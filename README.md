@@ -25,6 +25,8 @@
 
 ## Overview
 
+**Documentation: [docs.lakesidegames.net](https://docs.lakesidegames.net)** — the full design and engineering doc set.
+
 A House Divided is a browser-based political and economic simulation where players create politicians, compete in elections, form coalitions, pass legislation, found corporations, and climb from state office to national leadership. The world advances one turn per real hour (48 turns = one game year), with a persistent economy and AI-controlled Non-Player Politicians (NPPs) filling every vacant seat and voting on every bill, so the world stays alive at any player count.
 
 ### Eras
@@ -202,6 +204,26 @@ Register the first account with your `ADMIN_REGISTRATION_KEY` to unlock the admi
 
 ---
 
+## Authentication
+
+Accounts support **password login** plus optional **Discord OAuth** and **Google OAuth** ("Continue with Discord/Google" and account linking), with optional **Cloudflare Turnstile** CAPTCHA on registration. Sessions are JWTs signed with `AUTH_SECRET` (HS256 via `jose`) and carried in HTTP-only cookies; see `src/lib/auth.ts`. All of the OAuth and CAPTCHA providers fail open when unconfigured, so password auth is all local development needs.
+
+The first account registered with `ADMIN_REGISTRATION_KEY` becomes the admin. Two machine credentials round out the surface: `CRON_SECRET` authenticates the hourly turn cron hitting `/api/cron`, and `INTERNAL_API_KEY` authenticates server-side scripts and the task API. The Discord bot uses its own admin-managed API keys (`src/lib/api/botApiAuth.ts`).
+
+---
+
+## Worldsim & MCP
+
+The repo ships a headless world simulator and an **MCP server** so AI coding agents can drive it:
+
+- `scripts/sim/localWorldsimMcp.ts` — an MCP server over **stdio**. Point an MCP client (Claude Code or any MCP-capable agent) at it and it exposes tools to launch, monitor, and report on full world simulations against a local sandbox Mongo — no ports, no tokens, no production data.
+- `scripts/sim/worker.ts` — the sim worker that polls for queued runs and drives the real turn engine at speed; `scripts/sim/local-setup.sh` bootstraps the sandbox.
+- `scripts/sim/runWorld.ts` and the `collect*`/report scripts run and analyze simulations directly from the CLI for balance work.
+
+This is how economy and election changes get validated before they ship: simulate hundreds of turns, compare metrics against a baseline, then merge.
+
+---
+
 ## Development
 
 ```bash
@@ -272,6 +294,7 @@ docs/                     # Design system and observability docs
 
 | Document                                                       | Description                                            |
 | -------------------------------------------------------------- | ------------------------------------------------------ |
+| **[docs.lakesidegames.net](https://docs.lakesidegames.net)**   | Full design + engineering documentation site           |
 | [Design system](./docs/DESIGN.md)                              | UI conventions, theming, component and layout rules    |
 | [Source maps & monitoring](./docs/observability/sourcemaps.md) | Wiring a Sentry-compatible backend for readable traces |
 | [E2E testing](./e2e/README.md)                                 | Playwright setup and login-flow test accounts          |
