@@ -29,7 +29,11 @@ import { getActiveSubsidies } from "@/lib/subsidies/subsidyEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
 import { reconcileSignedTariffBills } from "@/lib/tariffs/reconcileTariffs";
 import { reconcileSignedEmbargoBills } from "@/lib/trade/reconcileEmbargoes";
+import { buildTradeAffinity } from "@/lib/trade/tradeAffinity";
+import { buildCountryClearingBooks } from "@/lib/market/tradePartition";
+import { COUNTRY_ORDER } from "@/lib/constants/countries";
 import type { TradeEmbargo } from "@/lib/db/types/tradeEmbargo";
+import type { OrganizationMembership } from "@/lib/db/types/internationalOrganization";
 import {
   getUnemploymentMarginModifier,
   getGridReliabilityMarginModifier,
@@ -156,6 +160,8 @@ export async function buildCorporationLookups(
     activeFtaPairs,
     unownedSectorDocs,
     latestTradeSnapshot,
+    orgMembershipDocs,
+    activeEmbargoDocs,
   ] = await Promise.all([
     db.collection<Corporation>("corporations").find({}).toArray(),
     db.collection<CorporateSector>("corporateSectors").find({}).toArray(),
@@ -263,6 +269,19 @@ export async function buildCorporationLookups(
     db
       .collection<TradeFlowSnapshot>("tradeFlowSnapshots")
       .find({}, { sort: { turn: -1 }, limit: 1 })
+      .toArray(),
+    // Trade-graph inputs for the market partition (era worlds): shared org
+    // blocs and ALL active embargoes (the suppression query above keeps only
+    // comprehensive ones; the affinity graph needs every block/cap lane).
+    db
+      .collection<OrganizationMembership>("organizationMemberships")
+      .find({}, { projection: { countryId: 1, organizationId: 1 } })
+      .toArray(),
+    db
+      .collection<TradeEmbargo>("tradeEmbargoes")
+      .find({
+        $or: [{ expiresTurn: { $exists: false } }, { expiresTurn: { $gte: embargoTurn } }],
+      })
       .toArray(),
   ]);
 
@@ -639,6 +658,35 @@ export async function buildCorporationLookups(
   // One era unit scale per world per turn: every ₳↔unit conversion downstream
   // reads this value from the lookups rather than re-resolving the preset.
   const eraUnitScale = getEraUnitScale(marketSharePreset);
+
+  // Market partition (era worlds only): scope each seller's clearing book to
+  // the demand its home country can actually reach under the live trade graph
+  // (embargoes block, tariffs/geography drag, caps clamp — legislated autarky
+  // lands here as embargo/tariff walls). Modern worlds (eraUnitScale === 1)
+  // keep the single worldwide book: postwar-integrated trade is the modern
+  // baseline, and partitioning it would only re-derive the same world market
+  // with extra moving parts. See market/tradePartition.ts for book semantics.
+  let countryClearingBooks: ReturnType<typeof buildCountryClearingBooks> | null = null;
+  if (eraUnitScale !== 1) {
+    const blocsByCountry = new Map<string, Set<string>>();
+    for (const m of orgMembershipDocs) {
+      if (!m.countryId || !m.organizationId) continue;
+      if (!blocsByCountry.has(m.countryId)) blocsByCountry.set(m.countryId, new Set());
+      blocsByCountry.get(m.countryId)!.add(String(m.organizationId));
+    }
+    const { affinityFor, capUnitsFor } = buildTradeAffinity({
+      ftaPairs: activeFtaPairs,
+      blocsByCountry,
+      tariffs: allTariffs,
+      embargoes: activeEmbargoDocs,
+    });
+    countryClearingBooks = buildCountryClearingBooks({
+      countries: COUNTRY_ORDER,
+      nationalBalances: nationalCommodityBalancesByCountry,
+      affinityFor,
+      capUnitsFor,
+    });
+  }
   const marketShareBySectorId = buildMarketShareBySectorId({
     sectors: allSectors,
     corpById,
@@ -870,6 +918,7 @@ export async function buildCorporationLookups(
     globalCommodityBalances,
     priceRatioByCommodity,
     nationalCommodityBalancesByCountry,
+    countryClearingBooks,
     exportIntensityByCountry,
     rawStateBalances,
     sectorPresenceKeys,

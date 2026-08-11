@@ -19,11 +19,12 @@
 export const REQUIRED_YES_FRACTION = 0.6 as const;
 
 /**
- * Turns a `positionShift` cooldown locks the affected axis for after
- * a successful pass. Each axis (`economic | social | foreignPolicy |
- * culture`) tracks independently — passing a `social` shift does not
- * lock `economic`. 336 turns = roughly 7 game-years per the 48 turn /
- * year cadence — intentional slow drift on ideological repositioning.
+
+ * Turns a `positionShift` cooldown locks the affected axis for after a
+ * successful pass. Each axis (`economic | social`) tracks independently —
+ * passing a `social` shift does not lock `economic`. 336 turns = roughly
+ * 7 game-years per the 48 turn / year cadence — intentional slow drift on
+ * ideological repositioning.
  */
 export const POSITION_SHIFT_COOLDOWN_TURNS = 336 as const;
 

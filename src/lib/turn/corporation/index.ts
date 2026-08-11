@@ -336,6 +336,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       });
     }
     const clearingInputs: SectorClearingInput[] = [];
+    // Market partition (era worlds): each sector clears in its HOME COUNTRY's
+    // reachable book (lookups.countryClearingBooks), not the worldwide one.
+    const clearingGroupBySector = lookups.countryClearingBooks
+      ? new Map<string, string>()
+      : undefined;
     for (const [corpId, sectors] of lookups.sectorsByCorp) {
       const fx = fxByCorpId.get(corpId);
       for (const sector of sectors) {
@@ -347,6 +352,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           turn ?? 0
         );
         const sectorId = sector._id.toString();
+        // countryId is backfilled onto every sector in buildLookups (from
+        // stateCountryMap, "US" fallback), so the cast is total in practice.
+        if (clearingGroupBySector) {
+          clearingGroupBySector.set(sectorId, (sector as { countryId?: string }).countryId ?? "US");
+        }
         const revenueAnchor = readCorpEconomicAnchor(sector.revenue, fx?.code, fx?.rate ?? 1);
         if (supplyAgreementsEnabled) sectorCorpId.set(sectorId, corpId);
         // PRODUCTION SINK for the supply-agreement shortfall leg, filled HERE
@@ -483,6 +493,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     market.clearingBySectorId = computeClearingFactors({
       sectors: clearingInputs,
       balances: lookups.globalCommodityBalances,
+      // Era worlds: one book per seller home country, scoped to the demand the
+      // trade graph lets that country reach (embargoes/tariffs/autarky). Null
+      // on modern worlds → the single worldwide book, unchanged.
+      groupBySector: clearingGroupBySector,
+      balancesByGroup: lookups.countryClearingBooks ?? undefined,
       priceRatioByCommodity: lookups.priceRatioByCommodity,
       // The era table: clearing compares sector offers (era-based units under
       // plants) against the ledger's balances, which run on the same basis.

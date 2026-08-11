@@ -37,13 +37,9 @@ describe("clampPlatform", () => {
     const result = clampPlatform({
       economic: 100,
       social: -100,
-      foreignPolicy: 30,
-      culture: -30,
     });
     expect(result.economic).toBe(60);
     expect(result.social).toBe(-60);
-    expect(result.foreignPolicy).toBe(30);
-    expect(result.culture).toBe(-30);
   });
 });
 

@@ -93,8 +93,8 @@ describe("seedParties", () => {
 
   it("fills a field the stored row is missing, and only that field", async () => {
     const live = livePlayedDemocrats();
-    // Simulate a row written before `culture` was added to the party seed.
-    delete (live as Record<string, unknown>).culture;
+    // Simulate a row written before `nationalTaxRate` was added to the seed.
+    delete (live as Record<string, unknown>).nationalTaxRate;
     db.collection("politicalParties");
     db.collectionMocks.politicalParties!.findOne.mockImplementation(
       async (filter: { name: string }) => (filter.name === "Democratic Party" ? live : null)
@@ -103,7 +103,7 @@ describe("seedParties", () => {
     await seedParties(db as unknown as Db, () => {});
 
     const $set = setFieldsOf(db.collectionMocks.politicalParties!.updateOne);
-    expect(Object.keys($set).sort()).toEqual(["culture", "updatedAt"]);
+    expect(Object.keys($set).sort()).toEqual(["nationalTaxRate", "updatedAt"]);
     expect($set.treasury).toBeUndefined();
     expect($set.chairId).toBeUndefined();
   });

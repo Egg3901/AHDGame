@@ -22,8 +22,6 @@ export const frParties: PartySeed[] = [
     color: "#E4002B",
     economicPosition: -2, // democratic-socialist; welfare + mixed economy
     socialPosition: -1,
-    foreignPolicy: 0, // Atlanticist socialists; European Defence Community split
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -45,8 +43,6 @@ export const frParties: PartySeed[] = [
     color: "#F5A623",
     economicPosition: 0, // Christian-democratic; social Catholicism + market
     socialPosition: 2, // Catholic traditionalism
-    foreignPolicy: 1, // European integration (Schuman, Bidault)
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -68,8 +64,6 @@ export const frParties: PartySeed[] = [
     color: "#FFD700",
     economicPosition: 1, // Radical / centre; laissez-faire with colonial empire
     socialPosition: -1, // secular anticlerical tradition
-    foreignPolicy: 1, // Atlanticist, pro-empire
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -91,8 +85,6 @@ export const frParties: PartySeed[] = [
     color: "#0055A4",
     economicPosition: 2, // Gaullist; anti-regime, strong executive
     socialPosition: 2, // national-conservative
-    foreignPolicy: 2, // Gaullist independence, anti-EDC
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -115,8 +107,6 @@ export const frParties: PartySeed[] = [
     color: "#0066CC",
     economicPosition: 2, // Gaullist dirigiste-but-market centre-right
     socialPosition: 2, // national-conservative
-    foreignPolicy: 2, // Gaullist independence, force de frappe
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1979-default", "1991-default"],
@@ -138,8 +128,6 @@ export const frParties: PartySeed[] = [
     color: "#00AEEF",
     economicPosition: 3, // liberal / pro-market (Giscard, Barre)
     socialPosition: 0, // centrist, socially liberal-ish
-    foreignPolicy: 1, // Atlanticist-leaning, European integration
-    culture: 0,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1979-default", "1991-default"],
@@ -161,8 +149,6 @@ export const frParties: PartySeed[] = [
     color: "#FF6699",
     economicPosition: -2, // social-democratic; nationalizations in the 1972 Programme commun
     socialPosition: -1,
-    foreignPolicy: 0,
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1979-default", "1991-default"],
@@ -184,8 +170,6 @@ export const frParties: PartySeed[] = [
     color: "#CC0000",
     economicPosition: -4, // Marxist; ~20% of the vote in the late 1970s
     socialPosition: -1,
-    foreignPolicy: -2, // Moscow-aligned (Eurocommunism debated)
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     // PCF continuous from Fourth → Fifth Republic; also valid in 1953/1991.
@@ -212,8 +196,6 @@ export const frParties: PartySeed[] = [
     color: "#1A2E5A",
     economicPosition: 1, // protectionist-nationalist, not classically free-market
     socialPosition: 4,
-    foreignPolicy: 2, // nationalist, anti-EC integration
-    culture: 4,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1991-default"],

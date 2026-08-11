@@ -1,5 +1,9 @@
 import type { Db, ObjectId } from "mongodb";
-import type { CommitteeProposal, CommitteeProposalVote } from "@/lib/db/types/committeeProposal";
+import type {
+  CommitteeProposal,
+  CommitteeProposalVote,
+  PositionShiftAxis,
+} from "@/lib/db/types/committeeProposal";
 import type {
   NationalCommitteeElection,
   NationalPartyElection,
@@ -89,24 +93,28 @@ export async function applyRenameEffect(db: Db, proposal: CommitteeProposal): Pr
 
 /**
  * Maps a `positionShift.axis` value to the field name on
- * `PoliticalParty` that stores the current position. Stable for the
- * 2-axis legacy data AND the 4-axis post-2026-05-22 redesign.
- * `economic`/`social` use the `Position`-suffixed legacy names;
- * `foreignPolicy`/`culture` use the literal axis name.
+ * `PoliticalParty` that stores the current position. Only the two axes
+ * the engines read are mappable; `foreignPolicy` / `culture` were
+ * retired in ticket #1032 and have no field left to write.
  */
 const POSITION_SHIFT_FIELD_BY_AXIS = {
   economic: "economicPosition",
   social: "socialPosition",
-  foreignPolicy: "foreignPolicy",
-  culture: "culture",
-} as const satisfies Record<
-  NonNullable<CommitteeProposal["positionShift"]>["axis"],
-  keyof PoliticalParty
->;
+} as const satisfies Record<PositionShiftAxis, keyof PoliticalParty>;
+
+/** Narrows a stored axis to one that can still be applied. */
+function isLiveAxis(axis: string): axis is PositionShiftAxis {
+  return axis === "economic" || axis === "social";
+}
 
 export async function applyPositionShiftEffect(db: Db, proposal: CommitteeProposal): Promise<void> {
   if (!proposal.positionShift) throw new Error("Not a positionShift proposal");
   const { axis, direction } = proposal.positionShift;
+  // Retired axes (ticket #1032) can no longer be proposed, but a proposal
+  // created before the retirement could still be sitting open. There is no
+  // field left to move, so treat it as a no-op rather than throwing and
+  // wedging the proposal-resolution phase for the whole party.
+  if (!isLiveAxis(axis)) return;
   const field = POSITION_SHIFT_FIELD_BY_AXIS[axis];
   const party = await db.collection<PoliticalParty>("politicalParties").findOne(
     { _id: proposal.partyId },
@@ -114,15 +122,11 @@ export async function applyPositionShiftEffect(db: Db, proposal: CommitteePropos
       projection: {
         economicPosition: 1,
         socialPosition: 1,
-        foreignPolicy: 1,
-        culture: 1,
       },
     }
   );
   if (!party) throw new Error("Party not found");
-  // `foreignPolicy` / `culture` are optional and may be undefined on
-  // pre-charter-redesign rows — treat absent as neutral 0. Also recover
-  // from rows where a prior buggy applyPositionShiftEffect wrote NaN
+  // Recover from rows where a prior buggy applyPositionShiftEffect wrote NaN
   // (pre-2026-05-22 redesign would compute `clampPosition(undefined, 1)
   // = NaN` and persist it). Without the `Number.isFinite` guard, every
   // subsequent positionShift on the same axis would re-read NaN, compute
@@ -339,7 +343,9 @@ export async function applyRemoveOfficeHolderEffect(
  */
 export function isPositionShiftLocked(
   party: Pick<PoliticalParty, "positionShiftCooldowns">,
-  axis: NonNullable<CommitteeProposal["positionShift"]>["axis"],
+  // Only live axes can be proposed, so only they can be locked. Retired
+  // axes (ticket #1032) have no cooldown entry left to consult.
+  axis: PositionShiftAxis,
   currentTurn: number
 ): boolean {
   const lock = party.positionShiftCooldowns?.[axis];

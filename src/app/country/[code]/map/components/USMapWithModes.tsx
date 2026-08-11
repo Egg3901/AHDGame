@@ -13,6 +13,12 @@ import { type LeanAxis, interpolateGreen, sectorSpecializationMapEntry } from ".
 import { MapFallback } from "./MapFallback";
 import { useResourceMapData } from "./useResourceMapData";
 import { useFreightDemandData } from "./useFreightDemandData";
+import {
+  FREIGHT_HAUL_LOAD_MODE_DESCRIPTION,
+  freightHaulLoadCaption,
+  freightHaulLoadLabel,
+  freightHaulLoadTooltip,
+} from "./freightHaulLoadCopy";
 
 import { USA_GEO_URL, US_REGION_CODES, US_LABEL_OVERRIDES } from "@/lib/maps/usaGeometry";
 
@@ -54,7 +60,7 @@ const US_MODE_CONFIG: { id: USMapMode; label: string; description: string }[] = 
   {
     id: "logistics",
     label: "Logistics",
-    description: "Freight demand by state (network load, latest turn)",
+    description: FREIGHT_HAUL_LOAD_MODE_DESCRIPTION,
   },
 ];
 
@@ -199,16 +205,19 @@ export function USMapWithModes({
     }
 
     if (mode === "logistics") {
-      const maxTotal = Math.max(...Object.values(freightData.states).map((e) => e.total), 1);
+      // Color by freight capacity (market size logistics clear against). Haul
+      // alone understates states that mostly serve local / free intra-state trade.
+      const maxCapacity = Math.max(
+        ...Object.values(freightData.states).map((e) => e.capacity ?? e.total),
+        1
+      );
       for (const [stateId, entry] of Object.entries(freightData.states)) {
+        const capacity = entry.capacity ?? 0;
+        const intensity = capacity > 0 ? capacity : entry.total;
         stateData[stateId] = {
-          color: entry.total === 0 ? "#374151" : interpolateGreen(entry.total / maxTotal),
-          label: `${Math.round(entry.total).toLocaleString("en-US")} TEU`,
-          tooltip: [
-            stateId,
-            `Freight demand: ${Math.round(entry.total).toLocaleString("en-US")} TEU/turn`,
-            `Bulk: ${Math.round(entry.bulk).toLocaleString("en-US")} · Special: ${Math.round(entry.special).toLocaleString("en-US")}`,
-          ],
+          color: intensity === 0 ? "#374151" : interpolateGreen(intensity / maxCapacity),
+          label: freightHaulLoadLabel(entry),
+          tooltip: freightHaulLoadTooltip(stateId, entry),
         };
       }
       return { stateData, senateSplitData: undefined, senateSplitMode: false };
@@ -478,9 +487,7 @@ export function USMapWithModes({
           )}
           {mode === "logistics" && (
             <p className="mt-3 text-xs text-muted">
-              {Object.keys(freightData.states).length === 0
-                ? "No freight data yet — this fills in after the first market turn runs."
-                : "Freight consumed per state on the interstate network. Darker = more logistics demand; strong hubs are where a new logistics sector finds ready customers."}
+              {freightHaulLoadCaption(Object.keys(freightData.states).length > 0)}
             </p>
           )}
         </div>

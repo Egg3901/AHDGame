@@ -69,7 +69,7 @@ export function CreateProposalForm({
   const [type, setType] = useState<ProposalType>("rename");
   const [newName, setNewName] = useState("");
   const [newAbbreviation, setNewAbbreviation] = useState("");
-  const [axis, setAxis] = useState<"economic" | "social" | "foreignPolicy" | "culture">("economic");
+  const [axis, setAxis] = useState<"economic" | "social">("economic");
   const [direction, setDirection] = useState<1 | -1>(1);
   const [targetPartyId, setTargetPartyId] = useState("");
   const [parties, setParties] = useState<ActivePartyOption[]>([]);
@@ -330,8 +330,6 @@ export function CreateProposalForm({
               [
                 { value: "economic", label: "Economic" },
                 { value: "social", label: "Social" },
-                { value: "foreignPolicy", label: "Foreign Policy" },
-                { value: "culture", label: "Culture" },
               ] as const
             ).map((opt) => (
               <button

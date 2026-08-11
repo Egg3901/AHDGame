@@ -32,7 +32,5 @@ export function clampPlatform(platform: PartyCharterPlatform): PartyCharterPlatf
   return {
     economic: clampPlatformAxis(platform.economic),
     social: clampPlatformAxis(platform.social),
-    foreignPolicy: clampPlatformAxis(platform.foreignPolicy),
-    culture: clampPlatformAxis(platform.culture),
   };
 }

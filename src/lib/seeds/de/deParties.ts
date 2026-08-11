@@ -30,8 +30,6 @@ export const deParties: PartySeed[] = [
     color: "#E3000F",
     economicPosition: -2,
     socialPosition: -2,
-    foreignPolicy: 0, // NATO + multilateral, Zeitenwende defence increase, pro-Ukraine
-    culture: -2, // open society, integrationist, multicultural
     memberCount: 0,
     isDefault: true,
     treasury: 1_500_000,
@@ -51,8 +49,6 @@ export const deParties: PartySeed[] = [
     color: "#000000",
     economicPosition: 2,
     socialPosition: 1,
-    foreignPolicy: 1, // NATO, transatlantic, EU-integrationist
-    culture: 1, // Christian-democratic, mild traditionalism
     memberCount: 0,
     isDefault: true,
     treasury: 1_500_000,
@@ -72,8 +68,6 @@ export const deParties: PartySeed[] = [
     color: "#0080C8",
     economicPosition: 2,
     socialPosition: 2,
-    foreignPolicy: 1, // similar to CDU; transatlantic with stronger EU border focus
-    culture: 2, // Bavarian traditionalist, Catholic-conservative, immigration-restrictive
     memberCount: 0,
     isDefault: true,
     treasury: 500_000,
@@ -95,8 +89,6 @@ export const deParties: PartySeed[] = [
     color: "#64A12D",
     economicPosition: -2,
     socialPosition: -4,
-    foreignPolicy: -1, // historically anti-war but post-Ukraine pivoted to defence support
-    culture: -3, // multicultural, ecological, secular
     memberCount: 0,
     isDefault: true,
     treasury: 1_000_000,
@@ -124,8 +116,6 @@ export const deParties: PartySeed[] = [
     color: "#FFED00",
     economicPosition: 3,
     socialPosition: -1,
-    foreignPolicy: 1, // Atlanticist, market-friendly, pro-EU expansion
-    culture: -1, // cosmopolitan-liberal, civil liberties focus
     memberCount: 0,
     isDefault: true,
     treasury: 750_000,
@@ -148,8 +138,6 @@ export const deParties: PartySeed[] = [
     color: "#003366",
     economicPosition: 2,
     socialPosition: 3,
-    foreignPolicy: 2, // Westbindung / rearmament / anti-communist
-    culture: 3, // nationalist-conservative, Protestant North German base
     memberCount: 0,
     isDefault: true,
     treasury: 400_000,
@@ -173,8 +161,6 @@ export const deParties: PartySeed[] = [
     color: "#8B4513",
     economicPosition: 1,
     socialPosition: 2,
-    foreignPolicy: 2, // reunification / eastern territories focus
-    culture: 3, // expellee identity, traditionalist
     memberCount: 0,
     isDefault: true,
     treasury: 350_000,
@@ -198,8 +184,6 @@ export const deParties: PartySeed[] = [
     color: "#BE3075",
     economicPosition: -4,
     socialPosition: -3,
-    foreignPolicy: -3, // anti-NATO historic, anti-arms-export, peace-tradition
-    culture: -2, // multicultural, secular-left
     memberCount: 0,
     isDefault: true,
     treasury: 500_000,
@@ -223,8 +207,6 @@ export const deParties: PartySeed[] = [
     color: "#009EE0",
     economicPosition: 2,
     socialPosition: 4,
-    foreignPolicy: -2, // Russia-friendly, EU-skeptic, anti-Ukraine-aid, NATO-ambivalent
-    culture: 5, // ethnic nationalism, anti-immigration, pro-Heimat
     memberCount: 0,
     isDefault: true,
     treasury: 500_000,
@@ -250,8 +232,6 @@ export const deParties: PartySeed[] = [
     color: "#8E44AD",
     economicPosition: -4,
     socialPosition: -3,
-    foreignPolicy: -3, // anti-NATO, peace-tradition, post-Soviet socialism
-    culture: -2, // secular-left, East-German civic identity
     memberCount: 0,
     isDefault: true,
     treasury: 500_000,

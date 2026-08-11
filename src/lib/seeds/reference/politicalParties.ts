@@ -29,8 +29,6 @@ export const politicalParties: PartySeed[] = [
     color: "#3B82F6", // Blue
     economicPosition: -2, // Center-left
     socialPosition: -2, // Center-left
-    foreignPolicy: -1, // multilateralist, alliance-friendly, comfortable using force but prefers coalitions
-    culture: -2, // progressive multiculturalism, secularism
     chairId: null,
     viceChairId: null,
     treasurerId: null,
@@ -50,8 +48,6 @@ export const politicalParties: PartySeed[] = [
     color: "#EF4444", // Red
     economicPosition: 2, // Center-right
     socialPosition: 2, // Center-right
-    foreignPolicy: 3, // hawkish, military-projection, China/Iran/Russia confrontational
-    culture: 3, // traditional values, anti-DEI, restrictive on immigration
     chairId: null,
     viceChairId: null,
     treasurerId: null,

@@ -26,8 +26,6 @@
  * Platform: derives from the existing party position fields:
  *   - economic = round(economicPosition * 12)  // [-5,5] → [-60,60]
  *   - social   = round(socialPosition * 12)
- *   - foreignPolicy = 0
- *   - culture       = 0
  *
  * Idempotent: parties that already have a charter (any status) are skipped.
  *
@@ -203,8 +201,6 @@ async function main() {
         platform: {
           economic: clampAxis((party.economicPosition ?? 0) * 12),
           social: clampAxis((party.socialPosition ?? 0) * 12),
-          foreignPolicy: 0,
-          culture: 0,
         },
         signatures,
         status,

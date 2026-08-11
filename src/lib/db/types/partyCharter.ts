@@ -49,10 +49,6 @@ export interface PartyCharterPlatform {
   economic: number;
   /** Social axis: -60 (progressive) to +60 (conservative). */
   social: number;
-  /** Foreign policy axis: -60 (isolationist) to +60 (interventionist). */
-  foreignPolicy: number;
-  /** Cultural axis: -60 (open) to +60 (traditional). */
-  culture: number;
 }
 
 /**

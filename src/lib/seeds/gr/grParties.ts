@@ -24,8 +24,6 @@ export const grParties: PartySeed[] = [
     color: "#1268C3",
     economicPosition: 2, // liberal-conservative, EEC accession course
     socialPosition: 1,
-    foreignPolicy: 2, // NATO/EEC Western anchor
-    culture: 1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1979-default", "1991-default"],
@@ -47,8 +45,6 @@ export const grParties: PartySeed[] = [
     color: "#009A44",
     economicPosition: -3, // socialist "Allagi" programme
     socialPosition: -1,
-    foreignPolicy: -2, // anti-NATO/anti-EEC rhetoric of the late 1970s
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1979-default", "1991-default"],
@@ -70,8 +66,6 @@ export const grParties: PartySeed[] = [
     color: "#D50000",
     economicPosition: -5,
     socialPosition: -2,
-    foreignPolicy: -4, // Moscow-line
-    culture: -2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1979-default", "1991-default"],
@@ -94,8 +88,6 @@ export const grParties: PartySeed[] = [
     color: "#123A6B",
     economicPosition: 2, // Markezinis stabilisation, pro-investment
     socialPosition: 2, // royalist, anti-communist order
-    foreignPolicy: 3, // NATO (1952), American aid
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -117,8 +109,6 @@ export const grParties: PartySeed[] = [
     color: "#2E7D32",
     economicPosition: -1, // Plastiras centrism, reconciliation platform
     socialPosition: 0,
-    foreignPolicy: 1,
-    culture: 0,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -140,8 +130,6 @@ export const grParties: PartySeed[] = [
     color: "#C62828",
     economicPosition: -4, // legal front of the banned KKE
     socialPosition: -2,
-    foreignPolicy: -4,
-    culture: -2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],

@@ -8,8 +8,6 @@ export const bgParties: PartySeed[] = [
     color: "#C00000",
     economicPosition: -4,
     socialPosition: 2,
-    foreignPolicy: -3,
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default", "1979-default"],

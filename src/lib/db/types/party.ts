@@ -26,24 +26,6 @@ export interface PoliticalParty {
   color: string;
   economicPosition: number;
   socialPosition: number;
-  /**
-   * Phase 6 D6 — foreign-policy axis on the same `[-5, +5]` scale as
-   * `economicPosition` / `socialPosition`. -5 = isolationist, +5 =
-   * interventionist. Default-party seeds carry hand-curated values
-   * derived from real-world stances; custom parties inherit from
-   * `PartyCharter.platform.foreignPolicy / 12` at ratification.
-   *
-   * Currently scaffolding only — no engine reads this yet. When future
-   * mechanics (Phase 7+) consume it, undefined falls back to 0.
-   */
-  foreignPolicy?: number;
-  /**
-   * Phase 6 D6 — culture axis on the same `[-5, +5]` scale. -5 = open
-   * (cosmopolitan / multicultural / secular), +5 = traditional
-   * (nationalist / religious-conservative / mono-cultural). Same
-   * sourcing rule as `foreignPolicy`.
-   */
-  culture?: number;
   chairId: ObjectId | null;
   viceChairId: ObjectId | null;
   treasurerId: ObjectId | null;
@@ -168,8 +150,6 @@ export interface PoliticalParty {
   positionShiftCooldowns?: {
     economic?: { lockedUntilTurn: number };
     social?: { lockedUntilTurn: number };
-    foreignPolicy?: { lockedUntilTurn: number };
-    culture?: { lockedUntilTurn: number };
   };
   /**
    * Per-type lockedUntilTurn for non-positionShift CommitteeProposals.

@@ -17,8 +17,6 @@ const axisSchema = z.coerce.number().min(PLATFORM_AXIS_MIN).max(PLATFORM_AXIS_MA
 export const platformSchema = z.object({
   economic: axisSchema,
   social: axisSchema,
-  foreignPolicy: axisSchema,
-  culture: axisSchema,
 });
 
 const objectIdHex = z.string().regex(/^[a-f0-9]{24}$/i, "Must be a 24-char hex ObjectId");

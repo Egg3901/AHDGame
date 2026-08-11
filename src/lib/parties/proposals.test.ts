@@ -243,48 +243,22 @@ describe("applyPositionShiftEffect (4-axis support)", () => {
     expect(setOp.socialPosition).toBe(-4);
   });
 
-  it("writes foreignPolicy when axis = foreignPolicy", async () => {
-    const partyId = makePartyId();
-    const { db, updates } = makeDbStub({
-      party: { _id: partyId, foreignPolicy: 1 },
-    });
-    await applyPositionShiftEffect(db, {
-      type: "positionShift",
-      partyId,
-      positionShift: { axis: "foreignPolicy", direction: 1 },
-    } as unknown as CommitteeProposal);
-    const setOp = (updates[0]!.update as { $set: Record<string, unknown> }).$set;
-    expect(setOp.foreignPolicy).toBe(2);
-  });
-
-  it("writes culture when axis = culture", async () => {
-    const partyId = makePartyId();
-    const { db, updates } = makeDbStub({
-      party: { _id: partyId, culture: -1 },
-    });
-    await applyPositionShiftEffect(db, {
-      type: "positionShift",
-      partyId,
-      positionShift: { axis: "culture", direction: -1 },
-    } as unknown as CommitteeProposal);
-    const setOp = (updates[0]!.update as { $set: Record<string, unknown> }).$set;
-    expect(setOp.culture).toBe(-2);
-  });
-
-  it("treats undefined foreignPolicy / culture as 0 (legacy rows)", async () => {
-    const partyId = makePartyId();
-    const { db, updates } = makeDbStub({
-      // party row predates the 4-axis schema — no foreignPolicy field.
-      party: { _id: partyId },
-    });
-    await applyPositionShiftEffect(db, {
-      type: "positionShift",
-      partyId,
-      positionShift: { axis: "foreignPolicy", direction: 1 },
-    } as unknown as CommitteeProposal);
-    const setOp = (updates[0]!.update as { $set: Record<string, unknown> }).$set;
-    // 0 (treated as neutral) + 1 → 1.
-    expect(setOp.foreignPolicy).toBe(1);
+  it("no-ops on a retired axis instead of throwing (ticket #1032)", async () => {
+    // `foreignPolicy` / `culture` can no longer be proposed, but a proposal
+    // created before they were retired could still be sitting open. Applying
+    // it must not throw — that would wedge proposal resolution for the party.
+    for (const axis of ["foreignPolicy", "culture"] as const) {
+      const partyId = makePartyId();
+      const { db, updates } = makeDbStub({ party: { _id: partyId } });
+      await expect(
+        applyPositionShiftEffect(db, {
+          type: "positionShift",
+          partyId,
+          positionShift: { axis, direction: 1 },
+        } as unknown as CommitteeProposal)
+      ).resolves.toBeUndefined();
+      expect(updates).toHaveLength(0);
+    }
   });
 
   it("recovers from a party row stuck at NaN (legacy bug pre-2026-05-22 redesign)", async () => {
@@ -418,17 +392,15 @@ describe("isPositionShiftLocked", () => {
     ).toBe(false);
   });
 
-  it("locks the four axes independently", () => {
+  it("locks each axis independently", () => {
     const party = {
       positionShiftCooldowns: {
         economic: { lockedUntilTurn: 500 },
-        // social, foreignPolicy, culture absent → unlocked
+        // social absent → unlocked
       },
     };
     expect(isPositionShiftLocked(party, "economic", 100)).toBe(true);
     expect(isPositionShiftLocked(party, "social", 100)).toBe(false);
-    expect(isPositionShiftLocked(party, "foreignPolicy", 100)).toBe(false);
-    expect(isPositionShiftLocked(party, "culture", 100)).toBe(false);
   });
 });
 

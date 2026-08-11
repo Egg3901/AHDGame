@@ -50,6 +50,7 @@ function makeMinimalLookups(
     globalCommodityBalances: new Map(),
     priceRatioByCommodity: new Map(),
     nationalCommodityBalancesByCountry: new Map(),
+    countryClearingBooks: null,
     exportIntensityByCountry: new Map(),
     rawStateBalances: new Map(),
     sectorPresenceKeys: new Set(),

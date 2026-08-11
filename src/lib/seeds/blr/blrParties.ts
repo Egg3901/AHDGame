@@ -16,8 +16,6 @@ export const blrParties: PartySeed[] = [
     color: "#C00000",
     economicPosition: -4,
     socialPosition: 2,
-    foreignPolicy: -4,
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default", "1979-default"],

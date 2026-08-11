@@ -22,8 +22,6 @@ export const atParties: PartySeed[] = [
     color: "#E30613",
     economicPosition: -2, // Austro-Keynesianism, big nationalised sector
     socialPosition: -1,
-    foreignPolicy: 0, // active neutrality
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     // Same party governs continuously through the 1990 Vranitzky election.
@@ -46,8 +44,6 @@ export const atParties: PartySeed[] = [
     color: "#191919",
     economicPosition: 2,
     socialPosition: 2, // Catholic-conservative Lager
-    foreignPolicy: 1,
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1979-default", "1991-default"],
@@ -69,8 +65,6 @@ export const atParties: PartySeed[] = [
     color: "#0056A2",
     economicPosition: 2,
     socialPosition: 2, // the national-liberal third camp
-    foreignPolicy: 1,
-    culture: 3,
     memberCount: 0,
     isDefault: true,
     // Continuous into 1991, pre-Haider (leader from Sept 1986) liberal wing
@@ -96,8 +90,6 @@ export const atParties: PartySeed[] = [
     color: "#5DA226",
     economicPosition: -1, // ecological-left, redistribution + regulation
     socialPosition: -3, // socially liberal, anti-nuclear founding cause
-    foreignPolicy: -2, // pacifist, anti-militarist
-    culture: -3,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1991-default"],
@@ -120,8 +112,6 @@ export const atParties: PartySeed[] = [
     color: "#191919",
     economicPosition: 1, // grand-coalition corporatism, Raab-Kamitz course
     socialPosition: 2,
-    foreignPolicy: 1, // Western-leaning within enforced neutrality talks
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -143,8 +133,6 @@ export const atParties: PartySeed[] = [
     color: "#E30613",
     economicPosition: -2,
     socialPosition: -1,
-    foreignPolicy: 0,
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -166,8 +154,6 @@ export const atParties: PartySeed[] = [
     color: "#0056A2",
     economicPosition: 2,
     socialPosition: 2, // third-camp nationals and amnestied ex-NSDAP voters
-    foreignPolicy: 1,
-    culture: 3,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -189,8 +175,6 @@ export const atParties: PartySeed[] = [
     color: "#C62828",
     economicPosition: -5,
     socialPosition: -1,
-    foreignPolicy: -4, // Soviet-zone patronage
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],

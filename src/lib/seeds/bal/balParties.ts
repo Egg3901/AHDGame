@@ -12,9 +12,9 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  * carries the single branch organisation and lets the republican split live in
  * the regions and the census instead.
  *
- * Positions relative to the satellite parties: foreignPolicy is pinned at the
- * hard end because this is not a satellite state with its own foreign ministry
- * but a set of union republics inside the USSR. The treasury is the smallest of
+ * Positions relative to the satellite parties: this is not a satellite state
+ * with its own foreign ministry but a set of union republics inside the USSR.
+ * The treasury is the smallest of
  * the bloc set for the same reason — a republican party organisation had a much
  * thinner independent purse than the PZPR or the BKP.
  */
@@ -27,8 +27,6 @@ export const balParties: PartySeed[] = [
     color: "#C00000",
     economicPosition: -4,
     socialPosition: 1,
-    foreignPolicy: -4,
-    culture: 1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default", "1979-default"],

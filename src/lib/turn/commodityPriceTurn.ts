@@ -1140,6 +1140,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       nationalPricesFor: (commodity) => existingPriceMap.get(commodity)?.nationalPrices,
       basePriceFor: (commodity) => LEDGER_BASE_PRICES[commodity],
       freightPrice: existingPriceMap.get("freight")?.globalPrice ?? LEDGER_BASE_PRICES.freight,
+      eraUnitScale: ledgerEraUnitScale,
       hops: stateHops,
       tariffRatePct: (commodity, exporter, importer) => {
         const sectorType = PRIMARY_SECTOR_BY_COMMODITY[commodity];

@@ -24,8 +24,6 @@ export const huParties: PartySeed[] = [
     color: "#C00000",
     economicPosition: -4, // Stalinist forced-draft heavy industry; full command economy
     socialPosition: 2, // ÁVH terror state; Rákosi personality cult
-    foreignPolicy: -3, // subordinate Soviet satellite; Cominform discipline
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -47,8 +45,6 @@ export const huParties: PartySeed[] = [
     color: "#C00000",
     economicPosition: -3,
     socialPosition: 1,
-    foreignPolicy: -2,
-    culture: 1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1979-default"],

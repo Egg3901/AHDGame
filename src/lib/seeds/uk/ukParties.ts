@@ -32,8 +32,6 @@ export const ukParties: PartySeed[] = [
     color: "#E4003B",
     economicPosition: -2,
     socialPosition: -3,
-    foreignPolicy: -1, // NATO-aligned but multilateral, EU-friendly post-Brexit re-engagement
-    culture: -2, // multicultural, secular, pro-immigration
     memberCount: 0,
     isDefault: true,
     treasury: 1_000_000,
@@ -53,8 +51,6 @@ export const ukParties: PartySeed[] = [
     color: "#0087DC",
     economicPosition: 2,
     socialPosition: 2,
-    foreignPolicy: 2, // Atlanticist, post-Brexit autonomy, defence-spending hawk
-    culture: 2, // mild traditionalism, immigration-restrictive
     memberCount: 0,
     isDefault: true,
     treasury: 1_000_000,
@@ -76,8 +72,6 @@ export const ukParties: PartySeed[] = [
     color: "#FAA61A",
     economicPosition: 0,
     socialPosition: -2,
-    foreignPolicy: -1, // pro-EU re-join, multilateralist, NATO-supportive
-    culture: -3, // cosmopolitan, pro-immigration, civil liberties
     memberCount: 0,
     isDefault: true,
     treasury: 1_000_000,
@@ -105,8 +99,6 @@ export const ukParties: PartySeed[] = [
     color: "#FFF95D",
     economicPosition: -2,
     socialPosition: -2,
-    foreignPolicy: -2, // anti-Trident, EU-rejoin focus, peace-tradition
-    culture: -2, // civic nationalist, pro-immigration, multicultural
     memberCount: 0,
     isDefault: true,
     treasury: 250_000,
@@ -126,8 +118,6 @@ export const ukParties: PartySeed[] = [
     color: "#3F8428",
     economicPosition: -2,
     socialPosition: -2,
-    foreignPolicy: -2, // anti-nuclear, EU-leaning, Welsh autonomy
-    culture: -1, // Welsh civic nationalism, pro-language but inclusive
     memberCount: 0,
     isDefault: true,
     treasury: 250_000,
@@ -149,8 +139,6 @@ export const ukParties: PartySeed[] = [
     color: "#02A95B",
     economicPosition: -4,
     socialPosition: -4,
-    foreignPolicy: -3, // anti-war, NATO-skeptic, anti-arms-trade
-    culture: -3, // multicultural, ecological, secular
     memberCount: 0,
     isDefault: true,
     treasury: 100_000,
@@ -182,8 +170,6 @@ export const ukParties: PartySeed[] = [
     color: "#12B6CF",
     economicPosition: 2,
     socialPosition: 4,
-    foreignPolicy: 0, // anti-EU, NATO-ambivalent, anti-aid, transactional
-    culture: 4, // anti-immigration, anti-woke, ethno-nationalist
     memberCount: 0,
     isDefault: true,
     treasury: 100_000,
@@ -207,8 +193,6 @@ export const ukParties: PartySeed[] = [
     color: "#D46A4C",
     economicPosition: 2,
     socialPosition: 4,
-    foreignPolicy: 2, // pro-UK union, pro-NATO, transatlantic
-    culture: 4, // Protestant traditionalism, anti-LGBT, anti-abortion
     memberCount: 0,
     isDefault: true,
     treasury: 250_000,
@@ -236,8 +220,6 @@ export const ukParties: PartySeed[] = [
     color: "#326760",
     economicPosition: -3,
     socialPosition: -2,
-    foreignPolicy: -2, // Irish neutrality tradition, anti-NATO, pro-Palestine
-    culture: -1, // left-nationalist, civic Irish identity, increasingly progressive
     memberCount: 0,
     isDefault: true,
     treasury: 250_000,
@@ -260,8 +242,6 @@ export const ukParties: PartySeed[] = [
     color: "#9999FF",
     economicPosition: 1,
     socialPosition: 2,
-    foreignPolicy: 2, // pro-UK union, Atlanticist, NATO-aligned
-    culture: 2, // moderate Protestant unionism, traditional but less hardline than DUP
     memberCount: 0,
     isDefault: true,
     treasury: 250_000,
@@ -287,8 +267,6 @@ export const ukParties: PartySeed[] = [
     color: "#FDBB30",
     economicPosition: 0, // free trade, anti-nationalisation but pro-welfare-state
     socialPosition: -1, // nonconformist-liberal, civil-liberties tradition
-    foreignPolicy: -1, // internationalist, pro-UN, free-trade multilateralism
-    culture: -1, // liberal for the era
     memberCount: 0,
     isDefault: true,
     treasury: 100_000, // tiny organization — near-bankrupt party of the early 50s

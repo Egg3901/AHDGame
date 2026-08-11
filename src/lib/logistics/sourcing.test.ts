@@ -99,32 +99,36 @@ describe("runSourcingPass", () => {
   });
 
   it("buys from the cheapest landed seller, not the cheapest ask", () => {
-    // UK asks 60 but pays a sea leg (6 hops); A2 asks 90 with 1 hop.
-    // bulk: 1000 × 0.004 = 4/unit/hop → UK landed 84 < A2 landed 94.
+    // At freightPrice 1000 the sea leg dominates (bulk 0.04 TEU/unit/hop):
+    // UK landed 60+240=300 > A2 landed 90+40=130 — domestic wins despite higher ask.
     const r = runSourcingPass(makeInputs());
     const flows = coalFlow(r);
-    expect(flows[0].originType).toBe("country");
-    expect(flows[0].originId).toBe("UK");
-    expect(flows[0].landedPrice).toBeCloseTo(
-      60 + 1000 * FREIGHT_TEU_PER_UNIT_HOP.bulk * SEA_FREIGHT_HOP_EQUIV
-    );
+    expect(flows[0].originType).toBe("state");
+    expect(flows[0].originId).toBe("A2");
+    expect(flows[0].landedPrice).toBeCloseTo(90 + 1000 * FREIGHT_TEU_PER_UNIT_HOP.bulk * 1);
     expect(flows[0].units).toBeCloseTo(100);
   });
 
-  it("tariffs flip the winner back to the domestic seller and are recorded", () => {
-    // 60% tariff on UK coal: landed 60×1.6 + 24 = 120 > A2's 94.
-    const r = runSourcingPass(makeInputs({ tariffRatePct: () => 60 }));
-    const flows = coalFlow(r);
-    expect(flows[0].originId).toBe("A2");
-    // A2's spare (200) covers all 100 units; no import flow at all.
-    expect(flows).toHaveLength(1);
-    const coal = r.summaries.find((s) => s.commodity === "coal")!;
-    expect(coal.tariffPaid).toBe(0);
+  it("prefer foreign when sea shipping is cheap enough, then tariffs flip it", () => {
+    // freightPrice 100: UK landed 60+24=84 < A2 90+4=94.
+    const cheapSea = makeInputs({ freightPrice: 100 });
+    const cheap = coalFlow(runSourcingPass(cheapSea))[0];
+    expect(cheap.originId).toBe("UK");
+    expect(cheap.landedPrice).toBeCloseTo(
+      60 + 100 * FREIGHT_TEU_PER_UNIT_HOP.bulk * SEA_FREIGHT_HOP_EQUIV
+    );
+
+    // 60% tariff: UK 60×1.6 + 24 = 120 > A2's 94.
+    const taxed = runSourcingPass(makeInputs({ freightPrice: 100, tariffRatePct: () => 60 }));
+    const taxedFlows = coalFlow(taxed);
+    expect(taxedFlows[0].originId).toBe("A2");
+    expect(taxedFlows).toHaveLength(1);
+    expect(taxed.summaries.find((s) => s.commodity === "coal")!.tariffPaid).toBe(0);
   });
 
   it("books tariff paid on import flows", () => {
-    // 10% tariff: UK landed 66 + 24 = 90 < 94, still wins.
-    const r = runSourcingPass(makeInputs({ tariffRatePct: () => 10 }));
+    // freightPrice 100 + 10% tariff: UK landed 66 + 24 = 90 < 94, still wins.
+    const r = runSourcingPass(makeInputs({ freightPrice: 100, tariffRatePct: () => 10 }));
     const flow = coalFlow(r)[0];
     expect(flow.originId).toBe("UK");
     expect(flow.tariffRatePct).toBe(10);
@@ -157,7 +161,7 @@ describe("runSourcingPass", () => {
   });
 
   it("caps interstate shipping at the origin state's per-class freight capacity", () => {
-    // A2 freight supply 0.2 → bulk cap 0.2 × share; 1 hop × 0.004 TEU/unit.
+    // A2 freight supply 0.2 → bulk cap 0.2 × share; 1 hop × TEU/unit.
     const freightSupply = 0.2;
     const r = runSourcingPass(
       makeInputs({

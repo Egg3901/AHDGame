@@ -24,8 +24,6 @@ export const roParties: PartySeed[] = [
     color: "#C00000",
     economicPosition: -4, // Stalinist central planning; forced heavy-industry drive
     socialPosition: 3, // Securitate terror; Gheorghiu-Dej Stalinism
-    foreignPolicy: -2, // Soviet satellite (before the 1960s autonomy line)
-    culture: 3,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -47,8 +45,6 @@ export const roParties: PartySeed[] = [
     color: "#C00000",
     economicPosition: -4,
     socialPosition: 3,
-    foreignPolicy: -1,
-    culture: 3,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1979-default"],

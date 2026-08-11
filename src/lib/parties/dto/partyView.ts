@@ -1,5 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import type { NationalPartyElectionPosition } from "@/lib/db/types";
+import type { PositionShiftAxis, RetiredPositionShiftAxis } from "@/lib/db/types/committeeProposal";
 import type { TreasuryPresetId } from "@/lib/treasury/partyTreasuryPresets";
 
 export interface PartyLeader {
@@ -326,7 +327,8 @@ export interface ProposalView {
 
   rename?: { newName: string; newAbbreviation: string };
   positionShift?: {
-    axis: "economic" | "social" | "foreignPolicy" | "culture";
+    /** New proposals are economic|social; historical rows may carry a retired axis. */
+    axis: PositionShiftAxis | RetiredPositionShiftAxis;
     direction: 1 | -1;
   };
   merge?: { targetPartyId: string; targetPartyName: string };

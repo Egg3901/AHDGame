@@ -13,8 +13,6 @@ import type { FoundingCohortPick } from "@/lib/db/types";
 const EMPTY_PLATFORM: PlatformValue = {
   economic: 0,
   social: 0,
-  foreignPolicy: 0,
-  culture: 0,
 };
 
 const EMPTY_SLOT: FounderSlot = { characterId: "", name: "" };

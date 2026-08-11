@@ -25,8 +25,6 @@ export const ieParties: PartySeed[] = [
     color: "#009DD6",
     economicPosition: 2,
     socialPosition: -2,
-    foreignPolicy: 1, // pro-EU, increasingly NATO-curious, mainstream Atlantic-leaning
-    culture: 0, // centrist; liberalised on social issues post-marriage / abortion referendums
     memberCount: 0,
     isDefault: true,
     treasury: 1_200_000,
@@ -46,8 +44,6 @@ export const ieParties: PartySeed[] = [
     color: "#66BB00",
     economicPosition: 0,
     socialPosition: 0,
-    foreignPolicy: 0, // traditional Irish neutrality but EU-engaged
-    culture: 1, // catch-all; mild rural / Catholic-historical traditionalism
     memberCount: 0,
     isDefault: true,
     treasury: 1_200_000,
@@ -70,8 +66,6 @@ export const ieParties: PartySeed[] = [
     color: "#326760",
     economicPosition: -3,
     socialPosition: -3,
-    foreignPolicy: -2, // Irish neutrality, anti-NATO, pro-Palestine, anti-imperialist
-    culture: -1, // left-nationalist; civic Irish identity, increasingly progressive
     memberCount: 0,
     isDefault: true,
     treasury: 800_000,
@@ -92,8 +86,6 @@ export const ieParties: PartySeed[] = [
     color: "#CC0000",
     economicPosition: -2,
     socialPosition: -2,
-    foreignPolicy: 0, // EU-supportive, neutrality-respectful, multilateralist
-    culture: -2, // progressive, secular, pro-marriage / abortion / LGBT
     memberCount: 0,
     isDefault: true,
     treasury: 400_000,
@@ -116,8 +108,6 @@ export const ieParties: PartySeed[] = [
     color: "#00B140",
     economicPosition: -1,
     socialPosition: -3,
-    foreignPolicy: -2, // peace movement, anti-militarism, multilateralist
-    culture: -3, // cosmopolitan, ecological, secular
     memberCount: 0,
     isDefault: true,
     treasury: 300_000,
@@ -143,8 +133,6 @@ export const ieParties: PartySeed[] = [
     color: "#C8102E",
     economicPosition: -4,
     socialPosition: -2,
-    foreignPolicy: -3,
-    culture: -2,
     memberCount: 0,
     isDefault: true,
     treasury: 400_000,
@@ -169,8 +157,6 @@ export const ieParties: PartySeed[] = [
     color: "#7B68EE",
     economicPosition: 3,
     socialPosition: -1,
-    foreignPolicy: 1,
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     treasury: 400_000,

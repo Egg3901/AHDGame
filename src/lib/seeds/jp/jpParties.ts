@@ -30,8 +30,6 @@ export const jpParties: PartySeed[] = [
     color: "#2BA547",
     economicPosition: 2,
     socialPosition: 2,
-    foreignPolicy: 2, // San Francisco system; US alliance; rearmament cautious
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     treasury: 1_000_000,
@@ -54,8 +52,6 @@ export const jpParties: PartySeed[] = [
     color: "#1B6B3A",
     economicPosition: 1,
     socialPosition: 2,
-    foreignPolicy: 1, // more revisionist on US occupation settlement than Yoshida
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     treasury: 750_000,
@@ -77,8 +73,6 @@ export const jpParties: PartySeed[] = [
     color: "#2BA547",
     economicPosition: 2,
     socialPosition: 2,
-    foreignPolicy: 2, // US alliance, SDF expansion, China-hawkish, Article-9 revisionist
-    culture: 3, // traditional Japanese values, conservative on family / immigration
     memberCount: 0,
     isDefault: true,
     treasury: 1_000_000,
@@ -109,8 +103,6 @@ export const jpParties: PartySeed[] = [
     color: "#1E4D8C",
     economicPosition: -2,
     socialPosition: -2,
-    foreignPolicy: 0, // US alliance acceptable but pacifist-leaning, anti-Article-9-revision
-    culture: -1, // progressive on gender / LGBT / selective dual nationality
     memberCount: 0,
     isDefault: true,
     treasury: 1_000_000,
@@ -132,8 +124,6 @@ export const jpParties: PartySeed[] = [
     color: "#F5A623",
     economicPosition: 0,
     socialPosition: 0,
-    foreignPolicy: -1, // Buddhist pacifist tradition; in coalition tempers LDP defence push
-    culture: 0, // moderate, faith-based but inclusive
     memberCount: 0,
     isDefault: true,
     treasury: 500_000,
@@ -161,8 +151,6 @@ export const jpParties: PartySeed[] = [
     color: "#D71920",
     economicPosition: -4,
     socialPosition: -3,
-    foreignPolicy: -4, // strict Article-9 defenders, anti-US-bases, anti-alliance
-    culture: -2, // left-progressive on gender / LGBT / immigration
     memberCount: 0,
     isDefault: true,
     treasury: 500_000,
@@ -185,8 +173,6 @@ export const jpParties: PartySeed[] = [
     color: "#39B54A",
     economicPosition: 3,
     socialPosition: 1,
-    foreignPolicy: 2, // pro-Article-9-revision, defence-build-up, US-alliance-supportive
-    culture: 1, // reformist but right-leaning on national identity
     memberCount: 0,
     isDefault: true,
     treasury: 500_000,
@@ -209,8 +195,6 @@ export const jpParties: PartySeed[] = [
     color: "#FF6B00",
     economicPosition: 0,
     socialPosition: -1,
-    foreignPolicy: 1, // pragmatic alliance-supportive, security-realist
-    culture: 0, // centrist, mildly progressive on social issues
     memberCount: 0,
     isDefault: true,
     treasury: 500_000,
@@ -235,8 +219,6 @@ export const jpParties: PartySeed[] = [
     color: "#C8102E",
     economicPosition: -3,
     socialPosition: -2,
-    foreignPolicy: -3, // pacifist tradition, anti-Article-9-revision, anti-US-bases
-    culture: -2, // union-aligned progressive, secular
     memberCount: 0,
     isDefault: true,
     treasury: 750_000,
@@ -261,8 +243,6 @@ export const jpParties: PartySeed[] = [
     color: "#0E5FAA",
     economicPosition: -1,
     socialPosition: -1,
-    foreignPolicy: 1, // pro-US-alliance moderate, social-democratic-Atlanticist
-    culture: 0, // moderate union-aligned, less radical than JSP on cultural issues
     memberCount: 0,
     isDefault: true,
     treasury: 500_000,

@@ -27,8 +27,6 @@ export const brParties: PartySeed[] = [
     color: "#007A32",
     economicPosition: 0, // Vargas catch-all; rural bosses + industrialists
     socialPosition: 1,
-    foreignPolicy: 0,
-    culture: 1,
     memberCount: 0,
     isDefault: true,
     treasury: 1_200_000,
@@ -49,8 +47,6 @@ export const brParties: PartySeed[] = [
     color: "#003399",
     economicPosition: 2, // anti-Vargas liberals; urban middle class
     socialPosition: 1,
-    foreignPolicy: 2, // pro-US Cold War alignment
-    culture: 1,
     memberCount: 0,
     isDefault: true,
     treasury: 900_000,
@@ -73,8 +69,6 @@ export const brParties: PartySeed[] = [
     color: "#00A859",
     economicPosition: -2, // labourist / Getulista working-class base
     socialPosition: 0,
-    foreignPolicy: -1,
-    culture: 0,
     memberCount: 0,
     isDefault: true,
     treasury: 800_000,
@@ -97,8 +91,6 @@ export const brParties: PartySeed[] = [
     color: "#EE2027",
     economicPosition: -3,
     socialPosition: -2,
-    foreignPolicy: -2, // non-aligned tradition, BRICS-friendly, multipolar diplomacy
-    culture: -2, // progressive, secular, indigenous / quilombola rights focus
     memberCount: 0,
     isDefault: true,
     treasury: 1_500_000,
@@ -122,8 +114,6 @@ export const brParties: PartySeed[] = [
     color: "#004A99",
     economicPosition: 2,
     socialPosition: 3,
-    foreignPolicy: 2, // Bolsonarist; pro-US-Israel, transactional with right-wing partners
-    culture: 4, // evangelical, anti-LGBT, "tradition / family / God / Brazil"
     memberCount: 0,
     isDefault: true,
     treasury: 1_200_000,
@@ -146,8 +136,6 @@ export const brParties: PartySeed[] = [
     color: "#36A9E0",
     economicPosition: 0,
     socialPosition: 0,
-    foreignPolicy: 0, // catch-all centrist, follows whichever government it brokers
-    culture: 0, // pragmatic, no fixed cultural line
     memberCount: 0,
     isDefault: true,
     treasury: 1_000_000,
@@ -169,8 +157,6 @@ export const brParties: PartySeed[] = [
     color: "#003399",
     economicPosition: 1,
     socialPosition: 1,
-    foreignPolicy: 1, // right-leaning establishment, US-friendly
-    culture: 2, // conservative, evangelical-friendly tilt
     memberCount: 0,
     isDefault: true,
     treasury: 900_000,
@@ -193,8 +179,6 @@ export const brParties: PartySeed[] = [
     color: "#007A32",
     economicPosition: 1,
     socialPosition: 0,
-    foreignPolicy: 0, // pragmatic centre-right, business-friendly, no ideological foreign line
-    culture: 1, // mild traditionalism, pragmatic
     memberCount: 0,
     isDefault: true,
     treasury: 800_000,
@@ -220,8 +204,6 @@ export const brParties: PartySeed[] = [
     color: "#36A9E0",
     economicPosition: 0,
     socialPosition: 0,
-    foreignPolicy: 0,
-    culture: 0,
     memberCount: 0,
     isDefault: true,
     treasury: 1_500_000,
@@ -246,8 +228,6 @@ export const brParties: PartySeed[] = [
     color: "#FF8C00",
     economicPosition: 2,
     socialPosition: 2,
-    foreignPolicy: 1,
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     treasury: 1_200_000,
@@ -271,8 +251,6 @@ export const brParties: PartySeed[] = [
     color: "#FF1744",
     economicPosition: -2,
     socialPosition: -1,
-    foreignPolicy: -1,
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     treasury: 700_000,
@@ -296,8 +274,6 @@ export const brParties: PartySeed[] = [
     color: "#005AA7",
     economicPosition: 2,
     socialPosition: 3,
-    foreignPolicy: 1,
-    culture: 3,
     memberCount: 0,
     isDefault: true,
     treasury: 700_000,
@@ -321,8 +297,6 @@ export const brParties: PartySeed[] = [
     color: "#00A859",
     economicPosition: 1,
     socialPosition: 1,
-    foreignPolicy: 0,
-    culture: 1,
     memberCount: 0,
     isDefault: true,
     treasury: 600_000,
@@ -346,8 +320,6 @@ export const brParties: PartySeed[] = [
     color: "#FFCC00",
     economicPosition: 1,
     socialPosition: 1,
-    foreignPolicy: 1,
-    culture: 1,
     memberCount: 0,
     isDefault: true,
     treasury: 600_000,
@@ -370,8 +342,6 @@ export const brParties: PartySeed[] = [
     color: "#FFD200",
     economicPosition: -2,
     socialPosition: -2,
-    foreignPolicy: -2,
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     treasury: 500_000,
@@ -395,8 +365,6 @@ export const brParties: PartySeed[] = [
     color: "#C00000",
     economicPosition: -4,
     socialPosition: -2,
-    foreignPolicy: -3,
-    culture: -2,
     memberCount: 0,
     isDefault: true,
     treasury: 400_000,

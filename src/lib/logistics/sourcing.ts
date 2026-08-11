@@ -29,18 +29,36 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import type { CountryId } from "@/lib/constants/countries";
 import { FREIGHT_CLASS_BY_COMMODITY, SHIPPED_COMMODITIES, type FreightClass } from "./freightClass";
 
-// ── Tuning constants (all pre-tuning: validated against the dark ledger before
-//    any money wiring reads them) ────────────────────────────────────────────
+// ── Tuning constants (dark-ledger calibrated; money wiring still off) ────────
 
 /**
  * Freight (TEU) consumed per commodity unit per state-line crossing, by class.
  * Also the basis of the shipping charge: perUnitHopCost = freightPrice × this.
  * Special care hauls fewer goods per TEU-equivalent, hence the higher factor.
+ *
+ * Calibrated 10× up from the 0.004/0.012 v1 seeds (ticket #1039): live
+ * sourcingNetworkLoad showed interstate haul using only ~6% of NY freight
+ * supply, so the Logistics map read as a ~4 TEU state market. Commodity unit
+ * counts and freight TEU supply already share {@link getEraUnitScale}, so this
+ * ratio is era-invariant — see {@link freightTeuPerUnitHop}.
  */
 export const FREIGHT_TEU_PER_UNIT_HOP: Record<FreightClass, number> = {
-  bulk: 0.004,
-  special: 0.012,
+  bulk: 0.04,
+  special: 0.12,
 };
+
+/**
+ * TEU per commodity-unit per hop on the world's era unit basis.
+ *
+ * Do not divide by `eraUnitScale`: under plants, both commodity balances and
+ * freight TEU supply are already on that basis, so the haul ratio stays
+ * real-terms invariant across eras. `eraUnitScale` is accepted for call-site
+ * symmetry with other plants helpers (and for money-wiring rates later).
+ */
+export function freightTeuPerUnitHop(freightClass: FreightClass, eraUnitScale: number = 1): number {
+  void eraUnitScale;
+  return FREIGHT_TEU_PER_UNIT_HOP[freightClass];
+}
 
 /**
  * Share of a state's freight supply available per class while `freight` is
@@ -131,6 +149,12 @@ export interface SourcingInputs {
   basePriceFor: (commodity: CommodityType) => number;
   /** Last turn's global freight price — the shipping cost basis (era-scaled). */
   freightPrice: number;
+  /**
+   * World's era unit-basis scale (`getEraUnitScale(preset)`). Defaults to 1.
+   * TEU-per-unit rates are scale-free (see {@link freightTeuPerUnitHop}); this
+   * is threaded for plants call-site symmetry and future haulage $ rates.
+   */
+  eraUnitScale?: number;
   /** Same-country hop distance; null = no route. */
   hops: (country: CountryId, from: string, to: string) => number | null;
   /** Importer-side tariff rate in percent for a foreign flow. */
@@ -152,6 +176,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     nationalPricesFor,
     basePriceFor,
     freightPrice,
+    eraUnitScale = 1,
     hops,
     tariffRatePct,
     isBlocked,
@@ -178,7 +203,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
 
   for (const commodity of SHIPPED_COMMODITIES) {
     const freightClass = FREIGHT_CLASS_BY_COMMODITY[commodity]!;
-    const teuPerUnitHop = FREIGHT_TEU_PER_UNIT_HOP[freightClass];
+    const teuPerUnitHop = freightTeuPerUnitHop(freightClass, eraUnitScale);
     const shippingPerUnitPerHop = freightPrice * teuPerUnitHop;
     const basePrice = basePriceFor(commodity);
     const statePrices = statePricesFor(commodity) ?? {};

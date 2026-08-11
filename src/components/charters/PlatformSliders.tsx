@@ -4,10 +4,13 @@ import { Slider, Label } from "@/components/ui";
 import { PLATFORM_AXIS_MAX, PLATFORM_AXIS_MIN } from "@/lib/charters/overtonGuardrails";
 
 /**
- * Phase 6 minimal-MVP platform editor (D6). Renders 4 sliders for the
- * charter platform axes — economic, social, foreign policy, culture —
- * each clamped to `[-60, +60]`. No fancy Overton-window visualization;
- * just the labels at each pole and the current numeric value.
+ * Phase 6 minimal-MVP platform editor (D6). Renders a slider per charter
+ * platform axis — economic and social — each clamped to `[-60, +60]`. No
+ * fancy Overton-window visualization; just the labels at each pole and the
+ * current numeric value.
+ *
+ * Foreign-policy and culture sliders were removed in ticket #1032: they
+ * were recorded on the charter but no gameplay mechanic ever read them.
  *
  * Used in `/charters/new` for drafting and (read-only) on `/charters/[id]`
  * to display the proposed platform.
@@ -15,8 +18,6 @@ import { PLATFORM_AXIS_MAX, PLATFORM_AXIS_MIN } from "@/lib/charters/overtonGuar
 export interface PlatformValue {
   economic: number;
   social: number;
-  foreignPolicy: number;
-  culture: number;
 }
 
 interface AxisDef {
@@ -24,33 +25,11 @@ interface AxisDef {
   label: string;
   leftPole: string;
   rightPole: string;
-  /**
-   * Optional disclosure shown under the slider. Used to mark axes that
-   * are recorded on the charter but not yet consumed by any gameplay
-   * mechanic (currently `foreignPolicy` and `culture` — only `economic`
-   * and `social` flow through to `PoliticalParty.economicPosition` /
-   * `socialPosition` and into the election / NPP / primary engines).
-   */
-  note?: string;
 }
 
 const AXES: AxisDef[] = [
   { key: "economic", label: "Economic", leftPole: "Left", rightPole: "Right" },
   { key: "social", label: "Social", leftPole: "Progressive", rightPole: "Conservative" },
-  {
-    key: "foreignPolicy",
-    label: "Foreign Policy",
-    leftPole: "Isolationist",
-    rightPole: "Interventionist",
-    note: "Recorded on the charter, but it does not affect gameplay yet.",
-  },
-  {
-    key: "culture",
-    label: "Culture",
-    leftPole: "Open",
-    rightPole: "Traditional",
-    note: "Recorded on the charter, but it does not affect gameplay yet.",
-  },
 ];
 
 interface PlatformSlidersProps {
@@ -84,7 +63,6 @@ export function PlatformSliders({ value, onChange, readOnly = false }: PlatformS
             <span>{axis.leftPole}</span>
             <span>{axis.rightPole}</span>
           </div>
-          {axis.note && <p className="pt-0.5 text-[11px] italic text-muted/80">{axis.note}</p>}
         </div>
       ))}
     </div>

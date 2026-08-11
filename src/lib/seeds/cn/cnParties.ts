@@ -30,8 +30,6 @@ export const cnParties: PartySeed[] = [
     color: "#DE2910",
     economicPosition: -3, // state ownership, SOE dominance, five-year planning
     socialPosition: 2, // nominally secular but socially authoritarian / nationalist
-    foreignPolicy: 3, // BRI, regional assertion, anti-US-containment, "wolf warrior" diplomacy
-    culture: 5, // Chinese cultural nationalism, "core socialist values", anti-Western influence
     memberCount: 0,
     isDefault: true,
     regimeStatus: "ruling",
@@ -52,8 +50,6 @@ export const cnParties: PartySeed[] = [
     color: "#FFD700",
     economicPosition: -1,
     socialPosition: 0,
-    foreignPolicy: 2, // united-front participant, follows CCP foreign line in practice
-    culture: 2, // defers to CCP cultural framework; nominally pluralist but constrained
     memberCount: 0,
     isDefault: true,
     regimeStatus: "approved",
@@ -74,8 +70,6 @@ export const cnParties: PartySeed[] = [
     color: "#1E90FF",
     economicPosition: 1,
     socialPosition: 0,
-    foreignPolicy: 2, // united-front participant; same alignment as CDL
-    culture: 2, // defers to CCP cultural framework; business-class base
     memberCount: 0,
     isDefault: true,
     regimeStatus: "approved",

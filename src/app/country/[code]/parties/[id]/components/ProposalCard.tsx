@@ -24,14 +24,13 @@ function VoteBar({ yes, no, notVoted }: { yes: number; no: number; notVoted: num
   );
 }
 
-const POSITION_SHIFT_AXIS_LABEL: Record<
-  "economic" | "social" | "foreignPolicy" | "culture",
-  string
-> = {
+// Includes the axes retired in ticket #1032 so proposals passed before the
+// retirement still render their real subject in party history.
+const POSITION_SHIFT_AXIS_LABEL: Record<string, string> = {
   economic: "Economic",
   social: "Social",
-  foreignPolicy: "Foreign Policy",
-  culture: "Culture",
+  foreignPolicy: "Foreign Policy (retired)",
+  culture: "Culture (retired)",
 };
 
 const REMOVE_ROLE_LABEL: Record<"chair" | "viceChair" | "committeeMember", string> = {

@@ -22,8 +22,6 @@ export const ruParties: PartySeed[] = [
     color: "#CC0000",
     economicPosition: -4, // total state ownership, Gosplan central planning
     socialPosition: 2, // officially secular but socially authoritarian / conformist
-    foreignPolicy: 4, // Cold-War superpower; socialist-bloc hegemon; ideological confrontation with the West
-    culture: 4, // Soviet patriotism, Marxist-Leninist orthodoxy, anti-Western
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default", "1979-default"],

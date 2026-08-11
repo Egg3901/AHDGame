@@ -43,8 +43,6 @@ export const ngParties: PartySeed[] = [
     color: "#1B4F8C",
     economicPosition: 2, // center-right, market-friendly, deregulation lean
     socialPosition: 3, // socially conservative
-    foreignPolicy: 1, // pro-Western security ties, non-aligned economic diplomacy
-    culture: 2, // conservative, religious-traditionalist tilt
     memberCount: 0,
     isDefault: true,
     treasury: 0,
@@ -65,8 +63,6 @@ export const ngParties: PartySeed[] = [
     color: "#0A7A35",
     economicPosition: 0, // centrist, mixed-economy catch-all
     socialPosition: -1, // mildly progressive
-    foreignPolicy: 0, // pragmatic multilateralism
-    culture: -1, // pluralist, secular-tilt
     memberCount: 0,
     isDefault: true,
     treasury: 0,
@@ -87,8 +83,6 @@ export const ngParties: PartySeed[] = [
     color: "#E8A014",
     economicPosition: -3, // center-left populist, redistribution focus
     socialPosition: -2, // socially progressive
-    foreignPolicy: -1, // non-interventionist, pan-African tilt
-    culture: -2, // progressive, youth / diaspora coalition
     memberCount: 0,
     isDefault: true,
     treasury: 0,
@@ -109,8 +103,6 @@ export const ngParties: PartySeed[] = [
     color: "#8B0000",
     economicPosition: -1, // centrist with welfare tilt
     socialPosition: -1, // mildly progressive
-    foreignPolicy: 0, // pragmatic
-    culture: -1, // pluralist
     memberCount: 0,
     isDefault: true,
     treasury: 0,
@@ -131,8 +123,6 @@ export const ngParties: PartySeed[] = [
     color: "#7B3F99",
     economicPosition: 1, // center-right regional, business-friendly
     socialPosition: 1, // moderately conservative
-    foreignPolicy: 0, // pragmatic, diaspora-engaged
-    culture: 1, // regional-identity, mildly traditionalist
     memberCount: 0,
     isDefault: true,
     treasury: 0,
@@ -153,8 +143,6 @@ export const ngParties: PartySeed[] = [
     color: "#D4A017",
     economicPosition: -1, // center-left, welfare-oriented
     socialPosition: -1, // mildly progressive, pluralist
-    foreignPolicy: 0, // pragmatic non-alignment
-    culture: -1, // pluralist, secular-leaning
     memberCount: 0,
     isDefault: true,
     treasury: 0,
@@ -175,8 +163,6 @@ export const ngParties: PartySeed[] = [
     color: "#2E8B57",
     economicPosition: 2, // center-right, market-friendly
     socialPosition: 2, // socially conservative, traditionalist
-    foreignPolicy: 1, // pro-Western security orientation
-    culture: 2, // conservative, religious-traditionalist
     memberCount: 0,
     isDefault: true,
     treasury: 0,
@@ -201,8 +187,6 @@ export const ngParties: PartySeed[] = [
     color: "#006B3F",
     economicPosition: -1, // nationalist developmentalism, anti-colonial welfare lean
     socialPosition: -1, // relatively progressive / urban for the era
-    foreignPolicy: -1, // pan-African, anti-colonial
-    culture: -1, // pluralist nationalist
     memberCount: 0,
     isDefault: true,
     treasury: 0,
@@ -226,8 +210,6 @@ export const ngParties: PartySeed[] = [
     color: "#E85D04",
     economicPosition: 1, // free-enterprise + regional welfarism
     socialPosition: 0,
-    foreignPolicy: 0, // pragmatic Commonwealth gradualism
-    culture: 0, // regional-identity progressive
     memberCount: 0,
     isDefault: true,
     treasury: 0,
@@ -251,8 +233,6 @@ export const ngParties: PartySeed[] = [
     color: "#1B4F3C",
     economicPosition: 1, // conservative gradualist; northern interest protection
     socialPosition: 3, // traditionalist, emirate-aligned
-    foreignPolicy: 1, // pro-Commonwealth, cautious on rapid independence
-    culture: 3, // Islamic / traditionalist North
     memberCount: 0,
     isDefault: true,
     treasury: 0,
@@ -278,8 +258,6 @@ export const ngParties: PartySeed[] = [
     color: "#1B4F3C",
     economicPosition: 1, // gradualist state-capitalist, oil-revenue patronage
     socialPosition: 1,
-    foreignPolicy: 1, // pro-Western, Commonwealth-aligned
-    culture: 1,
     memberCount: 0,
     isDefault: true,
     treasury: 0,
@@ -302,8 +280,6 @@ export const ngParties: PartySeed[] = [
     color: "#E85D04",
     economicPosition: -1, // welfare-statist, free education/health programme
     socialPosition: -1,
-    foreignPolicy: 0,
-    culture: 0,
     memberCount: 0,
     isDefault: true,
     treasury: 0,
@@ -326,8 +302,6 @@ export const ngParties: PartySeed[] = [
     color: "#006B3F",
     economicPosition: -1,
     socialPosition: -1,
-    foreignPolicy: -1, // pan-African, anti-colonial continuity
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     treasury: 0,
@@ -349,8 +323,6 @@ export const ngParties: PartySeed[] = [
     color: "#8B0000",
     economicPosition: 1,
     socialPosition: 2, // conservative, traditionalist Northern base
-    foreignPolicy: 1,
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     treasury: 0,
@@ -373,8 +345,6 @@ export const ngParties: PartySeed[] = [
     color: "#C62828",
     economicPosition: -3, // radical redistributive populism
     socialPosition: -2,
-    foreignPolicy: -1,
-    culture: -2,
     memberCount: 0,
     isDefault: true,
     treasury: 0,

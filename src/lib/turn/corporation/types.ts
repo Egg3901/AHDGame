@@ -8,6 +8,7 @@ import type {
   Subsidy,
 } from "@/lib/db/types";
 import type { CommodityType, ExtractableResource } from "@/lib/constants/commodities";
+import type { CountryId } from "@/lib/constants/countries";
 import type { StateSectorSpecialization } from "@/lib/constants/corporations";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CrossCorpStockHolding } from "@/lib/corporations/portfolioAnchorValuation";
@@ -129,6 +130,18 @@ export interface CorporationLookups {
     string,
     Map<CommodityType, { supply: number; demand: number }>
   >;
+  /**
+   * Market partition (era worlds only, null on modern worlds): per-country
+   * reachable clearing books — supply = the country's lagged national supply,
+   * demand = domestic demand net of import competition plus the exports the
+   * trade graph (embargoes/tariffs/caps) lets the country place abroad. When
+   * present, the clearing pass runs one book per seller home country instead
+   * of a single worldwide book. See market/tradePartition.ts.
+   */
+  countryClearingBooks: Map<
+    CountryId,
+    Map<CommodityType, { supply: number; demand: number }>
+  > | null;
   rawStateBalances: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
   /** Per-country export intensity ∈ [0,1] per commodity (from the latest trade
    *  snapshot) — fraction of the country's surplus that cleared abroad. Feeds

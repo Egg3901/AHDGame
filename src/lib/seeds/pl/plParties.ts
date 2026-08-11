@@ -9,8 +9,6 @@ export const plParties: PartySeed[] = [
     color: "#C00000",
     economicPosition: -4,
     socialPosition: 1,
-    foreignPolicy: -2,
-    culture: 1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default", "1979-default"],

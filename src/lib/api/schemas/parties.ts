@@ -21,10 +21,12 @@ export const createProposalSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("positionShift"),
-    // 4-axis support per the 2026-05-22 amendments-via-CommitteeProposal
-    // redesign. Each axis has its own 336-turn cooldown enforced via
+    // Economic and social only — the axes the engines actually read.
+    // `foreignPolicy` / `culture` were offered by the 2026-05-22 redesign
+    // but nothing consumed them, so they were removed (ticket #1032).
+    // Each axis has its own 336-turn cooldown enforced via
     // `PoliticalParty.positionShiftCooldowns`.
-    axis: z.enum(["economic", "social", "foreignPolicy", "culture"]),
+    axis: z.enum(["economic", "social"]),
     direction: z.union([z.literal(1), z.literal(-1)]),
   }),
   z.object({

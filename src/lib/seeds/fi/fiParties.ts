@@ -24,8 +24,6 @@ export const fiParties: PartySeed[] = [
     color: "#E11931",
     economicPosition: -2,
     socialPosition: -1,
-    foreignPolicy: 0, // Paasikivi–Kekkonen line orthodoxy
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1979-default", "1991-default"],
@@ -47,8 +45,6 @@ export const fiParties: PartySeed[] = [
     color: "#01954B",
     economicPosition: 0, // agrarian center; smallholder subsidies + regional policy
     socialPosition: 2,
-    foreignPolicy: 0, // Kekkonen's own party
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1979-default", "1991-default"],
@@ -70,8 +66,6 @@ export const fiParties: PartySeed[] = [
     color: "#006288",
     economicPosition: 3,
     socialPosition: 2,
-    foreignPolicy: 1, // Western-leaning; kept out of cabinets by the eastern relationship
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1979-default", "1991-default"],
@@ -93,8 +87,6 @@ export const fiParties: PartySeed[] = [
     color: "#B5121B",
     economicPosition: -4,
     socialPosition: -1,
-    foreignPolicy: -3, // Moscow-aligned front, though in and out of cabinets
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1979-default"],
@@ -117,8 +109,6 @@ export const fiParties: PartySeed[] = [
     color: "#01954B",
     economicPosition: 0,
     socialPosition: 3, // smallholder-agrarian, church-adjacent countryside
-    foreignPolicy: 0, // Kekkonen carries the Paasikivi line
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -140,8 +130,6 @@ export const fiParties: PartySeed[] = [
     color: "#E11931",
     economicPosition: -2,
     socialPosition: -1,
-    foreignPolicy: 1, // more Western-minded than the Agrarians; distrusted by Moscow
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -163,8 +151,6 @@ export const fiParties: PartySeed[] = [
     color: "#B5121B",
     economicPosition: -4,
     socialPosition: -1,
-    foreignPolicy: -4, // Moscow-aligned; excluded from cabinets since 1948
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -186,8 +172,6 @@ export const fiParties: PartySeed[] = [
     color: "#006288",
     economicPosition: 3,
     socialPosition: 2,
-    foreignPolicy: 1,
-    culture: 2,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1953-default"],
@@ -212,8 +196,6 @@ export const fiParties: PartySeed[] = [
     color: "#B5121B",
     economicPosition: -4,
     socialPosition: -1,
-    foreignPolicy: -2,
-    culture: -1,
     memberCount: 0,
     isDefault: true,
     validForPresets: ["1991-default"],

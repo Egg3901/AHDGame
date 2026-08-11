@@ -33,6 +33,7 @@ import { migration as restoreCapitalModeFromShadow } from "./entries/2026-08-01-
 import { migration as fixSeedSectorCurrencyDenomination } from "./entries/2026-08-01-fix-seed-sector-currency-denomination";
 import { migration as adoptReferenceGameConfigGates } from "./entries/2026-08-08-adopt-reference-gameconfig-gates";
 import { migration as smoothLegacyBuildOrders } from "./entries/2026-08-10-smooth-legacy-build-orders";
+import { migration as dropDeadPartyAxes } from "./entries/2026-08-11-drop-dead-party-axes";
 import { migration as heal1953SeedBalance } from "./entries/2026-08-09-heal-1953-seed-balance";
 import { migration as reconcileCommandEconomyUnowned } from "./entries/2026-08-09-reconcile-command-economy-unowned";
 
@@ -85,6 +86,9 @@ export const MIGRATIONS: Migration[] = [
   // so full ordered capacity is delivered over the remaining window (flipping
   // `smooth` alone would drop the already-elapsed, already-paid fraction).
   smoothLegacyBuildOrders,
+  // Ticket #1032 — drop the foreignPolicy / culture party axes. Written by
+  // every seed and the shift UI, read by nothing.
+  dropDeadPartyAxes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.

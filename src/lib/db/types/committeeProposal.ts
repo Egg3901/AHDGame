@@ -1,6 +1,17 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "../../constants/countries";
 
+/** Axes a position shift can be proposed on. Both are read by the engines. */
+export type PositionShiftAxis = "economic" | "social";
+
+/**
+ * Axes retired in ticket #1032. They were written by seeds, charters and
+ * the shift UI but never read by any gameplay mechanic, so players could
+ * spend a committee vote and a 336-turn cooldown for no effect. Retained
+ * only so historical proposals stay describable and renderable.
+ */
+export type RetiredPositionShiftAxis = "foreignPolicy" | "culture";
+
 export interface CommitteeProposalVote {
   voterId: ObjectId;
   vote: "yes" | "no";
@@ -35,13 +46,17 @@ export interface CommitteeProposal {
   /**
    * Populated for type === "positionShift".
    *
-   * Axes extended from `economic | social` to all four
-   * PartyCharterPlatform axes per the 2026-05-22 amendments-via-
-   * CommitteeProposal redesign. Each axis has its own 336-turn
-   * cooldown enforced via `PoliticalParty.positionShiftCooldowns`.
+   * Only `economic | social` can be proposed — those are the axes the
+   * engines actually read. A 2026-05-22 redesign also offered
+   * `foreignPolicy` and `culture`, but nothing ever consumed them, so
+   * they were retired (ticket #1032). Rows created before that retirement
+   * still carry the old values, so the stored type stays wide enough to
+   * describe them honestly; creation is narrowed by the zod schema and
+   * `applyPositionShiftEffect` refuses them. Each axis has its own
+   * 336-turn cooldown via `PoliticalParty.positionShiftCooldowns`.
    */
   positionShift?: {
-    axis: "economic" | "social" | "foreignPolicy" | "culture";
+    axis: PositionShiftAxis | RetiredPositionShiftAxis;
     direction: 1 | -1;
   };
   /** Populated for type === "merge" */

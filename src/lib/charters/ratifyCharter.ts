@@ -104,8 +104,6 @@ export async function ratifyCharter(
     color: "#4f46e5", // neutral indigo until chair customizes
     economicPosition: axisToPartyPosition(platform.economic),
     socialPosition: axisToPartyPosition(platform.social),
-    foreignPolicy: axisToPartyPosition(platform.foreignPolicy),
-    culture: axisToPartyPosition(platform.culture),
     chairId: null,
     viceChairId: null,
     treasurerId: null,

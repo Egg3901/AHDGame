@@ -382,6 +382,22 @@ export function computeClearingFactors(args: {
    * the book is byte-identical to today for every other mode.
    */
   plantsEnabled?: boolean;
+  /**
+   * Market partition (era worlds, marketPartition): sectorId → market-group key
+   * (the seller's home country). Together with `balancesByGroup`, each
+   * commodity clears one book PER GROUP against that group's reachable
+   * balances (see market/tradePartition.ts) instead of a single worldwide
+   * book — a seller behind an embargo wall competes only for the demand its
+   * country can reach. Sectors absent from the map, or groups without a
+   * balance entry, fall back to the worldwide `balances`. Omitted ⇒ one
+   * worldwide book, byte-identical to today.
+   */
+  groupBySector?: ReadonlyMap<string, string>;
+  /** Per-group lagged balances (group key → commodity → {supply, demand}). */
+  balancesByGroup?: ReadonlyMap<
+    string,
+    ReadonlyMap<CommodityType, { supply: number; demand: number }>
+  >;
 }): Map<string, SectorClearingResult> {
   const { sectors, balances, priceRatioByCommodity, basePrices, onBookDiagnostic } = args;
 
@@ -397,7 +413,13 @@ export function computeClearingFactors(args: {
     for (const commodity of Object.keys(s.supplyRates) as CommodityType[]) {
       const rate = s.supplyRates[commodity] ?? 0;
       if (rate <= 0) continue;
-      const bal = balances.get(commodity);
+      // Auto-posture reads the sector's OWN market's balance when partitioned:
+      // a seller in a glutted, embargo-walled market must undercut off its
+      // reachable book, not off a healthy worldwide aggregate it cannot sell to.
+      const group = args.groupBySector?.get(s.sectorId);
+      const bal =
+        (group !== undefined ? args.balancesByGroup?.get(group)?.get(commodity) : undefined) ??
+        balances.get(commodity);
       const posture =
         s.posture != null
           ? clampPricingPosture(s.posture)
@@ -435,98 +457,142 @@ export function computeClearingFactors(args: {
   //    doesn't hand corporate sectors the whole market.
   const soldByCommodityBySector = new Map<CommodityType, Map<string, number>>();
   for (const [commodity, sellers] of sellersByCommodity) {
-    const bal = balances.get(commodity);
-    const nameplateUnits = sellers.reduce((sum, s) => sum + s.units, 0);
-    const laggedSupply = bal?.supply ?? 0;
-    // Diagnostic reports the RAW nameplate so the caller's tripwire still catches
-    // genuine unit-scale bugs (e.g. the t879 FX book, ~100×). The benign scale/
-    // haircut gap (nameplate a bit above supply because the ledger applies
-    // natcorpScale/outputMultiplier/haircut the nameplate omits) is reconciled
-    // below and no longer depresses fills.
-    onBookDiagnostic?.({
-      commodity,
-      offeredUnits: nameplateUnits,
-      laggedSupply,
-      laggedDemand: bal?.demand ?? 0,
-    });
-    // When the nameplate exceeds lagged supply, scale every seller down
-    // proportionally so the offered book equals the units that actually reach the
-    // market. This makes aggregate corp fill track the true clear rate
-    // (min(1, demand/supply)) instead of being depressed by phantom over-supply,
-    // while preserving relative seller shares so posture ordering still holds.
-    // Sellers offering REAL produced units are exempt: the normalization exists
-    // only to undo the nameplate's known overstatement (it omits natcorpScale,
-    // outputMultiplier and the extraction haircut that the supply ledger
-    // applies). Capacity-derived offers already carry every production leg, so
-    // scaling them down would double-count the same haircuts and depress fills.
-    if (laggedSupply > 0 && nameplateUnits > laggedSupply) {
-      const normalizable = sellers.filter((s) => !s.realUnits);
-      const normalizableUnits = normalizable.reduce((sum, s) => sum + s.units, 0);
-      const exemptUnits = nameplateUnits - normalizableUnits;
-      const target = laggedSupply - exemptUnits;
-      if (normalizableUnits > 0 && target > 0 && target < normalizableUnits) {
-        const norm = target / normalizableUnits;
-        for (const s of normalizable) s.units *= norm;
-      } else if (normalizableUnits > 0 && target <= 0) {
-        // Exempt (real) offers alone already meet or exceed lagged supply —
-        // nothing left of the book for the nameplate sellers to claim.
-        for (const s of normalizable) s.units = 0;
-      }
-    }
-    const offeredUnits = sellers.reduce((sum, s) => sum + s.units, 0);
-    const totalSupply = Math.max(laggedSupply, offeredUnits);
-    const share = totalSupply > 0 ? offeredUnits / totalSupply : 1;
-    const demandForPass = (bal?.demand ?? 0) * share;
-
-    // Contracted allocation: distribute each supplier corp's contracted volume
-    // for this commodity across its selling sectors, proportional to their
-    // (post-normalization) offered units, capped at each sector's units.
-    let contractedUnitsById: Map<string, number> | undefined;
-    // Exclusivity offer caps. Kept OUT of `s.units` on purpose: `s.units` is the
-    // soldFraction denominator (and the produced-units figure the contract
-    // shortfall check reads), so writing the contracted share back into it made
-    // an exclusive supplier that produced far more than it contracted report a
-    // ~100% fill rate and hid its unsold surplus from every downstream consumer.
-    let exclusiveCapById: Map<string, number> | undefined;
-    const contractedCorpBySector = new Map<string, string>();
-    if (args.contractedByCorpCommodity && args.sectorCorpId) {
-      contractedUnitsById = new Map<string, number>();
-      const unitsByCorp = new Map<string, { total: number; sellers: ClearingSeller[] }>();
+    // Market partition: split the commodity's sellers into per-group books
+    // (seller's home country) and clear each book against ITS reachable
+    // balances. Without partition args this is one worldwide group ("") over
+    // the aggregate `balances` — the original single-book pass, unchanged.
+    const partitioned = new Map<string, ClearingSeller[]>();
+    if (args.balancesByGroup) {
       for (const s of sellers) {
-        const corpId = args.sectorCorpId.get(s.id);
-        if (!corpId) continue;
-        const e = unitsByCorp.get(corpId) ?? { total: 0, sellers: [] };
-        e.total += s.units;
-        e.sellers.push(s);
-        unitsByCorp.set(corpId, e);
+        const g = args.groupBySector?.get(s.id) ?? "";
+        partitioned.set(g, [...(partitioned.get(g) ?? []), s]);
       }
-      for (const [corpId, e] of unitsByCorp) {
-        const contracted = args.contractedByCorpCommodity.get(corpId)?.get(commodity) ?? 0;
-        if (contracted <= 0 || e.total <= 0) continue;
-        const take = Math.min(contracted, e.total);
-        const exclusive = args.exclusiveByCorpCommodity?.has(`${corpId}:${commodity}`) ?? false;
-        for (const s of e.sellers) {
-          const share = (take * s.units) / e.total;
-          contractedUnitsById.set(s.id, share);
-          contractedCorpBySector.set(s.id, corpId);
-          // Exclusive: cap the units that reach the book at the contracted share
-          // so the surplus never reaches loyalty/cheapest-first or the open
-          // market. The cap lives in its own map — see exclusiveCapById above.
-          if (exclusive) {
-            exclusiveCapById ??= new Map<string, number>();
-            exclusiveCapById.set(s.id, share);
-          }
+    } else {
+      partitioned.set("", sellers);
+    }
+    const balForGroup = (g: string) =>
+      (g !== "" ? args.balancesByGroup?.get(g)?.get(commodity) : undefined) ??
+      balances.get(commodity);
+
+    for (const [g, groupSellers] of partitioned) {
+      const bal = balForGroup(g);
+      const nameplateUnits = groupSellers.reduce((sum, s) => sum + s.units, 0);
+      const laggedSupply = bal?.supply ?? 0;
+      // Diagnostic reports the RAW nameplate so the caller's tripwire still catches
+      // genuine unit-scale bugs (e.g. the t879 FX book, ~100×). The benign scale/
+      // haircut gap (nameplate a bit above supply because the ledger applies
+      // natcorpScale/outputMultiplier/haircut the nameplate omits) is reconciled
+      // below and no longer depresses fills.
+      onBookDiagnostic?.({
+        commodity,
+        offeredUnits: nameplateUnits,
+        laggedSupply,
+        laggedDemand: bal?.demand ?? 0,
+      });
+      // When the nameplate exceeds lagged supply, scale every seller down
+      // proportionally so the offered book equals the units that actually reach the
+      // market. This makes aggregate corp fill track the true clear rate
+      // (min(1, demand/supply)) instead of being depressed by phantom over-supply,
+      // while preserving relative seller shares so posture ordering still holds.
+      // Sellers offering REAL produced units are exempt: the normalization exists
+      // only to undo the nameplate's known overstatement (it omits natcorpScale,
+      // outputMultiplier and the extraction haircut that the supply ledger
+      // applies). Capacity-derived offers already carry every production leg, so
+      // scaling them down would double-count the same haircuts and depress fills.
+      if (laggedSupply > 0 && nameplateUnits > laggedSupply) {
+        const normalizable = groupSellers.filter((s) => !s.realUnits);
+        const normalizableUnits = normalizable.reduce((sum, s) => sum + s.units, 0);
+        const exemptUnits = nameplateUnits - normalizableUnits;
+        const target = laggedSupply - exemptUnits;
+        if (normalizableUnits > 0 && target > 0 && target < normalizableUnits) {
+          const norm = target / normalizableUnits;
+          for (const s of normalizable) s.units *= norm;
+        } else if (normalizableUnits > 0 && target <= 0) {
+          // Exempt (real) offers alone already meet or exceed lagged supply —
+          // nothing left of the book for the nameplate sellers to claim.
+          for (const s of normalizable) s.units = 0;
         }
       }
     }
 
-    const sold = clearCommodityMarket(
-      demandForPass,
-      sellers,
-      loyaltyBySectorId,
-      contractedUnitsById,
-      exclusiveCapById
-    );
+    // Post-normalization per-corp unit totals ACROSS groups: a corp whose
+    // sectors span countries (overseas plants) must have its contracted volume
+    // split once, proportional to where its units actually sit — allocating the
+    // full volume inside every book it touches would double-count the contract.
+    const corpUnitsTotal = new Map<string, number>();
+    if (args.contractedByCorpCommodity && args.sectorCorpId) {
+      for (const s of sellers) {
+        const corpId = args.sectorCorpId.get(s.id);
+        if (!corpId) continue;
+        corpUnitsTotal.set(corpId, (corpUnitsTotal.get(corpId) ?? 0) + s.units);
+      }
+    }
+
+    const sold = new Map<string, number>();
+    const contractedCorpBySector = new Map<string, string>();
+    const contractedShareBySector = new Map<string, number>();
+    for (const [g, groupSellers] of partitioned) {
+      const bal = balForGroup(g);
+      const laggedSupply = bal?.supply ?? 0;
+      const offeredUnits = groupSellers.reduce((sum, s) => sum + s.units, 0);
+      const totalSupply = Math.max(laggedSupply, offeredUnits);
+      const share = totalSupply > 0 ? offeredUnits / totalSupply : 1;
+      const demandForPass = (bal?.demand ?? 0) * share;
+
+      // Contracted allocation: distribute each supplier corp's contracted volume
+      // for this commodity across its selling sectors, proportional to their
+      // (post-normalization) offered units, capped at each sector's units.
+      let contractedUnitsById: Map<string, number> | undefined;
+      // Exclusivity offer caps. Kept OUT of `s.units` on purpose: `s.units` is the
+      // soldFraction denominator (and the produced-units figure the contract
+      // shortfall check reads), so writing the contracted share back into it made
+      // an exclusive supplier that produced far more than it contracted report a
+      // ~100% fill rate and hid its unsold surplus from every downstream consumer.
+      let exclusiveCapById: Map<string, number> | undefined;
+      if (args.contractedByCorpCommodity && args.sectorCorpId) {
+        contractedUnitsById = new Map<string, number>();
+        const unitsByCorp = new Map<string, { total: number; sellers: ClearingSeller[] }>();
+        for (const s of groupSellers) {
+          const corpId = args.sectorCorpId.get(s.id);
+          if (!corpId) continue;
+          const e = unitsByCorp.get(corpId) ?? { total: 0, sellers: [] };
+          e.total += s.units;
+          e.sellers.push(s);
+          unitsByCorp.set(corpId, e);
+        }
+        for (const [corpId, e] of unitsByCorp) {
+          const contractedAll = args.contractedByCorpCommodity.get(corpId)?.get(commodity) ?? 0;
+          const allUnits = corpUnitsTotal.get(corpId) ?? 0;
+          // This group's slice of the corp's contracted volume, by unit weight.
+          const contracted = allUnits > 0 ? contractedAll * (e.total / allUnits) : 0;
+          if (contracted <= 0 || e.total <= 0) continue;
+          const take = Math.min(contracted, e.total);
+          const exclusive = args.exclusiveByCorpCommodity?.has(`${corpId}:${commodity}`) ?? false;
+          for (const s of e.sellers) {
+            const sectorShare = (take * s.units) / e.total;
+            contractedUnitsById.set(s.id, sectorShare);
+            contractedCorpBySector.set(s.id, corpId);
+            contractedShareBySector.set(s.id, sectorShare);
+            // Exclusive: cap the units that reach the book at the contracted share
+            // so the surplus never reaches loyalty/cheapest-first or the open
+            // market. The cap lives in its own map — see exclusiveCapById above.
+            if (exclusive) {
+              exclusiveCapById ??= new Map<string, number>();
+              exclusiveCapById.set(s.id, sectorShare);
+            }
+          }
+        }
+      }
+
+      const groupSold = clearCommodityMarket(
+        demandForPass,
+        groupSellers,
+        loyaltyBySectorId,
+        contractedUnitsById,
+        exclusiveCapById
+      );
+      for (const [id, f] of groupSold) sold.set(id, f);
+    }
     soldByCommodityBySector.set(commodity, sold);
 
     // Production sink: each corp's offered units for this commodity, recorded
@@ -543,8 +609,8 @@ export function computeClearingFactors(args: {
 
     // Settlement sink: record the contracted units that actually cleared, per
     // supplier corp, for the caller's bilateral premium settlement.
-    if (args.contractSettlementOut && contractedUnitsById) {
-      for (const [sectorId, contractedShare] of contractedUnitsById) {
+    if (args.contractSettlementOut && contractedShareBySector.size > 0) {
+      for (const [sectorId, contractedShare] of contractedShareBySector) {
         const corpId = contractedCorpBySector.get(sectorId);
         if (!corpId) continue;
         const seller = sellers.find((x) => x.id === sectorId);
