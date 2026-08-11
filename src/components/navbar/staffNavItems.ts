@@ -1,6 +1,6 @@
 import { OPS_DASHBOARD_URL } from "@/lib/urls";
 
-export const DOCS_URL = "https://docs.ahousedividedgame.com";
+export const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL ?? "https://docs.lakesidegames.net";
 
 export interface StaffNavItem {
   label: string;
