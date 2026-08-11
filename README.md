@@ -46,7 +46,7 @@ The country roster is **config- and database-driven**, not hardcoded: 24 registe
 - Nine action types: fundraise, campaign, advertise, build donor base, poll (regular and large), convert cash, debate prep, rest
 - Action costs scale with progress — campaigning costs more influence-points and funds (GDP-scaled per state) as your standing rises
 - Character stats (charisma, intellect, fundraising) modify action outcomes
-- 39+ achievement-tracked careers, onboarding flow, year-in-review "wrapped" recaps
+- 58 achievements, onboarding flow, year-in-review "wrapped" recaps
 
 ### Elections & Campaigns
 
