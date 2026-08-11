@@ -1,0 +1,20 @@
+name: Feature or mechanic proposal
+description: Propose a feature, mechanic, or balance change
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Balance and mechanics proposals need discussion before code — see [CONTRIBUTING.md](../../blob/main/CONTRIBUTING.md). Balance changes require a worldsim report to merge.
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should change and why. Include the player problem it solves.
+    validations:
+      required: true
+  - type: textarea
+    id: interactions
+    attributes:
+      label: Interactions
+      description: Which existing systems does this touch (economy, elections, NPPs, turn phases)?

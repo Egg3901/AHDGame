@@ -1,0 +1,27 @@
+name: Bug report
+description: Something is broken in the game or the codebase
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Is this an exploit or vulnerability?** Do NOT file it here — see [SECURITY.md](../../blob/main/SECURITY.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Steps, character/country/world context, or a failing test.
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      placeholder: page URL, API route, or turn phase

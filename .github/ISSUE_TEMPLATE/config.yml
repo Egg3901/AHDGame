@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report an exploit or vulnerability (private)
+    url: https://github.com/Egg3901/AHDGame/security/advisories/new
+    about: Never report exploits in public issues.
+  - name: Player support
+    url: https://www.ahousedividedgame.com/faq
+    about: In-game issues with your account are handled via in-game support and Discord, not GitHub.
