@@ -1,0 +1,148 @@
+import type { ObjectId } from "mongodb";
+
+export interface VoteTurnSnapshot {
+  turn: number;
+  recordedAt: Date;
+  cumulativeVotes: Record<string, number>;
+  sharesPct: Record<string, number>;
+  /** Multi-seat races only (house, stateSenate, commons, …): Hamilton seat projection at this turn. */
+  seatsEstimate?: Record<string, number>;
+}
+
+/** Stored when primary resolves — canonical primary results for wiki/history. */
+export interface PrimaryResultEntry {
+  candidateId: string;
+  characterName: string;
+  party: string;
+  primaryScore: number;
+  sharePct: number;
+  won: boolean;
+}
+
+export interface PrimaryResults {
+  byParty: Record<string, PrimaryResultEntry[]>;
+  recordedAt: Date;
+}
+
+export interface ElectionVoteTally {
+  _id: ObjectId;
+  electionId: ObjectId;
+  state: string;
+  totalVotes: Record<string, number>;
+  candidateNames: Record<string, string>;
+  candidateParties: Record<string, string>;
+  turnSnapshots: VoteTurnSnapshot[];
+  finalized: boolean;
+  seatsEstimate?: Record<string, number>;
+  /** Stored when primary resolves; used for wiki election history. */
+  primaryResults?: PrimaryResults;
+  createdAt: Date;
+  updatedAt: Date;
+
+  /** President only: votes per electoral unit (state or ME/NE district). unitId -> candidateId -> votes */
+  totalVotesByUnit?: Record<string, Record<string, number>>;
+  /** President only: electoral votes per candidate after resolution */
+  electoralVotesByCandidate?: Record<string, number>;
+  /** President only: how the race was resolved when finalized */
+  resolutionMode?: "majority" | "contingent" | "contingent_deadlock";
+  /** President only: House/Senate contingent vote breakdown when no EV majority */
+  contingentResult?: {
+    eligiblePresidentCandidateIds: string[];
+    eligibleVicePresidentCandidateIds: string[];
+    houseDelegationVotes: Record<string, string | null>;
+    houseVoteTotals: Record<string, number>;
+    senateVotes: Record<string, string | null>;
+    senateVoteTotals: Record<string, number>;
+    presidentWinnerId: string;
+    vicePresidentWinnerId: string | null;
+    houseThreshold: number;
+    senateThreshold: number;
+    deadlockBreakerUsed?: boolean;
+    deadlockBreakerReason?: string;
+    topElectoralVoteTotal: number;
+  };
+  /** President only: per-unit turn snapshots for EV projection */
+  unitTurnSnapshots?: Record<string, VoteTurnSnapshot[]>;
+  /**
+   * President only: frozen House/Senate chamber used for contingent ballots.
+   * Captured when contingent resolution first runs so same-turn chamber flips
+   * cannot change the ballot after down-ballot races resolve.
+   */
+  contingentChamberSnapshot?: {
+    capturedAt: Date;
+    houseDelegations: Array<{
+      stateId: string;
+      voters: Array<{
+        id: string;
+        party: string;
+        economic: number;
+        social: number;
+        weight?: number;
+      }>;
+    }>;
+    senators: Array<{
+      id: string;
+      party: string;
+      economic: number;
+      social: number;
+      weight?: number;
+    }>;
+  };
+  /** President only: set when contingent resolution failed and will retry next turn. */
+  contingentResolutionPending?: boolean;
+  /** President only: tally finalized but executive seating failed; retry seating only. */
+  executiveSeatingPending?: boolean;
+
+  /**
+   * President-primary-only: per-state intra-party votes accumulated during the final 6 turns.
+   * Shape: partyId -> stateId -> candidateId -> votes
+   */
+  primaryStateVotes?: Record<string, Record<string, Record<string, number>>>;
+  /**
+   * President-primary-only: delegates awarded per candidate per party after stagger waves.
+   * Shape: partyId -> candidateId -> delegates
+   */
+  primaryDelegates?: Record<string, Record<string, number>>;
+  /**
+   * President-primary-only: per-state delegates awarded, for historical display.
+   * Shape: partyId -> stateId -> candidateId -> delegates
+   */
+  primaryDelegatesByState?: Record<string, Record<string, Record<string, number>>>;
+  /**
+   * President-primary-only: allocation method used for each state this cycle.
+   * Snapshot frozen at primary start from state party chair choice.
+   * Shape: partyId -> stateId -> "PR" | "WTA"
+   */
+  primaryAllocationByState?: Record<string, Record<string, "PR" | "WTA">>;
+  /**
+   * President-primary-only: stagger waves that have already run this cycle.
+   * Each turn's wave stores `{ wave, turnsRemaining, statesVoted, recordedAt }`.
+   */
+  primaryWaveHistory?: {
+    wave: number;
+    turnsRemaining: number;
+    statesVoted: string[];
+    recordedAt: Date;
+  }[];
+  /**
+   * President-primary-only: authoritative counter of stagger waves that have
+   * run this cycle. Maintained atomically via `$inc` alongside the
+   * `primaryWaveHistory` `$push`, so runtime control flow is robust against
+   * accidental edits to the display history array. Trusted by
+   * `runPrimaryStaggerWaveIfDue` when present; falls back to
+   * `primaryWaveHistory.length` for legacy tallies without the counter.
+   */
+  primaryStaggerWavesRun?: number;
+  /**
+   * President-primary-only: per-state polling trend during the pre-stagger
+   * window. Each snapshot captures projected score per candidate per state for
+   * each party, so the state-detail page can render a simple trend over time.
+   * Capped at the 24 most-recent snapshots to bound document size.
+   * Shape: snapshot -> partyId -> stateId -> candidateId -> projected score
+   */
+  primaryStatePollingHistory?: {
+    turn: number;
+    recordedAt: Date;
+    byParty: Record<string, Record<string, Record<string, number>>>;
+  }[];
+}

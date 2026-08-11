@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" role="img" aria-label="Non-Aligned Movement emblem">
+  <title>Non-Aligned Movement</title>
+  <rect width="240" height="160" fill="#7A5EA8"/>
+  <g transform="translate(120 80)">
+    <circle r="50" fill="#654C8E"/>
+    <g fill="none" stroke="#C9B6E4" stroke-width="3">
+      <circle r="34"/>
+      <ellipse rx="16" ry="34"/>
+      <line x1="-34" y1="0" x2="34" y2="0"/>
+    </g>
+    <path d="M0 -22 L15 0 L0 22 L-15 0 Z" fill="#F2ECFA"/>
+  </g>
+</svg>

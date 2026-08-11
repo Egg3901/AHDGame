@@ -1,0 +1,135 @@
+import type { ClientSession, Db, ObjectId } from "mongodb";
+import * as Sentry from "@sentry/nextjs";
+import { getShareBuybackMode } from "./shareBuybackMode";
+import {
+  creditCorpLiquidCapital,
+  refundCorpLiquidCapital,
+  atomicallyDebitCorpLiquidCapital,
+  decrementCorpIssuanceProceeds,
+  creditCorpShareEscrow,
+  debitCorpShareEscrowFloored,
+  type EscrowDebitSplit,
+} from "@/lib/financialTxLog/atomicCashGuard";
+
+/**
+ * Centralized routing for issuer-as-counterparty float trades. The issuer's
+ * `shareBuybackMode` decides whether float buy/sell cash flows through the
+ * market-making escrow (escrow mode) or the treasury (instant mode). Used by
+ * the market buy/sell routes, limit-order immediate fills, and index-fund
+ * float absorption so the routing lives in exactly one place.
+ *
+ * `amountLocal` is always in the issuer's liquidCurrencyCode units
+ * (= shares × executionPrice).
+ */
+type EscrowCorp = { _id: ObjectId; shareBuybackMode?: string };
+type EscrowSettlementOptions = { session?: ClientSession };
+
+/**
+ * Credit the issuer for a float BUY.
+ * - escrow mode: credit shareEscrowBalance.
+ * - instant mode: credit liquidCapital AND track issuance proceeds (so dilution
+ *   reduces the share-price book floor). Escrow mode does NOT track issuance
+ *   proceeds — the cash lands in the off-book escrow (the escrow is not a
+ *   share-price valuation input, decoupled 2026-06-07), so liquidCapital never
+ *   inflates and there is nothing to offset.
+ */
+export async function applyFloatBuyCredit(
+  db: Db,
+  corp: EscrowCorp,
+  amountLocal: number,
+  options?: EscrowSettlementOptions
+): Promise<void> {
+  if (getShareBuybackMode(corp) === "escrow") {
+    await creditCorpShareEscrow(db, corp._id, amountLocal, options);
+  } else {
+    await creditCorpLiquidCapital(db, corp._id, amountLocal, true, options);
+  }
+}
+
+/** Re-exported so callers can type the hoisted split without a second import. */
+export type { EscrowDebitSplit };
+
+/** Result of a float-sell settlement. `split` is present only in escrow mode. */
+export type FloatSellSettlement = { ok: boolean; split?: EscrowDebitSplit };
+
+/**
+ * Settle the issuer side of a float SELL.
+ * - escrow mode: debit the market-making escrow FLOORED at zero — escrow can
+ *   only spend the buyer cash it actually collected; any shortfall is drawn
+ *   from real `liquidCapital`. Never blocks the trade (always `ok:true`), and
+ *   `shareEscrowBalance` can no longer go negative (no more minted cash). The
+ *   returned `split` records how much came from escrow vs treasury so a
+ *   rollback can reverse both legs exactly.
+ * - instant mode: atomically debit liquidCapital, gated — `ok:false` if the
+ *   treasury can't cover (caller surfaces the "use the order book" error).
+ */
+export async function settleFloatSellDebit(
+  db: Db,
+  corp: EscrowCorp,
+  amountLocal: number,
+  options?: EscrowSettlementOptions
+): Promise<FloatSellSettlement> {
+  if (getShareBuybackMode(corp) === "escrow") {
+    const split = await debitCorpShareEscrowFloored(db, corp._id, amountLocal, options);
+    return { ok: true, split };
+  }
+  const debit = await atomicallyDebitCorpLiquidCapital(db, corp._id, amountLocal, options);
+  return { ok: debit.ok };
+}
+
+/**
+ * Reverse a `settleFloatSellDebit` (rollback when a later leg throws).
+ * Pass the `split` returned by the matching settle so both the escrow and the
+ * treasury legs are undone exactly. When no split is given (instant mode, or a
+ * legacy caller), it refunds the full amount to `liquidCapital`.
+ */
+export async function reverseFloatSellDebit(
+  db: Db,
+  corp: EscrowCorp,
+  amountLocal: number,
+  options?: EscrowSettlementOptions & { split?: EscrowDebitSplit }
+): Promise<void> {
+  if (getShareBuybackMode(corp) === "escrow") {
+    const split = options?.split;
+    if (split) {
+      if (split.escrowDebited > 0) {
+        await creditCorpShareEscrow(db, corp._id, split.escrowDebited, options);
+      }
+      if (split.treasuryDebited > 0) {
+        await refundCorpLiquidCapital(db, corp._id, split.treasuryDebited, options);
+      }
+    } else {
+      // No split recorded — best-effort restore of the whole amount to escrow.
+      await creditCorpShareEscrow(db, corp._id, amountLocal, options);
+    }
+  } else {
+    await refundCorpLiquidCapital(db, corp._id, amountLocal, options);
+  }
+}
+
+/**
+ * Best-effort side effect after a float SELL commits. Instant mode backs out
+ * realized issuance proceeds so the book floor tracks the float shrinking.
+ * Escrow mode is a no-op (it never tracked issuance proceeds — see
+ * `applyFloatBuyCredit`).
+ */
+export async function onFloatSellCommitted(
+  db: Db,
+  corp: EscrowCorp,
+  amountLocal: number,
+  options?: EscrowSettlementOptions
+): Promise<void> {
+  if (getShareBuybackMode(corp) === "escrow") return;
+  // Self-contained capture: this is invoked fire-and-forget (`void
+  // onFloatSellCommitted(...)`) from the trade paths, so a rejection here would
+  // otherwise be an unhandled promise rejection AND silently drift the corp
+  // issuance-proceeds book (the share-price floor lever) from reality.
+  try {
+    await decrementCorpIssuanceProceeds(db, corp._id, amountLocal, options);
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { module: "shareEscrowSettlement", op: "onFloatSellCommitted" },
+      extra: { corpId: corp._id?.toString(), amountLocal },
+    });
+  }
+}

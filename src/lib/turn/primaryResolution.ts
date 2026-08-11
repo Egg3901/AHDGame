@@ -1,0 +1,1293 @@
+import { getDb } from "@/lib/mongodb";
+import { accumulateNGPresidentVoteTurn } from "@/lib/turn/election/ngPresidentAccumulation";
+import { COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS } from "@/lib/constants/countries";
+import { ObjectId } from "mongodb";
+import type {
+  Campaign,
+  DemographicCategory,
+  Election,
+  ElectionCandidate,
+  ElectionVoteTally,
+  Character,
+  NPP,
+  PoliticalParty as PoliticalPartyType,
+  PrimaryResults,
+  PrimaryResultEntry,
+  PrimarySnapshot,
+  PrimarySnapshotEntry,
+  State,
+  StateDemographics,
+  StateDemographicTurnout,
+  StatePartyOrg,
+} from "@/lib/db/types";
+import {
+  fetchEnrichedCandidates,
+  initElectionVoteTally,
+  accumulateVoteTurn,
+} from "@/lib/electionEngine";
+import {
+  initPresidentVoteTally,
+  accumulatePresidentVoteTurn,
+} from "@/lib/presidentialElectionEngine";
+import { createNotifications, type NotificationInput } from "@/lib/notifications";
+import {
+  calcPrimaryScore,
+  calcPresidentPrimaryScore,
+  primarySharePctSoftmax,
+  effectivePartyInfluenceForPresidentialPrimary,
+  buildPartyChairMaps,
+  resolvePartyChairPrimaryRole,
+} from "@/lib/primaryScore";
+import { parseSeatId } from "@/lib/seats/seatId";
+import { getAllStateApprovalsForElection } from "@/lib/utils/getStateApprovalForElection";
+import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
+import {
+  getCountryConfig,
+  getPrimaryWinnersForElection,
+  type CountryId,
+} from "@/lib/constants/countries";
+import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
+import { NPP_PRIMARY_SCORE_MULTIPLIER } from "@/lib/electionEngine/constants";
+import { processPrimaryStaggerWaves } from "./primaryStaggerPhase";
+import { hasReachedExecutiveTermLimit } from "@/lib/elections/executiveTermLimits";
+import {
+  primaryOpenFilter,
+  primaryClosedFilter,
+  generalPhaseFilter,
+  electionOpenFilter,
+} from "@/lib/elections/electionDeadlineFilters";
+import { voidDebateSessionsForElection } from "@/lib/debate/debateSessionLifecycle";
+import {
+  summarizePrimaryProjection,
+  presidentialPrimaryStanding,
+} from "@/lib/elections/presidentialPrimaryDisplay";
+import { resolvePartyFamily, getTotalDelegatesForFamily } from "@/lib/constants/primaryCalendar";
+import { logger } from "../observability/logger";
+import { isNationwideDirectExecutiveElection } from "@/lib/elections/nationwideExecutive";
+import { buildNationwideElectoratePreload } from "@/lib/electionEngine/nationwideElectorate";
+
+/**
+ * For elections whose primaryEndTime just passed, eliminate losers per party.
+ * Sends win/loss notifications and initialises the general vote tally.
+ */
+export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): Promise<void> {
+  const db = await getDb();
+
+  // US House top-3 primary advance is part of the districted-redistricting
+  // system; gate it on the flag so the legacy single-nominee behavior is
+  // unchanged when the feature is off.
+  const redistrictingGs = await db
+    .collection<{ _id: string; redistrictingEnabled?: boolean }>("gameState")
+    .findOne({ _id: "current" });
+  const redistrictingEnabled = redistrictingGs?.redistrictingEnabled === true;
+
+  // Past-primary but not-yet-ended — turn-first (drift-immune, freezes on
+  // pause) with a Date fallback for un-backfilled docs.
+  const pastPrimary = await db
+    .collection<Election>("elections")
+    .find({
+      status: { $in: ["active", "upcoming"] },
+      $and: [primaryClosedFilter(currentTurn, now), electionOpenFilter(currentTurn, now)],
+    })
+    .toArray();
+
+  if (pastPrimary.length === 0) return;
+
+  const electionIds = pastPrimary.map((e) => e._id as ObjectId);
+  const presidentialElectionIds = pastPrimary
+    .filter((e) => e.electionType === "president")
+    .map((e) => e._id as ObjectId);
+  const hasPresident = presidentialElectionIds.length > 0;
+
+  // Region IDs needed for state-level primary alignment (skip presidential — national race).
+  const regionLookups = pastPrimary
+    .filter((e) => e.electionType !== "president" && e.seatId)
+    .map((e) => ({
+      regionId: parseSeatId(e.seatId as string).localRegionId,
+      countryId: (e.countryId ?? "US") as CountryId,
+    }))
+    .filter((r): r is { regionId: string; countryId: CountryId } => Boolean(r.regionId));
+  const uniqueRegionKeys = new Set(regionLookups.map((r) => `${r.countryId}:${r.regionId}`));
+
+  const [parties, allCandidates, statePartyOrgs, presidentialTallies, stateDocs] =
+    await Promise.all([
+      db.collection<PoliticalPartyType>("politicalParties").find({}).toArray(),
+      db
+        .collection<ElectionCandidate>("electionCandidates")
+        .find({ electionId: { $in: electionIds }, status: "active" })
+        .toArray(),
+      hasPresident
+        ? db.collection<StatePartyOrg>("statePartyOrg").find({}).toArray()
+        : Promise.resolve([] as StatePartyOrg[]),
+      hasPresident
+        ? db
+            .collection<ElectionVoteTally>("electionVoteTallies")
+            .find({ electionId: { $in: presidentialElectionIds } })
+            .toArray()
+        : Promise.resolve([] as ElectionVoteTally[]),
+      uniqueRegionKeys.size > 0
+        ? db
+            .collection<State>("states")
+            .find({
+              $or: [...uniqueRegionKeys].map((key) => {
+                const [countryId, regionId] = key.split(":");
+                return { _id: regionId, countryId: countryId as CountryId };
+              }),
+            })
+            .toArray()
+        : Promise.resolve([] as State[]),
+    ]);
+  const presidentialTallyMap = new Map(
+    presidentialTallies.map((t) => [t.electionId.toString(), t])
+  );
+  // Use composite keys to avoid cross-country sequential ID collisions
+  const partyMap = new Map(parties.map((p) => [`${p.countryId ?? "US"}:${p.sequentialId}`, p]));
+  const partyChairMaps = buildPartyChairMaps(parties, statePartyOrgs);
+  const partyOrgByStateParty = new Map<string, number>();
+  for (const po of statePartyOrgs) {
+    partyOrgByStateParty.set(`${po.stateId}_${po.partyId}`, po.organization ?? 0);
+  }
+  // Composite key (countryId:stateId) keeps UK/DE region docs from colliding with US.
+  const stateMap = new Map(stateDocs.map((s) => [`${s.countryId}:${s._id}`, s]));
+  const candidatesByElection = new Map<string, ElectionCandidate[]>();
+  for (const c of allCandidates) {
+    const eid = c.electionId.toString();
+    const list = candidatesByElection.get(eid) ?? [];
+    list.push(c);
+    candidatesByElection.set(eid, list);
+  }
+
+  let totalEliminated = 0;
+
+  // Gate pre-pass: country-specific primary winners: US=1, UK=3, JP=3. Skip any
+  // election where no party exceeds the max that can advance — otherwise
+  // multi-winner countries (UK/JP) would re-run primary resolution every turn
+  // after primaries end (parties still have maxAdvancing active candidates),
+  // wiping the general-phase vote tally via initElectionVoteTally each turn.
+  // Computing the gate up front lets the character fetch below be ONE batched
+  // $in query across every resolving election instead of one per election.
+  const resolvingElections: Array<{
+    election: (typeof pastPrimary)[number];
+    candidates: ElectionCandidate[];
+    partyCounts: Map<string, number>;
+    maxAdvancing: number;
+  }> = [];
+  for (const election of pastPrimary) {
+    const candidates = candidatesByElection.get((election._id as ObjectId).toString()) ?? [];
+    if (candidates.length === 0) continue;
+    const partyCounts = new Map<string, number>();
+    for (const c of candidates) partyCounts.set(c.party, (partyCounts.get(c.party) ?? 0) + 1);
+    const maxAdvancing = getPrimaryWinnersForElection(
+      (election.countryId ?? "US") as CountryId,
+      election.electionType,
+      redistrictingEnabled
+    );
+    if (![...partyCounts.values()].some((v) => v > maxAdvancing)) continue;
+    resolvingElections.push({ election, candidates, partyCounts, maxAdvancing });
+  }
+
+  // Characters for infamy lookup, batched across all resolving elections.
+  // Presidential races also need this map for partyOrg/national-influence
+  // lookups below; non-presidential paths only need char.infamy.
+  const allResolvingCandidates = resolvingElections.flatMap((r) => r.candidates);
+  const allCharacterIds = allResolvingCandidates.filter((c) => !c.isNPP).map((c) => c.characterId);
+  const chars =
+    allCharacterIds.length > 0
+      ? await db
+          .collection<Character>("characters")
+          .find({ _id: { $in: allCharacterIds } })
+          .toArray()
+      : [];
+  const charMap: Map<string, Character> = new Map(chars.map((c) => [c._id.toString(), c]));
+
+  for (const { election, candidates, partyCounts, maxAdvancing } of resolvingElections) {
+    const electionId = election._id as ObjectId;
+
+    const enriched = await fetchEnrichedCandidates(candidates);
+    const loserIds: string[] = [];
+    const primaryResultsByParty: Record<string, PrimaryResultEntry[]> = {};
+
+    // Resolve state lean for state-level alignment (skip president — national).
+    let raceStateEconLean: number | null | undefined;
+    let raceStateSocialLean: number | null | undefined;
+    if (election.electionType !== "president" && election.seatId) {
+      const localRegionId = parseSeatId(election.seatId).localRegionId;
+      if (localRegionId) {
+        const stateDoc = stateMap.get(`${election.countryId ?? "US"}:${localRegionId}`);
+        if (
+          stateDoc &&
+          typeof stateDoc.cachedEconomicLean === "number" &&
+          typeof stateDoc.cachedSocialLean === "number"
+        ) {
+          raceStateEconLean = stateDoc.cachedEconomicLean;
+          raceStateSocialLean = stateDoc.cachedSocialLean;
+        }
+      }
+    }
+
+    for (const [partyId, count] of partyCounts) {
+      const partyCandidates = candidates.filter((c) => c.party === partyId);
+      const party = partyMap.get(`${election.countryId ?? "US"}:${partyId}`);
+      const partyEP = party?.economicPosition ?? 0;
+      const partySP = party?.socialPosition ?? 0;
+      const hasPlayerInParty = partyCandidates.some((c) => !c.isNPP);
+
+      /*
+       * Presidential primary resolution reads the delegate tally produced by the
+       * stagger-phase accumulator (final 6 turns of the primary). Non-presidential
+       * primaries continue to use calcPrimaryScore — their path is unchanged.
+       * The presidential path falls back to score-based ranking only if no delegate
+       * data is present (e.g. admin-forced resolution skipping the stagger window).
+       */
+      const presidentialTally =
+        election.electionType === "president"
+          ? presidentialTallyMap.get(electionId.toString())
+          : null;
+      const partyDelegates = presidentialTally?.primaryDelegates?.[partyId];
+      const usePresidentialDelegatePath =
+        election.electionType === "president" &&
+        partyDelegates &&
+        Object.values(partyDelegates).some((v) => v > 0);
+
+      let scored: { candidateId: string; characterName: string; score: number }[];
+
+      // Vote fallback: stagger ran and recorded per-state votes but no delegates
+      // crossed zero yet (e.g. admin-forced resolution mid-stagger). Rank by the
+      // national sum of real per-state votes so the winner still matches the
+      // vote engine rather than the ideology score (#3022).
+      const partyStateVotes =
+        election.electionType === "president"
+          ? presidentialTally?.primaryStateVotes?.[partyId]
+          : undefined;
+      const partyNationalVotes: Record<string, number> = {};
+      if (partyStateVotes) {
+        for (const byCandidate of Object.values(partyStateVotes)) {
+          for (const [cid, v] of Object.entries(byCandidate)) {
+            partyNationalVotes[cid] = (partyNationalVotes[cid] ?? 0) + v;
+          }
+        }
+      }
+      const usePresidentialVoteFallback =
+        !usePresidentialDelegatePath &&
+        election.electionType === "president" &&
+        Object.values(partyNationalVotes).some((v) => v > 0);
+
+      if (usePresidentialDelegatePath && partyDelegates) {
+        scored = partyCandidates
+          .map((c) => ({
+            candidateId: c._id.toString(),
+            characterName: c.characterName,
+            score: partyDelegates[c._id.toString()] ?? 0,
+          }))
+          .sort((a, b) => b.score - a.score);
+      } else if (usePresidentialVoteFallback) {
+        scored = partyCandidates
+          .map((c) => ({
+            candidateId: c._id.toString(),
+            characterName: c.characterName,
+            score: partyNationalVotes[c._id.toString()] ?? 0,
+          }))
+          .sort((a, b) => b.score - a.score);
+      } else {
+        scored = partyCandidates
+          .map((c) => {
+            const ec = enriched.find((e) => e.candidateId === c._id.toString());
+            if (!ec)
+              return { candidateId: c._id.toString(), characterName: c.characterName, score: 0 };
+            let score: number;
+            if (election.electionType === "president") {
+              // Party influence (candidate's own party clout), NPPs have none. See #934.
+              // No chair multiplier — the chair primary boost was removed (#3019);
+              // effectivePartyInfluenceForPresidentialPrimary is an inert passthrough.
+              const rawPartyInfluence = c.isNPP
+                ? 0
+                : (charMap.get(c.characterId.toString())?.partyInfluence ?? 0);
+              const role = c.isNPP
+                ? null
+                : resolvePartyChairPrimaryRole(c.characterId.toString(), partyChairMaps);
+              const partyInfluence = effectivePartyInfluenceForPresidentialPrimary(
+                rawPartyInfluence,
+                role
+              );
+              const nationalOrPol = c.isNPP
+                ? ec.politicalInfluence
+                : (charMap.get(c.characterId.toString())?.nationalInfluence ??
+                  ec.politicalInfluence);
+              score = calcPresidentPrimaryScore(
+                ec.charEP,
+                ec.charSP,
+                partyEP,
+                partySP,
+                ec.favorability,
+                nationalOrPol,
+                partyInfluence,
+                ec.infamy
+              );
+            } else {
+              score = calcPrimaryScore(
+                ec.charEP,
+                ec.charSP,
+                partyEP,
+                partySP,
+                ec.favorability,
+                ec.politicalInfluence,
+                ec.infamy,
+                raceStateEconLean,
+                raceStateSocialLean
+              );
+            }
+            /*
+             * NPPs are penalised in primary scoring when a player character runs in
+             * the same party. This models the structural disadvantage NPPs face from
+             * lower voter name recognition and fewer campaign resources compared to
+             * active player-driven characters. Without this handicap, high-favorability
+             * NPPs would frequently outcompete players in their own party primaries,
+             * undermining player agency. See NPP_PRIMARY_SCORE_MULTIPLIER in constants.ts.
+             */
+            if (c.isNPP && hasPlayerInParty) score *= NPP_PRIMARY_SCORE_MULTIPLIER;
+            return { candidateId: c._id.toString(), characterName: c.characterName, score };
+          })
+          .sort((a, b) => b.score - a.score);
+      }
+
+      // Country-specific primary winners: US=1, UK=3, JP=3
+      const shares = primarySharePctSoftmax(scored.map((x) => x.score));
+      primaryResultsByParty[partyId] = scored.map((s, i) => ({
+        candidateId: s.candidateId,
+        characterName: s.characterName,
+        party: partyId,
+        primaryScore: Math.round(s.score * 10) / 10,
+        sharePct: shares[i],
+        won: i < maxAdvancing,
+      }));
+
+      if (count > maxAdvancing) {
+        for (const s of scored.slice(maxAdvancing)) loserIds.push(s.candidateId);
+      }
+    }
+
+    const primaryResults: PrimaryResults = {
+      byParty: primaryResultsByParty,
+      recordedAt: now,
+    };
+
+    if (loserIds.length > 0) {
+      const loserObjectIds = loserIds.map((id) => new ObjectId(id));
+      await db
+        .collection("electionCandidates")
+        .updateMany(
+          { _id: { $in: loserObjectIds } },
+          { $set: { status: "withdrawn", withdrawnAt: now } }
+        );
+
+      // A debate challenge tied to this primary is moot the instant its
+      // candidate is eliminated — void any still-pending session rather than
+      // letting it live on for up to its own 12h real-time deadline.
+      await voidDebateSessionsForElection(db, electionId, now);
+
+      // Archive campaign docs for eliminated candidates instead of deleting
+      // them. A primary loser keeps their campaign (hidden from active surfaces)
+      // so a re-entry can reactivate it and an accidental wipe can't strand an
+      // active candidate without a campaign. Campaigns are only hard-deleted
+      // when the election itself resolves (presidentResolution / generalResolution).
+      const loserCandidateDocs = await db
+        .collection<ElectionCandidate>("electionCandidates")
+        .find(
+          { _id: { $in: loserObjectIds } },
+          { projection: { characterId: 1, nppId: 1, isNPP: 1 } }
+        )
+        .toArray();
+      const loserCharIds = loserCandidateDocs
+        .filter((c) => !c.isNPP && c.characterId)
+        .map((c) => c.characterId);
+      const loserNppIds = loserCandidateDocs.filter((c) => c.isNPP && c.nppId).map((c) => c.nppId!);
+      const loserCandidateKeys = [...loserCharIds, ...loserNppIds];
+      if (loserCandidateKeys.length > 0) {
+        await db.collection<Campaign>("campaigns").updateMany(
+          { electionId, candidateId: { $in: loserCandidateKeys }, status: { $ne: "archived" } },
+          {
+            $set: {
+              status: "archived",
+              archivedAt: now,
+              archivedReason: "primary_loss",
+              updatedAt: now,
+            },
+          }
+        );
+      }
+
+      totalEliminated += loserIds.length;
+
+      const typeLabel = formatElectionTypeLabel(election.electionType, election.countryId);
+
+      const loserIdSet = new Set(loserIds);
+      // Character docs were already fetched in the batched pre-loop query; the
+      // per-election re-fetch this replaces was one more round-trip per race.
+      const charMapNotify = charMap;
+      const notificationInputs: NotificationInput[] = [];
+      const achievementPromises: Promise<unknown>[] = [];
+      for (const c of candidates) {
+        if (c.isNPP) continue;
+        const char = charMapNotify.get(c.characterId.toString());
+        if (!char) continue;
+        const isLoser = loserIdSet.has(c._id.toString());
+        notificationInputs.push({
+          userId: char.userId,
+          type: isLoser ? "primary_loss" : "primary_win",
+          title: isLoser
+            ? `Primary Lost — ${typeLabel} (${election.state === "US" ? "National" : election.state})`
+            : `Primary Won — ${typeLabel} (${election.state === "US" ? "National" : election.state})`,
+          message: isLoser
+            ? `You were eliminated in the ${c.party} primary for ${typeLabel}${election.state === "US" ? "" : ` in ${election.state}`}.`
+            : `Congratulations! You won the ${c.party} primary for ${typeLabel}${election.state === "US" ? "" : ` in ${election.state}`} and advance to the general election.`,
+          metadata: {
+            electionId: electionId.toString(),
+            state: election.state,
+            electionType: election.electionType,
+            party: c.party,
+          },
+        });
+        if (!isLoser && election.electionType === "president") {
+          achievementPromises.push(
+            import("@/lib/achievements")
+              .then(async ({ awardAchievement, resolveUserIdFromCharacter }) => {
+                const cUserId = await resolveUserIdFromCharacter(c.characterId);
+                if (cUserId) await awardAchievement(cUserId, "presidential_nominee", c.characterId);
+              })
+              .catch((e) => console.error("Achievement check failed:", e))
+          );
+        }
+      }
+      await Promise.all([createNotifications(notificationInputs), ...achievementPromises]);
+    }
+
+    // Clear primary-phase campaigning state for every candidate in this election —
+    // the primary is over, so the badge and ticks should reset before general-phase
+    // travel takes over. Only affects presidential (state primaries don't set these).
+    if (election.electionType === "president") {
+      await db.collection<ElectionCandidate>("electionCandidates").updateMany(
+        { electionId },
+        {
+          $set: {
+            primaryCampaignState: null,
+            primaryCampaignTicks: 0,
+            primarySurgeUsed: false,
+          },
+        }
+      );
+
+      // Clear primarySurge bumps on every state party org for this country —
+      // the surge bonus exists only for the duration of the primary cycle.
+      await db
+        .collection<StatePartyOrg>("statePartyOrg")
+        .updateMany(
+          { countryId: election.countryId, primarySurge: { $gt: 0 } },
+          { $unset: { primarySurge: "" }, $set: { updatedAt: now } }
+        );
+    }
+
+    // Always reinitialise the tally so any stale vote snapshots from a previous
+    // general-phase window (e.g. after an admin timer reset puts the election back
+    // into primary) are wiped clean. The guard above ensures this only runs on
+    // the turn the primary ends — subsequent turns skip because no party has
+    // more active candidates than the country's maxAdvancing (US=1, UK/JP=3).
+    const generalCandidates = await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find({ electionId, status: "active" })
+      .toArray();
+    if (election.electionType === "president") {
+      // Auto-pick a tentative running mate for any player nominee who hasn't
+      // chosen one yet. Nominees can override via the running-mate UI at any
+      // time during the general phase — this is a fallback so a player who wins
+      // the primary on the final turn isn't VP-less when votes start accumulating.
+      await autoAssignTentativeRunningMates(db, generalCandidates, election.countryId as CountryId);
+      await initPresidentVoteTally(electionId, generalCandidates, primaryResults);
+    } else {
+      await initElectionVoteTally(
+        electionId,
+        generalCandidates,
+        election.state as string,
+        primaryResults
+      );
+    }
+  }
+
+  if (totalEliminated > 0)
+    console.log(`[Turn] Primaries resolved: ${totalEliminated} candidate(s) eliminated`);
+}
+
+/**
+ * For each player presidential nominee without a runningMateId, tentatively
+ * assign the highest-favorability same-party character in the same country
+ * who is not themselves a candidate or the incumbent president. Sends a
+ * notification so the nominee knows and can override via the running-mate UI.
+ */
+async function autoAssignTentativeRunningMates(
+  db: Awaited<ReturnType<typeof getDb>>,
+  nominees: ElectionCandidate[],
+  countryId: CountryId
+): Promise<void> {
+  const needsVp = nominees.filter((c) => !c.isNPP && !c.runningMateId && c.characterId != null);
+  if (needsVp.length === 0) return;
+
+  // Incumbent president is disqualified from being a running mate
+  const incumbent = await db
+    .collection("electedOfficials")
+    .findOne(getExecutiveOfficialFilter(countryId, "president"), {
+      projection: { characterId: 1 },
+    });
+  const incumbentId: ObjectId | null = (incumbent?.characterId as ObjectId | null) ?? null;
+  const countryConfig = getCountryConfig(countryId);
+
+  const candidateIdSet = new Set(nominees.map((c) => c.characterId?.toString()).filter(Boolean));
+
+  // Group nominees by party so we run one query per party instead of one per nominee
+  const nomineesByParty = new Map<string, typeof needsVp>();
+  for (const n of needsVp) {
+    const list = nomineesByParty.get(n.party) ?? [];
+    list.push(n);
+    nomineesByParty.set(n.party, list);
+  }
+
+  const partyQueries = [...nomineesByParty.keys()].map((party) =>
+    db
+      .collection<Character>("characters")
+      .find({
+        countryId,
+        party,
+        _id: { $nin: needsVp.map((n) => n.characterId) },
+      })
+      .sort({ favorability: -1 })
+      .limit(10)
+      .toArray()
+  );
+  const partyCandidatesArrays = await Promise.all(partyQueries);
+  const candidatesByParty = new Map<string, Character[]>();
+  let idx = 0;
+  for (const party of nomineesByParty.keys()) {
+    candidatesByParty.set(party, partyCandidatesArrays[idx++]);
+  }
+
+  // Batch-fetch nominee characters for notifications in one query
+  const nomineeChars = await db
+    .collection<Character>("characters")
+    .find(
+      { _id: { $in: needsVp.map((n) => n.characterId) } },
+      { projection: { _id: 1, userId: 1 } }
+    )
+    .toArray();
+  const nomineeCharMap = new Map(nomineeChars.map((c) => [c._id.toString(), c]));
+
+  for (const nominee of needsVp) {
+    const candidates = candidatesByParty.get(nominee.party) ?? [];
+
+    const pick = candidates.find(
+      (c) =>
+        !candidateIdSet.has(c._id.toString()) &&
+        (!incumbentId || !c._id.equals(incumbentId)) &&
+        !(
+          countryConfig.executiveTermLimit?.blocksRunningMateSelection &&
+          hasReachedExecutiveTermLimit(c, countryId)
+        )
+    );
+
+    if (!pick) continue;
+
+    await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .updateOne(
+        { _id: nominee._id },
+        { $set: { runningMateId: pick._id, updatedAt: new Date() } }
+      );
+
+    const nomineeChar = nomineeCharMap.get(nominee.characterId.toString());
+    if (nomineeChar?.userId) {
+      await createNotifications([
+        {
+          userId: nomineeChar.userId,
+          type: "general_win",
+          title: "Running mate tentatively assigned",
+          message: `Since you didn't pick a running mate before the primary ended, ${pick.name} has been assigned as your tentative VP. You can change them from the election page.`,
+          metadata: {
+            electionId: nominee.electionId.toString(),
+            tentativeVpId: pick._id.toString(),
+          },
+        },
+      ]);
+    }
+  }
+}
+
+/**
+ * Record a primary standings snapshot for every election currently in primary phase.
+ * Called each turn so the hourly trend graph stays populated.
+ */
+export async function recordPrimarySnapshots(now: Date, currentTurn: number): Promise<number> {
+  const db = await getDb();
+
+  // Elections still in their primary phase — turn-first with Date fallback.
+  const activeElections = await db
+    .collection<Election>("elections")
+    .find({ status: { $in: ["upcoming", "active"] }, ...primaryOpenFilter(currentTurn, now) })
+    .toArray();
+
+  if (activeElections.length === 0) return 0;
+
+  const electionIds = activeElections.map((e) => e._id);
+  const hasPresident = activeElections.some((e) => e.electionType === "president");
+
+  // Region IDs for state-level alignment lookups (skip presidential).
+  const snapshotRegionLookups = activeElections
+    .filter((e) => e.electionType !== "president" && e.seatId)
+    .map((e) => ({
+      regionId: parseSeatId(e.seatId as string).localRegionId,
+      countryId: (e.countryId ?? "US") as CountryId,
+    }))
+    .filter((r): r is { regionId: string; countryId: CountryId } => Boolean(r.regionId));
+  const uniqueSnapshotRegionKeys = new Set(
+    snapshotRegionLookups.map((r) => `${r.countryId}:${r.regionId}`)
+  );
+
+  const [parties, statePartyOrgs, allCandidates, stateDocs] = await Promise.all([
+    db.collection<PoliticalPartyType>("politicalParties").find({}).toArray(),
+    hasPresident
+      ? db.collection<StatePartyOrg>("statePartyOrg").find({}).toArray()
+      : Promise.resolve([] as StatePartyOrg[]),
+    db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find({ electionId: { $in: electionIds }, status: "active" })
+      .toArray(),
+    uniqueSnapshotRegionKeys.size > 0
+      ? db
+          .collection<State>("states")
+          .find({
+            $or: [...uniqueSnapshotRegionKeys].map((key) => {
+              const [countryId, regionId] = key.split(":");
+              return { _id: regionId, countryId: countryId as CountryId };
+            }),
+          })
+          .toArray()
+      : Promise.resolve([] as State[]),
+  ]);
+
+  // Use composite keys to avoid cross-country sequential ID collisions
+  const partyMap = new Map(parties.map((p) => [`${p.countryId ?? "US"}:${p.sequentialId}`, p]));
+  const partyChairMaps = buildPartyChairMaps(parties, statePartyOrgs);
+  const partyOrgByStateParty = new Map<string, number>();
+  for (const po of statePartyOrgs) {
+    partyOrgByStateParty.set(`${po.stateId}_${po.partyId}`, po.organization ?? 0);
+  }
+  const stateMap = new Map(stateDocs.map((s) => [`${s.countryId}:${s._id}`, s]));
+
+  const candidatesByElection = new Map<string, typeof allCandidates>();
+  for (const c of allCandidates) {
+    const eid = c.electionId.toString();
+    const list = candidatesByElection.get(eid) ?? [];
+    list.push(c);
+    candidatesByElection.set(eid, list);
+  }
+
+  const allCharacterIds = [
+    ...new Set(allCandidates.filter((c) => !c.isNPP).map((c) => c.characterId)),
+  ];
+  const allNppIds = [
+    ...new Set(allCandidates.filter((c) => c.isNPP && c.nppId).map((c) => c.nppId!)),
+  ];
+
+  const [characters, npps] = await Promise.all([
+    allCharacterIds.length > 0
+      ? db
+          .collection<Character>("characters")
+          .find({ _id: { $in: allCharacterIds } })
+          .toArray()
+      : Promise.resolve([] as Character[]),
+    allNppIds.length > 0
+      ? db
+          .collection<NPP>("npps")
+          .find({ _id: { $in: allNppIds } })
+          .toArray()
+      : Promise.resolve([] as NPP[]),
+  ]);
+  const charMap = new Map(characters.map((c) => [c._id.toString(), c]));
+  const nppMap = new Map(npps.map((n) => [n._id.toString(), n]));
+
+  // Presidential-only: compute per-state projections FIRST (also writes the
+  // per-state polling history to the tally). The returned projections drive a
+  // delegate-consistent national standing on the primarySnapshots doc below, so
+  // the persisted standing (read by wiki/discord/trend) matches the delegate
+  // winner instead of the old calcPresidentPrimaryScore ranking (#3022).
+  const presProjections = await recordPresidentialStatePollingSnapshots(
+    db,
+    activeElections.filter((e) => e.electionType === "president"),
+    candidatesByElection,
+    charMap,
+    nppMap,
+    partyMap,
+    statePartyOrgs,
+    now
+  );
+  const presPreset = hasPresident
+    ? (
+        await db
+          .collection<{ _id: string; preset?: string }>("gameState")
+          .findOne({ _id: "current" }, { projection: { preset: 1 } })
+      )?.preset
+    : undefined;
+
+  const snapshots: PrimarySnapshot[] = [];
+
+  for (const election of activeElections) {
+    const electionObjectId = election._id as ObjectId;
+    const candidates = candidatesByElection.get(electionObjectId.toString()) ?? [];
+
+    if (candidates.length === 0) continue;
+
+    const isPresident = election.electionType === "president";
+
+    // Resolve state lean for state-level alignment (skip president).
+    let raceStateEconLean: number | null | undefined;
+    let raceStateSocialLean: number | null | undefined;
+    if (!isPresident && election.seatId) {
+      const localRegionId = parseSeatId(election.seatId).localRegionId;
+      if (localRegionId) {
+        const stateDoc = stateMap.get(`${election.countryId ?? "US"}:${localRegionId}`);
+        if (
+          stateDoc &&
+          typeof stateDoc.cachedEconomicLean === "number" &&
+          typeof stateDoc.cachedSocialLean === "number"
+        ) {
+          raceStateEconLean = stateDoc.cachedEconomicLean;
+          raceStateSocialLean = stateDoc.cachedSocialLean;
+        }
+      }
+    }
+
+    const byParty: Record<string, PrimarySnapshotEntry[]> = {};
+
+    // Presidential standings derive from the SAME per-state vote projection that
+    // produces the delegate winner (#3022): rank by projected delegates, votes
+    // as tiebreak, with delegate share as the displayed sharePct. Falls back to
+    // the ideology score only for a party with no projected votes yet (very
+    // early primary). Non-presidential races keep calcPrimaryScore untouched.
+    const presStandingByCandidate = new Map<string, { standing: number; sharePct: number }>();
+    const presPartiesWithProjection = new Set<string>();
+    if (isPresident) {
+      const projByParty = presProjections.get(electionObjectId.toString()) ?? {};
+      const partyIds = [...new Set(candidates.map((c) => c.party))];
+      for (const partyId of partyIds) {
+        const byState = projByParty[partyId];
+        if (!byState) continue;
+        const partyDoc = partyMap.get(`${election.countryId ?? "US"}:${partyId}`);
+        const partyCandidateIds = candidates
+          .filter((c) => c.party === partyId)
+          .map((c) => c._id.toString());
+        const family = resolvePartyFamily(partyId, {
+          primaryCalendar: partyDoc?.primaryCalendar ?? null,
+          economicPosition: partyDoc?.economicPosition ?? 0,
+        });
+        const stateIds = Object.keys(byState);
+        const summary = summarizePrimaryProjection({
+          stateIds,
+          family,
+          candidateIds: partyCandidateIds,
+          totalDelegates: getTotalDelegatesForFamily(family, presPreset),
+          projectedVotesByState: byState,
+          preset: presPreset,
+        });
+        const totalVotes = Object.values(summary.nationalVotesByCandidate).reduce(
+          (s, v) => s + v,
+          0
+        );
+        if (totalVotes <= 0) continue; // no signal yet — fall back to score below
+        presPartiesWithProjection.add(partyId);
+        const totalDelegates = Object.values(summary.delegatesByCandidate).reduce(
+          (s, v) => s + v,
+          0
+        );
+        for (const cid of partyCandidateIds) {
+          const standing = presidentialPrimaryStanding(
+            summary.delegatesByCandidate[cid] ?? 0,
+            (summary.nationalVoteSharePct[cid] ?? 0) / 100
+          );
+          // Prefer delegate share; before any delegates are awarded show vote share.
+          const sharePct =
+            totalDelegates > 0
+              ? (summary.nationalDelegateSharePct[cid] ?? 0)
+              : (summary.nationalVoteSharePct[cid] ?? 0);
+          presStandingByCandidate.set(cid, { standing, sharePct });
+        }
+      }
+    }
+
+    for (const c of candidates) {
+      const party = partyMap.get(`${election.countryId ?? "US"}:${c.party}`);
+      const partyEcon = party?.economicPosition ?? 0;
+      const partySocial = party?.socialPosition ?? 0;
+
+      let econ = 0,
+        social = 0,
+        favorability = 50,
+        politicalInfluence = 0,
+        nationalInfluence: number | undefined,
+        candidateInfamy: number | undefined;
+      if (c.isNPP && c.nppId) {
+        const npp = nppMap.get(c.nppId.toString());
+        if (npp) {
+          econ = npp.policies.economic;
+          social = npp.policies.social;
+          favorability = npp.favorability;
+          politicalInfluence = npp.politicalInfluence;
+        }
+      } else {
+        const char = charMap.get(c.characterId.toString());
+        if (char) {
+          econ = char.policies.economic;
+          social = char.policies.social;
+          favorability = char.favorability;
+          politicalInfluence = char.politicalInfluence;
+          nationalInfluence = char.nationalInfluence;
+          candidateInfamy = char.infamy;
+        }
+      }
+
+      // President with a live projection → delegate-consistent standing (#3022).
+      const presStanding = isPresident ? presStandingByCandidate.get(c._id.toString()) : undefined;
+      const usePresProjection = isPresident && presPartiesWithProjection.has(c.party);
+      let primaryScore = usePresProjection
+        ? (presStanding?.standing ?? 0)
+        : isPresident
+          ? (() => {
+              // Pre-projection fallback (no per-state votes yet this cycle).
+              // Party influence (candidate's own party clout), NPPs have none (#934).
+              // No chair multiplier — chair primary boost removed (#3019).
+              const rawPartyInfluence = c.isNPP
+                ? 0
+                : (charMap.get(c.characterId.toString())?.partyInfluence ?? 0);
+              const role = c.isNPP
+                ? null
+                : resolvePartyChairPrimaryRole(c.characterId.toString(), partyChairMaps);
+              const partyInfluence = effectivePartyInfluenceForPresidentialPrimary(
+                rawPartyInfluence,
+                role
+              );
+              const nationalOrPol = nationalInfluence ?? politicalInfluence;
+              return calcPresidentPrimaryScore(
+                econ,
+                social,
+                partyEcon,
+                partySocial,
+                favorability,
+                nationalOrPol,
+                partyInfluence,
+                candidateInfamy
+              );
+            })()
+          : calcPrimaryScore(
+              econ,
+              social,
+              partyEcon,
+              partySocial,
+              favorability,
+              politicalInfluence,
+              candidateInfamy,
+              raceStateEconLean,
+              raceStateSocialLean
+            );
+      const partyCandidates = candidates.filter((x) => x.party === c.party);
+      const hasPlayerInParty = partyCandidates.some((x) => !x.isNPP);
+      // Same handicap as in resolvePrimariesIfNeeded — see NPP_PRIMARY_SCORE_MULTIPLIER.
+      // Skipped on the projection path: the NPP penalty is already baked into the
+      // per-state vote engine, so re-applying it would double-count.
+      if (c.isNPP && hasPlayerInParty && !usePresProjection)
+        primaryScore *= NPP_PRIMARY_SCORE_MULTIPLIER;
+      if (!byParty[c.party]) byParty[c.party] = [];
+      byParty[c.party].push({
+        candidateId: c._id.toString(),
+        characterName: c.characterName,
+        party: c.party,
+        primaryScore,
+        sharePct: presStanding?.sharePct ?? 0,
+      });
+    }
+
+    for (const [partyId, entries] of Object.entries(byParty)) {
+      // Projection path already set delegate/vote sharePct; just order it.
+      if (presPartiesWithProjection.has(partyId)) {
+        entries.sort((a, b) => b.primaryScore - a.primaryScore);
+        continue;
+      }
+      const shares = primarySharePctSoftmax(entries.map((e) => e.primaryScore));
+      entries.forEach((entry, i) => {
+        entry.sharePct = shares[i];
+      });
+      entries.sort((a, b) => b.primaryScore - a.primaryScore);
+    }
+
+    snapshots.push({ _id: new ObjectId(), electionId: electionObjectId, recordedAt: now, byParty });
+  }
+
+  if (snapshots.length > 0) {
+    await db.collection<PrimarySnapshot>("primarySnapshots").insertMany(snapshots);
+  }
+
+  return snapshots.length;
+}
+
+/**
+ * @internal recordPrimarySnapshots helper — per-state projection history for pres
+ * primaries. Returns the per-election projected votes-by-state (party → state →
+ * candidate → votes) so the caller can build a delegate-consistent national
+ * standing for the primarySnapshots doc from the SAME projection (#3022).
+ */
+type PresProjectionByElection = Map<string, Record<string, Record<string, Record<string, number>>>>;
+
+async function recordPresidentialStatePollingSnapshots(
+  db: Awaited<ReturnType<typeof getDb>>,
+  presElections: Election[],
+  candidatesByElection: Map<string, ElectionCandidate[]>,
+  charMap: Map<string, Character>,
+  nppMap: Map<string, NPP>,
+  partyMap: Map<string, PoliticalPartyType>,
+  statePartyOrgs: StatePartyOrg[],
+  now: Date
+): Promise<PresProjectionByElection> {
+  const projectionsByElection: PresProjectionByElection = new Map();
+  if (presElections.length === 0) return projectionsByElection;
+
+  const { projectPrimaryByState } = await import("@/lib/primaryProjection");
+  const { fetchEnrichedCandidates } = await import("@/lib/electionEngine");
+  const { loadRegionalBonusMaps } = await import("@/lib/primaryRegionalBonusLoader");
+  const { ELECTORAL_VOTE_UNITS } = await import("@/lib/constants/states");
+  const stateIds = [...new Set(ELECTORAL_VOTE_UNITS.map((u) => u.stateId))];
+
+  // One-shot fetch for demographics + state + categories used across all
+  // pres elections in this turn.
+  const [categoriesDocs, statesDocs, demographicsDocs] = await Promise.all([
+    db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+    db
+      .collection<State>("states")
+      .find({ _id: { $in: stateIds } })
+      .toArray(),
+    db
+      .collection<StateDemographics>("stateDemographics")
+      .find({ _id: { $in: stateIds } })
+      .toArray(),
+  ]);
+  const stateMap = new Map(statesDocs.map((s) => [s._id as string, s]));
+  const demographicsMap = new Map(demographicsDocs.map((d) => [d._id as string, d]));
+
+  const orgMap = new Map<string, number>();
+  for (const po of statePartyOrgs) {
+    orgMap.set(`${po.stateId}_${po.partyId}`, (po.organization ?? 0) + (po.primarySurge ?? 0));
+  }
+
+  for (const election of presElections) {
+    const candidates = candidatesByElection.get(election._id.toString()) ?? [];
+    if (candidates.length === 0) continue;
+    const uniqueParties = [...new Set(candidates.map((c) => c.party))];
+    const byParty: Record<string, Record<string, Record<string, number>>> = {};
+    // Scope the party lookup by countryId so sequentialId collisions across
+    // countries cannot invert candidate party positions.
+    const enrichedAll = await fetchEnrichedCandidates(candidates, {
+      includePartyPositions: true,
+      countryId: (election.countryId ?? "US") as CountryId,
+    });
+
+    // Regional bases L1+C — mirror primaryStaggerPhase wiring so the
+    // snapshot projection matches what the live stagger produced.
+    const homeStateByCharacterIdForBonuses = new Map<string, string | null>();
+    const homeStateByNppIdForBonuses = new Map<string, string | null>();
+    for (const c of candidates) {
+      if (c.isNPP && c.nppId) {
+        const npp = nppMap.get(c.nppId.toString());
+        homeStateByNppIdForBonuses.set(c.nppId.toString(), npp?.homeState ?? null);
+      } else if (!c.isNPP && c.characterId) {
+        const char = charMap.get(c.characterId.toString());
+        homeStateByCharacterIdForBonuses.set(c.characterId.toString(), char?.homeState ?? null);
+      }
+    }
+    const regionalBonuses = await loadRegionalBonusMaps(db, {
+      candidates,
+      homeStateByCharacterId: homeStateByCharacterIdForBonuses,
+      homeStateByNppId: homeStateByNppIdForBonuses,
+    });
+
+    for (const partyId of uniqueParties) {
+      const partyCandidates = candidates.filter((c) => c.party === partyId);
+      if (partyCandidates.length === 0) continue;
+      const partyDoc = partyMap.get(`${election.countryId ?? "US"}:${partyId}`);
+      const enriched = enrichedAll.filter((ec) => ec.party === partyId);
+      const candidateMeta = partyCandidates.map((c) => {
+        const homeState = c.isNPP
+          ? c.nppId
+            ? (nppMap.get(c.nppId.toString())?.homeState ?? null)
+            : null
+          : (charMap.get(c.characterId.toString())?.homeState ?? null);
+        return {
+          candidateId: c._id.toString(),
+          isNPP: Boolean(c.isNPP),
+          homeState,
+          primaryCampaignState: c.primaryCampaignState ?? null,
+          primaryCampaignTicks: c.primaryCampaignTicks ?? 0,
+        };
+      });
+      const { byState } = projectPrimaryByState({
+        candidates: enriched,
+        candidateMeta,
+        stateIds,
+        stateMap,
+        demographicsMap,
+        categories: categoriesDocs,
+        statePartyOrgs: orgMap,
+        partyPosition: {
+          economicPosition: partyDoc?.economicPosition ?? 0,
+          socialPosition: partyDoc?.socialPosition ?? 0,
+        },
+        stateOrgByStateAndCandidate: regionalBonuses.stateOrgByStateAndCandidate,
+        homeStateByCandidate: regionalBonuses.homeStateByCandidate,
+        countryId: (election.countryId ?? "US") as CountryId,
+      });
+      byParty[partyId] = byState;
+    }
+
+    projectionsByElection.set(election._id.toString(), byParty);
+
+    // Do NOT upsert — a tally-less election is pre-stagger and has no valid
+    // totalVotes / totalVotesByUnit structure. Creating a stub doc with ONLY
+    // primaryStatePollingHistory would crash full-view rendering downstream.
+    // Skip the snapshot if the tally doesn't exist yet; it will start being
+    // recorded after the stagger initializes the tally.
+    await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
+      { electionId: election._id },
+      {
+        $push: {
+          primaryStatePollingHistory: {
+            $each: [{ turn: 0, recordedAt: now, byParty }],
+            $slice: -24,
+          },
+        } as never,
+        $set: { updatedAt: now },
+      }
+    );
+  }
+
+  return projectionsByElection;
+}
+
+/**
+ * For every general-phase election (past primaryEndTime), accumulate one turn
+ * of votes into the ElectionVoteTally.  Auto-creates missing tally documents.
+ *
+ * Also runs the presidential-primary stagger phase: during the final 6 turns
+ * of each presidential primary, one wave of states accumulates real votes +
+ * awards delegates per the calendar in `primaryCalendar.ts`.
+ */
+export async function accumulateGeneralElectionVotes(now: Date, turn: number): Promise<void> {
+  const db = await getDb();
+
+  // Run presidential primary stagger waves first (before general accumulation).
+  // Affects only presidential elections in primary phase within 6h of ending.
+  try {
+    await processPrimaryStaggerWaves(db, now, turn);
+  } catch (err) {
+    logger.error("Turn", "Primary stagger failed", err);
+  }
+
+  // No upper-bound on endTime: elections that just hit their endTime are still
+  // "active" when vote accumulation runs (resolution is a later phase). Excluding
+  // them via endTime > now causes the final turn's votes to be dropped whenever
+  // turn processing runs a few milliseconds after the scheduled endTime.
+  const generalElections = await db
+    .collection<Election>("elections")
+    .find({
+      status: "active",
+      // General phase = primary closed OR no primary at all (turn-first).
+      ...generalPhaseFilter(turn, now),
+    })
+    .toArray();
+
+  const stateElections = generalElections.filter((e) => e.electionType !== "president");
+  const hasStateElections = stateElections.length > 0;
+
+  let approvalMap: Map<string, number> | undefined;
+  let preload: import("@/lib/electionEngine").AccumulateVoteTurnPreload | undefined;
+
+  if (hasStateElections) {
+    const uniqueStateIds = [...new Set(stateElections.map((e) => e.state as string))];
+    const uniqueCountries = [
+      ...new Set(stateElections.map((e) => (e.countryId ?? "US") as CountryId)),
+    ];
+    const nationwideCountries = [
+      ...new Set(
+        stateElections
+          .filter((election) => {
+            const countryId = (election.countryId ?? "US") as CountryId;
+            return isNationwideDirectExecutiveElection(
+              election.electionType,
+              election.state,
+              countryId
+            );
+          })
+          .map((election) => (election.countryId ?? "US") as CountryId)
+      ),
+    ];
+    const regionalScope =
+      nationwideCountries.length > 0
+        ? {
+            $or: [{ _id: { $in: uniqueStateIds } }, { countryId: { $in: nationwideCountries } }],
+          }
+        : { _id: { $in: uniqueStateIds } };
+    [approvalMap, preload] = await Promise.all([
+      getAllStateApprovalsForElection({ countryIds: uniqueCountries }),
+      (async () => {
+        const [
+          categories,
+          states,
+          demographics,
+          statePartyOrgs,
+          turnoutDocs,
+          gsPreset,
+          demoDefaults,
+        ] = await Promise.all([
+          db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+          db.collection<State>("states").find(regionalScope).toArray(),
+          db.collection<StateDemographics>("stateDemographics").find(regionalScope).toArray(),
+          db
+            .collection<StatePartyOrg>("statePartyOrg")
+            .find(
+              nationwideCountries.length > 0
+                ? {
+                    $or: [
+                      { stateId: { $in: uniqueStateIds } },
+                      { countryId: { $in: nationwideCountries } },
+                    ],
+                  }
+                : { stateId: { $in: uniqueStateIds } }
+            )
+            .toArray(),
+          db
+            .collection<StateDemographicTurnout>("stateDemographicTurnout")
+            .find(regionalScope)
+            .toArray(),
+          db
+            .collection<{
+              _id: string;
+              preset?: string;
+              currentYear?: number;
+              currentTurn?: number;
+              startingYear?: number;
+              eraSystemEnabled?: boolean;
+            }>("gameState")
+            .findOne(
+              { _id: "current" },
+              {
+                projection: {
+                  preset: 1,
+                  currentYear: 1,
+                  currentTurn: 1,
+                  startingYear: 1,
+                  eraSystemEnabled: 1,
+                },
+              }
+            ),
+          // Seeded snapshots for the granular substrate's legislation
+          // lean-drift fold (only consumed when the flag is on).
+          db.collection<StateDemographics>("demographicDefaults").find(regionalScope).toArray(),
+        ]);
+        const stateMap = new Map(states.map((s) => [s._id as string, s]));
+        const demographicsMap = new Map(demographics.map((d) => [d._id as string, d]));
+        const turnoutByState = new Map(turnoutDocs.map((t) => [t._id as string, t]));
+        const statePartyOrgsByState = new Map<string, typeof statePartyOrgs>();
+        for (const po of statePartyOrgs) {
+          const list = statePartyOrgsByState.get(po.stateId) ?? [];
+          list.push(po);
+          statePartyOrgsByState.set(po.stateId, list);
+        }
+        for (const countryId of nationwideCountries) {
+          const national = buildNationwideElectoratePreload(
+            countryId,
+            states,
+            demographics,
+            turnoutDocs,
+            statePartyOrgs
+          );
+          if (!national) continue;
+          stateMap.set(countryId, national.state);
+          demographicsMap.set(countryId, national.demographics);
+          turnoutByState.set(countryId, national.turnout);
+          statePartyOrgsByState.set(countryId, national.partyOrgs);
+        }
+        return {
+          preset: gsPreset?.preset,
+          currentYear: gsPreset?.currentYear,
+          startingYear: gsPreset?.startingYear,
+          eraSystemEnabled: gsPreset?.eraSystemEnabled === true,
+          categories,
+          stateMap,
+          demographicsMap,
+          statePartyOrgsByState,
+          turnoutByState,
+          demographicDefaultsByState: new Map(demoDefaults.map((d) => [d._id as string, d])),
+        };
+      })(),
+    ]);
+  }
+
+  const electionIds = generalElections.map((e) => e._id);
+  const [existingTallies, allActiveCandidates] = await Promise.all([
+    db
+      .collection<ElectionVoteTally>("electionVoteTallies")
+      .find({ electionId: { $in: electionIds } })
+      .toArray(),
+    db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find({ electionId: { $in: electionIds }, status: "active" })
+      .toArray(),
+  ]);
+  const tallyByElection = new Map(existingTallies.map((t) => [t.electionId.toString(), t]));
+  const candidatesByElection = new Map<string, ElectionCandidate[]>();
+  for (const c of allActiveCandidates) {
+    const eid = c.electionId.toString();
+    const list = candidatesByElection.get(eid) ?? [];
+    list.push(c);
+    candidatesByElection.set(eid, list);
+  }
+
+  // A3 — process presidential races BEFORE down-ballot races so the
+  // coattails driver reads the freshly-accumulated presidential margin
+  // for this turn. Without this ordering, MongoDB's default iteration
+  // would let a down-ballot tally see last turn's presidential data
+  // (or none on the first turn), suppressing coattails.
+  const presidentialElections = generalElections.filter((e) => e.electionType === "president");
+  const downBallotElections = generalElections.filter((e) => e.electionType !== "president");
+  const orderedElections = [...presidentialElections, ...downBallotElections];
+
+  for (const election of orderedElections) {
+    try {
+      const existing = tallyByElection.get(election._id.toString());
+      const activeCandidates = candidatesByElection.get(election._id.toString()) ?? [];
+
+      if (election.electionType === "president") {
+        if (!existing && activeCandidates.length > 0) {
+          await initPresidentVoteTally(election._id, activeCandidates);
+        }
+        // Per-country accumulation: US electoral college vs NG/bespoke per-zone.
+        if (
+          election.countryId != null &&
+          COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS.has(election.countryId)
+        ) {
+          await accumulateNGPresidentVoteTurn(db, election._id, now);
+        } else {
+          await accumulatePresidentVoteTurn(election._id, turn, now);
+        }
+      } else {
+        if (!existing && activeCandidates.length > 0) {
+          await initElectionVoteTally(election._id, activeCandidates, election.state as string);
+        }
+        await accumulateVoteTurn(election._id, turn, now, { approvalMap, preload });
+      }
+    } catch (err) {
+      logger.error("Turn", `Error accumulating votes for election ${election._id}`, err);
+    }
+  }
+}

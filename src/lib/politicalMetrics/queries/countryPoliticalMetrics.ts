@@ -1,0 +1,257 @@
+import type { Db } from "mongodb";
+import { getDb } from "@/lib/mongodb";
+import type { GameState } from "@/lib/db/types/gameState";
+import { resolveGameYear } from "@/lib/era/era";
+import type { State } from "@/lib/db/types/state";
+import type {
+  PoliticalMetricsDoc,
+  PoliticalMetricsHistoryDoc,
+} from "@/lib/db/types/politicalMetrics";
+import { getCountryDisplayName } from "@/lib/constants/countries";
+import { getCatalog } from "@/lib/politicalLegislation/catalog";
+import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
+import { getEnactedLevels } from "@/lib/politicalLegislation/enactedLevels";
+import {
+  composeTarget,
+  lawTargets,
+  metricModifierRows,
+  type ModifierRow,
+} from "@/lib/politicalLegislation/dynamics";
+import { aggregateNationalPoliticalMetrics, categoryScore, overallScore } from "../aggregate";
+import { loadEvidence, type EvidenceRow } from "../evidence";
+import { FAMILIES_BY_CATEGORY } from "../families";
+import { leanLabelFor, statusFor } from "../display";
+import { getCategoryDisplayName, getMetricDisplayName } from "../names";
+import {
+  POLITICAL_METRIC_CATEGORIES,
+  type PoliticalMetricId,
+  type PoliticalMetricsCountryId,
+} from "../types";
+
+export interface CountryPoliticalMetricsResponse {
+  countryId: PoliticalMetricsCountryId;
+  countryDisplayName: string;
+  /** Current in-game year and turn, for the masthead series/date line. */
+  year: number;
+  turn: number;
+  overall: number;
+  overallStatus: string;
+  categories: Array<{
+    id: string;
+    displayName: string;
+    score: number;
+    status: string;
+    metrics: Array<{
+      id: string;
+      lean: number;
+      leanLabel: string;
+      displayName: string;
+      description: string;
+      pos: string[];
+      neg: string[];
+      indicators: string[];
+      nationalValue: number;
+      status: string;
+      legislation: MetricLegislationInfo | null;
+      /** SP2 §5: this metric's national trend series (empty until history exists). */
+      history: Array<{ turn: number; value: number }>;
+      /** SP2 §6: the target decomposition driving the Active-modifiers panel. */
+      modifiers: MetricModifiersInfo;
+      /** SP6: underlying raw statistics ([] when the family has no mapping). */
+      evidence: EvidenceRow[];
+      regions: Array<{ regionId: string; name: string; value: number }>;
+    }>;
+  }>;
+}
+
+/** First calendar year of the information era for indicator-list selection (display flavor only). */
+const MODERN_INDICATORS_FROM_YEAR = 1990;
+
+export interface MetricModifiersInfo {
+  /** Contributing laws (sorted by points desc; L0 rows omitted). */
+  laws: ModifierRow[];
+  /** Population-weighted mean structural residual (rounded 0.1). */
+  residual: number;
+  /** National-view target: composeTarget(nationalPoints, 0, meanResidual). */
+  target: number;
+  /** Drift direction vs the current national value (|gap| ≤ 0.1 = flat). */
+  direction: "up" | "down" | "flat";
+}
+
+export interface MetricLegislationInfo {
+  primary: {
+    lawId: string;
+    title: string;
+    level: number;
+    levelName: string;
+    /** Annual net (revenue − cost) at the enacted level, local currency. */
+    annualNet: number;
+  } | null;
+  secondaries: Array<{ lawId: string; title: string; level: number; levelName: string }>;
+}
+
+/**
+ * Relevant Legislation panel data (political-legislation spec §8): each
+ * metric's primary law at its enacted level with its annual net, plus the
+ * secondaries that touch the metric. Empty map for countries without a
+ * new-generation catalog.
+ */
+async function loadRelevantLegislation(
+  db: Db,
+  countryId: PoliticalMetricsCountryId,
+  states: Pick<State, "_id" | "population" | "gdp">[]
+): Promise<{ map: Map<string, MetricLegislationInfo>; levels: Map<string, number> }> {
+  const map = new Map<string, MetricLegislationInfo>();
+  const levels = await getEnactedLevels(db, countryId);
+  const base = {
+    gdp: states.reduce((sum, s) => sum + (s.gdp ?? 0), 0) * 1_000_000,
+    population: states.reduce((sum, s) => sum + (s.population ?? 0), 0),
+  };
+  for (const law of getCatalog(countryId)) {
+    if (law.kind === "tax" || !law.levels) continue;
+    const level = levels.get(law.id) ?? law.baselineLevel ?? 0;
+    const levelName = law.levels[level]?.name ?? "";
+    if (law.kind === "primary") {
+      const metricId = law.targets[0].metricId;
+      const { net } = computeLawCost(law.levels[level], base, countryId, null);
+      const existing = map.get(metricId) ?? { primary: null, secondaries: [] };
+      existing.primary = {
+        lawId: law.id,
+        title: law.title,
+        level,
+        levelName,
+        annualNet: net,
+      };
+      map.set(metricId, existing);
+    } else {
+      for (const target of law.targets) {
+        const existing = map.get(target.metricId) ?? { primary: null, secondaries: [] };
+        existing.secondaries.push({ lawId: law.id, title: law.title, level, levelName });
+        map.set(target.metricId, existing);
+      }
+    }
+  }
+  return { map, levels };
+}
+
+export async function loadCountryPoliticalMetrics(
+  countryId: PoliticalMetricsCountryId,
+  dbOverride?: Db
+): Promise<CountryPoliticalMetricsResponse | null> {
+  const db = dbOverride ?? (await getDb());
+  const [docs, states, gameState] = await Promise.all([
+    db.collection<PoliticalMetricsDoc>("politicalMetrics").find({ countryId }).toArray(),
+    db
+      .collection<State>("states")
+      .find({ countryId }, { projection: { name: 1, population: 1, gdp: 1 } })
+      .toArray(),
+    db
+      .collection<GameState>("gameState")
+      .findOne(
+        { _id: "current" },
+        { projection: { currentYear: 1, currentTurn: 1, startingYear: 1, preset: 1 } }
+      ),
+  ]);
+  if (docs.length === 0) return null;
+
+  const populationByRegion = new Map(states.map((s) => [s._id, s.population ?? 0]));
+  const nameByRegion = new Map(states.map((s) => [s._id, s.name]));
+  const national = aggregateNationalPoliticalMetrics(docs, populationByRegion);
+  const { map: legislationByMetric, levels: enactedLevels } = await loadRelevantLegislation(
+    db,
+    countryId,
+    states
+  );
+
+  // SP2 (§5/§6): trend history + the modifiers decomposition — the dynamics
+  // engine's own arithmetic served read-time. The stored series caps at 365
+  // entries; SERVE only the most recent 180 (≈6 real months) so the payload
+  // stays bounded (63 metrics × entries — a full year would push ~1MB).
+  const SERVED_HISTORY_ENTRIES = 180;
+  const historyDoc = await db
+    .collection<PoliticalMetricsHistoryDoc>("politicalMetricsHistory")
+    .findOne({ _id: countryId }, { projection: { entries: { $slice: -SERVED_HISTORY_ENTRIES } } });
+  const nationalLawPoints = lawTargets(countryId, enactedLevels);
+  const totalPopulation = states.reduce((sum, s) => sum + (s.population ?? 0), 0);
+  const meanResidual = (metricId: PoliticalMetricId): number => {
+    if (totalPopulation <= 0) return 0;
+    let weighted = 0;
+    for (const doc of docs) {
+      const weight = populationByRegion.get(doc._id) ?? 0;
+      const residual =
+        doc.residuals?.[metricId] ?? (doc.values[metricId] ?? 0) - nationalLawPoints[metricId];
+      weighted += residual * weight;
+    }
+    return weighted / totalPopulation;
+  };
+  const buildMetricModifiers = (metricId: PoliticalMetricId): MetricModifiersInfo => {
+    const laws = metricModifierRows(countryId, metricId, enactedLevels);
+    const residual = meanResidual(metricId);
+    const target = composeTarget(nationalLawPoints[metricId], 0, residual);
+    const gap = target - national[metricId];
+    return {
+      laws,
+      residual: Math.round(residual * 10) / 10,
+      target: Math.round(target * 10) / 10,
+      direction: Math.abs(gap) <= 0.1 ? "flat" : gap > 0 ? "up" : "down",
+    };
+  };
+  // Via resolveGameYear, not `currentYear ?? 1953`: legacy rows carry only
+  // turn + startingYear, and defaulting those to 1953 would mis-date the
+  // indicator era and the evidence lookup.
+  const year = (gameState ? resolveGameYear(gameState) : null) ?? 1953;
+  const indicatorEra = year >= MODERN_INDICATORS_FROM_YEAR ? "modern" : "early";
+  // SP6: national raw-statistics evidence for mapped families (spec §D).
+  const evidenceByFamily = await loadEvidence(db, countryId, year);
+
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+  const categories = POLITICAL_METRIC_CATEGORIES.map((cat) => {
+    const score = categoryScore(national, cat.id);
+    return {
+      id: cat.id,
+      displayName: getCategoryDisplayName(countryId, cat.id),
+      score: round1(score),
+      status: statusFor(score),
+      metrics: FAMILIES_BY_CATEGORY[cat.id].map((f) => {
+        const nationalValue = national[f.id];
+        return {
+          id: f.id,
+          lean: f.lean,
+          leanLabel: leanLabelFor(f.lean),
+          displayName: getMetricDisplayName(countryId, f.id),
+          description: f.description,
+          pos: f.pos,
+          neg: f.neg,
+          indicators: f.indicators[indicatorEra],
+          nationalValue: round1(nationalValue),
+          status: statusFor(nationalValue),
+          legislation: legislationByMetric.get(f.id) ?? null,
+          history: (historyDoc?.entries ?? []).map((entry) => ({
+            turn: entry.turn,
+            value: round1(entry.values[f.id] ?? 0),
+          })),
+          modifiers: buildMetricModifiers(f.id),
+          evidence: evidenceByFamily.get(f.id) ?? [],
+          regions: docs
+            .map((d) => ({
+              regionId: d._id,
+              name: nameByRegion.get(d._id) ?? d._id,
+              value: round1(d.values[f.id] ?? 0),
+            }))
+            .sort((a, b) => b.value - a.value),
+        };
+      }),
+    };
+  });
+
+  const overall = overallScore(national);
+  return {
+    countryId,
+    countryDisplayName: getCountryDisplayName(countryId, gameState?.preset),
+    year,
+    turn: gameState?.currentTurn ?? 1,
+    overall: round1(overall),
+    overallStatus: statusFor(overall),
+    categories,
+  };
+}

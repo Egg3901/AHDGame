@@ -1,0 +1,542 @@
+{
+  "corp/1979": {
+    "term": "mainframe computer",
+    "title": "File:Mainframe Computer.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Mainframe_Computer.jpg"
+  },
+  "corp/1999": {
+    "term": "server room 1990s",
+    "title": "File:Students in computer room, c1990s (4359056290).jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Students_in_computer_room,_c1990s_(4359056290).jpg"
+  },
+  "corp/2009": {
+    "term": "data center servers",
+    "title": "File:BalticServers data center.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:BalticServers_data_center.jpg"
+  },
+  "corp/2019": {
+    "term": "open plan office technology",
+    "title": "File:The Assistant to the US President for Science & Technology and Director of the White House office of Science and Technology and Earth Sciences, Dr. John P. Holdren meeting the Minister of State for Planning.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:The_Assistant_to_the_US_President_for_Science_%26_Technology_and_Director_of_the_White_House_office_of_Science_and_Technology_and_Earth_Sciences,_Dr._John_P._Holdren_meeting_the_Minister_of_State_for_Planning.jpg"
+  },
+  "corp/2029": {
+    "term": "artificial intelligence data center",
+    "title": "File:Anti ai data center 4 censored.png",
+    "page": "https://commons.wikimedia.org/wiki/File:Anti_ai_data_center_4_censored.png"
+  },
+  "sector/energy/1979": {
+    "term": "oil refinery",
+    "title": "File:Anacortes Refinery 31911.JPG",
+    "page": "https://commons.wikimedia.org/wiki/File:Anacortes_Refinery_31911.JPG"
+  },
+  "sector/energy/1989": {
+    "term": "power plant",
+    "title": "File:Rostock Power Station, SW view.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Rostock_Power_Station,_SW_view.jpg"
+  },
+  "sector/energy/1999": {
+    "term": "offshore oil platform",
+    "title": "File:Oil platform P-51 (Brazil).jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Oil_platform_P-51_(Brazil).jpg"
+  },
+  "sector/energy/2009": {
+    "term": "wind farm",
+    "title": "File:Roscoe Wind Farm in West Texas.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Roscoe_Wind_Farm_in_West_Texas.jpg"
+  },
+  "sector/chemical_industries/2029": {
+    "term": "laboratory automation",
+    "title": "File:Laboratory robot Eve.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Laboratory_robot_Eve.jpg"
+  },
+  "sector/healthcare/1979": {
+    "term": "hospital laboratory",
+    "title": "File:Testing in a Medical Lab Laquintinie Hospital Douala.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Testing_in_a_Medical_Lab_Laquintinie_Hospital_Douala.jpg"
+  },
+  "sector/healthcare/1989": {
+    "term": "mri scanner",
+    "title": "File:MRI-Philips.JPG",
+    "page": "https://commons.wikimedia.org/wiki/File:MRI-Philips.JPG"
+  },
+  "sector/healthcare/1999": {
+    "term": "hospital computer",
+    "title": "File:'One of the wards in the hospital at Scutari'. Wellcome M0007724 - restoration, cropped.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:%27One_of_the_wards_in_the_hospital_at_Scutari%27._Wellcome_M0007724_-_restoration,_cropped.jpg"
+  },
+  "sector/healthcare/2009": {
+    "term": "telemedicine",
+    "title": "File:Telemedicine Consult.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Telemedicine_Consult.jpg"
+  },
+  "sector/healthcare/2019": {
+    "term": "surgical robot",
+    "title": "File:Columbia Hernia Center.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Columbia_Hernia_Center.jpg"
+  },
+  "sector/healthcare/2029": {
+    "term": "medical artificial intelligence",
+    "title": "File:IBM Medical Sieve.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:IBM_Medical_Sieve.jpg"
+  },
+  "sector/retail/1979": {
+    "term": "supermarket checkout",
+    "title": "File:Supermarket checkout Tegut Tauberbischofsheim.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Supermarket_checkout_Tegut_Tauberbischofsheim.jpg"
+  },
+  "sector/retail/1989": {
+    "term": "shopping mall",
+    "title": "File:Entrance in Torp shopping mall, Uddevalla.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Entrance_in_Torp_shopping_mall,_Uddevalla.jpg"
+  },
+  "sector/retail/1999": {
+    "term": "distribution warehouse",
+    "title": "File:Amazon distribution warehouse, Crymlyn - geograph.org.uk - 3139516.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Amazon_distribution_warehouse,_Crymlyn_-_geograph.org.uk_-_3139516.jpg"
+  },
+  "sector/energy/2019": {
+    "term": "solar power plant",
+    "title": "File:SolarPowerPlantSerpa.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:SolarPowerPlantSerpa.jpg"
+  },
+  "sector/energy/2029": {
+    "term": "nuclear fusion reactor",
+    "title": "File:DEMO fusion reactor slice neutron-source probability.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:DEMO_fusion_reactor_slice_neutron-source_probability.jpg"
+  },
+  "sector/technology/1979": {
+    "term": "microprocessor",
+    "title": "File:Intel SB80486DX2-50.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Intel_SB80486DX2-50.jpg"
+  },
+  "sector/technology/1989": {
+    "term": "personal computer 1980s",
+    "title": "File:Commodore64.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Commodore64.jpg"
+  },
+  "sector/technology/1999": {
+    "term": "server room",
+    "title": "File:139 Server Room 01.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:139_Server_Room_01.jpg"
+  },
+  "sector/technology/2009": {
+    "term": "smartphone",
+    "title": "File:Smartphone display screen.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Smartphone_display_screen.jpg"
+  },
+  "sector/technology/2019": {
+    "term": "data center servers",
+    "title": "File:BalticServers data center.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:BalticServers_data_center.jpg"
+  },
+  "sector/technology/2029": {
+    "term": "supercomputer",
+    "title": "File:Dutch national supercomputer \"Huygens\" - 8183833489.png",
+    "page": "https://commons.wikimedia.org/wiki/File:Dutch_national_supercomputer_%22Huygens%22_-_8183833489.png"
+  },
+  "sector/manufacturing/1979": {
+    "term": "assembly line",
+    "title": "File:Hyundai car assembly line.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Hyundai_car_assembly_line.jpg"
+  },
+  "sector/manufacturing/1999": {
+    "term": "factory automation",
+    "title": "File:Autonomous Mobile Robot AMR.png",
+    "page": "https://commons.wikimedia.org/wiki/File:Autonomous_Mobile_Robot_AMR.png"
+  },
+  "sector/manufacturing/2009": {
+    "term": "3d printing",
+    "title": "File:3D printing of face shields.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:3D_printing_of_face_shields.jpg"
+  },
+  "sector/manufacturing/2019": {
+    "term": "smart factory",
+    "title": "File:Smart Manufacturing Showcase (39751301490).jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Smart_Manufacturing_Showcase_(39751301490).jpg"
+  },
+  "sector/manufacturing/2029": {
+    "term": "robotic factory",
+    "title": "File:Factory Automation Robotics Palettizing Bread.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Factory_Automation_Robotics_Palettizing_Bread.jpg"
+  },
+  "sector/financial/1979": {
+    "term": "stock exchange floor",
+    "title": "File:NY stock exchange traders floor LC-U9-10548-6.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:NY_stock_exchange_traders_floor_LC-U9-10548-6.jpg"
+  },
+  "sector/financial/1989": {
+    "term": "trading floor",
+    "title": "File:Trading Floor in the Chicago Board of Trade Building.png",
+    "page": "https://commons.wikimedia.org/wiki/File:Trading_Floor_in_the_Chicago_Board_of_Trade_Building.png"
+  },
+  "sector/financial/1999": {
+    "term": "wall street",
+    "title": "File:New York City (New York, USA), Wall Street -- 2012 -- 6614.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:New_York_City_(New_York,_USA),_Wall_Street_--_2012_--_6614.jpg"
+  },
+  "sector/financial/2009": {
+    "term": "stock market screen",
+    "title": "File:Market centre in Tokyo stock exchange.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Market_centre_in_Tokyo_stock_exchange.jpg"
+  },
+  "sector/financial/2019": {
+    "term": "mobile banking",
+    "title": "File:Banca móvil.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Banca_m%C3%B3vil.jpg"
+  },
+  "sector/financial/2029": {
+    "term": "cryptocurrency",
+    "title": "File:Cryptocurrency Regulation & Laws.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Cryptocurrency_Regulation_%26_Laws.jpg"
+  },
+  "sector/media/1989": {
+    "term": "cable television",
+    "title": "File:Cutting the Cord - Cord Cutting from Cable TV to Streaming TV Services.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Cutting_the_Cord_-_Cord_Cutting_from_Cable_TV_to_Streaming_TV_Services.jpg"
+  },
+  "sector/media/1999": {
+    "term": "newsroom",
+    "title": "File:Al Jazeera English Newsroom.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Al_Jazeera_English_Newsroom.jpg"
+  },
+  "sector/media/2009": {
+    "term": "smartphone video streaming",
+    "title": "File:Singing-bowl sound processing with modular synthesizer, and taking a video with smartphone - Orlando Synthesizer Meetup Dec 2016 (2016-12-04 (33) by Mac Rutan).png",
+    "page": "https://commons.wikimedia.org/wiki/File:Singing-bowl_sound_processing_with_modular_synthesizer,_and_taking_a_video_with_smartphone_-_Orlando_Synthesizer_Meetup_Dec_2016_(2016-12-04_(33)_by_Mac_Rutan).png"
+  },
+  "sector/media/2019": {
+    "term": "social media",
+    "title": "File:Social media addiction.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Social_media_addiction.jpg"
+  },
+  "sector/media/2029": {
+    "term": "virtual reality headset",
+    "title": "File:Virtual reality headset.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Virtual_reality_headset.jpg"
+  },
+  "sector/chemical_industries/1979": {
+    "term": "chemical plant",
+    "title": "File:Chemical factory in Kankou.JPG",
+    "page": "https://commons.wikimedia.org/wiki/File:Chemical_factory_in_Kankou.JPG"
+  },
+  "sector/chemical_industries/1989": {
+    "term": "oil refinery",
+    "title": "File:Anacortes Refinery 31911.JPG",
+    "page": "https://commons.wikimedia.org/wiki/File:Anacortes_Refinery_31911.JPG"
+  },
+  "sector/chemical_industries/1999": {
+    "term": "pharmaceutical laboratory",
+    "title": "File:Allen & Hanbury,General Pharmaceutical Laboratory Wellcome L0005119.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Allen_%26_Hanbury,General_Pharmaceutical_Laboratory_Wellcome_L0005119.jpg"
+  },
+  "sector/chemical_industries/2009": {
+    "term": "chemical factory",
+    "title": "File:Usine chimique de Balan (2013).jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Usine_chimique_de_Balan_(2013).jpg"
+  },
+  "sector/chemical_industries/2019": {
+    "term": "biotechnology laboratory",
+    "title": "File:Bioinformatics Division, National Institute of Biotechnology (NIB) laboratory.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Bioinformatics_Division,_National_Institute_of_Biotechnology_(NIB)_laboratory.jpg"
+  },
+  "sector/retail/2019": {
+    "term": "self checkout",
+    "title": "File:Self Checkout at Costco.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Self_Checkout_at_Costco.jpg"
+  },
+  "sector/retail/2029": {
+    "term": "warehouse robot",
+    "title": "File:Automated Storage Shuttle.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Automated_Storage_Shuttle.jpg"
+  },
+  "sector/automobiles/1979": {
+    "term": "car assembly line",
+    "title": "File:Hyundai car assembly line.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Hyundai_car_assembly_line.jpg"
+  },
+  "sector/automobiles/1989": {
+    "term": "automobile factory robot",
+    "title": "File:Tesla auto bots.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Tesla_auto_bots.jpg"
+  },
+  "sector/automobiles/1999": {
+    "term": "car manufacturing",
+    "title": "File:Keith Car Manufacturing Company Sagamore Massachusetts.JPG",
+    "page": "https://commons.wikimedia.org/wiki/File:Keith_Car_Manufacturing_Company_Sagamore_Massachusetts.JPG"
+  },
+  "sector/automobiles/2009": {
+    "term": "hybrid car",
+    "title": "File:Solon-Hybrid car.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Solon-Hybrid_car.jpg"
+  },
+  "sector/automobiles/2019": {
+    "term": "electric vehicle factory",
+    "title": "File:Tesla Gigafactory Shanghai aerial view 02.png",
+    "page": "https://commons.wikimedia.org/wiki/File:Tesla_Gigafactory_Shanghai_aerial_view_02.png"
+  },
+  "sector/automobiles/2029": {
+    "term": "autonomous car",
+    "title": "File:Waymo self-driving car front view.gk.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Waymo_self-driving_car_front_view.gk.jpg"
+  },
+  "sector/agriculture/1979": {
+    "term": "combine harvester",
+    "title": "File:Claas Lexion 480-20080806-RM-133435.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Claas_Lexion_480-20080806-RM-133435.jpg"
+  },
+  "sector/agriculture/1989": {
+    "term": "tractor field",
+    "title": "File:Tractor New Holland T6.165 plowing (Zadobrova, Ljubljana).jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Tractor_New_Holland_T6.165_plowing_(Zadobrova,_Ljubljana).jpg"
+  },
+  "sector/agriculture/2009": {
+    "term": "precision agriculture",
+    "title": "File:Daedelus comparison, remote sensing in precision farming (rotated).jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Daedelus_comparison,_remote_sensing_in_precision_farming_(rotated).jpg"
+  },
+  "sector/agriculture/2019": {
+    "term": "agricultural drone",
+    "title": "File:Agricultural drone spraying on paddy field.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Agricultural_drone_spraying_on_paddy_field.jpg"
+  },
+  "sector/agriculture/2029": {
+    "term": "autonomous tractor",
+    "title": "File:Autonomous compact tractors in a Texas vineyard, Nov 2012.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Autonomous_compact_tractors_in_a_Texas_vineyard,_Nov_2012.jpg"
+  },
+  "sector/real_estate/1979": {
+    "term": "office building construction",
+    "title": "File:A new office building under construction on Hitech City road (2).jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:A_new_office_building_under_construction_on_Hitech_City_road_(2).jpg"
+  },
+  "sector/real_estate/1989": {
+    "term": "skyscraper",
+    "title": "File:Skyscraper Los Angeles Downtown 2013.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Skyscraper_Los_Angeles_Downtown_2013.jpg"
+  },
+  "sector/real_estate/1999": {
+    "term": "shopping mall building",
+    "title": "File:Entrance in Torp shopping mall, Uddevalla.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Entrance_in_Torp_shopping_mall,_Uddevalla.jpg"
+  },
+  "sector/real_estate/2009": {
+    "term": "modern office building",
+    "title": "File:Paleis van Justitie, Amsterdam-9011.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Paleis_van_Justitie,_Amsterdam-9011.jpg"
+  },
+  "sector/real_estate/2019": {
+    "term": "modern glass office building",
+    "title": "File:Münster, Westdeutsche Lotterie -- 2018 -- 0417.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:M%C3%BCnster,_Westdeutsche_Lotterie_--_2018_--_0417.jpg"
+  },
+  "sector/real_estate/2029": {
+    "term": "green building architecture",
+    "title": "File:Colorful illuminated facades of buildings at night, with green, blue and pink lights, Kabukicho, Shinjuku, Tokyo.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Colorful_illuminated_facades_of_buildings_at_night,_with_green,_blue_and_pink_lights,_Kabukicho,_Shinjuku,_Tokyo.jpg"
+  },
+  "sector/construction/1979": {
+    "term": "construction crane",
+    "title": "File:Eriksberg shipyard crane.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Eriksberg_shipyard_crane.jpg"
+  },
+  "sector/construction/1999": {
+    "term": "construction project",
+    "title": "File:Västra gatan construction project 01.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:V%C3%A4stra_gatan_construction_project_01.jpg"
+  },
+  "sector/construction/2009": {
+    "term": "construction equipment",
+    "title": "File:Construction with CAT Equipment Up a Building in Cape Town CBD.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Construction_with_CAT_Equipment_Up_a_Building_in_Cape_Town_CBD.jpg"
+  },
+  "sector/construction/2019": {
+    "term": "modular construction",
+    "title": "File:SI-MODULAR Tragwerk Deutschland 2019.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:SI-MODULAR_Tragwerk_Deutschland_2019.jpg"
+  },
+  "sector/construction/2029": {
+    "term": "3d printed building",
+    "title": "File:3D printed wall.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:3D_printed_wall.jpg"
+  },
+  "sector/defense/1979": {
+    "term": "fighter jet",
+    "title": "File:105 Polish Air Force MiG-29A Fulcrum ILA Berlin 2016 10.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:105_Polish_Air_Force_MiG-29A_Fulcrum_ILA_Berlin_2016_10.jpg"
+  },
+  "sector/defense/1989": {
+    "term": "stealth aircraft",
+    "title": "File:Stealth Blackhawk.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Stealth_Blackhawk.jpg"
+  },
+  "sector/defense/1999": {
+    "term": "military radar",
+    "title": "File:SCR-527.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:SCR-527.jpg"
+  },
+  "sector/defense/2009": {
+    "term": "military drone",
+    "title": "File:UA military FPV drones 01.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:UA_military_FPV_drones_01.jpg"
+  },
+  "sector/defense/2019": {
+    "term": "cyber warfare",
+    "title": "File:691st Cyberspace Operations Squadron takes Squadron photo (7144090).jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:691st_Cyberspace_Operations_Squadron_takes_Squadron_photo_(7144090).jpg"
+  },
+  "sector/defense/2029": {
+    "term": "military robot",
+    "title": "File:Camouflagerobot.png",
+    "page": "https://commons.wikimedia.org/wiki/File:Camouflagerobot.png"
+  },
+  "sector/telecommunications/1989": {
+    "term": "fiber optic cable",
+    "title": "File:Optical fiber connectors-optical patch cable-01ASD.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Optical_fiber_connectors-optical_patch_cable-01ASD.jpg"
+  },
+  "sector/telecommunications/1999": {
+    "term": "mobile phone tower",
+    "title": "File:Cellular Telephone Tower - Knoxville, Tennessee - May 26, 2014.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Cellular_Telephone_Tower_-_Knoxville,_Tennessee_-_May_26,_2014.jpg"
+  },
+  "sector/telecommunications/2009": {
+    "term": "broadband network",
+    "title": "File:Hong Kong Boardband Network Store in East Point City 2007.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Hong_Kong_Boardband_Network_Store_in_East_Point_City_2007.jpg"
+  },
+  "sector/telecommunications/2019": {
+    "term": "5g antenna",
+    "title": "File:Deutsche Telekom 5G-Empfänger SE - Wieson Wi-Fi antenna 3-1444.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Deutsche_Telekom_5G-Empf%C3%A4nger_SE_-_Wieson_Wi-Fi_antenna_3-1444.jpg"
+  },
+  "sector/telecommunications/2029": {
+    "term": "satellite communications",
+    "title": "File:Communications satellite bus.png",
+    "page": "https://commons.wikimedia.org/wiki/File:Communications_satellite_bus.png"
+  },
+  "sector/entertainment/1979": {
+    "term": "movie theater",
+    "title": "File:Commodore Cinema, Stanley Road.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Commodore_Cinema,_Stanley_Road.jpg"
+  },
+  "sector/entertainment/1989": {
+    "term": "video game arcade",
+    "title": "File:Amusement Arcade, Hoppings funfair, Newcastle Town Moor - geograph.org.uk - 5009855.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Amusement_Arcade,_Hoppings_funfair,_Newcastle_Town_Moor_-_geograph.org.uk_-_5009855.jpg"
+  },
+  "sector/entertainment/1999": {
+    "term": "film production",
+    "title": "File:Vancouver Film School production site 2011-02-24.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Vancouver_Film_School_production_site_2011-02-24.jpg"
+  },
+  "sector/entertainment/2009": {
+    "term": "video streaming",
+    "title": "File:Matrox MXO2 Mini Portable HDMI & analog video & audio Capture Device for Streaming.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Matrox_MXO2_Mini_Portable_HDMI_%26_analog_video_%26_audio_Capture_Device_for_Streaming.jpg"
+  },
+  "sector/entertainment/2019": {
+    "term": "esports tournament",
+    "title": "File:Esports-tournament-africa-name.png",
+    "page": "https://commons.wikimedia.org/wiki/File:Esports-tournament-africa-name.png"
+  },
+  "sector/logistics/1979": {
+    "term": "shipping containers",
+    "title": "File:Line3174 - Shipping Containers at the terminal at Port Elizabeth, New Jersey - NOAA.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Line3174_-_Shipping_Containers_at_the_terminal_at_Port_Elizabeth,_New_Jersey_-_NOAA.jpg"
+  },
+  "sector/logistics/1989": {
+    "term": "freight train",
+    "title": "File:Ferrocarril en el salar de Ascotán, Chile, 2016-02-09, DD 46.JPG",
+    "page": "https://commons.wikimedia.org/wiki/File:Ferrocarril_en_el_salar_de_Ascot%C3%A1n,_Chile,_2016-02-09,_DD_46.JPG"
+  },
+  "sector/logistics/1999": {
+    "term": "cargo warehouse",
+    "title": "File:Modern warehouse with pallet rack storage system.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Modern_warehouse_with_pallet_rack_storage_system.jpg"
+  },
+  "sector/logistics/2009": {
+    "term": "delivery truck",
+    "title": "File:Blue Bell Creameries Early Delivery Truck.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Blue_Bell_Creameries_Early_Delivery_Truck.jpg"
+  },
+  "sector/logistics/2019": {
+    "term": "automated warehouse",
+    "title": "File:Godorf Station at Dusk, May 2018.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Godorf_Station_at_Dusk,_May_2018.jpg"
+  },
+  "sector/logistics/2029": {
+    "term": "delivery drone",
+    "title": "File:Flytrex-Iceland-drone-delivery.png",
+    "page": "https://commons.wikimedia.org/wiki/File:Flytrex-Iceland-drone-delivery.png"
+  },
+  "sector/extraction/1979": {
+    "term": "oil drilling rig",
+    "title": "File:Deepwater Horizon offshore drilling unit on fire 2010.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Deepwater_Horizon_offshore_drilling_unit_on_fire_2010.jpg"
+  },
+  "sector/extraction/1989": {
+    "term": "mining excavator",
+    "title": "File:Caterpillar 330 excavator on a pile of dirt.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Caterpillar_330_excavator_on_a_pile_of_dirt.jpg"
+  },
+  "sector/extraction/1999": {
+    "term": "offshore drilling",
+    "title": "File:Deepwater Horizon offshore drilling unit on fire 2010.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Deepwater_Horizon_offshore_drilling_unit_on_fire_2010.jpg"
+  },
+  "sector/extraction/2009": {
+    "term": "mining truck",
+    "title": "File:Perlini-haul truck-03.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Perlini-haul_truck-03.jpg"
+  },
+  "sector/extraction/2029": {
+    "term": "mining haul truck",
+    "title": "File:Haul truck under repair at Brockman 4, September 2018.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Haul_truck_under_repair_at_Brockman_4,_September_2018.jpg"
+  },
+  "sector/manufacturing/1989": {
+    "term": "industrial robot",
+    "title": "File:Factory Automation Robotics Palettizing Bread.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Factory_Automation_Robotics_Palettizing_Bread.jpg"
+  },
+  "sector/media/1979": {
+    "term": "television studio",
+    "title": "File:ABC-TV studio at Sandy Bay Road, Hobart (AB713-1-8232).jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:ABC-TV_studio_at_Sandy_Bay_Road,_Hobart_(AB713-1-8232).jpg"
+  },
+  "sector/retail/2009": {
+    "term": "ecommerce warehouse",
+    "title": "File:CBP Releases E-Commerce Strategy (40632506572).jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:CBP_Releases_E-Commerce_Strategy_(40632506572).jpg"
+  },
+  "sector/agriculture/1999": {
+    "term": "irrigation field",
+    "title": "File:Mahamaya Irrigation Dam Regulator (04).jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Mahamaya_Irrigation_Dam_Regulator_(04).jpg"
+  },
+  "sector/construction/1989": {
+    "term": "building construction site",
+    "title": "File:Drilling rig and a digger at a construction site in Tuntorp.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Drilling_rig_and_a_digger_at_a_construction_site_in_Tuntorp.jpg"
+  },
+  "sector/telecommunications/1979": {
+    "term": "telephone exchange",
+    "title": "File:Telephone Exchange, Hither Green (Southeast View - 01).jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Telephone_Exchange,_Hither_Green_(Southeast_View_-_01).jpg"
+  },
+  "sector/entertainment/2029": {
+    "term": "virtual reality gaming",
+    "title": "File:InclusiveGameLab Person-Playing-Virtual-Reality 4 CC-BY-SA.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:InclusiveGameLab_Person-Playing-Virtual-Reality_4_CC-BY-SA.jpg"
+  },
+  "sector/extraction/2019": {
+    "term": "open pit mine",
+    "title": "File:Open pit mine.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Open_pit_mine.jpg"
+  },
+  "corp/1989": {
+    "term": "vintage personal computer",
+    "title": "File:Vintage computer warehouse (IMG 20180706 171346579).jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Vintage_computer_warehouse_(IMG_20180706_171346579).jpg"
+  }
+}

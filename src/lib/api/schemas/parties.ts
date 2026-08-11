@@ -1,0 +1,81 @@
+import { z } from "zod";
+import { containsBlockedName } from "@/lib/moderation";
+import { schemas } from "@/lib/api/validate";
+
+function moderatedNameSchema(label: string, minLength: number, maxLength: number) {
+  return z
+    .string()
+    .trim()
+    .min(minLength, `${label} must be at least ${minLength} characters`)
+    .max(maxLength, `${label} must be ${maxLength} characters or less`)
+    .refine((value) => !containsBlockedName(value), {
+      message: `${label} contains prohibited language`,
+    });
+}
+
+export const createProposalSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("rename"),
+    newName: z.string().trim().min(1).max(40),
+    newAbbreviation: z.string().trim().min(1).max(6),
+  }),
+  z.object({
+    type: z.literal("positionShift"),
+    // 4-axis support per the 2026-05-22 amendments-via-CommitteeProposal
+    // redesign. Each axis has its own 336-turn cooldown enforced via
+    // `PoliticalParty.positionShiftCooldowns`.
+    axis: z.enum(["economic", "social", "foreignPolicy", "culture"]),
+    direction: z.union([z.literal(1), z.literal(-1)]),
+  }),
+  z.object({
+    type: z.literal("merge"),
+    targetPartyId: schemas.objectId,
+  }),
+  z.object({
+    type: z.literal("electionMethod"),
+    method: z.enum(["party", "committee", "influence"]),
+  }),
+  z.object({
+    type: z.literal("electionDuration"),
+    durationTurns: z.number().int().min(168).max(420),
+  }),
+  z.object({
+    type: z.literal("removeOfficeHolder"),
+    // Treasurer is NOT a removable target — chair-appointed slot. Chair,
+    // vice-chair, and committee members are subject to removal.
+    role: z.enum(["chair", "viceChair", "committeeMember"]),
+    targetCharacterId: schemas.objectId,
+  }),
+  z.object({
+    type: z.literal("transactionApprovalMode"),
+    // Toggles `PoliticalParty.transactionApprovalMode`. The route
+    // rejects a proposal whose `mode` matches the party's current
+    // setting (no-op proposals not allowed).
+    mode: z.enum(["single", "double"]),
+  }),
+]);
+
+export const castProposalVoteSchema = z.object({
+  vote: z.enum(["yes", "no"]),
+});
+
+/**
+ * POST /api/country/[code]/parties/[id]/priority-region — set the
+ * chair-tunable Priority Region cluster (2-4 connected adjacent states).
+ * Per-state existence is validated at the route layer against the
+ * `states` collection; shape + size + connectedness validated by
+ * `validatePriorityRegionCluster`.
+ */
+export const setPriorityRegionSchema = z.object({
+  stateIds: z.array(z.string().trim().min(1).max(32)).min(2).max(4),
+});
+
+export const createPartySchema = z.object({
+  name: moderatedNameSchema("Name", 3, 50),
+  abbreviation: z.string().min(2, "Abbreviation must be at least 2 characters").max(5),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Color must be a valid hex (e.g. #FF5733)"),
+  economicPosition: z.coerce.number().min(-5).max(5),
+  socialPosition: z.coerce.number().min(-5).max(5),
+  // US: 4 selected + locked home = 5 max, UK: 2 regions
+  selectedStates: z.array(z.string()).min(2).max(5).optional(),
+});

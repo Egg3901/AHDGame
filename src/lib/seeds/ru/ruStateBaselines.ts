@@ -1,0 +1,45 @@
+import type { StateMetricBaseline } from "@/lib/db/types/statePolicy";
+import type { StateMetrics, StateMetricValue } from "@/lib/db/types";
+import { ruStateMetrics } from "./ruStateMetrics";
+
+/**
+ * USSR region metric baselines — the resting value each metric decays toward.
+ * Derived 1:1 from ruStateMetrics so a freshly seeded game has zero decay
+ * pressure.
+ */
+
+type StateMetricCategory = Exclude<keyof StateMetrics, "_id" | "lastUpdated">;
+
+function flattenCategory(
+  category: Partial<Record<string, StateMetricValue>>
+): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const [key, metric] of Object.entries(category)) {
+    if (metric) result[key] = metric.value;
+  }
+  return result;
+}
+
+function toBaseline(metrics: StateMetrics): StateMetricBaseline {
+  const categories: StateMetricCategory[] = [
+    "economic",
+    "education",
+    "healthcare",
+    "infrastructure",
+    "publicSafety",
+    "environment",
+    "social",
+    "governance",
+    "population",
+    "mediaInformation",
+  ];
+
+  const baselines: Record<string, Record<string, number>> = {};
+  for (const cat of categories) {
+    baselines[cat] = flattenCategory(metrics[cat] as Record<string, StateMetricValue>);
+  }
+
+  return { _id: metrics._id, baselines };
+}
+
+export const ruStateBaselines: StateMetricBaseline[] = ruStateMetrics.map(toBaseline);

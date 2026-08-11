@@ -1,0 +1,597 @@
+/**
+ * Per-state, per-era HAND-AUTHORED values for the United States' new overhaul ROOT metrics.
+ * Consumed via `getRegionMetricPresets` and overlaid by the US seeder (runCoreSeed path) AFTER
+ * `applyEra1991Adjustments`. The preset is the SINGLE SOURCE OF TRUTH for these metrics in both
+ * eras; `uniformMetricDefault` is a fallback only.
+ *
+ * BOTH eras are authored, per the 2026-06-15 decision. With 51 regions (50 states + DC) the
+ * authoring is composed from a NATIONAL baseline + a regional ARCHETYPE delta (every state is
+ * assigned one) + per-state OVERRIDES for outliers — so every state resolves to a full, authored
+ * 45-metric set without 51 bespoke blocks. 2019 = the contemporary US of the seed era; 1991 =
+ * post-Cold-War "peace dividend" (Gulf War year) amid the 1990-91 recession and the 1991-93 crime
+ * peak: a larger manufacturing base (pre-NAFTA/pre-China-WTO), Cold-War-peak military, near-zero
+ * renewables, higher uninsuredness (pre-ACA/pre-SCHIP), lower public debt (~60% vs ~107%), and
+ * lower nominal house prices (before the long housing boom).
+ */
+
+/** A per-region map of metricPath → numeric value (only the metrics the US authors). */
+export type MetricPresetBundle = Record<string, Record<string, number>>;
+
+/**
+ * The new ROOT metrics the US authors per era — 45 of the 52 uniform paths (IE's 44 plus
+ * `environment.nuclearSafety`; the US runs the world's largest nuclear fleet). No
+ * `coDeterminationQuality` (German) or the UK-coined nhs/gcse/bbc metrics. Excludes the
+ * engine-recomputed wageGrowth/tradeGrowth and population.birthRate.
+ */
+export const US_AUTHORED_METRIC_PATHS = [
+  "economic.laborParticipation",
+  "economic.matchingFriction",
+  "economic.tradeBalance",
+  "economic.productivityGrowth",
+  "economic.rdIntensity",
+  "economic.propertyValueIndex",
+  "economic.commercialValueIndex",
+  "economic.ruralRevitalization",
+  "economic.foodSecurity",
+  "economic.exportDependency",
+  "economic.manufacturingCompetitiveness",
+  "economic.regulatoryBurden",
+  "economic.economicFreedom",
+  "education.highSchoolGradRate",
+  "education.universityEnrollment",
+  "education.apprenticeshipRate",
+  "education.academicPressure",
+  "healthcare.uninsuredRate",
+  "healthcare.affordabilityIndex",
+  "healthcare.mentalHealthAccess",
+  "healthcare.socialCareQuality",
+  "healthcare.elderCareQuality",
+  "infrastructure.transportEfficiency",
+  "publicSafety.antiSocialBehaviourRate",
+  "publicSafety.knifeCrimeRate",
+  "publicSafety.firearmRights",
+  "environment.floodRisk",
+  "environment.naturalDisasterPreparedness",
+  "environment.nuclearSafety",
+  "environment.energyTransitionProgress",
+  "social.childPoverty",
+  "social.housingAffordability",
+  "social.roughSleeping",
+  "social.workLifeBalance",
+  "social.foreignWorkerIntegration",
+  "social.genderEquality",
+  "social.housingSupplyGrowth",
+  "governance.debtToGdp",
+  "governance.devolutionSatisfaction",
+  "governance.roboticsAdoption",
+  "governance.nationalPride",
+  "governance.civilLiberties",
+  "governance.militaryReadiness",
+  "governance.borderSecurity",
+  "population.demographicDecline",
+  "mediaInformation.stateMediaControl",
+] as const;
+
+type Archetype = "TECH" | "NEMA" | "RUST" | "SOUTH" | "PLAINS" | "MOUNTAIN";
+
+/** Every state + DC assigned one primary regional archetype (outliers refined via overrides). */
+const STATE_ARCHETYPE: Record<string, Archetype> = {
+  // Tech / coastal-innovation
+  CA: "TECH",
+  WA: "TECH",
+  MA: "TECH",
+  NY: "TECH",
+  CO: "TECH",
+  OR: "TECH",
+  // New England / Mid-Atlantic (high education + healthcare, older)
+  CT: "NEMA",
+  NH: "NEMA",
+  VT: "NEMA",
+  ME: "NEMA",
+  RI: "NEMA",
+  NJ: "NEMA",
+  MD: "NEMA",
+  DE: "NEMA",
+  HI: "NEMA",
+  VA: "NEMA",
+  MN: "NEMA",
+  DC: "NEMA",
+  // Rust Belt (manufacturing legacy, aging)
+  PA: "RUST",
+  OH: "RUST",
+  MI: "RUST",
+  IL: "RUST",
+  IN: "RUST",
+  WI: "RUST",
+  MO: "RUST",
+  // South (lower income/education, higher poverty, younger/growing)
+  AL: "SOUTH",
+  AR: "SOUTH",
+  KY: "SOUTH",
+  LA: "SOUTH",
+  MS: "SOUTH",
+  SC: "SOUTH",
+  TN: "SOUTH",
+  GA: "SOUTH",
+  NC: "SOUTH",
+  WV: "SOUTH",
+  OK: "SOUTH",
+  FL: "SOUTH",
+  TX: "SOUTH",
+  // Great Plains (agriculture, wind energy, sparse)
+  IA: "PLAINS",
+  KS: "PLAINS",
+  NE: "PLAINS",
+  ND: "PLAINS",
+  SD: "PLAINS",
+  // Mountain West (energy/mining, growing, sparse)
+  MT: "MOUNTAIN",
+  ID: "MOUNTAIN",
+  WY: "MOUNTAIN",
+  UT: "MOUNTAIN",
+  NV: "MOUNTAIN",
+  AZ: "MOUNTAIN",
+  NM: "MOUNTAIN",
+  AK: "MOUNTAIN",
+};
+
+const US_REGIONS = Object.keys(STATE_ARCHETYPE);
+
+function expand(
+  national: Record<string, number>,
+  archetypes: Record<Archetype, Record<string, number>>,
+  overrides: Record<string, Record<string, number>>
+): MetricPresetBundle {
+  return Object.fromEntries(
+    US_REGIONS.map((state) => [
+      state,
+      {
+        ...national,
+        ...(archetypes[STATE_ARCHETYPE[state]] ?? {}),
+        ...(overrides[state] ?? {}),
+      },
+    ])
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2019
+// ─────────────────────────────────────────────────────────────────────────────
+
+const NATIONAL_2019: Record<string, number> = {
+  "economic.laborParticipation": 63,
+  "economic.matchingFriction": 3.5,
+  "economic.tradeBalance": -3,
+  "economic.productivityGrowth": 1.2,
+  "economic.rdIntensity": 2.8,
+  "economic.propertyValueIndex": 100,
+  "economic.commercialValueIndex": 100,
+  "economic.ruralRevitalization": 50,
+  "economic.foodSecurity": 80,
+  "economic.exportDependency": 25,
+  "economic.manufacturingCompetitiveness": 70,
+  "economic.regulatoryBurden": 40,
+  "economic.economicFreedom": 78,
+  "education.highSchoolGradRate": 88,
+  "education.universityEnrollment": 60,
+  "education.apprenticeshipRate": 1.5,
+  "education.academicPressure": 55,
+  "healthcare.uninsuredRate": 9,
+  "healthcare.affordabilityIndex": 45,
+  "healthcare.mentalHealthAccess": 50,
+  "healthcare.socialCareQuality": 50,
+  "healthcare.elderCareQuality": 52,
+  "infrastructure.transportEfficiency": 50,
+  "publicSafety.antiSocialBehaviourRate": 8,
+  "publicSafety.knifeCrimeRate": 3,
+  "publicSafety.firearmRights": 68,
+  "environment.floodRisk": 14,
+  "environment.naturalDisasterPreparedness": 60,
+  "environment.nuclearSafety": 75,
+  "environment.energyTransitionProgress": 45,
+  "social.childPoverty": 17,
+  "social.housingAffordability": 55,
+  "social.roughSleeping": 5,
+  "social.workLifeBalance": 50,
+  "social.foreignWorkerIntegration": 60,
+  "social.genderEquality": 62,
+  "social.housingSupplyGrowth": 1.2,
+  "governance.debtToGdp": 107,
+  "governance.devolutionSatisfaction": 50,
+  "governance.roboticsAdoption": 55,
+  "governance.nationalPride": 72,
+  "governance.civilLiberties": 78,
+  "governance.militaryReadiness": 80,
+  "governance.borderSecurity": 52,
+  "population.demographicDecline": 42,
+  "mediaInformation.stateMediaControl": 15,
+};
+
+const ARCHETYPE_2019: Record<Archetype, Record<string, number>> = {
+  TECH: {
+    "economic.rdIntensity": 4.0,
+    "economic.propertyValueIndex": 160,
+    "economic.commercialValueIndex": 155,
+    "economic.manufacturingCompetitiveness": 60,
+    "economic.economicFreedom": 72,
+    "education.highSchoolGradRate": 90,
+    "education.universityEnrollment": 68,
+    "healthcare.uninsuredRate": 6,
+    "healthcare.mentalHealthAccess": 58,
+    "infrastructure.transportEfficiency": 62,
+    "environment.energyTransitionProgress": 55,
+    "social.childPoverty": 13,
+    "social.housingAffordability": 80,
+    "social.foreignWorkerIntegration": 70,
+    "social.genderEquality": 70,
+    "governance.roboticsAdoption": 65,
+    "publicSafety.firearmRights": 55,
+    "governance.borderSecurity": 46,
+    "population.demographicDecline": 40,
+  },
+  NEMA: {
+    "publicSafety.firearmRights": 55,
+    "governance.borderSecurity": 48,
+    "economic.rdIntensity": 3.0,
+    "economic.propertyValueIndex": 125,
+    "education.highSchoolGradRate": 90,
+    "education.universityEnrollment": 64,
+    "healthcare.uninsuredRate": 5,
+    "healthcare.affordabilityIndex": 50,
+    "healthcare.mentalHealthAccess": 56,
+    "infrastructure.transportEfficiency": 58,
+    "environment.energyTransitionProgress": 50,
+    "social.childPoverty": 13,
+    "social.housingAffordability": 65,
+    "social.genderEquality": 68,
+    "population.demographicDecline": 48,
+  },
+  RUST: {
+    "economic.rdIntensity": 2.4,
+    "economic.propertyValueIndex": 80,
+    "economic.manufacturingCompetitiveness": 78,
+    "economic.foodSecurity": 82,
+    "environment.energyTransitionProgress": 40,
+    "social.childPoverty": 19,
+    "governance.roboticsAdoption": 58,
+    "population.demographicDecline": 52,
+  },
+  SOUTH: {
+    "economic.rdIntensity": 2.0,
+    "economic.propertyValueIndex": 80,
+    "economic.manufacturingCompetitiveness": 68,
+    "education.highSchoolGradRate": 84,
+    "education.universityEnrollment": 52,
+    "healthcare.uninsuredRate": 14,
+    "healthcare.affordabilityIndex": 42,
+    "environment.energyTransitionProgress": 38,
+    "publicSafety.antiSocialBehaviourRate": 10,
+    "publicSafety.knifeCrimeRate": 4,
+    "publicSafety.firearmRights": 78,
+    "governance.borderSecurity": 58,
+    "social.childPoverty": 22,
+    "social.foreignWorkerIntegration": 55,
+    "social.genderEquality": 55,
+    "population.demographicDecline": 38,
+  },
+  PLAINS: {
+    "publicSafety.firearmRights": 80,
+    "economic.foodSecurity": 92,
+    "economic.ruralRevitalization": 58,
+    "economic.rdIntensity": 2.0,
+    "economic.propertyValueIndex": 78,
+    "economic.manufacturingCompetitiveness": 65,
+    "environment.energyTransitionProgress": 60,
+    "infrastructure.transportEfficiency": 42,
+    "publicSafety.antiSocialBehaviourRate": 5,
+    "social.childPoverty": 14,
+    "social.housingAffordability": 38,
+    "population.demographicDecline": 48,
+  },
+  MOUNTAIN: {
+    "publicSafety.firearmRights": 82,
+    "governance.borderSecurity": 56,
+    "economic.rdIntensity": 2.2,
+    "economic.propertyValueIndex": 90,
+    "economic.ruralRevitalization": 52,
+    "economic.manufacturingCompetitiveness": 62,
+    "economic.foodSecurity": 75,
+    "environment.energyTransitionProgress": 55,
+    "environment.naturalDisasterPreparedness": 55,
+    "infrastructure.transportEfficiency": 40,
+    "social.housingAffordability": 50,
+    "population.demographicDecline": 36,
+  },
+};
+
+const OVERRIDES_2019: Record<string, Record<string, number>> = {
+  CA: {
+    "economic.rdIntensity": 4.2,
+    "economic.propertyValueIndex": 200,
+    "social.housingAffordability": 92,
+    "social.childPoverty": 16,
+    "social.foreignWorkerIntegration": 72,
+    "social.roughSleeping": 8,
+    "environment.energyTransitionProgress": 65,
+  },
+  NY: {
+    "economic.rdIntensity": 3.6,
+    "economic.propertyValueIndex": 180,
+    "economic.commercialValueIndex": 185,
+    "infrastructure.transportEfficiency": 80,
+    "social.housingAffordability": 88,
+    "social.childPoverty": 18,
+    "social.roughSleeping": 7,
+  },
+  MA: {
+    "economic.rdIntensity": 4.5,
+    "education.universityEnrollment": 70,
+    "healthcare.uninsuredRate": 3,
+  },
+  WA: { "economic.rdIntensity": 4.0, "environment.energyTransitionProgress": 75 },
+  CO: { "economic.rdIntensity": 3.2, "environment.energyTransitionProgress": 58 },
+  TX: {
+    "economic.manufacturingCompetitiveness": 75,
+    "economic.exportDependency": 32,
+    "economic.rdIntensity": 2.4,
+    "economic.propertyValueIndex": 90,
+    "healthcare.uninsuredRate": 18,
+    "environment.energyTransitionProgress": 50,
+    "population.demographicDecline": 34,
+  },
+  FL: {
+    "economic.propertyValueIndex": 110,
+    "healthcare.uninsuredRate": 16,
+    "environment.floodRisk": 22,
+    "environment.naturalDisasterPreparedness": 55,
+    "population.demographicDecline": 55,
+  },
+  WV: {
+    "economic.rdIntensity": 1.4,
+    "economic.manufacturingCompetitiveness": 55,
+    "economic.foodSecurity": 60,
+    "education.highSchoolGradRate": 80,
+    "healthcare.uninsuredRate": 8,
+    "environment.energyTransitionProgress": 25,
+    "social.childPoverty": 25,
+    "population.demographicDecline": 58,
+  },
+  MS: {
+    "economic.rdIntensity": 1.5,
+    "economic.propertyValueIndex": 60,
+    "education.highSchoolGradRate": 80,
+    "healthcare.uninsuredRate": 16,
+    "healthcare.affordabilityIndex": 40,
+    "social.childPoverty": 28,
+    "social.genderEquality": 50,
+  },
+  UT: {
+    "economic.rdIntensity": 2.6,
+    "social.childPoverty": 10,
+    "population.demographicDecline": 30,
+  },
+  HI: {
+    "economic.propertyValueIndex": 170,
+    "economic.foodSecurity": 40,
+    "social.housingAffordability": 90,
+    "social.foreignWorkerIntegration": 70,
+    "environment.energyTransitionProgress": 60,
+  },
+  AK: {
+    "economic.manufacturingCompetitiveness": 45,
+    "economic.foodSecurity": 50,
+    "environment.energyTransitionProgress": 30,
+    "infrastructure.transportEfficiency": 30,
+    "environment.naturalDisasterPreparedness": 50,
+  },
+  DC: {
+    "economic.rdIntensity": 3.5,
+    "economic.propertyValueIndex": 190,
+    "economic.manufacturingCompetitiveness": 40,
+    "education.highSchoolGradRate": 88,
+    "education.universityEnrollment": 75,
+    "healthcare.uninsuredRate": 3,
+    "infrastructure.transportEfficiency": 78,
+    "publicSafety.antiSocialBehaviourRate": 12,
+    "publicSafety.knifeCrimeRate": 5,
+    "social.childPoverty": 24,
+    "social.housingAffordability": 90,
+    "social.roughSleeping": 9,
+    "social.genderEquality": 72,
+    "population.demographicDecline": 36,
+  },
+};
+
+export const usMetricPresets2019: MetricPresetBundle = expand(
+  NATIONAL_2019,
+  ARCHETYPE_2019,
+  OVERRIDES_2019
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1991
+// ─────────────────────────────────────────────────────────────────────────────
+
+const NATIONAL_1991: Record<string, number> = {
+  "economic.laborParticipation": 64,
+  "economic.matchingFriction": 5,
+  "economic.tradeBalance": -2,
+  "economic.productivityGrowth": 0.8,
+  "economic.rdIntensity": 2.6,
+  "economic.propertyValueIndex": 65,
+  "economic.commercialValueIndex": 65,
+  "economic.ruralRevitalization": 55,
+  "economic.foodSecurity": 82,
+  "economic.exportDependency": 22,
+  "economic.manufacturingCompetitiveness": 80,
+  "economic.regulatoryBurden": 45,
+  "economic.economicFreedom": 72,
+  "education.highSchoolGradRate": 82,
+  "education.universityEnrollment": 45,
+  "education.apprenticeshipRate": 2.0,
+  "education.academicPressure": 50,
+  "healthcare.uninsuredRate": 14,
+  "healthcare.affordabilityIndex": 50,
+  "healthcare.mentalHealthAccess": 30,
+  "healthcare.socialCareQuality": 45,
+  "healthcare.elderCareQuality": 48,
+  "infrastructure.transportEfficiency": 50,
+  "publicSafety.antiSocialBehaviourRate": 12,
+  "publicSafety.knifeCrimeRate": 5,
+  "publicSafety.firearmRights": 76,
+  "environment.floodRisk": 14,
+  "environment.naturalDisasterPreparedness": 50,
+  "environment.nuclearSafety": 72,
+  "environment.energyTransitionProgress": 5,
+  "social.childPoverty": 22,
+  "social.housingAffordability": 40,
+  "social.roughSleeping": 5,
+  "social.workLifeBalance": 50,
+  "social.foreignWorkerIntegration": 50,
+  "social.genderEquality": 52,
+  "social.housingSupplyGrowth": 1.5,
+  "governance.debtToGdp": 60,
+  "governance.devolutionSatisfaction": 50,
+  "governance.roboticsAdoption": 25,
+  "governance.nationalPride": 78,
+  "governance.civilLiberties": 75,
+  "governance.militaryReadiness": 85,
+  "governance.borderSecurity": 55,
+  "population.demographicDecline": 32,
+  "mediaInformation.stateMediaControl": 18,
+};
+
+const ARCHETYPE_1991: Record<Archetype, Record<string, number>> = {
+  TECH: {
+    "economic.rdIntensity": 3.2,
+    "economic.propertyValueIndex": 85,
+    "economic.manufacturingCompetitiveness": 78,
+    "education.universityEnrollment": 52,
+    "environment.energyTransitionProgress": 6,
+    "social.childPoverty": 18,
+    "social.foreignWorkerIntegration": 52,
+    "publicSafety.firearmRights": 66,
+    "population.demographicDecline": 30,
+  },
+  NEMA: {
+    "economic.rdIntensity": 2.8,
+    "economic.propertyValueIndex": 78,
+    "education.universityEnrollment": 50,
+    "publicSafety.firearmRights": 66,
+    "population.demographicDecline": 38,
+  },
+  RUST: {
+    "economic.manufacturingCompetitiveness": 85,
+    "economic.propertyValueIndex": 60,
+    "governance.roboticsAdoption": 28,
+    "social.childPoverty": 22,
+    "population.demographicDecline": 38,
+  },
+  SOUTH: {
+    "economic.rdIntensity": 1.8,
+    "economic.propertyValueIndex": 55,
+    "economic.manufacturingCompetitiveness": 78,
+    "education.highSchoolGradRate": 75,
+    "healthcare.uninsuredRate": 18,
+    "environment.energyTransitionProgress": 4,
+    "publicSafety.antiSocialBehaviourRate": 13,
+    "publicSafety.knifeCrimeRate": 6,
+    "publicSafety.firearmRights": 84,
+    "governance.borderSecurity": 58,
+    "social.childPoverty": 28,
+    "social.genderEquality": 45,
+    "population.demographicDecline": 30,
+  },
+  PLAINS: {
+    "publicSafety.firearmRights": 86,
+    "economic.foodSecurity": 85,
+    "economic.propertyValueIndex": 55,
+    "economic.manufacturingCompetitiveness": 72,
+    "environment.energyTransitionProgress": 5,
+    "social.childPoverty": 18,
+    "population.demographicDecline": 35,
+  },
+  MOUNTAIN: {
+    "publicSafety.firearmRights": 88,
+    "governance.borderSecurity": 56,
+    "economic.propertyValueIndex": 60,
+    "economic.manufacturingCompetitiveness": 70,
+    "economic.foodSecurity": 78,
+    "environment.energyTransitionProgress": 6,
+    "population.demographicDecline": 28,
+  },
+};
+
+const OVERRIDES_1991: Record<string, Record<string, number>> = {
+  CA: {
+    "economic.propertyValueIndex": 90,
+    "economic.rdIntensity": 3.4,
+    "social.foreignWorkerIntegration": 50,
+    "social.childPoverty": 20,
+  },
+  NY: {
+    "economic.propertyValueIndex": 88,
+    "economic.rdIntensity": 3.0,
+    "economic.manufacturingCompetitiveness": 75,
+    "infrastructure.transportEfficiency": 78,
+    "population.demographicDecline": 38,
+  },
+  MA: { "economic.rdIntensity": 3.6, "education.universityEnrollment": 58 },
+  TX: {
+    "economic.manufacturingCompetitiveness": 82,
+    "economic.propertyValueIndex": 60,
+    "healthcare.uninsuredRate": 22,
+    "environment.energyTransitionProgress": 5,
+    "population.demographicDecline": 28,
+  },
+  FL: {
+    "economic.propertyValueIndex": 70,
+    "environment.floodRisk": 20,
+    "population.demographicDecline": 45,
+  },
+  WV: {
+    "economic.manufacturingCompetitiveness": 75,
+    "economic.rdIntensity": 1.2,
+    "education.highSchoolGradRate": 70,
+    "environment.energyTransitionProgress": 3,
+    "social.childPoverty": 28,
+    "population.demographicDecline": 42,
+  },
+  MS: {
+    "economic.rdIntensity": 1.3,
+    "economic.propertyValueIndex": 50,
+    "education.highSchoolGradRate": 70,
+    "healthcare.uninsuredRate": 20,
+    "social.childPoverty": 32,
+    "social.genderEquality": 42,
+  },
+  UT: { "social.childPoverty": 14, "population.demographicDecline": 26 },
+  HI: {
+    "economic.propertyValueIndex": 95,
+    "economic.foodSecurity": 42,
+    "environment.energyTransitionProgress": 8,
+  },
+  AK: {
+    "economic.manufacturingCompetitiveness": 50,
+    "economic.foodSecurity": 52,
+    "economic.propertyValueIndex": 70,
+    "environment.energyTransitionProgress": 4,
+  },
+  DC: {
+    "economic.rdIntensity": 3.0,
+    "economic.propertyValueIndex": 100,
+    "economic.manufacturingCompetitiveness": 42,
+    "education.universityEnrollment": 60,
+    "infrastructure.transportEfficiency": 75,
+    "publicSafety.antiSocialBehaviourRate": 16,
+    "publicSafety.knifeCrimeRate": 8, // DC's early-1990s "murder capital" era
+    "social.childPoverty": 30,
+    "population.demographicDecline": 32,
+  },
+};
+
+export const usMetricPresets1991: MetricPresetBundle = expand(
+  NATIONAL_1991,
+  ARCHETYPE_1991,
+  OVERRIDES_1991
+);

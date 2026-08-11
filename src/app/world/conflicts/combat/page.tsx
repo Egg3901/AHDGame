@@ -1,0 +1,213 @@
+import { requireConflictsEnabled } from "../_coldwar/gate";
+import { getAuthUserWithCharacter } from "@/lib/auth";
+import { getDb } from "@/lib/mongodb";
+import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
+import { getNationalDoctrine } from "@/lib/db/collections/nationalDoctrine";
+import { getMilitaryFormations } from "@/lib/db/collections/militaryFormations";
+import { getMilitaryCommands } from "@/lib/db/collections/militaryCommands";
+import { loadGeneralsById } from "@/lib/db/collections/characterGenerals";
+import { listPendingForCountry } from "@/lib/db/collections/battleDeclarations";
+import { listBattleReportsForCountry } from "@/lib/db/collections/battleReports";
+import { natMods } from "@/lib/military/doctrineTree";
+import { listActiveConflicts } from "@/lib/db/collections/conflicts";
+import { RESERVE_THEATER_ID } from "@/lib/military/theaters";
+import { belligerentSideOf } from "@/lib/military/conflictVisibility";
+import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
+import { getGameState } from "@/lib/gameState";
+import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
+import type { CountryId } from "@/lib/constants/countries";
+import { occupationOf } from "@/lib/military/occupation";
+import { regionCodesOfCountry } from "@/lib/maps/regionOwnership";
+import { CombatCommandClient } from "./CombatCommandClient";
+import type { BattleReportView, ConflictView } from "./useCombatState";
+
+// Combat Command — order-of-battle + PvP theater-resolution surface. Gated by
+// conflictsEnabled and styled to match the Cold-War themed island. Units + org come
+// from live gameState; offensives are declared here and resolved on the turn tick
+// against the target nation's real forces.
+export default async function CombatCommandPage() {
+  await requireConflictsEnabled();
+
+  const authUser = await getAuthUserWithCharacter();
+  const country = authUser?.character?.countryId ?? "US";
+
+  const db = await getDb();
+  const rawUnits = await getMilitaryUnitsCollection(db).find({ countryId: country }).toArray();
+  // Serialize ObjectId → string for the client boundary; the combat client keys
+  // units by String(_id), so a string _id is what it expects at runtime.
+  const units = rawUnits.map((u) => ({ ...u, _id: String(u._id) })) as unknown as MilitaryUnit[];
+
+  const gameState = await getGameState();
+  const currentTurn = gameState?.currentTurn ?? 1;
+
+  const [doctrine, org, generalsById, pending, reports, activeConflicts] = await Promise.all([
+    getNationalDoctrine(db, country),
+    getMilitaryFormations(db, country),
+    loadGeneralsById(db, country),
+    listPendingForCountry(db, country),
+    listBattleReportsForCountry(db, country, 10),
+    listActiveConflicts(db),
+  ]);
+
+  // A report's theater name comes from the live conflict it was fought at; a report
+  // for a since-resolved conflict falls back to its id (reserve reads "Reserve").
+  const conflictName = new Map(activeConflicts.map((c) => [c._id, c.name]));
+  const theaterNameOf = (id: string) =>
+    id === RESERVE_THEATER_ID ? "Reserve" : (conflictName.get(id) ?? id);
+
+  const pendingDeclarations = pending.map((d) => ({
+    theaterId: d.theaterId,
+    targetCountry: d.targetCountry,
+    declaredTurn: d.declaredTurn,
+  }));
+
+  // A report's ground change, from THIS viewer's side. `control` is side B's share of
+  // the host, so side A gains when it FALLS. Null when the report predates the front
+  // position being recorded — unknown, which must not be shown as a stalemate.
+  const sideByConflict = new Map(
+    activeConflicts.map((c) => [c._id, belligerentSideOf(c, country)] as const)
+  );
+  const groundFor = (r: (typeof reports)[number]): number | null => {
+    if (r.controlBefore == null || r.controlAfter == null) return null;
+    const side = sideByConflict.get(r.theaterId);
+    if (!side) return null;
+    const deltaB = r.controlAfter - r.controlBefore;
+    return Math.round((side === "B" ? deltaB : -deltaB) * 10) / 10;
+  };
+
+  // Render each report from the viewer's perspective (offensive vs defensive).
+  const reportViews: BattleReportView[] = reports.map((r) => {
+    const isDeclarer = r.declarerCountry === (country as CountryId);
+    const theaterName = theaterNameOf(r.theaterId);
+    if (!r.result) {
+      return {
+        id: String(r._id),
+        theaterId: r.theaterId,
+        theaterName,
+        turn: r.turn,
+        noContact: true,
+        role: isDeclarer ? "offensive" : "defensive",
+        win: false,
+        ownLoss: 0,
+        enemyLoss: 0,
+        enemyCountry: isDeclarer ? r.targetCountry : r.declarerCountry,
+        // No contact still moves the front when the defender left the front empty.
+        verdict: r.unopposedAdvance
+          ? isDeclarer
+            ? "Unopposed advance"
+            : "Ground lost — no contact"
+          : "No contact",
+        retreat: null,
+        groundPct: groundFor(r),
+      };
+    }
+    const own = isDeclarer ? r.result.attacker : r.result.defender;
+    const enemy = isDeclarer ? r.result.defender : r.result.attacker;
+    return {
+      id: String(r._id),
+      theaterId: r.theaterId,
+      theaterName,
+      turn: r.turn,
+      noContact: false,
+      role: isDeclarer ? "offensive" : "defensive",
+      win: isDeclarer ? r.result.win : !r.result.win,
+      ownLoss: own.loss,
+      enemyLoss: enemy.loss,
+      enemyCountry: enemy.country,
+      verdict: r.result.verdict,
+      // Viewer-relative: the attacker is the declarer, so a break by the attacking
+      // side is "own" only when this viewer declared the offensive.
+      retreat: r.result.retreat
+        ? (r.result.retreat.side === "attacker") === isDeclarer
+          ? ("own" as const)
+          : ("enemy" as const)
+        : null,
+      groundPct: groundFor(r),
+    };
+  });
+
+  // Territorial state for the fronts this nation actually has forces at — the war
+  // room only ever renders those, and each one costs a region lookup. The host's
+  // drawable regions and the shards holding their geometry are resolved here, so the
+  // client fetches geometry only — never ownership, and never the enemy's ORDER OF
+  // BATTLE. The opposing side's belligerent list does go down: it is public on every
+  // conflict record page, and the war room's target picker has to be built from it.
+  const engagedIds = new Set(units.map((u) => u.theaterId));
+  const conflictViews: ConflictView[] = await Promise.all(
+    activeConflicts
+      .filter((c) => engagedIds.has(c._id))
+      .map(async (c) => {
+        const occ = occupationOf(c);
+        const occupyingSide =
+          occ.occupier === "A" ? c.sideA : occ.occupier === "B" ? c.sideB : null;
+        const hostRegionCodes = await regionCodesOfCountry(db, c.hostCountry);
+        // Roster membership only — deliberately NOT `sideOf`'s backer fallback, which
+        // would hand a non-belligerent a target list at a war it has no part in. The
+        // declare route applies the same rule, so the picker cannot offer a target the
+        // server will refuse.
+        const ownSide = belligerentSideOf(c, country);
+        const enemyCountries =
+          ownSide === "A" ? [...c.sideB.countries] : ownSide === "B" ? [...c.sideA.countries] : [];
+        const ownSpectrum =
+          ownSide === "A"
+            ? (c.sideA.backer ?? "neutral")
+            : ownSide === "B"
+              ? (c.sideB.backer ?? "neutral")
+              : "neutral";
+        return {
+          id: c._id,
+          name: c.name,
+          hostCountry: c.hostCountry,
+          control: c.control,
+          sideALabel: c.sideA.label,
+          sideBLabel: c.sideB.label,
+          enemyCountries,
+          occupier: occ.occupier,
+          occupierCountry: occupyingSide?.countries[0] ?? null,
+          ownSpectrum,
+          hostRegionCodes,
+        };
+      })
+  );
+
+  // A Commanding General who has not posted their generals has nothing to declare
+  // WITH — and this page cannot post them, by design. Without a pointer they are one
+  // click from the war and cannot find the door, because postings live on the CG's
+  // own page. Shown only while there is something to act on: a live conflict to post
+  // to, and at least one general still unposted.
+  const viewerCharId = authUser?.character?._id ? String(authUser.character._id) : null;
+  const myCommand = viewerCharId
+    ? ((await getMilitaryCommands(db, country)).find(
+        (c) => c.commandingGeneralId === viewerCharId
+      ) ?? null)
+    : null;
+  const posted = new Set(org.conflictAssignments.map((a) => a.generalCharacterId));
+  const unpostedGenerals = myCommand
+    ? myCommand.commanderIds.filter((id) => !posted.has(id)).length
+    : 0;
+  const cgHint =
+    unpostedGenerals > 0 && conflictViews.length > 0
+      ? {
+          unpostedGenerals,
+          href: `/country/${country.toLowerCase()}/general/commands`,
+        }
+      : null;
+
+  return (
+    <CombatCommandClient
+      units={units}
+      country={country}
+      countryCode={country.toLowerCase()}
+      positionId={DEFENSE_POSITION_BY_COUNTRY[country as CountryId] ?? ""}
+      currentTurn={currentTurn}
+      natMods={natMods(doctrine.adopted)}
+      conflictAssignments={org.conflictAssignments}
+      generalsById={generalsById}
+      positions={org.positions}
+      pendingDeclarations={pendingDeclarations}
+      reports={reportViews}
+      conflicts={conflictViews}
+      cgHint={cgHint}
+    />
+  );
+}

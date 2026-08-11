@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" role="img" aria-label="NATO flag">
+  <title>North Atlantic Treaty Organization</title>
+  <rect width="240" height="160" fill="#004990"/>
+  <g transform="translate(120 80)" fill="none" stroke="#ffffff" stroke-width="2">
+    <circle r="48"/>
+  </g>
+  <g transform="translate(120 80)" fill="#ffffff">
+    <!-- Compass star: vertical + horizontal four-pointed star -->
+    <polygon points="0,-44 6,0 0,44 -6,0"/>
+    <polygon points="-44,0 0,-6 44,0 0,6"/>
+  </g>
+  <g transform="translate(120 80)" stroke="#ffffff" stroke-width="2">
+    <!-- Four cardinal lines extending from the star out to the edges -->
+    <line x1="0" y1="-66" x2="0" y2="-50"/>
+    <line x1="0" y1="50" x2="0" y2="66"/>
+    <line x1="-66" y1="0" x2="-50" y2="0"/>
+    <line x1="50" y1="0" x2="66" y2="0"/>
+  </g>
+</svg>

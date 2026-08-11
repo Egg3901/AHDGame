@@ -1,0 +1,234 @@
+/** @vitest-environment happy-dom */
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { ArsenalTab } from "./ArsenalTab";
+import type {
+  DefenceContractView,
+  DefenceSupplierView,
+  MilitaryUnitView,
+} from "../../useCabinetOffice";
+
+afterEach(cleanup);
+
+const unit = (over: Partial<MilitaryUnitView> = {}) =>
+  ({
+    _id: "u1",
+    domain: "ground",
+    type: "Infantry Division",
+    equipment: { firepower: 0, protection: 0, support: 0 },
+    ...over,
+  }) as MilitaryUnitView;
+
+const contract = (over: Partial<DefenceContractView> = {}): DefenceContractView => ({
+  _id: "c1",
+  corporationId: "corp1",
+  sectorId: "s1",
+  supplierName: "Uralvagon Industrial",
+  component: "ground",
+  lotsOrdered: 100,
+  lotsDelivered: 25,
+  pricePerLot: 1_000,
+  awardedTurn: 3,
+  ...over,
+});
+
+const supplier = (over: Partial<DefenceSupplierView> = {}): DefenceSupplierView => ({
+  sectorId: "s1",
+  corporationId: "corp1",
+  corporationName: "Uralvagon Industrial",
+  plantLabel: "Sverdlovsk",
+  strategyId: "heavy_armor",
+  component: "ground",
+  components: ["ground"],
+  projectedLotsPerTurn: 20,
+  gradeCeiling: 2,
+  alreadyContracted: false,
+  ...over,
+});
+
+function setup(over: Partial<React.ComponentProps<typeof ArsenalTab>> = {}) {
+  return render(
+    <ArsenalTab
+      arsenal={{
+        stock: { ground: 40, naval: 0, air: 0, rocket: 0, space: 0, marine: 0 },
+        grade: { ground: 2, naval: 0, air: 0, rocket: 0, space: 0, marine: 0 },
+      }}
+      contracts={[contract()]}
+      units={[unit()]}
+      currencySymbol="$"
+      canAct
+      busy={false}
+      suppliers={[supplier()]}
+      lotPricePerLot={1_000}
+      onAwardContract={vi.fn(async () => true)}
+      onCancelContract={vi.fn()}
+      {...over}
+    />
+  );
+}
+
+describe("ArsenalTab", () => {
+  it("lists every arm of service, including ones with nothing in store", () => {
+    setup();
+    for (const label of ["Ground", "Naval", "Air", "Rocket", "Marine", "Space"]) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
+  });
+
+  it("names the grade of what is in store rather than a bare number", () => {
+    setup();
+    expect(screen.getByText("Modernised")).toBeTruthy();
+  });
+
+  // A domain with no units needs nothing — reporting "0 needed" there would read as
+  // satisfied rather than as not-applicable.
+  it("distinguishes a domain with no units from one that is fully equipped", () => {
+    setup({ units: [] });
+    expect(screen.getAllByText("no units").length).toBeGreaterThan(0);
+  });
+
+  it("reports what the current roster is still short of", () => {
+    setup();
+    expect(screen.getByText(/needed/)).toBeTruthy();
+  });
+
+  // Without a contract the arsenal never fills, which is the one thing a new minister needs
+  // told rather than left to infer from an empty table.
+  it("explains the consequence when there are no contracts", () => {
+    setup({ contracts: [] });
+    expect(screen.getByText(/never fills/i)).toBeTruthy();
+  });
+
+  it("shows a contract's supplier, progress and unit price", () => {
+    setup();
+    expect(screen.getByText("Uralvagon Industrial")).toBeTruthy();
+    expect(screen.getByText(/25 \/ 100/)).toBeTruthy();
+    expect(screen.getByText(/25% delivered/)).toBeTruthy();
+  });
+
+  // Cancelling is destructive and irreversible, so it takes two clicks.
+  it("requires confirmation before cancelling a contract", () => {
+    const onCancelContract = vi.fn();
+    setup({ onCancelContract });
+    // fireEvent, not a raw DOM .click(): the latter runs outside React's act() and the
+    // state change that swaps in the Confirm button is never flushed.
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    expect(onCancelContract).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /confirm/i }));
+    expect(onCancelContract).toHaveBeenCalledWith("c1");
+  });
+
+  it("offers no cancel control to a viewer who cannot act", () => {
+    setup({ canAct: false });
+    expect(screen.queryByRole("button", { name: /^cancel$/i })).toBeNull();
+  });
+
+  it("renders without an arsenal document at all", () => {
+    expect(() => setup({ arsenal: undefined, contracts: undefined })).not.toThrow();
+  });
+});
+
+describe("ArsenalTab — awarding a contract", () => {
+  // The whole C2 loop is inert without this form: a minister could see an empty arsenal and
+  // an empty contract list with no way to connect the two.
+  it("awards to the selected plant with the ordered lots", async () => {
+    const onAwardContract = vi.fn(async () => true);
+    setup({ onAwardContract });
+
+    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
+    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "250" } });
+    fireEvent.click(screen.getByText("Offer contract"));
+
+    expect(onAwardContract).toHaveBeenCalledWith("s1", 250);
+  });
+
+  // Quoting off a different price than the route bills would make the confirmation a lie.
+  it("quotes lots x the going rate before the minister commits", () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
+    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "250" } });
+    expect(screen.getByText("Total if fully delivered")).toBeTruthy();
+    // 250 lots x $1,000.
+    expect(screen.getByText(/250,000/)).toBeTruthy();
+  });
+
+  it("shows how many turns the plant needs to fill the order", () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
+    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "250" } });
+    // 250 lots at 20/turn rounds up to 13.
+    expect(screen.getByText(/about 13 turns to fill/)).toBeTruthy();
+  });
+
+  it("refuses to submit with no plant chosen or a non-positive order", () => {
+    const onAwardContract = vi.fn(async () => true);
+    setup({ onAwardContract });
+    const button = screen.getByText("Offer contract") as HTMLButtonElement;
+
+    expect(button.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
+    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "0" } });
+    expect(button.disabled).toBe(true);
+
+    fireEvent.click(screen.getByText("Offer contract"));
+    expect(onAwardContract).not.toHaveBeenCalled();
+  });
+
+  // A zero GDP is exactly what would price a contract at nothing, so the form closes rather
+  // than awarding free materiel.
+  it("disables the form when a lot cannot be priced", () => {
+    setup({ lotPricePerLot: null });
+    expect(screen.getByText(/no usable GDP figure/)).toBeTruthy();
+    expect(screen.queryByLabelText("Supplier")).toBeNull();
+  });
+
+  it("explains an empty supplier list rather than showing a dead picker", () => {
+    setup({ suppliers: [] });
+    expect(screen.getByText(/No eligible supplier/)).toBeTruthy();
+    expect(screen.queryByLabelText("Supplier")).toBeNull();
+  });
+
+  it("hides the form from someone who does not hold the seat", () => {
+    setup({ canAct: false });
+    expect(screen.getByText(/Only the defence minister may award/)).toBeTruthy();
+  });
+
+  // A plant serving two domains splits its output, and a plant already under contract splits
+  // it again — both change what the order is actually worth.
+  it("warns when the chosen plant is already committed", () => {
+    setup({ suppliers: [supplier({ alreadyContracted: true })] });
+    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
+    expect(screen.getByText(/already has an order/)).toBeTruthy();
+  });
+
+  it("warns when the chosen plant is producing nothing", () => {
+    setup({ suppliers: [supplier({ projectedLotsPerTurn: 0 })] });
+    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
+    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "10" } });
+    expect(screen.getByText(/producing nothing right now/)).toBeTruthy();
+  });
+});
+
+describe("ArsenalTab — order size cap", () => {
+  // Mirrors the award route's own max. Without it the minister gets a raw schema error
+  // from the server for a figure the form could have refused with a reason.
+  it("refuses an order past the per-contract cap", () => {
+    const onAwardContract = vi.fn(async () => true);
+    setup({ onAwardContract });
+    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
+    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "1000001" } });
+
+    expect(screen.getByText(/cannot exceed/)).toBeTruthy();
+    expect((screen.getByText("Offer contract") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByText("Offer contract"));
+    expect(onAwardContract).not.toHaveBeenCalled();
+  });
+
+  it("accepts an order exactly at the cap", () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
+    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "1000000" } });
+    expect(screen.queryByText(/cannot exceed/)).toBeNull();
+    expect((screen.getByText("Offer contract") as HTMLButtonElement).disabled).toBe(false);
+  });
+});

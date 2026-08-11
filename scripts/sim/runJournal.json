@@ -1,0 +1,82 @@
+[
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "Launch guard measured drawdown against a frozen launch anchor",
+    "detail": "The guard compared market cap to a reference stamped at turn 2 and reverted capital to ledger on any 25% fall. A prime-rate rise from 3.00% to 4.58% discounts sectorNPV and legitimately reprices equities ~34%, so it fired on healthy monetary tightening in 3 of 3 armed runs. launchGuard.ts now measures the drop against what fundamentals justify and back-fills the fundamental baseline on the first turn fundamentalSharePrice exists (it is not written at turn 2, which defeated the first attempt).",
+    "status": "worked",
+    "evidence": "Held for the full 1000 turns: market stayed in `capital`, guard armed, ZERO trips. Every previous armed run tripped by t11."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "UK income-band index inflated every law cost 7.3x",
+    "detail": "ukStateBaselines.ts carries modern median incomes (GBP 27k-42k) used for every era, so against the GBP 4,300 1953 anchor the back-solved income-band index came out at 7.3168 instead of ~1. That index multiplies the income term of every costModelV2 law and UK laws are priced entirely on that term. nationalMetrics.ts now rejects a back-solve whose implied index falls outside 0.4-2.5 and anchors the baseline at current GDP-per-capita instead.",
+    "status": "partial",
+    "evidence": "Fixed at the source (all indices ~1.00) and UK spending fell 184%->45% of GDP. But over 20 years UK inflation still ends pinned at the 15.00 clamp with a 15.69% policy rate, so the clamp pathology returns on a long horizon even with costs corrected."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "Soviet state enterprises seeded at a zero growth target",
+    "detail": "All 136 RU corporate sectors carried targetGrowthRate 0 while the US/DE/JP sat at 4.5-4.8, so Soviet corporate revenue was byte-identical for the whole run despite RU's own 1953 baseline authoring trendGdpGrowth 6.0. Harmless in a market economy where NPP-founded private firms carry expansion; fatal in a command economy where every producing sector is an SOE. Both seed paths now derive the target from getEraTrendGdpGrowth \u2014 the multi-SOE path in buildCommandSoeCorpEntries as well as the legacy single-corp buildRuSector, since the first patch hit only the branch that does NOT run when commandEconomyEnabled is true.",
+    "status": "worked",
+    "evidence": "RU sector growth targets seeded at 6.00 (was 0/136) and Soviet GDP compounded 1,401B -> 2,002B (+42.8%) over 20 years. Previously byte-identical."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "Command economy and labour tier written to the wrong document",
+    "detail": "forceFullAutonomy set commandEconomyEnabled and labourSystemMode inside the gameState update, but every consumer reads gameConfig._id:'default' \u2014 a silent no-op. Moved to the gameConfig block. labourSystemMode also raised from the seed default 'wages' (tier 1 of 4) to 'full', because ownedUnionMembershipPressureByKey is only fetched at full, so union membership pressure never reaches unionization or labor cost below that tier.",
+    "status": "worked",
+    "evidence": "Both landed on gameConfig. Command economies held administered inflation for the whole run (RU 1.0->1.5, DD 0.5->1.5) while market economies floated. labourSystemMode=full made union pressure reach unionization."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "NPPs had no union agency at all",
+    "detail": "Union.ownerId is a character ObjectId and every union command checks character._id, so all 408 unions stayed leaderless forever and the entire labour-bargaining layer was switched off. Added Union.ownerType ('character' | 'npp'), a nppUnionBehavior turn phase that elects NPP leaders, recruits, posts wage demands and calls strikes, and \u2014 critically \u2014 lets NPP-run corporations answer a demand by raising wageLevel. Nothing else in the turn path writes wageLevel, so a strike could previously only resolve by wait-out, which raises unionization again: an up-ratchet with no negative feedback.",
+    "status": "partial",
+    "evidence": "408/408 unions led by NPPs and 144 standing wage demands; wageLevel moved from a flat 1.0 to a 1.161-1.496 spread, so the bargaining and concession loop genuinely ran and respected the 1.5 model cap. But ZERO strikes fired in 1000 turns - strikeCallCost (2000/sector) outruns dues income, exactly as the pre-launch audit predicted. The strike lever remains effectively unreachable."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "Auto-disasters and auto-crises iterated zero countries",
+    "detail": "Both spawners walked getEnabledCountryIdsFromDb, which resolves doc?.enabledForPlayers ?? status === 'active'. The harness writes enabledForPlayers:false for every country, and ?? only falls through on null/undefined, so the list was permanently EMPTY \u2014 zero disasters and zero crises across a whole run despite crisisSpawnChanceMultiplier 5, with the crisis-effect and NPP-response chains unreachable behind an early return, while telemetry reported every phase completed. First attempt flipped the flag to true; that was REVERTED after checking isNppAutonomyActive, which refuses player-enabled countries regardless of autonomy level and gates PM appointment, autonomous org voting and central-bank chair seating \u2014 it would have stopped every government forming for 1000 turns. Added a separate status-based getSimulatedCountryIds instead.",
+    "status": "worked",
+    "evidence": "531 crises spawned over the run (was 0). The status-based getSimulatedCountryIds resolver fixed it without touching enabledForPlayers, which would have stopped every government forming."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "NaN absorbing states in sector revenue and fiscal bases",
+    "detail": "Sector revenue is read, multiplied by a growth rate and written straight back with no finiteness guard, so one non-finite value persists forever and spreads within the turn to corp totals, liquidCapital and tax accruals. The sibling unownedSectorGrowth path already carried exactly this guard. Separately fiscalBaseGrowth read inflationRate with a bare ?? 2.5 while its three siblings were all Number.isFinite-checked \u2014 enough to NaN every tax base, and from there revenue.total, treasuryBalance, debt.principal, debtToGdpRatio and creditRating.",
+    "status": "worked",
+    "evidence": "Zero non-finite sector revenues after 1000 compounding turns. Guards held."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "27 countries in one unguarded loop with the player countries last",
+    "detail": "runParliamentaryGovernmentPhases looped every parliamentary country with no per-country try/catch, under a single runPhase. COUNTRY_ORDER ends with RU and DD \u2014 both player countries \u2014 so a throw in any earlier country would permanently starve them of PM appointment, confidence resolution, NPP auto-aye and rulingPartyId sync every turn while the phase still reported completed. Each country is now isolated.",
+    "status": "worked",
+    "evidence": "4 phase errors total across 1000 turns, all nppStanceDrift at t60-78, and none cascaded. RU and DD (last in COUNTRY_ORDER) kept forming governments - 1,908 officials seated, 2,679 elections tallied."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "DD seed gaps: no income anchor, no sovereign issuer, modern-era budget args",
+    "detail": "DD had no INCOME_ANCHORS entry, so getIncomeAnchor returned null and scoring fell through to a global USD band of 15k-90k against seeded incomes of 5,900-8,800 Mark \u2014 pinning DD's income score at 0 for the entire run with no way for policy to move it. It also had no sovereign issuer corporation, so seedSovereignBondInstruments fell back to new ObjectId() and DD's seeded DDM 3B of debt pointed at a corporation that did not exist. And seedDdBudgets passed neither preset nor commandEconomyEnabled, defaulting to 2019-default and excluding DD from the command-economy SOE split by construction. Added a DD anchor (1953: 7,000 / 1979: 14,000), an issuer-only sovereign corp with sectors:[] (DDR keeps no producing corporations by design), and threaded both budget arguments. RU's anchor was also re-based from 3,500 to 1,600 to match what its 1953 overlay actually seeds.",
+    "status": "partial",
+    "evidence": "DD now produces economy rows, has an income anchor and a sovereign issuer. But DD is the only player country whose economy CONTRACTED (50.0B -> 43.5B, -13.1%) while every other grew, so the seed is present but the economy is not healthy."
+  },
+  {
+    "turn": 1000,
+    "phase": "post-run",
+    "title": "Private corporate sector collapsed in the market economies",
+    "detail": "Corporations fell 432 -> 88 and sectors 598 -> 295 over 1000 turns. The survivors are CN 58, RU 9, JP 8, IT 3, DD 2, GR 2, IE 1, DE 1 - the US and UK, the two largest market economies, end with ZERO corporations. Critically there are 0 docs flagged isDefunct and 0 dissolution admin logs, so the firms were DELETED rather than retired through the insolvency path, which is why nothing surfaced it while the run was live.",
+    "status": "failed",
+    "evidence": "Not yet diagnosed. This is the single largest open finding from the run and it invalidates any corporate-sector conclusion drawn from the later checkpoints."
+  }
+]

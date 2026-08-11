@@ -1,0 +1,105 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { getDb } from "@/lib/mongodb";
+import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
+import { handleRouteError } from "@/lib/api/errors";
+import { parseJsonBody } from "@/lib/api/validate";
+import { getPartyBudgetCollection } from "@/lib/db/collections";
+import { findPartyBySequentialId } from "@/lib/db/partyLookup";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
+import { savePartyBudgetForScope } from "@/lib/partyBudgetGuards";
+import { getTreasuryReserveSummary } from "@/lib/partyTreasuryPlan";
+import { getTreasuryPresetLabel, type TreasuryPresetId } from "@/lib/treasury/partyTreasuryPresets";
+
+interface RouteParams {
+  params: Promise<{ code: string; id: string }>;
+}
+
+const treasuryPlanSchema = z.object({
+  transferReserveAmount: z.number().min(0).max(500_000_000),
+  memberSupportReserveAmount: z.number().min(0).max(500_000_000),
+  nppRecruitmentReserveAmount: z.number().min(0).max(500_000_000),
+  gotvBudgetPercent: z.number().min(0).max(25),
+  suppressionBudgetPercent: z.number().min(0).max(25),
+  treasuryPreset: z.enum(["custom", "growth", "election_push", "member_support", "reserve_first"]),
+});
+
+// POST /api/country/[code]/parties/[id]/treasury-plan — Save national Treasurer reserve targets for soft treasury planning
+// Auth: requireAuthWithCharacter
+// Errors: 400, 401, 403, 404, 429
+export async function POST(request: Request, { params }: RouteParams) {
+  try {
+    const { code, id: partyId } = await params;
+    const countryId = code.toUpperCase() as CountryId;
+    if (!COUNTRY_CONFIGS[countryId]) {
+      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+    }
+
+    const auth = await requireAuthWithCharacter();
+    if (!auth.ok) return auth.response;
+
+    const rateLimit = checkRateLimit(auth.user.userId, 20, 60000);
+    if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
+
+    const parsed = await parseJsonBody(request, treasuryPlanSchema);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    }
+
+    const db = await getDb();
+    const party = await findPartyBySequentialId(db, partyId, countryId);
+    if (!party) {
+      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    }
+
+    const actor = auth.user.character;
+    const isAdmin = auth.user.isAdmin;
+    const isTreasurer = party.treasurerId?.equals(actor._id);
+    // When the Treasurer seat is vacant, the Chair / VC act as Treasurer
+    // (mirrors the acting-Treasurer rule on send/transfer) so the plan
+    // isn't permanently locked.
+    const isChair = party.chairId?.equals(actor._id);
+    const isViceChair = party.viceChairId?.equals(actor._id);
+    const canActAsTreasurer = !party.treasurerId && (isChair || isViceChair);
+    if (!isAdmin && !isTreasurer && !canActAsTreasurer) {
+      return NextResponse.json(
+        {
+          error:
+            "Only the party treasurer (or Chair/Vice-Chair when the seat is vacant) or an admin can set treasury targets",
+        },
+        { status: 403 }
+      );
+    }
+
+    const now = new Date();
+    const collection = await getPartyBudgetCollection();
+    await savePartyBudgetForScope(
+      collection,
+      { countryId, partyId, scope: "national" },
+      parsed.data,
+      now
+    );
+
+    const summary = getTreasuryReserveSummary(party.treasury ?? 0, parsed.data);
+    const presetLabel = getTreasuryPresetLabel(parsed.data.treasuryPreset as TreasuryPresetId);
+
+    await db.collection("adminLogs").insertOne({
+      category: "system",
+      action: "treasury_plan_changed",
+      username: auth.user.username,
+      characterName: actor.name,
+      adminUsername: isAdmin ? auth.user.username : undefined,
+      details: `National treasury plan for ${party.name} updated: ${presetLabel} posture, GOTV ${parsed.data.gotvBudgetPercent}%, suppression ${parsed.data.suppressionBudgetPercent}%, transfer reserve $${summary.transferReserveAmount.toLocaleString()}, member support reserve $${summary.memberSupportReserveAmount.toLocaleString()}, NPP recruitment reserve $${summary.nppRecruitmentReserveAmount.toLocaleString()}`,
+      createdAt: now,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Treasury planning targets updated",
+      ...summary,
+    });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}

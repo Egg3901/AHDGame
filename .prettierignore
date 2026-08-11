@@ -1,0 +1,16 @@
+.next
+out
+build
+node_modules
+public
+*.min.js
+package-lock.json
+.worktrees
+src/data/
+
+# Design handoff prototypes (Claude Design exports) — verbatim reference mocks,
+# not reformatted. Mirrors the eslint globalIgnores entry.
+docs/design-handoffs/
+# Design-handoff prototypes (Claude Design exports) — reference-only mockups,
+# kept verbatim alongside the spec; not formatted to project style.
+docs/superpowers/specs/**/prototype/

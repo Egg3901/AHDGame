@@ -1,0 +1,82 @@
+import type { State } from "@/lib/db/types";
+
+/** Finland regions (1979; late Kekkonen era) — six macro-regions grouping the
+ *  historical provinces. pop ≈ 4.77M; gdp in millions of markka.
+ *
+ *  houseDistricts = Eduskunta seats, apportioned by population (sum = 200,
+ *  matching the country config's lowerChamber seats). */
+export const fiRegions: State[] = [
+  {
+    _id: "FI_UUS",
+    countryId: "FI",
+    regionType: "state",
+    name: "Uusimaa",
+    population: 1_090_000,
+    gdp: 50_000,
+    houseDistricts: 46,
+    stateSenateSeats: 0,
+    region: "Helsinki",
+    votingSystem: "rcv",
+  },
+  {
+    _id: "FI_SW",
+    countryId: "FI",
+    regionType: "state",
+    name: "Southwest Finland",
+    population: 660_000,
+    gdp: 21_000,
+    houseDistricts: 28,
+    stateSenateSeats: 0,
+    region: "Southwest",
+    votingSystem: "rcv",
+  },
+  {
+    _id: "FI_HAM",
+    countryId: "FI",
+    regionType: "state",
+    name: "Häme & Central Finland",
+    population: 1_030_000,
+    gdp: 34_000,
+    houseDistricts: 43,
+    stateSenateSeats: 0,
+    region: "Lakeland",
+    votingSystem: "rcv",
+  },
+  {
+    _id: "FI_EAS",
+    countryId: "FI",
+    regionType: "state",
+    name: "Eastern Finland",
+    population: 1_000_000,
+    gdp: 27_000,
+    houseDistricts: 42,
+    stateSenateSeats: 0,
+    region: "Karelia",
+    votingSystem: "rcv",
+  },
+  {
+    _id: "FI_OST",
+    countryId: "FI",
+    regionType: "state",
+    name: "Ostrobothnia",
+    population: 790_000,
+    gdp: 22_000,
+    houseDistricts: 33,
+    stateSenateSeats: 0,
+    region: "Bothnia",
+    votingSystem: "rcv",
+  },
+  {
+    _id: "FI_LAP",
+    countryId: "FI",
+    regionType: "state",
+    name: "Lapland",
+    population: 200_000,
+    gdp: 6_000,
+    houseDistricts: 8,
+    stateSenateSeats: 0,
+    region: "Arctic North",
+    votingSystem: "rcv",
+  },
+];
+export default fiRegions;

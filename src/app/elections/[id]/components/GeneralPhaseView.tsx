@@ -1,0 +1,334 @@
+"use client";
+
+import React from "react";
+import dynamic from "next/dynamic";
+import { RunningMateSelector } from "./RunningMateSelector";
+import { GeneralElectionPanel, GeneralElectionNoTallyPanel } from "./ElectionDetailPanels";
+import { GeneralElectionShellClient } from "./GeneralElectionShellClient";
+import { buildGeneralElectionViewModel } from "@/lib/elections/generalViewModel";
+import { countryHasPresidentialRunningMate } from "@/lib/elections/runningMateEligibility";
+import { assessContingentEvRisk } from "@/lib/elections/presidentialResolutionDisplay";
+import { ContingentRiskBanner } from "./ContingentRiskBanner";
+import { CampaignSeasonBanner } from "./CampaignSeasonBanner";
+import type { DriverDisplayInputs } from "@/lib/elections/computePersuasionDriverDisplay";
+import {
+  PersuasionDrivers,
+  type PersuasionDriverCandidate,
+} from "@/components/elections/general/PersuasionDrivers";
+import { states as referenceStates } from "@/lib/seeds/reference/states";
+import { getSubdivisionMode } from "@/lib/maps/subdivisionConfig";
+import { UK_REGION_NAMES, RU_REGION_NAMES } from "@/lib/constants/states";
+import type { ElectionDetail } from "./ElectionDetailTypes";
+
+/** Static US state-id → display-name map sourced from the reference seed.
+ *  Built once at module load — pure data, no runtime cost per render. */
+const US_STATE_NAME_BY_ID: Record<string, string> = Object.fromEntries(
+  referenceStates.filter((s) => s.countryId === "US").map((s) => [s._id, s.name])
+);
+
+const MapLoadingSkeleton = () => (
+  <div className="w-full animate-pulse rounded-xl border border-card-border bg-card p-6">
+    <div className="h-4 w-32 rounded bg-card-border mb-4" />
+    <div className="h-64 rounded-lg bg-card-border/50" />
+  </div>
+);
+
+const PresidentialMapWithStateDetail = dynamic(
+  () =>
+    import("./PresidentialMapWithStateDetail").then((m) => ({
+      default: m.PresidentialMapWithStateDetail,
+    })),
+  { ssr: false, loading: MapLoadingSkeleton }
+);
+
+const StateCountyMapCompact = dynamic(
+  () =>
+    import("./StateCountyMapCompact").then((m) => ({
+      default: m.StateCountyMapCompact,
+    })),
+  { ssr: false, loading: MapLoadingSkeleton }
+);
+
+const StateCDMapCompact = dynamic(
+  () =>
+    import("./StateCDMapCompact").then((m) => ({
+      default: m.StateCDMapCompact,
+    })),
+  { ssr: false, loading: MapLoadingSkeleton }
+);
+
+const StateSubdivisionMapCompact = dynamic(
+  () =>
+    import("./StateSubdivisionMapCompact").then((m) => ({
+      default: m.StateSubdivisionMapCompact,
+    })),
+  { ssr: false, loading: MapLoadingSkeleton }
+);
+
+interface GeneralPhaseViewProps {
+  election: ElectionDetail;
+  electionId: string;
+  localInPrimary: boolean;
+  localIsEnded: boolean;
+  amInRace: boolean;
+  onSuccess: () => void;
+}
+
+export function GeneralPhaseView({
+  election,
+  electionId,
+  localInPrimary,
+  localIsEnded,
+  amInRace,
+  onSuccess,
+}: GeneralPhaseViewProps) {
+  // Derive country-specific UI gates from the election itself rather than
+  // accept them as props. `isUS` drives presidential-only UI (running mate,
+  // EC map, etc.); `isProjectedGeneral` drives the "Live Projection" vs
+  // "Live Tally" copy — parliamentary lower-chamber elections allocate seats
+  // by demographic reach (projected), while presidential / FPTP-per-seat
+  // races show a running tally.
+  const isUS = election.countryId === "US";
+  const isProjectedGeneral = election.countryId !== "US";
+  // The running-mate selector is offered for any president-with-VP-ticket
+  // country (US, Brazil, Nigeria) — not just the US. Ceremonial presidencies
+  // without a VP office (Ireland, China) never show it. See ticket #0957.
+  const showRunningMateSelector = countryHasPresidentialRunningMate(election.countryId);
+
+  // Persuasion-driver inputs — shared by the presidential shell and the
+  // state-race card. All fields are already on the client DTO (support is
+  // fogged server-side for non-privileged viewers).
+  const persuasionCandidates: PersuasionDriverCandidate[] = (election.allCandidates ?? []).map(
+    (c) => ({
+      id: c.id,
+      characterId: c.characterId,
+      name: c.characterName,
+      party: c.party,
+      partyColor: c.partyColor,
+      partyEcon: c.partyEcon,
+      partySocial: c.partySocial,
+      economicPosition: c.economicPosition,
+      socialPosition: c.socialPosition,
+      favorability: c.favorability,
+      politicalInfluence: c.politicalInfluence,
+      nationalInfluence: c.nationalInfluence,
+      isNPP: c.isNPP,
+      sharePct: c.sharePct,
+      support: c.support,
+    })
+  );
+  const persuasionInputs: DriverDisplayInputs = {
+    fundsByParty: election.fundsByParty,
+    incumbentSeatShareByParty: election.incumbentSeatShareByParty,
+    regByParty: election.persuasionRegByParty,
+    medianVoter: election.medianVoter,
+    presidentialCoattailPctByParty: election.presidentialCoattailPctByParty,
+    gubernatorialCoattailPctByParty: election.gubernatorialCoattailPctByParty,
+    incumbentPartyId: election.incumbentPartyId,
+    incumbentApproval: election.incumbentApproval,
+    legislativeIncumbentPartyId: election.legislativeIncumbentPartyId,
+    legislativeIncumbentTenureTerms: election.legislativeIncumbentTenureTerms,
+  };
+  /* Persuasion Drivers for non-presidential general elections. The swing-flow
+     engine + drivers already run server-side for every general race (see
+     `tallyManagement.ts`). Single-state races (US Senate / Governor / House /
+     State Senate, plus UK / JP / DE equivalents that populate
+     `election.state`) render it directly under the tally, where it explains
+     the numbers the viewer just read. President keeps the multi-state
+     battleground shell above. */
+  const persuasionDriversCard =
+    !localInPrimary &&
+    election.electionType !== "president" &&
+    election.state &&
+    election.allCandidates.length > 0 ? (
+      <PersuasionDrivers
+        stateId={election.state}
+        stateName={(isUS ? US_STATE_NAME_BY_ID[election.state] : undefined) ?? election.state}
+        candidates={persuasionCandidates}
+        inputs={persuasionInputs}
+      />
+    ) : null;
+
+  return (
+    <div className="space-y-4">
+      {showRunningMateSelector &&
+        election.electionType === "president" &&
+        amInRace &&
+        !localIsEnded &&
+        (() => {
+          const myCandidate = election.allCandidates.find((c) => c.isYou);
+          return myCandidate ? (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+              <RunningMateSelector
+                electionId={electionId}
+                currentRunningMateCharacterId={myCandidate.runningMateCharacterId ?? null}
+                currentRunningMateName={myCandidate.runningMateName ?? null}
+                onSuccess={onSuccess}
+              />
+            </div>
+          ) : null;
+        })()}
+
+      <div className="space-y-3">
+        <CampaignSeasonBanner
+          election={election}
+          localInPrimary={localInPrimary}
+          localIsEnded={localIsEnded}
+        />
+
+        <div>
+          <h2 className="text-lg font-semibold">
+            {localIsEnded
+              ? "Final Election Results"
+              : isProjectedGeneral
+                ? "General Election — Live Projection"
+                : "General Election — Live Tally"}
+          </h2>
+          <p className="text-xs text-muted mt-0.5">
+            {isProjectedGeneral
+              ? "Seats projected by demographic reach and regional support each turn."
+              : "Votes allocated by demographic reach each turn. Final 4 turns = 25%; earlier turns = 75%."}
+          </p>
+        </div>
+
+        {/* Phase 5b shell — battleground tiers + Reg / Persuasion side panels.
+            Mounted alongside the existing PresidentialMapWithStateDetail per
+            D5; the two coexist (different emphasis: this one for margin tiers
+            + drivers, the existing one for EV totals + state-detail modal). */}
+        {isUS &&
+          election.electionType === "president" &&
+          !localInPrimary &&
+          !localIsEnded &&
+          (() => {
+            const risk = assessContingentEvRisk(
+              election.generalVotes?.electoralVotesByCandidate,
+              270
+            );
+            return risk?.atRisk ? (
+              <ContingentRiskBanner
+                risk={risk}
+                candidateNames={election.generalVotes?.candidateNames ?? {}}
+              />
+            ) : null;
+          })()}
+
+        {isUS && election.electionType === "president" && !localInPrimary && (
+          <GeneralElectionShellClient
+            countryId="US"
+            persuasionCandidates={persuasionCandidates}
+            persuasionInputs={persuasionInputs}
+            viewModel={buildGeneralElectionViewModel({
+              candidates: Object.entries(election.generalVotes?.candidateNames ?? {}).map(
+                ([id, name]) => {
+                  const partyId = election.generalVotes?.candidateParties?.[id] ?? "";
+                  return {
+                    id,
+                    name,
+                    color: election.generalVotes?.candidateColors?.[id] ?? "#9CA3AF",
+                    partyAbbr: election.partyDisplayById?.[partyId]?.abbr ?? (partyId || "?"),
+                  };
+                }
+              ),
+              stateVoteData: Object.fromEntries(
+                Object.entries(election.generalVotes?.stateVoteData ?? {}).map(([stateId, d]) => [
+                  stateId,
+                  d.votesByCandidate,
+                ])
+              ),
+              // Per-state registration-lean breakdown, computed server-side in
+              // `_enrichElection` from `statePartyOrg.registration` + the
+              // `stateRegistrationPool` buckets. Undefined for states without
+              // seeded registration → the card shows its honest 'no data
+              // tracked' placeholder per state.
+              regByState: election.regByState,
+              partyDisplayById: election.partyDisplayById,
+              stateNameById: US_STATE_NAME_BY_ID,
+            })}
+          />
+        )}
+
+        {isUS && election.electionType === "president" && !localInPrimary && (
+          <PresidentialMapWithStateDetail
+            electionId={electionId}
+            electoralMapData={election.generalVotes?.electoralMapData ?? {}}
+            electoralVotesByCandidate={election.generalVotes?.electoralVotesByCandidate}
+            candidateNames={election.generalVotes?.candidateNames ?? {}}
+            candidateParties={election.generalVotes?.candidateParties ?? {}}
+            candidateColors={election.generalVotes?.candidateColors ?? {}}
+            stateVoteData={election.generalVotes?.stateVoteData}
+            stateVotesOverTime={election.generalVotes?.stateVotesOverTime}
+            candidateTravelStates={Object.fromEntries(
+              election.allCandidates.filter((c) => c.travelState).map((c) => [c.id, c.travelState!])
+            )}
+          />
+        )}
+
+        {election.generalVotes ? (
+          <GeneralElectionPanel
+            afterTally={persuasionDriversCard}
+            tally={election.generalVotes}
+            candidates={election.allCandidates}
+            isEnded={localIsEnded}
+            totalSeats={election.totalSeats}
+            electionType={election.electionType}
+            electionId={election.id}
+            myCharId={election.myCharId}
+            myEndorsedCandidateId={election.myEndorsedCandidateId}
+            countryId={(election.countryId ?? "US") as "US" | "UK" | "DE"}
+          />
+        ) : (
+          <GeneralElectionNoTallyPanel
+            candidates={election.allCandidates}
+            isEnded={localIsEnded}
+            totalSeats={election.totalSeats}
+            electionId={election.id}
+            electionType={election.electionType}
+            myCharId={election.myCharId}
+            myEndorsedCandidateId={election.myEndorsedCandidateId}
+          />
+        )}
+
+        {/* Sub-region maps close the page, under the results and trend charts.
+            election.id (not the route param): the URL may be a seat id that
+            resolves to the CURRENT cycle, while Previous/Next can be showing a
+            past election — the map must query the election on screen. */}
+
+        {/* County map for US senate, governor, and state senate races */}
+        {isUS &&
+          !localInPrimary &&
+          ["senate", "governor", "stateSenate"].includes(election.electionType) && (
+            <StateCountyMapCompact
+              electionId={election.id}
+              state={election.state}
+              electionType={election.electionType}
+              countryId={election.countryId ?? "US"}
+            />
+          )}
+
+        {/* CD map for US house races */}
+        {isUS && !localInPrimary && election.electionType === "house" && (
+          <StateCDMapCompact
+            electionId={election.id}
+            state={election.state}
+            countryId={election.countryId ?? "US"}
+          />
+        )}
+
+        {/* Sub-region map for non-US races with subdivision data (e.g. UK constituencies).
+            The registry decides support; the compact card hides itself on 404. */}
+        {!isUS &&
+          !localInPrimary &&
+          election.state &&
+          election.countryId &&
+          getSubdivisionMode(election.countryId, election.electionType) && (
+            <StateSubdivisionMapCompact
+              electionId={election.id}
+              state={election.state}
+              countryId={election.countryId}
+              stateName={UK_REGION_NAMES[election.state] ?? RU_REGION_NAMES[election.state]}
+            />
+          )}
+      </div>
+    </div>
+  );
+}

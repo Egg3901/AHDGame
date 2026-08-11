@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A House Divided — Iteration Alpha: Year in Review</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --bg-card: #111118;
+    --bg-card-alt: #16161f;
+    --border: #1e1e2e;
+    --border-bright: #2a2a3e;
+    --text: #e4e4ef;
+    --text-dim: #8888a0;
+    --text-muted: #55556a;
+    --accent: #6366f1;
+    --accent-glow: rgba(99, 102, 241, 0.15);
+    --red: #ef4444;
+    --red-dim: rgba(239, 68, 68, 0.15);
+    --green: #22c55e;
+    --green-dim: rgba(34, 197, 94, 0.15);
+    --amber: #f59e0b;
+    --amber-dim: rgba(245, 158, 11, 0.15);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59, 130, 246, 0.15);
+    --us-blue: #3b82f6;
+    --us-red: #ef4444;
+    --uk-blue: #1d4ed8;
+    --uk-red: #dc2626;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    position: relative;
+    padding: 120px 24px 80px;
+    text-align: center;
+    overflow: hidden;
+    background: linear-gradient(180deg, #0d0d1a 0%, var(--bg) 100%);
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 800px 400px at 50% 30%, var(--accent-glow), transparent);
+    pointer-events: none;
+  }
+  .hero-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+  .hero h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    font-weight: 700;
+    line-height: 1.1;
+    margin-bottom: 16px;
+    background: linear-gradient(135deg, #e4e4ef 0%, #9999b0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero-sub {
+    font-size: 1.1rem;
+    color: var(--text-dim);
+    max-width: 600px;
+    margin: 0 auto 40px;
+  }
+  .hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 48px;
+    flex-wrap: wrap;
+  }
+  .hero-stat {
+    text-align: center;
+  }
+  .hero-stat .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .hero-stat .label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* ── Layout ── */
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ── Sections ── */
+  section {
+    padding: 80px 0;
+    border-top: 1px solid var(--border);
+  }
+  section:first-of-type { border-top: none; }
+
+  .section-header {
+    margin-bottom: 48px;
+  }
+  .section-flag {
+    font-size: 2rem;
+    margin-bottom: 8px;
+  }
+  .section-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .section-desc {
+    color: var(--text-dim);
+    max-width: 700px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    margin-bottom: 20px;
+  }
+  .card-title {
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title .badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  .badge-dem { background: var(--blue-dim); color: var(--blue); }
+  .badge-rep { background: var(--red-dim); color: var(--red); }
+  .badge-ind { background: rgba(156, 163, 175, 0.15); color: #9ca3af; }
+  .badge-reform { background: rgba(0, 176, 216, 0.15); color: #00b0d8; }
+  .badge-labour { background: rgba(220, 38, 38, 0.15); color: #dc2626; }
+  .badge-con { background: rgba(0, 135, 220, 0.15); color: #0087dc; }
+  .badge-snp { background: rgba(255, 200, 0, 0.15); color: #ffc800; }
+  .badge-freedom { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+  .badge-green { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+  .badge-accent { background: var(--accent-glow); color: var(--accent); }
+
+  /* ── Grid ── */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 768px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+
+  /* ── Tables ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  tr:last-child td { border-bottom: none; }
+  td.name { color: var(--text); font-weight: 500; }
+  td.mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+  }
+  .val-positive { color: var(--green); }
+  .val-negative { color: var(--red); }
+  .val-warn { color: var(--amber); }
+  .val-blue { color: var(--blue); }
+
+  /* ── Executive Card ── */
+  .exec-card {
+    background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-card-alt) 100%);
+    border: 1px solid var(--border-bright);
+    border-radius: 16px;
+    padding: 32px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+  .exec-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--accent-glow);
+    border: 2px solid var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .exec-info h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+  .exec-info .role {
+    color: var(--text-dim);
+    font-size: 0.875rem;
+  }
+  .exec-info .stats {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+  .exec-info .stats span { color: var(--text-dim); }
+
+  /* ── Stat Pill ── */
+  .stat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .stat-pill {
+    background: var(--bg-card-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    min-width: 140px;
+    flex: 1;
+  }
+  .stat-pill .val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+  .stat-pill .lbl {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── Rate chart (ASCII-style) ── */
+  .rate-chart {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    overflow-x: auto;
+  }
+  .rate-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+  }
+  .rate-bar-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    width: 30px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .rate-bar {
+    height: 6px;
+    border-radius: 3px;
+    transition: width 0.3s;
+  }
+  .rate-bar-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    margin-left: 4px;
+  }
+
+  /* ── Corp ticker row ── */
+  .ticker-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .ticker-row:last-child { border-bottom: none; }
+  .ticker-rank {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    width: 28px;
+    flex-shrink: 0;
+  }
+  .ticker-name {
+    flex: 1;
+    font-weight: 500;
+  }
+  .ticker-name .ceo {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+  .ticker-price {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    text-align: right;
+    min-width: 80px;
+  }
+  .ticker-mcap {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-align: right;
+    min-width: 100px;
+  }
+
+  /* ── Callout ── */
+  .callout {
+    border-left: 3px solid var(--accent);
+    padding: 16px 20px;
+    background: var(--accent-glow);
+    border-radius: 0 8px 8px 0;
+    margin: 24px 0;
+    font-size: 0.9rem;
+    color: var(--text-dim);
+  }
+  .callout strong { color: var(--text); }
+  .callout-red {
+    border-left-color: var(--red);
+    background: var(--red-dim);
+  }
+  .callout-green {
+    border-left-color: var(--green);
+    background: var(--green-dim);
+  }
+  .callout-amber {
+    border-left-color: var(--amber);
+    background: var(--amber-dim);
+  }
+
+  /* ── Bill list ── */
+  .bill-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.875rem;
+  }
+  .bill-item:last-child { border-bottom: none; }
+  .bill-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+  .bill-signed { background: var(--green-dim); color: var(--green); }
+  .bill-failed { background: var(--red-dim); color: var(--red); }
+
+  /* ── Footer ── */
+  .footer {
+    padding: 60px 0;
+    text-align: center;
+    border-top: 1px solid var(--border);
+  }
+  .footer-logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text-dim);
+  }
+  .footer-sub {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  /* ── Misc ── */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 32px 0;
+  }
+  .tag {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--bg-card-alt);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    margin-right: 4px;
+  }
+  .highlight { color: var(--accent); }
+  .text-sm { font-size: 0.875rem; }
+  .text-xs { font-size: 0.75rem; }
+  .text-dim { color: var(--text-dim); }
+  .text-muted { color: var(--text-muted); }
+  .mt-4 { margin-top: 16px; }
+  .mt-8 { margin-top: 32px; }
+  .mb-4 { margin-bottom: 16px; }
+  .mb-2 { margin-bottom: 8px; }
+  .fw-600 { font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ HERO ═══════════════ -->
+<header class="hero">
+  <div class="container">
+    <div class="hero-eyebrow">A House Divided</div>
+    <h1>Iteration Alpha<br>Year in Review</h1>
+    <p class="hero-sub">
+      919 turns. 20 game years. 270 politicians. Two countries. One simulation.
+      Here's everything that happened.
+    </p>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="value">919</div>
+        <div class="label">Turns Processed</div>
+      </div>
+      <div class="hero-stat">
+        <div class="value">270</div>
+        <div class="label">Player Characters</div>
+      </div>
+      <div class="hero-stat">
+        <div class="value">5,487</div>
+        <div class="label">NPPs Simulated</div>
+      </div>
+      <div class="hero-stat">
+        <div class="value">81</div>
+        <div class="label">Corporations</div>
+      </div>
+      <div class="hero-stat">
+        <div class="value">89</div>
+        <div class="label">Bills Introduced</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+<!-- ═══════════════ US POLITICS ═══════════════ -->
+<section>
+  <div class="section-header">
+    <div class="section-flag">🇺🇸</div>
+    <div class="section-eyebrow">United States</div>
+    <h2 class="section-title">American Politics</h2>
+    <p class="section-desc">
+      182 player characters. 5,198 NPPs. The Democratic Party held the White House, but a fragmented Congress
+      and a rising Freedom Party made governance anything but simple.
+    </p>
+  </div>
+
+  <!-- Executive -->
+  <h3 class="fw-600 mb-4">The Executive Branch</h3>
+  <div class="exec-card">
+    <div class="exec-avatar">🏛️</div>
+    <div class="exec-info">
+      <h3>Roseanne Park</h3>
+      <div class="role">President of the United States <span class="badge badge-dem" style="margin-left:8px">Democratic</span></div>
+      <div class="stats">
+        <span>Fav: 33.7</span>
+        <span>PI: 45.6</span>
+        <span>NI: 350.9</span>
+        <span>Funds: $93.7M</span>
+      </div>
+    </div>
+  </div>
+  <div class="exec-card">
+    <div class="exec-avatar">⭐</div>
+    <div class="exec-info">
+      <h3>Marilyn Monroe</h3>
+      <div class="role">Vice President <span class="badge badge-dem" style="margin-left:8px">Democratic</span></div>
+      <div class="stats">
+        <span>Fav: 30.0</span>
+        <span>PI: 5.9</span>
+        <span>NI: 161.4</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Notable:</strong> President Park also served as CEO of <strong>Blackwell Inc.</strong> ($27.56/share, $273M market cap) —
+    the sitting president simultaneously running one of the largest companies in the simulation. Her investment portfolio
+    peaked at an astonishing <strong>$6.68 billion</strong> around turn 769 before a sharp correction.
+  </div>
+
+  <!-- Congressional Leadership -->
+  <h3 class="fw-600 mb-4 mt-8">Congressional Leadership</h3>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Senate</div>
+      <table>
+        <tr><td class="text-dim">President Pro Tempore</td><td class="name">Diane Williams <span class="badge badge-dem">D</span></td></tr>
+        <tr><td class="text-dim">Majority Leader</td><td class="name">Diane Williams <span class="badge badge-dem">D</span></td></tr>
+        <tr><td class="text-dim">Minority Leader</td><td class="name">Teresa McDonald <span class="badge badge-rep">R</span></td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">House of Representatives</div>
+      <table>
+        <tr><td class="text-dim">Speaker</td><td class="name">Kimberly Barnes <span class="badge badge-rep">R</span></td></tr>
+        <tr><td class="text-dim">Majority Leader</td><td class="name">Kimberly Barnes <span class="badge badge-rep">R</span></td></tr>
+        <tr><td class="text-dim">Minority Leader</td><td class="name">Cole_ <span class="badge badge-dem">D</span></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="callout callout-amber">
+    <strong>Divided government:</strong> Democrats held the White House, Senate Majority, and Pro Tempore —
+    but Republicans controlled the House speakership. A split-ticket arrangement that made legislating a constant negotiation.
+  </div>
+
+  <!-- Senators -->
+  <h3 class="fw-600 mb-4 mt-8">Player-Held Senate Seats</h3>
+  <div class="card">
+    <table>
+      <thead>
+        <tr><th>Senator</th><th>State</th><th>Party</th><th>Favorability</th><th>PI</th><th>Nat. Influence</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="name">Ron Swanson</td><td>NH</td><td><span class="badge badge-accent">The American People</span></td><td class="mono val-positive">61.0</td><td class="mono val-positive">86.8</td><td class="mono">148.6</td></tr>
+        <tr><td class="name">Drake Voss</td><td>KY</td><td><span class="badge badge-freedom">Freedom</span></td><td class="mono val-positive">82.1</td><td class="mono val-positive">78.6</td><td class="mono">260.9</td></tr>
+        <tr><td class="name">Anthony Soprano</td><td>NE</td><td><span class="badge badge-rep">Republican</span></td><td class="mono val-positive">66.3</td><td class="mono">55.2</td><td class="mono">75.4</td></tr>
+        <tr><td class="name">Loco King</td><td>MO</td><td><span class="badge badge-accent">Monarchists</span></td><td class="mono val-positive">60.4</td><td class="mono">64.3</td><td class="mono">441.4</td></tr>
+        <tr><td class="name">Thomas Sanders</td><td>MA</td><td><span class="badge badge-dem">Democratic</span></td><td class="mono">32.0</td><td class="mono">25.6</td><td class="mono">402.7</td></tr>
+        <tr><td class="name">Grace Santos</td><td>WA</td><td><span class="badge badge-dem">Democratic</span></td><td class="mono">30.0</td><td class="mono">27.8</td><td class="mono">231.6</td></tr>
+        <tr><td class="name">Cassius MacInnis</td><td>TX</td><td><span class="badge badge-rep">Republican</span></td><td class="mono">30.4</td><td class="mono">12.1</td><td class="mono">261.5</td></tr>
+        <tr><td class="name">Moshe Greenbaum</td><td>DE</td><td><span class="badge badge-ind">Independent</span></td><td class="mono">34.3</td><td class="mono">14.5</td><td class="mono">155.2</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout callout-green">
+    <strong>Standout:</strong> Drake Voss (Freedom-KY) ended the iteration as the most popular senator in America at
+    <strong>82.1 favorability</strong> and 78.6 political influence. Ron Swanson (The American People-NH) held the highest PI at 86.8 —
+    and also chaired the Federal Reserve.
+  </div>
+
+  <!-- Governors -->
+  <h3 class="fw-600 mb-4 mt-8">Governors</h3>
+  <div class="card">
+    <table>
+      <thead>
+        <tr><th>Governor</th><th>State</th><th>Party</th><th>Fav</th><th>PI</th><th>Nat. Influence</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="name">Pete Wilson</td><td>OH</td><td><span class="badge badge-rep">Republican</span></td><td class="mono val-positive">80.0</td><td class="mono val-positive">80.7</td><td class="mono">157.7</td></tr>
+        <tr><td class="name">Karl Freitag</td><td>MD</td><td><span class="badge badge-dem">Democratic</span></td><td class="mono val-positive">62.3</td><td class="mono">53.6</td><td class="mono">127.0</td></tr>
+        <tr><td class="name">Timmy Turner</td><td>WI</td><td><span class="badge badge-dem">Democratic</span></td><td class="mono val-positive">61.3</td><td class="mono">57.8</td><td class="mono">541.7</td></tr>
+        <tr><td class="name">Bill Sanders</td><td>MA</td><td><span class="badge badge-dem">Democratic</span></td><td class="mono">30.5</td><td class="mono val-positive">66.1</td><td class="mono">527.5</td></tr>
+        <tr><td class="name">Gretchen Whitmer</td><td>MI</td><td><span class="badge badge-dem">Democratic</span></td><td class="mono">40.8</td><td class="mono">54.6</td><td class="mono">84.1</td></tr>
+        <tr><td class="name">Berry Strong</td><td>GA</td><td><span class="badge badge-dem">Democratic</span></td><td class="mono">30.3</td><td class="mono">20.2</td><td class="mono">244.7</td></tr>
+        <tr><td class="name">Jayden Petersen</td><td>NY</td><td><span class="badge badge-dem">Democratic</span></td><td class="mono">30.0</td><td class="mono">3.0</td><td class="mono">81.5</td></tr>
+        <tr><td class="name">Averi</td><td>IL</td><td><span class="badge badge-dem">Democratic</span></td><td class="mono">30.0</td><td class="mono">10.6</td><td class="mono">99.0</td></tr>
+        <tr><td class="name">Evan Star</td><td>MO</td><td><span class="badge badge-rep">Republican</span></td><td class="mono">30.8</td><td class="mono">11.6</td><td class="mono">79.0</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="text-sm text-dim mt-4">
+    Democrats held 7 of 9 player governorships. Pete Wilson (R-OH) was the single most popular governor at 80.0 favorability.
+    Timmy Turner (D-WI) led all governors in national influence at 541.7, followed closely by Bill Sanders (D-MA) at 527.5.
+  </p>
+
+  <!-- US Parties -->
+  <h3 class="fw-600 mb-4 mt-8">Party Landscape</h3>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Parties by Membership</div>
+      <table>
+        <thead><tr><th>Party</th><th>Members</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Freedom Party</td><td class="mono val-positive">11</td></tr>
+          <tr><td class="name">Democratic Party</td><td class="mono val-blue">7</td></tr>
+          <tr><td class="name">Rikki West PAF</td><td class="mono">3</td></tr>
+          <tr><td class="name">Republican Party</td><td class="mono val-negative">3</td></tr>
+          <tr><td class="name">Communist Party</td><td class="mono">2</td></tr>
+          <tr><td class="name">8 other parties</td><td class="mono text-muted">1 each</td></tr>
+          <tr><td class="name">Regionalist Party</td><td class="mono val-negative">-17</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">The Fragmentation Story</div>
+      <p class="text-sm text-dim">
+        Alpha's most distinctive political feature was its <strong style="color:var(--text)">extreme party fragmentation</strong>.
+        By iteration's end, the US had <strong style="color:var(--text)">19 political parties</strong> — but no party topped
+        11 members. The Freedom Party led in raw numbers, yet the Democrats dominated executive power.
+      </p>
+      <p class="text-sm text-dim mt-4">
+        The <strong style="color:var(--red)">Regionalist Party</strong> collapsed entirely, ending at -17 members.
+        Meanwhile, single-member parties like the Monarchists, Pacific Independence Party, Maine Separatist Party,
+        and RATEL all survived, proving niche ideologies could persist in the simulation.
+      </p>
+      <p class="text-sm text-dim mt-4">
+        Three coalitions formed: the <strong style="color:var(--text)">Anti-Neoliberal America League</strong>,
+        <strong style="color:var(--text)">The Left Coalition</strong>, and the
+        <strong style="color:var(--text)">Liberty Coalition</strong>.
+      </p>
+    </div>
+  </div>
+
+  <!-- US House seats -->
+  <h3 class="fw-600 mb-4 mt-8">House Seat Distribution (Player-held)</h3>
+  <div class="card">
+    <table>
+      <thead><tr><th>Representative</th><th>State</th><th>Party</th><th>Seats</th><th>Fav</th></tr></thead>
+      <tbody>
+        <tr><td class="name">Saul Goodman</td><td>CA</td><td><span class="badge badge-ind">Independent</span></td><td class="mono val-positive">36</td><td class="mono">30.0</td></tr>
+        <tr><td class="name">Gerri Kellman</td><td>MI</td><td><span class="badge badge-ind">Independent</span></td><td class="mono">13</td><td class="mono">30.0</td></tr>
+        <tr><td class="name">Amelia Watson</td><td>NJ</td><td><span class="badge badge-ind">Independent</span></td><td class="mono">12</td><td class="mono">30.0</td></tr>
+        <tr><td class="name">Cameron Sasai</td><td>CA</td><td><span class="badge badge-accent">Pacific Indep.</span></td><td class="mono">12</td><td class="mono val-positive">62.4</td></tr>
+        <tr><td class="name">Alexandrina Victoria</td><td>CA</td><td><span class="badge badge-dem">Democratic</span></td><td class="mono">9</td><td class="mono">24.0</td></tr>
+        <tr><td class="name">James Smith</td><td>FL</td><td><span class="badge badge-freedom">Freedom</span></td><td class="mono">9</td><td class="mono">30.0</td></tr>
+        <tr><td class="name">Alex Jones</td><td>TX</td><td><span class="badge badge-rep">Republican</span></td><td class="mono">4</td><td class="mono">30.0</td></tr>
+        <tr><td class="name">Jon Angelo</td><td>MA</td><td><span class="badge badge-dem">Democratic</span></td><td class="mono">3</td><td class="mono">30.0</td></tr>
+        <tr><td class="name">Lily Stern</td><td>PA</td><td><span class="badge badge-accent">PSL</span></td><td class="mono">3</td><td class="mono">31.2</td></tr>
+        <tr><td class="name">Vincent Rein</td><td>TN</td><td><span class="badge badge-accent">Civic Coalition</span></td><td class="mono">2</td><td class="mono val-positive">77.3</td></tr>
+        <tr><td class="name">Cole_</td><td>WI</td><td><span class="badge badge-dem">Democratic</span></td><td class="mono">2</td><td class="mono">38.9</td></tr>
+      </tbody>
+    </table>
+    <p class="text-xs text-muted mt-4">Showing top 11 seat-holders of 18+ player House members. Saul Goodman's 36-seat California delegation was the largest single player bloc.</p>
+  </div>
+
+  <!-- US Legislation -->
+  <h3 class="fw-600 mb-4 mt-8">Legislation</h3>
+  <div class="stat-row mb-4">
+    <div class="stat-pill"><div class="val val-positive">27</div><div class="lbl">Bills Signed</div></div>
+    <div class="stat-pill"><div class="val val-negative">27</div><div class="lbl">Bills Failed</div></div>
+    <div class="stat-pill"><div class="val val-warn">1</div><div class="lbl">Override Failed</div></div>
+    <div class="stat-pill"><div class="val val-blue">2</div><div class="lbl">Currently Active</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Notable Legislation</div>
+    <div class="bill-item"><span class="bill-status bill-signed">Signed</span> Affordable Housing Act</div>
+    <div class="bill-item"><span class="bill-status bill-signed">Signed</span> American Health Act</div>
+    <div class="bill-item"><span class="bill-status bill-signed">Signed</span> Broadband Infrastructure &amp; Energy Modernization Act</div>
+    <div class="bill-item"><span class="bill-status bill-signed">Signed</span> Golden Age Act</div>
+    <div class="bill-item"><span class="bill-status bill-signed">Signed</span> Subsidy for Shortages</div>
+    <div class="bill-item"><span class="bill-status bill-signed">Signed</span> Guns Are Only for Good Liberals</div>
+    <div class="bill-item"><span class="bill-status bill-signed">Signed</span> Time to Fix Our Criminals</div>
+    <div class="bill-item"><span class="bill-status bill-signed">Signed</span> Corruption is Bad M'kay</div>
+  </div>
+
+  <!-- US Economy -->
+  <h3 class="fw-600 mb-4 mt-8">Economic Snapshot</h3>
+  <div class="stat-row mb-4">
+    <div class="stat-pill"><div class="val">$22.9T</div><div class="lbl">Total GDP</div></div>
+    <div class="stat-pill"><div class="val">330.7M</div><div class="lbl">Population</div></div>
+    <div class="stat-pill"><div class="val val-positive">~3.2%</div><div class="lbl">Avg Unemployment</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">State Economic Performance</div>
+    <table>
+      <thead><tr><th>State</th><th>Unemployment</th><th>GDP Growth</th><th>Poverty Rate</th></tr></thead>
+      <tbody>
+        <tr><td class="name">Texas</td><td class="mono val-positive">2.66%</td><td class="mono">16.9</td><td class="mono">9.1%</td></tr>
+        <tr><td class="name">New York</td><td class="mono val-positive">2.77%</td><td class="mono">37.3</td><td class="mono val-positive">7.6%</td></tr>
+        <tr><td class="name">Florida</td><td class="mono val-positive">2.85%</td><td class="mono">19.1</td><td class="mono val-warn">11.8%</td></tr>
+        <tr><td class="name">Ohio</td><td class="mono">3.00%</td><td class="mono val-positive">66.7</td><td class="mono">9.7%</td></tr>
+        <tr><td class="name">California</td><td class="mono">3.12%</td><td class="mono">24.7</td><td class="mono">8.4%</td></tr>
+        <tr><td class="name">Massachusetts</td><td class="mono val-warn">4.79%</td><td class="mono val-positive">74.5</td><td class="mono val-positive">6.4%</td></tr>
+        <tr><td class="name">Georgia</td><td class="mono">3.79%</td><td class="mono val-positive">55.9</td><td class="mono val-warn">11.3%</td></tr>
+        <tr><td class="name">Illinois</td><td class="mono">3.27%</td><td class="mono">19.8</td><td class="mono val-negative">12.1%</td></tr>
+      </tbody>
+    </table>
+    <p class="text-xs text-muted mt-4">
+      Massachusetts paradox: highest unemployment (4.79%) but also highest GDP growth (74.5) and lowest poverty (6.4%).
+      Ohio's GDP growth (66.7) under Republican Governor Pete Wilson was the second-highest in the nation.
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════ UK POLITICS ═══════════════ -->
+<section>
+  <div class="section-header">
+    <div class="section-flag">🇬🇧</div>
+    <div class="section-eyebrow">United Kingdom</div>
+    <h2 class="section-title">British Politics</h2>
+    <p class="section-desc">
+      88 player characters across 12 regions. A hung parliament with no Prime Minister. Active legislation.
+      And a Labour plurality that couldn't translate into government.
+    </p>
+  </div>
+
+  <div class="callout callout-red">
+    <strong>Constitutional Crisis:</strong> Alpha ended without a sitting Prime Minister.
+    No single party or coalition could assemble enough Commons support to form a government.
+    Westminster operated in a state of managed instability for the entire duration.
+  </div>
+
+  <!-- UK Commons -->
+  <h3 class="fw-600 mb-4 mt-8">House of Commons — Player Seats</h3>
+  <div class="card">
+    <table>
+      <thead><tr><th>MP</th><th>Region</th><th>Party</th><th>Seats</th><th>Fav</th><th>PI</th></tr></thead>
+      <tbody>
+        <tr><td class="name">Senator</td><td>South East</td><td><span class="badge badge-reform">Reform UK</span></td><td class="mono val-positive">38</td><td class="mono val-positive">60.9</td><td class="mono">57.6</td></tr>
+        <tr><td class="name">Rgold</td><td>North West</td><td><span class="badge badge-reform">Reform UK</span></td><td class="mono">32</td><td class="mono val-positive">64.3</td><td class="mono val-positive">62.5</td></tr>
+        <tr><td class="name">Stefan Aztrix</td><td>North West</td><td><span class="badge badge-con">Conservative</span></td><td class="mono">17</td><td class="mono val-positive">60.3</td><td class="mono val-positive">64.2</td></tr>
+        <tr><td class="name">Steven Bartlett</td><td>Scotland</td><td><span class="badge badge-snp">SNP</span></td><td class="mono">10</td><td class="mono val-positive">50.2</td><td class="mono">50.8</td></tr>
+        <tr><td class="name">Emma Thatcher</td><td>South East</td><td><span class="badge badge-con">Conservative</span></td><td class="mono">10</td><td class="mono">31.3</td><td class="mono">21.0</td></tr>
+        <tr><td class="name">Anthony Smith</td><td>London</td><td><span class="badge badge-accent">Labor Party</span></td><td class="mono">10</td><td class="mono val-positive">60.0</td><td class="mono">41.1</td></tr>
+        <tr><td class="name">Bob Smith</td><td>London</td><td><span class="badge badge-con">Conservative</span></td><td class="mono" style="font-size:0.7rem">Council×10</td><td class="mono val-positive">52.3</td><td class="mono val-positive">64.9</td></tr>
+        <tr><td class="name">Sheev Palpatine</td><td>W. Midlands</td><td><span class="badge badge-labour">Labour</span></td><td class="mono">9</td><td class="mono">30.9</td><td class="mono">17.9</td></tr>
+        <tr><td class="name">Charlotte Kirk</td><td>East</td><td><span class="badge badge-labour">Labour</span></td><td class="mono">8</td><td class="mono val-positive">58.6</td><td class="mono">52.8</td></tr>
+        <tr><td class="name">TheBritishUnion</td><td>Scotland</td><td><span class="badge badge-con">Conservative</span></td><td class="mono">6</td><td class="mono val-positive">50.1</td><td class="mono">19.2</td></tr>
+        <tr><td class="name">Reba Astor</td><td>Scotland</td><td><span class="badge badge-reform">Reform UK</span></td><td class="mono">6</td><td class="mono">32.4</td><td class="mono">37.0</td></tr>
+        <tr><td class="name">Ollie Ghark</td><td>South West</td><td><span class="badge badge-labour">Labour</span></td><td class="mono">6</td><td class="mono">30.0</td><td class="mono">2.3</td></tr>
+        <tr><td class="name">Publius Caesar</td><td>North East</td><td><span class="badge badge-con">Conservative</span></td><td class="mono">5</td><td class="mono">30.0</td><td class="mono val-positive">59.3</td></tr>
+        <tr><td class="name">Sameer Ahmed Orabi</td><td>Scotland</td><td><span class="badge badge-labour">Labour</span></td><td class="mono">5</td><td class="mono val-positive">63.5</td><td class="mono">3.8</td></tr>
+        <tr><td class="name">Timothy Smith</td><td>Wales</td><td><span class="badge badge-accent">Lib Dem</span></td><td class="mono">5</td><td class="mono">30.0</td><td class="mono">11.6</td></tr>
+        <tr><td class="name">Joseph Ryan</td><td>London</td><td><span class="badge badge-accent">Lib Dem</span></td><td class="mono">5</td><td class="mono">36.6</td><td class="mono">40.6</td></tr>
+      </tbody>
+    </table>
+    <p class="text-xs text-muted mt-4">
+      Plus: Amos Ellmaker (Labour, SEE, 4), Harold Wilson (Labour, NWE, 4), Peter Mandelson (Labour, NEE, 4),
+      Gustav Rhodes (Lib Dem, NWE, 3), Man Will (Reform UK, WAL, 2), Clark H Turned (DUP, NIR, 1).
+    </p>
+  </div>
+
+  <div class="grid-2 mt-8">
+    <div class="card">
+      <div class="card-title">Seats by Party</div>
+      <table>
+        <thead><tr><th>Party</th><th>Player Seats</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Reform UK</td><td class="mono">78</td></tr>
+          <tr><td class="name">Labour</td><td class="mono">47</td></tr>
+          <tr><td class="name">Conservative</td><td class="mono">43</td></tr>
+          <tr><td class="name">Liberal Democrats</td><td class="mono">13</td></tr>
+          <tr><td class="name">SNP</td><td class="mono">10</td></tr>
+          <tr><td class="name">Labor Party (UK)</td><td class="mono">10</td></tr>
+          <tr><td class="name">DUP</td><td class="mono">1</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">The Coalition Landscape</div>
+      <p class="text-sm text-dim">Three UK coalitions attempted to break the deadlock:</p>
+      <div class="mt-4">
+        <p class="text-sm mb-2"><strong style="color:var(--text)">The Coalition</strong></p>
+        <p class="text-sm mb-2"><strong style="color:var(--text)">Patriot Coalition</strong></p>
+        <p class="text-sm mb-2"><strong style="color:var(--text)">The Labor-Labour Coalition</strong></p>
+      </div>
+      <p class="text-sm text-dim mt-4">
+        Despite these efforts, none could command a majority. All UK major parties
+        ended the iteration with negative or zero player membership —
+        a stark contrast to the vibrant seat counts.
+      </p>
+    </div>
+  </div>
+
+  <!-- UK Legislation -->
+  <h3 class="fw-600 mb-4 mt-8">UK Legislation</h3>
+  <div class="stat-row mb-4">
+    <div class="stat-pill"><div class="val val-positive">17</div><div class="lbl">Bills Signed</div></div>
+    <div class="stat-pill"><div class="val val-negative">13</div><div class="lbl">Bills Failed</div></div>
+    <div class="stat-pill"><div class="val val-blue">2</div><div class="lbl">Active</div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Signed Into Law</div>
+      <div class="bill-item"><span class="bill-status bill-signed">Signed</span> Balanced Budget Act</div>
+      <div class="bill-item"><span class="bill-status bill-signed">Signed</span> Heavy Defence Act</div>
+      <div class="bill-item"><span class="bill-status bill-signed">Signed</span> The Climate Change Act</div>
+      <div class="bill-item"><span class="bill-status bill-signed">Signed</span> Foreign Resident Act</div>
+      <div class="bill-item"><span class="bill-status bill-signed">Signed</span> National Defence Renewal</div>
+      <div class="bill-item"><span class="bill-status bill-signed">Signed</span> New Social Contract (Pension Reform)</div>
+      <div class="bill-item"><span class="bill-status bill-signed">Signed</span> Scottish Liberation Act</div>
+      <div class="bill-item"><span class="bill-status bill-signed">Signed</span> Leasehold Abolition Act</div>
+      <div class="bill-item"><span class="bill-status bill-signed">Signed</span> License Fee Abolition Act</div>
+      <div class="bill-item"><span class="bill-status bill-signed">Signed</span> Immigration Act</div>
+      <div class="bill-item"><span class="bill-status bill-signed">Signed</span> North Sea Maximisation Act 2</div>
+      <div class="bill-item"><span class="bill-status bill-signed">Signed</span> Higher Education Regulation Act</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Failed to Pass</div>
+      <div class="bill-item"><span class="bill-status bill-failed">Failed</span> National Health Service Bill</div>
+      <div class="bill-item"><span class="bill-status bill-failed">Failed</span> HS2 Act</div>
+      <div class="bill-item"><span class="bill-status bill-failed">Failed</span> Private Healthcare Act</div>
+      <div class="bill-item"><span class="bill-status bill-failed">Failed</span> National Public Investment Plan</div>
+      <div class="bill-item"><span class="bill-status bill-failed">Failed</span> Television Licensing Bill</div>
+      <div class="bill-item"><span class="bill-status bill-failed">Failed</span> Community Policing Code</div>
+      <div class="bill-item"><span class="bill-status bill-failed">Failed</span> North Sea Resource Extraction Act</div>
+      <p class="text-sm text-muted mt-4">
+        The failure of the National Health Service Bill is particularly notable given
+        the simultaneous collapse of the NHS corporation (see Markets section below).
+      </p>
+    </div>
+  </div>
+
+  <!-- UK Economy -->
+  <h3 class="fw-600 mb-4 mt-8">Regional Economics</h3>
+  <div class="stat-row mb-4">
+    <div class="stat-pill"><div class="val">$2.0T</div><div class="lbl">Total GDP</div></div>
+    <div class="stat-pill"><div class="val">67.2M</div><div class="lbl">Population</div></div>
+  </div>
+  <div class="card">
+    <table>
+      <thead><tr><th>Region</th><th>Unemployment</th><th>GDP Growth</th><th>Poverty</th></tr></thead>
+      <tbody>
+        <tr><td class="name">South East England</td><td class="mono val-positive">3.2%</td><td class="mono val-positive">174.0</td><td class="mono val-positive">12.6%</td></tr>
+        <tr><td class="name">Scotland</td><td class="mono">3.8%</td><td class="mono val-positive">157.5</td><td class="mono">15.6%</td></tr>
+        <tr><td class="name">Wales</td><td class="mono val-negative">5.0%</td><td class="mono val-positive">175.6</td><td class="mono val-negative">20.6%</td></tr>
+        <tr><td class="name">London</td><td class="mono val-warn">4.5%</td><td class="mono">82.4</td><td class="mono val-negative">20.6%</td></tr>
+        <tr><td class="name">Northern Ireland</td><td class="mono val-warn">4.5%</td><td class="mono val-positive">161.1</td><td class="mono val-warn">19.6%</td></tr>
+        <tr><td class="name">North West England</td><td class="mono val-negative">5.0%</td><td class="mono val-positive">147.4</td><td class="mono val-warn">18.6%</td></tr>
+      </tbody>
+    </table>
+    <p class="text-xs text-muted mt-4">
+      UK GDP growth numbers were dramatically higher than the US — Wales led at 175.6 despite having 5% unemployment
+      and 20.6% poverty. London showed the widest disparity: strong output but persistent poverty.
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════ CENTRAL BANKS ═══════════════ -->
+<section>
+  <div class="section-header">
+    <div class="section-flag">🏦</div>
+    <div class="section-eyebrow">Monetary Policy</div>
+    <h2 class="section-title">Central Banks &amp; Interest Rates</h2>
+    <p class="section-desc">
+      Player-controlled central banks set interest rates each turn. The results were... volatile.
+    </p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">🇺🇸 Federal Reserve</div>
+      <table>
+        <tr><td class="text-dim">Chair</td><td class="name">Ron Swanson <span class="badge badge-accent">The American People</span></td></tr>
+        <tr><td class="text-dim">Current Rate</td><td class="mono">5.50%</td></tr>
+        <tr><td class="text-dim">Rate History</td><td class="mono">48 turns of data</td></tr>
+        <tr><td class="text-dim">Rate Range</td><td class="mono">0.00% — 25.00%</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">🇬🇧 Bank of England</div>
+      <table>
+        <tr><td class="text-dim">Chair</td><td class="name">Janet</td></tr>
+        <tr><td class="text-dim">Current Rate</td><td class="mono">6.25%</td></tr>
+        <tr><td class="text-dim">Rate History</td><td class="mono">48 turns of data</td></tr>
+        <tr><td class="text-dim">Rate Range</td><td class="mono">0.75% — 25.00%</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="callout callout-red mt-8">
+    <strong>Fed volatility was extreme.</strong> The US interest rate hit <strong>25%</strong> three separate times
+    (turns 877, 880, and 900) and was slashed to <strong>0%</strong> ten times across the iteration. The rate swung from
+    25% → 0% → 25% in the span of three turns (877–880). For context, the real-world Fed has <em>never</em> set a rate
+    above 20%, and rate changes are typically measured in 0.25% increments.
+  </div>
+
+  <!-- Rate visualization -->
+  <h3 class="fw-600 mb-4 mt-8">US Federal Funds Rate — Last 48 Turns</h3>
+  <div class="rate-chart">
+    <div style="display: grid; grid-template-columns: repeat(48, 1fr); gap: 2px; align-items: end; height: 180px; padding: 0 4px;">
+      <!-- Turn-by-turn rate bars, scaled so 25% = 100% height -->
+      <div title="T873: 1.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 7%;"></div>
+      <div title="T874: 1.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 7%;"></div>
+      <div title="T875: 2.5%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 10%;"></div>
+      <div title="T876: 6%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 24%;"></div>
+      <div title="T877: 25%" style="background: var(--red); border-radius: 2px 2px 0 0; height: 100%;"></div>
+      <div title="T878: 3.25%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 13%;"></div>
+      <div title="T879: 0%" style="background: var(--green); border-radius: 2px 2px 0 0; height: 2%;"></div>
+      <div title="T880: 25%" style="background: var(--red); border-radius: 2px 2px 0 0; height: 100%;"></div>
+      <div title="T881: 5%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 20%;"></div>
+      <div title="T882: 7.5%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 30%;"></div>
+      <div title="T883: 7%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 28%;"></div>
+      <div title="T884: 5.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 23%;"></div>
+      <div title="T885: 5.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 23%;"></div>
+      <div title="T886: 5.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 23%;"></div>
+      <div title="T887: 5.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 23%;"></div>
+      <div title="T888: 3.25%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 13%;"></div>
+      <div title="T889: 3.25%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 13%;"></div>
+      <div title="T890: 3.25%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 13%;"></div>
+      <div title="T891: 3.25%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 13%;"></div>
+      <div title="T892: 3.25%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 13%;"></div>
+      <div title="T893: 3.25%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 13%;"></div>
+      <div title="T894: 3.25%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 13%;"></div>
+      <div title="T895: 3.25%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 13%;"></div>
+      <div title="T896: 3.25%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 13%;"></div>
+      <div title="T897: 3.25%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 13%;"></div>
+      <div title="T898: 5.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 23%;"></div>
+      <div title="T899: 7.25%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 29%;"></div>
+      <div title="T900: 25%" style="background: var(--red); border-radius: 2px 2px 0 0; height: 100%;"></div>
+      <div title="T901: 0%" style="background: var(--green); border-radius: 2px 2px 0 0; height: 2%;"></div>
+      <div title="T902: 0%" style="background: var(--green); border-radius: 2px 2px 0 0; height: 2%;"></div>
+      <div title="T903: 0%" style="background: var(--green); border-radius: 2px 2px 0 0; height: 2%;"></div>
+      <div title="T904: 6.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 27%;"></div>
+      <div title="T905: 6.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 27%;"></div>
+      <div title="T906: 6.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 27%;"></div>
+      <div title="T907: 6.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 27%;"></div>
+      <div title="T908: 6.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 27%;"></div>
+      <div title="T909: 6.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 27%;"></div>
+      <div title="T910: 6.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 27%;"></div>
+      <div title="T911: 6.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 27%;"></div>
+      <div title="T912: 6.75%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 27%;"></div>
+      <div title="T913: 0%" style="background: var(--green); border-radius: 2px 2px 0 0; height: 2%;"></div>
+      <div title="T914: 0%" style="background: var(--green); border-radius: 2px 2px 0 0; height: 2%;"></div>
+      <div title="T915: 0%" style="background: var(--green); border-radius: 2px 2px 0 0; height: 2%;"></div>
+      <div title="T916: 0%" style="background: var(--green); border-radius: 2px 2px 0 0; height: 2%;"></div>
+      <div title="T917: 0%" style="background: var(--green); border-radius: 2px 2px 0 0; height: 2%;"></div>
+      <div title="T918: 0%" style="background: var(--green); border-radius: 2px 2px 0 0; height: 2%;"></div>
+      <div title="T919: 5.5%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 22%;"></div>
+      <div title="T920: 5.5%" style="background: var(--accent); border-radius: 2px 2px 0 0; height: 22%;"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-top:8px;">
+      <span class="text-xs text-muted">T873</span>
+      <span class="text-xs text-muted">
+        <span style="display:inline-block;width:8px;height:8px;background:var(--red);border-radius:2px;vertical-align:middle;margin-right:4px;"></span>25%
+        <span style="display:inline-block;width:8px;height:8px;background:var(--green);border-radius:2px;vertical-align:middle;margin:0 4px 0 12px;"></span>0%
+        <span style="display:inline-block;width:8px;height:8px;background:var(--accent);border-radius:2px;vertical-align:middle;margin:0 4px 0 12px;"></span>Normal
+      </span>
+      <span class="text-xs text-muted">T920</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ MARKETS ═══════════════ -->
+<section>
+  <div class="section-header">
+    <div class="section-flag">📈</div>
+    <div class="section-eyebrow">Markets &amp; Corporations</div>
+    <h2 class="section-title">The Corporate Landscape</h2>
+    <p class="section-desc">
+      81 corporations across the US and UK. From $494M real estate empires to corporations in negative equity.
+    </p>
+  </div>
+
+  <!-- Top by share price -->
+  <h3 class="fw-600 mb-4">Top Corporations by Share Price</h3>
+  <div class="card">
+    <div class="ticker-row" style="border-bottom: 1px solid var(--border-bright); padding-bottom: 8px; margin-bottom: 4px;">
+      <div class="ticker-rank" style="color: var(--text-muted);">#</div>
+      <div class="ticker-name" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted);">Company</div>
+      <div class="ticker-price" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted);">Price</div>
+      <div class="ticker-mcap" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted);">Market Cap</div>
+    </div>
+    <div class="ticker-row">
+      <div class="ticker-rank">1</div>
+      <div class="ticker-name">King Corporation <span class="tag">US</span><br><span class="ceo">CEO: Loco King</span></div>
+      <div class="ticker-price val-positive">$271.81</div>
+      <div class="ticker-mcap">$271.8M</div>
+    </div>
+    <div class="ticker-row">
+      <div class="ticker-rank">2</div>
+      <div class="ticker-name">Lighthouse Whole Food <span class="tag">US</span><br><span class="ceo">CEO: John Smith</span></div>
+      <div class="ticker-price val-positive">$72.25</div>
+      <div class="ticker-mcap">$72.3M</div>
+    </div>
+    <div class="ticker-row">
+      <div class="ticker-rank">3</div>
+      <div class="ticker-name">Lighthouse Insurance <span class="tag">US</span><br><span class="ceo">CEO: Benjamin Long</span></div>
+      <div class="ticker-price val-positive">$59.03</div>
+      <div class="ticker-mcap">$59.0M</div>
+    </div>
+    <div class="ticker-row">
+      <div class="ticker-rank">4</div>
+      <div class="ticker-name">Lockheed Martin <span class="tag">US</span><br><span class="ceo">CEO: Daniels Smiths</span></div>
+      <div class="ticker-price">$42.49</div>
+      <div class="ticker-mcap">$42.5M</div>
+    </div>
+    <div class="ticker-row">
+      <div class="ticker-rank">5</div>
+      <div class="ticker-name">INTERSHIP <span class="tag">US</span><br><span class="ceo">CEO: Cole_</span></div>
+      <div class="ticker-price">$40.03</div>
+      <div class="ticker-mcap">$40.0M</div>
+    </div>
+    <div class="ticker-row">
+      <div class="ticker-rank">6</div>
+      <div class="ticker-name">JPMorgan Chase & Co. <span class="tag">US</span><br><span class="ceo">CEO: Ron Swanson</span></div>
+      <div class="ticker-price">$38.44</div>
+      <div class="ticker-mcap">$38.4M</div>
+    </div>
+    <div class="ticker-row">
+      <div class="ticker-rank">7</div>
+      <div class="ticker-name">Lighthouse Retail <span class="tag">US</span><br><span class="ceo">CEO: Daniel Smith</span></div>
+      <div class="ticker-price">$34.46</div>
+      <div class="ticker-mcap">$34.5M</div>
+    </div>
+    <div class="ticker-row">
+      <div class="ticker-rank">8</div>
+      <div class="ticker-name">Keir's Tool Shop <span class="tag">UK</span><br><span class="ceo">CEO: Keir Starmer</span></div>
+      <div class="ticker-price">$27.44</div>
+      <div class="ticker-mcap">$90.4M</div>
+    </div>
+    <div class="ticker-row">
+      <div class="ticker-rank">9</div>
+      <div class="ticker-name">Blackwell Inc. <span class="tag">US</span><br><span class="ceo">CEO: Roseanne Park</span></div>
+      <div class="ticker-price">$27.33</div>
+      <div class="ticker-mcap">$273.3M</div>
+    </div>
+    <div class="ticker-row">
+      <div class="ticker-rank">10</div>
+      <div class="ticker-name">Blackrock <span class="tag">US</span><br><span class="ceo">CEO: President Business</span></div>
+      <div class="ticker-price">$25.11</div>
+      <div class="ticker-mcap">$127.4M</div>
+    </div>
+  </div>
+
+  <!-- Top by market cap -->
+  <h3 class="fw-600 mb-4 mt-8">Largest by Market Capitalization</h3>
+  <div class="card">
+    <table>
+      <thead><tr><th>Corporation</th><th>Share Price</th><th>Shares Outstanding</th><th>Market Cap</th><th>Liquid Capital</th></tr></thead>
+      <tbody>
+        <tr><td class="name">Skeedoo Real Estate <span class="tag">US</span></td><td class="mono">$2.81</td><td class="mono">175.7M</td><td class="mono val-positive">$493.6M</td><td class="mono">$417.8M</td></tr>
+        <tr><td class="name">Comau <span class="tag">US</span></td><td class="mono">$16.58</td><td class="mono">17.3M</td><td class="mono val-positive">$286.5M</td><td class="mono">$165.3M</td></tr>
+        <tr><td class="name">Blackwell Inc. <span class="tag">US</span></td><td class="mono">$27.33</td><td class="mono">10.0M</td><td class="mono val-positive">$273.3M</td><td class="mono">$30.2M</td></tr>
+        <tr><td class="name">King Corporation <span class="tag">US</span></td><td class="mono">$271.81</td><td class="mono">1.0M</td><td class="mono val-positive">$271.8M</td><td class="mono">$183.6M</td></tr>
+        <tr><td class="name">Texland Petroleum <span class="tag">US</span></td><td class="mono">$1.46</td><td class="mono">160.0M</td><td class="mono val-positive">$233.6M</td><td class="mono val-positive">$284.4M</td></tr>
+        <tr><td class="name">VOSS CORP <span class="tag">US</span></td><td class="mono">$20.00</td><td class="mono">10.3M</td><td class="mono">$206.0M</td><td class="mono">$74.6M</td></tr>
+        <tr><td class="name">Greenbaum Capital <span class="tag">US</span></td><td class="mono">$13.93</td><td class="mono">10.0M</td><td class="mono">$139.3M</td><td class="mono">$81.3M</td></tr>
+        <tr><td class="name">Maryco <span class="tag">US</span></td><td class="mono">$12.14</td><td class="mono">10.5M</td><td class="mono">$127.5M</td><td class="mono">$38.9M</td></tr>
+        <tr><td class="name">Blackrock <span class="tag">US</span></td><td class="mono">$25.11</td><td class="mono">5.1M</td><td class="mono">$127.4M</td><td class="mono val-positive">$99.9M</td></tr>
+        <tr><td class="name">Reliance Industries <span class="tag">UK</span></td><td class="mono">$8.12</td><td class="mono">15.0M</td><td class="mono">$121.8M</td><td class="mono">$45.0M</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <strong>The Lighthouse Empire:</strong> Four corporations — Lighthouse Whole Food ($72.25), Lighthouse Insurance ($59.03),
+    Lighthouse Retail ($34.46), and Lighthouse Manufacturing ($3.16, CEO vacant) — formed the game's most visible corporate conglomerate,
+    collectively worth over <strong>$169M</strong> by market cap.
+  </div>
+
+  <!-- Business empires -->
+  <h3 class="fw-600 mb-4 mt-8">Business Moguls</h3>
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-title">Ron Swanson</div>
+      <p class="text-sm text-dim">Senator (NH), Fed Chair, CEO of JPMorgan Chase. Peak portfolio: <strong style="color:var(--green)">$1.07B</strong>.
+      The most powerful person in Alpha — simultaneously controlling monetary policy, holding elected office, and running a major bank.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Roseanne Park</div>
+      <p class="text-sm text-dim">President, CEO of Blackwell Inc. Peak portfolio: <strong style="color:var(--green)">$6.68B</strong> (turn 769) —
+      the single largest portfolio value ever recorded. Crashed to $1.46B the following turn.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Loco King</div>
+      <p class="text-sm text-dim">Senator (MO, Monarchists), CEO of King Corporation — the highest share price in the game at $271.81.
+      Built from 1M shares to $183M in liquid capital, all while maintaining 60+ favorability in the Senate.</p>
+    </div>
+  </div>
+
+  <!-- Notable UK Corps -->
+  <h3 class="fw-600 mb-4 mt-8">UK Corporate Standouts</h3>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title val-positive">Winners</div>
+      <table>
+        <tr><td class="name">Keir's Tool Shop</td><td class="mono">$27.44</td><td class="mono text-dim">$72.5M liquid</td></tr>
+        <tr><td class="name">Reliance Industries</td><td class="mono">$8.12</td><td class="mono text-dim">$45.0M liquid</td></tr>
+        <tr><td class="name">Gründer Industries</td><td class="mono">$9.36</td><td class="mono text-dim">$11.6M liquid</td></tr>
+        <tr><td class="name">Glencore Corporation</td><td class="mono">$1.58</td><td class="mono text-dim">$27.2M liquid</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title val-negative">Collapsed</div>
+      <table>
+        <tr><td class="name">NHS</td><td class="mono val-negative">$0.01</td><td class="mono val-negative">-$42.5M</td></tr>
+        <tr><td class="name">Palantir</td><td class="mono val-negative">$0.01</td><td class="mono val-negative">-$1.6M</td></tr>
+        <tr><td class="name">Morning plc</td><td class="mono val-negative">$0.01</td><td class="mono text-dim">$0.85M</td></tr>
+        <tr><td class="name">NigDig Industries</td><td class="mono val-warn">$0.09</td><td class="mono text-dim">$1.2M</td></tr>
+      </table>
+      <p class="text-xs text-muted mt-4">
+        The NHS ended at $0.01/share with <strong style="color:var(--red)">-$42.5M in liquid capital</strong> — the largest negative balance
+        in the simulation. Parliament simultaneously failed to pass the National Health Service Bill.
+      </p>
+    </div>
+  </div>
+
+  <!-- Top portfolios -->
+  <h3 class="fw-600 mb-4 mt-8">Investment Portfolios</h3>
+  <div class="callout callout-green">
+    <strong>Peak portfolio values recorded:</strong><br>
+    Roseanne Park: <strong>$6.68B</strong> (turn 769) — dropped to $1.46B by turn 770.<br>
+    Ron Swanson: <strong>$1.07B</strong> (turn 912) — the largest sustained portfolio.<br>
+    These portfolio crashes and recoveries played out against the backdrop of wildly volatile interest rates.
+  </div>
+
+  <!-- US vs UK corporate split -->
+  <h3 class="fw-600 mb-4 mt-8">Market Summary</h3>
+  <div class="stat-row">
+    <div class="stat-pill"><div class="val">53</div><div class="lbl">US Corporations</div></div>
+    <div class="stat-pill"><div class="val">28</div><div class="lbl">UK Corporations</div></div>
+    <div class="stat-pill"><div class="val val-positive">$494M</div><div class="lbl">Largest Market Cap</div></div>
+    <div class="stat-pill"><div class="val val-negative">-$42.5M</div><div class="lbl">Worst Liquid Capital</div></div>
+  </div>
+</section>
+
+<!-- ═══════════════ BY THE NUMBERS ═══════════════ -->
+<section>
+  <div class="section-header">
+    <div class="section-flag">📊</div>
+    <div class="section-eyebrow">Final Tally</div>
+    <h2 class="section-title">By the Numbers</h2>
+  </div>
+
+  <div class="grid-3">
+    <div class="card" style="text-align:center">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:2.5rem;font-weight:800;color:var(--accent)">280</div>
+      <div class="text-dim">Registered Users</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:2.5rem;font-weight:800;color:var(--accent)">270</div>
+      <div class="text-dim">Player Characters</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:2.5rem;font-weight:800;color:var(--accent)">5,487</div>
+      <div class="text-dim">NPPs Simulated</div>
+    </div>
+  </div>
+
+  <div class="grid-3 mt-4">
+    <div class="card" style="text-align:center">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:2rem;font-weight:700">29</div>
+      <div class="text-dim">Political Parties</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:2rem;font-weight:700">6</div>
+      <div class="text-dim">Coalitions</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:2rem;font-weight:700">81</div>
+      <div class="text-dim">Corporations</div>
+    </div>
+  </div>
+
+  <div class="grid-2 mt-4">
+    <div class="card" style="text-align:center">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:2rem;font-weight:700">44</div>
+      <div class="text-dim">Bills Signed Into Law</div>
+      <div class="text-xs text-muted">27 US + 17 UK</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:2rem;font-weight:700">40</div>
+      <div class="text-dim">Bills Failed</div>
+      <div class="text-xs text-muted">27 US + 13 UK</div>
+    </div>
+  </div>
+
+  <div class="grid-2 mt-4">
+    <div class="card">
+      <div class="card-title">🇺🇸 United States</div>
+      <table>
+        <tr><td class="text-dim">Players</td><td class="mono">182</td></tr>
+        <tr><td class="text-dim">NPPs</td><td class="mono">5,198</td></tr>
+        <tr><td class="text-dim">Parties</td><td class="mono">19</td></tr>
+        <tr><td class="text-dim">States</td><td class="mono">50</td></tr>
+        <tr><td class="text-dim">GDP</td><td class="mono">$22.9 trillion</td></tr>
+        <tr><td class="text-dim">Population</td><td class="mono">330.7M</td></tr>
+        <tr><td class="text-dim">Corporations</td><td class="mono">53</td></tr>
+        <tr><td class="text-dim">Fed Rate (final)</td><td class="mono">5.50%</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">🇬🇧 United Kingdom</div>
+      <table>
+        <tr><td class="text-dim">Players</td><td class="mono">88</td></tr>
+        <tr><td class="text-dim">NPPs</td><td class="mono">289</td></tr>
+        <tr><td class="text-dim">Parties</td><td class="mono">10</td></tr>
+        <tr><td class="text-dim">Regions</td><td class="mono">12</td></tr>
+        <tr><td class="text-dim">GDP</td><td class="mono">$2.0 trillion</td></tr>
+        <tr><td class="text-dim">Population</td><td class="mono">67.2M</td></tr>
+        <tr><td class="text-dim">Corporations</td><td class="mono">28</td></tr>
+        <tr><td class="text-dim">BoE Rate (final)</td><td class="mono">6.25%</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ═══════════════ FOOTER ═══════════════ -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-logo">A House Divided</div>
+    <p class="footer-sub">
+      Iteration Alpha &mdash; February 19 to April 10, 2026<br>
+      919 turns &bull; Game year 2039 &bull; None of this was scripted.
+    </p>
+    <p class="footer-sub mt-4" style="font-size: 0.7rem; color: var(--text-muted);">
+      All data pulled directly from the live game database at turn 919.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" role="img" aria-label="Commonwealth of Nations flag">
+  <title>Commonwealth of Nations</title>
+  <rect width="240" height="160" fill="#1C3F94"/>
+  <g transform="translate(120 80)">
+    <g fill="none" stroke="#FFD25E" stroke-width="3">
+      <circle r="26"/>
+      <ellipse rx="12" ry="26"/>
+      <line x1="-26" y1="0" x2="26" y2="0"/>
+    </g>
+    <g stroke="#FFD25E" stroke-width="4" stroke-linecap="round">
+      <line x1="0" y1="-38" x2="0" y2="-52"/>
+      <line x1="19" y1="-33" x2="26" y2="-45"/>
+      <line x1="33" y1="-19" x2="45" y2="-26"/>
+      <line x1="38" y1="0" x2="52" y2="0"/>
+      <line x1="33" y1="19" x2="45" y2="26"/>
+      <line x1="-19" y1="-33" x2="-26" y2="-45"/>
+      <line x1="-33" y1="-19" x2="-45" y2="-26"/>
+      <line x1="-38" y1="0" x2="-52" y2="0"/>
+      <line x1="-33" y1="19" x2="-45" y2="26"/>
+    </g>
+  </g>
+</svg>

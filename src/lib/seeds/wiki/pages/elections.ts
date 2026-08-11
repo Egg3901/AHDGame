@@ -1,0 +1,163 @@
+import type { WikiSeedPage } from "../types";
+import { electionMechanicsContent } from "../content/electionMechanics";
+import { primariesContent } from "../content/primaries";
+import { generalElectionsContent } from "../content/generalElections";
+import { pollingContent } from "../content/polling";
+import { fundraisingAdsContent } from "../content/fundraisingAds";
+import { canvassingContent } from "../content/canvassing";
+import { demographicsTargetingContent } from "../content/demographicsTargeting";
+import { demographicsContent } from "../content/demographics";
+import { usHouseRedistrictingContent } from "../content/usHouseRedistricting";
+import { campaignStrategyContent } from "../content/campaignStrategy";
+import { campaignManagerContent } from "../content/campaignManager";
+import { primaryGeneralTacticsContent } from "../content/primaryGeneralTactics";
+import { snapElectionsContent } from "../content/snapElections";
+
+export const electionsPages: readonly WikiSeedPage[] = [
+  {
+    slug: "election-mechanics",
+    title: "Election Mechanics",
+    description:
+      "Primary + general phase structure, duration by race, vote accumulation math, FPTP vs RCV, multi-seat allocation, candidacy rules.",
+    content: electionMechanicsContent,
+    category: "elections",
+    featured: true,
+    difficulty: "intermediate",
+    contentType: "reference",
+    estimatedReadTime: 8,
+  },
+  {
+    slug: "primaries",
+    title: "Primaries",
+    description:
+      "Declaration windows, the state vs presidential primary score formulas, NPP primary dynamics, and tactics for winning your party's nomination.",
+    content: primariesContent,
+    category: "elections",
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 6,
+  },
+  {
+    slug: "general-elections",
+    title: "General Elections",
+    description:
+      "Vote accumulation across the general phase, the Total Appeal Pipeline, the final-4-turn 25% weighting, FPTP spoilers, and closing-sprint tactics.",
+    content: generalElectionsContent,
+    category: "elections",
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 7,
+  },
+  {
+    slug: "polling",
+    title: "Polling",
+    description:
+      "Quick poll vs Full Demographic poll — what they cost, what they return, and how to use poll data to plan ads and canvassing.",
+    content: pollingContent,
+    category: "elections",
+    difficulty: "beginner",
+    contentType: "guide",
+    estimatedReadTime: 5,
+  },
+  {
+    slug: "fundraising-ads",
+    title: "Fundraising & Ads",
+    description:
+      "Fund generation, Build Donor Network ROI by state tier, ad diminishing returns, out-of-state cost multipliers, and the fundraising priority hierarchy.",
+    content: fundraisingAdsContent,
+    category: "elections",
+    difficulty: "beginner",
+    contentType: "guide",
+    estimatedReadTime: 6,
+  },
+  {
+    slug: "canvassing",
+    title: "Canvassing",
+    description:
+      "The $100 / 1-action home-state turnout boost — alignment multiplier, campaign season 2× window, diminishing returns, and interaction with party GOTV.",
+    content: canvassingContent,
+    category: "elections",
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 5,
+  },
+  {
+    slug: "demographics-targeting",
+    title: "Demographics & Targeting",
+    description:
+      "The 12 voter archetypes, the reach × appeal × approval × party-org formula, state political lean, and how to allocate ads and canvassing across groups.",
+    content: demographicsTargetingContent,
+    category: "elections",
+    difficulty: "intermediate",
+    contentType: "reference",
+    estimatedReadTime: 7,
+  },
+  {
+    slug: "demographics",
+    title: "Demographics",
+    description:
+      "The 12 voter archetypes, how demographic alignment determines election appeal, and turnout manipulation mechanics.",
+    content: demographicsContent,
+    category: "elections",
+    difficulty: "intermediate",
+    contentType: "reference",
+    estimatedReadTime: 8,
+  },
+  {
+    slug: "us-house-redistricting",
+    title: "US House Redistricting",
+    description:
+      "Congressional district maps, trifecta gerrymandering, compactness and fairness caps, and per-district House elections.",
+    content: usHouseRedistrictingContent,
+    category: "elections",
+    featured: true,
+    difficulty: "advanced",
+    contentType: "guide",
+    estimatedReadTime: 7,
+  },
+  {
+    slug: "campaign-strategy",
+    title: "Campaign Strategy",
+    description:
+      "Phase-by-phase action allocation, campaign-page upgrade tables with costs and maintenance, fog of war, party org, and the final-4-turn campaign season multiplier.",
+    content: campaignStrategyContent,
+    category: "elections",
+    featured: true,
+    difficulty: "advanced",
+    contentType: "strategy",
+    estimatedReadTime: 9,
+  },
+  {
+    slug: "campaign-manager",
+    title: "Campaign Manager",
+    description:
+      "The /campaign/[id] page — budget, upgrades, activity log, endorsements, manager assignment, access tiers, donations, and insolvency auto-downgrade.",
+    content: campaignManagerContent,
+    category: "elections",
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 7,
+  },
+  {
+    slug: "primary-general-tactics",
+    title: "Primary vs General Tactics",
+    description:
+      "What to change and what not to change when your primary ends — ad targeting, canvassing, campaign upgrades, Opposition Research, presidential specifics.",
+    content: primaryGeneralTacticsContent,
+    category: "elections",
+    difficulty: "advanced",
+    contentType: "strategy",
+    estimatedReadTime: 7,
+  },
+  {
+    slug: "snap-elections",
+    title: "Snap Elections",
+    description:
+      "Parliamentary dissolution mechanics — UK Commons and JP Shūgiin. PM-initiated snaps, the 96-turn auto-snap clock, cycle reset, and 48-hour sprint tactics.",
+    content: snapElectionsContent,
+    category: "elections",
+    difficulty: "advanced",
+    contentType: "reference",
+    estimatedReadTime: 6,
+  },
+];

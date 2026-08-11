@@ -1,0 +1,127 @@
+# Dependencies
+savant-protocol
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Next.js
+/.next/
+/out/
+/.next-dev.log
+
+# Production
+/build
+/dist
+
+# Testing
+/coverage
+/test-results
+/playwright-report
+/blob-report
+
+# Environment Variables
+.env
+.env*.local
+.env.local
+.env.staging
+.env.sentry-build-plugin
+.env.development.local
+.env.test.local
+.env.production.local
+.env.backup-api
+*.pem
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# IDE / Editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+.idea/
+.claude/*
+!.claude/skills
+!.claude/skills/**
+!.claude/MEMORY.md
+.cursor/
+.hermes/
+!.hermes/skills/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Git worktrees
+.worktrees/
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Vercel
+.vercel
+
+# Turbopack
+.turbo
+
+# Local uploads (avatars etc.)
+/uploads
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Shared compiled output (source is .ts)
+shared/**/*.js
+
+# Legacy backend (removed per MONOREPO_SETUP; may contain node_modules)
+/backend/
+
+# Trae IDE workspace files (same category as .cursor/)
+.trae/
+.superpowers/
+
+# Generated audit reports (reproducible from scripts/audit/)
+scripts/audit/report-*.md
+
+# Discord bot
+discord-bot/node_modules/
+discord-bot/dist/
+discord-bot/.env
+# Scratch dir for one-off scripts, dev screenshots, ops backups —
+# nothing here should be checked in. Archive real artifacts under
+# docs/archive/incidents|operations/<YYYY-MM>/ instead.
+tmp/**
+
+# Design bundles fetched from claude.ai/design — local reference only
+.design-bundle/
+# docs/ stays local-only except the generated design-system artifact
+# (gitignore cannot re-include a file under an excluded directory, hence docs/*)
+docs/*
+!docs/DESIGN.md
+savant-protocol
+savant-protocol
+
+# Generated event image contact sheet (dev-only)
+scripts/event-image-gallery.html
+
+# Wikimedia-sourced landing bento card images (binaries; upload script + manifest are tracked)
+scripts/landing-images/*
+!scripts/landing-images/manifest.json
+
+.superpowers/

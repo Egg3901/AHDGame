@@ -1,0 +1,114 @@
+// POST /api/country/[code]/executive/cabinet/[positionId]/energy/build
+// Auth: requireAuth — energy seat holder or admin. Costs 1 ministerial action.
+// Errors: 400, 401, 403, 404, 409
+import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
+import { z } from "zod";
+import { getDb } from "@/lib/mongodb";
+import { requireAuth } from "@/lib/api/requireAuth";
+import { parseJsonBody } from "@/lib/api/validate";
+import { handleRouteError } from "@/lib/api/errors";
+import { getGameState } from "@/lib/gameState";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import { getEnergyPlantsCollection } from "@/lib/db/collections/energyPlants";
+import { resolveEnergyPosition, getEnergySource } from "@/lib/constants/cabinetEnergy";
+
+const buildSchema = z.object({
+  source: z.enum(["coal", "gas", "nuclear", "hydro", "wind", "solar"]),
+  regionId: z.string().min(1),
+  name: z.string().min(1).max(80),
+});
+
+interface RouteParams {
+  params: Promise<{ code: string; positionId: string }>;
+}
+
+export async function POST(request: Request, { params }: RouteParams) {
+  try {
+    const auth = await requireAuth();
+    if (!auth.ok) return auth.response;
+
+    const { code, positionId } = await params;
+    const countryId = code.toUpperCase() as CountryId;
+    if (!COUNTRY_CONFIGS[countryId]) {
+      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+    }
+    if (!resolveEnergyPosition(countryId, positionId)) {
+      return NextResponse.json({ error: "Not an energy cabinet position" }, { status: 404 });
+    }
+
+    const parsed = await parseJsonBody(request, buildSchema);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    }
+    const src = getEnergySource(parsed.data.source);
+    if (!src) {
+      return NextResponse.json({ error: "Invalid source" }, { status: 400 });
+    }
+
+    const db = await getDb();
+    const region = await db
+      .collection<{ _id: string; countryId: string }>("states")
+      .findOne({ _id: parsed.data.regionId, countryId }, { projection: { _id: 1 } });
+    if (!region) {
+      return NextResponse.json({ error: "Invalid region for this country" }, { status: 400 });
+    }
+
+    const membersCol = getCabinetMembersCollection(db);
+    const member = await membersCol.findOne({ countryId, positionId });
+    const isHolder =
+      member &&
+      member.characterId &&
+      auth.user.character &&
+      member.characterId.toString() === auth.user.character._id.toString();
+    if (!isHolder && !auth.user.isAdmin) {
+      return NextResponse.json(
+        { error: "Only the energy holder or admin can build plants" },
+        { status: 403 }
+      );
+    }
+
+    if (member && member.ministerialActions == null) {
+      await membersCol.updateOne({ _id: member._id }, { $set: { ministerialActions: 2 } });
+      member.ministerialActions = 2;
+    }
+    const actions = member?.ministerialActions ?? 2;
+    if (actions < 1) {
+      return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 400 });
+    }
+
+    const gameState = await getGameState();
+    const currentTurn = gameState?.currentTurn ?? 1;
+
+    const spend = await membersCol.updateOne(
+      { _id: member!._id, ministerialActions: { $gte: 1 } },
+      { $inc: { ministerialActions: -1 } }
+    );
+    if (spend.modifiedCount === 0) {
+      return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 409 });
+    }
+
+    try {
+      await getEnergyPlantsCollection(db).insertOne({
+        _id: new ObjectId(),
+        countryId,
+        positionId,
+        source: src.id,
+        name: parsed.data.name.trim(),
+        icon: src.icon,
+        capacityBase: src.baseCapacity,
+        tier: 0,
+        regionId: parsed.data.regionId,
+        createdTurn: currentTurn,
+      });
+    } catch (error) {
+      await membersCol.updateOne({ _id: member!._id }, { $inc: { ministerialActions: 1 } });
+      throw error;
+    }
+
+    return NextResponse.json({ success: true, actionsRemaining: actions - 1 });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}

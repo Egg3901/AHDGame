@@ -1,0 +1,2238 @@
+{
+  "WY": [
+    [
+      {
+        "id": "56025",
+        "name": "Natrona",
+        "votes": { "c1": 8810, "c2": 14951 },
+        "margin": 25.844871848827907,
+        "winner": "c2"
+      },
+      {
+        "id": "56009",
+        "name": "Converse",
+        "votes": { "c1": 192, "c2": 2717 },
+        "margin": 86.79958748710897,
+        "winner": "c2"
+      },
+      {
+        "id": "56029",
+        "name": "Park",
+        "votes": { "c1": 504, "c2": 6125 },
+        "margin": 84.79408658922914,
+        "winner": "c2"
+      },
+      {
+        "id": "56023",
+        "name": "Lincoln",
+        "votes": { "c1": 304, "c2": 4143 },
+        "margin": 86.32786147964919,
+        "winner": "c2"
+      },
+      {
+        "id": "56035",
+        "name": "Sublette",
+        "votes": { "c1": 138, "c2": 1768 },
+        "margin": 85.51941238195172,
+        "winner": "c2"
+      },
+      {
+        "id": "56001",
+        "name": "Albany",
+        "votes": { "c1": 38712, "c2": 3200 },
+        "margin": 84.72991028822295,
+        "winner": "c1"
+      },
+      {
+        "id": "56031",
+        "name": "Platte",
+        "votes": { "c1": 132, "c2": 1678 },
+        "margin": 85.41436464088399,
+        "winner": "c2"
+      },
+      {
+        "id": "56011",
+        "name": "Crook",
+        "votes": { "c1": 103, "c2": 1535 },
+        "margin": 87.42368742368743,
+        "winner": "c2"
+      },
+      {
+        "id": "56015",
+        "name": "Goshen",
+        "votes": { "c1": 200, "c2": 2491 },
+        "margin": 85.13563730955036,
+        "winner": "c2"
+      },
+      {
+        "id": "56019",
+        "name": "Johnson",
+        "votes": { "c1": 137, "c2": 1736 },
+        "margin": 85.37106246663106,
+        "winner": "c2"
+      },
+      {
+        "id": "56037",
+        "name": "Sweetwater",
+        "votes": { "c1": 2594, "c2": 7904 },
+        "margin": 50.58106305963041,
+        "winner": "c2"
+      },
+      {
+        "id": "56039",
+        "name": "Teton",
+        "votes": { "c1": 36867, "c2": 233 },
+        "margin": 98.74393530997304,
+        "winner": "c1"
+      },
+      {
+        "id": "56033",
+        "name": "Sheridan",
+        "votes": { "c1": 3888, "c2": 6099 },
+        "margin": 22.1387804145389,
+        "winner": "c2"
+      },
+      {
+        "id": "56027",
+        "name": "Niobrara",
+        "votes": { "c1": 32, "c2": 454 },
+        "margin": 86.8312757201646,
+        "winner": "c2"
+      },
+      {
+        "id": "56041",
+        "name": "Uinta",
+        "votes": { "c1": 313, "c2": 4066 },
+        "margin": 85.70449874400548,
+        "winner": "c2"
+      },
+      {
+        "id": "56043",
+        "name": "Washakie",
+        "votes": { "c1": 115, "c2": 1511 },
+        "margin": 85.85485854858548,
+        "winner": "c2"
+      },
+      {
+        "id": "56013",
+        "name": "Fremont",
+        "votes": { "c1": 12634, "c2": 6397 },
+        "margin": 32.77284430665756,
+        "winner": "c1"
+      },
+      {
+        "id": "56045",
+        "name": "Weston",
+        "votes": { "c1": 92, "c2": 1355 },
+        "margin": 87.28403593642017,
+        "winner": "c2"
+      },
+      {
+        "id": "56003",
+        "name": "Big Horn",
+        "votes": { "c1": 173, "c2": 2384 },
+        "margin": 86.4685177942902,
+        "winner": "c2"
+      },
+      {
+        "id": "56017",
+        "name": "Hot Springs",
+        "votes": { "c1": 73, "c2": 912 },
+        "margin": 85.17766497461929,
+        "winner": "c2"
+      },
+      {
+        "id": "56021",
+        "name": "Laramie",
+        "votes": { "c1": 45449, "c2": 14833 },
+        "margin": 50.7879632394413,
+        "winner": "c1"
+      },
+      {
+        "id": "56007",
+        "name": "Carbon",
+        "votes": { "c1": 236, "c2": 2808 },
+        "margin": 84.49408672798948,
+        "winner": "c2"
+      },
+      {
+        "id": "56005",
+        "name": "Campbell",
+        "votes": { "c1": 643, "c2": 9465 },
+        "margin": 87.27740403640681,
+        "winner": "c2"
+      }
+    ],
+    [
+      {
+        "id": "56025",
+        "name": "Natrona",
+        "votes": { "c1": 5723, "c2": 15135, "c3": 1733 },
+        "margin": 41.6626090035855,
+        "winner": "c2"
+      },
+      {
+        "id": "56009",
+        "name": "Converse",
+        "votes": { "c1": 211, "c2": 2699, "c3": 243 },
+        "margin": 77.8940691405011,
+        "winner": "c2"
+      },
+      {
+        "id": "56029",
+        "name": "Park",
+        "votes": { "c1": 551, "c2": 6048, "c3": 634 },
+        "margin": 74.85137563943037,
+        "winner": "c2"
+      },
+      {
+        "id": "56023",
+        "name": "Lincoln",
+        "votes": { "c1": 334, "c2": 4110, "c3": 384 },
+        "margin": 77.17481358740679,
+        "winner": "c2"
+      },
+      {
+        "id": "56035",
+        "name": "Sublette",
+        "votes": { "c1": 151, "c2": 1749, "c3": 174 },
+        "margin": 75.94021215043394,
+        "winner": "c2"
+      },
+      {
+        "id": "56001",
+        "name": "Albany",
+        "votes": { "c1": 41423, "c2": 3158, "c3": 847 },
+        "margin": 84.23219159989434,
+        "winner": "c1"
+      },
+      {
+        "id": "56031",
+        "name": "Platte",
+        "votes": { "c1": 144, "c2": 1660, "c3": 166 },
+        "margin": 75.83756345177665,
+        "winner": "c2"
+      },
+      {
+        "id": "56011",
+        "name": "Crook",
+        "votes": { "c1": 113, "c2": 1528, "c3": 130 },
+        "margin": 78.93845285149632,
+        "winner": "c2"
+      },
+      {
+        "id": "56015",
+        "name": "Goshen",
+        "votes": { "c1": 219, "c2": 2462, "c3": 252 },
+        "margin": 75.3494715308558,
+        "winner": "c2"
+      },
+      {
+        "id": "56019",
+        "name": "Johnson",
+        "votes": { "c1": 150, "c2": 1717, "c3": 172 },
+        "margin": 75.77243746934772,
+        "winner": "c2"
+      },
+      {
+        "id": "56037",
+        "name": "Sweetwater",
+        "votes": { "c1": 774, "c2": 8006, "c3": 889 },
+        "margin": 73.60637087599545,
+        "winner": "c2"
+      },
+      {
+        "id": "56039",
+        "name": "Teton",
+        "votes": { "c1": 40182, "c2": 155, "c3": 502 },
+        "margin": 97.16202649428243,
+        "winner": "c1"
+      },
+      {
+        "id": "56033",
+        "name": "Sheridan",
+        "votes": { "c1": 2656, "c2": 6173, "c3": 711 },
+        "margin": 36.86582809224318,
+        "winner": "c2"
+      },
+      {
+        "id": "56027",
+        "name": "Niobrara",
+        "votes": { "c1": 35, "c2": 451, "c3": 40 },
+        "margin": 78.13688212927757,
+        "winner": "c2"
+      },
+      {
+        "id": "56041",
+        "name": "Uinta",
+        "votes": { "c1": 343, "c2": 4026, "c3": 395 },
+        "margin": 76.2174643157011,
+        "winner": "c2"
+      },
+      {
+        "id": "56043",
+        "name": "Washakie",
+        "votes": { "c1": 126, "c2": 1497, "c3": 145 },
+        "margin": 76.47058823529412,
+        "winner": "c2"
+      },
+      {
+        "id": "56013",
+        "name": "Fremont",
+        "votes": { "c1": 12125, "c2": 6456, "c3": 856 },
+        "margin": 29.1660235633071,
+        "winner": "c1"
+      },
+      {
+        "id": "56045",
+        "name": "Weston",
+        "votes": { "c1": 101, "c2": 1348, "c3": 117 },
+        "margin": 78.60791826309068,
+        "winner": "c2"
+      },
+      {
+        "id": "56003",
+        "name": "Big Horn",
+        "votes": { "c1": 189, "c2": 2366, "c3": 218 },
+        "margin": 77.46123332131266,
+        "winner": "c2"
+      },
+      {
+        "id": "56017",
+        "name": "Hot Springs",
+        "votes": { "c1": 80, "c2": 901, "c3": 92 },
+        "margin": 75.39608574091332,
+        "winner": "c2"
+      },
+      {
+        "id": "56021",
+        "name": "Laramie",
+        "votes": { "c1": 45747, "c2": 14934, "c3": 2192 },
+        "margin": 49.008318356051085,
+        "winner": "c1"
+      },
+      {
+        "id": "56007",
+        "name": "Carbon",
+        "votes": { "c1": 258, "c2": 2769, "c3": 297 },
+        "margin": 74.3682310469314,
+        "winner": "c2"
+      },
+      {
+        "id": "56005",
+        "name": "Campbell",
+        "votes": { "c1": 706, "c2": 9417, "c3": 812 },
+        "margin": 78.69227251943302,
+        "winner": "c2"
+      }
+    ],
+    [
+      { "id": "56025", "name": "Natrona", "votes": { "c1": 1 }, "margin": 0, "winner": "c1" },
+      { "id": "56009", "name": "Converse", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56029", "name": "Park", "votes": { "c1": 1 }, "margin": 0, "winner": "c1" },
+      { "id": "56023", "name": "Lincoln", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56035", "name": "Sublette", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56001", "name": "Albany", "votes": { "c1": 1 }, "margin": 0, "winner": "c1" },
+      { "id": "56031", "name": "Platte", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56011", "name": "Crook", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56015", "name": "Goshen", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56019", "name": "Johnson", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56037", "name": "Sweetwater", "votes": { "c1": 1 }, "margin": 0, "winner": "c1" },
+      { "id": "56039", "name": "Teton", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56033", "name": "Sheridan", "votes": { "c1": 1 }, "margin": 0, "winner": "c1" },
+      { "id": "56027", "name": "Niobrara", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56041", "name": "Uinta", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56043", "name": "Washakie", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56013", "name": "Fremont", "votes": { "c1": 1 }, "margin": 0, "winner": "c1" },
+      { "id": "56045", "name": "Weston", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56003", "name": "Big Horn", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56017", "name": "Hot Springs", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56021", "name": "Laramie", "votes": { "c1": 3 }, "margin": 0, "winner": "c1" },
+      { "id": "56007", "name": "Carbon", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "56005", "name": "Campbell", "votes": { "c1": 1 }, "margin": 0, "winner": "c1" }
+    ],
+    [
+      {
+        "id": "56025",
+        "name": "Natrona",
+        "votes": { "c1": 6203, "c2": 75716 },
+        "margin": 84.85577216518756,
+        "winner": "c2"
+      },
+      {
+        "id": "56009",
+        "name": "Converse",
+        "votes": { "c1": 858, "c2": 12986 },
+        "margin": 87.6047385148801,
+        "winner": "c2"
+      },
+      {
+        "id": "56029",
+        "name": "Park",
+        "votes": { "c1": 2220, "c2": 29288 },
+        "margin": 85.90834073885998,
+        "winner": "c2"
+      },
+      {
+        "id": "56023",
+        "name": "Lincoln",
+        "votes": { "c1": 1353, "c2": 19805 },
+        "margin": 87.21051139049058,
+        "winner": "c2"
+      },
+      {
+        "id": "56035",
+        "name": "Sublette",
+        "votes": { "c1": 610, "c2": 8451 },
+        "margin": 86.535702461097,
+        "winner": "c2"
+      },
+      {
+        "id": "56001",
+        "name": "Albany",
+        "votes": { "c1": 154160, "c2": 19273 },
+        "margin": 77.7747026229149,
+        "winner": "c1"
+      },
+      {
+        "id": "56031",
+        "name": "Platte",
+        "votes": { "c1": 583, "c2": 8024 },
+        "margin": 86.45288718484954,
+        "winner": "c2"
+      },
+      {
+        "id": "56011",
+        "name": "Crook",
+        "votes": { "c1": 461, "c2": 7337 },
+        "margin": 88.17645550141063,
+        "winner": "c2"
+      },
+      {
+        "id": "56015",
+        "name": "Goshen",
+        "votes": { "c1": 883, "c2": 11908 },
+        "margin": 86.19341724650144,
+        "winner": "c2"
+      },
+      {
+        "id": "56019",
+        "name": "Johnson",
+        "votes": { "c1": 605, "c2": 8298 },
+        "margin": 86.40907559249692,
+        "winner": "c2"
+      },
+      {
+        "id": "56037",
+        "name": "Sweetwater",
+        "votes": { "c1": 3101, "c2": 38873 },
+        "margin": 85.22418640110544,
+        "winner": "c2"
+      },
+      {
+        "id": "56039",
+        "name": "Teton",
+        "votes": { "c1": 159048, "c2": 3473 },
+        "margin": 95.72609078211431,
+        "winner": "c1"
+      },
+      {
+        "id": "56033",
+        "name": "Sheridan",
+        "votes": { "c1": 2556, "c2": 31052 },
+        "margin": 84.78933587241133,
+        "winner": "c2"
+      },
+      {
+        "id": "56027",
+        "name": "Niobrara",
+        "votes": { "c1": 142, "c2": 2171 },
+        "margin": 87.7215737137916,
+        "winner": "c2"
+      },
+      {
+        "id": "56041",
+        "name": "Uinta",
+        "votes": { "c1": 1387, "c2": 19441 },
+        "margin": 86.68139043595161,
+        "winner": "c2"
+      },
+      {
+        "id": "56043",
+        "name": "Washakie",
+        "votes": { "c1": 509, "c2": 7224 },
+        "margin": 86.83563946721841,
+        "winner": "c2"
+      },
+      {
+        "id": "56013",
+        "name": "Fremont",
+        "votes": { "c1": 27050, "c2": 34590 },
+        "margin": 12.232316677482153,
+        "winner": "c2"
+      },
+      {
+        "id": "56045",
+        "name": "Weston",
+        "votes": { "c1": 413, "c2": 6479 },
+        "margin": 88.0150899593732,
+        "winner": "c2"
+      },
+      {
+        "id": "56003",
+        "name": "Big Horn",
+        "votes": { "c1": 769, "c2": 11398 },
+        "margin": 87.35925043149501,
+        "winner": "c2"
+      },
+      {
+        "id": "56017",
+        "name": "Hot Springs",
+        "votes": { "c1": 321, "c2": 4359 },
+        "margin": 86.28205128205128,
+        "winner": "c2"
+      },
+      {
+        "id": "56021",
+        "name": "Laramie",
+        "votes": { "c1": 132852, "c2": 81185 },
+        "margin": 24.139284329344925,
+        "winner": "c1"
+      },
+      {
+        "id": "56007",
+        "name": "Carbon",
+        "votes": { "c1": 1039, "c2": 13425 },
+        "margin": 85.63329646017698,
+        "winner": "c2"
+      },
+      {
+        "id": "56005",
+        "name": "Campbell",
+        "votes": { "c1": 2877, "c2": 45244 },
+        "margin": 88.0426425053511,
+        "winner": "c2"
+      }
+    ]
+  ],
+  "PA": [
+    [
+      {
+        "id": "42075",
+        "name": "Lebanon",
+        "votes": { "c1": 734, "c2": 1859 },
+        "margin": 43.38603933667566,
+        "winner": "c2"
+      },
+      {
+        "id": "42007",
+        "name": "Beaver",
+        "votes": { "c1": 1337, "c2": 1720 },
+        "margin": 12.528622832842657,
+        "winner": "c2"
+      },
+      {
+        "id": "42121",
+        "name": "Venango",
+        "votes": { "c1": 148, "c2": 713 },
+        "margin": 65.62137049941927,
+        "winner": "c2"
+      },
+      {
+        "id": "42059",
+        "name": "Greene",
+        "votes": { "c1": 88, "c2": 501 },
+        "margin": 70.11884550084889,
+        "winner": "c2"
+      },
+      {
+        "id": "42065",
+        "name": "Jefferson",
+        "votes": { "c1": 9, "c2": 722 },
+        "margin": 97.53761969904241,
+        "winner": "c2"
+      },
+      {
+        "id": "42021",
+        "name": "Cambria",
+        "votes": { "c1": 506, "c2": 1784 },
+        "margin": 55.80786026200873,
+        "winner": "c2"
+      },
+      {
+        "id": "42071",
+        "name": "Lancaster",
+        "votes": { "c1": 4776, "c2": 5670 },
+        "margin": 8.558299827685232,
+        "winner": "c2"
+      },
+      {
+        "id": "42003",
+        "name": "Allegheny",
+        "votes": { "c1": 20035, "c2": 4787 },
+        "margin": 61.429377165417776,
+        "winner": "c1"
+      },
+      {
+        "id": "42049",
+        "name": "Erie",
+        "votes": { "c1": 3239, "c2": 1927 },
+        "margin": 25.396825396825392,
+        "winner": "c1"
+      },
+      {
+        "id": "42017",
+        "name": "Bucks",
+        "votes": { "c1": 8332, "c2": 4307 },
+        "margin": 31.845873882427412,
+        "winner": "c1"
+      },
+      {
+        "id": "42005",
+        "name": "Armstrong",
+        "votes": { "c1": 43, "c2": 1036 },
+        "margin": 92.02965708989805,
+        "winner": "c2"
+      },
+      {
+        "id": "42023",
+        "name": "Cameron",
+        "votes": { "c1": 8, "c2": 67 },
+        "margin": 78.66666666666666,
+        "winner": "c2"
+      },
+      {
+        "id": "42025",
+        "name": "Carbon",
+        "votes": { "c1": 329, "c2": 843 },
+        "margin": 43.856655290102395,
+        "winner": "c2"
+      },
+      {
+        "id": "42047",
+        "name": "Elk",
+        "votes": { "c1": 66, "c2": 454 },
+        "margin": 74.61538461538461,
+        "winner": "c2"
+      },
+      {
+        "id": "42009",
+        "name": "Bedford",
+        "votes": { "c1": 9, "c2": 793 },
+        "margin": 97.75561097256858,
+        "winner": "c2"
+      },
+      {
+        "id": "42029",
+        "name": "Chester",
+        "votes": { "c1": 8717, "c2": 2499 },
+        "margin": 55.43865905848787,
+        "winner": "c1"
+      },
+      {
+        "id": "42031",
+        "name": "Clarion",
+        "votes": { "c1": 36, "c2": 590 },
+        "margin": 88.49840255591054,
+        "winner": "c2"
+      },
+      {
+        "id": "42053",
+        "name": "Forest",
+        "votes": { "c1": 17, "c2": 98 },
+        "margin": 70.43478260869566,
+        "winner": "c2"
+      },
+      {
+        "id": "42097",
+        "name": "Northumberland",
+        "votes": { "c1": 325, "c2": 1254 },
+        "margin": 58.83470550981633,
+        "winner": "c2"
+      },
+      {
+        "id": "42057",
+        "name": "Fulton",
+        "votes": { "c1": 3, "c2": 241 },
+        "margin": 97.54098360655738,
+        "winner": "c2"
+      },
+      {
+        "id": "42095",
+        "name": "Northampton",
+        "votes": { "c1": 3887, "c2": 2340 },
+        "margin": 24.843423799582467,
+        "winner": "c1"
+      },
+      {
+        "id": "42067",
+        "name": "Juniata",
+        "votes": { "c1": 5, "c2": 389 },
+        "margin": 97.46192893401016,
+        "winner": "c2"
+      },
+      {
+        "id": "42131",
+        "name": "Wyoming",
+        "votes": { "c1": 111, "c2": 345 },
+        "margin": 51.315789473684205,
+        "winner": "c2"
+      },
+      {
+        "id": "42073",
+        "name": "Lawrence",
+        "votes": { "c1": 468, "c2": 1043 },
+        "margin": 38.054268696227666,
+        "winner": "c2"
+      },
+      {
+        "id": "42085",
+        "name": "Mercer",
+        "votes": { "c1": 681, "c2": 1276 },
+        "margin": 30.403679100664277,
+        "winner": "c2"
+      },
+      {
+        "id": "42079",
+        "name": "Luzerne",
+        "votes": { "c1": 2915, "c2": 3253 },
+        "margin": 5.479896238651108,
+        "winner": "c2"
+      },
+      {
+        "id": "42013",
+        "name": "Blair",
+        "votes": { "c1": 310, "c2": 1775 },
+        "margin": 70.26378896882494,
+        "winner": "c2"
+      },
+      {
+        "id": "42111",
+        "name": "Somerset",
+        "votes": { "c1": 15, "c2": 1200 },
+        "margin": 97.53086419753086,
+        "winner": "c2"
+      },
+      {
+        "id": "42045",
+        "name": "Delaware",
+        "votes": { "c1": 10293, "c2": 1654 },
+        "margin": 72.31104042855947,
+        "winner": "c1"
+      },
+      {
+        "id": "42063",
+        "name": "Indiana",
+        "votes": { "c1": 319, "c2": 1140 },
+        "margin": 56.2714187799863,
+        "winner": "c2"
+      },
+      {
+        "id": "42077",
+        "name": "Lehigh",
+        "votes": { "c1": 5204, "c2": 2347 },
+        "margin": 37.83604820553569,
+        "winner": "c1"
+      },
+      {
+        "id": "42117",
+        "name": "Tioga",
+        "votes": { "c1": 34, "c2": 657 },
+        "margin": 90.15918958031838,
+        "winner": "c2"
+      },
+      {
+        "id": "42103",
+        "name": "Pike",
+        "votes": { "c1": 487, "c2": 662 },
+        "margin": 15.230635335073977,
+        "winner": "c2"
+      },
+      {
+        "id": "42087",
+        "name": "Mifflin",
+        "votes": { "c1": 10, "c2": 764 },
+        "margin": 97.41602067183463,
+        "winner": "c2"
+      },
+      {
+        "id": "42107",
+        "name": "Schuylkill",
+        "votes": { "c1": 479, "c2": 2047 },
+        "margin": 62.07442596991291,
+        "winner": "c2"
+      },
+      {
+        "id": "42081",
+        "name": "Lycoming",
+        "votes": { "c1": 339, "c2": 1633 },
+        "margin": 65.6186612576065,
+        "winner": "c2"
+      },
+      {
+        "id": "42037",
+        "name": "Columbia",
+        "votes": { "c1": 347, "c2": 833 },
+        "margin": 41.186440677966104,
+        "winner": "c2"
+      },
+      {
+        "id": "42089",
+        "name": "Monroe",
+        "votes": { "c1": 2205, "c2": 1047 },
+        "margin": 35.608856088560884,
+        "winner": "c1"
+      },
+      {
+        "id": "42119",
+        "name": "Union",
+        "votes": { "c1": 281, "c2": 485 },
+        "margin": 26.631853785900788,
+        "winner": "c2"
+      },
+      {
+        "id": "42039",
+        "name": "Crawford",
+        "votes": { "c1": 321, "c2": 1124 },
+        "margin": 55.570934256055374,
+        "winner": "c2"
+      },
+      {
+        "id": "42127",
+        "name": "Wayne",
+        "votes": { "c1": 241, "c2": 672 },
+        "margin": 47.20700985761226,
+        "winner": "c2"
+      },
+      {
+        "id": "42115",
+        "name": "Susquehanna",
+        "votes": { "c1": 115, "c2": 549 },
+        "margin": 65.36144578313252,
+        "winner": "c2"
+      },
+      {
+        "id": "42105",
+        "name": "Potter",
+        "votes": { "c1": 3, "c2": 266 },
+        "margin": 97.76951672862452,
+        "winner": "c2"
+      },
+      {
+        "id": "42093",
+        "name": "Montour",
+        "votes": { "c1": 133, "c2": 199 },
+        "margin": 19.87951807228916,
+        "winner": "c2"
+      },
+      {
+        "id": "42041",
+        "name": "Cumberland",
+        "votes": { "c1": 2645, "c2": 2529 },
+        "margin": 2.241979126401233,
+        "winner": "c1"
+      },
+      {
+        "id": "42027",
+        "name": "Centre",
+        "votes": { "c1": 2062, "c2": 1048 },
+        "margin": 32.60450160771705,
+        "winner": "c1"
+      },
+      {
+        "id": "42099",
+        "name": "Perry",
+        "votes": { "c1": 51, "c2": 746 },
+        "margin": 87.20200752823087,
+        "winner": "c2"
+      },
+      {
+        "id": "42109",
+        "name": "Snyder",
+        "votes": { "c1": 68, "c2": 612 },
+        "margin": 80,
+        "winner": "c2"
+      },
+      {
+        "id": "42033",
+        "name": "Clearfield",
+        "votes": { "c1": 97, "c2": 1236 },
+        "margin": 85.4463615903976,
+        "winner": "c2"
+      },
+      {
+        "id": "42101",
+        "name": "Philadelphia",
+        "votes": { "c1": 33027, "c2": 218 },
+        "margin": 98.68852459016392,
+        "winner": "c1"
+      },
+      {
+        "id": "42123",
+        "name": "Warren",
+        "votes": { "c1": 125, "c2": 528 },
+        "margin": 61.71516079632465,
+        "winner": "c2"
+      },
+      {
+        "id": "42035",
+        "name": "Clinton",
+        "votes": { "c1": 155, "c2": 513 },
+        "margin": 53.59281437125749,
+        "winner": "c2"
+      },
+      {
+        "id": "42019",
+        "name": "Butler",
+        "votes": { "c1": 977, "c2": 2573 },
+        "margin": 44.95774647887323,
+        "winner": "c2"
+      },
+      {
+        "id": "42051",
+        "name": "Fayette",
+        "votes": { "c1": 589, "c2": 1614 },
+        "margin": 46.52746255106672,
+        "winner": "c2"
+      },
+      {
+        "id": "42069",
+        "name": "Lackawanna",
+        "votes": { "c1": 2963, "c2": 1291 },
+        "margin": 39.30418429713211,
+        "winner": "c1"
+      },
+      {
+        "id": "42113",
+        "name": "Sullivan",
+        "votes": { "c1": 10, "c2": 91 },
+        "margin": 80.1980198019802,
+        "winner": "c2"
+      },
+      {
+        "id": "42125",
+        "name": "Washington",
+        "votes": { "c1": 1472, "c2": 2366 },
+        "margin": 23.293381969775922,
+        "winner": "c2"
+      },
+      {
+        "id": "42083",
+        "name": "McKean",
+        "votes": { "c1": 77, "c2": 602 },
+        "margin": 77.31958762886597,
+        "winner": "c2"
+      },
+      {
+        "id": "42011",
+        "name": "Berks",
+        "votes": { "c1": 4438, "c2": 3853 },
+        "margin": 7.0558436859244935,
+        "winner": "c1"
+      },
+      {
+        "id": "42001",
+        "name": "Adams",
+        "votes": { "c1": 490, "c2": 1424 },
+        "margin": 48.79832810867293,
+        "winner": "c2"
+      },
+      {
+        "id": "42133",
+        "name": "York",
+        "votes": { "c1": 3108, "c2": 5449 },
+        "margin": 27.357718826691595,
+        "winner": "c2"
+      },
+      {
+        "id": "42091",
+        "name": "Montgomery",
+        "votes": { "c1": 15379, "c2": 2560 },
+        "margin": 71.45883271085344,
+        "winner": "c1"
+      },
+      {
+        "id": "42061",
+        "name": "Huntingdon",
+        "votes": { "c1": 41, "c2": 696 },
+        "margin": 88.87381275440978,
+        "winner": "c2"
+      },
+      {
+        "id": "42129",
+        "name": "Westmoreland",
+        "votes": { "c1": 2040, "c2": 4276 },
+        "margin": 35.40215326155794,
+        "winner": "c2"
+      },
+      {
+        "id": "42043",
+        "name": "Dauphin",
+        "votes": { "c1": 4016, "c2": 1734 },
+        "margin": 39.68695652173912,
+        "winner": "c1"
+      },
+      {
+        "id": "42015",
+        "name": "Bradford",
+        "votes": { "c1": 131, "c2": 899 },
+        "margin": 74.5631067961165,
+        "winner": "c2"
+      },
+      {
+        "id": "42055",
+        "name": "Franklin",
+        "votes": { "c1": 420, "c2": 2342 },
+        "margin": 69.58725561187545,
+        "winner": "c2"
+      }
+    ],
+    [
+      {
+        "id": "42075",
+        "name": "Lebanon",
+        "votes": { "c1": 684, "c2": 1883, "c3": 137 },
+        "margin": 44.34171597633137,
+        "winner": "c2"
+      },
+      {
+        "id": "42007",
+        "name": "Beaver",
+        "votes": { "c1": 1307, "c2": 1732, "c3": 156 },
+        "margin": 13.302034428794997,
+        "winner": "c2"
+      },
+      {
+        "id": "42121",
+        "name": "Venango",
+        "votes": { "c1": 126, "c2": 725, "c3": 47 },
+        "margin": 66.70378619153674,
+        "winner": "c2"
+      },
+      {
+        "id": "42059",
+        "name": "Greene",
+        "votes": { "c1": 72, "c2": 509, "c3": 32 },
+        "margin": 71.28874388254486,
+        "winner": "c2"
+      },
+      {
+        "id": "42065",
+        "name": "Jefferson",
+        "votes": { "c1": 9, "c2": 717, "c3": 38 },
+        "margin": 88.87434554973821,
+        "winner": "c2"
+      },
+      {
+        "id": "42021",
+        "name": "Cambria",
+        "votes": { "c1": 453, "c2": 1811, "c3": 122 },
+        "margin": 56.91533948030176,
+        "winner": "c2"
+      },
+      {
+        "id": "42071",
+        "name": "Lancaster",
+        "votes": { "c1": 4686, "c2": 5711, "c3": 530 },
+        "margin": 9.380433787864924,
+        "winner": "c2"
+      },
+      {
+        "id": "42003",
+        "name": "Allegheny",
+        "votes": { "c1": 20358, "c2": 4582, "c3": 1158 },
+        "margin": 60.449076557590615,
+        "winner": "c1"
+      },
+      {
+        "id": "42049",
+        "name": "Erie",
+        "votes": { "c1": 3249, "c2": 1915, "c3": 252 },
+        "margin": 24.630723781388483,
+        "winner": "c1"
+      },
+      {
+        "id": "42017",
+        "name": "Bucks",
+        "votes": { "c1": 8381, "c2": 4265, "c3": 611 },
+        "margin": 31.04774835935732,
+        "winner": "c1"
+      },
+      {
+        "id": "42005",
+        "name": "Armstrong",
+        "votes": { "c1": 14, "c2": 1049, "c3": 60 },
+        "margin": 88.06767586821016,
+        "winner": "c2"
+      },
+      {
+        "id": "42023",
+        "name": "Cameron",
+        "votes": { "c1": 6, "c2": 68, "c3": 4 },
+        "margin": 79.48717948717949,
+        "winner": "c2"
+      },
+      {
+        "id": "42025",
+        "name": "Carbon",
+        "votes": { "c1": 306, "c2": 854, "c3": 62 },
+        "margin": 44.8445171849427,
+        "winner": "c2"
+      },
+      {
+        "id": "42047",
+        "name": "Elk",
+        "votes": { "c1": 51, "c2": 461, "c3": 28 },
+        "margin": 75.92592592592594,
+        "winner": "c2"
+      },
+      {
+        "id": "42009",
+        "name": "Bedford",
+        "votes": { "c1": 9, "c2": 791, "c3": 39 },
+        "margin": 89.6305125148987,
+        "winner": "c2"
+      },
+      {
+        "id": "42029",
+        "name": "Chester",
+        "votes": { "c1": 8842, "c2": 2418, "c3": 527 },
+        "margin": 54.5007211334521,
+        "winner": "c1"
+      },
+      {
+        "id": "42031",
+        "name": "Clarion",
+        "votes": { "c1": 16, "c2": 601, "c3": 35 },
+        "margin": 86.80981595092025,
+        "winner": "c2"
+      },
+      {
+        "id": "42053",
+        "name": "Forest",
+        "votes": { "c1": 13, "c2": 99, "c3": 6 },
+        "margin": 72.88135593220339,
+        "winner": "c2"
+      },
+      {
+        "id": "42097",
+        "name": "Northumberland",
+        "votes": { "c1": 287, "c2": 1273, "c3": 85 },
+        "margin": 59.93920972644377,
+        "winner": "c2"
+      },
+      {
+        "id": "42057",
+        "name": "Fulton",
+        "votes": { "c1": 3, "c2": 240, "c3": 11 },
+        "margin": 90.15748031496064,
+        "winner": "c2"
+      },
+      {
+        "id": "42095",
+        "name": "Northampton",
+        "votes": { "c1": 3897, "c2": 2327, "c3": 304 },
+        "margin": 24.05024509803922,
+        "winner": "c1"
+      },
+      {
+        "id": "42067",
+        "name": "Juniata",
+        "votes": { "c1": 5, "c2": 387, "c3": 20 },
+        "margin": 89.07766990291262,
+        "winner": "c2"
+      },
+      {
+        "id": "42131",
+        "name": "Wyoming",
+        "votes": { "c1": 101, "c2": 350, "c3": 24 },
+        "margin": 52.42105263157894,
+        "winner": "c2"
+      },
+      {
+        "id": "42073",
+        "name": "Lawrence",
+        "votes": { "c1": 441, "c2": 1056, "c3": 79 },
+        "margin": 39.02284263959391,
+        "winner": "c2"
+      },
+      {
+        "id": "42085",
+        "name": "Mercer",
+        "votes": { "c1": 651, "c2": 1290, "c3": 102 },
+        "margin": 31.27753303964758,
+        "winner": "c2"
+      },
+      {
+        "id": "42079",
+        "name": "Luzerne",
+        "votes": { "c1": 2868, "c2": 3272, "c3": 312 },
+        "margin": 6.261624302541847,
+        "winner": "c2"
+      },
+      {
+        "id": "42013",
+        "name": "Blair",
+        "votes": { "c1": 252, "c2": 1804, "c3": 113 },
+        "margin": 71.55371138773629,
+        "winner": "c2"
+      },
+      {
+        "id": "42111",
+        "name": "Somerset",
+        "votes": { "c1": 15, "c2": 1190, "c3": 65 },
+        "margin": 88.58267716535433,
+        "winner": "c2"
+      },
+      {
+        "id": "42045",
+        "name": "Delaware",
+        "votes": { "c1": 10488, "c2": 1533, "c3": 550 },
+        "margin": 71.2353830244213,
+        "winner": "c1"
+      },
+      {
+        "id": "42063",
+        "name": "Indiana",
+        "votes": { "c1": 285, "c2": 1157, "c3": 78 },
+        "margin": 57.368421052631575,
+        "winner": "c2"
+      },
+      {
+        "id": "42077",
+        "name": "Lehigh",
+        "votes": { "c1": 5247, "c2": 2315, "c3": 363 },
+        "margin": 36.99684542586751,
+        "winner": "c1"
+      },
+      {
+        "id": "42117",
+        "name": "Tioga",
+        "votes": { "c1": 11, "c2": 669, "c3": 38 },
+        "margin": 87.88300835654597,
+        "winner": "c2"
+      },
+      {
+        "id": "42103",
+        "name": "Pike",
+        "votes": { "c1": 474, "c2": 667, "c3": 59 },
+        "margin": 16.08333333333333,
+        "winner": "c2"
+      },
+      {
+        "id": "42087",
+        "name": "Mifflin",
+        "votes": { "c1": 10, "c2": 758, "c3": 41 },
+        "margin": 88.62793572311494,
+        "winner": "c2"
+      },
+      {
+        "id": "42107",
+        "name": "Schuylkill",
+        "votes": { "c1": 416, "c2": 2079, "c3": 136 },
+        "margin": 63.20790573926263,
+        "winner": "c2"
+      },
+      {
+        "id": "42081",
+        "name": "Lycoming",
+        "votes": { "c1": 288, "c2": 1659, "c3": 106 },
+        "margin": 66.78032148075985,
+        "winner": "c2"
+      },
+      {
+        "id": "42037",
+        "name": "Columbia",
+        "votes": { "c1": 325, "c2": 844, "c3": 62 },
+        "margin": 42.1608448415922,
+        "winner": "c2"
+      },
+      {
+        "id": "42089",
+        "name": "Monroe",
+        "votes": { "c1": 2221, "c2": 1034, "c3": 157 },
+        "margin": 34.788980070339974,
+        "winner": "c1"
+      },
+      {
+        "id": "42119",
+        "name": "Union",
+        "votes": { "c1": 270, "c2": 490, "c3": 40 },
+        "margin": 27.500000000000007,
+        "winner": "c2"
+      },
+      {
+        "id": "42039",
+        "name": "Crawford",
+        "votes": { "c1": 287, "c2": 1141, "c3": 77 },
+        "margin": 56.74418604651163,
+        "winner": "c2"
+      },
+      {
+        "id": "42127",
+        "name": "Wayne",
+        "votes": { "c1": 222, "c2": 682, "c3": 48 },
+        "margin": 48.319327731092436,
+        "winner": "c2"
+      },
+      {
+        "id": "42115",
+        "name": "Susquehanna",
+        "votes": { "c1": 98, "c2": 557, "c3": 36 },
+        "margin": 66.42547033285095,
+        "winner": "c2"
+      },
+      {
+        "id": "42105",
+        "name": "Potter",
+        "votes": { "c1": 3, "c2": 265, "c3": 14 },
+        "margin": 89.00709219858156,
+        "winner": "c2"
+      },
+      {
+        "id": "42093",
+        "name": "Montour",
+        "votes": { "c1": 128, "c2": 201, "c3": 17 },
+        "margin": 21.09826589595376,
+        "winner": "c2"
+      },
+      {
+        "id": "42041",
+        "name": "Cumberland",
+        "votes": { "c1": 2618, "c2": 2538, "c3": 259 },
+        "margin": 1.4773776546629733,
+        "winner": "c1"
+      },
+      {
+        "id": "42027",
+        "name": "Centre",
+        "votes": { "c1": 2074, "c2": 1037, "c3": 150 },
+        "margin": 31.800061330880098,
+        "winner": "c1"
+      },
+      {
+        "id": "42099",
+        "name": "Perry",
+        "votes": { "c1": 25, "c2": 759, "c3": 44 },
+        "margin": 86.3526570048309,
+        "winner": "c2"
+      },
+      {
+        "id": "42109",
+        "name": "Snyder",
+        "votes": { "c1": 47, "c2": 623, "c3": 37 },
+        "margin": 81.47100424328147,
+        "winner": "c2"
+      },
+      {
+        "id": "42033",
+        "name": "Clearfield",
+        "votes": { "c1": 54, "c2": 1258, "c3": 73 },
+        "margin": 85.5595667870036,
+        "winner": "c2"
+      },
+      {
+        "id": "42101",
+        "name": "Philadelphia",
+        "votes": { "c1": 33516, "c2": 223, "c3": 1201 },
+        "margin": 92.48712077847739,
+        "winner": "c1"
+      },
+      {
+        "id": "42123",
+        "name": "Warren",
+        "votes": { "c1": 109, "c2": 536, "c3": 35 },
+        "margin": 62.794117647058826,
+        "winner": "c2"
+      },
+      {
+        "id": "42035",
+        "name": "Clinton",
+        "votes": { "c1": 140, "c2": 520, "c3": 36 },
+        "margin": 54.59770114942528,
+        "winner": "c2"
+      },
+      {
+        "id": "42019",
+        "name": "Butler",
+        "votes": { "c1": 907, "c2": 2607, "c3": 187 },
+        "margin": 45.93353147797892,
+        "winner": "c2"
+      },
+      {
+        "id": "42051",
+        "name": "Fayette",
+        "votes": { "c1": 545, "c2": 1636, "c3": 117 },
+        "margin": 47.476066144473464,
+        "winner": "c2"
+      },
+      {
+        "id": "42069",
+        "name": "Lackawanna",
+        "votes": { "c1": 2989, "c2": 1272, "c3": 204 },
+        "margin": 38.454647256438975,
+        "winner": "c1"
+      },
+      {
+        "id": "42113",
+        "name": "Sullivan",
+        "votes": { "c1": 7, "c2": 93, "c3": 6 },
+        "margin": 81.13207547169813,
+        "winner": "c2"
+      },
+      {
+        "id": "42125",
+        "name": "Washington",
+        "votes": { "c1": 1422, "c2": 2389, "c3": 198 },
+        "margin": 24.120728361187332,
+        "winner": "c2"
+      },
+      {
+        "id": "42083",
+        "name": "McKean",
+        "votes": { "c1": 57, "c2": 612, "c3": 37 },
+        "margin": 78.61189801699716,
+        "winner": "c2"
+      },
+      {
+        "id": "42011",
+        "name": "Berks",
+        "votes": { "c1": 4407, "c2": 3861, "c3": 413 },
+        "margin": 6.289597972583806,
+        "winner": "c1"
+      },
+      {
+        "id": "42001",
+        "name": "Adams",
+        "votes": { "c1": 450, "c2": 1444, "c3": 101 },
+        "margin": 49.82456140350877,
+        "winner": "c2"
+      },
+      {
+        "id": "42133",
+        "name": "York",
+        "votes": { "c1": 2985, "c2": 5507, "c3": 443 },
+        "margin": 28.22607722439843,
+        "winner": "c2"
+      },
+      {
+        "id": "42091",
+        "name": "Montgomery",
+        "votes": { "c1": 15667, "c2": 2381, "c3": 827 },
+        "margin": 70.38940397350993,
+        "winner": "c1"
+      },
+      {
+        "id": "42061",
+        "name": "Huntingdon",
+        "votes": { "c1": 16, "c2": 708, "c3": 41 },
+        "margin": 87.18954248366013,
+        "winner": "c2"
+      },
+      {
+        "id": "42129",
+        "name": "Westmoreland",
+        "votes": { "c1": 1933, "c2": 4327, "c3": 330 },
+        "margin": 36.3277693474962,
+        "winner": "c2"
+      },
+      {
+        "id": "42043",
+        "name": "Dauphin",
+        "votes": { "c1": 4052, "c2": 1708, "c3": 275 },
+        "margin": 38.84009942004971,
+        "winner": "c1"
+      },
+      {
+        "id": "42015",
+        "name": "Bradford",
+        "votes": { "c1": 101, "c2": 914, "c3": 56 },
+        "margin": 75.91036414565826,
+        "winner": "c2"
+      },
+      {
+        "id": "42055",
+        "name": "Franklin",
+        "votes": { "c1": 345, "c2": 2381, "c3": 150 },
+        "margin": 70.79276773296245,
+        "winner": "c2"
+      }
+    ],
+    [
+      { "id": "42075", "name": "Lebanon", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42007", "name": "Beaver", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42121", "name": "Venango", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42059", "name": "Greene", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42065", "name": "Jefferson", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42021", "name": "Cambria", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42071", "name": "Lancaster", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42003", "name": "Allegheny", "votes": { "c1": 8 }, "margin": 0, "winner": "c1" },
+      { "id": "42049", "name": "Erie", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42017", "name": "Bucks", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42005", "name": "Armstrong", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42023", "name": "Cameron", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42025", "name": "Carbon", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42047", "name": "Elk", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42009", "name": "Bedford", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42029", "name": "Chester", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42031", "name": "Clarion", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42053", "name": "Forest", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      {
+        "id": "42097",
+        "name": "Northumberland",
+        "votes": { "c1": 0 },
+        "margin": 0,
+        "winner": "c1"
+      },
+      { "id": "42057", "name": "Fulton", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42095", "name": "Northampton", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42067", "name": "Juniata", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42131", "name": "Wyoming", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42073", "name": "Lawrence", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42085", "name": "Mercer", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42079", "name": "Luzerne", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42013", "name": "Blair", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42111", "name": "Somerset", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42045", "name": "Delaware", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42063", "name": "Indiana", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42077", "name": "Lehigh", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42117", "name": "Tioga", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42103", "name": "Pike", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42087", "name": "Mifflin", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42107", "name": "Schuylkill", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42081", "name": "Lycoming", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42037", "name": "Columbia", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42089", "name": "Monroe", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42119", "name": "Union", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42039", "name": "Crawford", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42127", "name": "Wayne", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42115", "name": "Susquehanna", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42105", "name": "Potter", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42093", "name": "Montour", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42041", "name": "Cumberland", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42027", "name": "Centre", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42099", "name": "Perry", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42109", "name": "Snyder", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42033", "name": "Clearfield", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42101", "name": "Philadelphia", "votes": { "c1": 1 }, "margin": 0, "winner": "c1" },
+      { "id": "42123", "name": "Warren", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42035", "name": "Clinton", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42019", "name": "Butler", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42051", "name": "Fayette", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42069", "name": "Lackawanna", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42113", "name": "Sullivan", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42125", "name": "Washington", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42083", "name": "McKean", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42011", "name": "Berks", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42001", "name": "Adams", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42133", "name": "York", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42091", "name": "Montgomery", "votes": { "c1": 1 }, "margin": 0, "winner": "c1" },
+      { "id": "42061", "name": "Huntingdon", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42129", "name": "Westmoreland", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42043", "name": "Dauphin", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42015", "name": "Bradford", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "42055", "name": "Franklin", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" }
+    ],
+    [
+      {
+        "id": "42075",
+        "name": "Lebanon",
+        "votes": { "c1": 1592, "c2": 8940 },
+        "margin": 69.76832510444359,
+        "winner": "c2"
+      },
+      {
+        "id": "42007",
+        "name": "Beaver",
+        "votes": { "c1": 3778, "c2": 8506 },
+        "margin": 38.489091501139704,
+        "winner": "c2"
+      },
+      {
+        "id": "42121",
+        "name": "Venango",
+        "votes": { "c1": 144, "c2": 3384 },
+        "margin": 91.83673469387755,
+        "winner": "c2"
+      },
+      {
+        "id": "42059",
+        "name": "Greene",
+        "votes": { "c1": 45, "c2": 2368 },
+        "margin": 96.27020306672192,
+        "winner": "c2"
+      },
+      {
+        "id": "42065",
+        "name": "Jefferson",
+        "votes": { "c1": 31, "c2": 3047 },
+        "margin": 97.98570500324885,
+        "winner": "c2"
+      },
+      {
+        "id": "42021",
+        "name": "Cambria",
+        "votes": { "c1": 831, "c2": 8512 },
+        "margin": 82.21128117307074,
+        "winner": "c2"
+      },
+      {
+        "id": "42071",
+        "name": "Lancaster",
+        "votes": { "c1": 13745, "c2": 28187 },
+        "margin": 34.441476676523884,
+        "winner": "c2"
+      },
+      {
+        "id": "42003",
+        "name": "Allegheny",
+        "votes": { "c1": 67681, "c2": 29510 },
+        "margin": 39.274212632856944,
+        "winner": "c1"
+      },
+      {
+        "id": "42049",
+        "name": "Erie",
+        "votes": { "c1": 10333, "c2": 10153 },
+        "margin": 0.878648833349601,
+        "winner": "c1"
+      },
+      {
+        "id": "42017",
+        "name": "Bucks",
+        "votes": { "c1": 26926, "c2": 23086 },
+        "margin": 7.678157242261861,
+        "winner": "c1"
+      },
+      {
+        "id": "42005",
+        "name": "Armstrong",
+        "votes": { "c1": 49, "c2": 4472 },
+        "margin": 97.83233797832338,
+        "winner": "c2"
+      },
+      {
+        "id": "42023",
+        "name": "Cameron",
+        "votes": { "c1": 4, "c2": 305 },
+        "margin": 97.41100323624596,
+        "winner": "c2"
+      },
+      {
+        "id": "42025",
+        "name": "Carbon",
+        "votes": { "c1": 709, "c2": 4054 },
+        "margin": 70.22884736510602,
+        "winner": "c2"
+      },
+      {
+        "id": "42047",
+        "name": "Elk",
+        "votes": { "c1": 25, "c2": 2114 },
+        "margin": 97.66245909303413,
+        "winner": "c2"
+      },
+      {
+        "id": "42009",
+        "name": "Bedford",
+        "votes": { "c1": 32, "c2": 3350 },
+        "margin": 98.10762862211709,
+        "winner": "c2"
+      },
+      {
+        "id": "42029",
+        "name": "Chester",
+        "votes": { "c1": 29227, "c2": 14785 },
+        "margin": 32.81377806052894,
+        "winner": "c1"
+      },
+      {
+        "id": "42031",
+        "name": "Clarion",
+        "votes": { "c1": 29, "c2": 2588 },
+        "margin": 97.78372181887659,
+        "winner": "c2"
+      },
+      {
+        "id": "42053",
+        "name": "Forest",
+        "votes": { "c1": 7, "c2": 462 },
+        "margin": 97.01492537313433,
+        "winner": "c2"
+      },
+      {
+        "id": "42097",
+        "name": "Northumberland",
+        "votes": { "c1": 478, "c2": 5972 },
+        "margin": 85.1782945736434,
+        "winner": "c2"
+      },
+      {
+        "id": "42057",
+        "name": "Fulton",
+        "votes": { "c1": 9, "c2": 1016 },
+        "margin": 98.2439024390244,
+        "winner": "c2"
+      },
+      {
+        "id": "42095",
+        "name": "Northampton",
+        "votes": { "c1": 12385, "c2": 12316 },
+        "margin": 0.27934091737176914,
+        "winner": "c1"
+      },
+      {
+        "id": "42067",
+        "name": "Juniata",
+        "votes": { "c1": 16, "c2": 1644 },
+        "margin": 98.07228915662651,
+        "winner": "c2"
+      },
+      {
+        "id": "42131",
+        "name": "Wyoming",
+        "votes": { "c1": 207, "c2": 1649 },
+        "margin": 77.69396551724137,
+        "winner": "c2"
+      },
+      {
+        "id": "42073",
+        "name": "Lawrence",
+        "votes": { "c1": 1091, "c2": 5039 },
+        "margin": 64.40456769983686,
+        "winner": "c2"
+      },
+      {
+        "id": "42085",
+        "name": "Mercer",
+        "votes": { "c1": 1714, "c2": 6201 },
+        "margin": 56.68982943777638,
+        "winner": "c2"
+      },
+      {
+        "id": "42079",
+        "name": "Luzerne",
+        "votes": { "c1": 8499, "c2": 16230 },
+        "margin": 31.262889724614816,
+        "winner": "c2"
+      },
+      {
+        "id": "42013",
+        "name": "Blair",
+        "votes": { "c1": 150, "c2": 8396 },
+        "margin": 96.489585771121,
+        "winner": "c2"
+      },
+      {
+        "id": "42111",
+        "name": "Somerset",
+        "votes": { "c1": 53, "c2": 5067 },
+        "margin": 97.9296875,
+        "winner": "c2"
+      },
+      {
+        "id": "42045",
+        "name": "Delaware",
+        "votes": { "c1": 35194, "c2": 11400 },
+        "margin": 51.06666094346912,
+        "winner": "c1"
+      },
+      {
+        "id": "42063",
+        "name": "Indiana",
+        "votes": { "c1": 516, "c2": 5439 },
+        "margin": 82.67002518891688,
+        "winner": "c2"
+      },
+      {
+        "id": "42077",
+        "name": "Lehigh",
+        "votes": { "c1": 16996, "c2": 12820 },
+        "margin": 14.005902870941775,
+        "winner": "c1"
+      },
+      {
+        "id": "42117",
+        "name": "Tioga",
+        "votes": { "c1": 31, "c2": 2858 },
+        "margin": 97.85392869505019,
+        "winner": "c2"
+      },
+      {
+        "id": "42103",
+        "name": "Pike",
+        "votes": { "c1": 1356, "c2": 3263 },
+        "margin": 41.285992639099376,
+        "winner": "c2"
+      },
+      {
+        "id": "42087",
+        "name": "Mifflin",
+        "votes": { "c1": 34, "c2": 3227 },
+        "margin": 97.9147500766636,
+        "winner": "c2"
+      },
+      {
+        "id": "42107",
+        "name": "Schuylkill",
+        "votes": { "c1": 600, "c2": 9731 },
+        "margin": 88.38447391346433,
+        "winner": "c2"
+      },
+      {
+        "id": "42081",
+        "name": "Lycoming",
+        "votes": { "c1": 329, "c2": 7745 },
+        "margin": 91.8503839484766,
+        "winner": "c2"
+      },
+      {
+        "id": "42037",
+        "name": "Columbia",
+        "votes": { "c1": 778, "c2": 4014 },
+        "margin": 67.52921535893154,
+        "winner": "c2"
+      },
+      {
+        "id": "42089",
+        "name": "Monroe",
+        "votes": { "c1": 7173, "c2": 5677 },
+        "margin": 11.642023346303503,
+        "winner": "c1"
+      },
+      {
+        "id": "42119",
+        "name": "Union",
+        "votes": { "c1": 728, "c2": 2367 },
+        "margin": 52.95638126009694,
+        "winner": "c2"
+      },
+      {
+        "id": "42039",
+        "name": "Crawford",
+        "votes": { "c1": 531, "c2": 5364 },
+        "margin": 81.98473282442748,
+        "winner": "c2"
+      },
+      {
+        "id": "42127",
+        "name": "Wayne",
+        "votes": { "c1": 491, "c2": 3225 },
+        "margin": 73.57373519913887,
+        "winner": "c2"
+      },
+      {
+        "id": "42115",
+        "name": "Susquehanna",
+        "votes": { "c1": 114, "c2": 2603 },
+        "margin": 91.6083916083916,
+        "winner": "c2"
+      },
+      {
+        "id": "42105",
+        "name": "Potter",
+        "votes": { "c1": 11, "c2": 1124 },
+        "margin": 98.06167400881057,
+        "winner": "c2"
+      },
+      {
+        "id": "42093",
+        "name": "Montour",
+        "votes": { "c1": 359, "c2": 977 },
+        "margin": 46.25748502994011,
+        "winner": "c2"
+      },
+      {
+        "id": "42041",
+        "name": "Cumberland",
+        "votes": { "c1": 7935, "c2": 12752 },
+        "margin": 23.28515492821579,
+        "winner": "c2"
+      },
+      {
+        "id": "42027",
+        "name": "Centre",
+        "votes": { "c1": 6671, "c2": 5629 },
+        "margin": 8.471544715447152,
+        "winner": "c1"
+      },
+      {
+        "id": "42099",
+        "name": "Perry",
+        "votes": { "c1": 36, "c2": 3287 },
+        "margin": 97.83328317785134,
+        "winner": "c2"
+      },
+      {
+        "id": "42109",
+        "name": "Snyder",
+        "votes": { "c1": 32, "c2": 2782 },
+        "margin": 97.72565742714997,
+        "winner": "c2"
+      },
+      {
+        "id": "42033",
+        "name": "Clearfield",
+        "votes": { "c1": 61, "c2": 5485 },
+        "margin": 97.80021637216012,
+        "winner": "c2"
+      },
+      {
+        "id": "42101",
+        "name": "Philadelphia",
+        "votes": { "c1": 129452, "c2": 1010 },
+        "margin": 98.45165642102683,
+        "winner": "c1"
+      },
+      {
+        "id": "42123",
+        "name": "Warren",
+        "votes": { "c1": 161, "c2": 2511 },
+        "margin": 87.94910179640718,
+        "winner": "c2"
+      },
+      {
+        "id": "42035",
+        "name": "Clinton",
+        "votes": { "c1": 273, "c2": 2450 },
+        "margin": 79.94858611825194,
+        "winner": "c2"
+      },
+      {
+        "id": "42019",
+        "name": "Butler",
+        "votes": { "c1": 2068, "c2": 12363 },
+        "margin": 71.33947751368581,
+        "winner": "c2"
+      },
+      {
+        "id": "42051",
+        "name": "Fayette",
+        "votes": { "c1": 1214, "c2": 7748 },
+        "margin": 72.9078330729748,
+        "winner": "c2"
+      },
+      {
+        "id": "42069",
+        "name": "Lackawanna",
+        "votes": { "c1": 9701, "c2": 7086 },
+        "margin": 15.577530231726932,
+        "winner": "c1"
+      },
+      {
+        "id": "42113",
+        "name": "Sullivan",
+        "votes": { "c1": 5, "c2": 416 },
+        "margin": 97.62470308788599,
+        "winner": "c2"
+      },
+      {
+        "id": "42125",
+        "name": "Washington",
+        "votes": { "c1": 3912, "c2": 11574 },
+        "margin": 49.476946919798536,
+        "winner": "c2"
+      },
+      {
+        "id": "42083",
+        "name": "McKean",
+        "votes": { "c1": 32, "c2": 2771 },
+        "margin": 97.71673207277917,
+        "winner": "c2"
+      },
+      {
+        "id": "42011",
+        "name": "Berks",
+        "votes": { "c1": 13521, "c2": 19577 },
+        "margin": 18.29717807722521,
+        "winner": "c2"
+      },
+      {
+        "id": "42001",
+        "name": "Adams",
+        "votes": { "c1": 967, "c2": 6823 },
+        "margin": 75.17329910141206,
+        "winner": "c2"
+      },
+      {
+        "id": "42133",
+        "name": "York",
+        "votes": { "c1": 8018, "c2": 26553 },
+        "margin": 53.614301003731455,
+        "winner": "c2"
+      },
+      {
+        "id": "42091",
+        "name": "Montgomery",
+        "votes": { "c1": 52539, "c2": 17448 },
+        "margin": 50.139311586437486,
+        "winner": "c1"
+      },
+      {
+        "id": "42061",
+        "name": "Huntingdon",
+        "votes": { "c1": 34, "c2": 3044 },
+        "margin": 97.79077322936972,
+        "winner": "c2"
+      },
+      {
+        "id": "42129",
+        "name": "Westmoreland",
+        "votes": { "c1": 4893, "c2": 20695 },
+        "margin": 61.755510395497886,
+        "winner": "c2"
+      },
+      {
+        "id": "42043",
+        "name": "Dauphin",
+        "votes": { "c1": 13157, "c2": 9533 },
+        "margin": 15.971793741736448,
+        "winner": "c1"
+      },
+      {
+        "id": "42015",
+        "name": "Bradford",
+        "votes": { "c1": 49, "c2": 4190 },
+        "margin": 97.68813399386649,
+        "winner": "c2"
+      },
+      {
+        "id": "42055",
+        "name": "Franklin",
+        "votes": { "c1": 238, "c2": 11086 },
+        "margin": 95.79653832567998,
+        "winner": "c2"
+      }
+    ]
+  ],
+  "NH": [
+    [
+      {
+        "id": "33007",
+        "name": "Coos",
+        "votes": { "c1": 2644, "c2": 3000 },
+        "margin": 6.3075832742735685,
+        "winner": "c2"
+      },
+      {
+        "id": "33001",
+        "name": "Belknap",
+        "votes": { "c1": 5039, "c2": 6877 },
+        "margin": 15.42463914065123,
+        "winner": "c2"
+      },
+      {
+        "id": "33003",
+        "name": "Carroll",
+        "votes": { "c1": 5139, "c2": 4309 },
+        "margin": 8.784928027095681,
+        "winner": "c1"
+      },
+      {
+        "id": "33017",
+        "name": "Strafford",
+        "votes": { "c1": 16300, "c2": 7362 },
+        "margin": 37.77364550756487,
+        "winner": "c1"
+      },
+      {
+        "id": "33019",
+        "name": "Sullivan",
+        "votes": { "c1": 4465, "c2": 3420 },
+        "margin": 13.25301204819278,
+        "winner": "c1"
+      },
+      {
+        "id": "33015",
+        "name": "Rockingham",
+        "votes": { "c1": 31839, "c2": 26052 },
+        "margin": 9.996372493133649,
+        "winner": "c1"
+      },
+      {
+        "id": "33011",
+        "name": "Hillsborough",
+        "votes": { "c1": 46665, "c2": 30030 },
+        "margin": 21.689810287502446,
+        "winner": "c1"
+      },
+      {
+        "id": "33005",
+        "name": "Cheshire",
+        "votes": { "c1": 9748, "c2": 3981 },
+        "margin": 42.00597275839465,
+        "winner": "c1"
+      },
+      {
+        "id": "33013",
+        "name": "Merrimack",
+        "votes": { "c1": 17703, "c2": 10341 },
+        "margin": 26.251604621309376,
+        "winner": "c1"
+      },
+      {
+        "id": "33009",
+        "name": "Grafton",
+        "votes": { "c1": 12799, "c2": 3393 },
+        "margin": 58.090415019762844,
+        "winner": "c1"
+      }
+    ],
+    [
+      {
+        "id": "33007",
+        "name": "Coos",
+        "votes": { "c1": 2611, "c2": 3043, "c3": 265 },
+        "margin": 7.298530157121135,
+        "winner": "c2"
+      },
+      {
+        "id": "33001",
+        "name": "Belknap",
+        "votes": { "c1": 4948, "c2": 6997, "c3": 556 },
+        "margin": 16.390688744900416,
+        "winner": "c2"
+      },
+      {
+        "id": "33003",
+        "name": "Carroll",
+        "votes": { "c1": 5114, "c2": 4342, "c3": 448 },
+        "margin": 7.794830371567052,
+        "winner": "c1"
+      },
+      {
+        "id": "33017",
+        "name": "Strafford",
+        "votes": { "c1": 16381, "c2": 7255, "c3": 1143 },
+        "margin": 36.82957342911336,
+        "winner": "c1"
+      },
+      {
+        "id": "33019",
+        "name": "Sullivan",
+        "votes": { "c1": 4452, "c2": 3437, "c3": 375 },
+        "margin": 12.282187802516944,
+        "winner": "c1"
+      },
+      {
+        "id": "33015",
+        "name": "Rockingham",
+        "votes": { "c1": 31702, "c2": 26232, "c3": 2746 },
+        "margin": 9.01450230718524,
+        "winner": "c1"
+      },
+      {
+        "id": "33011",
+        "name": "Hillsborough",
+        "votes": { "c1": 46671, "c2": 30024, "c3": 3666 },
+        "margin": 20.715272333594655,
+        "winner": "c1"
+      },
+      {
+        "id": "33005",
+        "name": "Cheshire",
+        "votes": { "c1": 9807, "c2": 3903, "c3": 665 },
+        "margin": 41.071304347826086,
+        "winner": "c1"
+      },
+      {
+        "id": "33013",
+        "name": "Merrimack",
+        "votes": { "c1": 17732, "c2": 10303, "c3": 1345 },
+        "margin": 25.285908781484004,
+        "winner": "c1"
+      },
+      {
+        "id": "33009",
+        "name": "Grafton",
+        "votes": { "c1": 12923, "c2": 3229, "c3": 792 },
+        "margin": 57.2119924457035,
+        "winner": "c1"
+      }
+    ],
+    [
+      { "id": "33007", "name": "Coos", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "33001", "name": "Belknap", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "33003", "name": "Carroll", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "33017", "name": "Strafford", "votes": { "c1": 1 }, "margin": 0, "winner": "c1" },
+      { "id": "33019", "name": "Sullivan", "votes": { "c1": 0 }, "margin": 0, "winner": "c1" },
+      { "id": "33015", "name": "Rockingham", "votes": { "c1": 2 }, "margin": 0, "winner": "c1" },
+      { "id": "33011", "name": "Hillsborough", "votes": { "c1": 4 }, "margin": 0, "winner": "c1" },
+      { "id": "33005", "name": "Cheshire", "votes": { "c1": 1 }, "margin": 0, "winner": "c1" },
+      { "id": "33013", "name": "Merrimack", "votes": { "c1": 1 }, "margin": 0, "winner": "c1" },
+      { "id": "33009", "name": "Grafton", "votes": { "c1": 1 }, "margin": 0, "winner": "c1" }
+    ],
+    [
+      {
+        "id": "33007",
+        "name": "Coos",
+        "votes": { "c1": 8203, "c2": 14242 },
+        "margin": 26.90576965916685,
+        "winner": "c2"
+      },
+      {
+        "id": "33001",
+        "name": "Belknap",
+        "votes": { "c1": 15211, "c2": 32163 },
+        "margin": 35.78334107316249,
+        "winner": "c2"
+      },
+      {
+        "id": "33003",
+        "name": "Carroll",
+        "votes": { "c1": 16506, "c2": 21098 },
+        "margin": 12.211466865227102,
+        "winner": "c2"
+      },
+      {
+        "id": "33017",
+        "name": "Strafford",
+        "votes": { "c1": 54677, "c2": 39625 },
+        "margin": 15.961485440393623,
+        "winner": "c1"
+      },
+      {
+        "id": "33019",
+        "name": "Sullivan",
+        "votes": { "c1": 14463, "c2": 16927 },
+        "margin": 7.849633641287028,
+        "winner": "c2"
+      },
+      {
+        "id": "33015",
+        "name": "Rockingham",
+        "votes": { "c1": 102510, "c2": 127913 },
+        "margin": 11.024507102155603,
+        "winner": "c2"
+      },
+      {
+        "id": "33011",
+        "name": "Hillsborough",
+        "votes": { "c1": 153243, "c2": 152193 },
+        "margin": 0.3437708718029313,
+        "winner": "c1"
+      },
+      {
+        "id": "33005",
+        "name": "Cheshire",
+        "votes": { "c1": 32854, "c2": 21871 },
+        "margin": 20.06943809958885,
+        "winner": "c1"
+      },
+      {
+        "id": "33013",
+        "name": "Merrimack",
+        "votes": { "c1": 58520, "c2": 53187 },
+        "margin": 4.774096520361297,
+        "winner": "c1"
+      },
+      {
+        "id": "33009",
+        "name": "Grafton",
+        "votes": { "c1": 43813, "c2": 20781 },
+        "margin": 35.65656252902747,
+        "winner": "c1"
+      }
+    ]
+  ]
+}

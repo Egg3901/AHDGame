@@ -1,0 +1,60 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    # This repo runs development -> staging -> master. The GitHub default
+    # branch is master, so without this dependabot opens every PR against
+    # master and bypasses the staging gate.
+    target-branch: "development"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    # Don't auto-PR versions published in the last 7 days
+    # (guards against freshly compromised/unstable releases)
+    cooldown:
+      default-days: 7
+    # Batch related updates into one PR instead of one per package
+    groups:
+      next-ecosystem:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "@types/react*"
+          - "eslint-config-next"
+        update-types:
+          - "minor"
+          - "patch"
+      tailwind-ecosystem:
+        patterns:
+          - "tailwindcss"
+          - "@tailwindcss/*"
+        update-types:
+          - "minor"
+          - "patch"
+      typescript-tooling:
+        patterns:
+          - "typescript"
+          - "@types/node"
+          - "tsx"
+          - "vitest"
+        update-types:
+          - "minor"
+          - "patch"
+      formatting-linting:
+        patterns:
+          - "eslint*"
+          - "prettier*"
+          - "husky"
+          - "lint-staged"
+        update-types:
+          - "minor"
+          - "patch"
+    # Only auto-open PRs for security updates on major bumps;
+    # grouped minor/patch PRs are created for all others
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"

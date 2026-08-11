@@ -1,0 +1,1512 @@
+@import "tailwindcss";
+@import "./animations.css";
+
+/* Default theme — premium dark, slightly warmed graphite.
+   Surfaces tuned to separate cards from page without a dashboardy feel:
+   bg #14141c · card #1d1d2a · border #2a2a3d · softer ivory fg for long-session reading. */
+:root,
+[data-theme="default"] {
+  --background: #14141c;
+  --foreground: #e8e8ee;
+  --primary: #dc2626;
+  --primary-dark: #991b1b;
+  --secondary: #1d4ed8;
+  --secondary-dark: #1e3a8a;
+  --accent: #e8e8ee;
+  --muted: #6b6b7a;
+  --card: #1d1d2a;
+  --card-border: #2a2a3d;
+
+  /* Referendum campaigns-panel palette (dark) */
+  --ref-yes: #10b981;
+  --ref-no: #f43f5e;
+  --ref-amber: #f59e0b;
+  --ref-gold: #d4af37;
+
+  /* Semantic tokens */
+  --success: #22c55e;
+  --success-muted: #16a34a;
+  --warning: #eab308;
+  --warning-muted: #ca8a04;
+  --gold: #d4af37;
+  --gold-muted: #b3902c;
+  --error: #ef4444;
+  --error-muted: #dc2626;
+  --info: #3b82f6;
+  --info-muted: #2563eb;
+
+  /* Card variants */
+  --card-default: #1d1d2a;
+  --card-elevated: #26263a;
+  --card-muted: #11111a;
+
+  /* Shadow scale */
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.6), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 10px 30px -3px rgb(0 0 0 / 0.7), 0 4px 8px -4px rgb(0 0 0 / 0.6);
+
+  /* Glow */
+  --glow-primary: 0 0 20px rgb(220 38 38 / 0.15), 0 0 40px rgb(220 38 38 / 0.07);
+  --glow-primary-sm: 0 0 8px rgb(220 38 38 / 0.25);
+
+  /* Noise overlay for subtle texture */
+  --noise-opacity: 0.025;
+  --track: #27272a;
+  --overlay: rgba(0, 0, 0, 0.2);
+  --modal-backdrop: rgba(0, 0, 0, 0.6);
+}
+
+/* Light theme — clean, airy, and professional */
+[data-theme="light"] {
+  --background: #f8fafc; /* Slate 50 - Softer than pure white */
+  --foreground: #0f172a; /* Slate 900 - High contrast, soft black */
+  --primary: #dc2626; /* Red 600 - Standard political red */
+  --primary-dark: #b91c1c; /* Red 700 */
+  --secondary: #2563eb; /* Blue 600 - Clear blue */
+  --secondary-dark: #1d4ed8; /* Blue 700 */
+  --accent: #0f172a;
+  --muted: #64748b; /* Slate 500 - Readable gray */
+  --card: #ffffff;
+  --card-border: #e2e8f0; /* Slate 200 - Subtle border */
+  /* Referendum campaigns-panel palette (light) */
+  --ref-yes: #059669;
+  --ref-no: #e11d48;
+  --ref-amber: #d97706;
+  --ref-gold: #b3902c;
+  --card-default: #ffffff;
+  --card-elevated: #f1f5f9; /* Slate 100 */
+  --card-muted: #f8fafc; /* Slate 50 */
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(15 23 42 / 0.1), 0 2px 4px -1px rgb(15 23 42 / 0.06);
+  --shadow-lg: 0 10px 15px -3px rgb(15 23 42 / 0.1), 0 4px 6px -2px rgb(15 23 42 / 0.05);
+  --glow-primary: 0 0 20px rgb(220 38 38 / 0.1), 0 0 40px rgb(220 38 38 / 0.05);
+  --glow-primary-sm: 0 0 8px rgb(220 38 38 / 0.15);
+  --noise-opacity: 0;
+  --track: #e2e8f0;
+  --overlay: rgba(0, 0, 0, 0.05);
+  --modal-backdrop: rgba(15, 23, 42, 0.4);
+}
+
+/* OLED Black theme — true #000 backdrop. Cards lifted only slightly so content
+   stays visible; borders bumped so card edges register against the void.
+   Accents pushed brighter so they pop on pure black without losing saturation. */
+[data-theme="oled"] {
+  --background: #000000;
+  --foreground: #ffffff;
+  --primary: #ff3b3b;
+  --primary-dark: #cc2a2a;
+  --secondary: #4d8cff;
+  --secondary-dark: #2d6fd6;
+  --accent: #ffffff;
+  --muted: #7a7a8a;
+  --card: #070710;
+  --card-border: #242436;
+  --card-default: #070710;
+  --card-elevated: #12121c;
+  --card-muted: #000000;
+  --success: #2ee064;
+  --success-muted: #1fb84c;
+  --warning: #ffd60a;
+  --warning-muted: #d6a800;
+  --gold: #d4af37;
+  --gold-muted: #b3902c;
+  --error: #ff5a5a;
+  --error-muted: #d63a3a;
+  --info: #4d8cff;
+  --info-muted: #2d6fd6;
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.8), 0 1px 2px -1px rgb(0 0 0 / 0.6);
+  --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.8), 0 2px 4px -2px rgb(0 0 0 / 0.7);
+  --shadow-lg: 0 10px 30px -3px rgb(0 0 0 / 0.9), 0 4px 8px -4px rgb(0 0 0 / 0.8);
+  --glow-primary: 0 0 20px rgb(255 59 59 / 0.22), 0 0 40px rgb(255 59 59 / 0.1);
+  --glow-primary-sm: 0 0 8px rgb(255 59 59 / 0.3);
+  --noise-opacity: 0;
+  --track: #1a1a1a;
+  --overlay: rgba(0, 0, 0, 0.3);
+  --modal-backdrop: rgba(0, 0, 0, 0.75);
+}
+
+/* USA theme — refined patriotic palette (Navy, Parchment, Crimson) */
+[data-theme="usa"] {
+  --background: #0f1e38; /* A brighter, more distinct navy than the default slate */
+  --foreground: #fffbeb; /* Amber 50 - Warm parchment white */
+  --primary: #ef4444; /* Red 500 */
+  --primary-dark: #b91c1c; /* Red 700 */
+  --secondary: #3b82f6; /* Blue 500 */
+  --secondary-dark: #1d4ed8; /* Blue 700 */
+  --accent: #fffbeb;
+  --muted: #cbd5e1; /* Slate 300 - lighter gray for contrast on navy */
+  --card: #1e3a5f; /* Rich blue-slate for cards, distinct from background */
+  --card-border: #475569; /* Slate 600 */
+  --card-default: #1e3a5f;
+  --card-elevated: #264570; /* Slightly lighter blue-slate */
+  --card-muted: #142848; /* Darker blue-slate */
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -1px rgb(0 0 0 / 0.2);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -2px rgb(0 0 0 / 0.3);
+  --glow-primary: 0 0 20px rgb(239 68 68 / 0.15), 0 0 40px rgb(239 68 68 / 0.05);
+  --glow-primary-sm: 0 0 8px rgb(239 68 68 / 0.2);
+  --noise-opacity: 0.02;
+  --track: #1e3a5f;
+  --overlay: rgba(0, 0, 0, 0.15);
+  --modal-backdrop: rgba(0, 0, 0, 0.55);
+}
+
+/* Pastel theme — soft, approachable, and legible */
+[data-theme="pastel"] {
+  --background: #fdf4ff; /* Fuchsia 50 - Very soft pink/purple */
+  --foreground: #4a044e; /* Fuchsia 950 - Deep purple text */
+  --primary: #d946ef; /* Fuchsia 500 - Playful but readable */
+  --primary-dark: #c026d3; /* Fuchsia 600 */
+  --secondary: #8b5cf6; /* Violet 500 */
+  --secondary-dark: #7c3aed; /* Violet 600 */
+  --accent: #4a044e;
+  --muted: #86198f; /* Fuchsia 800 - Readable muted text */
+  --card: #ffffff; /* White - Clean contrast against pink bg */
+  --card-border: #e9d5ff; /* Purple 200 - Soft border */
+  --card-default: #ffffff;
+  --card-elevated: #fae8ff; /* Fuchsia 100 */
+  --card-muted: #fdf4ff;
+  --shadow-sm: 0 1px 2px 0 rgb(192 38 211 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(192 38 211 / 0.1), 0 2px 4px -1px rgb(192 38 211 / 0.06);
+  --shadow-lg: 0 10px 15px -3px rgb(192 38 211 / 0.1), 0 4px 6px -2px rgb(192 38 211 / 0.05);
+  --glow-primary: 0 0 20px rgb(217 70 239 / 0.15), 0 0 40px rgb(217 70 239 / 0.08);
+  --glow-primary-sm: 0 0 8px rgb(217 70 239 / 0.2);
+  --noise-opacity: 0;
+  --track: #e9d5ff;
+  --overlay: rgba(0, 0, 0, 0.05);
+  --modal-backdrop: rgba(74, 4, 78, 0.4);
+}
+
+/* Dark Pastel theme — deep purple with cool accents */
+[data-theme="dark-pastel"] {
+  --background: #0e0b18;
+  --foreground: #ede0ff;
+  --primary: #c084fc;
+  --primary-dark: #a855f7;
+  --secondary: #67e8f9;
+  --secondary-dark: #22d3ee;
+  --accent: #ede0ff;
+  --muted: #7c6fa0;
+  --card: #16112a;
+  --card-border: #2a1f4a;
+  --card-default: #16112a;
+  --card-elevated: #201840;
+  --card-muted: #0b0816;
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.6), 0 1px 2px -1px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.65), 0 2px 4px -2px rgb(0 0 0 / 0.55);
+  --shadow-lg: 0 10px 30px -3px rgb(0 0 0 / 0.75), 0 4px 8px -4px rgb(0 0 0 / 0.65);
+  --glow-primary: 0 0 20px rgb(192 132 252 / 0.2), 0 0 40px rgb(192 132 252 / 0.1);
+  --glow-primary-sm: 0 0 8px rgb(192 132 252 / 0.3);
+  --noise-opacity: 0.02;
+  --track: #3b2d4a;
+  --overlay: rgba(0, 0, 0, 0.2);
+  --modal-backdrop: rgba(0, 0, 0, 0.65);
+}
+
+/* Retro theme — green phosphor CRT terminal */
+[data-theme="retro"] {
+  --background: #0a0f0a;
+  --foreground: #b8e6b8;
+  --primary: #4af626;
+  --primary-dark: #32c416;
+  --secondary: #26f6ce;
+  --secondary-dark: #1ac4a4;
+  --accent: #b8e6b8;
+  --muted: #5a8a5a;
+  --card: #0e160e;
+  --card-border: #1a2e1a;
+  --card-default: #0e160e;
+  --card-elevated: #142214;
+  --card-muted: #080c08;
+  --success: #4af626;
+  --success-muted: #32c416;
+  --warning: #c8e626;
+  --warning-muted: #a8c416;
+  --gold: #c5a542;
+  --gold-muted: #9e8430;
+  --error: #f64a26;
+  --error-muted: #c43216;
+  --info: #26c8f6;
+  --info-muted: #1aa4c4;
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.6), 0 1px 2px -1px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.65), 0 2px 4px -2px rgb(0 0 0 / 0.55);
+  --shadow-lg: 0 10px 30px -3px rgb(0 0 0 / 0.75), 0 4px 8px -4px rgb(0 0 0 / 0.65);
+  --glow-primary: 0 0 20px rgb(74 246 38 / 0.15), 0 0 40px rgb(74 246 38 / 0.07);
+  --glow-primary-sm: 0 0 8px rgb(74 246 38 / 0.25);
+  --noise-opacity: 0.04;
+  --track: #1a2e1a;
+  --overlay: rgba(0, 0, 0, 0.25);
+  --modal-backdrop: rgba(0, 0, 0, 0.7);
+}
+
+/* Solarized Dark theme — warm burnt orange aesthetic */
+[data-theme="solarized"] {
+  --background: #002028;
+  --foreground: #eee8d5;
+  --primary: #d65d0e;
+  --primary-dark: #af4a08;
+  --secondary: #b58900;
+  --secondary-dark: #946f00;
+  --accent: #fdf6e3;
+  --muted: #839496;
+  --card: #073642;
+  --card-border: #2a4a40;
+  --card-default: #073642;
+  --card-elevated: #0a4f5c;
+  --card-muted: #001a22;
+  --success: #859900;
+  --success-muted: #6d7e00;
+  --warning: #cb4b16;
+  --warning-muted: #a33a10;
+  --gold: #b58900;
+  --gold-muted: #946f00;
+  --error: #dc322f;
+  --error-muted: #b02825;
+  --info: #2aa198;
+  --info-muted: #1a7a72;
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 10px 30px -3px rgb(0 0 0 / 0.6), 0 4px 8px -4px rgb(0 0 0 / 0.5);
+  --glow-primary: 0 0 20px rgb(214 93 14 / 0.2), 0 0 40px rgb(214 93 14 / 0.1);
+  --glow-primary-sm: 0 0 8px rgb(214 93 14 / 0.3);
+  --noise-opacity: 0.015;
+  --track: #2a4a40;
+  --overlay: rgba(0, 0, 0, 0.2);
+  --modal-backdrop: rgba(0, 32, 40, 0.7);
+}
+
+/* Cloakroom theme — warm dark ivory-on-graphite. Oxblood primary + brass secondary.
+   Statesman mood — designed for campaign / diplomacy / leadership-heavy screens. */
+[data-theme="cloakroom"] {
+  --background: #12100e;
+  --foreground: #f5ecd8;
+  --primary: #9b2a2a;
+  --primary-dark: #6e1e1e;
+  --secondary: #c99a3d;
+  --secondary-dark: #a17a28;
+  --accent: #f5ecd8;
+  --muted: #8a7f6d;
+  --card: #1c1915;
+  --card-border: #2a2620;
+  --card-default: #1c1915;
+  --card-elevated: #252016;
+  --card-muted: #0e0c0a;
+  --success: #8ea65a;
+  --success-muted: #6f8444;
+  --warning: #d4a244;
+  --warning-muted: #a67f30;
+  --gold: #e0b34d;
+  --gold-muted: #b88f33;
+  --error: #b9452e;
+  --error-muted: #8e3422;
+  --info: #b58763;
+  --info-muted: #8a6446;
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.55), 0 1px 2px -1px rgb(0 0 0 / 0.45);
+  --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.6), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 10px 30px -3px rgb(0 0 0 / 0.7), 0 4px 8px -4px rgb(0 0 0 / 0.6);
+  --glow-primary: 0 0 20px rgb(155 42 42 / 0.18), 0 0 40px rgb(155 42 42 / 0.08);
+  --glow-primary-sm: 0 0 8px rgb(155 42 42 / 0.28);
+  --noise-opacity: 0.02;
+  --track: #2a2620;
+  --overlay: rgba(0, 0, 0, 0.25);
+  --modal-backdrop: rgba(0, 0, 0, 0.65);
+}
+
+/* Broadsheet theme — light, newsprint-inspired. Cream paper + deep ink + single
+   crimson accent. Day mode that reads like a paper of record, not a web app. */
+[data-theme="broadsheet"] {
+  --background: #f3efe6;
+  --foreground: #1a1614;
+  --primary: #8c1c1c;
+  --primary-dark: #6a1414;
+  --secondary: #1e3a5f;
+  --secondary-dark: #152a47;
+  --accent: #1a1614;
+  --muted: #6b6258;
+  --card: #fbf8f0;
+  --card-border: #d6cfbd;
+  --card-default: #fbf8f0;
+  --card-elevated: #ffffff;
+  --card-muted: #efeadd;
+  --success: #4a7c2f;
+  --success-muted: #3a6224;
+  --warning: #a66b16;
+  --warning-muted: #80510f;
+  --gold: #846414;
+  --gold-muted: #5f4a0f;
+  --error: #a83232;
+  --error-muted: #822525;
+  --info: #1e3a5f;
+  --info-muted: #152a47;
+  --shadow-sm: 0 1px 2px 0 rgb(26 22 20 / 0.06);
+  --shadow-md: 0 4px 6px -1px rgb(26 22 20 / 0.1), 0 2px 4px -1px rgb(26 22 20 / 0.06);
+  --shadow-lg: 0 10px 15px -3px rgb(26 22 20 / 0.1), 0 4px 6px -2px rgb(26 22 20 / 0.05);
+  --glow-primary: 0 0 20px rgb(140 28 28 / 0.12), 0 0 40px rgb(140 28 28 / 0.05);
+  --glow-primary-sm: 0 0 8px rgb(140 28 28 / 0.18);
+  --noise-opacity: 0;
+  --track: #d6cfbd;
+  --overlay: rgba(26, 22, 20, 0.08);
+  --modal-backdrop: rgba(26, 22, 20, 0.45);
+}
+
+/* Cold War theme — amber-on-near-black CRT, grown up. Terminal aesthetic without
+   the neon-green retro trope — reads like a SitRoom console at night. */
+[data-theme="coldwar"] {
+  --background: #0a0906;
+  --foreground: #f5c46a;
+  --primary: #ff7849;
+  --primary-dark: #d15a30;
+  --secondary: #6fa8dc;
+  --secondary-dark: #4d85b8;
+  --accent: #f5c46a;
+  --muted: #7a6430;
+  --card: #12100a;
+  --card-border: #2a2416;
+  --card-default: #12100a;
+  --card-elevated: #1a1610;
+  --card-muted: #08070a;
+  --success: #86d978;
+  --success-muted: #65b058;
+  --warning: #ffc14d;
+  --warning-muted: #d09a32;
+  --gold: #c9a227;
+  --gold-muted: #a3811c;
+  --error: #ff5a3c;
+  --error-muted: #cc4028;
+  --info: #6fa8dc;
+  --info-muted: #4d85b8;
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.65), 0 1px 2px -1px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.7), 0 2px 4px -2px rgb(0 0 0 / 0.55);
+  --shadow-lg: 0 10px 30px -3px rgb(0 0 0 / 0.8), 0 4px 8px -4px rgb(0 0 0 / 0.65);
+  --glow-primary: 0 0 20px rgb(255 120 73 / 0.2), 0 0 40px rgb(255 120 73 / 0.08);
+  --glow-primary-sm: 0 0 8px rgb(255 120 73 / 0.3);
+  --noise-opacity: 0.03;
+  --track: #2a2416;
+  --overlay: rgba(0, 0, 0, 0.3);
+  --modal-backdrop: rgba(0, 0, 0, 0.75);
+}
+
+/* 1953 Command — a single-screen phosphor console inspired by SAGE, early radar,
+   and industrial control rooms. Text stays crisp; atmospheric effects concentrate
+   on the display shell and imagery so dense game screens remain fast to parse. */
+[data-theme="command-1953"] {
+  --background: #050805;
+  --foreground: #b8ffad;
+  --primary: #39ff14;
+  --primary-dark: #1fcf0b;
+  --secondary: #00ff41;
+  --secondary-dark: #00bd31;
+  --accent: #d4ffcc;
+  --muted: #76a971;
+  --card: #091109;
+  --card-border: #1b4a20;
+  --card-default: #091109;
+  --card-elevated: #0d1a0e;
+  --card-muted: #030603;
+  --success: #67ff72;
+  --success-muted: #32c94b;
+  --warning: #d7ff45;
+  --warning-muted: #9fbd28;
+  --gold: #c6e85a;
+  --gold-muted: #8ca53d;
+  --error: #ff6b4a;
+  --error-muted: #c94a32;
+  --info: #63f5c7;
+  --info-muted: #3aaf8f;
+  --shadow-sm: inset 0 1px 0 rgb(184 255 173 / 0.04), 0 1px 4px rgb(0 0 0 / 0.8);
+  --shadow-md:
+    inset 0 1px 0 rgb(184 255 173 / 0.05), inset 0 0 18px rgb(0 0 0 / 0.38),
+    0 5px 16px rgb(0 0 0 / 0.78);
+  --shadow-lg:
+    inset 0 1px 0 rgb(184 255 173 / 0.06), inset 0 0 28px rgb(0 0 0 / 0.45),
+    0 12px 34px rgb(0 0 0 / 0.88);
+  --glow-primary: 0 0 8px rgb(57 255 20 / 0.28), 0 0 22px rgb(0 255 65 / 0.12);
+  --glow-primary-sm: 0 0 5px rgb(57 255 20 / 0.34);
+  --noise-opacity: 0.025;
+  --track: #102c14;
+  --overlay: rgba(0, 8, 2, 0.34);
+  --modal-backdrop: rgba(0, 3, 0, 0.82);
+}
+
+/* Solarized-specific: subtle warm gradient on body and navbar */
+[data-theme="solarized"] body {
+  background: linear-gradient(168deg, #002028 0%, #04303a 40%, #002830 100%);
+  background-attachment: fixed;
+}
+
+[data-theme="solarized"] .sticky.top-0 {
+  background: linear-gradient(
+    90deg,
+    rgba(7, 54, 66, 0.7) 0%,
+    rgba(10, 64, 76, 0.6) 50%,
+    rgba(7, 54, 66, 0.7) 100%
+  );
+}
+
+/* Typography scale */
+:root {
+  --text-body-xs: 0.625rem; /* 10px */
+  --text-body-sm: 0.75rem; /* 12px */
+  --text-body: 0.875rem; /* 14px */
+  --text-body-lg: 1rem; /* 16px */
+  --text-heading-sm: 1.125rem; /* 18px */
+  --text-heading: 1.25rem; /* 20px */
+  --text-heading-lg: 1.5rem; /* 24px */
+  --text-display: 1.875rem; /* 30px */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-dark: var(--primary-dark);
+  --color-secondary: var(--secondary);
+  --color-secondary-dark: var(--secondary-dark);
+  --color-accent: var(--accent);
+  --color-muted: var(--muted);
+  --color-card: var(--card);
+  --color-card-border: var(--card-border);
+  --color-success: var(--success);
+  --color-success-muted: var(--success-muted);
+  --color-warning: var(--warning);
+  --color-warning-muted: var(--warning-muted);
+  --color-gold: var(--gold);
+  --color-gold-muted: var(--gold-muted);
+  --color-error: var(--error);
+  --color-error-muted: var(--error-muted);
+  --color-info: var(--info);
+  --color-info-muted: var(--info-muted);
+  --color-card-default: var(--card-default);
+  --color-card-elevated: var(--card-elevated);
+  --color-card-muted: var(--card-muted);
+  --color-track: var(--track);
+  --color-overlay: var(--overlay);
+  /* Cabinet-office dossier accent. Value comes from the per-country
+     --gov / --gov-soft set on the [data-cabinet-dossier] wrapper; the gold
+     fallback applies anywhere the wrapper isn't present. */
+  --color-gov: var(--gov, #c9a24b);
+  --color-gov-soft: var(--gov-soft, #e2c887);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-lora);
+  --font-display: var(--font-fraunces);
+  --font-size-body-xs: var(--text-body-xs);
+  --font-size-body-sm: var(--text-body-sm);
+  --font-size-body: var(--text-body);
+  --font-size-body-lg: var(--text-body-lg);
+  --font-size-heading-sm: var(--text-heading-sm);
+  --font-size-heading: var(--text-heading);
+  --font-size-heading-lg: var(--text-heading-lg);
+  --font-size-display: var(--text-display);
+  /* Shadow utilities */
+  --shadow-card: var(--shadow-sm);
+  --shadow-panel: var(--shadow-md);
+  --shadow-modal: var(--shadow-lg);
+  --shadow-glow: var(--glow-primary);
+  --shadow-glow-sm: var(--glow-primary-sm);
+  /* Animation utilities */
+  --animate-fade-in: fadeIn 0.3s ease forwards;
+}
+
+html {
+  overflow-x: clip;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+body {
+  overflow-x: clip;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+/* The command theme treats the viewport as one aging tube. The 2px scan pitch is
+   deliberately lighter than the overlays used on media below. */
+[data-theme="command-1953"] body {
+  background:
+    radial-gradient(ellipse at center, rgb(10 24 11 / 0.72) 0%, transparent 68%),
+    linear-gradient(180deg, #060a06 0%, #030503 100%);
+  background-attachment: fixed;
+  font-family: var(--font-jetbrains-mono), var(--font-geist-mono), monospace;
+  letter-spacing: 0.012em;
+  text-shadow: 0 0 4px rgb(57 255 20 / 0.12);
+}
+
+[data-theme="command-1953"] body::before,
+[data-theme="command-1953"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+[data-theme="command-1953"] body::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.08) 0,
+    rgb(0 0 0 / 0.08) 1px,
+    rgb(57 255 20 / 0.012) 1px,
+    transparent 3px
+  );
+  mix-blend-mode: multiply;
+}
+
+[data-theme="command-1953"] body::after {
+  border: 1px solid rgb(57 255 20 / 0.1);
+  border-radius: 2.25rem / 1.1rem;
+  background:
+    radial-gradient(
+      ellipse at center,
+      transparent 60%,
+      rgb(0 0 0 / 0.2) 78%,
+      rgb(0 0 0 / 0.7) 112%
+    ),
+    linear-gradient(90deg, rgb(0 0 0 / 0.14), transparent 4%, transparent 96%, rgb(0 0 0 / 0.14));
+  box-shadow:
+    inset 0 0 50px rgb(0 0 0 / 0.55),
+    inset 0 0 5px rgb(57 255 20 / 0.14);
+}
+
+[data-theme="command-1953"] h1,
+[data-theme="command-1953"] h2,
+[data-theme="command-1953"] h3,
+[data-theme="command-1953"] h4,
+[data-theme="command-1953"] .font-serif,
+[data-theme="command-1953"] .font-display {
+  font-family: var(--font-jetbrains-mono), var(--font-geist-mono), monospace;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+[data-theme="command-1953"] .bg-card,
+[data-theme="command-1953"] .bg-card-default,
+[data-theme="command-1953"] .bg-card-elevated,
+[data-theme="command-1953"] .glass-card {
+  background-image:
+    linear-gradient(180deg, rgb(57 255 20 / 0.018), transparent 32%),
+    radial-gradient(ellipse at center, transparent 45%, rgb(0 0 0 / 0.18) 100%);
+  box-shadow: var(--shadow-sm);
+}
+
+[data-theme="command-1953"] :is(button, a, input, select, textarea):focus-visible {
+  outline: 1px solid var(--primary);
+  outline-offset: 2px;
+  box-shadow: var(--glow-primary-sm);
+}
+
+[data-theme="command-1953"] :is(button, a):not(:disabled) {
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+[data-theme="command-1953"] :is(button, a):not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--card-border));
+  text-shadow: 0 0 6px rgb(57 255 20 / 0.32);
+}
+
+[data-theme="command-1953"] :is(table, [role="table"]) {
+  font-variant-numeric: tabular-nums;
+}
+
+[data-theme="command-1953"] :is(thead, [role="rowheader"]) {
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+}
+
+[data-theme="command-1953"] tbody tr:hover {
+  background: rgb(57 255 20 / 0.055);
+}
+
+/* Media gets the denser phosphor treatment. Global scanlines still sit above it,
+   while this filter unifies portraits, maps, icons, and flavor art without
+   flattening party colors or election-map distinctions into monochrome. */
+[data-theme="command-1953"] :is(img, video, canvas, svg) {
+  filter: saturate(0.72) contrast(1.08) brightness(0.9) drop-shadow(0 0 3px rgb(57 255 20 / 0.16));
+}
+
+[data-theme="command-1953"] :is(img, video) {
+  animation: command-1953-signal-jitter 8s steps(1, end) infinite;
+}
+
+@keyframes command-1953-signal-jitter {
+  0%,
+  96%,
+  100% {
+    translate: 0 0;
+  }
+  97% {
+    translate: 0.35px 0;
+  }
+  98% {
+    translate: -0.25px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="command-1953"] :is(img, video) {
+    animation: none;
+  }
+
+  [data-theme="command-1953"] *,
+  [data-theme="command-1953"] *::before,
+  [data-theme="command-1953"] *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 640px) {
+  [data-theme="command-1953"] body::after {
+    border-radius: 1.25rem / 0.75rem;
+    box-shadow: inset 0 0 24px rgb(0 0 0 / 0.42);
+  }
+}
+
+/* Status bar stays denser monospace but drops the global letter-spacing that
+   made elections-compact chips collide with the turn timer / online count. */
+[data-theme="command-1953"] [data-statusbar] {
+  letter-spacing: 0;
+}
+
+/* Custom scrollbar — 10px floating pill, works in WebKit + Firefox */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-border) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Hide scrollbar but keep scroll behavior */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Gradient text utility */
+.gradient-text {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Fade-in entry animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toastOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+/* Animated background */
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animated-gradient {
+  background: linear-gradient(-45deg, #dc2626, #1d4ed8, #dc2626, #1d4ed8);
+  background-size: 400% 400%;
+  animation: gradient-shift 15s ease infinite;
+}
+
+/* Serif display headings — apply to h1, .display-heading */
+h1 {
+  font-family: var(--font-lora), Georgia, serif;
+}
+
+/* Glass card utility */
+.glass-card {
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--card-border);
+}
+
+/* Section label with left accent */
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--text-body-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.section-label::before {
+  content: "";
+  display: block;
+  width: 2px;
+  height: 0.75rem;
+  background: var(--primary);
+  border-radius: 1px;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+/* Glow ring on interactive focus */
+.glow-focus:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 4px var(--primary),
+    var(--glow-primary-sm);
+}
+
+/* Smooth card lift on hover — apply to interactive cards */
+.card-hover {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Subtle link underline animation */
+.link-underline {
+  position: relative;
+}
+
+.link-underline::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background: var(--primary);
+  transition: width 0.2s ease;
+}
+
+.link-underline:hover::after {
+  width: 100%;
+}
+
+/* Ping animation for live indicators */
+@keyframes ping-slow {
+  75%,
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.animate-ping-slow {
+  animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Bell halo — soft breathing crimson glow when the player owes input.
+   Intentionally subtle (not a radar ping). Paired with reduced-motion override. */
+@keyframes ahdHalo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+  }
+  50% {
+    box-shadow: 0 0 9px 2px rgba(220, 38, 38, 0.4);
+  }
+}
+
+.ahd-bell-pulse {
+  animation: ahdHalo 2.4s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ahd-bell-pulse {
+    animation: none;
+  }
+}
+
+/* Device accessibility preferences. The explicit setting complements the OS
+   media query for players who need less motion or stronger control outlines. */
+html[data-reduce-motion="true"] *,
+html[data-reduce-motion="true"] *::before,
+html[data-reduce-motion="true"] *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+html[data-high-contrast="true"] {
+  --card-border: color-mix(in srgb, var(--foreground) 55%, var(--background));
+  --muted: color-mix(in srgb, var(--foreground) 78%, var(--background));
+}
+
+html[data-high-contrast="true"] :focus-visible {
+  outline: 3px solid var(--primary) !important;
+  outline-offset: 3px !important;
+}
+
+/* Signal field — drifting star scatter + slow scan beam on the landing globe
+   backdrop (wireframe eras). Reduced-motion override below. */
+@keyframes ahd-star-twinkle {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.ahd-star-twinkle {
+  animation: ahd-star-twinkle 4.5s ease-in-out infinite;
+}
+
+@keyframes ahd-scan-drift {
+  0% {
+    transform: translateY(-20vmax);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(70vmax);
+    opacity: 0;
+  }
+}
+
+.ahd-scan-drift {
+  animation: ahd-scan-drift 9s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ahd-star-twinkle,
+  .ahd-scan-drift {
+    animation: none;
+  }
+}
+
+/* ── Green-phosphor CRT countdown (landing hero) ────────────────────────────
+   Deliberately off-palette: this is a monitor bleeding through the page, so it
+   carries its own green rather than the brand primary.
+
+   Everything animated here is compositor-only (opacity + transform) and driven
+   by four custom properties, so the degrade-as-the-deadline-nears effect is a
+   handful of variable writes rather than new work per frame. */
+.ahd-crt-panel {
+  --ahd-crt: #4dff9b;
+  --ahd-crt-shift: 1.5px;
+  --ahd-crt-glitch-dur: 4.7s;
+  --ahd-crt-flicker-dur: 3.2s;
+  --ahd-crt-roll-dur: 5.5s;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ahd-crt) 35%, transparent);
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0) 0px,
+      rgba(0, 0, 0, 0) 2px,
+      rgba(0, 0, 0, 0.42) 3px,
+      rgba(0, 0, 0, 0.42) 4px
+    ),
+    radial-gradient(120% 140% at 50% 0%, rgba(15, 60, 35, 0.9), rgba(2, 10, 6, 0.94));
+  color: var(--ahd-crt);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--ahd-crt) 70%, transparent);
+  box-shadow:
+    inset 0 0 22px rgba(77, 255, 155, 0.14),
+    0 0 24px rgba(77, 255, 155, 0.12);
+  animation: ahd-crt-flicker var(--ahd-crt-flicker-dur) steps(1, end) infinite;
+  /* Own layer: the panel repaints constantly, the hero behind it does not. */
+  will-change: opacity;
+}
+
+/* Signal degrades as the deadline closes in: faster cycles, wider RGB split.
+   Level 0 is the base state above. */
+.ahd-crt-panel[data-glitch="1"] {
+  --ahd-crt-shift: 2.5px;
+  --ahd-crt-glitch-dur: 3.4s;
+  --ahd-crt-flicker-dur: 2.4s;
+  --ahd-crt-roll-dur: 4.2s;
+}
+
+.ahd-crt-panel[data-glitch="2"] {
+  --ahd-crt-shift: 3.5px;
+  --ahd-crt-glitch-dur: 2.2s;
+  --ahd-crt-flicker-dur: 1.6s;
+  --ahd-crt-roll-dur: 3s;
+}
+
+.ahd-crt-panel[data-glitch="3"] {
+  --ahd-crt-shift: 5px;
+  --ahd-crt-glitch-dur: 1.3s;
+  --ahd-crt-flicker-dur: 0.9s;
+  --ahd-crt-roll-dur: 1.9s;
+}
+
+.ahd-crt-panel[data-glitch="4"] {
+  --ahd-crt-shift: 7px;
+  --ahd-crt-glitch-dur: 0.7s;
+  --ahd-crt-flicker-dur: 0.5s;
+  --ahd-crt-roll-dur: 1.1s;
+}
+
+/* Sweeping bright scanline — the slow roll of a mistuned vertical hold. */
+.ahd-crt-panel::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 28%;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--ahd-crt) 16%, transparent),
+    transparent
+  );
+  animation: ahd-crt-roll var(--ahd-crt-roll-dur) linear infinite;
+}
+
+/* RGB-split jitter on the digits themselves. */
+.ahd-crt-digits {
+  animation: ahd-crt-glitch var(--ahd-crt-glitch-dur) steps(1, end) infinite;
+}
+
+.ahd-crt-flicker {
+  animation: ahd-crt-flicker var(--ahd-crt-flicker-dur) steps(1, end) infinite;
+}
+
+@keyframes ahd-crt-roll {
+  from {
+    transform: translateY(-120%);
+  }
+  to {
+    transform: translateY(420%);
+  }
+}
+
+@keyframes ahd-crt-flicker {
+  0%,
+  92%,
+  100% {
+    opacity: 1;
+  }
+  93% {
+    opacity: 0.62;
+  }
+  94% {
+    opacity: 1;
+  }
+  97% {
+    opacity: 0.78;
+  }
+  98% {
+    opacity: 1;
+  }
+}
+
+@keyframes ahd-crt-glitch {
+  0%,
+  88%,
+  100% {
+    transform: translateX(0);
+    text-shadow: 0 0 6px color-mix(in srgb, var(--ahd-crt) 70%, transparent);
+  }
+  89% {
+    transform: translateX(calc(var(--ahd-crt-shift) * -1));
+    text-shadow:
+      var(--ahd-crt-shift) 0 0 rgba(255, 60, 90, 0.75),
+      calc(var(--ahd-crt-shift) * -1) 0 0 rgba(60, 190, 255, 0.75),
+      0 0 6px color-mix(in srgb, var(--ahd-crt) 70%, transparent);
+  }
+  90% {
+    transform: translateX(var(--ahd-crt-shift));
+    text-shadow:
+      calc(var(--ahd-crt-shift) * -1) 0 0 rgba(255, 60, 90, 0.75),
+      var(--ahd-crt-shift) 0 0 rgba(60, 190, 255, 0.75),
+      0 0 6px color-mix(in srgb, var(--ahd-crt) 70%, transparent);
+  }
+  91% {
+    transform: translateX(0);
+  }
+}
+
+/* Reduced motion keeps the phosphor look and drops every moving part. */
+@media (prefers-reduced-motion: reduce) {
+  .ahd-crt-panel,
+  .ahd-crt-digits,
+  .ahd-crt-flicker {
+    animation: none;
+  }
+
+  .ahd-crt-panel::after {
+    display: none;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.2s ease-out forwards;
+}
+
+/* Navbar entry — slides down from above on mount.
+   Paired with reduced-motion override below. */
+@keyframes ahd-nav-enter {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.ahd-navbar-enter {
+  animation: ahd-nav-enter 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ahd-navbar-enter {
+    animation: none;
+  }
+
+  .ahd-nav-rollout-label,
+  .ahd-nav-brand-label {
+    transition: none !important;
+  }
+}
+
+/* News page: player post + ad ticker — two identical segments; -50% = one loop */
+@keyframes ahd-player-feed-marquee {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.ahd-player-feed-marquee-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: ahd-player-feed-marquee linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ahd-player-feed-marquee-track {
+    animation: none;
+    transform: none;
+  }
+}
+
+/* Navbar top accent — primary color only; mix with --background so it stays theme-native
+   (color-mix + transparent is unreliable in sRGB). */
+.ahd-nav-flair-track {
+  background: color-mix(in srgb, var(--primary) 20%, var(--background));
+}
+
+.ahd-nav-flair-shimmer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40vw;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--primary) 75%, var(--background)) 35%,
+    color-mix(in srgb, var(--primary) 75%, var(--background)) 65%,
+    transparent 100%
+  );
+  box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 45%, var(--background));
+  will-change: transform, opacity;
+}
+
+.ahd-nav-flair-shimmer-alt {
+  opacity: 0.5;
+  width: 30vw;
+  animation-delay: -0.4s !important;
+}
+
+/* Idle: always-present left-bleed base layer. Overlays (indeterminate, fill) render on top.
+   Uses relative color syntax for true alpha — color-mix(…, transparent) is unreliable. */
+.ahd-nav-flair-idle {
+  background: linear-gradient(
+    90deg,
+    rgb(from var(--primary) r g b / 0.65) 0%,
+    rgb(from var(--primary) r g b / 0.28) 38%,
+    rgb(from var(--primary) r g b / 0) 65%
+  );
+}
+
+.ahd-nav-flair-fill-layer {
+  background: color-mix(in srgb, var(--primary) 75%, var(--background));
+  will-change: transform, opacity;
+  position: relative;
+}
+
+.ahd-nav-flair-fill-layer::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 60px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--primary) 75%, var(--background))
+  );
+  filter: blur(6px);
+}
+
+@keyframes ahd-nav-flair-shimmer-sweep {
+  0% {
+    transform: translate3d(-120%, 0, 0) skewX(-12deg);
+    opacity: 0.6;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(calc(100vw + 40%), 0, 0) skewX(-6deg);
+    opacity: 0.8;
+  }
+}
+
+.ahd-nav-flair-sweep {
+  animation: ahd-nav-flair-shimmer-sweep 3.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes ahd-nav-flair-fill {
+  0% {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+.ahd-nav-flair-fill-once {
+  animation: ahd-nav-flair-fill 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes ahd-nav-flair-fill-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.ahd-nav-flair-fill-fadeout {
+  transform: scaleX(1);
+  animation: ahd-nav-flair-fill-fade 0.5s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ahd-nav-flair-sweep {
+    animation: none;
+    transform: translate3d(0, 0, 0);
+    opacity: 0.8;
+  }
+
+  .ahd-nav-flair-fill-once {
+    animation: none;
+    transform: scaleX(1);
+    opacity: 1;
+  }
+
+  .ahd-nav-flair-fill-fadeout {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* Policy position slider */
+.policy-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--foreground);
+  border: 2px solid var(--background);
+  box-shadow:
+    0 0 0 2px var(--card-border),
+    0 2px 6px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  margin-top: -3px;
+  transition: box-shadow 0.15s ease;
+}
+.policy-slider::-webkit-slider-thumb:hover {
+  box-shadow:
+    0 0 0 2px var(--primary),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.policy-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--foreground);
+  border: 2px solid var(--background);
+  box-shadow:
+    0 0 0 2px var(--card-border),
+    0 2px 6px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+.policy-slider::-moz-range-thumb:hover {
+  box-shadow:
+    0 0 0 2px var(--primary),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.policy-slider::-moz-range-track {
+  background: transparent;
+}
+
+/* ─── AHD Slider — reusable styled range input ─────────────────────────────── */
+.ahd-slider {
+  --slider-color: var(--primary);
+  --slider-track-height: 8px;
+  --slider-thumb-size: 22px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--track);
+  border-radius: 999px;
+  height: var(--slider-track-height);
+  cursor: pointer;
+  width: 100%;
+}
+
+/* Track - WebKit (Chrome, Safari, Edge) */
+/* Track is transparent - the fill gradient is applied to the input element itself */
+.ahd-slider::-webkit-slider-runnable-track {
+  height: var(--slider-track-height);
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--card-border);
+}
+
+/* Track - Firefox */
+.ahd-slider::-moz-range-track {
+  height: var(--slider-track-height);
+  border-radius: 999px;
+  background: var(--track);
+  border: 1px solid var(--card-border);
+}
+
+/* Progress fill - Firefox only (WebKit uses JS-based fill) */
+.ahd-slider::-moz-range-progress {
+  height: var(--slider-track-height);
+  border-radius: 999px 0 0 999px;
+  background: var(--slider-color);
+  border: 1px solid transparent;
+}
+
+/* Thumb - WebKit */
+.ahd-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  border-radius: 50%;
+  background: var(--foreground);
+  border: 3px solid var(--slider-color);
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 2px 8px rgba(0, 0, 0, 0.3);
+  margin-top: calc((var(--slider-track-height) - var(--slider-thumb-size)) / 2);
+  cursor: grab;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.ahd-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 4px color-mix(in srgb, var(--slider-color) 30%, transparent),
+    0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.ahd-slider::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.05);
+}
+
+/* Thumb - Firefox */
+.ahd-slider::-moz-range-thumb {
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  border-radius: 50%;
+  background: var(--foreground);
+  border: 3px solid var(--slider-color);
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 2px 8px rgba(0, 0, 0, 0.3);
+  cursor: grab;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.ahd-slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 4px color-mix(in srgb, var(--slider-color) 30%, transparent),
+    0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.ahd-slider::-moz-range-thumb:active {
+  cursor: grabbing;
+}
+
+/* Color variants */
+.ahd-slider-primary {
+  --slider-color: var(--primary);
+}
+.ahd-slider-warning {
+  --slider-color: var(--warning);
+}
+.ahd-slider-error {
+  --slider-color: var(--error);
+}
+.ahd-slider-success {
+  --slider-color: var(--success);
+}
+.ahd-slider-secondary {
+  --slider-color: var(--secondary);
+}
+.ahd-slider-muted {
+  --slider-color: var(--muted);
+}
+
+@keyframes progressSlide {
+  0% {
+    left: -45%;
+  }
+  100% {
+    left: 145%;
+  }
+}
+
+/* AdSense: collapse unfilled units so blank reserved space disappears
+   (Google-documented pattern; data-ad-status is set by adsbygoogle.js).
+   Also hide the container's "Advertisement" label when the unit is unfilled. */
+ins.adsbygoogle[data-ad-status="unfilled"] {
+  display: none !important;
+}
+.adsense-container:has(ins.adsbygoogle[data-ad-status="unfilled"]) {
+  display: none;
+}

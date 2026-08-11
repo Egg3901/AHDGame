@@ -1,0 +1,739 @@
+/**
+ * Election vote tally accumulation and initialization.
+ */
+
+import { getDb } from "@/lib/mongodb";
+import type {
+  Election,
+  ElectionCandidate,
+  ElectionVoteTally,
+  PrimaryResults,
+  State,
+  StateDemographics,
+  VoteTurnSnapshot,
+} from "@/lib/db/types";
+import { ObjectId } from "mongodb";
+import { getStateApprovalForElection } from "@/lib/utils/getStateApprovalForElection";
+import type { StatePartyOrg, StateDemographicTurnout, ExecutiveEndorsement } from "@/lib/db/types";
+import type { CountryId } from "@/lib/constants/countries";
+import { getPartyStrengthWeight, getRegionalExecutiveOfficeKey } from "@/lib/constants/countries";
+import {
+  isCoattailEligibleRace,
+  isOwnRegionalExecutiveRace,
+  buildGovModifierByParty,
+  resolveGovExecutiveApproval,
+} from "./govCoattail";
+import { MULTI_SEAT_TYPES, officeKeyForElectionType } from "@/lib/utils/electionLabels";
+import {
+  applyMajoritarianBonus,
+  getMajoritarianBonus,
+  getMultiSeatMinShare,
+} from "@/lib/turn/election/seatAllocation";
+import { rankPartiesByOrganization } from "@/lib/turn/election/commonsOrgRanking";
+import { turnVoteWeight, resolveTurnWindow } from "./voteCalculations";
+import { distributeVotesByGroupLevelAllocation } from "./voteDistribution";
+import { distributeVotesBySwingFlow } from "./voteDistributionSwingFlow";
+import { getIncumbentSeatShareByParty } from "./incumbentSeatShare";
+import {
+  resolveSingleSeatLegislativeIncumbent,
+  isSingleSeatLegislativeRace,
+  resolveHouseIncumbentTenures,
+} from "./singleSeatIncumbency";
+import { getFundsByPartyForElection } from "./fundsByParty";
+import {
+  isHeadOfGovernmentRace,
+  resolvePresidentApproval,
+  buildPresidentialModifierByParty,
+} from "./presidentialCoattail";
+import { computeMedianVoter } from "./medianVoter";
+import { fetchEnrichedCandidates } from "./candidateEnrichment";
+import type { AccumulateVoteTurnPreload } from "./types";
+import { loadPartyGroupFavorability } from "@/lib/governorOffice/address/partyGroupFavorabilityLoader";
+import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
+import { eraYearContextFromGameState } from "@/lib/era/context";
+import { resolveTurnout } from "./resolvedTurnout";
+import { isPrimaryEnded } from "@/lib/elections/phases";
+import type { GameTimeContext } from "@/lib/time/gameTime";
+import { STARTING_YEAR } from "@/lib/constants/turnTime";
+
+// ─── Accumulate one turn of votes into a tally ───────────────────────────────
+
+export async function accumulateVoteTurn(
+  electionId: ObjectId,
+  turnNumber: number,
+  now: Date,
+  options?: { approvalMap?: Map<string, number>; preload?: AccumulateVoteTurnPreload }
+): Promise<void> {
+  const db = await getDb();
+
+  const [tally, candidates] = await Promise.all([
+    db.collection<ElectionVoteTally>("electionVoteTallies").findOne({ electionId }),
+    db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find({ electionId, status: "active" })
+      .toArray(),
+  ]);
+
+  if (!tally || candidates.length === 0) return;
+
+  const election = await db.collection<Election>("elections").findOne({ _id: electionId });
+  if (!election || !election.endTime) return;
+
+  const stateId = election.state as string;
+  let state: State | null;
+  let demographics: StateDemographics | null;
+  let categories: import("@/lib/db/types").DemographicCategory[];
+  let statePartyOrgs: StatePartyOrg[];
+  let turnoutDoc: StateDemographicTurnout | null;
+  let preset: string | undefined;
+  let currentYear: number | undefined;
+  let eraYear: { year: number | null; startingYear: number | null };
+
+  if (options?.preload) {
+    state = options.preload.stateMap.get(stateId) ?? null;
+    demographics = options.preload.demographicsMap.get(stateId) ?? null;
+    categories = options.preload.categories;
+    statePartyOrgs = options.preload.statePartyOrgsByState.get(stateId) ?? [];
+    turnoutDoc = options.preload.turnoutByState.get(stateId) ?? null;
+    preset = options.preload.preset;
+    currentYear = options.preload.currentYear;
+    eraYear = eraYearContextFromGameState({
+      currentYear: options.preload.currentYear,
+      startingYear: options.preload.startingYear,
+      eraSystemEnabled: options.preload.eraSystemEnabled,
+    });
+  } else {
+    const [s, d, c, spo, t, gs] = await Promise.all([
+      db.collection<State>("states").findOne({ _id: stateId, countryId: election.countryId }),
+      db
+        .collection<StateDemographics>("stateDemographics")
+        .findOne({ _id: stateId, countryId: election.countryId }),
+      db
+        .collection<import("@/lib/db/types").DemographicCategory>("demographicCategories")
+        .find({})
+        .toArray(),
+      db
+        .collection<StatePartyOrg>("statePartyOrg")
+        .find({ stateId, countryId: election.countryId })
+        .toArray(),
+      db
+        .collection<StateDemographicTurnout>("stateDemographicTurnout")
+        .findOne({ _id: stateId, countryId: election.countryId }),
+      db
+        .collection<{
+          _id: string;
+          preset?: string;
+          currentYear?: number;
+          currentTurn?: number;
+          startingYear?: number;
+          eraSystemEnabled?: boolean;
+        }>("gameState")
+        .findOne(
+          { _id: "current" },
+          {
+            projection: {
+              preset: 1,
+              currentYear: 1,
+              currentTurn: 1,
+              startingYear: 1,
+              eraSystemEnabled: 1,
+            },
+          }
+        ),
+    ]);
+    state = s;
+    demographics = d;
+    categories = c;
+    statePartyOrgs = spo;
+    turnoutDoc = t;
+    preset = gs?.preset;
+    currentYear = gs?.currentYear;
+    eraYear = eraYearContextFromGameState(gs);
+  }
+
+  if (!state || !demographics) return;
+
+  const partyOrgByParty = new Map(statePartyOrgs.map((po) => [po.partyId, po.organization]));
+  // Phase 5a: Reg as persuasion-resistance multiplier in general-election
+  // distribution. Rows whose `registration` field is undefined (pre-seed)
+  // simply aren't added to the map → `regResistanceMultiplier(undefined)`
+  // returns the neutral 1.0× downstream. Rows seeded with a real value
+  // contribute the entrenchment tilt per `electionFormulaFactors.ts`.
+  const regByParty = new Map<string, number>();
+  for (const po of statePartyOrgs) {
+    if (typeof po.registration === "number") regByParty.set(po.partyId, po.registration);
+  }
+  // Seeded party-baseline share (0-100) for `regBaselineMultiplier`. Only
+  // written by seeds that author regional partisan baselines (UK era polling
+  // via ukStatePartyOrgCalculations). Absent everywhere else → empty map →
+  // exactly 1.0× downstream (byte-identical for worlds without the field;
+  // never double-counts the US `registration` resistance/peel lane).
+  const regShareByParty = new Map<string, number>();
+  for (const po of statePartyOrgs) {
+    if (typeof po.registrationShare === "number") {
+      regShareByParty.set(po.partyId, po.registrationShare);
+    }
+  }
+
+  // Turn-first surge window (drift-immune) with a Date fallback for legacy docs.
+  // Keying the closing surge off turn numbers makes the final-turn band coincide
+  // with the race's actual last turns instead of a stale `endTime` projection
+  // that the drifting game clock no longer matches.
+  //
+  // Anchor the window at the GENERAL-election start (`primaryEndTurn`), NOT the
+  // overall `startTurn`: general votes only accrue after the primary, so spanning
+  // the primary period smears the early-vote share across turns that cast no
+  // general votes and inflates the final turns to ~66% of the vote (ticket #955).
+  // `?? startTurn` preserves prior behavior for races with no primary window.
+  const { totalTurns, turnIndex } = resolveTurnWindow({
+    startTurn: election.primaryEndTurn ?? election.startTurn,
+    endTurn: election.endTurn,
+    startTime: election.primaryEndTime ?? election.startTime,
+    endTime: election.endTime,
+    createdAt: tally.createdAt,
+    currentTurn: turnNumber,
+    now,
+  });
+
+  // Age-aware electorate (P1b-1b): the vote pool is the live voting-age population
+  // (Σ ages ≥ votingAgeEligible), written each turn by the demographic phase, so
+  // the electorate tracks kids aging past 18 and deaths removing voters. Falls
+  // back to total population on worlds not yet seeded with cohort vectors — vote
+  // SHARES are invariant to this basis (the F-4 guarantee), only magnitude differs.
+  const electorate = state.votingEligiblePopulation ?? state.population;
+
+  // Resolve effective turnout using GOTV/canvassing/suppression modifiers from turnoutDoc
+  // This is the key change: static demographics now combine with dynamic turnout modifiers
+  const { totalPool: resolvedTotalPool, byGroup: liveTurnouts } = resolveTurnout(
+    electorate,
+    demographics,
+    categories,
+    turnoutDoc,
+    { preset, year: eraYear.year, startingYear: eraYear.startingYear }
+  );
+
+  const turnPool = turnVoteWeight(totalTurns, turnIndex, resolvedTotalPool);
+
+  // Party strength: state government approval × office strength. Scales the vote pool for this election.
+  // Approval should be a small modifier, not a massive multiplier (50% approval = 5% boost, not 50% boost)
+  const electionCountryId = (election.countryId ?? "US") as CountryId;
+
+  // These three reads are mutually independent: state approval keys off the
+  // region, candidate enrichment off `candidates`, party-group favorability off
+  // the country + turn. One parallel round-trip instead of three serial ones —
+  // this path runs for every active election on every turn.
+  //
+  // enriched: candidates enriched for group-level competitive allocation.
+  // State/Senate/House races put politicalInfluence in reach only, not appeal.
+  //
+  // partyGroupFavorabilityByKey: Address-sourced per-group appeal boosts for the
+  // leader's party. Country-scoped, keyed `${partyId}:${groupId}` for O(1)
+  // lookup in the vote-distribution inner loop.
+  const preloadedApproval = options?.approvalMap?.get(election.state.toUpperCase());
+  const [approvalPct, enriched, partyGroupFavorabilityByKey] = await Promise.all([
+    preloadedApproval ?? getStateApprovalForElection(election.state),
+    fetchEnrichedCandidates(candidates),
+    loadPartyGroupFavorability(db, electionCountryId, turnNumber),
+  ]);
+  const approvalDecimal = approvalPct / 100;
+  // Normalize snap_* → regular for office-strength lookup (snap_commons uses the
+  // same party-strength weight as commons — same constituency, same office).
+  const officeStrength = getPartyStrengthWeight(
+    electionCountryId,
+    officeKeyForElectionType(election.electionType as string, electionCountryId)
+  );
+  const strengthMultiplier = (1 + (approvalDecimal - 0.5) * 0.2) * officeStrength;
+  const effectiveTurnPool = turnPool * strengthMultiplier;
+
+  // ── Granular-cell electorate substrate ─────────────────────────────────────
+  // The electorate is Layer-1 cells. Same engines, same appeal formula — the
+  // cells ARE the substrate now, not an alternative to one.
+  //
+  // This used to sit behind `granularElectorateEnabled`, whose OFF branch ran
+  // the archetype electorate instead. That branch is gone: every country in the
+  // game has a Layer-1 model (see `devolvedNationModel.ts`, which closed the
+  // last two), so it was unreachable as an engine choice and survived only as a
+  // way to turn the real electorate off.
+  //
+  // A null substrate still falls through, but it now means one thing: this STATE
+  // has no census row yet (newly admitted, mid-migration). That is a
+  // data-integrity fallback, not an engine selection.
+  let effDemographics = demographics;
+  let effCategories = categories;
+  let effLiveTurnouts = liveTurnouts;
+  let effTotalPool = resolvedTotalPool;
+  let effEffectiveTurnPool = effectiveTurnPool;
+  let effEnriched = enriched;
+  let effPartyGroupFavorabilityByKey = partyGroupFavorabilityByKey;
+  {
+    // Seeded snapshot for the legislation lean-drift fold. Preloaded on the
+    // batched general path; a single extra read on the standalone path (only
+    // ever paid when the flag is on).
+    const demographicDefaults =
+      options?.preload?.demographicDefaultsByState?.get(stateId) ??
+      (options?.preload
+        ? null
+        : await db
+            .collection<StateDemographics>("demographicDefaults")
+            .findOne({ _id: stateId, countryId: election.countryId }));
+    const substrate = buildGranularElectorateSubstrate({
+      countryId: electionCountryId,
+      stateId,
+      preset,
+      turnoutDoc,
+      statePopulation: electorate,
+      demographics,
+      categories,
+      liveTurnouts,
+      enriched,
+      partyGroupFavorabilityByKey,
+      demographicDefaults,
+      year: eraYear.year,
+      startingYear: eraYear.startingYear,
+    });
+    if (substrate) {
+      effDemographics = substrate.demographics;
+      effCategories = substrate.categories;
+      effLiveTurnouts = substrate.liveTurnouts;
+      effTotalPool = substrate.totalPool;
+      effEffectiveTurnPool =
+        turnVoteWeight(totalTurns, turnIndex, substrate.totalPool) * strengthMultiplier;
+      effEnriched = substrate.enriched;
+      effPartyGroupFavorabilityByKey =
+        substrate.partyGroupFavorabilityByKey ?? partyGroupFavorabilityByKey;
+    }
+  }
+  // Determine if we are in the general election phase (after primary end).
+  // Turn-first (drift-immune, freezes on pause); falls back to the Date for
+  // elections not yet backfilled. `now` is the game-time of this turn, so it
+  // doubles as effectiveNow for the fallback path.
+  const phaseGameTime: GameTimeContext = {
+    currentTurn: turnNumber,
+    lastTurnProcessed: now,
+    isActive: true,
+    pausedAt: null,
+    effectiveNow: now,
+    // Inert here — isPrimaryEnded only reads effectiveNow for the Date fallback.
+    startingYear: STARTING_YEAR,
+  };
+  const isGeneralElection = isPrimaryEnded(election, turnNumber, phaseGameTime);
+  // NPP weight penalty only applies in the general phase (not primaries, which use score-based handicap).
+  const hasPlayerInRace = isGeneralElection && enriched.some((c) => !c.isNPP);
+  // #4G cutover (2026-05-21): swing-flow is now the default for general
+  // elections. Legacy weight-multiplier model remains reachable by
+  // passing `useSwingFlowModel: false` explicitly, but tallyManagement
+  // routes new turn-tallies through the §7.3.2 engine. Primaries
+  // always use the legacy engine — §7.3.2 is general-election only and
+  // `primaryResolution.ts` has its own formula.
+  //
+  // The per-candidate margin tolerance against the legacy engine is
+  // pinned at ±10pt by the diff-test harness
+  // (`voteDistributionSwingFlowDiff.test.ts`). Per-race-family
+  // integration tests (`voteDistributionSwingFlowFamilies.test.ts`)
+  // verify the new engine produces valid distributions for every
+  // §7.3.3 race family.
+  const useSwingFlowModel = true;
+  const distributeFn =
+    isGeneralElection && useSwingFlowModel
+      ? distributeVotesBySwingFlow
+      : distributeVotesByGroupLevelAllocation;
+
+  // A1 — share-weighted incumbency. Look up the prior-cycle vote-share
+  // for this seat so the swing-flow engine's incumbency driver can
+  // scale lift / drag by how much each party was defending. Empty Map
+  // when no prior cycle exists (driver returns 0, matching open-seat
+  // semantics). Only computed for general elections — primaries don't
+  // route through the swing-flow engine.
+  // Single-seat legislative races (US Senate) use the dedicated flat-shield
+  // path below, not the raw-vote-share fallback (which would produce a
+  // meaningless margin-scaled value for a single winner).
+  // Presidential coattail — the sitting President's party gets an
+  // approval-driven nominal-share nudge in every down-ballot general
+  // nationwide (US only). Excludes the presidential race itself. A vacant
+  // presidency or a party not present in this race no-ops to neutral.
+  const isOwnHeadOfGovernmentRace = isHeadOfGovernmentRace(
+    election.electionType as string,
+    electionCountryId
+  );
+  // Coattail gating uses the parties actually fielding candidates in THIS
+  // race (matches the display path in enrichElection.ts), not the state's
+  // StatePartyOrg rows: a party can hold an org row without a candidate in
+  // the race (engine applied a coattail the display never showed) or field
+  // a candidate without an org row (coattail wrongly suppressed).
+  const partyIdsInRace = new Set(enriched.map((ec) => ec.party));
+  const regionalExecOfficeType = getRegionalExecutiveOfficeKey(electionCountryId);
+
+  // Every gate below is pure (derived from `election`, `candidates` and
+  // `enriched`, all already resolved), so the five driver lookups they guard
+  // are decided up front and issued as ONE parallel round-trip. They were five
+  // sequential awaits, paid on every active election every turn.
+  //
+  // The two governor-approval consumers share a single fetch: the coattail gate
+  // and the own-race gate are mutually exclusive by construction
+  // (`isCoattailEligibleRace` returns false exactly when the race IS the
+  // regional executive's own seat), so at most one consumes it — but resolving
+  // it once keeps that invariant from costing a second round-trip if the
+  // predicates ever widen.
+  const wantsGovCoattail = isCoattailEligibleRace({
+    isGeneralElection,
+    electionType: election.electionType as string,
+    regionalExecOfficeType,
+    isOwnHeadOfGovernmentRace,
+  });
+  const wantsOwnExecIncumbency =
+    Boolean(stateId) &&
+    isOwnRegionalExecutiveRace({
+      isGeneralElection,
+      electionType: election.electionType as string,
+      regionalExecOfficeType,
+      hasState: Boolean(stateId),
+    });
+  const runningIdentities = new Set(
+    candidates
+      .map((c) => (c.characterId ?? c.nppId)?.toString())
+      .filter((id): id is string => Boolean(id))
+  );
+
+  const [incumbentSeatShareByParty, fundsByParty, president, govExecutive, legInc] =
+    await Promise.all([
+      // A1 — share-weighted incumbency. Prior-cycle vote-share for this seat so
+      // the swing-flow engine's incumbency driver can scale lift / drag by how
+      // much each party was defending. Empty Map when no prior cycle exists
+      // (driver returns 0, matching open-seat semantics). General elections
+      // only — primaries don't route through the swing-flow engine. Single-seat
+      // legislative races (US Senate) use the dedicated flat-shield path below,
+      // not the raw-vote-share fallback (which would produce a meaningless
+      // margin-scaled value for a single winner).
+      isGeneralElection && !isSingleSeatLegislativeRace(election)
+        ? getIncumbentSeatShareByParty(election, db)
+        : undefined,
+      // A2 — money driver. Aggregate per-party spend-this-turn across all
+      // campaigns in the race. Per the design doc the driver reads "active
+      // pacing" rather than treasury balance; `spendThisTurn` is reset every
+      // turn-tick by the `campaignSpendReset` phase after this accumulator runs.
+      isGeneralElection ? getFundsByPartyForElection(electionId, db) : undefined,
+      isGeneralElection && !isOwnHeadOfGovernmentRace
+        ? resolvePresidentApproval(db, electionCountryId)
+        : undefined,
+      // Governor coattail (§7.3.2 govModifier) — the sitting regional
+      // executive's party gets a small nominal-share bonus in its own state's
+      // down-ballot generals, and the own-race path feeds the same approval
+      // into the incumbency driver.
+      wantsGovCoattail || wantsOwnExecIncumbency
+        ? resolveGovExecutiveApproval(db, electionCountryId, stateId)
+        : undefined,
+      // Single-seat legislative own-race (US Senate): flat incumbency shield
+      // keyed to the sitting senator, decaying with tenure to a +1 floor. Null
+      // (skipped) for open seats / incumbent not running / non-senate races.
+      isGeneralElection
+        ? resolveSingleSeatLegislativeIncumbent(election, runningIdentities, db)
+        : undefined,
+    ]);
+
+  const presidentialModifierByParty =
+    isGeneralElection && !isOwnHeadOfGovernmentRace
+      ? buildPresidentialModifierByParty(president ?? null, partyIdsInRace)
+      : undefined;
+
+  // A stale `electedOfficials.party` value that doesn't match a party actually
+  // in the race silently no-ops (empty map → neutral 1.0×).
+  const govModifierByParty = wantsGovCoattail
+    ? buildGovModifierByParty(govExecutive ?? null, partyIdsInRace)
+    : undefined;
+
+  // Approval-modulated incumbency (own regional-executive race only). The
+  // governor coattail deliberately skips the executive's own seat; this fills
+  // that gap by feeding the sitting governor's approval into the incumbency
+  // driver — a shield when popular, a drag when unpopular. The presidential
+  // race is excluded: that engine already folds approval into a dedicated
+  // `strengthMultiplier`, so routing it here would double-count.
+  const incumbentPartyId =
+    wantsOwnExecIncumbency && govExecutive ? govExecutive.partyId : undefined;
+  const incumbentApproval =
+    wantsOwnExecIncumbency && govExecutive ? govExecutive.approval : undefined;
+
+  const legislativeIncumbentPartyId = legInc ? legInc.incumbentPartyId : undefined;
+  const legislativeIncumbentTenureTerms = legInc ? legInc.tenureTerms : undefined;
+
+  // M3 — per-state median voter for the policy-distance driver.
+  // Computed from already-loaded demographics + categories so no extra
+  // DB hit. GOTV / suppression effects shift the median via liveTurnouts.
+  const medianVoter = isGeneralElection
+    ? computeMedianVoter(effDemographics, effCategories, effLiveTurnouts)
+    : undefined;
+
+  // Multi-seat legislative own-race (US House): per-candidate consecutive-term
+  // fatigue — a state's House delegation can have several simultaneous
+  // incumbents at once (one per party's returning nominee), so this is a map
+  // rather than the Senate's single flat-shield party+terms pair. See
+  // `resolveHouseIncumbentTenures`'s doc comment in singleSeatIncumbency.ts
+  // for why the House needs this different shape.
+  let houseIncumbentTenureTermsByCandidateId: Map<string, number> | undefined;
+  if (isGeneralElection && election.electionType === "house") {
+    const runningIdentityToCandidateId = new Map<string, string>();
+    for (const c of candidates) {
+      const identity = (c.characterId ?? c.nppId)?.toString();
+      if (identity) runningIdentityToCandidateId.set(identity, c._id.toString());
+    }
+    houseIncumbentTenureTermsByCandidateId = await resolveHouseIncumbentTenures(
+      election,
+      runningIdentityToCandidateId,
+      db
+    );
+  }
+
+  const { votesPerCandidate, sharesPct } = distributeFn(
+    effEnriched,
+    effEffectiveTurnPool,
+    effTotalPool,
+    electorate,
+    effDemographics,
+    effCategories,
+    partyOrgByParty,
+    {
+      includeInfluenceInAppeal: false,
+      useNationalInfluenceForReach: false,
+      votingSystem: state.votingSystem ?? "fptp",
+      isGeneralElection,
+      countryId: electionCountryId,
+      parentRegionId: state.parentRegionId,
+      liveTurnouts: effLiveTurnouts, // Pass resolved turnout to vote distribution
+      hasPlayerInRace,
+      partyGroupFavorabilityByKey: effPartyGroupFavorabilityByKey,
+      // Phase 5a — entrenched-Reg multiplier; consumed only in general
+      // elections. Empty / partial maps fall through to the neutral 1.0×
+      // per `regResistanceMultiplier`'s undefined branch.
+      regByParty,
+      // Seeded party-baseline share — 1.0× wherever the field was never
+      // seeded (see regBaselineMultiplier's compatibility contract).
+      regShareByParty,
+      // Governor coattail (§7.3.2 govModifier) — in-state down-ballot only.
+      govModifierByParty,
+      // A1 — per-party prior seat-share for the incumbency driver.
+      incumbentSeatShareByParty,
+      // Approval-scaled directional incumbency for the executive's own race.
+      incumbentPartyId,
+      incumbentApproval,
+      // Flat single-seat legislative (US Senate) incumbency shield.
+      legislativeIncumbentPartyId,
+      legislativeIncumbentTenureTerms,
+      // Per-candidate multi-seat legislative (US House) tenure fatigue.
+      houseIncumbentTenureTermsByCandidateId,
+      // A2 — per-party spend-this-turn for the money driver.
+      fundsByParty,
+      // Presidential coattail — sitting President's nominal-share multiplier.
+      presidentialModifierByParty,
+      // M3 — per-state median voter for the policy-distance driver.
+      medianVoter,
+      useSwingFlowModel,
+    }
+  );
+
+  // Executive-leader endorsements: when the sitting head of government has
+  // endorsed a candidate in this race, apply a +1.5% multiplier to that
+  // candidate's per-turn vote increment. Mirrors the governor→presidential
+  // bonus in presidentialElectionEngine. Cross-race bleed isn't a concern
+  // because each `Election` is state-scoped (one race per AZ House district,
+  // one race for AZ Senate Class 1, etc.) so the multiplier only touches
+  // votes in this specific race's tally.
+  const executiveEndorsements = await db
+    .collection<ExecutiveEndorsement>("executiveEndorsements")
+    .find({ electionId, isActive: true })
+    .project<{ candidateId: ObjectId }>({ candidateId: 1 })
+    .toArray();
+  const executiveEndorsedCandidateIds = new Set(
+    executiveEndorsements.map((e) => e.candidateId.toString())
+  );
+  const EXECUTIVE_ENDORSEMENT_VOTE_BONUS = 1.015;
+
+  // Build new totals using ONLY active candidates — withdrawn candidates'
+  // historical votes are excluded so vote share and seat projections are correct.
+  const activeCandidateIds = new Set(enriched.map((ec) => ec.candidateId));
+  const newTotals: Record<string, number> = {};
+  for (const ec of enriched) {
+    const raw = votesPerCandidate[ec.candidateId] ?? 0;
+    const multiplier = executiveEndorsedCandidateIds.has(ec.candidateId)
+      ? EXECUTIVE_ENDORSEMENT_VOTE_BONUS
+      : 1.0;
+    newTotals[ec.candidateId] =
+      (tally.totalVotes[ec.candidateId] ?? 0) + Math.round(raw * multiplier);
+  }
+
+  // For house/stateSenate races, compute per-candidate seat estimates
+  // Uses largest-remainder method (Hamilton method) to ensure total seats = totalSeats exactly
+  // Applies minimum vote share threshold to match election resolution logic
+  const seatsEstimate: Record<string, number> | undefined = (() => {
+    const electionType = election.electionType as string;
+    const totalSeats = election.totalSeats as number | undefined;
+    if (!totalSeats || !MULTI_SEAT_TYPES.has(electionType)) return undefined;
+    // Only count active candidates' votes for seat allocation
+    const totalVotesCast = enriched.reduce((s, ec) => s + (newTotals[ec.candidateId] ?? 0), 0);
+    if (totalVotesCast === 0) return undefined;
+
+    // Filter to candidates whose PARTY aggregate share meets the minimum
+    // threshold (mirrors allocateSeats). Per-candidate thresholds punished
+    // parties that split their vote across multiple candidates, and the old
+    // "re-admit everyone when eligible < min(seats, candidates)" fallback let
+    // sub-1% candidates collect largest-remainder seats in any race with more
+    // seats than candidates (e.g. 12 candidates vs 27-90 UK Commons seats).
+    const minShare = getMultiSeatMinShare(electionType, {
+      majoritarian: getMajoritarianBonus(electionType, currentYear) !== undefined,
+    });
+    const groupKey = (ec: (typeof enriched)[number]) =>
+      ec.party && ec.party !== "independent" ? `party:${ec.party}` : `cand:${ec.candidateId}`;
+    const votesByGroup = new Map<string, number>();
+    for (const ec of enriched) {
+      const k = groupKey(ec);
+      votesByGroup.set(k, (votesByGroup.get(k) ?? 0) + (newTotals[ec.candidateId] ?? 0));
+    }
+    const eligible = enriched.filter(
+      (ec) => (votesByGroup.get(groupKey(ec)) ?? 0) / totalVotesCast >= minShare
+    );
+
+    // Degenerate fallback ONLY when nobody clears the threshold: fill from the
+    // top vote-getters in ranked order. Sub-threshold candidates are never
+    // re-admitted alongside eligible ones.
+    const pool =
+      eligible.length > 0
+        ? eligible
+        : [...enriched]
+            .sort((a, b) => (newTotals[b.candidateId] ?? 0) - (newTotals[a.candidateId] ?? 0))
+            .slice(0, Math.min(totalSeats, enriched.length));
+    const poolVotes = pool.reduce((s, ec) => s + (newTotals[ec.candidateId] ?? 0), 0);
+    if (poolVotes === 0) return undefined;
+
+    // Initialize all candidates to 0 seats
+    const seats: Record<string, number> = {};
+    for (const ec of enriched) seats[ec.candidateId] = 0;
+
+    // FPTP winner's bonus (#3244): mirror the resolver's cube-law re-split of
+    // the top-two party groups so live seat projections match what resolution
+    // will actually seat. Gated on the CURRENT in-game year exactly like the
+    // resolver — undefined (proportional, byte-identical estimate) once the
+    // world's clock reaches 1999, or when no year is available.
+    const baseBonus = getMajoritarianBonus(electionType, currentYear);
+    // Ticket #1032: the boost belongs to the two best-organized parties in
+    // the state; statePartyOrgs is already loaded for this state above.
+    const majoritarianBonus = baseBonus
+      ? { ...baseBonus, orgRanking: rankPartiesByOrganization(statePartyOrgs) }
+      : undefined;
+    const effectiveVotes =
+      majoritarianBonus && pool.length > 1
+        ? applyMajoritarianBonus(
+            pool.map((ec) => ({
+              id: ec.candidateId,
+              votes: newTotals[ec.candidateId] ?? 0,
+              group: groupKey(ec),
+            })),
+            majoritarianBonus
+          )
+        : undefined;
+
+    // Calculate proportional seats with remainders for pool candidates
+    const allocations = pool.map((ec) => {
+      const votes = effectiveVotes?.get(ec.candidateId) ?? newTotals[ec.candidateId] ?? 0;
+      const exactSeats = (votes / poolVotes) * totalSeats;
+      return {
+        candidateId: ec.candidateId,
+        floor: Math.floor(exactSeats),
+        remainder: exactSeats - Math.floor(exactSeats),
+      };
+    });
+
+    // Give everyone their floor allocation first
+    let allocated = 0;
+    for (const a of allocations) {
+      seats[a.candidateId] = a.floor;
+      allocated += a.floor;
+    }
+
+    // Distribute remaining seats to candidates with largest remainders
+    const remaining = totalSeats - allocated;
+    if (remaining > 0) {
+      const sorted = [...allocations].sort((a, b) => b.remainder - a.remainder);
+      for (let i = 0; i < remaining && i < sorted.length; i++) {
+        seats[sorted[i].candidateId]++;
+      }
+    }
+
+    return seats;
+  })();
+
+  const snapshot: VoteTurnSnapshot = {
+    turn: turnNumber,
+    recordedAt: now,
+    cumulativeVotes: { ...newTotals },
+    sharesPct,
+    ...(seatsEstimate ? { seatsEstimate } : {}),
+  };
+
+  // Sync candidateNames/candidateParties: remove withdrawn, add any who joined after tally init
+  const cleanedNames = { ...tally.candidateNames };
+  const cleanedParties = { ...tally.candidateParties };
+  for (const key of Object.keys(tally.totalVotes)) {
+    if (!activeCandidateIds.has(key)) {
+      delete cleanedNames[key];
+      delete cleanedParties[key];
+    }
+  }
+  for (const ec of enriched) {
+    if (!cleanedNames[ec.candidateId]) {
+      cleanedNames[ec.candidateId] = ec.characterName;
+      cleanedParties[ec.candidateId] = ec.party;
+    }
+  }
+
+  await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
+    { electionId },
+    {
+      $set: {
+        totalVotes: newTotals,
+        candidateNames: cleanedNames,
+        candidateParties: cleanedParties,
+        ...(seatsEstimate ? { seatsEstimate } : {}),
+        updatedAt: now,
+      },
+      $push: { turnSnapshots: snapshot } as never,
+    }
+  );
+}
+
+// ─── Initialize a blank tally for an election ────────────────────────────────
+
+export async function initElectionVoteTally(
+  electionId: ObjectId,
+  candidates: ElectionCandidate[],
+  state: string,
+  primaryResults?: PrimaryResults
+): Promise<void> {
+  const db = await getDb();
+  const now = new Date();
+
+  const totalVotes: Record<string, number> = {};
+  const candidateNames: Record<string, string> = {};
+  const candidateParties: Record<string, string> = {};
+
+  for (const c of candidates) {
+    totalVotes[c._id.toString()] = 0;
+    candidateNames[c._id.toString()] = c.characterName;
+    candidateParties[c._id.toString()] = c.party;
+  }
+
+  const doc: ElectionVoteTally = {
+    _id: electionId,
+    electionId,
+    state,
+    totalVotes,
+    candidateNames,
+    candidateParties,
+    turnSnapshots: [],
+    finalized: false,
+    ...(primaryResults && { primaryResults }),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await db
+    .collection<ElectionVoteTally>("electionVoteTallies")
+    .replaceOne({ electionId }, doc, { upsert: true });
+}

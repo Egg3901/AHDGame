@@ -1,0 +1,264 @@
+{
+  "_comment": [
+    "Sources for the era/country action-card art on /actions.",
+    "Keys are '<era>/<slug>' (era-generic) or '<era>/<country>/<slug>' (national).",
+    "Every entry is public domain or a free CC/open licence — see `license` and `credit`.",
+    "Fetch + optimise:  node scripts/fetch-action-images.mjs",
+    "Publish to R2:     node scripts/upload-action-images-to-r2.mjs",
+    "Adding a national image also requires listing its slug in ERA_COUNTRY_SLUGS",
+    "in src/lib/images/actionImages.ts, or the resolver will keep serving the generic.",
+    "Optional `gravity` (a sharp position: top/north/bottom/…) moves the 2:1 card crop",
+    "off centre; use it when the subject sits high or low in the frame."
+  ],
+  "1953/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Large_crowd_assembled_at_a_political_rally_in_South_Bend%2C_Indiana%2C_for_presidential_candidate_Dwight_Eisenhower.jpg",
+    "credit": "Charlotte Brooks, LOOK Magazine Collection / Library of Congress, 1952",
+    "license": "Public domain"
+  },
+  "1953/advertise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/44/Chicago%2C_Burlington_%26_Quincy_Railroad_outdoor_billboard%2C_1953_%28NBY_3003%29.jpg",
+    "credit": "Chicago, Burlington & Quincy Railroad outdoor billboard, 1953",
+    "license": "Public domain"
+  },
+  "1953/fundraise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d1/National_Association_for_the_Advancement_of_Colored_People_Human_Rights_Banquet_Honoring_Philip_Murray%2C_Alexandria_Hotel%2C_Los_Angeles%2C_1953%2C_edit.jpg",
+    "credit": "NAACP Human Rights Banquet, Alexandria Hotel, Los Angeles, 16 Jan 1953",
+    "license": "Public domain"
+  },
+  "1953/buildDonorBase": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d6/Vergadering_KNAU_bezoek_Ir._Paulen_en_bestuur%2C_Bestanddeelnr_906-1415.jpg",
+    "credit": "Wim van Rossem / Anefo, Nationaal Archief, 28 Nov 1953",
+    "license": "CC0"
+  },
+  "1953/convertCash": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/31/Women_sorting_cheques_in_the_basement_--_%28A_document_for_times_gone_if_ever_there_was_one%29%2C_National_Bank%2C_Head_office%2C_279_Collins_Street%2C_Melbourne%2C_1953_-_Wolfgang_Sievers_%289781004031%29.jpg",
+    "credit": "Wolfgang Sievers, National Library of Australia, 1953",
+    "license": "No known copyright restrictions"
+  },
+  "1953/poll": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/39/Keypunch_operator_1950_census_IBM_016.jpg",
+    "credit": "U.S. Census Bureau, 1950s",
+    "license": "Public domain"
+  },
+  "1953/pollLarge": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d4/Census_Bureau_techs_check_out_computer_frame.jpg",
+    "credit": "U.S. Census Bureau, 1950s",
+    "license": "Public domain"
+  },
+  "1953/canvass": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c2/Stemmen_voor_gemeenteraden._Minister-President_Dr._Drees_in_rij_voor_stembureau%2C_Bestanddeelnr_905-7450.jpg",
+    "credit": "van Duinen / Anefo, Nationaal Archief, 27 May 1953",
+    "license": "CC0"
+  },
+  "1953/flipflop": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/0/09/Dewey_Defeats_Truman.jpg",
+    "credit": "Byron H. Rollins / Associated Press, 4 Nov 1948",
+    "license": "Public domain"
+  },
+  "1953/debatePrep": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/cf/President_Harry_S._Truman%27s_Study%2C_Second_Floor_Oval_Room-07-29-1952.jpg",
+    "credit": "Abbie Rowe, National Park Service, 29 Jul 1952",
+    "license": "Public domain"
+  },
+  "1953/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/69/Minister-presidenten%2C_tweede_kamer%2C_redevoeringen%2C_Algera_J%2C_Drees_W%2C_Staf%2C_Ke%2C_Bestanddeelnr_079-0740.jpg",
+    "credit": "Anefo, Nationaal Archief, 3 Feb 1953",
+    "license": "CC0"
+  },
+  "1953/US/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/8d/Dwight_D._Eisenhower_and_Earl_Warren_campaigning_in_Los_Angeles_1952.jpg",
+    "credit": "Los Angeles Daily News / UCLA Library, 1952",
+    "license": "CC BY 4.0"
+  },
+  "1953/US/advertise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/24/Key_West_Florida_Bus_1952_-_Stevenson_For_President_Banner.jpg",
+    "credit": "Florida Keys Public Libraries, 1952",
+    "license": "CC BY 2.0"
+  },
+  "1953/US/fundraise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/de/%22Night_With_Ike%22_dinner_at_Case_Institute_of_Technology_-_DPLA_-_ea98001056aaac4ffecb7f5ead71510d.jpg",
+    "credit": "Rebman Photo Service, Case Western Reserve University Archives",
+    "license": "No known copyright restrictions"
+  },
+  "1953/US/buildDonorBase": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/7/7e/Vice_President_Richard_Nixon_Conversing_with_Notables.jpg",
+    "credit": "Bettmann Archive, 23 Apr 1953",
+    "license": "Public domain",
+    "gravity": "top"
+  },
+  "1953/US/convertCash": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/53/Detail_of_a_Series_1950_%2410_FRN%2C_showing_legal_tender_phrase.jpg",
+    "credit": "Series 1950 $10 Federal Reserve Note",
+    "license": "CC BY-SA 4.0"
+  },
+  "1953/US/canvass": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d6/Women_in_front_of_a_campaign_poster%2C_discussing_Adlai_Stevenson._%285278844519%29.jpg",
+    "credit": "Kheel Center, Cornell University, 1952",
+    "license": "CC BY 2.0"
+  },
+  "1953/US/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/bd/Inaugural_Parade%2C_20_January_1953_%2833165849900%29.jpg",
+    "credit": "USMC Archives, 20 Jan 1953",
+    "license": "CC BY 2.0"
+  },
+  "1953/UK/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/e/e9/Coronation_crowds_at_Portman_Street-Oxford_Street%2C_1953_-_geograph.org.uk_-_5423404.jpg",
+    "credit": "Ben Brooksbank, geograph.org.uk, 2 Jun 1953",
+    "license": "CC BY-SA 2.0"
+  },
+  "1953/UK/advertise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/7/79/Piccadilly_Circus._Fortepan_94477.jpg",
+    "credit": "Fortepan (ID 94477), Piccadilly Circus, 1957",
+    "license": "CC BY-SA 3.0"
+  },
+  "1953/UK/canvass": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/6b/High_Street_Lincoln_with_Wyatt_%5E_Hayes%2C_1952_-_geograph.org.uk_-_7290955.jpg",
+    "credit": "David Hawgood, geograph.org.uk, Aug 1952",
+    "license": "CC BY-SA 2.0"
+  },
+  "1953/UK/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/a/ae/Coronation_Day%2C_2_June_1953%2C_waiting_for_the_procession_in_Oxford_Street_-_geograph.org.uk_-_4669206.jpg",
+    "credit": "Ben Brooksbank, geograph.org.uk, 2 Jun 1953",
+    "license": "CC BY-SA 2.0"
+  },
+  "1953/FR/advertise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/67/Affiche_du_PCF_pour_la_manifestation_du_14_juillet_1953.jpg",
+    "credit": "Parti communiste français, affiche, 1953",
+    "license": "Licence Ouverte"
+  },
+  "1953/DD/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/b1/Fotothek_df_roe-neg_0006707_035_Wahlwerbung_f%C3%BCr_die_Volkskammerwahl_am_17.10.1954.jpg",
+    "credit": "Deutsche Fotothek / Roger Rössing, 1954",
+    "license": "CC BY-SA 3.0 DE"
+  },
+  "1953/DD/advertise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/9/93/Fotothek_df_roe-neg_0006707_031_Belebter_Stra%C3%9Fenzug_mit_Wahlwerbung_f%C3%BCr_die_Volkskammerwahl_am_17.10.1954.jpg",
+    "credit": "Deutsche Fotothek / Roger Rössing, 1954",
+    "license": "CC BY-SA 3.0 DE"
+  },
+  "1953/DD/canvass": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/e/ec/Fotothek_df_roe-neg_0006707_033_Wahlwerbung_f%C3%BCr_die_Volkskammerwahl_am_17.10.1954_an_einem_Hauseingang.jpg",
+    "credit": "Deutsche Fotothek / Roger Rössing, 1954",
+    "license": "CC BY-SA 3.0 DE"
+  },
+  "1953/DD/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/ca/Bundesarchiv_Bild_183-17861-0008%2C_Berlin%2C_Stalinallee%2C_Wohnblocks%2C_Winter.jpg",
+    "credit": "Bundesarchiv Bild 183-17861-0008 / Peter Heinz Junge, 7 Jan 1953",
+    "license": "CC BY-SA 3.0 DE"
+  },
+  "1979/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/0/05/Demonstranten_in_Amsterdam_op_weg_naar_het_Amstelstation_vanwaar_zij_gezamenlijk%2C_Bestanddeelnr_930-3042.jpg",
+    "credit": "Anefo, Nationaal Archief, 1979",
+    "license": "CC0"
+  },
+  "1979/advertise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/7/75/Verkiezingsaffiches_in_Belgi%C3%AB%2C_Bestanddeelnr_929-1156.jpg",
+    "credit": "Anefo, Nationaal Archief — election posters, Belgium",
+    "license": "CC0"
+  },
+  "1979/fundraise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/7/72/Applaus_bij_de_benoeming_van_Geneesheer-directeur_dr._D._Spoelstra_tot_Officier_in_de_Orde_van_Oranje-Nassau%2C_Bestanddeelnr_930-1459.jpg",
+    "credit": "Anefo, Nationaal Archief, 1979",
+    "license": "CC0"
+  },
+  "1979/buildDonorBase": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d0/Overzicht_tijdens_de_vergadering%2C_Bestanddeelnr_930-1675.jpg",
+    "credit": "Anefo, Nationaal Archief, 1979",
+    "license": "CC0"
+  },
+  "1979/convertCash": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/52/United_States_one_dollar_bill_-_DPLA_-_45bd6ac4545a643aaa2129459ac41301.jpg",
+    "credit": "David E. Lucas, via DPLA",
+    "license": "Public domain"
+  },
+  "1979/poll": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/bd/No_original_caption._%28African-American_woman_computer_operator%29_-_NARA_-_558656.tif",
+    "credit": "NARA 558656 — computer operator, 1970s",
+    "license": "Public domain"
+  },
+  "1979/pollLarge": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c6/Employees_in_computer_room_plotter_in_use_Hughes_Aircraft_Company.jpg",
+    "credit": "Hughes Aircraft Company computer room",
+    "license": "Public domain"
+  },
+  "1979/canvass": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/1/13/Verkiezingen_Provinciale_Staten_premier_Van_Agt_en_vrouw_voor_stembureau%2C_Bestanddeelnr_929-6463.jpg",
+    "credit": "Bert Verhoeff / Anefo, Nationaal Archief, 29 Mar 1978",
+    "license": "CC0"
+  },
+  "1979/flipflop": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/da/Minister_Pais_tijdens_de_persconferentie%2C_Bestanddeelnr_930-1723.jpg",
+    "credit": "Anefo, Nationaal Archief, 1979",
+    "license": "CC0"
+  },
+  "1979/debatePrep": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/81/Jimmy_Carter_working_at_his_desk_-_NARA_-_183088.tif",
+    "credit": "NARA 183088, Carter White House",
+    "license": "Public domain"
+  },
+  "1979/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c1/Tweede_Kamer_%2C_diverse_ordedebatten_Den_Uyl_aan_het_woord%2C_Bestanddeelnr_930-0879.jpg",
+    "credit": "Anefo, Nationaal Archief — Tweede Kamer debate, 1979",
+    "license": "CC0"
+  },
+  "1979/US/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/a/a7/Ronald_Reagan%2C_George_Bush_and_Howard_Baker_at_a_campaign_rally_in_front_of_the_U.S._Capitol_in_Washington%2C_DC._-_DPLA_-_119ec49a72ccca5da5fcbc6fc0cf65aa.jpg",
+    "credit": "Campaign rally at the U.S. Capitol, via DPLA",
+    "license": "Public domain"
+  },
+  "1979/US/fundraise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/ca/Jimmy_Carter_and_Rosalynn_Carter_host_State_Dinner_in_honor_of_President_Jose_Lopez_Portillo_of_Mexico_-_NARA_-_173698.tif",
+    "credit": "NARA 173698 — White House state dinner, 14 Feb 1977",
+    "license": "Public domain"
+  },
+  "1979/US/canvass": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/ca/VOTE_REGISTRATION_DRIVE_WAS_ONE_ASPECT_OF_BLACK_EXPO%2C_AN_ANNUAL_EXHIBIT_OF_BLACK_TALENT%2C_EDUCATION%2C_PRODUCTS_AND..._-_NARA_-_556258.jpg",
+    "credit": "John H. White, NARA 556258 — voter registration drive, Oct 1973",
+    "license": "Public domain"
+  },
+  "1979/US/flipflop": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/63/Jimmy_Carter_holds_a_press_conference_-_NARA_-_183030.tif",
+    "credit": "NARA 183030 — Carter press conference",
+    "license": "Public domain"
+  },
+  "1979/US/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/47/Jimmy_Carter_and_Margaret_Thatcher_in_1979.jpg",
+    "credit": "Carter and Thatcher, 17 Dec 1979",
+    "license": "Public domain"
+  },
+  "1979/UK/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/3b/Michael_Foot_Solidarity_Chile_266.jpg",
+    "credit": "Gillfoto — Michael Foot at a London rally, 16 Sep 1979",
+    "license": "CC BY-SA 4.0"
+  },
+  "1979/RU/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/6e/RIAN_archive_734809_Members_of_Moscow%27s_Soviets%2C_Communist_and_civic_organisations_attend_International_Women%27s_Day_meeting.jpg",
+    "credit": "RIA Novosti archive 734809",
+    "license": "CC BY-SA 3.0"
+  },
+  "1979/RU/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/46/RIAN_archive_710758_16th_Congress_of_YCL.jpg",
+    "credit": "RIA Novosti archive 710758 — 16th Komsomol Congress",
+    "license": "CC BY-SA 3.0"
+  },
+  "1979/RU/convertCash": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/6c/Soviet_Union-1961-Bill-25-Obverse.jpg",
+    "credit": "Soviet 25-ruble note, 1961 series",
+    "license": "Public domain"
+  },
+  "1979/DD/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/8d/Bundesarchiv_Bild_183-U1007-0004%2C_Berlin%2C_30._Jahrestag_DDR-Gr%C3%BCndung%2C_Parade.jpg",
+    "credit": "Bundesarchiv Bild 183-U1007-0004 / Rainer Mittelstädt, 7 Oct 1979",
+    "license": "CC BY-SA 3.0 DE"
+  },
+  "1979/DD/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/1/10/Bundesarchiv_Bild_183-R0515-0008%2C_Berlin%2C_Palast_der_Republik%2C_Nacht.jpg",
+    "credit": "Bundesarchiv Bild 183-R0515-0008 / Ulrich Kohls — Palast der Republik",
+    "license": "CC BY-SA 3.0 DE"
+  },
+  "1979/DD/convertCash": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/82/GermanyDemRepPFX6-100Mark-1979-donatedmjd_f.jpg",
+    "credit": "GDR 100 Mark note, 1979 series",
+    "license": "Public domain"
+  }
+}

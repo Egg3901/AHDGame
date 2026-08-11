@@ -1,0 +1,164 @@
+import { describe, expect, it } from "vitest";
+import { ObjectId, type Db } from "mongodb";
+import { listDefenceSuppliers } from "./defenceSuppliers";
+
+const CORP_ID = new ObjectId();
+
+interface World {
+  sectors: Record<string, unknown>[];
+  corps: Record<string, unknown>[];
+  contracts: Record<string, unknown>[];
+}
+
+function stubDb(w: World): Db {
+  return {
+    collection: (name: string) => {
+      if (name === "corporateSectors") {
+        return {
+          find: (f: Record<string, unknown>) => ({
+            toArray: async () =>
+              w.sectors.filter((s) => s.sectorType === f.sectorType && s.countryId === f.countryId),
+          }),
+        };
+      }
+      if (name === "corporations") {
+        return { find: () => ({ toArray: async () => w.corps }) };
+      }
+      // defenceContracts
+      return {
+        find: () => ({
+          toArray: async () => w.contracts,
+          sort: () => ({ toArray: async () => w.contracts }),
+        }),
+      };
+    },
+  } as unknown as Db;
+}
+
+const sector = (over: Record<string, unknown> = {}) => ({
+  _id: new ObjectId(),
+  corporationId: CORP_ID,
+  countryId: "US",
+  stateId: "TX",
+  sectorType: "defense",
+  strategyId: "heavy_armor",
+  revenue: 10_000_000,
+  ...over,
+});
+
+const corp = (over: Record<string, unknown> = {}) => ({
+  _id: CORP_ID,
+  name: "Lockmartin",
+  countryId: "US",
+  liquidCurrencyCode: "USD",
+  unlockedTechNodeIds: [],
+  ...over,
+});
+
+const world = (over: Partial<World> = {}): World => ({
+  sectors: [sector()],
+  corps: [corp()],
+  contracts: [],
+  ...over,
+});
+
+describe("listDefenceSuppliers", () => {
+  it("offers a domestic defence plant on a materiel line", async () => {
+    const rows = await listDefenceSuppliers(stubDb(world()), "US", 1953);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].corporationName).toBe("Lockmartin");
+    expect(rows[0].component).toBe("ground");
+    expect(rows[0].projectedLotsPerTurn).toBeGreaterThan(0);
+  });
+
+  // Every filter below mirrors a rejection the award route already makes. A picker that
+  // offered one of these would turn a clear 400 into an option the minister cannot diagnose.
+  it("omits a plant whose line builds no materiel", async () => {
+    const rows = await listDefenceSuppliers(
+      stubDb(world({ sectors: [sector({ strategyId: "cyber" })] })),
+      "US",
+      1953
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("omits a foreign-owned supplier", async () => {
+    const rows = await listDefenceSuppliers(
+      stubDb(world({ corps: [corp({ countryId: "UK" })] })),
+      "US",
+      1953
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("omits a supplier paid in another currency", async () => {
+    const rows = await listDefenceSuppliers(
+      stubDb(world({ corps: [corp({ liquidCurrencyCode: "GBP" })] })),
+      "US",
+      1953
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("omits a non-defence plant", async () => {
+    const rows = await listDefenceSuppliers(
+      stubDb(world({ sectors: [sector({ sectorType: "manufacturing" })] })),
+      "US",
+      1953
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  // Marked, not removed — a second order on one plant is legal, just rarely intended.
+  it("flags a plant that already carries a contract, without hiding it", async () => {
+    const s = sector();
+    const rows = await listDefenceSuppliers(
+      stubDb(
+        world({
+          sectors: [s],
+          contracts: [{ _id: new ObjectId(), sectorId: s._id, corporationId: CORP_ID }],
+        })
+      ),
+      "US",
+      1953
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].alreadyContracted).toBe(true);
+  });
+
+  it("puts uncommitted and more productive plants first", async () => {
+    const busy = sector({ revenue: 90_000_000 });
+    const free = sector({ revenue: 10_000_000 });
+    const rows = await listDefenceSuppliers(
+      stubDb(
+        world({
+          sectors: [busy, free],
+          contracts: [{ _id: new ObjectId(), sectorId: busy._id, corporationId: CORP_ID }],
+        })
+      ),
+      "US",
+      1953
+    );
+    // The busier plant produces more, but the free one is the one a minister can actually use.
+    expect(rows[0].sectorId).toBe(free._id.toString());
+    expect(rows[1].alreadyContracted).toBe(true);
+  });
+
+  it("prefers a CEO's own plant name over the state it sits in", async () => {
+    const rows = await listDefenceSuppliers(
+      stubDb(world({ sectors: [sector({ displayName: "Fort Worth Works" })] })),
+      "US",
+      1953
+    );
+    expect(rows[0].plantLabel).toBe("Fort Worth Works");
+  });
+
+  it("falls back to the state when the plant is unnamed", async () => {
+    const rows = await listDefenceSuppliers(
+      stubDb(world({ sectors: [sector({ displayName: "  " })] })),
+      "US",
+      1953
+    );
+    expect(rows[0].plantLabel).toBe("TX");
+  });
+});

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" role="img" aria-label="European Union flag">
+  <title>European Union</title>
+  <rect width="240" height="160" fill="#003399"/>
+  <g fill="#FFCC00">
+    <g id="eu-star">
+      <polygon points="0,-8 1.88,-2.47 7.61,-2.47 2.97,0.94 4.7,6.47 0,3.06 -4.7,6.47 -2.97,0.94 -7.61,-2.47 -1.88,-2.47"/>
+    </g>
+    <use href="#eu-star" transform="translate(120,20)"/>
+    <use href="#eu-star" transform="translate(150,28.04)"/>
+    <use href="#eu-star" transform="translate(171.96,50)"/>
+    <use href="#eu-star" transform="translate(180,80)"/>
+    <use href="#eu-star" transform="translate(171.96,110)"/>
+    <use href="#eu-star" transform="translate(150,131.96)"/>
+    <use href="#eu-star" transform="translate(120,140)"/>
+    <use href="#eu-star" transform="translate(90,131.96)"/>
+    <use href="#eu-star" transform="translate(68.04,110)"/>
+    <use href="#eu-star" transform="translate(60,80)"/>
+    <use href="#eu-star" transform="translate(68.04,50)"/>
+    <use href="#eu-star" transform="translate(90,28.04)"/>
+  </g>
+</svg>

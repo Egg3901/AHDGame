@@ -1,0 +1,66 @@
+"use client";
+
+import { CampaignerPicker } from "@/components/party/CampaignerPicker";
+import { partyApiUrl } from "@/lib/urls";
+import { MAX_NATIONAL_CAMPAIGNERS } from "@/lib/parties/access";
+import type { PartyData } from "./types";
+
+interface PartyCampaignersCardProps {
+  party: PartyData;
+  countryCode: string;
+  onUpdate: () => void;
+}
+
+/**
+ * Chair-Office card for assigning the national party's Campaigners (up to
+ * `MAX_NATIONAL_CAMPAIGNERS`). Renders the shared {@link CampaignerPicker} in
+ * 3-slot (`triple`) mode with no state filter — national campaigners may come
+ * from any state, unlike the state-party single slot which restricts to
+ * in-state members.
+ *
+ * `canAssign` is always true here: this card only renders inside the Chair
+ * Office tab, which the party page gates to the acting chair, and the POST
+ * route re-checks chair authority server-side regardless.
+ */
+export function PartyCampaignersCard({ party, countryCode, onUpdate }: PartyCampaignersCardProps) {
+  return (
+    <div className="rounded-xl border border-card-border bg-card p-6">
+      <div className="mb-4 flex items-baseline justify-between gap-3">
+        <h2 className="text-lg font-semibold">Party Campaigners</h2>
+        <span className="text-xs text-muted">
+          Up to {MAX_NATIONAL_CAMPAIGNERS}, spend national PS to Build Org on the party&apos;s
+          behalf
+        </span>
+      </div>
+
+      <p className="text-xs text-muted mb-4">
+        Assign party members as Campaigners. They can spend national Political Strength to Build Org
+        in any state for this party. NPP Management (Influence Actions), NPP Move, and Recruitment
+        stay chair / vice-chair / admin. NPPs can&apos;t be campaigners.
+      </p>
+
+      <CampaignerPicker
+        mode="triple"
+        current={party.campaigners}
+        members={party.members.map((m) => ({
+          id: m.id,
+          name: m.name,
+          homeState: m.homeState,
+          isNPP: m.isNPP,
+        }))}
+        partyColor={party.color}
+        canAssign
+        onSave={async (ids) => {
+          const res = await fetch(`${partyApiUrl(countryCode, party.id)}/campaigners`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ campaignerIds: ids }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error ?? "Save failed");
+          onUpdate();
+        }}
+      />
+    </div>
+  );
+}

@@ -1,0 +1,142 @@
+import { ObjectId, type Db } from "mongodb";
+import type { ElectedOfficial } from "@/lib/db/types";
+import {
+  buildScopedVoteInputs,
+  type BillVoteValue,
+  type ScopedVoteInputs,
+  type ScopedVoteOfficial,
+} from "@/lib/congress/billVoting";
+
+export interface ScopedStateVoteResult extends ScopedVoteInputs {
+  /** Weighted for/against/abstain totals over the scoped (current-chamber) votes. */
+  totals: { for: number; against: number; abstain: number };
+}
+
+/**
+ * Pure variant of {@link scopeStateBillVotes} for callers that have already
+ * loaded the chamber roster (e.g. the bills-list page, which scopes many bills
+ * that all share one chamber and must not issue a DB query per bill). Given the
+ * current seat holders, drops votes from officials who no longer hold the seat,
+ * re-weights survivors by `seatsHeld`, and returns the weighted totals.
+ */
+export function scopeStateBillVotesWithOfficials(
+  votes: Record<string, BillVoteValue> | undefined,
+  officials: ScopedVoteOfficial[],
+  scope: { countryId: string; officeType: string }
+): ScopedStateVoteResult {
+  const emptyTotals = { for: 0, against: 0, abstain: 0 };
+  if (!votes || Object.keys(votes).length === 0) {
+    return { votes, weightMap: new Map(), totals: { ...emptyTotals } };
+  }
+  const scoped = buildScopedVoteInputs(votes, officials, {
+    countryId: scope.countryId,
+    officeType: scope.officeType,
+  });
+  const totals = { ...emptyTotals };
+  for (const [voteKey, vote] of Object.entries(scoped.votes ?? {})) {
+    totals[vote] += scoped.weightMap.get(voteKey) ?? 1;
+  }
+  return { ...scoped, totals };
+}
+
+/**
+ * Level-agnostic core shared by the national engine vote-core
+ * (`resolvePhaseVotes`) and the state helpers below: parse the vote map's
+ * character/NPP keys, load the matching CURRENT seat holders, and re-weight
+ * surviving votes by `seatsHeld` (bug #0836 — the single implementation of
+ * election-boundary vote scoping).
+ *
+ * `scoped: false` means no roster lookup happened (empty map or no valid
+ * keys) and `votes`/`totals` are the untouched input + zeros — callers decide
+ * their own fallback semantics for that case.
+ *
+ * The chamber filter is level-aware: with `stateId` it pins state + office +
+ * country so a same-officeType seat in another region cannot leak into the
+ * weight map; without it, country only (national chambers — office is
+ * enforced in-memory by `buildScopedVoteInputs`, letting a multi-seat NPP's
+ * other-chamber rows load harmlessly).
+ */
+export async function scopeVotesToCurrentSeatHolders(
+  db: Db,
+  votes: Record<string, BillVoteValue> | undefined,
+  scope: { countryId: string; officeType: string; stateId?: string }
+): Promise<ScopedStateVoteResult & { scoped: boolean }> {
+  const emptyTotals = { for: 0, against: 0, abstain: 0 };
+  const voteKeys = Object.keys(votes ?? {});
+  if (voteKeys.length === 0) {
+    return { votes, weightMap: new Map(), totals: { ...emptyTotals }, scoped: false };
+  }
+
+  const characterIds = voteKeys.filter((key) => !key.startsWith("npp_") && ObjectId.isValid(key));
+  const nppIds = voteKeys
+    .filter((key) => key.startsWith("npp_") && ObjectId.isValid(key.slice(4)))
+    .map((key) => key.slice(4));
+
+  const orClauses: Record<string, unknown>[] = [];
+  if (characterIds.length > 0) {
+    orClauses.push({
+      characterId: { $in: characterIds.map((id) => new ObjectId(id)) },
+      nppId: null,
+    });
+  }
+  if (nppIds.length > 0) {
+    orClauses.push({ nppId: { $in: nppIds.map((id) => new ObjectId(id)) } });
+  }
+  if (orClauses.length === 0) {
+    return { votes, weightMap: new Map(), totals: { ...emptyTotals }, scoped: false };
+  }
+
+  const chamberFilter =
+    scope.stateId !== undefined
+      ? {
+          $or: orClauses,
+          state: scope.stateId,
+          officeType: scope.officeType,
+          countryId: scope.countryId as ElectedOfficial["countryId"],
+        }
+      : {
+          $or: orClauses,
+          countryId: { $in: [scope.countryId as ElectedOfficial["countryId"]] },
+        };
+
+  const officials = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .find(chamberFilter)
+    .project<ScopedVoteOfficial>({
+      characterId: 1,
+      countryId: 1,
+      nppId: 1,
+      officeType: 1,
+      seatsHeld: 1,
+    })
+    .toArray();
+
+  return {
+    ...scopeStateBillVotesWithOfficials(votes, officials, {
+      countryId: scope.countryId,
+      officeType: scope.officeType,
+    }),
+    scoped: true,
+  };
+}
+
+/**
+ * Scope a state bill's raw vote map down to the sub-national chamber's CURRENT
+ * seat holders, weighting each surviving vote by that holder's current
+ * `seatsHeld`. Mirrors the national `buildScopedVoteInputs` /
+ * `resolveScopedVoteTotals` treatment so votes cast by a pre-election chamber
+ * composition cannot inflate post-election tallies (bug #0836: 35 votes shown in
+ * a 31-seat chamber after a state legislature election).
+ *
+ * Voters who no longer hold the seat are dropped entirely; survivors are
+ * re-weighted to their current seat count. This keeps any tally within the
+ * chamber size and never double-counts across an election boundary.
+ */
+export async function scopeStateBillVotes(
+  db: Db,
+  votes: Record<string, BillVoteValue> | undefined,
+  scope: { stateId: string; countryId: string; officeType: string }
+): Promise<ScopedStateVoteResult> {
+  const { scoped: _scoped, ...result } = await scopeVotesToCurrentSeatHolders(db, votes, scope);
+  return result;
+}

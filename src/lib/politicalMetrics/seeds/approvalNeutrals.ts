@@ -1,0 +1,120 @@
+/**
+ * GENERATED — do not edit by hand.
+ *
+ * Regenerate with:
+ *   npx tsx scripts/debug/derive-nonplayable-boards.ts --emit
+ *
+ * Per-country approval intercept for the non-playables, by the same method
+ * the four authored playable values use (politicalApproval.ts §2): the
+ * 0.7·objective + 0.3·affinity(lean 0) blend of the day-one 1953 board,
+ * population-weighted across the country's regions so day-one national
+ * approval lands on BASE_APPROVAL rather than drifting by the
+ * population/board-quality covariance.
+ *
+ * DERIVED, never hand-picked: the intercept is what makes cutover
+ * approval-neutral, so a guessed value would silently lurch every region's
+ * approval on the day the routing widened.
+ */
+
+export const NON_PLAYABLE_APPROVAL_NEUTRALS: Record<string, Record<string, number>> = {
+  "1953-default": {
+    AT: 57.59,
+    BAL: 44.78,
+    BG: 45.39,
+    BLR: 44.34,
+    BR: 35.93,
+    CN: 47.36,
+    CS: 47.93,
+    DE: 58.36,
+    ES: 44.34,
+    FI: 59.56,
+    FR: 59.58,
+    GR: 42.93,
+    HU: 46.38,
+    IE: 51.09,
+    IT: 55.51,
+    JP: 53.24,
+    NG: 24.64,
+    PL: 47.03,
+    RO: 45.55,
+    SE: 68.27,
+    TR: 34.03,
+    UKR: 45.27,
+    YU: 47.64,
+  },
+  "1979-default": {
+    AT: 66.41,
+    BAL: 52.91,
+    BG: 54.35,
+    BLR: 53.46,
+    BR: 39.37,
+    CN: 56.99,
+    CS: 56.6,
+    DE: 63.96,
+    ES: 55.11,
+    FI: 64.24,
+    FR: 66.53,
+    GR: 53.09,
+    HU: 56.22,
+    IE: 63.63,
+    IT: 59.14,
+    JP: 62.16,
+    NG: 31.32,
+    PL: 56.6,
+    RO: 55.11,
+    SE: 73.23,
+    TR: 42.27,
+    UKR: 54.07,
+    YU: 57.61,
+  },
+  "1991-default": {
+    AT: 64.25,
+    BAL: 51.64,
+    BG: 52.97,
+    BLR: 52.07,
+    BR: 41.78,
+    CN: 58.43,
+    CS: 55.22,
+    DE: 63.03,
+    ES: 53.99,
+    FI: 62.56,
+    FR: 64.52,
+    GR: 51.93,
+    HU: 54.77,
+    IE: 57.94,
+    IT: 57.66,
+    JP: 59.16,
+    NG: 27.25,
+    PL: 55.32,
+    RO: 53.63,
+    SE: 71.67,
+    TR: 41.94,
+    UKR: 52.7,
+    YU: 56.19,
+  },
+  "2019-default": {
+    AT: 60.43,
+    BAL: 47.84,
+    BG: 49.16,
+    BLR: 48.27,
+    BR: 40.58,
+    CN: 59.26,
+    CS: 51.45,
+    DE: 62.67,
+    ES: 49.85,
+    FI: 58.3,
+    FR: 59.95,
+    GR: 48.28,
+    HU: 51,
+    IE: 58.48,
+    IT: 53.26,
+    JP: 55.86,
+    NG: 25.58,
+    PL: 51.53,
+    RO: 49.92,
+    SE: 67.97,
+    TR: 39.03,
+    UKR: 48.95,
+    YU: 52.38,
+  },
+};

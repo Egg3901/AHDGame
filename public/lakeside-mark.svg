@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Lakeside Games mark">
+  <!-- Tile -->
+  <rect x="1" y="1" width="62" height="62" rx="14" fill="#0e1620"/>
+  <rect x="1" y="1" width="62" height="62" rx="14" fill="none" stroke="#38bdf8" stroke-opacity="0.3" stroke-width="2"/>
+  <!-- Twin peaks above the waterline: tall peak + shoulder peak -->
+  <path d="M10 36 L27 14 L38 28.5 L44 21 L56 36 Z" fill="#38bdf8"/>
+  <!-- Waterline -->
+  <rect x="8" y="38" width="48" height="2.5" rx="1.25" fill="#eaf0f6"/>
+  <!-- Reflection: mirrored peaks, sliced into ripple bands that fade -->
+  <g fill="#38bdf8">
+    <path d="M13.7 43.5 L52.6 43.5 L49.4 47.5 L36.1 47.5 L33.5 44.1 L30.9 47.5 L16.8 47.5 Z" opacity="0.5"/>
+    <path d="M18.3 50 L29 50 L27 52.5 L20.2 52.5 Z" opacity="0.32"/>
+    <path d="M38 50 L48 50 L46 52.5 L39.9 52.5 Z" opacity="0.32"/>
+    <path d="M22.4 55 L25 55 L23.7 56.6 Z" opacity="0.18"/>
+    <path d="M41.5 55 L44.1 55 L42.8 56.6 Z" opacity="0.18"/>
+  </g>
+</svg>

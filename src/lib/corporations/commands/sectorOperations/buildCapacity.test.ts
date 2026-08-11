@@ -1,0 +1,340 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ObjectId } from "mongodb";
+import type { Db } from "mongodb";
+import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import {
+  CAPACITY_ANCHOR_YEAR,
+  CAPACITY_BUILD_CANCEL_REFUND,
+  CAPACITY_BUILD_TURNS,
+  computeBuildCost,
+} from "@/lib/constants/capacityEconomy";
+
+/**
+ * P3a: the capacity command surface — build, cancel (partial refund),
+ * mothball/reactivate — plus the plants gate that fences all of it off below
+ * the tier.
+ */
+
+vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
+vi.mock("@/lib/api/corporations/resolveQuery", () => ({
+  resolveCorporation: vi.fn(),
+  requireCeo: vi.fn().mockReturnValue(null),
+}));
+vi.mock("@/lib/api/requireCorporationActions", () => ({
+  requireCorporationActionsEnabled: vi.fn().mockResolvedValue(null),
+}));
+vi.mock("@/lib/api/rateLimit", () => ({
+  checkRateLimit: vi.fn().mockReturnValue({ ok: true }),
+  rateLimitResponse: vi.fn(),
+}));
+vi.mock("@/lib/currency/corporationCapital", () => ({
+  getCorpFxRate: vi.fn().mockResolvedValue(1),
+  resolveCorpLiquidCurrencyCode: vi.fn().mockReturnValue("USD"),
+  anchorToCorpLiquidCapital: vi.fn((anchor: number) => anchor),
+  corpLiquidCapitalToAnchor: vi.fn((local: number) => local),
+}));
+vi.mock("@/lib/currency/sectorFxSpread", () => ({
+  corpToSectorCountrySpread: vi.fn().mockReturnValue({ spreadAnchor: 0, from: null, to: null }),
+}));
+vi.mock("@/lib/currency/marketMaker", () => ({
+  safeDistributeConversionSpread: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/corporations/marketShare", () => ({
+  fetchSectorMarketSharePercent: vi.fn().mockResolvedValue(0),
+}));
+vi.mock("@/lib/corporations/sectorGrowthCost", () => ({
+  resolveCountryPrimeRate: vi.fn().mockResolvedValue(0),
+}));
+vi.mock("@/lib/corporations/economicActionLog", () => ({
+  logEconomicAction: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/market/featureFlag", () => ({
+  getMarketSystemMode: vi.fn().mockResolvedValue("plants"),
+  isMarketSystemMode: (m: string) => typeof m === "string",
+  marketAtLeast: vi.fn().mockReturnValue(true),
+}));
+
+let db: MockDb;
+const CORP_ID = new ObjectId();
+const SECTOR_ID = new ObjectId();
+const CURRENT_TURN = 1000;
+
+const corporation = {
+  _id: CORP_ID,
+  name: "Plantsco",
+  countryId: "US",
+  type: "manufacturing",
+  ceoId: new ObjectId(),
+  liquidCapital: 100_000_000,
+  liquidCurrencyCode: "USD",
+};
+
+function sectorDoc(overrides: Record<string, unknown> = {}) {
+  return {
+    _id: SECTOR_ID,
+    corporationId: CORP_ID,
+    countryId: "US",
+    stateId: "US-CA",
+    sectorType: "manufacturing",
+    revenue: 1_000_000,
+    ...overrides,
+  };
+}
+
+async function wireMocks(sector: Record<string, unknown>) {
+  // Re-assert the plants gate: `vi.clearAllMocks()` clears call history but
+  // keeps implementations, so the "fenced off below plants" case would
+  // otherwise poison every later test in the file.
+  const { marketAtLeast } = await import("@/lib/market/featureFlag");
+  vi.mocked(marketAtLeast).mockReturnValue(true);
+  const { getDb } = await import("@/lib/mongodb");
+  vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+  vi.mocked(requireBasicAuth).mockResolvedValue({ ok: true, user: { userId: "user-1" } } as never);
+  const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+  vi.mocked(resolveCorporation).mockResolvedValue({ ok: true, corporation } as never);
+  db.collectionMocks.corporateSectors.findOne.mockResolvedValue(sector);
+  db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({
+    matchedCount: 1,
+    modifiedCount: 1,
+  });
+  db.collectionMocks.corporations.updateOne.mockResolvedValue({
+    matchedCount: 1,
+    modifiedCount: 1,
+  });
+  db.collectionMocks.characters.findOne.mockResolvedValue(null);
+  db.collectionMocks.gameState.findOne.mockResolvedValue({
+    _id: "current",
+    currentTurn: CURRENT_TURN,
+    currentYear: CAPACITY_ANCHOR_YEAR,
+  });
+}
+
+function request(body: unknown) {
+  return new Request("http://localhost/api/corporations/1/sectors/2/build", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+const params = Promise.resolve({ id: CORP_ID.toString(), sectorId: SECTOR_ID.toString() });
+
+/** The `$set` the command wrote to corporateSectors. */
+function sectorSet(): Record<string, unknown> {
+  const call = db.collectionMocks.corporateSectors.updateOne.mock.calls[0];
+  return (call?.[1] as { $set: Record<string, unknown> }).$set;
+}
+
+describe("buildCapacity — build", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("corporations");
+    db.collection("corporateSectors");
+    db.collection("characters");
+    db.collection("gameState");
+  });
+
+  it("queues an order, charges computeBuildCost and tracks CIP", async () => {
+    await wireMocks(sectorDoc());
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "build", units: 1_000 }), { params });
+    expect(res.status).toBe(201);
+
+    const expected = computeBuildCost({
+      eraUnitScale: 1,
+      sectorType: "manufacturing",
+      units: 1_000,
+      year: CAPACITY_ANCHOR_YEAR,
+      marketSharePercent: 0,
+      primeRate: 0,
+    });
+    const body = (await res.json()) as Record<string, number>;
+    expect(body.costAnchor).toBe(Math.round(expected.totalAnchor));
+    expect(body.onlineTurn).toBe(CURRENT_TURN + CAPACITY_BUILD_TURNS("manufacturing"));
+
+    const set = sectorSet();
+    const queue = set.buildQueue as Array<Record<string, number>>;
+    expect(queue.length).toBe(1);
+    expect(queue[0].unitsOrdered).toBe(1_000);
+    expect(queue[0].costPaidAnchor).toBeCloseTo(expected.totalAnchor, 6);
+    expect(set.constructionInProgressAnchor).toBe(Math.round(expected.totalAnchor));
+
+    // Cash left the corp.
+    const inc = db.collectionMocks.corporations.updateOne.mock.calls[0][1] as {
+      $inc: { liquidCapital: number };
+    };
+    expect(inc.$inc.liquidCapital).toBeCloseTo(-expected.totalAnchor, 6);
+  });
+
+  it("previews without charging or queueing", async () => {
+    await wireMocks(sectorDoc());
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "build", units: 500, preview: true }), {
+      params,
+    });
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects a build the corp cannot afford", async () => {
+    await wireMocks(sectorDoc());
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: { ...corporation, liquidCapital: 1 },
+    } as never);
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "build", units: 1_000 }), { params });
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-positive and absurd unit counts", async () => {
+    await wireMocks(sectorDoc());
+    const { buildCapacity } = await import("./buildCapacity");
+    expect((await buildCapacity(request({ action: "build", units: 0 }), { params })).status).toBe(
+      400
+    );
+    expect(
+      (await buildCapacity(request({ action: "build", units: 1e15 }), { params })).status
+    ).toBe(400);
+  });
+
+  it("is fenced off below the plants tier", async () => {
+    await wireMocks(sectorDoc());
+    const { marketAtLeast } = await import("@/lib/market/featureFlag");
+    vi.mocked(marketAtLeast).mockReturnValue(false);
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "build", units: 10 }), { params });
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("buildCapacity — cancel", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("corporations");
+    db.collection("corporateSectors");
+    db.collection("characters");
+    db.collection("gameState");
+  });
+
+  const outstanding = {
+    unitsOrdered: 1_000,
+    costPaidAnchor: 400_000,
+    startTurn: 990,
+    onlineTurn: CURRENT_TURN + 50,
+  };
+
+  it("removes the order and refunds the documented share — never all of it", async () => {
+    await wireMocks(
+      sectorDoc({ buildQueue: [outstanding], constructionInProgressAnchor: 400_000 })
+    );
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "cancel", orderIndex: 0 }), { params });
+    expect(res.status).toBe(200);
+
+    const expectedRefund = 400_000 * CAPACITY_BUILD_CANCEL_REFUND;
+    expect(expectedRefund).toBeLessThan(400_000);
+    const inc = db.collectionMocks.corporations.updateOne.mock.calls[0][1] as {
+      $inc: { liquidCapital: number };
+    };
+    expect(inc.$inc.liquidCapital).toBe(Math.round(expectedRefund));
+
+    const set = sectorSet();
+    expect(set.buildQueue).toEqual([]);
+    expect(set.constructionInProgressAnchor).toBe(0);
+  });
+
+  it("refunds only the UNDELIVERED share of a half-built smooth order", async () => {
+    // Half-way through its window: 50% of capacity is already delivered and
+    // kept. Cancelling must refund 75% of the remaining HALF, not of the whole.
+    const halfBuilt = {
+      unitsOrdered: 1_000,
+      costPaidAnchor: 400_000,
+      startTurn: 940,
+      onlineTurn: 1_060, // (1000 − 940) / (1060 − 940) = 0.5 delivered
+      smooth: true,
+    };
+    await wireMocks(
+      sectorDoc({ buildQueue: [halfBuilt], constructionInProgressAnchor: 200_000 })
+    );
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "cancel", orderIndex: 0 }), { params });
+    expect(res.status).toBe(200);
+
+    const undelivered = 400_000 * 0.5;
+    const expectedRefund = undelivered * CAPACITY_BUILD_CANCEL_REFUND;
+    const inc = db.collectionMocks.corporations.updateOne.mock.calls[0][1] as {
+      $inc: { liquidCapital: number };
+    };
+    expect(inc.$inc.liquidCapital).toBe(Math.round(expectedRefund));
+    // Strictly less than refunding the whole order's undelivered-as-if-full.
+    expect(expectedRefund).toBeLessThan(400_000 * CAPACITY_BUILD_CANCEL_REFUND);
+    expect(sectorSet().buildQueue).toEqual([]);
+  });
+
+  it("refuses to cancel a build that already landed", async () => {
+    await wireMocks(sectorDoc({ buildQueue: [{ ...outstanding, onlineTurn: CURRENT_TURN - 1 }] }));
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "cancel", orderIndex: 0 }), { params });
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("404s on an unknown order index", async () => {
+    await wireMocks(sectorDoc({ buildQueue: [] }));
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "cancel", orderIndex: 3 }), { params });
+    expect(res.status).toBe(404);
+  });
+
+  it("refunds nothing for the free flip-compensation order", async () => {
+    await wireMocks(sectorDoc({ buildQueue: [{ ...outstanding, costPaidAnchor: 0 }] }));
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "cancel", orderIndex: 0 }), { params });
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("buildCapacity — mothball / reactivate", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("corporations");
+    db.collection("corporateSectors");
+    db.collection("characters");
+    db.collection("gameState");
+  });
+
+  it("mothballs an active sector", async () => {
+    await wireMocks(sectorDoc());
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "mothball" }), { params });
+    expect(res.status).toBe(200);
+    expect(sectorSet().mothballed).toBe(true);
+    // Free: no cash movement either way.
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("reactivates a mothballed sector for free, with no cooldown", async () => {
+    await wireMocks(sectorDoc({ mothballed: true }));
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "reactivate" }), { params });
+    expect(res.status).toBe(200);
+    expect(sectorSet().mothballed).toBe(false);
+  });
+
+  it("rejects a no-op toggle", async () => {
+    await wireMocks(sectorDoc({ mothballed: true }));
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "mothball" }), { params });
+    expect(res.status).toBe(400);
+  });
+});

@@ -1,0 +1,130 @@
+[
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "Private corporate sector collapsed across run 1 — fixed, unverified at length",
+    "detail": "Run 1 ended with firms down from 432 to 88 and none flagged defunct. Three compounding bugs. Growth was billed on nominal revenue but paid out of realized revenue: sectorTurn derived hourlyGrowthCost from raw newRevenue while hourlyRevenue carries seven realization factors, and at a measured realization of 0.417 against a growth cost of 0.246 of nominal, expansion consumed 59% of the income funding it. NPPs steered on sector.profitMargin, a seeded constant no turn phase writes, so every sector read 'strong' forever and the governor added +2 growth every turn for a thousand turns. And the governor lives in NPP behaviour, so it could not reach the 190 of 598 sectors seeded state-owned with no CEO — the affordability brake therefore lives in the turn path, and it lowers the persisted TARGET, because braking the current rate is cancelled exactly by the trend pulling back toward the old target.",
+    "status": "pending",
+    "evidence": "In a 25-turn probe: growth converged 4.9 to 3.0, growth cost 21.4% to 12.4%, firms held at 432 with zero dissolutions, liquidCapital rose 0.40M to 0.86M. Whether it holds over 1000 turns is what this run measures. Judge by liquidCapital, not book income — negative income beside rising cash is a dividend and depreciation artefact."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "A 1953 world seeded a U.S. Space Force",
+    "detail": "military.ts carried branch and unit-type catalogues with no era dimension and seedMilitaryUnits walked them regardless of the preset's starting year, so a Korean-War world booted with a service established in 2019. Branches and unit archetypes now carry establishedYear and dissolvedYear, filtered on getStartingYearForPreset — the same gate seedInternationalOrganizations already applied to orgs. The live game year is threaded through the recruit and assignment paths too, and enforced server-side, so a branch becomes available mid-run as its establishment year passes rather than being permanently locked to the start year.",
+    "status": "pending",
+    "evidence": "West Germany seeds ZERO branches in 1953 — historically right, the Bundeswehr was not stood up until November 1955 — and an empty military is verified survivable: aggregateForce([]) returns zeros, applyMilitaryForceEffects no-ops, the roster UI has an empty state."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "Seven countries booted a 1953 world on modern values",
+    "detail": "METRIC_PRESET_BUNDLES had no entry at all for FR, ES, SE, TR, AT, FI or GR, so getRegionMetricPresets returned null and all seven kept base bundles authored on 1979 or 2019 values — France life expectancy 73.5, Spain 75.5, Sweden 75.5, Turkey 58. Authored per-region 1953 bundles for all seven against INSEE 1954, INE, SCB, TUIK 1955 and the UN Demographic Yearbook, and — the load-bearing half — wired the seeders, which took no preset argument and never called getRegionMetricPresets, so the first four bundles were registered, unit-tested and never reached the database. The overlay is applied to baselines as well as metrics; metrics alone decay straight back toward the modern baseline.",
+    "status": "pending",
+    "evidence": "Turkey lands at life expectancy 44, literacy 34%, median age 20; Sweden at 72. The spread is the point — an era band that admits only the Western slice erases exactly the countries whose data is most distinctive."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "Six Eastern-bloc census bundles were authored but never registered",
+    "detail": "Poland, Czechoslovakia, Hungary, Romania, Bulgaria and Yugoslavia had authored 1953 census data that regionCensusData never registered, so getRegionCensusData returned null and seedCohortVectors silently skipped every region — 38 regions with no age pyramid at all in a demographic run. Pure wiring.",
+    "status": "pending",
+    "evidence": "All six registered; cohort vectors now seed for every bloc region."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "The era adjuster flattened demography into a Western band",
+    "detail": "Third instance of one recurring mistake, after the lifeExpectancy minValue of 70 and the [62,71] band that replaced it and forced Nigeria's authored 51 back up to 62. applyEra1953Adjustments clamped medianAge into [22,36] and birthRate into [14,30] — and 1953 median age ran to roughly 19-21 across Turkey, Nigeria, China and Brazil. Before touching the birthRate band, established that the field is a 0-100 fertility INDEX, not a crude rate (unit: 'index'; London reads 46.75, an impossible crude figure), so the old band was treating an index as a rate and widening it to real birth rates would have injected a worse fault. Bands are now [15,36] and [30,95], the 1953 BASELINE band was widened to match — it is the decay target, so a mismatched baseline drags an era-real value toward a modern one for a thousand turns — and the blanket -8 shift is skipped for inputs already era-young, which had turned Nigeria's 16 into 15.",
+    "status": "pending",
+    "evidence": "Each band carries a comment naming the countries at both ends of the real 1953 spread, so a future narrowing is visibly a narrowing."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "Japan resolved to a 1990s median age in 1953",
+    "detail": "A per-country table of where 1953 demography actually comes from showed only UK, DE, JP, BR and NG run the era adjuster, and none of their overlays set medianAge or birthRate — so those five were adjuster-alone. Japan landed at 36.0 and Ireland at 38.6 against real 1953 figures near 22 and 30, and China's authored overlay said 30 against roughly 19-21. A widened band can stop a value being destroyed; it cannot invent the right one. Authored medianAge and birthRate overlays for JP, IE, CN and BR.",
+    "status": "pending",
+    "evidence": "Before/after country table recorded in the session log."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "Eastern-bloc budgets booted with revenue at 96-107% of GDP",
+    "detail": "Poland, Czechoslovakia, Romania and Bulgaria seeded revenue at 95.8% of their own GDP and Hungary at 106.7% — arithmetically impossible, and it poisons every deficit, bond issue and solvency check for the whole run. Not a missing scalar: makeEasternBlocBudget1953 authored state-FOOTPRINT-scale bases (corporateProfits 0.60, taxableSales 1.05, otherRevenue 15.5% of GDP) sized for the milder shared rate ladder, while COUNTRY_POLICY_CONFIGS_1953 wires the Stalinist one — 70% surplus remittance, 26% turnover tax. 0.60x70 + 1.05x26 + 15.5 = 95.8. The USSR and East Germany had already been cut to fiscal scale; the satellites never were. The same helper was wrong for 1979 and was fixed in the same pass.",
+    "status": "pending",
+    "evidence": "1953: PL/CS/RO/BG 95.8 to 52.1%, HU 106.7 to 52.1%, YU 85.3 to 47.9%, against a 45-70% band for Soviet-type fiscal budgets. Market economies unchanged — US 20.4%, UK 33.5%, JP 19.0%."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "The Eastern bloc had a military alliance and no economic one",
+    "detail": "The org catalogue held EU, NATO, UN, Commonwealth and Warsaw Pact but no COMECON, despite eight bloc countries running command economies whose trade it actually organised. Added with foundedYear 1949 — unlike Warsaw Pact, deliberately dated 1952 against a real 1955 treaty so the alliance exists at a 1953 start — dissolvedYear 1991, and era rosters. The 1953 roster is RU, BG, CS, HU, PL, RO, DD: East Germany joined in 1950, and Yugoslavia is excluded because it was expelled from Cominform in 1948 and only took associate status in 1964.",
+    "status": "pending",
+    "evidence": "Roster, dissolution and post-1991 absence asserted; DB probe confirms membership at bootstrap."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "M2 was an exogenous seeded constant, so the monetary term of inflation was dead",
+    "detail": "Of the ten components snapshot.ts sums into M2, only externalBroadMoney was populated for most countries — householdLiquid, corporateLiquid, governmentLiquid, fundLiquid, householdSavings, bankReserves and creditOutstanding all sat at roughly zero. So annualizedM2GrowthPct read exactly 0.0% for the US, USSR, Brazil, Austria, Sweden and the DDR, and 605% for Nigeria, which is the exception precisely because it has almost no external money and its M2 was driven by NPP wallets. The money-supply term of the inflation model, clamp(-1.5, 2.5, (m2Growth - gdpGrowth) * 0.08), was therefore either exactly zero or noise. Fixed at the components, not at the readout — patching annualizedMoneyGrowthPct would have faked the number with no economic content.",
+    "status": "pending",
+    "evidence": "Before/after M1, M2 and growth table per country recorded in the session log, with a 2019 spot check since the defect is era-agnostic."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "Flags were written to the wrong document and read as no-ops",
+    "detail": "forceFullAutonomy set commandEconomyEnabled and labourSystemMode inside the gameState update, but every consumer reads gameConfig._id:'default' — a silent no-op while telemetry reported the flags as set. Moved to gameConfig. labourSystemMode also raised from the seed default 'wages' (tier 1 of 4) to 'full', because ownedUnionMembershipPressureByKey is only fetched at 'full', so union membership pressure never reaches unionization below that tier.",
+    "status": "pending",
+    "evidence": "Both land on gameConfig. In run 1 the command economies then held administered inflation for the whole run (RU 1.0 to 1.5, DD 0.5 to 1.5) while market economies floated."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "Auto-disasters and auto-crises iterated zero countries",
+    "detail": "Both spawners walked getEnabledCountryIdsFromDb, which resolves doc?.enabledForPlayers ?? status === 'active'. The harness writes enabledForPlayers:false for every country, and ?? only falls through on null/undefined, so the list was permanently empty — zero disasters and zero crises across a whole run despite crisisSpawnChanceMultiplier 5, with the crisis-effect and NPP-response chains unreachable behind an early return while every phase reported completing. The first attempt flipped the flag to true and was reverted: isNppAutonomyActive refuses player-enabled countries regardless of autonomy level and gates PM appointment, autonomous org voting and central-bank chair seating, so it would have stopped every government forming for 1000 turns. A separate status-based resolver fixes it without touching the flag.",
+    "status": "pending",
+    "evidence": "531 crises spawned over run 1, from zero."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "NPPs had no union agency, so the whole labour layer was switched off",
+    "detail": "Union.ownerId is a character ObjectId and every union command checks character._id, so in an all-NPP world all 408 unions stayed leaderless forever. Added Union.ownerType and an nppUnionBehavior phase that elects leaders, recruits, posts wage demands and calls strikes — and, critically, lets NPP-run corporations answer a demand by raising wageLevel, since nothing else in the turn path writes that field and a strike could otherwise only resolve by wait-out, which raises unionization again: an up-ratchet with no negative feedback.",
+    "status": "partial",
+    "evidence": "408/408 unions led, 144 standing wage demands, wageLevel moved from a flat 1.0 to a 1.161-1.496 spread against the 1.5 cap. But ZERO strikes fired in 1000 turns — strikeCallCost at 2000 per sector outruns dues income, exactly as the pre-launch audit predicted. The strike lever remains unreachable."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "Population anchors: investigated, deliberately not filled",
+    "detail": "The audit listed 'population anchors have no 1953 entries' as an outstanding gap. Literally true and operationally irrelevant: the only production caller of getRegionPopulationAnchor is applyEra1991Adjustments, which hardcodes the 1991 preset. Nothing on the 1953 path reads the module, so authoring anchor tables for twenty countries would have produced data no consumer touches. Recorded rather than silently skipped, because 'we chose not to' and 'we forgot' look identical in a diff. The genuine defect underneath it — the 1953 adjuster's own clamps — is logged separately.",
+    "status": "worked",
+    "evidence": "Repo-wide grep finds one production caller, hardcoded to 1991-default. 27 existing anchor tests pass untouched."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "The whole 1953 world was being narrowed toward a 2019 shape",
+    "detail": "A bootstrapped world was measured rather than trusted, and life expectancy came back with a world-wide minimum of exactly 70.00 — Turkey 70.03 against an authored 48, China and Nigeria at 70, while Sweden's 72 was untouched. Seeding was never at fault: the stateBaselines doc held 48 exactly. The binding gate was the metric-engine node bounds, applied every turn, a second location from the metricDefinitions floor already fixed. Widening only that would have been the fourth round of whack-a-mole, so every numeric gate a metric passes through was enumerated and checked against the authored 1953 data. Seventeen were breached: Nigeria's graduation rate 1 against a floor of 55, its uninsured rate 98 against a ceiling of 25, the USSR's incarceration 2600 against 1200, Turkey's poverty 68 against 35, China's property index 5 against 25, Austria's apprenticeship 28 against 8. Each clamped value looks perfectly reasonable alone, which is why it survived every previous check — this was not a mortality bug, it was the entire era being compressed toward a modern shape.",
+    "status": "worked",
+    "evidence": "Life expectancy now spans 40.06-72.00 across the world where it was a flat 70. Turkey 40.5-48.4, China 40.1-44.1, Nigeria 40.1-44.5, Japan 61-65, Ireland 64-67, Austria 66-68, Sweden 72. Verified against a real bootstrapped database, not a test."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "KNOWN LIMITATION: young countries run 6-8 years too old",
+    "detail": "Median age reads 26.5 for Turkey against an authored 20, and 24.4 for Nigeria against 16-19. This is NOT the clamp class fixed above and should not be reported as one at a checkpoint. Median age has no metric-engine node; it is recomputed from the cohort vector, and synthesizeAgeSexVector caps the under-18 share at 35% of population however high fertility goes. Real 1953 shares were about 48% in Nigeria and 45% in Turkey, so the cap is era-blind in the same way everything else was — and it is wrong in the modern era too, where Nigeria's under-18 share is still near 50%. Widening it to 50% was tried and REVERTED: cohort stationarity failed immediately, with population growing 1.253x against a 1.2 ceiling and below-replacement fertility growing the population instead of shrinking it. The flow model is calibrated against that cap, so correcting it requires recalibrating cohort dynamics rather than changing a constant. A runaway population over 1000 turns is a far worse failure than an age structure that reads too old, so this ships unfixed and deliberately.",
+    "status": "pending",
+    "evidence": "Probe: world median age 24.39-41.38 against an authored floor of 16. Reverted experiment: cohortFlows.sim.test.ts failed at 1.2530764900793043 > 1.2."
+  },
+  {
+    "turn": 0,
+    "phase": "pre-flight",
+    "title": "KNOWN LIMITATION: money-supply growth is undefined for the first twelve turns",
+    "detail": "M2 growth now returns null until the lookback window reaches a game-quarter, because annualizing a stock jump over one or two turns raises the ratio to the 24th power and produced readings of 10^8 percent for the yuan and 10^16 for the naira. inflationRecalc reads it through finiteOr and falls back to gdpGrowth, so the monetary term of inflation contributes nothing before turn 12. That is correct — there is genuinely no defined annual growth rate from a two-turn base — but it means the first checkpoint at turn 25 is the earliest point at which the monetary channel says anything at all. France additionally still runs about 91 percent residual external money because its seed is denominated on the old-franc scale while its median income is not; Spain and Turkey have the mirror problem.",
+    "status": "pending",
+    "evidence": "Probe at turn 3: every currency reads null growth. Before the fix: CNY 105,228,778%, NGN 20,350,430,497,279,976%."
+  }
+]

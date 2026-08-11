@@ -1,0 +1,66 @@
+{
+  "state-metrics": {
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:THE_GAS_SHORTAGE_IN_THE_PACIFIC_NORTHWEST_DURING_DECEMBER_1973_HAD_EVEN_SUITED_BUSINESSMEN_HITCH-HIKING_IN_PLACES..._-_NARA_-_555455.jpg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/c/c0/THE_GAS_SHORTAGE_IN_THE_PACIFIC_NORTHWEST_DURING_DECEMBER_1973_HAD_EVEN_SUITED_BUSINESSMEN_HITCH-HIKING_IN_PLACES..._-_NARA_-_555455.jpg",
+    "license": "Public domain (PD-USGov-EPA)",
+    "author": "David Falconer (EPA DOCUMERICA)",
+    "description": "Dec 1973 oil-crisis photo — suited businessmen hitch-hiking in the Pacific Northwest during the gas shortage",
+    "webpPath": "scripts/landing-images/state-metrics.webp"
+  },
+  "ballot-box": {
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:1977_Israeli_legislative_election_Dan_Hadani_Archive_I.jpg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/4/40/1977_Israeli_legislative_election_Dan_Hadani_Archive_I.jpg",
+    "license": "CC BY 4.0",
+    "author": "Danny Gotfried / Israel Press and Photo Agency (I.P.P.A.) / Dan Hadani collection, National Library of Israel",
+    "description": "17 May 1977 — Menachem Begin putting his ballot envelope in the ballot box at a Tel Aviv polling station",
+    "webpPath": "scripts/landing-images/ballot-box.webp"
+  },
+  "legislative-combat": {
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:President_John_F._Kennedy_Delivers_State_of_the_Union_Address_(1962)_ST-9-10-62.jpg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/4/44/President_John_F._Kennedy_Delivers_State_of_the_Union_Address_%281962%29_ST-9-10-62.jpg",
+    "license": "Public domain (work of U.S. federal government / White House)",
+    "author": "Cecil W. Stoughton (official White House photographer)",
+    "description": "11 Jan 1962 — JFK delivering State of the Union in the House of Representatives chamber (pre-1979 chamber photo)",
+    "webpPath": "scripts/landing-images/legislative-combat.webp"
+  },
+  "industrial-empires": {
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:ARMCO_STEEL_PLANT._HOUSTON_SHIP_CHANNEL_IN_BACKGROUND_-_NARA_-_545889.jpg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/4/4a/ARMCO_STEEL_PLANT._HOUSTON_SHIP_CHANNEL_IN_BACKGROUND_-_NARA_-_545889.jpg",
+    "license": "Public domain (PD-USGov-EPA)",
+    "author": "Blair Pittman (EPA DOCUMERICA)",
+    "description": "June 1972 — ARMCO Steel Plant with the Houston Ship Channel in the background",
+    "webpPath": "scripts/landing-images/industrial-empires.webp"
+  },
+  "global-markets": {
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:NY_stock_exchange_traders_floor_LC-U9-10548-6.jpg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/e/ea/NY_stock_exchange_traders_floor_LC-U9-10548-6.jpg",
+    "license": "Public domain (U.S. News & World Report collection, Library of Congress — no known copyright restrictions)",
+    "author": "Thomas J. O'Halloran",
+    "description": "26 Sep 1963 — stock brokers working on the New York Stock Exchange trading floor (pre-1979, era-appropriate)",
+    "webpPath": "scripts/landing-images/global-markets.webp"
+  },
+  "newsroom": {
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:The_New_York_Times_newsroom_1942.jpg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/d/d0/The_New_York_Times_newsroom_1942.jpg",
+    "license": "Public domain (PD US FSA/OWI — work of U.S. federal government)",
+    "author": "Marjory Collins (FSA/OWI photographer)",
+    "description": "Sep 1942 — New York Times newsroom; reporters and rewrite men writing stories (pre-1979; closest newsroom image available on Commons)",
+    "webpPath": "scripts/landing-images/newsroom.webp"
+  },
+  "central-banks": {
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:US_Federal_Reserve_Eccles_Building_1937.jpg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/0/04/US_Federal_Reserve_Eccles_Building_1937.jpg",
+    "license": "Public domain (work of Board of Governors of the Federal Reserve System)",
+    "author": "Federal Reserve (Federalreserve on Flickr)",
+    "description": "20 Oct 1937 — Eccles Building (Federal Reserve Board headquarters), Washington D.C.",
+    "webpPath": "scripts/landing-images/central-banks.webp"
+  },
+  "world-1979": {
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Berlin_-_Checkpoint_Charlie.jpg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Berlin_-_Checkpoint_Charlie.jpg",
+    "license": "CC BY-SA 2.0",
+    "author": "Roger Wollstadt",
+    "description": "11 Mar 1970 — Checkpoint Charlie on Friedrichstrasse, the Cold-War crossing point between East and West Berlin",
+    "webpPath": "scripts/landing-images/world-1979.webp"
+  }
+}

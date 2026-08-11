@@ -1,0 +1,125 @@
+import type { ConflictDoc } from "@/lib/db/types/conflict";
+import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
+import type { CountryId } from "@/lib/constants/countries";
+import { opposedBelligerents, type Side } from "@/lib/military/occupation";
+
+export type PeaceOfferCheck = { ok: true } | { ok: false; error: string };
+
+/**
+ * Ceiling on an indemnity, as a multiple of the PAYER's annual GDP.
+ *
+ * The amount is otherwise unbounded: the body schema only rejects negatives and
+ * affordability is deliberately not checked (a country may buy peace on debt).
+ * Without a ceiling a foreign-seat holder can post `amount: 1e15`, and on accept
+ * `moveIndemnity` drives the payer treasury arbitrarily negative and credits the
+ * recipient the converted sum — a one-request self-bankrupting grief, or a
+ * collusion pump into a chosen treasury. Anchoring to the payer's own GDP (the
+ * same denomination-agnostic basis military procurement uses) keeps even a harsh
+ * reparation finite and tied to the real economy paying it. 2× GDP is a very
+ * large but bounded reparation.
+ */
+export const PEACE_INDEMNITY_MAX_GDP_SHARE = 2;
+
+/**
+ * The indemnity ceiling for a payer with the given GDP, or null when GDP is
+ * missing/non-positive (no assumed fallback — same stance as `unitPurchasePrice`,
+ * where an assumed GDP is how a country ends up transacting for free).
+ */
+export function maxIndemnityForGdp(gdp: number | null | undefined): number | null {
+  if (gdp == null || !(gdp > 0)) return null;
+  return gdp * PEACE_INDEMNITY_MAX_GDP_SHARE;
+}
+
+/**
+ * Is this offer still open?
+ *
+ * Expiry is LAZY — derived here rather than swept by a scheduled job, which would
+ * exist only to flip a field every reader can already compute. The consequence is
+ * that a stored `status` of "pending" is NOT sufficient: a row whose `expiresTurn`
+ * has passed is expired regardless of what it says. Any reader comparing
+ * `status === "pending"` without also checking the turn is a bug, which is why this
+ * helper exists instead of the check being inlined at each call site.
+ */
+export function isOfferLive(
+  offer: Pick<PeaceOfferDoc, "status" | "expiresTurn">,
+  currentTurn: number
+): boolean {
+  return offer.status === "pending" && currentTurn < offer.expiresTurn;
+}
+
+/**
+ * The side that would be left with nobody on it if `leaver` walked away, or null.
+ *
+ * Used to decide whether accepting a peace deal also ends the war outright. Both
+ * sides can never empty at once: emptying one resolves the conflict.
+ */
+export function sideWouldEmpty(
+  c: Pick<ConflictDoc, "sideA" | "sideB">,
+  leaver: CountryId
+): Side | null {
+  const a = c.sideA.countries as string[];
+  const b = c.sideB.countries as string[];
+  if (a.length === 1 && a[0] === leaver) return "A";
+  if (b.length === 1 && b[0] === leaver) return "B";
+  return null;
+}
+
+/**
+ * Every rule an offer must clear, with a reason the offerer can act on.
+ *
+ * Pure — no DB. Deliberately does NOT check affordability: `treasuryBalance` is a
+ * signed position and is legitimately negative, so requiring a surplus would mean a
+ * country already in debt could never buy peace, which rules out most of the
+ * countries that would want to.
+ */
+export function validatePeaceOffer(
+  conflict: Pick<ConflictDoc, "status" | "sideA" | "sideB">,
+  from: CountryId,
+  to: CountryId,
+  indemnity: { payer: CountryId; amount: number },
+  // The payer's indemnity ceiling (see `maxIndemnityForGdp`). Optional so a caller
+  // without the payer's GDP to hand can still run the roster/side checks, but the
+  // POST (offer) and accept paths both pass it so an over-cap amount is refused at
+  // creation AND re-refused at acceptance in case GDP has since fallen.
+  maxAmount?: number | null
+): PeaceOfferCheck {
+  if (conflict.status === "resolved") {
+    return { ok: false, error: "That war is already over." };
+  }
+
+  // Checked BEFORE roster membership, because a generated side is defined by an
+  // EMPTY roster (`countries: []` — see ConflictSide). Test it second and every
+  // insurgency would fail the membership check instead, telling the offerer their
+  // enemy "must be a belligerent" when the truth is that there is no government on
+  // the other side to address an offer to.
+  if (conflict.sideA.kind === "generated" || conflict.sideB.kind === "generated") {
+    return { ok: false, error: "There is no government on the other side to negotiate with." };
+  }
+
+  const rosters = [...conflict.sideA.countries, ...conflict.sideB.countries] as string[];
+  if (!rosters.includes(from) || !rosters.includes(to)) {
+    return { ok: false, error: "Both countries must be belligerents in that war." };
+  }
+  // Roster-only, via the same predicate the one-war-per-pair rule uses, so war and
+  // peace cannot drift on what "at war with each other" means. `sideOf` would be
+  // wrong here: its bloc fallback would call two bloc rivals opposed in a war neither
+  // had joined, and offer a settlement for it.
+  if (!opposedBelligerents(conflict, from, to)) {
+    return { ok: false, error: "You are on the same side of that war." };
+  }
+
+  if (!(indemnity.amount >= 0)) {
+    return { ok: false, error: "An indemnity cannot be negative." };
+  }
+  if (indemnity.payer !== from && indemnity.payer !== to) {
+    return { ok: false, error: "Only one of the two parties can pay the indemnity." };
+  }
+  if (maxAmount != null && indemnity.amount > maxAmount) {
+    return {
+      ok: false,
+      error: "An indemnity cannot exceed twice the paying country's annual GDP.",
+    };
+  }
+
+  return { ok: true };
+}

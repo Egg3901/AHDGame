@@ -1,0 +1,37 @@
+import type { Db } from "mongodb";
+import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
+import type { CountryGameState } from "@/lib/db/types/gameState";
+
+/**
+ * The runtime "registered countries" set: the static COUNTRY_ORDER base PLUS any
+ * country whose countryGameStates row has been flipped to `status: "active"`
+ * (e.g. a seceded SCO/WAL). De-duped; COUNTRY_ORDER first, then activated extras
+ * in deterministic order. This is the iteration/processing source — use it instead
+ * of raw COUNTRY_ORDER at any server site that must reflect live countries.
+ */
+export async function getRegisteredCountryIds(db: Db): Promise<CountryId[]> {
+  const docs = await db
+    .collection<CountryGameState>("countryGameStates")
+    .find({ status: "active" })
+    .toArray();
+  const activeExtra = docs
+    .map((d) => d._id as CountryId)
+    .filter((id) => !COUNTRY_ORDER.includes(id));
+  // Stable order: COUNTRY_ORDER base, then activated extras (sorted for determinism).
+  return [...COUNTRY_ORDER, ...activeExtra.sort()];
+}
+
+/**
+ * Mark a latent country live: idempotent upsert of an active+enabled row. Called
+ * by the SP2d secession actuation (and admin tools). Surfacing is immediate —
+ * getRegisteredCountryIds + the access layer both read this row at runtime.
+ */
+export async function activateCountry(db: Db, countryId: CountryId): Promise<void> {
+  await db
+    .collection<CountryGameState>("countryGameStates")
+    .updateOne(
+      { _id: countryId },
+      { $set: { status: "active", enabledForPlayers: true, updatedAt: new Date() } },
+      { upsert: true }
+    );
+}

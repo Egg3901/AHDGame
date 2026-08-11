@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" role="img" aria-label="Warsaw Pact flag">
+  <title>Warsaw Pact</title>
+  <rect width="240" height="160" fill="#B3202C"/>
+  <g transform="translate(120 80)">
+    <circle r="52" fill="#8F1721"/>
+    <polygon
+      points="0,-40 9.4,-12.4 38.1,-12.4 14.9,4.7 23.5,32.4 0,15.3 -23.5,32.4 -14.9,4.7 -38.1,-12.4 -9.4,-12.4"
+      fill="#FFFFFF"/>
+    <path d="M -46 34 A 52 52 0 0 1 -46 -34" fill="none" stroke="#FFD25E" stroke-width="4" stroke-linecap="round"/>
+    <path d="M 46 34 A 52 52 0 0 0 46 -34" fill="none" stroke="#FFD25E" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</svg>

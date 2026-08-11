@@ -1,0 +1,5 @@
+[phases.build]
+# Cache the Next.js incremental compilation output between deploys.
+# Requires cleanDistDir: false in next.config.ts — otherwise Next.js
+# deletes .next at build start, discarding the restored cache.
+cacheDirectories = [".next/cache"]

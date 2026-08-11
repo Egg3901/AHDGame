@@ -1,0 +1,367 @@
+/*
+ * Cold War "situation room" themed island.
+ *
+ * Scoped to `.cw-root` (applied by the section layout) so it never touches the
+ * app's themed surfaces. Keyframes are global but namespaced `cw*` so the
+ * verbatim-ported inline `animation:cw…` references in the page components
+ * resolve. This is the approved design-system exception — pixel-faithful to the
+ * Cold War design project, intentionally outside the 11 app themes.
+ */
+
+.cw-root {
+  min-height: 100vh;
+  background: #0b0b11;
+  color: #e8e8ee;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.cw-root ::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+.cw-root ::-webkit-scrollbar-thumb {
+  background: #2a2a3d;
+  border-radius: 4px;
+}
+.cw-root ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes cwPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(212, 175, 55, 0);
+  }
+  50% {
+    box-shadow: 0 0 11px 1px rgba(212, 175, 55, 0.45);
+  }
+}
+@keyframes cwBlink {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  75%,
+  100% {
+    opacity: 0.2;
+  }
+}
+@keyframes cwSweep {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(1100%);
+  }
+}
+@keyframes cwPing {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  70%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+/* The conflict record's front line: a hue-cycling glow, a breathing core, and two
+   scans drifting in opposite directions. The line is the page's one moving part —
+   a war that is still being fought should not read as a static diagram. */
+@keyframes cwFlGlow {
+  0%,
+  100% {
+    stroke: #3b82f6;
+    stroke-opacity: 0.26;
+  }
+  50% {
+    stroke: #dc2626;
+    stroke-opacity: 0.5;
+  }
+}
+@keyframes cwFlCore {
+  0%,
+  100% {
+    stroke-opacity: 0.8;
+  }
+  50% {
+    stroke-opacity: 1;
+  }
+}
+@keyframes cwFlScan {
+  to {
+    stroke-dashoffset: -1400;
+  }
+}
+@keyframes cwFlScanBack {
+  to {
+    stroke-dashoffset: 900;
+  }
+}
+/* The control-track marker pulses on opacity, not stroke — it is a <div>. */
+@keyframes cwFlMark {
+  0%,
+  100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.cw-fl-glow {
+  animation: cwFlGlow 4.6s ease-in-out infinite;
+}
+.cw-fl-core {
+  animation: cwFlCore 4.6s ease-in-out infinite;
+}
+.cw-fl-scan {
+  animation: cwFlScan 7s linear infinite;
+}
+.cw-fl-scan-back {
+  animation: cwFlScanBack 9.5s linear infinite;
+}
+.cw-fl-mark {
+  animation: cwFlMark 4.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cw-fl-glow,
+  .cw-fl-core,
+  .cw-fl-scan,
+  .cw-fl-scan-back,
+  .cw-fl-mark {
+    animation: none;
+  }
+  /* Without the cycle the glow has no colour of its own; settle it mid-way so the
+     line still reads as the seam between the two sides. */
+  .cw-fl-glow {
+    stroke: #8b5cf6;
+    stroke-opacity: 0.34;
+  }
+  .cw-fl-core {
+    stroke-opacity: 0.95;
+  }
+}
+
+/* The record's situation console: map + rail, stacking on narrow screens. The
+   rail width matches `.cw-board-side` so both boards read as one system. */
+/* `stretch`, not `flex-start`: the rail is as tall as the seat looking at the
+   front, and a Theater Commander's rail runs far past any fixed map height. Left
+   to its own height the map stranded several hundred pixels of dead column
+   beside the order of battle. The map grows into whatever the rail needs. */
+.cw-front-body {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+.cw-front-map {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.cw-front-rail {
+  width: 452px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* Side by side, the SVG letterboxes inside this box and HEIGHT is what responds;
+   the floor keeps a short rail (a seatless reader's) from crushing the map. */
+.cw-front-canvas {
+  flex: 1;
+  min-height: 620px;
+}
+@media (max-width: 1240px) {
+  .cw-front-body {
+    flex-direction: column;
+  }
+  .cw-front-map,
+  .cw-front-rail {
+    width: 100%;
+  }
+  /* Stacked, the box takes the HOST's own shape rather than a fixed height. The
+     desktop floor has to be reset with it: left standing, a portrait country on
+     a phone got a 620px box to draw 392px in, and reserved 200px of empty air
+     above and below the map on every scroll past it. `--cw-front-aspect` comes
+     from the component, because the shape is the host country's, not the page's. */
+  .cw-front-canvas {
+    flex: none;
+    min-height: 0;
+    height: auto;
+    aspect-ratio: var(--cw-front-aspect, 620 / 837);
+    /* A tall host must not turn into a full screen of map with the war pushed
+       off the bottom; past this it letterboxes sideways, which costs far less. */
+    max-height: 70vh;
+  }
+}
+@media (max-width: 720px) {
+  .cw-front-canvas {
+    max-height: 62vh;
+  }
+}
+
+/* Verdict band: the headline split beside the state of the front. */
+.cw-front-verdict {
+  display: grid;
+  grid-template-columns: 1fr 520px;
+  gap: 26px;
+  align-items: center;
+}
+@media (max-width: 1080px) {
+  .cw-front-verdict {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+}
+
+/* The opening line, bracketed by the two sides' names under the control track.
+   On a phone the brackets wrap onto two lines each and collide with the sentence
+   between them — and they are redundant there, since both names sit directly
+   above with the percentages. */
+@media (max-width: 620px) {
+  .cw-front-track-ends {
+    justify-content: center !important;
+  }
+  .cw-front-track-ends > .cw-front-track-end {
+    display: none;
+  }
+}
+
+/* The war's headline. 38px is a desktop size; a long conflict name at 375px
+   wraps to three lines and shoves the whole page down. */
+.cw-front-title {
+  font-size: clamp(26px, 7vw, 38px);
+}
+
+/* A next-tick chip is a sentence plus a timing. Side by side they squeeze the
+   sentence into a four-line column on a phone, so below that the chip takes the
+   strip's full width and lets the two sit on their own lines. */
+@media (max-width: 620px) {
+  .cw-front-tick {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .cw-front-tick-head {
+    border-right: none !important;
+    border-bottom: 1px solid #2a2a3d;
+  }
+  .cw-front-chip {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  /* A 1px full-height rule beside a label becomes a stray tick once the row
+     wraps, so it goes rather than pointing at nothing. */
+  .cw-front-rule {
+    display: none;
+  }
+}
+
+/* War-log rows: turn · marker · what happened · verdict · losses. */
+.cw-front-log-row {
+  display: grid;
+  grid-template-columns: 74px 26px 1fr 200px 190px;
+  gap: 14px;
+  align-items: center;
+}
+@media (max-width: 900px) {
+  .cw-front-log-row {
+    grid-template-columns: 60px 20px 1fr;
+    row-gap: 6px;
+  }
+  .cw-front-log-row > :nth-child(4),
+  .cw-front-log-row > :nth-child(5) {
+    grid-column: 3;
+    text-align: left !important;
+  }
+}
+
+/* Responsive-reflow helpers — the fixed-canvas boards collapse on narrow screens. */
+.cw-conflict-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.cw-blocstats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.cw-board {
+  display: flex;
+  gap: 18px;
+  padding: 20px 22px 22px;
+}
+.cw-board-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cw-board-side {
+  width: 452px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+@media (max-width: 1100px) {
+  .cw-board {
+    flex-direction: column;
+  }
+  .cw-board-side {
+    width: 100%;
+  }
+}
+@media (max-width: 720px) {
+  .cw-conflict-grid,
+  .cw-blocstats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Command Console — paired rows reflow, and the design's style-hover directives. */
+.cw-cmd-row {
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+}
+.cw-cmd-link {
+  transition:
+    border-color 0.12s,
+    background 0.12s;
+}
+.cw-cmd-card-w:hover {
+  border-color: rgba(59, 130, 246, 0.6) !important;
+  background: linear-gradient(270deg, rgba(59, 130, 246, 0.16), rgba(17, 17, 26, 0.4)) !important;
+}
+.cw-cmd-card-e:hover {
+  border-color: rgba(220, 38, 38, 0.6) !important;
+  background: linear-gradient(90deg, rgba(220, 38, 38, 0.16), rgba(20, 17, 26, 0.4)) !important;
+}
+.cw-cmd-shared:hover {
+  border-color: rgba(212, 175, 55, 0.55) !important;
+  background: linear-gradient(
+    90deg,
+    rgba(59, 130, 246, 0.12),
+    rgba(212, 175, 55, 0.16) 50%,
+    rgba(220, 38, 38, 0.12)
+  ) !important;
+}
+@media (max-width: 860px) {
+  .cw-cmd-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .cw-cmd-spine {
+    width: 100% !important;
+    flex-direction: row !important;
+    gap: 8px !important;
+  }
+}

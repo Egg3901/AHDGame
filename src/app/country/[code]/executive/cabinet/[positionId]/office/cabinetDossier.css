@@ -1,0 +1,95 @@
+/*
+ * Scoped dossier theme for the cabinet office route. Every rule is namespaced
+ * under [data-cabinet-dossier] so it never leaks into the rest of the app.
+ * Per-country accent vars (--gov, --gov-soft, --g0/1/2) are overridden inline on
+ * the wrapper via cabinetIdentityVars(); the defaults below are the UK palette.
+ */
+[data-cabinet-dossier] {
+  --gov: #c9a24b;
+  --gov-soft: #e2c887;
+  --g0: #16233f;
+  --g1: #101a30;
+  --g2: #0c1018;
+  --font-dossier-cjk: "Noto Serif SC", serif;
+}
+
+[data-cabinet-dossier] .dossier-label {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-weight: 700;
+  font-size: 10px;
+}
+[data-cabinet-dossier] .tabular {
+  font-variant-numeric: tabular-nums;
+}
+[data-cabinet-dossier] .mono {
+  font-family: var(--font-dossier-mono), ui-monospace, monospace;
+}
+
+[data-cabinet-dossier] .masthead {
+  background:
+    radial-gradient(
+      120% 150% at 0% 0%,
+      color-mix(in srgb, var(--gov) 16%, transparent) 0%,
+      transparent 44%
+    ),
+    linear-gradient(135deg, var(--g0) 0%, var(--g1) 52%, var(--g2) 100%);
+}
+[data-cabinet-dossier] .gov-rule {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--gov) 16%,
+    var(--gov-soft) 50%,
+    var(--gov) 84%,
+    transparent
+  );
+  opacity: 0.85;
+}
+[data-cabinet-dossier] .gov-glow {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--gov) 25%, transparent),
+    0 12px 34px -14px color-mix(in srgb, var(--gov) 45%, transparent);
+}
+[data-cabinet-dossier] .gov-panel {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gov) 7%, transparent), transparent);
+  border: 1px solid color-mix(in srgb, var(--gov) 26%, transparent);
+}
+
+[data-cabinet-dossier] .chop {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  color: var(--gov-soft);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--g0) 70%, white 8%), var(--g1));
+  border: 2px solid var(--gov);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--gov-soft) 32%, transparent),
+    0 4px 14px rgba(0, 0, 0, 0.5);
+  border-radius: 9px;
+  line-height: 1;
+}
+[data-cabinet-dossier] .chop::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid color-mix(in srgb, var(--gov-soft) 40%, transparent);
+  border-radius: 5px;
+}
+[data-cabinet-dossier] .chop.cjk {
+  font-family: var(--font-dossier-cjk);
+}
+[data-cabinet-dossier] .chop.mono-seal {
+  font-family: var(--font-dossier-serif), serif;
+  letter-spacing: -0.02em;
+}
+
+[data-cabinet-dossier] .meter-track {
+  background: var(--card-muted, rgb(17 17 26));
+  border: 1px solid var(--card-border, rgb(42 42 61));
+  border-radius: 9999px;
+  overflow: hidden;
+}

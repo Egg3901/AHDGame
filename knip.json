@@ -1,0 +1,44 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": [
+    "src/app/**/{page,layout,route,error,loading,not-found,template,opengraph-image,icon,apple-icon}.{ts,tsx}",
+    "src/app/**/sitemap.ts",
+    "src/app/**/manifest.ts",
+    "src/app/**/robots.ts",
+    "src/instrumentation*.ts",
+    "instrumentation.ts",
+    "sentry.*.config.ts",
+    "next.config.ts",
+    "playwright.config.ts",
+    "vitest.config.ts",
+    "postcss.config.mjs",
+    "eslint.config.mjs",
+    "commitlint.config.mjs",
+    "scripts/**/*.{ts,mjs,js}",
+    "src/proxy.ts",
+    "src/**/*.test.{ts,tsx}",
+    "src/**/__tests__/**/*.{ts,tsx}",
+    "e2e/**/*.{ts,tsx}"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{ts,mjs,js}"],
+  "ignore": [
+    "src/lib/seeds/**",
+    "src/lib/constants/**",
+    "src/data/**",
+    "src/lib/admin/seed/seedManifest.ts",
+    "src/typings/**",
+    "src/types/**",
+    "next-env.d.ts",
+    "scripts/archive/**",
+    "scripts/migrations/deprecated/**"
+  ],
+  "ignoreDependencies": [
+    "knip",
+    "@types/*",
+    "husky",
+    "lint-staged",
+    "prettier",
+    "eslint-plugin-*",
+    "eslint-config-*"
+  ]
+}
