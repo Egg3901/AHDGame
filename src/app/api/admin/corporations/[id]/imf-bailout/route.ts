@@ -293,7 +293,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json(
         {
           error:
-            "IMF institution corporation not found — seed it from Admin → Server Setup or Corporations (IMF form), or run scripts/seed-imf-institution.ts",
+            "IMF institution corporation not found — seed it from Admin → Server Setup or Corporations (IMF form), or run scripts/seed/seed-imf-institution.ts",
         },
         { status: 400 }
       );

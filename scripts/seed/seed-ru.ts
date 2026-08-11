@@ -9,7 +9,7 @@
  * Idempotent. Does NOT touch parties (run the full seed for those). 1979 preset.
  * Usage: npx tsx scripts/seed-ru.ts
  */
-import { connectDb, closeDb } from "./utils/db";
+import { connectDb, closeDb } from "../utils/db";
 import {
   seedRURegions,
   seedRUDemographics,

@@ -6,7 +6,7 @@
  * captured stack trace.
  *
  * The GlitchTip base URL is configured via the `GLITCHTIP_URL` env var
- * (e.g. `https://glitchtip.ahousedividedgame.com`). If unset, the link
+ * (e.g. your Sentry-compatible host). If unset, the link
  * builder returns null and the UI hides the deep link.
  */
 

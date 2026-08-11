@@ -17,7 +17,7 @@
  *   npm run seed:uk           # if added to package.json
  */
 
-import { connectDb, closeDb } from "./utils/db";
+import { connectDb, closeDb } from "../utils/db";
 import type {
   State,
   PoliticalParty,
@@ -26,17 +26,17 @@ import type {
   StateDemographicTurnout,
   StatePartyOrg,
   StateMetrics,
-} from "../src/lib/db/types";
-import { ukRegions } from "../src/lib/seeds/uk/ukRegions";
-import { ukParties } from "../src/lib/seeds/uk/ukParties";
-import { ukDemographicCategories } from "../src/lib/seeds/uk/ukDemographicCategories";
-import { ukRegionDemographics } from "../src/lib/seeds/uk/ukRegionDemographics";
-import { ukDemographicTurnout } from "../src/lib/seeds/uk/ukDemographicTurnout";
-import { ukStateMetrics } from "../src/lib/seeds/uk/ukStateMetrics";
-import { calculateUKStatePartyOrgs } from "../src/lib/seeds/uk/ukStatePartyOrgCalculations";
-import { calculateStateLean } from "../src/lib/utils/demographics";
+} from "../../src/lib/db/types";
+import { ukRegions } from "../../src/lib/seeds/uk/ukRegions";
+import { ukParties } from "../../src/lib/seeds/uk/ukParties";
+import { ukDemographicCategories } from "../../src/lib/seeds/uk/ukDemographicCategories";
+import { ukRegionDemographics } from "../../src/lib/seeds/uk/ukRegionDemographics";
+import { ukDemographicTurnout } from "../../src/lib/seeds/uk/ukDemographicTurnout";
+import { ukStateMetrics } from "../../src/lib/seeds/uk/ukStateMetrics";
+import { calculateUKStatePartyOrgs } from "../../src/lib/seeds/uk/ukStatePartyOrgCalculations";
+import { calculateStateLean } from "../../src/lib/utils/demographics";
 import { ObjectId } from "mongodb";
-import { getNextSequentialId } from "../src/lib/db/sequentialId";
+import { getNextSequentialId } from "../../src/lib/db/sequentialId";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 
 async function main() {

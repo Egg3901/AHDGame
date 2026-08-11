@@ -1,8 +1,8 @@
 /**
  * CLI entry for US reference seeding. Core logic: `runSeed` in `src/lib/admin/seed/runCoreSeed.ts`.
  */
-import { connectDb, closeDb } from "./utils/db";
-import { runSeed } from "../src/lib/admin/seed/runCoreSeed";
+import { connectDb, closeDb } from "../utils/db";
+import { runSeed } from "../../src/lib/admin/seed/runCoreSeed";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 
 /**

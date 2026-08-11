@@ -35,7 +35,7 @@ export async function seedBudgets(
     // `POLITICAL_LEGISLATION_EXCLUDED_SCOPES` strips the legacy US catalog out
     // of the budget-derived defaults below. That seeder lives in the
     // orchestrators, NOT in `runSeed` — so on `POST /api/seed?reset=true` and
-    // `scripts/seed.ts --reset` this delete removed the US law book with nothing
+    // `scripts/seed/seed.ts --reset` this delete removed the US law book with nothing
     // to restore it. MEASURED as enactedLaws 742 -> 642, exactly the 100 US rows.
     //
     // Scoping the delete to the US does not help; the US is who loses them.

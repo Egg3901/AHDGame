@@ -34,7 +34,7 @@ describe("moderator endpoint signal gating", () => {
 
   it("keeps a genuine recent residential IP eligible", () => {
     const result = eligibleIdentitySignals(
-      { createdAt: ago(10 * DAY), lastKnownIp: "68.192.35.139", lastKnownIpAt: ago(1 * DAY) },
+      { createdAt: ago(10 * DAY), lastKnownIp: "198.51.100.77", lastKnownIpAt: ago(1 * DAY) },
       NOW
     );
     expect(result.lastKnownIp.eligible).toBe(true);

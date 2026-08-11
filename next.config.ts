@@ -55,8 +55,8 @@ const widenSentryClientFileUpload = process.env.SENTRY_WIDEN_CLIENT_FILE_UPLOAD 
 // Railway build env to turn on symbolication — see docs/observability/sourcemaps.md.
 const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
 // Self-hosted GlitchTip base URL (the sentry-cli upload target). Defaults to the
-// production ops host; override with SENTRY_URL if the instance moves.
-const sentryUrl = process.env.SENTRY_URL ?? "https://ops.ahousedividedgame.com/";
+// Sentry-compatible ingest for sourcemap upload; unset disables upload.
+const sentryUrl = process.env.SENTRY_URL;
 
 const nextConfig: NextConfig = {
   // `output: "standalone"` was previously set for Vercel-era cold-start wins.

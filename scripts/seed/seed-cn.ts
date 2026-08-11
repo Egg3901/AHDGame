@@ -1,4 +1,4 @@
-import { connectDb, closeDb } from "./utils/db";
+import { connectDb, closeDb } from "../utils/db";
 import {
   seedCNRegions,
   seedCNParties,

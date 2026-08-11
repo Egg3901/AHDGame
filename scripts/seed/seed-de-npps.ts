@@ -10,10 +10,10 @@
  */
 
 import { ObjectId } from "mongodb";
-import { connectDb, closeDb } from "./utils/db";
-import type { NPP, PoliticalParty, StatePartyOrg, State } from "../src/lib/db/types";
-import { getNextSequentialId } from "../src/lib/db/sequentialId";
-import { generateUniqueNPPNameAndGender } from "../src/lib/npp/nameGenerator";
+import { connectDb, closeDb } from "../utils/db";
+import type { NPP, PoliticalParty, StatePartyOrg, State } from "../../src/lib/db/types";
+import { getNextSequentialId } from "../../src/lib/db/sequentialId";
+import { generateUniqueNPPNameAndGender } from "../../src/lib/npp/nameGenerator";
 
 // 2021 Bundestag proportional NPP targets per party (seq ID: count)
 // CSU limited to BY; others spread across all 16 Länder.

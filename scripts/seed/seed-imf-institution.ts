@@ -8,8 +8,8 @@
  * Or use Admin → Server Setup or Corporations → IMF form in the UI.
  */
 import { ObjectId } from "mongodb";
-import { connectDb, closeDb } from "./utils/db";
-import { seedImfInstitution, SeedImfInstitutionError } from "../src/lib/imf/seedImfInstitution";
+import { connectDb, closeDb } from "../utils/db";
+import { seedImfInstitution, SeedImfInstitutionError } from "../../src/lib/imf/seedImfInstitution";
 
 async function main() {
   const a = process.argv[2];

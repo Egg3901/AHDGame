@@ -64,7 +64,7 @@ export function SeedControls() {
       </div>
       <h3 className="mb-1 text-lg font-semibold">Seed Database</h3>
       <p className="mb-4 text-sm text-muted">
-        Runs the legacy API-key seed route backed by <code>scripts/seed.ts</code>. This is
+        Runs the legacy API-key seed route backed by <code>scripts/seed/seed.ts</code>. This is
         reference-data seeding only, not the full runtime bootstrap/reset flow.
       </p>
 

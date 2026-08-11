@@ -25,14 +25,24 @@ export function buildStaffNavItems({
   return [
     { label: "Admin Panel", href: "/admin", show: isAdmin },
     { label: "Mod Panel", href: "/moderator", show: isAdmin || isModerator },
-    { label: "Ops Dashboard", href: OPS_DASHBOARD_URL, external: true, show: isAdmin },
+    {
+      label: "Ops Dashboard",
+      href: OPS_DASHBOARD_URL,
+      external: true,
+      show: isAdmin && OPS_DASHBOARD_URL !== "",
+    },
     { label: "Docs", href: DOCS_URL, external: true, show: isAdmin || isModerator },
-    { label: "Tickets", href: `${OPS_DASHBOARD_URL}/tickets`, external: true, show: isAdmin },
+    {
+      label: "Tickets",
+      href: `${OPS_DASHBOARD_URL}/tickets`,
+      external: true,
+      show: isAdmin && OPS_DASHBOARD_URL !== "",
+    },
     {
       label: "Suggestions",
       href: `${OPS_DASHBOARD_URL}/suggestions`,
       external: true,
-      show: isAdmin,
+      show: isAdmin && OPS_DASHBOARD_URL !== "",
     },
   ];
 }

@@ -10,7 +10,7 @@
  * `runSeed` seeds only the US states bundle, so running the stage from inside
  * it covers the US and nothing else. `runSeed` therefore takes
  * `includeRegionDerived`, defaulting true for the standalone callers
- * (`POST /api/seed`, `scripts/seed.ts`), and `seedAllCountryData` is required
+ * (`POST /api/seed`, `scripts/seed/seed.ts`), and `seedAllCountryData` is required
  * to pass false.
  *
  * This is asserted against source text rather than by driving the functions:
@@ -48,7 +48,7 @@ describe("region-derived stage wiring", () => {
   });
 
   it("runSeed still runs the stage by default, for the standalone callers", () => {
-    // POST /api/seed and scripts/seed.ts pass no flag and must keep seeding the
+    // POST /api/seed and scripts/seed/seed.ts pass no flag and must keep seeding the
     // region-derived collections for the US bundle they do own.
     const source = read("seed/runCoreSeed.ts");
     expect(source).toContain("includeRegionDerived = true");

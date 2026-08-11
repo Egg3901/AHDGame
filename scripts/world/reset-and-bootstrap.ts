@@ -1,4 +1,4 @@
-import { connectDb, closeDb } from "./utils/db";
+import { connectDb, closeDb } from "../utils/db";
 import type { BootstrapMode } from "@/lib/admin/bootstrapGameWorld";
 import { resetAndBootstrapGameWorld } from "@/lib/admin/resetAndBootstrapGameWorld";
 import { presetDefaultsToFoundingPhase } from "@/lib/seeds/presetSelector";

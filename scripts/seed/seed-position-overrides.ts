@@ -15,11 +15,11 @@
  *   npx tsx scripts/seed-position-overrides.ts --apply    # write to DB
  */
 
-import { getEraPositions, getEraComposition } from "../src/lib/seeds/demographicCategories";
-import { getCountryLayer1Model } from "../src/lib/seeds/international/index";
-import type { EraId } from "../src/lib/seeds/presetSelector";
-import type { DemographicConfigOverride } from "../src/lib/db/types/demographicConfigOverride";
-import { connectDb, closeDb } from "./utils/db";
+import { getEraPositions, getEraComposition } from "../../src/lib/seeds/demographicCategories";
+import { getCountryLayer1Model } from "../../src/lib/seeds/international/index";
+import type { EraId } from "../../src/lib/seeds/presetSelector";
+import type { DemographicConfigOverride } from "../../src/lib/db/types/demographicConfigOverride";
+import { connectDb, closeDb } from "../utils/db";
 
 const ERAS: EraId[] = ["1979", "1991", "1999", "2007", "2019", "2023"];
 

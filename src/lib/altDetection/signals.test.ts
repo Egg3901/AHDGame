@@ -834,9 +834,9 @@ describe("system-generated placeholder emails are not a family signal", () => {
     // used to link any two Discord users in the game at 0.3.
     const a = facet({
       userId: new ObjectId(),
-      email: "discord333052320252297216@discord.local",
+      email: "discord910000000000000001@discord.local",
     });
-    const b = facet({ userId: new ObjectId(), email: "discord918273645500112233@discord.local" });
+    const b = facet({ userId: new ObjectId(), email: "discord910000000000000002@discord.local" });
     expect(def.evaluate(a, b, 0.3, NOW)).toBeNull();
   });
 

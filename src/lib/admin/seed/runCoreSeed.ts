@@ -65,7 +65,7 @@ import type {
  * and destructive on the two standalone ones.
  *
  * `POST /api/seed?reset=true` (SEED_SECRET, i.e. reachable from CI) and
- * `scripts/seed.ts --reset` call `runSeed` directly and never reach
+ * `scripts/seed/seed.ts --reset` call `runSeed` directly and never reach
  * `seedAllCountryData`. With a global drop those endpoints deleted 21
  * collections outright and re-seeded only the US: MEASURED at **1,995 documents
  * lost, `states` 24 countries -> 1**, with `statePartyOrg` 591 -> 100,
@@ -228,7 +228,7 @@ export type RunSeedOptions = {
   /**
    * Seed the US budget bundle (federal budget, US enacted laws, US state
    * budgets, the US country-owned corporation, formula grants). Default TRUE so
-   * `POST /api/seed` and `scripts/seed.ts` — which never reach
+   * `POST /api/seed` and `scripts/seed/seed.ts` — which never reach
    * `bootstrapGameWorld` — keep rebuilding it.
    *
    * `seedAllCountryData` passes FALSE. `bootstrapGameWorld` calls `seedBudgets`
@@ -252,10 +252,10 @@ export type RunSeedOptions = {
 };
 
 /**
- * US reference data seed used by CLI (`scripts/seed.ts`), token `/api/seed`, auto-seed,
+ * US reference data seed used by CLI (`scripts/seed/seed.ts`), token `/api/seed`, auto-seed,
  * and `bootstrapGameWorld` (first step). Owns achievements, states, parties, legislation types, etc.
  *
- * Callers must supply a connected `db` (CLI uses `connectDb()` in `scripts/seed.ts`).
+ * Callers must supply a connected `db` (CLI uses `connectDb()` in `scripts/seed/seed.ts`).
  */
 export async function runSeed(
   options: RunSeedOptions
@@ -785,7 +785,7 @@ export async function runSeed(
   // `runRegionDerivedStage`. `runSeed` seeds only the US states bundle, so
   // anything that reads `states` for its roster would cover the US and nothing
   // else. Default TRUE keeps the standalone callers (`/api/seed`,
-  // `scripts/seed.ts`) behaving as before; `seedAllCountryData` passes FALSE and
+  // `scripts/seed/seed.ts`) behaving as before; `seedAllCountryData` passes FALSE and
   // runs the stage once every country has regions.
   if (includeRegionDerived) {
     await runRegionDerivedStage(db, { preset, log, reset });

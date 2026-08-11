@@ -17,8 +17,8 @@
  * Usage:
  *   npx tsx scripts/seed-de-officials.ts
  */
-import { connectDb, closeDb } from "./utils/db";
-import { seedHistoricalOfficialsForCountry } from "../src/lib/npp/seedHistorical";
+import { connectDb, closeDb } from "../utils/db";
+import { seedHistoricalOfficialsForCountry } from "../../src/lib/npp/seedHistorical";
 
 async function main() {
   console.log("=== DE Officials Seed Script ===\n");

@@ -317,5 +317,8 @@ export function tierPrimaryRoute(
   return `/elections/primary/${tier}/${partyId}`;
 }
 
-/** External operations dashboard (admin-only link in the navbar). */
-export const OPS_DASHBOARD_URL = "https://ops.ahousedividedgame.com";
+/**
+ * External operations dashboard (admin-only links in the navbar). Empty when
+ * the deployment has no ops dashboard; consumers hide the links.
+ */
+export const OPS_DASHBOARD_URL = process.env.NEXT_PUBLIC_OPS_DASHBOARD_URL ?? "";

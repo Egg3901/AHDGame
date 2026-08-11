@@ -22,8 +22,8 @@ function extractMapping(file: string): Record<string, string> {
 
 describe("RU subdivision mapping drift guard", () => {
   it("prepare-ru-map-data SUBJECT_TO_REGION matches build-ru-geo verbatim", () => {
-    expect(extractMapping("scripts/prepare-ru-map-data.ts")).toEqual(
-      extractMapping("scripts/maps/build-ru-geo.mjs")
+    expect(extractMapping("scripts/geo/prepare-ru-map-data.ts")).toEqual(
+      extractMapping("scripts/geo/build-ru-geo.mjs")
     );
   });
 });

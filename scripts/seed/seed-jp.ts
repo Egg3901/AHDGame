@@ -24,7 +24,7 @@
  *  13. Cabinet positions (via admin seed tool — constants only, no DB seed needed)
  */
 
-import { connectDb, closeDb } from "./utils/db";
+import { connectDb, closeDb } from "../utils/db";
 
 async function main() {
   console.log("=== Japan Seed Orchestrator ===\n");

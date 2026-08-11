@@ -12,8 +12,8 @@
  */
 
 import { ObjectId } from "mongodb";
-import { connectDb, closeDb } from "./utils/db";
-import { seedWikiPages } from "../src/lib/seeds/wiki";
+import { connectDb, closeDb } from "../utils/db";
+import { seedWikiPages } from "../../src/lib/seeds/wiki";
 
 const FORCE = process.argv.includes("--force");
 const SLUG_ARGS = process.argv

@@ -7,9 +7,9 @@
  *   npx tsx scripts/seed-policies.ts --reset   # Drop statePolicies and re-seed
  */
 
-import { connectDb, closeDb } from "./utils/db";
-import { basePolicies } from "./seeds/basePolicies";
-import type { StatePolicyRecord } from "../src/lib/db/types";
+import { connectDb, closeDb } from "../utils/db";
+import { basePolicies } from "../seeds/basePolicies";
+import type { StatePolicyRecord } from "../../src/lib/db/types";
 
 const RESET = process.argv.includes("--reset");
 

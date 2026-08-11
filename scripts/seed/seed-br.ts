@@ -19,7 +19,7 @@
  *   8. Government formation document
  */
 
-import { connectDb, closeDb } from "./utils/db";
+import { connectDb, closeDb } from "../utils/db";
 
 async function main() {
   console.log("=== Brazil Seed Orchestrator ===\n");

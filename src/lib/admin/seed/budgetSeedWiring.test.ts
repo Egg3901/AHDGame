@@ -49,7 +49,7 @@ describe("US budget seed wiring", () => {
   });
 
   it("runSeed still seeds budgets by default, for the standalone callers", () => {
-    // POST /api/seed and scripts/seed.ts pass no flag and never reach
+    // POST /api/seed and scripts/seed/seed.ts pass no flag and never reach
     // bootstrapGameWorld, so they must keep rebuilding the US bundle.
     const source = read("seed/runCoreSeed.ts");
     expect(source).toContain("includeBudgets = true");

@@ -32,7 +32,7 @@ Follow the README: Node 20+, a local MongoDB, `cp .env.example .env.local`, `npm
 ## The bar for a PR
 
 1. Branch off `main`, one topic per PR, small over large.
-2. `npm run verify` passes (lint, format, typecheck, unit tests). CI runs the same gate.
+2. Lint, format, typecheck, and unit tests pass (`npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run test:run`) — CI runs exactly this gate. `npm run verify` additionally runs an architecture audit that currently carries known pre-existing findings; new findings from your change are on you, existing ones are not.
 3. **New or changed API routes require integration tests.** Copy the pattern from any existing `route.test.ts`.
 4. New logic gets unit tests next to it (`*.test.ts`, Vitest).
 5. Add a `CHANGELOG.md` entry if the change is player-visible.

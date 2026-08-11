@@ -8,9 +8,9 @@
  *   npx tsx scripts/seed-legislation.ts --reset-committees  # Also clear committee assignments
  */
 
-import { connectDb, closeDb } from "./utils/db";
-import { legislationTypes } from "./seeds/legislationTypes";
-import type { LegislationType } from "../src/lib/db/types";
+import { connectDb, closeDb } from "../utils/db";
+import { legislationTypes } from "../seeds/legislationTypes";
+import type { LegislationType } from "../../src/lib/db/types";
 
 const RESET_COMMITTEES = process.argv.includes("--reset-committees");
 

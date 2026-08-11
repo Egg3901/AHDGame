@@ -15,11 +15,11 @@
  *   npm run seed:demographics
  */
 
-import { connectDb, closeDb } from "./utils/db";
-import { demographicCategories } from "../src/lib/seeds/demographicCategories";
-import { stateDemographics } from "../src/lib/seeds/stateDemographics";
-import { calculateStateLean } from "../src/lib/utils/demographics";
-import type { DemographicCategory, State, StateDemographics } from "../src/lib/db/types";
+import { connectDb, closeDb } from "../utils/db";
+import { demographicCategories } from "../../src/lib/seeds/demographicCategories";
+import { stateDemographics } from "../../src/lib/seeds/stateDemographics";
+import { calculateStateLean } from "../../src/lib/utils/demographics";
+import type { DemographicCategory, State, StateDemographics } from "../../src/lib/db/types";
 
 async function main() {
   console.log("Seed: Demographics (categories + state demographics)\n");

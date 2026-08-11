@@ -24,7 +24,7 @@
  *   npm run seed:de           # when added to package.json
  */
 
-import { connectDb, closeDb } from "./utils/db";
+import { connectDb, closeDb } from "../utils/db";
 import type {
   State,
   PoliticalParty,
@@ -33,23 +33,23 @@ import type {
   StateDemographicTurnout,
   StatePartyOrg,
   StateMetrics,
-} from "../src/lib/db/types";
-import type { StateMetricBaseline } from "../src/lib/db/types/statePolicy";
-import type { GovernmentFormation } from "../src/lib/db/types/governmentFormation";
-import type { LegislationType } from "../src/lib/db/types/legislation";
-import { deRegions } from "../src/lib/seeds/de/deRegions";
-import { deParties } from "../src/lib/seeds/de/deParties";
-import { deDemographicCategories } from "../src/lib/seeds/de/deDemographicCategories";
-import { deRegionDemographics } from "../src/lib/seeds/de/deRegionDemographics";
-import { deDemographicTurnout } from "../src/lib/seeds/de/deDemographicTurnout";
-import { calculateDEStatePartyOrgs } from "../src/lib/seeds/de/deStatePartyOrgCalculations";
-import { deStateMetrics } from "../src/lib/seeds/de/deStateMetrics";
-import { deStateBaselines } from "../src/lib/seeds/de/deStateBaselines";
-import { deGovernmentFormation } from "../src/lib/seeds/de/deGovernmentFormation";
-import { deLegislationTypes } from "../src/lib/seeds/de/deLegislationTypes";
-import { calculateStateLean } from "../src/lib/utils/demographics";
+} from "../../src/lib/db/types";
+import type { StateMetricBaseline } from "../../src/lib/db/types/statePolicy";
+import type { GovernmentFormation } from "../../src/lib/db/types/governmentFormation";
+import type { LegislationType } from "../../src/lib/db/types/legislation";
+import { deRegions } from "../../src/lib/seeds/de/deRegions";
+import { deParties } from "../../src/lib/seeds/de/deParties";
+import { deDemographicCategories } from "../../src/lib/seeds/de/deDemographicCategories";
+import { deRegionDemographics } from "../../src/lib/seeds/de/deRegionDemographics";
+import { deDemographicTurnout } from "../../src/lib/seeds/de/deDemographicTurnout";
+import { calculateDEStatePartyOrgs } from "../../src/lib/seeds/de/deStatePartyOrgCalculations";
+import { deStateMetrics } from "../../src/lib/seeds/de/deStateMetrics";
+import { deStateBaselines } from "../../src/lib/seeds/de/deStateBaselines";
+import { deGovernmentFormation } from "../../src/lib/seeds/de/deGovernmentFormation";
+import { deLegislationTypes } from "../../src/lib/seeds/de/deLegislationTypes";
+import { calculateStateLean } from "../../src/lib/utils/demographics";
 import { ObjectId } from "mongodb";
-import { getNextSequentialId } from "../src/lib/db/sequentialId";
+import { getNextSequentialId } from "../../src/lib/db/sequentialId";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 
 async function main() {

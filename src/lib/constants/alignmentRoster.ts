@@ -1,7 +1,7 @@
 /**
  * Every nation alignment may be authored for — a superset of CountryId, taken
  * verbatim from the ops 1953 seed-readiness report
- * (https://ops.lakesidegames.net/reports/1953-seed-readiness-map). Implemented
+ * (internal 1953 seed-readiness report). Implemented
  * countries reuse their CountryId spelling, so the key narrows to CountryId by
  * a plain membership check with no translation table; the rest use the
  * project's own historical entity ids (NVN, SVN, YE, MM, TANG, ...).

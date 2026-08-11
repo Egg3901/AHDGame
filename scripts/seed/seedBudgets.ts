@@ -1,11 +1,11 @@
-import { connectDb, closeDb } from "./utils/db";
+import { connectDb, closeDb } from "../utils/db";
 import {
   initialNationalBudgets,
   generateCountryOwnedSeedData,
   generateStateBudgets,
-} from "./seeds/budgets";
-import type { Corporation, CorporateSector, Counter } from "../src/lib/db/types";
-import type { FederalBudget, StateBudget } from "../src/lib/db/types/budget";
+} from "../seeds/budgets";
+import type { Corporation, CorporateSector, Counter } from "../../src/lib/db/types";
+import type { FederalBudget, StateBudget } from "../../src/lib/db/types/budget";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 
 /**

@@ -226,7 +226,7 @@ describe("reset drop scoping", () => {
 
   it("scopes every country-keyed collection instead of dropping it whole", () => {
     // A global drop here deleted 1,995 documents on `POST /api/seed?reset=true`
-    // and `scripts/seed.ts --reset`, taking `states` from 24 countries to 1 —
+    // and `scripts/seed/seed.ts --reset`, taking `states` from 24 countries to 1 —
     // because `runSeed` is the US pack and re-seeds only the US. Every other
     // country is seeded by its own module, each of which already scopes its own
     // reset with deleteMany({ countryId }).

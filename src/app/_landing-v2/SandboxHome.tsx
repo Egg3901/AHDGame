@@ -92,7 +92,7 @@ const SECONDARY_BUTTON_CLASSES =
 const GHOST_BUTTON_CLASSES =
   "pointer-events-auto inline-flex items-center justify-center gap-1.5 rounded-lg px-4.5 h-11 text-sm font-medium text-muted backdrop-blur-sm transition-all duration-150 hover:text-foreground active:scale-[0.98]";
 
-/** Public sideload mirror for the Android beta build; see LSGD-ops-dash public/downloads. */
+/** Public sideload mirror for the Android beta build;  */
 const ANDROID_BETA_APK_URL = "https://ops.lakesidegames.net/downloads/a-house-divided-0.3.1.apk";
 
 function links(isSignedIn: boolean) {

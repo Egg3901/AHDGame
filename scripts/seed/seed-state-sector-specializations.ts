@@ -1,5 +1,5 @@
-import { getDb } from "../src/lib/mongodb";
-import { seedStateSectorSpecializations } from "../src/lib/admin/seed/seedStateSectorSpecializations";
+import { getDb } from "../../src/lib/mongodb";
+import { seedStateSectorSpecializations } from "../../src/lib/admin/seed/seedStateSectorSpecializations";
 
 async function main() {
   const reset = process.argv.includes("--reset");

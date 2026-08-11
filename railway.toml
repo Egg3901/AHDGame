@@ -4,11 +4,10 @@ builder = "NIXPACKS"
 [deploy]
 # Use `next start`, not the standalone server.js, so Next.js's nodejs runtime
 # actually invokes instrumentation.ts's register() at boot. node-cron, auto-seed,
-# and crash capture all live in that branch and need to initialize at boot
-# (see reference_nextjs_standalone_instrumentation_gap in memory).
+# and crash capture all live in that branch and need to initialize at boot.
 # NODE_OPTIONS caps the V8 old-space heap. Without it, V8 sizes the heap to
-# visible machine memory and RSS drifts upward under load (railway-cost-audit
-# 2026-08-03, item 5). 1024 MB is comfortably above steady-state and the
+# visible machine memory and RSS drifts upward under load. 1024 MB is
+# comfortably above steady-state and the
 # heapWatchdog's own 5 GB RSS observation ceiling still backstops runaways.
 startCommand = "NODE_OPTIONS=--max-old-space-size=1024 HOSTNAME=0.0.0.0 npx next start"
 healthcheckPath = "/api/health"
