@@ -109,12 +109,8 @@ describe("buildAltClusters — thresholds and edge cases", () => {
     const a = new ObjectId();
     const b = new ObjectId();
     const edges = [link(a, b, 0.5, [sig({ type: "wire_graph_link", weight: 0.5 })])];
-    expect(
-      buildAltClusters(edges, { thresholds: { link: 0.6, strongLink: 0.4 } })
-    ).toHaveLength(0);
-    expect(
-      buildAltClusters(edges, { thresholds: { link: 0.4, strongLink: 0.4 } })
-    ).toHaveLength(1);
+    expect(buildAltClusters(edges, { thresholds: { link: 0.6, strongLink: 0.4 } })).toHaveLength(0);
+    expect(buildAltClusters(edges, { thresholds: { link: 0.4, strongLink: 0.4 } })).toHaveLength(1);
   });
 
   it("separates two independent pairs into two clusters", () => {

@@ -9,10 +9,7 @@ import {
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useEnabledCountries } from "@/contexts/RegisteredCountriesContext";
 import { LEGAL_STRUCTURES, type LegalStructureId } from "@/lib/constants/legalStructures";
-import {
-  getLegalStructureForCorp,
-  isListedOnlyStructure,
-} from "@/lib/corporations/legalStructure";
+import { getLegalStructureForCorp, isListedOnlyStructure } from "@/lib/corporations/legalStructure";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { MailComposerModal } from "@/components/MailComposerModal";

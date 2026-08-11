@@ -102,7 +102,9 @@ export function computeSeatEstimates(
   const pool =
     eligible.length > 0
       ? eligible
-      : [...allEntries].sort((a, b) => b[1] - a[1]).slice(0, Math.min(totalSeats, allEntries.length));
+      : [...allEntries]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, Math.min(totalSeats, allEntries.length));
   const poolVotes = pool.reduce((s, [, v]) => s + v, 0);
   if (poolVotes === 0) return null;
 

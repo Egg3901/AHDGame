@@ -890,10 +890,18 @@ describe("allocateSeats — commons with FPTP winner's bonus", () => {
       exponent: UK_COMMONS_FPTP_EXPONENT,
       orgRanking: ["con", "lib", "lab"],
     });
-    const orgPutsLabourFirst = allocateSeats("commons", "UNKNOWN_REGION", 27, nee, 1000, undefined, {
-      exponent: UK_COMMONS_FPTP_EXPONENT,
-      orgRanking: ["lab", "con", "lib"],
-    });
+    const orgPutsLabourFirst = allocateSeats(
+      "commons",
+      "UNKNOWN_REGION",
+      27,
+      nee,
+      1000,
+      undefined,
+      {
+        exponent: UK_COMMONS_FPTP_EXPONENT,
+        orgRanking: ["lab", "con", "lib"],
+      }
+    );
     // Same pair (Lab + Con) either way, so an org reshuffle cannot lurch the
     // seat count while the vote shares hold still.
     expect(orgPutsLabourLast.seatsEstimate).toEqual(orgPutsLabourFirst.seatsEstimate);

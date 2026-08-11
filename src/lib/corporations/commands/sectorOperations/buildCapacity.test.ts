@@ -261,9 +261,7 @@ describe("buildCapacity — cancel", () => {
       onlineTurn: 1_060, // (1000 − 940) / (1060 − 940) = 0.5 delivered
       smooth: true,
     };
-    await wireMocks(
-      sectorDoc({ buildQueue: [halfBuilt], constructionInProgressAnchor: 200_000 })
-    );
+    await wireMocks(sectorDoc({ buildQueue: [halfBuilt], constructionInProgressAnchor: 200_000 }));
     const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "cancel", orderIndex: 0 }), { params });
     expect(res.status).toBe(200);

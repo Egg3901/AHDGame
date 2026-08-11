@@ -221,13 +221,26 @@ describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", ()
     parties: Record<string, string>
   ) {
     const tally = { totalVotes: votes, candidateParties: parties } as never;
-    const projection = computeSeatEstimates("commons", seats, tally, new Set(Object.keys(votes)), bonus);
+    const projection = computeSeatEstimates(
+      "commons",
+      seats,
+      tally,
+      new Set(Object.keys(votes)),
+      bonus
+    );
     const ranked = Object.entries(votes)
       .map(([id, v]) => ({ id, votes: v, party: parties[id] }))
       .sort((a, b) => b.votes - a.votes);
     const totalVotes = ranked.reduce((s, c) => s + c.votes, 0);
-    const resolution = allocateSeats("commons", region, seats, ranked, totalVotes, undefined, bonus)
-      .seatsEstimate;
+    const resolution = allocateSeats(
+      "commons",
+      region,
+      seats,
+      ranked,
+      totalVotes,
+      undefined,
+      bonus
+    ).seatsEstimate;
     const byParty = (est: Record<string, number> | null) => {
       const out: Record<string, number> = {};
       for (const [id, s] of Object.entries(est ?? {})) {
@@ -249,14 +262,24 @@ describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", ()
       "LON",
       75,
       {
-        lab1: 441_139, lab2: 250_370, lab3: 231_630,
-        con1: 368_520, con2: 200_235, con3: 31_104,
-        third: 118_602, minor: 31_164,
+        lab1: 441_139,
+        lab2: 250_370,
+        lab3: 231_630,
+        con1: 368_520,
+        con2: 200_235,
+        con3: 31_104,
+        third: 118_602,
+        minor: 31_164,
       },
       {
-        lab1: "lab", lab2: "lab", lab3: "lab",
-        con1: "con", con2: "con", con3: "con",
-        third: "third", minor: "minor",
+        lab1: "lab",
+        lab2: "lab",
+        lab3: "lab",
+        con1: "con",
+        con2: "con",
+        con3: "con",
+        third: "third",
+        minor: "minor",
       }
     );
     expect(projection).toEqual(resolution);

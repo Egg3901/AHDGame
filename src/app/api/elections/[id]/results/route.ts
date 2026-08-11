@@ -324,9 +324,7 @@ async function handleGet(
       finalHour?.progress ?? null,
       isEnded,
       nationalBonus,
-      nationalBonus
-        ? await loadCommonsOrgRankings(db, election.countryId ?? "UK")
-        : undefined
+      nationalBonus ? await loadCommonsOrgRankings(db, election.countryId ?? "UK") : undefined
     );
 
     // ── Summary ───────────────────────────────────────────────────────────

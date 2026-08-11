@@ -1,4 +1,7 @@
 <p align="center">
+  <img src="public/ahd-logo.png" alt="A House Divided" width="140">
+</p>
+<p align="center">
   <h1 align="center">A House Divided</h1>
   <p align="center">
     Real-time multiplayer political simulation — run for office, pass legislation, build corporations, and shape nations across seven decades of history.
@@ -7,6 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.0.0-informational" alt="Version">
+  <img src="https://img.shields.io/badge/license-PolyForm_Noncommercial-8957e5" alt="License">
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="Pull Requests">
   <img src="https://img.shields.io/badge/code_style-prettier-ff69b4?logo=prettier&logoColor=white" alt="Code Style">
   <img src="https://img.shields.io/badge/deployed_on-Railway-0B0D0E?logo=railway&logoColor=white" alt="Railway">
@@ -306,14 +310,12 @@ docs/                     # Design system and observability docs
 
 ## Contributing
 
-1. Branch off **`main`** with a descriptive feature branch name
-2. Add a `CHANGELOG.md` entry when your change warrants it
-3. Run `npm run verify` before pushing
-4. New API routes require integration tests — see existing `route.test.ts` files for the pattern
-5. Open a PR into **`main`**
+Read **[CONTRIBUTING.md](./CONTRIBUTING.md)** — it covers what PRs are welcome, what needs discussion first (balance changes need a worldsim report), the test bar, and setup. Exploits go through **[SECURITY.md](./SECURITY.md)**, never public issues.
 
 ---
 
 ## License
 
-This project is source-available. All rights reserved.
+Licensed under [PolyForm Noncommercial 1.0.0](./LICENSE.md): read it, run it locally, fork it, contribute — any noncommercial purpose. Commercial use, including running a commercial host, is not permitted. "A House Divided" and its logo are trademarks of Lakeside Games; the official servers at [ahousedividedgame.com](https://www.ahousedividedgame.com) are the only official way to play.
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to contribute and [SECURITY.md](./SECURITY.md) for reporting vulnerabilities and game exploits.

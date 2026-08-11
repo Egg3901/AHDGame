@@ -79,7 +79,9 @@ export async function runAdoptReferenceGameConfigGates(
   const dryRun = opts.dryRun ?? false;
   const notes: string[] = [];
 
-  const live = await db.collection<{ _id: string } & Record<string, unknown>>("gameConfig").findOne({ _id: referenceGameConfig._id });
+  const live = await db
+    .collection<{ _id: string } & Record<string, unknown>>("gameConfig")
+    .findOne({ _id: referenceGameConfig._id });
   if (!live) {
     notes.push("no gameConfig document — nothing to reconcile (a fresh seed will create it)");
     return { documentsScanned: 0, documentsUpdated: 0, notes };
@@ -160,7 +162,9 @@ export async function runAdoptReferenceGameConfigGates(
     return { documentsScanned: 1, documentsUpdated: 0, notes };
   }
 
-  await db.collection<{ _id: string } & Record<string, unknown>>("gameConfig").updateOne({ _id: referenceGameConfig._id }, { $set: set });
+  await db
+    .collection<{ _id: string } & Record<string, unknown>>("gameConfig")
+    .updateOne({ _id: referenceGameConfig._id }, { $set: set });
 
   // Written directly rather than through `createAdminLog`, which opens its own
   // connection via getDb(); the runner already handed us a Db.

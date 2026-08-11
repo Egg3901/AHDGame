@@ -38,10 +38,7 @@ describe("UK_REGION_POLLING_1951", () => {
     for (const [region, shares] of Object.entries(UK_REGION_POLLING_1951)) {
       const total = sumOf(shares);
       const top = Math.max(...Object.values(shares));
-      expect(
-        (100 * top) / total,
-        `${region} normalizes to a one-party sweep`
-      ).toBeLessThan(75);
+      expect((100 * top) / total, `${region} normalizes to a one-party sweep`).toBeLessThan(75);
     }
   });
 
