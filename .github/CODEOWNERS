@@ -1,0 +1,8 @@
+# Balance-sensitive paths: PRs touching these require the maintainer.
+/src/lib/constants/           @Egg3901
+/src/lib/turn/                @Egg3901
+/src/lib/economy/             @Egg3901
+/src/lib/electionEngine/      @Egg3901
+/src/lib/demographics/        @Egg3901
+/scripts/seeds/               @Egg3901
+/scripts/seed/                @Egg3901
