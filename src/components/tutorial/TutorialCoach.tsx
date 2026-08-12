@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { TUTORIAL_CHAPTERS, buildChapterTour, buildTourSteps } from "@/lib/tutorial/chapters";
-import type { CoachCharacter, TourStep } from "@/lib/tutorial/coachSteps";
+import { coachCountryContext, type CoachCharacter, type TourStep } from "@/lib/tutorial/coachSteps";
 import { parseTutorialFacts, type TutorialFacts } from "@/lib/tutorial/facts";
 import {
   DEFAULT_TUTORIAL_PLAN,
@@ -91,6 +92,21 @@ export interface TutorialCoachProps {
 export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const t = useTranslations("tutorial");
+
+  // Copy fields on a step are message keys under "tutorial"; every t() call
+  // shares one ICU value bag built from the character's country. The region
+  // noun is itself translated (catalog key when known, config noun otherwise);
+  // country and legislature names are proper nouns and pass through as is.
+  const values = useMemo(() => {
+    const ctx = coachCountryContext(character);
+    const nounKey = ctx.region === "autonomous community" ? "autonomousCommunity" : ctx.region;
+    return {
+      countryName: ctx.countryName,
+      legislatureName: ctx.legislatureName,
+      region: t.has(`regionNouns.${nounKey}`) ? t(`regionNouns.${nounKey}`) : ctx.region,
+    };
+  }, [character, t]);
 
   // A single-chapter replay swaps the step list without touching the plan.
   const [replayChapter, setReplayChapter] = useState<TutorialChapterId | null>(null);
@@ -426,7 +442,7 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
     .filter((fact): fact is NonNullable<typeof fact> => Boolean(fact));
 
   return (
-    <div className="fixed inset-0 z-[190] pointer-events-none" role="dialog" aria-label="Tutorial">
+    <div className="fixed inset-0 z-[190] pointer-events-none" role="dialog" aria-label={t("coach.dialogLabel")}>
       {rect ? (
         <>
           {/* Cut-out scrim plus a bright ring on the highlighted element. */}
@@ -477,7 +493,7 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
         {/* Chapter rail. Each chapter is its own labelled, clickable stop, so
             the player can see where they are, what is left, and jump. */}
         {chapters.length > 1 && (
-          <nav className="flex items-center gap-1" aria-label="Tutorial chapters">
+          <nav className="flex items-center gap-1" aria-label={t("coach.chapterRail")}>
             {chapters.map((chapter, index) => {
               const here = index === chapterNumber - 1;
               const done = index < chapterNumber - 1;
@@ -485,8 +501,8 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
                 <button
                   key={chapter.id}
                   type="button"
-                  title={chapter.title}
-                  aria-label={`Go to ${chapter.title}`}
+                  title={t(chapter.title)}
+                  aria-label={t("coach.goToChapter", { title: t(chapter.title) })}
                   aria-current={here ? "step" : undefined}
                   onClick={() => setStep(chapter.firstStep)}
                   className={`flex min-w-0 items-center gap-1 rounded-full px-1.5 py-1 text-[11px] leading-none transition-colors ${
@@ -500,7 +516,7 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
                   <span aria-hidden className={here ? "" : "opacity-60"}>
                     {chapter.icon}
                   </span>
-                  {here && <span className="truncate">{chapter.title}</span>}
+                  {here && <span className="truncate">{t(chapter.title)}</span>}
                 </button>
               );
             })}
@@ -510,16 +526,16 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
         <div className="mt-2 flex items-baseline justify-between gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-primary">
             {chapters.length > 1
-              ? `Chapter ${chapterNumber} of ${chapters.length}`
-              : current.chapterTitle}
+              ? t("coach.chapterProgress", { number: chapterNumber, total: chapters.length })
+              : t(current.chapterTitle)}
           </span>
           <span className="text-[11px] tabular-nums text-muted">
-            Step {step + 1} of {steps.length}
+            {t("coach.stepProgress", { step: step + 1, total: steps.length })}
           </span>
         </div>
 
-        <h4 className="mt-1 text-base font-semibold leading-snug">{current.title}</h4>
-        <p className="mt-1 text-sm leading-relaxed text-muted">{current.body}</p>
+        <h4 className="mt-1 text-base font-semibold leading-snug">{t(current.title, values)}</h4>
+        <p className="mt-1 text-sm leading-relaxed text-muted">{t(current.body, values)}</p>
 
         {visibleFacts.length > 0 && (
           <dl className="mt-2 space-y-0.5 rounded-lg bg-card-muted px-2.5 py-2">
@@ -532,14 +548,16 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
           </dl>
         )}
 
-        {current.hint && <p className="mt-2 text-xs font-medium text-primary">{current.hint}</p>}
+        {current.hint && (
+          <p className="mt-2 text-xs font-medium text-primary">{t(current.hint, values)}</p>
+        )}
 
         {current.readMore && (
           <Link
             href={current.readMore.href}
             className="mt-2 inline-block text-xs font-medium text-primary underline-offset-2 hover:underline"
           >
-            {current.readMore.label} →
+            {t(current.readMore.label)} →
           </Link>
         )}
 
@@ -550,7 +568,7 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
               onClick={finish}
               className="text-xs text-muted hover:text-foreground"
             >
-              Skip
+              {t("coach.skip")}
             </button>
             {step > 0 && (
               <button
@@ -558,7 +576,7 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
                 onClick={goBack}
                 className="text-xs text-muted hover:text-foreground"
               >
-                Back
+                {t("coach.back")}
               </button>
             )}
           </div>
@@ -574,7 +592,7 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
                 onClick={() => window.open(current.link, "_blank", "noopener,noreferrer")}
                 className="rounded-md border border-card-border px-3 py-1.5 text-sm font-medium text-foreground hover:border-primary/50 hover:text-primary"
               >
-                {current.next} <span aria-hidden>↗</span>
+                {t(current.next)} <span aria-hidden>↗</span>
               </button>
             )}
             {needsNav && !current.external ? (
@@ -583,7 +601,7 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
                 onClick={() => current.link && router.push(current.link)}
                 className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
               >
-                Take me there
+                {t("coach.takeMeThere")}
               </button>
             ) : (
               <button
@@ -591,7 +609,7 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
                 onClick={advance}
                 className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
               >
-                {current.external ? "Next" : current.next}
+                {current.external ? t("coach.next") : t(current.next)}
               </button>
             )}
           </div>

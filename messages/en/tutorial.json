@@ -1,3 +1,323 @@
 {
-  "tutorial": {}
+  "tutorial": {
+    "chapters": {
+      "whatsNew": {
+        "title": "What changed",
+        "blurb": "The five changes most likely to catch out someone who played last iteration."
+      },
+      "core": {
+        "title": "Getting started",
+        "blurb": "Turns, your home region, the wire, and where the other players are."
+      },
+      "office": {
+        "title": "Run for office",
+        "blurb": "Join a party, campaign, win a seat, and vote on real laws."
+      },
+      "invest": {
+        "title": "Invest",
+        "blurb": "Buy shares and funds, collect dividends, and avoid the usual traps."
+      },
+      "company": {
+        "title": "Run a company",
+        "blurb": "Found or take over a corporation. Pick sectors, set wages, raise capital."
+      },
+      "union": {
+        "title": "Run a union",
+        "blurb": "Organize an industry, win the leadership, and push wages up."
+      },
+      "nation": {
+        "title": "Run a nation",
+        "blurb": "The top of the ladder: the executive, the cabinet, the budget, the bank."
+      }
+    },
+    "steps": {
+      "whatsNewIntro": {
+        "title": "What changed this iteration",
+        "body": "These are the five changes most likely to catch out someone who played before. The full list is on the changelog page whenever you want it.",
+        "next": "Show me"
+      },
+      "whatsNewFounding": {
+        "title": "Every country earns its starting position",
+        "body": "Worlds now open with a real founding election before anyone plays. No country is handed a result any more, so the seats and the governing party you arrive to were actually voted for.",
+        "next": "Next"
+      },
+      "whatsNewUnions": {
+        "title": "Unions are a career you can take",
+        "body": "Every industry now has a union you can organise. Pay for a recruitment drive, run for union president, build up its treasury, and push wages up across the industry. Governments can ban unions by law, which freezes them until the ban is repealed.",
+        "readMore": "See the unions",
+        "next": "Next"
+      },
+      "whatsNewHouseholds": {
+        "title": "Ordinary people now buy things",
+        "body": "How much households spend follows their jobs, their wages, and prices. Give people work and rising pay and they spend more; let the cost of living climb and they stop. That spending goes to the companies selling to them, so where you build and who you employ now changes your own demand.",
+        "readMore": "See the economy",
+        "next": "Next"
+      },
+      "whatsNewAi": {
+        "title": "The computer politicians got much smarter",
+        "body": "They now check the calendar instead of campaigning the same way three years out as the week before, they push harder when they are actually being challenged, and they stop paying for advertising once it has stopped working. They also have individual habits that drift over a career. There are firm limits on how much of this can land on you.",
+        "next": "Next"
+      },
+      "whatsNewElections": {
+        "title": "Elections are harder to coast through",
+        "body": "An incumbent's advantage now scales with how popular they actually are, parties that have held power a long time pick up a penalty, and every governor and senate race gets a real opponent. A census redraws the seats every ten years, so safe ground does not stay safe forever.",
+        "readMore": "See the races",
+        "next": "Got it"
+      },
+      "welcome": {
+        "title": "Welcome to A House Divided",
+        "body": "{countryName} is a living country, and the other people in it are real players. The ones who do well build allies and an income early. A good platform on its own does not get you very far. This tour shows you the moves that actually matter. You can stop at any point and pick it up again from the tutorial page.",
+        "next": "Show me"
+      },
+      "howTurnsWork": {
+        "title": "The game moves in turns",
+        "body": "Nothing happens the moment you click it. What you do now resolves on the next turn, along with everyone else's moves and the economy. You get a small number of actions each turn. Money and influence carry over, but an unspent turn is gone.",
+        "next": "Next"
+      },
+      "joinDiscord": {
+        "title": "Find other players first",
+        "body": "You will get much further with allies than on your own. The Discord is where players form parties, trade favours, agree how to vote, and explain the parts of the game nothing else explains. Join it now and come back.",
+        "next": "Open Discord"
+      },
+      "scoutRegion": {
+        "title": "Look at your home {region} before you spend anything",
+        "body": "Everything starts local. Your {region} page shows how its economy is doing, who currently holds office there, and which seats are coming up. Read it first so you know where the gaps are instead of guessing.",
+        "hint": "Open your {region} page to continue.",
+        "next": "Next"
+      },
+      "readWire": {
+        "title": "Read the news every turn",
+        "body": "The News page tells you what other players did last turn and what the economy did in response. It is the difference between reacting to the game and being surprised by it. Most strong players read it before they spend anything.",
+        "hint": "Open the News page.",
+        "next": "Next"
+      },
+      "officeIntro": {
+        "title": "How a career gets built here",
+        "body": "Nobody hands you an office. You join a party, spend actions to get your name known, win a small seat, build a voting record, and trade up from there. Players who try to start at the top almost always lose their first primary and give up.",
+        "next": "Next"
+      },
+      "joinParty": {
+        "title": "Join a party first",
+        "body": "A party gives you a shared pool of actions to draw on, better odds in a primary, a lift from whoever is at the top of the ticket, and money from the party treasury when yours runs out. Running as an independent is much harder. Pick the party closest to your platform, or a weak one you think you can take over.",
+        "hint": "Open the parties page and join one.",
+        "next": "Next"
+      },
+      "actionsWhat": {
+        "title": "Actions are your time",
+        "body": "You get a few actions each turn and they are the main thing you have to spend. Money you can raise later. Actions you cannot get back. The next few cards walk through what each one does and when it is worth the cost.",
+        "hint": "Open the Actions page to follow along.",
+        "next": "Next"
+      },
+      "actionCampaign": {
+        "title": "Campaign is the one you start with",
+        "body": "Campaigning raises your Political Influence, which is how well known you are. It is the cheapest action in the game and it is what turns a nobody into someone who can win a primary. The cost goes up as your influence grows, so it is at its best right now while you have none.",
+        "hint": "Run a Campaign action to continue.",
+        "next": "Next"
+      },
+      "actionAdvertise": {
+        "title": "Advertising is for later",
+        "body": "Adverts raise Favorability, which is whether people like you rather than whether they have heard of you. It costs about five times what campaigning costs. Buying adverts before anyone knows your name is the most common way new players waste a turn. Get your influence up first.",
+        "next": "Next"
+      },
+      "actionFundraise": {
+        "title": "Fundraising needs a donor base",
+        "body": "Fundraise turns your donor network into campaign money. If your donor level is zero it is greyed out, because you have nobody to call. That is why the next card matters more than this one on your first few turns.",
+        "next": "Next"
+      },
+      "actionDonors": {
+        "title": "Build the donor network early",
+        "body": "This is the action new players skip and regret. It costs a lot up front and pays nothing straight away, but every fundraise you ever run afterwards pays more. Do not fund your own campaign out of pocket instead. Self funding drives your Infamy up and bleeds Favorability every turn, and it is the fastest way to end a promising career.",
+        "next": "Got it"
+      },
+      "fileForRace": {
+        "title": "File for a race at home",
+        "body": "Your {region} page lists the races you can actually enter. A {region} legislature seat is the usual first run: it is cheap to contest, it is real power, and it gives you a voting record to campaign on next time. Win something small first, then climb.",
+        "hint": "Open the Elections tab on your {region} page and file for a race.",
+        "next": "Next"
+      },
+      "firstVote": {
+        "title": "Cast your first vote",
+        "body": "Once you hold a seat you can vote on bills in {legislatureName}. Bills move real numbers like taxes, wages, and growth, and how you voted follows you into every race you run after this. If you do not hold a seat yet, skip ahead and come back when you win one.",
+        "hint": "Open {legislatureName} and read a bill on the floor.",
+        "next": "Next"
+      },
+      "officeWider": {
+        "title": "Where this goes next",
+        "body": "A seat is the start, not the finish. From here you chase committee places, party office, and leadership votes, and every one of those is decided by players you will need on your side. The Discord is where most of that gets arranged.",
+        "readMore": "See every race",
+        "next": "Got it"
+      },
+      "investIntro": {
+        "title": "Share prices here are not random",
+        "body": "A company is worth what it earns. What it earns depends on the sectors it works in, the wages it pays, and how much households can afford to buy. So the way to pick a share is to read the economy first and then buy the company that gains from what you just read.",
+        "next": "Next"
+      },
+      "investMarket": {
+        "title": "Put your money somewhere",
+        "body": "You can buy shares in a single company, or buy into an index fund if you would rather hold a slice of everything and not pick. The market moves every turn whether or not you are paying attention, so leaving all your money in cash is also a decision, and usually a losing one.",
+        "hint": "Open the market and buy shares or fund units.",
+        "next": "Next"
+      },
+      "investPortfolio": {
+        "title": "Check what it actually paid you",
+        "body": "Your portfolio shows what you hold, what it is worth now, and what it has paid out. Dividends land each turn and report what really happened last turn rather than a smoothed average, so a bad sector looks bad straight away instead of a few turns later.",
+        "hint": "Open your portfolio.",
+        "next": "Next"
+      },
+      "investRisk": {
+        "title": "How people lose money here",
+        "body": "Usually one of three ways. They hold one company all the way through a downturn in its sector. They chase a high savings rate in a currency that is losing value faster than the interest pays. Or they borrow against something that then falls. Spread your holdings, watch inflation, and keep some cash back for campaigns.",
+        "next": "Got it"
+      },
+      "companyIntro": {
+        "title": "A company here is a real business",
+        "body": "It is not just a share price. A company works in specific sectors, employs people in specific regions, buys what it needs from other companies, and sells to households and to the government. Run one well and it pays for a political career nobody can outspend.",
+        "next": "Next"
+      },
+      "companyTakeCharge": {
+        "title": "Start one, or take over an empty chair",
+        "body": "You can found a company from nothing, or step into one whose chief executive seat is empty. Taking over is usually faster: the buildings, the staff and the contracts already exist and you get them on day one. Both start from the market page.",
+        "hint": "Open the market page and found or claim a company.",
+        "next": "Next"
+      },
+      "companySectors": {
+        "title": "Sectors are where the money comes from",
+        "body": "Every company works in one or more sectors, and each has its own demand, its own input costs, and a limit on how much it can produce. Adding capacity costs money and takes several turns to come online. So pick the sector the economy is about to need, not the one that did well last year.",
+        "next": "Next"
+      },
+      "companyLabour": {
+        "title": "Wages cut both ways",
+        "body": "Pay too little and output drops, workers organise, and you get strikes. Pay too much and you have no margin left. There is a second effect that catches people out: the people you employ are also the people who buy things. Squeeze wages across your own region and you shrink the market you are selling into.",
+        "readMore": "See the economy",
+        "next": "Next"
+      },
+      "companyShares": {
+        "title": "Raising money without losing control",
+        "body": "Selling shares raises money quickly, but every share you sell is a vote you no longer hold, and someone can buy enough of them to remove you. Founders keep control through their founding stake and through supershares. Work out how much of the company you are willing to give up before you list it, not after.",
+        "next": "Got it"
+      },
+      "unionIntro": {
+        "title": "A union is pressure, not a member list",
+        "body": "Unions here are not groups of players. Each one has a membership pressure score that stands for the workers in that industry. Pressure is what gives a union any power at all, and organising drives are how it goes up. As leader, your job is to raise it and then spend it on something worth having.",
+        "next": "Next"
+      },
+      "unionFind": {
+        "title": "Find your industry",
+        "body": "Every industry has a union. Some already have a leader and some are sitting empty. An empty union in an industry that employs a lot of people is probably the best opening in the game for a new player with no money and no reputation, because nobody is competing with you for it.",
+        "hint": "Open the unions page and back one.",
+        "next": "Next"
+      },
+      "unionOrganize": {
+        "title": "Pay for a drive to get a vote",
+        "body": "Spending your own money on an organising drive raises that union's membership pressure and earns you a vote in its leadership election. That is the whole ladder: organise, get a vote, win the leadership, then you control the treasury.",
+        "readMore": "Back a union",
+        "next": "Next"
+      },
+      "unionPower": {
+        "title": "Wage demands and strikes",
+        "body": "A union with enough pressure and money behind it can demand higher wages across its industry, and strike if employers refuse. Strikes cost the union money and cost companies output, so it is a threat you spend rather than a button you press repeatedly. Watch out for governments passing a ban, which freezes your union until it is repealed.",
+        "next": "Got it"
+      },
+      "nationIntro": {
+        "title": "This is the top of the ladder",
+        "body": "Running {countryName} is not where you start. The route is a party, then a local seat, then a national seat, then the executive. This chapter shows you what is waiting at the top so you know what you are climbing towards and which jobs are worth taking on the way.",
+        "next": "Show me"
+      },
+      "nationExecutive": {
+        "title": "How the top job gets won",
+        "body": "The executive page shows who holds power in {countryName} right now, how they got it, and when the job is next contested. Read how your country picks its leader before you plan a run, because the rules are genuinely different from country to country.",
+        "readMore": "See who holds power",
+        "next": "Next"
+      },
+      "nationCabinet": {
+        "title": "Cabinet posts are the realistic first step",
+        "body": "Cabinet jobs run a whole area of policy and they are handed out rather than elected. For most players that is the first real taste of national power, long before the top job is possible. Which means being useful to whoever will be doing the handing out is worth more than any campaign action.",
+        "readMore": "See the cabinet",
+        "next": "Next"
+      },
+      "nationBudget": {
+        "title": "Governing is mostly arithmetic",
+        "body": "The budget is where promises meet money. Every programme costs something, every tax slows something down, and deficits turn into debt payments that squeeze out everything you actually wanted to do. Read it before you promise anything in a campaign.",
+        "hint": "Open the national budget.",
+        "next": "Next"
+      },
+      "nationMoney": {
+        "title": "The levers underneath the budget",
+        "body": "The central bank sets interest rates, and those move inflation, the cost of borrowing, and the value of your currency. A leader who ignores this still gets the consequences. Currency strength also sets what imports cost you and what your exporters earn abroad.",
+        "readMore": "See the central bank",
+        "next": "Got it"
+      }
+    },
+    "closing": {
+      "title": "That is the loop",
+      "bodyFull": "Read the wire, spend your actions where they count, and let the turns compound. You can replay any chapter from the tutorial page whenever you want it. Good luck out there.",
+      "bodyShort": "That is your path. If you want to see one of the others later, the tutorial page has every chapter and you can run them one at a time. Good luck out there.",
+      "next": "Done"
+    },
+    "coach": {
+      "dialogLabel": "Tutorial",
+      "chapterRail": "Tutorial chapters",
+      "goToChapter": "Go to {title}",
+      "chapterProgress": "Chapter {number} of {total}",
+      "stepProgress": "Step {step} of {total}",
+      "skip": "Skip",
+      "back": "Back",
+      "next": "Next",
+      "takeMeThere": "Take me there"
+    },
+    "regionNouns": {
+      "state": "state",
+      "nation": "nation",
+      "land": "Land",
+      "region": "region",
+      "province": "province",
+      "county": "county",
+      "republic": "republic",
+      "zone": "zone",
+      "autonomousCommunity": "autonomous community"
+    },
+    "welcome": {
+      "stepProgress": "Step {panel} of 2",
+      "titleNamed": "Welcome, {name}",
+      "title": "Welcome to A House Divided",
+      "interestsTitle": "What do you want to do?",
+      "intro": "Two quick questions and the game will point you at the right things. This takes about fifteen seconds.",
+      "interestsIntro": "Pick as many as you like. The tour covers each one in turn, and you can change your mind later.",
+      "experienceNewTitle": "New to A House Divided",
+      "experienceNewBlurb": "Start from the beginning. What a turn is, how power works, and what to do first.",
+      "experienceReturningTitle": "New to this iteration",
+      "experienceReturningBlurb": "You have played before. Skip the basics and see what changed this time around.",
+      "experienceSkipTitle": "Skip the tutorial",
+      "experienceSkipBlurb": "Go straight in. You can start any part of it later from the tutorial page.",
+      "allOfIt": "All of it",
+      "mostPlayers": "Most players",
+      "aboutMinutesShort": "about {minutes} min",
+      "minutesShort": "{minutes} min",
+      "allOfItBlurb": "The whole game. Politics and money feed each other, and the players who do both end up ahead of the ones who pick a side.",
+      "pickAtLeastOne": "Pick at least one to continue.",
+      "estimate": "About {minutes} minutes, and you can stop any time.",
+      "back": "Back",
+      "start": "Start the tour",
+      "starting": "Starting…",
+      "decideLater": "Decide later",
+      "saveFailed": "Could not save that. Check your connection and try again."
+    },
+    "hub": {
+      "metaTitle": "Tutorial | A House Divided",
+      "metaDescription": "Every chapter of the A House Divided guided tour: getting started, running for office, investing, running a company, running a union, and running a nation.",
+      "title": "Tutorial",
+      "intro": "Run any chapter whenever you want it. Nothing here costs an action or a turn.",
+      "changePlan": "Change what I want to do",
+      "resume": "Resume the tour",
+      "runAll": "Run the whole tour",
+      "loadFailed": "Could not load your tutorial progress. You can still run any chapter below.",
+      "done": "Done",
+      "inYourTour": "In your tour",
+      "aboutMinutes": "About {minutes} minutes",
+      "readMore": "Read more",
+      "replay": "Replay",
+      "start": "Start",
+      "entryLabel": "Tutorial"
+    }
+  }
 }

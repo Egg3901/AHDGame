@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 import { TutorialHubClient } from "./TutorialHubClient";
 
-export const metadata: Metadata = publicPageMetadata({
-  title: "Tutorial | A House Divided",
-  description:
-    "Every chapter of the A House Divided guided tour: getting started, running for office, investing, running a company, running a union, and running a nation.",
-  pathname: "/tutorial",
-});
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("tutorial");
+  return publicPageMetadata({
+    title: t("hub.metaTitle"),
+    description: t("hub.metaDescription"),
+    pathname: "/tutorial",
+  });
+}
 
 export default function TutorialHubPage() {
   return <TutorialHubClient />;

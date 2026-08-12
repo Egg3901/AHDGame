@@ -1,3 +1,323 @@
 {
-  "tutorial": {}
+  "tutorial": {
+    "chapters": {
+      "whatsNew": {
+        "title": "Was sich geändert hat",
+        "blurb": "Die fünf Änderungen, die dich am ehesten erwischen, wenn du die letzte Iteration gespielt hast."
+      },
+      "core": {
+        "title": "Erste Schritte",
+        "blurb": "Runden, deine Heimatregion, die Nachrichten und wo die anderen Spieler sind."
+      },
+      "office": {
+        "title": "Kandidiere für ein Amt",
+        "blurb": "Tritt einer Partei bei, mach Wahlkampf, gewinn einen Sitz und stimm über echte Gesetze ab."
+      },
+      "invest": {
+        "title": "Investieren",
+        "blurb": "Kauf Aktien und Fonds, kassiere Dividenden und geh den üblichen Fallen aus dem Weg."
+      },
+      "company": {
+        "title": "Führe ein Unternehmen",
+        "blurb": "Gründe oder übernimm einen Konzern. Wähle Sektoren, setze Löhne, beschaffe Kapital."
+      },
+      "union": {
+        "title": "Führe eine Gewerkschaft",
+        "blurb": "Organisiere eine Branche, gewinn den Vorsitz und treib die Löhne nach oben."
+      },
+      "nation": {
+        "title": "Führe eine Nation",
+        "blurb": "Die Spitze der Leiter: die Regierung, das Kabinett, der Haushalt, die Zentralbank."
+      }
+    },
+    "steps": {
+      "whatsNewIntro": {
+        "title": "Was sich in dieser Iteration geändert hat",
+        "body": "Das sind die fünf Änderungen, die dich am ehesten erwischen, wenn du schon einmal gespielt hast. Die vollständige Liste findest du jederzeit auf der Changelog-Seite.",
+        "next": "Zeig es mir"
+      },
+      "whatsNewFounding": {
+        "title": "Jedes Land erspielt sich seine Ausgangslage",
+        "body": "Welten starten jetzt mit einer echten Gründungswahl, bevor irgendjemand spielt. Kein Land bekommt mehr ein Ergebnis geschenkt. Die Sitze und die Regierungspartei, die du vorfindest, wurden tatsächlich gewählt.",
+        "next": "Weiter"
+      },
+      "whatsNewUnions": {
+        "title": "Gewerkschaften sind eine Karriere",
+        "body": "Jede Branche hat jetzt eine Gewerkschaft, die du organisieren kannst. Zahl für eine Anwerbekampagne, kandidiere für den Vorsitz, füll die Kasse und treib die Löhne in der ganzen Branche nach oben. Regierungen können Gewerkschaften per Gesetz verbieten, was sie einfriert, bis das Verbot aufgehoben ist.",
+        "readMore": "Zu den Gewerkschaften",
+        "next": "Weiter"
+      },
+      "whatsNewHouseholds": {
+        "title": "Normale Leute kaufen jetzt ein",
+        "body": "Wie viel Haushalte ausgeben, hängt an ihren Jobs, ihren Löhnen und den Preisen. Gib den Leuten Arbeit und steigende Löhne und sie geben mehr aus; lass die Lebenshaltungskosten klettern und sie hören auf. Dieses Geld geht an die Unternehmen, die an sie verkaufen. Wo du baust und wen du beschäftigst, verändert also deine eigene Nachfrage.",
+        "readMore": "Zur Wirtschaft",
+        "next": "Weiter"
+      },
+      "whatsNewAi": {
+        "title": "Die Computerpolitiker sind deutlich schlauer geworden",
+        "body": "Sie schauen jetzt auf den Kalender, statt drei Jahre vor der Wahl genauso zu kämpfen wie in der Woche davor, sie legen nach, wenn sie wirklich herausgefordert werden, und sie hören auf, für Werbung zu zahlen, sobald sie nicht mehr wirkt. Außerdem haben sie eigene Gewohnheiten, die sich über eine Karriere verschieben. Es gibt feste Grenzen dafür, wie viel davon bei dir landen kann.",
+        "next": "Weiter"
+      },
+      "whatsNewElections": {
+        "title": "Wahlen lassen sich schwerer im Vorbeigehen gewinnen",
+        "body": "Der Vorteil eines Amtsinhabers hängt jetzt daran, wie beliebt er wirklich ist, Parteien, die lange an der Macht waren, bekommen einen Malus, und jedes Gouverneurs- und Senatsrennen hat einen echten Gegner. Ein Zensus zeichnet die Sitze alle zehn Jahre neu, sicheres Terrain bleibt also nicht ewig sicher.",
+        "readMore": "Zu den Rennen",
+        "next": "Verstanden"
+      },
+      "welcome": {
+        "title": "Willkommen bei A House Divided",
+        "body": "{countryName} ist ein lebendiges Land, und die anderen Menschen darin sind echte Spieler. Wer gut abschneidet, baut früh Verbündete und ein Einkommen auf. Ein gutes Programm allein bringt dich nicht weit. Diese Tour zeigt dir die Züge, die wirklich zählen. Du kannst jederzeit aufhören und auf der Tutorial-Seite weitermachen.",
+        "next": "Zeig es mir"
+      },
+      "howTurnsWork": {
+        "title": "Das Spiel läuft in Runden",
+        "body": "Nichts passiert in dem Moment, in dem du klickst. Was du jetzt tust, wird in der nächsten Runde ausgewertet, zusammen mit den Zügen aller anderen und der Wirtschaft. Du bekommst jede Runde eine kleine Zahl an Aktionen. Geld und Einfluss bleiben erhalten, aber eine ungenutzte Runde ist weg.",
+        "next": "Weiter"
+      },
+      "joinDiscord": {
+        "title": "Finde zuerst andere Spieler",
+        "body": "Mit Verbündeten kommst du viel weiter als allein. Im Discord gründen Spieler Parteien, tauschen Gefallen, sprechen Abstimmungen ab und erklären die Teile des Spiels, die sonst niemand erklärt. Tritt jetzt bei und komm dann zurück.",
+        "next": "Discord öffnen"
+      },
+      "scoutRegion": {
+        "title": "Sieh dir deine {region}-Seite an, bevor du etwas ausgibst",
+        "body": "Alles beginnt lokal. Deine {region}-Seite zeigt, wie die Wirtschaft dort läuft, wer gerade im Amt ist und welche Sitze anstehen. Lies sie zuerst, damit du weißt, wo die Lücken sind, statt zu raten.",
+        "hint": "Öffne deine {region}-Seite, um weiterzumachen.",
+        "next": "Weiter"
+      },
+      "readWire": {
+        "title": "Lies jede Runde die Nachrichten",
+        "body": "Die Nachrichtenseite zeigt dir, was andere Spieler letzte Runde getan haben und wie die Wirtschaft darauf reagiert hat. Das ist der Unterschied zwischen auf das Spiel reagieren und von ihm überrascht werden. Die meisten starken Spieler lesen sie, bevor sie etwas ausgeben.",
+        "hint": "Öffne die Nachrichtenseite.",
+        "next": "Weiter"
+      },
+      "officeIntro": {
+        "title": "Wie hier eine Karriere entsteht",
+        "body": "Niemand schenkt dir ein Amt. Du trittst einer Partei bei, gibst Aktionen aus, um bekannt zu werden, gewinnst einen kleinen Sitz, baust eine Abstimmungsbilanz auf und arbeitest dich hoch. Spieler, die oben anfangen wollen, verlieren fast immer ihre erste Vorwahl und geben auf.",
+        "next": "Weiter"
+      },
+      "joinParty": {
+        "title": "Tritt zuerst einer Partei bei",
+        "body": "Eine Partei gibt dir einen gemeinsamen Aktionspool, bessere Chancen in einer Vorwahl, Rückenwind von der Spitze der Liste und Geld aus der Parteikasse, wenn deins alle ist. Als Unabhängiger anzutreten ist deutlich schwerer. Wähl die Partei, die deinem Programm am nächsten ist, oder eine schwache, die du übernehmen kannst.",
+        "hint": "Öffne die Parteienseite und tritt einer bei.",
+        "next": "Weiter"
+      },
+      "actionsWhat": {
+        "title": "Aktionen sind deine Zeit",
+        "body": "Du bekommst jede Runde ein paar Aktionen, und sie sind das Wichtigste, was du ausgeben kannst. Geld kannst du später beschaffen. Aktionen bekommst du nicht zurück. Die nächsten Karten zeigen, was jede tut und wann sie ihren Preis wert ist.",
+        "hint": "Öffne die Aktionsseite, um mitzumachen.",
+        "next": "Weiter"
+      },
+      "actionCampaign": {
+        "title": "Wahlkampf ist der Anfang",
+        "body": "Wahlkampf erhöht deinen politischen Einfluss, also wie bekannt du bist. Es ist die billigste Aktion im Spiel, und sie macht aus einem Niemand jemanden, der eine Vorwahl gewinnen kann. Die Kosten steigen mit deinem Einfluss, sie lohnt sich also gerade jetzt am meisten, solange du keinen hast.",
+        "hint": "Führe eine Wahlkampf-Aktion aus, um weiterzumachen.",
+        "next": "Weiter"
+      },
+      "actionAdvertise": {
+        "title": "Werbung kommt später",
+        "body": "Anzeigen erhöhen deine Beliebtheit, also ob die Leute dich mögen, nicht ob sie dich kennen. Sie kosten etwa fünfmal so viel wie Wahlkampf. Anzeigen zu kaufen, bevor irgendjemand deinen Namen kennt, ist der häufigste Weg, wie neue Spieler eine Runde verschwenden. Bau zuerst deinen Einfluss auf.",
+        "next": "Weiter"
+      },
+      "actionFundraise": {
+        "title": "Spendensammeln braucht eine Spenderbasis",
+        "body": "Spendensammeln macht aus deinem Spendernetzwerk Wahlkampfgeld. Ist dein Spenderlevel null, ist die Aktion ausgegraut, weil du niemanden anrufen kannst. Deshalb ist die nächste Karte in deinen ersten Runden wichtiger als diese.",
+        "next": "Weiter"
+      },
+      "actionDonors": {
+        "title": "Bau das Spendernetzwerk früh auf",
+        "body": "Das ist die Aktion, die neue Spieler auslassen und bereuen. Sie kostet vorab viel und zahlt sofort nichts, aber jedes Spendensammeln danach bringt mehr ein. Finanzier deinen Wahlkampf nicht stattdessen aus eigener Tasche. Eigenfinanzierung treibt deine Verrufenheit hoch, kostet jede Runde Beliebtheit und beendet vielversprechende Karrieren am schnellsten.",
+        "next": "Verstanden"
+      },
+      "fileForRace": {
+        "title": "Tritt bei dir zu Hause zu einem Rennen an",
+        "body": "Deine {region}-Seite listet die Rennen, zu denen du wirklich antreten kannst. Ein Sitz im {region}-Parlament ist der übliche erste Anlauf: billig zu bestreiten, echte Macht, und du bekommst eine Abstimmungsbilanz für den nächsten Wahlkampf. Gewinn erst etwas Kleines, dann steig auf.",
+        "hint": "Öffne den Wahlen-Tab auf deiner {region}-Seite und tritt zu einem Rennen an.",
+        "next": "Weiter"
+      },
+      "firstVote": {
+        "title": "Gib deine erste Stimme ab",
+        "body": "Sobald du einen Sitz hast, kannst du in {legislatureName} über Gesetze abstimmen. Gesetze bewegen echte Zahlen wie Steuern, Löhne und Wachstum, und dein Abstimmungsverhalten begleitet dich in jedes weitere Rennen. Hast du noch keinen Sitz, spring weiter und komm zurück, wenn du einen gewinnst.",
+        "hint": "Öffne {legislatureName} und lies einen Gesetzentwurf im Plenum.",
+        "next": "Weiter"
+      },
+      "officeWider": {
+        "title": "Wohin es von hier aus geht",
+        "body": "Ein Sitz ist der Anfang, nicht das Ziel. Von hier aus jagst du Ausschussplätze, Parteiämter und Führungswahlen, und über jede davon entscheiden Spieler, die du auf deiner Seite brauchst. Das meiste davon wird im Discord ausgehandelt.",
+        "readMore": "Alle Rennen ansehen",
+        "next": "Verstanden"
+      },
+      "investIntro": {
+        "title": "Aktienkurse sind hier nicht zufällig",
+        "body": "Ein Unternehmen ist wert, was es verdient. Was es verdient, hängt an seinen Sektoren, den Löhnen, die es zahlt, und daran, wie viel sich die Haushalte leisten können. Eine Aktie wählst du also, indem du zuerst die Wirtschaft liest und dann das Unternehmen kaufst, das davon profitiert.",
+        "next": "Weiter"
+      },
+      "investMarket": {
+        "title": "Leg dein Geld irgendwo an",
+        "body": "Du kannst Aktien eines einzelnen Unternehmens kaufen oder in einen Indexfonds gehen, wenn du lieber ein Stück von allem hältst und nichts auswählen willst. Der Markt bewegt sich jede Runde, ob du hinschaust oder nicht. Alles Geld in bar zu lassen ist also auch eine Entscheidung, und meistens eine schlechte.",
+        "hint": "Öffne den Markt und kauf Aktien oder Fondsanteile.",
+        "next": "Weiter"
+      },
+      "investPortfolio": {
+        "title": "Prüf, was es dir wirklich gezahlt hat",
+        "body": "Dein Portfolio zeigt, was du hältst, was es jetzt wert ist und was es ausgeschüttet hat. Dividenden kommen jede Runde und zeigen, was letzte Runde wirklich passiert ist, statt eines geglätteten Durchschnitts. Ein schlechter Sektor sieht also sofort schlecht aus und nicht erst ein paar Runden später.",
+        "hint": "Öffne dein Portfolio.",
+        "next": "Weiter"
+      },
+      "investRisk": {
+        "title": "Wie Leute hier Geld verlieren",
+        "body": "Meist auf eine von drei Arten. Sie halten ein einzelnes Unternehmen durch den ganzen Abschwung seines Sektors. Sie jagen einem hohen Sparzins in einer Währung nach, die schneller an Wert verliert, als die Zinsen zahlen. Oder sie beleihen etwas, das danach fällt. Streu deine Anlagen, behalt die Inflation im Blick und halt etwas Bargeld für Wahlkämpfe zurück.",
+        "next": "Verstanden"
+      },
+      "companyIntro": {
+        "title": "Ein Unternehmen ist hier ein echter Betrieb",
+        "body": "Es ist nicht nur ein Aktienkurs. Ein Unternehmen arbeitet in bestimmten Sektoren, beschäftigt Menschen in bestimmten Regionen, kauft bei anderen Unternehmen ein und verkauft an Haushalte und an den Staat. Führ eines gut und es bezahlt eine politische Karriere, die niemand überbieten kann.",
+        "next": "Weiter"
+      },
+      "companyTakeCharge": {
+        "title": "Gründe eines oder übernimm einen leeren Chefsessel",
+        "body": "Du kannst ein Unternehmen von Grund auf gründen oder in eines einsteigen, dessen Chefsessel leer ist. Übernehmen geht meist schneller: Gebäude, Belegschaft und Verträge existieren schon und gehören dir ab Tag eins. Beides beginnt auf der Marktseite.",
+        "hint": "Öffne die Marktseite und gründe oder übernimm ein Unternehmen.",
+        "next": "Weiter"
+      },
+      "companySectors": {
+        "title": "Sektoren sind die Geldquelle",
+        "body": "Jedes Unternehmen arbeitet in einem oder mehreren Sektoren, und jeder hat eigene Nachfrage, eigene Vorleistungskosten und eine Grenze, wie viel er produzieren kann. Kapazität kostet Geld und braucht mehrere Runden, bis sie läuft. Wähl also den Sektor, den die Wirtschaft gleich brauchen wird, nicht den, der letztes Jahr gut lief.",
+        "next": "Weiter"
+      },
+      "companyLabour": {
+        "title": "Löhne schneiden in beide Richtungen",
+        "body": "Zahlst du zu wenig, sinkt die Produktion, die Arbeiter organisieren sich und du bekommst Streiks. Zahlst du zu viel, bleibt dir keine Marge. Und es gibt einen zweiten Effekt, der viele erwischt: Deine Beschäftigten sind auch deine Kunden. Drück die Löhne in deiner eigenen Region und du schrumpfst den Markt, an den du verkaufst.",
+        "readMore": "Zur Wirtschaft",
+        "next": "Weiter"
+      },
+      "companyShares": {
+        "title": "Geld beschaffen, ohne die Kontrolle zu verlieren",
+        "body": "Aktien zu verkaufen bringt schnell Geld, aber jede verkaufte Aktie ist eine Stimme, die du nicht mehr hältst, und jemand kann genug davon kaufen, um dich abzusetzen. Gründer halten die Kontrolle über ihren Gründeranteil und über Superaktien. Überleg dir, wie viel vom Unternehmen du abgeben willst, bevor du es an die Börse bringst, nicht danach.",
+        "next": "Verstanden"
+      },
+      "unionIntro": {
+        "title": "Eine Gewerkschaft ist Druck, keine Mitgliederliste",
+        "body": "Gewerkschaften sind hier keine Spielergruppen. Jede hat einen Mitgliederdruckwert, der für die Arbeiter der Branche steht. Druck ist das, was einer Gewerkschaft überhaupt Macht gibt, und Organisationskampagnen treiben ihn nach oben. Als Vorsitzender ist es dein Job, ihn aufzubauen und dann für etwas auszugeben, das sich lohnt.",
+        "next": "Weiter"
+      },
+      "unionFind": {
+        "title": "Finde deine Branche",
+        "body": "Jede Branche hat eine Gewerkschaft. Manche haben schon einen Vorsitzenden, manche stehen leer. Eine leere Gewerkschaft in einer Branche mit vielen Beschäftigten ist wahrscheinlich die beste Chance im Spiel für einen neuen Spieler ohne Geld und ohne Ruf, weil niemand mit dir darum konkurriert.",
+        "hint": "Öffne die Gewerkschaftsseite und unterstütze eine.",
+        "next": "Weiter"
+      },
+      "unionOrganize": {
+        "title": "Zahl für eine Kampagne und bekomm eine Stimme",
+        "body": "Eigenes Geld in eine Organisationskampagne zu stecken erhöht den Mitgliederdruck der Gewerkschaft und gibt dir eine Stimme bei ihrer Vorstandswahl. Das ist die ganze Leiter: organisieren, Stimme bekommen, Vorsitz gewinnen, dann gehört dir die Kasse.",
+        "readMore": "Eine Gewerkschaft unterstützen",
+        "next": "Weiter"
+      },
+      "unionPower": {
+        "title": "Lohnforderungen und Streiks",
+        "body": "Eine Gewerkschaft mit genug Druck und Geld kann höhere Löhne für die ganze Branche fordern und streiken, wenn die Arbeitgeber ablehnen. Streiks kosten die Gewerkschaft Geld und die Unternehmen Produktion. Es ist also eine Drohung, die du gezielt einsetzt, kein Knopf zum Dauerdrücken. Pass auf Regierungen auf, die ein Verbot beschließen, denn das friert deine Gewerkschaft ein, bis es aufgehoben ist.",
+        "next": "Verstanden"
+      },
+      "nationIntro": {
+        "title": "Das ist die Spitze der Leiter",
+        "body": "{countryName} zu führen ist nicht dein Startpunkt. Der Weg ist eine Partei, dann ein lokaler Sitz, dann ein nationaler Sitz, dann die Regierung. Dieses Kapitel zeigt dir, was oben wartet, damit du weißt, wohin du kletterst und welche Jobs sich unterwegs lohnen.",
+        "next": "Zeig es mir"
+      },
+      "nationExecutive": {
+        "title": "Wie das höchste Amt gewonnen wird",
+        "body": "Die Regierungsseite zeigt, wer in {countryName} gerade die Macht hat, wie er sie bekommen hat und wann das Amt das nächste Mal zur Wahl steht. Lies, wie dein Land seine Führung wählt, bevor du eine Kandidatur planst, denn die Regeln unterscheiden sich wirklich von Land zu Land.",
+        "readMore": "Sehen, wer die Macht hat",
+        "next": "Weiter"
+      },
+      "nationCabinet": {
+        "title": "Kabinettsposten sind der realistische erste Schritt",
+        "body": "Kabinettsposten führen einen ganzen Politikbereich und werden vergeben statt gewählt. Für die meisten Spieler ist das der erste echte Vorgeschmack auf nationale Macht, lange bevor das höchste Amt möglich ist. Nützlich zu sein für den, der die Posten vergibt, ist also mehr wert als jede Wahlkampfaktion.",
+        "readMore": "Zum Kabinett",
+        "next": "Weiter"
+      },
+      "nationBudget": {
+        "title": "Regieren ist vor allem Rechnen",
+        "body": "Im Haushalt treffen Versprechen auf Geld. Jedes Programm kostet etwas, jede Steuer bremst etwas, und Defizite werden zu Schuldenzahlungen, die alles verdrängen, was du eigentlich tun wolltest. Lies ihn, bevor du im Wahlkampf irgendetwas versprichst.",
+        "hint": "Öffne den nationalen Haushalt.",
+        "next": "Weiter"
+      },
+      "nationMoney": {
+        "title": "Die Hebel unter dem Haushalt",
+        "body": "Die Zentralbank setzt die Zinsen, und die bewegen Inflation, Kreditkosten und den Wert deiner Währung. Eine Führung, die das ignoriert, bekommt trotzdem die Folgen. Die Stärke der Währung bestimmt außerdem, was Importe dich kosten und was deine Exporteure im Ausland verdienen.",
+        "readMore": "Zur Zentralbank",
+        "next": "Verstanden"
+      }
+    },
+    "closing": {
+      "title": "Das ist der Kreislauf",
+      "bodyFull": "Lies die Nachrichten, setz deine Aktionen dort ein, wo sie zählen, und lass die Runden für dich arbeiten. Du kannst jedes Kapitel jederzeit von der Tutorial-Seite aus wiederholen. Viel Erfolg da draußen.",
+      "bodyShort": "Das ist dein Weg. Wenn du später einen der anderen sehen willst, findest du jedes Kapitel auf der Tutorial-Seite und kannst sie einzeln durchspielen. Viel Erfolg da draußen.",
+      "next": "Fertig"
+    },
+    "coach": {
+      "dialogLabel": "Tutorial",
+      "chapterRail": "Tutorial-Kapitel",
+      "goToChapter": "Zu {title} springen",
+      "chapterProgress": "Kapitel {number} von {total}",
+      "stepProgress": "Schritt {step} von {total}",
+      "skip": "Überspringen",
+      "back": "Zurück",
+      "next": "Weiter",
+      "takeMeThere": "Bring mich hin"
+    },
+    "regionNouns": {
+      "state": "Bundesstaat",
+      "nation": "Nation",
+      "land": "Land",
+      "region": "Region",
+      "province": "Provinz",
+      "county": "County",
+      "republic": "Republik",
+      "zone": "Zone",
+      "autonomousCommunity": "Autonome Gemeinschaft"
+    },
+    "welcome": {
+      "stepProgress": "Schritt {panel} von 2",
+      "titleNamed": "Willkommen, {name}",
+      "title": "Willkommen bei A House Divided",
+      "interestsTitle": "Was willst du tun?",
+      "intro": "Zwei kurze Fragen, und das Spiel zeigt dir die richtigen Dinge. Das dauert etwa fünfzehn Sekunden.",
+      "interestsIntro": "Wähl so viele du willst. Die Tour behandelt sie nacheinander, und du kannst deine Meinung später ändern.",
+      "experienceNewTitle": "Neu bei A House Divided",
+      "experienceNewBlurb": "Fang von vorn an. Was eine Runde ist, wie Macht funktioniert und was du zuerst tun solltest.",
+      "experienceReturningTitle": "Neu in dieser Iteration",
+      "experienceReturningBlurb": "Du hast schon gespielt. Überspring die Grundlagen und sieh, was sich diesmal geändert hat.",
+      "experienceSkipTitle": "Tutorial überspringen",
+      "experienceSkipBlurb": "Direkt rein. Du kannst jeden Teil später von der Tutorial-Seite aus starten.",
+      "allOfIt": "Alles davon",
+      "mostPlayers": "Die meisten Spieler",
+      "aboutMinutesShort": "etwa {minutes} Min.",
+      "minutesShort": "{minutes} Min.",
+      "allOfItBlurb": "Das ganze Spiel. Politik und Geld befeuern sich gegenseitig, und wer beides macht, liegt am Ende vor denen, die sich für eine Seite entscheiden.",
+      "pickAtLeastOne": "Wähl mindestens eins, um weiterzumachen.",
+      "estimate": "Etwa {minutes} Minuten, und du kannst jederzeit aufhören.",
+      "back": "Zurück",
+      "start": "Tour starten",
+      "starting": "Startet…",
+      "decideLater": "Später entscheiden",
+      "saveFailed": "Das konnte nicht gespeichert werden. Prüf deine Verbindung und versuch es noch einmal."
+    },
+    "hub": {
+      "metaTitle": "Tutorial | A House Divided",
+      "metaDescription": "Jedes Kapitel der geführten Tour von A House Divided: erste Schritte, für ein Amt kandidieren, investieren, ein Unternehmen führen, eine Gewerkschaft führen und eine Nation führen.",
+      "title": "Tutorial",
+      "intro": "Starte jedes Kapitel, wann immer du willst. Nichts hier kostet eine Aktion oder eine Runde.",
+      "changePlan": "Ändern, was ich tun will",
+      "resume": "Tour fortsetzen",
+      "runAll": "Ganze Tour starten",
+      "loadFailed": "Dein Tutorial-Fortschritt konnte nicht geladen werden. Du kannst trotzdem jedes Kapitel unten starten.",
+      "done": "Fertig",
+      "inYourTour": "In deiner Tour",
+      "aboutMinutes": "Etwa {minutes} Minuten",
+      "readMore": "Mehr lesen",
+      "replay": "Wiederholen",
+      "start": "Starten",
+      "entryLabel": "Tutorial"
+    }
+  }
 }
