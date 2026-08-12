@@ -1,0 +1,9 @@
+{
+  "settings": {
+    "language": {
+      "title": "Sprache",
+      "description": "Wähle die Sprache für Menüs, Einstellungen und das Tutorial. Spielinhalte wie Nachrichten, Post und Gesetzgebung sind auf Englisch verfasst.",
+      "label": "Sprache der Oberfläche"
+    }
+  }
+}

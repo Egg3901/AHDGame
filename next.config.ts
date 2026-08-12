@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+import createNextIntlPlugin from "next-intl/plugin";
 import { execSync } from "child_process";
 import { readFileSync } from "fs";
 
@@ -338,7 +339,11 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
+// Locale resolution lives in src/i18n/request.ts (cookie-based, no URL
+// prefix), so the plugin only wires the request config into the build.
+const withNextIntl = createNextIntlPlugin();
+
+export default withNextIntl(withSentryConfig(nextConfig, {
   org: "ahousedivided",
   // GlitchTip project slug is "ahd" (not "a-house-divided"); artifacts must be
   // uploaded to the real slug or symbolication silently no-ops.
@@ -364,4 +369,4 @@ export default withSentryConfig(nextConfig, {
       removeDebugLogging: true,
     },
   },
-});
+}));

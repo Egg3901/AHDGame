@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { useTheme, type Theme } from "@/contexts/ThemeContext";
 import { type StatusBarLayout } from "@/components/StatusBar";
+import { LanguageSection } from "./LanguageSection";
 
 interface ThemeOption {
   value: Theme;
@@ -435,6 +436,8 @@ export function AppearanceSection({
           </div>
         </div>
       </div>
+
+      <LanguageSection />
 
       {/* ── Video prefs ─────────────────────────────────────────────────── */}
       <div className="border-t border-card-border pt-6">

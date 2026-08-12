@@ -1,0 +1,9 @@
+{
+  "settings": {
+    "language": {
+      "title": "Language",
+      "description": "Choose the language for menus, settings, and the tutorial. In-game content such as news, mail, and legislation is written in English.",
+      "label": "Interface language"
+    }
+  }
+}

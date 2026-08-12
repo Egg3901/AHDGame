@@ -3,6 +3,8 @@ import { Geist, Geist_Mono, Lora, Fraunces, JetBrains_Mono } from "next/font/goo
 import { redirect } from "next/navigation";
 import Script from "next/script";
 import { cookies, headers } from "next/headers";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import { NavbarWrapper } from "@/components/NavbarWrapper";
 import { BugReportFab } from "@/components/BugReportFab";
 import { StatusBar } from "@/components/StatusBar";
@@ -153,7 +155,13 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [cookieStore, requestHeaders] = await Promise.all([cookies(), headers()]);
+  const [cookieStore, requestHeaders, locale, intlMessages, t] = await Promise.all([
+    cookies(),
+    headers(),
+    getLocale(),
+    getMessages(),
+    getTranslations("layout"),
+  ]);
   const userAgent = requestHeaders.get("user-agent") ?? "";
   const isNativeApp = userAgent.includes("AHD-Android");
   const host = requestHeaders.get("host");
@@ -232,7 +240,7 @@ export default async function RootLayout({
   );
 
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${lora.variable} ${fraunces.variable} ${jetbrainsMono.variable} antialiased`}
       >
@@ -283,8 +291,9 @@ export default async function RootLayout({
           href="#main-content"
           className="absolute -top-24 left-4 z-[200] rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white outline-none transition-[top] duration-150 focus:top-4 focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
         >
-          Skip to main content
+          {t("skipToMainContent")}
         </a>
+        <NextIntlClientProvider locale={locale} messages={intlMessages}>
         <RegisteredCountriesProvider
           value={{
             registered: registeredCountries,
@@ -370,6 +379,7 @@ export default async function RootLayout({
             </CurrencyProvider>
           </AuthDataProvider>
         </RegisteredCountriesProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );
