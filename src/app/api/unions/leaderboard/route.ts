@@ -11,11 +11,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
-import type { Character, FederalBudget, Union } from "@/lib/db/types";
+import type { FederalBudget, Union } from "@/lib/db/types";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
 import { genericUnionName } from "@/lib/unions/unionNames";
+import { resolveUnionOwners } from "@/lib/unions/unionOwnerDisplay";
 
 export async function GET(req: NextRequest) {
   try {
@@ -64,16 +65,9 @@ export async function GET(req: NextRequest) {
       .sort({ membershipPressure: -1, treasury: -1, name: 1 })
       .toArray();
 
-    const ownerIds = unions
-      .map((u) => u.ownerId)
-      .filter((id): id is NonNullable<typeof id> => !!id);
-    const owners = ownerIds.length
-      ? await db
-          .collection<Character>("characters")
-          .find({ _id: { $in: ownerIds } }, { projection: { name: 1 } })
-          .toArray()
-      : [];
-    const ownerNameById = new Map(owners.map((o) => [o._id.toString(), o.name]));
+    // NPP-run unions store `ownerId` against `npps`, not `characters`. Looking
+    // only at characters left every NPP presidency labelled "Unknown".
+    const ownersById = await resolveUnionOwners(db, unions);
 
     const rows = unions.map((u) => ({
       unionId: u._id.toString(),
@@ -82,7 +76,9 @@ export async function GET(req: NextRequest) {
       countryName: COUNTRY_CONFIGS[u.countryId]?.name ?? u.countryId,
       sectorType: u.sectorType,
       sectorLabel: CORPORATION_TYPE_LABELS[u.sectorType] ?? u.sectorType,
-      leaderName: u.ownerId ? (ownerNameById.get(u.ownerId.toString()) ?? "Unknown") : null,
+      leaderName: u.ownerId
+        ? (ownersById.get(u.ownerId.toString())?.name ?? "Unknown")
+        : null,
       isVacant: u.ownerId == null,
       membershipPressure: u.membershipPressure,
       treasury: u.treasury,

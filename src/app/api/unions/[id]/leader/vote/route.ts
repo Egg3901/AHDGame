@@ -28,6 +28,7 @@ import {
   tallyUnionLeaderVoteWeights,
   tallyUnionLeaderVotes,
 } from "@/lib/unions/unionLeadershipVote";
+import { resolveUnionOwner } from "@/lib/unions/unionOwnerDisplay";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -55,7 +56,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Union not found" }, { status: 404 });
     }
 
-    const [votesRaw, organizerDocs, user, weights] = await Promise.all([
+    const [votesRaw, organizerDocs, user, weights, leader] = await Promise.all([
       db.collection<UnionLeaderVote>("unionLeaderVotes").find({ unionId: unionObjectId }).toArray(),
       // The full roster, not just a count. Legacy organizers carry no `strength`
       // field and are dropped from the weight map, but they still belong on the
@@ -69,17 +70,23 @@ export async function GET(_request: Request, { params }: RouteParams) {
         .toArray(),
       getAuthUserWithCharacter(),
       loadUnionVoteWeights(db, unionObjectId),
+      // NPP presidents live in `npps` (`ownerType: "npp"`). Looking them up as
+      // characters is what rendered "Unknown" on the union dashboard.
+      resolveUnionOwner(db, union, { includeAvatar: true }),
     ]);
     const organizerCount = organizerDocs.length;
 
     const votes = dedupeUnionLeaderVotes(votesRaw);
     const tally = tallyUnionLeaderVotes(votesRaw, weights);
     const leaderCharacterId = union.ownerId?.toString() ?? null;
+    // Organizers and vote tallies are always player characters. The sitting
+    // president may be an NPP — resolved separately above — so omit that id
+    // from the character name batch when `ownerType` says so.
     const nameLookupIds = [
       ...new Set([
         ...votes.map((v) => v.candidateCharacterId.toString()),
         ...organizerDocs.map((o) => o.characterId.toString()),
-        ...(leaderCharacterId ? [leaderCharacterId] : []),
+        ...(leaderCharacterId && union.ownerType !== "npp" ? [leaderCharacterId] : []),
       ]),
     ];
     const charMap = await bulkFetchCharacterNames(db, nameLookupIds, { includeAvatar: true });
@@ -169,14 +176,25 @@ export async function GET(_request: Request, { params }: RouteParams) {
       organizerCount,
       organizers,
       totalBankedStrength,
-      leader: leaderCharacterId
+      leader: leader
         ? {
-            characterId: leaderCharacterId,
-            name: charMap.get(leaderCharacterId)?.name ?? "Unknown",
-            sequentialId: charMap.get(leaderCharacterId)?.sequentialId ?? null,
-            avatarUrl: charMap.get(leaderCharacterId)?.avatarUrl ?? null,
+            characterId: leader.id,
+            name: leader.name,
+            sequentialId: leader.sequentialId,
+            avatarUrl: leader.avatarUrl,
+            isNPP: leader.isNPP,
           }
-        : null,
+        : leaderCharacterId
+          ? {
+              // Seat is filled but the owner doc is missing — keep the id so
+              // the UI still knows a presidency exists, and fall back to Unknown.
+              characterId: leaderCharacterId,
+              name: "Unknown",
+              sequentialId: null,
+              avatarUrl: null,
+              isNPP: union.ownerType === "npp",
+            }
+          : null,
       tallies,
       myVote,
       canVote,
