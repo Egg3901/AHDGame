@@ -2,9 +2,19 @@
  * @vitest-environment happy-dom
  */
 import { describe, it, expect } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render as rtlRender, screen, fireEvent } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
 import type { Character } from "@/lib/db/types";
 import { PoliticalStanding } from "./PoliticalStanding";
+import enProfile from "../../../../messages/en/profile.json";
+
+function render(ui: React.ReactElement) {
+  return rtlRender(
+    <NextIntlClientProvider locale="en" messages={enProfile}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}
 
 const baseProps = {
   character: { actions: 5, party: "2" } as unknown as Character,
