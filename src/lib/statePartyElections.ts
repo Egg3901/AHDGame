@@ -21,6 +21,8 @@ import {
   type CycleAnchorCandidate,
 } from "@/lib/elections/defaultCycleAnchor";
 import { loadUsPoliticalStateIds } from "@/lib/elections/usPoliticalHome";
+import { TERRITORY_ADMISSIONS } from "@/lib/elections/statehoodAdmission";
+import { buildMajorPartyOrgsForState } from "@/lib/seeds/reference/statePartyOrg";
 
 export const ELECTION_DURATION_TURNS = 72; // 72 turns = 72 hours
 
@@ -33,6 +35,72 @@ export const FOUNDING_STATE_ELECTION_DURATION_TURNS = 12;
 export interface CreateMissingStateElectionsOptions {
   /** When true, stamp `founding: true` and skip shared-cycle anchoring. */
   founding?: boolean;
+}
+
+/**
+ * Restore major-party chapters for residents of US territories that have not
+ * yet been admitted. Territorial chapters elect party leadership only; the
+ * statehood gates for public offices and legislative elections remain intact.
+ *
+ * This is normally satisfied by the seed, but worlds created before territorial
+ * chapters were seeded can contain legacy residents without any party-org rows.
+ */
+async function ensureResidentTerritorialPartyOrgs(
+  db: Db,
+  parties: PoliticalParty[],
+  statePartyOrgs: StatePartyOrg[],
+  usPoliticalIds: ReadonlySet<string>,
+  preset: string | undefined,
+  now: Date
+): Promise<StatePartyOrg[]> {
+  const territoryIds = TERRITORY_ADMISSIONS.map((territory) => territory.stateId).filter(
+    (stateId) => !usPoliticalIds.has(stateId)
+  );
+  if (territoryIds.length === 0) return statePartyOrgs;
+
+  const residents = await db
+    .collection<Character>("characters")
+    .find({
+      countryId: "US",
+      homeState: { $in: territoryIds },
+      party: { $exists: true, $nin: [null, ""] },
+    })
+    .project<Pick<Character, "homeState">>({ homeState: 1 })
+    .toArray();
+  const occupiedTerritories = new Set(
+    residents
+      .map((resident) => resident.homeState)
+      .filter((stateId): stateId is string => !!stateId)
+  );
+  if (occupiedTerritories.size === 0) return statePartyOrgs;
+
+  const usMajorParties = new Set(
+    parties
+      .filter((party) => (party.countryId ?? DEFAULT_LEGACY_COUNTRY_ID) === "US")
+      .map((party) => String(party.sequentialId))
+  );
+  if (!usMajorParties.has("1") || !usMajorParties.has("2")) return statePartyOrgs;
+
+  const existingOrgIds = new Set(statePartyOrgs.map((org) => org._id));
+  const missingOrgs = Array.from(occupiedTerritories).flatMap((stateId) =>
+    buildMajorPartyOrgsForState(stateId, preset).filter((org) => !existingOrgIds.has(org._id))
+  );
+  if (missingOrgs.length === 0) return statePartyOrgs;
+
+  await db.collection<StatePartyOrg>("statePartyOrg").bulkWrite(
+    missingOrgs.map((org) => ({
+      updateOne: {
+        filter: { _id: org._id },
+        update: { $setOnInsert: { ...org, createdAt: now, updatedAt: now } },
+        upsert: true,
+      },
+    }))
+  );
+
+  return [
+    ...statePartyOrgs,
+    ...missingOrgs.map((org) => ({ ...org, createdAt: now, updatedAt: now })),
+  ];
 }
 
 async function isFoundingPhaseActive(db: Db): Promise<boolean> {
@@ -173,17 +241,23 @@ export async function createMissingElections(
   const scopedStatePartyOrgQuery = applyOptionalCountryScope({}, countryId);
   const scopedActiveElectionQuery = applyOptionalCountryScope({ status: "voting" }, countryId);
 
-  const [parties, statePartyOrgs, activeElections, usPolitics] = await Promise.all([
+  const [parties, initialStatePartyOrgs, activeElections, usPolitics] = await Promise.all([
     db.collection<PoliticalParty>("politicalParties").find({}).toArray(),
     db.collection<StatePartyOrg>("statePartyOrg").find(scopedStatePartyOrgQuery).toArray(),
     db
       .collection<StatePartyElection>("statePartyElections")
       .find(scopedActiveElectionQuery)
       .toArray(),
-    // Era gate: Alaska/Hawaii under 1953-default must not get leadership races
-    // even if stale statePartyOrg rows still exist from an earlier seed.
     loadUsPoliticalStateIds(db),
   ]);
+  const statePartyOrgs = await ensureResidentTerritorialPartyOrgs(
+    db,
+    parties,
+    initialStatePartyOrgs,
+    usPolitics.politicalIds,
+    usPolitics.preset,
+    now
+  );
 
   // Include countryId in key to prevent cross-country collisions
   const activeSet = new Set(
@@ -202,7 +276,6 @@ export async function createMissingElections(
   for (const org of statePartyOrgs) {
     const orgCountryId = org.countryId ?? DEFAULT_LEGACY_COUNTRY_ID;
     if (!partySet.has(`${orgCountryId}:${org.partyId}`)) continue;
-    if (orgCountryId === "US" && !usPolitics.politicalIds.has(org.stateId)) continue;
     for (const position of ALL_POSITIONS) {
       const key = `${orgCountryId}:${org.stateId}_${org.partyId}_${position}`;
       if (!activeSet.has(key))
