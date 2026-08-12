@@ -60,10 +60,12 @@ import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
   anchorToCorpCapital,
+  resolveSectorHostCurrencyCode,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import type { ExchangeRate } from "@/lib/db/types";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 
 /**
  * Largest share of a sector's gross margin that may be spent on growth before an
@@ -358,6 +360,11 @@ interface NppCorpDecisionContext {
    * `corpLiquidCapitalToAnchor`; this brings the AI onto the same footing.
    */
   fxRate?: number;
+  /**
+   * Live local-per-₳ rates used to restate each sector's host-currency
+   * revenue into the corporation's home currency before combining sectors.
+   */
+  fxByCurrency?: ReadonlyMap<string, number>;
 }
 
 /**
@@ -679,6 +686,7 @@ export async function processNppCorporationDecisions(
         turn,
         now,
         fxRate: (corpCurrency && fxByCurrency.get(corpCurrency)) || 1,
+        fxByCurrency,
         modifiers: ceoArchetypeModifiers(archetype),
       },
       unownedByCountry,
@@ -942,6 +950,13 @@ export function makeNppCorpDecision(
   const corpFxRate = ctx.fxRate ?? 1;
   const toCorpLocal = (amountAnchor: number): number =>
     anchorToCorpCapital(amountAnchor, corpCurrencyCode, corpFxRate);
+  const sectorEconomicToCorpLocal = (amount: number, sector: CorporateSector): number => {
+    const hostCurrency = resolveSectorHostCurrencyCode(sector, corp);
+    const hostRate =
+      (hostCurrency && ctx.fxByCurrency?.get(hostCurrency)) ??
+      (hostCurrency === corpCurrencyCode ? corpFxRate : 1);
+    return toCorpLocal(readCorpEconomicAnchor(amount, hostCurrency, hostRate));
+  };
 
   // Archetype-adjusted levers, each clamped to a safe rail so no personality can
   // bankrupt a profitable corp. Clamped in ₳ (where the rails are authored),
@@ -999,7 +1014,7 @@ export function makeNppCorpDecision(
   //     instead restores this module's own stated intent — "spend only what
   //     you earn."
   const realizedOrNominal = (sp: SectorProfitInfo) =>
-    sp.sector.realizedRevenue ?? sp.sector.revenue ?? 0;
+    sectorEconomicToCorpLocal(sp.sector.realizedRevenue ?? sp.sector.revenue ?? 0, sp.sector);
   const totalRevenue = sectorProfits.reduce((sum, sp) => sum + realizedOrNominal(sp), 0);
   const grossRealizedIncome = sectorProfits.reduce(
     (sum, sp) => sum + realizedOrNominal(sp) * (sp.margin / 100),
