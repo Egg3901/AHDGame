@@ -15,7 +15,7 @@ When the market clears each turn, the contract is honored **before** the open ma
 
 1. **The buyer's demand is filled from the supplier's output first**, up to the volume the supplier can actually produce.
 2. **The supplier's excess** (whatever it makes beyond the contract) flows out to the open market as normal.
-3. **If the supplier falls short** and can't cover the contracted amount, there's no penalty: the buyer simply buys the **shortfall on the open market** like anyone else.
+3. **If the supplier falls short** of what it promised to produce, the buyer covers the gap on the open market **and** the supplier pays damages to the buyer (half the shortfall's market value, capped). A mothballed plant that still has a live contract is a damages machine.
 
 So a supply agreement is a *priority claim*, not a magic supply. It moves the buyer to the front of the supplier's queue; it doesn't create commodities that don't exist.
 
@@ -40,6 +40,10 @@ Each turn, demand is satisfied in this sequence:
 1. **Contracted**: supply agreements are filled first.
 2. **Loyal slice**: loyal customers get their reserved share (see [brand loyalty](/wiki/brand-loyalty)).
 3. **Cheapest-first**: everything that's left clears on the open market.
+
+## Non-player corporations
+
+NPP CEOs use the same contract book. They auto-accept an inbound proposal when they actually consume the commodity and the premium is honest (within 20%). They propose same-country NPP-to-NPP contracts when a seller has uncommitted plant and a buyer is input-starved, at a small glut discount or shortage premium. They never inbox-spam a player, and they serve cancel notice before a mothballed plant starts paying shortfall damages. State-owned enterprises are left to the command-economy pass.
 
 ## Strategy notes
 
