@@ -343,11 +343,19 @@ export async function loadOnboardingSignals(
       .collection("actionLogs")
       .countDocuments({ characterId, actionType: { $in: ["campaign", "advertise"] } }, { limit: 1 })
       .then((n) => n > 0),
-    // ceoType "character" excludes imperial and NPP-operated corps, so an
-    // autonomy-brain corp the player does not actually run never counts.
+    // Player-run seat only. `ceoType` defaults to "character" when absent
+    // (see Corporation type); founding historically omitted the field, so
+    // treat missing the same as "character". Exclude imperial / NPP seats.
+    // Same $or shape as allocate-stats' corpsOwned query.
     db
       .collection("corporations")
-      .countDocuments({ ceoId: characterId, ceoType: "character" }, { limit: 1 })
+      .countDocuments(
+        {
+          ceoId: characterId,
+          $or: [{ ceoType: "character" }, { ceoType: { $exists: false } }],
+        },
+        { limit: 1 }
+      )
       .then((n) => n > 0),
     db
       .collection("unions")

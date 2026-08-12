@@ -501,6 +501,10 @@ export async function POST(request: Request) {
       ...(secondaryType ? { secondaryType } : {}),
       countryId: character.countryId,
       ceoId: character._id,
+      // Explicit — Corporation.ceoType defaults to "character" in docs, but
+      // Mongo equality queries (onboarding checklist, buyer-search) do not
+      // treat a missing field as that default. Stamp it at founding.
+      ceoType: "character",
       ceoVacant: false,
       userId: new ObjectId(auth.user.userId),
       headquartersState,
