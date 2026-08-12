@@ -34,6 +34,7 @@ import { normalizeNPI, normalizeNationalReachPresidentialPrimary } from "@/lib/u
 import { infamyPenaltyMultiplier } from "@/lib/utils/infamy";
 import { getMajorPartiesForRegion } from "@/lib/constants/countries";
 import { calcEffectiveFavorability } from "./voteCalculations";
+import { splitGroupPoolBySlate } from "./slateAllocation";
 import {
   FPTP_SPOILER_RATE,
   NPP_GENERAL_WEIGHT_MULTIPLIER,
@@ -308,24 +309,21 @@ export function distributeVotesBySwingFlow(
       const groupShare = groupContribution / totalPool;
       const groupPool = effectiveTurnPool * groupShare;
 
-      const groupWeights: Record<string, number> = {};
-      let groupTotalWeight = 0;
+      // Slate-nested split (#1048): the group pool is divided between PARTIES
+      // (slate weight = mean of its candidates' appeal weights), then within a
+      // party between its own candidates. Byte-identical for the
+      // one-candidate-per-party FPTP families; stops a multi-seat party from
+      // buying nominal share with extra ballot slots. See slateAllocation.ts.
+      const groupSplit = splitGroupPoolBySlate(
+        groupPool,
+        enriched.map((ec) => ({
+          candidateId: ec.candidateId,
+          party: ec.party,
+          weight: appealWeight(ec, demoEP, demoSP, partyOrgByParty, group.id, options),
+        }))
+      );
       for (const ec of enriched) {
-        const w = appealWeight(ec, demoEP, demoSP, partyOrgByParty, group.id, options);
-        groupWeights[ec.candidateId] = w;
-        groupTotalWeight += w;
-      }
-
-      if (groupTotalWeight > 0) {
-        for (const ec of enriched) {
-          const groupCandidateVotes = groupPool * (groupWeights[ec.candidateId] / groupTotalWeight);
-          candidateGroupVotes[ec.candidateId] += groupCandidateVotes;
-        }
-      } else {
-        const n = enriched.length;
-        for (const ec of enriched) {
-          candidateGroupVotes[ec.candidateId] += groupPool / n;
-        }
+        candidateGroupVotes[ec.candidateId] += groupSplit[ec.candidateId] ?? 0;
       }
     }
   }

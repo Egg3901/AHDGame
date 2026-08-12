@@ -21,6 +21,7 @@ import {
 
 interface NominationDisplay {
   id: string;
+  kind: "cabinet" | "scotus";
   positionName: string;
   nomineeCharacterName: string;
   nomineeParty?: string;
@@ -31,13 +32,22 @@ interface NominationDisplay {
   votingEndsAt: string | null;
   proposedAt?: string;
   myVote: "for" | "against" | "abstain" | null;
-  isSenator: boolean;
+  isSenator?: boolean;
 }
 
 function NominationCard({ nom }: { nom: NominationDisplay }) {
+  const href =
+    nom.kind === "scotus"
+      ? `/congress/scotus-nominations/${nom.id}`
+      : `/congress/nominations/${nom.id}`;
+  const kindLabel =
+    nom.kind === "scotus"
+      ? "Supreme Court nomination · Senate confirmation required"
+      : "Cabinet nomination · Senate confirmation required";
+
   return (
     <Link
-      href={`/congress/nominations/${nom.id}`}
+      href={href}
       className="group flex flex-col rounded-2xl border border-card-border bg-card shadow-lg overflow-hidden hover:border-primary/30 hover:shadow-panel hover:-translate-y-0.5 transition-all duration-200 border-l-4 border-l-warning/60"
     >
       {/* Header */}
@@ -54,6 +64,11 @@ function NominationCard({ nom }: { nom: NominationDisplay }) {
           <span className="rounded-full border border-card-border px-2 py-0.5 text-[10px] text-muted">
             senate
           </span>
+          {nom.kind === "scotus" && (
+            <span className="rounded-full border border-card-border px-2 py-0.5 text-[10px] text-muted">
+              scotus
+            </span>
+          )}
           {nom.nomineeParty && (
             <span className="text-[10px] text-muted/60">{nom.nomineeParty}</span>
           )}
@@ -70,9 +85,7 @@ function NominationCard({ nom }: { nom: NominationDisplay }) {
       {/* Body */}
       <div className="px-5 py-3 border-t border-card-border/40 flex gap-4 flex-1">
         <div className="flex-1 min-w-0 space-y-2">
-          <p className="text-xs text-muted leading-relaxed">
-            Cabinet nomination · Senate confirmation required
-          </p>
+          <p className="text-xs text-muted leading-relaxed">{kindLabel}</p>
           <p className="text-[10px] text-muted/70">
             By {nom.proposedByPresidentName ?? "President"}
             {nom.proposedAt && ` · ${new Date(nom.proposedAt).toLocaleDateString("en-US")}`}
@@ -136,10 +149,13 @@ export function CongressBillsTab({
       setLoading(true);
       try {
         const params = new URLSearchParams({ chamber: activeTab });
-        const [billsRes, nomRes] = await Promise.all([
+        const [billsRes, cabinetNomRes, scotusNomRes] = await Promise.all([
           fetch(`/api/congress/bills?${params}`, { cache: "no-store", signal }),
           activeTab === "senate"
             ? fetch("/api/congress/cabinet-nominations", { cache: "no-store", signal })
+            : null,
+          activeTab === "senate"
+            ? fetch("/api/congress/scotus-nominations", { cache: "no-store", signal })
             : null,
         ]);
         if (billsRes.ok) {
@@ -148,10 +164,22 @@ export function CongressBillsTab({
           setBlockedProvisions(data.blockedProvisions ?? []);
           setProposalWarnings(data.proposalWarnings ?? {});
         }
-        if (activeTab === "senate" && nomRes?.ok) {
-          const data = await nomRes.json();
-          setNominations(data.nominations ?? []);
-        } else if (activeTab !== "senate") {
+        if (activeTab === "senate") {
+          const merged: NominationDisplay[] = [];
+          if (cabinetNomRes?.ok) {
+            const data = await cabinetNomRes.json();
+            for (const n of data.nominations ?? []) {
+              merged.push({ ...n, kind: "cabinet" as const });
+            }
+          }
+          if (scotusNomRes?.ok) {
+            const data = await scotusNomRes.json();
+            for (const n of data.nominations ?? []) {
+              merged.push({ ...n, kind: "scotus" as const });
+            }
+          }
+          setNominations(merged);
+        } else {
           setNominations([]);
         }
       } catch (err) {
@@ -198,18 +226,20 @@ export function CongressBillsTab({
       : [];
 
   type ListItem =
-    { type: "bill"; id: string; date: string } | { type: "nomination"; id: string; date: string };
+    | { type: "bill"; id: string; date: string }
+    | { type: "nomination"; id: string; date: string; kind: "cabinet" | "scotus" };
   const sortedItems: ListItem[] = [
     ...voteFiltered.map((b) => ({ type: "bill" as const, id: b.id, date: b.proposedAt })),
     ...filteredNominations.map((n) => ({
       type: "nomination" as const,
       id: n.id,
       date: n.proposedAt ?? "",
+      kind: n.kind,
     })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const billMap = new Map(voteFiltered.map((b) => [b.id, b]));
-  const nomMap = new Map(filteredNominations.map((n) => [n.id, n]));
+  const nomMap = new Map(filteredNominations.map((n) => [`${n.kind}:${n.id}`, n]));
 
   return (
     <>
@@ -321,7 +351,7 @@ export function CongressBillsTab({
             title={
               activeTab === "senate" ? "No legislation or nominations yet" : "No legislation yet"
             }
-            body={`No ${statusFilter !== "all" ? (STATUS_LABELS[statusFilter] ?? statusFilter).toLowerCase() + " " : ""}${activeTab === "senate" ? "bills or cabinet nominations" : "bills"} in the ${activeTab === "senate" ? "Senate" : "House"} yet.${canPropose ? " Be the first to propose legislation." : ""}`}
+            body={`No ${statusFilter !== "all" ? (STATUS_LABELS[statusFilter] ?? statusFilter).toLowerCase() + " " : ""}${activeTab === "senate" ? "bills or nominations" : "bills"} in the ${activeTab === "senate" ? "Senate" : "House"} yet.${canPropose ? " Be the first to propose legislation." : ""}`}
             cta={
               canPropose ? (
                 <button
@@ -341,9 +371,9 @@ export function CongressBillsTab({
                   <BillCard bill={billMap.get(item.id)!} onVoted={() => fetchAll()} />
                 </BillListItem>
               ) : (
-                <BillListItem key={`nom-${item.id}`}>
+                <BillListItem key={`nom-${item.kind}-${item.id}`}>
                   <div className="p-4 sm:p-5">
-                    <NominationCard nom={nomMap.get(item.id)!} />
+                    <NominationCard nom={nomMap.get(`${item.kind}:${item.id}`)!} />
                   </div>
                 </BillListItem>
               )

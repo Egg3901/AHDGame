@@ -206,7 +206,7 @@ function PartySearch({
                 onClick={() => {
                   onPick(party);
                   setQuery("");
-                  setResults([]);
+                  setAnswered({ term: "", results: [] });
                 }}
                 className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-card disabled:opacity-50"
               >

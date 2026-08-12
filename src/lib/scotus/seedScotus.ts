@@ -5,7 +5,7 @@ import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { getScotusPresetSeed } from "./presetData";
 
 /**
- * Seed nine vacant SCOTUS seats plus the era docket for the US, as part of
+ * Seed the SCOTUS Original Roster (9 seats) + Docket for the US, as part of
  * era-preset world creation/reset (#3598 scope item 8). Wired into
  * `bootstrapGameWorld.ts` alongside the other US-only, preset-gated seed steps
  * (mirrors `seedPoliticalLegislationBaseline`'s placement/shape).
@@ -14,17 +14,14 @@ import { getScotusPresetSeed } from "./presetData";
  * been authored yet — see `src/lib/scotus/presetData/index.ts` — so this hook
  * is safe to ship ahead of the four content tickets (#3599-#3602).
  *
- * Historical people are deliberately not seated or copied into the game
- * database. Every court starts vacant and must be filled through the ordinary
- * player/NPP nomination flow. The preset docket remains historical context,
- * but no real officeholder is impersonated as a playable game entity.
- *
- * A world that never fills the court stays safe: `decideCaseOutcome` affirms
- * every case on an empty bench, so the docket plays out as pure history until
- * a live presidency starts confirming justices.
+ * Historical justices are seated from the preset's authored succession chain
+ * (`justiceMode: "historical"`, `isDivergent: false`). Tenure then replays
+ * scripted death/retirement until a seat's chain is exhausted — only then does
+ * the seat go vacant for a live presidential nomination (the Divergence Point).
  *
  * On `reset=true`, wipes `supremeCourtSeats`/`docketCases`/`scotusNominations`
- * for the country first so a world reset never retains a stale prior court.
+ * for the country first so a world reset always starts from the Original
+ * Roster, never a stale divergent state from a prior game.
  */
 export async function seedScotus(
   db: Db,
@@ -51,78 +48,24 @@ export async function seedScotus(
   const now = new Date();
   const startingYear = getStartingYearForPreset(preset);
 
-  // Upgrade safety for worlds created before historical identity seeding was
-  // removed. Preserve any player or fictional NPP justice currently seated,
-  // but erase the stored real-person succession chain from every seat. A
-  // currently scripted historical occupant becomes a vacancy that the normal
-  // nomination flow can fill.
-  //
-  // Deliberately NOT gated on `reset`: purging real-person identities from
-  // live worlds is the point of the migration (settled product decision), and
-  // on reset=true these collections were just deleted so both updates match
-  // nothing. It runs on any admin re-seed of a live world, so it logs loudly
-  // below whenever it actually vacated something.
-  const chainWipe = await db.collection<SupremeCourtSeat>("supremeCourtSeats").updateMany(
-    { countryId, "historicalOccupants.0": { $exists: true } },
-    {
-      $set: {
-        historicalOccupants: [],
-        historicalOccupantIndex: -1,
-        isDivergent: true,
-        updatedAt: now,
-      },
-    }
-  );
-  const occupantWipe = await db.collection<SupremeCourtSeat>("supremeCourtSeats").updateMany(
-    { countryId, justiceMode: "historical" },
-    {
-      $set: {
-        justiceMode: null,
-        justiceCharacterId: null,
-        justiceNppId: null,
-        justiceName: null,
-        justiceParty: null,
-        economicLean: null,
-        socialLean: null,
-        seatedAt: null,
-        seatedAtTurn: null,
-        historicalOccupants: [],
-        historicalOccupantIndex: -1,
-        isDivergent: true,
-        updatedAt: now,
-      },
-    }
-  );
-  if (chainWipe.modifiedCount > 0 || occupantWipe.modifiedCount > 0) {
-    log(
-      `[scotus] MIGRATION: erased historical succession chains from ${chainWipe.modifiedCount} ` +
-        `seat(s) and vacated ${occupantWipe.modifiedCount} scripted historical occupant(s) on a ` +
-        `live world. Player/NPP justices were preserved; vacancies refill via nomination.`
-    );
-  }
-
   let seatsSeeded = 0;
   for (const seatSeed of data.seats) {
+    const firstOccupant = seatSeed.historicalOccupants[0];
     const seat: Omit<SupremeCourtSeat, "_id"> = {
       countryId,
       seatNumber: seatSeed.seatNumber,
-      justiceMode: null,
+      justiceMode: firstOccupant ? "historical" : null,
       justiceCharacterId: null,
       justiceNppId: null,
-      justiceName: null,
-      justiceParty: null,
-      economicLean: null,
-      socialLean: null,
-      seatedAt: null,
-      seatedAtTurn: null,
-      // A freshly seeded vacant seat has diverged from nothing - there is no
-      // authored succession script to depart from. The Divergence Point is a
-      // live confirmation (scotusNominationLifecycle sets isDivergent there),
-      // and the UI's divergence badge keys off this flag. The tenure turn's
-      // non-divergent branch no-ops on an empty historicalOccupants array.
+      justiceName: firstOccupant?.name ?? null,
+      justiceParty: firstOccupant?.party ?? null,
+      economicLean: firstOccupant?.economicLean ?? null,
+      socialLean: firstOccupant?.socialLean ?? null,
+      seatedAt: firstOccupant ? now : null,
+      seatedAtTurn: firstOccupant ? 1 : null,
       isDivergent: false,
-      historicalOccupantIndex: -1,
-      historicalOccupants: [],
+      historicalOccupantIndex: firstOccupant ? 0 : -1,
+      historicalOccupants: seatSeed.historicalOccupants,
       divergentHazardStartsTurn: null,
       createdAt: now,
       updatedAt: now,
@@ -167,7 +110,7 @@ export async function seedScotus(
   }
 
   log(
-    `[scotus] Seeded ${seatsSeeded} vacant seat(s) + ${casesSeeded} docket case(s) for preset "${preset}" (starting year ${startingYear}).`
+    `[scotus] Seeded ${seatsSeeded} Original Roster seat(s) + ${casesSeeded} docket case(s) for preset "${preset}" (starting year ${startingYear}).`
   );
   return { seatsSeeded, casesSeeded };
 }

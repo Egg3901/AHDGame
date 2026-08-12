@@ -12,6 +12,7 @@ import { normalizeNPI, normalizeNationalReachPresidentialPrimary } from "@/lib/u
 import { infamyPenaltyMultiplier } from "@/lib/utils/infamy";
 import { getMajorPartiesForRegion, COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { calcEffectiveFavorability } from "./voteCalculations";
+import { splitGroupPoolBySlate } from "./slateAllocation";
 import {
   FPTP_SPOILER_RATE,
   NPP_GENERAL_WEIGHT_MULTIPLIER,
@@ -97,7 +98,6 @@ export function distributeVotesByGroupLevelAllocation(
       const groupPool = effectiveTurnPool * groupShare;
 
       const weights: Record<string, number> = {};
-      let totalWeight = 0;
 
       for (const ec of enriched) {
         const rawReach = options?.useNationalInfluenceForReach
@@ -254,19 +254,22 @@ export function distributeVotesByGroupLevelAllocation(
             partyInfluenceMult
         );
         weights[ec.candidateId] = w;
-        totalWeight += w;
       }
 
-      if (totalWeight > 0) {
-        for (const ec of enriched) {
-          const share = weights[ec.candidateId] / totalWeight;
-          votesPerCandidate[ec.candidateId] += groupPool * share;
-        }
-      } else {
-        const n = enriched.length;
-        for (const ec of enriched) {
-          votesPerCandidate[ec.candidateId] += groupPool / n;
-        }
+      // Slate-nested split (#1048), kept identical to the swing-flow engine so
+      // the two lanes cannot drift. No-op for primaries (one party, so the
+      // single slate takes the whole pool and the within-slate split reproduces
+      // the old per-candidate split) and for one-candidate-per-party generals.
+      const groupSplit = splitGroupPoolBySlate(
+        groupPool,
+        enriched.map((ec) => ({
+          candidateId: ec.candidateId,
+          party: ec.party,
+          weight: weights[ec.candidateId] ?? 0,
+        }))
+      );
+      for (const ec of enriched) {
+        votesPerCandidate[ec.candidateId] += groupSplit[ec.candidateId] ?? 0;
       }
     }
   }
