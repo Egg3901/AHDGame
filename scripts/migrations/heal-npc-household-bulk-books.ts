@@ -19,6 +19,8 @@
  *
  * Default is a read-only report. `--apply` refuses to run while a turn is in
  * flight and is idempotent: subsequent runs find no active NPC bulk assets.
+ * It prefers `MONGODB_URI` and accepts the production incident variable
+ * `MONGODB_URI_LIVE` when no ordinary URI is present.
  */
 import type { ObjectId } from "mongodb";
 import type { BankCharter, BankCharterHistoryEntry } from "@/lib/db/types/bank";
@@ -47,6 +49,12 @@ type GameState = {
 };
 
 const APPLY = process.argv.includes("--apply");
+
+function configureRepairDbUri(): void {
+  if (!process.env.MONGODB_URI && process.env.MONGODB_URI_LIVE) {
+    process.env.MONGODB_URI = process.env.MONGODB_URI_LIVE;
+  }
+}
 
 function nonNegative(value: number | undefined): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
@@ -109,6 +117,7 @@ function restorationLiquidCapital(bank: BankRow, archived: BankCharter): number 
 }
 
 async function main(): Promise<void> {
+  configureRepairDbUri();
   const db = await connectDb();
   try {
     const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
