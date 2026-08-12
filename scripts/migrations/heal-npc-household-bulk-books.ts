@@ -3,13 +3,11 @@
  *
  * The faulty implementation gave every retail bank a separate fraction of
  * national GDP, irrespective of that bank's deposits or reserve requirement.
- * This script retires those synthetic loans and recomputes each ACTIVE bank's
- * cached loan total from its still-live named loans. The corrected turn code
- * then restarts household deposits and loans gradually from zero.
- *
- * This does not touch failed charters. Their failure path may already have
- * resolved deposits, zeroed capital, and caused contagion. Restoring them is a
- * separate player-facing decision requiring a reviewed recovery plan.
+ * This script retires those synthetic loans and recomputes each bank's cached
+ * loan total from its still-live named loans. It also restores failed charters
+ * from the archive captured at failure, with clean books and no failure state.
+ * The corrected turn code then restarts household deposits and loans gradually
+ * from zero.
  *
  * Historical NPC interest was not ledgered before this repair, so there is no
  * trustworthy per-bank amount to claw back. Do not infer one from present cash:
@@ -23,6 +21,8 @@
  * flight and is idempotent: subsequent runs find no active NPC bulk assets.
  */
 import type { ObjectId } from "mongodb";
+import type { BankCharter, BankCharterHistoryEntry } from "@/lib/db/types/bank";
+import { NPC_BANK_CAPITAL_BUFFER_MULTIPLIER } from "@/lib/banking/npcBanks";
 import { connectDb, closeDb } from "../utils/db";
 
 type LoanRow = {
@@ -33,14 +33,12 @@ type LoanRow = {
   status: "current" | "arrears" | "defaulted" | "repaid";
 };
 
-type ActiveBankRow = {
+type BankRow = {
   _id: ObjectId;
   name?: string;
+  ceoType?: string;
   liquidCapital?: number;
-  bankCharter?: {
-    status?: string;
-    totalLoans?: number;
-  };
+  bankCharter?: BankCharter;
 };
 
 type GameState = {
@@ -54,6 +52,62 @@ function nonNegative(value: number | undefined): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
+/** Build a clean active charter from the archive captured immediately before failure. */
+export function buildReactivatedCharter(
+  archived: BankCharter,
+  liquidCapital: number,
+  namedLoanOutstanding = 0
+): BankCharter {
+  const {
+    failedTurn: _failedTurn,
+    depositorsResolvedTurn: _depositorsResolvedTurn,
+    capitalStanding: _capitalStanding,
+    capitalRatio: _capitalRatio,
+    stressedCapitalRatio: _stressedCapitalRatio,
+    undercapitalizedSinceTurn: _undercapitalizedSinceTurn,
+    lastSupervisionTurn: _lastSupervisionTurn,
+    lastSolvencyTurn: _lastSolvencyTurn,
+    lastBankingTurn: _lastBankingTurn,
+    propBook: _propBook,
+    propBookMarkValue: _propBookMarkValue,
+    interbankDebt: _interbankDebt,
+    cbMarginDebt: _cbMarginDebt,
+    cbMarginArrears: _cbMarginArrears,
+    lastCbMarginTurn: _lastCbMarginTurn,
+    discountWindowDebt: _discountWindowDebt,
+    discountWindowArrears: _discountWindowArrears,
+    lastDiscountWindowTurn: _lastDiscountWindowTurn,
+    ...terms
+  } = archived;
+
+  return {
+    ...terms,
+    status: "active",
+    totalDeposits: 0,
+    totalLoans: nonNegative(namedLoanOutstanding),
+    npcDeposits: 0,
+    reserves: nonNegative(liquidCapital),
+    confidence: 1,
+    warningBand: "green",
+    panicTurns: 0,
+    propBook: [],
+    propBookMarkValue: 0,
+    interbankDebt: 0,
+    cbMarginDebt: 0,
+    cbMarginArrears: 0,
+    discountWindowDebt: 0,
+    discountWindowArrears: 0,
+  };
+}
+
+function restorationLiquidCapital(bank: BankRow, archived: BankCharter): number {
+  // NPP banks were seeded with 1x charter capital posted and 2x as the working
+  // cash buffer. Failure destroyed both. Restore the documented buffer, not
+  // the untraceable phantom interest earned from the corrupt loan book.
+  if (bank.ceoType !== "npp") return 0;
+  return nonNegative(archived.postedCapital) * (NPC_BANK_CAPITAL_BUFFER_MULTIPLIER - 1);
+}
+
 async function main(): Promise<void> {
   const db = await connectDb();
   try {
@@ -62,24 +116,49 @@ async function main(): Promise<void> {
       throw new Error("Refusing to repair while a turn is processing. Pause turns and retry.");
     }
 
-    const [activeBanks, failedCount] = await Promise.all([
+    const [activeBanks, failedBanks] = await Promise.all([
       db
-        .collection<ActiveBankRow>("corporations")
+        .collection<BankRow>("corporations")
         .find({
           "bankCharter.status": "active",
           "bankCharter.type": { $in: ["retail", "universal"] },
         })
-        .project({ _id: 1, name: 1, liquidCapital: 1, bankCharter: 1 })
+        .project({ _id: 1, name: 1, ceoType: 1, liquidCapital: 1, bankCharter: 1 })
         .toArray(),
-      db.collection("corporations").countDocuments({ "bankCharter.status": "failed" }),
+      db
+        .collection<BankRow>("corporations")
+        .find({
+          "bankCharter.status": "failed",
+          "bankCharter.type": { $in: ["retail", "universal"] },
+        })
+        .project({ _id: 1, name: 1, ceoType: 1, liquidCapital: 1, bankCharter: 1 })
+        .toArray(),
     ]);
-    const activeBankIds = activeBanks.map((bank) => bank._id);
+    const allBanks = [...activeBanks, ...failedBanks];
+    const allBankIds = allBanks.map((bank) => bank._id);
+    const failedBankIds = failedBanks.map((bank) => bank._id);
+    const archives =
+      failedBankIds.length === 0
+        ? []
+        : await db
+            .collection<BankCharterHistoryEntry>("bankCharterHistory")
+            .find({ corporationId: { $in: failedBankIds }, reason: "failed" })
+            .sort({ archivedTurn: -1 })
+            .toArray();
+    const latestFailureArchive = new Map<string, BankCharterHistoryEntry>();
+    for (const archive of archives) {
+      const id = archive.corporationId.toHexString();
+      if (!latestFailureArchive.has(id)) latestFailureArchive.set(id, archive);
+    }
+    const unarchivedFailures = failedBanks.filter(
+      (bank) => !latestFailureArchive.has(bank._id.toHexString())
+    );
     const loans =
-      activeBankIds.length === 0
+      allBankIds.length === 0
         ? []
         : await db
             .collection<LoanRow>("bankLoans")
-            .find({ bankCorporationId: { $in: activeBankIds } })
+            .find({ bankCorporationId: { $in: allBankIds } })
             .project({ _id: 1, bankCorporationId: 1, borrowerType: 1, outstanding: 1, status: 1 })
             .toArray();
 
@@ -105,9 +184,14 @@ async function main(): Promise<void> {
     const affectedBankIds = new Set(bulkLoans.map((loan) => loan.bankCorporationId.toHexString()));
     console.log(`Mode: ${APPLY ? "APPLY" : "DRY-RUN"}`);
     console.log(`Active deposit-taking banks: ${activeBanks.length}`);
+    console.log(`Failed deposit-taking banks to reactivate: ${failedBanks.length}`);
     console.log(`NPC bulk loans to retire: ${bulkLoans.length}`);
     console.log(`NPC bulk outstanding to remove: ${phantomOutstanding.toLocaleString()}`);
-    console.log(`Failed charters left untouched: ${failedCount}`);
+    if (unarchivedFailures.length > 0) {
+      console.log(
+        `Failed banks missing a failure archive: ${unarchivedFailures.map((bank) => bank.name ?? bank._id.toHexString()).join(", ")}`
+      );
+    }
 
     for (const bank of activeBanks) {
       const namedOutstanding = namedOutstandingByBank.get(bank._id.toHexString()) ?? 0;
@@ -127,6 +211,11 @@ async function main(): Promise<void> {
     if (!APPLY) {
       console.log("Dry run only. Pass --apply after pausing turns and reviewing this report.");
       return;
+    }
+    if (unarchivedFailures.length > 0) {
+      throw new Error(
+        "Refusing a partial recovery: one or more failed charters have no failure archive."
+      );
     }
 
     const now = new Date();
@@ -161,6 +250,31 @@ async function main(): Promise<void> {
             "bankCharter.stressedCapitalRatio": "",
           },
         }
+      );
+    }
+
+    for (const bank of failedBanks) {
+      const archive = latestFailureArchive.get(bank._id.toHexString());
+      if (!archive) continue;
+      const namedOutstanding = namedOutstandingByBank.get(bank._id.toHexString()) ?? 0;
+      const restoredCash = restorationLiquidCapital(bank, archive.charter);
+      const restoredCharter = buildReactivatedCharter(
+        archive.charter,
+        restoredCash,
+        namedOutstanding
+      );
+      await db.collection<BankRow>("corporations").updateOne(
+        { _id: bank._id, "bankCharter.status": "failed" },
+        {
+          $set: {
+            liquidCapital: restoredCash,
+            bankCharter: restoredCharter,
+            updatedAt: now,
+          },
+        }
+      );
+      console.log(
+        `Reactivated ${bank.name ?? bank._id.toHexString()}: posted capital ${restoredCharter.postedCapital.toLocaleString()}, working cash ${restoredCash.toLocaleString()}`
       );
     }
 
