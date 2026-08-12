@@ -53,6 +53,15 @@ export interface BondUserContext {
     liquidCurrencyCode?: CurrencyCode | null;
     bondUnits: number;
   } | null;
+  /** Active investment or universal charter eligible to trade its prop book. */
+  investmentBank: {
+    id: string;
+    name: string;
+    liquidCapital: number;
+    liquidCapitalLocal: number;
+    liquidCurrencyCode?: CurrencyCode | null;
+    bondUnits: number;
+  } | null;
   currencyBalances?: { personal: Partial<Record<CurrencyCode, number>> } | null;
   homeCurrency?: CurrencyCode | null;
   autoConvertEnabled?: boolean;

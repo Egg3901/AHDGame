@@ -25,6 +25,7 @@ export interface SharePurchaseModalProps {
     name: string;
     liquidCapital: number;
     liquidCurrencyCode?: string;
+    isInvestmentBank?: boolean;
   } | null;
   myOrders: MyShareOrder[];
   marketOrders: MarketOrder[];
