@@ -13,7 +13,7 @@
  */
 
 import type { Db, ObjectId } from "mongodb";
-import type { Corporation, CorporateSector, SectorBuildOrder, StateMetrics } from "@/lib/db/types";
+import type { Corporation, CorporateSector, SectorBuildOrder, StateMetrics, GameConfig, GameState, ExchangeRate } from "@/lib/db/types";
 import type { NPP } from "@/lib/db/types/npp";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import {
@@ -27,6 +27,8 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import { SECTOR_SUPPLY, type CommodityType } from "@/lib/constants/commodities";
 import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
+import { clampWageLevel } from "@/lib/labour/laborCost";
+import { labourAtLeast, isLabourSystemMode } from "@/lib/labour/modes";
 import { CHRONIC_LOW_FILL_THRESHOLD } from "@/lib/turn/npp/strategyExpectedRevenue";
 import {
   bucketKey,
@@ -34,7 +36,6 @@ import {
   loadNationalCorpIds,
 } from "@/lib/nationalization/stateControlledBuckets";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
-import type { GameState } from "@/lib/db/types";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { emitBuildCapexTxBulk } from "@/lib/corporations/capexTxLog";
@@ -63,7 +64,6 @@ import {
   resolveSectorHostCurrencyCode,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
-import type { ExchangeRate } from "@/lib/db/types";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 
@@ -242,6 +242,12 @@ const GLUT_MOTHBALL_FILL_THRESHOLD = 0.25;
 const GLUT_MOTHBALL_PRICE_RATIO = 0.65;
 const GLUT_RESTART_PRICE_RATIO = 0.9;
 
+/** Per-turn wage step toward the target. 0.02 × ~4 turns reaches the shortage premium. */
+const NPP_WAGE_STEP = 0.02;
+const NPP_WAGE_BASELINE = 1;
+const NPP_WAGE_SHORTAGE_TARGET = 1.08;
+const NPP_WAGE_GLUT_TARGET = 0.95;
+
 /**
  * Cohort stagger for glut mothball/restart state changes. Measured live
  * (turn 23): 446 NPP corps hold ~1 sector each, so a per-corp rate limit is
@@ -365,6 +371,11 @@ interface NppCorpDecisionContext {
    * revenue into the corporation's home currency before combining sectors.
    */
   fxByCurrency?: ReadonlyMap<string, number>;
+  /**
+   * When true (labourSystemMode at least wages), section 2d writes wageLevel.
+   * Absent/false leaves wages untouched so pre-labour worlds stay byte-identical.
+   */
+  labourWagesEnabled?: boolean;
 }
 
 /**
@@ -674,6 +685,12 @@ export async function processNppCorporationDecisions(
     }
   }
 
+  const labourCfg = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { labourSystemMode: 1 } });
+  const labourMode = labourCfg?.labourSystemMode;
+  const labourWagesEnabled = isLabourSystemMode(labourMode) && labourAtLeast(labourMode, "wages");
+
   for (const corp of nppCorps) {
     const sectors = sectorsByCorp.get(corp._id.toString()) ?? [];
     const archetype =
@@ -688,6 +705,7 @@ export async function processNppCorporationDecisions(
         fxRate: (corpCurrency && fxByCurrency.get(corpCurrency)) || 1,
         fxByCurrency,
         modifiers: ceoArchetypeModifiers(archetype),
+        labourWagesEnabled,
       },
       unownedByCountry,
       stateControlled,
@@ -1238,6 +1256,42 @@ export function makeNppCorpDecision(
         sectorUpdates.push({
           filter: { _id: worst.sp.sector._id },
           update: { $set: { mothballed: true, updatedAt: now } },
+        });
+      }
+    }
+  }
+
+  // ── 2d. Wage policy (labour wages+) ───────────────────────────────────────
+  // Quality, unionization and labour cost all hang off wageLevel. Player CEOs
+  // set it; NPP CEOs never did, so every NPP plant sat at the 1.0 baseline
+  // even with labourSystemMode full. Shortage + healthy margins pay up for
+  // quality; glut or losses cut toward 0.95. Steps 0.02/turn so a shock does
+  // not rewrite the wage bill in one tick. Union floors are applied at cost
+  // time (collectiveAgreementEffects) and are not written here.
+  if (ctx.labourWagesEnabled) {
+    for (const sp of sectorProfits) {
+      if (divestedSectorIds.includes(sp.sector._id)) continue;
+      if (sp.sector.mothballed === true) continue;
+      const chronicLowFill =
+        sp.sector.soldFraction != null && sp.sector.soldFraction < CHRONIC_LOW_FILL_THRESHOLD;
+      const shortage = sectorShortageScore(
+        sp.sector.sectorType,
+        sp.sector.countryId ?? corp.countryId,
+        priceRatioOf
+      );
+      let target = NPP_WAGE_BASELINE;
+      if (chronicLowFill || sp.marginCategory === "loss" || shortage <= 0.85) {
+        target = NPP_WAGE_GLUT_TARGET;
+      } else if (shortage >= 1.15 && (sp.marginCategory === "healthy" || sp.marginCategory === "strong")) {
+        target = NPP_WAGE_SHORTAGE_TARGET;
+      }
+      const current = sp.sector.wageLevel ?? NPP_WAGE_BASELINE;
+      const delta = Math.max(-NPP_WAGE_STEP, Math.min(NPP_WAGE_STEP, target - current));
+      const next = clampWageLevel(Math.round((current + delta) * 100) / 100);
+      if (next !== current) {
+        sectorUpdates.push({
+          filter: { _id: sp.sector._id },
+          update: { $set: { wageLevel: next, updatedAt: now } },
         });
       }
     }
