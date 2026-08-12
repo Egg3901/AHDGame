@@ -4,16 +4,30 @@
  */
 
 import { DD_LAWS } from "./laws/ddLaws";
+import { DD_LAND_LAWS } from "./laws/ddLandLaws";
 import { RU_LAWS } from "./laws/ruLaws";
 import { UK_LAWS } from "./laws/ukLaws";
 import { US_LAWS } from "./laws/usLaws";
 import type { LawCountryId, PoliticalLaw } from "./types";
 
-const CATALOGS: Record<LawCountryId, PoliticalLaw[]> = {
+/** Locked core catalogs (topology / RU↔DD cost parity). */
+const CORE_CATALOGS: Record<LawCountryId, PoliticalLaw[]> = {
   US: US_LAWS,
   UK: UK_LAWS,
   RU: RU_LAWS,
   DD: DD_LAWS,
+};
+
+/** Regional-only sidecars (not part of the 109-law core). */
+const REGIONAL_SIDECARS: Partial<Record<LawCountryId, PoliticalLaw[]>> = {
+  DD: DD_LAND_LAWS,
+};
+
+const CATALOGS: Record<LawCountryId, PoliticalLaw[]> = {
+  US: CORE_CATALOGS.US,
+  UK: CORE_CATALOGS.UK,
+  RU: CORE_CATALOGS.RU,
+  DD: [...CORE_CATALOGS.DD, ...DD_LAND_LAWS],
 };
 
 const LAWS_BY_ID = new Map<string, PoliticalLaw>(
@@ -79,11 +93,23 @@ export function getCatalog(countryId: string, year?: number): PoliticalLaw[] {
   return year == null ? all : all.filter((law) => isLawActive(law, year));
 }
 
+/** Core catalog only — excludes regional sidecars (DD Land laws, etc.). */
+export function getCoreCatalog(countryId: string, year?: number): PoliticalLaw[] {
+  const all = CORE_CATALOGS[countryId as LawCountryId] ?? [];
+  return year == null ? all : all.filter((law) => isLawActive(law, year));
+}
+
+/** Regional-only sidecar laws for a country (empty when none authored). */
+export function getRegionalCatalog(countryId: string, year?: number): PoliticalLaw[] {
+  const all = REGIONAL_SIDECARS[countryId as LawCountryId] ?? [];
+  return year == null ? all : all.filter((law) => isLawActive(law, year));
+}
+
 export function getLaw(lawId: string): PoliticalLaw | null {
   return LAWS_BY_ID.get(lawId) ?? null;
 }
 
-/** All 436 new-generation law ids (used by the generation-aware seed deleter). */
+/** All new-generation law ids including regional sidecars (used by seed deleters). */
 export function getAllNewGenerationLawIds(): string[] {
   return [...LAWS_BY_ID.keys()];
 }

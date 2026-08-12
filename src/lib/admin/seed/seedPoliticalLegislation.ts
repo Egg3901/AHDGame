@@ -19,14 +19,19 @@ import type { LegislationType, StatePolicyRecord } from "@/lib/db/types/legislat
 import {
   getAllNewGenerationLawIds,
   getCatalog,
+  getRegionalCatalog,
   baselineLevelFor,
 } from "@/lib/politicalLegislation/catalog";
 import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
 import { countryFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
 import { budgetKeyForLaw } from "@/lib/politicalLegislation/budgetKeys";
-import { lawTargets } from "@/lib/politicalLegislation/dynamics";
+import {
+  REGIONAL_SUPPLEMENT_FACTOR,
+  lawTargets,
+} from "@/lib/politicalLegislation/dynamics";
 import { projectLawToLegislationType } from "@/lib/politicalLegislation/project";
 import { LAW_COUNTRY_IDS, type LawCountryId } from "@/lib/politicalLegislation/types";
+import { DD_LAND_STATE_IDS } from "@/lib/politicalLegislation/laws/ddLandLaws";
 import { refreshNationalBudgetRevenue } from "@/lib/budget/revenue";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { NATIONAL_POLICY_STATE_IDS } from "@/lib/policy/nationalStateId";
@@ -103,6 +108,8 @@ export async function seedPoliticalLegislationBaseline(
     const base = await countryFiscalBase(db, countryId);
     for (const law of getCatalog(countryId, year)) {
       if (law.kind === "tax") continue;
+      // Regional-only sidecars seed per-state below — never as national.
+      if (law.allowedScope === "regional") continue;
       const level = baselineLevelFor(law, year);
       const doc = projectLawToLegislationType(law);
       const option = doc.policyOptions![level];
@@ -155,6 +162,49 @@ export async function seedPoliticalLegislationBaseline(
       });
       lawCount++;
     }
+
+    // Regional sidecar baselines (DD Land laws today): statePolicies only —
+    // no enactedLaws, no budget sync. Live regions intersect the authored
+    // Land id list so a drifted world cannot invent phantom Bezirke.
+    const regionalLaws = getRegionalCatalog(countryId, year).filter((law) => law.kind !== "tax");
+    if (regionalLaws.length > 0) {
+      const allowed =
+        countryId === "DD" ? new Set<string>(DD_LAND_STATE_IDS) : null;
+      const states = await db
+        .collection<{ _id: string }>("states")
+        .find({ countryId }, { projection: { _id: 1 } })
+        .toArray();
+      const regionIds = states
+        .map((s) => String(s._id))
+        .filter((id) => (allowed ? allowed.has(id) : true));
+      for (const stateId of regionIds) {
+        for (const law of regionalLaws) {
+          const level = baselineLevelFor(law, year);
+          const doc = projectLawToLegislationType(law);
+          const option = doc.policyOptions![level];
+          policyOps.push({
+            updateOne: {
+              filter: { scope: "state", stateId, legislationTypeId: law.id },
+              update: {
+                $set: {
+                  scope: "state",
+                  stateId,
+                  legislationTypeId: law.id,
+                  economic: option.economic,
+                  social: option.social,
+                  policyOptionId: option.id,
+                  policyOptionIndex: level,
+                  effectDirection: option.effectDirection,
+                  updatedAt: now,
+                },
+              },
+              upsert: true,
+            },
+          });
+          policyCount++;
+        }
+      }
+    }
   }
 
   // Flushed before the budget sync below, which READS `enactedLaws` — batching
@@ -187,9 +237,10 @@ export async function seedPoliticalLegislationBaseline(
 /**
  * SP2 residual initialization (dynamics spec §4): residual = seed − dayOneTarget
  * per region per metric, so every region starts EXACTLY at equilibrium — the
- * §5b seed-vs-law gaps ARE the residuals, and day one drifts nothing. Regions
- * begin with no regional enactments, so the day-one target is the national
- * law book alone. Idempotent (recomputed from the same seeds + baselines).
+ * §5b seed-vs-law gaps ARE the residuals, and day one drifts nothing.
+ *
+ * Day-one target = national law book + REGIONAL_SUPPLEMENT_FACTOR × regional
+ * sidecar baselines (DD Land laws). Idempotent.
  */
 export async function seedPoliticalMetricsResiduals(db: Db, year: number): Promise<number> {
   const now = new Date();
@@ -198,10 +249,18 @@ export async function seedPoliticalMetricsResiduals(db: Db, year: number): Promi
   for (const countryId of LAW_COUNTRY_IDS) {
     const levels = new Map(
       getCatalog(countryId, year)
-        .filter((law) => law.kind !== "tax")
+        .filter((law) => law.kind !== "tax" && law.allowedScope !== "regional")
         .map((law) => [law.id, baselineLevelFor(law, year)])
     );
     const national = lawTargets(countryId, levels);
+
+    const regionalLaws = getRegionalCatalog(countryId, year).filter((law) => law.kind !== "tax");
+    const regionalBaseline = new Map(
+      regionalLaws.map((law) => [law.id, baselineLevelFor(law, year)])
+    );
+    const regionalSupplement =
+      regionalBaseline.size > 0 ? lawTargets(countryId, regionalBaseline) : null;
+
     const docs = await db
       .collection<PoliticalMetricsDoc>("politicalMetrics")
       .find({ countryId })
@@ -209,8 +268,10 @@ export async function seedPoliticalMetricsResiduals(db: Db, year: number): Promi
     for (const doc of docs) {
       const residuals = {} as Record<PoliticalMetricId, number>;
       for (const [metricId, points] of Object.entries(national)) {
-        residuals[metricId as PoliticalMetricId] =
-          (doc.values[metricId as PoliticalMetricId] ?? 0) - points;
+        const id = metricId as PoliticalMetricId;
+        const supplementPoints = regionalSupplement?.[id] ?? 0;
+        residuals[id] =
+          (doc.values[id] ?? 0) - (points + REGIONAL_SUPPLEMENT_FACTOR * supplementPoints);
       }
       residualOps.push({
         updateOne: { filter: { _id: doc._id }, update: { $set: { residuals, lastUpdated: now } } },

@@ -17,10 +17,15 @@ vi.mock("@/lib/budget/revenue", () => ({
 }));
 
 describe("getProjectedPoliticalLegislationTypes", () => {
-  it("projects all 436 laws with unique ids", () => {
+  it("projects all core + regional sidecar laws with unique ids", () => {
     const docs = getProjectedPoliticalLegislationTypes();
-    expect(docs.length).toBe(436);
-    expect(new Set(docs.map((d) => d._id)).size).toBe(436);
+    // 436 core + 6 DD Land regional sidecars
+    expect(docs.length).toBe(442);
+    expect(new Set(docs.map((d) => d._id)).size).toBe(442);
+    expect(docs.some((d) => d._id === "dd.sec.landPolytechnicEducation")).toBe(true);
+    expect(docs.find((d) => d._id === "dd.sec.landPolytechnicEducation")?.allowedScope).toBe(
+      "state"
+    );
   });
 });
 
@@ -91,18 +96,28 @@ describe("seedPoliticalLegislationBaseline", () => {
   let db: MockDb;
   beforeEach(() => {
     db = createMockDb();
-    // countryFiscalBase reads states: give each country one region.
+    // countryFiscalBase reads states: give each country one region. DD gets the
+    // six authored Länder so the Land sidecar baseline is exercised.
     db.collectionMocks.states = {
       ...db.collectionMocks.states,
       find: vi.fn().mockImplementation((filter?: { countryId?: string }) => ({
-        toArray: vi.fn().mockResolvedValue([
-          {
-            _id: `${filter?.countryId}-1`,
-            countryId: filter?.countryId,
-            gdp: 19_800,
-            population: 52_600_000,
-          },
-        ]),
+        toArray: vi.fn().mockResolvedValue(
+          filter?.countryId === "DD"
+            ? ["BEO", "MV", "BB", "ST", "SN", "TH"].map((id) => ({
+                _id: id,
+                countryId: "DD",
+                gdp: 3_300,
+                population: 2_900_000,
+              }))
+            : [
+                {
+                  _id: `${filter?.countryId}-1`,
+                  countryId: filter?.countryId,
+                  gdp: 19_800,
+                  population: 52_600_000,
+                },
+              ]
+        ),
       })),
     } as typeof db.collectionMocks.states;
   });
@@ -110,11 +125,17 @@ describe("seedPoliticalLegislationBaseline", () => {
   it("seeds one policy record per program law and enacted laws above level 0", async () => {
     await seedPoliticalLegislationBaseline(db as unknown as Db, vi.fn(), 1953);
     const policyUpserts = bulkOps(db.collectionMocks.statePolicies.bulkWrite);
-    // 103 program laws per country × 4 countries.
-    expect(policyUpserts.length).toBe(412);
+    // 103 national program laws × 4 countries + 6 DD Land laws × 6 Länder.
+    expect(policyUpserts.length).toBe(412 + 36);
+    const landScoped = policyUpserts.filter(
+      (c) => (c[0] as { scope?: string }).scope === "state"
+    );
+    expect(landScoped.length).toBe(36);
     const lawReplaces = bulkOps(db.collectionMocks.enactedLaws.bulkWrite);
     const expectedEnacted = LAW_COUNTRY_IDS.flatMap((cc) =>
-      getCatalog(cc).filter((l) => l.kind !== "tax" && (l.baselineLevel ?? 0) > 0)
+      getCatalog(cc).filter(
+        (l) => l.kind !== "tax" && l.allowedScope !== "regional" && (l.baselineLevel ?? 0) > 0
+      )
     ).length;
     expect(lawReplaces.length).toBe(expectedEnacted);
     // Every enacted record carries the nested v2 model and an explicit option index.
