@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 
 // Animated glow styles for admin search results
 const adminGlowStyles = `
@@ -76,18 +77,19 @@ interface UniversalSearchProps {
   open?: boolean;
 }
 
-const TYPE_LABEL: Record<SearchResult["type"], string> = {
-  politician: "Politician",
-  corporation: "Corporation",
-  seat: "Seat",
-  region: "Region",
-  election: "Election",
-  bill: "Bill",
-  page: "Wiki",
-  commodity: "Commodity",
-  currency: "Currency",
-  bond: "Bond",
-  admin: "Admin",
+// Message ids under nav.search.types, resolved via t() at render time.
+const TYPE_LABEL_KEY: Record<SearchResult["type"], string> = {
+  politician: "search.types.politician",
+  corporation: "search.types.corporation",
+  seat: "search.types.seat",
+  region: "search.types.region",
+  election: "search.types.election",
+  bill: "search.types.bill",
+  page: "search.types.page",
+  commodity: "search.types.commodity",
+  currency: "search.types.currency",
+  bond: "search.types.bond",
+  admin: "search.types.admin",
 };
 
 // Token-based badge classes so themes stay in sync.
@@ -106,6 +108,7 @@ const TYPE_BADGE: Record<SearchResult["type"], string> = {
 };
 
 export function UniversalSearch({ open }: UniversalSearchProps = {}) {
+  const t = useTranslations("nav");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -285,8 +288,8 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search characters, corporations, bills…"
-          aria-label="Search characters, corporations, bills, elections"
+          placeholder={t("search.placeholder")}
+          aria-label={t("search.ariaLabel")}
           role="combobox"
           aria-expanded={isOpen}
           aria-controls="search-results"
@@ -351,7 +354,7 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
                     <span
                       className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${TYPE_BADGE[result.type]}`}
                     >
-                      {TYPE_LABEL[result.type]}
+                      {t(TYPE_LABEL_KEY[result.type])}
                     </span>
                   </div>
                   <p className="text-xs text-muted truncate">{result.subtitle}</p>
@@ -378,7 +381,7 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
             }}
             className="rounded-xl border border-card-border bg-card shadow-modal z-[60] px-4 py-5 text-center"
           >
-            <p className="text-sm text-muted">No results found for &quot;{query}&quot;</p>
+            <p className="text-sm text-muted">{t("search.noResults", { query })}</p>
           </div>,
           document.body
         )}
@@ -401,7 +404,7 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
           >
             <div>
               <p className="example-title text-xs font-semibold text-muted uppercase tracking-wider">
-                Try searching for
+                {t("search.trySearchingFor")}
               </p>
             </div>
             <div className="example-grid grid grid-cols-1 sm:grid-cols-2 gap-2">

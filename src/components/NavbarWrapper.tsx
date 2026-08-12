@@ -1,6 +1,7 @@
 "use client";
 
 import { useReducer, useEffect, useCallback, useMemo, useRef } from "react";
+import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
 import { usePathname, useRouter } from "next/navigation";
@@ -226,6 +227,7 @@ export function NavbarWrapper({
   displayMode?: "focused" | "classic";
   initialPageCountry?: CountryId | null;
 }) {
+  const t = useTranslations("nav");
   const pathname = usePathname();
   const useLightweightNav = isLightweightLayoutPath(pathname);
   const isExcludedPath = EXCLUDED_PATHS.includes(pathname);
@@ -355,7 +357,7 @@ export function NavbarWrapper({
       if (navData.hasCharacter && navData.missingDemographics && !demographicsToastShown.current) {
         demographicsToastShown.current = true;
         setTimeout(() => {
-          showToast("Set your character's background in Settings > Background", "warning");
+          showToast(t("wrapper.demographicsToast"), "warning");
         }, 1500);
       }
     } else {
@@ -370,6 +372,7 @@ export function NavbarWrapper({
     navData,
     setCharacterStats,
     showToast,
+    t,
     useLightweightNav,
   ]);
 

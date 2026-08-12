@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
 
 // Only show the footer on long-content public pages where a footer at the
@@ -38,6 +39,7 @@ const FOOTER_PATH_PREFIXES = [
 ];
 
 export function SiteFooter({ displayMode }: { displayMode?: "focused" | "classic" }) {
+  const t = useTranslations("nav");
   const pathname = usePathname();
   if (displayMode === "focused") return null;
   if (!FOOTER_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return null;
@@ -47,8 +49,7 @@ export function SiteFooter({ displayMode }: { displayMode?: "focused" | "classic
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-4 sm:px-6">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <p className="text-xs text-muted">
-            A House Divided <span className="text-muted/70">|</span> Political &amp; Economic Sim
-            Game
+            A House Divided <span className="text-muted/70">|</span> {t("footer.tagline")}
           </p>
           <a
             href="https://lakesidegames.net"
@@ -63,7 +64,7 @@ export function SiteFooter({ displayMode }: { displayMode?: "focused" | "classic
               height={18}
               className="opacity-80"
             />
-            <span>a Lakeside Games game</span>
+            <span>{t("footer.byLakeside")}</span>
           </a>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -71,28 +72,28 @@ export function SiteFooter({ displayMode }: { displayMode?: "focused" | "classic
             href="/about"
             className="text-xs text-muted transition-colors hover:text-foreground"
           >
-            About
+            {t("footer.about")}
           </Link>
           <Link
             href="/contact"
             className="text-xs text-muted transition-colors hover:text-foreground"
           >
-            Contact
+            {t("footer.contact")}
           </Link>
           <Link href="/faq" className="text-xs text-muted transition-colors hover:text-foreground">
-            FAQ
+            {t("footer.faq")}
           </Link>
           <Link
             href="/privacy"
             className="text-xs text-muted transition-colors hover:text-foreground"
           >
-            Privacy Policy
+            {t("footer.privacy")}
           </Link>
           <Link
             href="/terms"
             className="text-xs text-muted transition-colors hover:text-foreground"
           >
-            Terms of Service
+            {t("footer.terms")}
           </Link>
           <CookieSettingsLink
             hideOnPrivacyPage

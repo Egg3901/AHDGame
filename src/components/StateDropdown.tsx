@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { DROPDOWN_PANEL_CLASS } from "@/components/navbar/dropdownStyles";
 import { UK_NATIONS, UK_REGIONS } from "@/lib/constants/uk";
 import { regionUrl, regionPartyUrl, regionLegislatureUrl } from "@/lib/urls";
@@ -40,11 +41,12 @@ export function StateDropdown({
   governorOffice,
   currentParty,
 }: StateDropdownProps) {
+  const t = useTranslations("nav");
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const legislatureLabel = (() => {
-    if (countryId !== "UK") return "State Legislature";
+    if (countryId !== "UK") return t("state.legislature");
     const nation = UK_NATIONS.find((n) => n.id === stateId);
     if (nation?.devolvedBody) return nation.devolvedBody;
     const region = UK_REGIONS.find((r) => r.id === stateId);
@@ -115,7 +117,7 @@ export function StateDropdown({
                     d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
                   />
                 </svg>
-                <span className="truncate">My Party - {currentParty.name}</span>
+                <span className="truncate">{t("menus.nation.myParty")} - {currentParty.name}</span>
               </Link>
             )}
 
@@ -138,7 +140,7 @@ export function StateDropdown({
                   d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
                 />
               </svg>
-              State Overview
+              {t("state.overview")}
             </Link>
 
             {/* State Economy */}
@@ -160,7 +162,7 @@ export function StateDropdown({
                   d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
                 />
               </svg>
-              State Economy
+              {t("state.economy")}
             </Link>
 
             {/* State Legislature */}
@@ -205,7 +207,7 @@ export function StateDropdown({
                     d="M3 21V8l9-5 9 5v13M9 21V12h6v9"
                   />
                 </svg>
-                Office
+                {t("state.office")}
               </Link>
             )}
 
@@ -229,7 +231,7 @@ export function StateDropdown({
                     d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
                   />
                 </svg>
-                My Election
+                {t("state.myElection")}
               </Link>
             ) : (
               <div className="flex items-center gap-2 px-4 py-2.5 text-sm text-muted opacity-50 cursor-not-allowed">
@@ -241,7 +243,7 @@ export function StateDropdown({
                     d="M9 5H7a2 2 0 00-2-2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
                   />
                 </svg>
-                My Election (None)
+                {t("state.myElectionNone")}
               </div>
             )}
 
@@ -265,7 +267,7 @@ export function StateDropdown({
                     d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
                   />
                 </svg>
-                <span className="truncate">My Office</span>
+                <span className="truncate">{t("state.myOffice")}</span>
               </Link>
             )}
           </div>

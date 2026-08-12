@@ -8,6 +8,7 @@
  */
 
 import React, { type RefObject } from "react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import Image from "next/image";
 import { Avatar } from "@/components/Avatar";
@@ -33,7 +34,6 @@ export function getSandboxToggleInfo() {
   return {
     isSandbox,
     url: isSandbox ? mainSiteUrl : sandboxUrl,
-    label: isSandbox ? "Main Site" : "Sandbox",
   };
 }
 
@@ -76,6 +76,7 @@ export function ExperimentalUserMenu({
   anchorRef,
   panelRef,
 }: ExperimentalUserMenuProps) {
+  const t = useTranslations("nav");
   return (
     <DropdownPanel
       anchorRef={anchorRef}
@@ -120,29 +121,29 @@ export function ExperimentalUserMenu({
 
       <div className="border-t border-card-border p-1.5">
         <MenuRow href="/profile" onNavigate={closeAll} strong>
-          Profile
+          {t("common.profile")}
         </MenuRow>
         {showProfile && (
           <MenuRow href="/notifications" onNavigate={closeAll}>
-            Notifications
+            {t("common.notifications")}
             {unreadCount > 0 ? ` (${unreadCount > 9 ? "9+" : unreadCount})` : ""}
           </MenuRow>
         )}
         {showProfile && !isImperialMode && (
           <MenuRow href="/actions" onNavigate={closeAll}>
-            Actions
+            {t("common.actions")}
           </MenuRow>
         )}
         {showProfile && (
           <MenuRow href="/portfolio?tab=currency" onNavigate={closeAll}>
-            Wallet
+            {t("common.wallet")}
           </MenuRow>
         )}
         {showProfile && ((adminCharacters && adminCharacters.length > 1) || imperialCharacter) && (
           <>
             <div className="my-1 h-px bg-card-border" />
             <div className="px-2.5 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
-              Characters
+              {t("userMenu.characters")}
             </div>
             {adminCharacters?.map((char) =>
               char.isActive && !isImperialMode ? (
@@ -151,7 +152,7 @@ export function ExperimentalUserMenu({
                   className="flex items-center justify-between rounded-lg px-2.5 py-2 text-[13px] text-foreground"
                 >
                   <span>{char.name}</span>
-                  <span className="text-[10px] text-primary font-medium">Active</span>
+                  <span className="text-[10px] text-primary font-medium">{t("common.active")}</span>
                 </div>
               ) : isImperialMode ? (
                 <button
@@ -193,7 +194,7 @@ export function ExperimentalUserMenu({
                     className="flex items-center justify-between rounded-lg px-2.5 py-2 text-[13px] text-foreground transition-colors hover:bg-white/5"
                   >
                     <span>{imperialCharacter.name}</span>
-                    <span className="text-[10px] text-primary font-medium">Active</span>
+                    <span className="text-[10px] text-primary font-medium">{t("common.active")}</span>
                   </Link>
                 ) : (
                   <button
@@ -206,7 +207,7 @@ export function ExperimentalUserMenu({
                     className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-[13px] text-muted transition-colors hover:bg-white/5 disabled:opacity-50"
                   >
                     <span>{imperialCharacter.name}</span>
-                    <span className="text-[10px] text-amber-400/70">Imperial</span>
+                    <span className="text-[10px] text-amber-400/70">{t("common.imperial")}</span>
                   </button>
                 )}
               </>
@@ -215,11 +216,11 @@ export function ExperimentalUserMenu({
         )}
         <div className="my-1 h-px bg-card-border" />
         <MenuRow href="/settings" onNavigate={closeAll}>
-          Settings
+          {t("common.settings")}
         </MenuRow>
         {canAccessSandbox &&
           (() => {
-            const { url, label } = getSandboxToggleInfo();
+            const { url, isSandbox } = getSandboxToggleInfo();
             return (
               <a
                 href={url}
@@ -227,7 +228,7 @@ export function ExperimentalUserMenu({
                 onClick={closeAll}
                 className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-fg-2 transition-colors hover:bg-white/5"
               >
-                Switch to {label}
+                {isSandbox ? t("userMenu.switchToMainSite") : t("userMenu.switchToSandbox")}
               </a>
             );
           })()}
@@ -240,7 +241,7 @@ export function ExperimentalUserMenu({
           }}
           className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-error transition-colors hover:bg-white/5"
         >
-          Sign Out
+          {t("common.signOut")}
         </button>
       </div>
       <Link

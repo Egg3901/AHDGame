@@ -49,11 +49,18 @@ export type NationDetailItemId =
 export interface NationDetailItem {
   id: NationDetailItemId;
   label: string;
+  /**
+   * Message id under the "nav" namespace. Absent for data-driven labels
+   * (country-config names, charter labels), which render as-is.
+   */
+  labelKey?: string;
   href: string;
 }
 
 export interface NationDetailSection {
   title: "Government" | "Politics" | "Economy" | "Other";
+  /** Message id under the "nav" namespace for the section header. */
+  titleKey: string;
   items: NationDetailItem[];
   /** When true, renderers may collapse this section behind a click-to-expand header. */
   collapsible?: boolean;
@@ -79,9 +86,9 @@ export function buildNationalDetailsSections(
   // Traffic-ordered: election pages outdraw party pages, which outdraw the
   // politician roster (see the share breakdown above `sections` below).
   const politics: NationDetailItem[] = [
-    { id: "elections", label: "Elections", href: countryElectionsUrl(countryId) },
-    { id: "parties", label: "Political Parties", href: partiesUrl(countryId) },
-    { id: "politicians", label: "Politicians", href: politiciansUrl(countryId) },
+    { id: "elections", label: "Elections", labelKey: "menus.nation.elections", href: countryElectionsUrl(countryId) },
+    { id: "parties", label: "Political Parties", labelKey: "menus.nation.parties", href: partiesUrl(countryId) },
+    { id: "politicians", label: "Politicians", labelKey: "menus.nation.politicians", href: politiciansUrl(countryId) },
   ];
   // SP1 political registry — playable-pipeline countries only. Shipped without
   // a nav consumer originally; this is its primary entry point.
@@ -95,6 +102,7 @@ export function buildNationalDetailsSections(
     politics.push({
       id: "presidentialElection",
       label: "Presidential Election",
+      labelKey: "menus.nation.presidentialElection",
       href: `/elections/${opts.activePresidentElection.seatId ?? opts.activePresidentElection.id}`,
     });
   }
@@ -102,6 +110,7 @@ export function buildNationalDetailsSections(
     politics.push({
       id: "politicalMetrics",
       label: "Political Metrics",
+      labelKey: "menus.nation.politicalMetrics",
       href: politicalMetricsUrl(countryId),
     });
   }
@@ -112,6 +121,7 @@ export function buildNationalDetailsSections(
     politics.push({
       id: "referendums",
       label: "Referendums",
+      labelKey: "menus.nation.referendums",
       href: referendumsUrl(countryId),
     });
   }
@@ -119,18 +129,18 @@ export function buildNationalDetailsSections(
   // Traffic-ordered: banking (formerly the country CB deep link) leads Economy.
   // The hub lists every central bank and private bank; CB pages stay deep-linked.
   const economy: NationDetailItem[] = [
-    { id: "centralBank", label: "Banking", href: "/banking" },
-    { id: "economy", label: "Economy", href: economyUrl(countryId) },
-    { id: "budget", label: "National Budget", href: budgetUrl(countryId) },
+    { id: "centralBank", label: "Banking", labelKey: "menus.nation.banking", href: "/banking" },
+    { id: "economy", label: "Economy", labelKey: "menus.nation.economy", href: economyUrl(countryId) },
+    { id: "budget", label: "National Budget", labelKey: "menus.nation.budget", href: budgetUrl(countryId) },
   ];
   // SP6: playables have exactly one metrics entry — the registry (Politics
   // section above). Non-playables keep the legacy National Metrics page.
   if (!isPlayablePipeline) {
-    economy.push({ id: "metrics", label: "National Metrics", href: metricsUrl(countryId) });
+    economy.push({ id: "metrics", label: "National Metrics", labelKey: "menus.nation.metrics", href: metricsUrl(countryId) });
   }
   if (opts.unionsEnabled) {
     // Country-scoped unions roster (mirrors the other Economy-group links).
-    economy.push({ id: "unions", label: "Unions", href: unionsUrl(countryId) });
+    economy.push({ id: "unions", label: "Unions", labelKey: "menus.nation.unions", href: unionsUrl(countryId) });
   }
 
   // Section and item order below is set by measured traffic (Umami, 24 days
@@ -145,28 +155,40 @@ export function buildNationalDetailsSections(
   //   Economy   ~1.2% — central bank 0.68, economy 0.24, metrics 0.17,
   //                     budget 0.13
   const sections: NationDetailSection[] = [
-    { title: "Politics", items: politics },
+    { title: "Politics", titleKey: "menus.nation.sections.politics", items: politics },
     // Map outranks every Government and Economy link and no longer sits last.
     // Its section title is still "Other", which undersells a top-five
     // destination — renaming or promoting it to a pinned link is a structural
     // change left for a separate decision.
-    { title: "Other", items: [{ id: "map", label: "Map", href: config.mapPath }] },
+    {
+      title: "Other",
+      titleKey: "menus.nation.sections.other",
+      items: [{ id: "map", label: "Map", labelKey: "menus.nation.map", href: config.mapPath }],
+    },
     {
       title: "Government",
+      titleKey: "menus.nation.sections.government",
       items: [
         { id: "legislature", label: config.legislature.name, href: config.legislature.path },
         { id: "executive", label: config.executiveLabel, href: config.executivePath },
-        { id: "policy", label: "Policy", href: policyUrl(countryId) },
+        { id: "policy", label: "Policy", labelKey: "menus.nation.policy", href: policyUrl(countryId) },
         // SCOTUS is a US-only mechanic (#3581) — same country-literal
         // convention as the executive surface / CountryOverviewClient.
         ...(countryId === COUNTRY_CONFIGS.US.id
-          ? [{ id: "scotus" as const, label: "Supreme Court", href: scotusUrl(countryId) }]
+          ? [
+              {
+                id: "scotus" as const,
+                label: "Supreme Court",
+                labelKey: "menus.nation.scotus",
+                href: scotusUrl(countryId),
+              },
+            ]
           : []),
       ],
     },
     // Economy collapses behind a click-to-expand header — it carries the most
     // links (and the Unions page when that feature is on).
-    { title: "Economy", collapsible: true, items: economy },
+    { title: "Economy", titleKey: "menus.nation.sections.economy", collapsible: true, items: economy },
   ];
 
   return sections.filter((s) => s.items.length > 0);

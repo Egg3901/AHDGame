@@ -82,6 +82,7 @@ describe("buildWorldNavSections / looseWorldNavItems", () => {
       {
         id: "myCorporation",
         label: "My Corporation",
+        labelKey: "menus.world.myCorporation",
         href: "/corporation/1",
         section: "corporate",
         show: true,

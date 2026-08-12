@@ -5,6 +5,8 @@ export type WorldNavSection = "corporate" | "leaderboard" | "main";
 export interface WorldNavItem {
   id: string;
   label: string;
+  /** Message id under the "nav" namespace; renderers resolve via t(labelKey). */
+  labelKey: string;
   href: string;
   section: WorldNavSection;
   show: boolean;
@@ -35,6 +37,7 @@ export function buildWorldNavItems({
     {
       id: "myCorporation",
       label: "My Corporation",
+      labelKey: "menus.world.myCorporation",
       href: `/corporation/${myCorporationId}`,
       section: "corporate",
       show: myCorporationId != null,
@@ -43,22 +46,25 @@ export function buildWorldNavItems({
     {
       id: "legacyLeaderboard",
       label: "Hall of Fame",
+      labelKey: "menus.world.hallOfFame",
       href: "/world/legacy",
       section: "leaderboard",
       show: true,
     },
-    { id: "nations", label: "Nations", href: "/world", section: "main", show: true },
+    { id: "nations", label: "Nations", labelKey: "menus.world.nations", href: "/world", section: "main", show: true },
     {
       id: "map",
       label: "Map",
+      labelKey: "menus.world.map",
       href: getCountryConfig(countryId as CountryId).mapPath,
       section: "main",
       show: true,
     },
-    { id: "crises", label: "Crises", href: "/world/crises", section: "main", show: true },
+    { id: "crises", label: "Crises", labelKey: "menus.world.crises", href: "/world/crises", section: "main", show: true },
     {
       id: "conflicts",
       label: "Conflicts",
+      labelKey: "menus.world.conflicts",
       href: "/world/conflicts",
       section: "main",
       show: conflictsEnabled,
@@ -66,15 +72,17 @@ export function buildWorldNavItems({
     {
       id: "internationalOrgs",
       label: "International Orgs",
+      labelKey: "menus.world.internationalOrgs",
       href: "/world/international-organizations",
       section: "main",
       show: true,
     },
-    { id: "sectors", label: "Sectors", href: "/sectors", section: "main", show: true },
-    { id: "unions", label: "Unions", href: "/unions", section: "main", show: unionsEnabled },
+    { id: "sectors", label: "Sectors", labelKey: "menus.world.sectors", href: "/sectors", section: "main", show: true },
+    { id: "unions", label: "Unions", labelKey: "menus.world.unions", href: "/unions", section: "main", show: unionsEnabled },
     {
       id: "stockMarket",
       label: "Stock Market",
+      labelKey: "menus.world.stockMarket",
       href: "/stockmarket/global",
       section: "main",
       show: true,
@@ -82,22 +90,25 @@ export function buildWorldNavItems({
     {
       id: "forex",
       label: "Currency Exchange",
+      labelKey: "menus.world.forex",
       href: "/forex/global",
       section: "main",
       show: true,
     },
-    { id: "trade", label: "Trade", href: "/world/trade", section: "main", show: true },
+    { id: "trade", label: "Trade", labelKey: "menus.world.trade", href: "/world/trade", section: "main", show: true },
     {
       id: "news",
       label: "News",
+      labelKey: "menus.world.news",
       href: `/news?country=${country}`,
       section: "main",
       show: true,
     },
-    { id: "imf", label: "IMF", href: "/international/imf", section: "main", show: true },
+    { id: "imf", label: "IMF", labelKey: "menus.world.imf", href: "/international/imf", section: "main", show: true },
     {
       id: "banking",
       label: "Banking",
+      labelKey: "menus.world.banking",
       href: "/banking",
       section: "main",
       show: true,
@@ -128,12 +139,15 @@ export type WorldNavGroupId = "leaderboards" | "diplomacy" | "economy" | "other"
 export interface WorldNavGroup {
   id: WorldNavGroupId;
   title: "Leaderboards" | "Diplomacy" | "Economy" | "Other";
+  /** Message id under the "nav" namespace for the group header. */
+  titleKey: string;
   items: WorldNavItem[];
 }
 
 interface WorldNavGroupDef {
   id: WorldNavGroupId;
   title: WorldNavGroup["title"];
+  titleKey: string;
   /** `WorldNavItem.id`s belonging to this group, in display order. */
   itemIds: string[];
 }
@@ -148,6 +162,7 @@ const WORLD_NAV_GROUPS: WorldNavGroupDef[] = [
   {
     id: "economy",
     title: "Economy",
+    titleKey: "menus.world.groups.economy",
     // IMF sits here rather than Diplomacy — it's the world's central-bank
     // equivalent, mirroring how the Nation section's Economy group carries
     // the country's own central bank.
@@ -159,12 +174,18 @@ const WORLD_NAV_GROUPS: WorldNavGroupDef[] = [
   {
     id: "diplomacy",
     title: "Diplomacy",
+    titleKey: "menus.world.groups.diplomacy",
     // Nations 0.32% > International Orgs 0.08% > Crises 0.06%. Map keeps
     // second place because it is the entry point to the region cluster.
     itemIds: ["nations", "map", "internationalOrgs", "crises", "conflicts"],
   },
-  { id: "other", title: "Other", itemIds: ["news"] },
-  { id: "leaderboards", title: "Leaderboards", itemIds: ["legacyLeaderboard"] },
+  { id: "other", title: "Other", titleKey: "menus.world.groups.other", itemIds: ["news"] },
+  {
+    id: "leaderboards",
+    title: "Leaderboards",
+    titleKey: "menus.world.groups.leaderboards",
+    itemIds: ["legacyLeaderboard"],
+  },
 ];
 
 /**
@@ -177,9 +198,10 @@ const WORLD_NAV_GROUPS: WorldNavGroupDef[] = [
  */
 export function buildWorldNavSections(items: WorldNavItem[]): WorldNavGroup[] {
   const byId = new Map(items.map((item) => [item.id, item]));
-  return WORLD_NAV_GROUPS.map(({ id, title, itemIds }) => ({
+  return WORLD_NAV_GROUPS.map(({ id, title, titleKey, itemIds }) => ({
     id,
     title,
+    titleKey,
     items: itemIds
       .map((itemId) => byId.get(itemId))
       .filter((item): item is WorldNavItem => item != null),
