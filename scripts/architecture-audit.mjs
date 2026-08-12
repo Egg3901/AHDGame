@@ -150,6 +150,9 @@ const SIZE_CAP_EXEMPT = [
   // Pure-data seed files
   "src/lib/seeds/",
   // Pure-data constants (no logic, just declarative configuration tables)
+  // Tech-tree early-fill node tables: declarative NodeSpec entries per sector,
+  // zero functions or branches; consumed by buildTreeForSector.
+  "src/lib/constants/techTree/earlySectorFill.ts",
   "src/lib/constants/usCabinetMechanics.ts",
   "src/lib/constants/ukCabinetMechanics.ts",
   "src/lib/constants/jpCabinetMechanics.ts",
