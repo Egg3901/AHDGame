@@ -159,6 +159,42 @@ describe("POST /api/political-operations/state-org/build", () => {
     expect(response.status).toBe(400);
   });
 
+  it("allows building a personal state organization in territorial Alaska", async () => {
+    const orgFindOneAndUpdate = vi.fn().mockResolvedValue({
+      _id: new ObjectId(),
+      characterId: mockCharacterId,
+      stateId: "AK",
+      level: 1,
+      totalInvested: 3,
+      updatedAt: new Date(),
+    });
+    await setupDb({
+      characters: {
+        findOne: vi.fn().mockResolvedValue({ ...baseCharacter }),
+        updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+      },
+      characterStateOrg: {
+        findOne: vi.fn().mockResolvedValue({ level: 1, totalInvested: 3 }),
+        findOneAndUpdate: orgFindOneAndUpdate,
+      },
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/political-operations/state-org/build", {
+        method: "POST",
+        body: JSON.stringify({ stateId: "AK" }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(orgFindOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ stateId: "AK" }),
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
   it("returns 400 when the character has insufficient actions", async () => {
     const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
     vi.mocked(requireAuthWithCharacter).mockResolvedValue({

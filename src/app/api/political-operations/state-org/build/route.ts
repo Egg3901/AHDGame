@@ -21,7 +21,7 @@ import {
   loadUsPoliticalStateIds,
   unplayableTerritoryHomeError,
 } from "@/lib/elections/usPoliticalHome";
-import { isUsPoliticalState } from "@/lib/elections/statehoodAdmission";
+import { isUsResidentPoliticalRegion } from "@/lib/elections/statehoodAdmission";
 import type { Character, CharacterStateOrg } from "@/lib/db/types";
 import { MongoServerError } from "mongodb";
 
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
 
     const db = await getDb();
     const { admittedIds, preset } = await loadUsPoliticalStateIds(db);
-    if (!isUsPoliticalState(stateId, preset, admittedIds)) {
+    if (!isUsResidentPoliticalRegion(stateId, preset, admittedIds)) {
       return NextResponse.json(
         badRequest(unplayableTerritoryHomeError(stateId)).toJson(),
         { status: 400 }
@@ -304,5 +304,4 @@ export async function POST(request: Request) {
     return handleRouteError(error);
   }
 }
-
 

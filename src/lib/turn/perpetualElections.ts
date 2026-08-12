@@ -3,7 +3,7 @@ import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getCountryAccessFromDb, withCountryAccessSnapshot } from "@/lib/countryAccess";
 import { NG_REGIONAL_COUNCIL_SEATS } from "@/lib/constants/states";
-import type { Election, ElectionStatus, GameState, State } from "@/lib/db/types";
+import type { Election, ElectionStatus, GameState, Seat, State } from "@/lib/db/types";
 import { UK_COMMONS_SEATS } from "@/lib/turn/electionResolution";
 import { US_STATE_FILTER } from "@/lib/utils/electionLabels";
 import { MS_PER_TURN, STARTING_YEAR } from "@/lib/constants/turnTime";
@@ -21,7 +21,8 @@ import {
   isUsElectoralState,
 } from "@/lib/constants/states";
 import { loadApportionment } from "@/lib/elections/apportionment";
-import { admittedStateIdsAsOf } from "@/lib/elections/statehoodAdmission";
+import { admittedStateIdsAsOf, TERRITORY_ADMISSIONS } from "@/lib/elections/statehoodAdmission";
+import { buildUsTerritorialGovernorSeat } from "@/lib/admin/seed/seedSeats";
 import { type CountryId } from "@/lib/constants/countries";
 import { DEFAULT_DURATIONS } from "@/lib/constants/electionDurations";
 import { pickNextCanonicalCycle, turnToWallClock } from "@/lib/elections/canonicalCycle";
@@ -545,6 +546,38 @@ export async function ensurePerpetualElections(now: Date, currentTurn?: number):
     .filter(
       (id) => isUsElectoralState(id) && (presetHouseSeats[id] != null || admittedIds.has(id))
     );
+  const fullStateIds = new Set(stateIds);
+  // Alaska and Hawaii are playable territories before statehood. They retain
+  // the normal governor race machinery but no federal or state-legislative
+  // elections until admission moves them into `stateIds` above.
+  const territorialGovernorStateIds = states
+    .map((s) => s._id as string)
+    .filter(
+      (id) =>
+        !fullStateIds.has(id) && TERRITORY_ADMISSIONS.some((territory) => territory.stateId === id)
+    );
+
+  // Existing worlds predate territorial governor seat seeding. Upsert the
+  // deterministic rows here so deployment heals them on the next turn, while
+  // bootstrap/reset gets the same rows from `seedSeats`.
+  if (territorialGovernorStateIds.length > 0) {
+    const territorySeats = territorialGovernorStateIds.map((stateId) =>
+      buildUsTerritorialGovernorSeat(stateId, now)
+    );
+    await db.collection<Seat>("seats").bulkWrite(
+      territorySeats.map((seat) => {
+        const { _id, ...body } = seat;
+        return {
+          updateOne: {
+            filter: { _id },
+            update: { $setOnInsert: body },
+            upsert: true,
+          },
+        };
+      }),
+      { ordered: false }
+    );
+  }
 
   const liveElections = await db
     .collection<Election>("elections")
@@ -712,6 +745,23 @@ export async function ensurePerpetualElections(now: Date, currentTurn?: number):
       });
       if (doc) toInsert.push(doc);
     }
+  }
+
+  // ── Territorial governors (AK/HI before admission) ───────────────────────
+  for (const stateId of territorialGovernorStateIds) {
+    if (liveGov.has(stateId)) continue;
+    const prev = lastCompleted((e) => e.electionType === "governor" && e.state === stateId);
+    const doc = buildCanonicalSpawn({
+      electionType: "governor",
+      countryId: "US",
+      state: stateId,
+      prev,
+      currentTurn: resolvedTurn,
+      now,
+      fallbackTotalSeats: 1,
+      ctx,
+    });
+    if (doc) toInsert.push(doc);
   }
 
   // ── President (national, anchored to LARP presidential year) ───────────────

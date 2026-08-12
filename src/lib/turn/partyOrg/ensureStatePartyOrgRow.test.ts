@@ -119,7 +119,7 @@ describe("ensureStatePartyOrgRow", () => {
     expect(db.collectionMocks["statePartyOrg"]!.updateOne).not.toHaveBeenCalled();
   });
 
-  it("refuses Alaska under 1953-default until statehood admission", async () => {
+  it("allows Alaska's territorial party organization under 1953-default", async () => {
     db.collection("gameState");
     db.collection("states");
     db.collectionMocks["gameState"]!.findOne.mockResolvedValue({
@@ -129,16 +129,15 @@ describe("ensureStatePartyOrgRow", () => {
     });
     db.collectionMocks["statePartyOrg"]!.findOne.mockResolvedValue(null);
 
-    await expect(
-      ensureStatePartyOrgRow(db as unknown as Db, {
-        countryId: "US",
-        stateId: "AK",
-        party,
-        hasPresence: true,
-      })
-    ).rejects.toThrow(/territory|admitted/i);
+    const row = await ensureStatePartyOrgRow(db as unknown as Db, {
+      countryId: "US",
+      stateId: "AK",
+      party,
+      hasPresence: true,
+    });
 
-    expect(db.collectionMocks["statePartyOrg"]!.updateOne).not.toHaveBeenCalled();
+    expect(row._id).toBe("AK_2");
+    expect(db.collectionMocks["statePartyOrg"]!.updateOne).toHaveBeenCalled();
   });
 
   it("allows Alaska once admittedYear is on the state doc", async () => {

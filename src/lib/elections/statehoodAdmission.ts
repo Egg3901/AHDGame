@@ -237,6 +237,25 @@ export function isUsPoliticalState(
   return admittedIds.has(stateId);
 }
 
+/**
+ * True when a US region can be a player's political home.
+ *
+ * Alaska and Hawaii begin as territories in the 1953 era, but territorial
+ * residents may organize parties and elect a territorial governor. Full state
+ * politics remains behind {@link isUsPoliticalState}: territories do not gain
+ * House, Senate, or state-legislative seats until admission.
+ */
+export function isUsResidentPoliticalRegion(
+  stateId: string,
+  preset: string | undefined,
+  admittedIds: ReadonlySet<string> = new Set()
+): boolean {
+  return (
+    isUsPoliticalState(stateId, preset, admittedIds) ||
+    TERRITORY_ADMISSIONS.some((territory) => territory.stateId === stateId)
+  );
+}
+
 /** Headline for the admission news post. */
 export function buildAdmissionContent(decisions: AdmissionDecision[]): string {
   if (decisions.length === 0) return "";
