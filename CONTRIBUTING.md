@@ -37,6 +37,15 @@ Follow the README. You'll have a local world with an admin account in about ten 
 
 Code layout in one minute: `src/app/api/**` are thin route handlers (auth guard, Zod, call into lib). `src/lib/**` is the domain logic, one directory per system. The hourly turn processor is `src/lib/turnSystem.ts` with phases registered in `src/simulation/phases/`. Seeds are in `scripts/seeds/` (data) and `scripts/seed/` (runners). The [engineering docs](https://docs.lakesidegames.net) go deeper.
 
+## UI strings and translations
+
+The UI chrome (navigation, settings, tutorial) is localized with next-intl. Game-generated content (news, mail, notifications, legislation) stays English. The locale comes from the `ahd-locale` cookie, not the URL; players pick a language under Settings > Appearance.
+
+- Catalogs live in `messages/<locale>/<namespace>.json`, one top-level namespace per file. English is the source of truth; missing keys in other locales fall back to English at request time.
+- New chrome copy goes in the catalog, resolved with `useTranslations("<namespace>")` (client) or `getTranslations` (server). Use ICU for plurals and interpolation; never build sentences from concatenated fragments or `s` suffix ternaries.
+- Data modules that feed rendered chrome (nav menu definitions, settings section configs, tutorial chapters) store message keys; the rendering component resolves them.
+- Adding a locale: extend `SUPPORTED_LOCALES` in `src/i18n/locales.ts` and create `messages/<locale>/` mirroring `messages/en/`. Natural phrasing over literal translation; informal address (du-form in German); the player-copy rules above apply in every language.
+
 ## Review
 
 The maintainer reviews every PR. Balance and economy paths get extra scrutiny and may require a worldsim run. Squash merge only; your PR title becomes the commit message, so write it like one.
