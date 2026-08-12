@@ -343,30 +343,32 @@ const nextConfig: NextConfig = {
 // prefix), so the plugin only wires the request config into the build.
 const withNextIntl = createNextIntlPlugin();
 
-export default withNextIntl(withSentryConfig(nextConfig, {
-  org: "ahousedivided",
-  // GlitchTip project slug is "ahd" (not "a-house-divided"); artifacts must be
-  // uploaded to the real slug or symbolication silently no-ops.
-  project: "ahd",
-  sentryUrl,
-  authToken: sentryAuthToken,
-  // Tie uploaded source-map artifacts to the same release the runtime tags
-  // events with, so client stacks symbolicate against the right bundle.
-  release: { name: SENTRY_RELEASE },
-  silent: !process.env.CI,
-  widenClientFileUpload: widenSentryClientFileUpload,
-  // GlitchTip 6.1 implements the artifact-bundle / chunk-upload API, so source
-  // maps DO symbolicate client stacks (turning minified `rX`/`ux` frames into
-  // real file:line). Upload is gated on the auth token so token-less builds are
-  // unaffected. Maps are uploaded then deleted from the build output by the
-  // plugin, so they are never served publicly.
-  sourcemaps: {
-    disable: !sentryAuthToken,
-  },
-  webpack: {
-    automaticVercelMonitors: false,
-    treeshake: {
-      removeDebugLogging: true,
+export default withNextIntl(
+  withSentryConfig(nextConfig, {
+    org: "ahousedivided",
+    // GlitchTip project slug is "ahd" (not "a-house-divided"); artifacts must be
+    // uploaded to the real slug or symbolication silently no-ops.
+    project: "ahd",
+    sentryUrl,
+    authToken: sentryAuthToken,
+    // Tie uploaded source-map artifacts to the same release the runtime tags
+    // events with, so client stacks symbolicate against the right bundle.
+    release: { name: SENTRY_RELEASE },
+    silent: !process.env.CI,
+    widenClientFileUpload: widenSentryClientFileUpload,
+    // GlitchTip 6.1 implements the artifact-bundle / chunk-upload API, so source
+    // maps DO symbolicate client stacks (turning minified `rX`/`ux` frames into
+    // real file:line). Upload is gated on the auth token so token-less builds are
+    // unaffected. Maps are uploaded then deleted from the build output by the
+    // plugin, so they are never served publicly.
+    sourcemaps: {
+      disable: !sentryAuthToken,
     },
-  },
-}));
+    webpack: {
+      automaticVercelMonitors: false,
+      treeshake: {
+        removeDebugLogging: true,
+      },
+    },
+  })
+);

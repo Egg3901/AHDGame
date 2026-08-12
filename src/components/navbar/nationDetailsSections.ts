@@ -86,9 +86,24 @@ export function buildNationalDetailsSections(
   // Traffic-ordered: election pages outdraw party pages, which outdraw the
   // politician roster (see the share breakdown above `sections` below).
   const politics: NationDetailItem[] = [
-    { id: "elections", label: "Elections", labelKey: "menus.nation.elections", href: countryElectionsUrl(countryId) },
-    { id: "parties", label: "Political Parties", labelKey: "menus.nation.parties", href: partiesUrl(countryId) },
-    { id: "politicians", label: "Politicians", labelKey: "menus.nation.politicians", href: politiciansUrl(countryId) },
+    {
+      id: "elections",
+      label: "Elections",
+      labelKey: "menus.nation.elections",
+      href: countryElectionsUrl(countryId),
+    },
+    {
+      id: "parties",
+      label: "Political Parties",
+      labelKey: "menus.nation.parties",
+      href: partiesUrl(countryId),
+    },
+    {
+      id: "politicians",
+      label: "Politicians",
+      labelKey: "menus.nation.politicians",
+      href: politiciansUrl(countryId),
+    },
   ];
   // SP1 political registry — playable-pipeline countries only. Shipped without
   // a nav consumer originally; this is its primary entry point.
@@ -130,17 +145,37 @@ export function buildNationalDetailsSections(
   // The hub lists every central bank and private bank; CB pages stay deep-linked.
   const economy: NationDetailItem[] = [
     { id: "centralBank", label: "Banking", labelKey: "menus.nation.banking", href: "/banking" },
-    { id: "economy", label: "Economy", labelKey: "menus.nation.economy", href: economyUrl(countryId) },
-    { id: "budget", label: "National Budget", labelKey: "menus.nation.budget", href: budgetUrl(countryId) },
+    {
+      id: "economy",
+      label: "Economy",
+      labelKey: "menus.nation.economy",
+      href: economyUrl(countryId),
+    },
+    {
+      id: "budget",
+      label: "National Budget",
+      labelKey: "menus.nation.budget",
+      href: budgetUrl(countryId),
+    },
   ];
   // SP6: playables have exactly one metrics entry — the registry (Politics
   // section above). Non-playables keep the legacy National Metrics page.
   if (!isPlayablePipeline) {
-    economy.push({ id: "metrics", label: "National Metrics", labelKey: "menus.nation.metrics", href: metricsUrl(countryId) });
+    economy.push({
+      id: "metrics",
+      label: "National Metrics",
+      labelKey: "menus.nation.metrics",
+      href: metricsUrl(countryId),
+    });
   }
   if (opts.unionsEnabled) {
     // Country-scoped unions roster (mirrors the other Economy-group links).
-    economy.push({ id: "unions", label: "Unions", labelKey: "menus.nation.unions", href: unionsUrl(countryId) });
+    economy.push({
+      id: "unions",
+      label: "Unions",
+      labelKey: "menus.nation.unions",
+      href: unionsUrl(countryId),
+    });
   }
 
   // Section and item order below is set by measured traffic (Umami, 24 days
@@ -171,7 +206,12 @@ export function buildNationalDetailsSections(
       items: [
         { id: "legislature", label: config.legislature.name, href: config.legislature.path },
         { id: "executive", label: config.executiveLabel, href: config.executivePath },
-        { id: "policy", label: "Policy", labelKey: "menus.nation.policy", href: policyUrl(countryId) },
+        {
+          id: "policy",
+          label: "Policy",
+          labelKey: "menus.nation.policy",
+          href: policyUrl(countryId),
+        },
         // SCOTUS is a US-only mechanic (#3581) — same country-literal
         // convention as the executive surface / CountryOverviewClient.
         ...(countryId === COUNTRY_CONFIGS.US.id
@@ -188,7 +228,12 @@ export function buildNationalDetailsSections(
     },
     // Economy collapses behind a click-to-expand header — it carries the most
     // links (and the Unions page when that feature is on).
-    { title: "Economy", titleKey: "menus.nation.sections.economy", collapsible: true, items: economy },
+    {
+      title: "Economy",
+      titleKey: "menus.nation.sections.economy",
+      collapsible: true,
+      items: economy,
+    },
   ];
 
   return sections.filter((s) => s.items.length > 0);

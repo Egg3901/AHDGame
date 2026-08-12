@@ -29,15 +29,28 @@ export function buildLegislatureSubNavItems(countryId: CountryId): ExperimentalS
         strong: true,
         meta: "435",
       },
-      { label: "Senate", labelKey: "menus.legislature.senate", href: "/congress?chamber=senate", meta: "100" },
-      { label: "Committees", labelKey: "menus.legislature.committees", href: "/congress?tab=committees" },
+      {
+        label: "Senate",
+        labelKey: "menus.legislature.senate",
+        href: "/congress?chamber=senate",
+        meta: "100",
+      },
+      {
+        label: "Committees",
+        labelKey: "menus.legislature.committees",
+        href: "/congress?tab=committees",
+      },
       {
         label: "Active legislation",
         labelKey: "menus.legislature.activeLegislation",
         href: "/congress?tab=legislation",
         metaClass: "text-primary",
       },
-      { label: "Floor schedule", labelKey: "menus.legislature.floorSchedule", href: "/congress?tab=schedule" },
+      {
+        label: "Floor schedule",
+        labelKey: "menus.legislature.floorSchedule",
+        href: "/congress?tab=schedule",
+      },
     ];
   }
 
@@ -67,14 +80,27 @@ export function buildElectionsSubNavItems(countryId: CountryId): ExperimentalSub
   const config = getCountryConfig(countryId);
   const usesLegacyCongressRoutes = config.legislature.path === "/country/us/legislature";
   const items: ExperimentalSubNavItem[] = [
-    { label: "Upcoming races", labelKey: "menus.elections.upcomingRaces", href: electionsBase, strong: true },
+    {
+      label: "Upcoming races",
+      labelKey: "menus.elections.upcomingRaces",
+      href: electionsBase,
+      strong: true,
+    },
   ];
 
   if (usesLegacyCongressRoutes) {
     items.push(
-      { label: "Primaries", labelKey: "menus.elections.primaries", href: "/elections?tab=primaries" },
+      {
+        label: "Primaries",
+        labelKey: "menus.elections.primaries",
+        href: "/elections?tab=primaries",
+      },
       { label: "Results", labelKey: "menus.elections.results", href: "/elections?tab=results" },
-      { label: "Candidate directory", labelKey: "menus.elections.candidateDirectory", href: "/politicians" }
+      {
+        label: "Candidate directory",
+        labelKey: "menus.elections.candidateDirectory",
+        href: "/politicians",
+      }
     );
   } else {
     items.push({

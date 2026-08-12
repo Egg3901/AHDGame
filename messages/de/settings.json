@@ -87,19 +87,34 @@
       "identity": { "label": "Verknüpfte Konten", "summary": "Discord, Google" },
       "appearance": { "label": "Darstellung", "summary": "Design, experimentelle Oberfläche" },
       "patreon": { "label": "Patreon", "summary": "Unterstützervorteile" },
-      "supporterPerks": { "label": "Unterstützer-Extras", "summary": "Wall-Name, Politiker umbenennen" },
+      "supporterPerks": {
+        "label": "Unterstützer-Extras",
+        "summary": "Wall-Name, Politiker umbenennen"
+      },
       "referrals": { "label": "Einladungen", "summary": "Freunde einladen" },
       "achievements": { "label": "Erfolge", "summary": "Abzeichen & Meilensteine" },
-      "retiredCharacters": { "label": "Frühere Charaktere", "summary": "Aufzeichnungen früherer Charaktere" },
+      "retiredCharacters": {
+        "label": "Frühere Charaktere",
+        "summary": "Aufzeichnungen früherer Charaktere"
+      },
       "security": { "label": "Sicherheit", "summary": "Passwort" },
       "apiKeys": { "label": "API-Schlüssel", "summary": "API-Zugriff & Automatisierung" },
       "danger": { "label": "Gefahrenzone", "summary": "Konto löschen" },
       "profile": { "label": "Charakterprofil", "summary": "Name, Bio, Avatar, Titelbild" },
       "demographics": { "label": "Hintergrund", "summary": "Ethnie, Geschlecht, Bildung" },
-      "politics": { "label": "Politische Positionen", "summary": "Wirtschaftlich & gesellschaftlich" },
+      "politics": {
+        "label": "Politische Positionen",
+        "summary": "Wirtschaftlich & gesellschaftlich"
+      },
       "campaignSong": { "label": "Wahlkampfsong", "summary": "Profilmusik" },
-      "characterDanger": { "label": "Charakter-Gefahrenzone", "summary": "Charakter in den Ruhestand schicken" },
-      "imperialProfile": { "label": "Imperiales Profil", "summary": "Name, Bio, Avatar, Titelbild" },
+      "characterDanger": {
+        "label": "Charakter-Gefahrenzone",
+        "summary": "Charakter in den Ruhestand schicken"
+      },
+      "imperialProfile": {
+        "label": "Imperiales Profil",
+        "summary": "Name, Bio, Avatar, Titelbild"
+      },
       "royalIdentity": { "label": "Königliche Identität", "summary": "Königshaus, Wappen" },
       "royalAnthem": { "label": "Königliche Hymne", "summary": "Profilmusik" }
     },

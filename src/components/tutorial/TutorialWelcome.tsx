@@ -150,7 +150,9 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
                     {opt.icon}
                   </span>
                   <span className="mt-2 block text-sm font-semibold">{t(opt.title)}</span>
-                  <span className="mt-1 block text-xs leading-relaxed text-muted">{t(opt.blurb)}</span>
+                  <span className="mt-1 block text-xs leading-relaxed text-muted">
+                    {t(opt.blurb)}
+                  </span>
                 </button>
               ))}
             </div>

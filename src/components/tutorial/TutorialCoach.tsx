@@ -442,7 +442,11 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
     .filter((fact): fact is NonNullable<typeof fact> => Boolean(fact));
 
   return (
-    <div className="fixed inset-0 z-[190] pointer-events-none" role="dialog" aria-label={t("coach.dialogLabel")}>
+    <div
+      className="fixed inset-0 z-[190] pointer-events-none"
+      role="dialog"
+      aria-label={t("coach.dialogLabel")}
+    >
       {rect ? (
         <>
           {/* Cut-out scrim plus a bright ring on the highlighted element. */}

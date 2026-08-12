@@ -732,9 +732,7 @@ export function SettingsPageContent() {
                 }`}
               />
             </span>
-            <span className="mt-1 block text-xs leading-5 text-muted">
-              {t(section.summaryKey)}
-            </span>
+            <span className="mt-1 block text-xs leading-5 text-muted">{t(section.summaryKey)}</span>
           </button>
         );
       })}

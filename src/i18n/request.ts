@@ -46,9 +46,7 @@ export default getRequestConfig(async () => {
 
   const english = await loadCatalog(DEFAULT_LOCALE);
   const messages =
-    locale === DEFAULT_LOCALE
-      ? english
-      : mergeWithFallback(english, await loadCatalog(locale));
+    locale === DEFAULT_LOCALE ? english : mergeWithFallback(english, await loadCatalog(locale));
 
   return { locale, messages };
 });

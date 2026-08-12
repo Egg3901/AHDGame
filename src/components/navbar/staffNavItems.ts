@@ -26,7 +26,12 @@ export function buildStaffNavItems({
 }: StaffNavOpts): StaffNavItem[] {
   return [
     { label: "Admin Panel", labelKey: "menus.staff.adminPanel", href: "/admin", show: isAdmin },
-    { label: "Mod Panel", labelKey: "menus.staff.modPanel", href: "/moderator", show: isAdmin || isModerator },
+    {
+      label: "Mod Panel",
+      labelKey: "menus.staff.modPanel",
+      href: "/moderator",
+      show: isAdmin || isModerator,
+    },
     {
       label: "Ops Dashboard",
       labelKey: "menus.staff.opsDashboard",
@@ -34,7 +39,13 @@ export function buildStaffNavItems({
       external: true,
       show: isAdmin && OPS_DASHBOARD_URL !== "",
     },
-    { label: "Docs", labelKey: "menus.staff.docs", href: DOCS_URL, external: true, show: isAdmin || isModerator },
+    {
+      label: "Docs",
+      labelKey: "menus.staff.docs",
+      href: DOCS_URL,
+      external: true,
+      show: isAdmin || isModerator,
+    },
     {
       label: "Tickets",
       labelKey: "menus.staff.tickets",

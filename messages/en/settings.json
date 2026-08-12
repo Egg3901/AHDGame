@@ -99,7 +99,10 @@
       "politics": { "label": "Policy Positions", "summary": "Economic & social" },
       "campaignSong": { "label": "Campaign Song", "summary": "Profile music" },
       "characterDanger": { "label": "Character Danger Zone", "summary": "Retire character" },
-      "imperialProfile": { "label": "Imperial Profile", "summary": "Name, bio, avatar, header image" },
+      "imperialProfile": {
+        "label": "Imperial Profile",
+        "summary": "Name, bio, avatar, header image"
+      },
       "royalIdentity": { "label": "Royal Identity", "summary": "Royal House, Coat of Arms" },
       "royalAnthem": { "label": "Royal Anthem", "summary": "Profile music" }
     },

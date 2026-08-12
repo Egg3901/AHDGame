@@ -469,7 +469,9 @@ export const Navbar = React.memo(function Navbar({
                               <span className="truncate">{imperialCharacter.name}</span>
                               <span className="shrink-0 flex items-center gap-1.5 text-xs">
                                 <span className="text-amber-400/70">{t("common.imperial")}</span>
-                                <span className="text-primary font-medium">{t("common.active")}</span>
+                                <span className="text-primary font-medium">
+                                  {t("common.active")}
+                                </span>
                               </span>
                             </Link>
                           ) : (
@@ -849,7 +851,9 @@ export const Navbar = React.memo(function Navbar({
                           className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 ${isNavActive(pathname, "/profile") ? "bg-white/5 font-medium" : "text-foreground"}`}
                         >
                           <span>{char.name}</span>
-                          <span className="text-xs text-primary font-medium">{t("common.active")}</span>
+                          <span className="text-xs text-primary font-medium">
+                            {t("common.active")}
+                          </span>
                         </Link>
                       ) : isImperialMode ? (
                         <button
@@ -895,7 +899,9 @@ export const Navbar = React.memo(function Navbar({
                             className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5 disabled:opacity-50"
                           >
                             <span>{imperialCharacter.name}</span>
-                            <span className="text-xs text-amber-400/70">{t("common.imperial")}</span>
+                            <span className="text-xs text-amber-400/70">
+                              {t("common.imperial")}
+                            </span>
                           </button>
                         )}
                       </>

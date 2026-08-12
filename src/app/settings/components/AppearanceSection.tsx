@@ -481,21 +481,21 @@ export function AppearanceSection({
               desc: t(`appearance.layouts.${value}.desc`),
             }))
             .map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => handleLayoutChange(opt.value)}
-              aria-pressed={statusBarLayout === opt.value}
-              className={`flex-1 min-w-[140px] rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                statusBarLayout === opt.value
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-card-border bg-background text-muted hover:border-card-border hover:bg-card-elevated hover:text-foreground"
-              }`}
-            >
-              <span className="block font-medium mb-0.5">{opt.label}</span>
-              <span className="block text-xs opacity-70">{opt.desc}</span>
-            </button>
-          ))}
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => handleLayoutChange(opt.value)}
+                aria-pressed={statusBarLayout === opt.value}
+                className={`flex-1 min-w-[140px] rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                  statusBarLayout === opt.value
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-card-border bg-background text-muted hover:border-card-border hover:bg-card-elevated hover:text-foreground"
+                }`}
+              >
+                <span className="block font-medium mb-0.5">{opt.label}</span>
+                <span className="block text-xs opacity-70">{opt.desc}</span>
+              </button>
+            ))}
         </div>
         {statusBarLayout === "corp" && (
           <p className="mt-3 text-xs text-muted">{t("appearance.corpNote")}</p>

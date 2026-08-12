@@ -175,7 +175,9 @@ export function NationDropdown({
                         {getCountryDisplayName(id, preset)}
                       </span>
                       {isHome && (
-                        <span className="text-[10px] text-muted leading-none">{t("countrySwitcher.homeBadge")}</span>
+                        <span className="text-[10px] text-muted leading-none">
+                          {t("countrySwitcher.homeBadge")}
+                        </span>
                       )}
                     </button>
                   );
@@ -239,7 +241,9 @@ export function NationDropdown({
                         d="M3 21v-8a2 2 0 012-2h14a2 2 0 012 2v8M9 10a2 2 0 012-2h2a2 2 0 012 2"
                       />
                     </svg>
-                    <span className="truncate">{t("menus.nation.myParty")} - {currentParty.name}</span>
+                    <span className="truncate">
+                      {t("menus.nation.myParty")} - {currentParty.name}
+                    </span>
                   </Link>
                 )}
                 {userCountry === "US" && (
@@ -287,7 +291,9 @@ export function NationDropdown({
                       className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-background/60"
                     >
                       {NATION_DETAIL_ICONS[item.id]}
-                      <span className="truncate">{item.labelKey ? t(item.labelKey) : item.label}</span>
+                      <span className="truncate">
+                        {item.labelKey ? t(item.labelKey) : item.label}
+                      </span>
                     </Link>
                   ))}
                 </CollapsibleNavSection>

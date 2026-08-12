@@ -117,7 +117,11 @@ export function sectionMatchesQuery(section: SectionDef, query: string, localize
     .includes(normalized);
 }
 
-export function bucketQuickSettingsMatch(bucket: SettingsBucket, query: string, localizedText = "") {
+export function bucketQuickSettingsMatch(
+  bucket: SettingsBucket,
+  query: string,
+  localizedText = ""
+) {
   const normalized = query.trim().toLocaleLowerCase();
   if (!normalized) return true;
   return `${localizedText} ${bucket.quickKeywords.join(" ")}`

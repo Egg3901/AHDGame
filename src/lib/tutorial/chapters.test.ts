@@ -136,9 +136,7 @@ describe("step links", () => {
         .split(".")
         .reduce(
           (node, part) =>
-            node && typeof node === "object"
-              ? (node as Record<string, unknown>)[part]
-              : undefined,
+            node && typeof node === "object" ? (node as Record<string, unknown>)[part] : undefined,
           catalog
         );
 
@@ -242,8 +240,8 @@ describe("buildTourSteps", () => {
     // so the rendered title says "nation" for the UK, never a hardcoded
     // "state" (the coach passes coachCountryContext values to t()).
     expect(scout?.title).toBe("steps.scoutRegion.title");
-    const en = (enCatalog as { tutorial: { steps: { scoutRegion: { title: string } } } })
-      .tutorial.steps.scoutRegion.title;
+    const en = (enCatalog as { tutorial: { steps: { scoutRegion: { title: string } } } }).tutorial
+      .steps.scoutRegion.title;
     expect(en).toContain("{region}");
     expect(en.toLowerCase()).not.toContain("state");
   });

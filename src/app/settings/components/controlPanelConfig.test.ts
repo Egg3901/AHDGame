@@ -61,13 +61,25 @@ describe("settings control-panel information architecture", () => {
     expect(danger && sectionMatchesQuery(danger, "danger zone", sectionText(danger))).toBe(true);
     expect(danger && sectionMatchesQuery(danger, "unrelated", sectionText(danger))).toBe(false);
     expect(
-      bucketQuickSettingsMatch(CONTROL_PANEL_BUCKETS[1], "turn speed", bucketText(CONTROL_PANEL_BUCKETS[1]))
+      bucketQuickSettingsMatch(
+        CONTROL_PANEL_BUCKETS[1],
+        "turn speed",
+        bucketText(CONTROL_PANEL_BUCKETS[1])
+      )
     ).toBe(true);
     expect(
-      bucketQuickSettingsMatch(CONTROL_PANEL_BUCKETS[3], "volume", bucketText(CONTROL_PANEL_BUCKETS[3]))
+      bucketQuickSettingsMatch(
+        CONTROL_PANEL_BUCKETS[3],
+        "volume",
+        bucketText(CONTROL_PANEL_BUCKETS[3])
+      )
     ).toBe(true);
     expect(
-      bucketQuickSettingsMatch(CONTROL_PANEL_BUCKETS[4], "import", bucketText(CONTROL_PANEL_BUCKETS[4]))
+      bucketQuickSettingsMatch(
+        CONTROL_PANEL_BUCKETS[4],
+        "import",
+        bucketText(CONTROL_PANEL_BUCKETS[4])
+      )
     ).toBe(true);
     // Localized bucket summary text still matches ("Sign-in methods" is only in the catalog).
     expect(

@@ -194,7 +194,9 @@ export function ExperimentalUserMenu({
                     className="flex items-center justify-between rounded-lg px-2.5 py-2 text-[13px] text-foreground transition-colors hover:bg-white/5"
                   >
                     <span>{imperialCharacter.name}</span>
-                    <span className="text-[10px] text-primary font-medium">{t("common.active")}</span>
+                    <span className="text-[10px] text-primary font-medium">
+                      {t("common.active")}
+                    </span>
                   </Link>
                 ) : (
                   <button
