@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useTranslations } from "next-intl";
 import { MessageBanner, SpinnerIcon } from "./shared";
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function DangerZoneSection({ onAccountDeleted }: Props) {
+  const t = useTranslations("settings");
   // ── Resign All ──────────────────────────────────────────────────────────────
   const [showResignConfirm, setShowResignConfirm] = useState(false);
   const [resigning, setResigning] = useState(false);
@@ -24,10 +26,10 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
         setResignResult({ ok: true, text: data.message });
         setShowResignConfirm(false);
       } else {
-        setResignResult({ ok: false, text: data.error || "Failed to resign" });
+        setResignResult({ ok: false, text: data.error || t("danger.resignFailed") });
       }
     } catch {
-      setResignResult({ ok: false, text: "Network error - please try again" });
+      setResignResult({ ok: false, text: t("common.networkErrorRetry") });
     } finally {
       setResigning(false);
     }
@@ -48,7 +50,7 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
 
   const handleDeleteAccount = async () => {
     if (deleteConfirmText !== "DELETE") {
-      setDeleteError("Please type DELETE to confirm");
+      setDeleteError(t("danger.typeDeleteError"));
       return;
     }
     setDeleting(true);
@@ -59,10 +61,10 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
         onAccountDeleted();
       } else {
         const data = await res.json();
-        setDeleteError(data.error || "Failed to delete account");
+        setDeleteError(data.error || t("danger.deleteFailed"));
       }
     } catch {
-      setDeleteError("Network error - please try again");
+      setDeleteError(t("common.networkErrorRetry"));
     } finally {
       setDeleting(false);
     }
@@ -79,11 +81,8 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
     <>
       {/* ── Resign All Positions ─────────────────────────────────────────────── */}
       <div className="mb-8">
-        <h4 className="text-sm font-semibold text-foreground mb-1">Resign All Positions</h4>
-        <p className="text-sm text-muted mb-4">
-          Vacate your current office, all party leadership roles, congress leadership, and withdraw
-          from any active elections.
-        </p>
+        <h4 className="text-sm font-semibold text-foreground mb-1">{t("danger.resignTitle")}</h4>
+        <p className="text-sm text-muted mb-4">{t("danger.resignDesc")}</p>
         {resignResult && (
           <div className="mb-4">
             <MessageBanner
@@ -98,13 +97,14 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
             onClick={() => setShowResignConfirm(true)}
             className="rounded-xl border border-warning/50 bg-warning/10 px-4 py-2.5 text-sm font-medium text-warning transition-colors hover:bg-warning/20"
           >
-            Resign All Positions
+            {t("danger.resignTitle")}
           </button>
         ) : (
           <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
             <p className="text-sm text-foreground mb-3">
-              Are you sure? This will immediately vacate <strong>all</strong> your held positions
-              and withdraw you from all active elections.
+              {t.rich("danger.resignPrompt", {
+                strong: (chunks) => <strong>{chunks}</strong>,
+              })}
             </p>
             <div className="flex gap-3">
               <button
@@ -113,14 +113,14 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
                 className="rounded-xl bg-warning px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-warning/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {resigning && <SpinnerIcon />}
-                {resigning ? "Resigning…" : "Confirm Resign All"}
+                {resigning ? t("danger.resigning") : t("danger.confirmResign")}
               </button>
               <button
                 onClick={() => setShowResignConfirm(false)}
                 disabled={resigning}
                 className="rounded-xl border border-card-border px-4 py-2.5 text-sm text-muted transition-colors hover:text-foreground disabled:opacity-50"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
             </div>
           </div>
@@ -131,16 +131,13 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
       <hr className="border-card-border mb-8" />
 
       {/* ── Delete Account ───────────────────────────────────────────────────── */}
-      <h4 className="text-sm font-semibold text-foreground mb-1">Delete Account</h4>
-      <p className="text-sm text-muted mb-6">
-        This action is irreversible. Your account, character, and all data will be permanently
-        deleted.
-      </p>
+      <h4 className="text-sm font-semibold text-foreground mb-1">{t("danger.deleteTitle")}</h4>
+      <p className="text-sm text-muted mb-6">{t("danger.deleteDesc")}</p>
       <button
         onClick={() => setShowDeleteConfirm(true)}
         className="rounded-xl border border-error/50 bg-error/10 px-4 py-2.5 text-sm font-medium text-error transition-colors hover:bg-error/20"
       >
-        Delete My Account
+        {t("danger.deleteButton")}
       </button>
 
       {showDeleteConfirm &&
@@ -175,20 +172,22 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
                   </svg>
                 </div>
                 <h3 id="delete-dialog-title" className="text-base font-bold text-error">
-                  Delete Account
+                  {t("danger.deleteTitle")}
                 </h3>
               </div>
               <p className="text-sm text-muted mb-4">
-                This action is{" "}
-                <strong className="text-foreground">permanent and irreversible</strong>. Your
-                account, character, and all data will be permanently deleted.
+                {t.rich("danger.modalWarning", {
+                  strong: (chunks) => <strong className="text-foreground">{chunks}</strong>,
+                })}
               </p>
               <p className="mb-3 text-sm text-foreground">
-                Type{" "}
-                <span className="font-bold font-mono bg-error/10 px-1.5 py-0.5 rounded text-error">
-                  DELETE
-                </span>{" "}
-                to confirm:
+                {t.rich("danger.typeToConfirm", {
+                  code: (chunks) => (
+                    <span className="font-bold font-mono bg-error/10 px-1.5 py-0.5 rounded text-error">
+                      {chunks}
+                    </span>
+                  ),
+                })}
               </p>
               <input
                 type="text"
@@ -200,7 +199,7 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
                     setTimeout(() => setDeleteShake(false), 400);
                   }
                 }}
-                placeholder="Type DELETE to confirm"
+                placeholder={t("danger.deletePlaceholder")}
                 className={`w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all bg-background ${
                   deleteConfirmText === "DELETE"
                     ? "border-success/60 ring-2 ring-success/20 focus:ring-success/30"
@@ -226,14 +225,14 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
                   className="rounded-xl bg-error px-4 py-2.5 font-medium text-white transition-colors hover:bg-error/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {deleting && <SpinnerIcon />}
-                  {deleting ? "Deleting…" : "Permanently Delete"}
+                  {deleting ? t("danger.deleting") : t("danger.permanentlyDelete")}
                 </button>
                 <button
                   onClick={closeDeleteDialog}
                   disabled={deleting}
                   className="rounded-xl border border-card-border px-4 py-2.5 text-sm text-muted transition-colors hover:text-foreground disabled:opacity-50"
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
               </div>
             </div>

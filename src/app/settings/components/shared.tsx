@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 // Shared primitives used by the settings page and its sub-sections
 
 export type SectionId =
@@ -258,6 +260,7 @@ export function MessageBanner({
   text: string;
   onDismiss?: () => void;
 }) {
+  const t = useTranslations("settings");
   return (
     <div
       className={`flex items-center justify-between gap-3 rounded-xl p-4 text-sm ${
@@ -298,7 +301,7 @@ export function MessageBanner({
           type="button"
           onClick={onDismiss}
           className="shrink-0 rounded-lg p-1.5 opacity-70 hover:opacity-100 transition-opacity hover:bg-black/5"
-          aria-label="Dismiss"
+          aria-label={t("common.dismiss")}
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path

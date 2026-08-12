@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUserData } from "@/hooks/useUserData";
 import { useAuthMe } from "@/contexts/AuthDataContext";
@@ -66,6 +67,7 @@ import {
 } from "./components/QuickSettingsPanels";
 
 export function SettingsPageContent() {
+  const t = useTranslations("settings");
   const router = useRouter();
   const searchParams = useSearchParams();
   const { userData, rawUser, hasCharacter, loading, refetch } = useUserData();
@@ -92,12 +94,12 @@ export function SettingsPageContent() {
     if (hasDiscordParams) {
       return discord === "linked"
         ? DISCORD_MESSAGES.linked
-        : (DISCORD_MESSAGES[reason ?? ""] ?? { text: "Discord linking failed.", ok: false });
+        : (DISCORD_MESSAGES[reason ?? ""] ?? { key: "oauth.discord.failed", ok: false });
     }
     if (hasGoogleParams) {
       return google === "linked"
         ? GOOGLE_MESSAGES.linked
-        : (GOOGLE_MESSAGES[reason ?? ""] ?? { text: "Google linking failed.", ok: false });
+        : (GOOGLE_MESSAGES[reason ?? ""] ?? { key: "oauth.google.failed", ok: false });
     }
     return null;
   })();
@@ -393,7 +395,7 @@ export function SettingsPageContent() {
             />
           </svg>
         ),
-        label: "Set a profile picture",
+        label: t("recommendations.setProfilePicture"),
         action: "section",
         sectionId: "profile",
       });
@@ -411,7 +413,7 @@ export function SettingsPageContent() {
             />
           </svg>
         ),
-        label: "Set a profile header",
+        label: t("recommendations.setProfileHeader"),
         action: "section",
         sectionId: "profile",
       });
@@ -429,7 +431,7 @@ export function SettingsPageContent() {
             />
           </svg>
         ),
-        label: "Choose a theme",
+        label: t("recommendations.chooseTheme"),
         action: "section",
         sectionId: "appearance",
       });
@@ -442,7 +444,7 @@ export function SettingsPageContent() {
             <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
           </svg>
         ),
-        label: "Link your Discord",
+        label: t("recommendations.linkDiscord"),
         action: "link",
         href: "/api/auth/discord",
       });
@@ -460,7 +462,7 @@ export function SettingsPageContent() {
             />
           </svg>
         ),
-        label: `Set ${corporation.name} logo`,
+        label: t("recommendations.setCorpLogo", { name: corporation.name }),
         action: "link",
         href: `/corporation/${corporation.sequentialId}`,
       });
@@ -477,7 +479,7 @@ export function SettingsPageContent() {
           />
         </svg>
       ),
-      label: "View changelog",
+      label: t("recommendations.viewChangelog"),
       action: "link",
       href: "/changelog",
     });
@@ -491,18 +493,20 @@ export function SettingsPageContent() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-muted mb-1">Username</label>
+              <label className="block text-xs font-medium text-muted mb-1">
+                {t("page.username")}
+              </label>
               <div className="rounded-xl border border-card-border bg-background/50 px-4 py-2.5 text-sm text-foreground">
                 {username || "..."}
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted mb-1">Email</label>
+              <label className="block text-xs font-medium text-muted mb-1">{t("page.email")}</label>
               <div className="rounded-xl border border-card-border bg-background/50 px-4 py-2.5 text-sm text-foreground">
-                {email || "Not set"}
+                {email || t("common.notSet")}
               </div>
             </div>
-            <p className="text-xs text-muted">Contact an admin to change your username or email.</p>
+            <p className="text-xs text-muted">{t("page.contactAdmin")}</p>
           </div>
         );
       case "identity":
@@ -572,16 +576,16 @@ export function SettingsPageContent() {
         return imperialChar ? (
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-muted mb-1">Name</label>
+              <label className="block text-xs font-medium text-muted mb-1">{t("page.name")}</label>
               <div className="rounded-xl border border-card-border bg-background/50 px-4 py-2.5 text-sm text-foreground">
                 {imperialChar.name}
               </div>
-              <p className="mt-1 text-xs text-muted">
-                Contact an admin to change the imperial character name.
-              </p>
+              <p className="mt-1 text-xs text-muted">{t("page.imperialContactAdmin")}</p>
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted mb-1">Avatar</label>
+              <label className="block text-xs font-medium text-muted mb-1">
+                {t("page.avatar")}
+              </label>
               <ProfilePictureUpload
                 size="compact"
                 currentUrl={rawUser?.imperialCharacter?.avatarUrl}
@@ -598,16 +602,18 @@ export function SettingsPageContent() {
         return imperialChar ? (
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-muted mb-1">Royal House</label>
+              <label className="block text-xs font-medium text-muted mb-1">
+                {t("page.royalHouse")}
+              </label>
               <div className="rounded-xl border border-card-border bg-background/50 px-4 py-2.5 text-sm text-foreground">
                 {imperialChar.royalHouse}
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted mb-1">Coat of Arms</label>
-              <p className="text-xs text-muted mb-2">
-                Upload a coat of arms image (JPEG, PNG, or WebP, max 2 MB).
-              </p>
+              <label className="block text-xs font-medium text-muted mb-1">
+                {t("page.coatOfArms")}
+              </label>
+              <p className="text-xs text-muted mb-2">{t("page.coatOfArmsHint")}</p>
               <ProfilePictureUpload
                 size="compact"
                 currentUrl={rawUser?.imperialCharacter?.coatOfArmsUrl}
@@ -625,14 +631,16 @@ export function SettingsPageContent() {
         return imperialChar ? (
           <div className="space-y-4">
             <p className="text-xs text-muted">
-              Set a royal anthem that plays on your imperial profile page. Configure this on your{" "}
-              <Link
-                href={`/imperial/${imperialChar.sequentialId}`}
-                className="text-primary hover:underline"
-              >
-                imperial profile
-              </Link>
-              .
+              {t.rich("page.royalAnthemHint", {
+                link: (chunks) => (
+                  <Link
+                    href={`/imperial/${imperialChar.sequentialId}`}
+                    className="text-primary hover:underline"
+                  >
+                    {chunks}
+                  </Link>
+                ),
+              })}
             </p>
           </div>
         ) : null;
@@ -717,26 +725,37 @@ export function SettingsPageContent() {
               <SectionIcon id={section.id} />
             </span>
             <span className="flex items-center justify-between gap-3">
-              <span className="text-sm font-semibold text-foreground">{section.label}</span>
+              <span className="text-sm font-semibold text-foreground">{t(section.labelKey)}</span>
               <ChevronDown
                 className={`h-4 w-4 shrink-0 text-muted transition-transform ${
                   activeSection === section.id ? "rotate-180 text-primary" : ""
                 }`}
               />
             </span>
-            <span className="mt-1 block text-xs leading-5 text-muted">{section.summary}</span>
+            <span className="mt-1 block text-xs leading-5 text-muted">
+              {t(section.summaryKey)}
+            </span>
           </button>
         );
       })}
     </div>
   );
 
+  const sectionSearchText = (section: (typeof ALL_SECTIONS)[number]) =>
+    `${t(section.labelKey)} ${t(section.summaryKey)}`;
+  const bucketSearchText = (bucket: (typeof CONTROL_PANEL_BUCKETS)[number]) =>
+    `${t(bucket.labelKey)} ${t(bucket.summaryKey)}`;
+
   const hasSearchResults = CONTROL_PANEL_BUCKETS.some((bucket) => {
     const bucketSections = availableSections.filter(
       (section) =>
-        bucket.sectionIds.includes(section.id) && sectionMatchesQuery(section, normalizedSearch)
+        bucket.sectionIds.includes(section.id) &&
+        sectionMatchesQuery(section, normalizedSearch, sectionSearchText(section))
     );
-    return bucketSections.length > 0 || bucketQuickSettingsMatch(bucket, normalizedSearch);
+    return (
+      bucketSections.length > 0 ||
+      bucketQuickSettingsMatch(bucket, normalizedSearch, bucketSearchText(bucket))
+    );
   });
 
   return (
@@ -747,7 +766,7 @@ export function SettingsPageContent() {
           <div className="mb-6">
             <MessageBanner
               ok={oauthBanner.ok}
-              text={oauthBanner.text}
+              text={t(oauthBanner.key)}
               onDismiss={() => {
                 setOauthBannerDismissed(true);
                 router.replace("/settings", { scroll: false });
@@ -760,7 +779,7 @@ export function SettingsPageContent() {
           <div className="flex min-h-[50vh] items-center justify-center">
             <div className="flex flex-col items-center gap-4">
               <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              <p className="text-muted">Loading settings...</p>
+              <p className="text-muted">{t("common.loading")}</p>
             </div>
           </div>
         ) : (
@@ -772,15 +791,15 @@ export function SettingsPageContent() {
                     A House Divided
                   </p>
                   <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-5xl">
-                    Control panel
+                    {t("page.title")}
                   </h1>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-muted md:text-base">
-                    One place for your account, game, interface, audio, and data settings.
+                    {t("page.subtitle")}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 rounded-full border border-card-border bg-card px-3 py-1.5 text-xs text-muted">
                   <span className="h-2 w-2 rounded-full bg-success" />
-                  Changes save inline
+                  {t("page.savesInline")}
                 </div>
               </div>
             </header>
@@ -795,15 +814,15 @@ export function SettingsPageContent() {
                   type="search"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.currentTarget.value)}
-                  placeholder="Search settings — try “password”, “turn”, “theme”, or “export”"
-                  aria-label="Search settings"
+                  placeholder={t("page.searchPlaceholder")}
+                  aria-label={t("page.searchAria")}
                   className="min-h-12 w-full rounded-xl border border-card-border bg-background pl-10 pr-11 text-sm text-foreground outline-none transition-colors placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/25"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
-                    aria-label="Clear settings search"
+                    aria-label={t("page.clearSearchAria")}
                     className="absolute right-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-muted transition-colors hover:bg-card-elevated hover:text-foreground"
                   >
                     <X className="h-4 w-4" />
@@ -814,7 +833,7 @@ export function SettingsPageContent() {
 
             <div className="grid gap-7 lg:grid-cols-[190px_minmax(0,1fr)] lg:gap-9">
               <nav
-                aria-label="Settings categories"
+                aria-label={t("page.categoriesAria")}
                 className="flex gap-2 overflow-x-auto pb-1 lg:sticky lg:top-40 lg:block lg:self-start lg:overflow-visible lg:pb-0"
               >
                 {CONTROL_PANEL_BUCKETS.map((bucket) => (
@@ -827,7 +846,7 @@ export function SettingsPageContent() {
                     <span className="text-primary">
                       <BucketIcon id={bucket.id} />
                     </span>
-                    {bucket.label}
+                    {t(bucket.labelKey)}
                   </a>
                 ))}
               </nav>
@@ -837,17 +856,15 @@ export function SettingsPageContent() {
                   <div className="rounded-2xl border border-dashed border-card-border bg-card/50 px-6 py-12 text-center">
                     <Search className="mx-auto h-6 w-6 text-muted" />
                     <h2 className="mt-3 text-base font-semibold text-foreground">
-                      No settings found
+                      {t("page.noResultsTitle")}
                     </h2>
-                    <p className="mt-1 text-sm text-muted">
-                      Try a broader term or clear the search to see all five sections.
-                    </p>
+                    <p className="mt-1 text-sm text-muted">{t("page.noResultsHint")}</p>
                     <button
                       type="button"
                       onClick={() => setSearchQuery("")}
                       className="mt-4 min-h-11 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
                     >
-                      Clear search
+                      {t("page.clearSearch")}
                     </button>
                   </div>
                 )}
@@ -856,9 +873,13 @@ export function SettingsPageContent() {
                   const matchingSections = availableSections.filter(
                     (section) =>
                       bucket.sectionIds.includes(section.id) &&
-                      sectionMatchesQuery(section, normalizedSearch)
+                      sectionMatchesQuery(section, normalizedSearch, sectionSearchText(section))
                   );
-                  const quickMatches = bucketQuickSettingsMatch(bucket, normalizedSearch);
+                  const quickMatches = bucketQuickSettingsMatch(
+                    bucket,
+                    normalizedSearch,
+                    bucketSearchText(bucket)
+                  );
                   if (matchingSections.length === 0 && !quickMatches) return null;
 
                   const primarySections = matchingSections.filter(
@@ -890,12 +911,14 @@ export function SettingsPageContent() {
                           </span>
                           <div>
                             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
-                              {bucket.eyebrow}
+                              {t(bucket.eyebrowKey)}
                             </p>
                             <h2 className="mt-0.5 text-xl font-bold tracking-tight text-foreground">
-                              {bucket.label}
+                              {t(bucket.labelKey)}
                             </h2>
-                            <p className="mt-1 text-sm leading-6 text-muted">{bucket.summary}</p>
+                            <p className="mt-1 text-sm leading-6 text-muted">
+                              {t(bucket.summaryKey)}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -908,10 +931,10 @@ export function SettingsPageContent() {
                             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                               <div>
                                 <p className="text-sm font-semibold text-foreground">
-                                  Public profile media
+                                  {t("page.publicProfileMedia")}
                                 </p>
                                 <p className="mt-0.5 text-xs text-muted">
-                                  Update your portrait and header without leaving settings.
+                                  {t("page.publicProfileMediaHint")}
                                 </p>
                               </div>
                               {recommendations.length > 0 && (
@@ -935,7 +958,9 @@ export function SettingsPageContent() {
                                     )
                                   }
                                 />
-                                <p className="mt-2 text-center text-[11px] text-muted">Portrait</p>
+                                <p className="mt-2 text-center text-[11px] text-muted">
+                                  {t("page.portrait")}
+                                </p>
                               </div>
                               <div className="min-w-0">
                                 <ProfileHeaderImageUpload
@@ -948,7 +973,9 @@ export function SettingsPageContent() {
                                     )
                                   }
                                 />
-                                <p className="mt-2 text-[11px] text-muted">Profile header</p>
+                                <p className="mt-2 text-[11px] text-muted">
+                                  {t("page.profileHeader")}
+                                </p>
                               </div>
                             </div>
                           </div>
@@ -959,22 +986,20 @@ export function SettingsPageContent() {
                           (!normalizedSearch ||
                             "character create new".includes(normalizedSearch)) && (
                             <div className="rounded-2xl border border-dashed border-card-border bg-background/40 p-6 text-center">
-                              <p className="text-sm text-muted">
-                                You don&apos;t have a character yet. Create one to start playing.
-                              </p>
+                              <p className="text-sm text-muted">{t("page.noCharacter")}</p>
                               <div className="mt-4 flex flex-wrap justify-center gap-2">
                                 <Link
                                   href="/create-character"
                                   className="inline-flex min-h-11 items-center rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
                                 >
-                                  Create Your Character
+                                  {t("page.createCharacter")}
                                 </Link>
                                 {userData?.isAdmin && (
                                   <Link
                                     href="/create-imperial-character"
                                     className="inline-flex min-h-11 items-center rounded-xl border border-card-border bg-background px-5 py-2.5 text-sm font-medium text-primary transition-colors hover:border-primary/40 hover:bg-card-elevated"
                                   >
-                                    Create Imperial Character
+                                    {t("page.createImperialCharacter")}
                                   </Link>
                                 )}
                               </div>
@@ -987,11 +1012,9 @@ export function SettingsPageContent() {
                           <div className="rounded-2xl border border-card-border bg-card-muted/50 p-4">
                             <div className="mb-3">
                               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">
-                                Advanced &amp; historical
+                                {t("page.advancedTitle")}
                               </p>
-                              <p className="mt-1 text-xs text-muted">
-                                Less frequent controls, records, and specialist options.
-                              </p>
+                              <p className="mt-1 text-xs text-muted">{t("page.advancedHint")}</p>
                             </div>
                             {renderSectionCards(advancedSections)}
                           </div>
@@ -1008,8 +1031,8 @@ export function SettingsPageContent() {
                                   className="min-h-11 rounded-xl border border-card-border bg-background px-4 py-2 text-sm font-medium text-primary transition-colors hover:border-primary/40 hover:bg-card-elevated"
                                 >
                                   {isImperial
-                                    ? "↻ Switch to Regular Character"
-                                    : "↻ Switch to Imperial Character"}
+                                    ? t("page.switchToRegular")
+                                    : t("page.switchToImperial")}
                                 </button>
                               )}
                               {userData?.isAdmin && (
@@ -1018,13 +1041,13 @@ export function SettingsPageContent() {
                                     href="/create-character"
                                     className="inline-flex min-h-11 items-center rounded-xl px-4 py-2 text-sm font-medium text-primary hover:bg-background"
                                   >
-                                    + Create Another Character
+                                    {t("page.createAnotherCharacter")}
                                   </Link>
                                   <Link
                                     href="/create-imperial-character"
                                     className="inline-flex min-h-11 items-center rounded-xl px-4 py-2 text-sm font-medium text-primary/75 hover:bg-background hover:text-primary"
                                   >
-                                    + Create Imperial Character
+                                    {t("page.createImperialCharacterPlus")}
                                   </Link>
                                 </>
                               )}
@@ -1035,7 +1058,11 @@ export function SettingsPageContent() {
                           activeSection &&
                           (!normalizedSearch ||
                             (activeDefinition &&
-                              sectionMatchesQuery(activeDefinition, normalizedSearch))) && (
+                              sectionMatchesQuery(
+                                activeDefinition,
+                                normalizedSearch,
+                                sectionSearchText(activeDefinition)
+                              ))) && (
                             <section
                               id={`${activeSection}-panel`}
                               className={`overflow-hidden rounded-2xl border shadow-lg ${
@@ -1057,14 +1084,20 @@ export function SettingsPageContent() {
                                 </span>
                                 <div className="min-w-0 flex-1">
                                   <p className="text-sm font-semibold text-foreground">
-                                    {activeDefinition?.label}
+                                    {activeDefinition && t(activeDefinition.labelKey)}
                                   </p>
-                                  <p className="text-xs text-muted">{activeDefinition?.summary}</p>
+                                  <p className="text-xs text-muted">
+                                    {activeDefinition && t(activeDefinition.summaryKey)}
+                                  </p>
                                 </div>
                                 <button
                                   type="button"
                                   onClick={goToOverview}
-                                  aria-label={`Close ${activeDefinition?.label ?? "settings"} panel`}
+                                  aria-label={t("page.closePanelAria", {
+                                    label: activeDefinition
+                                      ? t(activeDefinition.labelKey)
+                                      : t("page.title"),
+                                  })}
                                   className="grid h-10 w-10 place-items-center rounded-xl text-muted transition-colors hover:bg-card hover:text-foreground"
                                 >
                                   <X className="h-4 w-4" />
@@ -1095,7 +1128,7 @@ export function SettingsPageContent() {
                     d="M15 19l-7-7 7-7"
                   />
                 </svg>
-                Back to Dashboard
+                {t("page.backToDashboard")}
               </Link>
             </div>
           </>
@@ -1122,12 +1155,13 @@ function BucketIcon({ id }: { id: SettingsBucketId }) {
 }
 
 function SettingsPageFallback() {
+  const t = useTranslations("settings");
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto flex min-h-[50vh] max-w-6xl items-center justify-center px-4 py-8 md:px-6 lg:px-8">
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="text-muted">Loading settings...</p>
+          <p className="text-muted">{t("common.loading")}</p>
         </div>
       </div>
     </div>

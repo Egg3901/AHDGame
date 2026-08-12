@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Bell,
   Check,
@@ -118,6 +119,7 @@ function Toggle(props: {
 }
 
 export function GameQuickSettings({ countries }: { countries: CountryChoice[] }) {
+  const t = useTranslations("settings");
   const [turnMinutes, setTurnMinutes] = useState<number | null>(null);
   const [turnAlerts, setTurnAlerts] = useState<boolean | null>(null);
   const [notificationSaving, setNotificationSaving] = useState(false);
@@ -148,7 +150,7 @@ export function GameQuickSettings({ countries }: { countries: CountryChoice[] })
     const previous = turnAlerts;
     setTurnAlerts(enabled);
     setNotificationSaving(true);
-    setNotificationMessage("Saving…");
+    setNotificationMessage("quick.game.saving");
     try {
       const response = await fetch("/api/notifications/preferences", {
         method: "PUT",
@@ -159,10 +161,10 @@ export function GameQuickSettings({ countries }: { countries: CountryChoice[] })
         }),
       });
       if (!response.ok) throw new Error("notification preference rejected");
-      setNotificationMessage("Saved");
+      setNotificationMessage("quick.game.saved");
     } catch {
       setTurnAlerts(previous);
-      setNotificationMessage("Could not save");
+      setNotificationMessage("quick.game.couldNotSave");
     } finally {
       setNotificationSaving(false);
     }
@@ -175,49 +177,57 @@ export function GameQuickSettings({ countries }: { countries: CountryChoice[] })
       {oneCountry ? (
         <Surface
           icon={<Globe2 className="h-4 w-4" />}
-          title="Default country"
-          description={`${oneCountry.name} (${oneCountry.code}) · Your only active country`}
+          title={t("quick.game.defaultCountry")}
+          description={t("quick.game.onlyActiveCountry", {
+            name: oneCountry.name,
+            code: oneCountry.code,
+          })}
           className="border-primary/30 bg-primary/[0.04]"
         />
       ) : (
         <Surface
           icon={<Globe2 className="h-4 w-4" />}
-          title="Active country"
+          title={t("quick.game.activeCountry")}
           description={
             countries.length > 0
               ? countries.map((country) => country.name).join(", ")
-              : "Create a character to establish a country."
+              : t("quick.game.createToEstablish")
           }
         />
       )}
       <Surface
         icon={<Clock3 className="h-4 w-4" />}
-        title="Turn speed"
+        title={t("quick.game.turnSpeed")}
         description={
           turnMinutes
-            ? `World turns run every ${turnMinutes} minute${turnMinutes === 1 ? "" : "s"}.`
-            : "Reading the live world cadence…"
+            ? t("quick.game.turnsEvery", { minutes: turnMinutes })
+            : t("quick.game.readingCadence")
         }
       >
         <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-card px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
           <Gauge className="h-3 w-3" />
-          World controlled
+          {t("quick.game.worldControlled")}
         </span>
       </Surface>
       <Surface
         icon={<Bell className="h-4 w-4" />}
-        title="Turn notifications"
-        description="Alert me when a new world turn is ready."
+        title={t("quick.game.turnNotifications")}
+        description={t("quick.game.alertMe")}
       >
         <div className="mt-3 flex items-center justify-between gap-3">
           <span className="text-xs text-muted" aria-live="polite">
-            {notificationMessage ??
-              (turnAlerts === null ? "Loading preference…" : turnAlerts ? "On" : "Muted")}
+            {notificationMessage
+              ? t(notificationMessage)
+              : turnAlerts === null
+                ? t("quick.game.loadingPreference")
+                : turnAlerts
+                  ? t("quick.game.on")
+                  : t("quick.game.muted")}
           </span>
           <Toggle
             checked={turnAlerts ?? false}
             onChange={updateTurnAlerts}
-            label="Turn notifications"
+            label={t("quick.game.turnNotifications")}
             disabled={turnAlerts === null || notificationSaving}
           />
         </div>
@@ -227,48 +237,49 @@ export function GameQuickSettings({ countries }: { countries: CountryChoice[] })
 }
 
 export function InterfaceQuickSettings() {
+  const t = useTranslations("settings");
   const { preferences, updatePreferences } = useBrowserPreferences();
 
   return (
     <div className="grid gap-3 md:grid-cols-3">
       <Surface
         icon={<Sparkles className="h-4 w-4" />}
-        title="Reduced motion"
-        description="Minimize animated transitions and moving decorative effects."
+        title={t("quick.interface.reducedMotion")}
+        description={t("quick.interface.reducedMotionHint")}
       >
         <div className="mt-3 flex justify-end">
           <Toggle
             checked={preferences.reducedMotion}
             onChange={(reducedMotion) => updatePreferences({ reducedMotion })}
-            label="Reduced motion"
+            label={t("quick.interface.reducedMotion")}
           />
         </div>
       </Surface>
       <Surface
         icon={<Contrast className="h-4 w-4" />}
-        title="High contrast"
-        description="Strengthen borders, secondary text, and keyboard focus."
+        title={t("quick.interface.highContrast")}
+        description={t("quick.interface.highContrastHint")}
       >
         <div className="mt-3 flex justify-end">
           <Toggle
             checked={preferences.highContrast}
             onChange={(highContrast) => updatePreferences({ highContrast })}
-            label="High contrast"
+            label={t("quick.interface.highContrast")}
           />
         </div>
       </Surface>
       <Surface
         icon={<Languages className="h-4 w-4" />}
-        title="Language"
-        description="A House Divided currently ships in English."
+        title={t("quick.interface.language")}
+        description={t("quick.interface.languageHint")}
       >
         <select
-          aria-label="Language"
+          aria-label={t("quick.interface.language")}
           value={preferences.language}
           disabled
           className="mt-3 min-h-11 w-full rounded-xl border border-card-border bg-card px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-80"
         >
-          <option value="en">English</option>
+          <option value="en">{t("quick.interface.english")}</option>
         </select>
       </Surface>
     </div>
@@ -276,6 +287,7 @@ export function InterfaceQuickSettings() {
 }
 
 export function AudioQuickSettings() {
+  const t = useTranslations("settings");
   const { preferences, updatePreferences } = useBrowserPreferences();
 
   return (
@@ -289,15 +301,13 @@ export function AudioQuickSettings() {
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">Game Sounds</p>
-          <p className="text-xs leading-5 text-muted">
-            Controls profile music and future in-game sound cues on this device.
-          </p>
+          <p className="text-sm font-semibold text-foreground">{t("quick.audio.gameSounds")}</p>
+          <p className="text-xs leading-5 text-muted">{t("quick.audio.gameSoundsHint")}</p>
         </div>
         <Toggle
           checked={preferences.gameSounds}
           onChange={(gameSounds) => updatePreferences({ gameSounds })}
-          label="Game Sounds"
+          label={t("quick.audio.gameSounds")}
         />
       </div>
 
@@ -308,14 +318,14 @@ export function AudioQuickSettings() {
           className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-card-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-card-elevated"
         >
           <SlidersHorizontal className="h-4 w-4 text-primary" />
-          Customize audio
+          {t("quick.audio.customize")}
         </button>
       ) : (
         <div className="mt-5 grid gap-5 border-t border-card-border pt-5 md:grid-cols-2">
           <div>
             <div className="mb-3 flex items-center justify-between gap-3">
               <label htmlFor="master-volume" className="text-sm font-medium text-foreground">
-                Master volume
+                {t("quick.audio.masterVolume")}
               </label>
               <span className="font-mono text-xs text-muted">{preferences.masterVolume}%</span>
             </div>
@@ -328,20 +338,18 @@ export function AudioQuickSettings() {
               onChange={(event) =>
                 updatePreferences({ masterVolume: Number(event.currentTarget.value) })
               }
-              aria-label="Master volume"
+              aria-label={t("quick.audio.masterVolume")}
             />
           </div>
           <div className="flex items-center justify-between gap-4 rounded-xl border border-card-border bg-card/70 p-3">
             <div>
-              <p className="text-sm font-medium text-foreground">Event sounds</p>
-              <p className="mt-0.5 text-xs text-muted">
-                Controls short cues when a game event provides one.
-              </p>
+              <p className="text-sm font-medium text-foreground">{t("quick.audio.eventSounds")}</p>
+              <p className="mt-0.5 text-xs text-muted">{t("quick.audio.eventSoundsHint")}</p>
             </div>
             <Toggle
               checked={preferences.eventSounds}
               onChange={(eventSounds) => updatePreferences({ eventSounds })}
-              label="Event sounds"
+              label={t("quick.audio.eventSounds")}
               disabled={!preferences.gameSounds}
             />
           </div>
@@ -350,7 +358,7 @@ export function AudioQuickSettings() {
             aria-live="polite"
           >
             <Check className="h-3.5 w-3.5" />
-            Saved on this device
+            {t("quick.audio.savedOnDevice")}
           </p>
         </div>
       )}
@@ -374,6 +382,7 @@ const VALID_THEMES = new Set([
 const VALID_STATUS_BAR_LAYOUTS = new Set(["standard", "corp", "elections", "full", "minimal"]);
 
 export function DataQuickSettings() {
+  const t = useTranslations("settings");
   const { preferences, replacePreferences, resetPreferences } = useBrowserPreferences();
   const { theme, setTheme } = useTheme();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -400,7 +409,7 @@ export function DataQuickSettings() {
     anchor.download = `ahd-device-settings-${new Date().toISOString().slice(0, 10)}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
-    setMessage("Device settings exported.");
+    setMessage("quick.data.exported");
   };
 
   const importPreferences = async (file: File | undefined) => {
@@ -432,12 +441,12 @@ export function DataQuickSettings() {
           body: JSON.stringify({ layout: imported.statusBarLayout }),
           feature: "settings-device-import-status-bar",
         }).catch(() => {
-          setMessage("Imported on this device, but status bar sync failed.");
+          setMessage("quick.data.importSyncFailed");
         });
       }
-      setMessage("Device settings imported.");
+      setMessage("quick.data.imported");
     } catch {
-      setMessage("That file is not a valid AHD settings export.");
+      setMessage("quick.data.invalidFile");
     } finally {
       if (inputRef.current) inputRef.current.value = "";
     }
@@ -449,7 +458,7 @@ export function DataQuickSettings() {
       await Promise.all(keys.map((key) => window.caches.delete(key)));
     }
     window.sessionStorage.clear();
-    setMessage("Temporary browser cache cleared. Your preferences were kept.");
+    setMessage("quick.data.cacheCleared");
   };
 
   return (
@@ -457,8 +466,8 @@ export function DataQuickSettings() {
       <div className="grid gap-3 md:grid-cols-3">
         <Surface
           icon={<Download className="h-4 w-4" />}
-          title="Export settings"
-          description="Download this device’s interface and audio preferences."
+          title={t("quick.data.exportTitle")}
+          description={t("quick.data.exportHint")}
         >
           <button
             type="button"
@@ -466,13 +475,13 @@ export function DataQuickSettings() {
             className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
           >
             <Download className="h-4 w-4" />
-            Export
+            {t("quick.data.export")}
           </button>
         </Surface>
         <Surface
           icon={<Upload className="h-4 w-4" />}
-          title="Import settings"
-          description="Restore a device-settings JSON file from AHD."
+          title={t("quick.data.importTitle")}
+          description={t("quick.data.importHint")}
         >
           <input
             ref={inputRef}
@@ -487,13 +496,13 @@ export function DataQuickSettings() {
             className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border border-card-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-card-elevated"
           >
             <Upload className="h-4 w-4 text-primary" />
-            Choose file
+            {t("quick.data.chooseFile")}
           </button>
         </Surface>
         <Surface
           icon={<Database className="h-4 w-4" />}
-          title="Browser cache"
-          description="Clear temporary cached responses without signing out or losing preferences."
+          title={t("quick.data.cacheTitle")}
+          description={t("quick.data.cacheHint")}
         >
           <div className="mt-3 flex flex-wrap gap-2">
             <button
@@ -501,18 +510,18 @@ export function DataQuickSettings() {
               onClick={() => void clearCachedData()}
               className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-card-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-card-elevated"
             >
-              Clear cache
+              {t("quick.data.clearCache")}
             </button>
             <button
               type="button"
               onClick={() => {
                 resetPreferences();
-                setMessage("Device preferences restored to smart defaults.");
+                setMessage("quick.data.resetDone");
               }}
               className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-muted transition-colors hover:bg-card hover:text-foreground"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              Reset preferences
+              {t("quick.data.resetPreferences")}
             </button>
           </div>
         </Surface>
@@ -523,7 +532,7 @@ export function DataQuickSettings() {
           aria-live="polite"
         >
           <Check className="h-3.5 w-3.5" />
-          {message}
+          {t(message)}
         </p>
       )}
     </div>
@@ -531,10 +540,11 @@ export function DataQuickSettings() {
 }
 
 export function AudioSectionHint() {
+  const t = useTranslations("settings");
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-muted">
       <Music2 className="h-3.5 w-3.5" />
-      Profile music is managed below.
+      {t("quick.audio.profileMusicBelow")}
     </span>
   );
 }

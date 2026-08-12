@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { MessageBanner, SpinnerIcon, CheckIcon } from "./shared";
 
 interface Demographics {
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export function DemographicsSection({ character, onCharacterUpdate }: Props) {
+  const t = useTranslations("settings");
   const [demoRace, setDemoRace] = useState(character.demographics?.race ?? "");
   const [demoGender, setDemoGender] = useState(character.demographics?.gender ?? "");
   const [demoEducation, setDemoEducation] = useState(character.demographics?.education ?? "");
@@ -31,7 +33,7 @@ export function DemographicsSection({ character, onCharacterUpdate }: Props) {
   const handleDemographicsSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!demoRace || !demoGender || !demoEducation || !demoWealth) {
-      setDemoMsg({ text: "Please select all demographic options.", ok: false });
+      setDemoMsg({ text: t("demographics.selectAllError"), ok: false });
       return;
     }
     setDemoSaving(true);
@@ -60,10 +62,10 @@ export function DemographicsSection({ character, onCharacterUpdate }: Props) {
           },
         });
       } else {
-        setDemoMsg({ text: data.error ?? "Save failed.", ok: false });
+        setDemoMsg({ text: data.error ?? t("common.saveFailed"), ok: false });
       }
     } catch {
-      setDemoMsg({ text: "Network error.", ok: false });
+      setDemoMsg({ text: t("common.networkError"), ok: false });
     } finally {
       setDemoSaving(false);
       setTimeout(() => setDemoMsg(null), 3000);
@@ -75,10 +77,7 @@ export function DemographicsSection({ character, onCharacterUpdate }: Props) {
 
   return (
     <>
-      <p className="text-sm text-muted mb-6">
-        Set your politician&apos;s demographic background. These traits influence how voter groups
-        perceive you.
-      </p>
+      <p className="text-sm text-muted mb-6">{t("demographics.intro")}</p>
       {!character.demographics && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
           <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -89,14 +88,14 @@ export function DemographicsSection({ character, onCharacterUpdate }: Props) {
               d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
             />
           </svg>
-          Please select your character&apos;s background to complete your profile.
+          {t("demographics.incomplete")}
         </div>
       )}
       <form onSubmit={handleDemographicsSave} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="demoRace" className="block text-sm font-medium mb-1.5">
-              Race
+              {t("demographics.race")}
             </label>
             <select
               id="demoRace"
@@ -105,17 +104,17 @@ export function DemographicsSection({ character, onCharacterUpdate }: Props) {
               className={selectCls}
               disabled={demoSaving}
             >
-              <option value="">Select race...</option>
-              <option value="white">White</option>
-              <option value="black">Black</option>
-              <option value="hispanic">Hispanic</option>
-              <option value="asian">Asian</option>
-              <option value="other">Other</option>
+              <option value="">{t("demographics.selectRace")}</option>
+              <option value="white">{t("demographics.raceWhite")}</option>
+              <option value="black">{t("demographics.raceBlack")}</option>
+              <option value="hispanic">{t("demographics.raceHispanic")}</option>
+              <option value="asian">{t("demographics.raceAsian")}</option>
+              <option value="other">{t("demographics.raceOther")}</option>
             </select>
           </div>
           <div>
             <label htmlFor="demoGender" className="block text-sm font-medium mb-1.5">
-              Gender
+              {t("demographics.gender")}
             </label>
             <select
               id="demoGender"
@@ -124,15 +123,15 @@ export function DemographicsSection({ character, onCharacterUpdate }: Props) {
               className={selectCls}
               disabled={demoSaving}
             >
-              <option value="">Select gender...</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="nonbinary">Non-binary</option>
+              <option value="">{t("demographics.selectGender")}</option>
+              <option value="male">{t("demographics.genderMale")}</option>
+              <option value="female">{t("demographics.genderFemale")}</option>
+              <option value="nonbinary">{t("demographics.genderNonbinary")}</option>
             </select>
           </div>
           <div>
             <label htmlFor="demoEducation" className="block text-sm font-medium mb-1.5">
-              Education Level
+              {t("demographics.education")}
             </label>
             <select
               id="demoEducation"
@@ -141,15 +140,15 @@ export function DemographicsSection({ character, onCharacterUpdate }: Props) {
               className={selectCls}
               disabled={demoSaving}
             >
-              <option value="">Select education...</option>
-              <option value="no_college">No College Degree</option>
-              <option value="college">College Degree</option>
-              <option value="graduate">Graduate Degree</option>
+              <option value="">{t("demographics.selectEducation")}</option>
+              <option value="no_college">{t("demographics.educationNoCollege")}</option>
+              <option value="college">{t("demographics.educationCollege")}</option>
+              <option value="graduate">{t("demographics.educationGraduate")}</option>
             </select>
           </div>
           <div>
             <label htmlFor="demoWealth" className="block text-sm font-medium mb-1.5">
-              Starting Wealth
+              {t("demographics.wealth")}
             </label>
             <select
               id="demoWealth"
@@ -158,10 +157,10 @@ export function DemographicsSection({ character, onCharacterUpdate }: Props) {
               className={selectCls}
               disabled={demoSaving}
             >
-              <option value="">Select wealth level...</option>
-              <option value="low">Low Income</option>
-              <option value="middle">Middle Income</option>
-              <option value="high">High Income</option>
+              <option value="">{t("demographics.selectWealth")}</option>
+              <option value="low">{t("demographics.wealthLow")}</option>
+              <option value="middle">{t("demographics.wealthMiddle")}</option>
+              <option value="high">{t("demographics.wealthHigh")}</option>
             </select>
           </div>
         </div>
@@ -175,7 +174,11 @@ export function DemographicsSection({ character, onCharacterUpdate }: Props) {
         >
           <span className="flex items-center gap-2">
             {demoSaved ? <CheckIcon /> : demoSaving ? <SpinnerIcon /> : null}
-            {demoSaved ? "Saved!" : demoSaving ? "Saving…" : "Save Background"}
+            {demoSaved
+              ? t("common.saved")
+              : demoSaving
+                ? t("common.saving")
+                : t("demographics.saveBackground")}
           </span>
         </button>
       </form>

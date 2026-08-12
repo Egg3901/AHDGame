@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { SectionLabel } from "@/components/ui";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { AchievementIcon } from "@/lib/utils/achievementIcons";
@@ -22,6 +23,7 @@ interface SettingsAchievementsSectionProps {
 const MAX_HIGHLIGHTS = 5;
 
 export function SettingsAchievementsSection({ characterId }: SettingsAchievementsSectionProps) {
+  const t = useTranslations("settings");
   const [achievements, setAchievements] = useState<AchievementItem[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -74,12 +76,12 @@ export function SettingsAchievementsSection({ characterId }: SettingsAchievement
       });
       const data = await res.json();
       if (res.ok) {
-        setMsg({ text: "Achievement highlights saved.", ok: true });
+        setMsg({ text: t("achievements.saved"), ok: true });
       } else {
-        setMsg({ text: data.error ?? "Save failed.", ok: false });
+        setMsg({ text: data.error ?? t("common.saveFailed"), ok: false });
       }
     } catch {
-      setMsg({ text: "Network error.", ok: false });
+      setMsg({ text: t("common.networkError"), ok: false });
     } finally {
       setSaving(false);
       setTimeout(() => setMsg(null), 3000);
@@ -91,10 +93,8 @@ export function SettingsAchievementsSection({ characterId }: SettingsAchievement
   if (achievements.length === 0) {
     return (
       <section className="scroll-mt-24 rounded-2xl border border-card-border bg-card/80 backdrop-blur-sm p-6 md:p-8 shadow-card">
-        <SectionLabel>Achievement Highlights</SectionLabel>
-        <p className="text-sm text-muted">
-          Earn achievements in the game to highlight them on your profile.
-        </p>
+        <SectionLabel>{t("achievements.title")}</SectionLabel>
+        <p className="text-sm text-muted">{t("achievements.empty")}</p>
       </section>
     );
   }
@@ -104,13 +104,10 @@ export function SettingsAchievementsSection({ characterId }: SettingsAchievement
       <div className="flex items-center gap-2 mb-1">
         <span className="block h-3 w-0.5 rounded-full bg-primary opacity-70 shrink-0" />
         <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-          Achievement Highlights
+          {t("achievements.title")}
         </h2>
       </div>
-      <p className="mb-4 text-sm text-muted">
-        Choose up to 5 achievements to display prominently on your profile. Leave empty for default
-        display.
-      </p>
+      <p className="mb-4 text-sm text-muted">{t("achievements.intro")}</p>
       <form onSubmit={handleSave} className="space-y-3">
         <div className="flex flex-wrap gap-2">
           {achievements.map((a) => (
@@ -140,7 +137,7 @@ export function SettingsAchievementsSection({ characterId }: SettingsAchievement
         </div>
         {characterId && (
           <p className="text-xs text-muted">
-            {selected.size} / {MAX_HIGHLIGHTS} selected
+            {t("achievements.selectedCount", { count: selected.size, max: MAX_HIGHLIGHTS })}
           </p>
         )}
         {msg && (
@@ -185,7 +182,7 @@ export function SettingsAchievementsSection({ characterId }: SettingsAchievement
             disabled={saving}
             className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
-            {saving ? "Saving…" : "Save Highlights"}
+            {saving ? t("common.saving") : t("achievements.save")}
           </button>
         )}
       </form>

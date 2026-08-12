@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { PolicyShiftControl } from "@/components/PolicyShiftControl";
 import { MessageBanner } from "./shared";
 
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export function PoliticsSection({ character, onCharacterUpdate, onReelectionChange }: Props) {
+  const t = useTranslations("settings");
   const [policyMsg, setPolicyMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const handlePolicyShift = async (axis: "economic" | "social", direction: -1 | 1) => {
@@ -37,7 +39,7 @@ export function PoliticsSection({ character, onCharacterUpdate, onReelectionChan
       });
       const data = await res.json();
       if (res.ok) {
-        setPolicyMsg({ text: "Policy shifted. Infamy +5, Influence -5%.", ok: true });
+        setPolicyMsg({ text: t("politics.shifted"), ok: true });
         if (data.stats) {
           onCharacterUpdate({
             policies: data.stats.policies,
@@ -48,10 +50,10 @@ export function PoliticsSection({ character, onCharacterUpdate, onReelectionChan
           });
         }
       } else {
-        setPolicyMsg({ text: data.error ?? "Shift failed.", ok: false });
+        setPolicyMsg({ text: data.error ?? t("politics.shiftFailed"), ok: false });
       }
     } catch {
-      setPolicyMsg({ text: "Network error.", ok: false });
+      setPolicyMsg({ text: t("common.networkError"), ok: false });
     } finally {
       setTimeout(() => setPolicyMsg(null), 5000);
     }
@@ -61,12 +63,10 @@ export function PoliticsSection({ character, onCharacterUpdate, onReelectionChan
     <>
       <div className="flex justify-end mb-4">
         <span className="rounded-full bg-secondary/15 px-3 py-1 text-sm font-medium text-secondary">
-          {character.actions} actions
+          {t("politics.actionsCount", { count: character.actions })}
         </span>
       </div>
-      <p className="text-sm text-muted mb-6">
-        Shift your stance on economic and social issues. Costs 15 actions per shift.
-      </p>
+      <p className="text-sm text-muted mb-6">{t("politics.intro")}</p>
       {policyMsg && (
         <MessageBanner
           ok={policyMsg.ok}
@@ -90,7 +90,7 @@ export function PoliticsSection({ character, onCharacterUpdate, onReelectionChan
       </div>
 
       <div className="border-t border-card-border pt-6 mt-6">
-        <h3 className="text-sm font-medium mb-3">Election Preferences</h3>
+        <h3 className="text-sm font-medium mb-3">{t("politics.electionPreferences")}</h3>
         <label className="flex items-start gap-3 cursor-pointer group">
           <input
             type="checkbox"
@@ -100,13 +100,9 @@ export function PoliticsSection({ character, onCharacterUpdate, onReelectionChan
           />
           <div className="flex-1">
             <span className="text-sm text-foreground group-hover:text-primary transition-colors">
-              Automatically run for re-election
+              {t("politics.autoReelection")}
             </span>
-            <p className="mt-0.5 text-xs text-muted">
-              When enabled, you will be automatically entered into new elections in your home
-              district each cycle. You can still withdraw manually. Does not apply to presidential
-              races.
-            </p>
+            <p className="mt-0.5 text-xs text-muted">{t("politics.autoReelectionHint")}</p>
           </div>
         </label>
       </div>
