@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { Character } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { PartyTenure } from "@/lib/parties/historyQuery";
@@ -10,6 +11,8 @@ import { formatStableUtc } from "@/lib/time/localTime";
 import { EmptyState } from "@/components/ui";
 import { Modal } from "@/components/ui";
 import { SectionHeader } from "./ProfileMeters";
+
+type CareerT = ReturnType<typeof useTranslations>;
 
 type CareerEvent = NonNullable<Character["careerHistory"]>[number];
 type TabId = "elected" | "executive" | "party" | "other";
@@ -96,32 +99,43 @@ function EventItem({
   partyNames,
   countryId,
   gameDateAnchor,
+  t,
 }: {
   event: CareerEvent;
   partyNames: Record<string, string>;
   countryId: CountryId | undefined;
   gameDateAnchor?: GameDateAnchor;
+  t: CareerT;
 }) {
   const isRelocation = event.type === "relocated";
-  const verb =
-    event.type === "elected"
-      ? "Elected to "
-      : event.type === "lost_election"
-        ? "Lost race for "
-        : event.type === "resigned"
-          ? "Resigned from "
-          : event.type === "removed"
-            ? "Removed from "
-            : isRelocation
-              ? event.fromCountry && event.toCountry && event.fromCountry !== event.toCountry
-                ? `Relocated (${event.fromCountry} → ${event.toCountry}) `
-                : "Relocated "
-              : "Appointed to ";
-  const body = isRelocation
-    ? `${event.fromState ?? "?"} → ${event.toState ?? "?"}`
-    : event.office
-      ? getOfficeLabel(event.office, countryId)
-      : event.officeLabel;
+  const officeText = event.office
+    ? getOfficeLabel(event.office, countryId)
+    : (event.officeLabel ?? "");
+
+  let text: string;
+  if (isRelocation) {
+    const fromState = event.fromState ?? "?";
+    const toState = event.toState ?? "?";
+    text =
+      event.fromCountry && event.toCountry && event.fromCountry !== event.toCountry
+        ? t("eventRelocatedCountries", {
+            fromCountry: event.fromCountry,
+            toCountry: event.toCountry,
+            fromState,
+            toState,
+          })
+        : t("eventRelocated", { fromState, toState });
+  } else if (event.type === "elected") {
+    text = t("eventElected", { office: officeText });
+  } else if (event.type === "lost_election") {
+    text = t("eventLostElection", { office: officeText });
+  } else if (event.type === "resigned") {
+    text = t("eventResigned", { office: officeText });
+  } else if (event.type === "removed") {
+    text = t("eventRemoved", { office: officeText });
+  } else {
+    text = t("eventAppointed", { office: officeText });
+  }
 
   const officeCountry = getOfficeCountry(event.office?.type);
   const partyLabel = resolvePartyName(event.party, event.partyCountryId, partyNames, [
@@ -139,58 +153,71 @@ function EventItem({
     <div className="relative pl-4 border-l-2 border-card-border/60 pb-1">
       <EventDot type={event.type} />
       <p className="text-xs text-muted mb-0.5">{dateLabel}</p>
-      <p className="text-sm font-medium text-foreground leading-snug">
-        {verb}
-        {body}
-      </p>
+      <p className="text-sm font-medium text-foreground leading-snug">{text}</p>
       {partyLabel && <p className="text-xs text-muted mt-0.5">{partyLabel}</p>}
     </div>
   );
 }
 
-function formatTenureDate(date: Date | null, gameDateAnchor: GameDateAnchor | undefined): string {
-  if (!date) return "Present";
+function formatTenureDate(
+  date: Date | null,
+  gameDateAnchor: GameDateAnchor | undefined,
+  t: CareerT
+): string {
+  if (!date) return t("present");
   return gameDateAnchor
     ? formatGameMonth(date, gameDateAnchor)
     : formatStableUtc(date, { year: "numeric", month: "short" });
 }
 
-function tenureStartVerb(kind: PartyTenure["startKind"]): string {
-  switch (kind) {
+function tenureStartText(
+  tenure: PartyTenure,
+  gameDateAnchor: GameDateAnchor | undefined,
+  t: CareerT
+): string {
+  const date = formatTenureDate(tenure.startedAt, gameDateAnchor, t);
+  switch (tenure.startKind) {
     case "founded":
-      return "Founded";
+      return t("tenureFounded", { date });
     case "became_independent":
-      return ""; // Independent rows just show the date
+      return date; // Independent rows just show the date
     case "switched_to":
     case "started":
     case "joined":
     default:
-      return "Joined";
+      return t("tenureJoined", { date });
   }
 }
 
 function tenureEndPhrase(
   tenure: PartyTenure,
   gameDateAnchor: GameDateAnchor | undefined,
-  nextLabel: string | undefined
+  nextLabel: string | undefined,
+  t: CareerT
 ): string {
-  const endLabel = formatTenureDate(tenure.endedAt, gameDateAnchor);
-  if (tenure.endKind === "present") return "Present";
-  if (tenure.endKind === "left") return `Left ${endLabel}`;
-  if (tenure.endKind === "purged") return `Purged ${endLabel}`;
+  const endLabel = formatTenureDate(tenure.endedAt, gameDateAnchor, t);
+  if (tenure.endKind === "present") return t("present");
+  if (tenure.endKind === "left") return t("tenureLeft", { date: endLabel });
+  if (tenure.endKind === "purged") return t("tenurePurged", { date: endLabel });
   // switched_to: from Independent → "Joined X"; from a party → "Switched to X".
-  const verb = tenure.partyId === null ? "Joined" : "Switched to";
-  return `${verb} ${nextLabel ?? "next party"} ${endLabel}`;
+  const party = nextLabel ?? t("nextPartyFallback");
+  return tenure.partyId === null
+    ? t("tenureJoinedNext", { party, date: endLabel })
+    : t("tenureSwitched", { party, date: endLabel });
 }
 
-function resolveTenurePartyLabel(tenure: PartyTenure, partyNames: Record<string, string>): string {
-  if (tenure.partyId === null) return "Independent";
+function resolveTenurePartyLabel(
+  tenure: PartyTenure,
+  partyNames: Record<string, string>,
+  t: CareerT
+): string {
+  if (tenure.partyId === null) return t("independent");
   if (tenure.partyName) return tenure.partyName;
   if (tenure.partyCountryId) {
     const hit = partyNames[`${tenure.partyCountryId}:${tenure.partyId}`];
     if (hit) return hit;
   }
-  return `Party ${tenure.partyId}`;
+  return t("partyFallback", { id: tenure.partyId });
 }
 
 function PartyTenureItem({
@@ -198,31 +225,31 @@ function PartyTenureItem({
   nextTenure,
   partyNames,
   gameDateAnchor,
+  t,
 }: {
   tenure: PartyTenure;
   nextTenure: PartyTenure | undefined;
   partyNames: Record<string, string>;
   gameDateAnchor?: GameDateAnchor;
+  t: CareerT;
 }) {
   const isIndependent = tenure.partyId === null;
   const dotClass = isIndependent ? "bg-muted" : "bg-success";
-  const startVerb = tenureStartVerb(tenure.startKind);
-  const startLabel = formatTenureDate(tenure.startedAt, gameDateAnchor);
-  const startText = startVerb ? `${startVerb} ${startLabel}` : startLabel;
+  const startText = tenureStartText(tenure, gameDateAnchor, t);
   // Pre-compute next-tenure label for the "Switched to ..." end phrase using
   // the same name-resolution chain (snapshot → partyNames lookup → fallback).
   const nextLabel = nextTenure
     ? nextTenure.partyId === null
-      ? "Independent"
+      ? t("independent")
       : (nextTenure.partyName ??
         (nextTenure.partyCountryId
           ? partyNames[`${nextTenure.partyCountryId}:${nextTenure.partyId}`]
           : undefined) ??
-        `Party ${nextTenure.partyId}`)
+        t("partyFallback", { id: nextTenure.partyId }))
     : undefined;
-  const endText = tenureEndPhrase(tenure, gameDateAnchor, nextLabel);
+  const endText = tenureEndPhrase(tenure, gameDateAnchor, nextLabel, t);
   const isSynthetic = tenure.startSynthetic || tenure.endSynthetic;
-  const partyLabel = resolveTenurePartyLabel(tenure, partyNames);
+  const partyLabel = resolveTenurePartyLabel(tenure, partyNames, t);
 
   return (
     <div className="relative pl-4 border-l-2 border-card-border/60 pb-1">
@@ -231,19 +258,12 @@ function PartyTenureItem({
       />
       <p className="text-sm font-medium text-foreground leading-snug">{partyLabel}</p>
       <p className="text-xs text-muted mt-0.5">
-        {startText} — {endText}
-        {isSynthetic && <span className="italic ml-1 text-muted/70">(historical)</span>}
+        {t("tenureRange", { start: startText, end: endText })}
+        {isSynthetic && <span className="italic ml-1 text-muted/70">({t("historical")})</span>}
       </p>
     </div>
   );
 }
-
-const TAB_LABELS: Record<TabId, string> = {
-  elected: "Elected",
-  executive: "Executive",
-  party: "Party",
-  other: "Other",
-};
 
 const PREVIEW_COUNT = 3;
 
@@ -252,12 +272,20 @@ function TabStrip({
   active,
   onSelect,
   counts,
+  t,
 }: {
   tabs: TabId[];
   active: TabId;
   onSelect: (id: TabId) => void;
   counts: Record<TabId, number>;
+  t: CareerT;
 }) {
+  const tabLabels: Record<TabId, string> = {
+    elected: t("tabElected"),
+    executive: t("tabExecutive"),
+    party: t("tabParty"),
+    other: t("tabOther"),
+  };
   return (
     <div className="flex gap-2 mb-4 border-b border-card-border">
       {tabs.map((tab) => (
@@ -271,7 +299,7 @@ function TabStrip({
               : "border-transparent text-muted hover:text-foreground"
           }`}
         >
-          {TAB_LABELS[tab]} <span className="text-muted/70">({counts[tab]})</span>
+          {tabLabels[tab]} <span className="text-muted/70">({counts[tab]})</span>
         </button>
       ))}
     </div>
@@ -284,6 +312,7 @@ export function CareerHistory({
   gameDateAnchor,
   partyHistory = [],
 }: CareerHistoryProps) {
+  const t = useTranslations("profile.career");
   const [modalOpen, setModalOpen] = useState(false);
 
   const { groups, available, totalCount } = useMemo(() => {
@@ -344,10 +373,16 @@ export function CareerHistory({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
-      <SectionHeader>Career History</SectionHeader>
+      <SectionHeader>{t("title")}</SectionHeader>
 
       {showTabs && (
-        <TabStrip tabs={available} active={safeActive} onSelect={setActiveTab} counts={counts} />
+        <TabStrip
+          tabs={available}
+          active={safeActive}
+          onSelect={setActiveTab}
+          counts={counts}
+          t={t}
+        />
       )}
 
       <div className="space-y-4">
@@ -357,7 +392,7 @@ export function CareerHistory({
             <p className="text-sm font-bold text-foreground">
               {getOfficeLabel(character.currentOffice, character.countryId)}
             </p>
-            <p className="text-xs text-primary font-medium">Incumbent</p>
+            <p className="text-xs text-primary font-medium">{t("incumbent")}</p>
           </div>
         )}
 
@@ -371,6 +406,7 @@ export function CareerHistory({
                   nextTenure={partyHistory[i + 1]}
                   partyNames={partyNames}
                   gameDateAnchor={gameDateAnchor}
+                  t={t}
                 />
               ))
           : preview.length > 0
@@ -381,13 +417,14 @@ export function CareerHistory({
                   partyNames={partyNames}
                   countryId={character.countryId}
                   gameDateAnchor={gameDateAnchor}
+                  t={t}
                 />
               ))
             : !showIncumbent && (
                 <EmptyState
-                  title="Career Start"
-                  description="No history yet."
-                  actionLabel="Find Election"
+                  title={t("emptyTitle")}
+                  description={t("emptyDescription")}
+                  actionLabel={t("findElection")}
                   actionHref="/elections"
                 />
               )}
@@ -401,14 +438,14 @@ export function CareerHistory({
             }}
             className="w-full text-xs text-primary hover:text-primary/80 font-medium py-1 transition-colors"
           >
-            View all {totalCount} events
+            {t("viewAll", { count: totalCount })}
           </button>
         )}
       </div>
 
       <Modal
         open={modalOpen}
-        title="Career History"
+        title={t("title")}
         onClose={() => setModalOpen(false)}
         maxWidthClass="max-w-2xl"
       >
@@ -418,6 +455,7 @@ export function CareerHistory({
             active={safeModalActive}
             onSelect={setModalTab}
             counts={counts}
+            t={t}
           />
         )}
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1 scrollbar-hide">
@@ -427,7 +465,7 @@ export function CareerHistory({
               <p className="text-sm font-bold text-foreground">
                 {getOfficeLabel(character.currentOffice, character.countryId)}
               </p>
-              <p className="text-xs text-primary font-medium">Incumbent</p>
+              <p className="text-xs text-primary font-medium">{t("incumbent")}</p>
             </div>
           )}
           {safeModalActive === "party"
@@ -438,6 +476,7 @@ export function CareerHistory({
                   nextTenure={partyHistory[i + 1]}
                   partyNames={partyNames}
                   gameDateAnchor={gameDateAnchor}
+                  t={t}
                 />
               ))
             : (groups[safeModalActive as OfficeTabId] ?? []).map((event, i) => (
@@ -447,6 +486,7 @@ export function CareerHistory({
                   partyNames={partyNames}
                   countryId={character.countryId}
                   gameDateAnchor={gameDateAnchor}
+                  t={t}
                 />
               ))}
         </div>

@@ -14,6 +14,8 @@
  * See plan §"Phase 4 — Tasks" 4.3.
  */
 
+import { useTranslations } from "next-intl";
+
 export interface CarveUpSlice {
   candidateId: string;
   candidateName: string;
@@ -42,6 +44,7 @@ export function CarveUpPanel({
   registrationBase?: string;
   detailHref?: string;
 }) {
+  const t = useTranslations("elections");
   const hasSlices = slices.length > 0 && slices.some((s) => s.pct > 0);
   // Sort largest slice first for the breakdown rows; conic-gradient walks the
   // slices in this order so the pie matches the row ordering.
@@ -51,28 +54,21 @@ export function CarveUpPanel({
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          {stateName} · Carve-up
+          {t("carveUp.title", { state: stateName })}
         </h3>
         <div className="flex items-center gap-2 text-[10px]">
           <span className="text-muted">{stateId}</span>
           {detailHref ? (
             <a href={detailHref} className="font-medium underline opacity-80 hover:opacity-100">
-              View state details →
+              {t("carveUp.viewDetails")}
             </a>
           ) : null}
         </div>
       </div>
-      <p className="mb-3 text-xs text-muted leading-snug">
-        Each candidate&rsquo;s slice = registered voters &times; archetype &times; demographic
-        affinity. Position alignment + influence drive appeal; favorability scales votes at
-        resolution.
-      </p>
+      <p className="mb-3 text-xs text-muted leading-snug">{t("carveUp.explanation")}</p>
 
       {!hasSlices ? (
-        <p className="text-xs italic text-muted">
-          No projected slices for {stateName} yet — the carve-up populates once candidates have
-          filed for this primary.
-        </p>
+        <p className="text-xs italic text-muted">{t("carveUp.empty", { state: stateName })}</p>
       ) : (
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div
@@ -89,7 +85,7 @@ export function CarveUpPanel({
               style={{ boxShadow: "inset 0 0 0 1px var(--card-border)" }}
             >
               <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-                Reg base
+                {t("carveUp.regBase")}
               </span>
               <span className="text-lg font-bold tabular-nums">{registrationBase ?? "—"}</span>
             </div>
@@ -98,7 +94,7 @@ export function CarveUpPanel({
             {topDemographics && topDemographics.length > 0 ? (
               <div className="mb-2">
                 <span className="text-[10px] uppercase tracking-wider text-muted">
-                  Top demographics:{" "}
+                  {t("carveUp.topDemographics")}
                 </span>
                 <span className="text-[11px]">{topDemographics.slice(0, 4).join(" · ")}</span>
               </div>

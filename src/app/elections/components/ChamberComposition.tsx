@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import type {
   ChamberCompositionData,
   CompositionResponse,
@@ -35,6 +36,7 @@ export function ChamberComposition({
   /** Contested class for a classed upper chamber, else null. */
   activeSenateClass: number | null;
 }) {
+  const t = useTranslations("elections");
   const chamber: ChamberCompositionData | null =
     composition.lower?.key === chamberKey
       ? composition.lower
@@ -51,8 +53,8 @@ export function ChamberComposition({
 
   const chartSeats = chamber.inGeneral ? projected : current;
   const chartLabel = chamber.inGeneral
-    ? "Projected after current elections"
-    : "Current composition";
+    ? t("chamberComposition.projectedLabel")
+    : t("chamberComposition.currentLabel");
 
   return (
     <div className="space-y-4 rounded-xl border border-card-border bg-card p-5">
@@ -61,8 +63,9 @@ export function ChamberComposition({
           <h3 className="text-sm font-semibold">{chamber.name}</h3>
           {isUpper && activeSenateClass != null && (
             <p className="mt-0.5 text-xs text-muted">
-              Class {CLASS_ROMAN[activeSenateClass - 1] ?? activeSenateClass} seats are being
-              contested
+              {t("chamberComposition.classContested", {
+                className: CLASS_ROMAN[activeSenateClass - 1] ?? activeSenateClass,
+              })}
             </p>
           )}
         </div>
@@ -79,7 +82,7 @@ export function ChamberComposition({
 
       {chamber.inGeneral && (
         <div className="space-y-1">
-          <span className="text-[10px] text-muted">Current, before these elections</span>
+          <span className="text-[10px] text-muted">{t("chamberComposition.currentBefore")}</span>
           <SeatBar seats={current} total={total} />
         </div>
       )}
@@ -88,9 +91,7 @@ export function ChamberComposition({
       <MajorityBanner seats={chartSeats} total={total} chamberLabel={chamber.name} />
 
       {chamber.inGeneral && (
-        <p className="text-[10px] italic text-muted/50">
-          Projection from current vote tallies. Updates each turn.
-        </p>
+        <p className="text-[10px] italic text-muted/50">{t("chamberComposition.projectionNote")}</p>
       )}
     </div>
   );

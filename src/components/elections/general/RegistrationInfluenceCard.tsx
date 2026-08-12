@@ -15,6 +15,7 @@
  * See plan §"Phase 5b — Tasks" 5b.2 and §"Phase 5b — D3".
  */
 
+import { useTranslations } from "next-intl";
 import type { RegBreakdown } from "@/lib/elections/generalViewModel";
 
 export function RegistrationInfluenceCard({
@@ -27,14 +28,15 @@ export function RegistrationInfluenceCard({
   /** From `generalViewModel.regBreakdownByState[stateId]`. Undefined when state isn't tracked. */
   breakdown?: RegBreakdown;
 }) {
+  const t = useTranslations("elections");
   if (!breakdown) {
     return (
       <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted">
-          Registration Influence
+          {t("registration.title")}
         </h3>
         <p className="text-xs italic text-muted">
-          {stateName} ({stateId}) — no registration data tracked for this state.
+          {t("registration.noData", { state: stateName, stateId })}
         </p>
       </div>
     );
@@ -44,13 +46,13 @@ export function RegistrationInfluenceCard({
     return (
       <div className="rounded-xl border border-dashed border-card-border bg-card p-4 shadow-sm">
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted">
-          Registration Influence
+          {t("registration.title")}
         </h3>
         <p className="text-xs leading-snug">
-          Registration data is populating in{" "}
-          <span className="font-semibold">Phase 1.5 / Phase 2</span> prerequisite. This card will
-          show {stateName}&rsquo;s partisan-lean strength once seed data lands. Until then, the
-          registration model defaults to neutral influence everywhere.
+          {t.rich("registration.populating", {
+            b: (chunks) => <span className="font-semibold">{chunks}</span>,
+            state: stateName,
+          })}
         </p>
       </div>
     );
@@ -64,14 +66,12 @@ export function RegistrationInfluenceCard({
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
       <div className="mb-2 flex items-baseline justify-between">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          Registration Influence
+          {t("registration.title")}
         </h3>
         <span className="text-[10px] uppercase tracking-wider text-muted">{stateId}</span>
       </div>
       <p className="mb-3 text-xs text-muted leading-snug">
-        Partisan-lean baseline for {stateName}. Each party&rsquo;s share is the slow-moving
-        registered-voter influence, not a vote-share guarantee — voters still need persuasion to
-        turn out and vote with their lean.
+        {t("registration.intro", { state: stateName })}
       </p>
 
       {/* Stacked bar */}
@@ -82,14 +82,14 @@ export function RegistrationInfluenceCard({
               key={p.partyId}
               className="h-full"
               style={{ width: `${p.leanPct}%`, backgroundColor: p.color }}
-              title={`${p.partyAbbr}: ${p.leanPct.toFixed(1)}% lean`}
+              title={t("registration.leanTitle", { party: p.partyAbbr, pct: p.leanPct.toFixed(1) })}
             />
           ))}
           {independent > 0 ? (
             <span
               className="h-full"
               style={{ width: `${independent}%`, backgroundColor: "var(--card-border)" }}
-              title={`Independent: ${independent.toFixed(1)}%`}
+              title={t("registration.independentTitle", { pct: independent.toFixed(1) })}
             />
           ) : null}
           {unregistered > 0 ? (
@@ -100,7 +100,7 @@ export function RegistrationInfluenceCard({
                 background:
                   "repeating-linear-gradient(135deg, var(--card-border) 0 4px, transparent 4px 8px)",
               }}
-              title={`Unregistered: ${unregistered.toFixed(1)}%`}
+              title={t("registration.unregisteredTitle", { pct: unregistered.toFixed(1) })}
             />
           ) : null}
         </div>
@@ -116,7 +116,9 @@ export function RegistrationInfluenceCard({
             <span className="font-semibold" style={{ color: p.color }}>
               {p.partyAbbr}
             </span>
-            <span className="ml-auto tabular-nums font-bold">{p.leanPct.toFixed(1)}% lean</span>
+            <span className="ml-auto tabular-nums font-bold">
+              {t("registration.leanValue", { pct: p.leanPct.toFixed(1) })}
+            </span>
           </div>
         ))}
         {independent > 0 ? (
@@ -125,7 +127,7 @@ export function RegistrationInfluenceCard({
               className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
               style={{ backgroundColor: "var(--card-border)" }}
             />
-            <span>Independent</span>
+            <span>{t("registration.independent")}</span>
             <span className="ml-auto tabular-nums">{independent.toFixed(1)}%</span>
           </div>
         ) : null}
@@ -138,7 +140,7 @@ export function RegistrationInfluenceCard({
                   "repeating-linear-gradient(135deg, var(--card-border) 0 3px, transparent 3px 6px)",
               }}
             />
-            <span>Unregistered</span>
+            <span>{t("registration.unregistered")}</span>
             <span className="ml-auto tabular-nums">{unregistered.toFixed(1)}%</span>
           </div>
         ) : null}
@@ -148,8 +150,9 @@ export function RegistrationInfluenceCard({
       {totalParty + independent + unregistered < 95 ||
       totalParty + independent + unregistered > 105 ? (
         <p className="mt-2 text-[10px] italic text-muted opacity-70">
-          Note: shares total {(totalParty + independent + unregistered).toFixed(1)}% — outside the
-          normalized 95–105% band. Bootstrap renormalization may be pending.
+          {t("registration.normalizationNote", {
+            pct: (totalParty + independent + unregistered).toFixed(1),
+          })}
         </p>
       ) : null}
     </div>

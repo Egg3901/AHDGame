@@ -13,6 +13,7 @@
  * flashes a stale value; returning null until mounted avoids both.
  */
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 /** 7pm Eastern on 2026-08-08. Written with the offset so it is unambiguous. */
 export const CRT_COUNTDOWN_DEADLINE_MS = Date.parse("2026-08-08T19:00:00-04:00");
@@ -107,9 +108,15 @@ function Cell({ value, label }: { value: number; label: string }) {
 }
 
 export function CrtCountdown({ remaining }: { remaining: Remaining | null }) {
+  const t = useTranslations("auth");
   if (!remaining) return null;
 
-  const readable = `${remaining.days}d ${remaining.hours}h ${remaining.minutes}m ${remaining.seconds}s remaining`;
+  const readable = t("countdown.remaining", {
+    days: remaining.days,
+    hours: remaining.hours,
+    minutes: remaining.minutes,
+    seconds: remaining.seconds,
+  });
 
   return (
     // Wrapper forces its own line: the "New in v1.0" badge below is inline-flex
@@ -120,16 +127,16 @@ export function CrtCountdown({ remaining }: { remaining: Remaining | null }) {
         data-glitch={remaining.glitch}
       >
         <span className="ahd-crt-flicker font-mono text-[0.6rem] uppercase tracking-[0.3em]">
-          Countdown
+          {t("countdown.label")}
         </span>
         <div className="flex items-end gap-3" aria-hidden="true">
-          <Cell value={remaining.days} label="days" />
+          <Cell value={remaining.days} label={t("countdown.days")} />
           <span className="ahd-crt-digits pb-3 font-mono text-xl leading-none opacity-60">:</span>
-          <Cell value={remaining.hours} label="hrs" />
+          <Cell value={remaining.hours} label={t("countdown.hrs")} />
           <span className="ahd-crt-digits pb-3 font-mono text-xl leading-none opacity-60">:</span>
-          <Cell value={remaining.minutes} label="min" />
+          <Cell value={remaining.minutes} label={t("countdown.min")} />
           <span className="ahd-crt-digits pb-3 font-mono text-xl leading-none opacity-60">:</span>
-          <Cell value={remaining.seconds} label="sec" />
+          <Cell value={remaining.seconds} label={t("countdown.sec")} />
         </div>
         {/* Screen readers get a single settled string, polite, so the per-second
             tick does not machine-gun the announcement queue. */}

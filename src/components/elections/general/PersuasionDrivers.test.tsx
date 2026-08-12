@@ -2,8 +2,18 @@
  * @vitest-environment happy-dom
  */
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render as rtlRender, screen, cleanup, fireEvent } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
 import { PersuasionDrivers, type PersuasionDriverCandidate } from "./PersuasionDrivers";
+import enElections from "../../../../messages/en/elections.json";
+
+function render(ui: React.ReactElement) {
+  return rtlRender(
+    <NextIntlClientProvider locale="en" messages={enElections}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}
 
 afterEach(cleanup);
 

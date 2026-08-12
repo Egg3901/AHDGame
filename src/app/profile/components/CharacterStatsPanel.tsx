@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import {
   Sparkles,
   Mic,
@@ -77,12 +78,13 @@ export function CharacterStatsPanel({
   /** Show the one-time free reallocation control (own profile, eligible only). */
   canReallocate?: boolean;
 }) {
+  const t = useTranslations("profile.stats");
   const statClass = deriveStatClass(stats);
   return (
     <div className="rounded-xl border border-card-border bg-card/50 p-5 shadow-card">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="flex flex-col items-start gap-2">
-          <h2 className="text-lg font-semibold text-foreground">Stats</h2>
+          <h2 className="text-lg font-semibold text-foreground">{t("title")}</h2>
           {canReallocate && <StatReallocateControl />}
         </div>
         <div className="max-w-[60%] text-right">
@@ -102,7 +104,13 @@ export function CharacterStatsPanel({
             <div
               key={key}
               tabIndex={0}
-              aria-label={`${label}: ${value} of ${STAT_MAX}. ${bonus.detail}. ${blurb}`}
+              aria-label={t("statAria", {
+                label,
+                value,
+                max: STAT_MAX,
+                detail: bonus.detail,
+                blurb,
+              })}
               className="group relative rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             >
               <div className="flex items-center gap-2.5">

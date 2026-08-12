@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import type { ProfileBorderKey } from "@/lib/db/types";
 import { ProfileBorder } from "@/components/patreon/ProfileBorder";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
@@ -19,6 +20,7 @@ export function ProfilePictureLightbox({
   borderKey,
   tintColor,
 }: ProfilePictureLightboxProps) {
+  const t = useTranslations("profile.lightbox");
   const [open, setOpen] = useState(false);
 
   const close = useCallback(() => setOpen(false), []);
@@ -61,7 +63,7 @@ export function ProfilePictureLightbox({
         type="button"
         onClick={() => setOpen(true)}
         className="group relative cursor-pointer"
-        title="View profile picture"
+        title={t("viewPicture")}
       >
         <ProfileBorder borderKey={borderKey} tintColor={tintColor}>
           <div className="relative flex items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 font-bold ring-2 ring-card-border shadow-xl h-24 w-24 text-4xl sm:h-36 sm:w-36 sm:text-6xl md:h-40 md:w-40 md:text-7xl lg:h-44 lg:w-44">
@@ -107,7 +109,7 @@ export function ProfilePictureLightbox({
           }}
           role="dialog"
           aria-modal="true"
-          aria-label={`${characterName}'s profile picture`}
+          aria-label={t("dialogAria", { name: characterName })}
         >
           <div className="relative flex flex-col items-center gap-4 p-4">
             {/* Close button */}
@@ -115,7 +117,7 @@ export function ProfilePictureLightbox({
               type="button"
               onClick={close}
               className="absolute -top-2 -right-2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-card/90 text-foreground shadow-lg border border-card-border hover:bg-card transition-colors"
-              aria-label="Close"
+              aria-label={t("close")}
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
@@ -153,7 +155,7 @@ export function ProfilePictureLightbox({
                   type="button"
                   onClick={handleDownload}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/20 transition-colors"
-                  title="Save image"
+                  title={t("saveImageTitle")}
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
@@ -163,7 +165,7 @@ export function ProfilePictureLightbox({
                       d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                     />
                   </svg>
-                  Save
+                  {t("save")}
                 </button>
               )}
             </div>
