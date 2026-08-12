@@ -99,6 +99,7 @@
     "lucide-react": "^1.25.0",
     "mongodb": "^7.4.0",
     "next": "^16.2.12",
+    "next-intl": "^4.13.6",
     "node-cron": "^4.2.1",
     "polygon-clipping": "^0.15.7",
     "react": "19.2.8",

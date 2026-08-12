@@ -1,0 +1,462 @@
+{
+  "settings": {
+    "language": {
+      "title": "Sprache",
+      "description": "Wähle die Sprache für Menüs, Einstellungen und das Tutorial. Spielinhalte wie Nachrichten, Post und Gesetzgebung sind auf Englisch verfasst.",
+      "label": "Sprache der Oberfläche"
+    },
+    "common": {
+      "loading": "Einstellungen werden geladen...",
+      "saving": "Speichern…",
+      "saved": "Gespeichert!",
+      "cancel": "Abbrechen",
+      "dismiss": "Schließen",
+      "notSet": "Nicht festgelegt",
+      "networkError": "Netzwerkfehler.",
+      "networkErrorRetry": "Netzwerkfehler - bitte versuche es erneut",
+      "saveFailed": "Speichern fehlgeschlagen."
+    },
+    "page": {
+      "title": "Kontrollzentrum",
+      "subtitle": "Ein Ort für deine Konto-, Spiel-, Oberflächen-, Audio- und Dateneinstellungen.",
+      "savesInline": "Änderungen werden direkt gespeichert",
+      "searchPlaceholder": "Einstellungen durchsuchen. Probiere „Passwort“, „Zug“, „Design“ oder „Export“",
+      "searchAria": "Einstellungen durchsuchen",
+      "clearSearchAria": "Einstellungssuche leeren",
+      "categoriesAria": "Einstellungskategorien",
+      "noResultsTitle": "Keine Einstellungen gefunden",
+      "noResultsHint": "Probiere einen allgemeineren Begriff oder leere die Suche, um alle fünf Bereiche zu sehen.",
+      "clearSearch": "Suche leeren",
+      "advancedTitle": "Erweitert & Historisches",
+      "advancedHint": "Seltener genutzte Optionen, Aufzeichnungen und Spezialeinstellungen.",
+      "closePanelAria": "Bereich {label} schließen",
+      "backToDashboard": "Zurück zum Dashboard",
+      "username": "Benutzername",
+      "email": "E-Mail",
+      "contactAdmin": "Wende dich an einen Admin, um Benutzernamen oder E-Mail zu ändern.",
+      "name": "Name",
+      "imperialContactAdmin": "Wende dich an einen Admin, um den Namen des imperialen Charakters zu ändern.",
+      "avatar": "Avatar",
+      "royalHouse": "Königshaus",
+      "coatOfArms": "Wappen",
+      "coatOfArmsHint": "Lade ein Wappenbild hoch (JPEG, PNG oder WebP, max. 2 MB).",
+      "royalAnthemHint": "Lege eine königliche Hymne fest, die auf deiner imperialen Profilseite abgespielt wird. Konfiguriere sie auf deinem <link>imperialen Profil</link>.",
+      "publicProfileMedia": "Öffentliche Profilmedien",
+      "publicProfileMediaHint": "Aktualisiere Porträt und Titelbild, ohne die Einstellungen zu verlassen.",
+      "portrait": "Porträt",
+      "profileHeader": "Titelbild",
+      "noCharacter": "Du hast noch keinen Charakter. Erstelle einen, um loszuspielen.",
+      "createCharacter": "Charakter erstellen",
+      "createImperialCharacter": "Imperialen Charakter erstellen",
+      "createAnotherCharacter": "+ Weiteren Charakter erstellen",
+      "createImperialCharacterPlus": "+ Imperialen Charakter erstellen",
+      "switchToRegular": "↻ Zu regulärem Charakter wechseln",
+      "switchToImperial": "↻ Zu imperialem Charakter wechseln"
+    },
+    "recommendations": {
+      "setProfilePicture": "Profilbild festlegen",
+      "setProfileHeader": "Titelbild festlegen",
+      "chooseTheme": "Design wählen",
+      "linkDiscord": "Discord verknüpfen",
+      "setCorpLogo": "Logo für {name} festlegen",
+      "viewChangelog": "Changelog ansehen",
+      "itemAria": "Empfehlung {number}"
+    },
+    "oauth": {
+      "discord": {
+        "linked": "Discord-Konto erfolgreich verknüpft.",
+        "notConfigured": "Discord-Verknüpfung ist auf diesem Server nicht eingerichtet.",
+        "alreadyLinked": "Dieses Discord-Konto ist bereits mit einem anderen Benutzer verknüpft.",
+        "failed": "Discord-Verknüpfung fehlgeschlagen. Bitte versuche es erneut.",
+        "expired": "Discord-Verknüpfung abgelaufen. Bitte versuche es erneut.",
+        "sessionExpired": "Discord-Verknüpfung abgelaufen oder unterbrochen. Bitte versuche es erneut.",
+        "rateLimited": "Du sendest Anfragen zu schnell. Bitte warte kurz und versuche es erneut.",
+        "denied": "Discord-Autorisierung wurde abgelehnt."
+      },
+      "google": {
+        "linked": "Google-Konto erfolgreich verknüpft.",
+        "notConfigured": "Google-Verknüpfung ist auf diesem Server nicht eingerichtet.",
+        "alreadyLinked": "Dieses Google-Konto ist bereits mit einem anderen Benutzer verknüpft.",
+        "failed": "Google-Verknüpfung fehlgeschlagen. Bitte versuche es erneut.",
+        "expired": "Google-Verknüpfung abgelaufen. Bitte versuche es erneut.",
+        "denied": "Google-Autorisierung wurde abgelehnt."
+      }
+    },
+    "sections": {
+      "accountProfile": { "label": "Profil", "summary": "Benutzername & E-Mail" },
+      "identity": { "label": "Verknüpfte Konten", "summary": "Discord, Google" },
+      "appearance": { "label": "Darstellung", "summary": "Design, experimentelle Oberfläche" },
+      "patreon": { "label": "Patreon", "summary": "Unterstützervorteile" },
+      "supporterPerks": {
+        "label": "Unterstützer-Extras",
+        "summary": "Wall-Name, Politiker umbenennen"
+      },
+      "referrals": { "label": "Einladungen", "summary": "Freunde einladen" },
+      "achievements": { "label": "Erfolge", "summary": "Abzeichen & Meilensteine" },
+      "retiredCharacters": {
+        "label": "Frühere Charaktere",
+        "summary": "Aufzeichnungen früherer Charaktere"
+      },
+      "security": { "label": "Sicherheit", "summary": "Passwort" },
+      "apiKeys": { "label": "API-Schlüssel", "summary": "API-Zugriff & Automatisierung" },
+      "danger": { "label": "Gefahrenzone", "summary": "Konto löschen" },
+      "profile": { "label": "Charakterprofil", "summary": "Name, Bio, Avatar, Titelbild" },
+      "demographics": { "label": "Hintergrund", "summary": "Ethnie, Geschlecht, Bildung" },
+      "politics": {
+        "label": "Politische Positionen",
+        "summary": "Wirtschaftlich & gesellschaftlich"
+      },
+      "campaignSong": { "label": "Wahlkampfsong", "summary": "Profilmusik" },
+      "characterDanger": {
+        "label": "Charakter-Gefahrenzone",
+        "summary": "Charakter in den Ruhestand schicken"
+      },
+      "imperialProfile": {
+        "label": "Imperiales Profil",
+        "summary": "Name, Bio, Avatar, Titelbild"
+      },
+      "royalIdentity": { "label": "Königliche Identität", "summary": "Königshaus, Wappen" },
+      "royalAnthem": { "label": "Königliche Hymne", "summary": "Profilmusik" }
+    },
+    "buckets": {
+      "account": {
+        "label": "Konto",
+        "eyebrow": "Identität & Zugang",
+        "summary": "Anmeldemethoden, Sicherheit, Unterstützervorteile und Kontoaktionen."
+      },
+      "game": {
+        "label": "Spiel",
+        "eyebrow": "Spieleinstellungen",
+        "summary": "Dein Land, der Zugtakt, Benachrichtigungen und dein Charakter."
+      },
+      "interface": {
+        "label": "Oberfläche",
+        "eyebrow": "Aussehen & Bedienung",
+        "summary": "Design, Navigation, Statusleiste, Barrierefreiheit und Sprache."
+      },
+      "audio": {
+        "label": "Audio",
+        "eyebrow": "Klang",
+        "summary": "Lautstärke, Ereignistöne und Profilmusik."
+      },
+      "data": {
+        "label": "Daten",
+        "eyebrow": "Speicher & Automatisierung",
+        "summary": "Geräteeinstellungen exportieren oder importieren, lokale Daten löschen und API-Zugriff verwalten."
+      }
+    },
+    "quick": {
+      "game": {
+        "saving": "Speichern…",
+        "saved": "Gespeichert",
+        "couldNotSave": "Speichern nicht möglich",
+        "defaultCountry": "Standardland",
+        "onlyActiveCountry": "{name} ({code}) · Dein einziges aktives Land",
+        "activeCountry": "Aktives Land",
+        "createToEstablish": "Erstelle einen Charakter, um ein Land festzulegen.",
+        "turnSpeed": "Zuggeschwindigkeit",
+        "turnsEvery": "Weltzüge laufen alle {minutes, plural, one {# Minute} other {# Minuten}}.",
+        "readingCadence": "Der aktuelle Weltzugtakt wird gelesen…",
+        "worldControlled": "Weltgesteuert",
+        "turnNotifications": "Zugbenachrichtigungen",
+        "alertMe": "Benachrichtige mich, wenn ein neuer Weltzug bereit ist.",
+        "loadingPreference": "Einstellung wird geladen…",
+        "on": "An",
+        "muted": "Stumm"
+      },
+      "interface": {
+        "reducedMotion": "Reduzierte Bewegung",
+        "reducedMotionHint": "Animierte Übergänge und bewegte Deko-Effekte minimieren.",
+        "highContrast": "Hoher Kontrast",
+        "highContrastHint": "Ränder, Sekundärtext und Tastaturfokus verstärken.",
+        "language": "Sprache",
+        "languageHint": "A House Divided erscheint derzeit auf Englisch.",
+        "english": "Englisch"
+      },
+      "audio": {
+        "gameSounds": "Spielsounds",
+        "gameSoundsHint": "Steuert Profilmusik und künftige Soundeffekte im Spiel auf diesem Gerät.",
+        "customize": "Audio anpassen",
+        "masterVolume": "Gesamtlautstärke",
+        "eventSounds": "Ereignistöne",
+        "eventSoundsHint": "Steuert kurze Töne, wenn ein Spielereignis einen bereitstellt.",
+        "savedOnDevice": "Auf diesem Gerät gespeichert",
+        "profileMusicBelow": "Profilmusik wird unten verwaltet."
+      },
+      "data": {
+        "exportTitle": "Einstellungen exportieren",
+        "exportHint": "Lade die Oberflächen- und Audioeinstellungen dieses Geräts herunter.",
+        "export": "Exportieren",
+        "importTitle": "Einstellungen importieren",
+        "importHint": "Stelle eine Geräteeinstellungs-JSON-Datei von AHD wieder her.",
+        "chooseFile": "Datei wählen",
+        "cacheTitle": "Browser-Cache",
+        "cacheHint": "Zwischengespeicherte Antworten löschen, ohne dich abzumelden oder Einstellungen zu verlieren.",
+        "clearCache": "Cache leeren",
+        "resetPreferences": "Einstellungen zurücksetzen",
+        "exported": "Geräteeinstellungen exportiert.",
+        "imported": "Geräteeinstellungen importiert.",
+        "importSyncFailed": "Auf diesem Gerät importiert, aber die Statusleisten-Synchronisierung ist fehlgeschlagen.",
+        "invalidFile": "Diese Datei ist kein gültiger AHD-Einstellungsexport.",
+        "cacheCleared": "Temporärer Browser-Cache geleert. Deine Einstellungen wurden behalten.",
+        "resetDone": "Geräteeinstellungen auf sinnvolle Standardwerte zurückgesetzt."
+      }
+    },
+    "appearance": {
+      "intro": "Wähle, wie die App aussieht. Die Startseite verwendet immer das Standarddesign.",
+      "themeLabel": "Design",
+      "themeMeta": "Gilt sofort · synchronisiert über Geräte",
+      "prevThemes": "Vorherige Designs",
+      "nextThemes": "Nächste Designs",
+      "pageAria": "Seite {number}",
+      "selectedLabel": "Ausgewählt:",
+      "themes": {
+        "default": "Standard",
+        "oled": "OLED",
+        "cloakroom": "Cloakroom",
+        "broadsheet": "Broadsheet",
+        "coldwar": "Kalter Krieg",
+        "command-1953": "1953 Command",
+        "usa": "USA",
+        "light": "Hell",
+        "pastel": "Pastell",
+        "dark-pastel": "Dunkles Pastell",
+        "retro": "Retro",
+        "solarized": "Solarized"
+      },
+      "videoPreferences": "Videoeinstellungen",
+      "disableAutoplay": "Autoplay auf Profilen anderer Spieler deaktivieren",
+      "disableAutoplayHint": "Wenn aktiviert, werden Wahlkampfsongs auf Profilen anderer Spieler nicht automatisch abgespielt (betrifft nur deine Ansicht)",
+      "interfaceTitle": "Oberfläche",
+      "classicUi": "Klassische Oberfläche verwenden",
+      "classicUiHint": "Die neue Navigationsleiste und das CEO Command Center sind jetzt Standard. Aktiviere dies, um zur klassischen Navigationsleiste und den alten Konzernseiten zurückzukehren.",
+      "statusBar": "Statusleiste",
+      "statusBarHint": "Wähle, was in der unteren Statusleiste angezeigt wird.",
+      "layouts": {
+        "standard": {
+          "label": "Standard",
+          "desc": "Aktionen, Wahlkampfgelder, Privatvermögen und Konzernkasse (wenn du CEO bist). Online-Anzahl neben dem Zugtimer."
+        },
+        "corp": {
+          "label": "Konzern kompakt",
+          "desc": "Kompakte Online-Anzahl; ergänzt Aktienticker, Konzernkasse und Marketingstärke, wenn du einen Konzern führst."
+        },
+        "elections": {
+          "label": "Wahlen kompakt",
+          "desc": "Politischer Einfluss und Beliebtheit immer sichtbar. Ergänzt Stimmenanteil, Vorsprung und Sitzprognose, wenn du in einer Wahl bist."
+        },
+        "full": {
+          "label": "Vollständig",
+          "desc": "Größere Leiste: Profilwerte plus Wahl- und Konzernbereiche zusammen (Konzern nur, wenn du CEO bist)."
+        },
+        "minimal": {
+          "label": "Minimal",
+          "desc": "Nur Zugtimer und Spieldatum. Keine Statuschips, klar und ablenkungsfrei."
+        }
+      },
+      "corpNote": "Konzerndaten erscheinen nur, wenn dein Charakter CEO ist.",
+      "electionsNote": "Stimmenanteil und Sitzprognose erscheinen nur, solange du aktiver Kandidat in einer Wahl bist.",
+      "fullNote": "Konzernwerte erscheinen nur, wenn dein Charakter CEO ist. Wahl- und Sitzchips erscheinen nur, solange du aktiver Kandidat bist.",
+      "minimalNote": "Nur das Wesentliche: Spieldatum, Zugtimer und Anzahl der Spieler online."
+    },
+    "security": {
+      "introChange": "Aktualisiere dein Kontopasswort. Verwende ein starkes, einzigartiges Passwort.",
+      "introSet": "Lege ein Passwort fest, um dich zusätzlich zum Social-Login mit Benutzername/E-Mail anzumelden.",
+      "currentPassword": "Aktuelles Passwort",
+      "newPassword": "Neues Passwort",
+      "password": "Passwort",
+      "confirmNewPassword": "Neues Passwort bestätigen",
+      "confirmPassword": "Passwort bestätigen",
+      "showPassword": "Passwort anzeigen",
+      "hidePassword": "Passwort verbergen",
+      "strengthWeak": "Schwach",
+      "strengthFair": "Mittel",
+      "strengthStrong": "Stark",
+      "errorCurrentRequired": "Aktuelles Passwort ist erforderlich",
+      "errorAllRequired": "Alle Felder sind erforderlich",
+      "errorMismatch": "Die neuen Passwörter stimmen nicht überein",
+      "errorTooShort": "Das Passwort muss mindestens 6 Zeichen lang sein",
+      "errorSameAsCurrent": "Das neue Passwort muss sich vom aktuellen unterscheiden",
+      "changeFailed": "Passwortänderung fehlgeschlagen",
+      "setFailed": "Passwort konnte nicht festgelegt werden",
+      "changedSuccess": "Passwort erfolgreich geändert",
+      "setSuccess": "Passwort erfolgreich festgelegt! Du kannst dich jetzt mit Benutzername und Passwort anmelden.",
+      "passwordsMatch": "Passwörter stimmen überein",
+      "passwordsNoMatch": "Passwörter stimmen nicht überein",
+      "changing": "Wird geändert...",
+      "setting": "Wird festgelegt...",
+      "changePassword": "Passwort ändern",
+      "setPassword": "Passwort festlegen"
+    },
+    "profile": {
+      "intro": "Anzeigename und Bio auf deinem öffentlichen Profil.",
+      "viewPublicProfile": "Öffentliches Profil ansehen",
+      "characterName": "Charaktername",
+      "namePlaceholder": "Charakternamen eingeben",
+      "rules": "Nur Buchstaben, Zahlen und Leerzeichen. 3 bis 30 Zeichen. 24h Wartezeit.",
+      "tooShort": "Zu kurz ({count}/3 min.)",
+      "tooLong": "Zu lang ({count}/30 max.)",
+      "charsOnly": "Nur Buchstaben, Zahlen und Leerzeichen.",
+      "noChanges": "Keine Änderungen zu speichern.",
+      "looksGood": "Sieht gut aus!",
+      "saveName": "Namen speichern",
+      "wait": "Warte {time}",
+      "cooldownNotice": "Namensänderung möglich in {time}",
+      "changeFailed": "Namensänderung fehlgeschlagen.",
+      "publicBio": "Öffentliche Bio",
+      "bioPlaceholder": "Ein erfahrener politischer Stratege aus der Provinz, bekannt für...",
+      "saveBio": "Bio speichern"
+    },
+    "identity": {
+      "intro": "Verknüpfe deine Social-Konten, damit andere Spieler dich kontaktieren können.",
+      "comingSoon": "Bald verfügbar",
+      "googleDev": "Google-Anmeldung ist in Entwicklung",
+      "discordLinked": "Discord-Konto verknüpft",
+      "link": "{provider} verknüpfen",
+      "unlink": "Trennen",
+      "unlinking": "Wird getrennt...",
+      "unlinkFailed": "Trennen fehlgeschlagen.",
+      "unlinked": "{provider} erfolgreich getrennt.",
+      "avatarAlt": "{provider}-Avatar"
+    },
+    "apiKeys": {
+      "intro": "Mit API-Schlüsseln können externe Anwendungen mit deinem Konto interagieren.",
+      "viewDocs": "API-Dokumentation ansehen →",
+      "personalTitle": "Persönliche API-Schlüssel",
+      "personalHint": "Schlüssel, die an dein Konto gebunden sind. Öffentliche Schlüssel können nur öffentliche Daten lesen. Private Schlüssel können außerdem Wahlkampfgelder senden und Devisen in deinem Namen handeln, behandle sie also wie ein Passwort.",
+      "keyNamePlaceholder": "Schlüsselname",
+      "readOnly": "Nur lesen",
+      "readSend": "Lesen + Geld senden",
+      "createKey": "Schlüssel erstellen",
+      "copyOnce": "Jetzt kopieren (wird nur einmal angezeigt):",
+      "requests": "{count, plural, one {# Anfrage} other {# Anfragen}}",
+      "lastUsed": "zuletzt verwendet {when}",
+      "never": "nie",
+      "revoke": "Widerrufen",
+      "noKeys": "Noch keine persönlichen API-Schlüssel.",
+      "createFailed": "API-Schlüssel konnte nicht erstellt werden"
+    },
+    "danger": {
+      "resignTitle": "Alle Ämter niederlegen",
+      "resignDesc": "Gib dein aktuelles Amt, alle Parteiführungsrollen und die Kongressführung auf und ziehe dich aus allen laufenden Wahlen zurück.",
+      "resignPrompt": "Bist du sicher? Dies gibt sofort <strong>alle</strong> deine Ämter auf und zieht dich aus allen laufenden Wahlen zurück.",
+      "confirmResign": "Rücktritt bestätigen",
+      "resigning": "Rücktritt läuft…",
+      "resignFailed": "Rücktritt fehlgeschlagen",
+      "deleteTitle": "Konto löschen",
+      "deleteDesc": "Diese Aktion ist unwiderruflich. Dein Konto, dein Charakter und alle Daten werden dauerhaft gelöscht.",
+      "deleteButton": "Mein Konto löschen",
+      "modalWarning": "Diese Aktion ist <strong>dauerhaft und unwiderruflich</strong>. Dein Konto, dein Charakter und alle Daten werden dauerhaft gelöscht.",
+      "typeToConfirm": "Tippe <code>DELETE</code> zur Bestätigung:",
+      "deletePlaceholder": "Tippe DELETE zur Bestätigung",
+      "typeDeleteError": "Bitte tippe DELETE zur Bestätigung",
+      "deleteFailed": "Konto konnte nicht gelöscht werden",
+      "deleting": "Wird gelöscht…",
+      "permanentlyDelete": "Endgültig löschen"
+    },
+    "demographics": {
+      "intro": "Lege den demografischen Hintergrund deines Politikers fest. Diese Merkmale beeinflussen, wie Wählergruppen dich wahrnehmen.",
+      "incomplete": "Bitte wähle den Hintergrund deines Charakters, um dein Profil zu vervollständigen.",
+      "selectAllError": "Bitte wähle alle demografischen Optionen aus.",
+      "race": "Ethnie",
+      "selectRace": "Ethnie wählen...",
+      "raceWhite": "Weiß",
+      "raceBlack": "Schwarz",
+      "raceHispanic": "Hispanisch",
+      "raceAsian": "Asiatisch",
+      "raceOther": "Andere",
+      "gender": "Geschlecht",
+      "selectGender": "Geschlecht wählen...",
+      "genderMale": "Männlich",
+      "genderFemale": "Weiblich",
+      "genderNonbinary": "Nichtbinär",
+      "education": "Bildungsniveau",
+      "selectEducation": "Bildung wählen...",
+      "educationNoCollege": "Kein Hochschulabschluss",
+      "educationCollege": "Hochschulabschluss",
+      "educationGraduate": "Weiterführender Abschluss",
+      "wealth": "Startvermögen",
+      "selectWealth": "Vermögensstufe wählen...",
+      "wealthLow": "Geringes Einkommen",
+      "wealthMiddle": "Mittleres Einkommen",
+      "wealthHigh": "Hohes Einkommen",
+      "saveBackground": "Hintergrund speichern"
+    },
+    "politics": {
+      "actionsCount": "{count, plural, one {# Aktion} other {# Aktionen}}",
+      "intro": "Verschiebe deine Haltung zu wirtschaftlichen und gesellschaftlichen Fragen. Kostet 15 Aktionen pro Verschiebung.",
+      "shifted": "Position verschoben. Verruf +5, Einfluss -5%.",
+      "shiftFailed": "Verschiebung fehlgeschlagen.",
+      "electionPreferences": "Wahleinstellungen",
+      "autoReelection": "Automatisch zur Wiederwahl antreten",
+      "autoReelectionHint": "Wenn aktiviert, wirst du in jedem Zyklus automatisch für neue Wahlen in deinem Heimatwahlkreis aufgestellt. Du kannst dich weiterhin manuell zurückziehen. Gilt nicht für Präsidentschaftswahlen."
+    },
+    "campaignSong": {
+      "intro": "Lege ein YouTube-Video fest, das auf deiner Profilseite abgespielt wird. Füge eine YouTube-URL oder Video-ID ein.",
+      "urlLabel": "YouTube-URL oder Video-ID",
+      "urlPlaceholder": "https://www.youtube.com/watch?v=dQw4w9WgXcQ oder dQw4w9WgXcQ",
+      "hint": "Vollständige YouTube-URL oder 11-stellige Video-ID. Leer lassen zum Entfernen.",
+      "invalid": "Keine gültige YouTube-URL oder Video-ID.",
+      "thumbAlt": "Vorschau des Video-Thumbnails",
+      "preview": "Vorschau",
+      "autoplay": "Autoplay auf meinem Profil aktivieren (andere können dies in ihren Einstellungen weiterhin deaktivieren)",
+      "save": "Wahlkampfsong speichern"
+    },
+    "referrals": {
+      "intro": "Teile deinen Einladungslink oder Code mit Freunden. Wenn sie sich registrieren und einen Charakter erstellen, starten sie mit einem <strong>10% Werte-Bonus</strong>, <strong>+10 Aktionen</strong> und <strong>$500.000</strong> Privatkapital. Du erhältst für jede erfolgreiche Einladung <strong>+10 Aktionen</strong> und <strong>$500.000</strong> Privatkapital.",
+      "inviteLink": "Dein Einladungslink",
+      "referralCode": "Dein Einladungscode",
+      "copyLink": "Link kopieren",
+      "copy": "Kopieren",
+      "copied": "Kopiert",
+      "joined": "{count, plural, one {Spieler ist} other {Spieler sind}} mit deinem Code beigetreten"
+    },
+    "supporterPerks": {
+      "loading": "Unterstützer-Extras werden geladen...",
+      "loadFailed": "Unterstützer-Extras konnten nicht geladen werden",
+      "title": "Unterstützer-Extras",
+      "currentTier": "Aktuelle Stufe:",
+      "notSubscribed": "Nicht abonniert",
+      "active": "(aktiv)",
+      "inactive": "(inaktiv)",
+      "subscriptionRequired": "Für diese Extras ist ein aktives Unterstützer-Abo erforderlich.",
+      "statusPending": "ausstehend",
+      "statusApproved": "genehmigt",
+      "statusRejected": "abgelehnt",
+      "wallTitle": "Name auf der Unterstützerwand",
+      "wallHint": "Der Name auf der öffentlichen Unterstützerwand. Einsendungen werden von Moderatoren geprüft.",
+      "currentWallName": "Aktueller Wand-Name:",
+      "pendingReview": "Wird geprüft: \"{name}\"",
+      "wallPlaceholder": "Dein Wand-Name",
+      "submit": "Einreichen",
+      "alreadyPending": "Du hast bereits eine ausstehende Anfrage.",
+      "subscribeToClaim": "Abonniere eine beliebige Unterstützerstufe, um einen Wand-Namen zu erhalten.",
+      "renameTitle": "Politiker umbenennen (Supporter++)",
+      "renameHint": "Du kannst einen Politiker einmalig umbenennen. Wähle sorgfältig.",
+      "requiresPlusPlus": "Dieses Extra erfordert die Stufe Supporter++.",
+      "renameUsed": "Deine einmalige Umbenennung wurde bereits genutzt.",
+      "pendingRename": "Wird geprüft: \"{from}\" zu \"{to}\"",
+      "findPolitician": "Politiker finden",
+      "searchPlaceholder": "Nach Name suchen (mind. 2 Zeichen)",
+      "selectedLabel": "Ausgewählt:",
+      "newNamePlaceholder": "Neuer Name",
+      "submitRename": "Umbenennung einreichen",
+      "oneTime": "Dies ist ein einmaliges Extra. Nach Genehmigung kann es auf diesem Konto nicht wiederholt werden.",
+      "unavailable": "Umbenennungsanfragen sind derzeit nicht verfügbar.",
+      "recentRequests": "Letzte Anfragen",
+      "wallEntry": "Wand-Name: \"{name}\"",
+      "renameEntry": "Umbenennung \"{from}\" zu \"{to}\"",
+      "rejectionReason": "(Grund: {reason})",
+      "submitFailed": "Anfrage konnte nicht eingereicht werden",
+      "submitted": "Anfrage eingereicht. Ein Moderator prüft sie bald."
+    },
+    "achievements": {
+      "title": "Erfolgs-Highlights",
+      "empty": "Verdiene Erfolge im Spiel, um sie auf deinem Profil hervorzuheben.",
+      "intro": "Wähle bis zu 5 Erfolge, die prominent auf deinem Profil angezeigt werden. Leer lassen für die Standardanzeige.",
+      "selectedCount": "{count} / {max} ausgewählt",
+      "saved": "Erfolgs-Highlights gespeichert.",
+      "save": "Highlights speichern"
+    }
+  }
+}

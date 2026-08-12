@@ -13,7 +13,9 @@ vi.mock("next/link", () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+import { NextIntlClientProvider } from "next-intl";
 import { TutorialCoach } from "./TutorialCoach";
+import enCatalog from "../../../messages/en/tutorial.json";
 
 const CHARACTER = { countryId: "US" as const, homeState: "CA" };
 
@@ -35,7 +37,11 @@ afterEach(() => {
 
 /** Auto-start, then run past the 450ms arming delay so the card is on screen. */
 function startTour() {
-  render(<TutorialCoach character={CHARACTER} autoStart />);
+  render(
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={enCatalog}>
+      <TutorialCoach character={CHARACTER} autoStart />
+    </NextIntlClientProvider>
+  );
   // Two passes: the first fires the deferred auto-start, the second the 450ms
   // arming timer that the auto-start's effects schedule.
   act(() => {

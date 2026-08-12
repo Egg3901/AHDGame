@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { usePathname } from "next/navigation";
 import { type CountryId } from "@/lib/constants/countries";
 import { buildNationalDetailsSections, type NationDetailsOpts } from "./nationDetailsSections";
@@ -25,6 +26,7 @@ export function MobileNationalDetails({
   onNavigate,
   ...opts
 }: { countryId: CountryId; onNavigate: () => void } & NationDetailsOpts) {
+  const t = useTranslations("nav");
   const pathname = usePathname();
   // Scope the presidential-election quick-link to the viewed country (the global
   // opts value is the US race). The mobile menu only mounts when open, so fetch.
@@ -35,7 +37,7 @@ export function MobileNationalDetails({
         (section) => (
           <CollapsibleNavSection
             key={section.title}
-            title={section.title}
+            title={t(section.titleKey)}
             // Every section collapses by default on mobile (regardless of
             // `section.collapsible`, which only Economy sets — that flag
             // still gates the desktop dropdowns, left untouched here). A
@@ -61,7 +63,7 @@ export function MobileNationalDetails({
                   }`}
                 >
                   {NATION_DETAIL_ICONS[item.id]}
-                  {item.label}
+                  {item.labelKey ? t(item.labelKey) : item.label}
                 </Link>
               );
             })}

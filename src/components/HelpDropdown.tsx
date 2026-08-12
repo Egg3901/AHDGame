@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { DROPDOWN_PANEL_CLASS } from "@/components/navbar/dropdownStyles";
 
@@ -23,6 +24,7 @@ export function HelpDropdown({
   wikiDisabled = false,
   isAdminOrMod = false,
 }: HelpDropdownProps) {
+  const t = useTranslations("nav");
   const showWiki = isAdminOrMod || !wikiDisabled;
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -54,7 +56,7 @@ export function HelpDropdown({
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
-        Help
+        {t("common.help")}
         <svg
           className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
           fill="none"
@@ -88,7 +90,7 @@ export function HelpDropdown({
                   d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
                 />
               </svg>
-              {showWiki ? "Wiki/Guides" : "Guides"}
+              {showWiki ? t("help.wikiGuides") : t("help.guides")}
             </Link>
 
             <Link
@@ -109,7 +111,7 @@ export function HelpDropdown({
                   d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              About
+              {t("help.about")}
             </Link>
 
             <Link
@@ -130,7 +132,7 @@ export function HelpDropdown({
                   d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
                 />
               </svg>
-              Suggestions
+              {t("help.suggestions")}
             </Link>
 
             <button
@@ -177,7 +179,7 @@ export function HelpDropdown({
                   />
                 </svg>
               )}
-              {feedbackCapturing ? "Capturing screenshot…" : "Quick suggest (screenshot)"}
+              {feedbackCapturing ? t("common.capturingScreenshot") : t("common.quickSuggest")}
             </button>
 
             <a
@@ -203,7 +205,7 @@ export function HelpDropdown({
               <svg className="h-4 w-4 text-muted" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M14.82 2.41C11.55 2.41 8.9 5.07 8.9 8.34c0 3.26 2.65 5.9 5.92 5.9 3.26 0 5.9-2.64 5.9-5.9 0-3.27-2.64-5.93-5.9-5.93zM3.18 21.6h3.28V2.41H3.18V21.6z" />
               </svg>
-              Support on Patreon
+              {t("help.patreon")}
             </a>
 
             <a
@@ -226,7 +228,7 @@ export function HelpDropdown({
                   d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a3 3 0 10-2.4-4.8"
                 />
               </svg>
-              Supporter Wall
+              {t("help.supporterWall")}
             </a>
 
             <a
@@ -247,7 +249,7 @@ export function HelpDropdown({
                   d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
                 />
               </svg>
-              Email Support
+              {t("help.emailSupport")}
             </a>
 
             <a
@@ -270,7 +272,7 @@ export function HelpDropdown({
                   d="M22 12h-4l-3 9L9 3l-3 9H2"
                 />
               </svg>
-              Server Status
+              {t("help.serverStatus")}
             </a>
 
             <div className="my-1 border-t border-card-border/60" />
@@ -293,7 +295,7 @@ export function HelpDropdown({
                   d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
                 />
               </svg>
-              Privacy Policy
+              {t("help.privacy")}
             </Link>
 
             <Link
@@ -314,7 +316,7 @@ export function HelpDropdown({
                   d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
                 />
               </svg>
-              Terms of Service
+              {t("help.terms")}
             </Link>
           </div>
         </div>

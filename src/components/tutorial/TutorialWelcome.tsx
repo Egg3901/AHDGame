@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { INTEREST_CHAPTERS } from "@/lib/tutorial/chapters";
 import {
   TUTORIAL_INTERESTS,
@@ -21,6 +22,7 @@ import {
  * already long character-creation form, where nobody read it.
  */
 
+/** Message keys under "tutorial" for each experience card. */
 const EXPERIENCES: Array<{
   value: TutorialExperience;
   icon: string;
@@ -30,20 +32,20 @@ const EXPERIENCES: Array<{
   {
     value: "new",
     icon: "🌱",
-    title: "New to A House Divided",
-    blurb: "Start from the beginning. What a turn is, how power works, and what to do first.",
+    title: "welcome.experienceNewTitle",
+    blurb: "welcome.experienceNewBlurb",
   },
   {
     value: "returning",
     icon: "🔁",
-    title: "New to this iteration",
-    blurb: "You have played before. Skip the basics and see what changed this time around.",
+    title: "welcome.experienceReturningTitle",
+    blurb: "welcome.experienceReturningBlurb",
   },
   {
     value: "skip",
     icon: "⏭️",
-    title: "Skip the tutorial",
-    blurb: "Go straight in. You can start any part of it later from the tutorial page.",
+    title: "welcome.experienceSkipTitle",
+    blurb: "welcome.experienceSkipBlurb",
   },
 ];
 
@@ -57,6 +59,7 @@ export interface TutorialWelcomeProps {
 }
 
 export function TutorialWelcome({ characterName, onConfirm, onDismiss }: TutorialWelcomeProps) {
+  const t = useTranslations("tutorial");
   const [experience, setExperience] = useState<TutorialExperience | null>(null);
   const [interests, setInterests] = useState<TutorialInterest[]>([]);
   const [saving, setSaving] = useState(false);
@@ -104,7 +107,7 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
     try {
       await onConfirm(plan);
     } catch {
-      setError("Could not save that. Check your connection and try again.");
+      setError(t("welcome.saveFailed"));
       setSaving(false);
     }
   }
@@ -116,19 +119,17 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
           <div className="relative rounded-t-2xl px-6 pt-6 pb-2 sm:px-8">
             <div className="absolute inset-x-0 top-0 h-[2px] rounded-t-2xl bg-gradient-to-r from-primary/60 via-secondary/40 to-transparent" />
             <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">
-              Step {panel} of 2
+              {t("welcome.stepProgress", { panel })}
             </p>
             <h1 className="mt-1 text-2xl font-bold">
               {panel === 1
                 ? characterName
-                  ? `Welcome, ${characterName}`
-                  : "Welcome to A House Divided"
-                : "What do you want to do?"}
+                  ? t("welcome.titleNamed", { name: characterName })
+                  : t("welcome.title")
+                : t("welcome.interestsTitle")}
             </h1>
             <p className="mt-1 text-sm text-muted">
-              {panel === 1
-                ? "Two quick questions and the game will point you at the right things. This takes about fifteen seconds."
-                : "Pick as many as you like. The tour covers each one in turn, and you can change your mind later."}
+              {panel === 1 ? t("welcome.intro") : t("welcome.interestsIntro")}
             </p>
           </div>
 
@@ -148,8 +149,10 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
                   <span className="text-2xl" aria-hidden>
                     {opt.icon}
                   </span>
-                  <span className="mt-2 block text-sm font-semibold">{opt.title}</span>
-                  <span className="mt-1 block text-xs leading-relaxed text-muted">{opt.blurb}</span>
+                  <span className="mt-2 block text-sm font-semibold">{t(opt.title)}</span>
+                  <span className="mt-1 block text-xs leading-relaxed text-muted">
+                    {t(opt.blurb)}
+                  </span>
                 </button>
               ))}
             </div>
@@ -166,18 +169,15 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
                 }`}
               >
                 <span className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-                  <span aria-hidden>⭐</span> All of it
+                  <span aria-hidden>⭐</span> {t("welcome.allOfIt")}
                   <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
-                    Most players
+                    {t("welcome.mostPlayers")}
                   </span>
                   <span className="ml-auto text-[10px] uppercase tracking-wide text-muted">
-                    about {fullEstimate} min
+                    {t("welcome.aboutMinutesShort", { minutes: fullEstimate })}
                   </span>
                 </span>
-                <span className="mt-1 block text-xs text-muted">
-                  The whole game. Politics and money feed each other, and the players who do both
-                  end up ahead of the ones who pick a side.
-                </span>
+                <span className="mt-1 block text-xs text-muted">{t("welcome.allOfItBlurb")}</span>
               </button>
 
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -201,14 +201,14 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
                           <span className="mr-1.5" aria-hidden>
                             {chapter.icon}
                           </span>
-                          {chapter.title}
+                          {t(chapter.title)}
                         </span>
                         <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted">
-                          {chapter.estimatedMinutes} min
+                          {t("welcome.minutesShort", { minutes: chapter.estimatedMinutes })}
                         </span>
                       </span>
                       <span className="mt-1 block text-xs leading-relaxed text-muted">
-                        {chapter.blurb}
+                        {t(chapter.blurb)}
                       </span>
                     </button>
                   );
@@ -218,8 +218,8 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-muted">
                   {interests.length === 0
-                    ? "Pick at least one to continue."
-                    : `About ${estimate} minutes, and you can stop any time.`}
+                    ? t("welcome.pickAtLeastOne")
+                    : t("welcome.estimate", { minutes: estimate })}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
@@ -228,7 +228,7 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
                     disabled={saving}
                     className="rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:text-foreground disabled:opacity-60"
                   >
-                    Back
+                    {t("welcome.back")}
                   </button>
                   <button
                     type="button"
@@ -238,7 +238,7 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
                     }
                     className="rounded-lg bg-gradient-to-r from-primary to-secondary px-5 py-2 text-sm font-semibold text-white shadow-glow-sm transition-shadow hover:shadow-glow disabled:opacity-50 disabled:shadow-none"
                   >
-                    {saving ? "Starting…" : "Start the tour"}
+                    {saving ? t("welcome.starting") : t("welcome.start")}
                   </button>
                 </div>
               </div>
@@ -258,7 +258,7 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
               disabled={saving}
               className="text-xs text-muted transition-colors hover:text-foreground disabled:opacity-60"
             >
-              Decide later
+              {t("welcome.decideLater")}
             </button>
           </div>
         </div>

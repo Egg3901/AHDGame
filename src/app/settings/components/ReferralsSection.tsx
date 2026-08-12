@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 interface ReferralsSectionProps {
   userId: string;
@@ -8,6 +9,7 @@ interface ReferralsSectionProps {
 }
 
 export function ReferralsSection({ userId, referralCount }: ReferralsSectionProps) {
+  const t = useTranslations("settings");
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
 
   function flash(kind: "code" | "link") {
@@ -28,19 +30,15 @@ export function ReferralsSection({ userId, referralCount }: ReferralsSectionProp
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted leading-relaxed">
-        Share your invite link or code with friends. When they register and create a character, they
-        start with a <strong className="text-foreground">10% stat bonus</strong>,{" "}
-        <strong className="text-foreground">+10 actions</strong>, and{" "}
-        <strong className="text-foreground">$500,000</strong> personal capital. You&apos;ll receive{" "}
-        <strong className="text-foreground">+10 actions</strong> and{" "}
-        <strong className="text-foreground">$500,000</strong> personal capital for each successful
-        referral.
+        {t.rich("referrals.intro", {
+          strong: (chunks) => <strong className="text-foreground">{chunks}</strong>,
+        })}
       </p>
 
       {/* Invite link — preferred share path; pre-fills referral on /register */}
       <div>
         <p className="mb-1.5 text-xs font-medium text-muted uppercase tracking-wider">
-          Your Invite Link
+          {t("referrals.inviteLink")}
         </p>
         <div className="flex items-center gap-2">
           <code className="flex-1 truncate rounded-lg border border-card-border bg-card-elevated px-4 py-2.5 font-mono text-sm text-foreground tracking-wider select-all">
@@ -55,7 +53,7 @@ export function ReferralsSection({ userId, referralCount }: ReferralsSectionProp
                 : "border-card-border bg-card hover:bg-card-elevated text-foreground"
             }`}
           >
-            {copied === "link" ? "Copied" : "Copy link"}
+            {copied === "link" ? t("referrals.copied") : t("referrals.copyLink")}
           </button>
         </div>
       </div>
@@ -63,7 +61,7 @@ export function ReferralsSection({ userId, referralCount }: ReferralsSectionProp
       {/* Code display */}
       <div>
         <p className="mb-1.5 text-xs font-medium text-muted uppercase tracking-wider">
-          Your Referral Code
+          {t("referrals.referralCode")}
         </p>
         <div className="flex items-center gap-2">
           <code className="flex-1 rounded-lg border border-card-border bg-card-elevated px-4 py-2.5 font-mono text-sm text-foreground tracking-wider select-all">
@@ -89,7 +87,7 @@ export function ReferralsSection({ userId, referralCount }: ReferralsSectionProp
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
-                Copied
+                {t("referrals.copied")}
               </>
             ) : (
               <>
@@ -106,7 +104,7 @@ export function ReferralsSection({ userId, referralCount }: ReferralsSectionProp
                     d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                   />
                 </svg>
-                Copy
+                {t("referrals.copy")}
               </>
             )}
           </button>
@@ -132,9 +130,7 @@ export function ReferralsSection({ userId, referralCount }: ReferralsSectionProp
         </div>
         <div>
           <p className="text-2xl font-bold tabular-nums">{referralCount}</p>
-          <p className="text-xs text-muted">
-            player{referralCount !== 1 ? "s" : ""} joined with your code
-          </p>
+          <p className="text-xs text-muted">{t("referrals.joined", { count: referralCount })}</p>
         </div>
       </div>
     </div>

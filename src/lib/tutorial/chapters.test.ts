@@ -8,6 +8,8 @@ import {
 } from "@/lib/tutorial/chapters";
 import { TUTORIAL_CHAPTER_IDS, type TutorialPlan } from "@/lib/onboarding/tutorialPlan";
 import { stockmarketUrl } from "@/lib/urls";
+import enCatalog from "../../../messages/en/tutorial.json";
+import deCatalog from "../../../messages/de/tutorial.json";
 
 const CHARACTER = { countryId: "US" as const, homeState: "CA" };
 
@@ -113,20 +115,66 @@ describe("step links", () => {
   });
 
   it("contains no em-dashes or en-dashes in any player-facing copy", () => {
-    for (const countryId of ["US", "UK", "DE", "JP"] as const) {
-      const steps = TUTORIAL_CHAPTER_IDS.flatMap((id) =>
-        buildChapterTour({ countryId, homeState: "XX" }, id)
-      );
-      for (const step of steps) {
-        expect(step.title, step.id).not.toMatch(/[–—]/);
-        expect(step.body, step.id).not.toMatch(/[–—]/);
-        expect(step.hint ?? "", step.id).not.toMatch(/[–—]/);
+    // Copy lives in the catalogs now, so the check runs over every string in
+    // both locales rather than over the built steps.
+    const walk = (node: unknown, path: string) => {
+      if (typeof node === "string") {
+        expect(node, path).not.toMatch(/[–—]/);
+        return;
       }
+      for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+        walk(value, `${path}.${key}`);
+      }
+    };
+    walk(enCatalog, "en");
+    walk(deCatalog, "de");
+  });
+
+  it("references only message keys that exist, identically in en and de", () => {
+    const lookup = (catalog: unknown, key: string): unknown =>
+      `tutorial.${key}`
+        .split(".")
+        .reduce(
+          (node, part) =>
+            node && typeof node === "object" ? (node as Record<string, unknown>)[part] : undefined,
+          catalog
+        );
+
+    const keys = new Set<string>();
+    for (const step of everyStep()) {
+      keys.add(step.title);
+      keys.add(step.body);
+      keys.add(step.next);
+      if (step.hint) keys.add(step.hint);
+      if (step.readMore) keys.add(step.readMore.label);
     }
     for (const id of TUTORIAL_CHAPTER_IDS) {
-      expect(TUTORIAL_CHAPTERS[id].title).not.toMatch(/[–—]/);
-      expect(TUTORIAL_CHAPTERS[id].blurb).not.toMatch(/[–—]/);
+      keys.add(TUTORIAL_CHAPTERS[id].title);
+      keys.add(TUTORIAL_CHAPTERS[id].blurb);
     }
+    keys.add("closing.title");
+    keys.add("closing.bodyFull");
+    keys.add("closing.bodyShort");
+    keys.add("closing.next");
+
+    for (const key of keys) {
+      expect(typeof lookup(enCatalog, key), `en missing ${key}`).toBe("string");
+      expect(typeof lookup(deCatalog, key), `de missing ${key}`).toBe("string");
+    }
+
+    // The two catalogs must carry exactly the same key set, so a German player
+    // never sees a raw message id where a key was only added to English.
+    const flatten = (node: unknown, path: string, out: string[]) => {
+      if (typeof node === "string") {
+        out.push(path);
+        return out;
+      }
+      for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+        flatten(value, `${path}.${key}`, out);
+      }
+      return out;
+    };
+    expect(flatten(deCatalog, "", []).sort()).toEqual(flatten(enCatalog, "", []).sort());
   });
 
   it("keeps step ids unique across the whole registry", () => {
@@ -181,14 +229,21 @@ describe("buildTourSteps", () => {
     expect(new Set(steps.map((s) => s.chapterIndex))).toEqual(new Set([0, 1, 2]));
   });
 
-  it("uses country-resolved copy rather than US wording", () => {
+  it("resolves links per country and leaves region wording to ICU values", () => {
     const uk = buildTourSteps(
       { countryId: "UK", homeState: "ENG-LON" },
       { experience: "new", interests: [] }
     );
     const scout = uk.find((s) => s.id === "scout-region");
-    expect(scout?.title.toLowerCase()).not.toContain("state");
     expect(scout?.link).toContain("/country/uk/");
+    // The copy is a message key whose English string interpolates {region},
+    // so the rendered title says "nation" for the UK, never a hardcoded
+    // "state" (the coach passes coachCountryContext values to t()).
+    expect(scout?.title).toBe("steps.scoutRegion.title");
+    const en = (enCatalog as { tutorial: { steps: { scoutRegion: { title: string } } } }).tutorial
+      .steps.scoutRegion.title;
+    expect(en).toContain("{region}");
+    expect(en.toLowerCase()).not.toContain("state");
   });
 });
 

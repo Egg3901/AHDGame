@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
 import { useEnabledCountries, useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -38,6 +39,7 @@ export function NationDropdown({
   userCountry = "US",
   unionsEnabled = false,
 }: NationDropdownProps) {
+  const t = useTranslations("nav");
   const [isOpen, setIsOpen] = useState(false);
   const [showNationPicker, setShowNationPicker] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -90,8 +92,8 @@ export function NationDropdown({
           href: activeCharters.length === 1 ? `/charters/${activeCharters[0]!.id}` : "/charters",
           label:
             activeCharters.length === 1
-              ? `Charter — ${activeCharters[0]!.proposedName}`
-              : `Party Charters (${activeCharters.length})`,
+              ? t("menus.nation.charterSingle", { name: activeCharters[0]!.proposedName })
+              : t("menus.nation.chartersMultiple", { count: activeCharters.length }),
         }
       : null;
 
@@ -146,10 +148,10 @@ export function NationDropdown({
                       d="M15 19l-7-7 7-7"
                     />
                   </svg>
-                  Back
+                  {t("common.back")}
                 </button>
                 <p className="text-xs font-medium uppercase tracking-wider text-muted">
-                  Select Nation
+                  {t("countrySwitcher.selectNation")}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-1.5 p-2">
@@ -173,7 +175,9 @@ export function NationDropdown({
                         {getCountryDisplayName(id, preset)}
                       </span>
                       {isHome && (
-                        <span className="text-[10px] text-muted leading-none">★ Home</span>
+                        <span className="text-[10px] text-muted leading-none">
+                          {t("countrySwitcher.homeBadge")}
+                        </span>
                       )}
                     </button>
                   );
@@ -185,7 +189,7 @@ export function NationDropdown({
               {/* Home Nation section */}
               <div className="mb-1 border-b border-card-border pb-1">
                 <p className="px-4 pt-2 pb-1 text-xs font-medium uppercase tracking-wider text-muted">
-                  Home Nation
+                  {t("menus.nation.homeNation")}
                 </p>
                 <Link
                   href={countryUrl(userCountry)}
@@ -194,7 +198,7 @@ export function NationDropdown({
                 >
                   <CountryFlag country={userCountry} size="sm" />
                   <span>{getCountryDisplayName(userCountry, preset)}</span>
-                  <span className="ml-1 text-xs text-muted">(Home)</span>
+                  <span className="ml-1 text-xs text-muted">{t("menus.nation.homeSuffix")}</span>
                 </Link>
                 {cabinetOffice && (
                   <Link
@@ -215,7 +219,7 @@ export function NationDropdown({
                         d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
                       />
                     </svg>
-                    <span className="truncate">Cabinet Office</span>
+                    <span className="truncate">{t("menus.nation.cabinetOffice")}</span>
                   </Link>
                 )}
                 {currentParty && (
@@ -237,7 +241,9 @@ export function NationDropdown({
                         d="M3 21v-8a2 2 0 012-2h14a2 2 0 012 2v8M9 10a2 2 0 012-2h2a2 2 0 012 2"
                       />
                     </svg>
-                    <span className="truncate">My Party - {currentParty.name}</span>
+                    <span className="truncate">
+                      {t("menus.nation.myParty")} - {currentParty.name}
+                    </span>
                   </Link>
                 )}
                 {userCountry === "US" && (
@@ -259,19 +265,21 @@ export function NationDropdown({
                         d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
                       />
                     </svg>
-                    <span className="truncate">My Political Operations</span>
+                    <span className="truncate">{t("menus.nation.myPoliticalOperations")}</span>
                   </Link>
                 )}
               </div>
 
               {/* National Details — grouped sub-sections (Government / Politics / Economy / Other). */}
               <p className="px-4 pt-2 pb-1 text-xs font-medium uppercase tracking-wider text-muted">
-                National Details — {getCountryDisplayName(countryId, preset)}
+                {t("menus.nation.nationalDetailsFor", {
+                  country: getCountryDisplayName(countryId, preset),
+                })}
               </p>
               {sections.map((section) => (
                 <CollapsibleNavSection
                   key={section.title}
-                  title={section.title}
+                  title={t(section.titleKey)}
                   collapsible={section.collapsible}
                   labelClassName="px-4 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted/80"
                 >
@@ -283,7 +291,9 @@ export function NationDropdown({
                       className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-background/60"
                     >
                       {NATION_DETAIL_ICONS[item.id]}
-                      <span className="truncate">{item.label}</span>
+                      <span className="truncate">
+                        {item.labelKey ? t(item.labelKey) : item.label}
+                      </span>
                     </Link>
                   ))}
                 </CollapsibleNavSection>
@@ -301,7 +311,7 @@ export function NationDropdown({
                     d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                Switch Nation View
+                {t("countrySwitcher.switchNationView")}
               </button>
             </div>
           )}

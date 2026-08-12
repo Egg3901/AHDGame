@@ -1,0 +1,194 @@
+{
+  "nav": {
+    "common": {
+      "profile": "Profile",
+      "actions": "Actions",
+      "world": "World",
+      "help": "Help",
+      "staff": "Staff",
+      "settings": "Settings",
+      "wallet": "Wallet",
+      "notifications": "Notifications",
+      "search": "Search",
+      "signIn": "Sign in",
+      "register": "Register",
+      "signOut": "Sign Out",
+      "active": "Active",
+      "imperial": "Imperial",
+      "back": "Back",
+      "preview": "Preview",
+      "mainNavigation": "Main navigation",
+      "openMenu": "Open menu",
+      "closeMenu": "Close menu",
+      "userMenu": "User menu",
+      "capturingScreenshot": "Capturing screenshot…",
+      "quickSuggest": "Quick suggest (screenshot)"
+    },
+    "menus": {
+      "world": {
+        "myCorporation": "My Corporation",
+        "hallOfFame": "Hall of Fame",
+        "nations": "Nations",
+        "map": "Map",
+        "crises": "Crises",
+        "conflicts": "Conflicts",
+        "internationalOrgs": "International Orgs",
+        "sectors": "Sectors",
+        "unions": "Unions",
+        "stockMarket": "Stock Market",
+        "forex": "Currency Exchange",
+        "trade": "Trade",
+        "news": "News",
+        "imf": "IMF",
+        "groups": {
+          "economy": "Economy",
+          "diplomacy": "Diplomacy",
+          "other": "Other",
+          "leaderboards": "Leaderboards"
+        },
+        "headers": {
+          "leaderboard": "Leaderboard",
+          "beta": "Beta",
+          "markets": "Markets",
+          "international": "International",
+          "browse": "Browse",
+          "corporate": "Corporate"
+        },
+        "banking": "Banking"
+      },
+      "staff": {
+        "adminPanel": "Admin Panel",
+        "modPanel": "Mod Panel",
+        "opsDashboard": "Ops Dashboard",
+        "docs": "Docs",
+        "tickets": "Tickets",
+        "suggestions": "Suggestions"
+      },
+      "nation": {
+        "homeNation": "Home Nation",
+        "homeSuffix": "(Home)",
+        "nationalDetails": "National Details",
+        "nationalDetailsFor": "National Details: {country}",
+        "cabinetOffice": "Cabinet Office",
+        "myParty": "My Party",
+        "myPoliticalOperations": "My Political Operations",
+        "sections": {
+          "government": "Government",
+          "politics": "Politics",
+          "economy": "Economy",
+          "other": "Other"
+        },
+        "elections": "Elections",
+        "parties": "Political Parties",
+        "politicians": "Politicians",
+        "presidentialElection": "Presidential Election",
+        "politicalMetrics": "Political Metrics",
+        "referendums": "Referendums",
+        "economy": "Economy",
+        "budget": "National Budget",
+        "metrics": "National Metrics",
+        "unions": "Unions",
+        "map": "Map",
+        "policy": "Policy",
+        "scotus": "Supreme Court",
+        "charterSingle": "Charter: {name}",
+        "chartersMultiple": "Party Charters ({count})",
+        "banking": "Banking"
+      },
+      "legislature": {
+        "congress": "Congress",
+        "house": "House of Representatives",
+        "senate": "Senate",
+        "committees": "Committees",
+        "activeLegislation": "Active legislation",
+        "floorSchedule": "Floor schedule"
+      },
+      "elections": {
+        "upcomingRaces": "Upcoming races",
+        "primaries": "Primaries",
+        "results": "Results",
+        "candidateDirectory": "Candidate directory"
+      }
+    },
+    "state": {
+      "overview": "State Overview",
+      "economy": "State Economy",
+      "legislature": "State Legislature",
+      "office": "Office",
+      "governorOffice": "Governor Office",
+      "myElection": "My Election",
+      "myElectionNone": "My Election: None",
+      "myOffice": "My Office"
+    },
+    "countrySwitcher": {
+      "switchNationView": "Switch nation view",
+      "switchNationViewCurrent": "Switch nation view: currently {country}",
+      "selectNation": "Select Nation",
+      "homeBadge": "★ Home"
+    },
+    "notifications": {
+      "openInbox": "Open inbox →",
+      "awaitingInput": "{count, plural, one {# awaiting your input} other {# awaiting your input}}",
+      "empty": "No notifications yet",
+      "needsYou": "Needs you",
+      "markRead": "Mark as read",
+      "delete": "Delete",
+      "ariaUnread": "Notifications ({count} unread)"
+    },
+    "help": {
+      "wikiGuides": "Wiki/Guides",
+      "guides": "Guides",
+      "about": "About",
+      "suggestions": "Suggestions",
+      "patreon": "Support on Patreon",
+      "supporterWall": "Supporter Wall",
+      "emailSupport": "Email Support",
+      "serverStatus": "Server Status",
+      "privacy": "Privacy Policy",
+      "terms": "Terms of Service",
+      "resources": "Resources",
+      "community": "Community",
+      "helpResources": "Help / Resources",
+      "helpInformation": "Help/Information"
+    },
+    "userMenu": {
+      "characters": "Characters",
+      "profileSettings": "Profile Settings",
+      "signedInAs": "Signed in as",
+      "switchToMainSite": "Switch to Main Site",
+      "switchToSandbox": "Switch to Sandbox",
+      "signOutAria": "Sign out"
+    },
+    "footer": {
+      "tagline": "Political & Economic Sim Game",
+      "byLakeside": "a Lakeside Games game",
+      "about": "About",
+      "contact": "Contact",
+      "faq": "FAQ",
+      "privacy": "Privacy Policy",
+      "terms": "Terms of Service"
+    },
+    "wrapper": {
+      "demographicsToast": "Set your character's background in Settings > Background"
+    },
+    "search": {
+      "placeholder": "Search characters, corporations, bills…",
+      "ariaLabel": "Search characters, corporations, bills, elections",
+      "noResults": "No results found for \"{query}\"",
+      "trySearchingFor": "Try searching for",
+      "types": {
+        "politician": "Politician",
+        "corporation": "Corporation",
+        "seat": "Seat",
+        "region": "Region",
+        "election": "Election",
+        "bill": "Bill",
+        "page": "Wiki",
+        "commodity": "Commodity",
+        "currency": "Currency",
+        "bond": "Bond",
+        "admin": "Admin"
+      }
+    }
+  }
+}

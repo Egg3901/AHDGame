@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { type SectionId } from "./shared";
 import { type Recommendation } from "./sectionsConfig";
 
@@ -11,6 +12,7 @@ export function RecommendationsBlurb({
   recommendations: Recommendation[];
   onSelectSection: (id: SectionId) => void;
 }) {
+  const t = useTranslations("settings");
   const [index, setIndex] = useState(0);
   const active = recommendations[index % recommendations.length];
 
@@ -59,7 +61,7 @@ export function RecommendationsBlurb({
             <button
               key={i}
               type="button"
-              aria-label={`Recommendation ${i + 1}`}
+              aria-label={t("recommendations.itemAria", { number: i + 1 })}
               onClick={() => setIndex(i)}
               className={`h-1 rounded-full transition-all ${
                 i === index ? "w-4 bg-primary" : "w-1.5 bg-card-border hover:bg-muted"

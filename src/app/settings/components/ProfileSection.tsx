@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { MessageBanner, SpinnerIcon, CheckIcon } from "./shared";
 
 const MAX_BIO = 500;
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function ProfileSection({ character, onCharacterUpdate, profileHref }: Props) {
+  const t = useTranslations("settings");
   // Name form state
   const [newName, setNewName] = useState(character.name);
   const [nameSaving, setNameSaving] = useState(false);
@@ -60,14 +62,14 @@ export function ProfileSection({ character, onCharacterUpdate, profileHref }: Pr
   }, [character.lastNameChange, updateCooldown]);
 
   const nameValidation = (() => {
-    if (!newName)
-      return { valid: false, msg: "3–30 chars. Alphanumeric and spaces only. 24h cooldown." };
-    if (newName.length < 3) return { valid: false, msg: `Too short (${newName.length}/3 min)` };
-    if (newName.length > 30) return { valid: false, msg: `Too long (${newName.length}/30 max)` };
-    if (!/^[a-zA-Z0-9 ]+$/.test(newName))
-      return { valid: false, msg: "Only letters, numbers, and spaces." };
-    if (newName === character.name) return { valid: true, msg: "No changes to save." };
-    return { valid: true, msg: "Looks good!" };
+    if (!newName) return { valid: false, msg: t("profile.rules") };
+    if (newName.length < 3)
+      return { valid: false, msg: t("profile.tooShort", { count: newName.length }) };
+    if (newName.length > 30)
+      return { valid: false, msg: t("profile.tooLong", { count: newName.length }) };
+    if (!/^[a-zA-Z0-9 ]+$/.test(newName)) return { valid: false, msg: t("profile.charsOnly") };
+    if (newName === character.name) return { valid: true, msg: t("profile.noChanges") };
+    return { valid: true, msg: t("profile.looksGood") };
   })();
 
   const handleNameSave = async (e: React.FormEvent) => {
@@ -86,10 +88,10 @@ export function ProfileSection({ character, onCharacterUpdate, profileHref }: Pr
         setTimeout(() => setNameSaved(false), 1500);
         onCharacterUpdate({ name: data.name, lastNameChange: new Date().toISOString() });
       } else {
-        setNameMsg({ text: data.error ?? "Failed to change name.", ok: false });
+        setNameMsg({ text: data.error ?? t("profile.changeFailed"), ok: false });
       }
     } catch {
-      setNameMsg({ text: "Network error.", ok: false });
+      setNameMsg({ text: t("common.networkError"), ok: false });
     } finally {
       setNameSaving(false);
       setTimeout(() => setNameMsg(null), 5000);
@@ -110,9 +112,9 @@ export function ProfileSection({ character, onCharacterUpdate, profileHref }: Pr
       if (res.ok) {
         setBioSaved(true);
         setTimeout(() => setBioSaved(false), 1500);
-      } else setBioMsg({ text: data.error ?? "Save failed.", ok: false });
+      } else setBioMsg({ text: data.error ?? t("common.saveFailed"), ok: false });
     } catch {
-      setBioMsg({ text: "Network error.", ok: false });
+      setBioMsg({ text: t("common.networkError"), ok: false });
     } finally {
       setBioSaving(false);
       setTimeout(() => setBioMsg(null), 3000);
@@ -121,7 +123,7 @@ export function ProfileSection({ character, onCharacterUpdate, profileHref }: Pr
 
   return (
     <>
-      <p className="text-sm text-muted mb-4">Display name and bio shown on your public profile.</p>
+      <p className="text-sm text-muted mb-4">{t("profile.intro")}</p>
 
       <Link
         href={profileHref}
@@ -141,7 +143,7 @@ export function ProfileSection({ character, onCharacterUpdate, profileHref }: Pr
             d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
           />
         </svg>
-        View public profile
+        {t("profile.viewPublicProfile")}
       </Link>
 
       <div className="my-6 border-t border-card-border" />
@@ -149,7 +151,7 @@ export function ProfileSection({ character, onCharacterUpdate, profileHref }: Pr
       <form onSubmit={handleNameSave} className="space-y-4 mb-6">
         <div>
           <label htmlFor="displayName" className="block text-sm font-medium text-foreground mb-1.5">
-            Character Name
+            {t("profile.characterName")}
           </label>
           <div className="flex flex-col sm:flex-row gap-3">
             <input
@@ -165,7 +167,7 @@ export function ProfileSection({ character, onCharacterUpdate, profileHref }: Pr
                     : "border-card-border focus:border-primary focus:ring-primary/50"
               }`}
               disabled={nameSaving || !!cooldownRemaining}
-              placeholder="Enter character name"
+              placeholder={t("profile.namePlaceholder")}
             />
             <button
               type="submit"
@@ -180,18 +182,18 @@ export function ProfileSection({ character, onCharacterUpdate, profileHref }: Pr
               <span className="flex items-center gap-2">
                 {nameSaved ? <CheckIcon /> : nameSaving ? <SpinnerIcon /> : null}
                 {nameSaved
-                  ? "Saved!"
+                  ? t("common.saved")
                   : nameSaving
-                    ? "Saving…"
+                    ? t("common.saving")
                     : cooldownRemaining
-                      ? `Wait ${cooldownRemaining}`
-                      : "Save Name"}
+                      ? t("profile.wait", { time: cooldownRemaining })
+                      : t("profile.saveName")}
               </span>
             </button>
           </div>
           {cooldownRemaining && (
             <p className="mt-1.5 text-xs text-warning">
-              Name change available in {cooldownRemaining}
+              {t("profile.cooldownNotice", { time: cooldownRemaining })}
             </p>
           )}
           <p
@@ -203,9 +205,7 @@ export function ProfileSection({ character, onCharacterUpdate, profileHref }: Pr
                   : "text-muted"
             }`}
           >
-            {newName
-              ? nameValidation.msg
-              : "Alphanumeric and spaces only. 3–30 chars. 24h cooldown."}
+            {newName ? nameValidation.msg : t("profile.rules")}
           </p>
         </div>
         {nameMsg && (
@@ -217,7 +217,7 @@ export function ProfileSection({ character, onCharacterUpdate, profileHref }: Pr
 
       <form onSubmit={handleBioSave} className="space-y-3">
         <label htmlFor="bio" className="block text-sm font-medium text-foreground mb-1.5">
-          Public Bio
+          {t("profile.publicBio")}
         </label>
         <div className="relative">
           <textarea
@@ -225,7 +225,7 @@ export function ProfileSection({ character, onCharacterUpdate, profileHref }: Pr
             value={bio}
             onChange={(e) => setBio(e.target.value.slice(0, MAX_BIO))}
             rows={4}
-            placeholder="A seasoned political operative from the heartland, known for..."
+            placeholder={t("profile.bioPlaceholder")}
             className="w-full rounded-xl border border-card-border bg-background px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={bioSaving}
           />
@@ -245,7 +245,7 @@ export function ProfileSection({ character, onCharacterUpdate, profileHref }: Pr
         >
           <span className="flex items-center gap-2">
             {bioSaved ? <CheckIcon /> : bioSaving ? <SpinnerIcon /> : null}
-            {bioSaved ? "Saved!" : bioSaving ? "Saving…" : "Save Bio"}
+            {bioSaved ? t("common.saved") : bioSaving ? t("common.saving") : t("profile.saveBio")}
           </span>
         </button>
       </form>

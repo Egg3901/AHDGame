@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { DROPDOWN_PANEL_CLASS } from "@/components/navbar/dropdownStyles";
 import { visibleWorldNavItems, type WorldNavOpts } from "@/components/navbar/worldNavItems";
 
@@ -15,6 +16,7 @@ export function WorldDropdown({
   myCorporationId = null,
   conflictsEnabled = false,
 }: WorldDropdownProps) {
+  const t = useTranslations("nav");
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -61,7 +63,7 @@ export function WorldDropdown({
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
-        World
+        {t("common.world")}
         <svg
           className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
           fill="none"
@@ -81,7 +83,7 @@ export function WorldDropdown({
             {corporate.length > 0 && (
               <div className="mb-1 border-b border-card-border pb-1">
                 <p className="px-4 pt-2 pb-1 text-xs font-medium uppercase tracking-wider text-muted">
-                  Corporate
+                  {t("menus.world.headers.corporate")}
                 </p>
                 {corporate.map((item) => (
                   <Link
@@ -91,7 +93,7 @@ export function WorldDropdown({
                     className={primaryLinkClass}
                     role="menuitem"
                   >
-                    {item.label}
+                    {t(item.labelKey)}
                   </Link>
                 ))}
               </div>
@@ -101,7 +103,7 @@ export function WorldDropdown({
               <div className="mb-1 border-b border-card-border pb-1">
                 <div className="flex items-center gap-2 px-4 pt-2 pb-1">
                   <p className="text-xs font-medium uppercase tracking-wider text-muted">
-                    Leaderboard
+                    {t("menus.world.headers.leaderboard")}
                   </p>
                   <span className="rounded-full bg-warning/15 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-warning">
                     Beta
@@ -115,7 +117,7 @@ export function WorldDropdown({
                     className={linkClass}
                     role="menuitem"
                   >
-                    {item.label}
+                    {t(item.labelKey)}
                   </Link>
                 ))}
               </div>
@@ -129,7 +131,7 @@ export function WorldDropdown({
                 className={linkClass}
                 role="menuitem"
               >
-                {item.label}
+                {t(item.labelKey)}
               </Link>
             ))}
           </div>

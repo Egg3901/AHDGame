@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import { MessageBanner, SpinnerIcon, CheckIcon } from "./shared";
 
 function extractYouTubeId(input: string): string | null {
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export function CampaignSongSection({ character, onCharacterUpdate }: Props) {
+  const t = useTranslations("settings");
   const [campaignSongUrl, setCampaignSongUrl] = useState(character.campaignSongUrl ?? "");
   const [campaignSongAutoplay, setCampaignSongAutoplay] = useState(
     character.campaignSongAutoplay ?? false
@@ -61,10 +63,10 @@ export function CampaignSongSection({ character, onCharacterUpdate }: Props) {
         onCharacterUpdate({ campaignSongUrl: data.videoId || "", campaignSongAutoplay });
         if (data.videoId) setCampaignSongUrl(data.videoId);
       } else {
-        setCampaignSongMsg({ text: data.error ?? "Save failed.", ok: false });
+        setCampaignSongMsg({ text: data.error ?? t("common.saveFailed"), ok: false });
       }
     } catch {
-      setCampaignSongMsg({ text: "Network error.", ok: false });
+      setCampaignSongMsg({ text: t("common.networkError"), ok: false });
     } finally {
       setCampaignSongSaving(false);
       setTimeout(() => setCampaignSongMsg(null), 3000);
@@ -73,20 +75,18 @@ export function CampaignSongSection({ character, onCharacterUpdate }: Props) {
 
   return (
     <>
-      <p className="text-sm text-muted mb-6">
-        Set a YouTube video to play on your profile page. Paste a YouTube URL or video ID.
-      </p>
+      <p className="text-sm text-muted mb-6">{t("campaignSong.intro")}</p>
       <form onSubmit={handleCampaignSongSave} className="space-y-4">
         <div>
           <label htmlFor="campaignSongUrl" className="block text-sm font-medium mb-1.5">
-            YouTube URL or Video ID
+            {t("campaignSong.urlLabel")}
           </label>
           <input
             id="campaignSongUrl"
             type="text"
             value={campaignSongUrl}
             onChange={(e) => setCampaignSongUrl(e.target.value)}
-            placeholder="https://www.youtube.com/watch?v=dQw4w9WgXcQ or dQw4w9WgXcQ"
+            placeholder={t("campaignSong.urlPlaceholder")}
             className={`w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${
               campaignSongUrl && campaignSongValidation.valid
                 ? "border-success/60 focus:ring-success/30 bg-background"
@@ -96,23 +96,21 @@ export function CampaignSongSection({ character, onCharacterUpdate }: Props) {
             }`}
             disabled={campaignSongSaving}
           />
-          <p className="mt-1 text-xs text-muted">
-            Full YouTube URL or 11-character video ID. Leave blank to remove.
-          </p>
+          <p className="mt-1 text-xs text-muted">{t("campaignSong.hint")}</p>
           {campaignSongUrl && !campaignSongValidation.valid && (
-            <p className="mt-1 text-xs text-error">Not a valid YouTube URL or video ID.</p>
+            <p className="mt-1 text-xs text-error">{t("campaignSong.invalid")}</p>
           )}
           {campaignSongValidation.videoId && (
             <div className="mt-3 flex items-center gap-3 rounded-xl border border-card-border bg-background p-3">
               <Image
                 src={`https://img.youtube.com/vi/${campaignSongValidation.videoId}/mqdefault.jpg`}
-                alt="Video thumbnail preview"
+                alt={t("campaignSong.thumbAlt")}
                 width={96}
                 height={56}
                 className="rounded-lg object-cover bg-muted/20 shrink-0"
               />
               <div className="min-w-0">
-                <p className="text-xs text-muted">Preview</p>
+                <p className="text-xs text-muted">{t("campaignSong.preview")}</p>
                 <p className="text-sm font-medium text-foreground truncate">
                   youtube.com/watch?v={campaignSongValidation.videoId}
                 </p>
@@ -128,9 +126,7 @@ export function CampaignSongSection({ character, onCharacterUpdate }: Props) {
             className="h-4 w-4 rounded border-card-border bg-background text-primary focus:ring-primary"
             disabled={campaignSongSaving}
           />
-          <span className="text-sm">
-            Enable autoplay on my profile (others can still disable this in their preferences)
-          </span>
+          <span className="text-sm">{t("campaignSong.autoplay")}</span>
         </label>
         {campaignSongMsg && (
           <MessageBanner
@@ -146,7 +142,11 @@ export function CampaignSongSection({ character, onCharacterUpdate }: Props) {
         >
           <span className="flex items-center gap-2">
             {campaignSongSaved ? <CheckIcon /> : campaignSongSaving ? <SpinnerIcon /> : null}
-            {campaignSongSaved ? "Saved!" : campaignSongSaving ? "Saving…" : "Save Campaign Song"}
+            {campaignSongSaved
+              ? t("common.saved")
+              : campaignSongSaving
+                ? t("common.saving")
+                : t("campaignSong.save")}
           </span>
         </button>
       </form>

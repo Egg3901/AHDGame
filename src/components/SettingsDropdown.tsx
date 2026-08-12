@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -37,7 +38,6 @@ function getSandboxToggleInfo() {
   return {
     isSandbox,
     url: isSandbox ? mainSiteUrl : sandboxUrl,
-    label: isSandbox ? "Main Site" : "Sandbox",
   };
 }
 
@@ -47,6 +47,7 @@ export function SettingsDropdown({
   pageCountry,
   userCountry,
 }: SettingsDropdownProps) {
+  const t = useTranslations("nav");
   const [isOpen, setIsOpen] = useState(false);
   const [showNationPicker, setShowNationPicker] = useState(false);
   const enabledCountries = useEnabledCountries();
@@ -84,7 +85,7 @@ export function SettingsDropdown({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`relative flex items-center justify-center rounded-lg p-2 transition-colors hover:bg-card hover:text-foreground ${isOpen ? "text-foreground bg-card" : "text-muted"}`}
-        aria-label="Settings"
+        aria-label={t("common.settings")}
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
@@ -135,10 +136,10 @@ export function SettingsDropdown({
                       d="M15 19l-7-7 7-7"
                     />
                   </svg>
-                  Back
+                  {t("common.back")}
                 </button>
                 <p className="text-xs font-medium uppercase tracking-wider text-muted">
-                  Select Nation
+                  {t("countrySwitcher.selectNation")}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-1.5 p-2">
@@ -163,7 +164,9 @@ export function SettingsDropdown({
                         {cfg.name}
                       </span>
                       {isHome && (
-                        <span className="text-[10px] text-muted leading-none">★ Home</span>
+                        <span className="text-[10px] text-muted leading-none">
+                          {t("countrySwitcher.homeBadge")}
+                        </span>
                       )}
                     </button>
                   );
@@ -174,7 +177,7 @@ export function SettingsDropdown({
             <>
               <div className="border-b border-card-border/60 px-4 py-2.5">
                 <p className="text-xs uppercase tracking-widest text-muted font-medium">
-                  Signed in as
+                  {t("userMenu.signedInAs")}
                 </p>
                 <p className="truncate text-sm font-semibold text-foreground">{user.username}</p>
               </div>
@@ -197,7 +200,7 @@ export function SettingsDropdown({
                       d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                     />
                   </svg>
-                  Profile Settings
+                  {t("userMenu.profileSettings")}
                 </Link>
 
                 <button
@@ -217,7 +220,7 @@ export function SettingsDropdown({
                       d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  Switch Nation View
+                  {t("countrySwitcher.switchNationView")}
                 </button>
 
                 {(() => {
@@ -228,7 +231,7 @@ export function SettingsDropdown({
                       user.patreonTier === "supporter-plus-plus") &&
                       user.isPatronActive);
                   if (!canAccessSandbox) return null;
-                  const { url, label } = getSandboxToggleInfo();
+                  const { url, isSandbox } = getSandboxToggleInfo();
                   return (
                     <a
                       href={url}
@@ -248,7 +251,7 @@ export function SettingsDropdown({
                           d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
                         />
                       </svg>
-                      Switch to {label}
+                      {isSandbox ? t("userMenu.switchToMainSite") : t("userMenu.switchToSandbox")}
                     </a>
                   );
                 })()}
@@ -268,7 +271,7 @@ export function SettingsDropdown({
                       d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
                     />
                   </svg>
-                  Sign Out
+                  {t("common.signOut")}
                 </button>
               </div>
 

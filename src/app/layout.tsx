@@ -3,6 +3,8 @@ import { Geist, Geist_Mono, Lora, Fraunces, JetBrains_Mono } from "next/font/goo
 import { redirect } from "next/navigation";
 import Script from "next/script";
 import { cookies, headers } from "next/headers";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import { NavbarWrapper } from "@/components/NavbarWrapper";
 import { BugReportFab } from "@/components/BugReportFab";
 import { StatusBar } from "@/components/StatusBar";
@@ -153,7 +155,13 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [cookieStore, requestHeaders] = await Promise.all([cookies(), headers()]);
+  const [cookieStore, requestHeaders, locale, intlMessages, t] = await Promise.all([
+    cookies(),
+    headers(),
+    getLocale(),
+    getMessages(),
+    getTranslations("layout"),
+  ]);
   const userAgent = requestHeaders.get("user-agent") ?? "";
   const isNativeApp = userAgent.includes("AHD-Android");
   const host = requestHeaders.get("host");
@@ -232,7 +240,7 @@ export default async function RootLayout({
   );
 
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${lora.variable} ${fraunces.variable} ${jetbrainsMono.variable} antialiased`}
       >
@@ -283,93 +291,95 @@ export default async function RootLayout({
           href="#main-content"
           className="absolute -top-24 left-4 z-[200] rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white outline-none transition-[top] duration-150 focus:top-4 focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
         >
-          Skip to main content
+          {t("skipToMainContent")}
         </a>
-        <RegisteredCountriesProvider
-          value={{
-            registered: registeredCountries,
-            enabled: enabledCountries,
-            preset: activePreset,
-          }}
-        >
-          <AuthDataProvider>
-            <CurrencyProvider>
-              <ThemeProvider>
-                <BrowserPreferencesProvider>
-                  <FeedbackProvider>
-                    <ToastProvider>
-                      <CharacterStatsProvider>
-                        {!isWikiSubdomain && (
-                          <NavbarWrapper
-                            displayMode={displayMode}
-                            initialPageCountry={initialPageCountry}
-                          />
-                        )}
-                        {!isWikiSubdomain && <BugReportFab displayMode={displayMode} />}
-                        {!isWikiSubdomain && <MassCrashAlertBanner />}
-                        {!isWikiSubdomain && <MaintenancePartialBanner />}
-                        <AuthConnectivityGate />
-                        <StatAllocationGate />
-                        <SeasonRecapGate />
-                        {/* overflow-x-CLIP, not -hidden: hidden makes this element the
+        <NextIntlClientProvider locale={locale} messages={intlMessages}>
+          <RegisteredCountriesProvider
+            value={{
+              registered: registeredCountries,
+              enabled: enabledCountries,
+              preset: activePreset,
+            }}
+          >
+            <AuthDataProvider>
+              <CurrencyProvider>
+                <ThemeProvider>
+                  <BrowserPreferencesProvider>
+                    <FeedbackProvider>
+                      <ToastProvider>
+                        <CharacterStatsProvider>
+                          {!isWikiSubdomain && (
+                            <NavbarWrapper
+                              displayMode={displayMode}
+                              initialPageCountry={initialPageCountry}
+                            />
+                          )}
+                          {!isWikiSubdomain && <BugReportFab displayMode={displayMode} />}
+                          {!isWikiSubdomain && <MassCrashAlertBanner />}
+                          {!isWikiSubdomain && <MaintenancePartialBanner />}
+                          <AuthConnectivityGate />
+                          <StatAllocationGate />
+                          <SeasonRecapGate />
+                          {/* overflow-x-CLIP, not -hidden: hidden makes this element the
                             scroll container for every `position: sticky` descendant
                             (admin status bar / sidebars / table headers), which both
                             displaces them by their `top` offset at rest and prevents
                             them from ever sticking to the viewport. clip gives the same
                             horizontal clipping without creating a scroll container. */}
-                        <main
-                          id="main-content"
-                          className="min-w-0 overflow-x-clip pb-14"
-                          tabIndex={-1}
-                        >
-                          <SiteTrafficTracker />
-                          {children}
-                        </main>
-                        {!isWikiSubdomain && !isNativeApp && <AdSlot />}
-                        {!isWikiSubdomain && !isNativeApp && <AdSenseSlot />}
-                        {!isWikiSubdomain && <SiteFooter displayMode={displayMode} />}
-                        {!isWikiSubdomain && <StatusBar />}
-                        {!isWikiSubdomain && <TutorialCoachMount />}
-                        {!isWikiSubdomain && <LiveRefreshBanner />}
-                        {!isNativeApp && <CookieConsentBanner />}
-                        {renderConsentManagedGoogleTags ? (
-                          <>
-                            <Script
-                              src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
-                              strategy="afterInteractive"
-                            />
-                            <Script
-                              id="google-analytics"
-                              strategy="afterInteractive"
-                              dangerouslySetInnerHTML={{
-                                __html: googleTagBootstrap,
-                              }}
-                            />
-                            <Script
-                              id="google-ads"
-                              strategy="afterInteractive"
-                              dangerouslySetInnerHTML={{
-                                __html: `gtag('config', '${GOOGLE_ADS_ID}');`,
-                              }}
-                            />
-                          </>
-                        ) : null}
-                        <Script
-                          id="umami-analytics"
-                          src="https://analytics.ahousedividedgame.com/script.js"
-                          data-website-id="caa223b2-469d-4325-9ad3-63e3e87ed3d1"
-                          strategy="afterInteractive"
-                        />
-                        <Analytics />
-                        <SpeedInsights />
-                      </CharacterStatsProvider>
-                    </ToastProvider>
-                  </FeedbackProvider>
-                </BrowserPreferencesProvider>
-              </ThemeProvider>
-            </CurrencyProvider>
-          </AuthDataProvider>
-        </RegisteredCountriesProvider>
+                          <main
+                            id="main-content"
+                            className="min-w-0 overflow-x-clip pb-14"
+                            tabIndex={-1}
+                          >
+                            <SiteTrafficTracker />
+                            {children}
+                          </main>
+                          {!isWikiSubdomain && !isNativeApp && <AdSlot />}
+                          {!isWikiSubdomain && !isNativeApp && <AdSenseSlot />}
+                          {!isWikiSubdomain && <SiteFooter displayMode={displayMode} />}
+                          {!isWikiSubdomain && <StatusBar />}
+                          {!isWikiSubdomain && <TutorialCoachMount />}
+                          {!isWikiSubdomain && <LiveRefreshBanner />}
+                          {!isNativeApp && <CookieConsentBanner />}
+                          {renderConsentManagedGoogleTags ? (
+                            <>
+                              <Script
+                                src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+                                strategy="afterInteractive"
+                              />
+                              <Script
+                                id="google-analytics"
+                                strategy="afterInteractive"
+                                dangerouslySetInnerHTML={{
+                                  __html: googleTagBootstrap,
+                                }}
+                              />
+                              <Script
+                                id="google-ads"
+                                strategy="afterInteractive"
+                                dangerouslySetInnerHTML={{
+                                  __html: `gtag('config', '${GOOGLE_ADS_ID}');`,
+                                }}
+                              />
+                            </>
+                          ) : null}
+                          <Script
+                            id="umami-analytics"
+                            src="https://analytics.ahousedividedgame.com/script.js"
+                            data-website-id="caa223b2-469d-4325-9ad3-63e3e87ed3d1"
+                            strategy="afterInteractive"
+                          />
+                          <Analytics />
+                          <SpeedInsights />
+                        </CharacterStatsProvider>
+                      </ToastProvider>
+                    </FeedbackProvider>
+                  </BrowserPreferencesProvider>
+                </ThemeProvider>
+              </CurrencyProvider>
+            </AuthDataProvider>
+          </RegisteredCountriesProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

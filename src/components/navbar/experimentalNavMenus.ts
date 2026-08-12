@@ -3,6 +3,8 @@ import { countryElectionsUrl } from "@/lib/urls";
 
 export interface ExperimentalSubNavItem {
   label: string;
+  /** Message id under the "nav" namespace; absent for data-driven labels. */
+  labelKey?: string;
   href: string;
   strong?: boolean;
   meta?: string;
@@ -20,11 +22,35 @@ export function buildLegislatureSubNavItems(countryId: CountryId): ExperimentalS
 
   if (usesLegacyCongressRoutes) {
     return [
-      { label: "House of Representatives", href: "/congress", strong: true, meta: "435" },
-      { label: "Senate", href: "/congress?chamber=senate", meta: "100" },
-      { label: "Committees", href: "/congress?tab=committees" },
-      { label: "Active legislation", href: "/congress?tab=legislation", metaClass: "text-primary" },
-      { label: "Floor schedule", href: "/congress?tab=schedule" },
+      {
+        label: "House of Representatives",
+        labelKey: "menus.legislature.house",
+        href: "/congress",
+        strong: true,
+        meta: "435",
+      },
+      {
+        label: "Senate",
+        labelKey: "menus.legislature.senate",
+        href: "/congress?chamber=senate",
+        meta: "100",
+      },
+      {
+        label: "Committees",
+        labelKey: "menus.legislature.committees",
+        href: "/congress?tab=committees",
+      },
+      {
+        label: "Active legislation",
+        labelKey: "menus.legislature.activeLegislation",
+        href: "/congress?tab=legislation",
+        metaClass: "text-primary",
+      },
+      {
+        label: "Floor schedule",
+        labelKey: "menus.legislature.floorSchedule",
+        href: "/congress?tab=schedule",
+      },
     ];
   }
 
@@ -54,18 +80,32 @@ export function buildElectionsSubNavItems(countryId: CountryId): ExperimentalSub
   const config = getCountryConfig(countryId);
   const usesLegacyCongressRoutes = config.legislature.path === "/country/us/legislature";
   const items: ExperimentalSubNavItem[] = [
-    { label: "Upcoming races", href: electionsBase, strong: true },
+    {
+      label: "Upcoming races",
+      labelKey: "menus.elections.upcomingRaces",
+      href: electionsBase,
+      strong: true,
+    },
   ];
 
   if (usesLegacyCongressRoutes) {
     items.push(
-      { label: "Primaries", href: "/elections?tab=primaries" },
-      { label: "Results", href: "/elections?tab=results" },
-      { label: "Candidate directory", href: "/politicians" }
+      {
+        label: "Primaries",
+        labelKey: "menus.elections.primaries",
+        href: "/elections?tab=primaries",
+      },
+      { label: "Results", labelKey: "menus.elections.results", href: "/elections?tab=results" },
+      {
+        label: "Candidate directory",
+        labelKey: "menus.elections.candidateDirectory",
+        href: "/politicians",
+      }
     );
   } else {
     items.push({
       label: "Candidate directory",
+      labelKey: "menus.elections.candidateDirectory",
       href: `/country/${countryId.toLowerCase()}/politicians`,
     });
   }
@@ -74,11 +114,15 @@ export function buildElectionsSubNavItems(countryId: CountryId): ExperimentalSub
 }
 
 /** Primary nav tab label/href for the legislature section. */
-export function getLegislatureNavTab(countryId: CountryId): { label: string; href: string } {
+export function getLegislatureNavTab(countryId: CountryId): {
+  label: string;
+  labelKey?: string;
+  href: string;
+} {
   const config = getCountryConfig(countryId);
   const usesLegacyCongressRoutes = config.legislature.path === "/country/us/legislature";
   if (usesLegacyCongressRoutes) {
-    return { label: "Congress", href: "/congress" };
+    return { label: "Congress", labelKey: "menus.legislature.congress", href: "/congress" };
   }
   return { label: config.legislature.name, href: config.legislature.path };
 }

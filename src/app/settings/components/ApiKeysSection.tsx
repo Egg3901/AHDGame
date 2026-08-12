@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
 
 type UserApiKey = {
   _id: string;
@@ -12,6 +13,8 @@ type UserApiKey = {
 };
 
 export function ApiKeysSection() {
+  const t = useTranslations("settings");
+  const locale = useLocale();
   const [userKeys, setUserKeys] = useState<UserApiKey[]>([]);
   const [userKeyName, setUserKeyName] = useState("");
   const [userKeyScope, setUserKeyScope] = useState<"public" | "private">("public");
@@ -42,7 +45,7 @@ export function ApiKeysSection() {
       setUserKeyName("");
       void loadUserKeys();
     } else {
-      setError(data.error || "Failed to create API key");
+      setError(data.error || t("apiKeys.createFailed"));
     }
   };
 
@@ -58,9 +61,9 @@ export function ApiKeysSection() {
   const scopeLabel = (scope: string) => {
     switch (scope) {
       case "public":
-        return "Read only";
+        return t("apiKeys.readOnly");
       case "private":
-        return "Read + send funds";
+        return t("apiKeys.readSend");
       default:
         return scope;
     }
@@ -80,9 +83,9 @@ export function ApiKeysSection() {
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted">
-        API keys allow external applications to interact with your account.{" "}
+        {t("apiKeys.intro")}{" "}
         <Link href="/api-guide" className="text-primary underline hover:text-primary/80">
-          View API documentation →
+          {t("apiKeys.viewDocs")}
         </Link>
       </p>
 
@@ -94,16 +97,13 @@ export function ApiKeysSection() {
 
       {/* Personal API Keys */}
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-foreground">Personal API Keys</h3>
-        <p className="text-xs text-muted">
-          Keys tied to your account. Public keys can only read public data. Private keys can also
-          send campaign funds and trade forex on your behalf — treat them like a password.
-        </p>
+        <h3 className="text-sm font-semibold text-foreground">{t("apiKeys.personalTitle")}</h3>
+        <p className="text-xs text-muted">{t("apiKeys.personalHint")}</p>
         <div className="flex gap-2">
           <input
             value={userKeyName}
             onChange={(e) => setUserKeyName(e.target.value)}
-            placeholder="Key name"
+            placeholder={t("apiKeys.keyNamePlaceholder")}
             className="rounded border border-card-border bg-background px-3 py-2 text-sm"
           />
           <select
@@ -111,19 +111,19 @@ export function ApiKeysSection() {
             onChange={(e) => setUserKeyScope(e.target.value as "public" | "private")}
             className="rounded border border-card-border bg-background px-3 py-2 text-sm"
           >
-            <option value="public">Read only</option>
-            <option value="private">Read + send funds</option>
+            <option value="public">{t("apiKeys.readOnly")}</option>
+            <option value="private">{t("apiKeys.readSend")}</option>
           </select>
           <button
             className="rounded bg-primary px-3 py-2 text-sm text-primary-foreground"
             onClick={createUserKey}
           >
-            Create key
+            {t("apiKeys.createKey")}
           </button>
         </div>
         {newUserToken ? (
           <div className="rounded border border-card-border bg-background p-3 text-xs break-all">
-            Copy now (shown once): <strong>{newUserToken}</strong>
+            {t("apiKeys.copyOnce")} <strong>{newUserToken}</strong>
           </div>
         ) : null}
         <div className="space-y-2">
@@ -136,19 +136,23 @@ export function ApiKeysSection() {
                 <div className="font-medium">{k.name}</div>
                 <div className="text-xs text-muted">
                   <span className={scopeColor(k.scope)}>{scopeLabel(k.scope)}</span> ·{" "}
-                  {k.requestCount ?? 0} requests · last used{" "}
-                  {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString("en-US") : "never"}
+                  {t("apiKeys.requests", { count: k.requestCount ?? 0 })} ·{" "}
+                  {t("apiKeys.lastUsed", {
+                    when: k.lastUsedAt
+                      ? new Date(k.lastUsedAt).toLocaleString(locale)
+                      : t("apiKeys.never"),
+                  })}
                 </div>
               </div>
               <button
                 className="rounded border border-red-500/40 px-2 py-1 text-xs text-red-300"
                 onClick={() => revokeUserKey(k._id)}
               >
-                Revoke
+                {t("apiKeys.revoke")}
               </button>
             </div>
           ))}
-          {userKeys.length === 0 && <p className="text-xs text-muted">No personal API keys yet.</p>}
+          {userKeys.length === 0 && <p className="text-xs text-muted">{t("apiKeys.noKeys")}</p>}
         </div>
       </div>
     </div>

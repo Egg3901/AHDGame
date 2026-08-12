@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 /**
  * Entry point to the tutorial hub. Rendered on the profile page.
@@ -9,6 +10,7 @@ import Link from "next/link";
  * strictly more useful than one button that only does one of those.
  */
 export function ReplayTutorialButton({ className }: { className?: string }) {
+  const t = useTranslations("tutorial");
   return (
     <Link
       href="/tutorial"
@@ -18,7 +20,7 @@ export function ReplayTutorialButton({ className }: { className?: string }) {
       }
     >
       <span aria-hidden>🎓</span>
-      Tutorial
+      {t("hub.entryLabel")}
     </Link>
   );
 }

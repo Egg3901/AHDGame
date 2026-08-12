@@ -1,0 +1,194 @@
+{
+  "nav": {
+    "common": {
+      "profile": "Profil",
+      "actions": "Aktionen",
+      "world": "Welt",
+      "help": "Hilfe",
+      "staff": "Team",
+      "settings": "Einstellungen",
+      "wallet": "Geldbörse",
+      "notifications": "Benachrichtigungen",
+      "search": "Suche",
+      "signIn": "Anmelden",
+      "register": "Registrieren",
+      "signOut": "Abmelden",
+      "active": "Aktiv",
+      "imperial": "Imperial",
+      "back": "Zurück",
+      "preview": "Vorschau",
+      "mainNavigation": "Hauptnavigation",
+      "openMenu": "Menü öffnen",
+      "closeMenu": "Menü schließen",
+      "userMenu": "Benutzermenü",
+      "capturingScreenshot": "Screenshot wird erstellt…",
+      "quickSuggest": "Schnellvorschlag (Screenshot)"
+    },
+    "menus": {
+      "world": {
+        "myCorporation": "Mein Unternehmen",
+        "hallOfFame": "Ruhmeshalle",
+        "nations": "Nationen",
+        "map": "Karte",
+        "crises": "Krisen",
+        "conflicts": "Konflikte",
+        "internationalOrgs": "Internationale Organisationen",
+        "sectors": "Sektoren",
+        "unions": "Gewerkschaften",
+        "stockMarket": "Börse",
+        "forex": "Devisenmarkt",
+        "trade": "Handel",
+        "news": "Nachrichten",
+        "imf": "IWF",
+        "groups": {
+          "economy": "Wirtschaft",
+          "diplomacy": "Diplomatie",
+          "other": "Sonstiges",
+          "leaderboards": "Bestenlisten"
+        },
+        "headers": {
+          "leaderboard": "Bestenliste",
+          "beta": "Beta",
+          "markets": "Märkte",
+          "international": "International",
+          "browse": "Entdecken",
+          "corporate": "Unternehmen"
+        },
+        "banking": "Bankwesen"
+      },
+      "staff": {
+        "adminPanel": "Admin-Panel",
+        "modPanel": "Mod-Panel",
+        "opsDashboard": "Ops-Dashboard",
+        "docs": "Doku",
+        "tickets": "Tickets",
+        "suggestions": "Vorschläge"
+      },
+      "nation": {
+        "homeNation": "Heimatnation",
+        "homeSuffix": "(Heimat)",
+        "nationalDetails": "Nationale Details",
+        "nationalDetailsFor": "Nationale Details: {country}",
+        "cabinetOffice": "Kabinettsposten",
+        "myParty": "Meine Partei",
+        "myPoliticalOperations": "Meine politischen Operationen",
+        "sections": {
+          "government": "Regierung",
+          "politics": "Politik",
+          "economy": "Wirtschaft",
+          "other": "Sonstiges"
+        },
+        "elections": "Wahlen",
+        "parties": "Politische Parteien",
+        "politicians": "Politiker",
+        "presidentialElection": "Präsidentschaftswahl",
+        "politicalMetrics": "Politische Kennzahlen",
+        "referendums": "Referenden",
+        "economy": "Wirtschaft",
+        "budget": "Staatshaushalt",
+        "metrics": "Nationale Kennzahlen",
+        "unions": "Gewerkschaften",
+        "map": "Karte",
+        "policy": "Richtlinien",
+        "scotus": "Oberster Gerichtshof",
+        "charterSingle": "Charta: {name}",
+        "chartersMultiple": "Parteichartas ({count})",
+        "banking": "Bankwesen"
+      },
+      "legislature": {
+        "congress": "Kongress",
+        "house": "Repräsentantenhaus",
+        "senate": "Senat",
+        "committees": "Ausschüsse",
+        "activeLegislation": "Aktive Gesetzgebung",
+        "floorSchedule": "Sitzungsplan"
+      },
+      "elections": {
+        "upcomingRaces": "Anstehende Wahlen",
+        "primaries": "Vorwahlen",
+        "results": "Ergebnisse",
+        "candidateDirectory": "Kandidatenverzeichnis"
+      }
+    },
+    "state": {
+      "overview": "Staatsübersicht",
+      "economy": "Staatswirtschaft",
+      "legislature": "Staatsparlament",
+      "office": "Amt",
+      "governorOffice": "Gouverneursamt",
+      "myElection": "Meine Wahl",
+      "myElectionNone": "Meine Wahl: keine",
+      "myOffice": "Mein Amt"
+    },
+    "countrySwitcher": {
+      "switchNationView": "Nationenansicht wechseln",
+      "switchNationViewCurrent": "Nationenansicht wechseln: aktuell {country}",
+      "selectNation": "Nation auswählen",
+      "homeBadge": "★ Heimat"
+    },
+    "notifications": {
+      "openInbox": "Posteingang öffnen →",
+      "awaitingInput": "{count, plural, one {# wartet auf deine Eingabe} other {# warten auf deine Eingabe}}",
+      "empty": "Noch keine Benachrichtigungen",
+      "needsYou": "Aktion nötig",
+      "markRead": "Als gelesen markieren",
+      "delete": "Löschen",
+      "ariaUnread": "Benachrichtigungen ({count} ungelesen)"
+    },
+    "help": {
+      "wikiGuides": "Wiki/Anleitungen",
+      "guides": "Anleitungen",
+      "about": "Über das Spiel",
+      "suggestions": "Vorschläge",
+      "patreon": "Auf Patreon unterstützen",
+      "supporterWall": "Unterstützerwand",
+      "emailSupport": "Support per E-Mail",
+      "serverStatus": "Serverstatus",
+      "privacy": "Datenschutzerklärung",
+      "terms": "Nutzungsbedingungen",
+      "resources": "Ressourcen",
+      "community": "Community",
+      "helpResources": "Hilfe / Ressourcen",
+      "helpInformation": "Hilfe/Informationen"
+    },
+    "userMenu": {
+      "characters": "Charaktere",
+      "profileSettings": "Profileinstellungen",
+      "signedInAs": "Angemeldet als",
+      "switchToMainSite": "Zur Hauptseite wechseln",
+      "switchToSandbox": "Zur Sandbox wechseln",
+      "signOutAria": "Abmelden"
+    },
+    "footer": {
+      "tagline": "Politik- und Wirtschaftssimulation",
+      "byLakeside": "ein Spiel von Lakeside Games",
+      "about": "Über uns",
+      "contact": "Kontakt",
+      "faq": "FAQ",
+      "privacy": "Datenschutzerklärung",
+      "terms": "Nutzungsbedingungen"
+    },
+    "wrapper": {
+      "demographicsToast": "Lege den Hintergrund deines Charakters unter Einstellungen > Hintergrund fest"
+    },
+    "search": {
+      "placeholder": "Charaktere, Unternehmen, Gesetze suchen…",
+      "ariaLabel": "Charaktere, Unternehmen, Gesetze und Wahlen suchen",
+      "noResults": "Keine Ergebnisse für \"{query}\"",
+      "trySearchingFor": "Suche zum Beispiel nach",
+      "types": {
+        "politician": "Politiker",
+        "corporation": "Unternehmen",
+        "seat": "Sitz",
+        "region": "Region",
+        "election": "Wahl",
+        "bill": "Gesetzentwurf",
+        "page": "Wiki",
+        "commodity": "Rohstoff",
+        "currency": "Währung",
+        "bond": "Anleihe",
+        "admin": "Admin"
+      }
+    }
+  }
+}

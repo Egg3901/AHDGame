@@ -17,6 +17,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -118,6 +119,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   activePresidentElectionId: _activePresidentElectionId,
   activePresidentElectionSeatId: _activePresidentElectionSeatId,
 }: ExperimentalNavbarProps) {
+  const t = useTranslations("nav");
   const pathname = usePathname();
   const { pageCountry, userCountry } = useCountryContext(
     homeState?.id,
@@ -245,12 +247,12 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
 
   // State legislature label (UK devolution-aware).
   const stateLegislatureLabel = (() => {
-    if (!homeState || homeState.countryId !== "UK") return "State Legislature";
+    if (!homeState || homeState.countryId !== "UK") return t("state.legislature");
     const nation = UK_NATIONS.find((n) => n.id === homeState.id);
     if (nation?.devolvedBody) return nation.devolvedBody;
     const region = UK_REGIONS.find((r) => r.id === homeState.id);
     const parentNation = UK_NATIONS.find((n) => n.id === region?.nationId);
-    return parentNation?.devolvedBody ?? "State Legislature";
+    return parentNation?.devolvedBody ?? t("state.legislature");
   })();
 
   const canAccessSandbox =
@@ -267,7 +269,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   const navItems: ExperimentalNavItem[] = [];
 
   if (showProfile && !isImperialMode) {
-    navItems.push({ label: "Actions", href: "/actions", icon: "Actions" });
+    navItems.push({ label: t("common.actions"), href: "/actions", icon: "Actions" });
   }
 
   if (showProfile && homeState) {
@@ -288,7 +290,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
         icon: "Nation",
         useFlag: true,
       },
-      { label: "World", href: "/world", key: "world", icon: "World" }
+      { label: t("common.world"), href: "/world", key: "world", icon: "World" }
     );
   }
 
@@ -298,8 +300,8 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
           href: activeCharters.length === 1 ? `/charters/${activeCharters[0]!.id}` : "/charters",
           label:
             activeCharters.length === 1
-              ? `Charter — ${activeCharters[0]!.proposedName}`
-              : `Party Charters (${activeCharters.length})`,
+              ? t("menus.nation.charterSingle", { name: activeCharters[0]!.proposedName })
+              : t("menus.nation.chartersMultiple", { count: activeCharters.length }),
         }
       : null;
 
@@ -400,10 +402,10 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               <>
                 <div className="px-2.5 pb-1 pt-2 flex items-center gap-2">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-                    Leaderboard
+                    {t("menus.world.headers.leaderboard")}
                   </span>
                   <span className="rounded-full bg-warning/15 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-warning">
-                    Beta
+                    {t("menus.world.headers.beta")}
                   </span>
                 </div>
               </>
@@ -411,16 +413,16 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
             {showMarketsHeader && (
               <>
                 <div className="my-1 mx-2.5 h-px bg-card-border" />
-                <MenuLabel>Markets</MenuLabel>
+                <MenuLabel>{t("menus.world.headers.markets")}</MenuLabel>
               </>
             )}
             {item.section === "main" && item.id === "nations" && (
-              <MenuLabel>International</MenuLabel>
+              <MenuLabel>{t("menus.world.headers.international")}</MenuLabel>
             )}
             {item.section === "main" && item.id === "sectors" && (
               <>
                 <div className="my-1 mx-2.5 h-px bg-card-border" />
-                <MenuLabel>Browse</MenuLabel>
+                <MenuLabel>{t("menus.world.headers.browse")}</MenuLabel>
               </>
             )}
             <MenuRow
@@ -429,7 +431,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               strong={item.id === "legacyLeaderboard"}
               dot={item.primary ? "bg-primary" : undefined}
             >
-              {item.label}
+              {t(item.labelKey)}
             </MenuRow>
           </React.Fragment>
         );
@@ -446,7 +448,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
       padded={false}
     >
       <div className="p-1.5">
-        <MenuLabel>Home Nation</MenuLabel>
+        <MenuLabel>{t("menus.nation.homeNation")}</MenuLabel>
         <MenuRow href={countryUrl(userCountry as CountryId)} onNavigate={closeAll} strong>
           {getCountryDisplayName(userCountry as CountryId, preset)}
         </MenuRow>
@@ -455,7 +457,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
             href={cabinetOfficeUrl(cabinetOffice.countryCode, cabinetOffice.positionId)}
             onNavigate={closeAll}
           >
-            Cabinet Office
+            {t("menus.nation.cabinetOffice")}
           </MenuRow>
         )}
         {currentParty && (
@@ -463,17 +465,17 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
             href={partyUrl(currentParty.countryId ?? pageCountry, currentParty.id)}
             onNavigate={closeAll}
           >
-            My Party · {currentParty.name}
+            {t("menus.nation.myParty")} · {currentParty.name}
           </MenuRow>
         )}
         {userCountry === "US" && (
           <MenuRow href="/political-operations" onNavigate={closeAll}>
-            My Political Operations
+            {t("menus.nation.myPoliticalOperations")}
           </MenuRow>
         )}
       </div>
       <div className="border-t border-card-border p-1.5">
-        <MenuLabel>National Details</MenuLabel>
+        <MenuLabel>{t("menus.nation.nationalDetails")}</MenuLabel>
         {nationalDetailSections.map((section) => {
           const isCollapsible = section.collapsible === true;
           const isExpanded = !isCollapsible || expandedNationSections[section.title] === true;
@@ -491,7 +493,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                   aria-expanded={isExpanded}
                   className="flex w-full items-center justify-between px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted/80 transition-colors hover:text-foreground"
                 >
-                  {section.title}
+                  {t(section.titleKey)}
                   {/* Explicit `text-muted` — same fix as CollapsibleNavSection
                       (mobile): the chevron must read at full contrast even
                       though the label itself stays a faint small-caps tag. */}
@@ -509,13 +511,13 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                 </button>
               ) : (
                 <div className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted/80">
-                  {section.title}
+                  {t(section.titleKey)}
                 </div>
               )}
               {isExpanded &&
                 section.items.map((item) => (
                   <MenuRow key={item.id} href={item.href} onNavigate={closeAll}>
-                    {item.label}
+                    {item.labelKey ? t(item.labelKey) : item.label}
                   </MenuRow>
                 ))}
             </div>
@@ -534,7 +536,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
     >
       <MenuLabel>{homeState.name}</MenuLabel>
       <MenuRow href={regionUrl(homeState.countryId, homeState.id)} onNavigate={closeAll} strong>
-        State Overview
+        {t("state.overview")}
       </MenuRow>
       {currentParty && (
         <MenuRow
@@ -548,7 +550,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
         href={`${regionUrl(homeState.countryId, homeState.id)}?tab=economy`}
         onNavigate={closeAll}
       >
-        State Economy
+        {t("state.economy")}
       </MenuRow>
       <MenuRow href={regionLegislatureUrl(homeState.countryId, homeState.id)} onNavigate={closeAll}>
         {stateLegislatureLabel}
@@ -558,7 +560,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
           href={`/country/${homeState.countryId.toLowerCase()}/region/${homeState.id.toLowerCase()}/office`}
           onNavigate={closeAll}
         >
-          Governor Office
+          {t("state.governorOffice")}
         </MenuRow>
       )}
       {cabinetOffice && (
@@ -566,7 +568,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
           href={`/country/${cabinetOffice.countryCode}/executive/cabinet/${cabinetOffice.positionId}/office`}
           onNavigate={closeAll}
         >
-          Cabinet Office · {cabinetOffice.positionName}
+          {t("menus.nation.cabinetOffice")} · {cabinetOffice.positionName}
         </MenuRow>
       )}
       {activeElection ? (
@@ -574,9 +576,9 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
           href={`/elections/${activeElection.seatId ?? activeElection.id}`}
           onNavigate={closeAll}
           metaClass="text-primary"
-          meta="Active"
+          meta={t("common.active")}
         >
-          My Election
+          {t("state.myElection")}
         </MenuRow>
       ) : null}
     </DropdownPanel>
@@ -589,21 +591,21 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
       align="right"
       width="w-[220px]"
     >
-      <MenuLabel>Resources</MenuLabel>
+      <MenuLabel>{t("help.resources")}</MenuLabel>
       <MenuRow
         href={showWiki ? "https://wiki.ahousedividedgame.com" : "/guides"}
         onNavigate={closeAll}
       >
-        {showWiki ? "Wiki / Guides" : "Guides"}
+        {showWiki ? t("help.wikiGuides") : t("help.guides")}
       </MenuRow>
       <MenuRow href="/about" onNavigate={closeAll}>
-        About
+        {t("help.about")}
       </MenuRow>
       <MenuRow href="/feedback" onNavigate={closeAll}>
-        Suggestions
+        {t("help.suggestions")}
       </MenuRow>
       <div className="my-1 mx-2.5 h-px bg-card-border" />
-      <MenuLabel>Community</MenuLabel>
+      <MenuLabel>{t("help.community")}</MenuLabel>
       <a
         href={HELP_DISCORD_URL}
         target="_blank"
@@ -620,7 +622,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
         onClick={closeAll}
         className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-fg-2 transition-colors hover:bg-white/5"
       >
-        Support on Patreon
+        {t("help.patreon")}
       </a>
       <a
         href={HELP_SUPPORTER_WALL_URL}
@@ -629,14 +631,14 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
         onClick={closeAll}
         className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-fg-2 transition-colors hover:bg-white/5"
       >
-        Supporter Wall
+        {t("help.supporterWall")}
       </a>
       <a
         href={HELP_SUPPORT_EMAIL}
         onClick={closeAll}
         className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-fg-2 transition-colors hover:bg-white/5"
       >
-        Email Support
+        {t("help.emailSupport")}
       </a>
       {onOpenFeedback && (
         <button
@@ -648,15 +650,15 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
           disabled={feedbackCapturing}
           className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-fg-2 transition-colors hover:bg-white/5 disabled:cursor-wait disabled:opacity-70"
         >
-          {feedbackCapturing ? "Capturing screenshot…" : "Quick suggest (screenshot)"}
+          {feedbackCapturing ? t("common.capturingScreenshot") : t("common.quickSuggest")}
         </button>
       )}
       <div className="my-1 mx-2.5 h-px bg-card-border" />
       <MenuRow href="/privacy" onNavigate={closeAll}>
-        Privacy Policy
+        {t("help.privacy")}
       </MenuRow>
       <MenuRow href="/terms" onNavigate={closeAll}>
-        Terms of Service
+        {t("help.terms")}
       </MenuRow>
     </DropdownPanel>
   );
@@ -668,7 +670,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
       align="right"
       width="w-52"
     >
-      <MenuLabel>Staff</MenuLabel>
+      <MenuLabel>{t("common.staff")}</MenuLabel>
       {staffSubItems.map((item) =>
         item.external ? (
           <a
@@ -679,11 +681,11 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
             onClick={closeAll}
             className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-fg-2 transition-colors hover:bg-white/5"
           >
-            {item.label}
+            {t(item.labelKey)}
           </a>
         ) : (
           <MenuRow key={item.label} href={item.href} onNavigate={closeAll}>
-            {item.label}
+            {t(item.labelKey)}
           </MenuRow>
         )
       )}
@@ -718,7 +720,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
     <>
       <nav
         className="ahd-navbar-enter sticky top-0 z-50 border-b border-card-border/60 bg-card/50 shadow-panel backdrop-blur-xl"
-        aria-label="Main navigation"
+        aria-label={t("common.mainNavigation")}
         data-feedback-ignore="true"
       >
         {/* The signature top accent + shimmer is rendered globally by
@@ -816,7 +818,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                     className={navTabClassName(open === "help")}
                   >
                     <NavIcon name="Help" />
-                    <NavItemLabel>Help</NavItemLabel>
+                    <NavItemLabel>{t("common.help")}</NavItemLabel>
                     <NavItemChevron open={open === "help"} />
                   </button>
                   {open === "help" && helpMenu}
@@ -836,7 +838,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                       className={navTabClassName(open === "staff")}
                     >
                       <NavIcon name="Staff" />
-                      <NavItemLabel>Staff</NavItemLabel>
+                      <NavItemLabel>{t("common.staff")}</NavItemLabel>
                       <NavItemChevron open={open === "staff"} />
                     </button>
                     {open === "staff" && staffMenu}
@@ -852,8 +854,10 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                     type="button"
                     onClick={() => toggle("country")}
                     aria-expanded={open === "country"}
-                    aria-label={`Switch nation view — currently ${getCountryDisplayName(pageCountry as CountryId, preset)}`}
-                    title="Switch nation view"
+                    aria-label={t("countrySwitcher.switchNationViewCurrent", {
+                      country: getCountryDisplayName(pageCountry as CountryId, preset),
+                    })}
+                    title={t("countrySwitcher.switchNationView")}
                     className="flex h-9 items-center gap-2 rounded-lg border border-card-border bg-card px-2.5 text-xs font-medium text-fg-2 transition-colors hover:border-muted/50 hover:text-foreground"
                   >
                     <CountryFlag country={pageCountry} size="sm" />
@@ -867,7 +871,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                       align="right"
                       width="w-64"
                     >
-                      <MenuLabel>Switch nation view</MenuLabel>
+                      <MenuLabel>{t("countrySwitcher.switchNationView")}</MenuLabel>
                       {switchableCountries.map((c) => {
                         const isCurrent = c === pageCountry;
                         const isHome = c === userCountry;
@@ -887,7 +891,9 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                             </span>
                             <span className="ml-auto flex items-center gap-1.5">
                               {isHome && (
-                                <span className="text-[10px] font-medium text-muted">★ Home</span>
+                                <span className="text-[10px] font-medium text-muted">
+                                  {t("countrySwitcher.homeBadge")}
+                                </span>
                               )}
                               {isCurrent && (
                                 <svg
@@ -925,7 +931,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                 <button
                   type="button"
                   onClick={() => setSearchOpen((v) => !v)}
-                  aria-label="Search"
+                  aria-label={t("common.search")}
                   aria-expanded={searchOpen}
                   className={`flex h-9 w-9 items-center justify-center rounded-lg border border-card-border bg-card transition-colors hover:border-muted/50 ${
                     searchOpen ? "text-foreground" : "text-muted hover:text-foreground"
@@ -948,7 +954,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                 {showProfile && (
                   <Link
                     href="/portfolio?tab=currency"
-                    aria-label="Wallet"
+                    aria-label={t("common.wallet")}
                     aria-current={isNavActive(pathname, "/portfolio") ? "page" : undefined}
                     className={`flex h-9 w-9 items-center justify-center rounded-lg border border-card-border bg-card transition-colors hover:border-muted/50 ${isNavActive(pathname, "/portfolio") ? "text-foreground" : "text-muted hover:text-foreground"}`}
                   >
@@ -974,7 +980,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                         type="button"
                         onClick={() => toggle("user")}
                         aria-expanded={open === "user"}
-                        aria-label="User menu"
+                        aria-label={t("common.userMenu")}
                         className={`relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-card-border bg-card transition-opacity hover:opacity-90 ${open === "user" ? "ring-2 ring-primary/40" : ""}`}
                       >
                         <Avatar
@@ -994,13 +1000,13 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                         href="/login"
                         className="text-[13px] font-medium text-muted transition-colors hover:text-foreground"
                       >
-                        Sign in
+                        {t("common.signIn")}
                       </Link>
                       <Link
                         href="/register"
                         className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3.5 text-[13px] font-semibold text-white transition-all hover:bg-primary/90"
                       >
-                        Register
+                        {t("common.register")}
                       </Link>
                     </div>
                   )}
@@ -1031,7 +1037,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                 <button
                   type="button"
                   onClick={() => setMobileMenuOpen(true)}
-                  aria-label="Open menu"
+                  aria-label={t("common.openMenu")}
                   className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-card-border bg-card"
                 >
                   <Avatar
@@ -1047,7 +1053,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen((v) => !v)}
-                aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+                aria-label={mobileMenuOpen ? t("common.closeMenu") : t("common.openMenu")}
                 aria-expanded={mobileMenuOpen}
                 aria-controls="experimental-mobile-menu"
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-card-border bg-card text-foreground transition-colors hover:bg-white/5"

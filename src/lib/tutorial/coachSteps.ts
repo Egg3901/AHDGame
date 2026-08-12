@@ -17,6 +17,10 @@ import type { TutorialFactKey } from "@/lib/tutorial/facts";
  *
  * Copy is country-neutral: region nouns, the legislature name, and deep links
  * all come from the character's country config, so nothing reads as US-only.
+ *
+ * Copy fields on a step (`title`, `body`, `hint`, `next`, `readMore.label`)
+ * hold message keys under the "tutorial" namespace; the coach resolves them
+ * with useTranslations and passes the country context as ICU values.
  */
 
 export const COMMUNITY_DISCORD_URL = "https://discord.gg/DmF8zJJuqN";

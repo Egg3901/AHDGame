@@ -5,12 +5,19 @@ export type SettingsBucketId = "account" | "game" | "interface" | "audio" | "dat
 
 export interface SettingsBucket {
   id: SettingsBucketId;
-  label: string;
-  eyebrow: string;
-  summary: string;
+  /** Message ids under the "settings" namespace, resolved via t() in the rendering component. */
+  labelKey: string;
+  eyebrowKey: string;
+  summaryKey: string;
   sectionIds: SectionId[];
   quickKeywords: string[];
 }
+
+const bucketKeys = (id: SettingsBucketId) => ({
+  labelKey: `buckets.${id}.label`,
+  eyebrowKey: `buckets.${id}.eyebrow`,
+  summaryKey: `buckets.${id}.summary`,
+});
 
 /**
  * The order is part of the information architecture. Keep these buckets stable
@@ -19,9 +26,7 @@ export interface SettingsBucket {
 export const CONTROL_PANEL_BUCKETS: SettingsBucket[] = [
   {
     id: "account",
-    label: "Account",
-    eyebrow: "Identity & access",
-    summary: "Sign-in methods, security, supporter benefits, and account actions.",
+    ...bucketKeys("account"),
     sectionIds: [
       "account-profile",
       "identity",
@@ -35,9 +40,7 @@ export const CONTROL_PANEL_BUCKETS: SettingsBucket[] = [
   },
   {
     id: "game",
-    label: "Game",
-    eyebrow: "Play preferences",
-    summary: "Your country, live turn cadence, notifications, and character setup.",
+    ...bucketKeys("game"),
     sectionIds: [
       "profile",
       "imperial-profile",
@@ -59,25 +62,19 @@ export const CONTROL_PANEL_BUCKETS: SettingsBucket[] = [
   },
   {
     id: "interface",
-    label: "Interface",
-    eyebrow: "Look & feel",
-    summary: "Theme, navigation, status bar, accessibility, and language.",
+    ...bucketKeys("interface"),
     sectionIds: ["appearance"],
     quickKeywords: ["theme", "accessibility", "language", "contrast", "motion", "status bar"],
   },
   {
     id: "audio",
-    label: "Audio",
-    eyebrow: "Sound",
-    summary: "Game sound level, event sounds, and profile music.",
+    ...bucketKeys("audio"),
     sectionIds: ["campaign-song", "royal-anthem"],
     quickKeywords: ["sound", "volume", "audio", "event sound", "music", "campaign song", "anthem"],
   },
   {
     id: "data",
-    label: "Data",
-    eyebrow: "Storage & automation",
-    summary: "Export or import device preferences, clear local data, and manage API access.",
+    ...bucketKeys("data"),
     sectionIds: ["api-keys", "retired-characters"],
     quickKeywords: ["export", "import", "cache", "reset", "api", "key", "retired", "history"],
   },
@@ -98,7 +95,7 @@ export function bucketForSection(id: SectionId) {
   return CONTROL_PANEL_BUCKETS.find((bucket) => bucket.sectionIds.includes(id));
 }
 
-export function sectionMatchesQuery(section: SectionDef, query: string) {
+export function sectionMatchesQuery(section: SectionDef, query: string, localizedText = "") {
   const normalized = query.trim().toLocaleLowerCase();
   if (!normalized) return true;
   const aliases: Partial<Record<SectionId, string>> = {
@@ -115,15 +112,19 @@ export function sectionMatchesQuery(section: SectionDef, query: string) {
     "api-keys": "automation developer data",
     "retired-characters": "history records archive wrapped",
   };
-  return `${section.label} ${section.summary} ${section.id.replaceAll("-", " ")} ${aliases[section.id] ?? ""}`
+  return `${localizedText} ${section.id.replaceAll("-", " ")} ${aliases[section.id] ?? ""}`
     .toLocaleLowerCase()
     .includes(normalized);
 }
 
-export function bucketQuickSettingsMatch(bucket: SettingsBucket, query: string) {
+export function bucketQuickSettingsMatch(
+  bucket: SettingsBucket,
+  query: string,
+  localizedText = ""
+) {
   const normalized = query.trim().toLocaleLowerCase();
   if (!normalized) return true;
-  return `${bucket.label} ${bucket.summary} ${bucket.quickKeywords.join(" ")}`
+  return `${localizedText} ${bucket.quickKeywords.join(" ")}`
     .toLocaleLowerCase()
     .includes(normalized);
 }

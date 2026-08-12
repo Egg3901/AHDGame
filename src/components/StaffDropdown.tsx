@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { DROPDOWN_PANEL_CLASS } from "@/components/navbar/dropdownStyles";
 import {
   isStaffUser,
@@ -20,6 +21,7 @@ type StaffDropdownProps = StaffNavOpts;
  * hidden entirely for non-staff.
  */
 export function StaffDropdown({ isAdmin = false, isModerator = false }: StaffDropdownProps) {
+  const t = useTranslations("nav");
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -58,7 +60,7 @@ export function StaffDropdown({ isAdmin = false, isModerator = false }: StaffDro
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
-        Staff
+        {t("common.staff")}
         <svg
           className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
           fill="none"
@@ -86,7 +88,7 @@ export function StaffDropdown({ isAdmin = false, isModerator = false }: StaffDro
                   className={itemClass}
                   role="menuitem"
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </a>
               ) : (
                 <Link
@@ -96,7 +98,7 @@ export function StaffDropdown({ isAdmin = false, isModerator = false }: StaffDro
                   className={itemClass}
                   role="menuitem"
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </Link>
               )
             )}

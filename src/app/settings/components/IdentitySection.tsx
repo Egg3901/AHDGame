@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import { MessageBanner, SpinnerIcon } from "./shared";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 
@@ -51,6 +52,7 @@ function ProviderCard({
   icon: React.ReactNode;
   onUnlink: () => void;
 }) {
+  const t = useTranslations("settings");
   const [unlinking, setUnlinking] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
@@ -61,13 +63,13 @@ function ProviderCard({
       const res = await fetch(unlinkUrl, { method: "POST" });
       if (res.ok) {
         onUnlink();
-        setMsg({ text: `${provider} unlinked successfully.`, ok: true });
+        setMsg({ text: t("identity.unlinked", { provider }), ok: true });
       } else {
         const data = await res.json();
-        setMsg({ text: data.error ?? "Failed to unlink.", ok: false });
+        setMsg({ text: data.error ?? t("identity.unlinkFailed"), ok: false });
       }
     } catch {
-      setMsg({ text: "Network error.", ok: false });
+      setMsg({ text: t("common.networkError"), ok: false });
     } finally {
       setUnlinking(false);
       setTimeout(() => setMsg(null), 3000);
@@ -81,7 +83,7 @@ function ProviderCard({
           {avatarUrl && (
             <Image
               src={avatarUrl}
-              alt={`${provider} avatar`}
+              alt={t("identity.avatarAlt", { provider })}
               width={48}
               height={48}
               className="rounded-lg"
@@ -100,10 +102,10 @@ function ProviderCard({
             {unlinking ? (
               <span className="flex items-center gap-2">
                 <SpinnerIcon />
-                Unlinking...
+                {t("identity.unlinking")}
               </span>
             ) : (
-              "Unlink"
+              t("identity.unlink")
             )}
           </button>
         </div>
@@ -114,7 +116,7 @@ function ProviderCard({
             className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-colors ${brandColor}`}
           >
             {icon}
-            Link {provider}
+            {t("identity.link", { provider })}
           </button>
         </form>
       )}
@@ -151,15 +153,14 @@ const GoogleIcon = (
 );
 
 export function IdentitySection({ character, onCharacterUpdate }: Props) {
+  const t = useTranslations("settings");
   const discordAvatarUrl = character.discordId
     ? getDiscordAvatarUrl(character.discordId, character.discordAvatar ?? null)
     : null;
 
   return (
     <>
-      <p className="text-sm text-muted mb-6">
-        Link your social accounts so other players can contact you.
-      </p>
+      <p className="text-sm text-muted mb-6">{t("identity.intro")}</p>
 
       <div className="space-y-4">
         {/* Google — in development, show disabled card */}
@@ -171,10 +172,10 @@ export function IdentitySection({ character, onCharacterUpdate }: Props) {
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium text-muted">Google</p>
               <span className="rounded-full bg-warning/20 border border-warning/30 px-2 py-0.5 text-[10px] font-semibold text-warning">
-                Coming Soon
+                {t("identity.comingSoon")}
               </span>
             </div>
-            <p className="text-xs text-muted/70">Google sign-in is under development</p>
+            <p className="text-xs text-muted/70">{t("identity.googleDev")}</p>
           </div>
         </div>
 
@@ -183,7 +184,7 @@ export function IdentitySection({ character, onCharacterUpdate }: Props) {
           isLinked={!!character.discordId}
           avatarUrl={discordAvatarUrl}
           displayName={character.discordUsername}
-          subtitle="Discord account linked"
+          subtitle={t("identity.discordLinked")}
           linkUrl="/api/auth/discord"
           unlinkUrl="/api/auth/discord/unlink"
           brandColor="bg-[#5865F2] hover:bg-[#4752C4]"

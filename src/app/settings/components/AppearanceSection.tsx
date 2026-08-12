@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { useTheme, type Theme } from "@/contexts/ThemeContext";
 import { type StatusBarLayout } from "@/components/StatusBar";
+import { LanguageSection } from "./LanguageSection";
 
 interface ThemeOption {
   value: Theme;
-  label: string;
   role: string;
   bg: string;
   card: string;
@@ -24,7 +25,6 @@ interface ThemeOption {
 const THEME_OPTIONS: ThemeOption[] = [
   {
     value: "default",
-    label: "Default",
     role: "Dark · Premium",
     bg: "#14141c",
     card: "#1d1d2a",
@@ -39,7 +39,6 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     value: "oled",
-    label: "OLED",
     role: "Dark · True black",
     bg: "#000000",
     card: "#070710",
@@ -54,7 +53,6 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     value: "cloakroom",
-    label: "Cloakroom",
     role: "Dark · Warm",
     bg: "#12100e",
     card: "#1c1915",
@@ -69,7 +67,6 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     value: "broadsheet",
-    label: "Broadsheet",
     role: "Light · Editorial",
     bg: "#f3efe6",
     card: "#fbf8f0",
@@ -84,7 +81,6 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     value: "coldwar",
-    label: "Cold War",
     role: "Dark · Terminal",
     bg: "#0a0906",
     card: "#12100a",
@@ -99,7 +95,6 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     value: "command-1953",
-    label: "1953 Command",
     role: "Dark · Phosphor CRT",
     bg: "#050805",
     card: "#091109",
@@ -114,7 +109,6 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     value: "usa",
-    label: "USA",
     role: "Dark · Patriotic",
     bg: "#0f1e38",
     card: "#182a4a",
@@ -129,7 +123,6 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     value: "light",
-    label: "Light",
     role: "Light · Default",
     bg: "#f8fafc",
     card: "#ffffff",
@@ -144,7 +137,6 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     value: "pastel",
-    label: "Pastel",
     role: "Light · Soft",
     bg: "#fdf4ff",
     card: "#ffffff",
@@ -159,7 +151,6 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     value: "dark-pastel",
-    label: "Dark Pastel",
     role: "Dark · Neo",
     bg: "#0e0b18",
     card: "#16112a",
@@ -174,7 +165,6 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     value: "retro",
-    label: "Retro",
     role: "Dark · CRT",
     bg: "#0a0f0a",
     card: "#0e160e",
@@ -189,7 +179,6 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     value: "solarized",
-    label: "Solarized",
     role: "Dark · Classic",
     bg: "#002b36",
     card: "#073642",
@@ -220,6 +209,7 @@ export function AppearanceSection({
   enableExperimentalUI,
   onExperimentalUiChange,
 }: Props) {
+  const t = useTranslations("settings");
   const { theme, setTheme } = useTheme();
   const [page, setPage] = useState(0);
   const [statusBarLayout, setStatusBarLayout] = useState<StatusBarLayout>("standard");
@@ -274,22 +264,20 @@ export function AppearanceSection({
 
   return (
     <>
-      <p className="text-sm text-muted mb-5">
-        Choose how the app looks. The landing page always uses the default theme.
-      </p>
+      <p className="text-sm text-muted mb-5">{t("appearance.intro")}</p>
 
       {/* ── Carousel ───────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-card-border bg-card-muted p-4 mb-2">
         <div className="flex items-baseline justify-between mb-3">
-          <span className="text-sm font-medium text-foreground">Theme</span>
-          <span className="text-xs text-muted">Applies instantly · syncs across devices</span>
+          <span className="text-sm font-medium text-foreground">{t("appearance.themeLabel")}</span>
+          <span className="text-xs text-muted">{t("appearance.themeMeta")}</span>
         </div>
 
         <div className="relative">
           {/* Prev */}
           <button
             type="button"
-            aria-label="Previous themes"
+            aria-label={t("appearance.prevThemes")}
             disabled={page === 0}
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 z-10 h-8 w-8 rounded-full border border-card-border bg-card flex items-center justify-center text-muted hover:border-primary/50 hover:text-foreground transition-all disabled:opacity-30 disabled:pointer-events-none"
@@ -342,7 +330,7 @@ export function AppearanceSection({
                           color: opt.fg,
                         }}
                       >
-                        {opt.label}
+                        {t(`appearance.themes.${opt.value}`)}
                       </span>
                       {isActive && (
                         <span
@@ -396,7 +384,7 @@ export function AppearanceSection({
           {/* Next */}
           <button
             type="button"
-            aria-label="Next themes"
+            aria-label={t("appearance.nextThemes")}
             disabled={page === PAGES - 1}
             onClick={() => setPage((p) => Math.min(PAGES - 1, p + 1))}
             className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 z-10 h-8 w-8 rounded-full border border-card-border bg-card flex items-center justify-center text-muted hover:border-primary/50 hover:text-foreground transition-all disabled:opacity-30 disabled:pointer-events-none"
@@ -418,14 +406,17 @@ export function AppearanceSection({
         {/* Dots + status */}
         <div className="flex items-center justify-between mt-3">
           <span className="text-xs text-muted font-mono">
-            Selected: <span className="text-foreground">{selectedTheme?.label ?? "Default"}</span>
+            {t("appearance.selectedLabel")}{" "}
+            <span className="text-foreground">
+              {t(`appearance.themes.${selectedTheme?.value ?? "default"}`)}
+            </span>
           </span>
           <div className="flex gap-1.5">
             {Array.from({ length: PAGES }, (_, i) => (
               <button
                 key={i}
                 type="button"
-                aria-label={`Page ${i + 1}`}
+                aria-label={t("appearance.pageAria", { number: i + 1 })}
                 onClick={() => setPage(i)}
                 className={`h-1.5 rounded-full transition-all ${
                   i === page ? "w-4 bg-primary" : "w-1.5 bg-card-border hover:bg-muted"
@@ -436,9 +427,11 @@ export function AppearanceSection({
         </div>
       </div>
 
+      <LanguageSection />
+
       {/* ── Video prefs ─────────────────────────────────────────────────── */}
       <div className="border-t border-card-border pt-6">
-        <h3 className="text-sm font-medium mb-3">Video Preferences</h3>
+        <h3 className="text-sm font-medium mb-3">{t("appearance.videoPreferences")}</h3>
         <label className="flex items-start gap-3 cursor-pointer group">
           <input
             type="checkbox"
@@ -448,12 +441,9 @@ export function AppearanceSection({
           />
           <div className="flex-1">
             <span className="text-sm text-foreground group-hover:text-primary transition-colors">
-              Disable autoplay on other users&apos; profiles
+              {t("appearance.disableAutoplay")}
             </span>
-            <p className="mt-0.5 text-xs text-muted">
-              When enabled, campaign songs on other users&apos; profiles will not autoplay (only
-              affects what you see)
-            </p>
+            <p className="mt-0.5 text-xs text-muted">{t("appearance.disableAutoplayHint")}</p>
           </div>
         </label>
       </div>
@@ -461,7 +451,7 @@ export function AppearanceSection({
       {/* ── Interface ───────────────────────────────────────────────────── */}
       <div className="border-t border-card-border pt-6">
         <div className="flex items-center gap-2 mb-3">
-          <h3 className="text-sm font-medium">Interface</h3>
+          <h3 className="text-sm font-medium">{t("appearance.interfaceTitle")}</h3>
         </div>
         <label className="flex items-start gap-3 cursor-pointer group">
           <input
@@ -472,90 +462,52 @@ export function AppearanceSection({
           />
           <div className="flex-1">
             <span className="text-sm text-foreground group-hover:text-primary transition-colors">
-              Use the classic interface
+              {t("appearance.classicUi")}
             </span>
-            <p className="mt-0.5 text-xs text-muted">
-              The redesigned navigation bar and the CEO Command Center dashboard are now the
-              default. Turn this on to switch back to the classic navigation bar and corporation
-              pages.
-            </p>
+            <p className="mt-0.5 text-xs text-muted">{t("appearance.classicUiHint")}</p>
           </div>
         </label>
       </div>
 
       {/* ── Status Bar ──────────────────────────────────────────────────── */}
       <div className="border-t border-card-border pt-6">
-        <h3 className="text-sm font-medium mb-1">Status Bar</h3>
-        <p className="text-xs text-muted mb-4">
-          Choose what&apos;s shown in the bottom status bar.
-        </p>
+        <h3 className="text-sm font-medium mb-1">{t("appearance.statusBar")}</h3>
+        <p className="text-xs text-muted mb-4">{t("appearance.statusBarHint")}</p>
         <div className="flex gap-3 flex-wrap">
-          {(
-            [
-              {
-                value: "standard",
-                label: "Standard",
-                desc: "Actions, campaign funds, personal cash, and corp treasury (when you are a CEO). Online count next to the turn timer.",
-              },
-              {
-                value: "corp",
-                label: "Corp Compact",
-                desc: "Condensed online count; adds stock ticker, corp cash, and marketing strength when you run a corporation.",
-              },
-              {
-                value: "elections",
-                label: "Elections Compact",
-                desc: "Political influence and favorability always shown. Adds vote share, margin, and seat projection when you're in an election.",
-              },
-              {
-                value: "full",
-                label: "Full",
-                desc: "Larger bar: profile stats plus elections and corporation panels together (corp only if you are a CEO).",
-              },
-              {
-                value: "minimal",
-                label: "Minimal",
-                desc: "Turn timer and in-game date only. No stat chips — clean and distraction-free.",
-              },
-            ] as { value: StatusBarLayout; label: string; desc: string }[]
-          ).map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => handleLayoutChange(opt.value)}
-              aria-pressed={statusBarLayout === opt.value}
-              className={`flex-1 min-w-[140px] rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                statusBarLayout === opt.value
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-card-border bg-background text-muted hover:border-card-border hover:bg-card-elevated hover:text-foreground"
-              }`}
-            >
-              <span className="block font-medium mb-0.5">{opt.label}</span>
-              <span className="block text-xs opacity-70">{opt.desc}</span>
-            </button>
-          ))}
+          {(["standard", "corp", "elections", "full", "minimal"] as StatusBarLayout[])
+            .map((value) => ({
+              value,
+              label: t(`appearance.layouts.${value}.label`),
+              desc: t(`appearance.layouts.${value}.desc`),
+            }))
+            .map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => handleLayoutChange(opt.value)}
+                aria-pressed={statusBarLayout === opt.value}
+                className={`flex-1 min-w-[140px] rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                  statusBarLayout === opt.value
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-card-border bg-background text-muted hover:border-card-border hover:bg-card-elevated hover:text-foreground"
+                }`}
+              >
+                <span className="block font-medium mb-0.5">{opt.label}</span>
+                <span className="block text-xs opacity-70">{opt.desc}</span>
+              </button>
+            ))}
         </div>
         {statusBarLayout === "corp" && (
-          <p className="mt-3 text-xs text-muted">
-            Corp data only appears if your character is a CEO.
-          </p>
+          <p className="mt-3 text-xs text-muted">{t("appearance.corpNote")}</p>
         )}
         {statusBarLayout === "elections" && (
-          <p className="mt-3 text-xs text-muted">
-            Vote share and seat projection only appear while you&apos;re an active candidate in an
-            election.
-          </p>
+          <p className="mt-3 text-xs text-muted">{t("appearance.electionsNote")}</p>
         )}
         {statusBarLayout === "full" && (
-          <p className="mt-3 text-xs text-muted">
-            Corporation stats only appear if your character is a CEO. Election vote and seat chips
-            only appear while you&apos;re an active candidate.
-          </p>
+          <p className="mt-3 text-xs text-muted">{t("appearance.fullNote")}</p>
         )}
         {statusBarLayout === "minimal" && (
-          <p className="mt-3 text-xs text-muted">
-            Just the essentials — in-game date, turn timer, and online player count.
-          </p>
+          <p className="mt-3 text-xs text-muted">{t("appearance.minimalNote")}</p>
         )}
       </div>
     </>

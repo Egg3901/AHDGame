@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { useClickOutside } from "@/hooks/useClickOutside";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { useNavbarState } from "./navbar/useNavbarState";
@@ -145,6 +146,7 @@ export const Navbar = React.memo(function Navbar({
   unionsEnabled = false,
   initialPageCountry,
 }: NavbarProps) {
+  const t = useTranslations("nav");
   const pathname = usePathname();
   // State managed by useNavbarState reducer. Destructured to preserve the
   // legacy variable names so the rest of this 1300+ line component reads as
@@ -186,12 +188,12 @@ export const Navbar = React.memo(function Navbar({
   );
   const stateLegislatureLabel = (() => {
     const id = homeState?.id;
-    if (!isUKContext) return "State Legislature";
+    if (!isUKContext) return t("state.legislature");
     const nation = UK_NATIONS.find((n) => n.id === id);
     if (nation?.devolvedBody) return nation.devolvedBody;
     const region = UK_REGIONS.find((r) => r.id === id);
     const parentNation = UK_NATIONS.find((n) => n.id === region?.nationId);
-    return parentNation?.devolvedBody ?? "State Legislature";
+    return parentNation?.devolvedBody ?? t("state.legislature");
   })();
 
   const stateAdjective = (() => {
@@ -348,7 +350,7 @@ export const Navbar = React.memo(function Navbar({
   return (
     <nav
       className="ahd-navbar-enter sticky top-0 z-50 border-b border-card-border/60 bg-card/50 shadow-panel backdrop-blur-xl"
-      aria-label="Main navigation"
+      aria-label={t("common.mainNavigation")}
       data-feedback-ignore="true"
     >
       {/* Top accent line: see NavbarTopFlair (fixed strip while client-nav loads + reveal) */}
@@ -393,8 +395,8 @@ export const Navbar = React.memo(function Navbar({
                   aria-haspopup="menu"
                 >
                   {isImperialMode
-                    ? (imperialCharacter?.name ?? "Imperial")
-                    : (adminCharacters?.find((c) => c.isActive)?.name ?? "Profile")}
+                    ? (imperialCharacter?.name ?? t("common.imperial"))
+                    : (adminCharacters?.find((c) => c.isActive)?.name ?? t("common.profile"))}
                   <svg
                     className={`h-4 w-4 shrink-0 transition-transform duration-200 ${profileOpen ? "rotate-180" : ""}`}
                     fill="none"
@@ -424,7 +426,7 @@ export const Navbar = React.memo(function Navbar({
                             <span className="truncate">{char.name}</span>
                             <span className="shrink-0 flex items-center gap-1.5 text-xs">
                               <span className="text-muted/60">{char.countryId}</span>
-                              <span className="text-primary font-medium">Active</span>
+                              <span className="text-primary font-medium">{t("common.active")}</span>
                             </span>
                           </Link>
                         ) : isImperialMode ? (
@@ -466,8 +468,10 @@ export const Navbar = React.memo(function Navbar({
                             >
                               <span className="truncate">{imperialCharacter.name}</span>
                               <span className="shrink-0 flex items-center gap-1.5 text-xs">
-                                <span className="text-amber-400/70">Imperial</span>
-                                <span className="text-primary font-medium">Active</span>
+                                <span className="text-amber-400/70">{t("common.imperial")}</span>
+                                <span className="text-primary font-medium">
+                                  {t("common.active")}
+                                </span>
                               </span>
                             </Link>
                           ) : (
@@ -481,7 +485,7 @@ export const Navbar = React.memo(function Navbar({
                             >
                               <span className="truncate">{imperialCharacter.name}</span>
                               <span className="ml-auto shrink-0 text-xs text-amber-400/70">
-                                Imperial
+                                {t("common.imperial")}
                               </span>
                             </button>
                           )}
@@ -498,7 +502,7 @@ export const Navbar = React.memo(function Navbar({
                   className={`relative px-2.5 py-1 text-sm transition-colors hover:text-foreground ${isNavActive(pathname, "/profile") ? "font-medium text-foreground after:absolute after:bottom-0 after:left-1 after:right-1 after:h-px after:rounded-full after:bg-primary after:opacity-70" : "text-muted"}`}
                   aria-current={isNavActive(pathname, "/profile") ? "page" : undefined}
                 >
-                  Profile
+                  {t("common.profile")}
                 </Link>
               )
             )}
@@ -510,7 +514,7 @@ export const Navbar = React.memo(function Navbar({
                 className={`relative px-2.5 py-1 text-sm transition-colors hover:text-foreground ${isNavActive(pathname, "/actions") ? "font-medium text-foreground after:absolute after:bottom-0 after:left-1 after:right-1 after:h-px after:rounded-full after:bg-primary after:opacity-70" : "text-muted"}`}
                 aria-current={isNavActive(pathname, "/actions") ? "page" : undefined}
               >
-                Actions
+                {t("common.actions")}
               </Link>
             )}
 
@@ -576,7 +580,7 @@ export const Navbar = React.memo(function Navbar({
             <button
               onClick={() => dispatch({ type: "SET_POPOVER", key: "search", open: !searchOpen })}
               className={`relative flex items-center justify-center rounded-lg p-2 transition-colors hover:bg-card hover:text-foreground ${searchOpen ? "text-foreground bg-card" : "text-muted"}`}
-              aria-label="Search"
+              aria-label={t("common.search")}
               aria-expanded={searchOpen}
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -593,7 +597,7 @@ export const Navbar = React.memo(function Navbar({
               <Link
                 href="/portfolio?tab=currency"
                 className={`relative flex items-center justify-center rounded-lg p-2 transition-colors hover:bg-card hover:text-foreground ${isNavActive(pathname, "/portfolio") ? "text-foreground" : "text-muted"}`}
-                aria-label="Wallet"
+                aria-label={t("common.wallet")}
                 aria-current={isNavActive(pathname, "/portfolio") ? "page" : undefined}
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -613,7 +617,9 @@ export const Navbar = React.memo(function Navbar({
                   onClick={() => dispatch({ type: "SET_POPOVER", key: "notif", open: !notifOpen })}
                   className={`relative flex items-center justify-center rounded-lg p-2 transition-colors hover:bg-card hover:text-foreground ${isNavActive(pathname, "/notifications") ? "text-foreground" : "text-muted"} ${notifPreviews.some((n) => !n.read && isActionRequiredType(n.type as NotificationType)) ? "ahd-bell-pulse" : ""}`}
                   aria-label={
-                    unreadCount > 0 ? `Notifications (${unreadCount} unread)` : "Notifications"
+                    unreadCount > 0
+                      ? t("notifications.ariaUnread", { count: unreadCount })
+                      : t("common.notifications")
                   }
                   aria-expanded={notifOpen}
                   aria-haspopup="menu"
@@ -636,13 +642,13 @@ export const Navbar = React.memo(function Navbar({
                 {notifOpen && (
                   <div className="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-1rem)] rounded-xl border border-card-border bg-card shadow-modal overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-card-border">
-                      <span className="text-sm font-semibold">Notifications</span>
+                      <span className="text-sm font-semibold">{t("common.notifications")}</span>
                       <Link
                         href="/notifications"
                         onClick={() => dispatch({ type: "SET_POPOVER", key: "notif", open: false })}
                         className="text-xs text-primary hover:text-primary/80 transition-colors"
                       >
-                        Open inbox →
+                        {t("notifications.openInbox")}
                       </Link>
                     </div>
                     {notifPreviews.some(
@@ -651,19 +657,18 @@ export const Navbar = React.memo(function Navbar({
                       <div className="flex items-center gap-2 px-4 py-2 bg-primary/5 border-b border-card-border">
                         <span className="ahd-bell-pulse h-2 w-2 shrink-0 rounded-full bg-primary" />
                         <span className="text-xs text-fg-2">
-                          {
-                            notifPreviews.filter(
+                          {t("notifications.awaitingInput", {
+                            count: notifPreviews.filter(
                               (n) => !n.read && isActionRequiredType(n.type as NotificationType)
-                            ).length
-                          }{" "}
-                          awaiting your input
+                            ).length,
+                          })}
                         </span>
                       </div>
                     )}
                     <div className={`py-1 ${NOTIFICATION_LIST_CLASS}`}>
                       {notifPreviews.length === 0 ? (
                         <p className="px-4 py-6 text-center text-sm text-muted">
-                          No notifications yet
+                          {t("notifications.empty")}
                         </p>
                       ) : (
                         [...notifPreviews]
@@ -689,7 +694,7 @@ export const Navbar = React.memo(function Navbar({
                               >
                                 {!n.read && isActionRequiredType(n.type as NotificationType) && (
                                   <span className="mb-0.5 inline-block rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary bg-primary/10">
-                                    Needs you
+                                    {t("notifications.needsYou")}
                                   </span>
                                 )}
                                 <p
@@ -706,7 +711,7 @@ export const Navbar = React.memo(function Navbar({
                                   <button
                                     onClick={(e) => markNotifRead(n._id, e)}
                                     className="p-1 rounded text-muted hover:text-foreground hover:bg-card-muted transition-colors"
-                                    title="Mark as read"
+                                    title={t("notifications.markRead")}
                                   >
                                     <svg
                                       className="h-3.5 w-3.5"
@@ -726,7 +731,7 @@ export const Navbar = React.memo(function Navbar({
                                 <button
                                   onClick={(e) => deleteNotif(n._id, e)}
                                   className="p-1 rounded text-muted hover:text-error hover:bg-card-muted transition-colors"
-                                  title="Delete"
+                                  title={t("notifications.delete")}
                                 >
                                   <svg
                                     className="h-3.5 w-3.5"
@@ -770,13 +775,13 @@ export const Navbar = React.memo(function Navbar({
                   href="/login"
                   className="text-sm font-medium text-muted transition-colors hover:text-foreground"
                 >
-                  Sign in
+                  {t("common.signIn")}
                 </Link>
                 <Link
                   href="/register"
                   className="inline-flex items-center justify-center rounded-lg bg-primary px-3.5 h-9 text-sm font-semibold text-white transition-all duration-150 hover:bg-primary-dark active:scale-[0.98]"
                 >
-                  Register
+                  {t("common.register")}
                 </Link>
               </div>
             )}
@@ -785,7 +790,7 @@ export const Navbar = React.memo(function Navbar({
             <button
               className="md:hidden flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-card hover:text-foreground"
               onClick={() => dispatch({ type: "SET_MOBILE_MENU", open: !mobileMenuOpen })}
-              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+              aria-label={mobileMenuOpen ? t("common.closeMenu") : t("common.openMenu")}
               aria-expanded={mobileMenuOpen}
               aria-controls="mobile-nav-menu"
             >
@@ -831,8 +836,8 @@ export const Navbar = React.memo(function Navbar({
                   aria-expanded={profileOpen}
                 >
                   {isImperialMode
-                    ? (imperialCharacter?.name ?? "Imperial")
-                    : (adminCharacters?.find((c) => c.isActive)?.name ?? "Profile")}
+                    ? (imperialCharacter?.name ?? t("common.imperial"))
+                    : (adminCharacters?.find((c) => c.isActive)?.name ?? t("common.profile"))}
                   <ChevronIcon open={profileOpen} />
                 </button>
                 {profileOpen && (
@@ -846,7 +851,9 @@ export const Navbar = React.memo(function Navbar({
                           className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 ${isNavActive(pathname, "/profile") ? "bg-white/5 font-medium" : "text-foreground"}`}
                         >
                           <span>{char.name}</span>
-                          <span className="text-xs text-primary font-medium">Active</span>
+                          <span className="text-xs text-primary font-medium">
+                            {t("common.active")}
+                          </span>
                         </Link>
                       ) : isImperialMode ? (
                         <button
@@ -881,8 +888,8 @@ export const Navbar = React.memo(function Navbar({
                           >
                             <span>{imperialCharacter.name}</span>
                             <span className="flex items-center gap-1.5 text-xs">
-                              <span className="text-amber-400/70">Imperial</span>
-                              <span className="text-primary font-medium">Active</span>
+                              <span className="text-amber-400/70">{t("common.imperial")}</span>
+                              <span className="text-primary font-medium">{t("common.active")}</span>
                             </span>
                           </Link>
                         ) : (
@@ -892,7 +899,9 @@ export const Navbar = React.memo(function Navbar({
                             className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5 disabled:opacity-50"
                           >
                             <span>{imperialCharacter.name}</span>
-                            <span className="text-xs text-amber-400/70">Imperial</span>
+                            <span className="text-xs text-amber-400/70">
+                              {t("common.imperial")}
+                            </span>
                           </button>
                         )}
                       </>
@@ -908,7 +917,7 @@ export const Navbar = React.memo(function Navbar({
                   className={`flex items-center rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-white/5 ${isNavActive(pathname, "/profile") ? "bg-white/5 font-medium text-foreground" : "text-foreground"}`}
                   aria-current={isNavActive(pathname, "/profile") ? "page" : undefined}
                 >
-                  Profile
+                  {t("common.profile")}
                 </Link>
               )
             )}
@@ -921,7 +930,7 @@ export const Navbar = React.memo(function Navbar({
                 className={`flex items-center rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-white/5 ${isNavActive(pathname, "/actions") ? "bg-white/5 font-medium" : ""}`}
                 aria-current={isNavActive(pathname, "/actions") ? "page" : undefined}
               >
-                Actions
+                {t("common.actions")}
               </Link>
             )}
 
@@ -962,7 +971,7 @@ export const Navbar = React.memo(function Navbar({
                             d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
                           />
                         </svg>
-                        Staff
+                        {t("common.staff")}
                       </span>
                       <ChevronIcon open={staffOpen} />
                     </button>
@@ -978,7 +987,7 @@ export const Navbar = React.memo(function Navbar({
                               onClick={closeMobileMenu}
                               className="flex items-center rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
                             >
-                              {i.label}
+                              {t(i.labelKey)}
                             </a>
                           ) : (
                             <Link
@@ -988,7 +997,7 @@ export const Navbar = React.memo(function Navbar({
                               className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 ${isNavActive(pathname, i.href) ? "bg-white/5 font-medium" : "text-muted"}`}
                               aria-current={isNavActive(pathname, i.href) ? "page" : undefined}
                             >
-                              {i.label}
+                              {t(i.labelKey)}
                             </Link>
                           )
                         )}
@@ -1021,7 +1030,7 @@ export const Navbar = React.memo(function Navbar({
                           : undefined
                       }
                     >
-                      State Overview
+                      {t("state.overview")}
                     </Link>
                     {currentParty && (
                       <Link
@@ -1037,7 +1046,7 @@ export const Navbar = React.memo(function Navbar({
                       onClick={closeMobileMenu}
                       className="flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 text-muted"
                     >
-                      State Economy
+                      {t("state.economy")}
                     </Link>
                     <Link
                       href={regionLegislatureUrl(homeState.countryId, homeState.id)}
@@ -1052,7 +1061,7 @@ export const Navbar = React.memo(function Navbar({
                         onClick={closeMobileMenu}
                         className="flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 text-muted"
                       >
-                        Office
+                        {t("state.office")}
                       </Link>
                     )}
                     {activeElection ? (
@@ -1069,14 +1078,14 @@ export const Navbar = React.memo(function Navbar({
                             : undefined
                         }
                       >
-                        <span>My Election</span>
+                        <span>{t("state.myElection")}</span>
                         <span className="ml-2 max-w-[120px] truncate text-xs text-muted">
                           {activeElection.label}
                         </span>
                       </Link>
                     ) : (
                       <div className="flex items-center rounded-lg px-3 py-2 text-sm text-muted opacity-50">
-                        My Election — None
+                        {t("state.myElectionNone")}
                       </div>
                     )}
                     {cabinetOffice && (
@@ -1085,7 +1094,7 @@ export const Navbar = React.memo(function Navbar({
                         onClick={closeMobileMenu}
                         className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 ${isNavActive(pathname, `/country/${cabinetOffice.countryCode}/executive/cabinet/${cabinetOffice.positionId}`) ? "bg-white/5 font-medium" : "text-muted"}`}
                       >
-                        <span>My Office</span>
+                        <span>{t("state.myOffice")}</span>
                         <span className="ml-2 max-w-[120px] truncate text-xs text-muted">
                           {cabinetOffice.positionName}
                         </span>
@@ -1120,7 +1129,7 @@ export const Navbar = React.memo(function Navbar({
                     >
                       <CountryFlag country={userCountry} size="sm" />
                       <span>{getCountryDisplayName(userCountry, preset)}</span>
-                      <span className="text-xs text-muted/60">(Home)</span>
+                      <span className="text-xs text-muted/60">{t("menus.nation.homeSuffix")}</span>
                     </Link>
 
                     {cabinetOffice && (
@@ -1129,7 +1138,7 @@ export const Navbar = React.memo(function Navbar({
                         onClick={closeMobileMenu}
                         className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 ${isNavActive(pathname, `/country/${cabinetOffice.countryCode}/executive/cabinet/${cabinetOffice.positionId}/office`) ? "bg-white/5 font-medium" : "text-muted"}`}
                       >
-                        Cabinet Office · {cabinetOffice.positionName}
+                        {t("menus.nation.cabinetOffice")} · {cabinetOffice.positionName}
                       </Link>
                     )}
 
@@ -1144,7 +1153,7 @@ export const Navbar = React.memo(function Navbar({
                             : undefined
                         }
                       >
-                        My Party · {currentParty.name}
+                        {t("menus.nation.myParty")} · {currentParty.name}
                       </Link>
                     )}
 
@@ -1157,12 +1166,14 @@ export const Navbar = React.memo(function Navbar({
                           isNavActive(pathname, "/political-operations") ? "page" : undefined
                         }
                       >
-                        My Political Operations
+                        {t("menus.nation.myPoliticalOperations")}
                       </Link>
                     )}
 
                     <div className="px-3 py-1 text-xs font-medium uppercase tracking-wider text-muted/60">
-                      National Details — {getCountryDisplayName(pageCountry, preset)}
+                      {t("menus.nation.nationalDetailsFor", {
+                        country: getCountryDisplayName(pageCountry, preset),
+                      })}
                     </div>
 
                     <MobileNationalDetails
@@ -1185,8 +1196,12 @@ export const Navbar = React.memo(function Navbar({
                                   : "/charters",
                               label:
                                 mobileActiveCharters.length === 1
-                                  ? `Charter — ${mobileActiveCharters[0]!.proposedName}`
-                                  : `Party Charters (${mobileActiveCharters.length})`,
+                                  ? t("menus.nation.charterSingle", {
+                                      name: mobileActiveCharters[0]!.proposedName,
+                                    })
+                                  : t("menus.nation.chartersMultiple", {
+                                      count: mobileActiveCharters.length,
+                                    }),
                             }
                           : null
                       }
@@ -1206,7 +1221,7 @@ export const Navbar = React.memo(function Navbar({
                   className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-white/5"
                   aria-expanded={worldOpen}
                 >
-                  World
+                  {t("common.world")}
                   <ChevronIcon open={worldOpen} />
                 </button>
                 {worldOpen && (
@@ -1239,7 +1254,7 @@ export const Navbar = React.memo(function Navbar({
                             : undefined
                         }
                       >
-                        {item.label}
+                        {t(item.labelKey)}
                       </Link>
                     ))}
                   </div>
@@ -1254,7 +1269,7 @@ export const Navbar = React.memo(function Navbar({
                 className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-white/5"
                 aria-expanded={helpOpen}
               >
-                Help/Information
+                {t("help.helpInformation")}
                 <ChevronIcon open={helpOpen} />
               </button>
               {helpOpen && (
@@ -1272,7 +1287,7 @@ export const Navbar = React.memo(function Navbar({
                         className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 ${wikiActive ? "bg-white/5 font-medium" : "text-muted"}`}
                         aria-current={wikiActive ? "page" : undefined}
                       >
-                        {showWiki ? "Wiki/Guides" : "Guides"}
+                        {showWiki ? t("help.wikiGuides") : t("help.guides")}
                       </Link>
                     );
                   })()}
@@ -1282,7 +1297,7 @@ export const Navbar = React.memo(function Navbar({
                     className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 ${isNavActive(pathname, "/about") ? "bg-white/5 font-medium" : "text-muted"}`}
                     aria-current={isNavActive(pathname, "/about") ? "page" : undefined}
                   >
-                    About
+                    {t("help.about")}
                   </Link>
                   <Link
                     href="/feedback"
@@ -1290,7 +1305,7 @@ export const Navbar = React.memo(function Navbar({
                     className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 ${isNavActive(pathname, "/feedback") ? "bg-white/5 font-medium text-foreground" : "text-muted"}`}
                     aria-current={isNavActive(pathname, "/feedback") ? "page" : undefined}
                   >
-                    Suggestions
+                    {t("help.suggestions")}
                   </Link>
                   <button
                     type="button"
@@ -1322,7 +1337,7 @@ export const Navbar = React.memo(function Navbar({
                         />
                       </svg>
                     )}
-                    {feedbackCapturing ? "Capturing screenshot…" : "Quick suggest (screenshot)"}
+                    {feedbackCapturing ? t("common.capturingScreenshot") : t("common.quickSuggest")}
                   </button>
                   <a
                     href={HELP_DISCORD_URL}
@@ -1340,7 +1355,7 @@ export const Navbar = React.memo(function Navbar({
                     onClick={closeMobileMenu}
                     className="flex items-center rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
                   >
-                    Support on Patreon
+                    {t("help.patreon")}
                   </a>
                   <a
                     href={HELP_SUPPORTER_WALL_URL}
@@ -1349,14 +1364,14 @@ export const Navbar = React.memo(function Navbar({
                     onClick={closeMobileMenu}
                     className="flex items-center rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
                   >
-                    Supporter Wall
+                    {t("help.supporterWall")}
                   </a>
                   <a
                     href={HELP_SUPPORT_EMAIL}
                     onClick={closeMobileMenu}
                     className="flex items-center rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
                   >
-                    Email Support
+                    {t("help.emailSupport")}
                   </a>
                   <a
                     href={HELP_STATUS_URL}
@@ -1365,7 +1380,7 @@ export const Navbar = React.memo(function Navbar({
                     onClick={closeMobileMenu}
                     className="flex items-center rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
                   >
-                    Server Status
+                    {t("help.serverStatus")}
                   </a>
                   <div className="my-1 border-t border-card-border/60" />
                   <Link
@@ -1374,7 +1389,7 @@ export const Navbar = React.memo(function Navbar({
                     className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 ${isNavActive(pathname, "/privacy") ? "bg-white/5 font-medium text-foreground" : "text-muted"}`}
                     aria-current={isNavActive(pathname, "/privacy") ? "page" : undefined}
                   >
-                    Privacy Policy
+                    {t("help.privacy")}
                   </Link>
                   <Link
                     href="/terms"
@@ -1382,7 +1397,7 @@ export const Navbar = React.memo(function Navbar({
                     className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 ${isNavActive(pathname, "/terms") ? "bg-white/5 font-medium text-foreground" : "text-muted"}`}
                     aria-current={isNavActive(pathname, "/terms") ? "page" : undefined}
                   >
-                    Terms of Service
+                    {t("help.terms")}
                   </Link>
                 </div>
               )}
@@ -1396,14 +1411,14 @@ export const Navbar = React.memo(function Navbar({
                 onClick={closeMobileMenu}
                 className="flex items-center justify-center rounded-lg border border-card-border bg-card py-2.5 text-sm font-medium text-foreground"
               >
-                Sign in
+                {t("common.signIn")}
               </Link>
               <Link
                 href="/register"
                 onClick={closeMobileMenu}
                 className="flex items-center justify-center rounded-lg bg-primary py-2.5 text-sm font-semibold text-white"
               >
-                Register
+                {t("common.register")}
               </Link>
             </div>
           )}
@@ -1420,7 +1435,7 @@ export const Navbar = React.memo(function Navbar({
             </span>
             {process.env.NEXT_PUBLIC_IS_PREVIEW === "true" && (
               <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-                Preview
+                {t("common.preview")}
               </span>
             )}
           </Link>

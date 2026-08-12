@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { MessageBanner, SpinnerIcon } from "./shared";
 
 function EyeIcon({ open }: { open: boolean }) {
@@ -39,6 +40,7 @@ interface Props {
 }
 
 export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
+  const t = useTranslations("settings");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -55,7 +57,12 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
     const hasUpper = /[A-Z]/.test(newPassword);
     const hasNumber = /[0-9]/.test(newPassword);
     const strength = [hasLength, hasUpper, hasNumber].filter(Boolean).length;
-    const strengthMsg = strength === 1 ? "Weak" : strength === 2 ? "Fair" : "Strong";
+    const strengthMsg =
+      strength === 1
+        ? t("security.strengthWeak")
+        : strength === 2
+          ? t("security.strengthFair")
+          : t("security.strengthStrong");
     const matches = confirmPassword === newPassword && confirmPassword.length > 0;
     return { valid: hasLength, strengthMsg, matches, strength };
   })();
@@ -66,23 +73,23 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
     setPasswordSuccess("");
 
     if (hasPassword && !currentPassword) {
-      setPasswordError("Current password is required");
+      setPasswordError(t("security.errorCurrentRequired"));
       return;
     }
     if (!newPassword || !confirmPassword) {
-      setPasswordError("All fields are required");
+      setPasswordError(t("security.errorAllRequired"));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setPasswordError("New passwords do not match");
+      setPasswordError(t("security.errorMismatch"));
       return;
     }
     if (newPassword.length < 6) {
-      setPasswordError("Password must be at least 6 characters");
+      setPasswordError(t("security.errorTooShort"));
       return;
     }
     if (hasPassword && currentPassword === newPassword) {
-      setPasswordError("New password must be different from current password");
+      setPasswordError(t("security.errorSameAsCurrent"));
       return;
     }
 
@@ -97,12 +104,12 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
         });
         const data = await res.json();
         if (res.ok) {
-          setPasswordSuccess("Password changed successfully");
+          setPasswordSuccess(t("security.changedSuccess"));
           setCurrentPassword("");
           setNewPassword("");
           setConfirmPassword("");
         } else {
-          setPasswordError(data.error || "Failed to change password");
+          setPasswordError(data.error || t("security.changeFailed"));
         }
       } else {
         // Set password for the first time (social-only accounts)
@@ -113,18 +120,16 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
         });
         const data = await res.json();
         if (res.ok) {
-          setPasswordSuccess(
-            "Password set successfully! You can now log in with your username and password."
-          );
+          setPasswordSuccess(t("security.setSuccess"));
           setNewPassword("");
           setConfirmPassword("");
           onPasswordSet();
         } else {
-          setPasswordError(data.error || "Failed to set password");
+          setPasswordError(data.error || t("security.setFailed"));
         }
       }
     } catch {
-      setPasswordError("Network error - please try again");
+      setPasswordError(t("common.networkErrorRetry"));
     } finally {
       setChangingPassword(false);
     }
@@ -136,15 +141,13 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
   return (
     <>
       <p className="text-sm text-muted mb-6">
-        {hasPassword
-          ? "Update your account password. Use a strong, unique password."
-          : "Set a password to enable username/email login alongside your social sign-in."}
+        {hasPassword ? t("security.introChange") : t("security.introSet")}
       </p>
       <form onSubmit={handlePasswordSubmit} className="space-y-4">
         {hasPassword && (
           <div>
             <label htmlFor="currentPassword" className="block text-sm font-medium mb-1.5">
-              Current Password
+              {t("security.currentPassword")}
             </label>
             <div className="relative">
               <input
@@ -159,7 +162,9 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
                 type="button"
                 onClick={() => setShowCurrentPassword((p) => !p)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors"
-                aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+                aria-label={
+                  showCurrentPassword ? t("security.hidePassword") : t("security.showPassword")
+                }
               >
                 <EyeIcon open={showCurrentPassword} />
               </button>
@@ -168,7 +173,7 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
         )}
         <div>
           <label htmlFor="newPassword" className="block text-sm font-medium mb-1.5">
-            {hasPassword ? "New Password" : "Password"}
+            {hasPassword ? t("security.newPassword") : t("security.password")}
           </label>
           <div className="relative">
             <input
@@ -183,7 +188,7 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
               type="button"
               onClick={() => setShowNewPassword((p) => !p)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors"
-              aria-label={showNewPassword ? "Hide password" : "Show password"}
+              aria-label={showNewPassword ? t("security.hidePassword") : t("security.showPassword")}
             >
               <EyeIcon open={showNewPassword} />
             </button>
@@ -222,7 +227,7 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
         </div>
         <div>
           <label htmlFor="confirmPassword" className="block text-sm font-medium mb-1.5">
-            {hasPassword ? "Confirm New Password" : "Confirm Password"}
+            {hasPassword ? t("security.confirmNewPassword") : t("security.confirmPassword")}
           </label>
           <div className="relative">
             <input
@@ -237,7 +242,9 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
               type="button"
               onClick={() => setShowConfirmPassword((p) => !p)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors"
-              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+              aria-label={
+                showConfirmPassword ? t("security.hidePassword") : t("security.showPassword")
+              }
             >
               <EyeIcon open={showConfirmPassword} />
             </button>
@@ -261,7 +268,7 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
                       d="M5 13l4 4L19 7"
                     />
                   </svg>
-                  Passwords match
+                  {t("security.passwordsMatch")}
                 </>
               ) : (
                 <>
@@ -278,7 +285,7 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
                       d="M6 18L18 6M6 6l12 12"
                     />
                   </svg>
-                  Passwords don&apos;t match
+                  {t("security.passwordsNoMatch")}
                 </>
               )}
             </p>
@@ -302,11 +309,11 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
           {changingPassword && <SpinnerIcon />}
           {changingPassword
             ? hasPassword
-              ? "Changing..."
-              : "Setting..."
+              ? t("security.changing")
+              : t("security.setting")
             : hasPassword
-              ? "Change Password"
-              : "Set Password"}
+              ? t("security.changePassword")
+              : t("security.setPassword")}
         </button>
       </form>
     </>
