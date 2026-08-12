@@ -45,7 +45,9 @@ export function BondTradeModal({
     useCurrency();
   const unitsInputId = useId();
   const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [account, setAccount] = useState<"character" | "corporation">("character");
+  const [account, setAccount] = useState<"character" | "corporation" | "investmentBank">(
+    "character"
+  );
   // 0 == "empty"; lets users backspace the field without it snapping back to 1.
   const [units, setUnits] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -131,6 +133,8 @@ export function BondTradeModal({
   };
 
   const hasCorp = !!userContext.myCorporation;
+  const investmentBank = userContext.investmentBank;
+  const hasInvestmentBank = !!investmentBank;
   const corpLiquidCurrencyCode = (userContext.myCorporation?.liquidCurrencyCode ??
     null) as CurrencyCode | null;
 
@@ -148,9 +152,17 @@ export function BondTradeModal({
       : userContext.myCashOnHand;
 
   const budget =
-    account === "character" ? personalCashAnchor : (userContext.myCorporation?.liquidCapital ?? 0);
+    account === "character"
+      ? personalCashAnchor
+      : account === "corporation"
+        ? (userContext.myCorporation?.liquidCapital ?? 0)
+        : (investmentBank?.liquidCapital ?? 0);
   const heldUnits =
-    account === "character" ? userContext.myBondUnits : (userContext.myCorporation?.bondUnits ?? 0);
+    account === "character"
+      ? userContext.myBondUnits
+      : account === "corporation"
+        ? (userContext.myCorporation?.bondUnits ?? 0)
+        : (investmentBank?.bondUnits ?? 0);
 
   const costPerUnit = bond.pricePerUnit;
   const costPerUnitAnchor = toInternalFrom(costPerUnit, bondCurrency);
@@ -159,7 +171,7 @@ export function BondTradeModal({
   // which is always in ₳ (personalCashAnchor / corp liquidCapital are anchor values).
   const totalCostAnchor = toInternalFrom(totalCost, bondCurrency);
   const notEnoughToSell = side === "sell" && units > heldUnits;
-  const floatShort = side === "buy" && units > bond.publicFloat;
+  const floatShort = side === "buy" && account !== "investmentBank" && units > bond.publicFloat;
   const selectedPayBalance =
     account === "character" && personalBalances ? (personalBalances[selectedPayCurrency] ?? 0) : 0;
   const corpLiquidBalanceLocal =
@@ -228,16 +240,18 @@ export function BondTradeModal({
       ? false
       : account === "corporation"
         ? !(corpBuyEstimate?.canAfford ?? totalCostAnchor <= budget)
-        : !personalBalances
+        : account === "investmentBank"
           ? totalCostAnchor > budget
-          : shouldUseImplicitAutoConvert
-            ? !(
-                implicitAutoConvertEstimate &&
-                implicitAutoConvertEstimate.spendableInTarget >= totalCost
-              )
-            : selectedPayCurrency === bondCurrency
-              ? selectedPayBalance < totalCost
-              : !(explicitPayEstimate && explicitPayEstimate.canAfford);
+          : !personalBalances
+            ? totalCostAnchor > budget
+            : shouldUseImplicitAutoConvert
+              ? !(
+                  implicitAutoConvertEstimate &&
+                  implicitAutoConvertEstimate.spendableInTarget >= totalCost
+                )
+              : selectedPayCurrency === bondCurrency
+                ? selectedPayBalance < totalCost
+                : !(explicitPayEstimate && explicitPayEstimate.canAfford);
   const approxMaxAffordableBuyUnits =
     side !== "buy"
       ? 0
@@ -252,21 +266,25 @@ export function BondTradeModal({
               }) / costPerUnit
             )
           : 0
-        : !personalBalances
+        : account === "investmentBank"
           ? costPerUnitAnchor > 0
             ? Math.floor(budget / costPerUnitAnchor)
             : 0
-          : shouldUseImplicitAutoConvert
-            ? costPerUnit > 0
-              ? Math.floor(maxImplicitSpendableInTarget / costPerUnit)
+          : !personalBalances
+            ? costPerUnitAnchor > 0
+              ? Math.floor(budget / costPerUnitAnchor)
               : 0
-            : selectedPayCurrency === bondCurrency
+            : shouldUseImplicitAutoConvert
               ? costPerUnit > 0
-                ? Math.floor(selectedPayBalance / costPerUnit)
+                ? Math.floor(maxImplicitSpendableInTarget / costPerUnit)
                 : 0
-              : costPerUnit > 0
-                ? Math.floor(maxExplicitSpendableInTarget / costPerUnit)
-                : 0;
+              : selectedPayCurrency === bondCurrency
+                ? costPerUnit > 0
+                  ? Math.floor(selectedPayBalance / costPerUnit)
+                  : 0
+                : costPerUnit > 0
+                  ? Math.floor(maxExplicitSpendableInTarget / costPerUnit)
+                  : 0;
   const canAffordBuyUnits = (candidateUnits: number) => {
     if (candidateUnits <= 0) return true;
     if (account === "corporation") {
@@ -278,6 +296,9 @@ export function BondTradeModal({
         rates: exchangeRates ?? {},
       });
       return estimate?.canAfford ?? false;
+    }
+    if (account === "investmentBank") {
+      return candidateUnits * costPerUnitAnchor <= budget;
     }
     if (!personalBalances) {
       return candidateUnits * costPerUnitAnchor <= budget;
@@ -313,39 +334,55 @@ export function BondTradeModal({
           canAfford: canAffordBuyUnits,
         });
   const maxAllowedUnits =
-    side === "buy" ? Math.max(0, Math.min(bond.publicFloat, maxAffordableBuyUnits)) : heldUnits;
+    side === "buy"
+      ? Math.max(
+          0,
+          account === "investmentBank"
+            ? maxAffordableBuyUnits
+            : Math.min(bond.publicFloat, maxAffordableBuyUnits)
+        )
+      : heldUnits;
 
   const budgetLabel =
     account === "corporation"
       ? "Corp liquid"
-      : !personalBalances
-        ? "Your cash"
-        : shouldUseImplicitAutoConvert
-          ? `Spendable in ${bondCurrency}`
-          : `Available in ${selectedPayCurrency}`;
+      : account === "investmentBank"
+        ? "Bank liquid"
+        : !personalBalances
+          ? "Your cash"
+          : shouldUseImplicitAutoConvert
+            ? `Spendable in ${bondCurrency}`
+            : `Available in ${selectedPayCurrency}`;
 
   const budgetValue =
     account === "corporation"
       ? formatFull(budget)
-      : !personalBalances
+      : account === "investmentBank"
         ? formatFull(budget)
-        : shouldUseImplicitAutoConvert
-          ? implicitAutoConvertEstimate
-            ? formatCurrencyFaceAmount(implicitAutoConvertEstimate.spendableInTarget, bondCurrency)
-            : formatFull(budget)
-          : formatCurrencyFaceAmount(selectedPayBalance, selectedPayCurrency);
+        : !personalBalances
+          ? formatFull(budget)
+          : shouldUseImplicitAutoConvert
+            ? implicitAutoConvertEstimate
+              ? formatCurrencyFaceAmount(
+                  implicitAutoConvertEstimate.spendableInTarget,
+                  bondCurrency
+                )
+              : formatFull(budget)
+            : formatCurrencyFaceAmount(selectedPayBalance, selectedPayCurrency);
 
   const estimatedFxFeeAnchor =
     account === "corporation"
       ? toInternalFrom(corpBuyEstimate?.spreadFee ?? 0, corpLiquidCurrencyCode ?? bondCurrency)
-      : account === "character" && personalBalances
-        ? shouldUseImplicitAutoConvert
-          ? Object.entries(implicitAutoConvertEstimate?.spreadFees ?? {}).reduce(
-              (total, [code, fee]) => total + toInternalFrom(fee ?? 0, code as CurrencyCode),
-              0
-            )
-          : toInternalFrom(explicitPayEstimate?.spreadFee ?? 0, selectedPayCurrency)
-        : 0;
+      : account === "investmentBank"
+        ? 0
+        : account === "character" && personalBalances
+          ? shouldUseImplicitAutoConvert
+            ? Object.entries(implicitAutoConvertEstimate?.spreadFees ?? {}).reduce(
+                (total, [code, fee]) => total + toInternalFrom(fee ?? 0, code as CurrencyCode),
+                0
+              )
+            : toInternalFrom(explicitPayEstimate?.spreadFee ?? 0, selectedPayCurrency)
+          : 0;
 
   const afterPurchaseValue =
     account === "corporation"
@@ -365,26 +402,33 @@ export function BondTradeModal({
             )
           );
         })()
-      : !personalBalances
+      : account === "investmentBank"
         ? fundsShort
           ? `Short by ${formatFull(totalCostAnchor - budget)}`
           : formatFull(budget - totalCostAnchor)
-        : shouldUseImplicitAutoConvert
-          ? (() => {
-              const spendable = implicitAutoConvertEstimate?.spendableInTarget ?? 0;
-              return fundsShort
-                ? `Short by ${formatCurrencyFaceAmount(totalCost - spendable, bondCurrency)}`
-                : formatCurrencyFaceAmount(spendable - totalCost, bondCurrency);
-            })()
-          : (() => {
-              const requiredSpend = explicitPayEstimate?.spendAmount ?? totalCost;
-              return fundsShort
-                ? `Short by ${formatCurrencyFaceAmount(
-                    totalCost - (explicitPayEstimate?.deliveredAmount ?? 0),
-                    bondCurrency
-                  )}`
-                : formatCurrencyFaceAmount(selectedPayBalance - requiredSpend, selectedPayCurrency);
-            })();
+        : !personalBalances
+          ? fundsShort
+            ? `Short by ${formatFull(totalCostAnchor - budget)}`
+            : formatFull(budget - totalCostAnchor)
+          : shouldUseImplicitAutoConvert
+            ? (() => {
+                const spendable = implicitAutoConvertEstimate?.spendableInTarget ?? 0;
+                return fundsShort
+                  ? `Short by ${formatCurrencyFaceAmount(totalCost - spendable, bondCurrency)}`
+                  : formatCurrencyFaceAmount(spendable - totalCost, bondCurrency);
+              })()
+            : (() => {
+                const requiredSpend = explicitPayEstimate?.spendAmount ?? totalCost;
+                return fundsShort
+                  ? `Short by ${formatCurrencyFaceAmount(
+                      totalCost - (explicitPayEstimate?.deliveredAmount ?? 0),
+                      bondCurrency
+                    )}`
+                  : formatCurrencyFaceAmount(
+                      selectedPayBalance - requiredSpend,
+                      selectedPayCurrency
+                    );
+              })();
 
   const requestPayCurrency =
     account === "character" && side === "buy" && personalBalances && !shouldUseImplicitAutoConvert
@@ -396,6 +440,21 @@ export function BondTradeModal({
     setLoading(true);
     setError("");
     try {
+      if (account === "investmentBank" && investmentBank) {
+        trackAction(`bond.${side}`, { bondId, units, account });
+        const res = await fetch(`/api/corporations/${investmentBank.id}/bank/prop/positions`, {
+          method: side === "buy" ? "POST" : "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ asset: "bond", ref: bond._id, units }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          setError(json.error ?? `Failed to ${side} bond`);
+          return;
+        }
+        onSuccess();
+        return;
+      }
       const corpParam =
         account === "corporation" && userContext.myCorporation
           ? `?corporationId=${userContext.myCorporation.id}`
@@ -445,7 +504,8 @@ export function BondTradeModal({
     !fundsShort &&
     !notEnoughToSell &&
     !floatShort &&
-    !(account === "corporation" && !hasCorp);
+    !(account === "corporation" && !hasCorp) &&
+    !(account === "investmentBank" && !hasInvestmentBank);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -583,6 +643,37 @@ export function BondTradeModal({
                       : `${userContext.myCorporation!.bondUnits.toLocaleString("en-US")} units`}
                 </div>
               </button>
+              {hasInvestmentBank && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccount("investmentBank");
+                    setUnits(0);
+                  }}
+                  disabled={side === "sell" && investmentBank.bondUnits === 0}
+                  title={
+                    side === "sell" && investmentBank.bondUnits === 0
+                      ? "Investment bank holds no units"
+                      : undefined
+                  }
+                  className={`flex-1 border-l border-card-border px-3 py-2.5 text-left transition-colors ${
+                    side === "sell" && investmentBank.bondUnits === 0
+                      ? "opacity-40 cursor-not-allowed bg-card-elevated text-muted"
+                      : account === "investmentBank"
+                        ? "bg-primary/10 text-primary"
+                        : "bg-card-elevated text-muted hover:text-foreground"
+                  }`}
+                >
+                  <div className="font-semibold">Investment bank</div>
+                  <div
+                    className={`mt-0.5 tabular-nums ${account === "investmentBank" ? "text-primary/70" : "text-muted/60"}`}
+                  >
+                    {side === "buy"
+                      ? `${formatFull(investmentBank.liquidCapital)} liquid`
+                      : `${investmentBank.bondUnits.toLocaleString("en-US")} units`}
+                  </div>
+                </button>
+              )}
             </div>
             {/* ─ Pay-currency selector (sibling of Personally so it isn't a button-in-button) ─ */}
             {account === "character" && side === "buy" && personalBalances && (
@@ -680,7 +771,7 @@ export function BondTradeModal({
                   ? "Units to buy"
                   : `Units to sell · ${heldUnits.toLocaleString("en-US")} held`}
               </label>
-              {side === "buy" && (
+              {side === "buy" && account !== "investmentBank" && (
                 <span className="text-xs text-muted tabular-nums">
                   {bond.publicFloat.toLocaleString("en-US")} in float
                 </span>

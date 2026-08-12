@@ -37,6 +37,7 @@ interface SharesTabProps {
     name: string;
     liquidCapital: number;
     liquidCurrencyCode?: string;
+    isInvestmentBank?: boolean;
   } | null;
   corpId: string;
   onRefresh: () => void;

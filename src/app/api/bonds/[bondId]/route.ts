@@ -23,6 +23,7 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { calculateBondYieldToMaturityPercent } from "@/lib/constants/bonds";
+import { isBankPropTradingEnabled } from "@/lib/banking/featureFlag";
 
 interface RouteParams {
   params: Promise<{ bondId: string }>;
@@ -71,13 +72,22 @@ export async function GET(_request: Request, { params }: RouteParams) {
     let currencyBalances: { personal: Record<string, number> } | null = null;
     let homeCurrency: string | null = null;
     let autoConvertEnabled = true;
+    let investmentBank: {
+      id: string;
+      name: string;
+      liquidCapital: number;
+      liquidCapitalLocal: number;
+      liquidCurrencyCode?: CurrencyCode | null;
+      bondUnits: number;
+    } | null = null;
 
     if (user) {
       if (corporation) {
         isCeo = corporation.userId != null && corporation.userId.toString() === user.userId;
       }
-      const [forexEnabled, userDoc] = await Promise.all([
+      const [forexEnabled, bankPropTradingEnabled, userDoc] = await Promise.all([
         isForexEnabled(),
+        isBankPropTradingEnabled(),
         db.collection<User>("users").findOne({ _id: new ObjectId(user.userId) }),
       ]);
       // Load exchange rates so multi-currency wealth converts correctly. Without
@@ -129,6 +139,24 @@ export async function GET(_request: Request, { params }: RouteParams) {
               liquidCurrencyCode: corpCode ?? null,
               bondUnits: corpHolding?.units ?? 0,
             };
+            if (
+              bankPropTradingEnabled &&
+              myCorp.bankCharter?.status === "active" &&
+              (myCorp.bankCharter.type === "investment" || myCorp.bankCharter.type === "universal")
+            ) {
+              investmentBank = {
+                id: myCorp._id.toString(),
+                name: myCorp.name,
+                liquidCapital:
+                  corpFxRate > 0 ? myCorp.liquidCapital / corpFxRate : myCorp.liquidCapital,
+                liquidCapitalLocal: myCorp.liquidCapital,
+                liquidCurrencyCode: corpCode ?? null,
+                bondUnits:
+                  myCorp.bankCharter.propBook
+                    ?.filter((p) => p.asset === "bond" && p.ref === bond._id.toString())
+                    .reduce((sum, p) => sum + p.units, 0) ?? 0,
+              };
+            }
           }
         }
       } else {
@@ -171,6 +199,24 @@ export async function GET(_request: Request, { params }: RouteParams) {
               liquidCurrencyCode: corpCode ?? null,
               bondUnits: corpHolding?.units ?? 0,
             };
+            if (
+              bankPropTradingEnabled &&
+              myCorp.bankCharter?.status === "active" &&
+              (myCorp.bankCharter.type === "investment" || myCorp.bankCharter.type === "universal")
+            ) {
+              investmentBank = {
+                id: myCorp._id.toString(),
+                name: myCorp.name,
+                liquidCapital:
+                  corpFxRate > 0 ? myCorp.liquidCapital / corpFxRate : myCorp.liquidCapital,
+                liquidCapitalLocal: myCorp.liquidCapital,
+                liquidCurrencyCode: corpCode ?? null,
+                bondUnits:
+                  myCorp.bankCharter.propBook
+                    ?.filter((p) => p.asset === "bond" && p.ref === bond._id.toString())
+                    .reduce((sum, p) => sum + p.units, 0) ?? 0,
+              };
+            }
           }
         }
       }
@@ -352,6 +398,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         myCashOnHand,
         myBondUnits,
         myCorporation,
+        investmentBank,
         ...(currencyBalances ? { currencyBalances, homeCurrency, autoConvertEnabled } : {}),
       },
     });

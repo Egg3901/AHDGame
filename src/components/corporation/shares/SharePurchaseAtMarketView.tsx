@@ -11,13 +11,17 @@ import type { OrderSide } from "./sharePurchaseModalTypes";
 interface SharePurchaseAtMarketViewProps {
   atMarketSide: OrderSide;
   buyAsCorp: boolean;
+  buyAsInvestmentBank: boolean;
   sellAsCorp: boolean;
+  sellAsInvestmentBank: boolean;
   quantity: number;
   quantityDraft: string | null;
   selectedPayCurrency: CurrencyCode;
   onSwitchSide: (side: OrderSide) => void;
   setBuyAsCorp: (v: boolean) => void;
+  setBuyAsInvestmentBank: (v: boolean) => void;
   setSellAsCorp: (v: boolean) => void;
+  setSellAsInvestmentBank: (v: boolean) => void;
   setQuantity: (v: number) => void;
   setQuantityDraft: (v: string | null) => void;
   setSelectedPayCurrency: (v: CurrencyCode) => void;
@@ -28,6 +32,7 @@ interface SharePurchaseAtMarketViewProps {
     name: string;
     liquidCapital: number;
     liquidCurrencyCode?: string;
+    isInvestmentBank?: boolean;
   } | null;
   myShares: number;
   myCorporationShares: number;
@@ -60,13 +65,17 @@ interface SharePurchaseAtMarketViewProps {
 export function SharePurchaseAtMarketView({
   atMarketSide,
   buyAsCorp,
+  buyAsInvestmentBank,
   sellAsCorp,
+  sellAsInvestmentBank,
   quantity,
   quantityDraft,
   selectedPayCurrency,
   onSwitchSide,
   setBuyAsCorp,
+  setBuyAsInvestmentBank,
   setSellAsCorp,
+  setSellAsInvestmentBank,
   setQuantity,
   setQuantityDraft,
   setSelectedPayCurrency,
@@ -179,7 +188,8 @@ export function SharePurchaseAtMarketView({
       {atMarketSide === "buy" && (
         <>
           <p className="text-xs text-muted">
-            Buy from the public float at the current price — executes immediately. No float, no buy.
+            Buy at the current price. Personal and corporate purchases use the public float; an
+            investment bank opens a prop-book position.
           </p>
 
           {myCorporation && (
@@ -188,23 +198,29 @@ export function SharePurchaseAtMarketView({
               <div className="flex overflow-hidden rounded-lg border border-card-border text-xs">
                 <button
                   type="button"
-                  onClick={() => setBuyAsCorp(false)}
+                  onClick={() => {
+                    setBuyAsCorp(false);
+                    setBuyAsInvestmentBank(false);
+                  }}
                   className={`flex-1 border-r border-card-border px-3 py-2.5 text-left transition-colors ${
-                    !buyAsCorp
+                    !buyAsCorp && !buyAsInvestmentBank
                       ? "bg-primary/10 text-primary"
                       : "bg-card-elevated text-muted hover:text-foreground"
                   }`}
                 >
                   <div className="font-semibold">Personally</div>
                   <div
-                    className={`mt-0.5 tabular-nums ${!buyAsCorp ? "text-primary/70" : "text-muted/60"}`}
+                    className={`mt-0.5 tabular-nums ${!buyAsCorp && !buyAsInvestmentBank ? "text-primary/70" : "text-muted/60"}`}
                   >
                     {formatAmount(personalCashAnchor)}
                   </div>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setBuyAsCorp(true)}
+                  onClick={() => {
+                    setBuyAsCorp(true);
+                    setBuyAsInvestmentBank(false);
+                  }}
                   className={`flex-1 px-3 py-2.5 text-left transition-colors ${
                     buyAsCorp
                       ? "bg-primary/10 text-primary"
@@ -218,12 +234,30 @@ export function SharePurchaseAtMarketView({
                     {formatAmount(myCorpLiquidInternal, myCorpLiquidCurrency)}
                   </div>
                 </button>
+                {myCorporation.isInvestmentBank && (
+                  <button
+                    type="button"
+                    onClick={() => setBuyAsInvestmentBank(true)}
+                    className={`flex-1 border-l border-card-border px-3 py-2.5 text-left transition-colors ${
+                      buyAsInvestmentBank
+                        ? "bg-primary/10 text-primary"
+                        : "bg-card-elevated text-muted hover:text-foreground"
+                    }`}
+                  >
+                    <div className="font-semibold">Investment bank</div>
+                    <div
+                      className={`mt-0.5 tabular-nums ${buyAsInvestmentBank ? "text-primary/70" : "text-muted/60"}`}
+                    >
+                      {formatAmount(myCorpLiquidInternal, myCorpLiquidCurrency)}
+                    </div>
+                  </button>
+                )}
               </div>
             </div>
           )}
 
           {/* Pay-currency selector + auto-convert */}
-          {!buyAsCorp && myCurrencyBalances && (
+          {!buyAsCorp && !buyAsInvestmentBank && myCurrencyBalances && (
             <div className="space-y-2">
               <div className="flex items-center justify-between px-0.5">
                 <span className="text-xs text-muted">Pay with</span>
@@ -344,10 +378,16 @@ export function SharePurchaseAtMarketView({
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">
-                  {buyAsCorp ? "Corp liquid capital" : personalBudgetLabel}
+                  {buyAsCorp || buyAsInvestmentBank
+                    ? buyAsInvestmentBank
+                      ? "Bank liquid capital"
+                      : "Corp liquid capital"
+                    : personalBudgetLabel}
                 </span>
                 <span className="tabular-nums font-medium">
-                  {buyAsCorp ? formatAmount(activeBudget) : personalBudgetValue}
+                  {buyAsCorp || buyAsInvestmentBank
+                    ? formatAmount(activeBudget)
+                    : personalBudgetValue}
                 </span>
               </div>
               {estimatedFxFeeAnchor > 0 && (
@@ -366,7 +406,11 @@ export function SharePurchaseAtMarketView({
                       floatFundsShort ? "text-error" : "text-success"
                     }`}
                   >
-                    {buyAsCorp ? corpAtMarketAfterPurchase : personalAfterPurchase}
+                    {buyAsCorp || buyAsInvestmentBank
+                      ? buyAsInvestmentBank
+                        ? formatAmount(activeBudget - buyCost)
+                        : corpAtMarketAfterPurchase
+                      : personalAfterPurchase}
                   </span>
                 </div>
               )}
@@ -400,17 +444,18 @@ export function SharePurchaseAtMarketView({
                   type="button"
                   onClick={() => {
                     setSellAsCorp(false);
+                    setSellAsInvestmentBank(false);
                     resetQuantity(0);
                   }}
                   className={`flex-1 border-r border-card-border px-3 py-2.5 text-left transition-colors ${
-                    !sellAsCorp
+                    !sellAsCorp && !sellAsInvestmentBank
                       ? "bg-primary/10 text-primary"
                       : "bg-card-elevated text-muted hover:text-foreground"
                   }`}
                 >
                   <div className="font-semibold">Personally</div>
                   <div
-                    className={`mt-0.5 tabular-nums ${!sellAsCorp ? "text-primary/70" : "text-muted/60"}`}
+                    className={`mt-0.5 tabular-nums ${!sellAsCorp && !sellAsInvestmentBank ? "text-primary/70" : "text-muted/60"}`}
                   >
                     {myShares.toLocaleString("en-US")} shares
                   </div>
@@ -420,6 +465,7 @@ export function SharePurchaseAtMarketView({
                   onClick={() => {
                     if (myCorporationShares > 0) {
                       setSellAsCorp(true);
+                      setSellAsInvestmentBank(false);
                       resetQuantity(0);
                     }
                   }}
@@ -442,6 +488,24 @@ export function SharePurchaseAtMarketView({
                       : `${myCorporationShares.toLocaleString("en-US")} shares`}
                   </div>
                 </button>
+                {myCorporation.isInvestmentBank && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSellAsInvestmentBank(true);
+                      setSellAsCorp(false);
+                      resetQuantity(0);
+                    }}
+                    className={`flex-1 border-l border-card-border px-3 py-2.5 text-left transition-colors ${
+                      sellAsInvestmentBank
+                        ? "bg-primary/10 text-primary"
+                        : "bg-card-elevated text-muted hover:text-foreground"
+                    }`}
+                  >
+                    <div className="font-semibold">Investment bank</div>
+                    <div className="mt-0.5 tabular-nums text-muted/60">Prop-book position</div>
+                  </button>
+                )}
               </div>
               {myCorporationShares === 0 && (
                 <p className="mt-1.5 text-xs text-muted">
@@ -470,14 +534,14 @@ export function SharePurchaseAtMarketView({
             <div className="mb-1.5 flex items-center justify-between">
               <label className="text-xs text-muted">
                 Shares to sell
-                {!sellAsCorp && (
+                {!sellAsCorp && !sellAsInvestmentBank && (
                   <>
                     <span className="mx-1.5 text-card-border">·</span>
                     {myShares.toLocaleString("en-US")} owned
                   </>
                 )}
               </label>
-              {(sellAsCorp ? myCorporationShares : myShares) > 0 && (
+              {!sellAsInvestmentBank && (sellAsCorp ? myCorporationShares : myShares) > 0 && (
                 <button
                   type="button"
                   onClick={() => resetQuantity(sellAsCorp ? myCorporationShares : myShares)}
@@ -497,7 +561,16 @@ export function SharePurchaseAtMarketView({
               onChange={(e) => {
                 const raw = e.target.value;
                 setQuantityDraft(raw);
-                setQuantity(parseQtyDigits(raw, sellAsCorp ? myCorporationShares : myShares));
+                setQuantity(
+                  parseQtyDigits(
+                    raw,
+                    sellAsInvestmentBank
+                      ? Number.MAX_SAFE_INTEGER
+                      : sellAsCorp
+                        ? myCorporationShares
+                        : myShares
+                  )
+                );
               }}
               onBlur={() => setQuantityDraft(null)}
               placeholder="Quantity"
