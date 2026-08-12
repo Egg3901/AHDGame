@@ -35,7 +35,7 @@ export interface WhipDefianceItem {
   whipId: string;
   audience: WhipAudience;
   mode: "soft" | "hard";
-  issuerRole: WhipIssuerRole;
+  issuerRole?: WhipIssuerRole;
   targetType: WhipTargetType;
   targetLabel: string;
   chamber: string;
@@ -78,10 +78,6 @@ interface TargetVoteRecord {
 interface TargetContext {
   label: string;
   votes: TargetVoteRecord[];
-}
-
-function getIssuerRoleLabel(role: WhipIssuerRole | undefined): WhipIssuerRole {
-  return role ?? "admin";
 }
 
 function getModeLabel(whip: BillWhip): "soft" | "hard" {
@@ -494,7 +490,7 @@ export async function buildWhipDefianceSnapshot(
         whipId: whip._id.toString(),
         audience: whip.audience,
         mode: getModeLabel(whip),
-        issuerRole: getIssuerRoleLabel(whip.issuedByRole),
+        issuerRole: whip.issuedByRole,
         targetType: whip.targetType,
         targetLabel: target.label,
         chamber: chamberToOffice(whip.chamber),
