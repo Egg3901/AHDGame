@@ -98,6 +98,7 @@ Any player or corporation can buy bond units from the public float:
 
 - **Players:** Payment from personal cash. Coupon payments received as personal income each turn.
 - **Corporations:** Payment from liquid capital. Coupon payments received as corporate income. Add \`?corporationId=\` to buy for your corporation.
+- **NPP caretaker CEOs:** When the corp is profitable and cash sits above one day of revenue, they buy high-coupon home-currency paper from the public float (a quarter of the surplus per turn). They will not buy the corp's own issue, and a loss-making corp keeps the cash as runway.
 
 CEOs can also **buy back** their own bonds from the public float to reduce outstanding debt:
 - Non-defaulted bonds: buyback at current **market price**

@@ -67,6 +67,9 @@ import { processSoeRemittance } from "@/lib/nationalization/soeRemittance";
 import { processPendingNationalizations } from "@/lib/nationalization/pendingNationalizations";
 import { processNationalizationAuctions } from "@/lib/nationalization/privatizationAuction";
 import { processNppCorporationDecisions } from "@/lib/turn/nppCorporationBehavior";
+import { processNppSupplyAgreements } from "@/lib/turn/npp/nppSupplyAgreements";
+import { processNppProspecting } from "@/lib/turn/npp/nppProspecting";
+import { processNppCorpTreasury } from "@/lib/turn/npp/nppCorpTreasury";
 import { createNotifications } from "@/lib/notifications";
 import { COMMODITY_LABELS } from "@/lib/constants/commodities";
 import { trackFinancialDistress } from "./financialDistressTracking";
@@ -163,6 +166,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           brandLoyaltySliceEnabled: 1,
           sectorQualityEnabled: 1,
           qualityPremiumPricingEnabled: 1,
+          supplyAgreementsEnabled: 1,
+          prospectingEnabled: 1,
           commandEconomyEnabled: 1,
           privateBankingEnabled: 1,
         },
@@ -850,6 +855,19 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     await db.collection("corporations").bulkWrite(corpOps as any[]);
   }
   mark("sector+corp bulkWrites");
+
+  // Contracts and surveys read the post-bulkWrite snapshot so this turn's
+  // mothball / production-policy / cash writes are visible. Matching before
+  // the write would lock volume against a plant this pass just idled, and
+  // a survey debit would lose to the reinvestment `$set liquidCapital`.
+  await processNppSupplyAgreements(db, turn ?? 0, now, market.plantsEnabled);
+  mark("nppSupplyAgreements");
+
+  const nppProspects = await processNppProspecting(db, turn ?? 0, now);
+  if (nppProspects > 0) mark("nppProspecting");
+
+  const nppTreasury = await processNppCorpTreasury(db, turn ?? 0, now);
+  if (nppTreasury > 0) mark("nppCorpTreasury");
 
   // Persist per-commodity output quality for next turn's input pillar (quality
   // propagation). Upsert by commodity so the lagged read above stays one turn behind.
