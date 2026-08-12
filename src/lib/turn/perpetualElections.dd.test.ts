@@ -23,9 +23,9 @@ vi.mock("@/lib/countryAccess", () => ({
 // Representative subset — the six-Länder roster invariant lives in
 // sovietSeatMap.test.ts / countryCoverage.test.ts.
 const DD_REGIONS = [
-  { _id: "BEO", houseDistricts: 32 },
-  { _id: "SN", houseDistricts: 151 },
-  { _id: "MV", houseDistricts: 58 },
+  { _id: "BEO", houseDistricts: 32, stateSenateSeats: 5 },
+  { _id: "SN", houseDistricts: 151, stateSenateSeats: 24 },
+  { _id: "MV", houseDistricts: 58, stateSenateSeats: 9 },
 ];
 
 function makeDDMockDb(currentTurn: number, gameState: Record<string, unknown> = {}) {
@@ -121,6 +121,35 @@ describe("ensureDDGovernorElections (Land First Secretaries)", () => {
     await mountDD(mock);
     const { ensureDDGovernorElections } = await import("./perpetualElections");
     await ensureDDGovernorElections(new Date("2026-04-01T00:00:00Z"));
+    expect(mock.insertCalls.flat()).toHaveLength(0);
+  });
+});
+
+describe("ensureDDLandAssemblyElections (Landtage)", () => {
+  it("spawns one multi-seat Landtag race per Land sized by stateSenateSeats", async () => {
+    const mock = makeDDMockDb(1);
+    await mountDD(mock);
+    const { ensureDDLandAssemblyElections } = await import("./perpetualElections");
+    await ensureDDLandAssemblyElections(new Date("2026-04-01T00:00:00Z"));
+
+    const inserted = mock.insertCalls.flat();
+    expect(inserted).toHaveLength(DD_REGIONS.length);
+    for (const doc of inserted) {
+      expect(doc.electionType).toBe("landAssembly");
+      expect(doc.countryId).toBe("DD");
+      expect(doc.electionYear).toBe(1954);
+    }
+    const byState = new Map(inserted.map((d) => [d.state, d.totalSeats]));
+    expect(byState.get("BEO")).toBe(5);
+    expect(byState.get("SN")).toBe(24);
+    expect(byState.get("MV")).toBe(9);
+  });
+
+  it("status gate: coming-soon (not NPP-governed) spawns nothing", async () => {
+    const mock = makeDDMockDb(1);
+    await mountDD(mock, "coming-soon");
+    const { ensureDDLandAssemblyElections } = await import("./perpetualElections");
+    await ensureDDLandAssemblyElections(new Date("2026-04-01T00:00:00Z"));
     expect(mock.insertCalls.flat()).toHaveLength(0);
   });
 });

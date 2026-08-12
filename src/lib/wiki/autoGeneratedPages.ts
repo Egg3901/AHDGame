@@ -312,6 +312,8 @@ function electionTypeLabel(election: Pick<Election, "electionType" | "senateClas
       return "NPC Delegate";
     case "peoplesCongress":
       return "People's Congress";
+    case "landAssembly":
+      return "Landtag";
     case "dail":
       return "Dáil Éireann";
     case "seanad":

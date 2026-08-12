@@ -66,6 +66,9 @@ export const DEFAULT_DURATIONS: Record<
   // DD Volkskammer — GDR single-list National Front deputies (4-year cycle via
   // the canonicalCycle table, 48h window).
   volkskammerDeputy: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
+  // DD Land assemblies (Landtage) — sub-national chamber per Land; same 48h
+  // window as the Volkskammer / RU republic soviets.
+  landAssembly: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   // Eastern bloc Tier-1 unicameral assemblies (DD pattern, 48h window).
   sejm: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   chamberOfThePeople: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },

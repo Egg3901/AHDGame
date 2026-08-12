@@ -78,7 +78,7 @@ describe("resolvePrimariesIfNeeded", () => {
     expect(db.collectionMocks["electionCandidates"]!.updateMany).not.toHaveBeenCalled();
   });
 
-  it("does nothing when only one candidate per party (no primary needed)", async () => {
+  it("records primaryResults for uncontested parties without eliminating anyone", async () => {
     const electionId = new ObjectId();
     const election = {
       _id: electionId,
@@ -123,11 +123,40 @@ describe("resolvePrimariesIfNeeded", () => {
       makeCursor([candidate1, candidate2])
     );
 
+    const { fetchEnrichedCandidates } = await import("@/lib/electionEngine");
+    vi.mocked(fetchEnrichedCandidates).mockResolvedValue(
+      [candidate1, candidate2].map((c) => ({
+        candidateId: c._id.toString(),
+        charEP: 0,
+        charSP: 0,
+        favorability: 50,
+        politicalInfluence: 100,
+      })) as never
+    );
+    const { calcPrimaryScore } = await import("@/lib/primaryScore");
+    vi.mocked(calcPrimaryScore).mockReturnValue(50);
+
+    db.collectionMocks["characters"] = db.collection("characters");
+    db.collectionMocks["characters"].find.mockReturnValue(
+      makeCursor(
+        [candidate1, candidate2].map((c) => ({ _id: c.characterId, userId: new ObjectId() }))
+      )
+    );
+    db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
+    db.collectionMocks["electionVoteTallies"].find.mockReturnValue(makeCursor([]));
+
     const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
     await resolvePrimariesIfNeeded(NOW, 100);
 
-    // No updateMany since no party has >1 candidate
+    // No withdrawals — each party already at/under the advance cap
     expect(db.collectionMocks["electionCandidates"].updateMany).not.toHaveBeenCalled();
+    // But still stamp primaryResults so districted house (and similar) can split
+    // seats by primary share rather than falling back to general-vote share.
+    const { initElectionVoteTally } = await import("@/lib/electionEngine");
+    expect(initElectionVoteTally).toHaveBeenCalled();
+    const primaryResults = vi.mocked(initElectionVoteTally).mock.calls[0][3];
+    expect(primaryResults?.byParty?.DEM?.[0]?.won).toBe(true);
+    expect(primaryResults?.byParty?.GOP?.[0]?.won).toBe(true);
   });
 
   it("eliminates lowest-scoring candidates in a contested primary", async () => {
@@ -338,8 +367,8 @@ describe("resolvePrimariesIfNeeded", () => {
 
   // Regression: for countries where the primary-winners cap > 1 (parliamentary
   // → 3, onePartyState → 7), after the primary resolves each party still has
-  // up to maxAdvancing active candidates.
-  // The guard must skip these elections on subsequent turns, otherwise the
+  // up to maxAdvancing active candidates AND the tally already carries
+  // primaryResults. The gate must skip these on subsequent turns, otherwise the
   // general-phase vote tally is wiped via initElectionVoteTally every turn.
   it("does not reinitialize tally when UK parties already have only maxAdvancing candidates", async () => {
     const electionId = new ObjectId();
@@ -370,6 +399,20 @@ describe("resolvePrimariesIfNeeded", () => {
     db.collectionMocks["politicalParties"].find.mockReturnValue(makeCursor([]));
     db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
     db.collectionMocks["electionCandidates"].find.mockReturnValue(makeCursor(candidates));
+    db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
+    db.collectionMocks["electionVoteTallies"].find.mockReturnValue(
+      makeCursor([
+        {
+          electionId,
+          primaryResults: {
+            byParty: {
+              uk_labour: candidates.map((c) => ({ candidateId: c._id.toString(), won: true })),
+            },
+            recordedAt: NOW,
+          },
+        },
+      ])
+    );
 
     const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
     await resolvePrimariesIfNeeded(NOW, 100);
@@ -407,6 +450,20 @@ describe("resolvePrimariesIfNeeded", () => {
     db.collectionMocks["politicalParties"].find.mockReturnValue(makeCursor([]));
     db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
     db.collectionMocks["electionCandidates"].find.mockReturnValue(makeCursor(candidates));
+    db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
+    db.collectionMocks["electionVoteTallies"].find.mockReturnValue(
+      makeCursor([
+        {
+          electionId,
+          primaryResults: {
+            byParty: {
+              jp_ldp: candidates.map((c) => ({ candidateId: c._id.toString(), won: true })),
+            },
+            recordedAt: NOW,
+          },
+        },
+      ])
+    );
 
     const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
     await resolvePrimariesIfNeeded(NOW, 100);
@@ -414,6 +471,102 @@ describe("resolvePrimariesIfNeeded", () => {
     const { initElectionVoteTally } = await import("@/lib/electionEngine");
     expect(initElectionVoteTally).not.toHaveBeenCalled();
     expect(db.collectionMocks["electionCandidates"].updateMany).not.toHaveBeenCalled();
+  });
+
+  // Ticket #1043: with redistricting on, US House advances top-3. A 2-candidate
+  // Democratic primary must still stamp primaryResults (both won:true) so the
+  // districted resolver can split the party's district wins by primary share —
+  // and must NOT eliminate either nominee.
+  it("stamps primaryResults for US House multi-advance without eliminating when under the cap", async () => {
+    const electionId = new ObjectId();
+    const election = {
+      _id: electionId,
+      electionType: "house",
+      status: "active",
+      countryId: "US",
+      state: "NC",
+      primaryEndTime: new Date(NOW.getTime() - 1000),
+      endTime: new Date(NOW.getTime() + 100000),
+    };
+    const playerId = new ObjectId();
+    const nppId = new ObjectId();
+    const candidates = [
+      {
+        _id: playerId,
+        electionId,
+        party: "1",
+        characterName: "Player",
+        characterId: new ObjectId(),
+        isNPP: false,
+        status: "active",
+      },
+      {
+        _id: nppId,
+        electionId,
+        party: "1",
+        characterName: "NPP Co-nominee",
+        characterId: new ObjectId(),
+        nppId: new ObjectId(),
+        isNPP: true,
+        status: "active",
+      },
+      {
+        _id: new ObjectId(),
+        electionId,
+        party: "2",
+        characterName: "GOP",
+        characterId: new ObjectId(),
+        isNPP: true,
+        nppId: new ObjectId(),
+        status: "active",
+      },
+    ];
+
+    db.collectionMocks["gameState"] = db.collection("gameState");
+    db.collectionMocks["gameState"].findOne.mockResolvedValue({
+      _id: "current",
+      redistrictingEnabled: true,
+    });
+    db.collectionMocks["elections"] = db.collection("elections");
+    db.collectionMocks["elections"].find.mockReturnValue(makeCursor([election]));
+    db.collectionMocks["politicalParties"] = db.collection("politicalParties");
+    db.collectionMocks["politicalParties"].find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
+    db.collectionMocks["electionCandidates"].find.mockReturnValue(makeCursor(candidates));
+    db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
+    db.collectionMocks["electionVoteTallies"].find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["characters"] = db.collection("characters");
+    db.collectionMocks["characters"].find.mockReturnValue(
+      makeCursor([{ _id: candidates[0].characterId, userId: new ObjectId() }])
+    );
+
+    const { fetchEnrichedCandidates } = await import("@/lib/electionEngine");
+    vi.mocked(fetchEnrichedCandidates).mockResolvedValue(
+      candidates.map((c) => ({
+        candidateId: c._id.toString(),
+        charEP: 0,
+        charSP: 0,
+        favorability: 50,
+        politicalInfluence: 100,
+      })) as never
+    );
+    const { calcPrimaryScore } = await import("@/lib/primaryScore");
+    vi.mocked(calcPrimaryScore)
+      .mockReturnValueOnce(80)
+      .mockReturnValueOnce(40)
+      .mockReturnValueOnce(50);
+
+    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
+    await resolvePrimariesIfNeeded(NOW, 100);
+
+    expect(db.collectionMocks["electionCandidates"].updateMany).not.toHaveBeenCalled();
+    const { initElectionVoteTally } = await import("@/lib/electionEngine");
+    expect(initElectionVoteTally).toHaveBeenCalled();
+    const primaryResults = vi.mocked(initElectionVoteTally).mock.calls[0][3];
+    const dem = primaryResults?.byParty?.["1"] ?? [];
+    expect(dem).toHaveLength(2);
+    expect(dem.every((e: { won: boolean }) => e.won)).toBe(true);
+    expect(dem[0].candidateId).toBe(playerId.toString());
   });
 
   it("still eliminates losers when a UK party has more candidates than maxAdvancing", async () => {

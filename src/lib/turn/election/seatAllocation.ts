@@ -62,8 +62,9 @@ export function getMultiSeatMinShare(
     // representation — the historical system never let a 20% gate zero one
     // out. Observed founding-cycle vote shares split ~14-30% across the 5
     // candidates; a 20% gate would exclude 2-3 of them from every region's
-    // allocation pool (issue #3896).
-    electionType === "volkskammerDeputy"
+    // allocation pool (issue #3896). Same gate for Land assemblies.
+    electionType === "volkskammerDeputy" ||
+    electionType === "landAssembly"
   )
     return 0.1;
   return 0.2;

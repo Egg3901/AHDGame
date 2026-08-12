@@ -2110,6 +2110,28 @@ export async function ensureDDGovernorElections(now: Date): Promise<void> {
 }
 
 /**
+ * Land assemblies (Landtage) — each Land's authored chamber size
+ * (`stateSenateSeats` on the seeded State doc). Without this family, Land
+ * First Secretaries have no same-party legislature NPPs to queue state bills
+ * through (ticket #1044). Mirrors `ensureRURepublicSovietElections`.
+ */
+export async function ensureDDLandAssemblyElections(now: Date): Promise<void> {
+  await ensureRegionalDelegateElections(
+    {
+      countryId: "DD",
+      electionType: "landAssembly",
+      seatsForRegions: (regions) =>
+        Object.fromEntries(regions.map((r) => [r._id as string, r.stateSenateSeats ?? 1])),
+      openPrimaryImmediately: true,
+      statusGated: true,
+      electionsLiveGate: ddElectionsLive,
+      label: "Landtag",
+    },
+    now
+  );
+}
+
+/**
  * Eastern-bloc NPP/beta election gate (DD/RU shape): live when the country is
  * beta/active, or when an NPP brain governs a coming-soon economy-preview row
  * so the assembly re-elects instead of freezing.

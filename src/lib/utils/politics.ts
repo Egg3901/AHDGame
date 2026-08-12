@@ -121,6 +121,8 @@ export function getOfficeCountry(officeType: string | undefined): CountryId | un
       return "RU";
     case "volkskammerDeputy":
       return "DD";
+    case "landAssembly":
+      return "DD";
     // "premier" is deliberately NOT mapped: both CN and RU use it (like
     // "governor" across US/JP), so callers fall back to the character's own
     // countryId per this function's ambiguity contract.
@@ -611,6 +613,11 @@ export function getOfficeLabel(office: OfficeLike | null, countryId?: CountryId)
     case "landtag": {
       const seats = office.seatsHeld ?? 1;
       const member = cfg?.label ?? "Mitglied des Landtags";
+      return `${member} (${office.state ?? "?"}, ${seats} seat${seats > 1 ? "s" : ""})`;
+    }
+    case "landAssembly": {
+      const seats = office.seatsHeld ?? 1;
+      const member = cfg?.label ?? "Landtag Deputy";
       return `${member} (${office.state ?? "?"}, ${seats} seat${seats > 1 ? "s" : ""})`;
     }
     case "regionalCouncil": {

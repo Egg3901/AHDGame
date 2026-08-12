@@ -21,6 +21,7 @@ const SEEDED_PAIRS: ReadonlyArray<readonly [CountryId, string]> = [
   ["CN", "peoplesCongress"],
   ["DD", "governor"],
   ["DD", "volkskammerDeputy"],
+  ["DD", "landAssembly"],
   ["DE", "bundestag"],
   ["FR", "assembleeNationale"],
   ["IE", "dail"],

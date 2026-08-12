@@ -117,6 +117,13 @@ describe("SUB_NATIONAL_CHAMBERS (candidate-supply floor registry)", () => {
   it("still covers the CN People's Congress it was modeled on", () => {
     expect(SUB_NATIONAL_CHAMBERS.CN?.officeType).toBe("peoplesCongress");
   });
+
+  it("covers DD Land assemblies so Land First Secretaries can queue state bills (#1044)", () => {
+    const dd = SUB_NATIONAL_CHAMBERS.DD;
+    expect(dd?.officeType).toBe("landAssembly");
+    expect(dd?.seatsForState({ _id: "SN", stateSenateSeats: 24 })).toBe(24);
+    expect(dd?.seatsForState({ _id: "X", stateSenateSeats: null })).toBe(0);
+  });
 });
 
 describe("allocateSeatsByWeights", () => {

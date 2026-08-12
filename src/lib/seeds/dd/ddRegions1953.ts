@@ -19,8 +19,10 @@ import type { State } from "@/lib/db/types";
  * `seedDD.ts` for the divided-era ownership rules.
  *
  * houseDistricts = Volkskammer seats (nominal, single National Front list;
- * sum = 500). stateSenateSeats = nominal regional weight. gdp in millions of
- * Mark der DDR (per-Land shares of the ~44B NMP).
+ * sum = 500). stateSenateSeats = Landtag (landAssembly) seats per Land
+ * (sum = 80) — the sub-national chamber Land First Secretaries queue state
+ * bills through. gdp in millions of Mark der DDR (per-Land shares of the
+ * ~44B NMP).
  */
 export const ddRegions1953: State[] = [
   // ── Berlin (the capital, SED stronghold, June 17 epicentre) ─────────────────

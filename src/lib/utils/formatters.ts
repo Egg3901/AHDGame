@@ -636,6 +636,10 @@ export function electionToLarpYear(
       // DD: single-list Volkskammer, 4-year cadence (mirrors RU; the 192-turn
       // cycle table drives scheduling). Fallback guards display totality only.
       return (years.ddVolkskammer ?? years.governorStateSenate) + (cycle - 1) * 4;
+    case "landAssembly":
+      // DD Landtage ride the Volkskammer cycle (same anchor as Land First
+      // Secretaries). Distinct key from DE `landtag` (5-year Sainte-Laguë).
+      return (years.ddVolkskammer ?? years.governorStateSenate) + (cycle - 1) * 4;
     case "npcDelegate":
     case "peoplesCongress":
       // CN: 5-year cycle. 14th NPC → 2023 for 2019-default; 8th NPC →

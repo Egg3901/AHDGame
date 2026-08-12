@@ -139,6 +139,10 @@ const BETA_PARLIAMENT_CYCLES: Record<
   // and — per the D3 note above — this row, not config termYears, drives the
   // schedule. Null anchor era-gates DD OFF outside the divided-Germany presets.
   volkskammerDeputy: { anchor: "ddVolkskammer", periodHours: 192 },
+  // DD Land assemblies — ride the Volkskammer cycle (Land First Secretaries
+  // already do; historically Bezirks-/Landtage tracked the chamber). Key is
+  // distinct from DE `landtag` so Sainte-Laguë never claims these races.
+  landAssembly: { anchor: "ddVolkskammer", periodHours: 192 },
   // Eastern bloc Tier-1 unicameral assemblies — ride the DD Volkskammer LARP
   // anchor (Cold-War 4/5-year cadence) until dedicated eastern-bloc anchors
   // land. Era-gated OFF outside 1953/1979 via null ddVolkskammer.

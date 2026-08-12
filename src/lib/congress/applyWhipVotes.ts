@@ -502,14 +502,25 @@ export async function applyWhipVotesToLeadership(
   mode: NppWhipMode = "hard",
   statecraftBonus = 0
 ): Promise<ApplyWhipResult> {
-  // Fetch the target nomination and all active nominations for re-vote handling
-  const allNominations = await db
+  // Fetch active nominations for re-vote handling. House/Senate leadership
+  // nominations share one collection across roles — scope to the target's role
+  // so whipping Majority Whip cannot steal Pro Tempore / Majority Leader votes
+  // (ticket #1046). Speaker nominations have no role and stay election-wide.
+  const openNominations = await db
     .collection<SpeakerNomination>(nominationCollection)
     .find({ status: { $in: ["open", "voting"] } })
     .toArray();
 
-  const targetNomination = allNominations.find((n) => n._id.equals(candidacyId));
+  const targetNomination = openNominations.find((n) => n._id.equals(candidacyId));
   if (!targetNomination) return { fellInLine: 0, ignored: 0 };
+
+  const targetRole = (targetNomination as SpeakerNomination & { role?: string }).role;
+  const raceNominations =
+    typeof targetRole === "string"
+      ? openNominations.filter(
+          (n) => (n as SpeakerNomination & { role?: string }).role === targetRole
+        )
+      : openNominations;
 
   let fellInLine = 0;
   let ignored = 0;
@@ -536,7 +547,7 @@ export async function applyWhipVotesToLeadership(
     if (!npp) continue;
     const obeysWhip = mode === "hard" || resolveNppWhipSuccess(npp, mode, statecraftBonus).success;
     if (!obeysWhip) {
-      const fallbackNomination = pickFallbackLeadershipNomination(npp, allNominations);
+      const fallbackNomination = pickFallbackLeadershipNomination(npp, raceNominations);
       if (!fallbackNomination) {
         ignored++;
         continue;
@@ -545,7 +556,7 @@ export async function applyWhipVotesToLeadership(
       await castLeadershipVote(
         db,
         nominationCollection,
-        allNominations,
+        raceNominations,
         nppKey,
         fallbackNomination._id,
         now
@@ -555,7 +566,7 @@ export async function applyWhipVotesToLeadership(
       continue;
     }
 
-    await castLeadershipVote(db, nominationCollection, allNominations, nppKey, candidacyId, now);
+    await castLeadershipVote(db, nominationCollection, raceNominations, nppKey, candidacyId, now);
 
     fellInLine++;
   }

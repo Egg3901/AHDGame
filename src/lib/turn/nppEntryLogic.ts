@@ -20,6 +20,7 @@ export const RACE_PRIORITY = [
   "regionalCouncil",
   "peoplesCongress",
   "republicSupremeSoviet",
+  "landAssembly",
   "sangiin",
   "house",
   "commons",

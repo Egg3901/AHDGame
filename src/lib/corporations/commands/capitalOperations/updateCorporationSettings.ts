@@ -11,7 +11,10 @@ import {
   TYPE_SWITCH_COOLDOWN_TURNS,
   TYPE_SWITCH_PENALTY_TURNS,
   CEO_SALARY_MAX_REVENUE_MULTIPLE,
+  type CorporationType,
 } from "@/lib/constants/corporations";
+import { migrateUnlockedTechOnPrimaryTypeSwitch } from "@/lib/corporations/techTree/migrateUnlocksOnTypeSwitch";
+import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import type { Corporation } from "@/lib/db/types";
 
 interface RouteParams {
@@ -154,8 +157,12 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
       (primaryType !== undefined && primaryType !== corporation.type) ||
       (secondaryType !== undefined && secondaryType !== (corporation.secondaryType ?? null));
 
+    let techUnset: Record<string, ""> | undefined;
+    let techInc: Record<string, number> | undefined;
+
     if (isTypeChange) {
-      const currentTurn = (await getGameState())?.currentTurn ?? 0;
+      const gameState = await getGameState();
+      const currentTurn = gameState?.currentTurn ?? 0;
 
       // Enforce cooldown
       const cooldownUntil = corporation.typeSwitchCooldownUntilTurn ?? 0;
@@ -179,6 +186,43 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
           );
         }
         updates.type = primaryType;
+
+        // Sector research is primary-type-specific: drop it on switch (no remap,
+        // no refund). Corporate-lane unlocks + new-type past-decade baseline keep
+        // (ticket #1040).
+        if (primaryType !== corporation.type) {
+          const startingYear = gameState?.startingYear ?? STARTING_YEAR;
+          const currentYear =
+            gameState?.currentYear ?? startingYear + Math.floor((currentTurn - 1) / TURNS_PER_YEAR);
+          const migration = migrateUnlockedTechOnPrimaryTypeSwitch(
+            corporation.unlockedTechNodeIds,
+            corporation.type as CorporationType,
+            primaryType as CorporationType,
+            currentYear,
+            corporation.techDecadeLane
+          );
+          updates.unlockedTechNodeIds = migration.unlockedTechNodeIds;
+          if (migration.clearDecadeLaneIds.length > 0) {
+            techUnset = {};
+            for (const decadeId of migration.clearDecadeLaneIds) {
+              techUnset[`techDecadeLane.${decadeId}`] = "";
+              techUnset[`techDecadeChosenTurn.${decadeId}`] = "";
+            }
+          }
+          const mkt = Math.min(
+            migration.strengthGrantReversal.marketingStrength,
+            corporation.marketingStrength ?? 0
+          );
+          const logi = Math.min(
+            migration.strengthGrantReversal.logisticsStrength,
+            corporation.logisticsStrength ?? 0
+          );
+          if (mkt > 0 || logi > 0) {
+            techInc = {};
+            if (mkt > 0) techInc.marketingStrength = -mkt;
+            if (logi > 0) techInc.logisticsStrength = -logi;
+          }
+        }
       }
 
       if (secondaryType !== undefined) {
@@ -206,9 +250,11 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
       }
     }
 
-    await db
-      .collection<Corporation>("corporations")
-      .updateOne({ _id: corporation._id }, { $set: updates });
+    const updateDoc: Record<string, unknown> = { $set: updates };
+    if (techUnset && Object.keys(techUnset).length > 0) updateDoc.$unset = techUnset;
+    if (techInc && Object.keys(techInc).length > 0) updateDoc.$inc = techInc;
+
+    await db.collection<Corporation>("corporations").updateOne({ _id: corporation._id }, updateDoc);
 
     return NextResponse.json({ success: true });
   } catch (error) {

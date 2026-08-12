@@ -33,9 +33,11 @@ const CONTESTABLE_SINGLE_SEAT = ["governor", "special_governor", "senate"] as co
  *
  * CN Provincial People's Congress (`peoplesCongress`) is the CN case. The RU
  * Supreme Soviet families are tracked separately (#3387/#3388 RU half) and are
- * intentionally NOT listed here.
+ * intentionally NOT listed here. DD Land assemblies (`landAssembly`) are the
+ * East German analog of CN's provincial congress — vacant at founding until
+ * backfill/challenger supply seats them (ticket #1044).
  */
-const CONTESTABLE_MULTI_SEAT_ONEPARTY = ["peoplesCongress"] as const;
+const CONTESTABLE_MULTI_SEAT_ONEPARTY = ["peoplesCongress", "landAssembly"] as const;
 
 /** All election types this phase files a floor candidate into. */
 const CONTESTABLE = [...CONTESTABLE_SINGLE_SEAT, ...CONTESTABLE_MULTI_SEAT_ONEPARTY] as const;

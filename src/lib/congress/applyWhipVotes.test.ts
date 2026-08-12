@@ -239,6 +239,73 @@ describe("applyWhipVotes fallback handling", () => {
     randomSpy.mockRestore();
   });
 
+  it("does not steal NPP votes from a different leadership role (ticket #1046)", async () => {
+    const npp = makeNpp();
+    const official = makeOfficial(npp._id);
+    const nppKey = `npp_${npp._id.toString()}`;
+    const majorityWhipId = new ObjectId();
+    const proTemporeId = new ObjectId();
+
+    const majorityWhipNomination: SpeakerNomination & { role: string } = {
+      _id: majorityWhipId,
+      role: "majority_whip",
+      nomineeId: new ObjectId(),
+      nomineeName: "Whip Target",
+      nomineeParty: "1",
+      nomineeCountryId: "US",
+      nomineeState: "US_IA",
+      nominatedById: new ObjectId(),
+      nominatedByName: "Nominator",
+      status: "voting",
+      votesFor: 0,
+      votesAgainst: 0,
+      votes: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const proTemporeNomination: SpeakerNomination & { role: string } = {
+      ...majorityWhipNomination,
+      _id: proTemporeId,
+      role: "pro_tempore",
+      nomineeName: "PPT Holder",
+      votesFor: 1,
+      votes: { [nppKey]: "for" },
+    };
+
+    const collections = createCollectionMap();
+    collections.speakerNominations.find.mockReturnValue(
+      makeCursor([majorityWhipNomination, proTemporeNomination])
+    );
+    const db = {
+      collection: vi.fn((name: string) => collections[name as keyof typeof collections]),
+    } as unknown as Db;
+
+    const { applyWhipVotesToLeadership } = await import("./applyWhipVotes");
+    const result = await applyWhipVotesToLeadership(
+      db,
+      majorityWhipId,
+      "speakerNominations",
+      [official],
+      new Map([[npp._id.toString(), npp]]),
+      "hard"
+    );
+
+    expect(result).toEqual({ fellInLine: 1, ignored: 0 });
+    expect(collections.speakerNominations.updateOne).toHaveBeenCalledWith(
+      { _id: majorityWhipId },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          [`votes.${nppKey}`]: "for",
+        }),
+      })
+    );
+    // Must not unset the Pro Tempore vote while applying a Majority Whip
+    expect(collections.speakerNominations.updateOne).not.toHaveBeenCalledWith(
+      { _id: proTemporeId },
+      expect.anything()
+    );
+  });
+
   it("forces a maximally-stubborn NPP to obey a hard leadership whip", async () => {
     // random 0.99 → roll 100, which fails even the best compliance chance,
     // so under the probabilistic gate this NPP would fall back. A hard

@@ -221,13 +221,14 @@ export async function GET(request: Request) {
     );
 
     // When primary is over, keep up to N nominees per party where N is the
-    // primary-winner cap for this race (US=1, UK=3, JP=3; single-winner
-    // governor/president races always 1).
+    // primary-winner cap for this race (US=1, UK=3, JP=3; US House=3 when
+    // redistricting is on; single-winner governor/president races always 1).
     let displayCandidates: EnrichedCandidate[] = enrichedCandidates;
     if (!phase.inPrimary) {
       const maxPerParty = getPrimaryWinnersForElection(
         (election.countryId ?? "US") as CountryId,
-        election.electionType
+        election.electionType,
+        gameState?.redistrictingEnabled === true
       );
       const partyCount = new Map<string, number>();
       displayCandidates = [];

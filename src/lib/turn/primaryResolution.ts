@@ -94,10 +94,7 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
   if (pastPrimary.length === 0) return;
 
   const electionIds = pastPrimary.map((e) => e._id as ObjectId);
-  const presidentialElectionIds = pastPrimary
-    .filter((e) => e.electionType === "president")
-    .map((e) => e._id as ObjectId);
-  const hasPresident = presidentialElectionIds.length > 0;
+  const hasPresident = pastPrimary.some((e) => e.electionType === "president");
 
   // Region IDs needed for state-level primary alignment (skip presidential — national race).
   const regionLookups = pastPrimary
@@ -109,8 +106,11 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
     .filter((r): r is { regionId: string; countryId: CountryId } => Boolean(r.regionId));
   const uniqueRegionKeys = new Set(regionLookups.map((r) => `${r.countryId}:${r.regionId}`));
 
-  const [parties, allCandidates, statePartyOrgs, presidentialTallies, stateDocs] =
-    await Promise.all([
+  // Tallies for every past-primary race (not just presidential): the gate below
+  // keys on `primaryResults` so we never re-init a general-phase tally, and the
+  // presidential path still reads primaryDelegates from the same map.
+  const [parties, allCandidates, statePartyOrgs, pastPrimaryTallies, stateDocs] = await Promise.all(
+    [
       db.collection<PoliticalPartyType>("politicalParties").find({}).toArray(),
       db
         .collection<ElectionCandidate>("electionCandidates")
@@ -119,12 +119,10 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
       hasPresident
         ? db.collection<StatePartyOrg>("statePartyOrg").find({}).toArray()
         : Promise.resolve([] as StatePartyOrg[]),
-      hasPresident
-        ? db
-            .collection<ElectionVoteTally>("electionVoteTallies")
-            .find({ electionId: { $in: presidentialElectionIds } })
-            .toArray()
-        : Promise.resolve([] as ElectionVoteTally[]),
+      db
+        .collection<ElectionVoteTally>("electionVoteTallies")
+        .find({ electionId: { $in: electionIds } })
+        .toArray(),
       uniqueRegionKeys.size > 0
         ? db
             .collection<State>("states")
@@ -136,10 +134,10 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
             })
             .toArray()
         : Promise.resolve([] as State[]),
-    ]);
-  const presidentialTallyMap = new Map(
-    presidentialTallies.map((t) => [t.electionId.toString(), t])
+    ]
   );
+  const tallyByElection = new Map(pastPrimaryTallies.map((t) => [t.electionId.toString(), t]));
+  const presidentialTallyMap = tallyByElection;
   // Use composite keys to avoid cross-country sequential ID collisions
   const partyMap = new Map(parties.map((p) => [`${p.countryId ?? "US"}:${p.sequentialId}`, p]));
   const partyChairMaps = buildPartyChairMaps(parties, statePartyOrgs);
@@ -159,11 +157,12 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
 
   let totalEliminated = 0;
 
-  // Gate pre-pass: country-specific primary winners: US=1, UK=3, JP=3. Skip any
-  // election where no party exceeds the max that can advance — otherwise
-  // multi-winner countries (UK/JP) would re-run primary resolution every turn
-  // after primaries end (parties still have maxAdvancing active candidates),
-  // wiping the general-phase vote tally via initElectionVoteTally each turn.
+  // Gate pre-pass: resolve each past-primary election exactly once.
+  // Idempotency is keyed on tally.primaryResults (not "party count ≤ maxAdvancing"):
+  // US House with redistricting advances top-3, so a 2-candidate party never
+  // exceeds the cap — the old count gate skipped those races entirely, left
+  // co-nominees on the general ballot with no primaryResults, and the
+  // districted seat splitter fell back to general-vote shares (#1043).
   // Computing the gate up front lets the character fetch below be ONE batched
   // $in query across every resolving election instead of one per election.
   const resolvingElections: Array<{
@@ -173,7 +172,8 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
     maxAdvancing: number;
   }> = [];
   for (const election of pastPrimary) {
-    const candidates = candidatesByElection.get((election._id as ObjectId).toString()) ?? [];
+    const eid = (election._id as ObjectId).toString();
+    const candidates = candidatesByElection.get(eid) ?? [];
     if (candidates.length === 0) continue;
     const partyCounts = new Map<string, number>();
     for (const c of candidates) partyCounts.set(c.party, (partyCounts.get(c.party) ?? 0) + 1);
@@ -182,7 +182,13 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
       election.electionType,
       redistrictingEnabled
     );
-    if (![...partyCounts.values()].some((v) => v > maxAdvancing)) continue;
+    const tally = tallyByElection.get(eid);
+    // Already stamped — never re-init (would wipe general-phase vote accumulation).
+    if (tally?.primaryResults) continue;
+    const needsElimination = [...partyCounts.values()].some((v) => v > maxAdvancing);
+    // Mid-general legacy tallies that skipped the one-shot stamp: do not wipe
+    // accumulating votes. Districted resolution falls back to vote-share nominees.
+    if (!needsElimination && tally) continue;
     resolvingElections.push({ election, candidates, partyCounts, maxAdvancing });
   }
 
@@ -488,9 +494,8 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
 
     // Always reinitialise the tally so any stale vote snapshots from a previous
     // general-phase window (e.g. after an admin timer reset puts the election back
-    // into primary) are wiped clean. The guard above ensures this only runs on
-    // the turn the primary ends — subsequent turns skip because no party has
-    // more active candidates than the country's maxAdvancing (US=1, UK/JP=3).
+    // into primary) are wiped clean. The gate above ensures this only runs once
+    // per primary close (tally.primaryResults absent); subsequent turns skip.
     const generalCandidates = await db
       .collection<ElectionCandidate>("electionCandidates")
       .find({ electionId, status: "active" })

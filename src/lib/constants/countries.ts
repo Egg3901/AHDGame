@@ -5042,6 +5042,21 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
       },
     },
 
+    // Land assemblies — the legislative arm each Land First Secretary needs to
+    // queue/pass state bills through (mirrors RU republicSupremeSoviet / CN
+    // peoplesCongress). Key is `landAssembly` (not DE's `landtag`) so DE's
+    // Sainte-Laguë Landtag resolver never claims DD races. Seat totals come
+    // from each region's `stateSenateSeats` (sum = 80 across the six Länder).
+    subNationalChamber: {
+      key: "landAssembly",
+      name: "Landtag",
+      shortName: "Landtag",
+      seats: 80,
+      description:
+        "The Landtage of the GDR's eastern Länder — the legislative arm of each Land government under the SED First Secretary. Four-year terms on the Volkskammer cycle.",
+      regionalModel: true,
+    },
+
     lowerElectionSystem: {
       termYears: 5,
       seatsContested: "all",
@@ -5051,6 +5066,9 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
 
     electionSystems: {
       lowerChamber: "fptp",
+      // One-party National Front list per Land — same shape as RU republic soviets.
+      subNationalChamber: "pr_hareQuota",
+      subNationalExecutive: "fptp",
       headOfGovernment: "parliamentary",
       headOfState: "ceremonial",
     },
@@ -5086,6 +5104,17 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
         termYears: 5,
         actionBonus: 1,
         partyStrengthWeight: 0.9,
+      },
+      {
+        key: "landAssembly",
+        label: "Landtag Deputy",
+        labelPlural: "Landtag Deputies",
+        chamberKey: "landAssembly",
+        isExecutive: false,
+        isSubNational: true,
+        termYears: 4,
+        actionBonus: 1,
+        partyStrengthWeight: 0.75,
       },
       {
         key: "governor",

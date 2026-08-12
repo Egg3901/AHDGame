@@ -41,6 +41,7 @@ describe("positionForElectionType", () => {
       "stateSenate",
       "regionalCouncil",
       "landtag",
+      "landAssembly",
       "peoplesCongress",
       "localCouncil",
     ]) {
@@ -110,6 +111,8 @@ const INVENTORY: [CountryId, string, string][] = [
   ["JP", "primeMinister", "parliamentary"],
   ["CN", "npcDelegate", "pr_hareQuota"],
   ["CN", "peoplesCongress", "pr_hareQuota"],
+  ["DD", "landAssembly", "pr_hareQuota"],
+  ["DD", "governor", "fptp"],
   ["IE", "dail", "pr_hareQuota"],
   ["IE", "seanad", "pr_hareQuota"],
   ["IE", "localCouncil", "pr_hareQuota"],

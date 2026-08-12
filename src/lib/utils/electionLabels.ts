@@ -45,6 +45,7 @@ export const ELECTION_TYPE_LABEL_MAP: Record<string, string> = {
   republicSupremeSoviet: "Republic Supreme Soviet",
   // DD (East Germany) offices
   volkskammerDeputy: "Volkskammer",
+  landAssembly: "Landtag",
   // Eastern bloc Tier-1 unicameral assemblies
   sejm: "Sejm",
   chamberOfThePeople: "Chamber of the People",
@@ -93,6 +94,7 @@ export const ELECTION_TYPE_SHORT_LABEL: Record<string, string> = {
   nationalitiesDeputy: "Nationalities",
   // DD (East Germany) offices
   volkskammerDeputy: "Volkskammer",
+  landAssembly: "Landtag",
   republicSupremeSoviet: "Republic Soviet",
   // Eastern bloc Tier-1 unicameral assemblies
   sejm: "Sejm",
@@ -207,6 +209,9 @@ export const MULTI_SEAT_TYPES: ReadonlySet<string> = new Set([
   // the founding cycle's six races (totalSeats summing to 500) seated 6
   // deputies total instead of 500 (issue #3896).
   "volkskammerDeputy",
+  // DD Land assemblies — same multi-seat PR shape; without this each Land
+  // would collapse to a single Landtag deputy (ticket #1044).
+  "landAssembly",
 ]);
 
 /**

@@ -135,6 +135,10 @@ export async function applyPlayerWhipToBill(
  *   - existing vote for a DIFFERENT candidate → snapshot is that candidate's ObjectId string
  *   - existing vote for THIS candidate       → snapshot is "for" (revert no-ops)
  *   - no prior vote                          → snapshot is "unvoted"
+ *
+ * House/Senate leadership nominations share one collection across roles. Re-votes
+ * are scoped to the target's role so whipping Majority Whip cannot steal votes
+ * from Pro Tempore / Majority Leader (ticket #1046).
  */
 export async function applyPlayerWhipToLeadership(
   db: Db,
@@ -146,13 +150,21 @@ export async function applyPlayerWhipToLeadership(
     return { overridden: 0, alreadyAligned: 0 };
   }
 
-  const allNominations = await db
+  const openNominations = await db
     .collection<SpeakerNomination>(nominationCollection)
     .find({ status: { $in: ["open", "voting"] } })
     .toArray();
 
-  const target = allNominations.find((n) => n._id.equals(targetCandidacyId));
+  const target = openNominations.find((n) => n._id.equals(targetCandidacyId));
   if (!target) return { overridden: 0, alreadyAligned: 0 };
+
+  const targetRole = (target as SpeakerNomination & { role?: string }).role;
+  const raceNominations =
+    typeof targetRole === "string"
+      ? openNominations.filter(
+          (n) => (n as SpeakerNomination & { role?: string }).role === targetRole
+        )
+      : openNominations;
 
   const now = new Date();
   let overridden = 0;
@@ -171,7 +183,7 @@ export async function applyPlayerWhipToLeadership(
       continue;
     }
 
-    const previousNom = allNominations.find(
+    const previousNom = raceNominations.find(
       (n) => !n._id.equals(targetCandidacyId) && n.votes?.[key]
     );
 
@@ -185,7 +197,10 @@ export async function applyPlayerWhipToLeadership(
       await db.collection(nominationCollection).updateOne(
         { _id: previousNom._id },
         {
-          $unset: { [`votes.${key}`]: "" },
+          $unset: {
+            [`votes.${key}`]: "",
+            [`whippedFromVote.${key}`]: "",
+          },
           $inc: { votesFor: -1 },
           $set: { updatedAt: now },
         }

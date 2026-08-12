@@ -63,6 +63,7 @@ import {
   ensureRURepublicSovietElections,
   ensureRUGovernorElections,
   ensureDDVolkskammerElections,
+  ensureDDLandAssemblyElections,
   ensureDDGovernorElections,
   ensureNGElections,
   ensureNGSenateElections,
@@ -295,11 +296,14 @@ export const COUNTRY_ELECTION_PHASES: Partial<Record<CountryId, CountryElectionP
     { name: "ruRepublicSovietElections", fn: ensureRURepublicSovietElections },
     { name: "ruGovernorElections", fn: ensureRUGovernorElections },
   ],
-  // DD Volkskammer + Land First Secretaries — status-gated + era-gated (null
-  // anchor outside 1953/1979) like RU; per-game countryGameStates enablement
-  // (1953/1979 PLAYER) activates them.
+  // DD Volkskammer + Land assemblies + Land First Secretaries — status-gated
+  // + era-gated (null anchor outside 1953/1979) like RU; per-game
+  // countryGameStates enablement (1953/1979 PLAYER) activates them. Land
+  // assemblies must spawn before governors so the First Secretary queue has
+  // legislature NPPs to sponsor through (ticket #1044).
   DD: [
     { name: "ddVolkskammerElections", fn: ensureDDVolkskammerElections },
+    { name: "ddLandAssemblyElections", fn: ensureDDLandAssemblyElections },
     { name: "ddGovernorElections", fn: ensureDDGovernorElections },
   ],
   // Eastern bloc Tier-1 — unicameral assembly cycles (DD regional-delegate

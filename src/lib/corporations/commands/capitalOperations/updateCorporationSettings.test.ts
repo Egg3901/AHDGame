@@ -100,3 +100,64 @@ describe("updateCorporationSettings — CEO salary revenue cap (Bug #0728)", () 
     expect(res.status).toBe(200);
   });
 });
+
+describe("updateCorporationSettings — tech unlock drop on primary type switch (ticket #1040)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("drops sector unlocks and clears researchable lane commitment when primary type changes", async () => {
+    db = createMockDb();
+    db.collection("corporateSectors");
+    db.collection("corporations");
+    db.collectionMocks["corporateSectors"]!.find.mockReturnValue(makeCursor([]) as never);
+
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as never);
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: new ObjectId().toString() },
+    } as never);
+    const { checkRateLimit } = await import("@/lib/api/rateLimit");
+    vi.mocked(checkRateLimit).mockReturnValue({ ok: true } as never);
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({
+      currentTurn: 44,
+      currentYear: 1953,
+      startingYear: 1953,
+    } as never);
+
+    const { resolveCorporation, requireCeo } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: makeCorp({
+        unlockedTechNodeIds: ["corp-1940-1", "manufacturing-1950-1", "manufacturing-1950-2"],
+        techDecadeLane: { "1950": "sector" },
+        techDecadeChosenTurn: { "1950": 16 },
+        marketingStrength: 50,
+      }),
+    } as never);
+    vi.mocked(requireCeo).mockReturnValue(null as never);
+
+    const { updateCorporationSettings } = await import("./updateCorporationSettings");
+    const req = new Request("http://localhost/api/corporations/x/settings", {
+      method: "POST",
+      body: JSON.stringify({ primaryType: "chemical_industries", secondaryType: "manufacturing" }),
+      headers: { "content-type": "application/json" },
+    });
+    const res = await updateCorporationSettings(req, {
+      params: Promise.resolve({ id: corpId.toString() }),
+    });
+    expect(res.status).toBe(200);
+
+    const updateArg = db.collectionMocks["corporations"]!.updateOne.mock.calls[0]?.[1] as {
+      $set: { unlockedTechNodeIds?: string[]; type?: string };
+      $unset?: Record<string, "">;
+    };
+    expect(updateArg.$set.type).toBe("chemical_industries");
+    expect(updateArg.$set.unlockedTechNodeIds).toContain("corp-1940-1");
+    expect(updateArg.$set.unlockedTechNodeIds).not.toContain("manufacturing-1950-1");
+    expect(updateArg.$set.unlockedTechNodeIds).not.toContain("chemical_industries-1950-1");
+    expect(updateArg.$unset?.["techDecadeLane.1950"]).toBe("");
+    expect(updateArg.$unset?.["techDecadeChosenTurn.1950"]).toBe("");
+  });
+});

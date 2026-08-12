@@ -31,6 +31,11 @@ describe("ddRegions (GDR — eastern Länder model)", () => {
     expect(sum).toBe(VOLKSKAMMER_TOTAL);
   });
 
+  it("Landtag seats (stateSenateSeats) sum to 80", () => {
+    const sum = ddRegions.reduce((s, r) => s + (r.stateSenateSeats ?? 0), 0);
+    expect(sum).toBe(80);
+  });
+
   it("the Volkskammer seat map matches each Land's houseDistricts and totals 500", () => {
     const perState = new Map<string, number>();
     for (const seat of DD_VOLKSKAMMER_1979) {

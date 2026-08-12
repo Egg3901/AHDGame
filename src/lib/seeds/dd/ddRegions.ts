@@ -20,10 +20,11 @@ import type { State } from "@/lib/db/types";
  * shape.
  *
  * houseDistricts = Volkskammer seats on the single National Front list (sum =
- * 500, matching `DD_VOLKSKAMMER_1979`). stateSenateSeats holds a nominal regional
- * weight. gdp in millions of Mark der DDR. `region` keeps the Berlin/North/South
- * macro-grouping for UI continuity. `votingSystem` is a nominal `fptp` placeholder
- * (the Volkskammer used single-list elections), as with the other one-party states.
+ * 500, matching `DD_VOLKSKAMMER_1979`). stateSenateSeats = Landtag
+ * (`landAssembly`) seats per Land (sum = 80). gdp in millions of Mark der DDR.
+ * `region` keeps the Berlin/North/South macro-grouping for UI continuity.
+ * `votingSystem` is a nominal `fptp` placeholder (the Volkskammer used
+ * single-list elections), as with the other one-party states.
  */
 export const ddRegions: State[] = [
   // ── Berlin (the capital, SED stronghold) ────────────────────────────────────

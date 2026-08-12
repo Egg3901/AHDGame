@@ -61,6 +61,7 @@ const SEATS_HELD_OFFICE_TYPES = new Set([
   "localCouncil",
   "chamber",
   "volkskammerDeputy",
+  "landAssembly",
   "supremeSovietDeputy",
   "nationalitiesDeputy",
   "republicSupremeSoviet",
@@ -277,6 +278,11 @@ export const SUB_NATIONAL_CHAMBERS: Partial<
     // the same single source of truth `ensureRURepublicSovietElections` sizes
     // its per-region elections from.
     seatsForState: (s) => subNationalChamberSeats("RU", s),
+  },
+  DD: {
+    officeType: "landAssembly",
+    // Each Land's authored assembly size (ddRegions*.ts stateSenateSeats).
+    seatsForState: (s) => subNationalChamberSeats("DD", s),
   },
 };
 

@@ -468,13 +468,19 @@ export async function _enrichElection(
   let byParty = groupCandidatesByParty(enrichedWithYou, partyMap);
 
   // Display candidates: post-primary dedup. Keep up to N per party where N is
-  // the primary-winner cap for this race (US=1, UK=3, JP=3; single-winner
-  // governor/president races always 1). Safety net for the window between
-  // primaryEndTime and the next primary-resolution turn.
+  // the primary-winner cap for this race (US=1, UK=3, JP=3; US House=3 when
+  // redistricting is on; single-winner governor/president races always 1).
+  // Safety net for the window between primaryEndTime and the next
+  // primary-resolution turn — and for multi-advance races that intentionally
+  // leave several same-party nominees active through the general (#1043).
   // Always include the current user's candidate even if they lost the primary.
   let displayCandidates: EnrichedCandidate[] = enrichedWithYou;
   if (!inPrimary && !isEnded) {
-    const maxPerParty = getPrimaryWinnersForElection(countryId as CountryId, election.electionType);
+    const maxPerParty = getPrimaryWinnersForElection(
+      countryId as CountryId,
+      election.electionType,
+      isRedistrictingEnabled(gameState)
+    );
     const partyCount = new Map<string, number>();
     displayCandidates = [];
     for (const c of [...enrichedWithYou].sort((a, b) => b.primaryScore - a.primaryScore)) {
@@ -1089,6 +1095,7 @@ export async function _enrichElection(
             lastTurnProcessed: gameState.lastTurnProcessed ?? null,
             currentTurn: gameState.currentTurn,
             effectiveNow: gameTime.effectiveNow.toISOString(),
+            redistrictingEnabled: isRedistrictingEnabled(gameState),
           }
         : null,
 

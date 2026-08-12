@@ -161,12 +161,66 @@ describe("applyPlayerWhipToLeadership", () => {
     expect(previousUpdate).toBeDefined();
     expect((previousUpdate![1] as { $unset: Record<string, string> }).$unset).toEqual({
       [`votes.${c1.toString()}`]: "",
+      [`whippedFromVote.${c1.toString()}`]: "",
     });
     const targetSet = (targetUpdate![1] as { $set: Record<string, unknown> }).$set;
     expect(targetSet[`votes.${c1.toString()}`]).toBe("for");
     expect(targetSet[`votes.${c2.toString()}`]).toBe("for");
     expect(targetSet[`whippedFromVote.${c1.toString()}`]).toBe(otherId.toString());
     expect(targetSet[`whippedFromVote.${c2.toString()}`]).toBe("unvoted");
+  });
+
+  it("does not steal votes from a different leadership role (ticket #1046)", async () => {
+    const majorityWhipId = new ObjectId();
+    const proTemporeId = new ObjectId();
+    const charId = new ObjectId();
+    const key = charId.toString();
+
+    const nominations = [
+      {
+        _id: majorityWhipId,
+        role: "majority_whip",
+        votes: {},
+        votesFor: 0,
+        status: "voting",
+      },
+      {
+        _id: proTemporeId,
+        role: "pro_tempore",
+        votes: { [key]: "for" },
+        votesFor: 1,
+        status: "voting",
+        whippedFromVote: { [key]: "unvoted" },
+      },
+    ] as unknown as SpeakerNomination[];
+
+    db.collection("senateLeadershipNominations").find.mockReturnValueOnce({
+      toArray: async () => nominations,
+    });
+
+    const result = await applyPlayerWhipToLeadership(
+      db as unknown as Db,
+      majorityWhipId,
+      "senateLeadershipNominations",
+      [charId]
+    );
+
+    expect(result.overridden).toBe(1);
+
+    const updateCalls = db.collectionMocks["senateLeadershipNominations"]!.updateOne.mock.calls;
+    const previousUpdate = updateCalls.find((c) =>
+      (c[0] as { _id: ObjectId })._id?.equals(proTemporeId)
+    );
+    expect(previousUpdate).toBeUndefined();
+
+    const targetUpdate = updateCalls.find((c) =>
+      (c[0] as { _id: ObjectId })._id?.equals(majorityWhipId)
+    );
+    expect(targetUpdate).toBeDefined();
+    const targetSet = (targetUpdate![1] as { $set: Record<string, unknown> }).$set;
+    expect(targetSet[`votes.${key}`]).toBe("for");
+    // Prior vote was on a different role — treat as unvoted within this race
+    expect(targetSet[`whippedFromVote.${key}`]).toBe("unvoted");
   });
 
   it("counts alreadyAligned when character already votes for the target", async () => {

@@ -14,6 +14,7 @@ import {
   getPartyStrengthWeight,
   getRegionAppointableSeats,
   getRegionalAddressName,
+  getSubNationalLegislatureKey,
 } from "./countries";
 import { COUNTRY_CURRENCY_MAP, FOREX_ACTIVE_COUNTRIES } from "./currencies";
 import { RU_NATIONALITIES_SEATS } from "./ruSeats";
@@ -267,6 +268,17 @@ describe("getRegionAppointableSeats", () => {
       multiSeat: true,
       totalField: "stateSenateSeats",
     });
+  });
+
+  it("DD: Land First Secretary + Volkskammer deputy + Land assembly", () => {
+    expect(keys("DD")).toEqual(["governor", "volkskammerDeputy", "landAssembly"]);
+    expect(byKind("DD", "executive")?.officeType).toBe("governor");
+    expect(byKind("DD", "subNationalChamber")).toMatchObject({
+      officeType: "landAssembly",
+      multiSeat: true,
+      totalField: "stateSenateSeats",
+    });
+    expect(getSubNationalLegislatureKey("DD")).toBe("landAssembly");
   });
 
   it("every executive group is single-seat with no total field", () => {

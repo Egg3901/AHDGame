@@ -220,9 +220,14 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // Determine how many candidates advance from primary — driven by the
   // country's `governmentType` (presidential → 1, parliamentary → 3,
   // onePartyState → 7), except single-winner executive races (governor/
-  // president) which always advance 1, via `getPrimaryWinnersForElection`.
+  // president) which always advance 1, and US House which advances 3 when
+  // redistricting is on, via `getPrimaryWinnersForElection`.
   const advancingCount = election.countryId
-    ? getPrimaryWinnersForElection(election.countryId as CountryId, election.electionType)
+    ? getPrimaryWinnersForElection(
+        election.countryId as CountryId,
+        election.electionType,
+        election.gameState?.redistrictingEnabled === true
+      )
     : 1;
 
   return (
