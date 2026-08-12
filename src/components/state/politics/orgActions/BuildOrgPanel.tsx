@@ -89,7 +89,13 @@ export function BuildOrgPanel({
   const [lastResult, setLastResult] = useState<BuildOrgResult | null>(null);
 
   const apiUrl = regionPartyApiUrl(countryCode, stateId, partyId);
-  const { eligibleScopes, poolPS } = usePsSpendScope(countryCode, stateId, partyId, canBuildOrg);
+  const { eligibleScopes, poolPS } = usePsSpendScope(
+    countryCode,
+    stateId,
+    partyId,
+    canBuildOrg,
+    bumpKey
+  );
   const { preview, loading: previewLoading } = useActionPreview<BuildOrgPreview>(
     `${apiUrl}/build-org/preview`,
     { enabled: true, refetchKey: bumpKey }
@@ -128,6 +134,15 @@ export function BuildOrgPanel({
 
   const statePoolInsufficient = (poolPS?.statePoolPS ?? ps) < BUILD_ORG_BASE_PS_COST;
   const nationalPoolInsufficient = (poolPS?.nationalPoolPS ?? 0) < BUILD_ORG_BASE_PS_COST;
+
+  // Header reserve must match the pool the preview will debit — national chairs
+  // were shown state PS (often near cap) while Strength Capacity drained (ticket #1059).
+  const headerPs = paysFromNationalPool ? (poolPS?.nationalPoolPS ?? 0) : (poolPS?.statePoolPS ?? ps);
+  const headerCapLabel = paysFromNationalPool ? "Nat'l" : String(effectiveCap);
+  const headerPoolLabel = paysFromNationalPool ? "National PS" : "Your PS";
+  const headerPoolTooltip = paysFromNationalPool
+    ? "National Political Strength reserve. Build Org from a national officer role spends this pool (not the state party's PS)."
+    : "Political Strength (PS) reserve for this state party. Build Org spends from the state pool (or national pool if you have that authority). Cap shown is the effective max.";
 
   const buttonAnim = bumpKey > 0 ? "ps-bloom" : "";
   const counterAnim = bumpKey > 0 ? "ps-counter-pulse" : "";
@@ -229,19 +244,16 @@ export function BuildOrgPanel({
         </div>
         <div className="text-right shrink-0">
           <div className="flex items-center justify-end text-[10px] uppercase tracking-wider text-muted">
-            Your PS
-            <Tooltip
-              label="About Political Strength"
-              content="Political Strength (PS) reserve for this state party. Build Org spends from the state pool (or national pool if you have that authority). Cap shown is the effective max."
-            />
+            {headerPoolLabel}
+            <Tooltip label="About Political Strength" content={headerPoolTooltip} />
           </div>
           <div
             key={`ps-${bumpKey}`}
             className={`font-bold tabular-nums ${compact ? "text-lg" : "text-2xl"} ${counterAnim}`}
             style={{ color: partyColor, "--ps-bloom-color": partyColor } as React.CSSProperties}
           >
-            {ps.toFixed(0)}
-            <span className="text-xs text-muted ml-1">/ {effectiveCap}</span>
+            {headerPs.toFixed(0)}
+            <span className="text-xs text-muted ml-1">/ {headerCapLabel}</span>
           </div>
         </div>
       </div>

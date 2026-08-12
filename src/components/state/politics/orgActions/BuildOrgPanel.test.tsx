@@ -145,4 +145,36 @@ describe("BuildOrgPanel", () => {
       ).toBe(true)
     );
   });
+
+  it("shows national PS in the header when the preview spends the national pool", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string) => {
+        if (input.includes("/ps-spend-scope")) {
+          return {
+            json: async () => ({
+              ok: true,
+              eligibleScopes: { state: false, national: true },
+              statePoolPS: 30,
+              nationalPoolPS: 4,
+            }),
+          };
+        }
+        return {
+          json: async () => ({
+            ok: true,
+            effectiveCost: 1,
+            pressureValue: 0,
+            projectedGain: 0.5,
+            factors: { base: 2, headroom: 0.5, ownDiminishing: 0.5, psLeverage: 1, catchup: 1 },
+            scope: "national-targeted",
+          }),
+        };
+      })
+    );
+    renderPanel({ ps: 30 });
+    await waitFor(() => expect(screen.getByText("National PS")).toBeTruthy());
+    expect(screen.getByText("4")).toBeTruthy();
+    expect(screen.getByText(/\/ Nat'l/)).toBeTruthy();
+  });
 });
