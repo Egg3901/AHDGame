@@ -87,8 +87,7 @@ export function IssueOrderModal({
   // fiscal estimates at the Land/region GDP for state-scoped orders.
   useEffect(() => {
     if (!open) return;
-    const regionParam =
-      scope === "state" ? `&regionId=${encodeURIComponent(stateId)}` : "";
+    const regionParam = scope === "state" ? `&regionId=${encodeURIComponent(stateId)}` : "";
     fetch(
       `/api/game/legislation-types?category=${encodeURIComponent(category)}&scope=${scope}&country=${countryId.toLowerCase()}${regionParam}&nocache=1`,
       { cache: "no-store" }
