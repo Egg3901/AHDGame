@@ -105,6 +105,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
+    if (!allowedOriginKeys.includes(parsed.data.chamber)) {
+      return NextResponse.json(
+        { error: `Invalid chamber for ${countryId} legislature.` },
+        { status: 400 }
+      );
+    }
 
     // Euro adoption provision: only DE and IE can propose; only while eurozone is not yet active.
     const hasEuroAdoptionProvision = (
