@@ -112,7 +112,14 @@ describe("propTrading open/close/mark", () => {
     });
 
     db.collectionMocks.corporations!.findOne.mockImplementation(
-      async (filter: { _id?: ObjectId }) => {
+      async (filter: { _id?: ObjectId; name?: unknown }) => {
+        if (filter?.name && typeof filter.name === "object" && "$regex" in filter.name) {
+          const query = filter.name as { $regex?: string; $options?: string };
+          const matches = query.$regex
+            ? new RegExp(query.$regex, query.$options).test(equityCorp.name)
+            : false;
+          return matches ? { ...equityCorp } : null;
+        }
         if (!filter?._id) return null;
         if (filter._id.equals(corpId)) {
           return {
@@ -221,6 +228,18 @@ describe("propTrading open/close/mark", () => {
     expect(closed.realizedPnl).toBe(2_000);
     expect(liveCorp.liquidCapital).toBe(before + 2_000);
     expect(liveCorp.bankCharter?.propBook ?? []).toHaveLength(0);
+  });
+
+  it("opens an equity position by the corporation's displayed name", async () => {
+    const opened = await openPosition(db as unknown as Db, corpId, {
+      asset: "equity",
+      ref: "Target",
+      units: 100,
+    });
+
+    expect(opened.ok).toBe(true);
+    if (!opened.ok) return;
+    expect(opened.position.ref).toBe(equityCorp._id.toString());
   });
 
   it("markBook updates mark values without moving cash", async () => {
