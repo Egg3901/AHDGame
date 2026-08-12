@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useTranslations, useLocale } from "next-intl";
 import { Button } from "@/components/ui/Button";
 
 export interface OnboardingChecklistCardStep {
@@ -33,6 +34,8 @@ export function OnboardingChecklist({
   total,
   rewardAmount,
 }: OnboardingChecklistProps) {
+  const t = useTranslations("profile.onboarding");
+  const locale = useLocale();
   const [dismissed, setDismissed] = useState(false);
   const [dismissing, setDismissing] = useState(false);
   const [claiming, setClaiming] = useState(false);
@@ -43,7 +46,7 @@ export function OnboardingChecklist({
 
   const allComplete = completedCount === total;
   const progressPct = total > 0 ? Math.round((completedCount / total) * 100) : 0;
-  const rewardLabel = `₳${rewardAmount.toLocaleString("en-US")}`;
+  const rewardLabel = `₳${rewardAmount.toLocaleString(locale)}`;
 
   async function handleDismiss() {
     setDismissing(true);
@@ -74,10 +77,10 @@ export function OnboardingChecklist({
       if (res.ok) {
         setClaimed(true);
       } else {
-        setClaimError(data?.error ?? "Claim failed. Try again.");
+        setClaimError(data?.error ?? t("claimFailed"));
       }
     } catch {
-      setClaimError("Claim failed. Try again.");
+      setClaimError(t("claimFailed"));
     } finally {
       setClaiming(false);
     }
@@ -85,24 +88,24 @@ export function OnboardingChecklist({
 
   return (
     <section
-      aria-label="New player checklist"
+      aria-label={t("checklistAria")}
       className="rounded-lg border border-card-border bg-card shadow-card"
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-3 px-4 pt-3">
         <div className="flex items-baseline gap-2 min-w-0">
-          <h2 className="text-heading-sm font-semibold text-foreground">Your first moves</h2>
+          <h2 className="text-heading-sm font-semibold text-foreground">{t("title")}</h2>
           <span className="text-body-xs text-muted whitespace-nowrap">
-            {completedCount} of {total} done
+            {t("progress", { completed: completedCount, total })}
           </span>
         </div>
         <button
           onClick={handleDismiss}
           disabled={dismissing}
           className="shrink-0 text-body-xs text-muted hover:text-foreground transition-colors"
-          aria-label="Dismiss checklist"
+          aria-label={t("dismissChecklistAria")}
         >
-          Dismiss
+          {t("dismiss")}
         </button>
       </div>
 
@@ -137,7 +140,7 @@ export function OnboardingChecklist({
               {step.done ? (
                 <p className="text-body-sm text-muted">
                   {step.title}
-                  <span className="sr-only"> (done)</span>
+                  <span className="sr-only"> {t("doneSr")}</span>
                 </p>
               ) : (
                 <>
@@ -161,17 +164,17 @@ export function OnboardingChecklist({
       {/* Reward footer */}
       <div className="border-t border-card-border/60 px-4 py-3">
         {claimed ? (
-          <p className="text-body-sm text-success">{rewardLabel} added to your campaign funds.</p>
+          <p className="text-body-sm text-success">{t("rewardAdded", { reward: rewardLabel })}</p>
         ) : allComplete ? (
           <div className="flex flex-wrap items-center gap-3">
             <Button size="sm" onClick={handleClaim} isLoading={claiming}>
-              Claim {rewardLabel}
+              {t("claim", { reward: rewardLabel })}
             </Button>
             {claimError && <p className="text-body-xs text-error">{claimError}</p>}
           </div>
         ) : (
           <p className="text-body-xs text-muted">
-            Finish all {total} steps to claim {rewardLabel} in campaign funds.
+            {t("finishSteps", { total, reward: rewardLabel })}
           </p>
         )}
       </div>

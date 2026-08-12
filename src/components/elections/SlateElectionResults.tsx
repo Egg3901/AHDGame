@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { Avatar } from "@/components/Avatar";
 import { PartyLogo } from "@/components/PartyLogo";
 import { GeneralPieChart } from "@/components/elections/ElectionDonut";
@@ -25,7 +26,10 @@ function formatVotesCompact(n: number): string {
   return n.toString();
 }
 
-function buildPrimaryGroups(election: ElectionDisplay) {
+function buildPrimaryGroups(
+  election: ElectionDisplay,
+  t: (key: string, values?: Record<string, string | number>) => string
+) {
   const isPrimaryPolling = election.polling?.source === "primary";
   if (!isPrimaryPolling || !election.inPrimary) return [];
 
@@ -68,7 +72,7 @@ function buildPrimaryGroups(election: ElectionDisplay) {
     }
     groupMap.get(partyId)!.candidates.push({
       id: candidateId,
-      name: candidateNames[candidateId] ?? candidate?.characterName ?? "Unknown",
+      name: candidateNames[candidateId] ?? candidate?.characterName ?? t("card.unknownCandidate"),
       avatarUrl: candidate?.avatarUrl,
       characterId: candidate?.characterId,
       nppId: candidate?.nppId,
@@ -104,7 +108,7 @@ function buildPrimaryGroups(election: ElectionDisplay) {
 
   return Array.from(groupMap.values()).map((group) => ({
     ...group,
-    partyName: `${group.partyName} Primary`,
+    partyName: t("card.partyPrimary", { party: group.partyName }),
     isUncontested: group.candidates.length === 1,
     candidates: group.candidates
       .sort((a, b) => b.percentage - a.percentage)
@@ -137,7 +141,8 @@ function buildGeneralEntries(election: ElectionDisplay) {
 }
 
 export function SlateElectionResults({ election }: { election: ElectionDisplay }) {
-  const primaryGroups = buildPrimaryGroups(election);
+  const t = useTranslations("elections");
+  const primaryGroups = buildPrimaryGroups(election, t);
   const generalEntries = buildGeneralEntries(election);
   const showSeats = SEAT_ELECTION_TYPES.has(election.electionType) && !!election.seatsEstimate;
 
@@ -150,7 +155,7 @@ export function SlateElectionResults({ election }: { election: ElectionDisplay }
       {primaryGroups.length > 0 && (
         <div className="space-y-3">
           <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-            Primary Results
+            {t("card.primaryResults")}
           </div>
           <PrimaryCardGrid primaries={primaryGroups} countryId={election.countryId as CountryId} />
         </div>
@@ -159,7 +164,7 @@ export function SlateElectionResults({ election }: { election: ElectionDisplay }
       {generalEntries && generalEntries.length > 0 && (
         <div className="space-y-2">
           <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-            General Results
+            {t("card.generalResults")}
           </div>
           <div className="rounded-lg border border-card-border/60 px-3 py-3">
             <div className="flex gap-3">
@@ -176,7 +181,7 @@ export function SlateElectionResults({ election }: { election: ElectionDisplay }
                       election.polling?.candidateNames[candidateId] ??
                       election.candidates.find((candidate) => candidate.id === candidateId)
                         ?.characterName ??
-                      "Unknown",
+                      t("card.unknownCandidate"),
                   }))}
                   size={80}
                 />
@@ -184,11 +189,15 @@ export function SlateElectionResults({ election }: { election: ElectionDisplay }
               <div className="flex-1 min-w-0">
                 <div className="mb-1.5 flex items-center gap-2 text-[9px] font-medium uppercase tracking-wider text-muted/50 select-none">
                   <div className="w-5 shrink-0" />
-                  <div className="w-36 shrink-0">Candidate</div>
-                  <div className="w-32 shrink-0">Party</div>
+                  <div className="w-36 shrink-0">{t("card.candidateHeader")}</div>
+                  <div className="w-32 shrink-0">{t("card.partyHeader")}</div>
                   <div className="flex-1 min-w-0" />
-                  {election.generalTally && <div className="w-8 shrink-0 text-right">Votes</div>}
-                  {showSeats && <div className="w-8 shrink-0 text-right">Seats</div>}
+                  {election.generalTally && (
+                    <div className="w-8 shrink-0 text-right">{t("card.votesHeader")}</div>
+                  )}
+                  {showSeats && (
+                    <div className="w-8 shrink-0 text-right">{t("card.seatsHeader")}</div>
+                  )}
                   <div className="w-10 shrink-0 text-right">%</div>
                 </div>
                 <div className="space-y-1.5">
@@ -201,7 +210,7 @@ export function SlateElectionResults({ election }: { election: ElectionDisplay }
                     const name =
                       election.polling?.candidateNames[candidateId] ??
                       candidate?.characterName ??
-                      "Unknown";
+                      t("card.unknownCandidate");
                     const partyDisplayName =
                       election.polling?.candidatePartyNames?.[candidateId] ??
                       candidate?.partyName ??

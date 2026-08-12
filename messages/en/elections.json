@@ -1,0 +1,143 @@
+{
+  "elections": {
+    "error": {
+      "description": "The elections page couldn't load. This may be a temporary issue.",
+      "backToElections": "Back to Elections",
+      "dashboard": "Dashboard"
+    },
+    "helpers": {
+      "classQualifier": "(Class {className})",
+      "seatsSuffix": "{count, plural, one {# seat} other {# seats}}"
+    },
+    "map": {
+      "noPollingData": "No polling data",
+      "competitive": "⚡ Competitive (≤15 pt margin)",
+      "uncontested": "Uncontested",
+      "stateSenateShort": "State Sen"
+    },
+    "chamberComposition": {
+      "projectedLabel": "Projected after current elections",
+      "currentLabel": "Current composition",
+      "classContested": "Class {className} seats are being contested",
+      "currentBefore": "Current, before these elections",
+      "projectionNote": "Projection from current vote tallies. Updates each turn."
+    },
+    "status": {
+      "upcoming": "Upcoming",
+      "completed": "Completed",
+      "primaryPhase": "Primary Phase",
+      "generalPhase": "General Phase",
+      "primary": "Primary",
+      "general": "General"
+    },
+    "card": {
+      "incumbent": "Incumbent:",
+      "popularVote": "Popular Vote",
+      "liveVoteTally": "Live Vote Tally",
+      "votesTurns": "{votes} votes · {turnCount, plural, one {# turn} other {# turns}}",
+      "candidateHeader": "Candidate",
+      "partyHeader": "Party",
+      "votesHeader": "Votes",
+      "seatsHeader": "Seats",
+      "primaryResults": "Primary Results",
+      "generalResults": "General Results",
+      "polling": "Polling",
+      "candidates": "Candidates",
+      "noRegisteredCandidates": "No registered candidates",
+      "processing": "Processing…",
+      "withdraw": "Withdraw",
+      "filingClosed": "Filing closed",
+      "filingClosedTitle": "Filing closed for this race.",
+      "joining": "Joining…",
+      "enterRace": "Enter Race",
+      "liveResults": "Live Results →",
+      "unknownCandidate": "Unknown",
+      "partyPrimary": "{party} Primary"
+    },
+    "presidentialCard": {
+      "awaitingResults": "Awaiting results, candidates entered",
+      "noCandidatesYet": "No candidates yet",
+      "primaryEnds": "Primary ends <date></date>",
+      "generalEnds": "General ends <date></date>"
+    },
+    "phaseStrip": {
+      "primaryElection": "Primary Election",
+      "generalElection": "General Election",
+      "opensIn": "Opens in {time}",
+      "endsIn": "Ends in {time}",
+      "completed": "Completed"
+    },
+    "statePV": {
+      "statePV": "State PV",
+      "ev": "{count} EV"
+    },
+    "primaryCard": {
+      "uncontested": "Uncontested"
+    },
+    "battleground": {
+      "title": "Battleground Map",
+      "subtitle": "Margin tiers, same shading as the popular-vote view",
+      "marginTiers": "Margin tiers:",
+      "emptyHint": "Margin data populates as votes accumulate. States with fewer than two non-zero candidates appear unshaded.",
+      "battlegroundCount": "Battleground ({count})",
+      "tierSafe": "Safe",
+      "tierLikely": "Likely",
+      "tierLean": "Lean",
+      "tierTossup": "Toss-up"
+    },
+    "persuasion": {
+      "title": "Persuasion Drivers",
+      "focus": "Focus",
+      "opponent": "Opponent",
+      "explanation": "Why <state></state> voters lean toward <focus></focus> over <opponent></opponent>. Each driver is signed: <b>+</b> = lift, <b>−</b> = drag. Drivers are relative within this list and only move the persuadable slice of each party's vote, so their real effect is small. Coattail rows are direct share tilts in %. A raw vote lead does not equal the sum of these bars.",
+      "empty": "No persuasion drivers computed for {state} yet. Drivers populate once vote data and enrichment data are loaded.",
+      "driversGroup": "Persuasion drivers (pts of the persuadable slice)",
+      "coattailsGroup": "Coattail tilts (direct % of vote share)",
+      "pts": "pts"
+    },
+    "registration": {
+      "title": "Registration Influence",
+      "noData": "{state} ({stateId}): no registration data tracked for this state.",
+      "populating": "Registration data is populating in <b>Phase 1.5 / Phase 2</b> prerequisite. This card will show {state}'s partisan-lean strength once seed data lands. Until then, the registration model defaults to neutral influence everywhere.",
+      "intro": "Partisan-lean baseline for {state}. Each party's share is the slow-moving registered-voter influence, not a vote-share guarantee. Voters still need persuasion to turn out and vote with their lean.",
+      "leanValue": "{pct}% lean",
+      "leanTitle": "{party}: {pct}% lean",
+      "independent": "Independent",
+      "unregistered": "Unregistered",
+      "independentTitle": "Independent: {pct}%",
+      "unregisteredTitle": "Unregistered: {pct}%",
+      "normalizationNote": "Note: shares total {pct}%, outside the normalized 95-105% band. Bootstrap renormalization may be pending."
+    },
+    "carveUp": {
+      "title": "{state} · Carve-up",
+      "viewDetails": "View state details →",
+      "explanation": "Each candidate's slice = registered voters × archetype × demographic affinity. Position alignment + influence drive appeal; favorability scales votes at resolution.",
+      "empty": "No projected slices for {state} yet. The carve-up populates once candidates have filed for this primary.",
+      "regBase": "Reg base",
+      "topDemographics": "Top demographics: "
+    },
+    "embeddedResults": {
+      "electionNight": "Election Night",
+      "retry": "Retry",
+      "fullElectionNight": "Full election night →"
+    },
+    "primaryCalendar": {
+      "title": "Primary Calendar",
+      "subtitle": "Past contests show winner; future shows wave timing",
+      "empty": "No primary calendar data yet. The wave schedule populates once the primary enters its stagger window.",
+      "voted": "Voted",
+      "votingNow": "Voting now",
+      "inTurns": "In {count, plural, one {# turn} other {# turns}}",
+      "chipVoted": "{state}: voted",
+      "chipUpcoming": "{state}: upcoming"
+    },
+    "tierSelector": {
+      "raceTier": "Race Tier",
+      "president": "Presidential",
+      "senate": "Senate",
+      "house": "House",
+      "governor": "Governor",
+      "stateSenate": "State Senate"
+    }
+  }
+}

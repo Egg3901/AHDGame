@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { Avatar } from "@/components/Avatar";
 import { PartyLogo } from "@/components/PartyLogo";
 import type { CountryId } from "@/lib/constants/countries";
@@ -33,6 +34,7 @@ export function PrimaryCard({
   candidates,
   isUncontested,
 }: PrimaryCardProps) {
+  const t = useTranslations("elections");
   const voteTotal = candidates.reduce((sum, c) => sum + c.percentage, 0) || 1;
 
   return (
@@ -54,7 +56,9 @@ export function PrimaryCard({
           </span>
         </div>
         {isUncontested && (
-          <span className="text-[10px] text-muted italic shrink-0">Uncontested</span>
+          <span className="text-[10px] text-muted italic shrink-0">
+            {t("primaryCard.uncontested")}
+          </span>
         )}
       </div>
 

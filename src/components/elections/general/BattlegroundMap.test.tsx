@@ -1,7 +1,17 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { render } from "@testing-library/react";
+import { render as rtlRender } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
 import { HoverCard, shadeColorForTier } from "./BattlegroundMap";
+import enElections from "../../../../messages/en/elections.json";
+
+function render(ui: React.ReactElement) {
+  return rtlRender(
+    <NextIntlClientProvider locale="en" messages={enElections}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}
 
 describe("shadeColorForTier", () => {
   it("safe darkens the base color", () => {

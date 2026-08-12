@@ -7,8 +7,18 @@
  */
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import React from "react";
-import { render, act } from "@testing-library/react";
+import { render as rtlRender, act } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
 import { CrtCountdown, useCrtCountdown, CRT_COUNTDOWN_DEADLINE_MS } from "./CrtCountdown";
+import enAuth from "../../../messages/en/auth.json";
+
+function render(ui: React.ReactElement) {
+  return rtlRender(
+    <NextIntlClientProvider locale="en" messages={enAuth}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}
 
 function Harness() {
   const remaining = useCrtCountdown();
