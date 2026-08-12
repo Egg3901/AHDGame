@@ -18,6 +18,7 @@ import {
   type UnionPensionScheme,
 } from "@/components/unions/UnionPensionSchemePanel";
 import { ORGANIZING_TOOLTIP, organizingBand, organizingValue } from "@/lib/unions/organizing";
+import { buildCharacterHref, buildNppHref } from "@/lib/utils/profileUrls";
 
 interface UnionDetail {
   id: string;
@@ -53,6 +54,8 @@ interface CandidateOption {
   name: string;
   sequentialId: number | null;
   avatarUrl: string | null;
+  /** True when this seat is held by an NPP (`Union.ownerType === "npp"`). */
+  isNPP?: boolean;
 }
 
 /** One organizer on the roster, with the banked strength that is their vote weight. */
@@ -533,7 +536,17 @@ export default function UnionDashboardPage({ params }: PageProps) {
               <span className="text-muted">President:</span>
               {leader ? (
                 <Link
-                  href={`/character/${leader.sequentialId ?? leader.characterId}`}
+                  href={
+                    leader.isNPP
+                      ? buildNppHref({
+                          sequentialId: leader.sequentialId ?? undefined,
+                          _id: leader.characterId,
+                        })
+                      : buildCharacterHref({
+                          sequentialId: leader.sequentialId ?? undefined,
+                          _id: leader.characterId,
+                        })
+                  }
                   className="font-semibold text-primary hover:opacity-80"
                 >
                   {leader.name}

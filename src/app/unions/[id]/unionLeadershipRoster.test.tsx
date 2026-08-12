@@ -59,7 +59,11 @@ const ORGANIZERS = [
   },
 ];
 
-function mockFetch(union = UNION, organizers = ORGANIZERS) {
+function mockFetch(
+  union = UNION,
+  organizers = ORGANIZERS,
+  leaderOverride?: (typeof ORGANIZERS)[number] | null
+) {
   return vi.fn(async (url: string) => {
     const u = String(url);
     if (u.includes("/api/character/me")) {
@@ -78,7 +82,10 @@ function mockFetch(union = UNION, organizers = ORGANIZERS) {
           organizerCount: organizers.length,
           organizers,
           myVotingPower: 10,
-          leader: organizers.find((o) => o.isLeader) ?? null,
+          leader:
+            leaderOverride === undefined
+              ? (organizers.find((o) => o.isLeader) ?? null)
+              : leaderOverride,
         }),
       } as unknown as Response;
     }
@@ -126,5 +133,29 @@ describe("union leadership surface", () => {
 
     expect(await screen.findByText(/elect a president/i)).toBeTruthy();
     expect(screen.getByText(/nobody has organized this union yet/i)).toBeTruthy();
+  });
+
+  it("links an NPP president to the NPP profile with their real name", async () => {
+    const nppLeader = {
+      characterId: "npp-1",
+      name: "Klaus Weber",
+      sequentialId: 88,
+      avatarUrl: null,
+      isNPP: true,
+      strength: 0,
+      organizeCount: 0,
+      influencePct: 0,
+      isLeader: true,
+    };
+    global.fetch = mockFetch(
+      { ...UNION, ownerId: "npp-1" },
+      [{ ...ORGANIZERS[1], isLeader: false }],
+      nppLeader
+    );
+    render(<UnionPage params={PARAMS} />);
+
+    const link = await screen.findByRole("link", { name: "Klaus Weber" });
+    expect(link.getAttribute("href")).toBe("/politicians/npp/88");
+    expect(screen.queryByText("Unknown")).toBeNull();
   });
 });
