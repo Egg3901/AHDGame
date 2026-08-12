@@ -1,7 +1,6 @@
 import type { StatePartyOrg } from "@/lib/db/types";
 import { states } from "./states";
 import { isUsElectoralState } from "@/lib/constants/states";
-import { isUsPoliticalState } from "@/lib/elections/statehoodAdmission";
 import { ELECTION_2020_MARGIN, marginToLean } from "@/lib/data/2020ElectionResults";
 import { ELECTION_1988_MARGIN } from "@/lib/data/1988ElectionResults";
 import { ELECTION_1980_MARGIN } from "@/lib/data/1980ElectionResults";
@@ -99,8 +98,8 @@ function calculateInitialOrg(politicalLean: number, partySeqId: string): number 
  * runs, `seedRegistrationLanes` overwrites `organization` (and sets
  * `registration`) per the preset's curated lane templates.
  *
- * Pre-statehood territories (Alaska/Hawaii under `1953-default`) are omitted —
- * they join via {@link buildMajorPartyOrgsForState} when admitted mid-game.
+ * Territorial chapters exist before statehood. They elect only party leadership;
+ * statehood still gates public offices and legislative elections separately.
  */
 export function generateStatePartyOrg(
   presetId: string = "2019-default"
@@ -109,9 +108,9 @@ export function generateStatePartyOrg(
   const entries: Omit<StatePartyOrg, "createdAt" | "updatedAt">[] = [];
 
   for (const state of states) {
-    // Federal districts like DC, and pre-statehood territories for this era,
-    // elect no offices and host no state party organization until admitted.
-    if (!isUsPoliticalState(state._id, presetId)) continue;
+    // Federal districts like DC do not host a state party organization. Alaska
+    // and Hawaii do: territorial party governance is distinct from statehood.
+    if (!isUsElectoralState(state._id)) continue;
     entries.push(...buildMajorPartyOrgsForState(state._id, presetId, margins));
   }
 
