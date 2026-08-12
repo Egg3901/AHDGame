@@ -298,13 +298,16 @@ docs/                     # Design system and observability docs
 
 | Document                                                       | Description                                            |
 | -------------------------------------------------------------- | ------------------------------------------------------ |
-| **[docs.lakesidegames.net](https://docs.lakesidegames.net)**   | Full design + engineering documentation site           |
+| **[docs.lakesidegames.net](https://docs.lakesidegames.net)**   | Docs site: player wiki + design + engineering docs     |
+| [Egg3901/ahd-docs](https://github.com/Egg3901/ahd-docs)        | Source repo for the docs site — doc PRs go here        |
 | [Design system](./docs/DESIGN.md)                              | UI conventions, theming, component and layout rules    |
 | [Source maps & monitoring](./docs/observability/sourcemaps.md) | Wiring a Sentry-compatible backend for readable traces |
 | [E2E testing](./e2e/README.md)                                 | Playwright setup and login-flow test accounts          |
 
-**In-game:** `/wiki` — game guides and design documentation
+**In-game:** `/wiki` — game guides and design documentation (seeded from `src/lib/seeds/wiki/`; wiki content PRs go to this repo)
 **Changelog:** `/changelog` — player-facing updates
+
+Docs suffixed `-as-shipped` are grounded in current code and win over older design docs where they disagree. Fixing a doc that contradicts the code is a welcome first PR — see [ahd-docs](https://github.com/Egg3901/ahd-docs).
 
 ---
 
