@@ -336,8 +336,12 @@ describe("loadOnboardingSignals", () => {
     expect(none.hasCompany).toBe(false);
 
     // corporations is queried twice: shareholdings first, then the CEO seat.
+    // Absent ceoType counts as "character" (founding historically omitted it).
     const ceoFilter = db.collectionMocks.corporations!.countDocuments.mock.calls[1][0];
-    expect(ceoFilter).toEqual({ ceoId: characterId, ceoType: "character" });
+    expect(ceoFilter).toEqual({
+      ceoId: characterId,
+      $or: [{ ceoType: "character" }, { ceoType: { $exists: false } }],
+    });
   });
 
   it("derives hasUnion from leading a union or funding a drive in one", async () => {
