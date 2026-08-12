@@ -31,6 +31,7 @@ import {
 } from "@/lib/turn/election/seatAllocation";
 import { withCommonsOrgRanking } from "@/lib/turn/election/commonsOrgRanking";
 import { loadApportionment } from "@/lib/elections/apportionment";
+import { getUkCommonsSeats } from "@/lib/constants/states";
 import { blocListQuota } from "@/lib/constants/blocList";
 import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { districtedHouseResolution } from "@/lib/redistricting/districtedHouseResolution";
@@ -289,7 +290,10 @@ export async function resolveOneGeneralElection(
     // House seat counts are preset-dependent (1990 vs 2020 census). Fetch the
     // active preset only for House races; other multi-seat types ignore the
     // `houseSeats` arg, so `undefined` correctly falls through to the default.
+    // Commons likewise needs the era map (625 in 1953 vs modern 650) — without
+    // it allocateSeats always used the modern UK_COMMONS_SEATS (ticket #1058).
     let houseSeats: Record<string, number> | undefined;
+    let commonsSeats: Record<string, number> | undefined;
     let gsForHouse: { preset?: string; redistrictingEnabled?: boolean } | null = null;
     if (election.electionType === "house") {
       gsForHouse = await (await getGameStateCollection(db)).findOne({ _id: "current" });
@@ -305,6 +309,7 @@ export async function resolveOneGeneralElection(
     let majoritarianBonus: MajoritarianBonusConfig | undefined;
     if (election.electionType === "commons" || election.electionType === "snap_commons") {
       const gsForCommons = await (await getGameStateCollection(db)).findOne({ _id: "current" });
+      commonsSeats = getUkCommonsSeats(gsForCommons?.preset);
       majoritarianBonus = await withCommonsOrgRanking(
         db,
         getMajoritarianBonus(election.electionType, gsForCommons?.currentYear),
@@ -369,7 +374,8 @@ export async function resolveOneGeneralElection(
         // National Front chambers: the quota decides the party split, not the
         // vote. Undefined for every non-bloc-list country, so their allocation
         // is byte-identical.
-        blocListQuota(election.countryId)?.shares
+        blocListQuota(election.countryId)?.shares,
+        commonsSeats
       );
 
     if (isMultiSeat) {

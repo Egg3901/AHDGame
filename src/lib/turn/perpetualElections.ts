@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongodb";
 import { getCountryAccessFromDb, withCountryAccessSnapshot } from "@/lib/countryAccess";
 import { NG_REGIONAL_COUNCIL_SEATS } from "@/lib/constants/states";
 import type { Election, ElectionStatus, GameState, State } from "@/lib/db/types";
-import { UK_COMMONS_SEATS } from "@/lib/turn/electionResolution";
+import { getUkCommonsSeats } from "@/lib/constants/states";
 import { US_STATE_FILTER } from "@/lib/utils/electionLabels";
 import { MS_PER_TURN, STARTING_YEAR } from "@/lib/constants/turnTime";
 import {
@@ -845,6 +845,7 @@ function endTimeToLarpTurn(endTime: Date, nowRef: Date, currentTurn: number): nu
 export async function ensureUKElections(now: Date): Promise<void> {
   const db = await getDb();
   const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const commonsSeatsByRegion = getUkCommonsSeats(ctx.preset);
 
   const ukRegions = await db
     .collection<State>("states")
@@ -864,6 +865,30 @@ export async function ensureUKElections(now: Date): Promise<void> {
       status: { $in: ["active", "upcoming"] },
     })
     .toArray();
+
+  // Heal live races that still carry the modern 650-seat map under a 1953
+  // world (or any other era mismatch). Same pattern as NG houseDistricts
+  // force-heal — without this, projections keep reading the wrong totalSeats
+  // until the next cycle, even after allocateSeats is era-aware (#1058).
+  const seatHealOps = liveElections.flatMap((e) => {
+    const expected = e.state ? commonsSeatsByRegion[e.state] : undefined;
+    if (expected == null || e.totalSeats === expected) return [];
+    return [
+      {
+        updateOne: {
+          filter: { _id: e._id },
+          update: { $set: { totalSeats: expected, updatedAt: now } },
+        },
+      },
+    ];
+  });
+  if (seatHealOps.length > 0) {
+    await db.collection<Election>("elections").bulkWrite(seatHealOps);
+    console.log(
+      `[Turn] ensureUKElections: healed totalSeats on ${seatHealOps.length} live Commons race(s)`
+    );
+  }
+
   const liveCommons = new Set(liveElections.map((e) => e.state));
 
   const completedElections = await db
@@ -928,7 +953,7 @@ export async function ensureUKElections(now: Date): Promise<void> {
       cycle: spawn.cycle,
       electionYear: electionToLarpYear("commons", spawn.cycle, undefined, undefined, ctx),
       status,
-      totalSeats: prev?.totalSeats ?? UK_COMMONS_SEATS[regionId] ?? 1,
+      totalSeats: commonsSeatsByRegion[regionId] ?? prev?.totalSeats ?? 1,
       startTime,
       primaryEndTime,
       endTime,
