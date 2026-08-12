@@ -49,7 +49,7 @@ describe("acceptUnionLeadership", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("accepts when the character matches the pending offer", async () => {
+  it("accepts when the character matches the pending offer on a vacant seat", async () => {
     const character = makeCharacter();
     const union = makeUnion({ pendingLeaderCharacterId: character._id });
     const unionUpdate = vi.fn().mockResolvedValue({ modifiedCount: 1 });
@@ -69,5 +69,31 @@ describe("acceptUnionLeadership", () => {
     expect(result.ok).toBe(true);
     expect(unionUpdate).toHaveBeenCalled();
     expect(charUpdate).toHaveBeenCalled();
+  });
+
+  it("displaces a sitting NPP president when the offer is accepted", async () => {
+    const character = makeCharacter();
+    const nppId = new ObjectId();
+    const union = makeUnion({
+      pendingLeaderCharacterId: character._id,
+      ownerId: nppId,
+      ownerType: "npp",
+    });
+    const unionUpdate = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+    const charUpdate = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+    const db = {
+      collection: (name: string) => {
+        if (name === "unions") return { updateOne: unionUpdate };
+        if (name === "characters") return { updateOne: charUpdate };
+        if (name === "federalBudget")
+          return { findOne: vi.fn().mockResolvedValue({ unionsBanned: false }) };
+        throw new Error(name);
+      },
+    } as unknown as Db;
+
+    const result = await acceptUnionLeadership(db, character, union);
+    expect(result.ok).toBe(true);
+    expect(unionUpdate.mock.calls[0][1].$set.ownerType).toBe("character");
+    expect(unionUpdate.mock.calls[0][1].$set.ownerId).toEqual(character._id);
   });
 });
