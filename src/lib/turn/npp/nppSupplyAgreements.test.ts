@@ -1,0 +1,208 @@
+import { describe, it, expect } from "vitest";
+import {
+  decideNppSupplyAgreements,
+  nppContractPremium,
+  NPP_CONTRACT_GLUT_PREMIUM,
+  NPP_CONTRACT_SHORTAGE_PREMIUM,
+  type NppAgreementParty,
+  type ExistingNppAgreement,
+} from "./nppSupplyAgreements";
+import type { CommodityType } from "@/lib/constants/commodities";
+
+const TURN = 10;
+const always = () => true;
+const never = () => false;
+
+function mill(over: Partial<NppAgreementParty> = {}): NppAgreementParty {
+  return {
+    corpId: "buyer1",
+    countryId: "US",
+    isNatcorp: false,
+    sectors: [
+      {
+        sectorType: "manufacturing",
+        capitalStock: 10_000,
+        strategyId: "standard",
+        throughputFactor: 0.8,
+        productionPolicyLevel: 0,
+      },
+    ],
+    ...over,
+  };
+}
+
+function miner(over: Partial<NppAgreementParty> = {}): NppAgreementParty {
+  return {
+    corpId: "seller1",
+    countryId: "US",
+    isNatcorp: false,
+    sectors: [
+      {
+        sectorType: "extraction",
+        capitalStock: 10_000,
+        strategyId: "iron_mining",
+        soldFraction: 0.3,
+        productionPolicyLevel: 0,
+      },
+    ],
+    ...over,
+  };
+}
+
+function prices(map: Partial<Record<CommodityType, number>>) {
+  return (commodity: CommodityType) => map[commodity] ?? null;
+}
+
+describe("nppContractPremium", () => {
+  it("discounts a glutted seller and premia a shortage", () => {
+    expect(nppContractPremium(0.2, 1)).toBe(NPP_CONTRACT_GLUT_PREMIUM);
+    expect(nppContractPremium(0.95, 1.3)).toBe(NPP_CONTRACT_SHORTAGE_PREMIUM);
+    expect(nppContractPremium(0.9, 1)).toBe(0);
+  });
+});
+
+describe("decideNppSupplyAgreements", () => {
+  it("activates a pending inbound proposal the NPP buyer uses", () => {
+    const pending: ExistingNppAgreement = {
+      id: "ag1",
+      supplierCorpId: "player-miner",
+      buyerCorpId: "buyer1",
+      commodity: "iron",
+      volumeCap: 100,
+      pricePremium: 0.05,
+      status: "pending",
+    };
+    const d = decideNppSupplyAgreements({
+      turn: TURN,
+      plantsEnabled: true,
+      parties: [mill()],
+      agreements: [pending],
+      priceRatioOf: prices({ iron: 1.2 }),
+      staggerEligible: always,
+    });
+    expect(d).toContainEqual({ action: "activate", agreementId: "ag1" });
+  });
+
+  it("refuses a gouging inbound premium", () => {
+    const pending: ExistingNppAgreement = {
+      id: "ag1",
+      supplierCorpId: "player-miner",
+      buyerCorpId: "buyer1",
+      commodity: "iron",
+      volumeCap: 100,
+      pricePremium: 0.3,
+      status: "pending",
+    };
+    const d = decideNppSupplyAgreements({
+      turn: TURN,
+      plantsEnabled: true,
+      parties: [mill()],
+      agreements: [pending],
+      priceRatioOf: prices({ iron: 1.2 }),
+      staggerEligible: always,
+    });
+    expect(d.filter((x) => x.action === "activate")).toHaveLength(0);
+  });
+
+  it("serves cancel notice when the supplier has mothballed every plant of that commodity", () => {
+    const active: ExistingNppAgreement = {
+      id: "ag2",
+      supplierCorpId: "seller1",
+      buyerCorpId: "buyer1",
+      commodity: "iron",
+      volumeCap: 100,
+      pricePremium: 0,
+      status: "active",
+    };
+    const cold = miner({
+      sectors: [
+        {
+          sectorType: "extraction",
+          capitalStock: 10_000,
+          strategyId: "iron_mining",
+          mothballed: true,
+          productionPolicyLevel: 0,
+        },
+      ],
+    });
+    const d = decideNppSupplyAgreements({
+      turn: TURN,
+      plantsEnabled: true,
+      parties: [cold],
+      agreements: [active],
+      priceRatioOf: prices({}),
+      staggerEligible: always,
+    });
+    expect(d).toContainEqual({ action: "cancelNotice", agreementId: "ag2" });
+  });
+
+  it("proposes a same-country NPP-NPP iron contract into a starved mill", () => {
+    const d = decideNppSupplyAgreements({
+      turn: TURN,
+      plantsEnabled: true,
+      parties: [mill(), miner()],
+      agreements: [],
+      priceRatioOf: prices({ iron: 1.4 }),
+      staggerEligible: always,
+    });
+    const propose = d.find((x) => x.action === "propose");
+    expect(propose).toMatchObject({
+      action: "propose",
+      supplierCorpId: "seller1",
+      buyerCorpId: "buyer1",
+      commodity: "iron",
+    });
+    if (propose?.action === "propose") {
+      expect(propose.volumeCap).toBeGreaterThan(0);
+      expect(propose.pricePremium).toBe(NPP_CONTRACT_GLUT_PREMIUM);
+    }
+  });
+
+  it("does not cross countries (1953 iron-curtain)", () => {
+    const d = decideNppSupplyAgreements({
+      turn: TURN,
+      plantsEnabled: true,
+      parties: [mill(), miner({ countryId: "RU" })],
+      agreements: [],
+      priceRatioOf: prices({ iron: 1.4 }),
+      staggerEligible: always,
+    });
+    expect(d.filter((x) => x.action === "propose")).toHaveLength(0);
+  });
+
+  it("does not propose when the stagger slot misses", () => {
+    const d = decideNppSupplyAgreements({
+      turn: TURN,
+      plantsEnabled: true,
+      parties: [mill(), miner()],
+      agreements: [],
+      priceRatioOf: prices({ iron: 1.4 }),
+      staggerEligible: never,
+    });
+    expect(d).toHaveLength(0);
+  });
+
+  it("skips SOE suppliers", () => {
+    const d = decideNppSupplyAgreements({
+      turn: TURN,
+      plantsEnabled: true,
+      parties: [mill(), miner({ isNatcorp: true })],
+      agreements: [],
+      priceRatioOf: prices({ iron: 1.4 }),
+      staggerEligible: always,
+    });
+    expect(d.filter((x) => x.action === "propose")).toHaveLength(0);
+  });
+
+  it("does not propose below plants (no physical volumeCap basis)", () => {
+    const d = decideNppSupplyAgreements({
+      turn: TURN,
+      plantsEnabled: false,
+      parties: [mill(), miner()],
+      agreements: [],
+      priceRatioOf: prices({ iron: 1.4 }),
+      staggerEligible: always,
+    });
+    expect(d.filter((x) => x.action === "propose")).toHaveLength(0);
+  });
+});
