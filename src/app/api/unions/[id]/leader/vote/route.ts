@@ -25,6 +25,7 @@ import {
 import {
   dedupeUnionLeaderVotes,
   loadUnionVoteWeights,
+  seatedPlayerPresidentId,
   tallyUnionLeaderVoteWeights,
   tallyUnionLeaderVotes,
 } from "@/lib/unions/unionLeadershipVote";
@@ -77,7 +78,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const organizerCount = organizerDocs.length;
 
     const votes = dedupeUnionLeaderVotes(votesRaw);
-    const tally = tallyUnionLeaderVotes(votesRaw, weights);
+    const incumbentId = seatedPlayerPresidentId(union);
+    const tally = tallyUnionLeaderVotes(votesRaw, weights, incumbentId);
     const leaderCharacterId = union.ownerId?.toString() ?? null;
     // Organizers and vote tallies are always player characters. The sitting
     // president may be an NPP — resolved separately above — so omit that id
