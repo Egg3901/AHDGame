@@ -14,7 +14,7 @@ import { warWalkthroughContent } from "../content/warWalkthrough";
 /**
  * Conflicts & Military.
  *
- * Documents the Conflicts subsystem — declaring war, raising forces, the officer
+ * Documents the Conflicts subsystem: declaring war, raising forces, the officer
  * corps, doctrine, command structure, battle, occupation and peace.
  *
  * ⚠️ EDITING RULE: battle-resolution math is deliberately NOT published here, so
@@ -22,8 +22,8 @@ import { warWalkthroughContent } from "../content/warWalkthrough";
  * formula, the combat-value curve, supply throughput, the round loop, the retreat
  * threshold, the margin-to-territory shift rate, the OCCUPATION constants, or the
  * odds calculation. Combat inputs are described directionally instead. Non-combat
- * numbers players need in order to plan — prices, cooldowns, point budgets, XP
- * thresholds, conscription multipliers — are fair game and are stated explicitly.
+ * numbers players need in order to plan: prices, cooldowns, point budgets, XP
+ * thresholds, conscription multipliers: are fair game and are stated explicitly.
  * See docs/superpowers/specs/2026-08-06-military-wiki-category-design.md.
  */
 export const militaryPages: readonly WikiSeedPage[] = [
@@ -31,7 +31,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     slug: "conflicts-overview",
     title: "Conflicts & the Military System",
     description:
-      "How war works end to end — the Unit → General → Command → Conflict chain, who may do what, the fog tiers, and where every surface lives.",
+      "How war works end to end: the Unit → General → Command → Conflict chain, who may do what, the fog tiers, and where every surface lives.",
     content: conflictsOverviewContent,
     category: "military",
     extraTags: ["conflicts", "war", "overview"],
@@ -44,7 +44,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     slug: "declaring-war",
     title: "Declaring War",
     description:
-      "War is legislation — the two-thirds bill, war goals, who may file, the 120-turn cooldown, truces, joining an existing war, and opening forces.",
+      "War is legislation: the two-thirds bill, war goals, who may file, the 120-turn cooldown, truces, joining an existing war, and opening forces.",
     content: declaringWarContent,
     category: "military",
     extraTags: ["war", "legislation", "diplomacy"],
@@ -93,7 +93,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     slug: "national-doctrine",
     title: "National Doctrine",
     description:
-      "Your nation's permanent way of fighting — 12 points against 128 nodes, decade gating, prerequisites, and how doctrine boosts your generals' traits.",
+      "Your nation's permanent way of fighting: 12 points against 128 nodes, decade gating, prerequisites, and how doctrine boosts your generals' traits.",
     content: nationalDoctrineContent,
     category: "military",
     extraTags: ["doctrine", "strategy"],
@@ -117,7 +117,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     slug: "fighting-a-battle",
     title: "Fighting a Battle",
     description:
-      "The operational loop — deploying through generals, reading the two odds bars, declaring an offensive, the defender's window, coalitions, retreat and battle reports.",
+      "The operational loop: deploying through generals, reading the two odds bars, declaring an offensive, the defender's window, coalitions, retreat and battle reports.",
     content: fightingABattleContent,
     category: "military",
     extraTags: ["combat", "battles", "tactics"],
@@ -154,7 +154,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     slug: "a-war-start-to-finish",
     title: "A War, Start to Finish",
     description:
-      "A complete worked example — a hypothetical US–China war from peacetime buildup through the ratification vote, first contact, attrition, coalition and a negotiated peace.",
+      "A complete worked example: a hypothetical US-China war from peacetime buildup through the ratification vote, first contact, attrition, coalition and a negotiated peace.",
     content: warWalkthroughContent,
     category: "military",
     extraTags: ["walkthrough", "example", "war"],

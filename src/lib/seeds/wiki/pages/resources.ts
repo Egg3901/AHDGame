@@ -9,7 +9,7 @@ export const resourcesPages: readonly WikiSeedPage[] = [
     slug: "resources-overview",
     title: "Resources",
     description:
-      "State deposits of oil, coal, iron, copper, natural gas, timber, and rare earth — how capacity works and why it affects corporate output and commodity prices.",
+      "State deposits of oil, coal, iron, copper, natural gas, timber, and rare earth: how capacity works and why it affects corporate output and commodity prices.",
     content: resourcesOverviewContent,
     category: "resources",
     featured: true,

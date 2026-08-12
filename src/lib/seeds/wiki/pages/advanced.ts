@@ -68,7 +68,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     slug: "reference-formulas",
     title: "Reference: Formulas",
     description:
-      "Complete formula reference — primary score, presidential primary, canvassing, vote accumulation, campaign upgrades, party org scalars, and NPI normalization.",
+      "Complete formula reference: primary score, presidential primary, canvassing, vote accumulation, campaign upgrades, party org scalars, and NPI normalization.",
     content: referenceFormulasContent,
     category: "advanced",
     featured: true,
@@ -80,7 +80,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     slug: "reference-turn-order",
     title: "Reference: Turn Order",
     description:
-      "The complete turn processing sequence — 14 groups, 40+ phases, what runs in each, and why the Group 7 election resolution order is strictly load-bearing.",
+      "The complete turn processing sequence: 14 groups, 40+ phases, what runs in each, and why the Group 7 election resolution order is strictly load-bearing.",
     content: referenceTurnOrderContent,
     category: "advanced",
     featured: false,
@@ -92,7 +92,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     slug: "reference-offices",
     title: "Reference: Offices",
     description:
-      "Complete reference for all playable offices across the US, UK, Germany, and Japan — how each is won, term lengths, action bonuses, and party strength weights.",
+      "Complete reference for all playable offices across the US, UK, Germany, and Japan: how each is won, term lengths, action bonuses, and party strength weights.",
     content: referenceOfficesContent,
     category: "advanced",
     featured: false,
@@ -175,7 +175,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
   {
     slug: "international-organizations",
     title: "International Organizations",
-    description: `Multilateral bodies — ${builtInOrgShortNames}, and custom orgs — covering founding members, leadership terms, membership proposals, org legislation, and how FTAs and blocs affect trade.`,
+    description: `Multilateral bodies: ${builtInOrgShortNames}, and custom orgs: covering founding members, leadership terms, membership proposals, org legislation, and how FTAs and blocs affect trade.`,
     content: internationalOrganizationsContent,
     category: "advanced",
     featured: false,
@@ -223,7 +223,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     slug: "rpg-stats",
     title: "RPG Stats & Debates",
     description:
-      "The seven character stats — what each does, how you raise and lose them through play, the 28-point creation budget, and how election debates are scored.",
+      "The seven character stats: what each does, how you raise and lose them through play, the 28-point creation budget, and how election debates are scored.",
     content: rpgStatsContent,
     category: "advanced",
     featured: false,
@@ -235,7 +235,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     slug: "crisis-interaction",
     title: "Crisis Interaction",
     description:
-      "Template-based crisis creation, decision trees, collective contributions, ambient interaction cards, and the auto-disaster spawner — all gated behind two independent feature flags.",
+      "Template-based crisis creation, decision trees, collective contributions, ambient interaction cards, and the auto-disaster spawner: all gated behind two independent feature flags.",
     content: crisisInteractionContent,
     category: "advanced",
     featured: false,

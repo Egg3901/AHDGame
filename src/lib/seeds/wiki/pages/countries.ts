@@ -28,7 +28,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     slug: "uk-overview",
     title: "United Kingdom",
     description:
-      "Westminster parliamentary democracy across four nations — 650 Commons seats, confidence votes, and a Prime Minister.",
+      "Westminster parliamentary democracy across four nations: 650 Commons seats, confidence votes, and a Prime Minister.",
     content: ukOverviewContent,
     category: "countries",
     countryId: "UK",
@@ -67,7 +67,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     slug: "ie-overview",
     title: "Ireland",
     description:
-      "Parliamentary republic with PR-STV elections, a 160-seat Dáil, coalition government, and a ceremonial Uachtarán — shares the ECB with the Eurozone.",
+      "Parliamentary republic with PR-STV elections, a 160-seat Dáil, coalition government, and a ceremonial Uachtarán: shares the ECB with the Eurozone.",
     content: ieOverviewContent,
     category: "countries",
     countryId: "IE",

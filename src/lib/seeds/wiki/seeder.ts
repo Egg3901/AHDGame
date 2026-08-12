@@ -64,7 +64,7 @@ function pageDocForSeed(
         userId: adminUserId,
         timestamp: now,
         action: "created",
-        note: "Reseed — initial insert",
+        note: "Reseed: initial insert",
       },
     ],
   };
@@ -137,7 +137,7 @@ export async function seedWikiPages(
             userId: adminUserId,
             timestamp: now,
             action: "edited",
-            note: "Reseed — overwrite",
+            note: "Reseed: overwrite",
           },
         },
       }

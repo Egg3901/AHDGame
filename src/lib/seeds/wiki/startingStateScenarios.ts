@@ -74,23 +74,23 @@ const PARTY_DISPLAY: Record<string, { name: string; color: string }> = {
   uk_uup: { name: "Ulster Unionist Party", color: "#9999FF" },
   uk_speaker: { name: "Speaker", color: "#94A3B8" },
   uk_independent: { name: "Independent", color: "#94A3B8" },
-  // JP — 2019-era
+  // JP: 2019-era
   jp_ldp: { name: "Liberal Democratic Party", color: "#3CA324" },
   jp_cdp: { name: "Constitutional Democratic Party", color: "#1E4D8C" },
   jp_komeito: { name: "Komeito", color: "#F55881" },
   jp_jcp: { name: "Japanese Communist Party", color: "#DB001C" },
   jp_ishin: { name: "Nippon Ishin no Kai", color: "#39B54A" },
   jp_dpfp: { name: "Democratic Party for the People", color: "#FBB917" },
-  // JP minor 2019-era (resolve to "independent" if not seeded — labels for
+  // JP minor 2019-era (resolve to "independent" if not seeded: labels for
   // scenario display so tallies don't render the raw slug)
   jp_sdp: { name: "Social Democratic Party", color: "#88BBFF" },
   jp_reiwa: { name: "Reiwa Shinsengumi", color: "#E50012" },
   jp_nhk: { name: "NHK Party", color: "#FFA500" },
-  // JP — 1991-era
+  // JP: 1991-era
   jp_jsp: { name: "Japan Socialist Party", color: "#C8102E" },
   jp_dsp: { name: "Democratic Socialist Party", color: "#0E5FAA" },
   jp_independent: { name: "Independent / Other", color: "#94A3B8" },
-  // DE — 2019-era
+  // DE: 2019-era
   de_spd: { name: "SPD", color: "#E3000F" },
   de_cdu: { name: "CDU", color: "#000000" },
   de_csu: { name: "CSU", color: "#0080C8" },
@@ -98,7 +98,7 @@ const PARTY_DISPLAY: Record<string, { name: string; color: string }> = {
   de_fdp: { name: "FDP", color: "#FFED00" },
   de_linke: { name: "Die Linke", color: "#BE3075" },
   de_afd: { name: "Alternative für Deutschland", color: "#009EE0" },
-  // DE — 1991-era
+  // DE: 1991-era
   de_pds: { name: "Partei des Demokratischen Sozialismus", color: "#8E44AD" },
   de_independent: { name: "Independent", color: "#94A3B8" },
   // CN
@@ -171,7 +171,7 @@ function buildChamber(
 export const STARTING_STATE_1991_COUNTRIES: readonly ScenarioCountry[] = [
   {
     countryId: "US",
-    contextLabel: "102nd Congress (1991–1993)",
+    contextLabel: "102nd Congress (1991-1993)",
     posture:
       "Democrats held a strong House majority and the Senate, with Bush in the White House. One Independent (Bernie Sanders, VT) joined the House.",
     chambers: [
@@ -200,7 +200,7 @@ export const STARTING_STATE_1991_COUNTRIES: readonly ScenarioCountry[] = [
   },
   {
     countryId: "DE",
-    contextLabel: "12th Bundestag (1990–1994)",
+    contextLabel: "12th Bundestag (1990-1994)",
     posture:
       "First all-German Bundestag after reunification. Kohl's CDU/CSU-FDP coalition held the chamber.",
     chambers: [
@@ -210,7 +210,7 @@ export const STARTING_STATE_1991_COUNTRIES: readonly ScenarioCountry[] = [
   },
   {
     countryId: "CN",
-    contextLabel: "7th National People's Congress (1988–1993)",
+    contextLabel: "7th National People's Congress (1988-1993)",
     posture:
       "CPC held ~97% of NPC seats. China Democratic League and CNDCA held token positions. All regional governors were CPC-affiliated.",
     chambers: [
@@ -232,7 +232,7 @@ export const STARTING_STATE_1991_COUNTRIES: readonly ScenarioCountry[] = [
     countryId: "IE",
     contextLabel: "27th Dáil (post-June 1989 General Election)",
     posture:
-      "Fianna Fáil formed government in coalition with the Progressive Democrats — FF's first-ever coalition. Fine Gael led the opposition.",
+      "Fianna Fáil formed government in coalition with the Progressive Democrats: FF's first-ever coalition. Fine Gael led the opposition.",
     chambers: [buildChamber("Dáil Éireann", "Dáil", IE_DAIL_1991)],
   },
   {
@@ -254,7 +254,7 @@ export function getScenarioCountry(countryId: ScenarioCountryId): ScenarioCountr
   return STARTING_STATE_1991_COUNTRIES.find((country) => country.countryId === countryId);
 }
 
-/** Countries that have no 1991 seed data — the dashboard shows a placeholder for these. */
+/** Countries that have no 1991 seed data: the dashboard shows a placeholder for these. */
 export const STARTING_STATE_1991_UNSEEDED_COUNTRIES: readonly CountryId[] = [];
 
 // ── Cold-War player start scenarios (RU / DD) ────────────────────────────────

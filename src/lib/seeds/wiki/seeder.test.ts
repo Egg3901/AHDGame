@@ -38,7 +38,7 @@ function existingPage(overrides: Partial<WikiPage> = {}): WikiPage {
         userId: ADMIN_ID,
         timestamp: new Date("2026-01-01"),
         action: "created",
-        note: "Reseed — initial insert",
+        note: "Reseed: initial insert",
       },
     ],
     ...overrides,
@@ -85,7 +85,7 @@ describe("seedWikiPages", () => {
     db.collectionMocks.wikiPages = db.collection("wikiPages");
     const page = existingPage({
       editHistory: [
-        { userId: ADMIN_ID, timestamp: new Date(), action: "created", note: "Reseed — initial" },
+        { userId: ADMIN_ID, timestamp: new Date(), action: "created", note: "Reseed: initial" },
         { userId: ADMIN_ID, timestamp: new Date(), action: "edited", note: "manual tweak" },
       ],
     });
@@ -139,7 +139,7 @@ describe("seedWikiPages", () => {
     expect(db.collectionMocks.wikiPages.findOne).toHaveBeenCalledExactlyOnceWith({
       slug: other.slug,
     });
-    // No mocking needed — vi falls through to the original mock for other call shapes
+    // No mocking needed: vi falls through to the original mock for other call shapes
     vi.clearAllMocks();
   });
 });

@@ -16,7 +16,7 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     slug: "bills-legislation",
     title: "Bills & Legislation",
     description:
-      "How bills are drafted, introduced, voted on in both chambers, and signed into law — including provision costs, NPP auto-voting, and what happens when a bill is enacted.",
+      "How bills are drafted, introduced, voted on in both chambers, and signed into law: including provision costs, NPP auto-voting, and what happens when a bill is enacted.",
     content: billsLegislationContent,
     category: "legislatures",
     featured: true,
@@ -39,7 +39,7 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     slug: "policy-effects",
     title: "Policy Effects",
     description:
-      "How enacted legislation changes national and state metrics each turn — exponential decay, tick rates, federal division, and long-run equilibrium.",
+      "How enacted legislation changes national and state metrics each turn: exponential decay, tick rates, federal division, and long-run equilibrium.",
     content: policyEffectsContent,
     category: "legislatures",
     featured: true,
@@ -51,7 +51,7 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     slug: "congress-leadership",
     title: "Congress Leadership",
     description:
-      "Speaker, Majority/Minority Leaders, and committee chairs — how leadership elections work, who votes, coalition blocs, and vacancy succession.",
+      "Speaker, Majority/Minority Leaders, and committee chairs: how leadership elections work, who votes, coalition blocs, and vacancy succession.",
     content: congressLeadershipContent,
     category: "legislatures",
     difficulty: "intermediate",
@@ -84,7 +84,7 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     slug: "cabinet-projects",
     title: "Cabinet Projects & Buildings",
     description:
-      "The estates, power plants, and infrastructure projects cabinet seats can build — what each asset does, tiers, funding, condition, and the budget envelope.",
+      "The estates, power plants, and infrastructure projects cabinet seats can build: what each asset does, tiers, funding, condition, and the budget envelope.",
     content: cabinetProjectsContent,
     category: "legislatures",
     difficulty: "intermediate",
@@ -95,7 +95,7 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     slug: "confirmation-process",
     title: "Confirmation Process",
     description:
-      "How Senate confirmation votes work for Cabinet nominees — thresholds, NPP voting logic, tie-breakers, and blocking strategies.",
+      "How Senate confirmation votes work for Cabinet nominees: thresholds, NPP voting logic, tie-breakers, and blocking strategies.",
     content: confirmationProcessContent,
     category: "legislatures",
     difficulty: "intermediate",
@@ -106,7 +106,7 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     slug: "government-formation",
     title: "Government Formation",
     description:
-      "How parliamentary governments (UK, JP, DE) form after elections — confidence motions, PM/Chancellor appointment votes, coalition negotiations, and the legislation freeze.",
+      "How parliamentary governments (UK, JP, DE) form after elections: confidence motions, PM/Chancellor appointment votes, coalition negotiations, and the legislation freeze.",
     content: governmentFormationContent,
     category: "legislatures",
     difficulty: "intermediate",
@@ -117,7 +117,7 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     slug: "no-confidence-votes",
     title: "No-Confidence Votes",
     description:
-      "How votes of no confidence work in parliamentary systems — who proposes, who votes, NPP behavior, VONC outcomes, and the link to snap elections.",
+      "How votes of no confidence work in parliamentary systems: who proposes, who votes, NPP behavior, VONC outcomes, and the link to snap elections.",
     content: noConfidenceVotesContent,
     category: "legislatures",
     difficulty: "intermediate",
@@ -128,7 +128,7 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     slug: "one-party-states",
     title: "One-Party States",
     description:
-      "How one-party states (CN today) work — the three party tiers (Ruling / Approved / Banned), what each can and cannot do, why new player parties default to banned, and the ruling-party confidence model.",
+      "How one-party states (CN today) work: the three party tiers (Ruling / Approved / Banned), what each can and cannot do, why new player parties default to banned, and the ruling-party confidence model.",
     content: onePartyStatesContent,
     category: "legislatures",
     difficulty: "intermediate",

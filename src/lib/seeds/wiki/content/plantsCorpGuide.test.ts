@@ -14,7 +14,7 @@ import { economyPages } from "../pages/economy";
 
 describe("plants-corp-guide wiki content", () => {
   it("is dash-free player copy", () => {
-    expect(plantsCorpGuideContent).not.toMatch(/[–—]/);
+    expect(plantsCorpGuideContent).not.toMatch(/[—–]/);
   });
 
   it("carries no internal jargon", () => {

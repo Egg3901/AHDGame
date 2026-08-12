@@ -26,7 +26,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     slug: "create-a-character",
     title: "Create a Character",
     description:
-      "Every decision during onboarding — country, name, home region, policy positions, starting kit, first party.",
+      "Every decision during onboarding: country, name, home region, policy positions, starting kit, first party.",
     content: createACharacterContent,
     category: "getting-started",
     difficulty: "beginner",
@@ -60,7 +60,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     slug: "the-game-loop",
     title: "The Game Loop",
     description:
-      "How much you actually need to log in — per-turn, per-day, per-cycle rhythms plus the long-term career arc.",
+      "How much you actually need to log in: per-turn, per-day, per-cycle rhythms plus the long-term career arc.",
     content: theGameLoopContent,
     category: "getting-started",
     difficulty: "beginner",
@@ -71,7 +71,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     slug: "player-progression",
     title: "Player Progression",
     description:
-      "Career arc from independent to head of state — phases, office benefits, per-country ladders.",
+      "Career arc from independent to head of state: phases, office benefits, per-country ladders.",
     content: playerProgressionContent,
     category: "getting-started",
     difficulty: "intermediate",
@@ -82,7 +82,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     slug: "relocation",
     title: "Relocation",
     description:
-      "Moving home state, region, or country — what resets, what's preserved, CEO rules, and strategic timing.",
+      "Moving home state, region, or country: what resets, what's preserved, CEO rules, and strategic timing.",
     content: relocationContent,
     category: "getting-started",
     difficulty: "intermediate",
@@ -93,7 +93,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     slug: "first-campaign-walkthrough",
     title: "First Campaign Walkthrough",
     description:
-      "Concrete week-by-week example of a new player running their first State Senate race — from Day 1 actions to election night.",
+      "Concrete week-by-week example of a new player running their first State Senate race: from Day 1 actions to election night.",
     content: firstCampaignWalkthroughContent,
     category: "getting-started",
     featured: true,
@@ -105,7 +105,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     slug: "game-starting-state",
     title: "Game Starting State",
     description:
-      "Starting parties, NPPs, treasuries, and legislature sizes for every country — the exact configuration a new world opens with.",
+      "Starting parties, NPPs, treasuries, and legislature sizes for every country: the exact configuration a new world opens with.",
     content: gameStartingStateContent,
     category: "getting-started",
     featured: false,

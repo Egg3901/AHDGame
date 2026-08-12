@@ -52,7 +52,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "polling",
     title: "Polling",
     description:
-      "Quick poll vs Full Demographic poll — what they cost, what they return, and how to use poll data to plan ads and canvassing.",
+      "Quick poll vs Full Demographic poll: what they cost, what they return, and how to use poll data to plan ads and canvassing.",
     content: pollingContent,
     category: "elections",
     difficulty: "beginner",
@@ -74,7 +74,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "canvassing",
     title: "Canvassing",
     description:
-      "The $100 / 1-action home-state turnout boost — alignment multiplier, campaign season 2× window, diminishing returns, and interaction with party GOTV.",
+      "The $100 / 1-action home-state turnout boost: alignment multiplier, campaign season 2× window, diminishing returns, and interaction with party GOTV.",
     content: canvassingContent,
     category: "elections",
     difficulty: "intermediate",
@@ -131,7 +131,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "campaign-manager",
     title: "Campaign Manager",
     description:
-      "The /campaign/[id] page — budget, upgrades, activity log, endorsements, manager assignment, access tiers, donations, and insolvency auto-downgrade.",
+      "The /campaign/[id] page: budget, upgrades, activity log, endorsements, manager assignment, access tiers, donations, and insolvency auto-downgrade.",
     content: campaignManagerContent,
     category: "elections",
     difficulty: "intermediate",
@@ -142,7 +142,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "primary-general-tactics",
     title: "Primary vs General Tactics",
     description:
-      "What to change and what not to change when your primary ends — ad targeting, canvassing, campaign upgrades, Opposition Research, presidential specifics.",
+      "What to change and what not to change when your primary ends: ad targeting, canvassing, campaign upgrades, Opposition Research, presidential specifics.",
     content: primaryGeneralTacticsContent,
     category: "elections",
     difficulty: "advanced",
@@ -153,7 +153,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "snap-elections",
     title: "Snap Elections",
     description:
-      "Parliamentary dissolution mechanics — UK Commons and JP Shūgiin. PM-initiated snaps, the 96-turn auto-snap clock, cycle reset, and 48-hour sprint tactics.",
+      "Parliamentary dissolution mechanics: UK Commons and JP Shūgiin. PM-initiated snaps, the 96-turn auto-snap clock, cycle reset, and 48-hour sprint tactics.",
     content: snapElectionsContent,
     category: "elections",
     difficulty: "advanced",

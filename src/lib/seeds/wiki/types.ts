@@ -33,6 +33,6 @@ export interface WikiSeedPage {
   /** Optional country scoping for country-specific pages (e.g. 'united-kingdom'). */
   countryId?: CountryId;
 
-  /** Admin-only page — hidden from public index and API unless the caller is admin. */
+  /** Admin-only page: hidden from public index and API unless the caller is admin. */
   private?: boolean;
 }

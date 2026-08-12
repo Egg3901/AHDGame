@@ -30,7 +30,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "corporations",
     title: "Corporations",
     description:
-      "How to found and run a corporation — sectors as owned plants, revenue, profit margins, splits and attacks, and political interactions.",
+      "How to found and run a corporation: sectors as owned plants, revenue, profit margins, splits and attacks, and political interactions.",
     content: corporationsContent,
     category: "economy",
     featured: true,
@@ -53,7 +53,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "brand-loyalty",
     title: "Brand Loyalty",
     description:
-      "How corporations earn and lose customer loyalty through consistent pricing and delivery — the relative loyal-slice payoff, the gouging penalty, and the hidden 5-tier scale.",
+      "How corporations earn and lose customer loyalty through consistent pricing and delivery: the relative loyal-slice payoff, the gouging penalty, and the hidden 5-tier scale.",
     content: brandLoyaltyContent,
     category: "economy",
     featured: true,
@@ -65,7 +65,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "output-quality",
     title: "Output Quality",
     description:
-      "How corporations produce quality from four substitutable pillars — Tech, Inputs, Wages, and Operations — how quality propagates up the supply chain, and the visible average-quality number and chart.",
+      "How corporations produce quality from four substitutable pillars: Tech, Inputs, Wages, and Operations: how quality propagates up the supply chain, and the visible average-quality number and chart.",
     content: outputQualityContent,
     category: "economy",
     difficulty: "intermediate",
@@ -76,7 +76,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "supply-agreements",
     title: "Supply Agreements",
     description:
-      "Private supplier-to-buyer commodity contracts — contracted demand filled before the open market, the ±35% price band, mutual consent, exclusivity, and the brand-loyalty interaction.",
+      "Private supplier-to-buyer commodity contracts: contracted demand filled before the open market, the ±35% price band, mutual consent, exclusivity, and the brand-loyalty interaction.",
     content: supplyAgreementsContent,
     category: "economy",
     difficulty: "intermediate",
@@ -99,7 +99,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "unions",
     title: "Unions",
     description:
-      "Sector unionization, standing labour premiums, strikes, union law, player-run unions, and union-busting — phased behind labour tiers.",
+      "Sector unionization, standing labour premiums, strikes, union law, player-run unions, and union-busting: phased behind labour tiers.",
     content: unionsContent,
     category: "economy",
     difficulty: "advanced",
@@ -121,7 +121,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "sovereign-bonds",
     title: "Sovereign Bonds",
     description:
-      "Government-issued bonds that finance national deficits — automatic issuance, coupon rates, and budget integration.",
+      "Government-issued bonds that finance national deficits: automatic issuance, coupon rates, and budget integration.",
     content: sovereignBondsContent,
     category: "economy",
     featured: true,
@@ -155,7 +155,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "market-system-guide",
     title: "Market System: A Player's Guide",
     description:
-      "A plain-language guide to the market system tiers — price realization, cheapest-first clearing and pricing posture, the capital loop, the plants tier where sectors are their plants, and how it all flows into valuation.",
+      "A plain-language guide to the market system tiers: price realization, cheapest-first clearing and pricing posture, the capital loop, the plants tier where sectors are their plants, and how it all flows into valuation.",
     content: marketSystemGuideContent,
     category: "economy",
     extraTags: [
@@ -289,7 +289,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "index-funds",
     title: "Index Funds",
     description:
-      "Passive investment vehicles that track a market basket — NAV, subscribe/redeem, and the 75/25 dividend pass-through.",
+      "Passive investment vehicles that track a market basket: NAV, subscribe/redeem, and the 75/25 dividend pass-through.",
     content: indexFundsContent,
     category: "economy",
     difficulty: "intermediate",
@@ -300,7 +300,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "line-of-credit",
     title: "Line of Credit",
     description:
-      "Borrowing against your credit score from the central bank — composite scoring, spread curve, funding sources, and garnishment.",
+      "Borrowing against your credit score from the central bank: composite scoring, spread curve, funding sources, and garnishment.",
     content: lineOfCreditContent,
     category: "economy",
     difficulty: "intermediate",
@@ -322,7 +322,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "sovereign-default",
     title: "Sovereign Default",
     description:
-      "The sovereign default crisis pipeline — failed auctions, demand penalty curve, resolution paths, default scar, and recovery floor.",
+      "The sovereign default crisis pipeline: failed auctions, demand penalty curve, resolution paths, default scar, and recovery floor.",
     content: sovereignDefaultContent,
     category: "economy",
     difficulty: "advanced",
@@ -333,7 +333,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "imf",
     title: "IMF & Bailouts",
     description:
-      "The IMF bailout facility — income capture, share-price discount, level-annuity repayment, and board membership.",
+      "The IMF bailout facility: income capture, share-price discount, level-annuity repayment, and board membership.",
     content: imfContent,
     category: "economy",
     difficulty: "advanced",

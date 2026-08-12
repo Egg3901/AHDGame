@@ -40,7 +40,7 @@ export const partiesPages: readonly WikiSeedPage[] = [
     slug: "party-leadership",
     title: "Party Leadership",
     description:
-      "Chair, vice chair, and treasurer roles at the national and state level — elections, whip authority, and the chairId vs chairCharacterId distinction.",
+      "Chair, vice chair, and treasurer roles at the national and state level: elections, whip authority, and the chairId vs chairCharacterId distinction.",
     content: partyLeadershipContent,
     category: "parties",
     difficulty: "intermediate",
@@ -51,7 +51,7 @@ export const partiesPages: readonly WikiSeedPage[] = [
     slug: "party-organization",
     title: "Party Organization",
     description:
-      "The org score system — how the cap is calculated from election results, how org builds through budget spending, and how org multiplies vote output.",
+      "The org score system: how the cap is calculated from election results, how org builds through budget spending, and how org multiplies vote output.",
     content: partyOrganizationContent,
     category: "parties",
     featured: true,
@@ -63,7 +63,7 @@ export const partiesPages: readonly WikiSeedPage[] = [
     slug: "party-ideology",
     title: "Party Ideology",
     description:
-      "The economic and social two-axis grid — how party positions affect primary scoring, NPP alignment, and voter appeal in generals.",
+      "The economic and social two-axis grid: how party positions affect primary scoring, NPP alignment, and voter appeal in generals.",
     content: partyIdeologyContent,
     category: "parties",
     difficulty: "intermediate",
@@ -74,7 +74,7 @@ export const partiesPages: readonly WikiSeedPage[] = [
     slug: "party-actions",
     title: "Party Actions",
     description:
-      "Budget-based actions (GOTV, suppression, org building), NPP influence spending, and whip directives — who can use them and how.",
+      "Budget-based actions (GOTV, suppression, org building), NPP influence spending, and whip directives: who can use them and how.",
     content: partyActionsContent,
     category: "parties",
     difficulty: "intermediate",
@@ -140,7 +140,7 @@ export const partiesPages: readonly WikiSeedPage[] = [
     slug: "npp-autonomy",
     title: "NPP Autonomy",
     description:
-      "Graduated smarter-NPP levels (v0–v3): bill sponsorship, executive formation, ministerial governance, and comingle tiers for player countries.",
+      "Graduated smarter-NPP levels (v0-v3): bill sponsorship, executive formation, ministerial governance, and comingle tiers for player countries.",
     content: nppAutonomyContent,
     category: "parties",
     difficulty: "advanced",
