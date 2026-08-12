@@ -224,11 +224,10 @@ export async function computeCabinetNominationTally(
 
 /**
  * Single source of truth for a US House / Senate leadership election tally
- * (Speaker, Majority/Minority Leader, etc.). Unlike PM / cabinet votes, these
- * are **one-member-one-vote** by design (the ballot system increments `votesFor`
- * by 1 and resolution is a plurality on that count) — so the breakdown must be
- * counted per voter, NOT seat-weighted, or a single NPP bloc would otherwise
- * appear as dozens of votes and disagree with the headline counter.
+ * (Speaker, Majority/Minority Leader, etc.). Tallies are **seat-weighted** via
+ * `seatsHeld` so multi-seat members (redistricting / aggregated NPP blocs)
+ * contribute their full chamber weight — matching bill votes and the "N seats ·
+ * plurality wins" leadership UI.
  *
  * Votes are scoped to current chamber seat-holders: a key absent from the seat
  * map is a de-seated or cross-country voter and is excluded.
@@ -249,7 +248,6 @@ export async function computeCongressLeadershipTally(
   const partyMap = new Map(parties.map((p) => [String(p.sequentialId), p]));
 
   const keys = Object.keys(votes);
-  // weightMap here is used only for seat PRESENCE (scoping), never as a weight.
   const { voterPartyMap, weightMap } = await buildVoterPartyAndWeightMaps(
     db,
     "US",
@@ -263,8 +261,7 @@ export async function computeCongressLeadershipTally(
     scopedVotes[k] = v;
   }
 
-  // No weightMap passed → buildVotesByParty counts 1 per voter (one-member-one-vote).
-  const voteByParty = buildVotesByParty(scopedVotes, voterPartyMap, partyMap);
+  const voteByParty = buildVotesByParty(scopedVotes, voterPartyMap, partyMap, weightMap);
   let votesFor = 0;
   let votesAgainst = 0;
   for (const p of voteByParty) {

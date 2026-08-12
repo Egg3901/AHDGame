@@ -225,7 +225,7 @@ export async function buildLeadershipElectionState(
         votes?: Record<string, "for" | "against">;
       }) => {
         const p = partyMap.get(nom.nomineeParty ?? "");
-        // One source of truth: the seat-scoped one-member-one-vote count feeds
+        // One source of truth: the seat-scoped seat-weighted count feeds
         // both the headline and the breakdown so they always agree.
         const tally = await computeCongressLeadershipTally(
           db,

@@ -143,23 +143,22 @@ describe("computeCongressLeadershipTally", () => {
       { _id: memberId, party: "1" },
     ]);
     stubFind(db.collection("npps") as unknown as MockCollection, [{ _id: nppBlocId, party: "1" }]);
-    // The NPP bloc holds 50 seats, but leadership elections are
-    // one-member-one-vote: it must count as a single vote, not 50.
+    // Multi-seat officials contribute seatsHeld; de-seated voters drop out.
     stubFind(db.collection("electedOfficials") as unknown as MockCollection, [
-      { characterId: memberId, countryId: "US", officeType: "house", seatsHeld: 1 },
+      { characterId: memberId, countryId: "US", officeType: "house", seatsHeld: 7 },
       { nppId: nppBlocId, isNPP: true, countryId: "US", officeType: "house", seatsHeld: 50 },
     ]);
   });
 
-  it("counts one vote per member (not seat-weighted) and drops de-seated voters", async () => {
+  it("counts seat-weighted votes and drops de-seated voters", async () => {
     const votes: Record<string, "for" | "against"> = {
       [memberId.toString()]: "for",
       [`npp_${nppBlocId.toString()}`]: "for",
       [`npp_${ghostId.toString()}`]: "for", // de-seated -> excluded
     };
     const tally = await computeCongressLeadershipTally(db as unknown as Db, "house", votes);
-    // member(1) + npp bloc(1, NOT 50); ghost dropped.
-    expect(tally.votesFor).toBe(2);
+    // member(7) + npp bloc(50); ghost dropped.
+    expect(tally.votesFor).toBe(57);
     expect(tally.votesAgainst).toBe(0);
     const sumFor = tally.voteByParty.reduce((s, p) => s + p.for, 0);
     expect(sumFor).toBe(tally.votesFor);

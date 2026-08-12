@@ -39,7 +39,7 @@ export async function resolveSpeakerVacateMotion(
   const windowClosed =
     force || isLeadershipElectionClosed(motion, gameTime.currentTurn, gameTime.effectiveNow);
 
-  // Seat-scoped, one-member-one-vote tally (drops votes from members who since
+  // Seat-scoped, seat-weighted tally (drops votes from members who since
   // lost their seat), same as Speaker nominations.
   const tally = await computeCongressLeadershipTally(db, "house", motion.votes);
   const passed = tally.votesFor >= vacateThreshold(house.totalSeats);

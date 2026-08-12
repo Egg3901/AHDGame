@@ -214,6 +214,20 @@ export async function applyPlayerWhipToLeadership(
         )
       : openNominations;
 
+  const officeType = nominationCollection === "senateLeadershipNominations" ? "senate" : "house";
+  const officials = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .find(
+      { characterId: { $in: eligibleCharacterIds }, officeType, countryId: "US" },
+      { projection: { characterId: 1, seatsHeld: 1 } }
+    )
+    .toArray();
+  const weightByCharId = new Map<string, number>(
+    officials
+      .filter((o) => o.characterId != null)
+      .map((o) => [o.characterId!.toString(), o.seatsHeld ?? 1])
+  );
+
   const now = new Date();
   let overridden = 0;
   let alreadyAligned = 0;
@@ -223,6 +237,7 @@ export async function applyPlayerWhipToLeadership(
 
   for (const charId of eligibleCharacterIds) {
     const key = charId.toString();
+    const weight = weightByCharId.get(key) ?? 1;
 
     if (target.votes?.[key]) {
       // Already voting for this candidate — snapshot their current value so revert is a no-op
@@ -238,7 +253,7 @@ export async function applyPlayerWhipToLeadership(
     const snapshotValue = previousNom ? previousNom._id.toString() : "unvoted";
     setFields[`whippedFromVote.${key}`] = snapshotValue;
     setFields[`votes.${key}`] = "for";
-    incFor++;
+    incFor += weight;
     overridden++;
 
     if (previousNom) {
@@ -249,7 +264,7 @@ export async function applyPlayerWhipToLeadership(
             [`votes.${key}`]: "",
             [`whippedFromVote.${key}`]: "",
           },
-          $inc: { votesFor: -1 },
+          $inc: { votesFor: -weight },
           $set: { updatedAt: now },
         }
       );

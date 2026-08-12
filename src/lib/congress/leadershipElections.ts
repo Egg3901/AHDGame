@@ -227,7 +227,7 @@ export async function resolveLeadershipElection(
     return true;
   }
 
-  // Has candidates: declare the winner by the seat-scoped one-member-one-vote
+  // Has candidates: declare the winner by the seat-scoped seat-weighted
   // count (not the cached `votesFor`, which can include de-seated voters), so
   // the resolved winner matches what the leadership page displays.
   const leadershipOfficeType = chamber === "senate" ? "senate" : "house";

@@ -177,16 +177,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       targetId === "speaker"
         ? "current"
         : targetId;
-    const isNppLeadershipWhip =
-      audience === "npp" &&
-      (targetType === "speakerElection" || targetType === "leadershipElection");
-
-    if (isNppLeadershipWhip) {
-      return NextResponse.json(badRequest("NPPs do not vote in leadership elections.").toJson(), {
-        status: 400,
-      });
-    }
-
     // Speaker/leadership-election whips route to US-only collections
     // (speakerNominations / houseLeadershipNominations / senateLeadershipNominations)
     // in the apply phase. Reject for German chambers, which use PM

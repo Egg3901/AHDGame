@@ -139,6 +139,12 @@ describe("applyPlayerWhipToLeadership", () => {
     db.collection("speakerNominations").find.mockReturnValueOnce({
       toArray: async () => nominations,
     });
+    db.collection("electedOfficials").find.mockReturnValueOnce({
+      toArray: async () => [
+        { characterId: c1, seatsHeld: 1 },
+        { characterId: c2, seatsHeld: 1 },
+      ],
+    });
 
     const result = await applyPlayerWhipToLeadership(
       db as unknown as Db,
@@ -170,6 +176,33 @@ describe("applyPlayerWhipToLeadership", () => {
     expect(targetSet[`whippedFromVote.${c2.toString()}`]).toBe("unvoted");
   });
 
+  it("increments votesFor by seatsHeld when whipping multi-seat members (ticket #1053)", async () => {
+    const targetId = new ObjectId();
+    const c1 = new ObjectId();
+    const c2 = new ObjectId();
+
+    db.collection("speakerNominations").find.mockReturnValueOnce({
+      toArray: async () => [{ _id: targetId, votes: {}, votesFor: 0, status: "voting" }],
+    });
+    db.collection("electedOfficials").find.mockReturnValueOnce({
+      toArray: async () => [
+        { characterId: c1, seatsHeld: 7 },
+        { characterId: c2, seatsHeld: 3 },
+      ],
+    });
+
+    await applyPlayerWhipToLeadership(db as unknown as Db, targetId, "speakerNominations", [
+      c1,
+      c2,
+    ]);
+
+    const targetUpdate = db.collectionMocks["speakerNominations"]!.updateOne.mock.calls.find((c) =>
+      (c[0] as { _id: ObjectId })._id?.equals(targetId)
+    );
+    expect(targetUpdate).toBeDefined();
+    expect((targetUpdate![1] as { $inc: { votesFor: number } }).$inc.votesFor).toBe(10);
+  });
+
   it("does not steal votes from a different leadership role (ticket #1046)", async () => {
     const majorityWhipId = new ObjectId();
     const proTemporeId = new ObjectId();
@@ -196,6 +229,9 @@ describe("applyPlayerWhipToLeadership", () => {
 
     db.collection("senateLeadershipNominations").find.mockReturnValueOnce({
       toArray: async () => nominations,
+    });
+    db.collection("electedOfficials").find.mockReturnValueOnce({
+      toArray: async () => [{ characterId: charId, seatsHeld: 1 }],
     });
 
     const result = await applyPlayerWhipToLeadership(
@@ -233,6 +269,9 @@ describe("applyPlayerWhipToLeadership", () => {
 
     db.collection("speakerNominations").find.mockReturnValueOnce({
       toArray: async () => nominations,
+    });
+    db.collection("electedOfficials").find.mockReturnValueOnce({
+      toArray: async () => [{ characterId: c1, seatsHeld: 1 }],
     });
 
     const result = await applyPlayerWhipToLeadership(

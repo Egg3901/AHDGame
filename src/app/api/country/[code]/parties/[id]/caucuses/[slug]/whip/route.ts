@@ -263,9 +263,6 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isUSCongressLeadershipTarget =
       countryId === COUNTRY_CONFIGS.US.id &&
       (targetType === "speakerElection" || targetType === "leadershipElection");
-    const isNppLeadershipWhip =
-      audience === "npp" &&
-      (targetType === "speakerElection" || targetType === "leadershipElection");
     const storedTargetId: ObjectId | string = isUSCongressLeadershipTarget
       ? normalizedTargetId
       : (targetOid ?? normalizedTargetId);
@@ -273,12 +270,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       if (!targetOid) throw badRequest("Invalid target ID");
       return targetOid;
     };
-
-    if (isNppLeadershipWhip) {
-      return NextResponse.json(badRequest("NPPs do not vote in leadership elections.").toJson(), {
-        status: 400,
-      });
-    }
 
     // Speaker/leadership-election whips route to US-only collections in the
     // apply phase. Reject for German chambers, which use PM appointment /
