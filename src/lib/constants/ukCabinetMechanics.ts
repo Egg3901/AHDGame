@@ -404,7 +404,10 @@ export const UK_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
   defence_secretary: {
     positionId: "defence_secretary",
     department: "Ministry of Defence",
-    departmentByYear: [{ from: 1775, name: "Ministry of Defence" }],
+    departmentByYear: [
+      { from: 1775, name: "War Office" },
+      { from: 1964, name: "Ministry of Defence" },
+    ],
     sealImage:
       "https://upload.wikimedia.org/wikipedia/commons/0/06/Ministry_of_Defence_%28United_Kingdom%29_badge.svg",
     nationalMetrics: [

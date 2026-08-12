@@ -22,7 +22,8 @@ export const UK_CABINET_POSITIONS = [
     order: 5,
     yearEnabled: 1775,
     namesByYear: [
-      { from: 1775, name: "Minister of Defence" },
+      // Seat lineage is War Office → SoS for Defence (1964), not the parallel MoD coordinator.
+      { from: 1775, name: "Secretary of State for War" },
       { from: 1964, name: "Secretary of State for Defence" },
     ],
   },

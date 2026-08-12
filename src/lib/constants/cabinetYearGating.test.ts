@@ -84,7 +84,9 @@ describe("UK cabinet year gating", () => {
   });
 
   it("1953 renames", () => {
-    expect(resolveSeatName(byId.defence_secretary, 1953)).toBe("Minister of Defence");
+    expect(resolveSeatName(byId.defence_secretary, 1953)).toBe("Secretary of State for War");
+    expect(resolveSeatName(byId.defence_secretary, 1963)).toBe("Secretary of State for War");
+    expect(resolveSeatName(byId.defence_secretary, 1964)).toBe("Secretary of State for Defence");
     expect(resolveSeatName(byId.justice_secretary, 1953)).toBe("Lord Chancellor");
     expect(resolveSeatName(byId.health_secretary, 1953)).toBe("Minister of Health");
     expect(resolveSeatName(byId.business_secretary, 1953)).toBe("President of the Board of Trade");
@@ -94,6 +96,14 @@ describe("UK cabinet year gating", () => {
     expect(resolveSeatName(byId.agriculture_secretary, 1953)).toBe(
       "Minister of Agriculture and Fisheries"
     );
+  });
+
+  it("defence department follows War Office → MoD", async () => {
+    const { getCabinetMechanics } = await import("./cabinetMechanics");
+    const { resolveDepartment } = await import("@/lib/cabinet/rosterEra");
+    const mech = getCabinetMechanics("UK", "defence_secretary")!;
+    expect(resolveDepartment(mech, 1953)).toBe("War Office");
+    expect(resolveDepartment(mech, 1964)).toBe("Ministry of Defence");
   });
 
   it("1979 DHSS-era names", () => {
