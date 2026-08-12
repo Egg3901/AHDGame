@@ -25,6 +25,16 @@ export async function getEnactedLevels(db: Db, countryId: string): Promise<Map<s
   const recorded = new Map(records.map((r) => [r.legislationTypeId, r.policyOptionIndex]));
   const levels = new Map<string, number>();
   for (const law of laws) {
+    // Regional-only laws never have a national baseline — missing national
+    // rows must stay at 0 so they cannot leak into the national law target.
+    if (law.allowedScope === "regional") {
+      const index = recorded.get(law.id);
+      levels.set(
+        law.id,
+        typeof index === "number" ? Math.max(0, Math.min(4, index)) : 0
+      );
+      continue;
+    }
     const index = recorded.get(law.id);
     levels.set(
       law.id,
@@ -54,6 +64,8 @@ export async function getEnactedLevel(
   if (typeof record?.policyOptionIndex === "number") {
     return Math.max(0, Math.min(4, record.policyOptionIndex));
   }
-  // Regional scope has no baseline (regions differentiate through play).
-  return regionId ? 0 : (law.baselineLevel ?? 0);
+  // Regional-only laws have no national baseline; region reads without a
+  // record stay at 0 until seeded or enacted through play.
+  if (law.allowedScope === "regional" || regionId) return 0;
+  return law.baselineLevel ?? 0;
 }
