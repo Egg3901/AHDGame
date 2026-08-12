@@ -1,13 +1,9 @@
 /**
- * Regression tests for phantom pre-statehood US races.
+ * Regression tests for US territorial governor races.
  *
  * `seedSeats` era-gates US seat creation on `getHouseSeats(preset)`, so a 1953
- * world correctly has 48 states — Alaska and Hawaii were territories until 1959
- * and get no `seats` row. `ensurePerpetualElections` gated only on
- * `isUsElectoralState`, which is preset-INDEPENDENT (it is the modern 50-state
- * set), so it kept spawning House/Senate/Governor/stateSenate races for AK and
- * HI with no seat behind them. Those orphan elections regenerated after every
- * reset. The gate here must match `seedSeats`.
+ * world has Alaska and Hawaii as territories. They have a territorial governor
+ * but no federal or state-legislative representation until admission.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Election } from "@/lib/db/types";
@@ -98,7 +94,7 @@ beforeEach(() => {
 });
 
 describe("ensurePerpetualElections US era statehood gate", () => {
-  it("spawns no races for Alaska or Hawaii under the 1953 preset", async () => {
+  it("spawns only territorial governor races for Alaska and Hawaii under the 1953 preset", async () => {
     const inserted = await mountUsWorld("1953-default");
 
     const { ensurePerpetualElections } = await import("./perpetualElections");
@@ -108,10 +104,11 @@ describe("ensurePerpetualElections US era statehood gate", () => {
     // Non-vacuous: WY is a 1953 state, so the spawner must have run for it.
     expect(usRaces.some((e) => e.state === "WY")).toBe(true);
 
-    // AK/HI were territories until 1959 — `seats` has no row for them, so no
-    // race may exist either.
-    expect(usRaces.filter((e) => e.state === "AK")).toEqual([]);
-    expect(usRaces.filter((e) => e.state === "HI")).toEqual([]);
+    for (const territory of ["AK", "HI"]) {
+      expect(usRaces.filter((e) => e.state === territory).map((e) => e.electionType)).toEqual([
+        "governor",
+      ]);
+    }
     // DC is excluded by the pre-existing non-electoral-region gate.
     expect(usRaces.filter((e) => e.state === "DC")).toEqual([]);
   });
@@ -147,8 +144,10 @@ describe("ensurePerpetualElections US era statehood gate", () => {
     expect(akTypes).toContain("senate");
     expect(akTypes).toContain("governor");
     expect(akTypes).toContain("stateSenate");
-    // Hawaii was not admitted in this world and stays a territory.
-    expect(usRaces.filter((e) => e.state === "HI")).toEqual([]);
+    // Hawaii was not admitted in this world and retains only its territorial governor.
+    expect(usRaces.filter((e) => e.state === "HI").map((e) => e.electionType)).toEqual([
+      "governor",
+    ]);
   });
 
   it("does not spawn races before the admission year arrives", async () => {
@@ -162,6 +161,8 @@ describe("ensurePerpetualElections US era statehood gate", () => {
 
     const usRaces = inserted.filter((e) => (e.countryId ?? "US") === "US");
     expect(usRaces.some((e) => e.state === "WY")).toBe(true);
-    expect(usRaces.filter((e) => e.state === "AK")).toEqual([]);
+    expect(usRaces.filter((e) => e.state === "AK").map((e) => e.electionType)).toEqual([
+      "governor",
+    ]);
   });
 });

@@ -37,7 +37,7 @@ import {
   loadUsPoliticalStateIds,
   unplayableTerritoryHomeError,
 } from "@/lib/elections/usPoliticalHome";
-import { isUsPoliticalState } from "@/lib/elections/statehoodAdmission";
+import { isUsResidentPoliticalRegion } from "@/lib/elections/statehoodAdmission";
 
 const MIN_STARTING_DONOR_BASE_LEVEL = 1;
 
@@ -119,11 +119,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid home state" }, { status: 400 });
     }
 
-    // Pre-statehood US territories (Alaska/Hawaii under 1953-default) stay on
-    // the map for economy/admission but are not playable home states.
+    // Alaska and Hawaii retain territorial politics before statehood: they are
+    // playable homes with party organization and territorial governor races.
     if ((stateDoc.countryId ?? "US") === "US") {
       const { admittedIds, preset } = await loadUsPoliticalStateIds(db);
-      if (!isUsPoliticalState(stateDoc._id, preset, admittedIds)) {
+      if (!isUsResidentPoliticalRegion(stateDoc._id, preset, admittedIds)) {
         return NextResponse.json(
           { error: unplayableTerritoryHomeError(stateDoc.name) },
           { status: 400 }

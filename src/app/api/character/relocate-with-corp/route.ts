@@ -43,7 +43,7 @@ import {
   RELOCATION_COOLDOWN_TURNS,
 } from "@/lib/character/relocationCooldown";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
-import { isUsPoliticalState } from "@/lib/elections/statehoodAdmission";
+import { isUsResidentPoliticalRegion } from "@/lib/elections/statehoodAdmission";
 import {
   loadUsPoliticalStateIds,
   unplayableTerritoryHomeError,
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
     }
     if (resolvedTargetCountryId === "US") {
       const { admittedIds, preset } = await loadUsPoliticalStateIds(db);
-      if (!isUsPoliticalState(normalizedTarget, preset, admittedIds)) {
+      if (!isUsResidentPoliticalRegion(normalizedTarget, preset, admittedIds)) {
         return NextResponse.json(
           { error: unplayableTerritoryHomeError(targetState.name) },
           { status: 400 }
