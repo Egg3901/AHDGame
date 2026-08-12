@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = {
-  title: "Register | A House Divided",
-  description:
-    "Create your account and start your political career in A House Divided, a real-time political simulation game.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("auth");
+  return {
+    title: t("register.metaTitle"),
+    description: t("register.metaDescription"),
+  };
+}
 
 export default function RegisterLayout({ children }: { children: React.ReactNode }) {
   return children;
