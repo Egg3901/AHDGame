@@ -1,58 +1,44 @@
-# Contributing to A House Divided
+# Contributing
 
-Thanks for wanting to help. A House Divided is a live game with real players, so contributions are welcome but held to a production bar. Read this before opening a PR.
+A House Divided is a live game with real players, so contributions are held to a production bar. Here's what that means in practice.
 
-## What we're looking for
+## What lands easily
 
-Great first contributions, in rough order of how easy they are to land:
+- Bug fixes with a reproduction and a test
+- UI, accessibility, and mobile polish
+- Documentation fixes (site docs go to [ahd-docs](https://github.com/Egg3901/ahd-docs), wiki content lives in `src/lib/seeds/wiki/` here)
+- Country content: seeds, region maps, cabinet catalogs, following an existing country as the pattern
+- Tests for under-tested systems
+- Performance work with before/after numbers
 
-- **Bug fixes** with a reproduction and a test
-- **UI, accessibility, and mobile polish**
-- **Documentation** — fixing inaccuracies, covering undocumented systems (see [docs.lakesidegames.net](https://docs.lakesidegames.net))
-- **New country content** — seed data, region maps, cabinet catalogs, following an existing country as the pattern
-- **Test coverage** for under-tested systems
-- **Performance** — with before/after measurements
+Issues labeled `good-first-issue` are verified and scoped.
 
-## What needs discussion first
+## What needs an issue first
 
-Open an issue before writing code for any of these:
+- **Balance changes.** Economy constants, election math, demographic weights, action costs. These merge only with a simulation report from `scripts/sim/`. A PR that changes balance constants without one gets closed with a request for one.
+- **New mechanics.** The game has a design direction; talk before you build.
+- **Schema changes.** Anything in `src/lib/db/types` affects a live production database and needs a migration plan.
 
-- **Balance changes** — economy constants, election math, demographic weights, action costs. These require validation through the world simulator (`scripts/sim/`) before they can merge; a PR that changes balance constants without a sim report will be closed with a request for one.
-- **New game mechanics** — the game has a design direction; a mechanic PR without prior discussion is a coin flip.
-- **Schema changes** — anything touching `src/lib/db/types` affects a live production database and needs a migration plan.
+Exploits and vulnerabilities: never in public issues. See [SECURITY.md](./SECURITY.md).
 
-## Exploits and security
+## Setup
 
-**Do not open a public issue for an exploit or vulnerability.** See [SECURITY.md](./SECURITY.md). Responsibly reported exploits earn credit and supporter time.
-
-## Getting set up
-
-Follow the README: Node 20+, a local MongoDB, `cp .env.example .env.local`, `npm install`, `npm run seed`, `npm run dev`. Bootstrap a full world from the admin console (register with your `ADMIN_REGISTRATION_KEY`). Advance turns locally by hitting `/api/cron` with your `CRON_SECRET`.
+Follow the README. You'll have a local world with an admin account in about ten minutes.
 
 ## The bar for a PR
 
-1. Branch off `main`, one topic per PR, small over large.
-2. Lint, format, typecheck, and unit tests pass (`npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run test:run`) — CI runs exactly this gate. `npm run verify` additionally runs an architecture audit that currently carries known pre-existing findings; new findings from your change are on you, existing ones are not.
-3. **New or changed API routes require integration tests.** Copy the pattern from any existing `route.test.ts`.
-4. New logic gets unit tests next to it (`*.test.ts`, Vitest).
-5. Add a `CHANGELOG.md` entry if the change is player-visible.
-6. Match the surrounding code. TypeScript strict, Zod validation on request bodies, collection access through `src/lib/db` getters, no new dependencies without discussion.
-7. Describe _why_ in the PR body, not just what. Link the issue.
+1. Branch off `main`. One topic per PR, small over large.
+2. Lint, format, typecheck, and tests pass (`npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run test:run`). CI runs exactly this gate. (`npm run verify` additionally runs an architecture audit with known pre-existing findings; new findings from your change are yours, old ones aren't.)
+3. New or changed API routes need integration tests. Copy the pattern from any `route.test.ts`.
+4. New logic gets unit tests next to it.
+5. Player-visible changes get a `CHANGELOG.md` entry.
+6. Match the surrounding code: strict TypeScript, Zod on request bodies, collection access through `src/lib/db` getters, no new dependencies without discussion. No em or en dashes in player-facing text.
+7. The PR body says why, not just what.
 
-## Code layout in one minute
+Code layout in one minute: `src/app/api/**` are thin route handlers (auth guard, Zod, call into lib). `src/lib/**` is the domain logic, one directory per system. The hourly turn processor is `src/lib/turnSystem.ts` with phases registered in `src/simulation/phases/`. Seeds are in `scripts/seeds/` (data) and `scripts/seed/` (runners). The [engineering docs](https://docs.lakesidegames.net) go deeper.
 
-- `src/app/api/**` — route handlers (thin: auth guard, Zod validation, call into `src/lib`)
-- `src/lib/**` — all domain logic, one directory per system
-- `src/lib/turn/` + `src/lib/turnSystem.ts` — the hourly turn processor; phases are registered in `src/simulation/phases/`
-- `src/lib/db/types` — the database document contracts
-- `scripts/seeds/` — world seed data; `scripts/sim/` — the headless world simulator
-
-The [engineering docs](https://docs.lakesidegames.net) cover architecture boundaries, naming, and the repo operating map in depth.
-
-## Review and merging
+## Review
 
 The maintainer reviews every PR. Balance and economy paths get extra scrutiny and may require a worldsim run. Squash merge only; your PR title becomes the commit message, so write it like one.
 
-## Licensing of contributions
-
-The project is licensed under [PolyForm Noncommercial 1.0.0](./LICENSE.md). By submitting a contribution you agree that it is licensed under the same terms and that Lakeside Games may use it in the official hosted game.
+By contributing you agree your contribution is licensed under [PolyForm Noncommercial 1.0.0](./LICENSE.md) and that Lakeside Games may use it in the hosted game.
