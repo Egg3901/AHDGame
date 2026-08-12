@@ -59,11 +59,11 @@ describe("generateStatePartyOrg", () => {
     }
   });
 
-  it("excludes Alaska and Hawaii under 1953-default (territories until admission)", () => {
+  it("includes territorial party chapters under 1953-default without granting statehood", () => {
     const entries = generateStatePartyOrg("1953-default");
-    expect(entries.some((e) => e.stateId === "AK")).toBe(false);
-    expect(entries.some((e) => e.stateId === "HI")).toBe(false);
-    expect(new Set(entries.map((e) => e.stateId)).size).toBe(48);
+    expect(entries.some((e) => e.stateId === "AK" && e.partyId === "1")).toBe(true);
+    expect(entries.some((e) => e.stateId === "HI" && e.partyId === "2")).toBe(true);
+    expect(new Set(entries.map((e) => e.stateId)).size).toBe(50);
   });
 
   it("includes Alaska and Hawaii under modern presets", () => {
