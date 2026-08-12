@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { CountryMapPaths } from "@/components/CountryMapPaths";
 import { buildLegend, buildRegionMapData, type MapRegionGroup } from "./electionsMapModel";
 
@@ -18,7 +19,15 @@ export function ElectionMap({
   onRegionClick,
   regionHref,
 }: ElectionMapProps) {
-  const regionData = useMemo(() => buildRegionMapData(electionsByState), [electionsByState]);
+  const t = useTranslations("elections");
+  const regionData = useMemo(
+    () =>
+      buildRegionMapData(electionsByState, {
+        uncontested: t("map.uncontested"),
+        stateSenateShort: t("map.stateSenateShort"),
+      }),
+    [electionsByState, t]
+  );
   const { parties, hasUnpolled } = useMemo(() => buildLegend(electionsByState), [electionsByState]);
 
   return (
@@ -44,12 +53,10 @@ export function ElectionMap({
               className="h-3 w-3 rounded-sm inline-block"
               style={{ backgroundColor: "var(--muted)" }}
             />
-            No polling data
+            {t("map.noPollingData")}
           </span>
         )}
-        <span className="flex items-center gap-1.5 text-yellow-400">
-          ⚡ Competitive (≤15 pt margin)
-        </span>
+        <span className="flex items-center gap-1.5 text-yellow-400">{t("map.competitive")}</span>
       </div>
     </div>
   );

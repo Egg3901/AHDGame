@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useGameClock } from "@/contexts/useGameClock";
 import { getTimerUrgencyStyle } from "@/lib/utils/formatters";
 import { LocalTime } from "@/components/time/LocalTime";
@@ -14,6 +15,7 @@ export function ElectionPhaseStatusStrip({
   phaseStatus,
   className = "",
 }: ElectionPhaseStatusStripProps) {
+  const t = useTranslations("elections");
   const clock = useGameClock();
   if (!phaseStatus.endTime) return null;
 
@@ -55,10 +57,12 @@ export function ElectionPhaseStatusStrip({
     >
       <div className="space-y-1">
         <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-          Primary Election
+          {t("phaseStrip.primaryElection")}
         </div>
         {isUpcoming ? (
-          <div className="text-sm font-medium text-blue-400">Opens in {primaryOpensTimer.text}</div>
+          <div className="text-sm font-medium text-blue-400">
+            {t("phaseStrip.opensIn", { time: primaryOpensTimer.text })}
+          </div>
         ) : (
           <div
             className={`text-sm font-medium ${
@@ -69,7 +73,9 @@ export function ElectionPhaseStatusStrip({
                   : "text-blue-400"
             }`}
           >
-            {primaryEnded ? "Completed" : `Ends in ${primaryTimer.text}`}
+            {primaryEnded
+              ? t("phaseStrip.completed")
+              : t("phaseStrip.endsIn", { time: primaryTimer.text })}
           </div>
         )}
         <div className="text-[10px] text-muted/60">
@@ -81,10 +87,10 @@ export function ElectionPhaseStatusStrip({
 
       <div className="space-y-1 border-l border-card-border/40 pl-4">
         <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-          General Election
+          {t("phaseStrip.generalElection")}
         </div>
         <div className={`text-sm font-medium ${getTimerUrgencyStyle(electionTimer.urgency)}`}>
-          Ends in {electionTimer.text}
+          {t("phaseStrip.endsIn", { time: electionTimer.text })}
         </div>
         <div className="text-[10px] text-muted/60">{absoluteDeadline(phaseStatus.endTime)}</div>
       </div>

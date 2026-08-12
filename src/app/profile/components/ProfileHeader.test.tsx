@@ -2,9 +2,19 @@
  * @vitest-environment happy-dom
  */
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render as rtlRender, screen } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
 import type { Character, PoliticalParty } from "@/lib/db/types";
 import { ProfileHeader } from "./ProfileHeader";
+import enProfile from "../../../../messages/en/profile.json";
+
+function render(ui: React.ReactElement) {
+  return rtlRender(
+    <NextIntlClientProvider locale="en" messages={enProfile}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}
 
 vi.mock("next/link", () => ({
   default: ({

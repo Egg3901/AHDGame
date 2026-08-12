@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { getPartyColor } from "@/lib/utils/politics";
 import { useGameClock } from "@/contexts/useGameClock";
 import type { ElectionDisplay } from "@/lib/db/types";
@@ -32,6 +33,7 @@ export function PresidentialElectionCard({
   getPartyColorHex,
   isCustomParty,
 }: PresidentialElectionCardProps) {
+  const t = useTranslations("elections");
   const clock = useGameClock();
   // Absolute deadlines render through <LocalTime> so any SSR pass stays
   // hydration-safe (host-locale toLocaleString caused React #418).
@@ -57,12 +59,12 @@ export function PresidentialElectionCard({
         : "bg-muted/15 text-muted border-card-border";
 
   const statusLabel = isUpcoming
-    ? "Upcoming"
+    ? t("status.upcoming")
     : election.status === "completed"
-      ? "Completed"
+      ? t("status.completed")
       : election.inPrimary
-        ? "Primary"
-        : "General";
+        ? t("status.primary")
+        : t("status.general");
 
   const stateEntries = stateData
     ? Object.entries(stateData.votes)
@@ -77,7 +79,7 @@ export function PresidentialElectionCard({
           href={buildElectionHref(election)}
           className="font-semibold text-sm hover:text-primary transition-colors"
         >
-          {electionRaceTitle(election, gameYear)}
+          {electionRaceTitle(election, gameYear, t)}
         </Link>
         <span
           className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium ${statusColor}`}
@@ -95,17 +97,25 @@ export function PresidentialElectionCard({
             stateId={stateId}
           />
         ) : election.candidates.length > 0 ? (
-          <p className="text-xs text-muted italic">Awaiting results — candidates entered</p>
+          <p className="text-xs text-muted italic">{t("presidentialCard.awaitingResults")}</p>
         ) : (
-          <p className="text-xs text-muted italic">No candidates yet</p>
+          <p className="text-xs text-muted italic">{t("presidentialCard.noCandidatesYet")}</p>
         )}
         {/* Timers */}
         {election.endTime && (
           <div className="text-xs text-muted/70 space-y-0.5">
             {!primaryEnded && election.primaryEndTime && (
-              <div>Primary ends {absoluteDeadline(election.primaryEndTime)}</div>
+              <div>
+                {t.rich("presidentialCard.primaryEnds", {
+                  date: () => absoluteDeadline(election.primaryEndTime),
+                })}
+              </div>
             )}
-            <div>General ends {absoluteDeadline(election.endTime)}</div>
+            <div>
+              {t.rich("presidentialCard.generalEnds", {
+                date: () => absoluteDeadline(election.endTime),
+              })}
+            </div>
           </div>
         )}
         {/* Candidates — only show chips when no state vote data is displayed above (avoids redundancy) */}

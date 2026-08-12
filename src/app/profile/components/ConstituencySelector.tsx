@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { Button, Input } from "@/components/ui";
 
@@ -25,12 +26,14 @@ function matches(option: ConstituencyOption, query: string) {
 }
 
 export function ConstituencySelector() {
+  const t = useTranslations("profile.constituency");
   const [data, setData] = useState<ConstituencyResponse | null>(null);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageIsError, setMessageIsError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,6 +71,7 @@ export function ConstituencySelector() {
     if (!selectedId) return;
     setSaving(true);
     setMessage(null);
+    setMessageIsError(false);
     const response = await fetch("/api/character/constituency", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -76,10 +80,11 @@ export function ConstituencySelector() {
     const payload = await response.json().catch(() => null);
     setSaving(false);
     if (!response.ok) {
-      setMessage(payload?.error ?? "Could not save constituency");
+      setMessage(payload?.error ?? t("saveFailed"));
+      setMessageIsError(true);
       return;
     }
-    setMessage("Constituency saved");
+    setMessage(t("saved"));
     if (payload?.selected?.name) {
       setQuery(payload.selected.name);
       setOpen(false);
@@ -91,14 +96,10 @@ export function ConstituencySelector() {
       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-sm font-semibold text-foreground">
-            {data.officeType === "primeMinister"
-              ? "Prime Minister's Constituency"
-              : "Commons Constituency"}
+            {data.officeType === "primeMinister" ? t("pmTitle") : t("commonsTitle")}
           </h2>
           <p className="text-xs text-muted">
-            {data.officeType === "primeMinister"
-              ? "Choose the constituency the Prime Minister represents."
-              : "Choose the constituency your MP represents."}
+            {data.officeType === "primeMinister" ? t("pmSubtitle") : t("commonsSubtitle")}
           </p>
         </div>
         {data.selected && <span className="text-xs text-muted">{data.selected.id}</span>}
@@ -114,7 +115,7 @@ export function ConstituencySelector() {
             setMessage(null);
           }}
           onFocus={() => setOpen(true)}
-          placeholder="Type a constituency name..."
+          placeholder={t("placeholder")}
           role="combobox"
           aria-expanded={open}
           aria-autocomplete="list"
@@ -143,11 +144,9 @@ export function ConstituencySelector() {
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-3">
-        <p className={`text-xs ${message?.includes("saved") ? "text-success" : "text-error"}`}>
-          {message}
-        </p>
+        <p className={`text-xs ${messageIsError ? "text-error" : "text-success"}`}>{message}</p>
         <Button size="sm" onClick={save} disabled={!selected || saving} isLoading={saving}>
-          Save
+          {t("save")}
         </Button>
       </div>
     </div>
