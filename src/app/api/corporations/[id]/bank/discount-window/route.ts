@@ -85,8 +85,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         ? await drawDiscountWindow(db, resolved.corporation._id, parsed.data.amount, turn)
         : await repayDiscountWindow(db, resolved.corporation._id, parsed.data.amount, turn);
 
-    if (!result.ok)
-      return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
 
     return NextResponse.json({
       success: true,

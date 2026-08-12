@@ -32,9 +32,14 @@ export function unionStrength(union: Pick<Union, "strength">): number {
 /** Membership pressure required before organizers can vote for a president. */
 export const LEADERSHIP_ELECTION_MIN_PRESSURE = 25;
 
-/** True when an unowned union has been organized enough to open a leadership vote. */
-export function isUnionLeadershipElectionOpen(union: Pick<Union, "ownerId" | "strength">): boolean {
-  return union.ownerId == null && unionStrength(union) >= LEADERSHIP_ELECTION_MIN_STRENGTH;
+/**
+ * True when organizers can contest the presidency. Mirrors corporation CEO
+ * votes: the race stays open once the union is strong enough, whether or not
+ * a president already sits. A seated NPP or player can be displaced by a
+ * challenger who out-organizes them and accepts the offer.
+ */
+export function isUnionLeadershipElectionOpen(union: Pick<Union, "strength">): boolean {
+  return unionStrength(union) >= LEADERSHIP_ELECTION_MIN_STRENGTH;
 }
 
 /** Treasury cost of one recruitment-drive action. */

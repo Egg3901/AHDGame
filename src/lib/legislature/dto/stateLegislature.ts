@@ -117,6 +117,12 @@ export interface LegislationTypeOption {
   subCategory: string;
   policyOptions?: LegislationPolicyOption[];
   effectTargetsWeighted?: EffectTargetWeighted[];
+  /** New-gen political-legislation targets (US/UK/RU/DD). Drives LawProvisionComparison. */
+  politicalMetricTargets?: { metricId: string; weight: number }[];
+  /** Per-level fiscal estimates attached by the legislation-types API for new-gen laws. */
+  estimates?: Array<{ level: number; cost: number; revenue: number; net: number }>;
+  /** GDP at the priced scope (national or regional), for %GDP annotations. */
+  estimatesGdp?: number;
   /** Set by the era-gated legislation-types API for types unlocked this era. */
   eraNew?: boolean;
 }

@@ -155,11 +155,12 @@ describe("union industrial-relations dashboard", () => {
 
     render(<UnionPage params={PARAMS} />);
 
+    fireEvent.click(await screen.findByRole("button", { name: /^Leadership/i }));
     const candidateSelect = await screen.findByRole("combobox", { name: /candidate/i });
     expect(candidateSelect.textContent).toMatch(/Alex Organizer #42/);
     expect(screen.queryByPlaceholderText(/paste character id/i)).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /legislative stances/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Legislative Stances/i }));
     const endorseButton = await screen.findByRole("button", { name: "Endorse" });
     fireEvent.click(endorseButton);
 

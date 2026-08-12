@@ -637,6 +637,55 @@ describe("createMissingElections — shared default-cycle alignment", () => {
     }
   });
 
+  it("materializes territorial party chapters with resident members and opens their elections", async () => {
+    const insertMany = vi.fn().mockResolvedValue({ insertedCount: 6 });
+    const orgBulkWrite = vi.fn().mockResolvedValue({ upsertedCount: 2 });
+    setMockCollection("gameState", {
+      findOne: vi.fn().mockResolvedValue({ preset: "1953-default", currentYear: 1953 }),
+    });
+    setMockCollection("states", {
+      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    });
+    setMockCollection("statePartyElections", {
+      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      insertMany,
+    });
+    setMockCollection("politicalParties", {
+      find: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { sequentialId: 1, countryId: "US" },
+          { sequentialId: 2, countryId: "US" },
+        ]),
+      }),
+    });
+    setMockCollection("statePartyOrg", {
+      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      bulkWrite: orgBulkWrite,
+    });
+    setMockCollection("characters", {
+      find: vi.fn((query: Record<string, unknown>) => {
+        const rows =
+          "homeState" in query
+            ? [{ _id: new ObjectId(), userId: new ObjectId(), homeState: "HI", party: "1" }]
+            : [];
+        return {
+          toArray: vi.fn().mockResolvedValue(rows),
+          project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(rows) }),
+        };
+      }),
+    });
+
+    const { createMissingElections } = await import("./statePartyElections");
+    const created = await createMissingElections(120, 72, new Date(), undefined);
+
+    expect(orgBulkWrite).toHaveBeenCalledOnce();
+    expect(created).toBe(6); // HI × two major parties × three positions
+    expect(insertMany.mock.calls[0][0]).toHaveLength(6);
+    expect(insertMany.mock.calls[0][0].every((e: { stateId: string }) => e.stateId === "HI")).toBe(
+      true
+    );
+  });
+
   it("stamps founding:true and uses a fixed short window (no shared-cycle anchor)", async () => {
     // Active 72-turn races exist — without founding, new orgs would join that
     // cycle. Founding must ignore them and open a fresh 12-turn window.

@@ -4,13 +4,7 @@ import type { CabinetPositionMechanics } from "@/lib/constants/cabinetMechanicsT
 import { isMergerAuthoritySeat } from "@/lib/corporations/mergerReview/constants";
 
 export type CabinetTabId =
-  | "overview"
-  | "treasury"
-  | "foreign"
-  | "flagship"
-  | "commands"
-  | "doctrine"
-  | "competition";
+  "overview" | "treasury" | "foreign" | "flagship" | "commands" | "doctrine" | "competition";
 
 export interface CabinetTab {
   id: CabinetTabId;

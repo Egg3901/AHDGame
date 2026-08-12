@@ -17,11 +17,7 @@ import { getBankId } from "@/lib/centralBank/helpers";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { createSystemNewsPost } from "@/lib/news";
-import {
-  describeTrinity,
-  resolveTrinity,
-  type FxRegime,
-} from "@/lib/currency/exchangeRateRegime";
+import { describeTrinity, resolveTrinity, type FxRegime } from "@/lib/currency/exchangeRateRegime";
 
 interface RouteContext {
   params: Promise<{ code: string }>;
@@ -91,7 +87,9 @@ export async function POST(request: Request, context: RouteContext) {
       bank.chairCharacterId.toString() !== auth.user.character._id.toString()
     )
       return NextResponse.json(
-        forbidden(`Only the ${config.centralBank.chairTitle} can set the exchange-rate regime.`).toJson(),
+        forbidden(
+          `Only the ${config.centralBank.chairTitle} can set the exchange-rate regime.`
+        ).toJson(),
         { status: 403 }
       );
 

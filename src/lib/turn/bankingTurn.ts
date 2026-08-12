@@ -1,5 +1,5 @@
 import { ObjectId, type Db } from "mongodb";
-import type { Character, Corporation, State } from "@/lib/db/types";
+import type { Character, Corporation } from "@/lib/db/types";
 import type {
   BankCharter,
   BankLoan,
@@ -9,7 +9,6 @@ import type {
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
-import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { isBankPropTradingEnabled, isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
@@ -32,8 +31,8 @@ import { discountWindowRatePercent } from "@/lib/banking/discountWindow";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
 
-/** Provisional - max fraction of current/target NPC deposits that may flow per turn. */
-export const MAX_NPC_FLOW_PER_TURN_FRACTION = 0.25;
+/** Max fraction of the household target that can migrate or be lent each turn. */
+export const MAX_NPC_FLOW_PER_TURN_FRACTION = 0.025;
 
 /** Provisional - consecutive shortfall turns before a player loan defaults. */
 export const ARREARS_DEFAULT_TURNS = 8;
@@ -95,25 +94,6 @@ function npcFlowDelta(current: number, target: number): number {
   const maxOutflow = MAX_NPC_FLOW_PER_TURN_FRACTION * cur;
   const maxInflow = MAX_NPC_FLOW_PER_TURN_FRACTION * Math.max(target, cur);
   return clamp(desired, -maxOutflow, maxInflow);
-}
-
-/**
- * National GDP proxy in home-currency face units: sum of regional `states.gdp`
- * (stored in millions) × 1_000_000 for the currency's anchor country, excluding
- * national-scope pseudo-states. Same source `fiscalBaseGrowth` uses.
- */
-async function loadCountryGdpFace(db: Db, currency: CurrencyCode): Promise<number> {
-  const countryId = getCountryIdForCurrency(currency);
-  const states = await db
-    .collection<State>("states")
-    .find({ countryId })
-    .project({ _id: 1, gdp: 1 })
-    .toArray();
-  const millions = states.reduce((sum, s) => {
-    if (NATIONAL_SCOPE_IDS.has(String(s._id))) return sum;
-    return sum + (typeof s.gdp === "number" && Number.isFinite(s.gdp) ? s.gdp : 0);
-  }, 0);
-  return millions * 1_000_000;
 }
 
 type DepositTaker = {
@@ -216,14 +196,12 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     }
   }
 
-  const gdpByCurrency = new Map<CurrencyCode, number>();
   const summary: BankingTurnSummary = { ...ZERO_SUMMARY };
 
   for (const row of depositTakers) {
     const bankResult = await processOneBank(db, turn, row, {
       npcShareByBankId,
       cbById,
-      gdpByCurrency,
     });
     summary.banksProcessed += 1;
     summary.depositInterestPaid += bankResult.depositInterestPaid;
@@ -249,7 +227,6 @@ type BankPassCaches = {
     string,
     Pick<CentralBank, "_id" | "primeRate" | "inflationHistory" | "externalBroadMoney">
   >;
-  gdpByCurrency: Map<CurrencyCode, number>;
 };
 
 type BankPassResult = {
@@ -533,12 +510,11 @@ async function processOneBank(
     })
   );
 
-  // (e) NPC bulk book
-  if (!caches.gdpByCurrency.has(currency)) {
-    caches.gdpByCurrency.set(currency, await loadCountryGdpFace(db, currency));
-  }
-  const regionalGdp = caches.gdpByCurrency.get(currency) ?? 0;
-  const npcBook = computeNpcLoanBook(regionalGdp, rates.lendingRatePercent);
+  // (e) NPC household loans. The book grows only from deposits actually held
+  // by this bank after its reserve requirement. Rates set utilization, while
+  // named loans consume the same capacity inside serviceNpcBulkBook.
+  const loanFundingCapacity =
+    (playerDeposits + playerInterestPaid + npcDeposits) * (1 - reserveRatioRequired);
   const bulkResult = await serviceNpcBulkBook(
     db,
     turn,
@@ -546,12 +522,12 @@ async function processOneBank(
     currency,
     rates.lendingRatePercent,
     {
-      targetVolume: npcBook.volume,
-      expectedDefaultRatePercent: npcBook.expectedDefaultRatePercent,
+      loanFundingCapacity,
       liquidCapital,
       totalLoans,
       cbDocId,
       cb,
+      bankName: corp.name,
     }
   );
   liquidCapital = bulkResult.liquidCapital;
@@ -579,6 +555,7 @@ async function processOneBank(
         "bankCharter.npcDeposits": npcDeposits,
         "bankCharter.totalDeposits": totalDeposits,
         "bankCharter.totalLoans": totalLoans,
+        "bankCharter.reserves": liquidCapital,
         "bankCharter.depositCeiling": depositCeiling,
         "bankCharter.lastBankingTurn": turn,
         updatedAt: new Date(),
@@ -805,12 +782,13 @@ async function debitBorrower(
 }
 
 type NpcBulkState = {
-  targetVolume: number;
-  expectedDefaultRatePercent: number;
+  /** Total lending capacity from deposits after the reserve requirement. */
+  loanFundingCapacity: number;
   liquidCapital: number;
   totalLoans: number;
   cbDocId: string;
   cb?: Pick<CentralBank, "externalBroadMoney">;
+  bankName: string;
 };
 
 type NpcBulkResult = {
@@ -841,9 +819,14 @@ async function serviceNpcBulkBook(
     status: { $in: ["current", "arrears"] },
   });
 
+  const current = Math.max(0, loan?.outstanding ?? 0);
+  const nonNpcLoans = Math.max(0, totalLoans - current);
+  const npcFundingCapacity = Math.max(0, state.loanFundingCapacity - nonNpcLoans);
+  const npcBook = computeNpcLoanBook(npcFundingCapacity, lendingRatePercent);
+
   if (!loan) {
-    // Ramp from zero - same 25% flow cap as deposit NPC migration.
-    const initial = Math.max(0, npcFlowDelta(0, state.targetVolume));
+    // Ramp from zero with the same gradual flow cap as household deposits.
+    const initial = Math.max(0, npcFlowDelta(0, npcBook.volume));
     const doc: BankLoan = {
       _id: new ObjectId(),
       bankCorporationId,
@@ -864,8 +847,7 @@ async function serviceNpcBulkBook(
     return { liquidCapital, totalLoans, interestCollected, writtenOff, shortfall };
   }
 
-  const current = Math.max(0, loan.outstanding ?? 0);
-  const target = Math.max(0, state.targetVolume);
+  const target = Math.max(0, npcBook.volume);
   const adjust = createdThisPass ? 0 : npcFlowDelta(current, target);
   const nextOutstandingBeforeYield = Math.max(0, current + adjust);
   if (!createdThisPass) {
@@ -877,7 +859,7 @@ async function serviceNpcBulkBook(
   // loan asset only - no cash moves for a writeoff.
   const interest = (nextOutstandingBeforeYield * (lendingRatePercent / 100)) / TURNS_PER_YEAR;
   const defaults =
-    (nextOutstandingBeforeYield * (state.expectedDefaultRatePercent / 100)) / TURNS_PER_YEAR;
+    (nextOutstandingBeforeYield * (npcBook.expectedDefaultRatePercent / 100)) / TURNS_PER_YEAR;
 
   const poolAvailable =
     typeof state.cb?.externalBroadMoney === "number" && Number.isFinite(state.cb.externalBroadMoney)
@@ -897,6 +879,23 @@ async function serviceNpcBulkBook(
     }
     liquidCapital += interestAffordable;
     interestCollected += interestAffordable;
+    await emitTx(db, {
+      type: "bank_npc_loan_interest",
+      turn,
+      createdAt: new Date(),
+      subjectType: "corporation",
+      subjectId: bankCorporationId,
+      subjectName: state.bankName,
+      amount: interestAffordable,
+      currencyCode: currency,
+      counterpartyType: "system",
+      counterpartyName: "NPC households",
+      meta: {
+        borrowerType: "npcBulk",
+        loanId: loan._id.toString(),
+        ratePercent: lendingRatePercent,
+      },
+    });
   }
   if (interest > interestAffordable) {
     shortfall += interest - interestAffordable;
