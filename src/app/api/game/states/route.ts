@@ -12,7 +12,7 @@ import { loadUsPoliticalStateIds } from "@/lib/elections/usPoliticalHome";
 const JP_PLAYABLE_REGION_IDS = JP_REGIONS.map((r) => r.id);
 
 // GET /api/game/states — Returns all states sorted by name, filtered to enabled countries for non-admins.
-// Optional `?playableHome=1` drops unadmitted US territories (Alaska/Hawaii under 1953).
+// Optional `?playableHome=1` includes US states plus Alaska/Hawaii's territorial politics.
 // Auth: public
 // Errors: (none)
 export async function GET(request: NextRequest) {
@@ -43,8 +43,10 @@ export async function GET(request: NextRequest) {
     let states = await db.collection<State>("states").find(query).sort({ name: 1 }).toArray();
 
     if (playableHome) {
-      const { politicalIds } = await loadUsPoliticalStateIds(db);
-      states = states.filter((s) => (s.countryId ?? "US") !== "US" || politicalIds.has(s._id));
+      const { residentPoliticalIds } = await loadUsPoliticalStateIds(db);
+      states = states.filter(
+        (s) => (s.countryId ?? "US") !== "US" || residentPoliticalIds.has(s._id)
+      );
     }
 
     return NextResponse.json(states, {

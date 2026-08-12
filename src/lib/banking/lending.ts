@@ -21,9 +21,6 @@ export const CHARACTER_BORROWER_CAP_FRACTION = 0.25;
 /** Provisional - corporation loan principal cap as a fraction of liquidCapital. */
 export const CORP_BORROWER_CAP_FRACTION = 0.5;
 
-/** Provisional - NPC bulk book volume = this × regionalGdp × rate factor. */
-export const NPC_LOAN_BOOK_GDP_SHARE = 0.15;
-
 /** Provisional - each pp of lending rate above this reference shrinks NPC volume. */
 export const NPC_LOAN_BOOK_RATE_REFERENCE_PERCENT = 4;
 
@@ -33,8 +30,8 @@ export const NPC_LOAN_BOOK_RATE_SENSITIVITY = 0.08;
 /** Provisional - floor on the NPC volume rate factor. */
 export const NPC_LOAN_BOOK_VOLUME_FACTOR_MIN = 0.2;
 
-/** Provisional - ceiling on the NPC volume rate factor. */
-export const NPC_LOAN_BOOK_VOLUME_FACTOR_MAX = 1.3;
+/** NPC household borrowing cannot exceed the bank's lendable deposits. */
+export const NPC_LOAN_BOOK_VOLUME_FACTOR_MAX = 1;
 
 /** Provisional - base expected default rate (percent) at the default reference rate. */
 export const NPC_LOAN_BOOK_DEFAULT_BASE_PERCENT = 1.0;
@@ -66,7 +63,6 @@ export type NpcLoanBook = {
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
-
 
 async function buildFundConstituentResolver(
   db: Db,
@@ -311,13 +307,16 @@ export async function originateLoan(
 }
 
 /**
- * Pure provisional NPC bulk loan-book math. Wiring happens in bankingTurn (phase 4).
+ * Pure NPC household loan-book math. Wiring happens in bankingTurn (phase 4).
  *
- * volume = GDP_SHARE * regionalGdp * clamp(1 - (rate - RATE_REF) * SENS, VOL_MIN, VOL_MAX)
+ * volume = lendableDeposits * clamp(1 - (rate - RATE_REF) * SENS, VOL_MIN, VOL_MAX)
  * expectedDefaultRatePercent = clamp(BASE + max(0, rate - DEF_REF) * DEF_SENS, DEF_MIN, DEF_MAX)
  */
-export function computeNpcLoanBook(regionalGdp: number, lendingRatePercent: number): NpcLoanBook {
-  const gdp = Number.isFinite(regionalGdp) && regionalGdp > 0 ? regionalGdp : 0;
+export function computeNpcLoanBook(
+  lendableDeposits: number,
+  lendingRatePercent: number
+): NpcLoanBook {
+  const funding = Number.isFinite(lendableDeposits) && lendableDeposits > 0 ? lendableDeposits : 0;
   const rate = Number.isFinite(lendingRatePercent) ? lendingRatePercent : 0;
 
   const volumeFactor = clamp(
@@ -325,7 +324,7 @@ export function computeNpcLoanBook(regionalGdp: number, lendingRatePercent: numb
     NPC_LOAN_BOOK_VOLUME_FACTOR_MIN,
     NPC_LOAN_BOOK_VOLUME_FACTOR_MAX
   );
-  const volume = NPC_LOAN_BOOK_GDP_SHARE * gdp * volumeFactor;
+  const volume = funding * volumeFactor;
 
   const expectedDefaultRatePercent = clamp(
     NPC_LOAN_BOOK_DEFAULT_BASE_PERCENT +

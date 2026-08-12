@@ -206,6 +206,9 @@ describe("processBankingTurn", () => {
           if (typeof u.$set["bankCharter.totalLoans"] === "number") {
             liveCorp.bankCharter!.totalLoans = u.$set["bankCharter.totalLoans"] as number;
           }
+          if (typeof u.$set["bankCharter.reserves"] === "number") {
+            liveCorp.bankCharter!.reserves = u.$set["bankCharter.reserves"] as number;
+          }
           if (typeof u.$set["bankCharter.lastBankingTurn"] === "number") {
             liveCorp.bankCharter!.lastBankingTurn = u.$set["bankCharter.lastBankingTurn"] as number;
           }
@@ -500,6 +503,9 @@ describe("processBankingTurn", () => {
     // npcDeposits also receives deposit interest after the flow, so final stock
     // is delta + interest, not delta alone.
     expect(npcAfter).toBeGreaterThanOrEqual(summary.npcDepositDelta);
+    const npcLoan = loans.find((loan) => loan.borrowerType === "npcBulk");
+    expect(npcLoan?.outstanding ?? 0).toBeLessThanOrEqual(npcAfter * 0.9 + 1e-6);
+    expect(liveCorp.bankCharter!.reserves).toBeCloseTo(liveCorp.liquidCapital ?? 0, 8);
     expect(Math.abs(summary.npcDepositDelta)).toBeLessThanOrEqual(
       MAX_NPC_FLOW_PER_TURN_FRACTION * Math.max(summary.npcDepositDelta, broadBefore) + 1e-6
     );
