@@ -131,6 +131,61 @@ function decide(c: Corporation, fxRate: number | undefined, plants?: NppPlantsCo
 }
 
 describe("NPP decisions in a non-anchor currency", () => {
+  it("normalizes foreign-sector revenue before sizing home-currency budgets", () => {
+    const usdCorp = corp({
+      countryId: "US",
+      headquartersState: "NY",
+      liquidCurrencyCode: "USD",
+      liquidCapital: 0,
+    });
+    const foreignSectors = [
+      {
+        ...sector(),
+        countryId: "IT",
+        stateId: "IT_LAZ",
+        revenue: 1_000_000,
+        realizedRevenue: 1_000_000,
+      },
+      {
+        ...sector(),
+        _id: new ObjectId(),
+        countryId: "JP",
+        stateId: "KAN",
+        revenue: 1_000_000,
+        realizedRevenue: 1_000_000,
+      },
+    ] as CorporateSector[];
+    const cautious = ceoArchetypeModifiers("cautious");
+
+    const decision = makeNppCorpDecision(
+      {
+        corp: usdCorp,
+        sectors: foreignSectors,
+        turn: TURN,
+        now: new Date(),
+        fxRate: 1,
+        fxByCurrency: new Map([
+          ["USD", 1],
+          ["ITL", 1_000],
+          ["JPY", 100],
+        ]),
+        modifiers: cautious,
+      },
+      new Map(),
+      noState,
+      noPrices
+    );
+
+    // ITL 1m / 1000 + JPY 1m / 100 = USD 11k. Before normalization the
+    // caretaker combined the raw 2m host-currency units and overspent 182x.
+    const homeRevenue = 11_000;
+    expect(decision.updates.marketingBudget).toBe(
+      Math.round(homeRevenue * 0.05 * cautious.marketingMult)
+    );
+    expect(decision.updates.logisticsBudget).toBe(Math.round(homeRevenue * 0.03));
+    expect(decision.updates.rdBudget).toBe(Math.round(homeRevenue * 0.02 * cautious.rdMult));
+  });
+
   it("charges the founding build in the corp's currency, not in ₳", () => {
     const c = corp();
     const decision = decide(c, JPY_RATE, plantsCtx);
