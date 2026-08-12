@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { FreightDemandEntry } from "@/app/api/map/logistics/route";
+import type { FreightDemandEntry } from "@/lib/logistics/freightDemand";
 
 export type FreightDemandData = {
   turn: number | null;

@@ -12,18 +12,11 @@ import { handleRouteError, badRequest } from "@/lib/api/errors";
 import { ZOD_COUNTRY_ENUM, type CountryId } from "@/lib/constants/countries";
 import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
+import type { FreightDemandEntry } from "@/lib/logistics/freightDemand";
 
 const countryIdSchema = z.enum(ZOD_COUNTRY_ENUM);
 
-export type FreightDemandEntry = {
-  /** Origin-state interstate haul TEU (shadow ledger). */
-  bulk: number;
-  special: number;
-  /** bulk + special haul load. */
-  total: number;
-  /** Freight commodity supply in this state (TEU capacity logistics clear against). */
-  capacity: number;
-};
+export type { FreightDemandEntry } from "@/lib/logistics/freightDemand";
 
 export async function GET(request: Request) {
   try {

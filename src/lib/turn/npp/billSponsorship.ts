@@ -44,6 +44,7 @@ import { isPoliticalApprovalCountry } from "@/lib/politicalLegislation/political
 import type { PoliticalMetricsCountryId } from "@/lib/politicalMetrics/types";
 import { proposeNppNationalBill } from "@/lib/nppAutonomy/proposeNppNationalBill";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
+import { isLegislationFrozen } from "@/lib/government/legislationFreeze";
 import { tallySeatsByParty } from "@/lib/turn/parliamentaryGovernment";
 import type { GoverningAgendaItem } from "@/lib/nppAutonomy/governingAgenda";
 import type { PersistedFiscalStance } from "@/lib/nppAutonomy/fiscalStance";
@@ -526,6 +527,26 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
       ? await nppAutonomyAtLeast(db, countryId, "v4")
       : await isNppAutonomyActive(db, countryId);
     if (!active) continue;
+
+    // Legislation freeze (S#17): while this country's government is still
+    // forming, a player's proposal is rejected at the route by
+    // checkLegislationFreeze. NPPs read the same rule here so the two paths
+    // carry the same restriction — otherwise an NPP files bills through a
+    // window in which no human in that country can (reported in DD, whose
+    // onePartyState government counts as parliamentary for the freeze).
+    //
+    // Ordering: this phase runs well before parliamentaryGovernmentFormation
+    // and nppGovernmentPhases seat a PM, so on the turn a government is
+    // finally formed the status read here is still "pending" and sponsorship
+    // resumes the following turn. That one-turn lag is deliberate — erring
+    // toward the stricter side keeps NPPs from legislating in a window the
+    // players they share a chamber with cannot.
+    if (await isLegislationFrozen(db, countryId)) {
+      console.log(
+        `[nppBillSponsorship] ${countryId}: skipped — government in formation, legislation frozen`
+      );
+      continue;
+    }
 
     const lowerChamberOfficeType = getLowerChamberOfficeType(countryId);
 

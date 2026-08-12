@@ -23,9 +23,9 @@ describe("nav link inventory parity", () => {
   });
 
   it("staff builder matches canonical staff routes", () => {
-    const labels = buildStaffNavItems({ isAdmin: true, isModerator: true })
-      .filter((i) => i.show)
-      .map((i) => i.label);
+    // Unfiltered: Ops Dashboard visibility depends on NEXT_PUBLIC_OPS_DASHBOARD_URL,
+    // covered in staffNavItems.test.ts. The inventory only guards the route list.
+    const labels = buildStaffNavItems({ isAdmin: true, isModerator: true }).map((i) => i.label);
 
     expect(labels).toContain("Admin Panel");
     expect(labels).toContain("Mod Panel");

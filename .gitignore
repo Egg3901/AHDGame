@@ -125,3 +125,4 @@ scripts/landing-images/*
 !scripts/landing-images/manifest.json
 
 .superpowers/
+worktrees/

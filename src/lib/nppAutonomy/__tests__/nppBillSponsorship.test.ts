@@ -310,6 +310,64 @@ describe("processNppBillSponsorship — gate", () => {
   });
 });
 
+// ── Tests: Legislation freeze ────────────────────────────────────────────────
+
+describe("processNppBillSponsorship — legislation freeze", () => {
+  it("proposes nothing while a parliamentary country's government is pending", async () => {
+    // Parity with the player path: checkLegislationFreeze rejects a player's
+    // proposal in exactly this state ("Government is in formation; legislation
+    // is frozen until a PM is seated"). NPP sponsorship never consulted the
+    // formation doc, so NPPs kept filing bills in a country where no player
+    // could — reported in DD, whose onePartyState government counts as
+    // parliamentary for the freeze.
+    const npp = makeNpp({ sequentialId: 1 });
+    const official = makeOfficial(npp._id, "DD", "volkskammerDeputy", "1", 300);
+    const nppMap = new Map([[npp._id.toString(), npp]]);
+    const { db, insertSpy } = makeMockDb({
+      legTypes: [makeLegType("l1", "fiscal")],
+      governmentFormation: { _id: "DD", status: "pending" },
+    });
+    const ctx = makeCtx(db, [official], nppMap);
+
+    const count = await processNppBillSponsorship(ctx);
+    expect(count).toBe(0);
+    expect(insertSpy).not.toHaveBeenCalled();
+  });
+
+  it("proposes normally once that government is formed", async () => {
+    const npp = makeNpp({ sequentialId: 1 });
+    const official = makeOfficial(npp._id, "DD", "volkskammerDeputy", "1", 300);
+    const nppMap = new Map([[npp._id.toString(), npp]]);
+    const { db, insertSpy } = makeMockDb({
+      legTypes: [makeLegType("l1", "fiscal")],
+      governmentFormation: { _id: "DD", status: "formed" },
+    });
+    const ctx = makeCtx(db, [official], nppMap);
+
+    const count = await processNppBillSponsorship(ctx);
+    expect(count).toBe(1);
+    expect(insertSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("proposes in a non-parliamentary country even with a pending gov doc", async () => {
+    // US is presidential, so checkLegislationFreeze passes players straight
+    // through. The NPP gate must have the same blind spot or the two diverge
+    // in the other direction.
+    const npp = makeNpp({ sequentialId: 1 });
+    const official = makeOfficial(npp._id, "US", "house", "1");
+    const nppMap = new Map([[npp._id.toString(), npp]]);
+    const { db, insertSpy } = makeMockDb({
+      legTypes: [makeLegType("l1", "fiscal")],
+      governmentFormation: { _id: "US", status: "pending" },
+    });
+    const ctx = makeCtx(db, [official], nppMap);
+
+    const count = await processNppBillSponsorship(ctx);
+    expect(count).toBe(1);
+    expect(insertSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
 // ── Tests: Throttle ───────────────────────────────────────────────────────────
 
 describe("processNppBillSponsorship — throttle", () => {
