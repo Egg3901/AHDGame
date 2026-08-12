@@ -98,15 +98,15 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-type Tab = "sectors" | "bargaining" | "stances";
+type Tab = "leadership" | "sectors" | "bargaining" | "stances";
 
 const HERO_IMAGE_URL =
   "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/IWW_demonstration_NY_1914.jpg/1280px-IWW_demonstration_NY_1914.jpg";
 
 /**
  * v3 Phase 8 union leadership dashboard, restyled to match the stock market
- * page: hero banner + stats strip + tabbed content, with the leader action
- * controls surfaced in a panel above the tabs.
+ * page: hero banner + stats strip + tabbed content. Leadership is a rolling
+ * contest (CEO-style) on its own tab — not a one-shot election that locks.
  */
 export default function UnionDashboardPage({ params }: PageProps) {
   const { id } = usePromise(params);
@@ -335,6 +335,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
     (endorsement) => !actionableBillIds.has(endorsement.billId)
   );
   const tabs: { key: Tab; label: string; count: number }[] = [
+    { key: "leadership", label: "Leadership", count: organizers.length },
     { key: "sectors", label: "Sectors", count: sectors.length },
     {
       key: "bargaining",
@@ -352,6 +353,18 @@ export default function UnionDashboardPage({ params }: PageProps) {
       ]).size,
     },
   ];
+
+  const presidentHref = leader
+    ? leader.isNPP
+      ? buildNppHref({
+          sequentialId: leader.sequentialId ?? undefined,
+          _id: leader.characterId,
+        })
+      : buildCharacterHref({
+          sequentialId: leader.sequentialId ?? undefined,
+          _id: leader.characterId,
+        })
+    : null;
 
   return (
     <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -404,6 +417,20 @@ export default function UnionDashboardPage({ params }: PageProps) {
 
         {/* Stats strip */}
         <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
+          <div className="flex min-w-[140px] flex-col gap-0.5 px-4 py-3 sm:px-5">
+            <span className="text-[11px] uppercase tracking-wider text-muted">President</span>
+            {presidentHref && leader ? (
+              <Link
+                href={presidentHref}
+                className="truncate text-base font-bold text-primary hover:opacity-80"
+              >
+                {leader.name}
+              </Link>
+            ) : (
+              <span className="text-base font-bold text-muted">Vacant</span>
+            )}
+            {isLeader && <span className="text-[11px] text-muted">(you)</span>}
+          </div>
           <StatCell
             label="Organizing"
             value={organizingValue(union.membershipPressure)}
@@ -422,12 +449,12 @@ export default function UnionDashboardPage({ params }: PageProps) {
                 (campaign) => campaign.status === "negotiating" || campaign.status === "dispute"
               ).length
             )}
-            hint="Employer-scoped negotiations and disputes currently awaiting resolution."
+            hint="Live bargaining campaigns against employers in this industry."
           />
           <StatCell
-            label="Sectors in Scope"
-            value={String(sectors.length)}
-            hint="Corporate-owned sectors of this industry, in this country, that this union can organize."
+            label="Strength"
+            value={String(Math.round(union.strength))}
+            hint="Banked organizing muscle. Gates the leadership contest and weights every ballot."
           />
         </div>
       </header>
@@ -477,7 +504,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
         <p className="text-sm text-muted">
           Anyone in {union.countryName} can organize this union. Every drive adds{" "}
           {union.organizeStrengthGain} strength to the union and the same amount to your own banked
-          total, which is your vote weight when the presidency is open. Strength decays{" "}
+          total, which is your vote weight in the leadership contest. Strength decays{" "}
           {(UNION_STRENGTH_DECAY_PER_TURN * 100).toFixed(1)}% a turn, so a union nobody works at
           loses its power, and so does an organizer who stops showing up.
         </p>
@@ -520,119 +547,15 @@ export default function UnionDashboardPage({ params }: PageProps) {
         <ActionResult result={organizeResult} />
       </section>
 
-      {/* Leadership. A led union used to render nothing here at all, so the
-          page never said who the president was or why there was no vote. */}
-      <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
-        <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
-            {union.ownerId ? "Leadership" : "Elect a President"}
-          </h2>
-          <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
-        </div>
-
-        {union.ownerId ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted">President:</span>
-              {leader ? (
-                <Link
-                  href={
-                    leader.isNPP
-                      ? buildNppHref({
-                          sequentialId: leader.sequentialId ?? undefined,
-                          _id: leader.characterId,
-                        })
-                      : buildCharacterHref({
-                          sequentialId: leader.sequentialId ?? undefined,
-                          _id: leader.characterId,
-                        })
-                  }
-                  className="font-semibold text-primary hover:opacity-80"
-                >
-                  {leader.name}
-                </Link>
-              ) : (
-                <span className="font-semibold">Unknown</span>
-              )}
-              {isLeader && <span className="text-xs text-muted">(you)</span>}
-            </div>
-            <p className="text-sm text-muted">
-              The presidency is filled, so there is no election running. The seat reopens for a vote
-              when the president resigns or retires. Keep organizing in the meantime: your banked
-              strength is your vote weight the moment it does.
+      {union.pendingLeaderCharacterId &&
+        myCharacterId === union.pendingLeaderCharacterId &&
+        !isLeader && (
+          <section className="space-y-3 rounded-xl border border-primary/30 bg-primary/10 p-5">
+            <p className="text-sm font-medium">
+              Organizers have voted you the top choice for president. Accept to take the seat
+              {union.ownerId ? " from the current holder" : ""}.
             </p>
-          </div>
-        ) : (
-          <p className="text-sm text-muted">
-            This union has no president. Once it reaches {union.leadershipElectionMinStrength}{" "}
-            strength, organizers vote for one, weighted by what each of them has banked. The winner
-            must accept the offer.
-          </p>
-        )}
-
-        {!union.ownerId && (
-          <div className="flex flex-wrap gap-4 text-sm">
-            <div>
-              <span className="text-muted">Strength:</span>{" "}
-              <span className="font-semibold tabular-nums">
-                {Math.round(union.strength)} / {union.leadershipElectionMinStrength}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {union.electionOpen && (
-          <div className="space-y-3">
-            <p className="text-sm font-medium text-foreground">
-              Leadership election is open. Organizers vote, weighted by banked strength.
-            </p>
-            {voteTallies.length > 0 && (
-              <ul className="space-y-1 text-sm">
-                {voteTallies.map((t) => (
-                  <li key={t.characterId} className="flex justify-between gap-4">
-                    <span>{t.name}</span>
-                    <span className="font-mono tabular-nums">{Math.round(t.votes)} strength</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {canVote && (
-              <div className="flex flex-wrap items-end gap-2">
-                <label className="flex flex-col gap-1">
-                  <span className="text-[11px] uppercase tracking-wider text-muted">Candidate</span>
-                  <select
-                    value={candidateDraft}
-                    onChange={(e) => setCandidateDraft(e.target.value)}
-                    className="w-64 rounded-lg border border-card-border bg-background px-3 py-2 text-xs"
-                  >
-                    <option value="">Choose a candidate</option>
-                    {candidates.map((candidate) => (
-                      <option key={candidate.characterId} value={candidate.characterId}>
-                        {candidate.name}
-                        {candidate.sequentialId != null ? ` #${candidate.sequentialId}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  disabled={actionPending || suspended || !candidateDraft}
-                  onClick={() => runAction("leader/vote", { candidateCharacterId: candidateDraft })}
-                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
-                >
-                  Cast Vote
-                </button>
-                {myVote && <span className="text-xs text-muted">Your vote is recorded.</span>}
-              </div>
-            )}
-          </div>
-        )}
-
-        {union.pendingLeaderCharacterId &&
-          myCharacterId === union.pendingLeaderCharacterId &&
-          !isLeader && (
-            <div className="flex flex-wrap gap-2 border-t border-card-border pt-4">
-              <p className="w-full text-sm font-medium">You have been offered the presidency.</p>
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 disabled={actionPending || suspended}
@@ -650,63 +573,9 @@ export default function UnionDashboardPage({ params }: PageProps) {
                 Decline
               </button>
             </div>
-          )}
-
-        {/* Who actually holds sway. Organizing banked strength per person was
-            computed for the vote tally but never shown, so members could not
-            see the roster or where they ranked in it. */}
-        <div className="space-y-2 border-t border-card-border pt-4">
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-sm font-semibold text-foreground">Organizers</h3>
-            <span className="text-xs text-muted tabular-nums">
-              {organizerCount} {organizerCount === 1 ? "member" : "members"}
-            </span>
-          </div>
-          {organizers.length === 0 ? (
-            <p className="text-sm text-muted">
-              Nobody has organized this union yet. The first drive puts you on the roster.
-            </p>
-          ) : (
-            <ul className="divide-y divide-card-border">
-              {organizers.map((organizer) => (
-                <li
-                  key={organizer.characterId}
-                  className="flex items-center justify-between gap-4 py-2"
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Link
-                      href={`/character/${organizer.sequentialId ?? organizer.characterId}`}
-                      className="truncate text-sm font-medium text-primary hover:opacity-80"
-                    >
-                      {organizer.name}
-                    </Link>
-                    {organizer.isLeader && (
-                      <span className="shrink-0 rounded-full border border-primary/30 bg-primary/15 px-2 py-0.5 text-[11px] text-primary">
-                        President
-                      </span>
-                    )}
-                    {organizer.characterId === myCharacterId && (
-                      <span className="shrink-0 text-[11px] text-muted">(you)</span>
-                    )}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-sm font-medium tabular-nums">
-                      {Math.round(organizer.strength)} strength
-                    </div>
-                    <div className="text-[11px] text-muted tabular-nums">
-                      {organizer.influencePct.toFixed(1)}% of the vote · {organizer.organizeCount}{" "}
-                      drive
-                      {organizer.organizeCount === 1 ? "" : "s"}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <ActionResult result={actionResult} />
-      </section>
+            <ActionResult result={actionResult} />
+          </section>
+        )}
 
       {/* Leader Actions */}
       {isLeader && (
@@ -855,6 +724,151 @@ export default function UnionDashboardPage({ params }: PageProps) {
             ))}
           </nav>
         </div>
+
+        {tab === "leadership" && (
+          <div className="space-y-6 rounded-xl border border-card-border bg-card p-5">
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold text-foreground">Leadership contest</h2>
+              <p className="text-sm text-muted">
+                Like a corporation CEO race: organizers vote continuously, weighted by banked
+                strength. Whoever leads the tally can accept the presidency
+                {union.ownerId ? " and displace the current holder" : ""}. Ties keep the sitting
+                player president.
+              </p>
+              <div className="flex flex-wrap gap-4 text-sm">
+                <div>
+                  <span className="text-muted">Strength:</span>{" "}
+                  <span className="font-semibold tabular-nums">
+                    {Math.round(union.strength)} / {union.leadershipElectionMinStrength}
+                  </span>
+                </div>
+                {union.ownerId && leader && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted">Sitting:</span>
+                    {presidentHref ? (
+                      <Link href={presidentHref} className="font-semibold text-primary hover:opacity-80">
+                        {leader.name}
+                      </Link>
+                    ) : (
+                      <span className="font-semibold">{leader.name}</span>
+                    )}
+                    {leader.isNPP && <span className="text-xs text-muted">(NPP)</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {!union.electionOpen ? (
+              <p className="text-sm text-muted">
+                Organize this union to {union.leadershipElectionMinStrength} strength to open the
+                contest.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-foreground">
+                  Contest open. Cast or change your vote anytime.
+                </p>
+                {voteTallies.length > 0 ? (
+                  <ul className="space-y-1 text-sm">
+                    {voteTallies.map((t) => (
+                      <li key={t.characterId} className="flex justify-between gap-4">
+                        <span>{t.name}</span>
+                        <span className="font-mono tabular-nums">{Math.round(t.votes)} strength</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted">No votes cast yet.</p>
+                )}
+                {canVote && (
+                  <div className="flex flex-wrap items-end gap-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] uppercase tracking-wider text-muted">
+                        Candidate
+                      </span>
+                      <select
+                        value={candidateDraft}
+                        onChange={(e) => setCandidateDraft(e.target.value)}
+                        className="w-64 rounded-lg border border-card-border bg-background px-3 py-2 text-xs"
+                      >
+                        <option value="">Choose a candidate</option>
+                        {candidates.map((candidate) => (
+                          <option key={candidate.characterId} value={candidate.characterId}>
+                            {candidate.name}
+                            {candidate.sequentialId != null ? ` #${candidate.sequentialId}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      disabled={actionPending || suspended || !candidateDraft}
+                      onClick={() =>
+                        runAction("leader/vote", { candidateCharacterId: candidateDraft })
+                      }
+                      className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
+                    >
+                      Cast Vote
+                    </button>
+                    {myVote && <span className="text-xs text-muted">Your vote is recorded.</span>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-2 border-t border-card-border pt-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <h3 className="text-sm font-semibold text-foreground">Organizers</h3>
+                <span className="text-xs text-muted tabular-nums">
+                  {organizerCount} {organizerCount === 1 ? "member" : "members"}
+                </span>
+              </div>
+              {organizers.length === 0 ? (
+                <p className="text-sm text-muted">
+                  Nobody has organized this union yet. The first drive puts you on the roster.
+                </p>
+              ) : (
+                <ul className="divide-y divide-card-border">
+                  {organizers.map((organizer) => (
+                    <li
+                      key={organizer.characterId}
+                      className="flex items-center justify-between gap-4 py-2"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Link
+                          href={`/character/${organizer.sequentialId ?? organizer.characterId}`}
+                          className="truncate text-sm font-medium text-primary hover:opacity-80"
+                        >
+                          {organizer.name}
+                        </Link>
+                        {organizer.isLeader && (
+                          <span className="shrink-0 rounded-full border border-primary/30 bg-primary/15 px-2 py-0.5 text-[11px] text-primary">
+                            President
+                          </span>
+                        )}
+                        {organizer.characterId === myCharacterId && (
+                          <span className="shrink-0 text-[11px] text-muted">(you)</span>
+                        )}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-sm font-medium tabular-nums">
+                          {Math.round(organizer.strength)} strength
+                        </div>
+                        <div className="text-[11px] text-muted tabular-nums">
+                          {organizer.influencePct.toFixed(1)}% of the vote ·{" "}
+                          {organizer.organizeCount} drive
+                          {organizer.organizeCount === 1 ? "" : "s"}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <ActionResult result={actionResult} />
+          </div>
+        )}
 
         {tab === "sectors" &&
           (sectors.length === 0 ? (

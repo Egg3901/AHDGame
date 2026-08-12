@@ -15,8 +15,10 @@ import type { CorporationType } from "@/lib/constants/corporations";
  * Deliberately NOT a membership-roster social system: "membership" is the
  * abstract `unionization`/`membershipPressure` stat (an NPC worker
  * population), not a roster of player Characters who joined. Player leaders
- * are elected: organizers fund drives until `membershipPressure` crosses a
- * threshold, then organizers vote for a president who must accept the offer.
+ * Player leaders are contested continuously (CEO-style): organizers fund
+ * drives until strength crosses a threshold, then vote weighted by banked
+ * strength; the plurality winner must accept the offer and may displace a
+ * sitting player or NPP president.
  *
  * `ownerId` is the source of truth for who leads this union — see the
  * denormalized `Character.unionLeaderOf` cache in `src/lib/db/types/character.ts`.

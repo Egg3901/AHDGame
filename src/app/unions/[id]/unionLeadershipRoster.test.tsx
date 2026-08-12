@@ -2,13 +2,11 @@
  * @vitest-environment happy-dom
  */
 /**
- * A union that already had a president rendered no leadership block at all, so
- * the page never said who held the seat, why there was no vote, or who else
- * was organizing. Banked strength per organizer was computed for the vote
- * tally and thrown away. These pin the roster and the president line.
+ * Leadership is a CEO-style rolling contest on its own tab. These pin the
+ * president strip, the contest copy, and the organizer roster.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import UnionPage from "./page";
 
 vi.mock("next/navigation", () => ({
@@ -25,9 +23,9 @@ const UNION = {
   sectorLabel: "Telecommunications",
   ownerId: "ceo-char" as string | null,
   pendingLeaderCharacterId: null,
-  electionOpen: false,
+  electionOpen: true,
   leadershipElectionMinStrength: 100,
-  strength: 30,
+  strength: 120,
   organizeActionCost: 5,
   organizeStrengthGain: 10,
   treasury: 164,
@@ -62,7 +60,8 @@ const ORGANIZERS = [
 function mockFetch(
   union = UNION,
   organizers = ORGANIZERS,
-  leaderOverride?: (typeof ORGANIZERS)[number] | null
+  leaderOverride?: (typeof ORGANIZERS)[number] | null,
+  voteExtras: Record<string, unknown> = {}
 ) {
   return vi.fn(async (url: string) => {
     const u = String(url);
@@ -86,6 +85,7 @@ function mockFetch(
             leaderOverride === undefined
               ? (organizers.find((o) => o.isLeader) ?? null)
               : leaderOverride,
+          ...voteExtras,
         }),
       } as unknown as Response;
     }
@@ -104,34 +104,49 @@ const PARAMS = {
 
 beforeEach(() => vi.restoreAllMocks());
 
+async function openLeadershipTab() {
+  const tab = await screen.findByRole("button", { name: /^Leadership/i });
+  fireEvent.click(tab);
+}
+
 describe("union leadership surface", () => {
-  it("names the sitting president and says why no vote is running", async () => {
+  it("names the sitting president in the stats strip and opens a contest while seated", async () => {
     global.fetch = mockFetch();
     render(<UnionPage params={PARAMS} />);
 
-    // Once on the president line, once on the roster row.
-    expect(await screen.findAllByText("Ada Prentice")).toHaveLength(2);
-    expect(screen.getByText(/the presidency is filled/i)).toBeTruthy();
-    expect(screen.getByText(/resigns or retires/i)).toBeTruthy();
+    // Stats strip president line (visible without opening the tab).
+    expect(await screen.findByText("Ada Prentice")).toBeTruthy();
+    expect(screen.queryByText(/the presidency is filled/i)).toBeNull();
+    expect(screen.queryByText(/resigns or retires/i)).toBeNull();
+
+    await openLeadershipTab();
+    expect(screen.getByRole("heading", { name: /leadership contest/i })).toBeTruthy();
+    expect(screen.getByText(/like a corporation ceo race/i)).toBeTruthy();
+    expect(screen.getByText(/contest open/i)).toBeTruthy();
   });
 
   it("lists every organizer with their banked strength and share of the vote", async () => {
     global.fetch = mockFetch();
     render(<UnionPage params={PARAMS} />);
+    await openLeadershipTab();
 
     expect(await screen.findByText("Bo Marsh")).toBeTruthy();
     expect(screen.getByText(/30 strength/)).toBeTruthy();
     expect(screen.getByText(/75\.0% of the vote/)).toBeTruthy();
     expect(screen.getByText(/25\.0% of the vote/)).toBeTruthy();
-    // The viewer is marked on their own row.
     expect(screen.getByText("(you)")).toBeTruthy();
   });
 
-  it("keeps the election panel for a union with no president", async () => {
-    global.fetch = mockFetch({ ...UNION, ownerId: null }, []);
+  it("shows the contest gate for a vacant under-strength union", async () => {
+    global.fetch = mockFetch(
+      { ...UNION, ownerId: null, electionOpen: false, strength: 30 },
+      [],
+      null
+    );
     render(<UnionPage params={PARAMS} />);
+    await openLeadershipTab();
 
-    expect(await screen.findByText(/elect a president/i)).toBeTruthy();
+    expect(await screen.findByText(/organize this union to 100 strength/i)).toBeTruthy();
     expect(screen.getByText(/nobody has organized this union yet/i)).toBeTruthy();
   });
 
@@ -157,5 +172,8 @@ describe("union leadership surface", () => {
     const link = await screen.findByRole("link", { name: "Klaus Weber" });
     expect(link.getAttribute("href")).toBe("/politicians/npp/88");
     expect(screen.queryByText("Unknown")).toBeNull();
+
+    await openLeadershipTab();
+    expect(screen.getByText(/\(NPP\)/)).toBeTruthy();
   });
 });
