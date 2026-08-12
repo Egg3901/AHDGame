@@ -1,3 +1,143 @@
 {
-  "elections": {}
+  "elections": {
+    "error": {
+      "description": "Die Wahlseite konnte nicht geladen werden. Das kann ein vorübergehendes Problem sein.",
+      "backToElections": "Zurück zu den Wahlen",
+      "dashboard": "Dashboard"
+    },
+    "helpers": {
+      "classQualifier": "(Klasse {className})",
+      "seatsSuffix": "{count, plural, one {# Sitz} other {# Sitze}}"
+    },
+    "map": {
+      "noPollingData": "Keine Umfragedaten",
+      "competitive": "⚡ Umkämpft (Vorsprung ≤15 Pkt.)",
+      "uncontested": "Ohne Gegenkandidat",
+      "stateSenateShort": "Staatssenat"
+    },
+    "chamberComposition": {
+      "projectedLabel": "Prognose nach den laufenden Wahlen",
+      "currentLabel": "Aktuelle Zusammensetzung",
+      "classContested": "Die Sitze der Klasse {className} stehen zur Wahl",
+      "currentBefore": "Aktuell, vor diesen Wahlen",
+      "projectionNote": "Prognose aus den laufenden Auszählungen. Wird jede Runde aktualisiert."
+    },
+    "status": {
+      "upcoming": "Bevorstehend",
+      "completed": "Abgeschlossen",
+      "primaryPhase": "Vorwahlphase",
+      "generalPhase": "Hauptwahlphase",
+      "primary": "Vorwahl",
+      "general": "Hauptwahl"
+    },
+    "card": {
+      "incumbent": "Amtsinhaber:",
+      "popularVote": "Popular Vote",
+      "liveVoteTally": "Live-Auszählung",
+      "votesTurns": "{votes} Stimmen · {turnCount, plural, one {# Runde} other {# Runden}}",
+      "candidateHeader": "Kandidat",
+      "partyHeader": "Partei",
+      "votesHeader": "Stimmen",
+      "seatsHeader": "Sitze",
+      "primaryResults": "Vorwahlergebnisse",
+      "generalResults": "Hauptwahlergebnisse",
+      "polling": "Umfragen",
+      "candidates": "Kandidaten",
+      "noRegisteredCandidates": "Keine registrierten Kandidaten",
+      "processing": "Wird verarbeitet…",
+      "withdraw": "Zurückziehen",
+      "filingClosed": "Anmeldung geschlossen",
+      "filingClosedTitle": "Die Anmeldung für dieses Rennen ist geschlossen.",
+      "joining": "Beitreten…",
+      "enterRace": "Ins Rennen gehen",
+      "liveResults": "Live-Ergebnisse →",
+      "unknownCandidate": "Unbekannt",
+      "partyPrimary": "Vorwahl: {party}"
+    },
+    "presidentialCard": {
+      "awaitingResults": "Ergebnisse ausstehend, Kandidaten angetreten",
+      "noCandidatesYet": "Noch keine Kandidaten",
+      "primaryEnds": "Vorwahl endet <date></date>",
+      "generalEnds": "Hauptwahl endet <date></date>"
+    },
+    "phaseStrip": {
+      "primaryElection": "Vorwahl",
+      "generalElection": "Hauptwahl",
+      "opensIn": "Öffnet in {time}",
+      "endsIn": "Endet in {time}",
+      "completed": "Abgeschlossen"
+    },
+    "statePV": {
+      "statePV": "Popular Vote",
+      "ev": "{count} EV"
+    },
+    "primaryCard": {
+      "uncontested": "Ohne Gegenkandidat"
+    },
+    "battleground": {
+      "title": "Battleground-Karte",
+      "subtitle": "Vorsprungsstufen, gleiche Schattierung wie die Popular-Vote-Ansicht",
+      "marginTiers": "Vorsprungsstufen:",
+      "emptyHint": "Vorsprungsdaten füllen sich, sobald Stimmen eingehen. Staaten mit weniger als zwei Kandidaten mit Stimmen bleiben ungefärbt.",
+      "battlegroundCount": "Battleground ({count})",
+      "tierSafe": "Sicher",
+      "tierLikely": "Wahrscheinlich",
+      "tierLean": "Tendenz",
+      "tierTossup": "Offen"
+    },
+    "persuasion": {
+      "title": "Überzeugungsfaktoren",
+      "focus": "Fokus",
+      "opponent": "Gegner",
+      "explanation": "Warum Wähler in <state></state> zu <focus></focus> statt zu <opponent></opponent> tendieren. Jeder Faktor hat ein Vorzeichen: <b>+</b> = Auftrieb, <b>−</b> = Ballast. Die Faktoren gelten relativ innerhalb dieser Liste und bewegen nur den umstimmbaren Teil der Wählerschaft jeder Partei, ihr realer Effekt ist also klein. Coattail-Zeilen sind direkte Verschiebungen des Stimmenanteils in %. Ein Stimmenvorsprung ist nicht die Summe dieser Balken.",
+      "empty": "Für {state} sind noch keine Überzeugungsfaktoren berechnet. Sie füllen sich, sobald Stimm- und Zusatzdaten geladen sind.",
+      "driversGroup": "Überzeugungsfaktoren (Punkte des umstimmbaren Anteils)",
+      "coattailsGroup": "Coattail-Effekte (direkte % des Stimmenanteils)",
+      "pts": "Pkt."
+    },
+    "registration": {
+      "title": "Registrierungseinfluss",
+      "noData": "{state} ({stateId}): für diesen Staat werden keine Registrierungsdaten erfasst.",
+      "populating": "Die Registrierungsdaten werden in der Voraussetzung <b>Phase 1.5 / Phase 2</b> befüllt. Diese Karte zeigt die Parteineigung von {state}, sobald die Seed-Daten vorliegen. Bis dahin geht das Registrierungsmodell überall von neutralem Einfluss aus.",
+      "intro": "Parteineigungs-Basis für {state}. Der Anteil jeder Partei ist der träge Einfluss registrierter Wähler, keine Garantie für Stimmenanteile. Wähler brauchen weiterhin Überzeugung, um zur Wahl zu gehen und ihrer Neigung zu folgen.",
+      "leanValue": "{pct}% Neigung",
+      "leanTitle": "{party}: {pct}% Neigung",
+      "independent": "Unabhängig",
+      "unregistered": "Nicht registriert",
+      "independentTitle": "Unabhängig: {pct}%",
+      "unregisteredTitle": "Nicht registriert: {pct}%",
+      "normalizationNote": "Hinweis: Die Anteile summieren sich auf {pct}%, außerhalb des normalisierten Bandes von 95-105%. Die Bootstrap-Renormalisierung steht womöglich noch aus."
+    },
+    "carveUp": {
+      "title": "{state} · Aufteilung",
+      "viewDetails": "Staatsdetails ansehen →",
+      "explanation": "Der Anteil jedes Kandidaten = registrierte Wähler × Archetyp × demografische Affinität. Positionsnähe + Einfluss bestimmen die Anziehungskraft; Beliebtheit skaliert die Stimmen bei der Auszählung.",
+      "empty": "Für {state} gibt es noch keine prognostizierten Anteile. Die Aufteilung füllt sich, sobald Kandidaten für diese Vorwahl gemeldet sind.",
+      "regBase": "Reg.-Basis",
+      "topDemographics": "Wichtigste Gruppen: "
+    },
+    "embeddedResults": {
+      "electionNight": "Wahlabend",
+      "retry": "Erneut versuchen",
+      "fullElectionNight": "Ganzer Wahlabend →"
+    },
+    "primaryCalendar": {
+      "title": "Vorwahlkalender",
+      "subtitle": "Vergangene Wahlen zeigen den Sieger, künftige den Wellenzeitpunkt",
+      "empty": "Noch keine Kalenderdaten für die Vorwahl. Der Wellenplan füllt sich, sobald die Vorwahl ihr Staffelfenster erreicht.",
+      "voted": "Abgestimmt",
+      "votingNow": "Stimmt gerade ab",
+      "inTurns": "In {count, plural, one {# Runde} other {# Runden}}",
+      "chipVoted": "{state}: abgestimmt",
+      "chipUpcoming": "{state}: bevorstehend"
+    },
+    "tierSelector": {
+      "raceTier": "Wahlebene",
+      "president": "Präsidentschaft",
+      "senate": "Senat",
+      "house": "Repräsentantenhaus",
+      "governor": "Gouverneur",
+      "stateSenate": "Staatssenat"
+    }
+  }
 }
