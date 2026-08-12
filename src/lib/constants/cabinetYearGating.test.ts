@@ -106,6 +106,26 @@ describe("UK cabinet year gating", () => {
     expect(resolveDepartment(mech, 1964)).toBe("Ministry of Defence");
   });
 
+  it("foreign / agriculture / labour departments follow era bands", async () => {
+    const { getCabinetMechanics } = await import("./cabinetMechanics");
+    const { resolveDepartment } = await import("@/lib/cabinet/rosterEra");
+    const foreign = getCabinetMechanics("UK", "foreign_secretary")!;
+    expect(resolveDepartment(foreign, 1953)).toBe("Foreign Office");
+    expect(resolveDepartment(foreign, 1979)).toBe("Foreign and Commonwealth Office");
+    expect(resolveDepartment(foreign, 2019)).toBe("Foreign and Commonwealth Office");
+    expect(resolveDepartment(foreign, 2020)).toBe("Foreign, Commonwealth & Development Office");
+
+    const agri = getCabinetMechanics("UK", "agriculture_secretary")!;
+    expect(resolveDepartment(agri, 1953)).toBe("Ministry of Agriculture and Fisheries");
+    expect(resolveDepartment(agri, 1955)).toBe("Ministry of Agriculture, Fisheries and Food");
+
+    const work = getCabinetMechanics("UK", "work_secretary")!;
+    expect(resolveDepartment(work, 1953)).toBe("Ministry of Labour and National Service");
+    expect(resolveDepartment(work, 1959)).toBe("Ministry of Labour");
+    expect(resolveDepartment(work, 1968)).toBe("Dept of Employment");
+    expect(resolveDepartment(work, 2001)).toBe("Dept for Work and Pensions");
+  });
+
   it("1979 DHSS-era names", () => {
     expect(resolveSeatName(byId.health_secretary, 1979)).toBe(
       "Secretary of State for Social Services"
