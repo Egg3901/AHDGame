@@ -81,16 +81,14 @@ export async function castLeadershipVote(
   const weight = Math.max(1, seatWeight);
   const previousNom = nominations.find((n) => n.votes?.[nppKey] && !n._id.equals(bestId));
   if (previousNom) {
-    await db
-      .collection(collectionName)
-      .updateOne(
-        { _id: previousNom._id },
-        {
-          $unset: { [`votes.${nppKey}`]: "" },
-          $inc: { votesFor: -weight },
-          $set: { updatedAt: now },
-        }
-      );
+    await db.collection(collectionName).updateOne(
+      { _id: previousNom._id },
+      {
+        $unset: { [`votes.${nppKey}`]: "" },
+        $inc: { votesFor: -weight },
+        $set: { updatedAt: now },
+      }
+    );
   }
 
   const targetNom = nominations.find((n) => n._id.equals(bestId));

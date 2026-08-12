@@ -30,10 +30,12 @@ async function seatWeightForCharacter(
   voterCharacterId: ObjectId,
   officeType: "house" | "senate"
 ): Promise<number> {
-  const official = await db.collection<ElectedOfficial>("electedOfficials").findOne(
-    { characterId: voterCharacterId, officeType, countryId: "US" },
-    { projection: { seatsHeld: 1 } }
-  );
+  const official = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .findOne(
+      { characterId: voterCharacterId, officeType, countryId: "US" },
+      { projection: { seatsHeld: 1 } }
+    );
   return official?.seatsHeld ?? 1;
 }
 
