@@ -10,10 +10,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
-import {
-  corporationQueryFromParamId,
-  requireCeo,
-} from "@/lib/api/corporations/resolveQuery";
+import { corporationQueryFromParamId, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { Corporation } from "@/lib/db/types";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
@@ -78,10 +75,13 @@ export async function POST(request: Request) {
       seedCapitalAnchor: body.seedCapitalAnchor,
       currentTurn: await getCurrentTurn(db),
     });
-    if (!result.ok)
-      return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
 
-    return NextResponse.json({ success: true, fundId: result.fundId.toString(), slug: result.slug });
+    return NextResponse.json({
+      success: true,
+      fundId: result.fundId.toString(),
+      slug: result.slug,
+    });
   } catch (error) {
     return handleRouteError(error);
   }

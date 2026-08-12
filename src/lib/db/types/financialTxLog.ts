@@ -43,6 +43,7 @@ export type FinancialTxType =
   // is a mint-contra leg rather than a transfer from the bank.
   | "bank_loan_origination"
   | "bank_loan_repayment"
+  | "bank_npc_loan_interest"
   | "bank_deposit_interest"
   // Prop book. A trade is a RECLASS between the bank's cash and its own
   // trading book, so only the cash side is a money movement and both
