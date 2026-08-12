@@ -159,7 +159,7 @@ export async function buildSpeakerResponse(
     filteredSpeakerNoms.map(async (nom) => {
       const p = partyMap.get(nom.nomineeParty ?? "");
       const nomineeIdStr = nom.nomineeId.toString();
-      // Seat-scoped one-member-one-vote count feeds both headline and breakdown.
+      // Seat-scoped seat-weighted count feeds both headline and breakdown.
       const tally = await computeCongressLeadershipTally(db, "house", nom.votes);
       return {
         id: nom._id.toString(),

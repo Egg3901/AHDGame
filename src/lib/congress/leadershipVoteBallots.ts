@@ -1,4 +1,5 @@
 import { ObjectId, type Db } from "mongodb";
+import type { ElectedOfficial } from "@/lib/db/types";
 
 type BallotCollectionName =
   "speakerLeadershipBallots" | "houseLeadershipBallots" | "senateLeadershipBallots";
@@ -17,6 +18,24 @@ interface LeadershipVoteBallot {
 }
 
 const ACTIVE_STATUSES = ["open", "voting"] as const;
+
+function officeTypeForBallotCollection(
+  ballotCollectionName: BallotCollectionName
+): "house" | "senate" {
+  return ballotCollectionName === "senateLeadershipBallots" ? "senate" : "house";
+}
+
+async function seatWeightForCharacter(
+  db: Db,
+  voterCharacterId: ObjectId,
+  officeType: "house" | "senate"
+): Promise<number> {
+  const official = await db.collection<ElectedOfficial>("electedOfficials").findOne(
+    { characterId: voterCharacterId, officeType, countryId: "US" },
+    { projection: { seatsHeld: 1 } }
+  );
+  return official?.seatsHeld ?? 1;
+}
 
 export async function castLeadershipVoteBallot(
   db: Db,
@@ -44,6 +63,11 @@ export async function castLeadershipVoteBallot(
   const voteField = `votes.${voterCharacterId.toString()}`;
   const ballotFilter = role ? { role, voterCharacterId } : { voterCharacterId };
   const nominationScope = role ? { role } : {};
+  const seatWeight = await seatWeightForCharacter(
+    db,
+    voterCharacterId,
+    officeTypeForBallotCollection(ballotCollectionName)
+  );
 
   const previousBallot = await ballotCollection.findOneAndUpdate(
     ballotFilter,
@@ -73,7 +97,7 @@ export async function castLeadershipVoteBallot(
       },
       {
         $unset: { [voteField]: "" },
-        $inc: { votesFor: -1 },
+        $inc: { votesFor: -seatWeight },
         $set: { updatedAt: now },
       }
     );
@@ -103,7 +127,7 @@ export async function castLeadershipVoteBallot(
         status: "voting",
         updatedAt: now,
       },
-      $inc: { votesFor: 1 },
+      $inc: { votesFor: seatWeight },
     }
   );
 

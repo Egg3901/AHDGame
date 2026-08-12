@@ -529,7 +529,7 @@ export async function applyWhipVotesToStateBill(
  * Leadership whips use the same hidden loyalty/stubbornness roll as bill
  * whips. On failure, the NPP defaults to their best same-party / same-state
  * leadership fit rather than being left unvoted.
- * Leadership elections use votesFor increments of 1 (no seat weights).
+ * Leadership elections increment votesFor by each official's seatsHeld.
  * Vote key format: `npp_${nppId}`. The whip's candidacyId determines
  * which nomination to vote for.
  */
@@ -599,14 +599,23 @@ export async function applyWhipVotesToLeadership(
         raceNominations,
         nppKey,
         fallbackNomination._id,
-        now
+        now,
+        official.seatsHeld ?? 1
       );
 
       ignored++;
       continue;
     }
 
-    await castLeadershipVote(db, nominationCollection, raceNominations, nppKey, candidacyId, now);
+    await castLeadershipVote(
+      db,
+      nominationCollection,
+      raceNominations,
+      nppKey,
+      candidacyId,
+      now,
+      official.seatsHeld ?? 1
+    );
 
     fellInLine++;
   }

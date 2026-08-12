@@ -9,6 +9,7 @@ beforeEach(() => {
   db = createMockDb();
   db.collection("houseLeadershipBallots");
   db.collection("houseLeadershipNominations");
+  db.collection("electedOfficials");
 });
 
 describe("leadershipVoteBallots", () => {
@@ -24,6 +25,11 @@ describe("leadershipVoteBallots", () => {
     db.collectionMocks["houseLeadershipBallots"]!.findOne.mockResolvedValue({
       nominationId: nextNominationId,
       ballotToken: "token-1",
+    });
+    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue({
+      characterId: voterCharacterId,
+      officeType: "house",
+      seatsHeld: 1,
     });
 
     const result = await castLeadershipVoteBallot(db as never, {
@@ -64,6 +70,40 @@ describe("leadershipVoteBallots", () => {
           status: "voting",
         }),
         $inc: { votesFor: 1 },
+      })
+    );
+  });
+
+  it("increments votesFor by the voter's seatsHeld (ticket #1053)", async () => {
+    const voterCharacterId = new ObjectId();
+    const nominationId = new ObjectId();
+    const now = new Date("2026-04-29T21:30:00Z");
+
+    db.collectionMocks["houseLeadershipBallots"]!.findOneAndUpdate.mockResolvedValue(null);
+    db.collectionMocks["houseLeadershipBallots"]!.findOne.mockResolvedValue({
+      nominationId,
+      ballotToken: "token-2",
+    });
+    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue({
+      characterId: voterCharacterId,
+      officeType: "house",
+      seatsHeld: 12,
+    });
+
+    await castLeadershipVoteBallot(db as never, {
+      ballotCollectionName: "houseLeadershipBallots",
+      nominationCollectionName: "houseLeadershipNominations",
+      nominationId,
+      voterCharacterId,
+      role: "majority_leader",
+      now,
+      ballotToken: "token-2",
+    });
+
+    expect(db.collectionMocks["houseLeadershipNominations"]!.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: nominationId }),
+      expect.objectContaining({
+        $inc: { votesFor: 12 },
       })
     );
   });

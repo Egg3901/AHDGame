@@ -61,7 +61,7 @@ export interface VacateMotionDisplay {
   filedByName: string | null;
   endsAt: string | null;
   endsOnTurn: number | null;
-  /** Seat-scoped one-member-one-vote tally. */
+  /** Seat-scoped seat-weighted tally. */
   votesFor: number;
   votesAgainst: number;
   /** Absolute chamber majority needed to carry the motion. */

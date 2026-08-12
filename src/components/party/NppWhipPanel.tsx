@@ -60,7 +60,11 @@ function isCabinetWhipItem(item: LeadershipElectionItem): boolean {
 }
 
 function isSupportedNppLeadershipItem(item: LeadershipElectionItem): boolean {
-  return item.type === "pmAppointmentVote" || item.type === "noConfidenceVote";
+  // Cabinet nominations render on their own tab; everything else with a
+  // leadership-style ballot (Speaker / chamber leaders / PM / confidence)
+  // belongs on the Leadership tab — including US congress races so NPP hard
+  // whips can move seat-weighted votes again (ticket #1053).
+  return !isCabinetWhipItem(item);
 }
 
 interface NppWhipPanelProps {

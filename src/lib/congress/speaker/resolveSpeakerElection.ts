@@ -46,7 +46,7 @@ export async function resolveSpeakerElection(
     return true;
   }
 
-  // Declare the winner by the seat-scoped one-member-one-vote count (not the
+  // Declare the winner by the seat-scoped seat-weighted count (not the
   // cached `votesFor`, which can include de-seated voters) so the resolved
   // Speaker matches what the leadership page displays.
   const countedCandidacies = await Promise.all(

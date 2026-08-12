@@ -65,6 +65,8 @@ export function resolveLeadershipWhip(
 /**
  * Cast a vote for a nomination (speaker or leadership style), handling
  * re-votes by removing any previous vote for a different candidate.
+ * `seatWeight` defaults to 1; pass the voter's `seatsHeld` so multi-seat
+ * members contribute their full chamber weight to the cached `votesFor`.
  * Returns true if a new vote was cast, false if already voted for this candidate.
  */
 export async function castLeadershipVote(
@@ -73,15 +75,21 @@ export async function castLeadershipVote(
   nominations: Array<{ _id: ObjectId; votes?: Record<string, string> }>,
   nppKey: string,
   bestId: ObjectId,
-  now: Date
+  now: Date,
+  seatWeight = 1
 ): Promise<boolean> {
+  const weight = Math.max(1, seatWeight);
   const previousNom = nominations.find((n) => n.votes?.[nppKey] && !n._id.equals(bestId));
   if (previousNom) {
     await db
       .collection(collectionName)
       .updateOne(
         { _id: previousNom._id },
-        { $unset: { [`votes.${nppKey}`]: "" }, $inc: { votesFor: -1 }, $set: { updatedAt: now } }
+        {
+          $unset: { [`votes.${nppKey}`]: "" },
+          $inc: { votesFor: -weight },
+          $set: { updatedAt: now },
+        }
       );
   }
 
@@ -91,7 +99,7 @@ export async function castLeadershipVote(
       { _id: bestId },
       {
         $set: { [`votes.${nppKey}`]: "for", status: "voting", updatedAt: now },
-        $inc: { votesFor: 1 },
+        $inc: { votesFor: weight },
       }
     );
     return true;
