@@ -285,6 +285,11 @@ export const UK_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
   foreign_secretary: {
     positionId: "foreign_secretary",
     department: "Foreign, Commonwealth & Development Office",
+    departmentByYear: [
+      { from: 1775, name: "Foreign Office" },
+      { from: 1968, name: "Foreign and Commonwealth Office" },
+      { from: 2020, name: "Foreign, Commonwealth & Development Office" },
+    ],
     sealImage:
       "https://upload.wikimedia.org/wikipedia/commons/9/98/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28Tudor_Crown%29.svg",
     nationalMetrics: [
@@ -404,7 +409,10 @@ export const UK_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
   defence_secretary: {
     positionId: "defence_secretary",
     department: "Ministry of Defence",
-    departmentByYear: [{ from: 1775, name: "Ministry of Defence" }],
+    departmentByYear: [
+      { from: 1775, name: "War Office" },
+      { from: 1964, name: "Ministry of Defence" },
+    ],
     sealImage:
       "https://upload.wikimedia.org/wikipedia/commons/0/06/Ministry_of_Defence_%28United_Kingdom%29_badge.svg",
     nationalMetrics: [
@@ -957,6 +965,10 @@ export const UK_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
   agriculture_secretary: {
     positionId: "agriculture_secretary",
     department: "Ministry of Agriculture, Fisheries and Food",
+    departmentByYear: [
+      { from: 1775, name: "Ministry of Agriculture and Fisheries" },
+      { from: 1955, name: "Ministry of Agriculture, Fisheries and Food" },
+    ],
     sealImage:
       "https://upload.wikimedia.org/wikipedia/commons/9/98/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28Tudor_Crown%29.svg",
     nationalMetrics: [
@@ -1051,7 +1063,8 @@ export const UK_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
     positionId: "work_secretary",
     department: "Dept for Work and Pensions",
     departmentByYear: [
-      { from: 1775, name: "Ministry of Labour" },
+      { from: 1775, name: "Ministry of Labour and National Service" },
+      { from: 1959, name: "Ministry of Labour" },
       { from: 1968, name: "Dept of Employment" },
       { from: 2001, name: "Dept for Work and Pensions" },
     ],
