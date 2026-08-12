@@ -27,9 +27,8 @@ import type { Migration, MigrationContext, MigrationResult } from "../types";
  * correct whenever it runs and on whichever world it runs against.
  */
 async function run(db: Db, ctx: MigrationContext): Promise<MigrationResult> {
+  // Keyed by the string "current"; see the note in the 1953 heal migration.
   const gs = await db
-    // Typed inline: an untyped handle defaults `_id` to ObjectId, and the
-    // gameState singleton is keyed by the string "current".
     .collection<{ _id: string; currentTurn?: number }>("gameState")
     .findOne({ _id: "current" }, { projection: { currentTurn: 1 } });
   const currentTurn = gs?.currentTurn;

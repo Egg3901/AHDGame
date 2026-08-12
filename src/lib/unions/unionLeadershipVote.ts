@@ -1,4 +1,21 @@
-import type { UnionLeaderVote } from "@/lib/db/types/union";
+import type { Db, ObjectId } from "mongodb";
+import type { UnionLeaderVote, UnionOrganizer } from "@/lib/db/types/union";
+
+/** Load every organizer's banked strength for one union, keyed by character id. */
+export async function loadUnionVoteWeights(db: Db, unionId: ObjectId): Promise<UnionVoteWeights> {
+  const organizers = await db
+    .collection<UnionOrganizer>("unionOrganizers")
+    .find({ unionId }, { projection: { characterId: 1, strength: 1 } })
+    .toArray();
+  const weights: UnionVoteWeights = new Map();
+  for (const organizer of organizers) {
+    const strength = organizer.strength;
+    if (typeof strength === "number" && Number.isFinite(strength) && strength > 0) {
+      weights.set(organizer.characterId.toString(), strength);
+    }
+  }
+  return weights;
+}
 
 /** Latest vote per organizer — mirrors corporation CEO vote dedupe. */
 export function dedupeUnionLeaderVotes(votes: UnionLeaderVote[]): UnionLeaderVote[] {
@@ -22,16 +39,37 @@ export function dedupeUnionLeaderVotes(votes: UnionLeaderVote[]): UnionLeaderVot
   return [...latestByVoter.values()];
 }
 
-/** Plurality winner among deduped votes, or null when no votes cast. */
-export function tallyUnionLeaderVotes(
-  votes: UnionLeaderVote[]
-): { leaderId: string; voteCount: number } | null {
-  const deduped = dedupeUnionLeaderVotes(votes);
+/**
+ * Vote weight per voter: the organizer's banked strength. A voter absent from
+ * the map, or holding no strength, casts nothing. Leadership follows organizing
+ * effort, so someone who ran fifty drives outvotes someone who ran one.
+ */
+export type UnionVoteWeights = Map<string, number>;
+
+/** Sum of banked strength backing each candidate. */
+export function tallyUnionLeaderVoteWeights(
+  votes: UnionLeaderVote[],
+  weights: UnionVoteWeights
+): Map<string, number> {
   const counts = new Map<string, number>();
-  for (const vote of deduped) {
+  for (const vote of dedupeUnionLeaderVotes(votes)) {
+    const weight = weights.get(vote.voterCharacterId.toString()) ?? 0;
+    if (!(weight > 0)) continue;
     const cid = vote.candidateCharacterId.toString();
-    counts.set(cid, (counts.get(cid) ?? 0) + 1);
+    counts.set(cid, (counts.get(cid) ?? 0) + weight);
   }
+  return counts;
+}
+
+/**
+ * Winner by total banked strength, or null when nothing is backing anyone.
+ * `voteCount` is that winning strength total, not a headcount.
+ */
+export function tallyUnionLeaderVotes(
+  votes: UnionLeaderVote[],
+  weights: UnionVoteWeights
+): { leaderId: string; voteCount: number } | null {
+  const counts = tallyUnionLeaderVoteWeights(votes, weights);
   let leaderId: string | null = null;
   let maxVotes = 0;
   for (const [cid, count] of counts) {

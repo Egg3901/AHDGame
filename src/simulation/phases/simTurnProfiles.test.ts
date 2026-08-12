@@ -17,6 +17,7 @@ describe("simTurnProfiles — elections-only turn-phase gate", () => {
     expect(pred).toBeDefined();
     for (const econ of [
       "corporationTurn", // the known hotspot
+      "nppUnionBehavior",
       "economicModel",
       "forexTurn",
       "bondTurn",
@@ -82,5 +83,11 @@ describe("simTurnProfiles — elections-only turn-phase gate", () => {
     const known = new Set<string>([...BASE_TURN_PHASE_NAMES, "indexFunds"]);
     const unknown = [...ELECTIONS_SKIP_PHASES].filter((name) => !known.has(name));
     expect(unknown).toEqual([]);
+  });
+
+  it("skips NPP union behavior with the frozen union economy", () => {
+    expect(BASE_TURN_PHASE_NAMES).toContain("nppUnionBehavior");
+    expect(ELECTIONS_SKIP_PHASES.has("nppUnionBehavior")).toBe(true);
+    expect(getSimTurnPhasePredicate("elections-only")!("nppUnionBehavior")).toBe(false);
   });
 });

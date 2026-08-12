@@ -5,7 +5,6 @@ import type {
   Corporation,
   CorporateSector,
   FederalBudget,
-  StateMetrics,
   Bond,
   Shareholder,
   ShareListing,
@@ -16,6 +15,10 @@ import type {
   GameState,
 } from "@/lib/db/types";
 import type { IndexFund } from "@/lib/db/types/indexFund";
+import {
+  indexFundOwnershipFraction,
+  qualifiesForIndexInclusionBenefit,
+} from "@/lib/corporations/indexOwnership";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 import { buildPoliticalBaseModifiers } from "@/lib/politicalLegislation/marginAdapter";
 import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoSectorShed";
@@ -109,6 +112,10 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getRoundedPublicMarketCap, getPublicShareQuote } from "@/lib/corporations/marketQuote";
 import { roundMarketingStrength } from "@/lib/utils/formatters";
 import { findImfFacilityReceivablesForLender } from "@/lib/corporations/imfPortfolioReceivables";
+import {
+  employerPensionCostForTurn,
+  EMPTY_EMPLOYER_PENSION_COST,
+} from "@/lib/pensions/employerPensionCosts";
 import {
   anchorPerTurnToFinancialDaily,
   imfFacilityPaymentAnchorPerTurn,
@@ -828,6 +835,7 @@ export async function loadCorporationDetailView(args: {
   // it out of Sector Maintenance.
   const labourWagesEnabled = await isLabourWagesEnabled();
   let totalLaborCosts = 0;
+  const wageBillAnchorPerTurnBySectorId = new Map<string, number>();
 
   // Plants tier: sectors are PLANTS, so the row's headline numbers become
   // physical (capacity, output, sales) rather than a growth rate. Resolved
@@ -1072,6 +1080,13 @@ export async function loadCorporationDetailView(args: {
     totalMaintenanceCosts += maintenance;
     if (labourWagesEnabled && sectorLaborCostLocal != null && sectorLaborCostLocal > 0) {
       totalLaborCosts += sectorLaborCostLocal;
+      // Same wage bill in ₳ on the per-turn clock the pension pass charges on,
+      // keyed by sector so a collective agreement can pick out just the sectors
+      // it covers.
+      wageBillAnchorPerTurnBySectorId.set(
+        sector._id.toString(),
+        sectorFieldToAnchor(sector.laborCost as number, sector) / TURNS_PER_DAY
+      );
     }
     totalGrowthCosts += sectorGrowthCostLocal;
     totalRegulatoryBurden += sectorRegulatoryBurden;
@@ -1339,6 +1354,32 @@ export async function loadCorporationDetailView(args: {
 
   const logisticsBudget = corporation.logisticsBudget ?? 0;
   const rdBudget = corporation.rdBudget ?? 0;
+
+  // Occupational pensions. The pension pass debits liquidCapital twice a turn
+  // under a collective agreement and both legs only ever showed up in the
+  // financial transaction log, which no player surface reads, so a CEO watched
+  // cash fall with nothing on the statement to name it. Two lines, not one: the
+  // bargained contribution is a price the CEO agreed, the deficit top-up is a
+  // consequence the CEO did not.
+  const pensionCostPerTurn = labourWagesEnabled
+    ? await employerPensionCostForTurn(
+        db,
+        corporation._id,
+        currentTurn,
+        wageBillAnchorPerTurnBySectorId
+      )
+    : EMPTY_EMPLOYER_PENSION_COST;
+  const pensionContributionCost = anchorToCorpCapital(
+    anchorPerTurnToFinancialDaily(pensionCostPerTurn.contributionAnchorPerTurn),
+    pageCorpCcy,
+    pageCorpRate
+  );
+  const pensionTopUpCost = anchorToCorpCapital(
+    anchorPerTurnToFinancialDaily(pensionCostPerTurn.topUpAnchorPerTurn),
+    pageCorpCcy,
+    pageCorpRate
+  );
+
   const operatingCosts =
     totalMaintenanceCosts +
     totalGrowthCosts +
@@ -1346,7 +1387,9 @@ export async function loadCorporationDetailView(args: {
     corporation.marketingBudget +
     logisticsBudget +
     rdBudget +
-    ceoSalary;
+    ceoSalary +
+    pensionContributionCost +
+    pensionTopUpCost;
   const operatingIncome = totalRevenue - operatingCosts;
 
   const domesticFederalRateByCountry = new Map<string, number>();
@@ -1580,7 +1623,21 @@ export async function loadCorporationDetailView(args: {
           },
         },
       })
-      .project({ _id: 1, name: 1, sequentialId: 1, totalShares: 1, shareholders: 1 })
+      // superShareMultiplier is required: control is voting power, and a
+      // dual-class corp's voting total differs from its share total.
+      .project<
+        Pick<
+          Corporation,
+          "_id" | "name" | "sequentialId" | "totalShares" | "shareholders" | "superShareMultiplier"
+        >
+      >({
+        _id: 1,
+        name: 1,
+        sequentialId: 1,
+        totalShares: 1,
+        shareholders: 1,
+        superShareMultiplier: 1,
+      })
       .toArray(),
     buildHostileTakeoverEligibility(db, corporation, viewerUserId),
   ]);
@@ -1613,7 +1670,12 @@ export async function loadCorporationDetailView(args: {
     if (!row) continue;
     const total = sub.totalShares ?? 0;
     if (total <= 0) continue;
-    const pct = (row.shares / total) * 100;
+    // Control is VOTING power everywhere else in the subsidiary model
+    // (getControllingCorporateParent, the formalize guard, the hostile
+    // threshold). Listing by raw share percent made a dual-class corp appear
+    // in, or vanish from, the parent's subsidiary list while the actions on it
+    // disagreed. Same helper the takeover path uses.
+    const pct = acquirerOwnershipPercent(corporation._id, sub as Corporation);
     if (pct > SUBSIDIARY_OWNERSHIP_THRESHOLD_PERCENT) {
       subsidiariesPayload.push({
         _id: sub._id.toString(),
@@ -1707,6 +1769,9 @@ export async function loadCorporationDetailView(args: {
     logisticsCosts: logisticsBudget,
     rdCosts: rdBudget,
     ceoSalaryCost: ceoSalary,
+    pensionContributionCost: Math.round(pensionContributionCost),
+    pensionTopUpCost: Math.round(pensionTopUpCost),
+    pensionSchemesInDeficit: pensionCostPerTurn.schemesInDeficit,
     operatingCosts: Math.round(operatingCosts),
     operatingIncome: Math.round(operatingIncome),
     federalTax: displayFederalTax,
@@ -2020,6 +2085,14 @@ export async function loadCorporationDetailView(args: {
       // uses that live recompute, but the shown rating should be the announced one.
       creditRatingSnapshot: corporation.creditRatingSnapshot ?? undefined,
       creditCompositeSnapshot: corporation.creditCompositeSnapshot ?? undefined,
+      // Suggestion #62: index-fund ownership and whether it has reached the
+      // level that earns the credit notch and the price premium. Surfaced so
+      // inclusion is a visible, chaseable goal rather than an invisible buff.
+      indexOwnershipPercent: Math.round(indexFundOwnershipFraction(corporation) * 1000) / 10,
+      indexInclusionActive:
+        (corporation.isPrivate ?? false)
+          ? false
+          : qualifiesForIndexInclusionBenefit(indexFundOwnershipFraction(corporation)),
       parentCorporation: parentCorporationPayload,
       subsidiaries: subsidiariesPayload,
       hostileTakeoverEligibility,

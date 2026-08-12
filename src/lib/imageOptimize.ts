@@ -1,5 +1,7 @@
 import sharp from "sharp";
 
+import { badRequest } from "@/lib/api/errors";
+
 interface OptimizeOptions {
   /** Max width in pixels — image is resized to fit within this bound */
   maxWidth: number;
@@ -30,13 +32,24 @@ export async function optimizeImage(
 
   const { maxWidth, maxHeight, quality = 80 } = options;
 
-  const optimized = await sharp(inputBuffer)
-    .resize(maxWidth, maxHeight, {
-      fit: "inside",
-      withoutEnlargement: true,
-    })
-    .webp({ quality })
-    .toBuffer();
+  // A truncated or malformed upload makes libvips throw (e.g. "VipsJpeg:
+  // premature end of JPEG image"). That is a bad request from the client, not
+  // a server fault, so it becomes a 400 the user can act on instead of a 500
+  // captured as an error.
+  let optimized: Buffer;
+  try {
+    optimized = await sharp(inputBuffer)
+      .resize(maxWidth, maxHeight, {
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .webp({ quality })
+      .toBuffer();
+  } catch {
+    throw badRequest(
+      "That image file is corrupt or incomplete. Try re-saving it and uploading again."
+    );
+  }
 
   return { buffer: optimized, ext: "webp" };
 }

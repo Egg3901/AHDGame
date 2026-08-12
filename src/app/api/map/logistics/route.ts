@@ -11,12 +11,10 @@ import { getDb } from "@/lib/mongodb";
 import { handleRouteError, badRequest } from "@/lib/api/errors";
 import { ZOD_COUNTRY_ENUM, type CountryId } from "@/lib/constants/countries";
 import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
+import type { FreightDemandEntry, FreightDemandResponse } from "@/lib/logistics/types";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
-import type { FreightDemandEntry } from "@/lib/logistics/freightDemand";
 
 const countryIdSchema = z.enum(ZOD_COUNTRY_ENUM);
-
-export type { FreightDemandEntry } from "@/lib/logistics/freightDemand";
 
 export async function GET(request: Request) {
   try {
@@ -74,11 +72,12 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({
+    const response: FreightDemandResponse = {
       countryId,
       turn: networkDoc?.turn ?? null,
       states,
-    });
+    };
+    return NextResponse.json(response);
   } catch (error) {
     return handleRouteError(error);
   }

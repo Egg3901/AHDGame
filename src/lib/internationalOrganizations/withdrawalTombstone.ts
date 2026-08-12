@@ -1,6 +1,7 @@
 import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { InternationalOrganizationId } from "@/lib/constants/internationalOrganizations";
+import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 import { getOrganizationWithdrawalsCollection } from "@/lib/db/collections";
 
 /**
@@ -40,10 +41,11 @@ export async function recordOrganizationWithdrawal(
 export async function clearOrganizationWithdrawal(
   db: Db,
   organizationId: InternationalOrganizationId | string,
-  countryId: CountryId
+  /** Widened alongside `admitMember`: a proxy war's hosts are world entities. */
+  countryId: WorldEntityId
 ): Promise<void> {
   const col = await getOrganizationWithdrawalsCollection(db);
-  await col.deleteOne({ organizationId, countryId });
+  await col.deleteOne({ organizationId, countryId: countryId as CountryId });
 }
 
 /**

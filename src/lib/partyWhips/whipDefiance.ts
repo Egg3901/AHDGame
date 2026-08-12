@@ -284,20 +284,32 @@ async function loadBillTarget(db: Db, whip: BillWhip): Promise<TargetContext | n
   const bill = await db.collection<Bill>("bills").findOne({ _id: whip.targetId });
   if (
     !bill ||
-    !["active", "active_other", "veto_override", "override_shugiin", "cabinet_review"].includes(
-      bill.status
-    )
+    ![
+      "active",
+      "active_other",
+      "active_both",
+      "veto_override",
+      "override_shugiin",
+      "cabinet_review",
+    ].includes(bill.status)
   ) {
     return null;
   }
   // override_shugiin (JP Shūgiin override) reuses the main `votes` field, so
   // falls through to the default branch below with the active/cabinet bills.
+  //
+  // A concurrent bill has TWO live maps and defiance is measured per voter, so both are
+  // merged here — a senator's defiance lives in `otherChamberVotes` and would be
+  // invisible if only the lower map were read. The keys are character/NPP ids and a
+  // member sits in exactly one chamber, so the merge cannot collide.
   const voteMap =
-    bill.status === "active_other"
-      ? bill.otherChamberVotes
-      : bill.status === "veto_override"
-        ? bill.vetoOverrideVotes
-        : bill.votes;
+    bill.status === "active_both"
+      ? { ...(bill.votes ?? {}), ...(bill.otherChamberVotes ?? {}) }
+      : bill.status === "active_other"
+        ? bill.otherChamberVotes
+        : bill.status === "veto_override"
+          ? bill.vetoOverrideVotes
+          : bill.votes;
   return {
     label: bill.title,
     votes: Object.entries(voteMap ?? {}).map(([voterKey, vote]) => ({

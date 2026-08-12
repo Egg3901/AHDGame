@@ -151,6 +151,9 @@ describe("WageLevelPanel", () => {
       />
     );
     expect(screen.getByText(/is demanding a 1\.30× wage level/)).toBeTruthy();
-    expect(screen.getByText(/Your current wage does not meet it/)).toBeTruthy();
+    expect(screen.getByText(/Your wage here does not meet it/)).toBeTruthy();
+    // The claim is a pressure signal, not a mechanical one. The old copy
+    // claimed it kept strike pressure elevated, which was never true.
+    expect(screen.getByText(/binds nothing on its own/)).toBeTruthy();
   });
 });

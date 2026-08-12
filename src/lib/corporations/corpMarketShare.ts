@@ -47,33 +47,37 @@ export interface CorpMarketSharePosition {
   unownedPercent: number;
 }
 
+/** One industry's national rollup: every corp's basis plus the market total. */
+export interface IndustryBasis {
+  /** corpId → basis (capacity units under plants, else ₳ revenue). */
+  basisByCorp: Map<string, number>;
+  /** corpId → ₳ revenue, always, regardless of basis. */
+  anchorByCorp: Map<string, number>;
+  /** Denominator: the addressable national market on the same basis. */
+  basisMarket: number;
+}
+
 /**
- * Compute the focal corporation's market-share position for each industry it
- * operates in, scoped to its home country. Read-only aggregation; returns an
- * empty array when the corp has no sectors or its country has no states.
+ * National per-industry rollup for one country. This is the SHARED denominator:
+ * `computeCorpMarketShare` and the merger-review concentration test both read
+ * it, so a combined post-merger share and a displayed single-corp share can
+ * never be measured against different markets.
  */
-export async function computeCorpMarketShare(
+export async function loadIndustryBasis(
   db: Db,
-  corporation: Pick<Corporation, "_id" | "countryId">,
-  corpSectors: Pick<CorporateSector, "sectorType">[],
-  /**
-   * Plants tier: aggregate the national rollup on the capacity-unit basis
-   * (owned capitalStock vs unowned headroomUnits) instead of ₳ revenue. Omit
-   * for legacy revenue behavior.
-   */
+  countryId: CountryId,
+  types: CorporationType[],
   plantsEnabled: boolean = false
-): Promise<CorpMarketSharePosition[]> {
-  const focalId = corporation._id.toString();
-  const countryId = corporation.countryId;
-  const types = [...new Set(corpSectors.map((s) => s.sectorType))] as CorporationType[];
-  if (types.length === 0) return [];
+): Promise<Map<CorporationType, IndustryBasis>> {
+  const out = new Map<CorporationType, IndustryBasis>();
+  if (types.length === 0) return out;
 
   const states = await db
     .collection<State>("states")
     .find({ countryId })
     .project<{ _id: string; gdp: number; countryId: CountryId }>({ _id: 1, gdp: 1, countryId: 1 })
     .toArray();
-  if (states.length === 0) return [];
+  if (states.length === 0) return out;
   const stateIds = states.map((s) => s._id);
   const stateById = new Map(states.map((s) => [s._id, s]));
 
@@ -129,8 +133,6 @@ export async function computeCorpMarketShare(
     readCorpEconomicAnchor(revenue, hostCode, hostRate);
   const unitScale = getEraUnitScale(preset);
 
-  const positions: CorpMarketSharePosition[] = [];
-
   for (const sectorType of types) {
     const typeSectors = sectorsInScope.filter((s) => s.sectorType === sectorType);
     const typeUnowned = unownedInScope.filter((u) => u.sectorType === sectorType);
@@ -172,7 +174,7 @@ export async function computeCorpMarketShare(
     }
 
     // National market = sum of per-state effective markets (same bucketing the
-    // per-sector routes use, so shares stay ≤ 100%).
+    // per-sector routes use, so shares stay <= 100%).
     let totalMarket = 0;
     let totalMarketUnits = 0;
     for (const s of states) {
@@ -195,8 +197,41 @@ export async function computeCorpMarketShare(
     // Fallback (c): if no unit denominator could be derived for this industry,
     // report it on the legacy revenue basis.
     const useUnits = plantsEnabled && totalMarketUnits > 0 && Number.isFinite(totalMarketUnits);
-    const basisByCorp = useUnits ? unitsByCorp : anchorByCorp;
-    const basisMarket = useUnits ? totalMarketUnits : totalMarket;
+    out.set(sectorType, {
+      basisByCorp: useUnits ? unitsByCorp : anchorByCorp,
+      anchorByCorp,
+      basisMarket: useUnits ? totalMarketUnits : totalMarket,
+    });
+  }
+
+  return out;
+}
+
+/**
+ * Compute the focal corporation's market-share position for each industry it
+ * operates in, scoped to its home country. Read-only aggregation; returns an
+ * empty array when the corp has no sectors or its country has no states.
+ */
+export async function computeCorpMarketShare(
+  db: Db,
+  corporation: Pick<Corporation, "_id" | "countryId">,
+  corpSectors: Pick<CorporateSector, "sectorType">[],
+  /**
+   * Plants tier: aggregate the national rollup on the capacity-unit basis
+   * (owned capitalStock vs unowned headroomUnits) instead of ₳ revenue. Omit
+   * for legacy revenue behavior.
+   */
+  plantsEnabled: boolean = false
+): Promise<CorpMarketSharePosition[]> {
+  const focalId = corporation._id.toString();
+  const types = [...new Set(corpSectors.map((s) => s.sectorType))] as CorporationType[];
+  const byType = await loadIndustryBasis(db, corporation.countryId, types, plantsEnabled);
+
+  const positions: CorpMarketSharePosition[] = [];
+  for (const sectorType of types) {
+    const basis = byType.get(sectorType);
+    if (!basis) continue;
+    const { basisByCorp, anchorByCorp, basisMarket } = basis;
 
     let totalOwned = 0;
     for (const a of basisByCorp.values()) totalOwned += a;

@@ -54,6 +54,25 @@ export async function debitTreasuryCompensation(
 }
 
 /**
+ * Debit an already-local amount from a country's treasury. Mirror of
+ * `creditTreasuryProceeds`, for money the state hands back rather than
+ * collects (C4 group loss relief). Unconditional, like every other treasury
+ * debit here: an unaffordable refund pushes the treasury further into debt
+ * rather than being silently withheld.
+ */
+export async function debitTreasury(
+  db: Db,
+  countryId: CountryId,
+  amountLocal: number,
+  now: Date
+): Promise<number> {
+  if (!(amountLocal > 0)) return 0;
+  const amount = Math.round(amountLocal);
+  await incTreasuryBalance(db, countryId, -amount, now);
+  return amount;
+}
+
+/**
  * Credit divestiture proceeds (privatization IPO float sale, spec §13.2) to the
  * country's treasury, in home currency. `proceedsLocal` is already denominated in
  * the country's currency (the spun-out corp's sharePrice is local), so no FX

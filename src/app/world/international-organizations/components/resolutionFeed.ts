@@ -1,3 +1,4 @@
+import type { OrganizationResolutionType } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary } from "../orgTypes";
 
 export interface FeedItem {
@@ -6,7 +7,12 @@ export interface FeedItem {
   orgName: string;
   orgShortName: string;
   title: string;
-  type: string;
+  /**
+   * The resolution's own type, not a widened string — the feed labels items by
+   * this, and widening it here is what let a new type reach the UI as a raw
+   * enum value with nothing failing.
+   */
+  type: OrganizationResolutionType;
   status: "pending" | "active";
   closesOnTurn?: number;
   enactedOnTurn?: number;

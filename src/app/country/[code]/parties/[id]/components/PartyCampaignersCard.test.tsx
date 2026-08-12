@@ -30,11 +30,40 @@ describe("PartyCampaignersCard", () => {
     expect(screen.getByText("Ada Already")).toBeTruthy();
   });
 
-  it("describes campaigners as Build Org spenders, not NPP Management (ticket #1028)", () => {
+  // Suggestion #269 widened the seat: Build Org AND NPP Management, in
+  // exchange for National Committee confirmation.
+  it("describes campaigners as Build Org + NPP Management, with Recruitment excluded", () => {
     render(<PartyCampaignersCard party={makeParty()} countryCode="US" onUpdate={vi.fn()} />);
-    expect(screen.getByText(/spend national Political Strength to Build Org/i)).toBeTruthy();
-    expect(screen.getByText(/NPP Management \(Influence Actions\)/i)).toBeTruthy();
-    expect(screen.queryByText(/use NPP Influence Actions/i)).toBeNull();
+    expect(screen.getByText(/spend national Political Strength to Build/i)).toBeTruthy();
+    expect(screen.getByText(/NPP Management \(Influence Actions and NPP Move\)/i)).toBeTruthy();
+    expect(screen.getByText(/Recruitment stays chair \/ vice-chair \/ admin/i)).toBeTruthy();
+  });
+
+  it("explains that additions need committee confirmation and removals do not", () => {
+    render(<PartyCampaignersCard party={makeParty()} countryCode="US" onUpdate={vi.fn()} />);
+    expect(screen.getByText(/opens a National Committee vote/i)).toBeTruthy();
+    expect(screen.getByText(/Removing a name takes effect immediately/i)).toBeTruthy();
+  });
+
+  it("surfaces the server message after a save (e.g. nominations opened)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        campaignerIds: [],
+        message: "Nominated 1 campaigner — the National Committee must confirm.",
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PartyCampaignersCard party={makeParty()} countryCode="US" onUpdate={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText(/Search party members/i), {
+      target: { value: "Ben" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Ben Newcomer/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+
+    await waitFor(() => expect(screen.getByText(/National Committee must confirm/i)).toBeTruthy());
   });
 
   it("posts the selected character ids to the national campaigners endpoint on save", async () => {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useAbortableEffectFetch } from "@/hooks/useAbortableEffectFetch";
 import { CodeQualityScoreGauges } from "./CodeQualityScoreGauges";
 import { CodeQualityMetricCards } from "./CodeQualityMetricCards";
 import { CodeQualityTrendChart } from "./CodeQualityTrendChart";
@@ -12,14 +13,18 @@ export function CodeQualityTab() {
   const [environment, setEnvironment] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function load() {
-      try {
+  // The environment selector refetches the same endpoints, so without an abort
+  // a slow response for the previous environment can land after the new one and
+  // leave the panel showing one environment's data under another's label.
+  useAbortableEffectFetch(async (signal) => {
+    try {
+      {
         const envParam = environment ? `?environment=${environment}` : "";
         const [latestRes, snapshotsRes] = await Promise.all([
-          fetch(`/api/admin/code-quality/snapshots/latest${envParam}`),
+          fetch(`/api/admin/code-quality/snapshots/latest${envParam}`, { signal }),
           fetch(
-            `/api/admin/code-quality/snapshots?limit=10${environment ? `&environment=${environment}` : ""}`
+            `/api/admin/code-quality/snapshots?limit=10${environment ? `&environment=${environment}` : ""}`,
+            { signal }
           ),
         ]);
 
@@ -33,11 +38,10 @@ export function CodeQualityTab() {
           const data = await snapshotsRes.json();
           setSnapshots(data.snapshots);
         }
-      } finally {
-        setLoading(false);
       }
+    } finally {
+      setLoading(false);
     }
-    load();
   }, [environment]);
 
   if (loading) {

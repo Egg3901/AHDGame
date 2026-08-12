@@ -318,3 +318,47 @@ describe("repressionLegitimacyCost", () => {
     }
   });
 });
+
+describe("accumulateOverhang plan-shortfall goods deficit", () => {
+  it("accrues overhang for a USSR whose wages trail GDP but whose plan is missed", () => {
+    // The exact production shape on 2026-08-10: RU ran wageGrowth 4.81 against
+    // gdpGrowth 5.50, a NEGATIVE gap, so the old kernel accrued nothing and
+    // structurally never could however badly the enterprises did.
+    const onPlan = accumulateOverhang(0, 4.81, 5.5, 0.9, 0, 0, 1);
+    expect(onPlan).toBe(0);
+
+    // Same wages, same GDP, but the enterprises deliver 84% of plan.
+    const missingPlan = accumulateOverhang(0, 4.81, 5.5, 0.9, 0, 0, 0.84);
+    expect(missingPlan).toBeGreaterThan(0);
+  });
+
+  it("scales with the size of the miss", () => {
+    const small = accumulateOverhang(0, 4.81, 5.5, 0.9, 0, 0, 0.95);
+    const big = accumulateOverhang(0, 4.81, 5.5, 0.9, 0, 0, 0.6);
+    expect(big).toBeGreaterThan(small);
+  });
+
+  it("does not let an over-delivering plan create negative overhang", () => {
+    const over = accumulateOverhang(0, 4.81, 5.5, 0.9, 0, 0, 1.5);
+    expect(over).toBe(0);
+    // And an over-delivering plan is identical to an exactly-met one: the term
+    // only ever adds a deficit, it never subtracts.
+    expect(over).toBe(accumulateOverhang(0, 4.81, 5.5, 0.9, 0, 0, 1));
+  });
+
+  it("defaults to on-plan so existing callers are unchanged", () => {
+    expect(accumulateOverhang(10, 8, 2, 1, 0, 0)).toBe(accumulateOverhang(10, 8, 2, 1, 0, 0, 1));
+  });
+
+  it("stays bounded on a total plan collapse", () => {
+    let o = 0;
+    for (let i = 0; i < 500; i++) o = accumulateOverhang(o, 20, 0, 1, 0, 0, 0);
+    expectFiniteInRange(o, 0, OVERHANG_CAP);
+  });
+
+  it("tolerates a non-finite fulfillment", () => {
+    for (const bad of [Number.NaN, Infinity, -Infinity]) {
+      expect(Number.isFinite(accumulateOverhang(10, 5, 1, 1, 0, 0, bad))).toBe(true);
+    }
+  });
+});

@@ -36,6 +36,7 @@ export const STATUS_LABELS: Record<string, string> = {
   active: "Voting Open",
   passed_origin: "Passed Chamber",
   active_other: "2nd Chamber",
+  active_both: "Both Chambers",
   enrolled: "Awaiting President",
   cabinet_review: "Cabinet Review",
   override_shugiin: "Shugiin Override",

@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import MergerReviewPanel from "@/components/corporation/MergerReviewPanel";
+import IndexCommitteePanel from "@/components/corporation/IndexCommitteePanel";
+import SponsoredFundPanel from "@/components/corporation/SponsoredFundPanel";
 
 interface DealSummary {
   offerId: string;
@@ -29,7 +32,16 @@ interface CorpSearchResult {
 
 const fmt = (n: number) => "₳" + Math.round(n).toLocaleString("en-US");
 
-export default function DealsTab({ corpId, isCeo }: { corpId: string; isCeo: boolean }) {
+export default function DealsTab({
+  corpId,
+  isCeo,
+  canSponsorFund = false,
+}: {
+  corpId: string;
+  isCeo: boolean;
+  /** True when the corporation has a financial sector, the gate for chartering a fund. */
+  canSponsorFund?: boolean;
+}) {
   const [data, setData] = useState<DealsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -152,6 +164,12 @@ export default function DealsTab({ corpId, isCeo }: { corpId: string; isCeo: boo
   return (
     <div className="space-y-6">
       {err && <p className="text-xs text-error">{err}</p>}
+
+      <MergerReviewPanel />
+
+      <IndexCommitteePanel corpId={corpId} />
+
+      {canSponsorFund && <SponsoredFundPanel corpId={corpId} />}
 
       <section className="rounded-lg border border-card-border bg-card p-4">
         <h3 className="mb-2 text-sm font-semibold text-foreground">

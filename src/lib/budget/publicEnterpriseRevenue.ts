@@ -293,7 +293,12 @@ export async function calculateCountryOwnedBudgetRevenue(
    * market-mode / ramp reads happen once per turn, not once per country.
    * Omitted ⇒ resolved here, so one-off callers and tests are unchanged.
    */
-  plantsContext?: PlantsBudgetContext
+  plantsContext?: PlantsBudgetContext,
+  /**
+   * World-constant FX map, hoisted the same way as plantsContext by the
+   * per-turn budget refresh. Omitted ⇒ loaded here.
+   */
+  hoistedFxByCurrency?: ReadonlyMap<CurrencyCode, number>
 ): Promise<Partial<Record<keyof FederalRevenue, number>>> {
   const corporations = await db
     .collection<Corporation>("corporations")
@@ -315,7 +320,7 @@ export async function calculateCountryOwnedBudgetRevenue(
       .collection<CorporateSector>("corporateSectors")
       .find({ corporationId: { $in: corporationIds } })
       .toArray(),
-    loadFxRatesByCurrency(db),
+    hoistedFxByCurrency ? Promise.resolve(hoistedFxByCurrency) : loadFxRatesByCurrency(db),
   ]);
 
   // Per-state metrics drive the dynamic SOE efficiency penalty (spec §11.3), so

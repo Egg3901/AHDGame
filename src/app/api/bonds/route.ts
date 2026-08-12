@@ -50,7 +50,34 @@ export async function GET(request: Request) {
     // Get all non-matured bonds + FX rates (needed to anchor-normalize the
     // cross-currency `totalOutstanding` summary — A24).
     const [bonds, fxByCurrency] = await Promise.all([
-      db.collection<Bond>("bonds").find({ matured: false }).sort({ createdAt: -1 }).toArray(),
+      db
+        .collection<Bond>("bonds")
+        .find(
+          { matured: false },
+          {
+            // Listing fields only; holders trimmed to units (the map needs the
+            // count and the units sum, not full holder entries).
+            projection: {
+              issuerType: 1,
+              countryId: 1,
+              currencyCode: 1,
+              corporationId: 1,
+              issuerName: 1,
+              couponRate: 1,
+              maturityTurns: 1,
+              issuedAtTurn: 1,
+              maturityTurn: 1,
+              marketPrice: 1,
+              totalIssued: 1,
+              publicFloat: 1,
+              defaulted: 1,
+              createdAt: 1,
+              "holders.units": 1,
+            },
+          }
+        )
+        .sort({ createdAt: -1 })
+        .toArray(),
       loadFxRatesByCurrency(db),
     ]);
 

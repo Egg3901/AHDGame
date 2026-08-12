@@ -266,6 +266,19 @@ describe("getSovereignCouponRate", () => {
     // 3.1 + 0.25 = 3.35 — exact, but guard against floating-point drift
     expect(getSovereignCouponRate(3.1, 96)).toBe(3.35);
   });
+
+  it("prices an unchanged coupon when no credibility spread is supplied", () => {
+    expect(getSovereignCouponRate(5.5, 96, 0)).toBe(getSovereignCouponRate(5.5, 96));
+  });
+
+  it("adds the B4 credibility spread on top of the term premium", () => {
+    expect(getSovereignCouponRate(5.5, 96, 1.5)).toBe(7.25);
+  });
+
+  it("ignores a negative or non-finite spread rather than discounting the coupon", () => {
+    expect(getSovereignCouponRate(5.5, 48, -2)).toBe(5.5);
+    expect(getSovereignCouponRate(5.5, 48, NaN)).toBe(5.5);
+  });
 });
 
 describe("reconcileSovereignDebt", () => {

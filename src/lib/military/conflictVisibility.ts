@@ -50,6 +50,11 @@ export function belligerentSideOf(
   const id = countryId as CountryId;
   if (c.sideA.countries.includes(id)) return "A";
   if (c.sideB.countries.includes(id)) return "B";
+  // A faction IS a belligerent — it is the side, named by its entity id, and a proxy
+  // war's rosters start empty. Exact match only: this function is the roster-only one
+  // precisely so visibility never inherits `sideOf`'s bloc fallback.
+  if (c.sideA.factionEntity === countryId) return "A";
+  if (c.sideB.factionEntity === countryId) return "B";
   return null;
 }
 

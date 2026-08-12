@@ -39,12 +39,20 @@ function mockBills(db: MockDb) {
  */
 function stubBillFind(db: MockDb, bills: Record<string, unknown>[]) {
   const coll = mockBills(db);
-  coll.find.mockReturnValue({
-    toArray: vi.fn().mockResolvedValue(bills),
-    sort: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    skip: vi.fn().mockReturnThis(),
-    project: vi.fn().mockReturnThis(),
+  // Status-AWARE: the engine now closes more than one stage per run, and each stage
+  // queries by its own status. A stub that returned every bill for every query would
+  // hand the same bill to each stage and double-count it — a harness artefact, since
+  // production filters on `status`.
+  coll.find.mockImplementation((query?: { status?: unknown }) => {
+    const wanted = query?.status;
+    const rows = typeof wanted === "string" ? bills.filter((b) => b.status === wanted) : bills;
+    return {
+      toArray: vi.fn().mockResolvedValue(rows),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+    };
   });
 }
 

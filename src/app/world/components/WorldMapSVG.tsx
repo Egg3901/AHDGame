@@ -23,6 +23,7 @@ import { REGION_SHARDS } from "@/lib/maps/regionManifest";
 import { computeRegionBlobs, selectStructuralOverlayShards } from "@/lib/maps/regionOverlay";
 import { WORLD_OVERLAY_OWNER_FOLD } from "@/lib/maps/germanyGeometry";
 import { VIETNAM_BASE_FEATURE_ID, VIETNAM_GEO_URL } from "@/lib/maps/vietnamGeometry";
+import { HISTORICAL_GEO_URL } from "@/lib/maps/historicalGeometry";
 import { simplifyForGlobe } from "@/lib/maps/simplifyForGlobe";
 import GlobeMetricPanel from "./GlobeMetricPanel";
 import type { CountryAccessMap } from "../page";
@@ -446,6 +447,7 @@ export default function WorldMapSVG({
         // Best-effort, exactly like the region overlay: without it Vietnam draws
         // as one unified background country rather than not at all.
       }
+
       featuresRef.current = geojson.features;
 
       const centroids = new Map<string, [number, number]>();
@@ -563,6 +565,44 @@ export default function WorldMapSVG({
         }
       } catch {
         // overlay is best-effort — the base country map still renders without it
+      }
+
+      // The historical territories — protectorates, trust territories and
+      // international zones that sit INSIDE a modern country and so have no ISO
+      // numeric of their own. Unlike Vietnam these do NOT replace a base feature:
+      // the Saar is drawn on top of Germany and Zanzibar on top of Tanzania, and
+      // dropping the host would erase a country that very much exists in 1953.
+      //
+      // ⚠️ Appended LAST — after the region-overlay blobs, not merely after the base
+      // countries. d3 draws in array order, so appending earlier buried the two whose
+      // host HAS a region shard (the Saar is one of Germany's Länder; Trieste sits
+      // inside Italy's macro-regions) under their host's blob, and they disappeared.
+      // Every step above this point only appends to `geojson.features` or replaces it
+      // wholesale, so this is the one position nothing later can cover or filter out.
+      //
+      // Placed AFTER the overlay's try/catch rather than inside it: that block
+      // swallows its own failures, so control reaches here whether or not the
+      // overlay rendered, and a failed overlay must not also cost us these.
+      //
+      // This ordering bites in the HEATMAP modes. In the structural modes these are
+      // background-tier and merged into one silhouette drawn before every individual
+      // path, so they are not separately visible there at any position — see the
+      // tier note in historicalGeometry.
+      try {
+        const histResp = await fetch(HISTORICAL_GEO_URL, { cache: "no-store" });
+        if (histResp.ok) {
+          const hist = await histResp.json();
+          for (const f of hist?.features ?? []) {
+            geojson.features.push(f);
+            // The centroid pass ran before these existed, so each one is set here —
+            // without it every label and zoom-to lookup misses these territories.
+            centroids.set(String(f.id), d3.geoCentroid(f));
+          }
+          featuresRef.current = geojson.features;
+        }
+      } catch {
+        // Best-effort: without it those territories are simply not drawn, which is
+        // the behaviour that shipped before they existed.
       }
 
       centroidsRef.current = centroids;

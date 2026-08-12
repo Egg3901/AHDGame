@@ -202,7 +202,6 @@ function buildCorpParticipants(input: {
     const priceAnchor = convertLocalPriceToAnchor(
       executionPrice,
       corp.liquidCurrencyCode,
-      fund.anchorCurrencyCode,
       exchangeRates
     );
     if (priceAnchor === null || priceAnchor <= 0) continue;

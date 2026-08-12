@@ -5,13 +5,13 @@ describe("1953 GDR regional macro texture", () => {
   it("varies labor friction, poverty, and fertility without moving the national baseline", () => {
     const values = (path: "unemploymentRate" | "povertyRate") =>
       ddStateMetrics1953.map((row) => row.economic[path].value);
-    // `birthRate` is optional on StateMetrics, so assert every DD row carries
-    // one rather than asserting it away: a row that lost its fertility metric
-    // should fail this test, not read as 0.
+    // birthRate is optional on the metric shape. Every 1953 DD row is expected
+    // to carry one, so assert that rather than papering over a missing row with
+    // a default that would quietly weaken the variance check below.
     const birthRates = ddStateMetrics1953.map((row) => {
       const birthRate = row.population.birthRate;
-      expect(birthRate, "every DD 1953 row must define population.birthRate").toBeDefined();
-      return birthRate!.value;
+      if (!birthRate) throw new Error("every DD 1953 state row must carry a birthRate");
+      return birthRate.value;
     });
     const mean = (rows: number[]) => rows.reduce((sum, value) => sum + value, 0) / rows.length;
 

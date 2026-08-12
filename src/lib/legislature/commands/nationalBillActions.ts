@@ -3,6 +3,7 @@ import { recordAudit } from "@/lib/audit/recordAudit";
 import type { LegislatureCommandResult } from "@/lib/legislature/commands/types";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
+import { resolveBillVoteField } from "@/lib/congress/billVoteField";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import { applyBillVotePolicyShift } from "@/lib/policyShift";
 import { executePresidentialBillAction } from "@/lib/presidentialBillAction";
@@ -92,7 +93,10 @@ export async function performNationalBillAction(
     const isJpOverride = bill.status === "override_shugiin";
     const isOrigin = bill.status === "active" || isJpOverride;
 
-    if (!isCabinetReview && !isOrigin && !isOtherChamber) {
+    // Both chambers vote at once; `currentChamber` cannot express that, so the voter's
+    // own seat decides which map and which deadline apply.
+    const isConcurrent = bill.status === "active_both";
+    if (!isCabinetReview && !isOrigin && !isOtherChamber && !isConcurrent) {
       return {
         status: 409,
         body: { error: "This bill is not currently open for voting." },
@@ -177,9 +181,23 @@ export async function performNationalBillAction(
     }
 
     const chamberType = bill.currentChamber === "joint" ? lowerKey : bill.currentChamber;
+    // A concurrent bill has no single current chamber, so eligibility is "a member of
+    // EITHER voting chamber". Resolved BEFORE the joint ternary above is consulted:
+    // `currentChamber` is a display default on these bills, never the authority.
+    //
+    // `chamberOfficeTypes` carries the preset; the single-chamber lookup below did not
+    // (a pre-existing drop — line 63 of this same function passes one), and
+    // getOfficeTypeForChamber's own doc comment names TR 1953-vs-1979 as the reason the
+    // parameter exists.
+    //
+    // The non-concurrent path keeps its exact single-value query shape, so no existing
+    // path changes (and no single-element $in replaces an equality match).
+    const officeTypeFilter = isConcurrent
+      ? { $in: chamberOfficeTypes }
+      : getOfficeTypeForChamber(countryId, chamberType, preset);
     const official = await db.collection<ElectedOfficial>("electedOfficials").findOne({
       characterId: character._id,
-      officeType: getOfficeTypeForChamber(countryId, chamberType),
+      officeType: officeTypeFilter,
       countryId,
     });
     if (!official) {
@@ -195,9 +213,42 @@ export async function performNationalBillAction(
 
     const weight = official.seatsHeld ?? 1;
 
-    if (isOtherChamber) {
+    /**
+     * Which map this voter writes into.
+     *
+     * Undefined for every non-concurrent status, where the existing branches decide.
+     */
+    const concurrentField = isConcurrent
+      ? resolveBillVoteField(bill, {
+          voterOfficeType: official.officeType,
+          lowerOfficeType: chamberOfficeTypes[0],
+        })
+      : undefined;
+
+    // ⚠️ Under `active_both` all three status flags above are false, so BOTH deadline
+    // guards were skipped entirely and late votes were accepted until the engine
+    // happened to close the bill. Nothing errored — this is the guard that was missing.
+    if (isConcurrent) {
+      const ended =
+        concurrentField === "otherChamberVotes"
+          ? isVotingDeadlinePassed(
+              bill.otherChamberVotingEndsAt,
+              now,
+              bill.otherChamberVotingEndsOnTurn,
+              currentTurn
+            )
+          : isVotingDeadlinePassed(bill.votingEndsAt, now, bill.votingEndsOnTurn, currentTurn);
+      if (ended) {
+        return { status: 409, body: { error: "Voting has ended for this bill." } };
+      }
+    }
+
+    if (isOtherChamber || concurrentField === "otherChamberVotes") {
       const voteResult = await db.collection<Bill>("bills").updateOne(
-        { _id: bill._id, status: "active_other" },
+        // BOTH filters accept `active_both`: the upper voter reaches this branch and the
+        // lower voter the one below, so teaching only one leaves half the chamber with
+        // "this bill changed before your vote could be recorded".
+        { _id: bill._id, status: isConcurrent ? "active_both" : "active_other" },
         buildEmbeddedVoteTallyUpdate({
           voteField: "otherChamberVotes",
           voteKey: charKey,
@@ -226,7 +277,10 @@ export async function performNationalBillAction(
       );
     } else {
       const voteResult = await db.collection<Bill>("bills").updateOne(
-        { _id: bill._id, status: isJpOverride ? "override_shugiin" : "active" },
+        {
+          _id: bill._id,
+          status: isConcurrent ? "active_both" : isJpOverride ? "override_shugiin" : "active",
+        },
         buildEmbeddedVoteTallyUpdate({
           voteField: "votes",
           voteKey: charKey,
@@ -255,11 +309,24 @@ export async function performNationalBillAction(
       category: "governance",
       subject: { type: "bill", id: bill._id.toString(), name: bill.title },
       refs: { billId: bill._id },
-      meta: { vote, chamber: isOtherChamber ? "other" : "origin", weight, countryId },
+      meta: {
+        vote,
+        // Follows the VOTER's chamber: under active_both, isOtherChamber is false for
+        // everyone, so every upper-chamber vote would be logged as an origin vote.
+        chamber: isOtherChamber || concurrentField === "otherChamberVotes" ? "other" : "origin",
+        weight,
+        countryId,
+      },
       outcome: "ok",
     });
 
-    const previousVote = isOtherChamber ? bill.otherChamberVotes?.[charKey] : bill.votes?.[charKey];
+    // Read from the VOTER's own map. Under active_both, isOtherChamber is false for
+    // everyone, so an upper-chamber voter's prior vote was looked up in the lower map --
+    // always absent -- and the policy shift re-fired every time they changed their vote.
+    const previousVote =
+      isOtherChamber || concurrentField === "otherChamberVotes"
+        ? bill.otherChamberVotes?.[charKey]
+        : bill.votes?.[charKey];
     if (!previousVote || previousVote === "abstain") {
       try {
         await applyBillVotePolicyShift(
@@ -491,6 +558,20 @@ export async function performNationalBillAction(
       };
     }
 
+    // `active_both` is deliberately absent from the two flags below: a filibuster
+    // parks the bill and restores `preFilibusterStatus`, which only models the
+    // sequential statuses, and it would stall one chamber's clock while the other
+    // kept running. Refused by name so the Senate is told why, rather than being
+    // told the bill is not being voted on when it plainly is.
+    if (bill.status === "active_both") {
+      return {
+        status: 409,
+        body: {
+          error:
+            "A bill before both chambers at once cannot be filibustered — each chamber votes on its own clock.",
+        },
+      };
+    }
     const isSenateOrigin = bill.status === "active" && bill.currentChamber === "senate";
     const isSenateOther = bill.status === "active_other" && bill.currentChamber === "senate";
     if (!isSenateOrigin && !isSenateOther) {

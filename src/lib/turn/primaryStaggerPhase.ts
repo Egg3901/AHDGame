@@ -14,6 +14,7 @@
  * Called from `primaryResolution.ts` before the existing primary-end check.
  */
 
+import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type {
@@ -218,7 +219,7 @@ export async function runPrimaryStaggerWaveIfDue(
 
   const waveStates = wave.states;
   const [categories, states, demographics, partyOrgs, turnoutDocs] = await Promise.all([
-    db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+    loadDemographicCategories(db),
     db
       .collection<State>("states")
       .find({ _id: { $in: waveStates } })

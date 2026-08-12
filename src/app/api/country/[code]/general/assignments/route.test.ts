@@ -45,7 +45,16 @@ describe("PUT general assignments", () => {
     db.collection("characterGenerals");
     db.collection("conflicts");
     // Postings validate their theaterId against live conflicts; "afghan" is live.
+    // The doc itself is read, not just counted: a posting to a PROXY war is refused
+    // unless the country is already a belligerent, so the gate needs the rosters.
+    // This one is an ordinary interstate war, which that narrowing must not catch.
     db.collectionMocks.conflicts.countDocuments.mockResolvedValue(1);
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({
+      _id: "afghan",
+      type: "war",
+      sideA: { label: "NATO", countries: ["US"], kind: "coalition", backer: "west" },
+      sideB: { label: "PLA", countries: ["CN"], kind: "state", backer: "east" },
+    });
     db.collectionMocks.gameState.findOne.mockResolvedValue({ conflictsEnabled: true });
     db.collectionMocks.militaryCommands.findOne.mockResolvedValue({
       countryId: "US",
@@ -139,12 +148,43 @@ describe("PUT general assignments", () => {
 
   it("400s an unknown theater", async () => {
     db.collectionMocks.conflicts.countDocuments.mockResolvedValue(0); // no such conflict
+    db.collectionMocks.conflicts.findOne.mockResolvedValue(null);
     const { PUT } = await import(ROUTE);
     const res = await PUT(
       req({ conflictAssignments: [assignment({ theaterId: "atlantis" })] }),
       call
     );
     expect(res.status).toBe(400);
+  });
+
+  it("400s a posting to a proxy war the country has not joined", async () => {
+    // `sideOf` would place the US here by backer. Posting a general is the quietest
+    // of the three doors into a war the design says is entered by a bloc vote and a
+    // vote of your own legislature.
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({
+      _id: "afghan",
+      type: "cold_war",
+      sideA: { label: "RVN", countries: [], kind: "generated", backer: "west" },
+      sideB: { label: "DRV", countries: [], kind: "generated", backer: "east" },
+    });
+    const { PUT } = await import(ROUTE);
+    const res = await PUT(req({ conflictAssignments: [assignment()] }), call);
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/not a belligerent/i);
+  });
+
+  it("allows the posting once the country is on a proxy war's roster", async () => {
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({
+      _id: "afghan",
+      type: "cold_war",
+      sideA: { label: "RVN", countries: ["US"], kind: "generated", backer: "west" },
+      sideB: { label: "DRV", countries: [], kind: "generated", backer: "east" },
+    });
+    const { PUT } = await import(ROUTE);
+    const res = await PUT(req({ conflictAssignments: [assignment()] }), call);
+
+    expect(res.status).toBe(200);
   });
 
   it("404s when conflicts is disabled", async () => {

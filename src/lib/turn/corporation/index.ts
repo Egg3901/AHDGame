@@ -35,6 +35,8 @@ import {
   type LabourContext,
 } from "@/lib/labour/laborCost";
 import { buildOwnedUnionMembershipPressureByKey } from "@/lib/unions/unionLookups";
+import { loadCollectiveAgreementEffects } from "@/lib/unions/collectiveAgreementEffects";
+import { loadIndustrialActionOutputFactors } from "@/lib/unions/industrialActionEffects";
 import {
   fireStrikeStartedPulse,
   fireStrikeResolvedPulse,
@@ -162,6 +164,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           sectorQualityEnabled: 1,
           qualityPremiumPricingEnabled: 1,
           commandEconomyEnabled: 1,
+          privateBankingEnabled: 1,
         },
       }
     ),
@@ -188,6 +191,9 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const commandEconomyEnabled =
     (marketGovernorConfig as { commandEconomyEnabled?: boolean } | null)?.commandEconomyEnabled ===
     true;
+  const privateBankingEnabled =
+    (marketGovernorConfig as { privateBankingEnabled?: boolean } | null)?.privateBankingEnabled ===
+    true;
   const subsidiaryCorporationsEnabled = await isSubsidiaryCorporationsEnabled(
     gameState ?? undefined
   );
@@ -198,6 +204,17 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // sector inside processSectors from sectorType + currentYear). Inert (no
   // economic change) when the mode is off — the default.
   const fullEnabled = labourAtLeast(labourMode, "full");
+  const [
+    ownedUnionMembershipPressureByKey,
+    collectiveAgreementEffects,
+    industrialActionOutputFactorBySectorId,
+  ] = fullEnabled
+    ? await Promise.all([
+        buildOwnedUnionMembershipPressureByKey(db),
+        loadCollectiveAgreementEffects(db, turn ?? gameState?.currentTurn ?? 0),
+        loadIndustrialActionOutputFactors(db),
+      ])
+    : [undefined, undefined, undefined];
   const labour: LabourContext = {
     wagesEnabled: labourAtLeast(labourMode, "wages"),
     minWageRatioByCountry: buildMinWageRatioByCountry(lookups.federalBudgets),
@@ -212,9 +229,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     unionsBannedByCountry: buildUnionsBannedByCountry(lookups.federalBudgets),
     // v3 Phase 8: gated read — only fetched when fullEnabled, so a union
     // document's mere existence never has an effect at a lower tier.
-    ownedUnionMembershipPressureByKey: fullEnabled
-      ? await buildOwnedUnionMembershipPressureByKey(db)
-      : undefined,
+    ownedUnionMembershipPressureByKey,
+    collectiveAgreementWageFloorBySectorId: collectiveAgreementEffects?.wageFloorBySectorId,
+    noStrikeProtectedSectorIds: collectiveAgreementEffects?.noStrikeProtectedSectorIds,
+    industrialActionOutputFactorBySectorId,
   };
   mark("labourContext");
 
@@ -272,6 +290,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       )
       .toArray();
     for (const a of agreements as unknown as {
+      _id: ObjectId;
       supplierCorpId: ObjectId;
       buyerCorpId: ObjectId;
       commodity: CommodityType;
@@ -287,6 +306,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       contractedByCorpCommodity.set(corpId, byCommodity);
       if (a.exclusive) exclusiveByCorpCommodity.add(`${corpId}:${a.commodity}`);
       settleableAgreements.push({
+        agreementId: a._id?.toString(),
         supplierCorpId: corpId,
         buyerCorpId: a.buyerCorpId.toString(),
         commodity: a.commodity,
@@ -741,7 +761,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     labour,
     market,
     subsidiaryCorporationsEnabled,
-    commandEconomyEnabled
+    commandEconomyEnabled,
+    privateBankingEnabled
   );
   mark("processSectors(CPU)");
 
@@ -1104,7 +1125,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // supplier is credited and the buyer debited the same ₳ premium delta.
   if (supplyAgreementsEnabled && settleableAgreements && settleableAgreements.length > 0) {
     try {
-      const { settledCount } = await settleSupplyAgreements({
+      const { settledCount, settledPremiums } = await settleSupplyAgreements({
         db,
         lookups,
         agreements: settleableAgreements,
@@ -1119,6 +1140,47 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       if (settledCount > 0) {
         console.log(`[corporationTurn] settled ${settledCount} supply-agreement premium(s)`);
       }
+
+      // C5: intra-group cross-border pricing. Runs off the same settled premiums
+      // rather than re-deriving them, so what the tax authority sees is exactly
+      // what the contract priced. Best-effort.
+      if (settledPremiums.length > 0) {
+        try {
+          const { applyTransferPricingAudit } = await import(
+            "@/lib/corporations/groups/applyTransferPricingAudit"
+          );
+          const tp = await applyTransferPricingAudit(
+            db,
+            settledPremiums,
+            lookups.domesticCorpTaxRateByCountry,
+            turn ?? 0,
+            now
+          );
+          if (tp.auditsAssessed > 0) {
+            console.log(
+              `[corporationTurn] transfer pricing: ${tp.auditsAssessed} assessment(s), ₳${Math.round(tp.totalAssessedAnchor).toLocaleString()} across ${tp.positionsTracked} tracked position(s)`
+            );
+            corpAuditEntries.push({
+              source: "turn",
+              category: "corp",
+              action: "corp.transfer_pricing_sweep",
+              phase: "corporationTurn",
+              subject: { type: "corpBatch", name: "transfer pricing sweep" },
+              outcome: "ok",
+              meta: {
+                positionsTracked: tp.positionsTracked,
+                auditsAssessed: tp.auditsAssessed,
+                assessedAnchor: Math.round(tp.totalAssessedAnchor),
+              },
+            });
+          }
+          if (tp.errors.length > 0) {
+            console.error("[corporationTurn] transfer pricing errors:", tp.errors.slice(0, 5));
+          }
+        } catch (err) {
+          console.error("[corporationTurn] transfer pricing audit failed:", err);
+        }
+      }
     } catch (err) {
       console.error("[corporationTurn] supply-agreement settlement failed:", err);
     }
@@ -1130,6 +1192,74 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     await processImfBailoutPayments(db, turn, corpSnapshots, lookups.corporations);
   }
   mark("imfBailout");
+
+  // Phase 3e (C4): group loss relief. Runs AFTER tax has been charged and after
+  // IMF remittances, so it reads the same per-corp figures the treasury
+  // actually collected against. Implemented as a rebate rather than a
+  // consolidated recomputation — arithmetically identical for the turn, and
+  // additive instead of unpicking the per-corp tax the whole snapshot is
+  // derived from. Best-effort: a hiccup must not fail the turn.
+  if (typeof turn === "number" && corpSnapshots.length > 0) {
+    try {
+      const { applyGroupLossRelief } = await import("@/lib/corporations/groups/applyGroupRelief");
+      const relief = await applyGroupLossRelief(
+        db,
+        corpSnapshots.map((snap) => ({
+          corpId: snap.corpId,
+          incomePreDividends: snap.incomePreDividends,
+          federalTaxPaid: snap.federalTaxPaid,
+          stateTaxPaid: snap.stateTaxPaid,
+        })),
+        turn,
+        now
+      );
+      if (relief.corpsCredited > 0) {
+        console.log(
+          `[corporationTurn] group relief: ${relief.groupsRelieved} group(s), ${relief.corpsCredited} corp(s), ₳${Math.round(relief.totalReliefAnchor).toLocaleString()}`
+        );
+        corpAuditEntries.push({
+          source: "turn",
+          category: "corp",
+          action: "corp.group_loss_relief",
+          phase: "corporationTurn",
+          subject: { type: "corpBatch", name: "group loss relief" },
+          outcome: "ok",
+          meta: {
+            groups: relief.groupsRelieved,
+            corps: relief.corpsCredited,
+            reliefAnchor: Math.round(relief.totalReliefAnchor),
+          },
+        });
+      }
+      if (relief.errors.length > 0) {
+        console.error("[corporationTurn] group relief errors:", relief.errors.slice(0, 5));
+      }
+    } catch (err) {
+      console.error("[corporationTurn] group loss relief failed:", err);
+    }
+  }
+  mark("groupLossRelief");
+
+  // Phase 3f (C6): group operating synergies. A group's members converge toward
+  // its best marketing and logistics capability — upward only, so acquiring a
+  // weak subsidiary never drags a strong parent down. Best-effort.
+  if (typeof turn === "number") {
+    try {
+      const { applyGroupSynergies } = await import("@/lib/corporations/groups/applySynergies");
+      const synergies = await applyGroupSynergies(db, turn);
+      if (synergies.corpsLifted > 0) {
+        console.log(
+          `[corporationTurn] group synergies: lifted ${synergies.corpsLifted} corp(s) across ${synergies.groupsProcessed} group(s)`
+        );
+      }
+      if (synergies.errors.length > 0) {
+        console.error("[corporationTurn] group synergy errors:", synergies.errors.slice(0, 5));
+      }
+    } catch (err) {
+      console.error("[corporationTurn] group synergies failed:", err);
+    }
+  }
+  mark("groupSynergies");
 
   // Phase 4 (+4b diagnostic): Update domestic/foreign corporate profits tax
   // bases (75% GDP-derived floor + 25% actual annualised corp income) — see
@@ -1419,6 +1549,34 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       } catch (err) {
         console.error("[corporationTurn] subsidiary cleanup failed:", err);
       }
+    }
+
+    // Merger review (C3): decide every referral whose deadline has passed on the
+    // published bands, then fine any corporation still sitting on an overdue
+    // divestiture order. Runs after subsidiary cleanup so the controlled-group
+    // measurement reads settled ownership. Best-effort: a hiccup must not fail
+    // the turn.
+    try {
+      const { resolveDueMergerReviews, fineOverdueDivestitures } =
+        await import("@/lib/corporations/mergerReview/lifecycle");
+      const { resolved } = await resolveDueMergerReviews(db, turn);
+      const { fined, totalAnchor } = await fineOverdueDivestitures(db, turn);
+      if (resolved > 0 || fined > 0) {
+        console.log(
+          `[corporationTurn] merger review: ${resolved} referral(s) resolved on deadline, ${fined} overdue divestiture(s) fined`
+        );
+        corpAuditEntries.push({
+          source: "turn",
+          category: "corp",
+          action: "corp.merger_review_sweep",
+          phase: "corporationTurn",
+          subject: { type: "corpBatch", name: "merger review sweep" },
+          outcome: "ok",
+          meta: { resolved, fined, finesAnchor: totalAnchor },
+        });
+      }
+    } catch (err) {
+      console.error("[corporationTurn] merger review sweep failed:", err);
     }
 
     // NPP-corp bankruptcy exit: player corps get nationalized/dissolved when

@@ -236,6 +236,7 @@ export function europe1953Entries(presetId: string): WorldEntityManifestEntry[] 
       un: unIneligible(),
       lifecycle: { earliestYear: 1955, expectedYear: 1957, latestYear: 1959 },
       notes: "Approx.: treated as FR-dependent protectorate pending 1955 Saar Statute vote.",
+      mapFeatureIds: ["SAAR"],
     }),
     tier3Entry(presetId, {
       entityId: "FTT",
@@ -250,6 +251,7 @@ export function europe1953Entries(presetId: string): WorldEntityManifestEntry[] 
       un: unIneligible(),
       lifecycle: { earliestYear: 1954, expectedYear: 1954, latestYear: 1955 },
       notes: "Dissolves via London Memorandum 1954; no single metropolitan parent.",
+      mapFeatureIds: ["FTT"],
     }),
   ];
 }

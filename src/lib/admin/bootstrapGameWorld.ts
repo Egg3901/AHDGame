@@ -737,6 +737,15 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     log(`NPP corporations seeded: ${r.totalSpawned} corps`);
   });
 
+  // NPC retail banks: NPP financial corps + real issueCharter path. After
+  // seedNppCorporations / seedForex so HQ states, FX, and capital maths work.
+  // Idempotent; not gated on privateBankingEnabled (runtime flag gates policy).
+  await guarded("seedNpcBanks", async () => {
+    const { seedNpcBanks } = await import("@/lib/admin/seed/seedNpcBanks");
+    const r = await seedNpcBanks(db, log);
+    log(`NPC banks seeded: created=${r.created} existing=${r.skippedExisting}`);
+  });
+
   if (seedOnly) {
     log("Seed-only complete — skipped elections, officials, and game state init");
     return;

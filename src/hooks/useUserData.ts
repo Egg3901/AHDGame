@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useMemo } from "react";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 
 interface UserData {
@@ -34,14 +35,24 @@ interface UseUserDataResult {
 export function useUserData(): UseUserDataResult {
   const { user, loading, authFetchError, refetch } = useAuthMe();
 
-  const userData: UserData | null = user
-    ? { username: user.username, isAdmin: user.isAdmin }
-    : null;
+  // Stable identities: consumers hang effect deps off these, so fresh objects
+  // every render caused spurious effect re-runs.
+  const userData: UserData | null = useMemo(
+    () => (user ? { username: user.username, isAdmin: user.isAdmin } : null),
+    [user]
+  );
 
-  const homeState: HomeState | null =
-    user?.character?.homeState && user?.character?.homeStateName
-      ? { id: user.character.homeState, name: user.character.homeStateName }
-      : null;
+  const homeState: HomeState | null = useMemo(
+    () =>
+      user?.character?.homeState && user?.character?.homeStateName
+        ? { id: user.character.homeState, name: user.character.homeStateName }
+        : null,
+    [user]
+  );
+
+  const stableRefetch = useCallback(async () => {
+    refetch(true);
+  }, [refetch]);
 
   return {
     userData,
@@ -50,8 +61,6 @@ export function useUserData(): UseUserDataResult {
     homeState,
     loading,
     error: authFetchError === "none" ? null : authFetchError,
-    refetch: async () => {
-      refetch(true);
-    },
+    refetch: stableRefetch,
   };
 }

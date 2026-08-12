@@ -58,6 +58,7 @@ import { gameConfig as referenceGameConfig } from "../../src/lib/seeds/reference
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "../../src/lib/market/modes";
 import { TURNS_PER_DAY } from "../../src/lib/constants/corporations";
 import type { MigrationResult } from "../../src/lib/migrations/types";
+import type { GameConfig } from "../../src/lib/db/types";
 
 const MARKER_ID = "2026-08-08-adopt-reference-gameconfig-gates";
 
@@ -79,13 +80,13 @@ export async function runAdoptReferenceGameConfigGates(
   const dryRun = opts.dryRun ?? false;
   const notes: string[] = [];
 
-  const live = await db
-    .collection<{ _id: string } & Record<string, unknown>>("gameConfig")
-    .findOne({ _id: referenceGameConfig._id });
+  const gameConfigCollection = db.collection<GameConfig>("gameConfig");
+  const live = await gameConfigCollection.findOne({ _id: referenceGameConfig._id });
   if (!live) {
     notes.push("no gameConfig document — nothing to reconcile (a fresh seed will create it)");
     return { documentsScanned: 0, documentsUpdated: 0, notes };
   }
+  const liveValues = live as unknown as Record<string, unknown>;
 
   const gameState = await db
     .collection("gameState")
@@ -103,15 +104,15 @@ export async function runAdoptReferenceGameConfigGates(
     // `marketSystemMode` is pass 2's business — it has provenance stamps and a
     // ladder, and must never be moved by a blunt value comparison.
     if (key === "marketSystemMode") continue;
-    if (live[key] === undefined) {
+    if (liveValues[key] === undefined) {
       set[key] = value;
       filled.push(key);
       continue;
     }
     const isGate = typeof value === "boolean" || typeof value === "string";
-    if (isFreshWorld && isGate && live[key] !== value) {
+    if (isFreshWorld && isGate && liveValues[key] !== value) {
       set[key] = value;
-      readopted.push(`${key}: ${JSON.stringify(live[key])} -> ${JSON.stringify(value)}`);
+      readopted.push(`${key}: ${JSON.stringify(liveValues[key])} -> ${JSON.stringify(value)}`);
     }
   }
   notes.push(filled.length > 0 ? `absent gates filled: ${filled.join(", ")}` : "no absent gates");
@@ -162,9 +163,7 @@ export async function runAdoptReferenceGameConfigGates(
     return { documentsScanned: 1, documentsUpdated: 0, notes };
   }
 
-  await db
-    .collection<{ _id: string } & Record<string, unknown>>("gameConfig")
-    .updateOne({ _id: referenceGameConfig._id }, { $set: set });
+  await gameConfigCollection.updateOne({ _id: referenceGameConfig._id }, { $set: set });
 
   // Written directly rather than through `createAdminLog`, which opens its own
   // connection via getDb(); the runner already handed us a Db.

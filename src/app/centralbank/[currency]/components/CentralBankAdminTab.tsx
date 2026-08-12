@@ -598,7 +598,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
                   const utilPct = (b.utilization * 100).toFixed(0);
                   const repayLabel =
                     b.turnsToRepay === null
-                      ? "—"
+                      ? "-"
                       : b.turnsToRepay >= 50000
                         ? "50k+"
                         : String(b.turnsToRepay);
@@ -638,7 +638,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
                         {formatAmount(b.outstandingInternal)}
                       </td>
                       <td className="px-4 py-2 text-right tabular-nums">
-                        {b.creditLimitInternal > 0 ? formatAmount(b.creditLimitInternal) : "—"}
+                        {b.creditLimitInternal > 0 ? formatAmount(b.creditLimitInternal) : "-"}
                       </td>
                       <td className="px-4 py-2 text-right tabular-nums">{utilPct}%</td>
                       <td className={`px-4 py-2 text-xs font-semibold ${statusClass}`}>
@@ -765,7 +765,7 @@ function DepositDetailPanel({
                   {formatNative(row.balanceAfter, row.currencyCode as CurrencyCode)}
                 </td>
                 <td className="px-3 py-2 text-right text-muted hidden sm:table-cell">
-                  {row.turn != null ? `T${row.turn}` : "—"}
+                  {row.turn != null ? `T${row.turn}` : "-"}
                 </td>
               </tr>
             ))}
@@ -913,10 +913,10 @@ function LoanDetailPanel({
                     {formatNative(row.amount, cc)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted hidden md:table-cell">
-                    {hasSplit ? formatNative(row.interestPortion ?? 0, cc) : "—"}
+                    {hasSplit ? formatNative(row.interestPortion ?? 0, cc) : "-"}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted hidden md:table-cell">
-                    {hasSplit ? formatNative(row.principalPortion ?? 0, cc) : "—"}
+                    {hasSplit ? formatNative(row.principalPortion ?? 0, cc) : "-"}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted">
                     {formatNative(row.balanceAfter, cc)}
@@ -925,7 +925,7 @@ function LoanDetailPanel({
                     {formatNative(row.arrearsAfter, cc)}
                   </td>
                   <td className="px-3 py-2 text-right text-muted hidden sm:table-cell">
-                    {row.turn != null ? `T${row.turn}` : "—"}
+                    {row.turn != null ? `T${row.turn}` : "-"}
                   </td>
                 </tr>
               );

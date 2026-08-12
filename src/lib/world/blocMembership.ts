@@ -68,3 +68,25 @@ export async function loadBlocMembership(
   }
   return out;
 }
+
+/**
+ * The organisation a bloc admits new members through, in this world.
+ *
+ * ⚠️ Keyed on the PRESET, exactly as `loadBlocMembership` above is — never on the
+ * live year. `resolveAlignmentEra` flips to the post-Cold-War era at 1991, where the
+ * only accession channels are WASHINGTON ones: Moscow and Beijing have no surviving
+ * bloc org there. A year-derived lookup would therefore return nothing for the East
+ * the moment a 1953 game's clock passed 1991 — and the winner of a proxy war would
+ * take a country into an organisation that does not exist, admitting nobody, in
+ * silence. A 1953 world has a Warsaw Pact in its year 2050.
+ */
+export function blocOrgFor(preset: string | undefined, bloc: WorldBloc): string | null {
+  const year = PRESET_YEAR[preset ?? ""] ?? PRESET_YEAR[DEFAULT_PRESET];
+  for (const channel of resolveAlignmentEra(year).channels) {
+    if (!channel.alignmentAccession) continue;
+    if (BLOC_BY_POLE[channel.poleId] !== bloc) continue;
+    if (!(channel.organizationId in INTERNATIONAL_ORGANIZATIONS)) continue;
+    return channel.organizationId;
+  }
+  return null;
+}

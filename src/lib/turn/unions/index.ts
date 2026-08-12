@@ -1,17 +1,27 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Character, State, Union, User } from "@/lib/db/types";
+import type { UnionOrganizer } from "@/lib/db/types/union";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
-import { duesTrickle, decayMembershipPressure } from "@/lib/unions/unionEconomy";
+import {
+  duesTrickle,
+  decayMembershipPressure,
+  UNION_STRENGTH_DECAY_PER_TURN,
+} from "@/lib/unions/unionEconomy";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
 import { seedUnions } from "@/lib/admin/seed/seedUnions";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoSectorShed";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
+import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { processLabourRelationsTurn } from "./labourRelationsTurn";
 
 export interface UnionsTurnResult {
   unionsProcessed: number;
   vacatedForInactivity: number;
+  campaignsMovedToDispute: number;
+  agreementsExpired: number;
+  mediationsExpired: number;
 }
 
 /**
@@ -50,8 +60,16 @@ export interface UnionsTurnResult {
  */
 export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
   if (!(await isLabourFullMode())) {
-    return { unionsProcessed: 0, vacatedForInactivity: 0 };
+    return {
+      unionsProcessed: 0,
+      vacatedForInactivity: 0,
+      campaignsMovedToDispute: 0,
+      agreementsExpired: 0,
+      mediationsExpired: 0,
+    };
   }
+
+  const labourRelations = await processLabourRelationsTurn(db, await getCurrentTurn(db));
 
   // Safety net: at "full" the roster must be COMPLETE — one union per
   // (country, sectorType) for every seeded country (unions are only ever
@@ -81,6 +99,32 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
     );
   }
 
+  // Union strength decay. Unlike dues and pressure this runs for EVERY union,
+  // led or not, and for every organizer's banked total alongside it, because
+  // strength is built by the rank and file rather than by a president: an
+  // unowned union that nobody organizes must bleed power too, and the vote
+  // weights have to decay in step with the pool they came from or the two
+  // numbers drift apart. Suspended unions stay frozen, same as dues.
+  const suspendedUnionIds = await db
+    .collection<Union>("unions")
+    .distinct("_id", { suspended: true });
+  const strengthDecayMultiplier = 1 - UNION_STRENGTH_DECAY_PER_TURN;
+  const decayStamp = new Date();
+  await Promise.all([
+    db
+      .collection<Union>("unions")
+      .updateMany(
+        { _id: { $nin: suspendedUnionIds }, strength: { $gt: 0 } },
+        { $mul: { strength: strengthDecayMultiplier }, $set: { updatedAt: decayStamp } }
+      ),
+    db
+      .collection<UnionOrganizer>("unionOrganizers")
+      .updateMany(
+        { unionId: { $nin: suspendedUnionIds }, strength: { $gt: 0 } },
+        { $mul: { strength: strengthDecayMultiplier }, $set: { updatedAt: decayStamp } }
+      ),
+  ]);
+
   const owned = await db
     .collection<Union>("unions")
     .find(
@@ -93,7 +137,7 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
     .toArray();
 
   if (owned.length === 0) {
-    return { unionsProcessed: 0, vacatedForInactivity: 0 };
+    return { unionsProcessed: 0, vacatedForInactivity: 0, ...labourRelations };
   }
 
   const now = new Date();
@@ -178,5 +222,9 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
     await db.collection<Union>("unions").bulkWrite(ops);
   }
 
-  return { unionsProcessed: stillOwned.length, vacatedForInactivity: vacatedUnionIds.length };
+  return {
+    unionsProcessed: stillOwned.length,
+    vacatedForInactivity: vacatedUnionIds.length,
+    ...labourRelations,
+  };
 }

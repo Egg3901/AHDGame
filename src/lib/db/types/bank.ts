@@ -1,0 +1,198 @@
+import type { ObjectId } from "mongodb";
+import type { CurrencyCode } from "@/lib/constants/currencies";
+
+/**
+ * Private banking (1.1). A corporation owning at least one `financial` sector
+ * may charter exactly one bank. Charter type is retail XOR investment while
+ * the era's Glass-Steagall separation is in force; a repeal unlocks universal.
+ */
+export type BankCharterType = "retail" | "investment" | "universal";
+
+export type BankCharterStatus = "active" | "revoked" | "failed";
+
+/** Where a character's per-currency savings balance is held. */
+export type SavingsHolder = "centralBank" | string; // string = bank corp id (hex)
+
+/**
+ * Sub-document on Corporation. Balance-sheet quantities are home-currency
+ * face values; the deposit/loan ledgers are the per-account source of truth
+ * and these are cached aggregates recomputed by bankingTurn.
+ */
+export interface BankCharter {
+  type: BankCharterType;
+  status: BankCharterStatus;
+  currency: CurrencyCode;
+  charteredTurn: number;
+  /** Capital posted at charter; absorbs losses before depositors do. */
+  postedCapital: number;
+  /** CEO-set offsets against prime, bounded by the Regulation Q corridor. */
+  depositOffset: number;
+  lendingOffset: number;
+  /**
+   * Cached deposit aggregate (recomputed each bankingTurn): player-held pointer
+   * deposits (characters with savingsHolder[CODE] = this bank) + npcDeposits.
+   */
+  totalDeposits?: number;
+  totalLoans?: number;
+  reserves?: number;
+  /**
+   * Captured NPC household deposits in home-currency face value. Moved each
+   * bankingTurn between this charter and the CB's externalBroadMoney.
+   */
+  npcDeposits?: number;
+  /**
+   * 0..1 solvency/liquidity confidence, recomputed each bankSolvencyTurn.
+   * Drives NPC deposit flight and the published warning band.
+   */
+  confidence?: number;
+  /** Contagion panic remaining; counts down by 1 each bankSolvencyTurn (floor 0). */
+  panicTurns?: number;
+  /** Published warning band one turn ahead of NPC flight bite (players see this). */
+  warningBand?: "green" | "amber" | "red";
+  /**
+   * Idempotency key for bankSolvencyTurn - standalone Mongo has no transactions.
+   * Set to the processed turn at the END of that bank's solvency pass.
+   */
+  lastSolvencyTurn?: number;
+  /** Share of financial-sector capacity allocated to the branch network (vs commodity output), 0..1. */
+  branchCapacityShare?: number;
+  /**
+   * Cached deposit ceiling recomputed each bankingTurn from financial-sector
+   * capacity × branchCapacityShare × DEPOSIT_CEILING_PER_CAPACITY_UNIT.
+   */
+  depositCeiling?: number;
+  /** Refused counterparties. Index funds blacklist every constituent. */
+  blacklist?: {
+    corporationIds?: string[];
+    characterIds?: string[];
+    indexFundIds?: string[];
+  };
+  /**
+   * Idempotency key for bankingTurn - standalone Mongo has no transactions.
+   * Set to the processed turn at the END of that bank's pass.
+   */
+  lastBankingTurn?: number;
+  /**
+   * Idempotency key for depositor resolution after failure. Set when
+   * resolveFailedBankDepositors finishes (insurance payouts / haircuts / holder flips).
+   */
+  depositorsResolvedTurn?: number;
+  revokedTurn?: number;
+  revokedReason?: string;
+  failedTurn?: number;
+  /**
+   * Proprietary trading book (investment / universal). Marked each
+   * bankSolvencyTurn; cash legs settle against the market counterparty.
+   */
+  propBook?: PropPosition[];
+  /** Outstanding principal borrowed on the interbank market (not retail totalLoans). */
+  interbankDebt?: number;
+  /** Outstanding CB margin-line principal (cash created at the CB on draw). */
+  cbMarginDebt?: number;
+  /**
+   * B8 discount window: outstanding emergency-liquidity principal owed to the
+   * central bank. Deposit-taking charters only. Carries a penalty rate AND a
+   * confidence penalty while outstanding — see `banking/discountWindow.ts`.
+   */
+  discountWindowDebt?: number;
+  /** Idempotency key for discount-window interest servicing in bankingTurn. */
+  lastDiscountWindowTurn?: number;
+  /** Window interest the bank could not pay, accrued against its headroom. */
+  discountWindowArrears?: number;
+  /** Cached sum of prop-book mark values; refreshed each bankSolvencyTurn. */
+  propBookMarkValue?: number;
+  /** Idempotency key for CB margin interest servicing in bankingTurn. */
+  lastCbMarginTurn?: number;
+  /**
+   * CB margin interest the bank could not pay, accumulated. Rolls into the
+   * principal the draw cap is measured against, so a bank that keeps missing
+   * payments loses headroom instead of borrowing interest-free forever.
+   */
+  cbMarginArrears?: number;
+
+  // ── B7 supervision ──────────────────────────────────────────────────
+  /** Capital standing at the last supervisory pass. Absent = never assessed. */
+  capitalStanding?: import("@/lib/banking/capitalAdequacy").CapitalStanding;
+  /** Capital / risk assets at the last pass, rounded to 4dp for display. */
+  capitalRatio?: number;
+  /** The same ratio after the published supervisory shock. */
+  stressedCapitalRatio?: number;
+  /**
+   * Turn the CURRENT undercapitalization began. Cleared the moment the bank is
+   * back above the minimum, so curing and later breaching again earns a fresh
+   * grace period rather than inheriting a stale clock.
+   */
+  undercapitalizedSinceTurn?: number;
+  /** Idempotency key for the supervisory pass. */
+  lastSupervisionTurn?: number;
+}
+
+/**
+ * Collection: bankCharterHistory. Snapshot of a charter sub-doc when it leaves
+ * active use (revoke, failure, or overwrite on recharter).
+ */
+export interface BankCharterHistoryEntry {
+  _id: ObjectId;
+  corporationId: ObjectId;
+  charter: BankCharter;
+  archivedTurn: number;
+  reason: "revoked" | "failed" | "recharter";
+}
+
+/** Collection: bankLoans. One doc per named loan (NPC bulk book lives on the charter). */
+export interface BankLoan {
+  _id: ObjectId;
+  bankCorporationId: ObjectId;
+  currency: CurrencyCode;
+  borrowerType: "corporation" | "character" | "npcBulk";
+  borrowerId?: ObjectId;
+  principal: number;
+  outstanding: number;
+  ratePercent: number;
+  originatedTurn: number;
+  /** Contract length in turns (required for named player loans). */
+  termTurns: number;
+  status: "current" | "arrears" | "defaulted" | "repaid";
+  /** Consecutive shortfall turns while in arrears; defaults at ARREARS_DEFAULT_TURNS. */
+  arrearsTurns?: number;
+  /** Idempotency key for turn processing — standalone Mongo has no transactions. */
+  lastProcessedTurn?: number;
+}
+
+/** Collection: depositInsuranceFunds. One per currency; premium-funded, Treasury backstop. */
+export interface DepositInsuranceFund {
+  _id: CurrencyCode;
+  balance: number;
+  /** Insured cap in local currency, era/FX-anchored at seed and re-anchorable. */
+  insuredCap: number;
+  premiumsCollectedLifetime: number;
+  payoutsLifetime: number;
+  treasuryBackstopLifetime: number;
+  lastProcessedTurn?: number;
+}
+
+/** Collection: interbankLoans. Retail bank lends non-reserved deposits to an investment bank. */
+export interface InterbankLoan {
+  _id: ObjectId;
+  lenderCorporationId: ObjectId;
+  borrowerCorporationId: ObjectId;
+  currency: CurrencyCode;
+  principal: number;
+  outstanding: number;
+  ratePercent: number;
+  originatedTurn: number;
+  status: "current" | "defaulted" | "repaid";
+  /** Consecutive interest shortfall turns; defaults at ARREARS_DEFAULT_TURNS. */
+  arrearsTurns?: number;
+  lastProcessedTurn?: number;
+}
+
+/** Prop-book position on an investment/universal bank (marked in bankSolvencyTurn). */
+export interface PropPosition {
+  asset: "equity" | "bond" | "indexUnit" | "forex";
+  /** Corp id / bond id / fund id / currency code depending on asset. */
+  ref: string;
+  units: number;
+  costBasis: number;
+  markValue?: number;
+}

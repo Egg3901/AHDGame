@@ -20,7 +20,6 @@
  */
 
 import type { Db } from "mongodb";
-import { IS_NUMERIC_BSON } from "@/lib/db/numericTypeFilter";
 import { ObjectId } from "mongodb";
 import type {
   Corporation,
@@ -36,6 +35,7 @@ import { commandEconomySoeSectors, isCommandEconomy } from "@/lib/constants/comm
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { generateCountryOwnedSeedData } from "@/lib/seeds/reference/budgets";
 import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
+import { NUMERIC_BSON_TYPE } from "@/lib/db/queryHelpers";
 
 export interface ReconcileCommandEconomyUnownedResult {
   commandCountries: CountryId[];
@@ -164,7 +164,7 @@ export async function reconcileCommandEconomyUnowned(
           if (conflict && !conflict._id.equals(corpId)) {
             const [maxRow] = await db
               .collection<Corporation>("corporations")
-              .find({ sequentialId: IS_NUMERIC_BSON })
+              .find({ sequentialId: { $type: NUMERIC_BSON_TYPE } })
               .project({ sequentialId: 1 })
               .sort({ sequentialId: -1 })
               .limit(1)

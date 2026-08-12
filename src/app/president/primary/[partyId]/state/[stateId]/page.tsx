@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getDb } from "@/lib/mongodb";
@@ -188,7 +189,7 @@ export default async function PartyPrimaryStatePage({ params }: PageProps) {
 
   const [categoriesDocs, stateDoc, demographicsDoc, enriched, apportionmentPreset] =
     await Promise.all([
-      db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+      loadDemographicCategories(db),
       db
         .collection<State>("states")
         .find({ _id: { $in: ALL_STATE_IDS } })

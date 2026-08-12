@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import { Meter } from "@/components/corporation/market/MarketPrimitives";
+import { INDEX_INCLUSION_THRESHOLD } from "@/lib/corporations/indexOwnership";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import {
   CORPORATE_BOND_SPREAD_PREMIUM,
@@ -407,6 +408,26 @@ export default function CreditRatingTab({
                   Letter grade and composite score are recalculated each turn from leverage,
                   coverage, profitability, and liquidity.
                 </p>
+                {corporation.indexOwnershipPercent != null &&
+                  corporation.indexOwnershipPercent > 0 && (
+                    <p className="text-xs mt-1.5">
+                      <span className="text-muted">Index funds hold </span>
+                      <span className="font-semibold tabular-nums text-foreground">
+                        {corporation.indexOwnershipPercent}%
+                      </span>
+                      <span className="text-muted"> of shares. </span>
+                      {corporation.indexInclusionActive ? (
+                        <span className="font-semibold text-success">
+                          Rating upgraded one notch for index inclusion.
+                        </span>
+                      ) : (
+                        <span className="text-muted">
+                          Reaching {Math.round(INDEX_INCLUSION_THRESHOLD * 100)}% earns a one-notch
+                          upgrade.
+                        </span>
+                      )}
+                    </p>
+                  )}
               </div>
               <a
                 href="#corp-bonds"

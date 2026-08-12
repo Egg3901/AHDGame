@@ -5,6 +5,8 @@ import {
   creditFundUnits,
   debitFundUnits,
   INDEX_FUND_AUTO_PAUSE_BACKING_RATIO,
+  INDEX_FUND_BACKING_WARN_RATIO,
+  autoPauseDisabled,
   INDEX_FUND_DIVIDEND_PASS_THROUGH_RATIO,
   INDEX_FUND_DIVIDEND_REINVEST_RATIO,
   INDEX_FUND_INITIAL_NAV,
@@ -330,5 +332,26 @@ describe("legacyAdjustedDisplayUnits (#857 grandfather display)", () => {
         forexEnabled: true,
       })
     ).toBe(100);
+  });
+});
+
+describe("auto-pause disarming is explicit", () => {
+  it("never asks for a pause while the threshold is zero", () => {
+    // The disabled case used to depend on `ratio < 0` being false, which made
+    // the pause branch and the gauge's error tone silently unreachable.
+    expect(autoPauseDisabled()).toBe(true);
+    const backing = calculateBackingRatio({
+      cashAnchor: 1,
+      holdingsValueAnchor: 0,
+      quotedNav: 100,
+      unitSupply: 1000,
+    });
+    expect(backing.backingRatio).toBeLessThan(0.5);
+    expect(backing.shouldAutoPause).toBe(false);
+    expect(backing.pauseReason).toBeUndefined();
+  });
+
+  it("keeps the warning band separate from the pause threshold", () => {
+    expect(INDEX_FUND_BACKING_WARN_RATIO).toBeGreaterThan(INDEX_FUND_AUTO_PAUSE_BACKING_RATIO);
   });
 });

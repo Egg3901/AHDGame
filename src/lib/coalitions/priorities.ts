@@ -38,6 +38,8 @@ export const COALITION_LEADERSHIP_GOAL_OPTIONS: ReadonlyArray<{
 const LIVE_BILL_STATUSES = new Set<Bill["status"]>([
   "active",
   "active_other",
+  // A concurrent bill is live in both chambers at once.
+  "active_both",
   "veto_override",
   "override_shugiin",
   "filibustered",

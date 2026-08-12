@@ -58,6 +58,7 @@ export function BillCard({
   const isVoting =
     bill.status === "active" ||
     bill.status === "active_other" ||
+    bill.status === "active_both" ||
     bill.status === "veto_override" ||
     bill.status === "cabinet_review" ||
     bill.status === "override_shugiin";
@@ -81,14 +82,32 @@ export function BillCard({
   const activeVotingDeadlineTurn =
     bill.status === "active_other" ? bill.otherChamberVotingEndsOnTurn : bill.votingEndsOnTurn;
   const clock = useGameClock();
-  const votingDeadlinePassed =
-    deadlineCheckable &&
+  // A concurrent bill leaves `active_both` only once BOTH chambers' clocks have
+  // run out — the lifecycle ANDs the two deadline pairs — so the card has to
+  // check the pair too, or it mutes the pill while one house is still voting.
+  const concurrentDeadlinePassed =
+    bill.status === "active_both" &&
     isVotingDeadlinePassed(
-      activeVotingDeadline,
+      bill.votingEndsAt,
       clock.realNow,
-      activeVotingDeadlineTurn,
+      bill.votingEndsOnTurn,
+      clock.currentTurn
+    ) &&
+    isVotingDeadlinePassed(
+      bill.otherChamberVotingEndsAt,
+      clock.realNow,
+      bill.otherChamberVotingEndsOnTurn,
       clock.currentTurn
     );
+  const votingDeadlinePassed =
+    concurrentDeadlinePassed ||
+    (deadlineCheckable &&
+      isVotingDeadlinePassed(
+        activeVotingDeadline,
+        clock.realNow,
+        activeVotingDeadlineTurn,
+        clock.currentTurn
+      ));
   const isVotingOpen = isVoting && !votingDeadlinePassed;
 
   const accent =
@@ -107,7 +126,9 @@ export function BillCard({
             : "var(--info)";
 
   // The Count rail uses current-chamber tally; for the active 2nd-chamber phase
-  // show that chamber's tally instead.
+  // show that chamber's tally instead. A concurrent bill has two live tallies and
+  // the card has no viewer chamber to pick by, so it shows the lower house and
+  // leaves the full picture to the detail page.
   const showOther = bill.status === "active_other";
   const votes = showOther
     ? {

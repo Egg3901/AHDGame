@@ -4,6 +4,9 @@ import { checkWikiDisabled } from "@/lib/api/wikiGuard";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { resolveElectionYear } from "@/lib/utils/formatters";
+import { getPrimaryWinnersForElection, type CountryId } from "@/lib/constants/countries";
+import { getGameState } from "@/lib/gameState";
+import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import type {
   Election,
   ElectionCandidate,
@@ -137,6 +140,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       );
     } else {
       if (lastPrimarySnapshot) {
+        // Snapshots record standings, not outcomes, so the winners have to be
+        // derived. This used to hardcode `i === 0`, which showed the 2nd and
+        // 3rd nominees of a multi-winner race (US House under redistricting,
+        // UK/JP/DE legislatures, one-party states) as primary losers even
+        // though they contested the general.
+        const maxAdvancing = getPrimaryWinnersForElection(
+          (election.countryId ?? "US") as CountryId,
+          election.electionType,
+          isRedistrictingEnabled(await getGameState(db))
+        );
         primaryResults = Object.entries(lastPrimarySnapshot.byParty).map(([partyId, entries]) => {
           const party = partyMap.get(partyId);
           const sorted = entries.sort((a, b) => b.primaryScore - a.primaryScore);
@@ -149,7 +162,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
               party: e.party,
               primaryScore: e.primaryScore,
               sharePct: e.sharePct,
-              won: i === 0,
+              won: i < maxAdvancing,
             })),
           };
         });

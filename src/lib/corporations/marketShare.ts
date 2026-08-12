@@ -10,7 +10,7 @@
  */
 
 import type { Db } from "mongodb";
-import type { CorporateSector, State, UnownedSector } from "@/lib/db/types";
+import type { Corporation, CorporateSector, State, UnownedSector } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   resolveSectorHostCurrencyCode,
@@ -584,6 +584,40 @@ export async function fetchSectorMarketSharePercent(
 
   const market = effectiveMarketAnchor(ownedAnchor, unownedDoc?.revenue, gdpFallback);
   return computeMarketSharePercent(thisSectorAnchor, market);
+}
+
+/**
+ * Count distinct RIVAL corporations holding a sector in the same
+ * (state, sectorType) cell — how contested this market actually is.
+ *
+ * Feeds `dominanceDensityFactor` so the dominance build toll can tell a
+ * five-way fight for California from being the only firm in Maryland. The
+ * building corp's own sectors are excluded, so the count is rivals, not
+ * participants: a sole occupant returns 0.
+ *
+ * Deliberately its own small query rather than a second return value from
+ * {@link fetchSectorMarketSharePercent}: that function has seven call sites
+ * that want only the share, and widening its contract to serve one of them
+ * would have every caller paying for a field it ignores.
+ *
+ * Returns null when the count cannot be established, which
+ * `dominanceDensityFactor` reads as "crowded" (full toll). Failing toward the
+ * higher price keeps a DB hiccup from silently discounting expansion.
+ */
+export async function fetchSectorCompetitorCount(
+  db: Db,
+  sector: Pick<CorporateSector, "stateId" | "sectorType">,
+  owningCorporationId: Corporation["_id"]
+): Promise<number | null> {
+  try {
+    const corpIds = await db
+      .collection<CorporateSector>("corporateSectors")
+      .distinct("corporationId", { stateId: sector.stateId, sectorType: sector.sectorType });
+    const own = owningCorporationId?.toString();
+    return corpIds.filter((id) => id != null && id.toString() !== own).length;
+  } catch {
+    return null;
+  }
 }
 
 /**

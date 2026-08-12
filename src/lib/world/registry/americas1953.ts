@@ -320,6 +320,7 @@ export function americas1953Entries(presetId: string): WorldEntityManifestEntry[
       recognition: dependentRecognition("US-administered Canal Zone."),
       un: unIneligible(),
       notes: "Distinct from sovereign Panama; returned under Torrijos–Carter path.",
+      mapFeatureIds: ["CZ"],
     }),
     tier3Entry(presetId, {
       entityId: "SUR",

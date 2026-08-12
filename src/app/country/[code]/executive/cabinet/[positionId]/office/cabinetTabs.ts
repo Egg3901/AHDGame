@@ -1,9 +1,16 @@
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import type { CabinetPositionMechanics } from "@/lib/constants/cabinetMechanicsTypes";
+import { isMergerAuthoritySeat } from "@/lib/corporations/mergerReview/constants";
 
 export type CabinetTabId =
-  "overview" | "treasury" | "foreign" | "flagship" | "commands" | "doctrine";
+  | "overview"
+  | "treasury"
+  | "foreign"
+  | "flagship"
+  | "commands"
+  | "doctrine"
+  | "competition";
 
 export interface CabinetTab {
   id: CabinetTabId;
@@ -41,14 +48,24 @@ export function isForeignMinister(positionId: string): boolean {
   return FOREIGN_POSITION_IDS.has(positionId);
 }
 
+export function isCompetitionSeat(countryId: string, positionId: string): boolean {
+  return isMergerAuthoritySeat(countryId, positionId);
+}
+
 export function resolveCabinetTabs(args: {
   countryId: string;
   positionId: string;
   mechanics: CabinetPositionMechanics;
   /** Gates the defense-only Commands + Doctrine tabs behind the Conflicts subsystem. */
   conflictsEnabled?: boolean;
+  /**
+   * The merger-review queue answered `applies: true` for THIS viewer. Server
+   * truth only: the seat, the era and the command-economy gate are all resolved
+   * there, so the tab never appears for a duty that does not exist.
+   */
+  competitionQueueApplies?: boolean;
 }): CabinetTab[] {
-  const { countryId, positionId, conflictsEnabled = false } = args;
+  const { countryId, positionId, conflictsEnabled = false, competitionQueueApplies = false } = args;
   const tabs: CabinetTab[] = [{ id: "overview", label: "Overview" }];
 
   if (isFinanceMinister(countryId, positionId)) {
@@ -66,6 +83,12 @@ export function resolveCabinetTabs(args: {
         ? "Monetary"
         : "Programs",
   });
+
+  // The competition seat gains Merger Review, but only once the server has
+  // confirmed the queue applies to this viewer in this country and era.
+  if (isCompetitionSeat(countryId, positionId) && competitionQueueApplies) {
+    tabs.push({ id: "competition", label: "Merger Review" });
+  }
 
   // Defense seats gain Commands + Doctrine when the Conflicts subsystem is enabled.
   if (isDefenseMinister(positionId) && conflictsEnabled) {

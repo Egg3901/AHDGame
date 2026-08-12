@@ -3,7 +3,6 @@
  * Tests state-level elections and multi-seat resolution.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createAsyncIterableCursor } from "@/lib/test-utils/mockDb";
 import { ObjectId } from "mongodb";
 
 // Mock dependencies
@@ -45,6 +44,18 @@ vi.mock("@/lib/time/gameTime", () => ({
     effectiveNow: new Date("2026-04-01"),
   }),
 }));
+
+function emptyFindCursor() {
+  const cursor = {
+    toArray: vi.fn().mockResolvedValue([]),
+    sort: vi.fn(),
+    limit: vi.fn(),
+    next: vi.fn().mockResolvedValue(null),
+  };
+  cursor.sort.mockReturnValue(cursor);
+  cursor.limit.mockReturnValue(cursor);
+  return cursor;
+}
 
 describe("Congressional Election Integration Tests", () => {
   const mockUserId = new ObjectId().toString();
@@ -138,10 +149,7 @@ describe("Congressional Election Integration Tests", () => {
           if (name === "electionCandidates") {
             return {
               findOne: vi.fn().mockResolvedValue(null), // Not already entered
-              // Chainable: the enter route reads prior candidacy with
-              // find().sort().limit().next(), which a bare { toArray } stub
-              // cannot satisfy.
-              find: vi.fn(() => createAsyncIterableCursor([])),
+              find: vi.fn().mockReturnValue(emptyFindCursor()),
               insertOne: candidatesInsertOne,
             };
           }
@@ -156,11 +164,6 @@ describe("Congressional Election Integration Tests", () => {
           }
           return {
             findOne: vi.fn().mockResolvedValue(null),
-            // Default stub carries a chainable find() too. Election routes have
-            // grown find().sort().limit() queries (prior-candidacy lookup on
-            // enter, endorsement race check), and a fallback without one fails
-            // as "find is not a function" instead of as a real assertion.
-            find: vi.fn(() => createAsyncIterableCursor([])),
           };
         }),
       };
@@ -257,19 +260,13 @@ describe("Congressional Election Integration Tests", () => {
           if (name === "electionCandidates") {
             return {
               findOne: vi.fn().mockResolvedValue(null),
-              // Chainable: the enter route reads prior candidacy with
-              // find().sort().limit().next(), which a bare { toArray } stub
-              // cannot satisfy.
-              find: vi.fn(() => createAsyncIterableCursor([])),
+              find: vi.fn().mockReturnValue({
+                toArray: vi.fn().mockResolvedValue([]),
+              }),
             };
           }
           return {
             findOne: vi.fn().mockResolvedValue(null),
-            // Default stub carries a chainable find() too. Election routes have
-            // grown find().sort().limit() queries (prior-candidacy lookup on
-            // enter, endorsement race check), and a fallback without one fails
-            // as "find is not a function" instead of as a real assertion.
-            find: vi.fn(() => createAsyncIterableCursor([])),
           };
         }),
       };
@@ -381,11 +378,6 @@ describe("Congressional Election Integration Tests", () => {
           }
           return {
             findOne: vi.fn().mockResolvedValue(null),
-            // Default stub carries a chainable find() too. Election routes have
-            // grown find().sort().limit() queries (prior-candidacy lookup on
-            // enter, endorsement race check), and a fallback without one fails
-            // as "find is not a function" instead of as a real assertion.
-            find: vi.fn(() => createAsyncIterableCursor([])),
           };
         }),
       };

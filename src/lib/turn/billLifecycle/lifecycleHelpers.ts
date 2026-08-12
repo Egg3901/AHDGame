@@ -7,8 +7,24 @@ import { ObjectId } from "mongodb";
 import { createNotifications } from "@/lib/notifications";
 import { didPass } from "@/lib/billLifecycleHelpers";
 import type { Bill, BillStatus, Character, ElectedOfficial } from "@/lib/db/types";
+import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { getChamberKeyForOfficeType } from "@/lib/legislature/chamberOfficeType";
 
 type LifecycleDb = Awaited<ReturnType<typeof import("@/lib/mongodb").getDb>>;
+
+/**
+ * The chamber's own name, from the country's config — "House of Commons", not
+ * "Senate". Falls back to the office type so an unknown key still reads sensibly.
+ */
+function chamberNameForOfficeType(countryId: string, officeType: string): string {
+  const config = getCountryConfig(countryId as CountryId);
+  if (!config) return officeType;
+  const chamberKey = getChamberKeyForOfficeType(countryId as CountryId, officeType);
+  const { lowerChamber, upperChamber } = config.legislature;
+  if (chamberKey === lowerChamber.key) return lowerChamber.name;
+  if (upperChamber && chamberKey === upperChamber.key) return upperChamber.name;
+  return officeType;
+}
 
 /**
  * When a bill has been filibustered, it requires 3/5 of the votes cast (for +
@@ -78,7 +94,17 @@ export async function notifyChambersVoteOpen(
 ): Promise<void> {
   const officials = await db
     .collection<ElectedOfficial>("electedOfficials")
-    .find({ officeType: chamberType, characterId: { $ne: null }, isNPP: { $ne: true } })
+    // ⚠️ `countryId` was missing. The US, BR and others all share the house/senate
+    // office-type keys (the collision `npp/billVoting.ts` works around per bill), so
+    // this notified legislators in EVERY country that used the same key. Pre-existing,
+    // but PR3 fans this out across every qualifying member of a bloc, which would turn
+    // a latent leak into Brazilian legislators being pinged about a NATO bill.
+    .find({
+      countryId: bill.countryId ?? "US",
+      officeType: chamberType,
+      characterId: { $ne: null },
+      isNPP: { $ne: true },
+    })
     .toArray();
 
   const charIds = officials
@@ -90,12 +116,16 @@ export async function notifyChambersVoteOpen(
     .find({ _id: { $in: charIds } }, { projection: { _id: 1, userId: 1 } })
     .toArray();
 
+  // House/Senate was hardcoded, so a Commons vote announced itself as the Senate.
+  // Harmless while only the US reached this; PR3 fans it across a whole bloc.
+  const chamberName = chamberNameForOfficeType(bill.countryId ?? "US", chamberType);
+
   await createNotifications(
     chars.map((c) => ({
       userId: c.userId,
       type: "bill_vote_open",
       title: "Vote Now Open",
-      message: `Voting on "${bill.title}" is now open in the ${chamberType === "house" ? "House" : "Senate"}.`,
+      message: `Voting on "${bill.title}" is now open in the ${chamberName}.`,
       metadata: { billId: bill._id.toString(), recipientCharacterId: c._id.toString() },
     }))
   );
@@ -136,6 +166,13 @@ export async function notifySponsor(
       title: "Bill Passed Chamber",
       message: `"${bill.title}" passed the ${bill.originChamber === "house" ? "House" : "Senate"} and moves to the other chamber.`,
     },
+    active_both: {
+      // Entering a concurrent vote is not a chamber PASSING — both chambers open at
+      // once. The sponsor is told the floor is open, not that anything advanced.
+      nType: "bill_passed_chamber",
+      title: "Bill Before Both Chambers",
+      message: `"${bill.title}" is before both chambers at once. Each votes separately, and both must pass.`,
+    },
     active_other: {
       nType: "bill_passed_chamber",
       title: "Bill Passed Chamber",
@@ -159,7 +196,14 @@ export async function notifySponsor(
     failed: {
       nType: "bill_failed_chamber",
       title: "Bill Failed",
-      message: `"${bill.title}" failed to pass the ${bill.currentChamber === "house" ? "House" : "Senate"}.`,
+      // The doc handed to the notifier is the pre-transition one, so a concurrent
+      // bill still reads `active_both` here. Naming a chamber would be a coin flip:
+      // `currentChamber` is the lower house on every one of these bills, whichever
+      // chamber actually voted it down.
+      message:
+        bill.status === "active_both"
+          ? `"${bill.title}" failed. A bill before both chambers has to clear both, and at least one voted it down.`
+          : `"${bill.title}" failed to pass the ${bill.currentChamber === "house" ? "House" : "Senate"}.`,
     },
     proposed: { nType: "bill_passed_chamber", title: "", message: "" },
     active: { nType: "bill_passed_chamber", title: "", message: "" },

@@ -330,4 +330,76 @@ describe("buildBillWhipPanelData", () => {
     expect(panel).toBeNull();
     expect(db.collectionMocks["politicalParties"]!.findOne).not.toHaveBeenCalled();
   });
+
+  it("opens both chambers on a concurrent bill, not just the display currentChamber", async () => {
+    const db = createMockDb();
+    const chairId = new ObjectId();
+    const billId = new ObjectId();
+    db.collection("politicalParties");
+    db.collection("electedOfficials");
+    db.collection("billWhips");
+
+    db.collectionMocks["politicalParties"]!.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      sequentialId: 1,
+      countryId: "US",
+      name: "Test Party",
+      abbreviation: "TP",
+      color: "#123456",
+      economicPosition: 0,
+      socialPosition: 0,
+      chairId,
+      viceChairId: null,
+      treasurerId: null,
+      committeeIds: [],
+      memberCount: 10,
+      isDefault: false,
+      createdBy: null,
+      treasury: 0,
+      nationalTaxRate: 0,
+      politicalStrength: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } satisfies PoliticalParty);
+
+    // `currentChamber` is the lower house on every concurrent bill — a display
+    // default, not the authority. Filtering on it leaves the Senate with no whip
+    // panel at all while the whip routes happily accept Senate votes.
+    const bill: Bill = {
+      _id: billId,
+      title: "Join the Conflict",
+      summary: "Summary",
+      originChamber: "house",
+      currentChamber: "house",
+      sponsorId: null,
+      sponsorName: "Sponsor",
+      sponsorParty: "1",
+      status: "active_both",
+      votesFor: 0,
+      votesAgainst: 0,
+      votesAbstain: 0,
+      votes: {},
+      countryId: "US",
+      proposedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue({
+      project: () => ({
+        toArray: async () => [{ officeType: "house" }, { officeType: "senate" }],
+      }),
+    });
+    db.collectionMocks["billWhips"]!.find.mockReturnValue({ toArray: async () => [] });
+
+    const panel = await buildBillWhipPanelData(db as never, bill, "US", {
+      characterId: chairId,
+      partyId: "1",
+      viewerCountryId: "US",
+      isAdmin: false,
+    });
+
+    expect(panel).not.toBeNull();
+    expect(panel!.chambers.map((c) => c.chamberKey)).toEqual(["house", "senate"]);
+  });
 });

@@ -1,10 +1,29 @@
 export const INDEX_FUND_INITIAL_NAV = 100;
 export const INDEX_FUND_SEED_CASH_ANCHOR = 50_000_000;
 export const INDEX_FUND_SEED_RESERVE_UNITS = 500_000;
-/** Auto-pause threshold for fund backing ratio. Set to 0 to disable automatic
- *  pausing on low backing — admins now manage fund solvency manually via the
- *  inject-capital tool. Backing ratio is still computed and displayed. */
+/**
+ * Auto-pause threshold for fund backing ratio. **Zero disables auto-pause**;
+ * admins manage fund solvency by hand via the inject-capital tool.
+ *
+ * The disabled case used to be implicit: `backingRatio < 0` is false for every
+ * non-negative ratio, so the pause branch in fundCron and the "error" tone in
+ * the gauge were both permanently unreachable while still reading as live
+ * safety. `backingRatioDisablesAutoPause` now says so out loud, and raising
+ * this constant above 0 is all it takes to arm the mechanism again.
+ */
 export const INDEX_FUND_AUTO_PAUSE_BACKING_RATIO = 0;
+
+/**
+ * Backing level below which a fund is displayed as under-backed. Purely a
+ * display band: it never pauses anything. Kept separate from the auto-pause
+ * constant so the gauge can warn while the mechanism stays disarmed.
+ */
+export const INDEX_FUND_BACKING_WARN_RATIO = 0.5;
+
+/** True when auto-pause on low backing is switched off entirely. */
+export function autoPauseDisabled(): boolean {
+  return !(INDEX_FUND_AUTO_PAUSE_BACKING_RATIO > 0);
+}
 export const INDEX_FUND_DIVIDEND_REINVEST_RATIO = 0.75;
 export const INDEX_FUND_DIVIDEND_PASS_THROUGH_RATIO = 0.25;
 /** Max share of fund backing that may be invested in equities. */
@@ -151,7 +170,8 @@ export function calculateBackingRatio(input: BackingRatioInput): BackingRatioRes
   const quotedLiabilityAnchor = quotedNav * unitSupply;
   const backingRatio =
     quotedLiabilityAnchor > 0 ? actualBackingValueAnchor / quotedLiabilityAnchor : 1;
-  const shouldAutoPause = backingRatio < INDEX_FUND_AUTO_PAUSE_BACKING_RATIO;
+  const shouldAutoPause =
+    !autoPauseDisabled() && backingRatio < INDEX_FUND_AUTO_PAUSE_BACKING_RATIO;
 
   return {
     actualBackingValueAnchor,

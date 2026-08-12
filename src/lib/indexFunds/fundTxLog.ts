@@ -87,7 +87,10 @@ export async function logIndexFundSubscribe(
     holder: IndexFundHolderContext;
     units: number;
     navAnchor: number;
+    /** ₳ value of the leg. */
     amountAnchor: number;
+    /** Fund-currency value actually moved on the wallet; defaults to the ₳ value. */
+    amountNative?: number;
     balanceAfter?: number;
     source?: IndexFundTxSource;
     turn?: number;
@@ -104,12 +107,14 @@ export async function logIndexFundSubscribe(
     subjectType: "character",
     subjectId: params.holder.holderId,
     subjectName: params.holder.holderName,
-    amount: -params.amountAnchor,
+    amount: -(params.amountNative ?? params.amountAnchor),
+    // `amountAnchor` is ₳ (fund cash, NAV and every fund leg are ₳). `amount` is
+    // what the wallet actually moved, in the fund's currency, so the two are only
+    // equal at parity. Stating `anchorAmount` outright stops emitTx re-deriving
+    // it from a native figure and keeps the ledger's ₳ value exact.
+    anchorAmount: -params.amountAnchor,
     balanceAfter: params.balanceAfter,
     currencyCode: params.fund.anchorCurrencyCode as CurrencyCode,
-    // Omit anchorAmount so emitTx FX-converts `amount` (the fund's anchor
-    // currency) into the internal anchor unit. Pre-setting it skipped that
-    // conversion and logged ~114× the true anchor value for JPY funds.
     counterpartyType: "system",
     counterpartyName: params.fund.name,
     meta: buildFundMeta(params.fund, {
@@ -145,6 +150,8 @@ export async function logIndexFundRedeem(
     units: number;
     navAnchor: number;
     amountAnchor: number;
+    /** Fund-currency value actually moved on the wallet; defaults to the ₳ value. */
+    amountNative?: number;
     balanceAfter?: number;
     source?: IndexFundTxSource;
     queuedRemainder?: number;
@@ -162,12 +169,12 @@ export async function logIndexFundRedeem(
     subjectType: "character",
     subjectId: params.holder.holderId,
     subjectName: params.holder.holderName,
-    amount: params.amountAnchor,
+    amount: params.amountNative ?? params.amountAnchor,
+    anchorAmount: params.amountAnchor,
     balanceAfter: params.balanceAfter,
     currencyCode: params.fund.anchorCurrencyCode as CurrencyCode,
-    // Omit anchorAmount so emitTx FX-converts `amount` (the fund's anchor
-    // currency) into the internal anchor unit. Pre-setting it skipped that
-    // conversion and logged ~114× the true anchor value for JPY funds.
+    // `amountAnchor` is ₳; `amount` is the native figure the wallet moved. See
+    // logIndexFundSubscribe for why anchorAmount is stated rather than derived.
     counterpartyType: "system",
     counterpartyName: params.fund.name,
     meta: buildFundMeta(params.fund, {
@@ -221,6 +228,8 @@ export function buildIndexFundDividendTxEntry(params: {
   holder: Pick<IndexFundHolderContext, "holderKind" | "holderId" | "holderName">;
   amountAnchor: number;
   units: number;
+  /** Fund-currency value actually credited; defaults to the ₳ value. */
+  amountNative?: number;
   corporationId: ObjectId;
   corporationName?: string;
   turn: number;
@@ -234,11 +243,11 @@ export function buildIndexFundDividendTxEntry(params: {
     subjectType: "character",
     subjectId: params.holder.holderId,
     subjectName: params.holder.holderName,
-    amount: params.amountAnchor,
+    amount: params.amountNative ?? params.amountAnchor,
+    anchorAmount: params.amountAnchor,
     currencyCode: params.fund.anchorCurrencyCode as CurrencyCode,
-    // Omit anchorAmount so emitTx FX-converts `amount` (the fund's anchor
-    // currency) into the internal anchor unit. Pre-setting it skipped that
-    // conversion and logged ~114× the true anchor value for JPY funds.
+    // `amountAnchor` is ₳; `amount` is the native figure the wallet moved. See
+    // logIndexFundSubscribe for why anchorAmount is stated rather than derived.
     counterpartyType: "system",
     counterpartyName: params.fund.name,
     meta: buildFundMeta(params.fund, {

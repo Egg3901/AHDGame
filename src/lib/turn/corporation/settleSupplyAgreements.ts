@@ -59,6 +59,12 @@ import {
 } from "@/lib/currency/corporationCapital";
 
 export interface SettleableSupplyAgreement {
+  /**
+   * Agreement document id. Optional so every existing caller and test compiles
+   * unchanged; the transfer-pricing accrual (C5) simply skips a position it
+   * cannot key.
+   */
+  agreementId?: string;
   supplierCorpId: string;
   buyerCorpId: string;
   commodity: CommodityType;
@@ -98,12 +104,29 @@ export interface SettleCorpInfo {
 
 type TxInput = Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">;
 
+/** One agreement's settled price premium, for the C5 transfer-pricing accrual. */
+export interface SettledPremium {
+  agreementId: string;
+  supplierCorpId: string;
+  buyerCorpId: string;
+  pricePremium: number;
+  /** Signed ₳ premium from the supplier's view: positive = buyer paid it. */
+  premiumAnchor: number;
+}
+
 export interface SupplyAgreementSettlements {
   /** corpId → net liquidCapital delta (in that corp's currency). */
   deltaByCorp: Map<string, number>;
   txEntries: TxInput[];
   settledCount: number;
   totalPremiumAnchor: number;
+  /**
+   * Per-agreement premium detail. Reported for every agreement that priced off
+   * market, INCLUDING ones whose net settlement was suppressed by the solvency
+   * floor: the tax position exists because the price was agreed, not because
+   * the cash cleared.
+   */
+  settledPremiums: SettledPremium[];
 }
 
 /** Below this ₳ magnitude a settlement is not worth a write. */
@@ -184,6 +207,7 @@ export function computeSupplyAgreementSettlements(args: {
   /** C6 solvency floor: ₳ each corp has already committed to pay this settlement. */
   const paidByCorp = new Map<string, number>();
   const txEntries: TxInput[] = [];
+  const settledPremiums: SettledPremium[] = [];
   let settledCount = 0;
   let totalPremiumAnchor = 0;
 
@@ -199,6 +223,19 @@ export function computeSupplyAgreementSettlements(args: {
       ((COMMODITY_BASE_PRICES[a.commodity] ?? 0) / safeUnitScale(args.eraUnitScale)) *
       (priceRatioByCommodity.get(a.commodity) ?? 1);
     const premiumAnchor = filled > 0 ? qty * unitPriceAnchor * a.pricePremium : 0;
+
+    // C5: record the priced position before any of the damages, solvency or
+    // rounding gates below can drop this agreement from the settlement. The tax
+    // position is created by the agreed price, not by whether the cash moved.
+    if (a.agreementId && premiumAnchor !== 0 && Number.isFinite(premiumAnchor)) {
+      settledPremiums.push({
+        agreementId: a.agreementId,
+        supplierCorpId: a.supplierCorpId,
+        buyerCorpId: a.buyerCorpId,
+        pricePremium: a.pricePremium,
+        premiumAnchor,
+      });
+    }
 
     // Shortfall damages: the supplier under-PRODUCED against its contracted
     // volume. The sink as a whole is undefined outside plants ⇒ no penalty.
@@ -327,7 +364,7 @@ export function computeSupplyAgreementSettlements(args: {
     }
   }
 
-  return { deltaByCorp, txEntries, settledCount, totalPremiumAnchor };
+  return { deltaByCorp, txEntries, settledCount, totalPremiumAnchor, settledPremiums };
 }
 
 /** I/O wrapper: compute settlements from lookups, then apply them to the DB. */
@@ -344,12 +381,17 @@ export async function settleSupplyAgreements(args: {
   turn: number;
   now: Date;
   thresholds: TxThresholds;
-}): Promise<{ settledCount: number; totalPremiumAnchor: number }> {
+}): Promise<{
+  settledCount: number;
+  totalPremiumAnchor: number;
+  settledPremiums: SettledPremium[];
+}> {
   const { db, lookups, agreements, contractSettlementByCorp, priceRatioByCommodity, turn, now } =
     args;
-  if (agreements.length === 0) return { settledCount: 0, totalPremiumAnchor: 0 };
+  if (agreements.length === 0)
+    return { settledCount: 0, totalPremiumAnchor: 0, settledPremiums: [] };
 
-  const { deltaByCorp, txEntries, settledCount, totalPremiumAnchor } =
+  const { deltaByCorp, txEntries, settledCount, totalPremiumAnchor, settledPremiums } =
     computeSupplyAgreementSettlements({
       agreements,
       contractSettlementByCorp,
@@ -396,5 +438,5 @@ export async function settleSupplyAgreements(args: {
   }
   if (txEntries.length > 0) await emitTxBulk(db, txEntries, args.thresholds);
 
-  return { settledCount, totalPremiumAnchor };
+  return { settledCount, totalPremiumAnchor, settledPremiums };
 }

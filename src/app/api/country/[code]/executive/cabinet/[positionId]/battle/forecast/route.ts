@@ -15,13 +15,15 @@ import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import { getConflict } from "@/lib/db/collections/conflicts";
 import { conflictToFront } from "@/lib/military/createConflict";
 import { buildCoalitionSide } from "@/lib/military/battleSides";
-import { defendersAtFront } from "@/lib/military/coalition";
+import { resolveDefendingSides } from "@/lib/military/defendingSides";
+import { buildFactionSide } from "@/lib/military/factionSide";
 import { listPendingDeclarations } from "@/lib/db/collections/battleDeclarations";
 import { battleForecast } from "@/lib/military/battle";
 import { enemyBand } from "@/lib/military/forecastFog";
 import { sideOf } from "@/lib/military/occupation";
 import { loadMilitaryBlocs } from "@/lib/military/blocLookup";
 import { belligerentSideOf } from "@/lib/military/conflictVisibility";
+import { isFactionEntity } from "@/lib/military/factionEntity";
 import type { Front } from "@/lib/military/combat";
 
 interface RouteParams {
@@ -36,7 +38,8 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const url = new URL(request.url);
     const theaterId = url.searchParams.get("theaterId") ?? "";
-    const targetCountry = (url.searchParams.get("targetCountry") ?? "").toUpperCase() as CountryId;
+    // A WorldEntityId, not a CountryId — see the faction note below.
+    const targetCountry = (url.searchParams.get("targetCountry") ?? "").toUpperCase();
 
     // The conflict must be live — the same requirement as declaring here.
     const conflict = await getConflict(db, theaterId);
@@ -49,7 +52,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       isAdmin,
     });
     if (denied) return denied;
-    if (!COUNTRY_CONFIGS[targetCountry]) {
+    // A forecast must be refused exactly when the offensive it projects would be, so
+    // this mirrors the declare route: in a proxy war the enemy is a FACTION with no
+    // COUNTRY_CONFIGS row, and the roster check below is the real gate.
+    if (!isFactionEntity(conflict, targetCountry) && !COUNTRY_CONFIGS[targetCountry as CountryId]) {
       return NextResponse.json({ error: "Invalid target country" }, { status: 400 });
     }
     // The same gate the declare route applies, resolved from THIS conflict's rosters
@@ -116,7 +122,18 @@ export async function GET(request: Request, { params }: RouteParams) {
       ),
     ];
     const attackerCountries = [countryId, ...alliedDeclarers];
-    const defenderCountries = defendersAtFront(conflict, atFront, theaterId, enemySide, blocs);
+    // The same helper the resolver uses. A forecast can never disagree with the
+    // outcome it predicts, and a proxy war's faction defends with a token force that
+    // owns no unit rows — computing "is anyone home" a second way here is exactly how
+    // the two come apart.
+    const defending = resolveDefendingSides({
+      conflict,
+      atFront,
+      theaterId,
+      enemySide,
+      blocs,
+    });
+    const defenderCountries = defending.defenderCountries;
 
     const [attackerSides, defenderSides] = await Promise.all([
       buildCoalitionSide(
@@ -136,13 +153,23 @@ export async function GET(request: Request, { params }: RouteParams) {
         enemySide
       ),
     ]);
+    // The projection has to include the token force for the same reason the battle
+    // does — otherwise it forecasts an unopposed advance the resolver will not deliver.
+    const factionSide = defending.factionDefends
+      ? buildFactionSide(conflict, defending.factionDefends, fronts[theaterId]!)
+      : null;
+    if (factionSide && factionSide.units.length > 0) {
+      factionSide.conflictSupply = supplyFor(enemySide);
+      defenderSides.push(factionSide);
+    }
+
     const fc = battleForecast(attackerSides, defenderSides, theaterId);
     // The same front from the other end. Derived from the sides already built here,
     // so it discloses nothing new — and it is NOT 100 − oddsPct, because the
     // defender holds terrain in whichever direction the attack runs.
     const counter = battleForecast(defenderSides, attackerSides, theaterId);
     // An undefended front fizzles at resolution rather than fighting — say so up front.
-    const unopposed = defenderCountries.length === 0;
+    const unopposed = defending.unopposed;
     const sup = fc.attackerProfile.sup;
 
     return NextResponse.json({

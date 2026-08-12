@@ -653,6 +653,7 @@ export default function CreateCharacterPage() {
                       <OnePartyStateNotice
                         countryName={selectedCountry.name}
                         rulingPartyName={rulingParty?.name ?? null}
+                        countryId={selectedCountry.id}
                       />
                     </div>
                   )}

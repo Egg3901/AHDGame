@@ -148,10 +148,13 @@ export async function GET(request: Request) {
 
     // Compute per-corp income from sectors (need all sectors of matched corps for total income)
     const corpIds = corporations.map((c) => c._id);
-    const allSectors = await db
-      .collection<CorporateSector>("corporateSectors")
-      .find(corpIds.length > 0 ? { corporationId: { $in: corpIds } } : {})
-      .toArray();
+    const allSectors =
+      corpIds.length > 0
+        ? await db
+            .collection<CorporateSector>("corporateSectors")
+            .find({ corporationId: { $in: corpIds } })
+            .toArray()
+        : [];
 
     const incomeByCorpId = new Map<string, number>();
     for (const sector of allSectors) {

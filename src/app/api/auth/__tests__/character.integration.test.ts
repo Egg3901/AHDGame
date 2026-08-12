@@ -3,7 +3,6 @@
  * Tests end-to-end character creation flow with mocked database.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createAsyncIterableCursor } from "@/lib/test-utils/mockDb";
 import { MongoServerError, ObjectId } from "mongodb";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 
@@ -91,11 +90,12 @@ describe("POST /api/auth/character - Character Creation", () => {
       collection: vi.fn().mockImplementation((name: string) => {
         if (name === "states") {
           return {
+            // `loadUsPoliticalStateIds` reads admitted states with find().
+            // Empty is faithful for these fixtures: the home states they use
+            // carry house seats for the preset, so admission is not what gates
+            // them.
+            find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
             findOne: vi.fn().mockResolvedValue(mockStateDoc),
-            // `loadUsPoliticalStateIds` (called by the character POST since the
-            // statehood work) does a find() over states. Empty is correct here:
-            // these tests assert character creation, not admission gating.
-            find: vi.fn(() => createAsyncIterableCursor([])),
           };
         }
         if (name === "characters") {
@@ -245,11 +245,12 @@ describe("POST /api/auth/character - Character Creation", () => {
       collection: vi.fn().mockImplementation((name: string) => {
         if (name === "states") {
           return {
+            // `loadUsPoliticalStateIds` reads admitted states with find().
+            // Empty is faithful for these fixtures: the home states they use
+            // carry house seats for the preset, so admission is not what gates
+            // them.
+            find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
             findOne: vi.fn().mockResolvedValue(mockStateDoc),
-            // `loadUsPoliticalStateIds` (called by the character POST since the
-            // statehood work) does a find() over states. Empty is correct here:
-            // these tests assert character creation, not admission gating.
-            find: vi.fn(() => createAsyncIterableCursor([])),
           };
         }
         if (name === "characters") {
@@ -374,11 +375,12 @@ describe("POST /api/auth/character - Character Creation", () => {
       collection: vi.fn().mockImplementation((name: string) => {
         if (name === "states") {
           return {
+            // `loadUsPoliticalStateIds` reads admitted states with find().
+            // Empty is faithful for these fixtures: the home states they use
+            // carry house seats for the preset, so admission is not what gates
+            // them.
+            find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
             findOne: vi.fn().mockResolvedValue(mockStateDoc),
-            // `loadUsPoliticalStateIds` (called by the character POST since the
-            // statehood work) does a find() over states. Empty is correct here:
-            // these tests assert character creation, not admission gating.
-            find: vi.fn(() => createAsyncIterableCursor([])),
           };
         }
         if (name === "users") {
@@ -473,11 +475,12 @@ describe("POST /api/auth/character - Character Creation", () => {
       collection: vi.fn().mockImplementation((name: string) => {
         if (name === "states") {
           return {
+            // `loadUsPoliticalStateIds` reads admitted states with find().
+            // Empty is faithful for these fixtures: the home states they use
+            // carry house seats for the preset, so admission is not what gates
+            // them.
+            find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
             findOne: vi.fn().mockResolvedValue(mockStateDoc),
-            // `loadUsPoliticalStateIds` (called by the character POST since the
-            // statehood work) does a find() over states. Empty is correct here:
-            // these tests assert character creation, not admission gating.
-            find: vi.fn(() => createAsyncIterableCursor([])),
           };
         }
         if (name === "characters") {
@@ -605,11 +608,12 @@ describe("POST /api/auth/character - Character Creation", () => {
       collection: vi.fn().mockImplementation((name: string) => {
         if (name === "states") {
           return {
+            // `loadUsPoliticalStateIds` reads admitted states with find().
+            // Empty is faithful for these fixtures: the home states they use
+            // carry house seats for the preset, so admission is not what gates
+            // them.
+            find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
             findOne: vi.fn().mockResolvedValue(mockStateDoc),
-            // `loadUsPoliticalStateIds` (called by the character POST since the
-            // statehood work) does a find() over states. Empty is correct here:
-            // these tests assert character creation, not admission gating.
-            find: vi.fn(() => createAsyncIterableCursor([])),
           };
         }
         if (name === "characters") {
@@ -724,11 +728,12 @@ describe("POST /api/auth/character - Character Creation", () => {
       collection: vi.fn().mockImplementation((name: string) => {
         if (name === "states") {
           return {
+            // `loadUsPoliticalStateIds` reads admitted states with find().
+            // Empty is faithful for these fixtures: the home states they use
+            // carry house seats for the preset, so admission is not what gates
+            // them.
+            find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
             findOne: vi.fn().mockResolvedValue(mockStateDoc),
-            // `loadUsPoliticalStateIds` (called by the character POST since the
-            // statehood work) does a find() over states. Empty is correct here:
-            // these tests assert character creation, not admission gating.
-            find: vi.fn(() => createAsyncIterableCursor([])),
           };
         }
         if (name === "characters") {

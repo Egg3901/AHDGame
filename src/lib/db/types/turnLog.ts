@@ -293,6 +293,52 @@ export interface TurnLog {
       totalInterest: number;
     } | null;
 
+    npcBankPolicyTurn: {
+      banksChecked: number;
+      banksUpdated: number;
+    } | null;
+
+    bankingTurn: {
+      banksProcessed: number;
+      depositInterestPaid: number;
+      loanInterestCollected: number;
+      loanPrincipalRepaid: number;
+      defaultsWrittenOff: number;
+      npcDepositDelta: number;
+    } | null;
+
+    /** A8: employer pension contributions into union schemes. */
+    pensionTurn?: {
+      schemesCharged: number;
+      contributionsAnchor: number;
+      topUpsAnchor: number;
+      accrualsAnchor: number;
+      shortfalls: number;
+      /** Phase 2: benefits in payment. */
+      benefitsPaidAnchor: number;
+      benefitsUnpaidAnchor: number;
+      /** Schemes that had to cut a pension because the assets were not there. */
+      schemesCutting: number;
+      /** Phase 2: scheme assets put into index funds this turn. */
+      investedAnchor: number;
+      schemesInvesting: number;
+    } | null;
+
+    bankSolvencyTurn: {
+      banksEvaluated: number;
+      fled: number;
+      failures: number;
+      contagionTriggered: number;
+    } | null;
+
+    /** B7 supervision: capital adequacy, stress test, forced recapitalization. */
+    bankSupervision?: {
+      banksAssessed: number;
+      stressed: number;
+      undercapitalized: number;
+      chartersRevoked: number;
+    } | null;
+
     treasuryTurn: {
       /** Country federalBudgets whose treasury balance was accrued this turn. */
       countriesProcessed: number;

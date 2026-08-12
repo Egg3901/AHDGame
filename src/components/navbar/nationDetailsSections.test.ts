@@ -82,4 +82,12 @@ describe("buildNationalDetailsSections", () => {
       "/country/us/referendums"
     );
   });
+
+  it("replaces the nation Economy CB link with the banking hub", () => {
+    const s = buildNationalDetailsSections("US");
+    const economy = s.find((x) => x.title === "Economy")!;
+    const banking = economy.items.find((i) => i.id === "centralBank")!;
+    expect(banking.label).toBe("Banking");
+    expect(banking.href).toBe("/banking");
+  });
 });

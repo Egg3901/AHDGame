@@ -19,6 +19,10 @@ vi.mock("@/lib/corporations/sentimentEvents", () => ({
   fireUnionBustingBackfirePulse: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/unions/unionBustingNotice", () => ({
+  notifyUnionOfBustingAttempt: vi.fn().mockResolvedValue(0),
+}));
+
 vi.mock("@/lib/labour/unionBusting", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/labour/unionBusting")>();
   return { ...actual, rollD100: vi.fn() };
@@ -162,6 +166,41 @@ describe("attemptUnionBusting", () => {
     const [corpFilter, corpUpdate] = corpUpdateOne.mock.calls[0];
     expect(corpFilter._id).toStrictEqual(corp._id);
     expect(corpUpdate.$inc.liquidCapital).toBeLessThan(0);
+  });
+
+  it("tells the union which employer attempted the bust, and how it went", async () => {
+    const { rollD100 } = await import("@/lib/labour/unionBusting");
+    const { notifyUnionOfBustingAttempt } = await import("@/lib/unions/unionBustingNotice");
+    vi.mocked(notifyUnionOfBustingAttempt).mockClear();
+    vi.mocked(rollD100).mockReturnValue(1);
+
+    const corp = makeCorp({ name: "Amalgamated Steel" });
+    const sector = makeSector(corp._id, { unionization: 50 });
+    const { db } = mockDb({ sector });
+
+    await attemptUnionBusting(db, corp, sector._id.toString(), 10);
+
+    expect(notifyUnionOfBustingAttempt).toHaveBeenCalledOnce();
+    expect(vi.mocked(notifyUnionOfBustingAttempt).mock.calls[0][1]).toMatchObject({
+      countryId: "US",
+      sectorType: "manufacturing",
+      employerName: "Amalgamated Steel",
+      success: true,
+      unionizationBefore: 50,
+      unionizationAfter: 30,
+    });
+  });
+
+  it("does not notify the union when the attempt never resolves", async () => {
+    const { notifyUnionOfBustingAttempt } = await import("@/lib/unions/unionBustingNotice");
+    vi.mocked(notifyUnionOfBustingAttempt).mockClear();
+
+    const corp = makeCorp({ liquidCapital: 100 });
+    const sector = makeSector(corp._id);
+    const { db } = mockDb({ sector });
+
+    await attemptUnionBusting(db, corp, sector._id.toString(), 10);
+    expect(notifyUnionOfBustingAttempt).not.toHaveBeenCalled();
   });
 
   it("on backfire: raises unionization instead of dropping it", async () => {

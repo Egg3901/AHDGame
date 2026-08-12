@@ -223,8 +223,11 @@ export async function computeNppWealthAnchorMap(
       const key = String(pos.nppId);
       const fund = fundById.get(String(pos.fundId));
       const nav = fund?.quotedNav ?? 1;
-      const currency = fund?.anchorCurrencyCode ?? ("USD" as CurrencyCode);
-      const value = toAnchor((pos.units ?? 0) * nav, currency, exchangeRates);
+      // `quotedNav` is already ₳ (fund cash, NAV and every fund leg are ₳), so
+      // units × NAV is the ₳ value directly. Running it through `toAnchor` with
+      // the fund's currency divided it a second time and understated NPP wealth
+      // in every fund whose currency is not at parity.
+      const value = (pos.units ?? 0) * nav;
       indexHoldingsByNpp.set(key, (indexHoldingsByNpp.get(key) ?? 0) + value);
     }
   }

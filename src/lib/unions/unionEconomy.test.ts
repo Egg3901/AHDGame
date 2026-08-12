@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ObjectId } from "mongodb";
 import {
   recruitPressureGain,
   applyRecruit,
@@ -9,7 +10,10 @@ import {
   strikeCallCost,
   STRIKE_CALL_COST_PER_SECTOR,
   RECRUIT_PRESSURE_GAIN_AT_ZERO,
+  buildUnionStrikePreview,
+  unionStrikeBlockReason,
 } from "./unionEconomy";
+import type { CorporateSector } from "@/lib/db/types";
 
 describe("recruitPressureGain", () => {
   it("is at its maximum at pressure 0", () => {
@@ -64,5 +68,62 @@ describe("strikeCallCost", () => {
 
   it("is 0 for 0 sectors", () => {
     expect(strikeCallCost(0)).toBe(0);
+  });
+});
+
+function strikeSector(
+  overrides: Partial<
+    Pick<
+      CorporateSector,
+      "_id" | "unionization" | "strikeStartedAtTurn" | "strikeCooldownUntilTurn"
+    >
+  > = {}
+) {
+  return {
+    _id: new ObjectId(),
+    unionization: 40,
+    strikeStartedAtTurn: null,
+    strikeCooldownUntilTurn: null,
+    ...overrides,
+  };
+}
+
+describe("union strike preview", () => {
+  it("uses the same organization, active-strike, and cooldown rules for every local", () => {
+    expect(unionStrikeBlockReason(strikeSector({ unionization: 29.9 }), 10)).toBe("underorganized");
+    expect(unionStrikeBlockReason(strikeSector({ strikeStartedAtTurn: 9 }), 10)).toBe(
+      "already_striking"
+    );
+    expect(unionStrikeBlockReason(strikeSector({ strikeCooldownUntilTurn: 11 }), 10)).toBe(
+      "sector_cooldown"
+    );
+    expect(unionStrikeBlockReason(strikeSector({ strikeCooldownUntilTurn: 10 }), 10)).toBeNull();
+    const protectedLocal = strikeSector();
+    expect(
+      unionStrikeBlockReason(protectedLocal, 10, new Set([protectedLocal._id.toString()]))
+    ).toBe("collective_agreement");
+  });
+
+  it("prices only eligible locals and explains every exclusion", () => {
+    const preview = buildUnionStrikePreview(
+      { lastCalledStrikeTurn: 7 },
+      [
+        strikeSector(),
+        strikeSector({ unionization: 10 }),
+        strikeSector({ strikeStartedAtTurn: 8 }),
+        strikeSector({ strikeCooldownUntilTurn: 20 }),
+      ],
+      10
+    );
+
+    expect(preview.eligibleSectors).toHaveLength(1);
+    expect(preview.cost).toBe(STRIKE_CALL_COST_PER_SECTOR);
+    expect(preview.unionCooldownTurnsRemaining).toBe(5);
+    expect(preview.blocked).toEqual({
+      underorganized: 1,
+      already_striking: 1,
+      sector_cooldown: 1,
+      collective_agreement: 0,
+    });
   });
 });

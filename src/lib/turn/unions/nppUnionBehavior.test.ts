@@ -1,13 +1,30 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
-import type { Union } from "@/lib/db/types";
+import type {
+  BargainingCampaign,
+  CollectiveAgreement,
+  Corporation,
+  CorporateSector,
+  Union,
+} from "@/lib/db/types";
 import type { NPP } from "@/lib/db/types/npp";
 import { processNppUnionBehavior } from "./nppUnionBehavior";
 import { SEED_MEMBERSHIP_PRESSURE } from "@/lib/admin/seed/seedUnions";
-import { STRIKE_CALL_MIN_UNIONIZATION } from "@/lib/unions/unionEconomy";
-import { realWageIndex } from "@/lib/labour/unionization";
-import { STRIKE_EXPECTATION_GAP_THRESHOLD } from "@/lib/labour/strikes";
+import {
+  openBargainingCampaignFromLiveConditions,
+  persistBargainingCounter,
+  persistBargainingSettlement,
+  persistUnionBargainingEscalation,
+} from "@/lib/unions/commands/bargaining";
+
+vi.mock("@/lib/unions/commands/bargaining", () => ({
+  openBargainingCampaignFromLiveConditions: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
+  persistBargainingCounter: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
+  persistBargainingMediationAction: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
+  persistBargainingSettlement: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
+  persistUnionBargainingEscalation: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
+}));
 
 let nppAutonomyLevel: "off" | "v3" = "v3";
 let labourSystemMode: "off" | "full" = "full";
@@ -64,7 +81,21 @@ function makeMilitantNpp(countryId: string): NPP {
  * a real DB would, so multi-call sequencing (election then recruit) composes
  * the same way it does in production instead of only inspecting the raw ops.
  */
-function mockDb({ unions, npps }: { unions: Union[]; npps: NPP[] }) {
+function mockDb({
+  unions,
+  npps,
+  sectors = [],
+  corporations = [],
+  campaigns = [],
+  agreements = [],
+}: {
+  unions: Union[];
+  npps: NPP[];
+  sectors?: CorporateSector[];
+  corporations?: Corporation[];
+  campaigns?: BargainingCampaign[];
+  agreements?: CollectiveAgreement[];
+}) {
   const unionsBulkWrite = vi.fn().mockImplementation(async (ops: unknown[]) => {
     for (const raw of ops as Array<{
       updateOne: { filter: { _id: ObjectId }; update: Record<string, unknown> };
@@ -101,11 +132,18 @@ function mockDb({ unions, npps }: { unions: Union[]; npps: NPP[] }) {
       if (name === "corporateSectors") {
         return {
           aggregate: () => ({ toArray: () => Promise.resolve([]) }),
+          find: () => ({ toArray: () => Promise.resolve(sectors) }),
           bulkWrite: vi.fn().mockResolvedValue({}),
         };
       }
       if (name === "corporations") {
-        return { find: () => ({ toArray: () => Promise.resolve([]) }) };
+        return { find: () => ({ toArray: () => Promise.resolve(corporations) }) };
+      }
+      if (name === "bargainingCampaigns") {
+        return { find: () => ({ toArray: () => Promise.resolve(campaigns) }) };
+      }
+      if (name === "collectiveAgreements") {
+        return { find: () => ({ toArray: () => Promise.resolve(agreements) }) };
       }
       throw new Error(`unexpected collection ${name}`);
     },
@@ -115,6 +153,16 @@ function mockDb({ unions, npps }: { unions: Union[]; npps: NPP[] }) {
 }
 
 describe("processNppUnionBehavior", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(openBargainingCampaignFromLiveConditions).mockResolvedValue({
+      ok: true,
+      status: 200,
+    });
+    vi.mocked(persistBargainingCounter).mockResolvedValue({ ok: true, status: 200 });
+    vi.mocked(persistBargainingSettlement).mockResolvedValue({ ok: true, status: 200 });
+    vi.mocked(persistUnionBargainingEscalation).mockResolvedValue({ ok: true, status: 200 });
+  });
   it(
     "elects NPP leaders into every vacant union and recruits — regression: without this phase " +
       "membershipPressure is uniformly stuck across every row forever (the turn-650 sandbox " +
@@ -194,100 +242,349 @@ describe("processNppUnionBehavior", () => {
     nppAutonomyLevel = "v3"; // reset for subsequent tests
   });
 
-  it("plants NPP strikes only on eligible sectors, with a CLOSABLE expectation gap", async () => {
-    // Regression for the exploit: the plant was updateMany({countryId,sectorType})
-    // with a fixed workerExpectationIndex of 2.0. That struck 0%-unionized player
-    // corps, reset live strikes, ignored cooldowns, and — with wages capped at 1.5
-    // — made concession impossible, looping player corps into a perma-strike. The
-    // fix mirrors the player path exactly: an eligibility-filtered find and a
-    // realWageIndex+threshold+0.05 plant.
-    const CURRENT_TURN = 50;
-    const leader = makeMilitantNpp("PL");
-    // A led union past every strike gate: organised, standing unmet demand,
-    // never struck (so cooled + patient), treasury to fund it.
-    const union = makeUnion("PL", {
+  it("opens one employer-scoped campaign for an organized NPP-led union", async () => {
+    const leader = makeMilitantNpp("US");
+    const ledUnion = makeUnion("US", {
       ownerId: leader._id,
       ownerType: "npp",
-      membershipPressure: 40,
-      demandedWageLevel: 1.4,
-      treasury: 10_000_000,
-      lastCalledStrikeTurn: null,
-    } as Partial<Union>);
+      membershipPressure: 60,
+    });
+    const corporationId = new ObjectId();
+    const sector = {
+      _id: new ObjectId(),
+      corporationId,
+      countryId: "US",
+      sectorType: "manufacturing",
+      workers: 1000,
+      unionization: 65,
+      wageLevel: 1,
+      profitMargin: 12,
+    } as CorporateSector;
+    const corporation = {
+      _id: corporationId,
+      ceoType: "character",
+      ceoId: new ObjectId(),
+    } as Corporation;
+    const { db } = mockDb({
+      unions: [ledUnion],
+      npps: [leader],
+      sectors: [sector],
+      corporations: [corporation],
+    });
 
-    let strikeFindQuery: Record<string, unknown> | null = null;
-    const strikePlantOps: Array<{
-      updateOne: { filter: Record<string, unknown>; update: Record<string, unknown> };
-    }> = [];
-    const eligibleSector = { _id: new ObjectId(), wageLevel: 1.0 };
+    const result = await processNppUnionBehavior(db, 10);
 
-    const db = {
-      collection: (name: string) => {
-        if (name === "unions") {
-          return {
-            find: () => ({ toArray: async () => [union] }),
-            bulkWrite: vi.fn().mockImplementation(async (ops: unknown[]) => {
-              for (const raw of ops as Array<{
-                updateOne: { filter: { _id: ObjectId }; update: Record<string, unknown> };
-              }>) {
-                const { filter, update } = raw.updateOne;
-                if (!union._id.equals(filter._id)) continue;
-                if (update.$set) Object.assign(union, update.$set);
-                if (update.$inc) {
-                  for (const [k, v] of Object.entries(update.$inc as Record<string, number>)) {
-                    (union as unknown as Record<string, number>)[k] =
-                      ((union as unknown as Record<string, number>)[k] ?? 0) + v;
-                  }
-                }
-              }
-              return {};
-            }),
-            updateMany: vi.fn().mockResolvedValue({}),
-          };
-        }
-        if (name === "npps") return { find: () => ({ toArray: async () => [leader] }) };
-        if (name === "corporateSectors") {
-          return {
-            aggregate: () => ({
-              toArray: async () => [
-                { _id: { c: "PL", s: "manufacturing" }, avgWage: 1.0, avgMargin: 20, n: 1 },
-              ],
-            }),
-            find: (query: Record<string, unknown>) => {
-              strikeFindQuery = query;
-              return { toArray: async () => [eligibleSector] };
-            },
-            bulkWrite: vi.fn().mockImplementation(async (ops: unknown[]) => {
-              strikePlantOps.push(...(ops as typeof strikePlantOps));
-              return {};
-            }),
-          };
-        }
-        // No NPP-run corporations → the concession pass returns before touching
-        // corporateSectors a second time.
-        if (name === "corporations") return { find: () => ({ toArray: async () => [] }) };
-        throw new Error(`unexpected collection ${name}`);
+    expect(result.campaignsOpened).toBe(1);
+    expect(openBargainingCampaignFromLiveConditions).toHaveBeenCalledWith(
+      db,
+      ledUnion,
+      corporationId.toHexString(),
+      expect.objectContaining({
+        agreementDurationTurns: 48,
+        noStrikeTurns: 24,
+      }),
+      10
+    );
+    expect(
+      vi.mocked(openBargainingCampaignFromLiveConditions).mock.calls[0][3].wageLevel
+    ).toBeGreaterThan(1);
+    expect(ledUnion.demandedWageLevel).toBeNull();
+  });
+
+  it("lets an NPP CEO counter a player-led union campaign", async () => {
+    const playerUnion = makeUnion("US", {
+      ownerId: new ObjectId(),
+      ownerType: "character",
+      membershipPressure: 60,
+    });
+    const employerId = new ObjectId();
+    const sectorId = new ObjectId();
+    const sector = {
+      _id: sectorId,
+      corporationId: employerId,
+      countryId: "US",
+      sectorType: "manufacturing",
+      workers: 1000,
+      unionization: 60,
+      wageLevel: 1,
+      profitMargin: 10,
+    } as CorporateSector;
+    const employer = {
+      _id: employerId,
+      ceoType: "npp",
+      ceoId: new ObjectId(),
+    } as Corporation;
+    const offer = {
+      revision: 1,
+      proposedBy: "union" as const,
+      wageLevel: 1.2,
+      agreementDurationTurns: 48,
+      noStrikeTurns: 24,
+      proposedAtTurn: 1,
+      proposedAt: new Date(),
+    };
+    const campaign = {
+      _id: new ObjectId(),
+      unionId: playerUnion._id,
+      countryId: "US",
+      sectorType: "manufacturing",
+      employerCorporationId: employerId,
+      sectorIds: [sectorId],
+      status: "negotiating",
+      escalationLevel: "none",
+      mandate: {
+        coverage: 60,
+        grievance: 50,
+        laborTightness: 50,
+        lawSupport: 50,
+        strikeFundRunway: 3,
+        support: 60,
+        leverage: 60,
+        organizedLocalCount: 1,
+        totalLocalCount: 1,
       },
-    } as unknown as Db;
+      currentOffer: offer,
+      offers: [offer],
+      startedAtTurn: 1,
+      deadlineTurn: 9,
+      lastActionTurn: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as BargainingCampaign;
+    const { db } = mockDb({
+      unions: [playerUnion],
+      npps: [],
+      sectors: [sector],
+      corporations: [employer],
+      campaigns: [campaign],
+    });
 
-    const result = await processNppUnionBehavior(db, CURRENT_TURN);
+    const result = await processNppUnionBehavior(db, 2);
 
-    expect(result.strikesCalled).toBe(1);
+    expect(result.counteroffersMade).toBe(1);
+    expect(persistBargainingCounter).toHaveBeenCalledWith(
+      db,
+      campaign,
+      "employer",
+      expect.any(Object),
+      2
+    );
+    expect(vi.mocked(persistBargainingCounter).mock.calls[0][3].wageLevel).toBeLessThan(1.2);
+  });
 
-    // (1) The eligibility filter is present — this is what confines strikes to
-    // organised, not-already-striking, cooled-down sectors (player parity).
-    expect(strikeFindQuery).not.toBeNull();
-    expect(strikeFindQuery!.unionization).toEqual({ $gte: STRIKE_CALL_MIN_UNIONIZATION });
-    expect(strikeFindQuery!.strikeStartedAtTurn).toBeNull();
+  it("lets an NPP-led union accept an adequate player CEO counteroffer", async () => {
+    const leader = makeMilitantNpp("US");
+    const ledUnion = makeUnion("US", {
+      ownerId: leader._id,
+      ownerType: "npp",
+      membershipPressure: 60,
+    });
+    const employerId = new ObjectId();
+    const sectorId = new ObjectId();
+    const sector = {
+      _id: sectorId,
+      corporationId: employerId,
+      countryId: "US",
+      sectorType: "manufacturing",
+      workers: 1000,
+      unionization: 60,
+      wageLevel: 1,
+      profitMargin: 10,
+    } as CorporateSector;
+    const employer = {
+      _id: employerId,
+      ceoType: "character",
+      ceoId: new ObjectId(),
+    } as Corporation;
+    const unionOffer = {
+      revision: 1,
+      proposedBy: "union" as const,
+      wageLevel: 1.2,
+      agreementDurationTurns: 48,
+      noStrikeTurns: 24,
+      proposedAtTurn: 1,
+      proposedAt: new Date(),
+    };
+    const employerOffer = {
+      ...unionOffer,
+      revision: 2,
+      proposedBy: "employer" as const,
+      wageLevel: 1.2,
+      proposedAtTurn: 2,
+    };
+    const campaign = {
+      _id: new ObjectId(),
+      unionId: ledUnion._id,
+      countryId: "US",
+      sectorType: "manufacturing",
+      employerCorporationId: employerId,
+      sectorIds: [sectorId],
+      status: "negotiating",
+      escalationLevel: "none",
+      mandate: {
+        coverage: 60,
+        grievance: 50,
+        laborTightness: 50,
+        lawSupport: 50,
+        strikeFundRunway: 3,
+        support: 60,
+        leverage: 60,
+        organizedLocalCount: 1,
+        totalLocalCount: 1,
+      },
+      currentOffer: employerOffer,
+      offers: [unionOffer, employerOffer],
+      startedAtTurn: 1,
+      deadlineTurn: 9,
+      lastActionTurn: 2,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as BargainingCampaign;
+    const { db } = mockDb({
+      unions: [ledUnion],
+      npps: [leader],
+      sectors: [sector],
+      corporations: [employer],
+      campaigns: [campaign],
+    });
 
-    // (2) The plant is guarded and uses a CLOSABLE gap, never the fixed 2.0.
-    expect(strikePlantOps).toHaveLength(1);
-    const op = strikePlantOps[0].updateOne;
-    expect(op.filter).toMatchObject({ strikeStartedAtTurn: null });
-    const set = op.update.$set as Record<string, number>;
-    expect(set.strikeStartedAtTurn).toBe(CURRENT_TURN);
-    const expected = realWageIndex(1.0, undefined) + STRIKE_EXPECTATION_GAP_THRESHOLD + 0.05;
-    expect(set.workerExpectationIndex).toBeCloseTo(expected, 6);
-    expect(set.workerExpectationIndex).not.toBe(2.0);
-    expect(set.workerExpectationIndex).toBeLessThanOrEqual(1.5 + STRIKE_EXPECTATION_GAP_THRESHOLD);
+    const result = await processNppUnionBehavior(db, 3);
+
+    expect(result.agreementsSettled).toBe(1);
+    expect(persistBargainingSettlement).toHaveBeenCalledWith(db, campaign, "union", 3);
+  });
+
+  it("does not reopen an employer while an active agreement covers it", async () => {
+    const leader = makeMilitantNpp("US");
+    const ledUnion = makeUnion("US", {
+      ownerId: leader._id,
+      ownerType: "npp",
+      membershipPressure: 60,
+    });
+    const employerId = new ObjectId();
+    const sectorId = new ObjectId();
+    const sector = {
+      _id: sectorId,
+      corporationId: employerId,
+      countryId: "US",
+      sectorType: "manufacturing",
+      workers: 1000,
+      unionization: 60,
+      wageLevel: 1,
+    } as CorporateSector;
+    const agreement = {
+      unionId: ledUnion._id,
+      employerCorporationId: employerId,
+      sectorIds: [sectorId],
+      status: "active",
+      expiresAtTurn: 50,
+    } as CollectiveAgreement;
+    const { db } = mockDb({
+      unions: [ledUnion],
+      npps: [leader],
+      sectors: [sector],
+      corporations: [{ _id: employerId } as Corporation],
+      agreements: [agreement],
+    });
+
+    const result = await processNppUnionBehavior(db, 10);
+
+    expect(result.campaignsOpened).toBe(0);
+    expect(openBargainingCampaignFromLiveConditions).not.toHaveBeenCalled();
+  });
+
+  it("routes NPP industrial action through the shared escalation service", async () => {
+    const leader = makeMilitantNpp("US");
+    const ledUnion = makeUnion("US", {
+      ownerId: leader._id,
+      ownerType: "npp",
+      membershipPressure: 60,
+      treasury: 10_000,
+    });
+    const employerId = new ObjectId();
+    const sectorId = new ObjectId();
+    const sector = {
+      _id: sectorId,
+      corporationId: employerId,
+      countryId: "US",
+      sectorType: "manufacturing",
+      workers: 1000,
+      unionization: 70,
+      wageLevel: 1,
+      profitMargin: 12,
+    } as CorporateSector;
+    const employer = {
+      _id: employerId,
+      ceoType: "character",
+      ceoId: new ObjectId(),
+    } as Corporation;
+    const offer = {
+      revision: 1,
+      proposedBy: "union" as const,
+      wageLevel: 1.2,
+      agreementDurationTurns: 48,
+      noStrikeTurns: 24,
+      proposedAtTurn: 1,
+      proposedAt: new Date(),
+    };
+    const campaign = {
+      _id: new ObjectId(),
+      unionId: ledUnion._id,
+      countryId: "US",
+      sectorType: "manufacturing",
+      employerCorporationId: employerId,
+      sectorIds: [sectorId],
+      status: "dispute",
+      escalationLevel: "none",
+      mandate: {
+        coverage: 70,
+        grievance: 50,
+        laborTightness: 50,
+        lawSupport: 50,
+        strikeFundRunway: 3,
+        support: 70,
+        leverage: 65,
+        organizedLocalCount: 1,
+        totalLocalCount: 1,
+      },
+      currentOffer: offer,
+      offers: [offer],
+      startedAtTurn: 1,
+      deadlineTurn: 9,
+      disputeStartedAtTurn: 1,
+      lastActionTurn: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as BargainingCampaign;
+    const { db } = mockDb({
+      unions: [ledUnion],
+      npps: [leader],
+      sectors: [sector],
+      corporations: [employer],
+      campaigns: [campaign],
+    });
+
+    const result = await processNppUnionBehavior(db, 3);
+
+    expect(result.disputesEscalated).toBe(1);
+    expect(persistUnionBargainingEscalation).toHaveBeenCalledWith(db, ledUnion, campaign, 3);
+  });
+
+  it("vacates a retired NPP leader instead of leaving the union inert", async () => {
+    const ledUnion = makeUnion("US", {
+      ownerId: new ObjectId(),
+      ownerType: "npp",
+    });
+    const { db, unionsUpdateMany } = mockDb({ unions: [ledUnion], npps: [] });
+
+    await processNppUnionBehavior(db, 10);
+
+    expect(unionsUpdateMany).toHaveBeenCalledWith(
+      { _id: { $in: [ledUnion._id] } },
+      expect.objectContaining({
+        $set: expect.objectContaining({ ownerId: null }),
+        $unset: { ownerType: "" },
+      })
+    );
   });
 });

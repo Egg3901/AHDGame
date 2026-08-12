@@ -110,7 +110,10 @@ export async function computeElectoralVotes(
   let stateVoteData: Record<string, StateVoteData> | undefined;
 
   if (hasUnitVotes || electoralVotesByCandidate) {
-    const states = await db.collection<{ _id: string; name?: string }>("states").find({}).toArray();
+    const states = await db
+      .collection<{ _id: string; name?: string }>("states")
+      .find({}, { projection: { _id: 1, name: 1 } })
+      .toArray();
     const stateNameMap = new Map(states.map((s) => [s._id, s.name ?? s._id]));
 
     if (hasUnitVotes && voteTally.totalVotesByUnit) {

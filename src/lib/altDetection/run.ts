@@ -61,9 +61,13 @@ import {
 const CANDIDATE_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
 
 /** Hard cap on the candidate pool. Scoring is O(n^2) pairwise (buildLinks
- * runs the full signal registry over every pair); at 300 candidates that's
- * ~45k pair evaluations, cheap for an hourly job. */
-const MAX_CANDIDATES = 300;
+ * runs the full signal registry over every pair); at 800 candidates that's
+ * ~320k pair evaluations, still seconds for an hourly job.
+ *
+ * Raised from 300 after launch: every hourly run was truncating, so accounts
+ * were dropping out of the graph unscored, and the whole registered base is
+ * far below this cap — the pool now fits with headroom rather than clipping. */
+const MAX_CANDIDATES = 800;
 
 /** Cap on persisted `altLinks` rows per run — guards against a pathological
  * shared-subnet blowup (e.g. a university NAT) writing tens of thousands of

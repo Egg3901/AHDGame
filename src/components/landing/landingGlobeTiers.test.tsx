@@ -143,7 +143,12 @@ describe("landing globe — Background Nations are inert", () => {
     const afterInteractive = after.paths.filter((el) => el.style.cursor === "pointer").length;
 
     expect(beforeInteractive).toBeGreaterThan(FEATURE_IDS.length - 5);
-    expect(afterInteractive).toBeLessThan(beforeInteractive / 3);
+    // A loose bound on purpose: the point is that most of the globe goes to the
+    // non-interactive background layer, not the exact fraction. The battleground
+    // roster grows whenever a decolonisation theatre gains geometry — Congo,
+    // Somalia and South Yemen took it past a literal third — and the exact-roster
+    // assertion below is the real check on what survives.
+    expect(afterInteractive).toBeLessThan(beforeInteractive / 2);
     // Sanity: what is left is exactly the named roster (plus nothing else).
     expect(afterInteractive).toBe(
       FEATURE_IDS.filter((id) => TIER_LOOKUP.has(id) && TIER_LOOKUP.get(id) !== "background").length

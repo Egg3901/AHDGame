@@ -44,6 +44,7 @@
  *    without eroding intentional per-state seed variation.
  */
 
+import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import type { Db } from "mongodb";
 import type { DemographicCategory, StateDemographics } from "@/lib/db/types/demographics";
 import type {
@@ -629,7 +630,7 @@ export async function processStateDemographics(
   let stateDefaults: StateDemographics | null = null;
   if (v2Enabled) {
     const [cats, defaults] = await Promise.all([
-      db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+      loadDemographicCategories(db),
       db.collection<StateDemographics>("demographicDefaults").findOne({ _id: stateId }),
     ]);
     categories = cats;
@@ -720,7 +721,7 @@ export async function processAllStateDemographics(db: Db): Promise<number> {
   let defaultsByState = new Map<string, StateDemographics>();
   if (v2Enabled) {
     const [cats, allDefaults] = await Promise.all([
-      db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+      loadDemographicCategories(db),
       db.collection<StateDemographics>("demographicDefaults").find({}).toArray(),
     ]);
     categories = cats;

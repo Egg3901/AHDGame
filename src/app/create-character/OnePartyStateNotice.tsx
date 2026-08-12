@@ -1,6 +1,7 @@
 "use client";
 
 import { DEFAULT_OPS_VOTE_MULTIPLIERS } from "@/lib/constants/countries";
+import { blocListQuota } from "@/lib/constants/blocList";
 
 /**
  * The one-party-state briefing.
@@ -14,12 +15,85 @@ import { DEFAULT_OPS_VOTE_MULTIPLIERS } from "@/lib/constants/countries";
 export function OnePartyStateNotice({
   countryName,
   rulingPartyName,
+  countryId,
 }: {
   countryName: string;
   rulingPartyName: string | null;
+  /** Selects the bloc-list briefing where the country runs one. */
+  countryId?: string | null;
 }) {
   const m = DEFAULT_OPS_VOTE_MULTIPLIERS;
   const rulingVsApproved = m.approved > 0 ? Math.round((m.ruling / m.approved) * 10) / 10 : null;
+  const quota = blocListQuota(countryId);
+
+  // Bloc-list countries do not use the vote multipliers at all, so quoting them
+  // here would be a straight lie: the quota decides the party split and the
+  // vote only orders a party's own slate. Numbers come from BLOC_LIST_QUOTAS.
+  if (quota) {
+    const total = Object.values(quota.shares).reduce((s, v) => s + v, 0) || 1;
+    const rulingPct = Math.round(((quota.shares["1"] ?? 0) / total) * 100);
+    const blocPcts = Object.entries(quota.shares)
+      .filter(([party]) => party !== "1")
+      .map(([, w]) => Math.round((w / total) * 1000) / 10);
+    const blocPct = blocPcts.length > 0 ? blocPcts[0] : 0;
+
+    return (
+      <div className="rounded border border-warning/40 bg-warning/10 p-3 text-body-sm">
+        <p className="font-semibold text-warning">
+          {countryName} elects its legislature on a single {quota.label} list.
+        </p>
+
+        <p className="mt-1.5 leading-relaxed text-foreground/90">
+          There is no contest between parties. Every seat is allocated before a vote is cast, and
+          the election only decides which of a party&apos;s own people fill its share.
+        </p>
+
+        <ul className="mt-2 space-y-1 text-muted">
+          <li className="flex gap-2">
+            <span aria-hidden className="text-warning">
+              •
+            </span>
+            <span>
+              <span className="font-semibold">
+                {rulingPartyName ? rulingPartyName : "The ruling party"}
+              </span>{" "}
+              holds <span className="font-mono font-semibold">{rulingPct}%</span> of the chamber and{" "}
+              {blocPcts.length > 0 ? `each bloc party ` : "the bloc parties hold "}
+              <span className="font-mono font-semibold">{blocPct}%</span>. Winning the popular vote
+              changes neither number.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span aria-hidden className="text-warning">
+              •
+            </span>
+            <span>
+              Your votes decide your standing{" "}
+              <span className="font-semibold">inside your own party&apos;s block</span>. A bloc
+              party is a real place to build a career; it is not a route to a majority.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span aria-hidden className="text-warning">
+              •
+            </span>
+            <span>
+              Parties off the list, and independents, take{" "}
+              <span className="font-mono font-semibold text-error">no seats at all</span>. There is
+              no ballot line outside the {quota.label}.
+            </span>
+          </li>
+        </ul>
+
+        <p className="mt-2 leading-relaxed text-foreground/90">
+          The way the split changes is political, not electoral. Reform belongs to the ruling
+          party&apos;s leadership: liberalising the regime, legalising opposition, calling a
+          constitutional convention, and ultimately converting the country to a competitive system.
+          Take the party, then take it somewhere.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded border border-warning/40 bg-warning/10 p-3 text-body-sm">

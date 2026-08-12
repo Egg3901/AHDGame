@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/mongodb";
+import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { accumulateNGPresidentVoteTurn } from "@/lib/turn/election/ngPresidentAccumulation";
 import { COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS } from "@/lib/constants/countries";
 import { ObjectId } from "mongodb";
@@ -968,7 +969,7 @@ async function recordPresidentialStatePollingSnapshots(
   // One-shot fetch for demographics + state + categories used across all
   // pres elections in this turn.
   const [categoriesDocs, statesDocs, demographicsDocs] = await Promise.all([
-    db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+    loadDemographicCategories(db),
     db
       .collection<State>("states")
       .find({ _id: { $in: stateIds } })
@@ -1154,7 +1155,7 @@ export async function accumulateGeneralElectionVotes(now: Date, turn: number): P
           gsPreset,
           demoDefaults,
         ] = await Promise.all([
-          db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+          loadDemographicCategories(db),
           db.collection<State>("states").find(regionalScope).toArray(),
           db.collection<StateDemographics>("stateDemographics").find(regionalScope).toArray(),
           db

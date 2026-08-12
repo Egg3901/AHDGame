@@ -159,7 +159,21 @@ export default async function GovernorOfficePage({ params }: Props) {
     getOfficeState(db, countryId, stateId),
     db
       .collection<StateBill>("stateBills")
-      .find({ stateId, status: "passed" })
+      .find(
+        { stateId, status: "passed" },
+        {
+          projection: {
+            title: 1,
+            summary: 1,
+            sponsorId: 1,
+            sponsorName: 1,
+            sponsorParty: 1,
+            votesFor: 1,
+            votesAgainst: 1,
+            passedAt: 1,
+          },
+        }
+      )
       .sort({ passedAt: 1 })
       .toArray(),
     db

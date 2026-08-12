@@ -384,3 +384,89 @@ describe("applyPlayerWhipToCabinet", () => {
     expect(db.collectionMocks["cabinetNominations"]!.updateOne).not.toHaveBeenCalled();
   });
 });
+
+describe("applyPlayerWhipToBill - concurrent (active_both) bills", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    db = createMockDb();
+  });
+
+  it("routes an UPPER-chamber member's vote AND weight to the upper chamber", async () => {
+    const senator = new ObjectId();
+    const bill = makeBill({
+      status: "active_both",
+      countryId: "US",
+      originChamber: "house",
+      currentChamber: "house",
+      votes: {},
+      otherChamberVotes: {},
+    });
+    db.collection("electedOfficials").find.mockReturnValue({
+      toArray: async () => [{ characterId: senator, seatsHeld: 1, officeType: "senate" }],
+    });
+
+    await applyPlayerWhipToBill(db as unknown as Db, bill, "for", [senator]);
+
+    const [, update] = db.collectionMocks["bills"]!.updateOne.mock.calls[0]!;
+    const set = (update as { $set: Record<string, unknown> }).$set;
+    const inc = (update as { $inc?: Record<string, number> }).$inc ?? {};
+
+    // Assert the MAP and the COUNTER. The map alone leaves the $inc triple unproven,
+    // and it is the counter that lets a bill pass on the other house's votes.
+    expect(set).toHaveProperty(`otherChamberVotes.${senator.toString()}`);
+    expect(set).toHaveProperty(`otherChamberWhippedFromVote.${senator.toString()}`);
+    expect(inc.otherChamberVotesFor).toBe(1);
+    expect(inc.votesFor).toBeUndefined();
+  });
+
+  it("routes a LOWER-chamber member to the lower chamber on the same bill", async () => {
+    const rep = new ObjectId();
+    const bill = makeBill({
+      status: "active_both",
+      countryId: "US",
+      originChamber: "house",
+      currentChamber: "house",
+      votes: {},
+      otherChamberVotes: {},
+    });
+    db.collection("electedOfficials").find.mockReturnValue({
+      toArray: async () => [{ characterId: rep, seatsHeld: 1, officeType: "house" }],
+    });
+
+    await applyPlayerWhipToBill(db as unknown as Db, bill, "for", [rep]);
+
+    const [, update] = db.collectionMocks["bills"]!.updateOne.mock.calls[0]!;
+    const set = (update as { $set: Record<string, unknown> }).$set;
+    const inc = (update as { $inc?: Record<string, number> }).$inc ?? {};
+    expect(set).toHaveProperty(`votes.${rep.toString()}`);
+    expect(inc.votesFor).toBe(1);
+    expect(inc.otherChamberVotesFor).toBeUndefined();
+  });
+
+  it("splits a mixed whip across both chambers", async () => {
+    const rep = new ObjectId();
+    const senator = new ObjectId();
+    const bill = makeBill({
+      status: "active_both",
+      countryId: "US",
+      originChamber: "house",
+      currentChamber: "house",
+      votes: {},
+      otherChamberVotes: {},
+    });
+    db.collection("electedOfficials").find.mockReturnValue({
+      toArray: async () => [
+        { characterId: rep, seatsHeld: 1, officeType: "house" },
+        { characterId: senator, seatsHeld: 1, officeType: "senate" },
+      ],
+    });
+
+    await applyPlayerWhipToBill(db as unknown as Db, bill, "for", [rep, senator]);
+
+    const [, update] = db.collectionMocks["bills"]!.updateOne.mock.calls[0]!;
+    const inc = (update as { $inc?: Record<string, number> }).$inc ?? {};
+    expect(inc.votesFor).toBe(1);
+    expect(inc.otherChamberVotesFor).toBe(1);
+  });
+});

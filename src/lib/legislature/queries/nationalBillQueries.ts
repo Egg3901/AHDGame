@@ -37,6 +37,10 @@ import {
   type OverrideChamberDisplay,
 } from "@/lib/congress/vetoOverrideTally";
 import { resolveBillCountryId } from "@/lib/congress/resolveBillCountryId";
+import {
+  resolveOtherVoteChamberKey,
+  resolvePrimaryVoteChamberKey,
+} from "@/lib/congress/billVoteChamberScope";
 import type { BillDetail } from "@/lib/legislature/dto/billDetail";
 import type { BillDisplay, BillsResponse } from "@/lib/legislature/dto/billDisplay";
 import {
@@ -96,13 +100,6 @@ function resolveVoteOfficeType(
   return getOfficeTypeForChamber(countryId, chamberKey === "joint" ? lowerKey : chamberKey);
 }
 
-function resolvePrimaryVoteChamberKey(bill: Bill, lowerKey: string): string | undefined {
-  if (bill.status === "cabinet_review") return undefined;
-  if (bill.status === "override_shugiin") return bill.currentChamber;
-  if (bill.originChamber === "cabinet") return lowerKey;
-  return bill.originChamber;
-}
-
 function describeTariffProvision(
   provision: Extract<Bill["provisions"], unknown[]>[number] & {
     type: "tariff";
@@ -150,7 +147,13 @@ export async function listNationalLegislatureBills(
 
   const billFilter: Record<string, unknown> = {
     ...buildNationalBillCountryScopeFilter(countryId),
-    currentChamber: chamber,
+    // A concurrent bill sits on both floors at once and `currentChamber` names
+    // only the lower one, so filtering by it alone drops the bill out of the
+    // upper chamber's tab — the chamber's own members would never see it.
+    //
+    // Nested under `$and`, not a bare `$or`: the UK country scope IS an `$or`,
+    // and a second one on the same object would replace it and unscope the query.
+    $and: [{ $or: [{ currentChamber: chamber }, { status: "active_both" }] }],
   };
 
   // The bill list is already scoped to this country by
@@ -356,7 +359,9 @@ export async function listNationalLegislatureBills(
                               : // Ahead of the subsidy fallback, which is a catch-all.
                                 provision.type === "declare_war"
                                 ? "Declaration of War"
-                                : describeSubsidyProvision(provision);
+                                : provision.type === "join_conflict"
+                                  ? "Entry into the Conflict"
+                                  : describeSubsidyProvision(provision);
           return {
             legislationTypeId: provision.type,
             legislationTypeName,
@@ -480,7 +485,10 @@ export async function listNationalLegislatureBills(
       votingStartedAt: bill.votingStartedAt?.toISOString() ?? null,
       votingEndsAt: bill.votingEndsAt?.toISOString() ?? null,
       votingEndsOnTurn: bill.votingEndsOnTurn ?? null,
-      otherChamberVotingEndsAt: null,
+      // Was a hardcoded `null` — a literal that derives from nothing, so no status grep
+      // could ever find it. A concurrent bill has a real upper-chamber deadline and the
+      // UI counts down against it.
+      otherChamberVotingEndsAt: bill.otherChamberVotingEndsAt?.toISOString() ?? null,
       otherChamberVotingEndsOnTurn: bill.otherChamberVotingEndsOnTurn ?? null,
       passedAt: bill.passedOriginAt?.toISOString() ?? null,
       enactedAt: bill.enactedAt?.toISOString() ?? null,
@@ -488,8 +496,15 @@ export async function listNationalLegislatureBills(
         "for" | "against" | "abstain" | null,
       myOtherChamberVote: (myVoteMap.get(bill._id.toString())?.other ?? null) as
         "for" | "against" | "abstain" | null,
-      canVoteOrigin: bill.status === "active" && isMemberOfViewedChamber,
-      canVoteOther: false,
+      // On a concurrent bill BOTH chambers are open, so a member of whichever chamber
+      // this page is showing may vote — into that chamber's own map. `canVoteOther` was
+      // a hardcoded `false`, which would have hidden the vote button from every upper
+      // chamber on every one of these bills.
+      canVoteOrigin:
+        (bill.status === "active" || (bill.status === "active_both" && chamber === lowerKey)) &&
+        isMemberOfViewedChamber,
+      canVoteOther:
+        bill.status === "active_both" && chamber !== lowerKey && isMemberOfViewedChamber,
       requiresExecutiveAction: billRequiresExecutiveAction(bill),
       failedAt: bill.failedAt?.toISOString() ?? null,
     };
@@ -743,7 +758,11 @@ export async function getNationalBillDetail(
   const originVoteOfficeType = primaryVoteChamberKey
     ? resolveVoteOfficeType(country, primaryVoteChamberKey, lowerKey)
     : null;
-  const otherVoteOfficeType = resolveVoteOfficeType(country, bill.currentChamber, lowerKey);
+  const otherVoteOfficeType = resolveVoteOfficeType(
+    country,
+    resolveOtherVoteChamberKey(bill, upperKey),
+    lowerKey
+  );
   const originVoteInputs = buildScopedVoteInputs(
     bill.votes,
     officials,

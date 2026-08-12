@@ -16,6 +16,8 @@ import {
   getPendingDeclaration,
 } from "@/lib/db/collections/battleDeclarations";
 import { belligerentSideOf } from "@/lib/military/conflictVisibility";
+import { isFactionEntity } from "@/lib/military/factionEntity";
+import { canEnterTheatre } from "@/lib/military/rosterGate";
 import { sideOf } from "@/lib/military/occupation";
 import { loadMilitaryBlocs } from "@/lib/military/blocLookup";
 import { getConflict } from "@/lib/db/collections/conflicts";
@@ -37,7 +39,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     const { theaterId } = parsed.data;
-    const targetCountry = parsed.data.targetCountry.toUpperCase() as CountryId;
+    // A WorldEntityId, not a CountryId — see the faction note below.
+    const targetCountry = parsed.data.targetCountry.toUpperCase();
 
     const conflict = await getConflict(db, theaterId);
     if (!conflict) {
@@ -49,7 +52,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       isAdmin,
     });
     if (denied) return denied;
-    if (!COUNTRY_CONFIGS[targetCountry]) {
+    // In a proxy war the enemy is a FACTION — a world entity with no COUNTRY_CONFIGS
+    // row — so the country-table check alone refused every declaration at one of
+    // these conflicts before `belligerentSideOf` was ever consulted. That check is
+    // now only the "is this a real thing at all" fallback; the roster check below is
+    // the real gate, and it already refuses anything not in THIS war.
+    if (!isFactionEntity(conflict, targetCountry) && !COUNTRY_CONFIGS[targetCountry as CountryId]) {
       return NextResponse.json({ error: "Invalid target country" }, { status: 400 });
     }
 
@@ -61,6 +69,19 @@ export async function POST(request: Request, { params }: RouteParams) {
     // `sideOf`'s backer fallback, so a nation in neither roster can still enter an
     // ongoing war on the side its alliance backs. The target may not: you can only
     // attack somebody already in this war, or a belligerent could drag in a bystander.
+    // A proxy war admits only countries already on a roster, which is reachable only
+    // through a passed Join Conflict bill. `sideOf` below would otherwise place any
+    // bloc member by backer — a second door into a war the design says is entered by
+    // a bloc vote and a vote of your own legislature.
+    if (!canEnterTheatre(countryId, conflict)) {
+      return NextResponse.json(
+        {
+          error:
+            "Your nation is not a belligerent in that conflict. Entry is decided by a bloc resolution and a vote of your legislature.",
+        },
+        { status: 400 }
+      );
+    }
     const ownSide = sideOf(conflict, countryId, await loadMilitaryBlocs(db));
     if (!ownSide) {
       return NextResponse.json(

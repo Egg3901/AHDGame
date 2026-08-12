@@ -1,3 +1,4 @@
+import { CONCURRENT_VOTE_STAGE } from "./concurrentVoteStage";
 import type { BillLifecycleConfig } from "../types";
 
 const VOTING_HOURS = 24;
@@ -58,5 +59,6 @@ export const US_NATIONAL_CONFIG: BillLifecycleConfig = {
       chambers: ["house", "senate"],
       votingDurationHours: OVERRIDE_HOURS,
     },
+    CONCURRENT_VOTE_STAGE,
   ],
 };

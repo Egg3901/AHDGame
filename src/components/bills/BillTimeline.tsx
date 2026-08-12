@@ -51,6 +51,9 @@ function getNationalTimelineState(status: string): {
     case "passed_origin":
       return { filledUpTo: 2, activeNode: null, failed: false };
     case "active_other":
+    // Both chambers at once: the bill is past proposal and sitting in the chamber
+    // stage, so it reads as that step rather than inventing a node for it.
+    case "active_both":
       return { filledUpTo: 2, activeNode: 3, failed: false };
     case "override_shugiin":
       return { filledUpTo: 3, activeNode: 3, failed: false };
@@ -84,6 +87,9 @@ function getJPCabinetTimelineState(status: string): {
     case "active":
       return { filledUpTo: 1, activeNode: 2, failed: false };
     case "active_other":
+    // Both chambers at once: the bill is past proposal and sitting in the chamber
+    // stage, so it reads as that step rather than inventing a node for it.
+    case "active_both":
       return { filledUpTo: 2, activeNode: 3, failed: false };
     case "override_shugiin":
       // Cabinet-origin overrides return to the Shugiin after a completed Sangiin rejection.
@@ -180,6 +186,7 @@ export function BillTimeline({
     status === "cabinet_review" ||
     status === "active" ||
     status === "active_other" ||
+    status === "active_both" ||
     status === "override_shugiin" ||
     (variant === "state" && (stateStatus === "active" || stateStatus === "veto_override"));
 

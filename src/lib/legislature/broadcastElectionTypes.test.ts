@@ -28,7 +28,10 @@ const EXPECTED_2019: Record<string, string[]> = {
   GR: ["deputy"],
   AT: ["deputy"],
   FI: ["deputy"],
-  DD: ["volkskammerDeputy"],
+  // #4367 gave the DDR Landtag assemblies and their governors so First
+  // Secretaries can queue regional bills; both are broadcastable, same as the
+  // DE landtag/ministerPresident pair.
+  DD: ["volkskammerDeputy", "landAssembly", "governor"],
   SCO: ["holyrood", "regionalCouncil"],
   WAL: ["senedd", "regionalCouncil"],
   BLR: ["sovietDeputy"],

@@ -38,6 +38,7 @@ export function pacific1953Entries(presetId: string): WorldEntityManifestEntry[]
       recognition: dependentRecognition("UN strategic trust under the United States."),
       un: unIneligible(),
       notes: "Covers Mariana, Caroline, and Marshall Islands groups.",
+      mapFeatureIds: ["TTPI"],
     }),
     tier3Entry(presetId, {
       entityId: "PNG",

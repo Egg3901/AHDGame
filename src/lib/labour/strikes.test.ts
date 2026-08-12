@@ -314,4 +314,30 @@ describe("stepStrike — union ban (player suggestion #93)", () => {
     expect(banned.event).toBe("started");
     expect(banned.next.strikeStartedAtTurn).toBe(10);
   });
+
+  it("blocks new strikes and resolves an active strike under a collective agreement", () => {
+    const blocked = stepStrike({
+      unionization: HIGH_UNIONIZATION,
+      realWage: 0.8,
+      workerExpectation: 0.8 + WIDE_GAP,
+      turn: 10,
+      prior: NOT_STRIKING,
+      noStrikeProtected: true,
+    });
+    expect(blocked.event).toBeNull();
+    expect(blocked.next).toEqual(NOT_STRIKING);
+
+    const resolved = stepStrike({
+      unionization: HIGH_UNIONIZATION,
+      realWage: 0.8,
+      workerExpectation: 0.8 + WIDE_GAP,
+      turn: 12,
+      prior: { strikeStartedAtTurn: 11, strikeCooldownUntilTurn: null },
+      noStrikeProtected: true,
+    });
+    expect(resolved.event).toBe("resolved_agreement");
+    expect(resolved.next.strikeStartedAtTurn).toBeNull();
+    expect(resolved.next.strikeCooldownUntilTurn).toBe(12 + STRIKE_COOLDOWN_TURNS);
+    expect(resolved.unionizationBump).toBe(0);
+  });
 });

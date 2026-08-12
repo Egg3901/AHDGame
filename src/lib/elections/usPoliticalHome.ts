@@ -1,9 +1,9 @@
 import type { Db } from "mongodb";
-import { IS_NUMERIC_BSON } from "@/lib/db/numericTypeFilter";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { State } from "@/lib/db/types/state";
 import { getHouseSeats } from "@/lib/constants/states";
 import { admittedStateIdsAsOf } from "@/lib/elections/statehoodAdmission";
+import { NUMERIC_BSON_TYPE } from "@/lib/db/queryHelpers";
 
 /**
  * Load the set of US state ids that currently host full state politics
@@ -23,7 +23,7 @@ export async function loadUsPoliticalStateIds(db: Db): Promise<{
   const admissionBearing = (await db
     .collection<State>("states")
     .find(
-      { countryId: "US", admittedYear: IS_NUMERIC_BSON },
+      { countryId: "US", admittedYear: { $type: NUMERIC_BSON_TYPE } },
       { projection: { _id: 1, admittedYear: 1 } }
     )
     .toArray()) as unknown as Array<{ _id: string; admittedYear?: number }>;

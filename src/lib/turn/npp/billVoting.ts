@@ -57,7 +57,12 @@ import { isBannedParty } from "@/lib/turn/onePartyConstraints";
 import { getCountryState } from "@/lib/countryState";
 import { NATIONAL_POLICY_STATE_IDS } from "@/lib/policy/nationalStateId";
 import { ADDRESS_AGENDA_FORCE_BIAS } from "@/lib/constants/governorOffice";
-import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
+import {
+  getOfficeTypeForChamber,
+  getJointSittingOfficeTypes,
+} from "@/lib/legislature/chamberOfficeType";
+import { resolveBillVoteField, type BillVoteField } from "@/lib/congress/billVoteField";
+import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 
 export async function processBillVoting(ctx: NPPContext): Promise<number> {
   const {
@@ -168,11 +173,23 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
     const billRuntime =
       countryStateByCountry.get(billCountry) ?? (await getCountryState(ctx.db, billCountry));
 
+    // A concurrent bill has BOTH chambers live at once — the same shape
+    // `vetoOverrideOfficials` (above) already handles, made country-aware.
+    // `getOfficeTypeForChamber` is already country-aware, so this is a union, not new
+    // country logic.
+    const isConcurrent = bill.status === "active_both";
+    const concurrentOfficeTypes = isConcurrent
+      ? getJointSittingOfficeTypes(billCountry, ctx.preset)
+      : [];
+    const lowerOfficeType = isConcurrent ? (concurrentOfficeTypes[0] ?? "") : "";
+
     const relevantOfficials = isUSVetoOverride
       ? vetoOverrideOfficials
       : isJPShugiinOverride
         ? (officialsByOfficeType.get("shugiin") ?? [])
-        : (officialsByOfficeType.get(getOfficeTypeForChamber(billCountry, chamberType)) ?? []);
+        : isConcurrent
+          ? concurrentOfficeTypes.flatMap((t) => officialsByOfficeType.get(t) ?? [])
+          : (officialsByOfficeType.get(getOfficeTypeForChamber(billCountry, chamberType)) ?? []);
 
     // Determine vote field — JP override_shugiin uses main "votes" (reset by jpBillLifecycle)
     const voteField = isOtherChamber
@@ -180,20 +197,79 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
       : isUSVetoOverride
         ? "vetoOverrideVotes"
         : "votes";
-    const existingVotes =
-      (isOtherChamber
+    /**
+     * The vote map THIS official writes into.
+     *
+     * Per-official for a concurrent bill, not per-bill: an upper-chamber member routed
+     * into the lower map would add weight to the wrong tally, and the bill could then
+     * pass on votes cast by the other chamber.
+     */
+    const fieldForOfficial = (officeType: string): BillVoteField =>
+      isConcurrent
+        ? resolveBillVoteField(bill, { voterOfficeType: officeType, lowerOfficeType })
+        : voteField;
+
+    const votesInField = (field: BillVoteField) =>
+      (field === "otherChamberVotes"
         ? bill.otherChamberVotes
-        : isUSVetoOverride
+        : field === "vetoOverrideVotes"
           ? bill.vetoOverrideVotes
           : bill.votes) ?? {};
+    const existingVotes = votesInField(voteField);
+
+    /**
+     * Whether THIS official's chamber has already closed.
+     *
+     * The fetch ORs the two deadlines so the bill keeps being polled while either
+     * chamber is open, and the engine closes it only when both have run out. Between
+     * those two moments one chamber is shut — players are refused there by the vote
+     * route's own deadline guard, and without this NPPs would carry on voting into it.
+     */
+    const closedField = (field: BillVoteField): boolean => {
+      if (!isConcurrent) return false;
+      return field === "otherChamberVotes"
+        ? isVotingDeadlinePassed(
+            bill.otherChamberVotingEndsAt,
+            ctx.now,
+            bill.otherChamberVotingEndsOnTurn,
+            ctx.currentTurn
+          )
+        : isVotingDeadlinePassed(
+            bill.votingEndsAt,
+            ctx.now,
+            bill.votingEndsOnTurn,
+            ctx.currentTurn
+          );
+    };
 
     // Get whips for this bill
     const whips = billWhips.get(bill._id.toString()) ?? [];
 
-    const voteUpdates: Record<string, "for" | "against" | "abstain"> = {};
-    let incFor = 0,
-      incAgainst = 0,
-      incAbstain = 0;
+    /**
+     * Accumulators keyed by vote field.
+     *
+     * A single group would land BOTH chambers' votes in `votes`/`votesFor`, leaving
+     * `otherChamberVotesFor` at zero — the identical fail-closed symptom the office-type
+     * union above exists to fix, which is why the two changes only work together.
+     * Non-concurrent bills use exactly one bucket and so write the same shape as before.
+     */
+    const byField = new Map<
+      BillVoteField,
+      {
+        updates: Record<string, "for" | "against" | "abstain">;
+        forW: number;
+        againstW: number;
+        abstainW: number;
+      }
+    >();
+    const bucket = (field: BillVoteField) => {
+      let b = byField.get(field);
+      if (!b) {
+        b = { updates: {}, forW: 0, againstW: 0, abstainW: 0 };
+        byField.set(field, b);
+      }
+      return b;
+    };
 
     // Predictions to persist for this bill — written in a single bulk op below.
     const predictionOps: Array<{
@@ -217,7 +293,11 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
       seenNppIds.add(nppIdStr);
       if ((official.countryId ?? "US") !== billCountry) continue;
       const nppKey = `npp_${nppIdStr}`;
-      if (existingVotes[nppKey]) continue; // Already voted
+      // The already-voted check reads THIS official's own map, not the bill's single
+      // field: on a concurrent bill the two chambers have separate maps.
+      const officialField = fieldForOfficial(official.officeType);
+      if (closedField(officialField)) continue; // This chamber's clock already ran out
+      if (votesInField(officialField)[nppKey]) continue; // Already voted
 
       const npp = nppMap.get(official.nppId.toString());
       if (!npp) continue;
@@ -308,10 +388,11 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
       }
 
       const weight = official.seatsHeld ?? 1;
-      voteUpdates[nppKey] = vote;
-      if (vote === "for") incFor += weight;
-      else if (vote === "against") incAgainst += weight;
-      else incAbstain += weight;
+      const b = bucket(officialField);
+      b.updates[nppKey] = vote;
+      if (vote === "for") b.forW += weight;
+      else if (vote === "against") b.againstW += weight;
+      else b.abstainW += weight;
 
       predictionOps.push({
         nppId: official.nppId,
@@ -324,26 +405,30 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
       votescast++;
     }
 
-    if (Object.keys(voteUpdates).length === 0) continue;
+    if (byField.size === 0) continue;
+
+    /** Counter names per vote field. Override has no abstain counter. */
+    const TALLY: Record<BillVoteField, [string, string, string | null]> = {
+      votes: ["votesFor", "votesAgainst", "votesAbstain"],
+      otherChamberVotes: [
+        "otherChamberVotesFor",
+        "otherChamberVotesAgainst",
+        "otherChamberVotesAbstain",
+      ],
+      vetoOverrideVotes: ["vetoOverrideVotesFor", "vetoOverrideVotesAgainst", null],
+    };
 
     // Build update
     const setFields: Record<string, unknown> = { updatedAt: now };
-    for (const [k, v] of Object.entries(voteUpdates)) {
-      setFields[`${voteField}.${k}`] = v;
-    }
-
     const incFields: Record<string, number> = {};
-    if (isOtherChamber) {
-      incFields.otherChamberVotesFor = incFor;
-      incFields.otherChamberVotesAgainst = incAgainst;
-      incFields.otherChamberVotesAbstain = incAbstain;
-    } else if (isUSVetoOverride) {
-      incFields.vetoOverrideVotesFor = incFor;
-      incFields.vetoOverrideVotesAgainst = incAgainst;
-    } else {
-      incFields.votesFor = incFor;
-      incFields.votesAgainst = incAgainst;
-      incFields.votesAbstain = incAbstain;
+    for (const [field, b] of byField) {
+      for (const [k, v] of Object.entries(b.updates)) {
+        setFields[`${field}.${k}`] = v;
+      }
+      const [forKey, againstKey, abstainKey] = TALLY[field];
+      incFields[forKey] = b.forW;
+      incFields[againstKey] = b.againstW;
+      if (abstainKey) incFields[abstainKey] = b.abstainW;
     }
 
     await db.collection<Bill>("bills").updateOne(

@@ -210,148 +210,158 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
   // Countries covered by a central bank, collected as we go so the unbanked
   // pass below knows who it still has to recompute.
   const bankedCountries = new Set<string>();
-  for (const bank of banks) {
-    const bankCountryId = bank.countryId as CountryId;
-    if (!COUNTRY_CONFIGS[bankCountryId]) continue;
+  // Banks are independent (disjoint member sets, per-country budget writes),
+  // and so are the members within a bank — fan both levels out instead of the
+  // old strictly serial walk.
+  await Promise.all(
+    banks.map(async (bank) => {
+      const bankCountryId = bank.countryId as CountryId;
+      if (!COUNTRY_CONFIGS[bankCountryId]) return;
 
-    // A shared bank (e.g. the ECB — one doc for all eurozone members, with
-    // `countryId` set to the anchor member) must recalculate EVERY member
-    // country's inflation, not just the one recorded on the doc. Otherwise the
-    // other members' inflation and wage growth freeze forever and crisis $inc
-    // shocks never decay (IE froze at 15.34% while DE tracked normally).
-    const { memberCountries } = await getCentralBankScope(db, bankCountryId);
+      // A shared bank (e.g. the ECB — one doc for all eurozone members, with
+      // `countryId` set to the anchor member) must recalculate EVERY member
+      // country's inflation, not just the one recorded on the doc. Otherwise the
+      // other members' inflation and wage growth freeze forever and crisis $inc
+      // shocks never decay (IE froze at 15.34% while DE tracked normally).
+      const { memberCountries } = await getCentralBankScope(db, bankCountryId);
 
-    // Savings flow pressure is a property of the bank's currency jurisdiction:
-    // ledger entries carry the currency's anchor countryId (= bank.countryId for
-    // every real bank) and the balance lives on the bank doc, so all members of
-    // a shared bank see the same pressure.
-    const flow = savingsFlowByCountry.get(bankCountryId);
-    const totalBalance = bank.nationalSavingsBalance ?? 0;
-    const deposits = flow?.deposits ?? 0;
-    const withdrawals = flow?.withdrawals ?? 0;
-    const savingsPressureRaw = savingsFlowPressureRatio(
-      withdrawals - deposits,
-      deposits + withdrawals,
-      totalBalance
-    );
-    const savingsPressure = finiteOr(savingsPressureRaw, 0);
+      // Savings flow pressure is a property of the bank's currency jurisdiction:
+      // ledger entries carry the currency's anchor countryId (= bank.countryId for
+      // every real bank) and the balance lives on the bank doc, so all members of
+      // a shared bank see the same pressure.
+      const flow = savingsFlowByCountry.get(bankCountryId);
+      const totalBalance = bank.nationalSavingsBalance ?? 0;
+      const deposits = flow?.deposits ?? 0;
+      const withdrawals = flow?.withdrawals ?? 0;
+      const savingsPressureRaw = savingsFlowPressureRatio(
+        withdrawals - deposits,
+        deposits + withdrawals,
+        totalBalance
+      );
+      const savingsPressure = finiteOr(savingsPressureRaw, 0);
 
-    let membersUpdated = 0;
+      let membersUpdated = 0;
 
-    for (const member of memberCountries) bankedCountries.add(String(member));
-    for (const countryId of memberCountries) {
-      const config = COUNTRY_CONFIGS[countryId];
-      if (!config) continue;
+      for (const member of memberCountries) bankedCountries.add(String(member));
+      await Promise.all(
+        memberCountries.map(async (countryId) => {
+          const config = COUNTRY_CONFIGS[countryId];
+          if (!config) return;
 
-      // Commodity cost-push: avg(P_national / P_base - 1) across all commodities that
-      // have a national price for this country. 0.0 if none available yet (first turns).
-      const pressures: number[] = [];
-      for (const doc of commodityPressureSnapshots) {
-        const nationalPrice = doc.nationalPrices?.[countryId];
-        if (
-          typeof nationalPrice === "number" &&
-          Number.isFinite(nationalPrice) &&
-          typeof doc.basePrice === "number" &&
-          doc.basePrice > 0
-        ) {
-          const raw = nationalPrice / doc.basePrice - 1.0;
-          const clamped = Math.max(
-            COMMODITY_PRESSURE_ROW_FLOOR,
-            Math.min(COMMODITY_PRESSURE_ROW_CEILING, raw)
-          );
-          if (clamped !== raw) {
-            console.warn(
-              `[inflationRecalc] ${countryId} ${doc.commodity}: pressure clamped ${raw.toFixed(2)} -> ${clamped.toFixed(2)} (nationalPrice=${nationalPrice}, basePrice=${doc.basePrice})`
-            );
+          // Commodity cost-push: avg(P_national / P_base - 1) across all commodities that
+          // have a national price for this country. 0.0 if none available yet (first turns).
+          const pressures: number[] = [];
+          for (const doc of commodityPressureSnapshots) {
+            const nationalPrice = doc.nationalPrices?.[countryId];
+            if (
+              typeof nationalPrice === "number" &&
+              Number.isFinite(nationalPrice) &&
+              typeof doc.basePrice === "number" &&
+              doc.basePrice > 0
+            ) {
+              const raw = nationalPrice / doc.basePrice - 1.0;
+              const clamped = Math.max(
+                COMMODITY_PRESSURE_ROW_FLOOR,
+                Math.min(COMMODITY_PRESSURE_ROW_CEILING, raw)
+              );
+              if (clamped !== raw) {
+                console.warn(
+                  `[inflationRecalc] ${countryId} ${doc.commodity}: pressure clamped ${raw.toFixed(2)} -> ${clamped.toFixed(2)} (nationalPrice=${nationalPrice}, basePrice=${doc.basePrice})`
+                );
+              }
+              pressures.push(clamped);
+            }
           }
-          pressures.push(clamped);
-        }
+          const commodityPressureRaw =
+            pressures.length > 0 ? pressures.reduce((s, v) => s + v, 0) / pressures.length : 0.0;
+          const commodityPressure = finiteOr(commodityPressureRaw, 0);
+
+          // Forex depreciation cost-push: rate / baseRate - 1.
+          // Positive = local currency weaker than calibration (imported goods more expensive).
+          // Uses previous turn's settled rate; forexTurn runs after inflationRecalc.
+          // Members without their own doc (eurozone: only the EUR anchor DE carries
+          // one) inherit the currency anchor's rate so they feel the same FX signal.
+          const currencyCode = COUNTRY_CURRENCY_MAP[countryId];
+          const currencyAnchorId = currencyCode ? getCountryIdForCurrency(currencyCode) : countryId;
+          const fxDoc =
+            exchangeRateByCountry.get(countryId) ?? exchangeRateByCountry.get(currencyAnchorId);
+          const fxRate = finiteOr(fxDoc?.rateHistory?.at(-1)?.rate, finiteOr(fxDoc?.rate, NaN));
+          const fxBase = finiteOr(fxDoc?.baseRate, 0);
+          const forexPressure = Number.isFinite(fxRate) && fxBase > 0 ? fxRate / fxBase - 1.0 : 0.0;
+
+          const budget = await ensureFederalBudget(db, countryId, preset);
+          if (!budget) return;
+
+          // Update wageGrowth dynamically before computing inflation, so the wage
+          // cost-push reflects current labor-market conditions instead of a static
+          // seed value. Without this, JP's seeded 5% wage growth (or any other
+          // country's) produces a permanent +0.4pp inflation floor forever.
+          const nationalDocId = getNationalDocId(countryId);
+          const nationalMetrics = nationalDocId
+            ? // SP5: national economic rollup lives on macroMetrics.
+              await db.collection<StateMetrics>("macroMetrics").findOne({ _id: nationalDocId })
+            : null;
+          const unemployment = finiteOr(nationalMetrics?.economic?.unemploymentRate?.value, 5.0);
+          const gdpGrowth = finiteOr(nationalMetrics?.economic?.gdpGrowth?.value, 2.0);
+          const currentWageGrowth = finiteOr(budget.economicFactors?.wageGrowth, WAGE_BASELINE);
+          const wageTarget = computeWageGrowthTarget(unemployment, gdpGrowth);
+          const newWageGrowth =
+            Math.round((WAGE_INERTIA * currentWageGrowth + (1 - WAGE_INERTIA) * wageTarget) * 100) /
+            100;
+
+          // Pass the updated wageGrowth into the inflation calculation by mutating
+          // the budget snapshot — the persisted update happens below in the same
+          // operation, so this preserves write-once semantics.
+          const budgetForCalc: FederalBudget = {
+            ...budget,
+            economicFactors: { ...budget.economicFactors, wageGrowth: newWageGrowth },
+          };
+
+          const policyStancePressure = finiteOr(bank.policyInflationPressure, 0);
+          const moneySupplyGrowthPct = finiteOr(moneyGrowthByCurrency.get(currencyCode), gdpGrowth);
+
+          const newInflation = await calculateCountryInflation(
+            db,
+            countryId,
+            budgetForCalc,
+            commodityPressure,
+            forexPressure,
+            savingsPressure,
+            policyStancePressure,
+            moneySupplyGrowthPct
+          );
+
+          await db.collection<FederalBudget>("federalBudget").updateOne(
+            { _id: budget._id },
+            {
+              $set: {
+                "economicFactors.inflationRate": newInflation,
+                "economicFactors.wageGrowth": newWageGrowth,
+                "economicFactors.lastUpdated": new Date(),
+              },
+            }
+          );
+
+          membersUpdated++;
+          updated++;
+        })
+      );
+
+      if (membersUpdated > 0) {
+        // Persist current pressure so interestRateSnapshot can chart it without
+        // re-aggregating. Stored as a percentage (×100) to match the chart's %
+        // y-axis convention. Keyed by the bank doc's _id — the previous
+        // `{ _id: countryId }` write was a silent no-op for shared banks whose
+        // _id ("ECB") differs from their countryId.
+        await db
+          .collection<CentralBank>("centralBanks")
+          .updateOne(
+            { _id: bank._id },
+            { $set: { currentSavingsPressure: savingsPressure * 100 } }
+          );
       }
-      const commodityPressureRaw =
-        pressures.length > 0 ? pressures.reduce((s, v) => s + v, 0) / pressures.length : 0.0;
-      const commodityPressure = finiteOr(commodityPressureRaw, 0);
-
-      // Forex depreciation cost-push: rate / baseRate - 1.
-      // Positive = local currency weaker than calibration (imported goods more expensive).
-      // Uses previous turn's settled rate; forexTurn runs after inflationRecalc.
-      // Members without their own doc (eurozone: only the EUR anchor DE carries
-      // one) inherit the currency anchor's rate so they feel the same FX signal.
-      const currencyCode = COUNTRY_CURRENCY_MAP[countryId];
-      const currencyAnchorId = currencyCode ? getCountryIdForCurrency(currencyCode) : countryId;
-      const fxDoc =
-        exchangeRateByCountry.get(countryId) ?? exchangeRateByCountry.get(currencyAnchorId);
-      const fxRate = finiteOr(fxDoc?.rateHistory?.at(-1)?.rate, finiteOr(fxDoc?.rate, NaN));
-      const fxBase = finiteOr(fxDoc?.baseRate, 0);
-      const forexPressure = Number.isFinite(fxRate) && fxBase > 0 ? fxRate / fxBase - 1.0 : 0.0;
-
-      const budget = await ensureFederalBudget(db, countryId, preset);
-      if (!budget) continue;
-
-      // Update wageGrowth dynamically before computing inflation, so the wage
-      // cost-push reflects current labor-market conditions instead of a static
-      // seed value. Without this, JP's seeded 5% wage growth (or any other
-      // country's) produces a permanent +0.4pp inflation floor forever.
-      const nationalDocId = getNationalDocId(countryId);
-      const nationalMetrics = nationalDocId
-        ? // SP5: national economic rollup lives on macroMetrics.
-          await db.collection<StateMetrics>("macroMetrics").findOne({ _id: nationalDocId })
-        : null;
-      const unemployment = finiteOr(nationalMetrics?.economic?.unemploymentRate?.value, 5.0);
-      const gdpGrowth = finiteOr(nationalMetrics?.economic?.gdpGrowth?.value, 2.0);
-      const currentWageGrowth = finiteOr(budget.economicFactors?.wageGrowth, WAGE_BASELINE);
-      const wageTarget = computeWageGrowthTarget(unemployment, gdpGrowth);
-      const newWageGrowth =
-        Math.round((WAGE_INERTIA * currentWageGrowth + (1 - WAGE_INERTIA) * wageTarget) * 100) /
-        100;
-
-      // Pass the updated wageGrowth into the inflation calculation by mutating
-      // the budget snapshot — the persisted update happens below in the same
-      // operation, so this preserves write-once semantics.
-      const budgetForCalc: FederalBudget = {
-        ...budget,
-        economicFactors: { ...budget.economicFactors, wageGrowth: newWageGrowth },
-      };
-
-      const policyStancePressure = finiteOr(bank.policyInflationPressure, 0);
-      const moneySupplyGrowthPct = finiteOr(moneyGrowthByCurrency.get(currencyCode), gdpGrowth);
-
-      const newInflation = await calculateCountryInflation(
-        db,
-        countryId,
-        budgetForCalc,
-        commodityPressure,
-        forexPressure,
-        savingsPressure,
-        policyStancePressure,
-        moneySupplyGrowthPct
-      );
-
-      await db.collection<FederalBudget>("federalBudget").updateOne(
-        { _id: budget._id },
-        {
-          $set: {
-            "economicFactors.inflationRate": newInflation,
-            "economicFactors.wageGrowth": newWageGrowth,
-            "economicFactors.lastUpdated": new Date(),
-          },
-        }
-      );
-
-      membersUpdated++;
-      updated++;
-    }
-
-    if (membersUpdated > 0) {
-      // Persist current pressure so interestRateSnapshot can chart it without
-      // re-aggregating. Stored as a percentage (×100) to match the chart's %
-      // y-axis convention. Keyed by the bank doc's _id — the previous
-      // `{ _id: countryId }` write was a silent no-op for shared banks whose
-      // _id ("ECB") differs from their countryId.
-      await db
-        .collection<CentralBank>("centralBanks")
-        .updateOne({ _id: bank._id }, { $set: { currentSavingsPressure: savingsPressure * 100 } });
-    }
-  }
+    })
+  );
 
   // Countries with NO central bank still need their inflation recomputed every
   // turn. This loop used to iterate central banks alone, which left the six
@@ -371,21 +381,23 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
     .collection<FederalBudget>("federalBudget")
     .find({ countryId: { $nin: [...bankedCountries] } })
     .toArray();
-  for (const budget of unbanked) {
-    const countryId = budget.countryId as CountryId | undefined;
-    if (!countryId || !COUNTRY_CONFIGS[countryId]) continue;
-    const newInflation = await calculateCountryInflation(db, countryId, budget);
-    await db.collection<FederalBudget>("federalBudget").updateOne(
-      { _id: budget._id },
-      {
-        $set: {
-          "economicFactors.inflationRate": newInflation,
-          "economicFactors.lastUpdated": new Date(),
-        },
-      }
-    );
-    updated++;
-  }
+  await Promise.all(
+    unbanked.map(async (budget) => {
+      const countryId = budget.countryId as CountryId | undefined;
+      if (!countryId || !COUNTRY_CONFIGS[countryId]) return;
+      const newInflation = await calculateCountryInflation(db, countryId, budget);
+      await db.collection<FederalBudget>("federalBudget").updateOne(
+        { _id: budget._id },
+        {
+          $set: {
+            "economicFactors.inflationRate": newInflation,
+            "economicFactors.lastUpdated": new Date(),
+          },
+        }
+      );
+      updated++;
+    })
+  );
 
   return updated;
 }

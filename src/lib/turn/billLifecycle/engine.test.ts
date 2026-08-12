@@ -715,3 +715,93 @@ describe("runBillLifecycle — a war declaration needs two-thirds", () => {
     expect(lastBillSet().status).toBe("active_other");
   });
 });
+
+describe("runBillLifecycle - concurrentVote stage", () => {
+  let db: MockDb;
+  beforeEach(() => {
+    db = createMockDb();
+    db.collection("bills");
+    db.collection("electedOfficials");
+    db.collection("characters");
+    db.collection("gameState");
+  });
+
+  const CONCURRENT_CONFIG: BillLifecycleConfig = {
+    country: "US",
+    level: "national",
+    originChambers: ["house"],
+    stages: [
+      {
+        kind: "concurrentVote",
+        status: "active_both",
+        chambersFor: () => ["house", "senate"],
+        voteFieldFor: (_b, officeType) => (officeType === "house" ? "votes" : "otherChamberVotes"),
+        passRule: "simpleMajority",
+        requireAll: true,
+        onPassStatus: "signed",
+        votingDurationHours: 24,
+        execActionCheckOnPass: true,
+      },
+    ],
+  };
+
+  function seat(officeType: string, characterId: ObjectId) {
+    return { characterId, countryId: "US", officeType, seatsHeld: 1 };
+  }
+
+  function concurrentBill(votes: Record<string, string>, other: Record<string, string>) {
+    return {
+      _id: new ObjectId(),
+      countryId: "US",
+      status: "active_both",
+      originChamber: "house",
+      currentChamber: "house",
+      title: "Entry into the Vietnam War (NATO)",
+      provisions: [],
+      votes,
+      otherChamberVotes: other,
+      votingEndsOnTurn: 1,
+      otherChamberVotingEndsOnTurn: 1,
+    };
+  }
+
+  function lastBillSet() {
+    const calls = db.collectionMocks["bills"]!.updateOne.mock.calls;
+    return (calls[calls.length - 1]?.[1] as { $set?: Record<string, unknown> })?.$set ?? {};
+  }
+
+  it("fails the bill when one chamber fails, even though the other passed", async () => {
+    const hFor = new ObjectId();
+    const sAgainst = new ObjectId();
+    const bill = concurrentBill({ [hFor.toString()]: "for" }, { [sAgainst.toString()]: "against" });
+    db.collectionMocks["bills"]!.find.mockImplementation(findByStatus({ active_both: [bill] }));
+    db.collectionMocks["bills"]!.findOne.mockResolvedValue(bill);
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue(
+      cursor([seat("house", hFor), seat("senate", sAgainst)])
+    );
+
+    await runBillLifecycle(db as unknown as Db, CONCURRENT_CONFIG, NOW, 50);
+
+    // Assert the STATUS, not the tally - a merged tally would look like a pass.
+    expect(lastBillSet().status).toBe("failed");
+  });
+
+  it("writes BOTH chambers tallies and enacts when both pass", async () => {
+    const hFor = new ObjectId();
+    const sFor = new ObjectId();
+    const bill = concurrentBill({ [hFor.toString()]: "for" }, { [sFor.toString()]: "for" });
+    db.collectionMocks["bills"]!.find.mockImplementation(findByStatus({ active_both: [bill] }));
+    db.collectionMocks["bills"]!.findOne.mockResolvedValue(bill);
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue(
+      cursor([seat("house", hFor), seat("senate", sFor)])
+    );
+
+    await runBillLifecycle(db as unknown as Db, CONCURRENT_CONFIG, NOW, 50);
+
+    const set = lastBillSet();
+    expect(set.status).toBe("signed");
+    expect(set.votesFor).toBe(1);
+    expect(set.otherChamberVotesFor).toBe(1);
+    expect(set.passedOtherChamberAt).toBeInstanceOf(Date);
+  });
+});

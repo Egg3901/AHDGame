@@ -1,3 +1,4 @@
+import { CONCURRENT_VOTE_STAGE } from "./concurrentVoteStage";
 import type { Db } from "mongodb";
 import { createNotifications } from "@/lib/notifications";
 import type { Bill, Character } from "@/lib/db/types";
@@ -61,5 +62,6 @@ export const IE_NATIONAL_CONFIG: BillLifecycleConfig = {
       onPassStatus: "signed", // terminal — enacts immediately
       votingDurationHours: VOTING_HOURS,
     },
+    CONCURRENT_VOTE_STAGE,
   ],
 };

@@ -1,4 +1,8 @@
 import type { Db, ObjectId as MongoObjectId } from "mongodb";
+import { blocListQuota } from "@/lib/constants/blocList";
+import { allocateBlocListSeats } from "@/lib/turn/election/blocListAllocation";
+import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
+import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { ObjectId } from "mongodb";
 import type {
   Election,
@@ -52,6 +56,7 @@ import { buildPrimaryShareMap } from "@/lib/turn/election/generalResolutionHelpe
 import { getMajoritarianBonus } from "@/lib/turn/election/seatAllocation";
 import { withCommonsOrgRanking } from "@/lib/turn/election/commonsOrgRanking";
 import { selectEndedDisplayCandidates } from "@/lib/elections/endedResultsCandidates";
+import { selectGeneralPhaseDisplayCandidates } from "@/lib/elections/generalPhaseCandidates";
 import { computeElectoralVotes } from "@/lib/elections/electoralVoteService";
 import { getFundsByPartyForElection } from "@/lib/electionEngine/fundsByParty";
 import { partyTenureFatiguePenalty } from "@/lib/electionEngine/partyTenureFatigue";
@@ -116,7 +121,7 @@ async function applyPresidentialPrimaryDisplay(
   const staggerStateIds = getAllStaggerStates();
   const [categories, states, demographics, resolvedStatePartyOrgs, engineEnriched] =
     await Promise.all([
-      db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+      loadDemographicCategories(db),
       db
         .collection<State>("states")
         .find({ _id: { $in: staggerStateIds } })
@@ -467,35 +472,27 @@ export async function _enrichElection(
   const partyMap = new Map(parties.map((p) => [String(p.sequentialId), p]));
   let byParty = groupCandidatesByParty(enrichedWithYou, partyMap);
 
-  // Display candidates: post-primary dedup. Keep up to N per party where N is
-  // the primary-winner cap for this race (US=1, UK=3, JP=3; US House=3 when
-  // redistricting is on; single-winner governor/president races always 1).
-  // Safety net for the window between primaryEndTime and the next
+  // Primary-winner cap for this race: US=1, UK=3, JP=3, US House=3 when
+  // redistricting is on; single-winner governor/president races are always 1.
+  // Threading the live redistricting flag is what keeps this display cap
+  // identical to the one `resolvePrimariesIfNeeded` actually enforced —
+  // omitting it silently showed one US House nominee per party. Resolved once
+  // here and returned as `primaryAdvanceCount` so client surfaces read it
+  // instead of recomputing it without access to gameState.
+  const primaryAdvanceCount = getPrimaryWinnersForElection(
+    countryId as CountryId,
+    election.electionType,
+    isRedistrictingEnabled(gameState)
+  );
+
+  // Display candidates: post-primary dedup, keeping up to `primaryAdvanceCount`
+  // per party. Safety net for the window between primaryEndTime and the next
   // primary-resolution turn — and for multi-advance races that intentionally
   // leave several same-party nominees active through the general (#1043).
   // Always include the current user's candidate even if they lost the primary.
   let displayCandidates: EnrichedCandidate[] = enrichedWithYou;
   if (!inPrimary && !isEnded) {
-    const maxPerParty = getPrimaryWinnersForElection(
-      countryId as CountryId,
-      election.electionType,
-      isRedistrictingEnabled(gameState)
-    );
-    const partyCount = new Map<string, number>();
-    displayCandidates = [];
-    for (const c of [...enrichedWithYou].sort((a, b) => b.primaryScore - a.primaryScore)) {
-      const used = partyCount.get(c.party) ?? 0;
-      if (used < maxPerParty) {
-        displayCandidates.push(c);
-        partyCount.set(c.party, used + 1);
-      }
-    }
-    if (myCharId) {
-      const myCandidate = enrichedWithYou.find((c) => c.isYou);
-      if (myCandidate && !displayCandidates.some((c) => c.id === myCandidate.id)) {
-        displayCandidates = [...displayCandidates, myCandidate];
-      }
-    }
+    displayCandidates = selectGeneralPhaseDisplayCandidates(enrichedWithYou, primaryAdvanceCount);
   } else if (isEnded) {
     // Final results show the field that actually contested the general. Ended
     // elections fetch ALL candidacies (active + withdrawn) so the primary field
@@ -603,6 +600,33 @@ export async function _enrichElection(
     });
     if (districted?.seatsEstimate && Object.keys(districted.seatsEstimate).length > 0) {
       seatsEstimate = districted.seatsEstimate;
+    }
+  }
+
+  // National Front chambers: project with the SAME quota the resolver will use,
+  // for the same reason the districted branch above exists. `computeSeatEstimates`
+  // has no bloc-list whitelist entry and returns null here, so before this the
+  // DDR showed a cross-party vote pie and no seat projection at all. That pie is
+  // the most misleading surface in the game for a bloc list: it invites players
+  // to read a popular bloc party as a chamber-winning one when the quota means
+  // it can never be. Overriding caller-side keeps the shared helper's signature
+  // and its other two call sites untouched.
+  const blocQuota = MULTI_SEAT_TYPES.has(election.electionType)
+    ? blocListQuota(countryId ?? election.countryId)
+    : null;
+  if (blocQuota && election.totalSeats) {
+    const ranked = activeCandidates
+      .map((c) => {
+        const id = c._id.toString();
+        return {
+          id,
+          votes: tally?.totalVotes?.[id] ?? 0,
+          party: c.party ?? tally?.candidateParties?.[id] ?? undefined,
+        };
+      })
+      .sort((a, b) => b.votes - a.votes || (a.id < b.id ? -1 : 1));
+    if (ranked.length > 0) {
+      seatsEstimate = allocateBlocListSeats(election.totalSeats, blocQuota.shares, ranked);
     }
   }
 
@@ -872,7 +896,7 @@ export async function _enrichElection(
       getFundsByPartyForElection(electionOid, db),
       getIncumbentSeatShareByParty(election, db),
       demographicsQueryStateIds.length > 0
-        ? db.collection<DemographicCategory>("demographicCategories").find({}).toArray()
+        ? loadDemographicCategories(db)
         : Promise.resolve([] as DemographicCategory[]),
       demographicsQueryStateIds.length > 0
         ? db
@@ -1070,6 +1094,7 @@ export async function _enrichElection(
     isEnded,
     isUpcoming,
     inGeneral,
+    primaryAdvanceCount,
 
     // Core data
     candidates: displayCandidates,

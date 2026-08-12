@@ -94,7 +94,11 @@ export const ORGANIZATION_CATEGORY_META: Record<OrganizationCategory, OrgCategor
     // alliance that holds. NATO and the Warsaw Pact were not ordinary alliances:
     // they were the instruments through which two superpowers ran their halves
     // of the world, and aid and sanctions are how that was actually done.
-    powers: ["set_posture", "joint_statement", "aid_package", "sanctions"],
+    //
+    // `join_conflict` is granted here and NOWHERE else. Calling its members into a
+    // war is the defining act of a bloc, and an ordinary defence pact — which is
+    // what `security` models — does not get to make it.
+    powers: ["set_posture", "joint_statement", "aid_package", "sanctions", "join_conflict"],
   },
 };
 
@@ -115,6 +119,7 @@ export const IMPLEMENTED_RESOLUTION_TYPES: OrganizationResolutionType[] = [
   "joint_statement",
   "set_posture",
   "fund_agency",
+  "join_conflict",
 ];
 
 /**

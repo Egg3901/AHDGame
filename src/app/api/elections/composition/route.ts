@@ -184,10 +184,18 @@ export async function GET(request: Request) {
           else candidatesByElection.set(key, [c]);
         }
 
+        // Index once by state: the per-election scan over the full chamber was
+        // O(elections × officials).
+        const chamberOfficialsByState = new Map<string, typeof chamberOfficials>();
+        for (const o of chamberOfficials) {
+          if (!o.state) continue;
+          const list = chamberOfficialsByState.get(o.state) ?? [];
+          list.push(o);
+          chamberOfficialsByState.set(o.state, list);
+        }
         for (const election of generalElections) {
-          const contested = chamberOfficials.filter(
+          const contested = (chamberOfficialsByState.get(election.state) ?? []).filter(
             (o) =>
-              o.state === election.state &&
               // A classed upper chamber only turns over the contested class.
               !(
                 chamber.regionElectedClasses &&

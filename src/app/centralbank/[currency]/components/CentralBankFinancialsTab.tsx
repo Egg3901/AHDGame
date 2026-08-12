@@ -161,7 +161,7 @@ function ReservePortfolioPanel({
     : `Value (${homeCurrency})`;
 
   // Two distinct pools. Only the FX (spread-fee) reserves are exchangeable; the
-  // home lending reserve backs LOC capacity and is shown separately — never as a
+  // home lending reserve backs LOC capacity and is shown separately - never as a
   // sell option (it would otherwise dominate the mix and offer balances the
   // reserve-exchange route rejects). A home-currency spread reserve, if any, is
   // a real exchangeable FX balance and is folded into the FX pool.
@@ -332,7 +332,7 @@ function ReservePortfolioPanel({
                     <td className="py-2.5 font-mono tabular-nums text-muted">
                       {totalValue > 0
                         ? `${Math.round((entry.valueInHomeCurrency / totalValue) * 100)}%`
-                        : "—"}
+                        : "-"}
                     </td>
                   </tr>
                 ))

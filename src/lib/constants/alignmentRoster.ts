@@ -1627,16 +1627,23 @@ export const ALIGNMENT_ROSTER: readonly AlignmentRosterEntry[] = [
     name: "Somalia",
     tier: "sphere-macro",
     status1953: "emergent",
-    iso: [],
+    iso: ["706"],
     metro: null,
   },
-  { key: "CD", name: "Congo", tier: "sphere-macro", status1953: "emergent", iso: [], metro: null },
+  {
+    key: "CD",
+    name: "Congo",
+    tier: "sphere-macro",
+    status1953: "emergent",
+    iso: ["180"],
+    metro: null,
+  },
   {
     key: "YD",
     name: "South Yemen",
     tier: "sphere-macro",
     status1953: "emergent",
-    iso: [],
+    iso: ["YD"],
     metro: null,
   },
   {
@@ -1652,7 +1659,7 @@ export const ALIGNMENT_ROSTER: readonly AlignmentRosterEntry[] = [
     name: "Somalia Trust Territories",
     tier: "historical-presence",
     status1953: "dependent",
-    iso: [],
+    iso: ["706"],
     metro: "IT",
   },
   {
@@ -1676,7 +1683,7 @@ export const ALIGNMENT_ROSTER: readonly AlignmentRosterEntry[] = [
     name: "Aden Protectorate",
     tier: "historical-presence",
     status1953: "dependent",
-    iso: [],
+    iso: ["ADN"],
     metro: "UK",
   },
   {
@@ -1700,7 +1707,7 @@ export const ALIGNMENT_ROSTER: readonly AlignmentRosterEntry[] = [
     name: "Saar Protectorate",
     tier: "historical-presence",
     status1953: "dependent",
-    iso: [],
+    iso: ["SAAR"],
     metro: "FR",
   },
   {
@@ -1708,7 +1715,7 @@ export const ALIGNMENT_ROSTER: readonly AlignmentRosterEntry[] = [
     name: "Free Territory of Trieste",
     tier: "historical-presence",
     status1953: "dependent",
-    iso: [],
+    iso: ["FTT"],
     metro: null,
   },
   {
@@ -1716,7 +1723,7 @@ export const ALIGNMENT_ROSTER: readonly AlignmentRosterEntry[] = [
     name: "Panama Canal Zone",
     tier: "historical-presence",
     status1953: "dependent",
-    iso: [],
+    iso: ["CZ"],
     metro: "US",
   },
   {
@@ -1724,7 +1731,7 @@ export const ALIGNMENT_ROSTER: readonly AlignmentRosterEntry[] = [
     name: "Spanish Morocco",
     tier: "historical-presence",
     status1953: "dependent",
-    iso: [],
+    iso: ["ESH"],
     metro: "ES",
   },
   {
@@ -1732,7 +1739,7 @@ export const ALIGNMENT_ROSTER: readonly AlignmentRosterEntry[] = [
     name: "Tangier International Zone",
     tier: "historical-presence",
     status1953: "dependent",
-    iso: [],
+    iso: ["TNG"],
     metro: null,
   },
   {
@@ -1740,7 +1747,7 @@ export const ALIGNMENT_ROSTER: readonly AlignmentRosterEntry[] = [
     name: "British Cameroons",
     tier: "historical-presence",
     status1953: "dependent",
-    iso: [],
+    iso: ["CMB"],
     metro: "UK",
   },
   {
@@ -1748,7 +1755,7 @@ export const ALIGNMENT_ROSTER: readonly AlignmentRosterEntry[] = [
     name: "British Togoland",
     tier: "historical-presence",
     status1953: "dependent",
-    iso: [],
+    iso: ["TGB"],
     metro: "UK",
   },
   {
@@ -1756,7 +1763,7 @@ export const ALIGNMENT_ROSTER: readonly AlignmentRosterEntry[] = [
     name: "Zanzibar",
     tier: "historical-presence",
     status1953: "dependent",
-    iso: [],
+    iso: ["ZNZ"],
     metro: "UK",
   },
   {
@@ -1764,7 +1771,7 @@ export const ALIGNMENT_ROSTER: readonly AlignmentRosterEntry[] = [
     name: "Ruanda-Urundi",
     tier: "historical-presence",
     status1953: "dependent",
-    iso: [],
+    iso: ["646", "108"],
     metro: "BE",
   },
   {
@@ -1772,7 +1779,7 @@ export const ALIGNMENT_ROSTER: readonly AlignmentRosterEntry[] = [
     name: "Palestinian territories",
     tier: "historical-presence",
     status1953: "dependent",
-    iso: [],
+    iso: ["275"],
     metro: null,
   },
   {
@@ -1780,7 +1787,7 @@ export const ALIGNMENT_ROSTER: readonly AlignmentRosterEntry[] = [
     name: "Trust Territory of the Pacific Islands",
     tier: "historical-presence",
     status1953: "dependent",
-    iso: [],
+    iso: ["TTPI"],
     metro: "US",
   },
   {

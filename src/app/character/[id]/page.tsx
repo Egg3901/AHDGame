@@ -452,26 +452,36 @@ async function getCharacterById(characterId: string) {
       statePartyOrg,
       nationalNpiOrdinalRank,
       conflictsEnabled: !!gameState?.conflictsEnabled,
-      doctrineAdopted: gameState?.conflictsEnabled
-        ? (await getNationalDoctrine(db, character.countryId)).adopted
-        : {},
+      // Conflict-path reads batched into one round; the posting load stays
+      // gated on the commission (only a commissioned general has an order of
+      // battle).
       ...(gameState?.conflictsEnabled
-        ? await getCharacterCommission(db, character._id.toString()).then(async (c) => ({
-            general: c.commissioned ? c.general : null,
-            // Gated on the commission that was just fetched: only a commissioned
-            // general has an order of battle, so every other character's profile
-            // skips three collection reads instead of loading an empty posting.
-            generalPosting: c.commissioned
-              ? await loadGeneralPosting(db, character._id.toString(), character.countryId)
-              : EMPTY_POSTING,
-          }))
-        : { general: null, generalPosting: EMPTY_POSTING }),
-      generalEra: gameState?.conflictsEnabled ? await resolveGeneralEra(db) : CUR_ERA_YEAR,
-      isCommandingGeneral: gameState?.conflictsEnabled
-        ? (await getMilitaryCommands(db, character.countryId)).some(
-            (c) => c.commandingGeneralId === character._id.toString()
-          )
-        : false,
+        ? await (async () => {
+            const [doctrine, commission, generalEra, commands] = await Promise.all([
+              getNationalDoctrine(db, character.countryId),
+              getCharacterCommission(db, character._id.toString()),
+              resolveGeneralEra(db),
+              getMilitaryCommands(db, character.countryId),
+            ]);
+            return {
+              doctrineAdopted: doctrine.adopted,
+              general: commission.commissioned ? commission.general : null,
+              generalPosting: commission.commissioned
+                ? await loadGeneralPosting(db, character._id.toString(), character.countryId)
+                : EMPTY_POSTING,
+              generalEra,
+              isCommandingGeneral: commands.some(
+                (c) => c.commandingGeneralId === character._id.toString()
+              ),
+            };
+          })()
+        : {
+            doctrineAdopted: {},
+            general: null,
+            generalPosting: EMPTY_POSTING,
+            generalEra: CUR_ERA_YEAR,
+            isCommandingGeneral: false,
+          }),
       gameDateAnchor: gameState
         ? {
             currentTurn: gameState.currentTurn,
@@ -634,6 +644,7 @@ export default async function CharacterPage({ params }: PageProps) {
       ? cabinetOfficeTypeForCountry((cabinetSeat.countryId ?? character.countryId) as CountryId)
       : undefined,
     officeActionBonus: gameConfig?.officeActionBonus,
+    countryId: (character.countryId ?? "US") as CountryId,
   });
   const chairActionBonus = chairBankRow ? (gameConfig?.chairActionBonus ?? 3) : 0;
   const totalActionsPerTurn = baseActionsPerTurn + officeActionBonus + chairActionBonus;

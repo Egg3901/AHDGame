@@ -570,4 +570,61 @@ describe("processActionRefresh", () => {
     expect(byId.nppAbove.politicalInfluence).toBeCloseTo(30 - 30 * 0.0075, 5);
     expect(byId.nppShell.politicalInfluence).toBe(1);
   });
+
+  it("grants a DD Volkskammer deputy the same seat generation a US member gets (ticket #974)", async () => {
+    const { processActionRefresh } = await import("./actionRefresh");
+    // The live gameConfig map has no key for any non-US-vocabulary office, so
+    // the registry fallback is what has to supply the bonus here.
+    const config: GameConfig = {
+      _id: "default",
+      baseActionsPerTurn: 4,
+      officeActionBonus: { house: 1, senate: 2 },
+      chairActionBonus: 3,
+    } as unknown as GameConfig;
+
+    const deputy: Character = {
+      _id: "ddDeputy" as never,
+      userId: "userDD" as never,
+      name: "Deputy",
+      countryId: "DD",
+      homeState: "TH",
+      policies: { economic: 0, social: 0 },
+      actions: 5,
+      funds: 0,
+      favorability: 50,
+      politicalInfluence: 0,
+      nationalInfluence: 0,
+      donorBaseLevel: 0,
+      infamy: 0,
+      party: "independent",
+      currentOffice: { type: "volkskammerDeputy", state: "TH" },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as unknown as Character;
+
+    const rep: Character = {
+      ...deputy,
+      _id: "usRep" as never,
+      countryId: "US",
+      homeState: "CA",
+      currentOffice: { type: "house", state: "CA" },
+    } as unknown as Character;
+
+    await processActionRefresh([deputy, rep], config, new Date());
+
+    const [ops] = mockBulkWrite.mock.calls[0];
+    const byId = Object.fromEntries(
+      (
+        ops as {
+          updateOne: { filter: { _id: string }; update: { $set: Record<string, number> } };
+        }[]
+      ).map((op) => [op.updateOne.filter._id, op.updateOne.update.$set])
+    );
+    // 5 + 4 base + 1 seat bonus — identical to the US representative.
+    expect(byId.ddDeputy.actions).toBe(10);
+    expect(byId.usRep.actions).toBe(10);
+    // Rank-and-file legislator NI tier, also identical.
+    expect(byId.ddDeputy.nationalInfluence).toBeCloseTo(1.0, 5);
+    expect(byId.usRep.nationalInfluence).toBeCloseTo(1.0, 5);
+  });
 });

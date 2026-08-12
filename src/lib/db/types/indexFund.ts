@@ -5,7 +5,7 @@ import type { CorporationType } from "../../constants/corporations";
 
 export type IndexFundScope = "country" | "global";
 export type IndexFundKind = "broad" | "sector";
-export type IndexFundStatus = "active" | "paused" | "delisted";
+export type IndexFundStatus = "active" | "paused" | "winding_down" | "delisted";
 export type IndexFundPauseReason = "manual" | "backing_ratio" | "constituent_delisted";
 
 export interface IndexFundTargetConstituent {
@@ -14,6 +14,18 @@ export interface IndexFundTargetConstituent {
   targetWeight: number;
   /** Constituent market cap converted to the fund anchor currency at weight-lock time. */
   marketCapAnchor: number;
+}
+
+/**
+ * A7 listing standards: how many consecutive rebalances a corporation has
+ * failed. Only failing corporations are carried; passing clears the record, and
+ * a corporation that leaves the index's mandate entirely is dropped from the
+ * list rather than kept at a stale count.
+ */
+export interface IndexFundListingFailureStreak {
+  corporationId: ObjectId;
+  consecutiveFailures: number;
+  failures: string[];
 }
 
 export interface IndexFundHolding {
@@ -56,11 +68,41 @@ export interface IndexFund {
   bondAllocations?: IndexFundBondAllocation[];
   backingRatio?: number;
   lastRebalancedAt?: Date;
+  /** A7: failing-corporation streaks, for the incumbent grace period. */
+  listingFailureStreaks?: IndexFundListingFailureStreak[];
+
+  // ── A5 sponsorship ──────────────────────────────────────────────────
+  /**
+   * Present only on SPONSORED funds. Absent means a system-seeded fund: no
+   * sponsor, no fee, and no wind-up path. Every sponsorship field is optional
+   * for exactly that reason — the seeded funds must stay byte-identical.
+   */
+  sponsorCorporationId?: ObjectId;
+  sponsorName?: string;
+  /** Annual expense ratio as a 0..1 fraction of AUM, capped at charter. */
+  expenseRatioAnnual?: number;
+  charteredAtTurn?: number;
+  /**
+   * Seed capital the sponsor put up (₳). Stays at risk for the fund's life and
+   * is returned at wind-up only after every unit holder has been paid.
+   */
+  seedCapitalAnchor?: number;
+  /** Running total of expense fees this fund has paid its sponsor (₳). */
+  feesPaidToSponsorAnchor?: number;
+  /** Turn the sponsor initiated wind-up; set with `status: "winding_down"`. */
+  windDownStartedAtTurn?: number;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export type IndexFundHolderKind = "character" | "imperial_character" | "npp" | "fund_reserve";
+export type IndexFundHolderKind =
+  | "character"
+  | "imperial_character"
+  | "npp"
+  | "fund_reserve"
+  // A8 phase 2: a union pension scheme investing its assets. Anchor-denominated
+  // like the NPP holder, because scheme assets are ₳ and never touch a wallet.
+  | "pension_scheme";
 
 export interface IndexFundPosition {
   _id: ObjectId;
@@ -69,6 +111,7 @@ export interface IndexFundPosition {
   characterId?: ObjectId;
   imperialCharacterId?: ObjectId;
   nppId?: ObjectId;
+  pensionSchemeId?: ObjectId;
   units: number;
   avgNavAnchor?: number;
   /**
@@ -96,7 +139,12 @@ export type IndexFundTransactionKind =
   | "rebalance"
   | "cross_fund_buy"
   | "cross_fund_sell"
-  | "capital_injection";
+  | "capital_injection"
+  // A5 sponsorship
+  | "sponsor_seed_capital"
+  | "expense_fee"
+  | "wind_up_distribution"
+  | "seed_capital_return";
 
 export interface IndexFundTransaction {
   _id: ObjectId;
@@ -107,6 +155,7 @@ export interface IndexFundTransaction {
   characterId?: ObjectId;
   imperialCharacterId?: ObjectId;
   nppId?: ObjectId;
+  pensionSchemeId?: ObjectId;
   corporationId?: ObjectId;
   units?: number;
   shares?: number;
@@ -121,7 +170,9 @@ export type IndexFundRedemptionStatus = "queued" | "partial" | "paid" | "cancell
 export interface IndexFundRedemptionQueueEntry {
   _id: ObjectId;
   fundId: ObjectId;
-  holderKind: Exclude<IndexFundHolderKind, "fund_reserve">;
+  // Pension schemes have no redemption path (see `schemeInvesting.ts`), so they
+  // cannot appear in the queue either.
+  holderKind: Exclude<IndexFundHolderKind, "fund_reserve" | "pension_scheme">;
   characterId?: ObjectId;
   imperialCharacterId?: ObjectId;
   nppId?: ObjectId;

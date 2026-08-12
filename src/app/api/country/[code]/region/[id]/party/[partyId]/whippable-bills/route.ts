@@ -127,6 +127,15 @@ export async function GET(_request: Request, { params }: RouteParams) {
                   ...stillOpen("otherChamberVotingEndsOnTurn", "otherChamberVotingEndsAt"),
                 },
                 {
+                  // Whippable while EITHER chamber is open. Nested, not spread: stillOpen
+                  // returns an $or object on the turn branch and a flat one otherwise.
+                  status: "active_both",
+                  $or: [
+                    stillOpen("votingEndsOnTurn", "votingEndsAt"),
+                    stillOpen("otherChamberVotingEndsOnTurn", "otherChamberVotingEndsAt"),
+                  ],
+                },
+                {
                   status: "veto_override",
                   ...stillOpen("overrideVotingEndsOnTurn", "overrideVotingEndsAt"),
                 },

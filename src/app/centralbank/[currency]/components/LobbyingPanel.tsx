@@ -125,10 +125,10 @@ export function LobbyingPanel({
         </div>
       </div>
       <p className="mb-4 text-xs text-muted italic">
-        Lobbying increases a candidate&apos;s chances within their selection pool — but the outcome
+        Lobbying increases a candidate&apos;s chances within their selection pool - but the outcome
         is never guaranteed. You may back multiple candidates; each contribution is a separate
         transaction paid from{" "}
-        <span className="font-medium text-foreground">{nationalCurrency ?? "—"}</span> liquid cash
+        <span className="font-medium text-foreground">{nationalCurrency ?? "-"}</span> liquid cash
         (minimum {formatNativeCurrency(CENTRAL_BANK_LOBBY_MIN_AMOUNT, nationalCurrency)}). If
         auto-convert is on, shortfalls are topped up from your home currency at the market rate.
       </p>

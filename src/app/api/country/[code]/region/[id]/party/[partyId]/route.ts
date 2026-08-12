@@ -127,10 +127,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
       };
     };
 
-    const chair = await resolveLeader(statePartyOrg?.chairId);
-    const viceChair = await resolveLeader(statePartyOrg?.viceChairId);
-    const treasurer = await resolveLeader(statePartyOrg?.treasurerId);
-    const campaigner = await resolveLeader(statePartyOrg?.campaignerId ?? null);
+    const [chair, viceChair, treasurer, campaigner] = await Promise.all([
+      resolveLeader(statePartyOrg?.chairId),
+      resolveLeader(statePartyOrg?.viceChairId),
+      resolveLeader(statePartyOrg?.treasurerId),
+      resolveLeader(statePartyOrg?.campaignerId ?? null),
+    ]);
 
     // Game clock — also drives the inactivity cutoff below so the displayed
     // roster + PS cap match what the turn engine enforces with the same `now`.

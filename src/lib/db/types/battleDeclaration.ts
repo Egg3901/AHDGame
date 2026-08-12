@@ -1,5 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 
 export type BattleDeclarationStatus = "pending" | "resolved" | "fizzled";
 
@@ -12,7 +13,14 @@ export type BattleDeclarationStatus = "pending" | "resolved" | "fizzled";
 export interface BattleDeclarationDoc {
   _id: ObjectId;
   declarerCountry: CountryId;
-  targetCountry: CountryId;
+  /**
+   * The enemy named by this declaration.
+   *
+   * A `WorldEntityId`, not a `CountryId`: in a proxy war the belligerent on the
+   * other side is a FACTION (`sideX.factionEntity`), which is a world entity with no
+   * row in `COUNTRY_CONFIGS`. Every real country id is a valid value here too.
+   */
+  targetCountry: WorldEntityId;
   theaterId: string;
   declaredByCharacterId: string | null;
   declaredTurn: number;

@@ -383,6 +383,41 @@ export const DOMINANCE_REGULATORY_BURDEN_AT_THRESHOLD = 0;
  */
 export const DOMINANCE_REGULATORY_BURDEN_AT_FULL = 0.05;
 
+/**
+ * Rival corps in the same (state, sectorType) cell at which the dominance toll
+ * is charged in full. At or above this count the market is "crowded" and a
+ * dominant corp pays the undiscounted price.
+ */
+export const DOMINANCE_DENSITY_CROWDED_COMPETITORS = 4;
+
+/**
+ * Share of the dominance toll charged in a market with NO rivals at all.
+ * A corp that is the only firm in a small state has not out-competed anyone —
+ * it turned up somewhere nobody else wanted to be. Charging it the same
+ * expansion toll as a corp that fought four rivals for California left thin
+ * markets permanently unbuilt even where demand existed.
+ */
+export const DOMINANCE_DENSITY_MIN_FACTOR = 0.35;
+
+/**
+ * Scales the dominance toll by how contested the market actually is.
+ *
+ * Returns {@link DOMINANCE_DENSITY_MIN_FACTOR} with no rivals, ramping linearly
+ * to 1 at {@link DOMINANCE_DENSITY_CROWDED_COMPETITORS}. Applied to the toll's
+ * EXCESS over 1.0, never to the base price, so a market with no rivals still
+ * pays a real (if smaller) monopoly premium and the ramp stays continuous.
+ *
+ * `competitorCount` counts distinct rival CORPORATIONS holding a sector in the
+ * cell, excluding the building corp's own. Absent/invalid ⇒ crowded (factor 1),
+ * so a caller that cannot resolve density never gets a silent discount.
+ */
+export function dominanceDensityFactor(competitorCount: number | null | undefined): number {
+  if (!Number.isFinite(competitorCount as number) || (competitorCount as number) < 0) return 1;
+  const rivals = Math.min(competitorCount as number, DOMINANCE_DENSITY_CROWDED_COMPETITORS);
+  const t = rivals / DOMINANCE_DENSITY_CROWDED_COMPETITORS;
+  return DOMINANCE_DENSITY_MIN_FACTOR + (1 - DOMINANCE_DENSITY_MIN_FACTOR) * t;
+}
+
 function dominanceMultiplier(
   marketSharePercent: number,
   atFull: number,

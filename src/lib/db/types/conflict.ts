@@ -1,6 +1,7 @@
 import type { CountryId } from "@/lib/constants/countries";
 import type { RegionCode } from "@/lib/military/types";
 import type { WarGoal } from "@/lib/military/warGoals";
+import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 
 /**
  * A conflict — a dynamic, first-class battleground that generalizes the retired
@@ -12,7 +13,13 @@ import type { WarGoal } from "@/lib/military/warGoals";
  * Spec: docs/superpowers/specs/2026-07-23-conflict-model-sub-a-design.md
  */
 
-export type ConflictType = "interstate" | "intervention" | "civil_war" | "independence";
+export type ConflictType =
+  | "interstate"
+  | "intervention"
+  | "civil_war"
+  | "independence"
+  /** A proxy war fought on third-party soil; the sides are internal factions. */
+  | "cold_war";
 export type ConflictStatus = "active" | "escalating" | "winding_down" | "resolved";
 export type SideKind = "state" | "coalition" | "generated";
 export type ConflictBloc = "west" | "east" | "internal" | "contested";
@@ -25,6 +32,20 @@ export interface ConflictSide {
   kind: SideKind;
   /** Cold War patron, if any. */
   backer?: "west" | "east";
+  /**
+   * Faction sides only: the world entity this faction represents.
+   *
+   * This is the DECLARABLE TARGET — `belligerentSideOf` and `sideOf` match it, so a
+   * player declares on "North Vietnam" rather than needing a side-addressed mode. It
+   * must never collide with a real CountryId: the admin creation route enforces that,
+   * and the fog resolver's safety depends on it.
+   */
+  factionEntity?: WorldEntityId;
+  /**
+   * Faction sides only: the weight of the token force it brings. Small by design.
+   * Decremented by its casualties and floored at zero; at zero the side is a walkover.
+   */
+  tokenStrength?: number;
 }
 
 export interface ConflictDoc {
@@ -38,8 +59,15 @@ export interface ConflictDoc {
    */
   conflictId: number;
   name: string;
-  /** Where it's fought — the map anchor. May not be a belligerent. */
-  hostCountry: CountryId;
+  /**
+   * Where it's fought — the map anchor. May not be a belligerent.
+   *
+   * WorldEntityId, not CountryId: a proxy war is hosted in a third-party state the game
+   * does not implement as playable (NVN, SVN, KR). Same widening `OrgMemberId` already
+   * made for org membership. `WorldEntityId` is `string`, so there is no compile-time
+   * check left — validation lives at the admin creation route, the only writer.
+   */
+  hostCountry: WorldEntityId;
   /** Derived from the host country (map / regionThreat). */
   region: RegionCode;
   type: ConflictType;
@@ -79,6 +107,22 @@ export interface ConflictDoc {
   supplyBaseA?: number;
   supplyBaseB?: number;
   status: ConflictStatus;
+  /**
+   * Every third-party country in the theatre — the roster that changes bloc when the
+   * war resolves. `hostCountry` stays the single map anchor. Read through
+   * `hostEntitiesOf`, never directly: absent must mean "just the anchor".
+   */
+  hostEntities?: WorldEntityId[];
+  /**
+   * `cold_war`: which side currently holds 100% of the host territory.
+   *
+   * Nullable, not merely optional: a front pushed back off the pole is explicitly
+   * CLEARED to null, and "the hold was broken" is a state worth storing rather than
+   * an absence worth inferring.
+   */
+  poleSide?: "A" | "B" | null;
+  /** `cold_war`: the turn that side reached the pole. Cleared if it comes off. */
+  poleSinceTurn?: number | null;
   /** What this war was declared for. Absent on conflicts predating declarations. */
   warGoal?: WarGoal;
   /** The bill that declared it, for the record page. */

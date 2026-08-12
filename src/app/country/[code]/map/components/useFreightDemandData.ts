@@ -1,10 +1,7 @@
 import { useState, useEffect } from "react";
-import type { FreightDemandEntry } from "@/lib/logistics/freightDemand";
+import type { FreightDemandResponse } from "@/lib/logistics/types";
 
-export type FreightDemandData = {
-  turn: number | null;
-  states: Record<string, FreightDemandEntry>;
-};
+export type FreightDemandData = Pick<FreightDemandResponse, "turn" | "states">;
 
 export function useFreightDemandData(mode: string, countryId: string): FreightDemandData {
   const [data, setData] = useState<FreightDemandData>({ turn: null, states: {} });
@@ -12,8 +9,8 @@ export function useFreightDemandData(mode: string, countryId: string): FreightDe
   useEffect(() => {
     if (mode !== "logistics") return;
     fetch(`/api/map/logistics?countryId=${countryId}`)
-      .then((r) => (r.ok ? r.json() : { turn: null, states: {} }))
-      .then((d: FreightDemandData) => setData({ turn: d.turn ?? null, states: d.states ?? {} }))
+      .then(async (r) => (r.ok ? ((await r.json()) as FreightDemandResponse) : null))
+      .then((d) => setData({ turn: d?.turn ?? null, states: d?.states ?? {} }))
       .catch(() => setData({ turn: null, states: {} }));
   }, [mode, countryId]);
 

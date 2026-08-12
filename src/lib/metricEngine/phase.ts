@@ -406,6 +406,12 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     macroInputs = buildMacroGrowthInputs(rows);
   }
 
+  // Per-country memos: synergy nudges and era envelopes depend only on the
+  // country (model, directives, era year), not the state, so compute each
+  // country's set once instead of once per state.
+  const targetNudgesByCountry = new Map<string, Record<NodeId, number>>();
+  const envelopesByCountry = new Map<string, Record<string, { limit: number; kind: "ceiling" }>>();
+
   for (const state of realStates) {
     const countryId = state.countryId;
     const ownedForState = sectorTax.ownedByState.get(state._id) ?? [];
@@ -594,25 +600,31 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     // named model / mixed (empty map → all nudges default to 0 in evalNode).
     const nationalDocId = getNationalDocId(countryId);
     const countryModel = nationalDocId ? prevDocById.get(nationalDocId)?.economicModel : undefined;
-    const targetNudges: Record<NodeId, number> = {};
-    for (const [metricId, nudge] of synergyNudges(countryModel)) {
-      const nodeId = nodeIdByMetricId.get(metricId);
-      if (nodeId) targetNudges[nodeId] = nudge;
-    }
-    // Fold in active org-directive + alliance-posture nudges for this state's
-    // country (added to any economic-model synergy already targeting the node).
-    for (const byCountry of [
-      directiveNudgesByCountry,
-      postureNudgesByCountry,
-      agencyNudgesByCountry,
-    ]) {
-      const nudges = byCountry.get(countryId);
-      if (!nudges) continue;
-      for (const [metricId, delta] of nudges) {
+    let cachedNudges = targetNudgesByCountry.get(countryId);
+    if (!cachedNudges) {
+      cachedNudges = {};
+      for (const [metricId, nudge] of synergyNudges(countryModel)) {
         const nodeId = nodeIdByMetricId.get(metricId);
-        if (nodeId) targetNudges[nodeId] = (targetNudges[nodeId] ?? 0) + delta;
+        if (nodeId) cachedNudges[nodeId] = nudge;
       }
+      // Fold in active org-directive + alliance-posture nudges for this state's
+      // country (added to any economic-model synergy already targeting the node).
+      for (const byCountry of [
+        directiveNudgesByCountry,
+        postureNudgesByCountry,
+        agencyNudgesByCountry,
+      ]) {
+        const nudges = byCountry.get(countryId);
+        if (!nudges) continue;
+        for (const [metricId, delta] of nudges) {
+          const nodeId = nodeIdByMetricId.get(metricId);
+          if (nodeId) cachedNudges[nodeId] = (cachedNudges[nodeId] ?? 0) + delta;
+        }
+      }
+      targetNudgesByCountry.set(countryId, cachedNudges);
     }
+    // Fresh copy per state: downstream consumers must not share mutable state.
+    const targetNudges: Record<NodeId, number> = { ...cachedNudges };
 
     // §6.4 (P7b): coherent (signature-category) spending goes further under a
     // held model. Scale the per-capita rollup before nodes consume it via
@@ -624,13 +636,18 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
 
     // Era envelopes per node for this state's country (null year ⇒ empty map ⇒
     // no clamps). Only enveloped catalog metrics get an entry.
-    const envelopes: Record<string, { limit: number; kind: "ceiling" }> = {};
-    if (eraYear != null) {
-      for (const n of MACRO_NODES) {
-        const env = getEraEnvelope(n.metricId, countryId, eraYear);
-        if (env) envelopes[n.id] = env;
+    let cachedEnvelopes = envelopesByCountry.get(countryId);
+    if (!cachedEnvelopes) {
+      cachedEnvelopes = {};
+      if (eraYear != null) {
+        for (const n of MACRO_NODES) {
+          const env = getEraEnvelope(n.metricId, countryId, eraYear);
+          if (env) cachedEnvelopes[n.id] = env;
+        }
       }
+      envelopesByCountry.set(countryId, cachedEnvelopes);
     }
+    const envelopes = { ...cachedEnvelopes };
 
     const results = evaluateRegistry(MACRO_NODES, {
       stateId: state._id,

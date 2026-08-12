@@ -111,11 +111,15 @@ export async function GET(
       : [];
 
     const candidatesByElection: Record<string, ElectionCandidate[]> = {};
-    for (const e of elections) {
-      candidatesByElection[e._id.toString()] = await db
+    for (const e of elections) candidatesByElection[e._id.toString()] = [];
+    if (elections.length > 0) {
+      const allCandidates = await db
         .collection<ElectionCandidate>("electionCandidates")
-        .find({ electionId: e._id, status: "active" })
+        .find({ electionId: { $in: elections.map((e) => e._id) }, status: "active" })
         .toArray();
+      for (const c of allCandidates) {
+        candidatesByElection[c.electionId.toString()]?.push(c);
+      }
     }
 
     return NextResponse.json({ elections, candidatesByElection, active });

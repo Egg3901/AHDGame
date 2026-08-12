@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import type { State } from "@/lib/db/types";
 import { allRegionCodes } from "./regionManifest";
+import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 
 /**
  * Of the requested codes with no `states` doc, which have SECEDED into a
@@ -104,11 +105,17 @@ export async function getRegionDetails(
  * A country's region codes that the map manifest actually has geometry for. The
  * front map draws the host's own regions, so codes with no shard are dropped here
  * rather than fetched and discarded.
+ *
+ * Takes a WorldEntityId: a conflict host may be a non-playable entity. `states` holds
+ * only full-autonomous countries, so such an entity returns `[]` and the caller falls
+ * back to static features (or to the territory meter).
  */
-export async function regionCodesOfCountry(db: Db, countryId: CountryId): Promise<string[]> {
+export async function regionCodesOfCountry(db: Db, countryId: WorldEntityId): Promise<string[]> {
   const docs = await db
     .collection<State>("states")
-    .find({ countryId })
+    // `State.countryId` is a CountryId; the argument may be any world entity. A
+    // non-playable host simply matches nothing, which is the intended result.
+    .find({ countryId: countryId as CountryId })
     .project({ _id: 1 })
     .toArray();
   const drawable = new Set(allRegionCodes());

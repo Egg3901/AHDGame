@@ -34,6 +34,18 @@ export interface PoliticalMetricsDoc {
    * back to ≈0 when the cabinet stops applying the effect.
    */
   cabinetResiduals?: Record<PoliticalMetricId, number>;
+  /**
+   * The labour-relations offset applied to this region's target this turn (the
+   * strike/settlement channel, `src/lib/unions/labourRelationsPoliticalProvider.ts`).
+   * Persisted for the same reason `cabinetResiduals` is: an offset that moves
+   * the board must be inspectable, or a strike wave shifts national politics
+   * with no traceable cause. Unlike the cabinet channel this one does NOT
+   * accumulate here — the provider already decays it from the dispute or
+   * settlement turn — so this field is a per-turn snapshot of what was applied,
+   * country-wide and therefore identical across a country's regions. Absent or
+   * empty means the channel contributed nothing.
+   */
+  labourResiduals?: Record<PoliticalMetricId, number>;
   lastUpdated: Date;
 }
 

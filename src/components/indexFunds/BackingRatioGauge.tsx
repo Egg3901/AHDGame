@@ -1,13 +1,17 @@
 "use client";
 
-import { INDEX_FUND_AUTO_PAUSE_BACKING_RATIO } from "@/lib/indexFunds/unitAccounting";
+import { INDEX_FUND_BACKING_WARN_RATIO, autoPauseDisabled } from "@/lib/indexFunds/unitAccounting";
 
 /**
  * Semi-circular gauge for the fund's backing ratio.
  *
- * The full sweep represents 0% → 150% backing. The auto-pause tick at 50% is
- * drawn in `--error` so a viewer can read the headroom in one glance. Values
- * above 150% are clamped to the top of the arc.
+ * The full sweep represents 0% → 150% backing. The tick marks the under-backed
+ * warning level so a viewer can read the headroom in one glance. Values above
+ * 150% are clamped to the top of the arc.
+ *
+ * The tick used to be drawn from the auto-pause constant, which is 0, so it sat
+ * at the origin and the error tone never fired while the copy claimed a 50%
+ * auto-pause line.
  */
 export function BackingRatioGauge({ ratio }: { ratio: number | null }) {
   const W = 210;
@@ -39,14 +43,14 @@ export function BackingRatioGauge({ ratio }: { ratio: number | null }) {
   const arcEnd = startDeg + frac * sweepDeg;
   const arcFull = arcPath(startDeg, arcEnd);
 
-  const tickDeg = (INDEX_FUND_AUTO_PAUSE_BACKING_RATIO / maxScale) * sweepDeg;
+  const tickDeg = (INDEX_FUND_BACKING_WARN_RATIO / maxScale) * sweepDeg;
   const [tx1, ty1] = polar(tickDeg, r - 10);
   const [tx2, ty2] = polar(tickDeg, r + 10);
 
   const hasData = ratio != null && Number.isFinite(ratio);
   const pct = hasData ? (safeRatio * 100).toFixed(1) : "—";
   const tone =
-    hasData && safeRatio < INDEX_FUND_AUTO_PAUSE_BACKING_RATIO ? "var(--error)" : "var(--success)";
+    hasData && safeRatio < INDEX_FUND_BACKING_WARN_RATIO ? "var(--error)" : "var(--success)";
 
   return (
     <div className="relative mx-auto" style={{ width: W, height: H }}>

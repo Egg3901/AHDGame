@@ -23,9 +23,9 @@ function makeDb(countryId: string) {
   const corpInsertedId = new ObjectId();
   const corpInsertOne = vi.fn().mockResolvedValue({ insertedId: corpInsertedId });
 
-  // Typed rather than inferred: the inferred union is JPY-or-USD only, so the
-  // UK case below (which reassigns to GBP) does not fit it.
-  const charFunds: { personal: Record<string, number> } =
+  // Typed rather than inferred: a test below funds GBP, and the inferred
+  // union of the two literals below would refuse any third currency.
+  const charFunds: { personal: Partial<Record<string, number>> } =
     countryId === "JP" ? { personal: { JPY: 2_000_000_000 } } : { personal: { USD: 2_000_000 } };
 
   const db = {

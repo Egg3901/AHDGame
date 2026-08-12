@@ -7,7 +7,6 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
   type ReactNode,
 } from "react";
 import { usePathname } from "next/navigation";
@@ -104,22 +103,24 @@ const FeedbackContext = createContext<FeedbackContextValue | null>(null);
 
 export function FeedbackProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [recentActions, setRecentActions] = useState<CapturedAction[]>([]);
+  // The action log is never rendered — only read when a snapshot is captured —
+  // so it lives in a ref. Keeping it in state rebuilt the context value on
+  // every route change and recorded action, re-rendering all consumers.
+  const recentActionsRef = useRef<CapturedAction[]>([]);
+  const pathnameRef = useRef<string | null>(null);
   const prevPathRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (pathname) pathnameRef.current = pathname;
     if (pathname && pathname !== prevPathRef.current) {
       prevPathRef.current = pathname;
       const label = getPageLabel(pathname);
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync recent actions with route
-      setRecentActions((prev) => {
-        const action: CapturedAction = {
-          label,
-          timestamp: new Date().toISOString(),
-          metadata: { pathname },
-        };
-        return [action, ...prev].slice(0, MAX_RECENT_ACTIONS);
-      });
+      const action: CapturedAction = {
+        label,
+        timestamp: new Date().toISOString(),
+        metadata: { pathname },
+      };
+      recentActionsRef.current = [action, ...recentActionsRef.current].slice(0, MAX_RECENT_ACTIONS);
     }
   }, [pathname]);
 
@@ -129,16 +130,14 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
       timestamp: new Date().toISOString(),
       metadata,
     };
-    setRecentActions((prev) => {
-      const next = [action, ...prev].slice(0, MAX_RECENT_ACTIONS);
-      return next;
-    });
+    recentActionsRef.current = [action, ...recentActionsRef.current].slice(0, MAX_RECENT_ACTIONS);
   }, []);
 
   const getContextSnapshot = useCallback((): FeedbackContextSnapshot => {
     const now = new Date();
+    const recentActions = recentActionsRef.current;
     return {
-      pathname: pathname ?? window.location.pathname,
+      pathname: pathnameRef.current ?? window.location.pathname,
       url: typeof window !== "undefined" ? window.location.href : "",
       capturedAt: now.toISOString(),
       lastAction: recentActions[0],
@@ -151,7 +150,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
       referrer:
         typeof document !== "undefined" && document.referrer ? document.referrer : undefined,
     };
-  }, [pathname, recentActions]);
+  }, []);
 
   const value = useMemo(
     () => ({ recordAction, getContextSnapshot }),

@@ -374,7 +374,12 @@ export interface SectorCalculationsResult {
     sectorId: string;
     sectorType: string;
     countryId: string;
-    event: "started" | "resolved_concession" | "resolved_waitout" | "resolved_banned";
+    event:
+      | "started"
+      | "resolved_concession"
+      | "resolved_waitout"
+      | "resolved_banned"
+      | "resolved_agreement";
   }>;
   /**
    * Extraction sectors that newly crossed into capacity-bound state this turn

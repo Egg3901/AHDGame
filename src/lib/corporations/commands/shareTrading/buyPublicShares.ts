@@ -6,6 +6,10 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { buySharesSchema } from "@/lib/api/schemas/corporations";
 import { handleRouteError } from "@/lib/api/errors";
+import {
+  corpPurchaseWouldCycle,
+  OWNERSHIP_CYCLE_ERROR,
+} from "@/lib/corporations/subsidiaries/cycleGuard";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { assertCeoTradeNotBlocked } from "@/lib/corporations/commands/privatization/openVoteGuard";
 import type { Character, Corporation, User } from "@/lib/db/types";
@@ -153,6 +157,10 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
           { error: "National corporations cannot hold equity positions" },
           { status: 400 }
         );
+      }
+
+      if (await corpPurchaseWouldCycle(db, buyingCorp._id, corporation._id)) {
+        return NextResponse.json({ error: OWNERSHIP_CYCLE_ERROR }, { status: 400 });
       }
 
       // sharePrice is stored in the target corp's liquidCurrencyCode (v0.2.6).

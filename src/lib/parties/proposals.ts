@@ -5,11 +5,13 @@ import type {
   PositionShiftAxis,
 } from "@/lib/db/types/committeeProposal";
 import type {
+  Character,
   NationalCommitteeElection,
   NationalPartyElection,
   NPP,
   PoliticalParty,
 } from "@/lib/db/types";
+import { MAX_NATIONAL_CAMPAIGNERS } from "./access";
 import type { StatePartyOrg } from "@/lib/db/types/statePartyOrg";
 import type { StateRegistrationPool } from "@/lib/db/types/stateRegistrationPool";
 import type { ElectedOfficial } from "@/lib/db/types/officials";
@@ -319,6 +321,14 @@ export async function applyRemoveOfficeHolderEffect(
         { _id: proposal.partyId, viceChairId: targetCharacterId },
         { $set: { viceChairId: null, updatedAt: now } }
       );
+  } else if (role === "campaigner") {
+    await db.collection<PoliticalParty>("politicalParties").updateOne(
+      { _id: proposal.partyId, campaignerIds: targetCharacterId },
+      {
+        $pull: { campaignerIds: targetCharacterId } as Record<string, unknown>,
+        $set: { updatedAt: now },
+      }
+    );
   } else {
     // committeeMember
     await db.collection<PoliticalParty>("politicalParties").updateOne(
@@ -329,6 +339,56 @@ export async function applyRemoveOfficeHolderEffect(
       }
     );
   }
+}
+
+/**
+ * Seat a chair-nominated Campaigner once the National Committee has
+ * confirmed. Re-validates at resolution time rather than trusting the
+ * state that held when the nomination was filed:
+ *
+ *  - the nominee must still be a member of this party (they may have
+ *    left or been purged while the vote sat open), and
+ *  - the roster must still be under `MAX_NATIONAL_CAMPAIGNERS` (two
+ *    nominations can be open at once, so the later one can arrive at a
+ *    full roster).
+ *
+ * Either miss is a silent no-op: the proposal still records as passed,
+ * the seat just isn't granted.
+ */
+export async function applyCampaignerAppointmentEffect(
+  db: Db,
+  proposal: CommitteeProposal
+): Promise<void> {
+  if (!proposal.campaignerAppointment) throw new Error("Not a campaignerAppointment proposal");
+  const { targetCharacterId } = proposal.campaignerAppointment;
+
+  const party = await db
+    .collection<PoliticalParty>("politicalParties")
+    .findOne(
+      { _id: proposal.partyId },
+      { projection: { campaignerIds: 1, sequentialId: 1, countryId: 1 } }
+    );
+  if (!party) return;
+
+  const current = party.campaignerIds ?? [];
+  if (current.some((id) => id.equals(targetCharacterId))) return;
+  if (current.length >= MAX_NATIONAL_CAMPAIGNERS) return;
+
+  const character = await db
+    .collection<Character>("characters")
+    .findOne({ _id: targetCharacterId }, { projection: { party: 1, countryId: 1 } });
+  if (!character) return;
+  if (character.party !== String(party.sequentialId) || character.countryId !== party.countryId) {
+    return;
+  }
+
+  await db.collection<PoliticalParty>("politicalParties").updateOne(
+    { _id: proposal.partyId },
+    {
+      $addToSet: { campaignerIds: targetCharacterId } as Record<string, unknown>,
+      $set: { updatedAt: new Date() },
+    }
+  );
 }
 
 // ─── Cooldown read helpers (pure) ─────────────────────────────────────────────
@@ -401,6 +461,9 @@ export async function setProposalCooldown(
     );
     return;
   }
+  // campaignerAppointment carries no cooldown — the chair must be able to
+  // re-nominate the moment a slot opens (or a nomination is voted down).
+  if (proposal.type === "campaignerAppointment") return;
   // rename / merge / electionMethod / electionDuration
   await db.collection<PoliticalParty>("politicalParties").updateOne(
     { _id: proposal.partyId },
@@ -707,6 +770,11 @@ export async function attemptResolution(
   if (proposal.type === "removeOfficeHolder" && proposal.removeOfficeHolder) {
     baseVoterSet.delete(proposal.removeOfficeHolder.targetCharacterId.toString());
   }
+  // Same procedural fairness rule for a campaigner nomination — a nominee
+  // who happens to sit on the committee doesn't get to confirm themselves.
+  if (proposal.type === "campaignerAppointment" && proposal.campaignerAppointment) {
+    baseVoterSet.delete(proposal.campaignerAppointment.targetCharacterId.toString());
+  }
   const proposingSize = baseVoterSet.size;
   const pYes = proposal.proposingVotes.filter((v) => v.vote === "yes").length;
   const pNo = proposal.proposingVotes.filter((v) => v.vote === "no").length;
@@ -751,6 +819,9 @@ export async function attemptResolution(
       if (proposal.type === "removeOfficeHolder") await applyRemoveOfficeHolderEffect(db, proposal);
       if (proposal.type === "transactionApprovalMode") {
         await applyTransactionApprovalModeEffect(db, proposal);
+      }
+      if (proposal.type === "campaignerAppointment") {
+        await applyCampaignerAppointmentEffect(db, proposal);
       }
       await setProposalCooldown(db, proposal, currentTurn);
       await markResolved(db, proposal._id, "passed", currentTurn);

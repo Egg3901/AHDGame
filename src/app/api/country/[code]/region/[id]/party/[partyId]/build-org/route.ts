@@ -202,11 +202,17 @@ export async function POST(request: Request, { params }: RouteParams) {
         .toArray()
     : [];
   const partyBySeq = new Map(rivalParties.map((p) => [String(p.sequentialId), p]));
-  const shieldByPartyId = new Map<string, number>();
-  for (const r of rivalRows) {
-    const p = partyBySeq.get(r.partyId);
-    shieldByPartyId.set(r.partyId, p ? await resolveUnmannedDefaultCaptureMultiplier(db, p) : 1);
-  }
+  const shieldByPartyId = new Map<string, number>(
+    await Promise.all(
+      rivalRows.map(async (r) => {
+        const p = partyBySeq.get(r.partyId);
+        return [r.partyId, p ? await resolveUnmannedDefaultCaptureMultiplier(db, p) : 1] as [
+          string,
+          number,
+        ];
+      })
+    )
+  );
 
   // Effective PS = state PS + a fraction of national PS, applied to spender and
   // every rival so leverage + poach weighting compare like with like.

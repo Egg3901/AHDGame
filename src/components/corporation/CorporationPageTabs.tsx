@@ -84,6 +84,10 @@ export const SupplyAgreementsSection = dynamic(
   () => import("@/components/corporation/SupplyAgreementsSection"),
   { loading: () => null }
 );
+export const IndustrialRelationsSection = dynamic(
+  () => import("@/components/corporation/IndustrialRelationsSection"),
+  { loading: () => null }
+);
 export const DefaultedBondCrisisModal = dynamic(
   () => import("@/components/corporation/DefaultedBondCrisisModal"),
   // Modal overlay — render nothing (not a tab skeleton) while the chunk loads.

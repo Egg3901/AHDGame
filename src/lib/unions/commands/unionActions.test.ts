@@ -1,23 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
-import type { Character, CorporateSector, Union } from "@/lib/db/types";
-import { recruitForUnion, callUnionStrike, setUnionWageDemand } from "./unionActions";
-import { RECRUIT_COST, applyRecruit, STRIKE_CALL_COST_PER_SECTOR } from "@/lib/unions/unionEconomy";
-import { realWageIndex } from "@/lib/labour/unionization";
-import { STRIKE_EXPECTATION_GAP_THRESHOLD } from "@/lib/labour/strikes";
-
-vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
-  runWithOptionalTransaction: vi
-    .fn()
-    .mockImplementation(async (_withSession: unknown, withoutSession: () => Promise<void>) => {
-      return withoutSession();
-    }),
-}));
-
-vi.mock("@/lib/corporations/sentimentEvents", () => ({
-  fireStrikeStartedPulse: vi.fn().mockResolvedValue(undefined),
-}));
+import type { Character, Union } from "@/lib/db/types";
+import { recruitForUnion, endorseBill, setUnionWageDemand } from "./unionActions";
+import { RECRUIT_COST, applyRecruit } from "@/lib/unions/unionEconomy";
 
 function makeCharacter(overrides: Partial<Character> = {}): Character {
   return { _id: new ObjectId(), name: "TestChar", ...overrides } as unknown as Character;
@@ -122,136 +108,6 @@ describe("recruitForUnion", () => {
   });
 });
 
-describe("callUnionStrike", () => {
-  function mockStrikeDb({
-    matchedSectors,
-    unionTreasury = 100_000,
-    unionUpdateModifiedCount = 1,
-    isProcessing = false,
-  }: {
-    matchedSectors: Partial<CorporateSector>[];
-    unionTreasury?: number;
-    unionUpdateModifiedCount?: number;
-    isProcessing?: boolean;
-  }) {
-    const union = makeUnion(new ObjectId(), { treasury: unionTreasury });
-    const character = makeCharacter({ _id: union.ownerId! });
-    const unionUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: unionUpdateModifiedCount });
-    const sectorBulkWrite = vi.fn().mockResolvedValue({});
-    const db = {
-      collection: (name: string) => {
-        if (name === "gameState") return gameStateCollection(isProcessing);
-        // Union-ban gate (player suggestion #93): resolveOwnedUnion checks the
-        // country's budget; no ban in these scenarios.
-        if (name === "federalBudget") {
-          return { findOne: vi.fn().mockResolvedValue({ unionsBanned: false }) };
-        }
-        if (name === "unions") {
-          return { findOne: vi.fn().mockResolvedValue(union), updateOne: unionUpdateOne };
-        }
-        if (name === "corporateSectors") {
-          return {
-            find: () => ({ toArray: () => Promise.resolve(matchedSectors) }),
-            bulkWrite: sectorBulkWrite,
-          };
-        }
-        throw new Error(`unexpected collection ${name}`);
-      },
-    } as unknown as Db;
-    return { db, character, union, unionUpdateOne, sectorBulkWrite };
-  }
-
-  it("rejects when no sector is organized enough to strike", async () => {
-    const { db, character, union } = mockStrikeDb({ matchedSectors: [] });
-    const result = await callUnionStrike(db, character, union._id.toString(), 10);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.status).toBe(400);
-  });
-
-  it("rejects when the union treasury can't afford the strike cost", async () => {
-    const { db, character, union } = mockStrikeDb({
-      matchedSectors: [{ _id: new ObjectId() }],
-      unionTreasury: STRIKE_CALL_COST_PER_SECTOR - 1,
-    });
-    const result = await callUnionStrike(db, character, union._id.toString(), 10);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.status).toBe(402);
-  });
-
-  it("rejects while in the union-level strike-call cooldown", async () => {
-    const character = makeCharacter();
-    const union = makeUnion(character._id, { lastCalledStrikeTurn: 5 });
-    const db = {
-      collection: (name: string) => {
-        if (name === "gameState") return gameStateCollection();
-        if (name === "federalBudget")
-          return { findOne: vi.fn().mockResolvedValue({ unionsBanned: false }) };
-        if (name === "unions") return { findOne: vi.fn().mockResolvedValue(union) };
-        if (name === "corporateSectors")
-          return { find: () => ({ toArray: () => Promise.resolve([]) }) };
-        throw new Error("unexpected");
-      },
-    } as unknown as Db;
-    const result = await callUnionStrike(db, character, union._id.toString(), 10);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.status).toBe(409);
-  });
-
-  it("rejects while a turn is actively processing", async () => {
-    const { db, character, union } = mockStrikeDb({
-      matchedSectors: [{ _id: new ObjectId() }],
-      isProcessing: true,
-    });
-    const result = await callUnionStrike(db, character, union._id.toString(), 10);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.status).toBe(409);
-  });
-
-  it("succeeds: force-sets strikeStartedAtTurn on matched sectors and deducts scaled cost", async () => {
-    const sectorIds = [new ObjectId(), new ObjectId()];
-    const { db, character, union, unionUpdateOne, sectorBulkWrite } = mockStrikeDb({
-      matchedSectors: sectorIds.map((_id) => ({ _id })),
-    });
-
-    const result = await callUnionStrike(db, character, union._id.toString(), 10);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.sectorsStruck).toBe(2);
-    expect(result.cashSpent).toBe(2 * STRIKE_CALL_COST_PER_SECTOR);
-
-    const [unionFilter, unionUpdate] = unionUpdateOne.mock.calls[0];
-    expect(unionFilter).toMatchObject({ treasury: { $gte: 2 * STRIKE_CALL_COST_PER_SECTOR } });
-    expect(unionUpdate.$set.lastCalledStrikeTurn).toBe(10);
-
-    const ops = sectorBulkWrite.mock.calls[0][0];
-    expect(ops).toHaveLength(2);
-    for (const op of ops) {
-      expect(op.updateOne.update.$set.strikeStartedAtTurn).toBe(10);
-      expect(op.updateOne.update.$set.workerExpectationIndex).toBeGreaterThan(0);
-    }
-  });
-
-  it("regression: plants a real wage-expectation gap so the forced strike doesn't false-concede next turn", async () => {
-    const sectorId = new ObjectId();
-    const wageLevel = 1.0;
-    const { db, character, union, sectorBulkWrite } = mockStrikeDb({
-      matchedSectors: [{ _id: sectorId, wageLevel }],
-    });
-
-    await callUnionStrike(db, character, union._id.toString(), 10);
-
-    const ops = sectorBulkWrite.mock.calls[0][0];
-    const workerExpectationIndex = ops[0].updateOne.update.$set.workerExpectationIndex;
-    const realWage = realWageIndex(wageLevel, undefined);
-    const gap = workerExpectationIndex - realWage;
-    // Must be strictly greater than the trigger gap threshold — a gap merely
-    // equal to it wouldn't itself re-trigger, but more importantly the
-    // concession threshold (well below the trigger threshold) must not be
-    // met immediately.
-    expect(gap).toBeGreaterThan(STRIKE_EXPECTATION_GAP_THRESHOLD);
-  });
-});
-
 describe("setUnionWageDemand", () => {
   it("clamps the demanded wage level into the standard wage bounds", async () => {
     const character = makeCharacter();
@@ -279,6 +135,65 @@ describe("setUnionWageDemand", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.demandedWageLevel).toBeNull();
+  });
+});
+
+describe("endorseBill", () => {
+  function endorsementDb(union: Union, bill: { _id: ObjectId } | null) {
+    const endorsementUpdate = vi.fn().mockResolvedValue({});
+    return {
+      endorsementUpdate,
+      db: {
+        collection: (name: string) => {
+          if (name === "unions") return { findOne: vi.fn().mockResolvedValue(union) };
+          if (name === "federalBudget") {
+            return { findOne: vi.fn().mockResolvedValue({ unionsBanned: false }) };
+          }
+          if (name === "bills") return { findOne: vi.fn().mockResolvedValue(bill) };
+          if (name === "unionEndorsements") return { updateOne: endorsementUpdate };
+          throw new Error(`unexpected collection ${name}`);
+        },
+      } as unknown as Db,
+    };
+  }
+
+  it("rejects a missing, foreign, or finished bill rather than recording a dead stance", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id);
+    const { db, endorsementUpdate } = endorsementDb(union, null);
+
+    const result = await endorseBill(
+      db,
+      character,
+      union._id.toString(),
+      new ObjectId().toString(),
+      "endorse"
+    );
+
+    expect(result).toMatchObject({ ok: false, status: 404 });
+    expect(endorsementUpdate).not.toHaveBeenCalled();
+  });
+
+  it("records a stance after the active same-country bill check succeeds", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id);
+    const billId = new ObjectId();
+    const { db, endorsementUpdate } = endorsementDb(union, { _id: billId });
+
+    const result = await endorseBill(
+      db,
+      character,
+      union._id.toString(),
+      billId.toString(),
+      "oppose"
+    );
+
+    expect(result).toMatchObject({ ok: true, stance: "oppose" });
+    expect(endorsementUpdate).toHaveBeenCalledWith(
+      { unionId: union._id, billId },
+      expect.objectContaining({ $set: expect.objectContaining({ stance: "oppose" }) }),
+      { upsert: true }
+    );
   });
 });
 
@@ -315,20 +230,6 @@ describe("union ban gate (player suggestion #93)", () => {
       character,
       union._id.toString(),
       1.2
-    );
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.status).toBe(403);
-  });
-
-  it("callUnionStrike is blocked before any treasury/sector work", async () => {
-    const character = makeCharacter();
-    const union = makeUnion(character._id);
-
-    const result = await callUnionStrike(
-      bannedDb(union, true),
-      character,
-      union._id.toString(),
-      10
     );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(403);

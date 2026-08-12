@@ -16,13 +16,23 @@ export interface ApplyPriceMultipliersResult {
  * and writes the result to sharePrice. Called by the 5-minute stock-exchange-refresh
  * cron before rebuilding snapshots so both share the same price state.
  */
+// The TTL index only needs creating once per process, not on every 5-minute
+// cron run. createIndex is a no-op server-side when the index exists, but it
+// still costs a round-trip; memo it per process.
+let sentimentTtlEnsured = false;
+async function ensureSentimentPulseTtlIndex(database: Db): Promise<void> {
+  if (sentimentTtlEnsured) return;
+  await database
+    .collection("sentimentPulses")
+    .createIndex({ createdAt: 1 }, { expireAfterSeconds: 86400, name: "ttl_createdAt" });
+  sentimentTtlEnsured = true;
+}
+
 export async function applyPriceMultipliers(db?: Db): Promise<ApplyPriceMultipliersResult> {
   const database = db ?? (await getDb());
   const now = new Date();
 
-  await database
-    .collection("sentimentPulses")
-    .createIndex({ createdAt: 1 }, { expireAfterSeconds: 86400, name: "ttl_createdAt" });
+  await ensureSentimentPulseTtlIndex(database);
 
   const pulses = await database.collection<SentimentPulse>("sentimentPulses").find({}).toArray();
 

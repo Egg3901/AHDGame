@@ -169,6 +169,8 @@ export interface BankData {
   chairNppId?: string | null;
   chairAppointedAt: string | null;
   chairInfamy: number;
+  /** Consecutive turns the corridor stance has been held; drives the recovery hint. */
+  resolveStreak?: number;
   chairTermExpiresAtTurn: number | null;
   currentTurn: number;
   nominationWindowOpen: boolean;
@@ -181,6 +183,8 @@ export interface BankData {
   isChair: boolean;
   isAdmin: boolean;
   chairControlsLocked?: boolean;
+  /** True when a committee is seated, so the rate moves by vote and not by decree. */
+  committeeSeated?: boolean;
   /** True when the government, not the bank, sets the policy rate (pre-1997 BoE). */
   governmentControlled?: boolean;
   /** True when the signed-in viewer may set the rate under government control. */

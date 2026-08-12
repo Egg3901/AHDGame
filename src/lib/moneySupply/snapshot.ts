@@ -62,6 +62,9 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     bonds,
     states,
     medianIncomeDocs,
+    indexFunds,
+    exchangeRateRows,
+    charteredBanks,
   ] = await Promise.all([
     db.collection("characters").find({}).toArray(),
     db.collection("npps").find({}).toArray(),
@@ -70,8 +73,6 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     db.collection("corporations").find({}).toArray(),
     db.collection("politicalParties").find({}).toArray(),
     db.collection<FederalBudget>("federalBudget").find({}).toArray(),
-    // indexFunds.cashAnchor is real but ₳-anchored, not native — see note on
-    // fundLiquid below. Not fetched until a native-denomination field exists.
     db.collection<OrganizationFund>("organizationFunds").find({}).toArray(),
     db
       .collection<Bond>("bonds")
@@ -87,6 +88,40 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     db
       .collection<{ _id: string; economic?: { medianIncome?: { value?: number } } }>("macroMetrics")
       .find({}, { projection: { "economic.medianIncome": 1 } })
+      .toArray(),
+    // Fund cash is ₳ (every fund leg is, since the currency SSOT fix), so it
+    // converts into a native figure with the same rate table everything else
+    // uses. That was the blocker on counting it at all.
+    db
+      .collection<{ _id: unknown; cashAnchor?: number; anchorCurrencyCode?: string }>("indexFunds")
+      .find({}, { projection: { cashAnchor: 1, anchorCurrencyCode: 1 } })
+      .toArray(),
+    db
+      .collection<{ currencyCode: string; rate: number }>("exchangeRates")
+      .find({}, { projection: { currencyCode: 1, rate: 1 } })
+      .toArray(),
+    // Chartered private banks: their deposit books and their loan books are both
+    // invisible to the aggregates otherwise.
+    db
+      .collection<{
+        _id: unknown;
+        bankCharter?: {
+          status?: string;
+          currency?: string;
+          totalDeposits?: number;
+          totalLoans?: number;
+        };
+      }>("corporations")
+      .find(
+        { "bankCharter.status": "active" },
+        {
+          projection: {
+            "bankCharter.currency": 1,
+            "bankCharter.totalDeposits": 1,
+            "bankCharter.totalLoans": 1,
+          },
+        }
+      )
       .toArray(),
   ]);
   const byCurrency = new Map<CurrencyCode, MutableComponents>();
@@ -147,10 +182,33 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
       "governmentLiquid",
       governmentLiquidFromTreasury(budget.treasuryBalance)
     );
-  // fundLiquid: indexFunds.cashAnchor is real and moves, but it is ₳-anchored
-  // (global mark-to-market unit), not native currency — see ahd-index-funds-scale.
-  // Folding it into a per-currency M2 without FX conversion would mis-scale
-  // non-USD issuers. Left at 0 until a native-denomination cash field exists.
+  // Fund cash is ₳ and the rate table is local-per-₳, so cashAnchor × rate is
+  // the native figure. This used to be left at 0 because the equity leg of a
+  // fund was denominated inconsistently; with one unit across every fund leg
+  // the conversion is well defined and the cash is real money that moves.
+  const rateByCurrency = new Map<string, number>(
+    exchangeRateRows
+      .filter((r) => Number.isFinite(r.rate) && r.rate > 0)
+      .map((r) => [r.currencyCode, r.rate])
+  );
+  for (const fund of indexFunds) {
+    const currency = (fund.anchorCurrencyCode ?? "USD") as CurrencyCode;
+    const rate = rateByCurrency.get(currency) ?? 1;
+    addComponent(byCurrency, currency, "fundLiquid", (fund.cashAnchor ?? 0) * rate);
+  }
+
+  // Private-bank books. Capturing an NPC deposit debits externalBroadMoney and
+  // credits the bank, so counting only the debit made measured M2 shrink as
+  // private banking grew. Loans join the credit stock for the same reason: the
+  // component was player LOC only.
+  for (const bank of charteredBanks) {
+    const charter = bank.bankCharter;
+    if (!charter?.currency) continue;
+    const currency = charter.currency as CurrencyCode;
+    addComponent(byCurrency, currency, "bankDeposits", charter.totalDeposits ?? 0);
+    addComponent(byCurrency, currency, "creditOutstanding", charter.totalLoans ?? 0);
+  }
+
   // organizationFunds.balanceLocal IS native — include it.
   for (const fund of organizationFunds)
     addComponent(

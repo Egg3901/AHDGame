@@ -79,12 +79,123 @@ function buildShareholderVoteMap(corporation: Corporation): Map<string, number> 
   return map;
 }
 
+/** The sitting CEO's character id, or null when the seat is vacant or non-player. */
+function seatedCeoId(corporation: Corporation): string | null {
+  if (corporation.ceoVacant === true) return null;
+  if (corporation.ceoType === "imperial" || corporation.ceoType === "npp") return null;
+  return corporation.ceoId?.toString() ?? null;
+}
+
+/** Weighted tally of the deduped votes, keyed by candidate character id. */
+function tallyVotes(
+  votes: CeoVote[],
+  shareholderMap: Map<string, number>
+): { counts: Map<string, number>; totalSharesVoted: number } {
+  const counts = new Map<string, number>();
+  let totalSharesVoted = 0;
+  for (const v of votes) {
+    const voterKey = v.voterCorporationId
+      ? `corp:${v.voterCorporationId.toString()}`
+      : v.voterCharacterId.toString();
+    const voterShares = shareholderMap.get(voterKey) ?? 0;
+    if (voterShares > 0) {
+      const cid = v.candidateCharacterId.toString();
+      counts.set(cid, (counts.get(cid) ?? 0) + voterShares);
+      totalSharesVoted += voterShares;
+    }
+  }
+  return { counts, totalSharesVoted };
+}
+
+/**
+ * Leading candidate, or null when nobody has votes. A tie goes to the sitting
+ * CEO: the challenger has to actually out-vote the incumbent to take the seat,
+ * not merely match them and win on map-insertion order.
+ */
+function leadingCandidate(counts: Map<string, number>, incumbentId: string | null): string | null {
+  let leaderId: string | null = null;
+  let maxVotes = 0;
+  for (const [cid, count] of counts) {
+    if (count > maxVotes || (count === maxVotes && cid === incumbentId)) {
+      maxVotes = count;
+      leaderId = cid;
+    }
+  }
+  return leaderId;
+}
+
+/**
+ * Reconcile `pendingCeoCharacterId` with the current leader.
+ *
+ * Three outcomes:
+ *  - leader is the sitting CEO (or nobody leads): there is nothing to accept,
+ *    so any stale offer is cleared. Leaving it set stranded a permanent
+ *    "you have been offered the CEO position" banner on the seat's own holder,
+ *    with no notification behind it because the offer was skipped as redundant.
+ *  - leader holds this corp's bonds: no offer (CEO ⊥ bondholder), seat unoffered.
+ *  - otherwise: offer the seat and notify, but only when the leader changed.
+ */
+async function reconcilePendingCeo(
+  db: Awaited<ReturnType<typeof getDb>>,
+  corporation: Corporation,
+  leaderId: string | null,
+  now: Date
+): Promise<void> {
+  const incumbentId = seatedCeoId(corporation);
+  const prevPending = corporation.pendingCeoCharacterId?.toString() ?? null;
+
+  if (!leaderId || leaderId === incumbentId) {
+    if (prevPending) {
+      await db
+        .collection<Corporation>("corporations")
+        .updateOne(
+          { _id: corporation._id },
+          { $unset: { pendingCeoCharacterId: "" }, $set: { updatedAt: now } }
+        );
+    }
+    return;
+  }
+
+  if (leaderId === prevPending) return;
+
+  const leaderHoldsBonds = (
+    await holdsAnyBondsInCorp(db, new ObjectId(leaderId), "characterId", corporation._id)
+  ).holds;
+  if (leaderHoldsBonds) return;
+
+  await db
+    .collection<Corporation>("corporations")
+    .updateOne(
+      { _id: corporation._id },
+      { $set: { pendingCeoCharacterId: new ObjectId(leaderId), updatedAt: now } }
+    );
+
+  const leaderChar = await db
+    .collection<Character>("characters")
+    .findOne({ _id: new ObjectId(leaderId) }, { projection: { userId: 1, name: 1 } });
+
+  if (leaderChar?.userId) {
+    await createNotification({
+      userId: leaderChar.userId,
+      type: "ceo_vote_offer",
+      title: "CEO Position Offered",
+      message: `Shareholders of ${corporation.name} have voted you as their top choice for CEO. Visit the corporation page to accept or decline the position.`,
+      metadata: {
+        corporationId: corporation._id.toString(),
+        corporationSequentialId: corporation.sequentialId,
+        corporationName: corporation.name,
+      },
+    });
+  }
+}
+
 /**
  * POST /api/corporations/[id]/ceo/vote
  * Cast a vote for a CEO candidate. Must be a shareholder (character or
  * corporation). Votes are weighted by the voter's voting power (supershare-
  * weighted for dual-class corps, so a founder's supershares protect them as CEO).
- * Candidates must be in the corporation's HQ state and home country. Self-voting is allowed.
+ * Candidates must be in the corporation's HQ state and home country, except for
+ * the sitting CEO, who stays votable wherever they live. Self-voting is allowed.
  * Body: { candidateCharacterId: string }
  */
 export async function POST(request: Request, { params }: RouteParams) {
@@ -149,17 +260,24 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!candidate) {
       return NextResponse.json({ error: "Candidate character not found" }, { status: 404 });
     }
-    if (candidate.homeState !== corporation.headquartersState) {
-      return NextResponse.json(
-        { error: "Candidate must be located in the corporation's HQ state" },
-        { status: 403 }
-      );
-    }
-    if (corporation.countryId && candidate.countryId !== corporation.countryId) {
-      return NextResponse.json(
-        { error: "Candidate must be in the corporation's home country" },
-        { status: 403 }
-      );
+    // The sitting CEO is exempt from the residency rules. A CEO who moves house,
+    // or whose corp relocates its HQ, would otherwise become unvotable in their
+    // own corporation: shareholders could not re-affirm them, so any challenger
+    // ran unopposed and the incumbent could not defend the seat.
+    const isIncumbentCandidate = seatedCeoId(corporation) === candidateOid.toString();
+    if (!isIncumbentCandidate) {
+      if (candidate.homeState !== corporation.headquartersState) {
+        return NextResponse.json(
+          { error: "Candidate must be located in the corporation's HQ state" },
+          { status: 403 }
+        );
+      }
+      if (corporation.countryId && candidate.countryId !== corporation.countryId) {
+        return NextResponse.json(
+          { error: "Candidate must be in the corporation's home country" },
+          { status: 403 }
+        );
+      }
     }
 
     // Upsert vote (one vote per shareholder per corporation).
@@ -216,75 +334,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     // power for characters, common-stock 1:1 for corporation holders).
     const shareholderMap = buildShareholderVoteMap(corporation);
 
-    // Count votes per candidate weighted by voter's voting power
-    const voteCounts = new Map<string, number>();
-    for (const v of allVotes) {
-      let voterKey: string;
-      if (v.voterCorporationId) {
-        voterKey = `corp:${v.voterCorporationId.toString()}`;
-      } else {
-        voterKey = v.voterCharacterId.toString();
-      }
-      const voterShares = shareholderMap.get(voterKey) ?? 0;
-      if (voterShares > 0) {
-        const cid = v.candidateCharacterId.toString();
-        voteCounts.set(cid, (voteCounts.get(cid) ?? 0) + voterShares);
-      }
-    }
-
-    // Find the leading candidate
-    let leaderId: string | null = null;
-    let maxVotes = 0;
-    for (const [cid, count] of voteCounts) {
-      if (count > maxVotes) {
-        maxVotes = count;
-        leaderId = cid;
-      }
-    }
-
-    // If leading candidate changed, send them a CEO offer notification
-    const prevPending = corporation.pendingCeoCharacterId?.toString() ?? null;
-    // A candidate who holds the corp's bonds cannot lead it (CEO ⊥ bondholder).
-    // Their votes still count toward the tally, but no CEO offer is created for
-    // them — the seat stays unoffered until a non-bondholder leads or they divest.
-    const leaderHoldsBonds = leaderId
-      ? (await holdsAnyBondsInCorp(db, new ObjectId(leaderId), "characterId", corporation._id))
-          .holds
-      : false;
-
-    if (leaderId && leaderId !== prevPending && !leaderHoldsBonds) {
-      // Update pending CEO offer on corporation
-      await db
-        .collection<Corporation>("corporations")
-        .updateOne(
-          { _id: corporation._id },
-          { $set: { pendingCeoCharacterId: new ObjectId(leaderId), updatedAt: now } }
-        );
-
-      // Look up the new leader's user ID to send notification
-      const leaderChar = await db
-        .collection<Character>("characters")
-        .findOne({ _id: new ObjectId(leaderId) }, { projection: { userId: 1, name: 1 } });
-
-      if (leaderChar?.userId) {
-        // Skip notification if candidate is already CEO of this corporation
-        const isAlreadyCeo = !corporation.ceoVacant && corporation.ceoId?.toString() === leaderId;
-
-        if (!isAlreadyCeo) {
-          await createNotification({
-            userId: leaderChar.userId,
-            type: "ceo_vote_offer",
-            title: "CEO Position Offered",
-            message: `Shareholders of ${corporation.name} have voted you as their top choice for CEO. Visit the corporation page to accept or decline the position.`,
-            metadata: {
-              corporationId: corporation._id.toString(),
-              corporationSequentialId: corporation.sequentialId,
-              corporationName: corporation.name,
-            },
-          });
-        }
-      }
-    }
+    // Count votes per candidate weighted by voter's voting power, then offer
+    // the seat to whoever leads. A candidate who holds the corp's bonds cannot
+    // lead it (CEO ⊥ bondholder); their votes still count, but the seat stays
+    // unoffered until a non-bondholder leads or they divest.
+    const { counts: voteCounts } = tallyVotes(allVotes, shareholderMap);
+    const leaderId = leadingCandidate(voteCounts, seatedCeoId(corporation));
+    await reconcilePendingCeo(db, corporation, leaderId, now);
 
     return NextResponse.json({ success: true, totalVotes: allVotes.length });
   } catch (error) {
@@ -317,22 +373,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const shareholderMap = buildShareholderVoteMap(corporation);
 
     // Count votes per candidate weighted by voter's voting power
-    const voteCounts = new Map<string, number>();
-    let totalSharesVoted = 0;
-    for (const v of allVotes) {
-      let voterKey: string;
-      if (v.voterCorporationId) {
-        voterKey = `corp:${v.voterCorporationId.toString()}`;
-      } else {
-        voterKey = v.voterCharacterId.toString();
-      }
-      const voterShares = shareholderMap.get(voterKey) ?? 0;
-      if (voterShares > 0) {
-        const cid = v.candidateCharacterId.toString();
-        voteCounts.set(cid, (voteCounts.get(cid) ?? 0) + voterShares);
-        totalSharesVoted += voterShares;
-      }
-    }
+    const { counts: voteCounts, totalSharesVoted } = tallyVotes(allVotes, shareholderMap);
 
     // Resolve candidate names
     const candidateIds = [...voteCounts.keys()];
@@ -365,7 +406,68 @@ export async function GET(_request: Request, { params }: RouteParams) {
       totalSharesVoted,
       pendingCeoCharacterId: corporation.pendingCeoCharacterId?.toString() ?? null,
       headquartersState: corporation.headquartersState,
+      ceoCharacterId: seatedCeoId(corporation),
     });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
+/**
+ * DELETE /api/corporations/[id]/ceo/vote
+ * Withdraw the caller's CEO vote. POST is an upsert, so before this a
+ * shareholder could switch their vote but never take it back — abstaining was
+ * impossible once you had voted once, including the self-vote founding casts
+ * on your behalf. Removing the last vote also clears any pending offer.
+ */
+export async function DELETE(_request: Request, { params }: RouteParams) {
+  try {
+    const auth = await requireAuthWithCharacter();
+    if (!auth.ok) return auth.response;
+
+    const rateLimit = checkRateLimit(auth.user.userId, 20, 60000);
+    if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
+
+    const { character: voterCharacter } = auth.user;
+    const { id } = await params;
+    const db = await getDb();
+
+    const resolved = await resolveCorporation(db, id);
+    if (!resolved.ok) return resolved.response;
+    const { corporation } = resolved;
+
+    // Withdraw both identities the voter may have used: their own character
+    // vote and any vote cast through a corporation they run.
+    const managedCorpIds = (
+      await db
+        .collection<Corporation>("corporations")
+        .find({ ceoId: voterCharacter._id, ceoType: { $ne: "npp" } }, { projection: { _id: 1 } })
+        .toArray()
+    ).map((mc) => mc._id);
+
+    const deletion = await db.collection<CeoVote>("corporationCeoVotes").deleteMany({
+      corporationId: corporation._id,
+      $or: [
+        { voterCharacterId: voterCharacter._id, voterCorporationId: { $exists: false } },
+        ...(managedCorpIds.length > 0 ? [{ voterCorporationId: { $in: managedCorpIds } }] : []),
+      ],
+    });
+
+    if (deletion.deletedCount === 0) {
+      return NextResponse.json({ error: "You have no vote to withdraw" }, { status: 404 });
+    }
+
+    const allVotes = dedupeCeoVotes(
+      await db
+        .collection<CeoVote>("corporationCeoVotes")
+        .find({ corporationId: corporation._id })
+        .toArray()
+    );
+    const { counts } = tallyVotes(allVotes, buildShareholderVoteMap(corporation));
+    const leaderId = leadingCandidate(counts, seatedCeoId(corporation));
+    await reconcilePendingCeo(db, corporation, leaderId, new Date());
+
+    return NextResponse.json({ success: true, totalVotes: allVotes.length });
   } catch (error) {
     return handleRouteError(error);
   }

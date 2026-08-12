@@ -17,6 +17,7 @@ import { ConstituentsPanel } from "@/components/indexFunds/ConstituentsPanel";
 import { BackingRatioGauge } from "@/components/indexFunds/BackingRatioGauge";
 import { AssetCompositionBar } from "@/components/indexFunds/AssetCompositionBar";
 import { YourPositionCard } from "@/components/indexFunds/YourPositionCard";
+import { SponsorshipCard } from "@/components/indexFunds/SponsorshipCard";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import type { PriceChangeTimeframe } from "@/app/country/[code]/stockmarket/components/StockList";
@@ -152,7 +153,9 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
       ? { label: "Active", tone: "var(--success)" }
       : fund.status === "paused"
         ? { label: "Paused", tone: "var(--warning)" }
-        : { label: "Delisted", tone: "var(--error)" };
+        : fund.status === "winding_down"
+          ? { label: "Winding down", tone: "var(--warning)" }
+          : { label: "Delisted", tone: "var(--error)" };
 
   const statusBg = `color-mix(in srgb, ${statusTone.tone} 10%, transparent)`;
   const statusBorder = `color-mix(in srgb, ${statusTone.tone} 30%, transparent)`;
@@ -331,8 +334,8 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
                     </div>
                     <BackingRatioGauge ratio={fund.backingRatio ?? null} />
                     <p className="mt-3 text-[11px] leading-relaxed text-muted">
-                      Assets ÷ (NAV × units outstanding). Falling below{" "}
-                      <span className="font-mono text-error">50%</span> triggers auto-pause.
+                      Assets ÷ (NAV × units outstanding). Below{" "}
+                      <span className="font-mono text-error">50%</span> the fund is under-backed.
                     </p>
                   </div>
 
@@ -379,6 +382,12 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
 
           {/* Right rail: position + trade panel */}
           <div className="sticky top-20 flex flex-col gap-4 self-start">
+            <SponsorshipCard
+              fund={fund}
+              formatAmount={formatAmount}
+              ccy={ccy}
+              onWindUpStarted={() => void load()}
+            />
             <YourPositionCard
               units={myPosition?.units ?? 0}
               legacyUnits={myPosition?.legacyUnits ?? myPosition?.units ?? 0}

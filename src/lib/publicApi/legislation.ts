@@ -5,7 +5,15 @@ import { isPolicyProvision } from "@/lib/db/types/legislation";
 type LegislationStatus = "pending" | "passed" | "failed";
 
 const STATUS_MAP: Record<LegislationStatus, string[]> = {
-  pending: ["proposed", "active", "passed_origin", "active_other", "enrolled", "cabinet_review"],
+  pending: [
+    "proposed",
+    "active",
+    "passed_origin",
+    "active_other",
+    "active_both",
+    "enrolled",
+    "cabinet_review",
+  ],
   passed: ["signed", "veto_override", "unsigned_law"],
   failed: ["failed", "vetoed", "override_failed", "withdrawn", "filibustered"],
 };

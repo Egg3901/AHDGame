@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createAsyncIterableCursor } from "@/lib/test-utils/mockDb";
 import { ObjectId, MongoServerError } from "mongodb";
 
 vi.mock("@/lib/mongodb", () => ({
@@ -104,10 +103,15 @@ describe("POST /api/political-operations/state-org/build", () => {
           collections[name] ?? {
             findOne: vi.fn().mockResolvedValue(null),
             updateOne: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
-            // Default fallback carries find() too, so a collection this route
-            // starts querying later fails on the assertion rather than on
-            // "find is not a function".
-            find: vi.fn(() => createAsyncIterableCursor([])),
+            // The default handle needs `find` too: the route now reads admitted
+            // states through it, and a collection the fixture never named would
+            // otherwise throw and turn every expected 4xx into a 500.
+            find: vi.fn().mockReturnValue({
+              toArray: vi.fn().mockResolvedValue([]),
+              project: vi.fn().mockReturnThis(),
+              sort: vi.fn().mockReturnThis(),
+              limit: vi.fn().mockReturnThis(),
+            }),
           }
         );
       }),

@@ -296,3 +296,23 @@ describe("frontProgress", () => {
     expect(frontProgress(60, 50)).toBeCloseTo(0.2);
   });
 });
+
+describe("a non-playable host", () => {
+  it("returns 50 when the host is on neither side", () => {
+    // SVN is a world entity, not a CountryId -- a proxy war's host is not a belligerent.
+    expect(initialControl("SVN", sideA(), sideB())).toBe(50);
+  });
+
+  it("reports no occupier for a host on neither side", () => {
+    const view = occupationOf({
+      hostCountry: "SVN",
+      control: 40,
+      sideA: sideA(),
+      sideB: sideB(),
+    });
+    expect(view.host).toBe("SVN");
+    expect(view.occupier).toBeNull();
+    expect(view.pctA).toBe(60);
+    expect(view.pctB).toBe(40);
+  });
+});

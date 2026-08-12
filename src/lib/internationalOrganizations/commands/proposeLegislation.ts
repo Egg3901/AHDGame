@@ -13,6 +13,7 @@ import {
   recordOrgHistoryEvent,
 } from "@/lib/internationalOrganizations/service";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { getConflict } from "@/lib/db/collections/conflicts";
 
 export type ProposeResolutionInput =
   | { type: "free_trade_agreement"; parties: CountryId[]; title?: string; description?: string }
@@ -40,7 +41,15 @@ export type ProposeResolutionInput =
       description?: string;
     }
   | { type: "set_posture"; posture: AlertPosture; title?: string; description?: string }
-  | { type: "fund_agency"; agencyKey: string; title?: string; description?: string };
+  | { type: "fund_agency"; agencyKey: string; title?: string; description?: string }
+  | {
+      type: "join_conflict";
+      /** ConflictDoc._id — the theater key, not the public conflictId. */
+      theaterId: string;
+      side: "A" | "B";
+      title?: string;
+      description?: string;
+    };
 
 export async function proposeOrganizationLegislation(params: {
   db: Db;
@@ -341,6 +350,60 @@ export async function proposeOrganizationLegislation(params: {
       countryId,
       currentTurn,
       `${COUNTRY_CONFIGS[countryId].name} proposed funding the ${def.label} at ${orgId}.`,
+      { organizationId: orgId, legislationId: legislationId.toString() }
+    );
+
+    return { ok: true as const, legislationId: legislationId.toString() };
+  }
+
+  if (input.type === "join_conflict") {
+    // The subsystem's own switch, enforced here as the admin create route enforces
+    // it. Conflict documents outlive the flag being turned off, so without this a
+    // crafted request could table a war-entry vote in a world where the Conflicts
+    // subsystem is off and the pages that would show it redirect away.
+    const gs = await db
+      .collection<{ _id: string; conflictsEnabled?: boolean }>("gameState")
+      .findOne({ _id: "current" }, { projection: { conflictsEnabled: 1 } });
+    if (!gs?.conflictsEnabled) {
+      return { ok: false as const, status: 404, error: "Conflicts subsystem disabled" };
+    }
+    if (input.side !== "A" && input.side !== "B") {
+      return { ok: false as const, status: 400, error: "Pick side A or side B." };
+    }
+    // Checked again at enactment: a resolution sits for 24 turns and the war can end
+    // inside that window, so passing here is not a promise that it is still live.
+    const conflict = await getConflict(db, input.theaterId);
+    if (!conflict || conflict.status === "resolved") {
+      return { ok: false as const, status: 400, error: "That conflict is not live." };
+    }
+
+    const sideLabel = input.side === "A" ? conflict.sideA.label : conflict.sideB.label;
+    const title = input.title?.trim() || `${orgId} Entry into ${conflict.name} (${sideLabel})`;
+
+    await legislation.insertOne({
+      _id: legislationId,
+      organizationId: orgId,
+      type: "join_conflict",
+      title,
+      description: input.description,
+      parties: [],
+      joinConflictTheaterId: conflict._id,
+      joinConflictSide: input.side,
+      proposingCountryId: countryId,
+      proposedByCharacterId: actor.characterId,
+      proposedByCharacterName: actor.characterName,
+      status: "pending",
+      votes: [],
+      proposedAt: now,
+      proposedOnTurn: currentTurn,
+      closesOnTurn: currentTurn + ORG_PROPOSAL_VOTING_TURNS,
+    });
+
+    await recordOrgHistoryEvent(
+      db,
+      countryId,
+      currentTurn,
+      `${COUNTRY_CONFIGS[countryId].name} moved that ${orgId} enter ${conflict.name} alongside ${sideLabel}.`,
       { organizationId: orgId, legislationId: legislationId.toString() }
     );
 

@@ -34,7 +34,13 @@ import type {
   State,
   StatePartyOrg,
 } from "@/lib/db/types";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import {
+  COUNTRY_CONFIGS,
+  getPrimaryWinnersForElection,
+  type CountryId,
+} from "@/lib/constants/countries";
+import { getGameState } from "@/lib/gameState";
+import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { parseSeatId } from "@/lib/seats/seatId";
 import { getGameTime } from "@/lib/time/gameTime";
 import { primaryOpenFilter } from "@/lib/elections/electionDeadlineFilters";
@@ -55,6 +61,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     // Game turn drives the turn-first primary-phase filter + the close mutation
     // below; `now` stays wall-clock for audit timestamps (withdrawnAt, etc.).
     const { currentTurn } = await getGameTime();
+    // Decides the US House primary cap (3 vs the legacy 1) below.
+    const redistrictingEnabled = isRedistrictingEnabled(await getGameState(db));
 
     // Optional additional filters from query params
     const { searchParams } = new URL(request.url);
@@ -124,7 +132,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         .find({ electionId: election._id, status: "active" })
         .toArray();
 
-      // ── 3b. Keep only the top primary scorer per party ────────────────────
+      // ── 3b. Keep the top `maxAdvancing` primary scorers per party ─────────
       const enriched = await fetchEnrichedCandidates(activeCandidates);
       // Filter parties by election's countryId to avoid cross-country collisions
       const electionCountryId = election.countryId ?? "US";
@@ -190,9 +198,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       for (const c of activeCandidates)
         partyCounts.set(c.party, (partyCounts.get(c.party) ?? 0) + 1);
 
+      // How many advance per party. This route used to hardcode 1, which
+      // withdrew candidates the turn resolver would have advanced: 3 for
+      // UK/JP/DE legislatures and US House under redistricting, 7 for
+      // one-party states. Mirror `resolvePrimariesIfNeeded` exactly.
+      const maxAdvancing = getPrimaryWinnersForElection(
+        electionCountryId as CountryId,
+        election.electionType,
+        redistrictingEnabled
+      );
+
       const loserIds: string[] = [];
       for (const [partyId, count] of partyCounts) {
-        if (count <= 1) continue;
+        if (count <= maxAdvancing) continue;
 
         const partyCandidates = activeCandidates.filter((c) => c.party === partyId);
         const party = partyMap.get(partyId);
@@ -248,7 +266,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
           })
           .sort((a, b) => b.score - a.score);
 
-        for (const s of scored.slice(1)) loserIds.push(s.candidateId);
+        for (const s of scored.slice(maxAdvancing)) loserIds.push(s.candidateId);
       }
 
       if (loserIds.length > 0) {

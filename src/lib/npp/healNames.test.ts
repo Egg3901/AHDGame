@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { planNppNameHeal, applyNppNameHeal, type NppRename } from "./healNames";
-import { isNameFromCountryPool } from "./nameGenerator";
+import { generateUniqueNPPNameAndGender, isNameFromCountryPool } from "./nameGenerator";
 
 function nppDoc(countryId: string, name: string, extra: Record<string, unknown> = {}) {
   return { _id: new ObjectId(), name, countryId, ...extra };
@@ -41,6 +41,34 @@ describe("isNameFromCountryPool", () => {
     expect(isNameFromCountryPool("Ana Garcia Moreno", "ES")).toBe(true);
     // Chinese names are surname-first.
     expect(isNameFromCountryPool("Wang Wei", "CN")).toBe(true);
+    // MULTI-TOKEN surnames. The Italian pool stores "De Luca" and "De Santis";
+    // checking token by token asked whether "De" and "Luca" were surnames,
+    // found neither, and called a name the generator had just produced foreign.
+    expect(isNameFromCountryPool("Sergio De Luca", "IT")).toBe(true);
+    expect(isNameFromCountryPool("Chiara De Santis", "IT")).toBe(true);
+  });
+
+  it("still rejects a foreign given name attached to a real compound surname", () => {
+    // The compound-surname fix must not turn the predicate into "any token
+    // matches something": the given name still has to belong to the pool.
+    expect(isNameFromCountryPool("Brandon De Luca", "IT")).toBe(false);
+  });
+
+  it("accepts every name the generator produces for its own pool", () => {
+    // This is the property the heal depends on. It used to fail for ~3% of
+    // Italian names, which made the heal rename them on every run, to another
+    // name that could be compound again. Exhaustive over the pools rather than
+    // sampled, so it cannot pass by luck the way the randomised heal test did.
+    for (const countryId of ["IT", "FR", "PL", "ES", "RU", "SE", "TR", "CN", "JP"]) {
+      for (let i = 0; i < 300; i++) {
+        const generated = generateUniqueNPPNameAndGender([], 200, countryId);
+        if (!generated) continue;
+        expect(
+          isNameFromCountryPool(generated.name, countryId),
+          `${countryId}: generated "${generated.name}" fails its own pool`
+        ).toBe(true);
+      }
+    }
   });
 
   it("treats every name as correct for countries with no pool of their own", () => {

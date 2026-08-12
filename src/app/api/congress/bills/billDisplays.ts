@@ -206,13 +206,20 @@ export function buildBillDisplays(
       myOtherChamberVote: (myVoteMap.get(b._id.toString())?.other ?? null) as
         "for" | "against" | "abstain" | null,
       canVoteOrigin:
-        b.status === "active" &&
         !!myCharacterId &&
-        ((myChamber === "house" &&
-          (b.currentChamber === "house" || b.currentChamber === "joint")) ||
-          (myChamber === "senate" && b.currentChamber === "senate")),
+        (b.status === "active_both"
+          ? myChamber === "house"
+          : b.status === "active" &&
+            ((myChamber === "house" &&
+              (b.currentChamber === "house" || b.currentChamber === "joint")) ||
+              (myChamber === "senate" && b.currentChamber === "senate"))),
+      // On a concurrent bill both chambers are open, so a senator may vote regardless of
+      // `currentChamber` — which is a display default on those bills, not the authority.
       canVoteOther:
-        b.status === "active_other" && !!myCharacterId && myChamber === b.currentChamber,
+        !!myCharacterId &&
+        (b.status === "active_both"
+          ? myChamber === "senate"
+          : b.status === "active_other" && myChamber === b.currentChamber),
       requiresExecutiveAction: billRequiresExecutiveAction(b),
       failedAt: b.failedAt?.toISOString() ?? null,
     };

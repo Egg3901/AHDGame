@@ -6,12 +6,16 @@ import {
   MAX_RATE_CUT_DELTA,
   AGGRESSIVE_CUT_SCRUTINY,
   RATE_CHANGE_COOLDOWN_TURNS,
+  RATE_CHANGES_PER_TERM,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { isBankGovernmentControlledLive } from "@/lib/centralBank/governance";
 import { isNationalIssuer } from "@/lib/extraction/contractIssuerAuth";
+import { INTERFERENCE_SCRUTINY } from "@/lib/centralBank/credibility";
+import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
+import { rateChangeRefusal, type FxRegime } from "@/lib/currency/exchangeRateRegime";
 
 type PrimeRateActor = {
   userId: string;
@@ -78,6 +82,48 @@ export async function updatePrimeRate(params: {
     };
   }
 
+  // A seated committee is the rate authority, full stop. The schema has said so
+  // since the FOMC landed ("when present, rate moves are decided by committee
+  // vote") and the NPP auto-rate path already skips banks with a board, but this
+  // command never checked — so a chair could set the rate unilaterally and skip
+  // the motion, the majority and the per-term cap the committee lives under.
+  // Admins keep the override for operational repair.
+  const hasCommittee = (bank.fomcBoard?.length ?? 0) > 0;
+  if (hasCommittee && !isAdmin) {
+    return {
+      ok: false as const,
+      status: 409,
+      error:
+        "This central bank has a seated committee: the rate moves by committee vote, not by chair decree. Table a motion in the committee room.",
+    };
+  }
+
+  // B6 — the impossible trinity. A currency committed to a rate (peg or band)
+  // with an open capital account has no independent monetary policy: the rate
+  // is whatever defending the commitment requires. The refusal names both ways
+  // out, because both are moves the chair can make this turn.
+  //
+  // Admins keep the override, as they do for the committee gate above.
+  if (!isAdmin) {
+    const fxDoc = await db
+      .collection<ExchangeRate>("exchangeRates")
+      .findOne(
+        { countryId },
+        { projection: { fxRegime: 1, capitalControls: 1, interventionPolicy: 1 } }
+      );
+    if (fxDoc) {
+      // An active intervention band counts as a commitment even when the
+      // regime field was never set — the promise to defend a corridor is the
+      // commitment, not the label on it.
+      const regime: FxRegime =
+        fxDoc.fxRegime ?? (fxDoc.interventionPolicy ? "band" : "float");
+      const refusal = rateChangeRefusal(regime, fxDoc.capitalControls === true);
+      if (refusal) {
+        return { ok: false as const, status: 409, error: refusal };
+      }
+    }
+  }
+
   const previousRate = bank.primeRate;
   if (rate === previousRate) {
     return { ok: false as const, status: 400, error: "New rate is the same as the current rate" };
@@ -125,10 +171,17 @@ export async function updatePrimeRate(params: {
   const scrutinyApplied = !isAdmin && rawDelta < -(MAX_RATE_CHANGE_DELTA + 1e-9);
   // Aggressive-cut scrutiny lands on the chair's standing; when the government
   // sets the rate the chair had no hand in it, so their infamy stays put.
+  //
+  // Government interference is a separate, INSTITUTIONAL cost: a rate set by the
+  // finance seat rather than the bank is exactly the event that makes a market
+  // stop believing the bank's next announcement. Without this, seizing the rate
+  // is free and the credibility model has no political teeth.
+  const interferenceApplied = governmentControlled && !isAdmin;
+  const scrutinyFromCut = scrutinyApplied && !governmentControlled ? AGGRESSIVE_CUT_SCRUTINY : 0;
+  const scrutinyFromInterference = interferenceApplied ? INTERFERENCE_SCRUTINY : 0;
+  const scrutinyAdded = scrutinyFromCut + scrutinyFromInterference;
   const newInfamy =
-    scrutinyApplied && !governmentControlled
-      ? Math.min(100, (bank.chairInfamy ?? 0) + AGGRESSIVE_CUT_SCRUTINY)
-      : undefined;
+    scrutinyAdded > 0 ? Math.min(100, (bank.chairInfamy ?? 0) + scrutinyAdded) : undefined;
 
   await db.collection<CentralBank>("centralBanks").updateOne(
     { _id: bank._id },
@@ -138,6 +191,16 @@ export async function updatePrimeRate(params: {
         updatedAt: now,
         lastRateChangeTurn: currentTurn,
         ...(newInfamy !== undefined ? { chairInfamy: newInfamy } : {}),
+        // An admin override on a committee bank still consumes one of the term's
+        // moves, so the override cannot be used to hand the committee free changes.
+        ...(hasCommittee
+          ? {
+              rateChangesThisTerm: Math.min(
+                RATE_CHANGES_PER_TERM,
+                (bank.rateChangesThisTerm ?? 0) + 1
+              ),
+            }
+          : {}),
       },
       $push: {
         rateHistory: {
@@ -165,5 +228,6 @@ export async function updatePrimeRate(params: {
     reason,
     primeRate: rate,
     scrutinyApplied,
+    interferenceApplied,
   };
 }

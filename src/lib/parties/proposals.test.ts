@@ -5,6 +5,7 @@ import { createMockDb, assertSetFields, type MockCollection } from "@/lib/test-u
 import {
   applyElectionDurationEffect,
   applyPositionShiftEffect,
+  applyCampaignerAppointmentEffect,
   applyRemoveOfficeHolderEffect,
   applyTransactionApprovalModeEffect,
   checkResolution,
@@ -493,6 +494,21 @@ describe("applyRemoveOfficeHolderEffect", () => {
     // The filter pins the chair to the target — Mongo will not match
     // a party whose chairId is different.
     expect(filter.chairId.equals(targetId)).toBe(true);
+  });
+
+  it("pulls from campaignerIds array when role=campaigner", async () => {
+    const partyId = makePartyId();
+    const targetId = new ObjectId();
+    const { db, updates } = makeDbStub({});
+    await applyRemoveOfficeHolderEffect(db, {
+      type: "removeOfficeHolder",
+      partyId,
+      removeOfficeHolder: { role: "campaigner", targetCharacterId: targetId },
+    } as unknown as CommitteeProposal);
+    const filter = updates[0]!.filter as { _id: ObjectId; campaignerIds: ObjectId };
+    const update = updates[0]!.update as { $pull: Record<string, unknown>; $set: object };
+    expect(filter.campaignerIds).toBe(targetId);
+    expect(update.$pull.campaignerIds).toBe(targetId);
   });
 
   it("throws when proposal is not a removeOfficeHolder", async () => {
@@ -998,5 +1014,123 @@ describe("processMergeProposal (NPP recruitment-cap enforcement)", () => {
       (c) => (c[0] as { _id?: { $in?: ObjectId[] } })._id?.$in
     );
     expect(del).toBeFalsy();
+  });
+});
+
+describe("applyCampaignerAppointmentEffect", () => {
+  const PARTY_SEQ = 7;
+
+  function makeAppointmentDb(opts: {
+    party?: Record<string, unknown> | null;
+    character?: Record<string, unknown> | null;
+  }) {
+    const updates: Array<{ filter: unknown; update: unknown }> = [];
+    const collection = vi.fn().mockImplementation((name: string) => {
+      if (name === "politicalParties") {
+        return {
+          findOne: vi.fn().mockResolvedValue(opts.party ?? null),
+          updateOne: vi.fn().mockImplementation((filter: unknown, update: unknown) => {
+            updates.push({ filter, update });
+            return Promise.resolve({ matchedCount: 1, modifiedCount: 1 });
+          }),
+        };
+      }
+      if (name === "characters") {
+        return { findOne: vi.fn().mockResolvedValue(opts.character ?? null) };
+      }
+      return {};
+    });
+    return { db: { collection } as unknown as Db, updates };
+  }
+
+  const seatedParty = (campaignerIds: ObjectId[], partyId: ObjectId) => ({
+    _id: partyId,
+    sequentialId: PARTY_SEQ,
+    countryId: "US",
+    campaignerIds,
+  });
+
+  it("adds the confirmed nominee to campaignerIds", async () => {
+    const partyId = makePartyId();
+    const targetId = new ObjectId();
+    const { db, updates } = makeAppointmentDb({
+      party: seatedParty([], partyId),
+      character: { _id: targetId, party: String(PARTY_SEQ), countryId: "US" },
+    });
+    await applyCampaignerAppointmentEffect(db, {
+      type: "campaignerAppointment",
+      partyId,
+      campaignerAppointment: { targetCharacterId: targetId },
+    } as unknown as CommitteeProposal);
+    expect(updates).toHaveLength(1);
+    const update = updates[0]!.update as { $addToSet: Record<string, unknown> };
+    expect(update.$addToSet.campaignerIds).toBe(targetId);
+  });
+
+  it("no-ops when the nominee left the party while the vote was open", async () => {
+    const partyId = makePartyId();
+    const targetId = new ObjectId();
+    const { db, updates } = makeAppointmentDb({
+      party: seatedParty([], partyId),
+      character: { _id: targetId, party: "99", countryId: "US" },
+    });
+    await applyCampaignerAppointmentEffect(db, {
+      type: "campaignerAppointment",
+      partyId,
+      campaignerAppointment: { targetCharacterId: targetId },
+    } as unknown as CommitteeProposal);
+    expect(updates).toHaveLength(0);
+  });
+
+  it("no-ops when the roster filled up before the vote resolved", async () => {
+    const partyId = makePartyId();
+    const targetId = new ObjectId();
+    const { db, updates } = makeAppointmentDb({
+      party: seatedParty([new ObjectId(), new ObjectId(), new ObjectId()], partyId),
+      character: { _id: targetId, party: String(PARTY_SEQ), countryId: "US" },
+    });
+    await applyCampaignerAppointmentEffect(db, {
+      type: "campaignerAppointment",
+      partyId,
+      campaignerAppointment: { targetCharacterId: targetId },
+    } as unknown as CommitteeProposal);
+    expect(updates).toHaveLength(0);
+  });
+
+  it("no-ops when the nominee is already seated", async () => {
+    const partyId = makePartyId();
+    const targetId = new ObjectId();
+    const { db, updates } = makeAppointmentDb({
+      party: seatedParty([targetId], partyId),
+      character: { _id: targetId, party: String(PARTY_SEQ), countryId: "US" },
+    });
+    await applyCampaignerAppointmentEffect(db, {
+      type: "campaignerAppointment",
+      partyId,
+      campaignerAppointment: { targetCharacterId: targetId },
+    } as unknown as CommitteeProposal);
+    expect(updates).toHaveLength(0);
+  });
+
+  it("throws when the proposal isn't a campaignerAppointment", async () => {
+    const { db } = makeAppointmentDb({});
+    await expect(
+      applyCampaignerAppointmentEffect(db, {
+        type: "rename",
+        partyId: makePartyId(),
+      } as unknown as CommitteeProposal)
+    ).rejects.toThrow(/Not a campaignerAppointment/);
+  });
+});
+
+describe("setProposalCooldown — campaignerAppointment", () => {
+  it("sets no cooldown so the chair can re-nominate immediately", async () => {
+    const { db, updates } = makeDbStub({});
+    await setProposalCooldown(
+      db,
+      { type: "campaignerAppointment", partyId: makePartyId() } as unknown as CommitteeProposal,
+      50
+    );
+    expect(updates).toHaveLength(0);
   });
 });

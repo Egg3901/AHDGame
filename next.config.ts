@@ -146,6 +146,12 @@ const nextConfig: NextConfig = {
         headers: [{ key: "Cache-Control", value: "no-store, no-transform" }],
       },
       {
+        // Banking hub/console GETs are per-user (your savings, your corp's
+        // charter). Same cross-user leak class as the corporations rule.
+        source: "/api/banking/:path*",
+        headers: [{ key: "Cache-Control", value: "no-store, no-transform" }],
+      },
+      {
         // Character creation (POST /api/auth/character) sets no Cache-Control
         // of its own, so the same zstd re-compression bug above hits the
         // "Ready to begin?" submit on affected Android WebViews: the response

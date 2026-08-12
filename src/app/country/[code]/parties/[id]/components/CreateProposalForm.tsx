@@ -15,7 +15,7 @@ type ProposalType =
 
 type TransactionApprovalMode = "single" | "double";
 
-type RemoveRole = "chair" | "viceChair" | "committeeMember";
+type RemoveRole = "chair" | "viceChair" | "committeeMember" | "campaigner";
 
 interface OfficerOption {
   id: string;
@@ -119,6 +119,7 @@ export function CreateProposalForm({
           chair?: LeaderInfo;
           viceChair?: LeaderInfo;
           members?: Member[];
+          campaigners?: { id: string; name: string }[];
         };
         const opts: OfficerOption[] = [];
         if (data.chair?.id) {
@@ -144,6 +145,18 @@ export function CreateProposalForm({
               name: m.name,
               role: "committeeMember",
               label: `${getPartyRoleLabel(countryCode, "committee")} — ${m.name}`,
+            });
+          }
+        }
+        // Campaigners are committee-confirmed, so the committee can strip
+        // the seat back out without the chair (suggestion #269).
+        for (const c of data.campaigners ?? []) {
+          if (c?.id) {
+            opts.push({
+              id: c.id,
+              name: c.name,
+              role: "campaigner",
+              label: `Campaigner — ${c.name}`,
             });
           }
         }
@@ -442,7 +455,8 @@ export function CreateProposalForm({
           <p className="text-xs text-muted mt-1">
             The target is excluded from voting on their own removal. 60% of remaining filled
             committee + leadership roles must vote yes. If a chair is removed, the vice-chair acts
-            as chair until a new chair is elected or admin-appointed.
+            as chair until a new chair is elected or admin-appointed. Removing a campaigner strips
+            their Build Org and NPP Management rights; the chair can also fire one directly.
           </p>
         </div>
       )}

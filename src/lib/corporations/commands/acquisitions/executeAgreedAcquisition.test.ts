@@ -23,7 +23,17 @@ vi.mock("@/lib/corporations/cleanupShareMarketActivity", () => ({
 }));
 vi.mock("@/lib/financialTxLog/stampDeleted", () => ({ stampSubjectDeleted: vi.fn() }));
 vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn() }));
+// Merger review is exercised in its own suite; here it must not interfere.
+vi.mock("@/lib/corporations/mergerReview/gate", () => ({
+  assertMergerClearance: vi.fn().mockResolvedValue({ ok: true }),
+  acquisitionsBarredByDivestiture: vi.fn().mockReturnValue(null),
+}));
+vi.mock("@/lib/corporations/mergerReview/lifecycle", () => ({
+  attachMergerRemedy: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
 
+import { emitTx } from "@/lib/financialTxLog/emit";
 import { payShareholders } from "@/lib/nationalization/ownershipTransition";
 import { moveSectorToCorp } from "@/lib/corporations/moveSector";
 import { atomicallyDebitCorpLiquidCapital } from "@/lib/financialTxLog/atomicCashGuard";
@@ -145,5 +155,34 @@ describe("executeAgreedAcquisition", () => {
     // Each sector re-parented, and the shell deleted.
     expect(vi.mocked(moveSectorToCorp)).toHaveBeenCalledTimes(2);
     expect(deleteOne).toHaveBeenCalledWith({ _id: TGT });
+  });
+
+  it("ledgers the acquirer outflow and both shell-cash legs", async () => {
+    const { db } = makeDb({ sectors: [{ _id: new ObjectId() }], targetCash: 5_000_000 });
+    const r = await executeAgreedAcquisition({
+      db,
+      offer: makeOffer(1_000_000) as never,
+      currentTurn: 200,
+    });
+    expect(r.ok).toBe(true);
+
+    const legs = vi.mocked(emitTx).mock.calls.map((c) => c[1]);
+    const outflow = legs.find((l) => l.type === "share_buyout_outflow");
+    expect(outflow).toBeDefined();
+    expect(outflow?.amount).toBe(-1_000_000);
+    expect(outflow?.subjectId).toBe(ACQ);
+
+    // The shell's cash is not created or destroyed: it leaves the target and
+    // lands on the acquirer, so the two legs must net to zero.
+    const shellLegs = legs.filter((l) => l.type === "corp_dissolution_distribution");
+    expect(shellLegs).toHaveLength(2);
+    expect(shellLegs.reduce((sum, l) => sum + l.amount, 0)).toBe(0);
+  });
+
+  it("passes ledger context to payShareholders so holder credits are logged", async () => {
+    const { db } = makeDb({ sectors: [] });
+    await executeAgreedAcquisition({ db, offer: makeOffer(1_000_000) as never, currentTurn: 200 });
+    const payCall = vi.mocked(payShareholders).mock.calls[0];
+    expect(payCall[5]).toEqual({ turn: 200, kind: "agreed_acquisition" });
   });
 });

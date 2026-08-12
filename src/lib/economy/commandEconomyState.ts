@@ -36,6 +36,24 @@ export const OVERHANG_CAP = 100;
 /** Per-turn persistence of accumulated overhang absent new flow. 0.99/turn ≈ a
  *  ~2-year decay horizon (48 turns/yr) — forced savings bleed off slowly. */
 export const OVERHANG_DECAY = 0.99;
+/**
+ * Converts an unmet plan (1 − fulfillment) into an annual percentage-point
+ * deficit on the GOODS side of the overhang gap.
+ *
+ * WHY THE GOODS SIDE NEEDS THIS. `realGoodsGrowth` is GDP growth, which counts
+ * everything the economy produces. In a shortage economy what creates forced
+ * savings is the gap between the incomes the plan pays out and the consumer
+ * goods that actually reach the shelves, and a plan the enterprises miss by 16%
+ * is exactly that gap. Without this term the sign can invert: production RU ran
+ * wageGrowth 4.81 against gdpGrowth 5.50, a NEGATIVE gap, so the USSR accrued
+ * no overhang at all and structurally never could, no matter how badly its
+ * enterprises performed. A command economy that misses its plan every turn and
+ * reports zero shortage pressure is the single clearest symptom of the model
+ * not being wired to the game.
+ *
+ * 20 maps a 16% plan miss to ~3.2pp of annual goods deficit.
+ */
+export const PLAN_SHORTFALL_GOODS_DEFICIT = 20;
 /** Max black-market premium as a fraction over official (2.0 = +200%). */
 export const MAX_BLACK_MARKET_PREMIUM = 2.0;
 /** Ceiling on how much of the economy can flee into the second economy. */
@@ -59,6 +77,11 @@ const SECOND_ECONOMY_ADJUST = 0.25;
  *        directed credit (Gosbank issuance not backed by savings). Already a
  *        per-turn flow — added AFTER the annual-gap /TURNS_PER_YEAR conversion,
  *        not re-divided. 0 (default) ⇒ byte-identical to the pre-P1 behaviour.
+ * @param planFulfillment aggregate SOE plan fulfillment (1.0 = on plan). The
+ *        unmet part of the plan is the consumer goods the incomes were paid
+ *        against but that never reached the shelves, so it widens the gap on
+ *        the goods side. Default 1.0 (on plan) ⇒ no deficit term, which is the
+ *        pre-existing behaviour for any caller that does not pass it.
  */
 export function accumulateOverhang(
   prevOverhang: number,
@@ -66,16 +89,22 @@ export function accumulateOverhang(
   realGoodsGrowth: number,
   plannedShare: number,
   secondEconomyRelief = 0,
-  creditInjection = 0
+  creditInjection = 0,
+  planFulfillment = 1
 ): number {
   const prev = clamp(prevOverhang, 0, OVERHANG_CAP);
   const share = clamp(plannedShare, 0, 1);
+  // The unmet plan, as an annual pp deficit on the goods side. Only a SHORTFALL
+  // counts: an over-delivering plan does not conjure negative overhang, it just
+  // stops contributing (the wage/GDP term alone decides from there).
+  const shortfall = Number.isFinite(planFulfillment) ? Math.max(0, 1 - planFulfillment) : 0;
+  const goodsDeficit = shortfall * PLAN_SHORTFALL_GOODS_DEFICIT;
   // Forced-saving flow: only the excess of nominal income over real goods, and
   // only the administered fraction of it, becomes overhang. In percentage points.
   const gap =
     Number.isFinite(wageGrowth) && Number.isFinite(realGoodsGrowth)
-      ? wageGrowth - realGoodsGrowth
-      : 0;
+      ? wageGrowth - realGoodsGrowth + goodsDeficit
+      : goodsDeficit;
   // Annual pp gap → per-turn flow. Without the /TURNS_PER_YEAR the annual rate
   // would be re-applied all 48 turns of the year and overhang would explode.
   const flow = (share * Math.max(0, gap)) / TURNS_PER_YEAR;

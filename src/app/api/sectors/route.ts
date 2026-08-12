@@ -109,7 +109,12 @@ export async function GET(request: Request) {
       }
 
       const unownedSectors = (
-        await db.collection<UnownedSector>("unownedSectors").find(unownedFilter).toArray()
+        await db
+          .collection<UnownedSector>("unownedSectors")
+          .find(unownedFilter, {
+            projection: { sectorType: 1, stateId: 1, countryId: 1, revenue: 1 },
+          })
+          .toArray()
       ).filter((u) => !commandEconomyBlockedCountries.has(u.countryId));
 
       for (const us of unownedSectors) {
@@ -153,7 +158,18 @@ export async function GET(request: Request) {
 
       const ownedSectors = await db
         .collection<CorporateSector>("corporateSectors")
-        .find(corpFilter)
+        .find(corpFilter, {
+          projection: {
+            sectorType: 1,
+            stateId: 1,
+            countryId: 1,
+            corporationId: 1,
+            revenue: 1,
+            profitMargin: 1,
+            currentGrowthRate: 1,
+            forSale: 1,
+          },
+        })
         .toArray();
 
       // Resolve corporations for name + currency

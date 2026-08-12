@@ -61,6 +61,15 @@ export interface LabourContext {
    */
   ownedUnionMembershipPressureByKey?: ReadonlyMap<string, number>;
   /**
+   * Release 1.1 collective agreements, keyed by CorporateSector id. The turn
+   * uses the highest active floor when defensive legacy data overlaps.
+   */
+  collectiveAgreementWageFloorBySectorId?: ReadonlyMap<string, number>;
+  /** CorporateSector ids covered by an active no-strike term this turn. */
+  noStrikeProtectedSectorIds?: ReadonlySet<string>;
+  /** Output factors from active employer-scoped industrial action. */
+  industrialActionOutputFactorBySectorId?: ReadonlyMap<string, number>;
+  /**
    * Union ban (player suggestion #93): countries whose `FederalBudget` has
    * `unionsBanned: true` (an enacted union-ban law). Read at the `unions`
    * tier and above: while banned, a country's sectors decay unionization

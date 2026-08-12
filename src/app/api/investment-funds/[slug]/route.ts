@@ -86,6 +86,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
     const dividendByCorpId = new Map(dividendAgg.map((r) => [r._id, r.total]));
 
     const auth = await getAuthUserWithCharacter();
+
+    // A5 sponsorship: the sponsor's CEO gets the wind-up control on this page,
+    // mirroring the check the wind-up route enforces.
+    let viewerIsSponsorCeo = false;
+    if (fund.sponsorCorporationId && auth) {
+      const sponsor = await db
+        .collection<{ _id: ObjectId; userId?: ObjectId }>("corporations")
+        .findOne({ _id: fund.sponsorCorporationId }, { projection: { userId: 1 } });
+      viewerIsSponsorCeo = !!sponsor?.userId && sponsor.userId.toString() === auth.userId;
+    }
+
     let myPosition: {
       units: number;
       legacyUnits: number;
@@ -124,6 +135,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
         cashAnchor: fund.cashAnchor,
         backingRatio: fund.backingRatio ?? null,
         lastRebalancedAt: fund.lastRebalancedAt ?? null,
+        // A5 sponsorship (all null for the seeded system funds)
+        sponsorCorporationId: fund.sponsorCorporationId?.toString() ?? null,
+        sponsorName: fund.sponsorName ?? null,
+        expenseRatioAnnual: fund.expenseRatioAnnual ?? null,
+        seedCapitalAnchor: fund.seedCapitalAnchor ?? null,
+        feesPaidToSponsorAnchor: fund.feesPaidToSponsorAnchor ?? null,
+        charteredAtTurn: fund.charteredAtTurn ?? null,
+        windDownStartedAtTurn: fund.windDownStartedAtTurn ?? null,
+        viewerIsSponsorCeo,
         navChange1: navMetrics.navChange1,
         navChange24: navMetrics.navChange24,
         navChange48: navMetrics.navChange48,

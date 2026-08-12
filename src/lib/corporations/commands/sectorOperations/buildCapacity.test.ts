@@ -8,6 +8,7 @@ import {
   CAPACITY_BUILD_TURNS,
   computeBuildCost,
 } from "@/lib/constants/capacityEconomy";
+import { DOMINANCE_DENSITY_CROWDED_COMPETITORS } from "@/lib/constants/corporations";
 
 /**
  * P3a: the capacity command surface — build, cancel (partial refund),
@@ -42,6 +43,9 @@ vi.mock("@/lib/currency/marketMaker", () => ({
 }));
 vi.mock("@/lib/corporations/marketShare", () => ({
   fetchSectorMarketSharePercent: vi.fn().mockResolvedValue(0),
+  // Crowded, so these cases price at the undiscounted dominance toll and the
+  // hand-computed expectations below are unaffected by the density scaling.
+  fetchSectorCompetitorCount: vi.fn().mockResolvedValue(DOMINANCE_DENSITY_CROWDED_COMPETITORS),
 }));
 vi.mock("@/lib/corporations/sectorGrowthCost", () => ({
   resolveCountryPrimeRate: vi.fn().mockResolvedValue(0),

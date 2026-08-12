@@ -98,7 +98,10 @@ export async function GET(request: Request) {
       // Chamber tabs should follow where the bill is currently being worked,
       // not where it originated, so passed House bills move to the Senate tab.
       if (chamber === "joint") query.originChamber = "joint";
-      else query.currentChamber = chamber;
+      // A concurrent bill is on the floor in BOTH chambers, and `currentChamber`
+      // names only the lower one — so the Senate tab would not list the bill the
+      // Senate is currently being asked to vote on.
+      else query.$or = [{ currentChamber: chamber }, { status: "active_both" }];
     }
     if (statusFilter && statusFilter !== "all") query.status = statusFilter;
 

@@ -4,14 +4,14 @@
  *
  * Mechanics:
  *   1. Read the country's ruling-party officials.
- *   2. Compute a divergence score for each (placeholder: zero — the
- *      richer faction subsystem on `feature/legislation-update-cn` will
- *      supply per-character voting-record divergence later).
+ *   2. Score each on distance from the party line, blended toward their
+ *      caucus's mean so a faction leaves as a faction (see
+ *      `./factionDivergence`).
  *   3. Pick max(3, ceil(15% of officials)) defectors by highest
  *      divergence. Stable order via character id when divergences tie.
  *   4. Spawn a new approved party with the per-country
- *      `factionDefectionName`, seeded from the ruling-party's
- *      ideology fields (same axis positions).
+ *      `factionDefectionName`, positioned at the defectors' own centre of
+ *      gravity rather than at the position of the party they just left.
  *   5. Re-assign each defector's `party` field to the new sequentialId.
  *
  * Per the spec: the defection list is published in the country-history
@@ -28,6 +28,13 @@ import { vacateDepartedLeadership } from "@/lib/parties/vacateDepartedLeadership
 import { recomputePartyMemberCount } from "@/lib/parties/recomputePartyMemberCount";
 import { withdrawFromPartyLeadershipElections } from "@/lib/elections/withdrawFromPartyLeadershipElections";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
+import type { CaucusMembership } from "@/lib/db/types/caucus";
+import {
+  applyCaucusCohesion,
+  factionCentreOfGravity,
+  scoreDivergence,
+  type PartyLine,
+} from "./factionDivergence";
 
 export interface OfficialAlignment {
   characterId: ObjectId;
@@ -68,10 +75,9 @@ export interface FactionSplitResult {
 export async function fireFactionSplit(
   db: Db,
   countryId: CountryId,
-  // Reserved for the richer faction subsystem on
-  // feature/legislation-update-cn, which will read per-turn voting-record
-  // divergence to score defection candidates. Today's placeholder
-  // implementation scores every official at 0, so the turn is unused.
+  // Reserved: divergence is scored from standing positions and caucus
+  // membership, neither of which is turn-indexed, so the turn is still unused.
+  // Kept in the signature for the callers that already thread it.
   _currentTurn: number
 ): Promise<FactionSplitResult | null> {
   const cfg = COUNTRY_CONFIGS[countryId];
@@ -119,15 +125,77 @@ export async function fireFactionSplit(
   });
   if (eligible.length === 0) return null;
 
-  // Read character divergence scores. Placeholder: zero for every official
-  // until the richer faction subsystem on feature/legislation-update-cn
-  // lands a real voting-record divergence reader.
-  const alignments: OfficialAlignment[] = eligible.map((o) => ({
-    characterId: o.characterId as ObjectId,
-    divergence: 0,
+  // Score who actually leaves. Position on the same (economic, social) axes the
+  // election engine uses for policy distance, then blended toward the caucus
+  // mean so a faction walks out as a faction rather than as an arbitrary 15% of
+  // the bench. See `./factionDivergence` for why both halves matter.
+  const eligibleIds = eligible.map((o) => o.characterId as ObjectId);
+  const [defectorChars, memberships] = await Promise.all([
+    db
+      .collection<Character>("characters")
+      .find({ _id: { $in: eligibleIds } }, { projection: { _id: 1, policies: 1 } })
+      .toArray(),
+    db
+      .collection<CaucusMembership>("caucusMemberships")
+      .find(
+        {
+          countryId,
+          memberType: "character",
+          memberId: { $in: eligibleIds },
+          status: "active",
+        },
+        { projection: { memberId: 1, caucusId: 1 } }
+      )
+      .toArray(),
+  ]);
+  const positionByChar = new Map(
+    defectorChars.map((c) => [c._id.toString(), c.policies ?? null])
+  );
+  // One caucus per official: a character in several keeps the first, which is
+  // deterministic on the collection's natural order and enough for cohesion.
+  const caucusByChar = new Map<string, string>();
+  for (const m of memberships) {
+    const key = m.memberId?.toString();
+    if (!key || caucusByChar.has(key)) continue;
+    caucusByChar.set(key, m.caucusId.toString());
+  }
+
+  const line: PartyLine = {
+    economic: rulingParty.economicPosition,
+    social: rulingParty.socialPosition,
+  };
+  const scored = applyCaucusCohesion(
+    eligible.map((o) => {
+      const key = (o.characterId as ObjectId).toString();
+      const pos = positionByChar.get(key);
+      return {
+        characterId: key,
+        divergence: scoreDivergence(
+          { characterId: key, economic: pos?.economic, social: pos?.social },
+          line
+        ),
+        caucusId: caucusByChar.get(key) ?? null,
+      };
+    })
+  );
+  const byId = new Map(eligible.map((o) => [(o.characterId as ObjectId).toString(), o]));
+  const alignments: OfficialAlignment[] = scored.map((s) => ({
+    characterId: byId.get(s.characterId)!.characterId as ObjectId,
+    divergence: s.divergence,
   }));
   const defectors = pickDefectors(alignments);
   if (defectors.length === 0) return null;
+
+  // The new party sits where its defectors actually sit, not where the party
+  // they walked out of sits. Inheriting the ruling party's axes verbatim made
+  // every faction an ideological copy of its parent.
+  const centre = factionCentreOfGravity(
+    defectors.map((d) => {
+      const pos = positionByChar.get(d.characterId.toString());
+      return { economic: pos?.economic, social: pos?.social };
+    }),
+    line
+  );
 
   // Spawn the defected party. Inherits ideology fields from the ruling
   // party (same axis positions) but starts at `approved` regime status
@@ -142,8 +210,8 @@ export async function fireFactionSplit(
     name: defectionName,
     abbreviation,
     color: "#9333ea", // distinct purple for the defected faction
-    economicPosition: rulingParty.economicPosition,
-    socialPosition: rulingParty.socialPosition,
+    economicPosition: centre.economic,
+    socialPosition: centre.social,
     chairId: null,
     viceChairId: null,
     treasurerId: null,

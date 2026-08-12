@@ -63,6 +63,14 @@ export interface SupplyAgreement {
    */
   cancelEffectiveTurn?: number;
   proposedByCorpId: ObjectId;
+  /**
+   * C5 transfer pricing: cumulative ₳ of profit this contract has shifted out
+   * of one country and into another, while both parties were in the same
+   * formalized group. Reset to zero when the tax authority assesses. Absent on
+   * every arm's-length or single-country contract, which is most of them.
+   */
+  transferPricingExposureAnchor?: number;
+  lastTransferPricingAuditTurn?: number;
   createdAt: Date;
   updatedAt: Date;
 }

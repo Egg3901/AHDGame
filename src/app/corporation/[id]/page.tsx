@@ -52,8 +52,10 @@ import {
   CorporationContractsTab,
   DefenceContractsTab,
   SupplyAgreementsSection,
+  IndustrialRelationsSection,
   DefaultedBondCrisisModal,
 } from "@/components/corporation/CorporationPageTabs";
+import { BankConsoleTab } from "./bank/BankConsoleTab";
 import type {
   CorporationDetail,
   CEO,
@@ -109,6 +111,7 @@ export default function CorporationDetailPage() {
   const [bondDefaultModalOpen, setBondDefaultModalOpen] = useState(false);
   const bondInfoLoadedRef = useRef(false);
   const bondInfoPromiseRef = useRef<Promise<void> | null>(null);
+  const [showBankTab, setShowBankTab] = useState(false);
 
   // Sectors state
   const [abandoningSectorId, setAbandoningSectorId] = useState<string | null>(null);
@@ -219,6 +222,21 @@ export default function CorporationDetailPage() {
   useEffect(() => {
     fetchCorporation();
   }, [fetchCorporation]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch(`/api/banking/corporation/${id}`)
+      .then(async (res) => {
+        const json = (await res.json().catch(() => ({}))) as { visible?: boolean };
+        if (!cancelled) setShowBankTab(json.visible === true);
+      })
+      .catch(() => {
+        if (!cancelled) setShowBankTab(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   const fetchViewerContext = useCallback(async () => {
     try {
@@ -720,11 +738,33 @@ export default function CorporationDetailPage() {
     ...(showStructureTab ? [STRUCTURE_TAB] : []),
     ...(isCeo && !isNationalCorp ? [CEO_TAB] : []),
   ];
-  const navTabs = buildCorpNavTabs(visibleTabs, {
-    badges: {
-      commodities: commoditiesTabIsNew ? <NewFeatureBadge /> : undefined,
-    },
-  });
+  const bankVisible = showBankTab || sectors.some((s) => s.sectorType === "financial");
+  const navTabs = [
+    ...buildCorpNavTabs(visibleTabs, {
+      badges: {
+        commodities: commoditiesTabIsNew ? <NewFeatureBadge /> : undefined,
+      },
+    }),
+    ...(bankVisible
+      ? [
+          {
+            id: "bank",
+            label: "Bank",
+            tooltip: "Bank charter, rates, blacklist, and loan book",
+            icon: (
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z"
+                />
+              </svg>
+            ),
+          },
+        ]
+      : []),
+  ];
 
   const brandHex = corporation.brandColor ?? "#3b82f6";
 
@@ -966,6 +1006,9 @@ export default function CorporationDetailPage() {
           legacyMap={CORP_LEGACY_TAB_MAP}
           defaultSuperId="overview"
           renderContent={(superId, subId) => {
+            if (superId === "bank") {
+              return <BankConsoleTab corporationId={id} isCeo={isCeo} />;
+            }
             const tab = corpTabIdFor(visibleTabs, superId, subId) ?? "overview";
             return (
               <div className="space-y-8">
@@ -1160,7 +1203,17 @@ export default function CorporationDetailPage() {
                   />
                 )}
 
-                {tab === "deals" && <DealsTab corpId={id} isCeo={isCeo} />}
+                {tab === "deals" && (
+                  <DealsTab
+                    corpId={id}
+                    isCeo={isCeo}
+                    canSponsorFund={
+                      corporation.type === "financial" ||
+                      corporation.secondaryType === "financial" ||
+                      sectors.some((s) => s.sectorType === "financial")
+                    }
+                  />
+                )}
 
                 {tab === "structure" && (
                   <div className="space-y-6">
@@ -1185,16 +1238,19 @@ export default function CorporationDetailPage() {
                 )}
 
                 {tab === "ceo" && isCeo && financials && (
-                  <CeoOfficeTab
-                    corporation={corporation}
-                    financials={financials}
-                    sectors={sectors}
-                    corpId={id}
-                    currentTurn={corporation.currentTurn ?? 0}
-                    onRefresh={fetchCorporation}
-                    myCashOnHand={myCashOnHand}
-                    myCurrencyBalances={myCurrencyBalances}
-                  />
+                  <div className="space-y-6">
+                    <IndustrialRelationsSection corpId={id} />
+                    <CeoOfficeTab
+                      corporation={corporation}
+                      financials={financials}
+                      sectors={sectors}
+                      corpId={id}
+                      currentTurn={corporation.currentTurn ?? 0}
+                      onRefresh={fetchCorporation}
+                      myCashOnHand={myCashOnHand}
+                      myCurrencyBalances={myCurrencyBalances}
+                    />
+                  </div>
                 )}
               </div>
             );

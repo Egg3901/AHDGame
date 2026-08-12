@@ -156,9 +156,64 @@ The leading candidate (highest share-weighted vote total) receives a pending CEO
 
 ## Corporate ownership and subsidiaries
 
-Corporations can hold shares in other corporations. When one corporation holds **more than 50%** of another corporation's outstanding shares, the target becomes a **subsidiary** of the controlling corporate parent. The largest corporate stake above 50% wins ties.
+Corporations can hold shares in other corporations. When one corporation holds **more than 50% of another corporation's voting power**, it becomes that corporation's controlling parent. Voting power is not the same as share count where a corporation has issued supershares. The largest corporate stake above 50% wins ties.
 
-Subsidiary status is visible on the corporation page and affects cross-holding calculations in the share-price formula.
+Control on its own makes the target a **de facto subsidiary**: the relationship shows on the corporation page and on the exchange, and it feeds cross-holding calculations in the share-price formula.
+
+**Managing** a subsidiary is a separate, deliberate step. The parent's CEO must **formalize** the relationship, and only then can the parent:
+
+- inject capital into the subsidiary (capped per injection, with a cooldown)
+- set a dividend floor the subsidiary must pay out
+- appoint the subsidiary's CEO
+
+A formalized subsidiary cannot issue new equity, cannot itself act as a parent to another corporation, and cannot be released again until it has been held for a minimum period. A corporation can never buy into a corporation that already controls it, directly or through a chain: circular ownership is refused at the point of purchase.
+
+Profits do **not** consolidate. Each corporation is taxed on its own sectors, and a parent sees its subsidiary's earnings through dividends and through the share price, not as its own operating income.
+
+## Corporate groups
+
+A parent and its **formalized** subsidiaries form a **group**. De facto control is not enough: the group is the set of relationships the parent has actually declared.
+
+**Group balance sheet.** The corporation page shows the consolidated position of the whole group — combined cash, combined revenue, every member, every industry and country it operates in. It is a view, not a merger: members keep their own balance sheets, share prices and shareholders. Group size is visible to everyone, not just the parent's CEO. A structure should be a way to organise a business, not a way to disappear.
+
+**Group loss relief.** Within a single country, a group's losses are surrendered against its profits, and the group is taxed on the net. A parent earning ₳1,000,000 alongside a subsidiary losing ₳250,000 is taxed as though it earned ₳750,000; the tax on the sheltered ₳250,000 is refunded from the treasury that collected it, split across the members that actually paid.
+
+Four limits, all of them deliberate:
+
+- **Same country only.** A loss in one country cannot shelter a profit in another.
+- **Losses cannot exceed profits.** A ₳5,000,000 loss against a ₳1,000,000 profit relieves ₳1,000,000. There is no carry-forward.
+- **Relief never exceeds the tax the group actually paid.** The state refunds; it does not pay out.
+- **Formalized subsidiaries only.** Relief is bought with a declaration.
+
+That last point is the trade. Formalizing a subsidiary is what unlocks relief, and it is also what makes the group legible — to everyone reading the corporation page, and to the competition authority reviewing your next merger.
+
+## Group synergies
+
+A group is not only a tax structure. Each turn, its members converge toward the group's **best** marketing and logistics capability, closing 5% of the gap per turn, up to 60% of the leader's level.
+
+**Synergy only ever lifts.** No member is reduced to bring the group toward an average. Averaging would mean acquiring a weak subsidiary drags your strong parent down, and the optimal move would be to never group anything — which is not what a group is for. The strong member's distribution network and brand are what the weak one gets access to, not the other way round.
+
+A member already above the capped share gains nothing. There is no reason to hold a flagship back.
+
+**A spin-off carries the brand out with it.** A corporation spun off from a group member keeps a higher ceiling — 85% instead of 60% — for two game years, because last turn it was literally part of that business. The advantage decays as the spin-off becomes its own company, and it disappears immediately if the corporation it came from leaves the group.
+
+## Transfer pricing
+
+Supply agreements carry an agreed price offset from market. Between two unrelated corporations that is a negotiation. Between two members of the same group it is a dial: both sides have the same owner, so the price decides which member books the profit — and when those members sit in **different countries**, it decides which treasury collects the tax.
+
+Price an intra-group cross-border contract away from market and the shifted profit accumulates as **exposure** on that contract. Cross ₳5,000,000 of accumulated exposure and the treasury that lost the base reassesses: it charges the tax that was avoided, plus a **40% surcharge**, and the exposure resets to zero.
+
+The surcharge is the point. Without it an assessment is a free option — worst case, you pay exactly the tax you owed anyway, later.
+
+Three things worth knowing:
+
+- **It is deterministic.** No dice. You can work out precisely how many turns a given position survives, which makes aggressive pricing a calculated risk rather than a gamble.
+- **A position you unwind stops accruing.** Price aggressively for a while and return to market before the threshold, and you have taken a real risk and got away with it.
+- **Small offsets are ignored.** Anything within 5% of market is ordinary commercial pricing, not a tax position.
+
+Same-country intra-group pricing is not audited at all: both sides pay the same treasury, so no base moves, and group loss relief already nets the two positions against each other.
+
+An assessment you cannot afford is not waived. It is collected as far as your balance goes, and the exposure resets either way.
 
 ## Hostile takeovers
 

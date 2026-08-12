@@ -2,15 +2,12 @@ import type { Db } from "mongodb";
 import type { Character, Union } from "@/lib/db/types";
 import type { UnionOrganizer } from "@/lib/db/types/union";
 import type { CountryId } from "@/lib/constants/countries";
-import { getFoundingFxRate } from "@/lib/corporations/foundingCosts";
-import { getHomeCurrency } from "@/lib/currency/characterFunds";
-import { atomicallyDebitCharacterCash } from "@/lib/financialTxLog/atomicCashGuard";
-import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import {
-  ORGANIZE_PERSONAL_COST,
-  applyRecruit,
+  ORGANIZE_ACTION_COST,
+  ORGANIZE_STRENGTH_GAIN,
   isUnionLeadershipElectionOpen,
+  unionStrength,
 } from "@/lib/unions/unionEconomy";
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
 
@@ -18,28 +15,31 @@ export type OrganizeUnionResult =
   | {
       ok: true;
       status: 200;
-      membershipPressure: number;
+      strength: number;
+      myStrength: number;
       electionOpen: boolean;
-      cashSpent: number;
+      actionsSpent: number;
     }
   | { ok: false; status: number; error: string };
 
 /**
- * Pre-leadership organizing: a character spends personal funds to raise an
- * unowned union's `membershipPressure`. Organizers earn the right to vote
- * once pressure crosses {@link LEADERSHIP_ELECTION_MIN_PRESSURE}.
+ * Run an organize drive. Any character in the union's country may do this, on
+ * any union, led or not: this is the rank-and-file loop, and it is the only
+ * union action that is not restricted to the president. It costs action points
+ * rather than cash so participation tracks turning up, not net worth.
+ *
+ * Both the union pool and the organizer's own banked strength go up by the
+ * same amount. The banked figure is their vote weight if the presidency opens.
+ *
+ * Writes use `$inc` throughout, with no read-modify-write on a shared field,
+ * because the whole point is that hundreds of players can press this button
+ * against the same union in the same turn without contending.
  */
 export async function organizeUnion(
   db: Db,
   character: Character,
   union: Union
 ): Promise<OrganizeUnionResult> {
-  if (union.ownerId != null) {
-    return { ok: false, status: 409, error: "This union already has a president." };
-  }
-  if (character.unionLeaderOf != null) {
-    return { ok: false, status: 409, error: "You already lead a union." };
-  }
   if (!isSameCountry(character, { countryId: union.countryId as CountryId })) {
     return {
       ok: false,
@@ -47,69 +47,74 @@ export async function organizeUnion(
       error: "You must be in this union's country to help organize it.",
     };
   }
+  if (union.suspended) {
+    return { ok: false, status: 403, error: UNIONS_BANNED_MESSAGE };
+  }
   // Union ban (player suggestion #93): organizing an outlawed union is blocked.
   if (await isUnionsBanned(db, union.countryId as CountryId)) {
     return { ok: false, status: 403, error: UNIONS_BANNED_MESSAGE };
   }
 
-  const forexEnabled = await isForexEnabled();
-  const homeCurrency = getHomeCurrency(character);
-  const fxRate = getFoundingFxRate(union.countryId, forexEnabled);
-  const costLocal = Math.round(ORGANIZE_PERSONAL_COST * fxRate);
-
-  const debit = await atomicallyDebitCharacterCash(
-    db,
-    character._id,
-    homeCurrency,
-    costLocal,
-    forexEnabled
-  );
-  if (!debit.ok) {
+  const available = character.actions ?? 0;
+  if (available < ORGANIZE_ACTION_COST) {
     return {
       ok: false,
-      status: 402,
-      error: "Not enough personal funds to run an organize drive.",
+      status: 400,
+      error: `An organize drive costs ${ORGANIZE_ACTION_COST} action points (you have ${available}).`,
     };
   }
 
   const now = new Date();
-  const newPressure = applyRecruit(union.membershipPressure);
-  const unionUpdate = await db.collection<Union>("unions").updateOne(
-    {
-      _id: union._id,
-      ownerId: null,
-      membershipPressure: union.membershipPressure,
-    },
-    { $set: { membershipPressure: newPressure, updatedAt: now } }
-  );
-  if (unionUpdate.modifiedCount === 0) {
-    return { ok: false, status: 409, error: "Union state changed — please retry." };
+  const spend = await db
+    .collection<Character>("characters")
+    .updateOne(
+      { _id: character._id, actions: { $gte: ORGANIZE_ACTION_COST } },
+      { $inc: { actions: -ORGANIZE_ACTION_COST }, $set: { updatedAt: now } }
+    );
+  if (spend.modifiedCount === 0) {
+    return {
+      ok: false,
+      status: 409,
+      error: "Your available actions changed. Please try again.",
+    };
   }
 
-  await db.collection<UnionOrganizer>("unionOrganizers").updateOne(
+  const updatedUnion = await db
+    .collection<Union>("unions")
+    .findOneAndUpdate(
+      { _id: union._id },
+      { $inc: { strength: ORGANIZE_STRENGTH_GAIN }, $set: { updatedAt: now } },
+      { returnDocument: "after" }
+    );
+  if (!updatedUnion) {
+    // Refund: the union vanished between the read and the write.
+    await db
+      .collection<Character>("characters")
+      .updateOne({ _id: character._id }, { $inc: { actions: ORGANIZE_ACTION_COST } });
+    return { ok: false, status: 404, error: "Union not found." };
+  }
+
+  const organizer = await db.collection<UnionOrganizer>("unionOrganizers").findOneAndUpdate(
     { unionId: union._id, characterId: character._id },
     {
-      $inc: { organizeCount: 1, totalSpent: ORGANIZE_PERSONAL_COST },
+      $inc: { organizeCount: 1, strength: ORGANIZE_STRENGTH_GAIN },
       $setOnInsert: {
         unionId: union._id,
         characterId: character._id,
+        totalSpent: 0,
         createdAt: now,
       },
       $set: { updatedAt: now },
     },
-    { upsert: true }
+    { upsert: true, returnDocument: "after" }
   );
-
-  const electionOpen = isUnionLeadershipElectionOpen({
-    ownerId: null,
-    membershipPressure: newPressure,
-  });
 
   return {
     ok: true,
     status: 200,
-    membershipPressure: newPressure,
-    electionOpen,
-    cashSpent: costLocal,
+    strength: unionStrength(updatedUnion),
+    myStrength: organizer?.strength ?? ORGANIZE_STRENGTH_GAIN,
+    electionOpen: isUnionLeadershipElectionOpen(updatedUnion),
+    actionsSpent: ORGANIZE_ACTION_COST,
   };
 }

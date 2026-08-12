@@ -3,6 +3,7 @@
  * Per-state (and ME/NE district) vote accumulation; Electoral College resolution.
  */
 
+import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
@@ -265,7 +266,7 @@ export async function accumulatePresidentVoteTurn(
 
   const [categories, states, demographics, statePartyOrgs, turnoutDocs, approvalMap] =
     await Promise.all([
-      db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+      loadDemographicCategories(db),
       db
         .collection<State>("states")
         .find({ _id: { $in: uniqueStateIds } })

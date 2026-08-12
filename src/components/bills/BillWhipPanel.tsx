@@ -20,6 +20,7 @@ type WhipAudience = "character" | "npp";
 const ACTIONABLE_STATUSES = new Set([
   "active",
   "active_other",
+  "active_both",
   "veto_override",
   "override_shugiin",
 ]);

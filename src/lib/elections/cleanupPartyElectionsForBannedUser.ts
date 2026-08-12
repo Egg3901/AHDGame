@@ -61,52 +61,44 @@ export async function cleanupPartyElectionsForBannedUser(
   const characterIds = characters.map((c) => c._id);
   const now = new Date();
 
-  // National party leadership (chair / vice chair / treasurer).
-  const npcRes = await db
-    .collection<NationalPartyCandidate>("nationalPartyCandidates")
-    .updateMany(
-      { characterId: { $in: characterIds }, status: "active" },
-      { $set: { status: "withdrawn", withdrawnAt: now } }
-    );
+  // Six independent collections plus caucus cleanup, all in one round.
+  const [npcRes, npvRes, spcRes, spvRes, nccRes, ncvRes, caucusCleanup] = await Promise.all([
+    db
+      .collection<NationalPartyCandidate>("nationalPartyCandidates")
+      .updateMany(
+        { characterId: { $in: characterIds }, status: "active" },
+        { $set: { status: "withdrawn", withdrawnAt: now } }
+      ),
+    db
+      .collection<NationalPartyVote>("nationalPartyVotes")
+      .deleteMany({ voterId: { $in: characterIds } }),
+    db
+      .collection<StatePartyCandidate>("statePartyCandidates")
+      .updateMany(
+        { characterId: { $in: characterIds }, status: "active" },
+        { $set: { status: "withdrawn", withdrawnAt: now } }
+      ),
+    db.collection<StatePartyVote>("statePartyVotes").deleteMany({ voterId: { $in: characterIds } }),
+    db
+      .collection<NationalCommitteeCandidate>("nationalCommitteeCandidates")
+      .updateMany(
+        { characterId: { $in: characterIds }, status: "active" },
+        { $set: { status: "withdrawn", withdrawnAt: now } }
+      ),
+    db
+      .collection<NationalCommitteeVote>("nationalCommitteeVotes")
+      .deleteMany({ voterId: { $in: characterIds } }),
+    cleanupCaucusParticipationForCharacters(db, characterIds, {
+      removeMembership: false,
+      now,
+    }),
+  ]);
   result.nationalPartyCandidatesWithdrawn = npcRes.modifiedCount;
-
-  const npvRes = await db
-    .collection<NationalPartyVote>("nationalPartyVotes")
-    .deleteMany({ voterId: { $in: characterIds } });
   result.nationalPartyVotesDeleted = npvRes.deletedCount;
-
-  // State party leadership.
-  const spcRes = await db
-    .collection<StatePartyCandidate>("statePartyCandidates")
-    .updateMany(
-      { characterId: { $in: characterIds }, status: "active" },
-      { $set: { status: "withdrawn", withdrawnAt: now } }
-    );
   result.statePartyCandidatesWithdrawn = spcRes.modifiedCount;
-
-  const spvRes = await db
-    .collection<StatePartyVote>("statePartyVotes")
-    .deleteMany({ voterId: { $in: characterIds } });
   result.statePartyVotesDeleted = spvRes.deletedCount;
-
-  // National committee.
-  const nccRes = await db
-    .collection<NationalCommitteeCandidate>("nationalCommitteeCandidates")
-    .updateMany(
-      { characterId: { $in: characterIds }, status: "active" },
-      { $set: { status: "withdrawn", withdrawnAt: now } }
-    );
   result.committeeCandidatesWithdrawn = nccRes.modifiedCount;
-
-  const ncvRes = await db
-    .collection<NationalCommitteeVote>("nationalCommitteeVotes")
-    .deleteMany({ voterId: { $in: characterIds } });
   result.committeeVotesDeleted = ncvRes.deletedCount;
-
-  const caucusCleanup = await cleanupCaucusParticipationForCharacters(db, characterIds, {
-    removeMembership: false,
-    now,
-  });
   result.caucusChairCandidatesWithdrawn = caucusCleanup.candidaciesWithdrawn;
   result.caucusChairVotesDeleted = caucusCleanup.votesDeleted;
 

@@ -303,7 +303,7 @@ export async function computeAllNationalMetricTickRates(
     db.collection<State>("states").find({ countryId }).toArray(),
     db
       .collection<CorporateSector>("corporateSectors")
-      .find({}, { projection: { stateId: 1 } })
+      .find({ countryId }, { projection: { stateId: 1 } })
       .toArray(),
   ]);
   if (countryStates.length === 0) return {};

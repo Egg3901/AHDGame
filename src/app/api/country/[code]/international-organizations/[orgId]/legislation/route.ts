@@ -91,6 +91,15 @@ const fundAgencySchema = z.object({
   description: z.string().max(2000).optional(),
 });
 
+const joinConflictSchema = z.object({
+  type: z.literal("join_conflict"),
+  /** ConflictDoc._id — the theater key, not the public conflictId. */
+  theaterId: z.string().min(1).max(120),
+  side: z.enum(["A", "B"]),
+  title: z.string().min(3).max(120).optional(),
+  description: z.string().max(2000).optional(),
+});
+
 const resolutionSchema = z.discriminatedUnion("type", [
   ftaSchema,
   sanctionsSchema,
@@ -100,6 +109,7 @@ const resolutionSchema = z.discriminatedUnion("type", [
   jointStatementSchema,
   setPostureSchema,
   fundAgencySchema,
+  joinConflictSchema,
 ]);
 
 export async function POST(
@@ -209,6 +219,16 @@ export async function POST(
       validatedInput = {
         type: "fund_agency",
         agencyKey: body.data.agencyKey,
+        title: body.data.title,
+        description: body.data.description,
+      };
+    } else if (body.data.type === "join_conflict") {
+      // No country to validate here — the theater is checked against the live
+      // conflict, and the category gate refuses any org that is not a bloc.
+      validatedInput = {
+        type: "join_conflict",
+        theaterId: body.data.theaterId,
+        side: body.data.side,
         title: body.data.title,
         description: body.data.description,
       };

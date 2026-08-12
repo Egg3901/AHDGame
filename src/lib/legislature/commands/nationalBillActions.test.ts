@@ -101,3 +101,166 @@ describe("performNationalBillAction — CN chamber/office eligibility", () => {
     expect(officialsFilter().countryId).toBe("CN");
   });
 });
+
+/**
+ * Concurrent (active_both) voting: both chambers are live at once, so every fork that
+ * keyed on bill.status has to key on the VOTER's chamber instead.
+ */
+describe("performNationalBillAction - active_both", () => {
+  let db: MockDb;
+  const characterId = new ObjectId();
+  const character = { _id: characterId, name: "Rep", party: undefined } as unknown as Character;
+  const authUser = { userId: new ObjectId().toString(), isAdmin: false } as AuthUser;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+  });
+
+  function usBill(overrides: Partial<Bill> = {}): Bill {
+    return {
+      _id: new ObjectId(),
+      title: "Entry into the Vietnam War (NATO)",
+      summary: "Summary",
+      originChamber: "house",
+      currentChamber: "house",
+      sponsorId: new ObjectId(),
+      sponsorName: "Sponsor",
+      status: "active_both",
+      votesFor: 0,
+      votesAgainst: 0,
+      votesAbstain: 0,
+      votes: {},
+      otherChamberVotes: {},
+      countryId: "US",
+      votingEndsOnTurn: 999,
+      otherChamberVotingEndsOnTurn: 999,
+      proposedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    } as Bill;
+  }
+
+  function seatedAs(officeType: string) {
+    db.collection("electedOfficials").findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      characterId,
+      countryId: "US",
+      officeType,
+      seatsHeld: 1,
+    });
+    db.collection("bills").updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+  }
+
+  function billUpdate() {
+    const call = db.collectionMocks["bills"]!.updateOne.mock.calls[0];
+    expect(call).toBeDefined();
+    return {
+      filter: call![0] as Record<string, unknown>,
+      update: call![1] as unknown,
+    };
+  }
+
+  /** The `$set` body of the vote write's aggregation pipeline. */
+  function setStage(): Record<string, unknown> {
+    const pipeline = billUpdate().update as Array<{ $set?: Record<string, unknown> }>;
+    expect(Array.isArray(pipeline)).toBe(true);
+    return pipeline[0]!.$set ?? {};
+  }
+
+  it("accepts a lower-chamber member into votes", async () => {
+    seatedAs("house");
+    const result = await performNationalBillAction(db as unknown as Db, {
+      authUser,
+      character,
+      bill: usBill(),
+      countryId: "US",
+      input: { action: "vote", vote: "for" },
+    });
+    expect(result.status).toBe(200);
+    expect(billUpdate().filter).toMatchObject({ status: "active_both" });
+    // The write is an aggregation pipeline: [{ $set: { votes: {$mergeObjects...}, ... } }]
+    const set = setStage();
+    expect(Object.keys(set)).toContain("votes");
+    expect(Object.keys(set)).toContain("votesFor");
+    expect(Object.keys(set)).not.toContain("otherChamberVotes");
+  });
+
+  it("accepts an upper-chamber member into otherChamberVotes", async () => {
+    seatedAs("senate");
+    const result = await performNationalBillAction(db as unknown as Db, {
+      authUser,
+      character,
+      bill: usBill(),
+      countryId: "US",
+      input: { action: "vote", vote: "for" },
+    });
+    expect(result.status).toBe(200);
+    // Both filters must accept active_both, or half the chamber gets a 409.
+    expect(billUpdate().filter).toMatchObject({ status: "active_both" });
+    const set = setStage();
+    expect(Object.keys(set)).toContain("otherChamberVotes");
+    expect(Object.keys(set)).toContain("otherChamberVotesFor");
+    expect(Object.keys(set)).not.toContain("votes");
+  });
+
+  it("queries BOTH chambers office types for eligibility", async () => {
+    db.collection("electedOfficials").findOne.mockResolvedValue(null);
+    const result = await performNationalBillAction(db as unknown as Db, {
+      authUser,
+      character,
+      bill: usBill(),
+      countryId: "US",
+      input: { action: "vote", vote: "for" },
+    });
+    expect(result.status).toBe(403);
+    const filter = db.collectionMocks["electedOfficials"]!.findOne.mock.calls[0]![0] as {
+      officeType: { $in: string[] };
+    };
+    expect(filter.officeType.$in).toEqual(expect.arrayContaining(["house", "senate"]));
+  });
+
+  it("refuses a vote past the UPPER chamber deadline", async () => {
+    // Under active_both all three status flags are false, so BOTH deadline guards were
+    // skipped and late votes were accepted until the engine happened to close the bill.
+    seatedAs("senate");
+    const result = await performNationalBillAction(db as unknown as Db, {
+      authUser,
+      character,
+      bill: usBill({ otherChamberVotingEndsOnTurn: 1 }),
+      countryId: "US",
+      input: { action: "vote", vote: "for" },
+    });
+    expect(result.status).toBe(409);
+    expect(db.collectionMocks["bills"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("does not refuse an upper voter for the LOWER chamber deadline", async () => {
+    seatedAs("senate");
+    const result = await performNationalBillAction(db as unknown as Db, {
+      authUser,
+      character,
+      bill: usBill({ votingEndsOnTurn: 1 }),
+      countryId: "US",
+      input: { action: "vote", vote: "for" },
+    });
+    expect(result.status).toBe(200);
+  });
+
+  it("refuses a filibuster with a reason that names the concurrent vote", async () => {
+    // The generic refusal below this one says the bill is not being voted on,
+    // which on a concurrent bill is plainly untrue and reads as a bug.
+    seatedAs("senate");
+    const result = await performNationalBillAction(db as unknown as Db, {
+      authUser,
+      character,
+      bill: usBill({ currentChamber: "senate" }),
+      countryId: "US",
+      input: { action: "filibuster" },
+    });
+
+    expect(result.status).toBe(409);
+    expect((result.body as { error: string }).error).toMatch(/both chambers/i);
+  });
+});

@@ -22,6 +22,7 @@ import { getCalendarDayInTimezone, shouldApplyDailyReset } from "@/lib/time/dail
 import { resolveMetricPath } from "@/lib/cabinet/resolveMetricPath";
 import { applyMilitaryForceEffects } from "./militaryForceEffects";
 import { resolveBattleDeclarations } from "./battleResolution";
+import { resolveColdWarHolds } from "./coldWarHolds";
 import { processGeneralTenure } from "./generalTenure";
 import { applyReinforcement } from "./reinforcement";
 import { applyDefenseAppropriation } from "./defenseAppropriationTurn";
@@ -338,6 +339,17 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   // earlier turn resolve now against the target's real units, persisting outcomes to
   // both nations' live units + reports. Gated upstream by conflictsEnabled at declare time.
   await resolveBattleDeclarations(db, currentTurn);
+
+  // 4b-ii-a. Resolve proxy wars pinned at a pole for three turns. AFTER the battles,
+  // so a front pushed off the pole this turn has already cleared its stamp and does
+  // not resolve for a side that no longer holds it.
+  //
+  // A turn step and not a check inside `applyOccupation`, because that only runs when
+  // a battle MOVES the front: once a side is pinned at 100 the front cannot move
+  // further, nothing would re-enter it, and the timer would never fire. The hold has
+  // to be measured on turns where nobody fought at all. It reads `conflictsEnabled`
+  // itself — it is the only conflict step with no declaration upstream to gate it.
+  await resolveColdWarHolds(db, currentTurn);
 
   // 4b-ii-b. Tenure skill points for commissioned generals. Placed AFTER battle
   // resolution so a general promoted by this turn's fighting is already at their new

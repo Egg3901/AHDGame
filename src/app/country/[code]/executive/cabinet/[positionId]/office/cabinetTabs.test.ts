@@ -123,4 +123,34 @@ describe("resolveCabinetTabs", () => {
     expect(tabs.some((t) => t.id === "commands")).toBe(false);
     expect(tabs.some((t) => t.id === "doctrine")).toBe(false);
   });
+
+  it("gives the competition seat a Merger Review tab when the queue applies", () => {
+    const tabs = resolveCabinetTabs({
+      countryId: "US",
+      positionId: "attorney_general",
+      mechanics: { ...base, positionId: "attorney_general" },
+      competitionQueueApplies: true,
+    });
+    expect(tabs.some((t) => t.id === "competition")).toBe(true);
+  });
+
+  it("omits Merger Review when the server says the duty does not apply", () => {
+    const tabs = resolveCabinetTabs({
+      countryId: "US",
+      positionId: "attorney_general",
+      mechanics: { ...base, positionId: "attorney_general" },
+      competitionQueueApplies: false,
+    });
+    expect(tabs.some((t) => t.id === "competition")).toBe(false);
+  });
+
+  it("never gives Merger Review to a seat that is not the competition authority", () => {
+    const tabs = resolveCabinetTabs({
+      countryId: "US",
+      positionId: "secretary_of_education",
+      mechanics: base,
+      competitionQueueApplies: true,
+    });
+    expect(tabs.some((t) => t.id === "competition")).toBe(false);
+  });
 });

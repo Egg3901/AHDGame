@@ -15,6 +15,10 @@ import { buildScopedVoteInputs, type ScopedVoteOfficial } from "@/lib/congress/b
 import { snapshotWeightMap } from "@/lib/legislature/voteSnapshot";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
+import {
+  resolveOtherVoteChamberKey,
+  resolvePrimaryVoteChamberKey,
+} from "@/lib/congress/billVoteChamberScope";
 
 interface IndividualVote {
   id: string;
@@ -30,22 +34,16 @@ interface IndividualVote {
 
 function resolveVoteOfficeType(countryId: CountryId, bill: Bill, chamber: "origin" | "other") {
   const config = getCountryConfig(countryId);
+  const upperKey = config.upperElectionSystem ? config.legislature.upperChamber?.key : null;
   const chamberKey =
     chamber === "origin"
       ? resolvePrimaryVoteChamberKey(bill, config.legislature.lowerChamber.key)
-      : bill.currentChamber;
+      : resolveOtherVoteChamberKey(bill, upperKey);
   if (!chamberKey || chamberKey === "cabinet") return null;
   return getOfficeTypeForChamber(
     countryId,
     chamberKey === "joint" ? config.legislature.lowerChamber.key : chamberKey
   );
-}
-
-function resolvePrimaryVoteChamberKey(bill: Bill, lowerKey: string): string | undefined {
-  if (bill.status === "cabinet_review") return undefined;
-  if (bill.status === "override_shugiin") return bill.currentChamber;
-  if (bill.originChamber === "cabinet") return lowerKey;
-  return bill.originChamber;
 }
 
 // GET /api/congress/bills/[id]/votes — Returns individual voter details for a bill's origin or other chamber votes.

@@ -9,7 +9,7 @@ const WINDOW = 60;
 
 /**
  * The rate corridor (locked composite signature): the prime rate as a stepped
- * line over the inflation band — one glance answers "is the bank ahead of
+ * line over the inflation band - one glance answers "is the bank ahead of
  * inflation?", with a computed stance verdict beneath.
  */
 export function RateCorridor({

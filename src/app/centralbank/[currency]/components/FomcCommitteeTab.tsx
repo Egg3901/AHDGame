@@ -218,7 +218,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
                 >
                   {board.map((s) => (
                     <option key={s.seatId} value={s.seatId}>
-                      {s.isChair ? "Chair — " : ""}
+                      {s.isChair ? "Chair - " : ""}
                       {s.name} ({s.alignment})
                     </option>
                   ))}

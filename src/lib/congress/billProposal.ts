@@ -119,12 +119,24 @@ export async function validateBillProvisions(
     // no such gate — it only checks that the proposer holds a legislative seat — so
     // accepting one here would let any backbencher take the country to war by
     // hand-rolling a provision. Refused outright rather than validated.
-    if ("type" in (rawP as object) && (rawP as { type: unknown }).type === "declare_war") {
+    const rawType = "type" in (rawP as object) ? (rawP as { type: unknown }).type : undefined;
+    if (rawType === "declare_war") {
       return {
         ok: false,
         status: 400,
         error:
           "A declaration of war is introduced by the head of government or the defence minister.",
+      };
+    }
+    // A join-conflict provision is written ONLY by buildJoinConflictBill, from a
+    // passed bloc resolution. Accepting one here would let any backbencher enter a
+    // war at the simple majority this design deliberately keeps — bypassing the
+    // foreign-minister gate, the org membership check and the bloc vote together.
+    if (rawType === "join_conflict") {
+      return {
+        ok: false,
+        status: 400,
+        error: "Entry into a conflict is decided by a bloc resolution, not a bill.",
       };
     }
 

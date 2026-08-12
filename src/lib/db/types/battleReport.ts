@@ -1,5 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 import type { PvpBattleResult } from "@/lib/military/battle";
 
 /**
@@ -12,8 +13,15 @@ export interface BattleReportDoc {
   theaterId: string;
   /** Principal attacker — the earliest declaration in a merged offensive. */
   declarerCountry: CountryId;
-  /** Principal defender — the country the principal declaration named. */
-  targetCountry: CountryId;
+  /**
+   * Principal defender — whoever the principal declaration named.
+   *
+   * A `WorldEntityId`, matching `BattleDeclarationDoc.targetCountry`: in a proxy
+   * war the named enemy is a FACTION with no `COUNTRY_CONFIGS` row, and this field
+   * is copied straight from the declaration. The insert casts through `as never`,
+   * so nothing would have caught the mismatch.
+   */
+  targetCountry: WorldEntityId;
   /**
    * Every country that fought on the attacking side, principal first. Absent on
    * reports written before coalitions existed; readers must fall back to the scalar.

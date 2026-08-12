@@ -118,7 +118,9 @@ export type OrganizationResolutionType =
   | "aid_package"
   | "set_dues"
   | "set_posture"
-  | "fund_agency";
+  | "fund_agency"
+  /** Enter an existing conflict on a named side. Bloc organisations only. */
+  | "join_conflict";
 
 /** @deprecated Use `OrganizationResolutionType`. Kept so existing imports compile. */
 export type OrganizationLegislationType = OrganizationResolutionType;
@@ -161,6 +163,15 @@ export interface OrganizationLegislation {
   agencyKey?: string;
   /** `fund_agency`: turn the programme's effect lapses and the resolution terminates. */
   agencyExpiresOnTurn?: number;
+  /**
+   * `join_conflict`: the conflict to enter — a ConflictDoc._id (the theater key).
+   *
+   * `_id`, NOT `conflictId`. The public sequential number is for display and URLs
+   * only; every lookup, unit `theaterId`, declaration and assignment references `_id`.
+   */
+  joinConflictTheaterId?: string;
+  /** `join_conflict`: which side of that conflict the bloc backs. */
+  joinConflictSide?: "A" | "B";
   proposingCountryId: CountryId;
   proposedByCharacterId: ObjectId;
   proposedByCharacterName: string;

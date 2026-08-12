@@ -12,21 +12,33 @@ type CorpQuoteRow = {
   publicFloat?: number;
 };
 
-/** Minimal shape for mark-to-market. */
+/**
+ * Convert a share price from its corporation's home currency into ₳.
+ *
+ * Every `*Anchor` quantity a fund holds — `cashAnchor`, `quotedNav`, bond
+ * principal, subscribe and redeem amounts — is denominated in ₳, and the FX
+ * table is quoted as local units per ₳. This helper used to convert into the
+ * FUND's `anchorCurrencyCode` instead (`price * anchorRate / localRate`), which
+ * only coincides with ₳ when that currency happens to sit at parity. For a JPY
+ * or GBP fund the equity leg of NAV was denominated differently from the cash
+ * leg it was added to, so every non-USD fund mispriced itself.
+ */
 export function convertLocalPriceToAnchor(
   localPrice: number,
   localCurrency: CurrencyCode | undefined,
-  anchorCurrency: CurrencyCode,
   exchangeRates: Partial<Record<CurrencyCode, number>>
 ): number | null {
-  if (!localCurrency || !Number.isFinite(localPrice) || localPrice <= 0) return null;
-  if (localCurrency === anchorCurrency) return localPrice;
+  if (!Number.isFinite(localPrice) || localPrice <= 0) return null;
+  // A corp with no home currency predates forex and already holds ₳ directly.
+  if (!localCurrency) return localPrice;
 
+  // No usable rate means no forex table for this currency, which is the
+  // pre-forex world where prices are already ₳. Same fail-soft as
+  // `corpCapitalToAnchor`, so a forex-off world keeps valuing its holdings.
   const localRate = exchangeRates[localCurrency];
-  const anchorRate = exchangeRates[anchorCurrency];
-  if (!localRate || localRate <= 0 || !anchorRate || anchorRate <= 0) return null;
+  if (!Number.isFinite(localRate) || !localRate || localRate <= 0) return localPrice;
 
-  return localPrice * (anchorRate / localRate);
+  return localPrice / localRate;
 }
 
 /**
@@ -48,7 +60,6 @@ export function refreshFundHoldingsMarkToMarket(
     const priceAnchor = convertLocalPriceToAnchor(
       executionPrice,
       corp.liquidCurrencyCode,
-      fund.anchorCurrencyCode,
       exchangeRates
     );
     if (priceAnchor === null || priceAnchor <= 0) return holding;

@@ -1,3 +1,4 @@
+import { CONCURRENT_VOTE_STAGE } from "./concurrentVoteStage";
 import type { Db } from "mongodb";
 import { createNotifications } from "@/lib/notifications";
 import type { Bill, Character } from "@/lib/db/types";
@@ -127,5 +128,6 @@ export const JP_NATIONAL_CONFIG: BillLifecycleConfig = {
         });
       },
     },
+    CONCURRENT_VOTE_STAGE,
   ],
 };

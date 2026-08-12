@@ -3,6 +3,7 @@ import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type { CountryId } from "@/lib/constants/countries";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { standDownCountry } from "./leaveConflict";
+import { hostEntitiesOf } from "./hostEntities";
 import { recordTruce } from "./truce";
 
 /** Every country that fought here, both rosters, deduped. */
@@ -30,7 +31,13 @@ export async function resolveConflict(
       $set: {
         status: "resolved" as const,
         endTurn: currentTurn,
-        outcome: { winner, note: `${victor} took full control of ${conflict.hostCountry}.` },
+        outcome: {
+          winner,
+          // Every host, not just the map anchor: a proxy war can be fought over two
+          // countries and both change hands, so naming one of them reads as a
+          // partial victory the record does not mean.
+          note: `${victor} took full control of ${hostEntitiesOf(conflict).join(" and ")}.`,
+        },
       },
     }
   );

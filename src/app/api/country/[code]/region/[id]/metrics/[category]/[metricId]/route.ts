@@ -237,11 +237,21 @@ export async function GET(
 
     // ── Regular state ─────────────────────────────────────────────────────────
     // SP5: merged two-store view (economic/population live on macroMetrics).
-    const [stateDoc, metrics, allMetrics, allStates] = await Promise.all([
+    // States first (tiny, projected): the national-average metric fetch below
+    // is scoped to this country's state ids instead of loading every region
+    // metric doc in the world. countryId on StateMetrics is optional/legacy,
+    // so scoping by _id set is the reliable filter.
+    const allStates = await db
+      .collection<State>("states")
+      .find({}, { projection: { countryId: 1 } })
+      .toArray();
+    const sameCountryIds = allStates
+      .filter((state) => state.countryId === countryId)
+      .map((state) => state._id);
+    const [stateDoc, metrics, allMetrics] = await Promise.all([
       db.collection<State>("states").findOne({ _id: stateId, countryId }),
       findMergedRegionMetricsForDisplay(db, { _id: stateId, countryId }),
-      findMergedRegionMetricsManyForDisplay(db, {}),
-      db.collection<State>("states").find({}).toArray(),
+      findMergedRegionMetricsManyForDisplay(db, { _id: { $in: sameCountryIds } }),
     ]);
 
     if (!metrics || !stateDoc) {

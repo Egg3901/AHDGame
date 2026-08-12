@@ -197,20 +197,31 @@ export async function loadCountryCentralBankDetail(params: {
   // Keyed on the bank's HOME country: SCO/WAL reach the same BoE doc, and its
   // governance (and the government that holds the pen) is the UK's.
   const bankHomeCountryId = (bank.countryId ?? countryId) as CountryId;
-  const governmentControlled = await isBankGovernmentControlledLive(bank, bankHomeCountryId);
+  // Independent of one another once the bank doc is loaded — one round.
+  const [
+    governmentControlled,
+    { chairData, chairMode, chairNppId },
+    forexEnabled,
+    budgetDoc,
+    gameState,
+  ] = await Promise.all([
+    isBankGovernmentControlledLive(bank, bankHomeCountryId),
+    buildCentralBankChairData(db, bank),
+    isForexEnabled(),
+    db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ _id: getNationalBudgetId(countryId) } as { _id: "federal" }),
+    getGameState(),
+  ]);
   const viewerSetsRate =
     governmentControlled && viewer?.character
       ? await isNationalIssuer(db, bankHomeCountryId, viewer.character._id)
       : false;
 
-  const { chairData, chairMode, chairNppId } = await buildCentralBankChairData(db, bank);
-
   const isAdmin = viewer?.isAdmin === true;
   let isChair = false;
   let isExecutive = false;
   let userCashOnHand = 0;
-
-  const forexEnabled = await isForexEnabled();
   const nationalCurrency = COUNTRY_CURRENCY_MAP[countryId] as CurrencyCode;
   let rateMap: Partial<Record<CurrencyCode, number>> | undefined;
   let forexSpreadStrength = FOREX_SPREAD_STRENGTH_DEFAULT;
@@ -262,13 +273,7 @@ export async function loadCountryCentralBankDetail(params: {
   const rateScale = getRateScale(bank.primeRate);
   const recentHistory = bank.rateHistory.slice(-20).reverse();
 
-  const federalBudgetId = getNationalBudgetId(countryId);
-  const budgetDoc = await db
-    .collection<FederalBudget>("federalBudget")
-    .findOne({ _id: federalBudgetId } as { _id: "federal" });
   const currentInflation = budgetDoc?.economicFactors?.inflationRate ?? 2.5;
-
-  const gameState = await getGameState();
   const currentTurn = gameState?.currentTurn ?? 0;
 
   const nationalDocId = getNationalDocId(countryId);
@@ -612,6 +617,9 @@ export async function loadCountryCentralBankDetail(params: {
       primeRate: bank.primeRate,
       lastRateChangeTurn: bank.lastRateChangeTurn ?? null,
       chairControlsLocked: bank.chairControlsLocked === true,
+      // A seated committee owns the rate: the chair's direct control is gone and
+      // the card must send players to the committee room instead of a dead POST.
+      committeeSeated: (bank.fomcBoard?.length ?? 0) > 0,
       currentSavingsPressure: bank.currentSavingsPressure ?? 0,
       currentInflation: displayInflation,
       targetInflation: getInflationTarget(countryId, gameState?.currentYear),
@@ -624,6 +632,7 @@ export async function loadCountryCentralBankDetail(params: {
       chairNppId,
       chairAppointedAt: bank.chairAppointedAt,
       chairInfamy: bank.chairInfamy ?? 0,
+      resolveStreak: bank.resolveStreak ?? 0,
       chairTermExpiresAtTurn: bank.chairTermExpiresAtTurn ?? null,
       currentTurn,
       nominationWindowOpen,

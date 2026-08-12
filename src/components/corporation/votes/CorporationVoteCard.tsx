@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
+import { useAbortableEffectFetch } from "@/hooks/useAbortableEffectFetch";
 import type { CorporationVote } from "@/lib/db/types/corporationVote";
 import { LEGAL_STRUCTURES } from "@/lib/constants/legalStructures";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
@@ -13,6 +14,16 @@ interface VotingIdentity {
   votingPower: number;
   shares: number;
   hasVoted?: boolean;
+}
+
+/** An index fund the viewer controls that holds shares in this corporation. */
+interface DirectableFund {
+  fundId: string;
+  name: string;
+  tickerSymbol: string;
+  unitShare: number;
+  votingPower: number;
+  instruction: "yes" | "no" | null;
 }
 
 interface Props {
@@ -88,6 +99,7 @@ export function CorporationVoteCard({
   const [identities, setIdentities] = useState<VotingIdentity[]>([]);
   const [selectedIdentityId, setSelectedIdentityId] = useState<string>("");
   const [, setIdentitiesLoading] = useState(false);
+  const [directableFunds, setDirectableFunds] = useState<DirectableFund[]>([]);
 
   const fetchVote = useCallback(async () => {
     const res = await fetch(`/api/corporations/${corporationId}/votes/${voteId}`);
@@ -122,10 +134,48 @@ export function CorporationVoteCard({
     }
   }, [corporationId, voteId]);
 
-  useEffect(() => {
-    fetchVote();
-    fetchIdentities();
-  }, [fetchVote, fetchIdentities]);
+  // Index funds the viewer controls that hold shares here. Most viewers control
+  // none, so the whole block stays hidden rather than showing an empty state.
+  const fetchDirectableFunds = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/corporations/${corporationId}/votes/${voteId}/fund-direction`
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      setDirectableFunds(data.funds ?? []);
+    } catch {
+      // stewardship is optional; voting still works without it
+    }
+  }, [corporationId, voteId]);
+
+  // One abortable mount load for all three reads: without it the responses land
+  // on an unmounted card, and in tests they reject during happy-dom teardown.
+  useAbortableEffectFetch(async () => {
+    await Promise.all([fetchVote(), fetchIdentities(), fetchDirectableFunds()]);
+  }, [fetchVote, fetchIdentities, fetchDirectableFunds]);
+
+  async function directFund(fundId: string, choice: "yes" | "no" | null) {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(
+        `/api/corporations/${corporationId}/votes/${voteId}/fund-direction`,
+        {
+          method: choice ? "POST" : "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(choice ? { fundId, vote: choice } : { fundId }),
+        }
+      );
+      if (!res.ok) throw new Error((await res.json()).error);
+      await fetchVote();
+      await fetchDirectableFunds();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function castVote(choice: "yes" | "no") {
     setLoading(true);
@@ -354,8 +404,79 @@ export function CorporationVoteCard({
             </p>
           )}
 
-          {!canVote && identities.length === 0 && !isCeo && (
+          {!canVote && identities.length === 0 && directableFunds.length === 0 && !isCeo && (
             <p className="text-xs text-muted-foreground">You hold no shares in this corporation.</p>
+          )}
+
+          {/* Fund stewardship: instruct the funds you control */}
+          {directableFunds.length > 0 && (
+            <div className="space-y-2 rounded-lg border border-card-border bg-card-elevated/50 p-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Funds you direct
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  You control enough units to instruct how these funds vote their shares. An
+                  uninstructed fund votes with the majority cast by everyone else, or abstains if
+                  there is no majority.
+                </p>
+              </div>
+              {directableFunds.map((fund) => (
+                <div
+                  key={fund.fundId}
+                  className="flex flex-wrap items-center justify-between gap-2 border-t border-card-border pt-2 first:border-t-0 first:pt-0"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium">
+                      {fund.name}
+                      {fund.tickerSymbol ? (
+                        <span className="ml-1 text-muted-foreground">{fund.tickerSymbol}</span>
+                      ) : null}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {fund.votingPower.toLocaleString("en-US")} votes ·{" "}
+                      {(fund.unitShare * 100).toFixed(0)}% of units yours
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => directFund(fund.fundId, "yes")}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                        fund.instruction === "yes"
+                          ? "bg-green-600 text-white"
+                          : "bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300"
+                      }`}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => directFund(fund.fundId, "no")}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                        fund.instruction === "no"
+                          ? "bg-red-600 text-white"
+                          : "bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300"
+                      }`}
+                    >
+                      No
+                    </button>
+                    {fund.instruction && (
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => directFund(fund.fundId, null)}
+                        className="rounded-lg border border-card-border px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Withdraw
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
 
           {isCeo && (

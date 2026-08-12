@@ -44,7 +44,16 @@ describe("PUT formations", () => {
     db.collection("characterGenerals");
     db.collection("conflicts");
     // Postings validate their theaterId against live conflicts; "afghan" is live.
+    // The doc itself is read, not just counted: a posting to a PROXY war is refused
+    // unless the country is already a belligerent, so the gate needs the rosters.
+    // This one is an ordinary interstate war, which that narrowing must not catch.
     db.collectionMocks.conflicts.countDocuments.mockResolvedValue(1);
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({
+      _id: "afghan",
+      type: "war",
+      sideA: { label: "NATO", countries: ["US"], kind: "coalition", backer: "west" },
+      sideB: { label: "PLA", countries: ["CN"], kind: "state", backer: "east" },
+    });
     db.collectionMocks.gameState.findOne.mockResolvedValue({ conflictsEnabled: true });
     db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
       _id: "m1",
@@ -184,6 +193,7 @@ describe("PUT formations", () => {
 
   it("400s an unknown theater", async () => {
     db.collectionMocks.conflicts.countDocuments.mockResolvedValue(0); // no such conflict
+    db.collectionMocks.conflicts.findOne.mockResolvedValue(null);
     const { PUT } = await import(ROUTE);
     const res = await PUT(
       req({ positions: {}, conflictAssignments: [assignment({ theaterId: "atlantis" })] }),

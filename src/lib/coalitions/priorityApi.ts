@@ -17,6 +17,8 @@ import {
 const LIVE_PRIORITY_BILL_STATUSES: ReadonlySet<Bill["status"]> = new Set([
   "active",
   "active_other",
+  // A concurrent bill is live in both chambers at once.
+  "active_both",
   "veto_override",
   "filibustered",
   "cabinet_review",

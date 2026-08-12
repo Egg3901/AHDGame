@@ -54,11 +54,47 @@ import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFla
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
+import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { releaseCorporationHeldBondsToFloat } from "@/lib/corporations/releaseHeldBondsToFloat";
 import { applyBrandFacilityLoss } from "@/lib/corporations/brandFacilityLoss";
 import { debitSharesFromFund } from "@/lib/corporations/shareholderOps";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import {
+  acquisitionsBarredByDivestiture,
+  assertMergerClearance,
+} from "@/lib/corporations/mergerReview/gate";
+import { attachMergerRemedy } from "@/lib/corporations/mergerReview/lifecycle";
 import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
+
+type TakeoverTxInput = Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">;
+
+/** One squeezed-out holder's buyout credit, counterparty being the absorbed corp. */
+function takeoverPayoutLeg(
+  turn: number,
+  now: Date,
+  target: { _id: ObjectId; name: string },
+  subjectType: "character" | "corporation",
+  subjectId: ObjectId,
+  amount: number,
+  currencyCode: CurrencyCode,
+  meta?: Record<string, unknown>
+): TakeoverTxInput {
+  return {
+    type: "share_buyout_payout",
+    turn,
+    createdAt: now,
+    subjectType,
+    subjectId,
+    subjectName: subjectType === "corporation" ? "(corp shareholder)" : "(shareholder)",
+    amount: Math.round(amount),
+    currencyCode,
+    counterpartyType: "corporation",
+    counterpartyId: target._id,
+    counterpartyName: target.name,
+    meta: { kind: "hostile_takeover", ...(meta ?? {}) },
+  };
+}
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -124,6 +160,19 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
         },
         { status: 400 }
       );
+    }
+
+    // Merger review (C3). The squeeze-out is the moment the two firms become
+    // one, so it is the moment competition policy gets a say. Checked before
+    // any money moves; a referral leaves both corporations untouched and the
+    // player retries once the authority clears it (clearance is durable per
+    // pair, so the retry sails straight through).
+    const reviewTurn = await getCurrentTurn(db);
+    const barred = acquisitionsBarredByDivestiture(parent, reviewTurn);
+    if (barred) return NextResponse.json({ error: barred }, { status: 403 });
+    const clearance = await assertMergerClearance(db, parent, target, "hostileTakeover", reviewTurn);
+    if (!clearance.ok) {
+      return NextResponse.json({ error: clearance.error }, { status: clearance.status });
     }
 
     // Outstanding bonds transfer to the parent automatically (see bond
@@ -242,6 +291,12 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
       // applied before the try) and the cash transfer (applied partway through).
       let cashTransferApplied = false;
 
+      // Ledger legs for every money move in this takeover. Collected as we go and
+      // flushed only once the merge has fully committed, so the rollback path
+      // below never leaves logged money that was actually reversed.
+      const ledgerLegs: TakeoverTxInput[] = [];
+      const parentLedgerCurrency = (resolveCorpLiquidCurrencyCode(parent) ?? "USD") as CurrencyCode;
+
       try {
         const takeoverTurn = await getCurrentTurn(db);
         const parentParty: ShareTradeParty = { corporationId: parent._id, name: parent.name };
@@ -270,6 +325,17 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
               }
             );
             holderParty = { characterId: sh.characterId, name: ch.name };
+            ledgerLegs.push(
+              takeoverPayoutLeg(
+                takeoverTurn,
+                now,
+                target,
+                "character",
+                sh.characterId,
+                amountLocal,
+                home
+              )
+            );
           } else if (sh.imperialCharacterId) {
             const ich = await db
               .collection<ImperialCharacter>("imperialCharacters")
@@ -290,6 +356,18 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
               }
             );
             holderParty = { imperialCharacterId: sh.imperialCharacterId, name: ich.name };
+            ledgerLegs.push(
+              takeoverPayoutLeg(
+                takeoverTurn,
+                now,
+                target,
+                "character",
+                sh.imperialCharacterId,
+                amountLocal,
+                home,
+                { imperial: true }
+              )
+            );
           } else if (sh.corporationId && !sh.corporationId.equals(parent._id)) {
             const holder = await db
               .collection<Corporation>("corporations")
@@ -304,6 +382,17 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
                 { $inc: { liquidCapital: payoutLocal }, $set: { updatedAt: now } }
               );
             holderParty = { corporationId: sh.corporationId, name: holder.name };
+            ledgerLegs.push(
+              takeoverPayoutLeg(
+                takeoverTurn,
+                now,
+                target,
+                "corporation",
+                holder._id,
+                payoutLocal,
+                (resolveCorpLiquidCurrencyCode(holder) ?? "USD") as CurrencyCode
+              )
+            );
           }
 
           if (holderParty) {
@@ -617,6 +706,66 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
             takeoverSpread.to
           );
         }
+
+        // Merge is committed: flush the ledger. Parent outflow for the squeeze-out
+        // (price + cross-currency spread), then the absorbed shell's cash as a
+        // matched release/absorb pair so the transfer nets to zero.
+        ledgerLegs.push({
+          type: "share_buyout_outflow",
+          turn: takeoverTurn,
+          createdAt: now,
+          subjectType: "corporation",
+          subjectId: parent._id,
+          subjectName: parent.name,
+          amount: -Math.round(totalInParentCapital),
+          currencyCode: parentLedgerCurrency,
+          counterpartyType: "corporation",
+          counterpartyId: target._id,
+          counterpartyName: target.name,
+          meta: {
+            kind: "hostile_takeover",
+            spreadAnchor: takeoverSpread.spreadAnchor,
+            sharesRetired: parentShares,
+          },
+        });
+        if (cashToParentLocal > 0) {
+          ledgerLegs.push(
+            {
+              type: "corp_dissolution_distribution",
+              turn: takeoverTurn,
+              createdAt: now,
+              subjectType: "corporation",
+              subjectId: parent._id,
+              subjectName: parent.name,
+              amount: Math.round(cashToParentLocal),
+              currencyCode: parentLedgerCurrency,
+              counterpartyType: "corporation",
+              counterpartyId: target._id,
+              counterpartyName: target.name,
+              meta: { kind: "hostile_takeover", side: "shell_cash_absorbed" },
+            },
+            {
+              type: "corp_dissolution_distribution",
+              turn: takeoverTurn,
+              createdAt: now,
+              subjectType: "corporation",
+              subjectId: target._id,
+              subjectName: target.name,
+              amount: -Math.round(cashToParentLocal),
+              currencyCode: parentLedgerCurrency,
+              counterpartyType: "corporation",
+              counterpartyId: parent._id,
+              counterpartyName: parent.name,
+              meta: { kind: "hostile_takeover", side: "shell_cash_released" },
+            }
+          );
+        }
+        await emitTxBulk(db, ledgerLegs, await loadTxThresholds(db));
+
+        // A conditional clearance becomes a live divestiture order only now
+        // that the merger has actually committed.
+        if (clearance.review)
+          await attachMergerRemedy(db, clearance.review, parent._id, takeoverTurn);
 
         return NextResponse.json({
           success: true,

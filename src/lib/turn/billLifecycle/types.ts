@@ -19,6 +19,13 @@ export type OnReject = "fail" | "sendToOverride" | "advance";
 export interface StageBillContext {
   currentChamber: string;
   countryId?: CountryId;
+  /**
+   * The world's reset preset. Legislature SHAPE is preset-dependent — Germany's 1953
+   * override flips `bicameral` to true over an appointed Bundesrat, and TR/ES flip
+   * `upperElectionSystem` — so a stage that resolves its config without this gets the
+   * wrong chamber count with no error.
+   */
+  preset?: string;
 }
 
 export interface ChamberVoteStage {
@@ -77,7 +84,41 @@ export interface OverrideStage {
   votingDurationHours: number;
 }
 
-export type BillStage = ChamberVoteStage | ExecutiveActionStage | OverrideStage;
+/**
+ * Both chambers voting AT ONCE, each into its own tally, passing only if every chamber
+ * clears the bar.
+ *
+ * Modelled on `OverrideStage`, which is already a concurrent bicameral vote with
+ * `requireAll` semantics (`stage.chambers.every(...)`). Two things stop it being reused
+ * directly: its tally is keyed on hardcoded `house`/`senate` literals, so it is US-only;
+ * and it uses one vote map, which forces a display snapshot. Two maps mean the
+ * per-chamber counters and snapshots already exist.
+ */
+export interface ConcurrentVoteStage {
+  kind: "concurrentVote";
+  /** Bill status this stage owns — "active_both". */
+  status: string;
+  /**
+   * Office types voting simultaneously; one entry for a unicameral country.
+   *
+   * MUST be `getJointSittingOfficeTypes`, NOT `legislature.bicameral`. Germany's 1953
+   * override sets `bicameral: true` over an appointed Bundesrat with no
+   * `upperElectionSystem`, so the bicameral reading yields two chambers, the upper tally
+   * is structurally empty, and `requireAll` fails every German bill.
+   */
+  chambersFor: (bill: StageBillContext) => string[];
+  /** Vote map per office type: lower → "votes", upper → "otherChamberVotes". */
+  voteFieldFor: (bill: StageBillContext, officeType: string) => "votes" | "otherChamberVotes";
+  passRule: PassRule;
+  /** Every listed chamber must clear the bar — OverrideStage's `.every` semantics. */
+  requireAll: true;
+  onPassStatus: string;
+  votingDurationHours: number;
+  execActionCheckOnPass?: boolean;
+}
+
+export type BillStage =
+  ChamberVoteStage | ExecutiveActionStage | OverrideStage | ConcurrentVoteStage;
 
 /** Per-country sponsor notifier; `status` is the transition the engine applied. */
 export type SponsorNotifier = (db: Db, bill: Bill, status: Bill["status"]) => Promise<void>;

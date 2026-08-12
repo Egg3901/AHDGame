@@ -32,7 +32,14 @@ import { migration as backfillUnownedHeadroomUnits } from "./entries/2026-08-01-
 import { migration as restoreCapitalModeFromShadow } from "./entries/2026-08-01-restore-capital-mode-from-shadow";
 import { migration as fixSeedSectorCurrencyDenomination } from "./entries/2026-08-01-fix-seed-sector-currency-denomination";
 import { migration as adoptReferenceGameConfigGates } from "./entries/2026-08-08-adopt-reference-gameconfig-gates";
+import { migration as labourRelationsIndexes } from "./entries/2026-08-09-labour-relations-indexes";
+import { migration as indexListingPetitionIndexes } from "./entries/2026-08-10-index-listing-petition-indexes";
+import { migration as indexFundPhaseIndexes } from "./entries/2026-08-10-index-fund-phase-indexes";
+import { migration as pensionSchemeIndexes } from "./entries/2026-08-10-pension-scheme-indexes";
+import { migration as adoptOnePartyConfidenceModel } from "./entries/2026-08-10-adopt-one-party-confidence-model";
 import { migration as smoothLegacyBuildOrders } from "./entries/2026-08-10-smooth-legacy-build-orders";
+import { migration as pensionSchemeFundPositions } from "./entries/2026-08-11-pension-scheme-fund-positions";
+import { migration as ratificationBallotIndexes } from "./entries/2026-08-11-ratification-ballot-indexes";
 import { migration as dropDeadPartyAxes } from "./entries/2026-08-11-drop-dead-party-axes";
 import { migration as heal1953SeedBalance } from "./entries/2026-08-09-heal-1953-seed-balance";
 import { migration as reconcileCommandEconomyUnowned } from "./entries/2026-08-09-reconcile-command-economy-unowned";
@@ -75,6 +82,14 @@ export const MIGRATIONS: Migration[] = [
   // reconciliation gameState has had via missingGameStateFlagDefaults, plus a
   // narrow raise for a market tier nobody chose on a world with no economy yet.
   adoptReferenceGameConfigGates,
+  // Release 1.1 industrial relations: campaign uniqueness and agreement reads.
+  labourRelationsIndexes,
+  indexListingPetitionIndexes,
+  indexFundPhaseIndexes,
+  pensionSchemeIndexes,
+  // Release 1.1 DDR parity: the promoted runtime field a seeded world can't
+  // pick up from a config change alone.
+  adoptOnePartyConfidenceModel,
   // Repairs the active 1953 world as well as future resets: four-country
   // registration pools plus era-relative sovereign debt pricing.
   heal1953SeedBalance,
@@ -86,6 +101,8 @@ export const MIGRATIONS: Migration[] = [
   // so full ordered capacity is delivered over the remaining window (flipping
   // `smooth` alone would drop the already-elapsed, already-paid fraction).
   smoothLegacyBuildOrders,
+  pensionSchemeFundPositions,
+  ratificationBallotIndexes,
   // Ticket #1032 — drop the foreignPolicy / culture party axes. Written by
   // every seed and the shift UI, read by nothing.
   dropDeadPartyAxes,

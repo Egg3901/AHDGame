@@ -106,6 +106,7 @@ export async function processSavingsInterestTurn(
     const accrualOps: { updateOne: { filter: object; update: object } }[] = [];
     for (const char of accrualCharacters) {
       const savings = char.currencyBalances?.savings ?? {};
+      const holders = char.currencyBalances?.savingsHolder ?? {};
       const perCharInc: Record<string, number> = {};
       for (const [code, bal] of Object.entries(savings)) {
         const oldBalance = typeof bal === "number" ? bal : 0;
@@ -114,6 +115,9 @@ export async function processSavingsInterestTurn(
         // Accumulate balance under the currency's country jurisdiction
         const cid = getCountryIdForCurrency(currency) as CountryId;
         nationalSavingsBalance.set(cid, (nationalSavingsBalance.get(cid) ?? 0) + oldBalance);
+        // Bank-held deposits earn from the bank's cash in bankingTurn — do not mint.
+        const holder = holders[currency];
+        if (holder != null && holder !== "centralBank") continue;
         const prime = resolvePrime(currency);
         // Interest accrues on the REAL rate (prime − inflation) and only on up to
         // SAVINGS_POOL_SHARE_CAP of the national pool, so no single account can farm
@@ -177,6 +181,7 @@ export async function processSavingsInterestTurn(
       for (const char of creditCharacters) {
         const pending = char.currencyBalances?.pendingSavingsInterest ?? {};
         const savingsNow = char.currencyBalances?.savings ?? {};
+        const holders = char.currencyBalances?.savingsHolder ?? {};
         const perCharInc: Record<string, number> = {};
         const perCharSet: Record<string, number> = {};
 
@@ -184,6 +189,9 @@ export async function processSavingsInterestTurn(
           const amount = typeof pendingAmt === "number" ? pendingAmt : 0;
           if (amount <= 0) continue;
           const currency = code as CurrencyCode;
+          // Bank-held deposits are paid by bankingTurn; do not flush minted pending.
+          const holder = holders[currency];
+          if (holder != null && holder !== "centralBank") continue;
           totalInterest += amount;
           perCharInc[`currencyBalances.savings.${currency}`] = amount;
           perCharInc[`currencyBalances.interestEarned.${currency}`] = amount;

@@ -133,6 +133,17 @@ export type {
   CeoTenure,
 } from "./corporation";
 export type {
+  BankCharter,
+  BankCharterType,
+  BankCharterStatus,
+  BankCharterHistoryEntry,
+  BankLoan,
+  DepositInsuranceFund,
+  InterbankLoan,
+  PropPosition,
+  SavingsHolder,
+} from "./bank";
+export type {
   IndexFund,
   IndexFundBondAllocation,
   IndexFundHolderKind,
@@ -194,6 +205,7 @@ export {
   MAX_RATE_CUT_DELTA,
   AGGRESSIVE_CUT_SCRUTINY,
   RATE_CHANGE_COOLDOWN_TURNS,
+  RATE_CHANGES_PER_TERM,
   getEffectiveRate,
   getRateScale,
 } from "./centralBank";

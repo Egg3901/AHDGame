@@ -1524,3 +1524,128 @@ describe.skip("processSpeakerVoting — senate leadership election", () => {
     expect(update.$inc.votesFor).toBe(1);
   });
 });
+
+describe("processBillVoting - concurrent (active_both) bills", () => {
+  function spyDb() {
+    const db = makeMockDb();
+    const updateOneCalls: unknown[][] = [];
+    const collectionSpy = vi.fn((name: string) => ({
+      updateOne: vi.fn((...args: unknown[]) => {
+        if (name === "bills") updateOneCalls.push(args);
+        return Promise.resolve({ modifiedCount: 1 });
+      }),
+      bulkWrite: vi.fn(() => Promise.resolve({ upsertedCount: 0, modifiedCount: 0 })),
+      findOne: vi.fn(() => Promise.resolve(null)),
+      find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })),
+    }));
+    (db as unknown as { collection: typeof collectionSpy }).collection = collectionSpy;
+    return { db, updateOneCalls };
+  }
+
+  it("puts BOTH chambers officials in the loop and writes to their own maps", async () => {
+    const houseNpp = makeNPP({ personality: { loyalty: 100, ambition: 50, stubbornness: 0 } });
+    const senateNpp = makeNPP({ personality: { loyalty: 100, ambition: 50, stubbornness: 0 } });
+    const bill = makeBill({
+      status: "active_both",
+      countryId: "US",
+      currentChamber: "house",
+      otherChamberVotes: {},
+    });
+    const { db, updateOneCalls } = spyDb();
+
+    const ctx = makeCtx(db, {
+      activeBills: [bill],
+      nppOfficials: [makeOfficial(houseNpp._id, "house"), makeOfficial(senateNpp._id, "senate")],
+      nppMap: new Map([
+        [houseNpp._id.toString(), houseNpp],
+        [senateNpp._id.toString(), senateNpp],
+      ]),
+      preset: "1953-default",
+    });
+    const { processBillVoting } = await import("./billVoting");
+    await processBillVoting(ctx);
+
+    expect(updateOneCalls.length).toBe(1);
+    const [, update] = updateOneCalls[0] as [unknown, Record<string, unknown>];
+    const setFields = update.$set as Record<string, unknown>;
+    const incFields = update.$inc as Record<string, number>;
+
+    // The discriminating assertion: with a single office type OR a single accumulator,
+    // this is empty and the upper tally stays at zero -- which is what fails every
+    // concurrent bill with no error anywhere.
+    const otherKeys = Object.keys(setFields).filter((k) => k.startsWith("otherChamberVotes."));
+    expect(otherKeys.length).toBe(1);
+    const lowerKeys = Object.keys(setFields).filter((k) => k.startsWith("votes."));
+    expect(lowerKeys.length).toBe(1);
+
+    const otherTotal =
+      (incFields.otherChamberVotesFor ?? 0) +
+      (incFields.otherChamberVotesAgainst ?? 0) +
+      (incFields.otherChamberVotesAbstain ?? 0);
+    const lowerTotal =
+      (incFields.votesFor ?? 0) + (incFields.votesAgainst ?? 0) + (incFields.votesAbstain ?? 0);
+    expect(otherTotal).toBe(1);
+    expect(lowerTotal).toBe(1);
+  });
+
+  it("still excludes an official from another country", async () => {
+    const npp = makeNPP({ countryId: "BR" });
+    const bill = makeBill({ status: "active_both", countryId: "US", currentChamber: "house" });
+    const { db, updateOneCalls } = spyDb();
+
+    const ctx = makeCtx(db, {
+      activeBills: [bill],
+      nppOfficials: [makeOfficial(npp._id, "senate", { countryId: "BR" })],
+      nppMap: new Map([[npp._id.toString(), npp]]),
+      preset: "1953-default",
+    });
+    const { processBillVoting } = await import("./billVoting");
+    await processBillVoting(ctx);
+
+    expect(updateOneCalls.length).toBe(0);
+  });
+
+  it("stops voting in the chamber whose clock ran out while the other is still open", async () => {
+    const houseNpp = makeNPP({ personality: { loyalty: 100, ambition: 50, stubbornness: 0 } });
+    const senateNpp = makeNPP({ personality: { loyalty: 100, ambition: 50, stubbornness: 0 } });
+    // The fetch ORs the two deadlines, so this bill is still polled — and the engine
+    // will not close it until BOTH have run out. In that window the House is shut:
+    // a player is refused there by the vote route, and an NPP must be too.
+    const bill = makeBill({
+      status: "active_both",
+      countryId: "US",
+      currentChamber: "house",
+      votingEndsOnTurn: 5,
+      otherChamberVotingEndsOnTurn: 20,
+      otherChamberVotes: {},
+    });
+    const { db, updateOneCalls } = spyDb();
+
+    const ctx = makeCtx(db, {
+      activeBills: [bill],
+      nppOfficials: [makeOfficial(houseNpp._id, "house"), makeOfficial(senateNpp._id, "senate")],
+      nppMap: new Map([
+        [houseNpp._id.toString(), houseNpp],
+        [senateNpp._id.toString(), senateNpp],
+      ]),
+      currentTurn: 10,
+      preset: "1953-default",
+    });
+    const { processBillVoting } = await import("./billVoting");
+    await processBillVoting(ctx);
+
+    expect(updateOneCalls.length).toBe(1);
+    const [, update] = updateOneCalls[0] as [unknown, Record<string, unknown>];
+    const setFields = update.$set as Record<string, unknown>;
+    const incFields = update.$inc as Record<string, number>;
+
+    // The Senate votes; the House does not.
+    expect(Object.keys(setFields).filter((k) => k.startsWith("otherChamberVotes."))).toHaveLength(
+      1
+    );
+    expect(Object.keys(setFields).filter((k) => k.startsWith("votes."))).toHaveLength(0);
+    expect(incFields.votesFor ?? 0).toBe(0);
+    expect(incFields.votesAgainst ?? 0).toBe(0);
+    expect(incFields.votesAbstain ?? 0).toBe(0);
+  });
+});

@@ -19,7 +19,12 @@
 import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
-import { COUNTRY_CONFIGS, type CountryConfig, type CountryId } from "@/lib/constants/countries";
+import {
+  COUNTRY_CONFIGS,
+  getCountryConfig,
+  type CountryConfig,
+  type CountryId,
+} from "@/lib/constants/countries";
 import type { PurgeEvent } from "@/lib/turn/rulingPartyPriorities";
 
 import { processRulingPartyConfidenceTurn } from "@/lib/turn/rulingPartyConfidenceTurn";
@@ -61,8 +66,7 @@ export async function processOnePartyBillLifecycleForCountry(
   countryId: CountryId,
   now: Date
 ): Promise<{ enacted: number; failed: number }> {
-  const config = COUNTRY_CONFIGS[countryId];
-  if (!config) return { enacted: 0, failed: 0 };
+  if (!COUNTRY_CONFIGS[countryId]) return { enacted: 0, failed: 0 };
   const db = await getDb();
   const runtime = await getCountryState(db, countryId);
   if (runtime.governmentType !== "onePartyState") {
@@ -70,7 +74,12 @@ export async function processOnePartyBillLifecycleForCountry(
   }
   const gameState = await getGameState();
   const currentTurn = gameState?.currentTurn ?? 1;
-  return processCountryBills(db, config, now, currentTurn);
+  // Era-resolved, not the flat table: legislature SHAPE is preset-dependent, and this
+  // config decides `upperKey` — and therefore `originChambers`, which every stage's
+  // expired-filter scopes on.
+  const preset = typeof gameState?.preset === "string" ? gameState.preset : undefined;
+  const config = getCountryConfig(countryId, preset);
+  return processCountryBills(db, config, now, currentTurn, preset);
 }
 
 /**
@@ -94,15 +103,18 @@ export async function processOnePartyBillLifecycle(now: Date): Promise<{
   const onePartyStates = await getCountryStateCollection(db)
     .find({ governmentType: "onePartyState" })
     .toArray();
+  // Era-resolved per country: legislature shape is preset-dependent, and the config
+  // decides `upperKey` and therefore `originChambers`.
+  const preset = typeof gameState?.preset === "string" ? gameState.preset : undefined;
   const onePartyCountries = onePartyStates
-    .map((s) => COUNTRY_CONFIGS[s.countryId])
+    .map((s) => (COUNTRY_CONFIGS[s.countryId] ? getCountryConfig(s.countryId, preset) : undefined))
     .filter((c): c is CountryConfig => !!c);
 
   let totalEnacted = 0;
   let totalFailed = 0;
 
   for (const config of onePartyCountries) {
-    const result = await processCountryBills(db, config, now, currentTurn);
+    const result = await processCountryBills(db, config, now, currentTurn, preset);
     totalEnacted += result.enacted;
     totalFailed += result.failed;
   }
@@ -114,7 +126,8 @@ async function processCountryBills(
   db: Db,
   config: CountryConfig,
   now: Date,
-  currentTurn: number
+  currentTurn: number,
+  preset?: string
 ): Promise<{ enacted: number; failed: number }> {
   const countryId = config.id;
 
@@ -135,7 +148,7 @@ async function processCountryBills(
   // engine returns the enacted categories the regime drifts below consume.
   const engineResult = await runBillLifecycle(
     db,
-    buildOnePartyBillConfig(config),
+    buildOnePartyBillConfig(config, preset),
     now,
     currentTurn
   );

@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 import { isIndexFundsEnabled } from "@/lib/indexFunds/featureFlag";
-import { listFunds } from "@/lib/indexFunds/fundQueries";
+import { listFunds, FUND_POSITION_COLLECTION } from "@/lib/indexFunds/fundQueries";
 import { INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/featureFlag";
 import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
 import { sumFundBondHoldingsValueAnchor } from "@/lib/bonds/fundBondHoldings";
@@ -25,6 +25,21 @@ export async function GET() {
     }
 
     const funds = await listFunds(db);
+
+    // `IndexFund.reserveUnits` is written once at seed and never maintained, so
+    // reading it back reported the seed figure forever even after retirement
+    // releases moved units into the reserve. Derive it from the reserve
+    // positions, which are the thing that actually moves.
+    const reservePositions = await db
+      .collection(FUND_POSITION_COLLECTION)
+      .find(
+        { fundId: { $in: funds.map((f) => f._id) }, holderKind: "fund_reserve" },
+        { projection: { fundId: 1, units: 1 } }
+      )
+      .toArray();
+    const reserveUnitsByFundId = new Map<string, number>(
+      reservePositions.map((p) => [String(p.fundId), Number(p.units) || 0])
+    );
     const exchangeRates = await loadFxRatesRecord(db);
     const fundIds = funds.map((fund) => fund._id);
     const openOrdersEscrowByFundId = await loadOpenOrdersEscrowByFundId(db, fundIds);
@@ -67,7 +82,7 @@ export async function GET() {
           pausedAt: fund.pausedAt ?? null,
           quotedNav: fund.quotedNav,
           unitSupply: fund.unitSupply,
-          reserveUnits: fund.reserveUnits,
+          reserveUnits: reserveUnitsByFundId.get(fundId) ?? 0,
           cashAnchor: fund.cashAnchor,
           holdingsValueAnchor,
           bondPrincipalAnchor,

@@ -234,6 +234,55 @@ describe("POST /api/country/[code]/central-bank/rate", () => {
     expect(res.status).toBe(200);
   });
 
+  it("refuses a chair's direct rate change when a committee is seated", async () => {
+    await setup({
+      bank: makeMockBank({
+        fomcBoard: [{ seatId: "seat-1", isChair: true }, { seatId: "seat-2" }],
+      }),
+    });
+    const { POST } = await import("./route");
+    const { sendMultiCountryGameEvent } = await import("@/lib/discordWebhooks");
+
+    const res = await POST(makeRequest({ rate: 1.75 }), ctx());
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual(
+      expect.objectContaining({ error: expect.stringMatching(/committee vote/i) })
+    );
+    expect(db.collectionMocks.centralBanks.updateOne).not.toHaveBeenCalled();
+    expect(sendMultiCountryGameEvent).not.toHaveBeenCalled();
+  });
+
+  it("lets an admin override a seated committee, spending one of the term's moves", async () => {
+    const adminUser = makeMockUser({
+      isAdmin: true,
+      character: { _id: new ObjectId(), name: "Site Admin" },
+    });
+    await setup({
+      user: adminUser,
+      bank: makeMockBank({ fomcBoard: [{ seatId: "seat-1" }], rateChangesThisTerm: 3 }),
+    });
+    const { POST } = await import("./route");
+
+    const res = await POST(makeRequest({ rate: 1.75 }), ctx());
+
+    expect(res.status).toBe(200);
+    const set = db.collectionMocks.centralBanks.updateOne.mock.calls[0][1].$set;
+    expect(set.primeRate).toBe(1.75);
+    expect(set.rateChangesThisTerm).toBe(4);
+  });
+
+  it("leaves the term counter alone on a bank with no committee", async () => {
+    await setup();
+    const { POST } = await import("./route");
+
+    const res = await POST(makeRequest({ rate: 1.75 }), ctx());
+
+    expect(res.status).toBe(200);
+    const set = db.collectionMocks.centralBanks.updateOne.mock.calls[0][1].$set;
+    expect(set.rateChangesThisTerm).toBeUndefined();
+  });
+
   it("rejects chair rate changes while on the 6-turn cooldown", async () => {
     await setup({ bank: makeMockBank({ primeRate: 2.0, lastRateChangeTurn: 97 }) });
     const { POST } = await import("./route");

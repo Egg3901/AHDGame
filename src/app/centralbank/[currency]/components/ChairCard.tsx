@@ -1,4 +1,9 @@
 import Link from "next/link";
+import {
+  RESOLVE_SCRUTINY_RELIEF,
+  RESOLVE_TURNS_REQUIRED,
+  turnsUntilResolveRelief,
+} from "@/lib/centralBank/credibility";
 import { Avatar } from "@/components/Avatar";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import type { ChairData } from "./centralBankTypes";
@@ -8,6 +13,7 @@ export function ChairCard({
   chair,
   chairAppointedAt,
   chairInfamy,
+  resolveStreak,
   chairTermExpiresAtTurn,
   currentTurn,
   currentInflation,
@@ -34,8 +40,13 @@ export function ChairCard({
     acceptanceTurnsRemaining?: number | null;
   } | null;
   chairMode?: "character" | "npp";
+  /** Consecutive turns the corridor stance has been held. */
+  resolveStreak?: number;
 }) {
   const infamy = chairInfamy ?? 0;
+  const streak = resolveStreak ?? 0;
+  const stanceHeld = streak > 0;
+  const resolveTurnsRemaining = turnsUntilResolveRelief(streak);
   const inflation = currentInflation ?? 0;
   const inflDelta = (inflation - targetInflation) * 0.5;
   const growthDelta = (2.0 - latestGdp) * 0.5;
@@ -211,7 +222,7 @@ export function ChairCard({
               </p>
               <p className="text-muted mt-1.5">
                 Above 25, office benefits (actions &amp; national influence) are halved. Recovery
-                becomes harder at high levels — positive effects are dampened.
+                becomes harder at high levels - positive effects are dampened.
               </p>
               <p className="text-muted mt-1.5">
                 The trend shown below is the macro trend from inflation, growth, and natural decay.
@@ -238,6 +249,34 @@ export function ChairCard({
               Macro {netChange > 0 ? "+" : ""}
               {netChange.toFixed(2)}/turn
             </span>
+          </div>
+
+          {/* The recovery path has to be visible: a hidden escape hatch is no
+              escape hatch. Holding the stance the corridor calls for pays down
+              scrutiny whether or not inflation has responded yet. */}
+          <div className="mt-2 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[11px] leading-snug text-muted">
+            {resolveTurnsRemaining === 0 ? (
+              <>
+                Credibility restored this turn:{" "}
+                <span className="font-semibold text-success">-{RESOLVE_SCRUTINY_RELIEF}</span>{" "}
+                scrutiny for holding the stance the corridor called for.
+              </>
+            ) : stanceHeld ? (
+              <>
+                Hold this stance for{" "}
+                <span className="font-semibold text-foreground">{resolveTurnsRemaining}</span> more
+                turn{resolveTurnsRemaining === 1 ? "" : "s"} to cut{" "}
+                <span className="font-semibold">{RESOLVE_SCRUTINY_RELIEF}</span> scrutiny, whether
+                or not inflation has responded yet.
+              </>
+            ) : (
+              <>
+                Match the rate corridor and hold it for{" "}
+                <span className="font-semibold text-foreground">{RESOLVE_TURNS_REQUIRED}</span>{" "}
+                turns to cut <span className="font-semibold">{RESOLVE_SCRUTINY_RELIEF}</span>{" "}
+                scrutiny. Resolve counts even before the numbers turn.
+              </>
+            )}
           </div>
         </div>
       )}

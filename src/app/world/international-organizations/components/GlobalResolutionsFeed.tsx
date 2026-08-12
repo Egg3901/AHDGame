@@ -2,13 +2,20 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import type { OrganizationResolutionType } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary } from "../orgTypes";
 import { orgHref } from "../orgRouting";
 import { buildResolutionFeed } from "./resolutionFeed";
 
 const PAGE_SIZE = 10;
 
-const TYPE_LABEL: Record<string, string> = {
+/**
+ * Keyed by `OrganizationResolutionType`, not `string`: a missing entry falls
+ * through to the raw enum value below, so a new resolution type would otherwise
+ * ship into the feed reading "join_conflict" with nothing failing. Typed this way
+ * it does not compile until the label exists.
+ */
+const TYPE_LABEL: Record<OrganizationResolutionType, string> = {
   free_trade_agreement: "Free-trade agreement",
   sanctions: "Sanctions",
   directive: "Directive",
@@ -17,6 +24,7 @@ const TYPE_LABEL: Record<string, string> = {
   set_dues: "Dues change",
   set_posture: "Alert posture",
   fund_agency: "Agency funding",
+  join_conflict: "Entry into a conflict",
 };
 
 /** Cross-org activity feed: pending votes + active resolutions across every org. */

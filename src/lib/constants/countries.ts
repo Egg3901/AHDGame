@@ -5140,7 +5140,27 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
 
     majorPartyIds: ["sed"],
     partyCreationNPPs: { statesRequired: 1, lockHomeState: true, nppsPerState: 2 },
+    partyRoleLabels: {
+      chair: "General Secretary",
+      viceChair: "Second Secretary",
+      committee: "Politburo",
+    },
     demographicProfileId: "dd_archetypes",
+    // One-party regime stack, at RU/CN parity. Without these the DDR seeds as a
+    // one-party state whose leader faces no internal-confidence pressure: the
+    // drift kernel needs `priorityProfile`, Stage 3 needs `factionDefectionName`,
+    // and both the nationalization consequence branches and the executive hub's
+    // confidence panel gate on `hasLeaderConfidenceModel`.
+    hasLeaderConfidenceModel: true,
+    priorityProfile: DEFAULT_CN_PRIORITY_PROFILE,
+    policyAxisEffects: DEFAULT_POLICY_AXIS_EFFECTS,
+    factionDefectionName: "Reform Wing of the SED",
+    legacyReservationDefault: 20,
+    electionDelayDefault: 24,
+    mapOverlay: "partyOrg",
+    // `collapseTargetAllowlist` is deliberately unset: the convention path falls
+    // back to [collapseTargetSystem], and the DDR's only collapse target is the
+    // parliamentary republic (reunification), not RU's wider presidential option.
 
     centralBank: {
       name: "Staatsbank der DDR",
@@ -6461,11 +6481,18 @@ export const SINGLE_WINNER_EXECUTIVE_ELECTION_TYPES: ReadonlySet<string> = new S
  *   redistricting system is enabled, so legacy worlds keep the single nominee.
  *
  * Otherwise it equals {@link getPrimaryWinnersForCountry}.
+ *
+ * `redistrictingEnabled` is REQUIRED and deliberately has no default. It used to
+ * default to `false`, which silently gave every caller that forgot it the legacy
+ * single-nominee cap: the turn resolver advanced three US House nominees per
+ * party while every display surface showed one (ticket-1041). Read it from the
+ * world's gameState via `isRedistrictingEnabled(gameState)`; pass a literal
+ * `false` only where no gameState exists and the legacy cap is genuinely wanted.
  */
 export function getPrimaryWinnersForElection(
   countryId: CountryId,
   electionType: string,
-  redistrictingEnabled = false
+  redistrictingEnabled: boolean
 ): number {
   if (SINGLE_WINNER_EXECUTIVE_ELECTION_TYPES.has(electionType)) {
     return 1;

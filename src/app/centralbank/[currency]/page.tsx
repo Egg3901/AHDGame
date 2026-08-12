@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const bankName = resolved.config.centralBank.name;
   return {
     title: `${bankName} | A House Divided`,
-    description: `${bankName} — prime rate, credit rating scale, and monetary policy.`,
+    description: `${bankName} - prime rate, credit rating scale, and monetary policy.`,
   };
 }
 

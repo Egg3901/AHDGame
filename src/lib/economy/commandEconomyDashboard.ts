@@ -12,7 +12,7 @@ import {
   NPP_DEFAULT_REFORMISM,
 } from "@/lib/constants/commandEconomy";
 import { blackMarketPressure } from "@/lib/economy/commandEconomyState";
-import { aggregatePlanFulfillment, planFulfillment } from "@/lib/economy/soe";
+import { aggregateCapacityUtilisation, planFulfillment } from "@/lib/economy/soe";
 
 export type CommandEconomyRegime = "command" | "dual-track";
 
@@ -46,7 +46,11 @@ export interface SoeView {
 export interface MarketizationDrivers {
   /** 0..1 — shortage / shadow premium / grey-market pressure toward the market. */
   blackMarketPressure: number;
-  /** Aggregate SOE plan fulfillment (1.0 = on plan). */
+  /**
+   * Aggregate SOE CAPACITY UTILISATION (1.0 = running the plant flat out), the
+   * quantity the engine actually feeds `marketizationDrift`. Deliberately not
+   * plan fulfillment, whose denominator the Gosplan chair sets.
+   */
   soePerformance: number;
   /** -1 (orthodox, entrench) .. +1 (reformist, marketize) policy stance. */
   policyStance: number;
@@ -110,7 +114,11 @@ export interface CommandEconomyDashboard {
   marketizationLevel: number;
   drivers: MarketizationDrivers;
   soes: SoeView[];
-  /** Aggregate plan fulfillment across all SOEs (mirror of drivers.soePerformance). */
+  /**
+   * Aggregate plan fulfillment across all SOEs: the directors' collective grade
+   * against the quotas Gosplan set. No longer a mirror of
+   * `drivers.soePerformance`, which is capacity utilisation.
+   */
   aggregateFulfillment: number;
   gosbank: GosbankStanceView;
   repression: RepressionView;
@@ -229,7 +237,7 @@ export function computeMarketizationDrivers(inputs: {
   shortageIndex: number | null;
   blackMarketPremium: number | null;
   secondEconomyShare: number | null;
-  soes: ReadonlyArray<{ output: number; planTarget: number }>;
+  soes: ReadonlyArray<{ output: number; capacity: number }>;
   creditAggressiveness: number;
   budgetSoftness: number;
   reformism?: number;
@@ -239,7 +247,10 @@ export function computeMarketizationDrivers(inputs: {
     num(inputs.blackMarketPremium),
     num(inputs.secondEconomyShare)
   );
-  const soePerformance = aggregatePlanFulfillment(inputs.soes);
+  // Capacity utilisation, matching what `commandEconomyTurn` actually feeds the
+  // drift. The dashboard mirrors the ENGINE'S driver, not the director's grade,
+  // so the gauge cannot disagree with the dial it is explaining.
+  const soePerformance = aggregateCapacityUtilisation(inputs.soes);
   const policyStance = computePolicyStance(
     typeof inputs.reformism === "number" ? inputs.reformism : NPP_DEFAULT_REFORMISM,
     inputs.creditAggressiveness,

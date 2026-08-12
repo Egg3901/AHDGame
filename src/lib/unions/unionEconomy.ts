@@ -7,18 +7,34 @@
  * completely unchanged ("conversion not reinvention," per the design doc).
  */
 
-import type { Union } from "@/lib/db/types";
+import type { CorporateSector, Union } from "@/lib/db/types";
 
-/** Personal-funds cost (₳-anchor) of one pre-leadership organize drive. */
-export const ORGANIZE_PERSONAL_COST = 25_000;
+/** Action points one organize drive costs the character who runs it. */
+export const ORGANIZE_ACTION_COST = 5;
+/** Union strength one organize drive adds, both to the union pool and to the organizer's own banked total. */
+export const ORGANIZE_STRENGTH_GAIN = 10;
+/** Union strength required before organizers can vote for a president. */
+export const LEADERSHIP_ELECTION_MIN_STRENGTH = 100;
+/**
+ * Fraction of union strength lost every turn, applied to the union pool AND to
+ * each organizer's banked strength. Organizing is a treadmill: a union that
+ * stops recruiting bleeds power, and an organizer who stops showing up loses
+ * their say over who runs it.
+ */
+export const UNION_STRENGTH_DECAY_PER_TURN = 0.005;
+
+/** Strength as stored, treating a missing field on pre-existing documents as zero. */
+export function unionStrength(union: Pick<Union, "strength">): number {
+  const s = union.strength;
+  return typeof s === "number" && Number.isFinite(s) && s > 0 ? s : 0;
+}
+
 /** Membership pressure required before organizers can vote for a president. */
 export const LEADERSHIP_ELECTION_MIN_PRESSURE = 25;
 
 /** True when an unowned union has been organized enough to open a leadership vote. */
-export function isUnionLeadershipElectionOpen(
-  union: Pick<Union, "ownerId" | "membershipPressure">
-): boolean {
-  return union.ownerId == null && union.membershipPressure >= LEADERSHIP_ELECTION_MIN_PRESSURE;
+export function isUnionLeadershipElectionOpen(union: Pick<Union, "ownerId" | "strength">): boolean {
+  return union.ownerId == null && unionStrength(union) >= LEADERSHIP_ELECTION_MIN_STRENGTH;
 }
 
 /** Treasury cost of one recruitment-drive action. */
@@ -87,4 +103,71 @@ export const UNION_STRIKE_CALL_COOLDOWN_TURNS = 8;
 /** Total treasury cost to force-call a strike across `sectorCount` matched sectors. */
 export function strikeCallCost(sectorCount: number): number {
   return Math.max(0, Math.round(sectorCount)) * STRIKE_CALL_COST_PER_SECTOR;
+}
+
+export type UnionStrikeSector = Pick<
+  CorporateSector,
+  "_id" | "unionization" | "strikeStartedAtTurn" | "strikeCooldownUntilTurn"
+>;
+
+export type UnionStrikeBlockReason =
+  "underorganized" | "already_striking" | "sector_cooldown" | "collective_agreement";
+
+/**
+ * Explain why one local cannot join a union-called strike this turn.
+ * Returning a reason instead of a boolean lets the command and every UI use
+ * the same rules without separately reconstructing them.
+ */
+export function unionStrikeBlockReason(
+  sector: UnionStrikeSector,
+  currentTurn: number,
+  noStrikeProtectedSectorIds: ReadonlySet<string> = new Set()
+): UnionStrikeBlockReason | null {
+  if (noStrikeProtectedSectorIds.has(sector._id.toString())) return "collective_agreement";
+  if ((sector.unionization ?? 0) < STRIKE_CALL_MIN_UNIONIZATION) return "underorganized";
+  if (sector.strikeStartedAtTurn != null) return "already_striking";
+  if (sector.strikeCooldownUntilTurn != null && sector.strikeCooldownUntilTurn > currentTurn) {
+    return "sector_cooldown";
+  }
+  return null;
+}
+
+export interface UnionStrikePreview<T extends UnionStrikeSector = UnionStrikeSector> {
+  eligibleSectors: T[];
+  cost: number;
+  unionCooldownTurnsRemaining: number;
+  blocked: Record<UnionStrikeBlockReason, number>;
+}
+
+/** Server-authoritative strike preview shared by the dashboard and command. */
+export function buildUnionStrikePreview<T extends UnionStrikeSector>(
+  union: Pick<Union, "lastCalledStrikeTurn">,
+  sectors: T[],
+  currentTurn: number,
+  noStrikeProtectedSectorIds: ReadonlySet<string> = new Set()
+): UnionStrikePreview<T> {
+  const blocked: UnionStrikePreview<T>["blocked"] = {
+    underorganized: 0,
+    already_striking: 0,
+    sector_cooldown: 0,
+    collective_agreement: 0,
+  };
+  const eligibleSectors: T[] = [];
+  for (const sector of sectors) {
+    const reason = unionStrikeBlockReason(sector, currentTurn, noStrikeProtectedSectorIds);
+    if (reason) blocked[reason]++;
+    else eligibleSectors.push(sector);
+  }
+
+  const availableTurn =
+    union.lastCalledStrikeTurn == null
+      ? currentTurn
+      : union.lastCalledStrikeTurn + UNION_STRIKE_CALL_COOLDOWN_TURNS;
+
+  return {
+    eligibleSectors,
+    cost: strikeCallCost(eligibleSectors.length),
+    unionCooldownTurnsRemaining: Math.max(0, availableTurn - currentTurn),
+    blocked,
+  };
 }

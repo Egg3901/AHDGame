@@ -1,4 +1,5 @@
-import type { CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { getNationalIdentity, type NationalIdentity } from "@/lib/constants/nationalIdentity";
 
 /**
@@ -521,7 +522,28 @@ const BANK_IDENTITY: Record<string, InstitutionIdentity> = {
   ),
 };
 
-/** Identity for a bank id from `getBankId(countryId)`; unknown ids fall back to the Fed. */
+/**
+ * Identity for a bank id from `getBankId(countryId)`.
+ *
+ * `BANK_TEXT` only hand-authors the banks with a non-obvious masthead (native
+ * script, shared institution, historical glyph). Every other country composes
+ * its identity from `COUNTRY_CONFIGS[bankId].centralBank.name` and its own
+ * currency symbol, so a bank without a hand-authored entry still shows its own
+ * name. Falling back to the Fed made every eastern-bloc and European bank read
+ * "The Federal Reserve".
+ */
+function composeFromConfig(bankId: string): InstitutionIdentity | null {
+  const config = COUNTRY_CONFIGS[bankId as CountryId];
+  if (!config) return null;
+  const currency = COUNTRY_CURRENCY_MAP[bankId as CountryId];
+  return composeFromNational(bankId as CountryId, {
+    glyph: (currency && CURRENCY_SYMBOLS[currency]) || "§",
+    serif: "mono",
+    registry: `Monetary Authority · ${config.name}`,
+    title: config.centralBank.name,
+  });
+}
+
 export function getBankIdentity(bankId: string): InstitutionIdentity {
-  return BANK_IDENTITY[bankId] ?? BANK_IDENTITY.US;
+  return BANK_IDENTITY[bankId] ?? composeFromConfig(bankId) ?? BANK_IDENTITY.US;
 }

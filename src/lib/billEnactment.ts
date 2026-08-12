@@ -54,6 +54,7 @@ import type {
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { seedFomcBoards } from "@/lib/centralBank/seedFomcBoard";
+import { scrutinyAfterRevocation } from "@/lib/centralBank/independence";
 import { createSystemNewsPost } from "@/lib/news";
 import { recordPolicyReaction } from "@/lib/policyReactions";
 import { validateFederalBudgetImpact } from "@/lib/budget/validation";
@@ -79,6 +80,11 @@ import { energyActionLimits } from "@/lib/stats/statDrift";
 import { STAT_MIN } from "@/lib/stats/statsConstants";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { applyInternationalWithdrawalMeasure } from "@/lib/internationalOrganizations/withdrawalBills";
+import {
+  applySeparationBill,
+  isBankingSeparationLegislationType,
+  separationPolicyFromOptionId,
+} from "@/lib/banking/separationBill";
 
 type EnactableBill = Pick<
   Bill | StateBill,
@@ -269,12 +275,32 @@ export async function applyCentralBankIndependenceProvision(
   currentTurn: number
 ): Promise<void> {
   const governmentControlled = provision.action === "revoke";
-  await db
-    .collection<CentralBank>("centralBanks")
-    .updateOne(
-      { _id: getBankId(countryId) },
-      { $set: { governmentControlled, updatedAt: new Date() } }
-    );
+  const banks = db.collection<CentralBank>("centralBanks");
+  const bankId = getBankId(countryId);
+
+  // B5: revoking independence costs the INSTITUTION credibility. Taking the
+  // bank by statute was previously free — the government got a bank that does
+  // what it says at no cost to what that bank's word is worth, which is the
+  // one thing that should have moved. Granting independence deliberately
+  // refunds nothing: if it did, grant-revoke cycling would launder scrutiny.
+  let revocationScrutiny: number | undefined;
+  if (governmentControlled) {
+    const bank = await banks.findOne({ _id: bankId }, { projection: { chairInfamy: 1 } });
+    if (bank) revocationScrutiny = scrutinyAfterRevocation(bank);
+  }
+
+  await banks.updateOne(
+    { _id: bankId },
+    {
+      $set: {
+        governmentControlled,
+        ...(revocationScrutiny !== undefined
+          ? { chairInfamy: revocationScrutiny, resolveStreak: 0 }
+          : {}),
+        updatedAt: new Date(),
+      },
+    }
+  );
 
   if (provision.action === "grant") {
     // Idempotent: only banks without a board (and not government-controlled,
@@ -286,7 +312,7 @@ export async function applyCentralBankIndependenceProvision(
   const newsContent =
     provision.action === "grant"
       ? `The ${bankName} has been granted operational independence: rate-setting passes from the government to the bank and its new policy committee.`
-      : `The ${bankName}'s operational independence has been revoked by law: rate-setting returns to the government.`;
+      : `The ${bankName}'s operational independence has been revoked by law: rate-setting returns to the government, and markets have marked down what the bank's word is worth.`;
   await createSystemNewsPost(newsContent, "legislation").catch(() => {});
 }
 
@@ -761,6 +787,20 @@ async function processProvisionEnactment(
   // statePolicies record above stores the rate-encoded option id for readback).
   if (lt?.taxSlider && provision.proposedRate !== undefined) {
     await applyTaxRateChange(db, lt, provision.proposedRate, stateId);
+  }
+
+  // Banking separation: write bankingLaws.<countryId>.separation (reusable law).
+  if (isBankingSeparationLegislationType(provision.legislationTypeId) && countryId) {
+    const separation = separationPolicyFromOptionId(policyOption?.id ?? provision.policyOptionId);
+    if (separation) {
+      await applySeparationBill(
+        db,
+        countryId as CountryId,
+        separation,
+        billId.toString(),
+        currentTurn
+      );
+    }
   }
 
   // Calculate and apply archetype approval impacts based on policy shift

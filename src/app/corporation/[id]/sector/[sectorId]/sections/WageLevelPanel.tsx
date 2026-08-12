@@ -84,8 +84,8 @@ export default function WageLevelPanel({
         )}
       </div>
       {sector.unionWageDemand != null && (
-        <div className="mb-4 rounded-lg border border-dashed border-purple-500/35 bg-purple-500/5 p-3 text-xs">
-          <span className="font-medium text-purple-300">
+        <div className="mb-4 rounded-lg border border-dashed border-info/30 bg-info/10 p-3 text-xs">
+          <span className="font-medium text-info">
             {sector.unionId ? (
               <Link href={`/unions/${sector.unionId}`} className="hover:underline">
                 A union is demanding a {sector.unionWageDemand.toFixed(2)}× wage level
@@ -97,7 +97,7 @@ export default function WageLevelPanel({
           <span className="text-muted">
             for this industry
             {activeLevel < sector.unionWageDemand
-              ? ". Your current wage does not meet it, which keeps strike pressure elevated."
+              ? ". Your wage here does not meet it. The claim binds nothing on its own, but it is what the union will bring to the table if it opens a campaign against you."
               : "."}
           </span>
         </div>

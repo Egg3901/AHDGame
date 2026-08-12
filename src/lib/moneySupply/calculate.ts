@@ -12,6 +12,15 @@ export interface MoneySupplyComponents {
   householdSavings: number;
   /** Deposits belonging to the simulated population/businesses outside player documents. */
   externalBroadMoney: number;
+  /**
+   * Deposits sitting on chartered private-bank books.
+   *
+   * Capturing an NPC deposit debits `externalBroadMoney` and credits the bank's
+   * book. Counting only the first leg made measured M2 shrink as private banking
+   * grew, which reads as monetary tightening that never happened and can trip
+   * the NPP policy engine into a QT it should not want.
+   */
+  bankDeposits: number;
   /** A bank asset/capacity measure. Reported separately; never double-counted in M1/M2. */
   bankReserves: number;
   creditOutstanding: number;
@@ -44,7 +53,7 @@ export function calculateMoneyAggregates(input: MoneySupplyComponents): MoneyAgg
   return {
     ...normalized,
     m1,
-    m2: m1 + normalized.householdSavings + normalized.externalBroadMoney,
+    m2: m1 + normalized.householdSavings + normalized.externalBroadMoney + normalized.bankDeposits,
   };
 }
 

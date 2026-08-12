@@ -1,16 +1,17 @@
 import { describe, it, expect } from "vitest";
 import {
-  planFulfillment,
-  aggregatePlanFulfillment,
-  makeSeedSoeState,
-  SOE_PERF_BASELINE,
+  CAPACITY_PER_CREDIT,
   MAX_PLAN_FULFILLMENT,
-  directedCreditBudget,
+  SOE_PERF_BASELINE,
+  aggregateCapacityUtilisation,
+  aggregatePlanFulfillment,
   allocateDirectedCredit,
   applyDirectedCreditToSoe,
+  directedCreditBudget,
   directedCreditIssuance,
+  makeSeedSoeState,
+  planFulfillment,
   resolveCreditAllocation,
-  CAPACITY_PER_CREDIT,
 } from "./soe";
 import type { CorporationType } from "@/lib/constants/corporations";
 
@@ -186,5 +187,48 @@ describe("resolveCreditAllocation (P2 Gosbank / director levers)", () => {
     expect(sum).toBeCloseTo(300, 3);
     const none = resolveCreditAllocation(soes, 0, null);
     expect([...none.values()].every((v) => v === 0)).toBe(true);
+  });
+});
+
+describe("aggregateCapacityUtilisation (the drift driver)", () => {
+  it("scores output against capacity, not against the planner's own target", () => {
+    // Same physical performance, wildly different self-set plans.
+    const soes = [{ output: 50, capacity: 100 }];
+    expect(aggregateCapacityUtilisation(soes)).toBeCloseTo(0.5, 6);
+
+    // A planner who sets a trivial target reports a perfect plan...
+    expect(aggregatePlanFulfillment([{ output: 50, planTarget: 1 }])).toBe(MAX_PLAN_FULFILLMENT);
+    // ...but utilisation is unmoved, because they cannot write `capacity`.
+    expect(aggregateCapacityUtilisation(soes)).toBeCloseTo(0.5, 6);
+  });
+
+  it("is immune to the denominator-gaming that plan fulfillment allowed", () => {
+    const honest = [{ output: 80, capacity: 100 }];
+    const gamed = [{ output: 80, capacity: 100 }];
+    // The exploit was writing planTarget; capacity is untouched by it, so both
+    // read identically no matter what the planner declared.
+    expect(aggregateCapacityUtilisation(gamed)).toBe(aggregateCapacityUtilisation(honest));
+  });
+
+  it("treats zero / non-finite capacity as no information", () => {
+    expect(aggregateCapacityUtilisation([{ output: 10, capacity: 0 }])).toBe(SOE_PERF_BASELINE);
+    expect(
+      aggregateCapacityUtilisation([{ output: 10, capacity: Number.NaN }])
+    ).toBe(SOE_PERF_BASELINE);
+    expect(aggregateCapacityUtilisation([])).toBe(SOE_PERF_BASELINE);
+  });
+
+  it("clamps a runaway overshoot like plan fulfillment does", () => {
+    expect(aggregateCapacityUtilisation([{ output: 10_000, capacity: 1 }])).toBe(
+      MAX_PLAN_FULFILLMENT
+    );
+  });
+
+  it("means across enterprises", () => {
+    const mean = aggregateCapacityUtilisation([
+      { output: 100, capacity: 100 },
+      { output: 0, capacity: 100 },
+    ]);
+    expect(mean).toBeCloseTo(0.5, 6);
   });
 });

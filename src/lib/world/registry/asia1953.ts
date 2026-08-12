@@ -361,6 +361,7 @@ export function asia1953Entries(presetId: string): WorldEntityManifestEntry[] {
       un: unIneligible(1967),
       lifecycle: { earliestYear: 1963, expectedYear: 1967, latestYear: 1972 },
       notes: "South Arabia → South Yemen path on #3727.",
+      mapFeatureIds: ["ADN"],
     }),
     tier3Entry(presetId, {
       entityId: "KW",
@@ -426,6 +427,10 @@ export function asia1953Entries(presetId: string): WorldEntityManifestEntry[] {
         "Former Mandate territory; West Bank under Jordanian admin, Gaza under Egyptian admin in 1953."
       ),
       un: unIneligible(),
+      // Natural Earth carries Palestine as its own feature (the West Bank and Gaza),
+      // which is the 1953 territory: Jordanian- and Egyptian-administered then, the
+      // same two areas now.
+      mapFeatureIds: ["275"],
       notes: "No single sovereign parent; exceptional disputed/post-Mandate record.",
     }),
   ];

@@ -438,7 +438,14 @@ describe("processCentralBankChairSelection", () => {
       expect(setFields.chairSelectionPending).toBeDefined();
       expect(setFields.chairCharacterId).toBeNull();
       expect(setFields.chairTermExpiresAtTurn).toBeNull();
-      expect(setFields.chairInfamy).toBe(0);
+      // Scrutiny is institutional and survives the chair: the vacancy decays it
+      // multiplicatively rather than zeroing it, so churning chairs cannot be
+      // used to erase a bad record.
+      expect(setFields.chairInfamy).toBeUndefined();
+      expect(setFields.resolveStreak).toBe(0);
+      const mulFields = (updateCall[1] as Record<string, Record<string, unknown>>).$mul;
+      expect(mulFields.chairInfamy).toBeGreaterThan(0);
+      expect(mulFields.chairInfamy).toBeLessThan(1);
       expect(setFields.nominations).toBeUndefined();
     }
   });

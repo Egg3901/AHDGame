@@ -39,7 +39,7 @@ export interface PartyData {
   chair: PartyLeader | null;
   viceChair: PartyLeader | null;
   treasurer: PartyLeader | null;
-  /** Up to 3 chair-assigned campaigners. May be empty. */
+  /** Up to 3 committee-confirmed campaigners. May be empty. */
   campaigners: PartyLeader[];
   committeeIds: string[];
   treasury: number;
@@ -317,7 +317,8 @@ export interface ProposalView {
     | "electionMethod"
     | "electionDuration"
     | "removeOfficeHolder"
-    | "transactionApprovalMode";
+    | "transactionApprovalMode"
+    | "campaignerAppointment";
   status: "open" | "passed" | "rejected" | "expired";
   proposedBy: string;
   proposedByName: string;
@@ -335,10 +336,11 @@ export interface ProposalView {
   electionMethod?: { method: "party" | "committee" | "influence" };
   electionDuration?: { durationTurns: number };
   removeOfficeHolder?: {
-    role: "chair" | "viceChair" | "committeeMember";
+    role: "chair" | "viceChair" | "committeeMember" | "campaigner";
     targetCharacterId: string;
     targetCharacterName: string;
   };
+  campaignerAppointment?: { targetCharacterId: string; targetCharacterName: string };
   transactionApprovalMode?: { mode: "single" | "double" };
 
   proposingVoteSummary: ProposalVoteSummary;

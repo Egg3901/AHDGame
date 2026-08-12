@@ -30,7 +30,9 @@ import {
   type PlantsBudgetContext,
 } from "./publicEnterpriseRevenue";
 import { calculateFederalSpending } from "./spending";
-import { getEraContext } from "@/lib/era/context";
+import { getEraContext, type EraContext } from "@/lib/era/context";
+import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 
 /**
  * Spec B revenue ceiling (flag-on only). A Laffer soft-cap: tax take above ~40%
@@ -207,7 +209,10 @@ export async function calculateFederalRevenue(
   // Plants-tier market context, hoisted by refreshNationalBudgetRevenue so the
   // market-mode + governor-ramp reads happen ONCE per turn rather than once per
   // country. Omitted ⇒ publicEnterpriseRevenue resolves it itself.
-  plantsContext?: PlantsBudgetContext
+  plantsContext?: PlantsBudgetContext,
+  // Era context and FX map, hoisted the same way. Omitted ⇒ resolved inline.
+  hoistedEraContext?: EraContext,
+  hoistedFxByCurrency?: ReadonlyMap<CurrencyCode, number>
 ): Promise<FederalBudget["revenue"]> {
   const normalizedTaxRates = normalizeFederalTaxRates(taxRates) ?? {
     incomeTax: 0,
@@ -233,7 +238,7 @@ export async function calculateFederalRevenue(
   // Defensive: a mock db without a gameState collection ⇒ flag off (legacy).
   let eraYear: number | null = null;
   try {
-    eraYear = (await getEraContext(db)).year;
+    eraYear = (hoistedEraContext ?? (await getEraContext(db))).year;
   } catch {
     eraYear = null;
   }
@@ -302,7 +307,8 @@ export async function calculateFederalRevenue(
   const publicEnterpriseRevenue = await calculateCountryOwnedBudgetRevenue(
     db,
     budgetCountryId,
-    plantsContext
+    plantsContext,
+    hoistedFxByCurrency
   );
   const healthcareIncome =
     publicEnterpriseRevenue.healthcareIncome ?? federalBudget?.revenue?.healthcareIncome ?? 0;
@@ -394,9 +400,14 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
   // bulkWrite. The redundant per-budget findOne inside calculateFederalRevenue
   // is also skipped by passing the budget we already hold.
   const now = new Date();
-  // One read for the whole pass: the market mode and governor ramp cannot change
-  // mid-pass, and the per-country path would otherwise re-read them per budget.
-  const plantsContext = await loadPlantsBudgetContext(db);
+  // One read each for the whole pass: the market mode / governor ramp, era
+  // clock, and FX table cannot change mid-pass, and the per-country path would
+  // otherwise re-read them per budget.
+  const [plantsContext, eraContext, fxByCurrency] = await Promise.all([
+    loadPlantsBudgetContext(db),
+    getEraContext(db).catch(() => null),
+    loadFxRatesByCurrency(db),
+  ]);
   const results = await Promise.all(
     budgets.map(async (budget) => {
       // Skip budgets missing taxRates (e.g. incompletely seeded countries) —
@@ -407,13 +418,16 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
         budget.taxRates,
         budget._id,
         budget,
-        plantsContext
+        plantsContext,
+        eraContext ?? undefined,
+        fxByCurrency
       );
       // Recalculate spending to include current enacted laws and debt interest
       const spending = await calculateFederalSpending(
         db,
         { ...budget, revenue },
-        budget.debt.principal * budget.debt.interestRate
+        budget.debt.principal * budget.debt.interestRate,
+        eraContext ?? undefined
       );
       const surplus = revenue.total - spending.total;
       return {

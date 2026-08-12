@@ -23,6 +23,28 @@ describe("turn phase registry", () => {
     ]);
   });
 
+  it("runs npcBankPolicyTurn immediately before bankingTurn", () => {
+    const phaseIndex = new Map(TURN_PHASE_NAMES.map((name, index) => [name, index]));
+    expect(phaseIndex.get("npcBankPolicyTurn"), "npcBankPolicyTurn must be registered").not.toBe(
+      undefined
+    );
+    expect(phaseIndex.get("npcBankPolicyTurn")).toBe(
+      (phaseIndex.get("savingsInterestTurn") ?? -1) + 1
+    );
+    expect(phaseIndex.get("bankingTurn"), "bankingTurn must be registered").not.toBe(undefined);
+    expect(phaseIndex.get("bankingTurn")).toBe((phaseIndex.get("npcBankPolicyTurn") ?? -1) + 1);
+  });
+
+  it("runs bankSolvencyTurn immediately after recomputeSharePrices", () => {
+    const phaseIndex = new Map(TURN_PHASE_NAMES.map((name, index) => [name, index]));
+    expect(phaseIndex.get("bankSolvencyTurn"), "bankSolvencyTurn must be registered").not.toBe(
+      undefined
+    );
+    expect(phaseIndex.get("bankSolvencyTurn")).toBe(
+      (phaseIndex.get("recomputeSharePrices") ?? -1) + 1
+    );
+  });
+
   it("releases inactive-user shares before the corporation turn", () => {
     const phaseIndex = new Map(TURN_PHASE_NAMES.map((name, index) => [name, index]));
     expect(
@@ -32,6 +54,16 @@ describe("turn phase registry", () => {
     expect(phaseIndex.get("inactiveShareholderShareRelease") ?? -1).toBeLessThan(
       phaseIndex.get("corporationTurn") ?? -1
     );
+  });
+
+  it("registers NPP union behavior immediately after the union economy", () => {
+    const phaseIndex = new Map(TURN_PHASE_NAMES.map((name, index) => [name, index]));
+    const unionsTurn = phaseIndex.get("unionsTurn");
+    const nppUnionBehavior = phaseIndex.get("nppUnionBehavior");
+
+    expect(unionsTurn, "unionsTurn must be registered").not.toBeUndefined();
+    expect(nppUnionBehavior, "nppUnionBehavior must be registered").not.toBeUndefined();
+    expect(nppUnionBehavior).toBe((unionsTurn as number) + 1);
   });
 
   it("registers socialAxisDrift after billLifecycle (reads the statePolicies it writes)", () => {

@@ -27,6 +27,12 @@ export interface MonetaryOperationRecord {
   actorName: string;
   reason?: string;
   createdAt: Date;
+  /**
+   * Chartered banks that took a share of a liquidity injection. Zero means no
+   * bank could take it and the cash buffered the central bank's reserve pool
+   * instead (the pre-1.1 behaviour, now the fallback).
+   */
+  banksCredited?: number;
 }
 
 export type MonetaryPolicyDecision = MonetaryOperationType | "hold";

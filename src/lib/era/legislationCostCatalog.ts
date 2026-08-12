@@ -7,11 +7,21 @@
  * Spec: docs/superpowers/specs/2026-07-06-era-legislation-costs-design.md
  */
 import { getIncomeAnchor } from "./metricCatalog";
+import { bankingSeparationLegislationTypes } from "@/lib/seeds/shared/bankingSeparationLegislation";
 
 export type CostClass = "gdpFraction" | "perCapita" | "none";
 
+/**
+ * Banking separation is regulatory with no budget cost; entries generated from
+ * the seed list so a new legislature country can never drift out of coverage.
+ */
+const BANKING_SEPARATION_COST_CLASSES: Record<string, CostClass> = Object.fromEntries(
+  bankingSeparationLegislationTypes.map((t) => [t._id, "none" as CostClass])
+);
+
 /** Per-type cost class. Populated in Task 3 (full coverage, validated). */
 export const LEGISLATION_COST_CLASS: Record<string, CostClass> = {
+  ...BANKING_SEPARATION_COST_CLASSES,
   bal_economic_system: "none",
   bal_enterprise_levy: "none",
   bal_foreign_trade: "none",

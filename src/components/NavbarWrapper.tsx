@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useEffect, useCallback, useRef } from "react";
+import { useReducer, useEffect, useCallback, useMemo, useRef } from "react";
 import Image from "next/image";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
 import { usePathname, useRouter } from "next/navigation";
@@ -432,22 +432,9 @@ export function NavbarWrapper({
     dispatch({ type: "CLOSE_FEEDBACK" });
   }, []);
 
-  if (displayMode === "focused") {
-    return null;
-  }
-
-  if (isExcludedPath) {
-    return null;
-  }
-
-  const navBootLoading = state.isLoading && !useLightweightNav;
-
-  // The redesigned navbar is the default; users can opt back to the classic
-  // chrome in Settings → Appearance (enableExperimentalUI === false). Lightweight
-  // layouts always use the classic chrome regardless of the preference.
-  const useExperimentalNav = !useLightweightNav && navData?.user?.enableExperimentalUI !== false;
-
-  const activeCharacterProfile = (() => {
+  // Memoized so the memoized ExperimentalNavbar is not defeated by a fresh
+  // object identity on every wrapper render.
+  const activeCharacterProfile = useMemo(() => {
     if (!navData?.user) return undefined;
     const char = navData.isImperialMode
       ? (navData.user.imperialCharacter as {
@@ -472,7 +459,22 @@ export function NavbarWrapper({
       tintColor: char.tintColor ?? null,
       name: char.name ?? navData.characterName ?? navData.user.username,
     };
-  })();
+  }, [navData]);
+
+  if (displayMode === "focused") {
+    return null;
+  }
+
+  if (isExcludedPath) {
+    return null;
+  }
+
+  const navBootLoading = state.isLoading && !useLightweightNav;
+
+  // The redesigned navbar is the default; users can opt back to the classic
+  // chrome in Settings → Appearance (enableExperimentalUI === false). Lightweight
+  // layouts always use the classic chrome regardless of the preference.
+  const useExperimentalNav = !useLightweightNav && navData?.user?.enableExperimentalUI !== false;
 
   return (
     <>

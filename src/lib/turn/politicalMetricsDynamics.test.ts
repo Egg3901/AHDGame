@@ -9,6 +9,12 @@ import { ENGINE_PATHS_BY_FAMILY } from "@/lib/politicalMetrics/engineTerm";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
+// Off by default (the provider is a no-op below labour "full" mode), so every
+// existing fixture is unaffected; the labourResiduals test drives it directly.
+vi.mock("@/lib/unions/labourRelationsPoliticalProvider", () => ({
+  loadLabourRelationsPoliticalNudgesByCountry: vi.fn().mockResolvedValue(new Map()),
+}));
+
 function baselineLevels(countryId: "US" | "UK" | "RU") {
   return new Map(
     getCatalog(countryId)
@@ -337,6 +343,56 @@ describe("processPoliticalMetricsDynamics", () => {
     expect(op.updateOne.update.$set.values[family]).toBeGreaterThan(50);
   });
 
+  it("persists the labour term to labourResiduals so the strike channel is traceable", async () => {
+    const { loadLabourRelationsPoliticalNudgesByCountry } =
+      await import("@/lib/unions/labourRelationsPoliticalProvider");
+    const values = flatValues(50);
+    wire({
+      metricsDocs: [
+        { _id: "R1", countryId: "UK", values, residuals: equilibriumResiduals("UK", values) },
+      ],
+    });
+    vi.mocked(loadLabourRelationsPoliticalNudgesByCountry).mockResolvedValueOnce(
+      new Map([["UK", new Map([["economy.workerSecurity", -2.25]])]]) as Awaited<
+        ReturnType<typeof loadLabourRelationsPoliticalNudgesByCountry>
+      >
+    );
+
+    await processPoliticalMetricsDynamics(db as unknown as Db, 5);
+
+    const op = (db.collectionMocks.politicalMetrics.bulkWrite as ReturnType<typeof vi.fn>).mock
+      .calls[0][0][0] as {
+      updateOne: { update: { $set: { labourResiduals?: Record<string, number> } } };
+    };
+    expect(op.updateOne.update.$set.labourResiduals).toEqual({
+      "economy.workerSecurity": -2.25,
+    });
+  });
+
+  it("writes no labourResiduals when the labour channel is silent (regression)", async () => {
+    const values = flatValues(50);
+    wire({
+      metricsDocs: [
+        {
+          _id: "R1",
+          countryId: "UK",
+          values,
+          residuals: equilibriumResiduals("UK", values),
+        },
+      ],
+    });
+
+    await processPoliticalMetricsDynamics(db as unknown as Db, 5);
+
+    const ops = (db.collectionMocks.politicalMetrics.bulkWrite as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as
+      | Array<{ updateOne: { update: { $set: Record<string, unknown> } } }>
+      | undefined;
+    for (const op of ops ?? []) {
+      expect(op.updateOne.update.$set).not.toHaveProperty("labourResiduals");
+    }
+  });
+
   it("with no cabinet contribution, the cabinet channel adds no drift (regression)", async () => {
     const values = flatValues(50);
     wire({
@@ -349,7 +405,8 @@ describe("processPoliticalMetricsDynamics", () => {
 
     const ops = (db.collectionMocks.politicalMetrics.bulkWrite as ReturnType<typeof vi.fn>).mock
       .calls[0]?.[0] as
-      Array<{ updateOne: { update: { $set: { values: Record<string, number> } } } }> | undefined;
+      | Array<{ updateOne: { update: { $set: { values: Record<string, number> } } } }>
+      | undefined;
     // Whether the engine families moved enough to trigger a write is not this
     // test's business; that every family nothing else bends stayed exactly put is.
     const next = ops?.[0]?.updateOne.update.$set.values ?? values;
@@ -505,7 +562,8 @@ describe("Bridge B — macro conditions bend the political equilibrium", () => {
       }));
     return processPoliticalMetricsDynamics(db as unknown as Db, 100).then(() => {
       const call = db.collectionMocks.politicalMetrics.bulkWrite.mock.calls[0]?.[0] as
-        Array<{ updateOne: { update: { $set: Record<string, unknown> } } }> | undefined;
+        | Array<{ updateOne: { update: { $set: Record<string, unknown> } } }>
+        | undefined;
       return call?.[0]?.updateOne.update.$set;
     });
   }

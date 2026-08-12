@@ -25,6 +25,7 @@ import {
   SHARE_PRICE_RATE_LIMIT_MIN_PREV,
 } from "@/lib/constants/corporations";
 import { IMF_BAILOUT_SHARE_PRICE_MULTIPLIER } from "@/lib/imf/constants";
+import { indexInclusionPriceMultiplier } from "@/lib/corporations/indexOwnership";
 
 /** Per-corp inputs to the share-price formula. All monetary fields are ₳ (anchor). */
 export interface SharePriceInput {
@@ -81,6 +82,11 @@ export interface SharePriceInput {
    * Used to compute the insider-concentration valuation discount.
    */
   ceoOwnershipFraction?: number;
+  /**
+   * Fraction of shares held by index funds (0–1), from
+   * `indexFundOwnershipFraction`. Drives the index-inclusion price premium.
+   */
+  indexFundOwnershipFraction?: number;
   /** True when this is a private corporation — concentration penalty does not apply. */
   isPrivate?: boolean;
   /**
@@ -179,9 +185,18 @@ export function computeSharePrices(
       i.isPrivate ?? false
     );
 
+    // Index-inclusion premium (suggestion #62): the mirror of the concentration
+    // discount. A broad passive holder base is a firmer bid under the stock, so
+    // it earns a bounded premium. Private corps have no float for a fund to
+    // hold, so they are exempt exactly as they are from the discount.
+    const inclusionMultiplier =
+      (i.isPrivate ?? false) ? 1 : indexInclusionPriceMultiplier(i.indexFundOwnershipFraction ?? 0);
+
     const clampedPrice = Math.max(
       MIN_SHARE_PRICE,
-      Number.isFinite(rawPrice) ? rawPrice * concentrationMultiplier : MIN_SHARE_PRICE
+      Number.isFinite(rawPrice)
+        ? rawPrice * concentrationMultiplier * inclusionMultiplier
+        : MIN_SHARE_PRICE
     );
     const finalPrice = i.imfBailoutActive
       ? Math.round(clampedPrice * IMF_BAILOUT_SHARE_PRICE_MULTIPLIER * 100) / 100

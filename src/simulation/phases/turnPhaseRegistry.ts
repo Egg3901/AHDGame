@@ -94,6 +94,11 @@ import { isProspectingEnabled, isContractIssuanceEnabled } from "@/lib/extractio
 import { processBondTurn } from "@/lib/turn/bondTurn";
 import { recomputeSharePricesAfterBondTurn } from "@/lib/turn/corporation/recomputeSharePrices";
 import { processSavingsInterestTurn } from "@/lib/turn/savingsInterestTurn";
+import { processNpcBankPolicyTurn } from "@/lib/banking/npcBanks";
+import { processBankingTurn } from "@/lib/turn/bankingTurn";
+import { runPensionTurn } from "@/lib/pensions/pensionTurn";
+import { processBankSolvencyTurn } from "@/lib/turn/bankSolvencyTurn";
+import { processBankSupervision } from "@/lib/banking/supervision";
 import { processLineOfCreditTurn } from "@/lib/turn/lineOfCreditTurn";
 import { processNppFundGeneration } from "@/lib/turn/nppFundGeneration";
 import { processNppActions } from "@/lib/turn/nppActionProcessing";
@@ -248,15 +253,11 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // consistent with the rest of the labour system's one-turn lag.
         await runtime.runPhase("unionsTurn", () => processUnionsTurn(context.db));
 
-        // NPP union agency. The union system was built character-only, so in an
-        // NPP-run world every union stays leaderless and the whole labour
-        // bargaining layer is switched off. This elects NPP leaders, has them
-        // recruit / demand wages / strike, and — critically — lets NPP-run
-        // corporations answer a demand by raising `wageLevel`. Nothing else in
-        // the turn path writes `wageLevel`, so without this a strike can only
-        // ever resolve by wait-out, which pushes unionization higher again: an
-        // up-ratchet with no negative feedback. Runs after unionsTurn so it
-        // sees this turn's dues and decay.
+        // NPP industrial-relations parity. This elects NPP union leaders, has
+        // them recruit and open employer-scoped campaigns, and lets autonomous
+        // unions and CEOs use the shared offer, mediation, escalation, and
+        // agreement lifecycle. Runs after unionsTurn so deadline transitions,
+        // dues, and membership decay are already visible.
         await runtime.runPhase("nppUnionBehavior", () =>
           processNppUnionBehavior(context.db, newTurn)
         );
@@ -337,6 +338,56 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           phaseResults.savingsInterestTurn = {
             charactersProcessed: savingsInterestResult.charactersProcessed,
             totalInterest: Math.round(savingsInterestResult.totalInterest * 100) / 100,
+          };
+        }
+
+        // NPC bank rate policy - BEFORE bankingTurn so mid-corridor offsets
+        // apply to this turn's deposit/loan pricing. Seeds run at bootstrap only.
+        const npcBankPolicyResult = await runtime.runPhase("npcBankPolicyTurn", () =>
+          processNpcBankPolicyTurn(context.db, newTurn)
+        );
+        if (npcBankPolicyResult) {
+          phaseResults.npcBankPolicyTurn = {
+            banksChecked: npcBankPolicyResult.banksChecked,
+            banksUpdated: npcBankPolicyResult.banksUpdated,
+          };
+        }
+
+        // Private-bank deposits/loans - AFTER savingsInterestTurn so CB-held
+        // accounts mint first and bank-held accounts are paid from bank cash here.
+        const bankingResult = await runtime.runPhase("bankingTurn", () =>
+          processBankingTurn(context.db, newTurn)
+        );
+        if (bankingResult) {
+          phaseResults.bankingTurn = {
+            banksProcessed: bankingResult.banksProcessed,
+            depositInterestPaid: Math.round(bankingResult.depositInterestPaid * 100) / 100,
+            loanInterestCollected: Math.round(bankingResult.loanInterestCollected * 100) / 100,
+            loanPrincipalRepaid: Math.round(bankingResult.loanPrincipalRepaid * 100) / 100,
+            defaultsWrittenOff: Math.round(bankingResult.defaultsWrittenOff * 100) / 100,
+            npcDepositDelta: Math.round(bankingResult.npcDepositDelta * 100) / 100,
+          };
+        }
+
+        // A8 pension contributions - AFTER corporationTurn, which is what
+        // writes the `laborCost` this reads, so the charge is always against
+        // THIS turn's wage bill rather than last turn's.
+        const pensionResult = await runtime.runPhase("pensionTurn", () =>
+          runPensionTurn(context.db, newTurn)
+        );
+        if (pensionResult) {
+          phaseResults.pensionTurn = {
+            schemesCharged: pensionResult.schemesCharged,
+            contributionsAnchor: Math.round(pensionResult.contributionsAnchor * 100) / 100,
+            topUpsAnchor: Math.round(pensionResult.topUpsAnchor * 100) / 100,
+            accrualsAnchor: Math.round(pensionResult.accrualsAnchor * 100) / 100,
+            shortfalls: pensionResult.shortfalls,
+            benefitsPaidAnchor: Math.round(pensionResult.benefits.benefitsPaidAnchor * 100) / 100,
+            benefitsUnpaidAnchor:
+              Math.round(pensionResult.benefits.benefitsUnpaidAnchor * 100) / 100,
+            schemesCutting: pensionResult.benefits.schemesCutting,
+            investedAnchor: Math.round(pensionResult.investing.investedAnchor * 100) / 100,
+            schemesInvesting: pensionResult.investing.schemesInvesting,
           };
         }
 
@@ -440,6 +491,38 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         await runtime.runPhase("recomputeSharePrices", () =>
           recomputeSharePricesAfterBondTurn(newTurn)
         );
+
+        // Private-bank solvency/flight/contagion - AFTER recomputeSharePrices so
+        // prop-book marking (phase 7) can land against fresh prices with this
+        // phase already ordered correctly.
+        const solvencyResult = await runtime.runPhase("bankSolvencyTurn", () =>
+          processBankSolvencyTurn(context.db, newTurn)
+        );
+        if (solvencyResult) {
+          phaseResults.bankSolvencyTurn = {
+            banksEvaluated: solvencyResult.banksEvaluated,
+            fled: Math.round(solvencyResult.fled * 100) / 100,
+            failures: solvencyResult.failures,
+            contagionTriggered: solvencyResult.contagionTriggered,
+          };
+        }
+
+        // B7 supervision: capital adequacy, stress test, forced recap. Runs
+        // AFTER solvency so it reads the same turn's marked prop book and
+        // settled deposit aggregates. Distinct from solvency on purpose:
+        // solvency asks whether the bank can meet withdrawals today,
+        // supervision asks whether it holds enough capital for what it lent.
+        const supervisionResult = await runtime.runPhase("bankSupervision", () =>
+          processBankSupervision(context.db, newTurn)
+        );
+        if (supervisionResult) {
+          phaseResults.bankSupervision = {
+            banksAssessed: supervisionResult.banksAssessed,
+            stressed: supervisionResult.stressed,
+            undercapitalized: supervisionResult.undercapitalized,
+            chartersRevoked: supervisionResult.chartersRevoked,
+          };
+        }
 
         const suspectScanResult = await runtime.runPhase("financialSuspectScan", () =>
           runFinancialSuspectScan(context.db, newTurn)

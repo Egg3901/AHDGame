@@ -98,4 +98,12 @@ describe("buildWorldNavSections / looseWorldNavItems", () => {
     const titles = buildWorldNavSections(items).map((g) => g.title);
     expect(titles).toEqual(["Economy", "Diplomacy", "Other", "Leaderboards"]);
   });
+
+  it("includes Banking in the Economy group", () => {
+    const items = visibleWorldNavItems({ countryId: "US" });
+    expect(items.map((i) => i.id)).toContain("banking");
+    const economy = buildWorldNavSections(items).find((g) => g.id === "economy");
+    expect(economy?.items.map((i) => i.id)).toContain("banking");
+    expect(items.find((i) => i.id === "banking")?.href).toBe("/banking");
+  });
 });

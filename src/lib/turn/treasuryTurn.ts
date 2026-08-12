@@ -30,14 +30,17 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
     db.collection<GameState>("gameState").findOne({ _id: "current" }),
   ]);
   const preset = gameStateDoc?.preset ?? DEFAULT_SEED_PRESET;
-  for (const bank of banks) {
-    // Shared banks (ECB) cover multiple member countries; heal every member's
-    // budget, not just the anchor recorded on the bank doc.
-    const { memberCountries } = await getCentralBankScope(db, bank.countryId as CountryId);
-    for (const countryId of memberCountries) {
-      await ensureFederalBudget(db, countryId, preset);
-    }
-  }
+  // Shared banks (ECB) cover multiple member countries; heal every member's
+  // budget, not just the anchor recorded on the bank doc. Banks and members
+  // are independent, so the whole self-heal fans out.
+  await Promise.all(
+    banks.map(async (bank) => {
+      const { memberCountries } = await getCentralBankScope(db, bank.countryId as CountryId);
+      await Promise.all(
+        memberCountries.map((countryId) => ensureFederalBudget(db, countryId, preset))
+      );
+    })
+  );
 
   const budgets = await db.collection<FederalBudget>("federalBudget").find({}).toArray();
 

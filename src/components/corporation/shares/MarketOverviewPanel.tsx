@@ -202,6 +202,14 @@ export default function MarketOverviewPanel({
   const isShareholder = myShares > 0;
 
   // ─── CEO vote handler ─────────────────────────────────────────────────────
+  function refreshTallies() {
+    fetchJson<{ tallies?: VoteTally[] }>(`/api/corporations/${corpId}/ceo/vote`, {
+      feature: "corp-ceo-vote",
+    })
+      .then((d) => setTallies(d.tallies ?? []))
+      .catch(() => {});
+  }
+
   async function handleVote(candidateCharacterId: string) {
     setVoteLoading(true);
     setActionError("");
@@ -216,16 +224,32 @@ export default function MarketOverviewPanel({
       if (res.ok) {
         setMyVote(candidateCharacterId);
         setActionSuccess("Your vote has been recorded.");
-        fetchJson<{ tallies?: VoteTally[] }>(`/api/corporations/${corpId}/ceo/vote`, {
-          feature: "corp-ceo-vote",
-        })
-          .then((d) => {
-            if (d.tallies) setTallies(d.tallies);
-          })
-          .catch(() => {});
+        refreshTallies();
         onRefresh();
       } else {
         setActionError(data.error || "Failed to cast vote");
+      }
+    } catch {
+      setActionError("Network error");
+    } finally {
+      setVoteLoading(false);
+    }
+  }
+
+  async function handleWithdrawVote() {
+    setVoteLoading(true);
+    setActionError("");
+    setActionSuccess("");
+    try {
+      const res = await fetch(`/api/corporations/${corpId}/ceo/vote`, { method: "DELETE" });
+      const data = await res.json();
+      if (res.ok) {
+        setMyVote(null);
+        setActionSuccess("Your vote has been withdrawn.");
+        refreshTallies();
+        onRefresh();
+      } else {
+        setActionError(data.error || "Failed to withdraw vote");
       }
     } catch {
       setActionError("Network error");
@@ -478,12 +502,19 @@ export default function MarketOverviewPanel({
                     !isCorporateShareholder && !isNppOrFund
                       ? tallies.find((t: VoteTally) => t.characterId === sh.characterId)?.votes
                       : undefined;
+                  // Residency gate, with the sitting CEO exempt — mirrors the
+                  // server rule. Without the exemption a CEO who moved state,
+                  // or whose corp moved its HQ, showed no Vote button on their
+                  // own row and could not be re-affirmed by anyone.
+                  const isSeatedCeo =
+                    sh.characterId != null && sh.characterId === corporation.ceoCharacterId;
                   const isVoteEligible =
                     !isCorporateShareholder &&
                     !sh.isImperial &&
                     !isNppOrFund &&
-                    sh.homeState === corporation.headquartersState &&
-                    sh.countryId === corporation.countryId;
+                    (isSeatedCeo ||
+                      (sh.homeState === corporation.headquartersState &&
+                        sh.countryId === corporation.countryId));
                   return (
                     <div key={rowKey} className="py-2.5">
                       <div className="flex items-center justify-between gap-4">
@@ -567,15 +598,22 @@ export default function MarketOverviewPanel({
                             sh.characterId != null &&
                             isVoteEligible && (
                               <button
-                                onClick={() => handleVote(sh.characterId as string)}
-                                disabled={voteLoading || hasVotedFor}
+                                onClick={() =>
+                                  hasVotedFor
+                                    ? void handleWithdrawVote()
+                                    : void handleVote(sh.characterId as string)
+                                }
+                                disabled={voteLoading}
+                                title={
+                                  hasVotedFor ? "Withdraw your vote" : `Vote for ${sh.name} as CEO`
+                                }
                                 className={`text-xs px-2 py-1 rounded-md transition-colors ${
                                   hasVotedFor
-                                    ? "bg-primary/20 text-primary border border-primary/40 cursor-default"
+                                    ? "bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30"
                                     : "border border-card-border text-muted hover:text-foreground hover:border-primary/50 disabled:opacity-50"
                                 }`}
                               >
-                                {hasVotedFor ? "Voted" : "Vote CEO"}
+                                {hasVotedFor ? "Voted (undo)" : "Vote CEO"}
                               </button>
                             )}
                           <div className="text-right">
@@ -653,7 +691,8 @@ export default function MarketOverviewPanel({
               <p className="text-xs text-muted mt-2 mb-3">
                 Shareholders vote for their preferred CEO, weighted by voting power (supershares
                 count for dual-class corps). The leading candidate is offered the position.
-                Candidates must be in the HQ state.
+                Candidates must be in the HQ state, except the sitting CEO, who stays votable
+                wherever they live. You can change or withdraw your vote at any time.
               </p>
               <div className="space-y-1">
                 {tallies.map((t: VoteTally, i: number) => (
@@ -683,9 +722,20 @@ export default function MarketOverviewPanel({
                         </span>
                       )}
                     </div>
-                    <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
-                      {t.votes.toLocaleString("en-US")} vote{t.votes !== 1 ? "s" : ""}
-                    </span>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {myVote === t.characterId && (
+                        <button
+                          onClick={() => void handleWithdrawVote()}
+                          disabled={voteLoading}
+                          className="text-xs px-2 py-1 rounded-md border border-card-border text-muted hover:text-foreground hover:border-primary/50 transition-colors disabled:opacity-50"
+                        >
+                          Withdraw
+                        </button>
+                      )}
+                      <span className="text-sm font-medium text-foreground tabular-nums">
+                        {t.votes.toLocaleString("en-US")} vote{t.votes !== 1 ? "s" : ""}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>

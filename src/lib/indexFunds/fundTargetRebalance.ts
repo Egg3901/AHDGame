@@ -86,7 +86,6 @@ export function planFundTargetRebalance(input: {
     const priceAnchor = convertLocalPriceToAnchor(
       resolveShareExecutionPrice(corp),
       corp.liquidCurrencyCode,
-      fund.anchorCurrencyCode,
       exchangeRates
     );
     if (priceAnchor == null || priceAnchor <= 0) continue;

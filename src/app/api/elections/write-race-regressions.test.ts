@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createAsyncIterableCursor } from "@/lib/test-utils/mockDb";
 import { ObjectId } from "mongodb";
 
 vi.mock("@/lib/mongodb", () => ({
@@ -103,18 +102,20 @@ function duplicateKeyError(message: string, keyPattern: Record<string, number>) 
 
 function mockDbWithCollections(collections: Record<string, unknown>) {
   return {
-    collection: vi.fn(
-      (name: string) =>
-        collections[name] ?? {
-          // An unlisted collection previously fell back to `{}`, so any new
-          // query on it failed as "x is not a function" rather than as an
-          // assertion. Chainable find() included for the sort().limit() chains.
-          findOne: vi.fn().mockResolvedValue(null),
-          find: vi.fn(() => createAsyncIterableCursor([])),
-          updateOne: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
-        }
-    ),
+    collection: vi.fn((name: string) => collections[name] ?? {}),
   };
+}
+
+function emptyFindCursor() {
+  const cursor = {
+    toArray: vi.fn().mockResolvedValue([]),
+    sort: vi.fn(),
+    limit: vi.fn(),
+    next: vi.fn().mockResolvedValue(null),
+  };
+  cursor.sort.mockReturnValue(cursor);
+  cursor.limit.mockReturnValue(cursor);
+  return cursor;
 }
 
 describe("Election write race regressions", () => {
@@ -174,10 +175,6 @@ describe("Election write race regressions", () => {
     } as never);
 
     const electionCandidates = {
-      // The enter route looks up prior candidacy with find().sort().limit()
-      // before inserting; without it the route dies before reaching the
-      // duplicate-key path this test is actually about.
-      find: vi.fn(() => createAsyncIterableCursor([])),
       findOne: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({
         _id: new ObjectId(),
         electionId,
@@ -187,6 +184,7 @@ describe("Election write race regressions", () => {
         status: "active",
         enteredAt: new Date(),
       }),
+      find: vi.fn().mockReturnValue(emptyFindCursor()),
       insertOne: vi
         .fn()
         .mockRejectedValue(
@@ -455,10 +453,7 @@ describe("Election write race regressions", () => {
     } as never);
 
     const playerEndorsements = {
-      // The endorse route sweeps prior endorsements with find().toArray()
-      // before inserting, so the duplicate-key path this test targets is only
-      // reachable once that read works.
-      find: vi.fn(() => createAsyncIterableCursor([])),
+      find: vi.fn().mockReturnValue(emptyFindCursor()),
       updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
       insertOne: vi
         .fn()
@@ -483,7 +478,6 @@ describe("Election write race regressions", () => {
     vi.mocked(getDb).mockResolvedValue(
       mockDbWithCollections({
         electionCandidates: {
-          find: vi.fn(() => createAsyncIterableCursor([])),
           findOne: vi.fn().mockResolvedValue({
             _id: candidateId,
             electionId,

@@ -26,6 +26,7 @@ import { blrLegislationTypes } from "../blr/blrLegislation";
 import { csLegislationTypes } from "../cs/csLegislation";
 import { balLegislationTypes } from "../bal/balLegislation";
 import { brLegislationTypes } from "../br/brLegislationTypes";
+import { bankingSeparationLegislationTypes } from "../shared/bankingSeparationLegislation";
 
 // ============================================================================
 // Archetype Approval System
@@ -8796,6 +8797,9 @@ const rawLegislationTypes: LegislationType[] = [
   ...blrLegislationTypes,
   ...csLegislationTypes,
   ...balLegislationTypes,
+
+  // ── Banking separation (reusable per-country charter law; all legislatures) ──
+  ...bankingSeparationLegislationTypes,
 
   // ── Scotland / Wales legislation types — PURPOSEFULLY POSTPONED ────────────
   // The seceded devolved nations do NOT yet have their own legislation. This was

@@ -20,6 +20,7 @@ import {
 import { getCountryConfig } from "@/lib/constants/countries";
 import { buildCorporationLookups } from "./buildLookups";
 import { computeSharePrices, type SharePriceInput } from "./sharePriceFormula";
+import { indexFundOwnershipFraction } from "@/lib/corporations/indexOwnership";
 import { normalizedEarningsFromHistory } from "./earningsRollingAverage";
 import { applyEquityMethodEarnings } from "./equityMethodEarnings";
 import {
@@ -207,6 +208,8 @@ export async function recomputeSharePricesAfterBondTurn(
       costOfCapital: corpPrimeRate + riskPremium,
       totalShares: corp.totalShares ?? 10_000_000,
       ceoOwnershipFraction: ceoOwnershipFraction(corp),
+      // Suggestion #62: index-fund ownership earns a bounded price premium.
+      indexFundOwnershipFraction: indexFundOwnershipFraction(corp),
       isPrivate: corp.isPrivate ?? false,
       // Smoothing-prior selection:
       //   - In split cooldown: use corp.sharePrice (the post-split-scaled value

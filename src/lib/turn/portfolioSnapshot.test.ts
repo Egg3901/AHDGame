@@ -30,10 +30,14 @@ describe("portfolioSnapshot", () => {
   let mockCollection: ReturnType<typeof vi.fn>;
   let mockInsertMany: ReturnType<typeof vi.fn>;
 
+  // Every chain also answers insertMany, so adding a read to the snapshot does
+  // not shift each test's mockReturnValueOnce queue onto the wrong shape: the
+  // insert still lands on the tracked spy whatever position it ends up in.
   const createMockChain = (result: any[]) => ({
     find: vi.fn().mockReturnThis(),
     project: vi.fn().mockReturnThis(),
     toArray: vi.fn().mockResolvedValue(result),
+    insertMany: (...args: unknown[]) => (mockInsertMany as (...a: unknown[]) => unknown)(...args),
   });
 
   beforeEach(() => {
@@ -47,6 +51,10 @@ describe("portfolioSnapshot", () => {
     vi.mocked(getDb).mockResolvedValue(mockDb);
     vi.clearAllMocks();
     vi.mocked(isForexEnabled).mockResolvedValue(false);
+    // Default for any collection the individual tests do not queue explicitly
+    // (index-fund positions and definitions), so adding a read to the snapshot
+    // does not shift every test's mockReturnValueOnce sequence.
+    mockCollection.mockReturnValue(createMockChain([]));
   });
 
   describe("snapshotPortfolioValues", () => {
@@ -88,7 +96,12 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain([])); // imperialCharacters
       mockCollection.mockReturnValueOnce(createMockChain(corporations));
       mockCollection.mockReturnValueOnce(createMockChain([])); // bonds
-      mockCollection.mockReturnValue({ insertMany: mockInsertMany });
+      // Catch-all: reads that come after the queued ones (index-fund positions)
+      // must still answer find/toArray, not only insertMany.
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
 
       const result = await snapshotPortfolioValues(100);
 
@@ -98,6 +111,33 @@ describe("portfolioSnapshot", () => {
       expect(insertedDocs).toHaveLength(2);
       expect(insertedDocs.some((d: any) => d.totalValue === 2500)).toBe(true);
       expect(insertedDocs.some((d: any) => d.totalValue === 1250)).toBe(true);
+    });
+
+    it("counts index-fund units in the portfolio total", async () => {
+      const charId = new ObjectId("507f1f77bcf86cd799439011");
+      const fundId = new ObjectId("507f1f77bcf86cd799439021");
+
+      mockCollection.mockReturnValueOnce(createMockChain([])); // characters
+      mockCollection.mockReturnValueOnce(createMockChain([])); // imperialCharacters
+      mockCollection.mockReturnValueOnce(createMockChain([])); // corps
+      mockCollection.mockReturnValueOnce(createMockChain([])); // bonds
+      mockCollection.mockReturnValueOnce(
+        createMockChain([{ fundId, holderKind: "character", characterId: charId, units: 10 }])
+      );
+      mockCollection.mockReturnValueOnce(createMockChain([{ _id: fundId, quotedNav: 125 }]));
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
+
+      await snapshotPortfolioValues(100);
+
+      const insertedDocs = mockInsertMany.mock.calls[0][0];
+      const doc = insertedDocs.find((d: any) => d.characterId.toString() === charId.toString());
+      // 10 units x 125 NAV, both already in ₳: no conversion.
+      expect(doc.fundValue).toBe(1250);
+      expect(doc.totalValue).toBe(1250);
+      expect(doc.netValue).toBe(1250);
     });
 
     it("snapshots bond holdings correctly", async () => {
@@ -115,7 +155,12 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain([])); // imperialCharacters
       mockCollection.mockReturnValueOnce(createMockChain([])); // corps
       mockCollection.mockReturnValueOnce(createMockChain(bonds));
-      mockCollection.mockReturnValue({ insertMany: mockInsertMany });
+      // Catch-all: reads that come after the queued ones (index-fund positions)
+      // must still answer find/toArray, not only insertMany.
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
 
       await snapshotPortfolioValues(100);
 
@@ -153,7 +198,12 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain([])); // imperialCharacters
       mockCollection.mockReturnValueOnce(createMockChain(corporations));
       mockCollection.mockReturnValueOnce(createMockChain(bonds));
-      mockCollection.mockReturnValue({ insertMany: mockInsertMany });
+      // Catch-all: reads that come after the queued ones (index-fund positions)
+      // must still answer find/toArray, not only insertMany.
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
 
       await snapshotPortfolioValues(100);
 
@@ -188,7 +238,12 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain([])); // imperialCharacters
       mockCollection.mockReturnValueOnce(createMockChain([])); // corporations
       mockCollection.mockReturnValueOnce(createMockChain([])); // bonds
-      mockCollection.mockReturnValue({ insertMany: mockInsertMany });
+      // Catch-all: reads that come after the queued ones (index-fund positions)
+      // must still answer find/toArray, not only insertMany.
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
 
       await snapshotPortfolioValues(100);
 
@@ -215,7 +270,12 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain([]));
       // Second query filters out matured bonds, returns empty
       mockCollection.mockReturnValueOnce(createMockChain([]));
-      mockCollection.mockReturnValue({ insertMany: mockInsertMany });
+      // Catch-all: reads that come after the queued ones (index-fund positions)
+      // must still answer find/toArray, not only insertMany.
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
 
       const result = await snapshotPortfolioValues(100);
       expect(result).toBe(0);
@@ -235,7 +295,12 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain([])); // imperialCharacters
       mockCollection.mockReturnValueOnce(createMockChain([]));
       mockCollection.mockReturnValueOnce(createMockChain(bonds));
-      mockCollection.mockReturnValue({ insertMany: mockInsertMany });
+      // Catch-all: reads that come after the queued ones (index-fund positions)
+      // must still answer find/toArray, not only insertMany.
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
 
       const result = await snapshotPortfolioValues(100);
       expect(result).toBe(0);
@@ -254,7 +319,12 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain([])); // imperialCharacters
       mockCollection.mockReturnValueOnce(createMockChain(corporations));
       mockCollection.mockReturnValueOnce(createMockChain([]));
-      mockCollection.mockReturnValue({ insertMany: mockInsertMany });
+      // Catch-all: reads that come after the queued ones (index-fund positions)
+      // must still answer find/toArray, not only insertMany.
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
 
       await snapshotPortfolioValues(100);
 
@@ -293,7 +363,12 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain([])); // imperialCharacters
       mockCollection.mockReturnValueOnce(createMockChain(corporations));
       mockCollection.mockReturnValueOnce(createMockChain(bonds));
-      mockCollection.mockReturnValue({ insertMany: mockInsertMany });
+      // Catch-all: reads that come after the queued ones (index-fund positions)
+      // must still answer find/toArray, not only insertMany.
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
 
       await snapshotPortfolioValues(100);
 
@@ -322,7 +397,12 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain([])); // imperialCharacters
       mockCollection.mockReturnValueOnce(createMockChain(corporations));
       mockCollection.mockReturnValueOnce(createMockChain([]));
-      mockCollection.mockReturnValue({ insertMany: mockInsertMany });
+      // Catch-all: reads that come after the queued ones (index-fund positions)
+      // must still answer find/toArray, not only insertMany.
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
 
       await snapshotPortfolioValues(100);
 
@@ -344,7 +424,12 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain([])); // imperialCharacters
       mockCollection.mockReturnValueOnce(createMockChain([]));
       mockCollection.mockReturnValueOnce(createMockChain(bonds));
-      mockCollection.mockReturnValue({ insertMany: mockInsertMany });
+      // Catch-all: reads that come after the queued ones (index-fund positions)
+      // must still answer find/toArray, not only insertMany.
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
 
       await snapshotPortfolioValues(100);
 
@@ -361,7 +446,12 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain(allCorps)); // all corps
       mockCollection.mockReturnValueOnce(createMockChain([])); // corps with shareholders
       mockCollection.mockReturnValueOnce(createMockChain([])); // bonds
-      mockCollection.mockReturnValue({ insertMany: mockInsertMany });
+      // Catch-all: reads that come after the queued ones (index-fund positions)
+      // must still answer find/toArray, not only insertMany.
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
 
       const result = await snapshotCorporationPortfolioValues(100);
 
@@ -402,7 +492,12 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain(allCorps));
       mockCollection.mockReturnValueOnce(createMockChain(heldCorps));
       mockCollection.mockReturnValueOnce(createMockChain(bonds));
-      mockCollection.mockReturnValue({ insertMany: mockInsertMany });
+      // Catch-all: reads that come after the queued ones (index-fund positions)
+      // must still answer find/toArray, not only insertMany.
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
 
       await snapshotCorporationPortfolioValues(100);
 
@@ -443,7 +538,12 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain(allCorps));
       mockCollection.mockReturnValueOnce(createMockChain([]));
       mockCollection.mockReturnValueOnce(createMockChain(bonds));
-      mockCollection.mockReturnValue({ insertMany: mockInsertMany });
+      // Catch-all: reads that come after the queued ones (index-fund positions)
+      // must still answer find/toArray, not only insertMany.
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
 
       await snapshotCorporationPortfolioValues(100);
 
@@ -471,7 +571,12 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain(allCorps));
       mockCollection.mockReturnValueOnce(createMockChain([]));
       mockCollection.mockReturnValueOnce(createMockChain([]));
-      mockCollection.mockReturnValue({ insertMany: mockInsertMany });
+      // Catch-all: reads that come after the queued ones (index-fund positions)
+      // must still answer find/toArray, not only insertMany.
+      mockCollection.mockReturnValue({
+        ...createMockChain([]),
+        insertMany: mockInsertMany,
+      });
 
       await snapshotCorporationPortfolioValues(100);
 

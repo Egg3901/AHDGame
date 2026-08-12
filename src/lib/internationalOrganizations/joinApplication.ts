@@ -1,5 +1,6 @@
 import { ObjectId, type Db } from "mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 import type { Bill } from "@/lib/db/types";
 import type { BillStatus } from "@/lib/db/types/legislation";
 import {
@@ -30,11 +31,18 @@ const BILL_FAILED_STATUS_LIST: BillStatus[] = [
 ];
 const BILL_FAILED_STATUSES = new Set<string>(BILL_FAILED_STATUS_LIST);
 
-/** Admit a country to an org (idempotent upsert of a membership). */
+/**
+ * Admit a country to an org (idempotent upsert of a membership).
+ *
+ * `WorldEntityId`, not `CountryId`: a proxy war's hosts are world entities — North
+ * and South Vietnam are the countries the war is fought over and neither is a
+ * playable `CountryId` — and resolving one takes them into the winner's bloc. Every
+ * real country id remains a valid value.
+ */
 export async function admitMember(
   db: Db,
   organizationId: string,
-  countryId: CountryId,
+  countryId: WorldEntityId,
   currentTurn: number,
   opts?: { status?: "founding" | "active" }
 ): Promise<void> {

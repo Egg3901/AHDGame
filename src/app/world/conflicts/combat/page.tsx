@@ -133,41 +133,53 @@ export default async function CombatCommandPage() {
   // BATTLE. The opposing side's belligerent list does go down: it is public on every
   // conflict record page, and the war room's target picker has to be built from it.
   const engagedIds = new Set(units.map((u) => u.theaterId));
+  const engagedConflicts = activeConflicts.filter((c) => engagedIds.has(c._id));
+  // Resolve each distinct host country's region codes once — repeated hosts
+  // previously issued one states query per conflict.
+  const hostCountries = [...new Set(engagedConflicts.map((c) => c.hostCountry))];
+  const regionCodesByHost = new Map(
+    await Promise.all(
+      hostCountries.map(async (host) => [host, await regionCodesOfCountry(db, host)] as const)
+    )
+  );
   const conflictViews: ConflictView[] = await Promise.all(
-    activeConflicts
-      .filter((c) => engagedIds.has(c._id))
-      .map(async (c) => {
-        const occ = occupationOf(c);
-        const occupyingSide =
-          occ.occupier === "A" ? c.sideA : occ.occupier === "B" ? c.sideB : null;
-        const hostRegionCodes = await regionCodesOfCountry(db, c.hostCountry);
-        // Roster membership only — deliberately NOT `sideOf`'s backer fallback, which
-        // would hand a non-belligerent a target list at a war it has no part in. The
-        // declare route applies the same rule, so the picker cannot offer a target the
-        // server will refuse.
-        const ownSide = belligerentSideOf(c, country);
-        const enemyCountries =
-          ownSide === "A" ? [...c.sideB.countries] : ownSide === "B" ? [...c.sideA.countries] : [];
-        const ownSpectrum =
-          ownSide === "A"
-            ? (c.sideA.backer ?? "neutral")
-            : ownSide === "B"
-              ? (c.sideB.backer ?? "neutral")
-              : "neutral";
-        return {
-          id: c._id,
-          name: c.name,
-          hostCountry: c.hostCountry,
-          control: c.control,
-          sideALabel: c.sideA.label,
-          sideBLabel: c.sideB.label,
-          enemyCountries,
-          occupier: occ.occupier,
-          occupierCountry: occupyingSide?.countries[0] ?? null,
-          ownSpectrum,
-          hostRegionCodes,
-        };
-      })
+    engagedConflicts.map(async (c) => {
+      const occ = occupationOf(c);
+      const occupyingSide = occ.occupier === "A" ? c.sideA : occ.occupier === "B" ? c.sideB : null;
+      const hostRegionCodes = regionCodesByHost.get(c.hostCountry) ?? [];
+      // Roster membership only — deliberately NOT `sideOf`'s backer fallback, which
+      // would hand a non-belligerent a target list at a war it has no part in. The
+      // declare route applies the same rule, so the picker cannot offer a target the
+      // server will refuse.
+      const ownSide = belligerentSideOf(c, country);
+      // The enemy faction belongs in the picker too — in a proxy war it is the only
+      // target there is, because those rosters start empty and a faction is never
+      // enrolled into one. Without it a member who joined the war has nothing to
+      // attack, though the declare route would accept the faction.
+      const enemySide = ownSide === "A" ? c.sideB : ownSide === "B" ? c.sideA : null;
+      const enemyCountries = enemySide
+        ? [...enemySide.countries, ...(enemySide.factionEntity ? [enemySide.factionEntity] : [])]
+        : [];
+      const ownSpectrum =
+        ownSide === "A"
+          ? (c.sideA.backer ?? "neutral")
+          : ownSide === "B"
+            ? (c.sideB.backer ?? "neutral")
+            : "neutral";
+      return {
+        id: c._id,
+        name: c.name,
+        hostCountry: c.hostCountry,
+        control: c.control,
+        sideALabel: c.sideA.label,
+        sideBLabel: c.sideB.label,
+        enemyCountries,
+        occupier: occ.occupier,
+        occupierCountry: occupyingSide?.countries[0] ?? null,
+        ownSpectrum,
+        hostRegionCodes,
+      };
+    })
   );
 
   // A Commanding General who has not posted their generals has nothing to declare

@@ -140,8 +140,6 @@ export async function placeAuctionBid(db: Db, params: PlaceBidParams): Promise<v
   // leader below (= mint). The array-equality filter lets exactly one writer flip
   // the standing bids; a racer that read a now-stale snapshot misses, so we roll
   // back our own debit and reject. Only the winner reaches the outbid refunds.
-  // `as const` keeps "open" a literal: widened to `string` it no longer
-  // satisfies `Filter<NationalizationAuction>`'s status union.
   const claimFilter = { _id: auction._id, status: "open" as const, bids: auction.bids };
   let claim;
   if (auction.bidHistory) {

@@ -12,6 +12,7 @@ import { AidPanel } from "./AidPanel";
 import { DirectivePanel } from "./DirectivePanel";
 import { JointStatementPanel } from "./JointStatementPanel";
 import { PosturePanel } from "./PosturePanel";
+import { JoinConflictPanel } from "./JoinConflictPanel";
 import { AgencyFundingPanel } from "./AgencyFundingPanel";
 import { FundOrgPanel } from "./FundOrgPanel";
 import { DuesPanel } from "./DuesPanel";
@@ -219,6 +220,17 @@ export function OverviewTab({
       )}
       {canTableResolutionType(org.def.category, "set_posture") && (
         <PosturePanel
+          org={org}
+          viewer={viewer}
+          currentTurn={currentTurn}
+          votingWindowTurns={votingWindowTurns}
+          onChange={onChange}
+        />
+      )}
+      {/* Bloc-only, and the panel gates on the same predicate internally so it is
+          safe wherever it is mounted. */}
+      {canTableResolutionType(org.def.category, "join_conflict") && (
+        <JoinConflictPanel
           org={org}
           viewer={viewer}
           currentTurn={currentTurn}

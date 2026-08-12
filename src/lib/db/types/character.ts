@@ -196,6 +196,13 @@ export interface Character {
     personal: Partial<Record<CurrencyCode, number>>;
     /** Savings per currency — APY tied to that currency's national prime rate */
     savings?: Partial<Record<CurrencyCode, number>>;
+    /**
+     * Private banking (1.1): who holds each currency's savings balance —
+     * "centralBank" (default when absent) or a bank corporation id. The
+     * pointer keeps `savings` the single balance so existing readers need
+     * no edits.
+     */
+    savingsHolder?: Partial<Record<CurrencyCode, import("./bank").SavingsHolder>>;
     /** Cumulative interest credited to savings, per currency (lifetime) */
     interestEarned?: Partial<Record<CurrencyCode, number>>;
     /** Per-turn accrued interest not yet quarterly-credited to savings */

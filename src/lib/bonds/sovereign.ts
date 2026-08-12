@@ -35,6 +35,7 @@ import {
   getSovereignConfidencePremium,
 } from "@/lib/budget/debt";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
+import { sovereignCredibilitySpread } from "@/lib/centralBank/marketEffects";
 
 export const SOVEREIGN_ISSUANCE_INTERVAL_TURNS = 12;
 export const SOVEREIGN_BOND_MATURITY_TURNS: BondMaturityTurns = 48;
@@ -64,15 +65,21 @@ export const SOVEREIGN_RECONCILE_DISTRIBUTION: Partial<Record<BondMaturityTurns,
 };
 
 /**
- * Effective sovereign coupon rate = primeRate + term premium for the given maturity.
+ * Effective sovereign coupon rate = primeRate + term premium for the given maturity,
+ * plus any central-bank credibility spread (B4 market effects).
  * Rounds to 2 dp so stored rates stay human-readable.
+ *
+ * `credibilitySpreadPp` defaults to 0, so every caller that does not know the
+ * issuing bank's scrutiny (seeds, admin tools) prices exactly as before.
  */
 export function getSovereignCouponRate(
   primeRate: number,
-  maturityTurns: BondMaturityTurns
+  maturityTurns: BondMaturityTurns,
+  credibilitySpreadPp = 0
 ): number {
   const termPremium = SOVEREIGN_BOND_TERM_PREMIUMS[maturityTurns] ?? 0;
-  return Math.round((primeRate + termPremium) * 100) / 100;
+  const spread = Number.isFinite(credibilitySpreadPp) ? Math.max(0, credibilitySpreadPp) : 0;
+  return Math.round((primeRate + termPremium + spread) * 100) / 100;
 }
 
 export function isSovereignBond(bond: Pick<Bond, "issuerType">): boolean {
@@ -212,13 +219,19 @@ function buildSovereignBondDoc(params: {
   maturityTurns: BondMaturityTurns;
   primeRate: number;
   countryCorporation: Pick<Corporation, "_id" | "name"> | null;
+  /** B4: percentage points of credibility spread. 0 for a clean or absent bank. */
+  credibilitySpreadPp?: number;
 }): { bondDoc: Omit<Bond, "_id">; annualCouponCost: number } {
   const { countryId, turn, now, issueAmount, maturityTurns, primeRate, countryCorporation } =
     params;
   const normalizedIssueAmount =
     Math.floor(issueAmount / BOND_UNIT_FACE_VALUE) * BOND_UNIT_FACE_VALUE;
   const totalUnits = Math.floor(normalizedIssueAmount / BOND_UNIT_FACE_VALUE);
-  const couponRate = getSovereignCouponRate(primeRate, maturityTurns);
+  const couponRate = getSovereignCouponRate(
+    primeRate,
+    maturityTurns,
+    params.credibilitySpreadPp ?? 0
+  );
 
   const bondDoc: Omit<Bond, "_id"> = {
     issuerType: "sovereign",
@@ -290,6 +303,9 @@ async function issueSovereignBondSeries(
     maturityTurns,
     primeRate,
     countryCorporation,
+    // B4: a discredited central bank makes its government borrow dearer. No
+    // bank document means no scrutiny to read, so the spread is 0, not a guess.
+    credibilitySpreadPp: centralBank ? sovereignCredibilitySpread(centralBank.chairInfamy ?? 0) : 0,
   });
 
   const budgetUpdate = applySovereignDebtAdjustment(budget, bondDoc.totalIssued, annualCouponCost);
@@ -561,6 +577,10 @@ export async function reconcileSovereignDebt(
 
   const primeRate =
     centralBank?.primeRate ?? getCountryConfig(countryId).centralBank.defaultPrimeRate;
+  // B4 credibility spread, same rule as scheduled issuance: no bank, no spread.
+  const credibilitySpreadPp = centralBank
+    ? sovereignCredibilitySpread(centralBank.chairInfamy ?? 0)
+    : 0;
 
   // Sum all active sovereign bonds already issued for this country.
   const activeBonds = await db
@@ -589,7 +609,7 @@ export async function reconcileSovereignDebt(
       if (trancheAmount < BOND_UNIT_FACE_VALUE) continue;
 
       const totalUnits = Math.floor(trancheAmount / BOND_UNIT_FACE_VALUE);
-      const couponRate = getSovereignCouponRate(primeRate, maturityTurns);
+      const couponRate = getSovereignCouponRate(primeRate, maturityTurns, credibilitySpreadPp);
       const annualCouponCost = (couponRate / 100) * trancheAmount;
 
       const bondDoc: Omit<Bond, "_id"> = {

@@ -242,7 +242,7 @@ export function ElectionsManageTab() {
     handleAction(
       "/api/admin/elections/resolve-primaries",
       "POST",
-      "DESTRUCTIVE: Remove primary losers from all elections whose primary has already closed?\n\nWithdraws all but the top-scoring candidate per party. Cannot be undone."
+      "DESTRUCTIVE: Remove primary losers from all elections whose primary has already closed?\n\nWithdraws all but the top-scoring candidates per party, keeping however many that race advances (1 for US federal and single-winner executive races, 3 for parliamentary legislatures and US House under redistricting, 7 for one-party states). Cannot be undone."
     );
 
   const handleDeleteCycle = async (cycle: number) => {

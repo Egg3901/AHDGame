@@ -164,6 +164,12 @@ export const BATTLEGROUND_FEATURE_IDS_BY_PRESET: Readonly<Record<string, readonl
     "818", // EG
     "862", // VE
     "887", // YE
+    // Decolonisation theatres that gained geometry with the historical-territory
+    // shard. Congo and Somalia take their modern feature; South Yemen has none, so
+    // `historical-regions.json` supplies it under its entity key.
+    "180", // CD
+    "706", // SO
+    "YD",
     // Entity keys, not ISO numerics: unified Vietnam's 704 covers both halves,
     // so `vietnam-regions.json` supplies one static feature each.
     "NVN",

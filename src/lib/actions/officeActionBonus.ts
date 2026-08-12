@@ -1,4 +1,5 @@
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { resolveOfficeActionBonusForType } from "./officeBonusRegistry";
 
 /**
  * Office-type keys used for cabinet appointments. A cabinet appointment
@@ -38,6 +39,13 @@ export interface ResolveOfficeActionBonusArgs {
   cabinetOfficeType: string | undefined;
   /** `gameConfig.officeActionBonus` map (office-type key → per-turn bonus). */
   officeActionBonus: Record<string, number> | undefined;
+  /**
+   * The holder's country. Used to resolve office keys `gameConfig` has never
+   * heard of against the per-country office registry (see
+   * {@link resolveOfficeActionBonusForType}). Optional: without it the key is
+   * resolved across all countries.
+   */
+  countryId?: CountryId;
 }
 
 export interface OfficeActionBonusBreakdown {
@@ -65,6 +73,7 @@ export function resolveOfficeActionBonusBreakdown({
   isCabinetMember,
   cabinetOfficeType,
   officeActionBonus,
+  countryId,
 }: ResolveOfficeActionBonusArgs): OfficeActionBonusBreakdown {
   // When currentOffice is a cabinet key it is not a real seat — recover the
   // underlying legislative seat so its bonus is not lost.
@@ -73,9 +82,11 @@ export function resolveOfficeActionBonusBreakdown({
       ? electedSeatOfficeType
       : currentOfficeType;
 
-  const seatBonus = seatType ? (officeActionBonus?.[seatType] ?? 0) : 0;
+  const seatBonus = resolveOfficeActionBonusForType(seatType, officeActionBonus, countryId);
   const cabinetBonus =
-    isCabinetMember && cabinetOfficeType ? (officeActionBonus?.[cabinetOfficeType] ?? 0) : 0;
+    isCabinetMember && cabinetOfficeType
+      ? resolveOfficeActionBonusForType(cabinetOfficeType, officeActionBonus, countryId)
+      : 0;
 
   return { seatType, seatBonus, cabinetBonus };
 }

@@ -8,7 +8,7 @@
  * three stage types US needs: chamberVote, executiveAction, override.
  */
 import { type Db, type Filter } from "mongodb";
-import type { Bill, ElectedOfficial } from "@/lib/db/types";
+import type { Bill, ElectedOfficial, GameState } from "@/lib/db/types";
 import { didPass, otherChamber } from "@/lib/billLifecycleHelpers";
 import type { ScopedVoteOfficial } from "@/lib/congress/billVoting";
 import {
@@ -42,6 +42,7 @@ import {
 import type {
   BillLifecycleConfig,
   ChamberVoteStage,
+  ConcurrentVoteStage,
   ExecutiveActionStage,
   OverrideStage,
   PassRule,
@@ -192,6 +193,25 @@ export async function runBillLifecycle(
   for (const stage of config.stages) {
     if (stage.kind === "override") {
       await closeOverrideStage(db, config, stage, now, currentTurn, result);
+    }
+  }
+
+  // ── Close concurrent bicameral votes. ──
+  // A stage kind with no dispatch is silently never closed: the bill sits at its status
+  // forever and no tally assertion catches it.
+  const concurrentStages = config.stages.filter(
+    (s): s is ConcurrentVoteStage => s.kind === "concurrentVote"
+  );
+  if (concurrentStages.length > 0) {
+    // Legislature shape is preset-dependent (DE 1953 flips `bicameral`; TR/ES flip
+    // `upperElectionSystem`), and these stages resolve chamber counts. Read once per run,
+    // and only when a concurrent stage exists so quiet configs pay nothing.
+    const gsForPreset = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { preset: 1 } });
+    const preset = typeof gsForPreset?.preset === "string" ? gsForPreset.preset : undefined;
+    for (const stage of concurrentStages) {
+      await closeConcurrentVoteStage(db, config, stage, now, currentTurn, result, preset);
     }
   }
 
@@ -710,6 +730,129 @@ async function enterLordsRevisionHold(
     );
   } catch {
     // Wire is best-effort.
+  }
+}
+
+/**
+ * Close a concurrent bicameral vote.
+ *
+ * Lives here rather than in its own module because it reuses `tallyFields`,
+ * `enterSigned` and `enterExecutive`, and splitting it out would either duplicate them
+ * or create a circular import.
+ */
+async function closeConcurrentVoteStage(
+  db: Db,
+  config: BillLifecycleConfig,
+  stage: ConcurrentVoteStage,
+  now: Date,
+  currentTurn: number,
+  result: BillLifecycleResult,
+  preset?: string
+): Promise<void> {
+  // The CLOSE filter ANDs the deadline pairs — a bill must not close while a chamber is
+  // still voting. (The NPP FETCH filter ORs them: poll while EITHER is open.)
+  const expiredFilter: Record<string, unknown> = {
+    status: stage.status,
+    $and: [
+      {
+        $or: [
+          { votingEndsOnTurn: { $lte: currentTurn } },
+          { votingEndsOnTurn: { $exists: false }, votingEndsAt: { $lte: now } },
+        ],
+      },
+      {
+        $or: [
+          { otherChamberVotingEndsOnTurn: { $lte: currentTurn } },
+          {
+            otherChamberVotingEndsOnTurn: { $exists: false },
+            otherChamberVotingEndsAt: { $lte: now },
+          },
+        ],
+      },
+    ],
+    originChamber: { $in: config.originChambers },
+  };
+
+  const expired = await db
+    .collection<Bill>("bills")
+    .find(expiredFilter as Filter<Bill>)
+    .toArray();
+
+  for (const claimedBill of expired) {
+    const bill =
+      (await db.collection<Bill>("bills").findOne({ _id: claimedBill._id })) ?? claimedBill;
+    const ctx = {
+      currentChamber: bill.currentChamber ?? "",
+      countryId: bill.countryId,
+      preset,
+    };
+
+    // Resolved PER BILL, not taken from the stage alone: nat/priv supersedes to
+    // two-thirds and is provision-driven. `evaluatePassRule` is deliberately NOT reused
+    // — it bundles Senate cloture, which a concurrent bill never faces (the filibuster
+    // route refuses these outright).
+    const { rule } = getBillPassRule(
+      getCountryConfig((bill.countryId ?? "US") as CountryId, preset).governmentType,
+      billHasNatPrivProvision(bill.provisions),
+      billHasDeclareWar(bill.provisions)
+    );
+
+    let fields: Record<string, unknown> = {};
+    let allPassed = true;
+    for (const officeType of stage.chambersFor(ctx)) {
+      const voteField = stage.voteFieldFor(ctx, officeType);
+      const res = await resolvePhaseVotes(
+        db,
+        bill,
+        { voteField, officeType, countryId: bill.countryId ?? "US" },
+        currentTurn
+      );
+      // `tallyFields` is parameterised by voteField, so calling it per chamber gives
+      // each its own totals AND its own frozen snapshot (#0982).
+      fields = { ...fields, ...tallyFields(voteField, res) };
+      if (!meetsBillPassRule(res.totals.for, res.totals.against, rule)) allPassed = false;
+    }
+
+    if (!allPassed) {
+      const claimed = await claimStatusTransition(
+        db,
+        "bills",
+        { _id: bill._id, status: stage.status },
+        { $set: { status: "failed", ...fields, failedAt: now, updatedAt: now } }
+      );
+      if (claimed) {
+        await resolveNotifier(config)(db, bill, "failed");
+        recordTransition(result, "failed");
+        result.billsProcessed++;
+        result.billsFailed++;
+      }
+      continue;
+    }
+
+    // Passed. Reproduce the DISPATCH only — `enterSigned` already contains
+    // applyLegislationEffect, onBillEnacted, the notifier, the achievement award,
+    // recordTransition and the counters. Calling any of those alongside it double-enacts.
+    const execStage = config.stages.find(
+      (s): s is ExecutiveActionStage => s.kind === "executiveAction"
+    );
+    if (stage.execActionCheckOnPass && execStage && billRequiresExecutiveAction(bill)) {
+      await enterExecutive(db, bill, execStage, "votes", fields, now, currentTurn, result);
+      continue;
+    }
+    // A concurrent close has TWO passage moments. `enterSigned` spreads `...fields`
+    // before `[passedAtField]`, so putting the other chamber's stamp in `fields` lets it
+    // set `passedOriginAt` itself — no signature change.
+    await enterSigned(
+      db,
+      config,
+      bill,
+      stage.status,
+      "votes",
+      { ...fields, passedOtherChamberAt: now },
+      now,
+      currentTurn,
+      result
+    );
   }
 }
 

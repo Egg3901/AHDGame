@@ -119,6 +119,7 @@ export function africa1953Entries(presetId: string): WorldEntityManifestEntry[] 
       recognition: dependentRecognition("Spanish protectorate zone."),
       un: unIneligible(1956),
       lifecycle: { earliestYear: 1955, expectedYear: 1956, latestYear: 1960 },
+      mapFeatureIds: ["ESH"],
     }),
     tier3Entry(presetId, {
       entityId: "TNG",
@@ -129,6 +130,7 @@ export function africa1953Entries(presetId: string): WorldEntityManifestEntry[] 
       recognition: { status: "partial", notes: "International zone; reintegrated 1956." },
       un: unIneligible(),
       lifecycle: { earliestYear: 1956, expectedYear: 1956, latestYear: 1957 },
+      mapFeatureIds: ["TNG"],
     }),
     tier3Entry(presetId, {
       entityId: "TN",
@@ -329,6 +331,7 @@ export function africa1953Entries(presetId: string): WorldEntityManifestEntry[] 
       recognition: dependentRecognition("UN trust territory under UK."),
       un: unIneligible(1961),
       lifecycle: { earliestYear: 1959, expectedYear: 1961, latestYear: 1965 },
+      mapFeatureIds: ["CMB"],
     }),
     tier3Entry(presetId, {
       entityId: "TGF",
@@ -352,6 +355,7 @@ export function africa1953Entries(presetId: string): WorldEntityManifestEntry[] 
       recognition: dependentRecognition("UN trust territory; union with Gold Coast path."),
       un: unIneligible(1957),
       lifecycle: { earliestYear: 1956, expectedYear: 1957, latestYear: 1960 },
+      mapFeatureIds: ["TGB"],
     }),
     // British East / Central / Southern Africa
     tier3Entry(presetId, {
@@ -398,6 +402,7 @@ export function africa1953Entries(presetId: string): WorldEntityManifestEntry[] 
       recognition: dependentRecognition("British protectorate sultanate."),
       un: unIneligible(1963),
       lifecycle: { earliestYear: 1961, expectedYear: 1963, latestYear: 1965 },
+      mapFeatureIds: ["ZNZ"],
     }),
     tier3Entry(presetId, {
       entityId: "SL",
@@ -514,6 +519,9 @@ export function africa1953Entries(presetId: string): WorldEntityManifestEntry[] 
       recognition: dependentRecognition("UN trust territory under Belgium."),
       un: unIneligible(1962),
       lifecycle: { earliestYear: 1960, expectedYear: 1962, latestYear: 1966 },
+      // The trust territory is exactly the two modern states it split into, so the
+      // pair of present-day features is its own border — no historical shape needed.
+      mapFeatureIds: ["646", "108"],
       notes: "Splits to Rwanda and Burundi; single trust entity in 1953.",
     }),
     tier3Entry(presetId, {

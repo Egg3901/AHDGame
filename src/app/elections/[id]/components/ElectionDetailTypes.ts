@@ -190,6 +190,12 @@ export interface ElectionDetail {
   isEnded: boolean;
   isUpcoming: boolean;
   inGeneral: boolean;
+  /**
+   * Candidates advancing per party from this race's primary, resolved
+   * server-side against the live redistricting flag. Optional so payloads
+   * cached before ticket-1041 still typecheck; consumers fall back to 1.
+   */
+  primaryAdvanceCount?: number;
   byParty: PartyGroup[];
   allCandidates: CandidateDetail[];
   snapshotHistory: SnapshotPoint[];

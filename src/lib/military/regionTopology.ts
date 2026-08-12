@@ -200,6 +200,10 @@ export const COUNTRY_HOME_REGION: Record<string, RegionCode> = {
   MN: "eas",
   // Southeast Asia (sea)
   VN: "sea",
+  // The two Vietnams (1954-1976). Unified VN above keeps its own row: a 1953 game has
+  // NVN/SVN, a modern one has VN, and both must resolve.
+  NVN: "sea",
+  SVN: "sea",
   TH: "sea",
   KH: "sea",
   LA: "sea",
@@ -238,6 +242,18 @@ export const COUNTRY_HOME_REGION: Record<string, RegionCode> = {
 export function homeRegionOf(country: string): RegionCode | undefined {
   return COUNTRY_HOME_REGION[country];
 }
+
+/**
+ * Entity ids a Cold War Conflict may be hosted in.
+ *
+ * Every entry MUST have a `COUNTRY_HOME_REGION` row — `buildConflict` throws for a
+ * `cold_war` host without one, because its `?? "noa"` fallback would otherwise file the
+ * war in North America with no error anywhere. A completeness test pins the pair.
+ *
+ * Korea and Angola are listed but have no static map geometry yet; they render as the
+ * territory meter alone until their builders land.
+ */
+export const PROXY_WAR_HOSTS: readonly string[] = ["NVN", "SVN", "KR", "KP", "AO"];
 
 const inverse: Partial<Record<RegionCode, string[]>> = {};
 /** Country codes whose home region is `region` (memoized inverse of the map). */

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireConflictsEnabled } from "../_coldwar/gate";
+import { entityName } from "@/app/world/international-organizations/entityLabel";
 import { getDb } from "@/lib/mongodb";
 import { getConflictByNumber } from "@/lib/db/collections/conflicts";
 import { getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
@@ -70,25 +71,27 @@ export default async function ConflictRecordPage({
 
   // Accepted deals only. A pending or rejected offer is a private negotiation; an
   // accepted one is part of how the war went and belongs on the public record.
-  const settlements = await getPeaceOffersCollection(db)
-    .find({ conflictId: doc._id, status: "accepted" })
-    .sort({ resolvedTurn: 1 })
-    .toArray();
-
-  const { startingYear, currentTurn } = await getGameTime();
-  // Aggregated over the WHOLE history, not the newest-50 window below: a long
-  // war's casualty figure and engagement count must not stop climbing once the
-  // rendered list fills.
-  const record = await theaterRecord(db, doc._id);
+  // All independent given the conflict doc — one round instead of five.
+  const [settlements, { startingYear, currentTurn }, record, reports, declarationHistory] =
+    await Promise.all([
+      getPeaceOffersCollection(db)
+        .find({ conflictId: doc._id, status: "accepted" })
+        .sort({ resolvedTurn: 1 })
+        .toArray(),
+      getGameTime(),
+      // Aggregated over the WHOLE history, not the newest-50 window below: a long
+      // war's casualty figure and engagement count must not stop climbing once the
+      // rendered list fills.
+      theaterRecord(db, doc._id),
+      getBattleReportsCollection(db)
+        .find({ theaterId: doc._id })
+        .sort({ turn: -1 })
+        .limit(BATTLE_LIMIT)
+        .toArray(),
+      listDeclarationHistory(db, doc._id, 3),
+    ]);
   const casualties = Object.values(record.casualtiesByCountry).reduce((a, b) => a + b, 0);
   const view = toConflictView(doc, { startingYear, casualties });
-
-  const reports = await getBattleReportsCollection(db)
-    .find({ theaterId: doc._id })
-    .sort({ turn: -1 })
-    .limit(BATTLE_LIMIT)
-    .toArray();
-  const declarationHistory = await listDeclarationHistory(db, doc._id, 3);
 
   // --- who is asking, and how much they may see ---------------------------------
   // Roles only count for a country actually in the war (belligerentSideOf uses
@@ -222,7 +225,17 @@ export default async function ConflictRecordPage({
   // route re-checks side membership against the same rosters, so this only shapes the
   // picker. (It used to re-check a global bloc table, which is what let an East German
   // player be offered NATO targets here and then refused by the route.)
-  const enemyCountries = ownSide === "A" ? doc.sideB.countries : doc.sideA.countries;
+  //
+  // The enemy FACTION is a legal target too, and in a proxy war it is the ONLY one:
+  // those rosters start empty and a faction is never enrolled into one, so building
+  // the picker from `countries` alone leaves a player who joined the war with
+  // nothing to attack — while the declare route would have accepted the faction
+  // perfectly well.
+  const enemySide = ownSide === "A" ? doc.sideB : doc.sideA;
+  const enemyCountries = [
+    ...enemySide.countries,
+    ...(enemySide.factionEntity ? [enemySide.factionEntity] : []),
+  ];
   const ownSpectrum =
     ownSide === "A"
       ? (doc.sideA.backer ?? "neutral")
@@ -344,7 +357,11 @@ export default async function ConflictRecordPage({
   const startYear = yearOfTurn(doc.startTurn, startingYear);
   // Prose names the country; chips and labels keep the code. "Warsaw Pact is
   // well ahead in DE" is a database row read aloud, not a sentence.
-  const hostName = COUNTRY_CONFIGS[doc.hostCountry as CountryId]?.name ?? doc.hostCountry;
+  //
+  // `entityName`, not a COUNTRY_CONFIGS lookup: a proxy war's host is a world entity
+  // with no CountryConfig, so the bare lookup fell through to the raw id and printed
+  // "well ahead in SVN". The alignment roster names every entity the world models.
+  const hostName = entityName(doc.hostCountry);
 
   const verdict = verdictOf({
     control: doc.control,

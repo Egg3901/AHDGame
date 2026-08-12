@@ -561,8 +561,12 @@ describe("resolveBattleDeclarations — legacy conflict baselines", () => {
 // Each side fights on its own derived supply, so a side losing the front fights worse.
 describe("resolveBattleDeclarations — supply at the front", () => {
   let db: MockDb;
+  // FIXED id: battle resolution is seeded by declaration id + turn, so a fresh
+  // ObjectId here makes the outcome deterministic within a run and different
+  // between runs. That is what made this block fail intermittently on a suite
+  // nobody had changed.
   const pending = {
-    _id: new ObjectId(),
+    _id: new ObjectId("64b7f9c2a1e4d3b2c1a09876"),
     declarerCountry: "US",
     targetCountry: "CN",
     theaterId: "afghan",
@@ -631,14 +635,23 @@ describe("resolveBattleDeclarations — supply at the front", () => {
     return report.result.margin;
   }
 
-  // Same forces, same seed (the declaration id and turn are fixed) — only supply
-  // differs, so the whole delta is the territorial feedback. Note this asserts the
-  // EFFECT, not an absolute win: the defender also holds terrain, which a supply
-  // edge does not automatically overcome.
-  it("gives the better-supplied attacker a better result than a starved one", async () => {
-    const supplied = await marginWith(70, 30);
-    const starved = await marginWith(30, 70);
-    expect(supplied).toBeGreaterThan(starved);
+  // Better supply is a statistical edge, not a per-battle guarantee: the
+  // defender also holds terrain, and this test's own note said so while
+  // asserting a single draw anyway. Averaged over many seeds it is a claim
+  // about the model rather than about one lucky battle.
+  it("gives the better-supplied attacker a better result on average", async () => {
+    const seeds = Array.from(
+      { length: 24 },
+      (_, i) => new ObjectId(`64b7f9c2a1e4d3b2c1a0${(1000 + i).toString()}`)
+    );
+    let suppliedTotal = 0;
+    let starvedTotal = 0;
+    for (const seed of seeds) {
+      pending._id = seed;
+      suppliedTotal += await marginWith(70, 30);
+      starvedTotal += await marginWith(30, 70);
+    }
+    expect(suppliedTotal / seeds.length).toBeGreaterThan(starvedTotal / seeds.length);
   });
 
   it("is unaffected when both sides sit at the same supply", async () => {

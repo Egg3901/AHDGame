@@ -110,6 +110,16 @@ export const NOTIFICATION_TYPES = [
   "player_event_resolved",
   "extraction_capacity_bound",
   "union_leader_offer",
+  /** An employer attempted to bust the union organizing one of its sectors. */
+  "union_busting_attempted",
+  /** A bargaining dispute ran its full course and lapsed unresolved. */
+  "bargaining_dispute_lapsed",
+  /** An overtime ban ended because the union treasury could not cover its upkeep. */
+  "overtime_ban_defunded",
+  /** Organizers are voting on a settlement the union president moved to accept. */
+  "bargaining_ratification_open",
+  /** A settlement ratification vote closed, whichever way it went. */
+  "bargaining_ratification_closed",
   "world_event_offered",
   "world_event_resolved",
   // Resource prospecting + extraction contracts
@@ -119,6 +129,13 @@ export const NOTIFICATION_TYPES = [
   "contract_royalty_missed",
   "contract_defaulted",
   "contract_expired",
+  // Merger review (C3)
+  "merger_review_opened",
+  "merger_review_decided",
+  "merger_remedy_overdue",
+  "transfer_pricing_assessed",
+  "bank_supervision_breach",
+  "bank_supervision_cleared",
   // Defence procurement: a government offering one of this corp's plants an order.
   "defence_contract_offered",
   "defence_contract_cancelled",

@@ -1235,6 +1235,11 @@ export function buildSectorPlantsSection(args: {
   governorCap: number;
   governorRampTurns: number;
   marketSharePercent: number;
+  /**
+   * Rival corps in this (state, type) cell — scales the dominance build toll.
+   * Null when the caller could not resolve it, which prices at the full toll.
+   */
+  competitorCount: number | null;
   primeRate: number;
   ceoAcumen: number;
   hostCostOfLivingIndex: number | null;
@@ -1280,6 +1285,7 @@ export function buildSectorPlantsSection(args: {
     governorCap,
     governorRampTurns,
     marketSharePercent,
+    competitorCount,
     primeRate,
     ceoAcumen,
     hostCostOfLivingIndex,
@@ -1391,6 +1397,7 @@ export function buildSectorPlantsSection(args: {
     year: currentYear,
     eraUnitScale,
     marketSharePercent,
+    competitorCount: competitorCount ?? undefined,
     primeRate,
     acumen: ceoAcumen,
     hostCostOfLivingIndex,

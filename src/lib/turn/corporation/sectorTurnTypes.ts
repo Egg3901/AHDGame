@@ -22,6 +22,8 @@ export interface SectorTurnEnv {
   pendingStrikeEvents: SectorCalculationsResult["strikeEvents"];
   pendingCapacityBindingEvents: SectorCalculationsResult["capacityBindingEvents"];
   sectorOps: SectorUpdateOp[];
+  /** gameConfig.privateBankingEnabled — gates branch/commodity capacity split. */
+  privateBankingEnabled?: boolean;
 }
 
 /** Per-sector contributions accumulated by processSectors. */

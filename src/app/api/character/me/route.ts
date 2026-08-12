@@ -180,6 +180,7 @@ export async function GET() {
           party: user.character.party,
           homeState: user.character.homeState,
           cashOnHand: getTotalPersonalLiquidWealth(user.character, forexEnabled, forexRates),
+          actions: user.character.actions ?? 0,
           countryId: user.character.countryId,
           // Both shapes: `tutorial` is the plan the welcome flow writes,
           // `tutorialTrack` is the legacy field resolveTutorialPlan migrates

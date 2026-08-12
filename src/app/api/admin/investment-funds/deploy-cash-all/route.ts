@@ -10,6 +10,8 @@ import { calculateBackingRatio } from "@/lib/indexFunds/unitAccounting";
 import { recomputeNav } from "@/lib/indexFunds/fundCron";
 import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
 import { createAdminLog } from "@/lib/adminLog";
+import { emitFundAdminMintLeg } from "@/lib/indexFunds/adminMintLedger";
+import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { sumFundBondHoldingsValueAnchor } from "@/lib/bonds/fundBondHoldings";
 import { loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import {
@@ -60,6 +62,8 @@ export async function POST(request: Request) {
     const totalsByCurrency: Record<string, number> = {};
     let injectedCount = 0;
 
+    // One turn read for the whole sweep rather than one per fund.
+    const injectionTurn = await getCurrentTurn(db);
     for (const fund of funds) {
       const holdingsValueAnchor = computeHoldingsValueAnchor(fund);
       const bondPrincipalAnchor = await sumFundBondHoldingsValueAnchor(db, fund, exchangeRates);
@@ -89,6 +93,17 @@ export async function POST(request: Request) {
         }
       );
       if (updateResult.matchedCount === 0) continue;
+
+      await emitFundAdminMintLeg(db, {
+        fundId: fund._id,
+        fundName: fund.name,
+        fundSlug: fund.slug,
+        amountAnchor: amountAnchor,
+        currencyCode: fund.anchorCurrencyCode,
+        adminName: auth.admin.username,
+        turn: await getCurrentTurn(db),
+        tool: "deploy_cash_all",
+      });
 
       await insertFundTransaction(db, {
         fundId: fund._id,

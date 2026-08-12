@@ -33,6 +33,43 @@ export type FinancialTxType =
   | "corp_dissolution_distribution"
   | "corp_escrow_funding"
   | "corp_escrow_withdrawal"
+  // C4 corporate groups: tax refunded when a group surrenders losses.
+  | "corp_group_relief"
+  // B8 discount window: emergency central-bank liquidity for a deposit-taker.
+  | "bank_discount_window_draw"
+  | "bank_discount_window_repay"
+  // Private banking: the money legs the release review found missing.
+  // Origination CREATES deposit money (the bank's own cash is untouched), so it
+  // is a mint-contra leg rather than a transfer from the bank.
+  | "bank_loan_origination"
+  | "bank_loan_repayment"
+  | "bank_deposit_interest"
+  // Prop book. A trade is a RECLASS between the bank's cash and its own
+  // trading book, so only the cash side is a money movement and both
+  // directions share one mint/sink reason, exactly like capacity capex.
+  | "bank_prop_trade_buy"
+  | "bank_prop_trade_sell"
+  // Depositor resolution when a bank fails: insured balances made whole from
+  // the recovery pool, the insurance fund, then the Treasury backstop.
+  | "bank_insurance_payout"
+  // Central-bank advance to a chartered bank (liquidity injection), booked as
+  // charter debt and repaid through the margin path.
+  | "bank_cb_advance"
+  // Interbank market: retail/universal bank cash lent to an investment or
+  // universal bank and repaid. A real corp-to-corp transfer, two-sided.
+  | "bank_interbank_lend"
+  | "bank_interbank_repay"
+  // CB margin line principal. Draw CREATES cash into the corp (LOC-style,
+  // mirrored on the CB's netMoneyCreatedLifetime); repayment destroys it.
+  | "bank_cb_margin_draw"
+  | "bank_cb_margin_repay"
+  // Merger review (C3): fine for an overdue divestiture order.
+  | "corp_fine"
+  // A7 index committee: corporate cash spent lobbying for a listing waiver.
+  | "index_listing_lobbying"
+  // A8: employer contribution or deficit top-up into a union pension scheme.
+  | "pension_contribution"
+  | "pension_benefit"
 
   // Capacity builds (P3a, marketSystemMode >= "plants"). A build is a CAPEX
   // reclass, not a loss: cash leaves `liquidCapital` and becomes the sector's
@@ -108,7 +145,14 @@ export type FinancialTxType =
   | "govt_signing_fee_receipt" // national treasury receives a contract signing fee
   | "govt_royalty_receipt"; // national treasury receives an extraction royalty
 
-export type FinancialSubjectType = "character" | "corporation" | "party" | "government";
+export type FinancialSubjectType =
+  | "character"
+  | "corporation"
+  | "party"
+  | "government"
+  // A8: a union pension scheme holds real assets paid in by employers, so it is
+  // a counterparty in its own right rather than a destination with no account.
+  | "pension_scheme";
 export type FinancialCounterpartyType = FinancialSubjectType | "system";
 export type SuspectFlagType =
   | "large_transaction"

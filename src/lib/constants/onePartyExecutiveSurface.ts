@@ -140,9 +140,13 @@ const SURFACES: Partial<Record<CountryId, OnePartyExecutiveSurface>> = {
       sealGlyph: "GS",
       vacancyNote: "A qualifying party or coalition chair may nominate a General Secretary.",
     },
-    oppositionNote: "The leader of the largest opposition party in the Volkskammer.",
+    // Not "opposition": the CDU, LDPD, NDPD and DBD sat in the National Front
+    // alongside the SED and held Volkskammer seats by allocation, not contest.
+    // The generic surface calls this seat the opposition leader; in the DDR the
+    // largest non-SED bloc party is a junior partner, so the copy says so.
+    oppositionNote: "The leader of the largest National Front bloc party in the Volkskammer.",
     seatsPanel: {
-      title: "Volkskammer seats by party",
+      title: "Volkskammer seats by bloc party",
       emptyText: "No Volkskammer deputies elected yet.",
     },
     confidencePanel: {

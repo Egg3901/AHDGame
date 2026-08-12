@@ -23,6 +23,13 @@ export type BillStatus =
   | "active"
   | "passed_origin"
   | "active_other"
+  /**
+   * Both chambers voting AT ONCE, each into its own tally; passes only if every chamber
+   * clears the bar. Distinct from `active`/`active_other`, which are sequential.
+   * `currentChamber` is a display default on these bills — never the authority for which
+   * chamber a voter belongs to.
+   */
+  | "active_both"
   | "enrolled"
   | "signed"
   | "vetoed"
@@ -176,6 +183,25 @@ export interface DeclareWarProvision {
   warGoal: WarGoal;
 }
 
+/**
+ * Entry into an EXISTING conflict at a bloc's call.
+ *
+ * Written only by `buildJoinConflictBill`, from a passed bloc resolution — the
+ * ordinary bill route refuses it, exactly as it refuses `declare_war`, because
+ * this path has no foreign-minister gate and would carry war entry at simple
+ * majority.
+ */
+export interface JoinConflictProvision {
+  type: "join_conflict";
+  /** ConflictDoc._id — the theater key, not the public conflictId. */
+  theaterId: string;
+  side: "A" | "B";
+  /** The bloc that called for it, for the bill text and the record. */
+  organizationId: string;
+  /** The resolution that spawned this bill. */
+  resolutionId: string;
+}
+
 export interface EmbargoProvision {
   type: "embargo";
   /** Country whose trade is restricted. */
@@ -308,7 +334,8 @@ export type BillProvision =
   | UnionLawProvision
   | ElectoralLawProvision
   | CentralBankIndependenceProvision
-  | DeclareWarProvision;
+  | DeclareWarProvision
+  | JoinConflictProvision;
 
 /** Type guard — true for policy provisions (the historical default). */
 export function isPolicyProvision(p: BillProvision): p is PolicyProvision {
@@ -325,6 +352,10 @@ export function isPolicyProvision(p: BillProvision): p is PolicyProvision {
     // Without this a declaration would be read as a policy provision and written
     // into a policy record — the same trap the union_law branch documents.
     p.type !== "declare_war" &&
+    // Same trap as declare_war: unlisted here it reads as a policy provision, and
+    // the two consumers write it into a policy record with an undefined
+    // legislationTypeId and shift every voting legislator's own positions by it.
+    p.type !== "join_conflict" &&
     p.type !== "euro_adoption" &&
     p.type !== "union_law" &&
     p.type !== "electoral_law" &&

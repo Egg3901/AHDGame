@@ -664,6 +664,7 @@ export async function GET(request: Request) {
         ? cabinetOfficeTypeForCountry((cabinetSeat.countryId ?? character.countryId) as CountryId)
         : undefined,
       officeActionBonus: gameConfigDoc?.officeActionBonus,
+      countryId: (character.countryId ?? "US") as CountryId,
     });
 
     // Bonus actions granted by party-influence share (mirrors profile/page.tsx).

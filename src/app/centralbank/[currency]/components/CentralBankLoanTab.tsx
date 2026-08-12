@@ -262,7 +262,7 @@ export function CentralBankLoanTab({ countryId }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Stat strip — your rate, outstanding, available, system pool */}
+      {/* Stat strip - your rate, outstanding, available, system pool */}
       <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
         <div className="grid grid-cols-2 sm:grid-cols-4 divide-y divide-card-border sm:divide-y-0 sm:divide-x">
           <StatCell
@@ -283,7 +283,7 @@ export function CentralBankLoanTab({ countryId }: Props) {
           />
           <StatCell
             label="Available Credit"
-            value={noIncome && !equityOnlyMode ? "—" : formatAmount(s.perPlayerAvailableInternal)}
+            value={noIncome && !equityOnlyMode ? "-" : formatAmount(s.perPlayerAvailableInternal)}
             sub={
               equityOnlyMode
                 ? "equity-backed only"
@@ -331,7 +331,7 @@ export function CentralBankLoanTab({ countryId }: Props) {
               <span className="text-xs text-muted tabular-nums">
                 {formatAmount(s.outstandingInternal)} <span className="text-muted/60">/</span>{" "}
                 <span className="text-foreground font-medium">
-                  {noIncome && !equityOnlyMode ? "—" : formatAmount(s.perPlayerLimitInternal)}
+                  {noIncome && !equityOnlyMode ? "-" : formatAmount(s.perPlayerLimitInternal)}
                 </span>
               </span>
             </div>
@@ -352,7 +352,7 @@ export function CentralBankLoanTab({ countryId }: Props) {
                         : ""
                     }
                   >
-                    {noIncome ? "—" : formatAmount(s.dtiLimitInternal)}
+                    {noIncome ? "-" : formatAmount(s.dtiLimitInternal)}
                   </span>
                 </span>
                 <span>
@@ -566,16 +566,16 @@ export function CentralBankLoanTab({ countryId }: Props) {
                         {formatNative(row.amount, c)}
                       </td>
                       <td className="px-4 py-2 text-right tabular-nums text-muted hidden md:table-cell">
-                        {hasSplit ? formatNative(row.interestPortion ?? 0, c) : "—"}
+                        {hasSplit ? formatNative(row.interestPortion ?? 0, c) : "-"}
                       </td>
                       <td className="px-4 py-2 text-right tabular-nums text-muted hidden md:table-cell">
-                        {hasSplit ? formatNative(row.principalPortion ?? 0, c) : "—"}
+                        {hasSplit ? formatNative(row.principalPortion ?? 0, c) : "-"}
                       </td>
                       <td className="px-4 py-2 text-right tabular-nums text-muted">
                         {formatNative(row.balanceAfter, c)}
                       </td>
                       <td className="px-4 py-2 text-right text-muted hidden sm:table-cell">
-                        {row.turn != null ? `T${row.turn}` : "—"}
+                        {row.turn != null ? `T${row.turn}` : "-"}
                       </td>
                     </tr>
                   );

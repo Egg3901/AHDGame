@@ -14,11 +14,15 @@ import {
   refundCorpLiquidCapital,
 } from "@/lib/financialTxLog/atomicCashGuard";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
+import { emitTx } from "@/lib/financialTxLog/emit";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import { cleanupShareMarketActivityForCorporations } from "@/lib/corporations/cleanupShareMarketActivity";
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
 import { payShareholders } from "@/lib/nationalization/ownershipTransition";
 import { moveSectorToCorp } from "@/lib/corporations/moveSector";
 import { recordAudit } from "@/lib/audit/recordAudit";
+import { assertMergerClearance } from "@/lib/corporations/mergerReview/gate";
+import { attachMergerRemedy } from "@/lib/corporations/mergerReview/lifecycle";
 
 export interface ExecuteAgreedAcquisitionParams {
   db: Db;
@@ -87,6 +91,13 @@ export async function executeAgreedAcquisition(
       status: 400,
     };
 
+  // Merger review (C3). Runs BEFORE any money moves: a referral must leave the
+  // two corporations exactly as it found them. A cleared review returns here
+  // with the (possibly conditional) clearance attached.
+  const clearance = await assertMergerClearance(db, acquirer, target, "agreedAcquisition", currentTurn);
+  if (!clearance.ok)
+    return { ok: false, error: clearance.error, status: clearance.status };
+
   const now = new Date();
   const [targetSectors, fxByCurrency, acquirerFxRate, targetFxRate] = await Promise.all([
     db
@@ -120,7 +131,10 @@ export async function executeAgreedAcquisition(
   //    Refund the acquirer if the payout throws before we mutate any assets.
   try {
     if (offer.priceAnchor > 0) {
-      await payShareholders(db, target, offer.priceAnchor, fxByCurrency, now);
+      await payShareholders(db, target, offer.priceAnchor, fxByCurrency, now, {
+        turn: currentTurn,
+        kind: "agreed_acquisition",
+      });
     }
   } catch (err) {
     if (priceInAcquirerCapital > 0)
@@ -158,11 +172,74 @@ export async function executeAgreedAcquisition(
     );
   }
 
+  // 4b. Ledger the two corporate-side legs. The holder credits were emitted by
+  //     `payShareholders`; these are the acquirer's outflow and the shell's cash
+  //     moving to its new owner. Emitted here, after every asset mutation has
+  //     succeeded, so a failure earlier (which refunds) logs nothing.
+  const targetCashInAcquirerCapital =
+    targetCashAnchor > 0
+      ? Math.round(anchorToCorpLiquidCapital(targetCashAnchor, acquirer, acquirerFxRate))
+      : 0;
+  await Promise.all([
+    priceInAcquirerCapital > 0
+      ? emitTx(db, {
+          type: "share_buyout_outflow",
+          turn: currentTurn,
+          createdAt: now,
+          subjectType: "corporation",
+          subjectId: acquirer._id,
+          subjectName: acquirer.name,
+          amount: -priceInAcquirerCapital,
+          currencyCode: (acquirerCurrency ?? "USD") as CurrencyCode,
+          counterpartyType: "corporation",
+          counterpartyId: target._id,
+          counterpartyName: target.name,
+          meta: { kind: "agreed_acquisition", offerId: offer._id.toString() },
+        })
+      : Promise.resolve(),
+    targetCashInAcquirerCapital > 0
+      ? emitTx(db, {
+          type: "corp_dissolution_distribution",
+          turn: currentTurn,
+          createdAt: now,
+          subjectType: "corporation",
+          subjectId: acquirer._id,
+          subjectName: acquirer.name,
+          amount: targetCashInAcquirerCapital,
+          currencyCode: (acquirerCurrency ?? "USD") as CurrencyCode,
+          counterpartyType: "corporation",
+          counterpartyId: target._id,
+          counterpartyName: target.name,
+          meta: { kind: "agreed_acquisition", side: "shell_cash_absorbed" },
+        })
+      : Promise.resolve(),
+    target.liquidCapital && target.liquidCapital > 0
+      ? emitTx(db, {
+          type: "corp_dissolution_distribution",
+          turn: currentTurn,
+          createdAt: now,
+          subjectType: "corporation",
+          subjectId: target._id,
+          subjectName: target.name,
+          amount: -Math.round(target.liquidCapital),
+          currencyCode: (targetCurrency ?? "USD") as CurrencyCode,
+          counterpartyType: "corporation",
+          counterpartyId: acquirer._id,
+          counterpartyName: acquirer.name,
+          meta: { kind: "agreed_acquisition", side: "shell_cash_released" },
+        })
+      : Promise.resolve(),
+  ]);
+
   // 5. Tear down the target shell.
   const forexEnabled = await isForexEnabled();
   await cleanupShareMarketActivityForCorporations(db, [target._id], now, forexEnabled);
   await stampSubjectDeleted(db, target._id, { sequentialId: target.sequentialId, deletedAt: now });
   await corps.deleteOne({ _id: target._id });
+
+  // A conditional clearance becomes a live divestiture order only now that the
+  // merger has actually committed.
+  if (clearance.review) await attachMergerRemedy(db, clearance.review, acquirer._id, currentTurn);
 
   recordAudit({
     source: "api",

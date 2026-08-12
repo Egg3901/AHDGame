@@ -1,4 +1,5 @@
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
+import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -105,16 +106,17 @@ const STATE_IDS = [...new Set(ELECTORAL_VOTE_UNITS.map((u) => u.stateId))];
 async function loadPrimaryData(partySlug: string) {
   const db = await getDb();
 
-  const election = await db.collection<Election>("elections").findOne({
-    electionType: "president",
-    countryId: "US",
-    status: "active",
-  });
+  const [election, party] = await Promise.all([
+    db.collection<Election>("elections").findOne({
+      electionType: "president",
+      countryId: "US",
+      status: "active",
+    }),
+    db
+      .collection<PoliticalParty>("politicalParties")
+      .findOne({ countryId: "US", sequentialId: Number(partySlug) }),
+  ]);
   if (!election) return null;
-
-  const party = await db
-    .collection<PoliticalParty>("politicalParties")
-    .findOne({ countryId: "US", sequentialId: Number(partySlug) });
   // Fall back to slug-based lookup if sequentialId doesn't match
   const partyDoc =
     party ??
@@ -127,18 +129,17 @@ async function loadPrimaryData(partySlug: string) {
   // we still render the page (calendar, map, standings) with zeroed-out
   // numbers and a "no candidates have filed yet" call-to-action so the
   // primary surface remains navigable before anyone enters the race.
-  const candidates = await db
-    .collection<ElectionCandidate>("electionCandidates")
-    .find({
-      electionId: election._id,
-      party: partyDoc.sequentialId.toString(),
-      status: "active",
-    })
-    .toArray();
-
-  const tally = await db
-    .collection<ElectionVoteTally>("electionVoteTallies")
-    .findOne({ electionId: election._id });
+  const [candidates, tally] = await Promise.all([
+    db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find({
+        electionId: election._id,
+        party: partyDoc.sequentialId.toString(),
+        status: "active",
+      })
+      .toArray(),
+    db.collection<ElectionVoteTally>("electionVoteTallies").findOne({ electionId: election._id }),
+  ]);
 
   // Fetch each candidate's campaign to read their chosen display color.
   // Campaign.color is optional; falls back to a palette in buildCandidateColorMap.
@@ -166,13 +167,16 @@ async function loadPrimaryData(partySlug: string) {
     characterIds.length > 0
       ? db
           .collection<Character>("characters")
-          .find({ _id: { $in: characterIds } })
+          .find(
+            { _id: { $in: characterIds } },
+            { projection: { homeState: 1, nationalInfluence: 1, favorability: 1 } }
+          )
           .toArray()
       : [],
     nppIds.length > 0
       ? db
           .collection<NPP>("npps")
-          .find({ _id: { $in: nppIds } })
+          .find({ _id: { $in: nppIds } }, { projection: { homeState: 1, favorability: 1 } })
           .toArray()
       : [],
   ]);
@@ -213,7 +217,7 @@ async function loadPrimaryData(partySlug: string) {
   // Fetch shared demographics / state meta / categories once for the GE-style
   // per-state projection.
   const [categoriesDocs, statesDocs, demographicsDocs, enriched] = await Promise.all([
-    db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+    loadDemographicCategories(db),
     db
       .collection<State>("states")
       .find({ _id: { $in: STATE_IDS } })

@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import type { State, StateDemographics, DemographicCategory } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { calculateStateLean, getDisplayLean, getLeanLabel } from "@/lib/utils/demographics";
@@ -28,7 +29,7 @@ export async function computeLeanMap(
   const [allStates, allDemographics, demographicCategories] = await Promise.all([
     db.collection<State>("states").find({ countryId }).toArray(),
     db.collection<StateDemographics>("stateDemographics").find({ countryId }).toArray(),
-    db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+    loadDemographicCategories(db),
   ]);
 
   const stateMap = new Map(allStates.map((s) => [s._id, s]));

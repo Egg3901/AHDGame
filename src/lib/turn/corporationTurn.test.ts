@@ -7,6 +7,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { softCapEffectiveMargin } from "@/lib/constants/corporations";
+import { processCorporationTurn } from "./corporationTurn";
 // profitMargin:100 (a "zero maintenance" shortcut in these fixtures) now realizes
 // at the soft-capped ~95.2%, so income/tax expectations scale by this factor.
 const EFF_MARGIN_100 = softCapEffectiveMargin(100) / 100;
@@ -99,7 +100,6 @@ describe("processCorporationTurn", () => {
 
   it("returns zero counts when no corporations exist", async () => {
     // All collections return empty by default
-    const { processCorporationTurn } = await import("./corporationTurn");
     const result = await processCorporationTurn(1);
 
     expect(result.corporationsProcessed).toBe(0);

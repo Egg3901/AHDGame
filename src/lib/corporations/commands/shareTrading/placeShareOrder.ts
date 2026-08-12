@@ -8,6 +8,10 @@ import { placeOrderSchema } from "@/lib/api/schemas/corporations";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { assertCeoTradeNotBlocked } from "@/lib/corporations/commands/privatization/openVoteGuard";
+import {
+  corpPurchaseWouldCycle,
+  OWNERSHIP_CYCLE_ERROR,
+} from "@/lib/corporations/subsidiaries/cycleGuard";
 import type { Character, Corporation, ShareOrder } from "@/lib/db/types";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import {
@@ -184,6 +188,10 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           { error: "National corporations cannot hold equity positions" },
           { status: 400 }
         );
+      }
+
+      if (type === "buy" && (await corpPurchaseWouldCycle(db, placerCorp._id, corporation._id))) {
+        return NextResponse.json({ error: OWNERSHIP_CYCLE_ERROR }, { status: 400 });
       }
 
       const placerFxRate = await getCorpFxRate(db, placerCorp);

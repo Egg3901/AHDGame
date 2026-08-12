@@ -115,10 +115,10 @@ export function LobbyForm({
             {autoConvertEnabled ? (
               <span className="text-muted">
                 {" "}
-                — auto-convert will top up {lobbyCurrency} if needed
+                - auto-convert will top up {lobbyCurrency} if needed
               </span>
             ) : (
-              <span className="text-warning"> — auto-convert off (exchange manually)</span>
+              <span className="text-warning"> - auto-convert off (exchange manually)</span>
             )}
           </p>
         )}

@@ -57,6 +57,7 @@ export function emptyComponents(): MutableComponents {
     partyLiquid: 0,
     governmentLiquid: 0,
     fundLiquid: 0,
+    bankDeposits: 0,
     organizationLiquid: 0,
     householdSavings: 0,
     externalBroadMoney: 0,

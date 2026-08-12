@@ -16,7 +16,7 @@ import { nationalLawCountryQuery } from "@/lib/policy/nationalPolicyRecords";
 import { calculateEnactedLawAnnualCost } from "./costs";
 import { COST_INCOME_ANCHORS } from "@/lib/politicalLegislation/costAnchors";
 import { countryFiscalBase, regionFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
-import { getEraContext } from "@/lib/era/context";
+import { getEraContext, type EraContext } from "@/lib/era/context";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
@@ -128,7 +128,10 @@ export function normalizeStateSpending(
 }
 
 async function getCountryPopulation(db: Db, countryId: CountryId): Promise<number> {
-  const states = await db.collection<State>("states").find({ countryId }).toArray();
+  const states = await db
+    .collection<State>("states")
+    .find({ countryId }, { projection: { population: 1 } })
+    .toArray();
   return states.reduce((sum, state) => sum + (state.population ?? 0), 0);
 }
 
@@ -171,7 +174,11 @@ export async function resolveNationalMedianIncome(
 export async function calculateFederalSpending(
   db: Db,
   budget: FederalBudget,
-  debtInterest: number
+  debtInterest: number,
+  // Optional pre-fetched era context, hoisted by refreshNationalBudgetRevenue
+  // so the world-constant gameState read happens once per turn instead of once
+  // per budget. Omitted => resolved here (single-budget callers).
+  hoistedEraContext?: EraContext
 ): Promise<FederalBudget["spending"]> {
   const budgetCountryId = (budget.countryId ||
     (budget._id === COUNTRY_CONFIGS.UK.id
@@ -182,22 +189,24 @@ export async function calculateFederalSpending(
     ...nationalLawCountryQuery(budgetCountryId),
     repealedAt: { $exists: false },
   };
-  const enactedLaws = keepLatestActiveLawPerType(
-    await db.collection<EnactedLaw>("enactedLaws").find(nationalQuery).toArray()
-  );
-
-  const population = await getCountryPopulation(db, budgetCountryId);
-  const nationalGdpPerCapita = population > 0 ? budget.gdp / population : undefined;
-  const nationalMedianIncome = await resolveNationalMedianIncome(db, budgetCountryId);
-  // Spec B: era cost forms apply when the flag is on (year non-null); null ⇒ legacy.
-  const { year: eraYear, incomeBandIndexByCountry } = await getEraContext(db);
-  // Political-legislation v2 (spec §5.1): countries with new-generation laws
-  // price them on the REGIONAL-ROLLUP base, not the budget-seed gdp. One read
-  // per sync; other countries skip it entirely.
-  const v2Base =
+  // These five reads are independent of one another — one round instead of a
+  // serial chain.
+  const [rawLaws, population, nationalMedianIncome, eraContext, v2Base] = await Promise.all([
+    db.collection<EnactedLaw>("enactedLaws").find(nationalQuery).toArray(),
+    getCountryPopulation(db, budgetCountryId),
+    resolveNationalMedianIncome(db, budgetCountryId),
+    // Spec B: era cost forms apply when the flag is on (year non-null); null ⇒ legacy.
+    hoistedEraContext ? Promise.resolve(hoistedEraContext) : getEraContext(db),
+    // Political-legislation v2 (spec §5.1): countries with new-generation laws
+    // price them on the REGIONAL-ROLLUP base, not the budget-seed gdp. One read
+    // per sync; other countries skip it entirely.
     budgetCountryId in COST_INCOME_ANCHORS
-      ? await countryFiscalBase(db, budgetCountryId)
-      : undefined;
+      ? countryFiscalBase(db, budgetCountryId)
+      : Promise.resolve(undefined),
+  ]);
+  const enactedLaws = keepLatestActiveLawPerType(rawLaws);
+  const nationalGdpPerCapita = population > 0 ? budget.gdp / population : undefined;
+  const { year: eraYear, incomeBandIndexByCountry } = eraContext;
   const incomeBandIndex = incomeBandIndexByCountry?.[budgetCountryId] ?? null;
   const byCategory: Record<string, number> = {};
   let stateGrants = 0;

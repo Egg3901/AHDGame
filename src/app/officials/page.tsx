@@ -41,8 +41,15 @@ export default async function OfficialsPage() {
     }
   }
 
-  // Get all current Senate officials
-  const senateOfficials = await officialsCollection.find({ officeType: "senate" }).toArray();
+  // Get Senate officials, states, and Governor officials in one round
+  const [senateOfficials, states, governorOfficials] = await Promise.all([
+    officialsCollection.find({ officeType: "senate" }).toArray(),
+    db
+      .collection("states")
+      .find({}, { projection: { abbreviation: 1 } })
+      .toArray(),
+    officialsCollection.find({ officeType: "governor" }).toArray(),
+  ]);
 
   // Build map of filled seats
   const filledSeats = new Map<string, boolean>();
@@ -63,12 +70,9 @@ export default async function OfficialsPage() {
     }
   });
 
-  // Get all states
-  const states = await db.collection("states").find({}).toArray();
   const stateAbbreviations = states.map((s) => s.abbreviation);
 
   // Get Governor vacancies
-  const governorOfficials = await officialsCollection.find({ officeType: "governor" }).toArray();
   const governorStates = new Set(governorOfficials.map((g) => g.state));
   const governorVacancies = stateAbbreviations
     .filter((state) => !governorStates.has(state))

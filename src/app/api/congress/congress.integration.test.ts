@@ -92,7 +92,7 @@ describe("GET /api/congress/bills", () => {
     // put this test *below* it — the only one in the file that could time out.
   });
 
-  it("filters chamber tabs by currentChamber so passed bills move to the next chamber list", async () => {
+  it("filters chamber tabs by currentChamber, plus concurrent bills, so passed bills move to the next chamber list", async () => {
     const { getDb } = await import("@/lib/mongodb");
     const billsFindResult = {
       toArray: vi.fn().mockResolvedValue([]),
@@ -123,7 +123,14 @@ describe("GET /api/congress/bills", () => {
     const res = await GET(req);
 
     expect(res.status).toBe(200);
-    expect(billsFind).toHaveBeenCalledWith(expect.objectContaining({ currentChamber: "senate" }));
+    // Follows currentChamber — plus concurrent bills, which sit on both floors at
+    // once and carry the LOWER chamber in that field, so filtering on it alone
+    // would hide them from the Senate tab entirely.
+    expect(billsFind).toHaveBeenCalledWith(
+      expect.objectContaining({
+        $or: expect.arrayContaining([{ currentChamber: "senate" }, { status: "active_both" }]),
+      })
+    );
     expect(billsFind).not.toHaveBeenCalledWith(
       expect.objectContaining({ originChamber: expect.anything() })
     );

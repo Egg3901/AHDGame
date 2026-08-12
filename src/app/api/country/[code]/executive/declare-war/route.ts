@@ -97,7 +97,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     // wars against the same country at once.
     const existing = await db.collection<Bill>("bills").findOne({
       countryId,
-      status: { $in: ["proposed", "active", "passed_origin", "active_other"] },
+      status: { $in: ["proposed", "active", "passed_origin", "active_other", "active_both"] },
       "provisions.type": "declare_war",
       "provisions.targetCountry": targetCountry,
     });

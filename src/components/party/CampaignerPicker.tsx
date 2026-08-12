@@ -24,7 +24,12 @@ interface CampaignerPickerProps {
   /** Optional state filter — when set, only members with `homeState === stateId` show. */
   filterStateId?: string;
   /** Save handler. Receives the new id list (single mode passes [] or [id]). */
-  onSave: (ids: string[]) => Promise<void> | void;
+  /**
+   * Persist the staged roster. May return a message to show instead of the
+   * generic confirmation — national campaigner saves report whether names
+   * were seated or sent to the National Committee for confirmation.
+   */
+  onSave: (ids: string[]) => Promise<string | void> | string | void;
   /** Display color for the save button. */
   partyColor: string;
   /** Whether the viewer is allowed to assign (chair / admin). */
@@ -90,8 +95,8 @@ export function CampaignerPicker({
     setSaving(true);
     setMsg("");
     try {
-      await onSave(staged.map((s) => s.id));
-      setMsg("✓ Campaigners updated");
+      const result = await onSave(staged.map((s) => s.id));
+      setMsg(typeof result === "string" && result ? `✓ ${result}` : "✓ Campaigners updated");
     } catch (err) {
       setMsg(err instanceof Error ? `✗ ${err.message}` : "✗ Save failed");
     } finally {

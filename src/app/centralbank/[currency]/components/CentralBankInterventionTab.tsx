@@ -189,7 +189,7 @@ export function CentralBankInterventionTab({
             <p className="text-gray-400">
               Status:{" "}
               {inBand === null ? (
-                "—"
+                "-"
               ) : inBand ? (
                 <span className="text-green-400">In band</span>
               ) : (

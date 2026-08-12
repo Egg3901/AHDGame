@@ -37,6 +37,7 @@ import { appointNppChair } from "@/lib/nppAutonomy/appointNppChair";
 import { makeSeededRng } from "@/lib/events/substrate/rng";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
 import { logger } from "../observability/logger";
+import { CHAIR_CHANGE_SCRUTINY_RETAINED } from "@/lib/centralBank/credibility";
 
 // Optional global salt so headless sim runs can vary this RNG across runs
 // while staying reproducible within a run (mirrors nppActionProcessing.ts).
@@ -236,12 +237,20 @@ export async function persistVacancy(db: Db, bankId: string, gameNow: Date): Pro
         chairCharacterName: null,
         chairAppointedAt: null,
         chairAppointedBy: null,
-        chairInfamy: 0,
+        // Scrutiny is the INSTITUTION's, not the person's: a new chair inherits
+        // most of it. Zeroing it here made replacing the chair a credibility
+        // laundromat — the cheapest way to erase a bad record was to churn
+        // people. The retained fraction leaves a real honeymoon without making
+        // the reset worth buying.
+        resolveStreak: 0,
         chairTermExpiresAtTurn: null,
         chairSelectionPending: null,
         vacancyAwaitingAutomaticSelection: true,
         updatedAt: gameNow,
       },
+      // Institutional scrutiny survives the person; the new chair inherits most
+      // of it, so churning chairs is not a way to erase a bad record.
+      $mul: { chairInfamy: CHAIR_CHANGE_SCRUTINY_RETAINED },
     }
   );
 }
@@ -262,12 +271,20 @@ async function persistPendingProposal(
         chairCharacterName: null,
         chairAppointedAt: null,
         chairAppointedBy: null,
-        chairInfamy: 0,
+        // Scrutiny is the INSTITUTION's, not the person's: a new chair inherits
+        // most of it. Zeroing it here made replacing the chair a credibility
+        // laundromat — the cheapest way to erase a bad record was to churn
+        // people. The retained fraction leaves a real honeymoon without making
+        // the reset worth buying.
+        resolveStreak: 0,
         chairTermExpiresAtTurn: null,
         chairSelectionPending: proposal,
         vacancyAwaitingAutomaticSelection: false,
         updatedAt: gameNow,
       },
+      // Institutional scrutiny survives the person; the new chair inherits most
+      // of it, so churning chairs is not a way to erase a bad record.
+      $mul: { chairInfamy: CHAIR_CHANGE_SCRUTINY_RETAINED },
     }
   );
 
@@ -460,7 +477,12 @@ export async function acceptCentralBankChairSelection(
         chairCharacterName: character.name,
         chairAppointedAt: gameNow,
         chairAppointedBy: pending.appointedByExecutiveId,
-        chairInfamy: 0,
+        // Scrutiny is the INSTITUTION's, not the person's: a new chair inherits
+        // most of it. Zeroing it here made replacing the chair a credibility
+        // laundromat — the cheapest way to erase a bad record was to churn
+        // people. The retained fraction leaves a real honeymoon without making
+        // the reset worth buying.
+        resolveStreak: 0,
         chairTermExpiresAtTurn: currentTurn + CHAIR_TERM_TURNS,
         chairSelectionPending: null,
         nominations: [],
@@ -468,6 +490,9 @@ export async function acceptCentralBankChairSelection(
         vacancyAwaitingAutomaticSelection: false,
         updatedAt: gameNow,
       },
+      // Institutional scrutiny survives the person; the new chair inherits most
+      // of it, so churning chairs is not a way to erase a bad record.
+      $mul: { chairInfamy: CHAIR_CHANGE_SCRUTINY_RETAINED },
     }
   );
   if (!claimed) {

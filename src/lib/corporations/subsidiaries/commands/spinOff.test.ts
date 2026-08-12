@@ -6,7 +6,12 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { CEO_INITIAL_SHARES } from "@/lib/constants/corporations";
 
 vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/nationalization/treasury", () => ({
+  creditTreasuryProceeds: vi.fn(async (_db, _country, amount: number) => Math.round(amount)),
+}));
 
+import { emitTx } from "@/lib/financialTxLog/emit";
+import { creditTreasuryProceeds } from "@/lib/nationalization/treasury";
 import { spinOff } from "./spinOff";
 
 const parentId = new ObjectId();
@@ -104,6 +109,26 @@ describe("spinOff", () => {
     // CEO is the appointed human, userId is that human (not the parent).
     expect(doc.ceoType).toBe("character");
     expect(doc.userId.equals(candidateUserId)).toBe(true);
+  });
+
+  it("pays the incorporation fee to the treasury and ledgers both legs", async () => {
+    const result = await spinOff(db as unknown as Db, { parent: parentCorp(), ...baseInput });
+    expect(result.ok).toBe(true);
+
+    // The fee is government revenue, not destroyed money.
+    const credited = vi.mocked(creditTreasuryProceeds).mock.calls[0];
+    expect(credited[1]).toBe("US");
+    const feeToTreasury = credited[2] as number;
+    expect(feeToTreasury).toBeGreaterThan(0);
+
+    const legs = vi.mocked(emitTx).mock.calls.map((c) => c[1]);
+    const paid = legs.find((l) => l.type === "corp_capital_seed");
+    const received = legs.find((l) => l.type === "gov_tax_revenue");
+    expect(paid).toBeDefined();
+    expect(received).toBeDefined();
+    // Debit and credit net to zero: nothing leaks.
+    expect((paid?.amount ?? 0) + (received?.amount ?? 0)).toBe(0);
+    expect(received?.countryId).toBe("US");
   });
 
   it("transfers all sectors of the type to the new corp (re-denominated)", async () => {

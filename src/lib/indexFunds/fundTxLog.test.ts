@@ -32,10 +32,9 @@ describe("fundTxLog", () => {
 
     expect(entry.type).toBe("index_fund_dividend");
     expect(entry.amount).toBe(125.5);
-    // anchorAmount must stay undefined so emitTx FX-converts `amount` (the fund's
-    // anchor currency) into the internal anchor unit. Pre-setting it skipped the
-    // conversion and logged ~114× the true anchor value for JPY-anchored funds.
-    expect(entry.anchorAmount).toBeUndefined();
+    // `amountAnchor` is ₳. With no native figure supplied the two coincide, and
+    // stating anchorAmount keeps emitTx from re-deriving it through FX.
+    expect(entry.anchorAmount).toBe(125.5);
     expect(entry.turn).toBe(42);
     expect(entry.meta).toMatchObject({
       fundId: fundId.toString(),
@@ -47,7 +46,7 @@ describe("fundTxLog", () => {
     });
   });
 
-  it("leaves anchorAmount undefined for a non-USD fund so emitTx converts it", () => {
+  it("states the ₳ value and the native value separately for a non-USD fund", () => {
     const entry = buildIndexFundDividendTxEntry({
       fund: {
         _id: new ObjectId(),
@@ -57,18 +56,19 @@ describe("fundTxLog", () => {
         anchorCurrencyCode: "JPY",
       },
       holder: { holderKind: "character", holderId: new ObjectId(), holderName: "Ren" },
-      amountAnchor: 391_380_703.9,
+      amountAnchor: 3_427_000,
+      amountNative: 391_380_703.9,
       units: 13_426_963,
       corporationId: new ObjectId(),
       turn: 1,
     });
 
-    // amount carries the native JPY value; anchorAmount is left for emitTx to
-    // derive via FX. If this regresses, the suspect scanner sees ~114× inflated
-    // logged-net and raises spurious cash_mismatch flags on JPY-fund holders.
+    // `amount` is what the yen wallet actually received; `anchorAmount` is the ₳
+    // value the fund actually paid out. Collapsing the two is what made a JPY
+    // fund's ledger row wrong by the whole exchange rate.
     expect(entry.currencyCode).toBe("JPY");
     expect(entry.amount).toBe(391_380_703.9);
-    expect(entry.anchorAmount).toBeUndefined();
+    expect(entry.anchorAmount).toBe(3_427_000);
   });
 
   it("registers index fund tx types in ALL_TX_TYPES", () => {

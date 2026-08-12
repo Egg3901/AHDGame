@@ -32,6 +32,7 @@ import { getNationalDocId } from "@/lib/constants/nationalScope";
 import { STARTING_YEAR } from "@/lib/constants/turnTime";
 import { MONETARY_BASELINES } from "@/lib/constants/currencies";
 import { getEraMonetaryBaseline, getEraTrendGdpGrowth } from "@/lib/constants/monetaryEra";
+import { transmissionMultiplier } from "@/lib/centralBank/credibility";
 import { computeCountryTariffPressure } from "@/lib/tariffs/tariffEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
 import { getBankId } from "@/lib/centralBank/helpers";
@@ -281,6 +282,13 @@ export interface InflationInputs {
   policyStancePressure?: number;
   /** Annualized M2 growth. Converted to bounded excess-money-growth pressure. */
   moneySupplyGrowthPct?: number;
+  /**
+   * Central-bank scrutiny (0-100). Dampens the MONETARY term only: a bank the
+   * market does not believe has to move further for the same effect on
+   * expectations. Loan rates, cost of capital and bond pricing are deliberately
+   * untouched, so policy is never inert. Defaults to full credibility.
+   */
+  centralBankScrutiny?: number;
 }
 
 /** Fraction of the spot rate that takes effect immediately (before lag). */
@@ -399,7 +407,11 @@ export function calculateInflationWithBreakdown(inputs: InflationInputs): {
   // 2. Monetary policy — trailing weighted average so rate changes take 12 turns to fully propagate
   const effectiveRate = computeEffectivePrimeRate(primeRateInput, primeRateHistoryInput);
   const rateGap = neutralPrimeRateInput - effectiveRate;
-  const monetary = rateGap >= 0 ? rateGap * MONETARY_COEFF_LOW : rateGap * MONETARY_COEFF_HIGH;
+  const monetaryRaw = rateGap >= 0 ? rateGap * MONETARY_COEFF_LOW : rateGap * MONETARY_COEFF_HIGH;
+  // Credibility scales the expectations channel, floored so a discredited bank
+  // still gets most of the effect. Full credibility (scrutiny 0) is x1, so this
+  // is a no-op for any bank hitting its targets.
+  const monetary = monetaryRaw * transmissionMultiplier(inputs.centralBankScrutiny ?? 0);
 
   // 3. Fiscal pressure — TWO-SIDED
   const deficitPctRaw = -surplusToGdpInput * 100; // positive = deficit
@@ -675,6 +687,7 @@ export async function calculateCountryInflation(
   );
 
   const primeRate = finiteOr(centralBank?.primeRate, 3.0);
+  const centralBankScrutiny = finiteOr(centralBank?.chairInfamy, 0);
   const primeRateHistory = centralBank?.interestRateHistory
     ?.map((s: { rate: number }) => s.rate)
     .filter((r): r is number => typeof r === "number" && Number.isFinite(r));
@@ -728,6 +741,7 @@ export async function calculateCountryInflation(
     savingsPressure: finiteOr(savingsPressure, 0),
     policyStancePressure: finiteOr(policyStancePressure, 0),
     moneySupplyGrowthPct: finiteOr(moneySupplyGrowthPct, 0),
+    centralBankScrutiny,
     housingCostPressure,
     previousInflation,
   });

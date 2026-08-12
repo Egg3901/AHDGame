@@ -320,11 +320,30 @@ export function commandEconomySoeSectors(countryId: string | null | undefined): 
  *          + w_pol * policyStance                  // reformist → +, orthodox → −
  */
 export const MARKETIZATION_DRIFT_WEIGHTS = {
-  /** Weight on black-market pressure (0..1). Max +0.34/turn. P3: raised from 0.30
-   *  so the headline shortage→black-market reform spiral (and the Gosbank
-   *  credit→overhang→shortage tradeoff) genuinely moves the dial, not just a
-   *  readout. */
-  blackMarket: 0.34,
+  /**
+   * Weight on black-market pressure (0..1). Max +0.22/turn. P3 raised this from
+   * 0.30 to 0.34 so the shortage→black-market reform spiral genuinely moved the
+   * dial rather than only the readouts.
+   *
+   * 1.1: trimmed to 0.22. Two reasons, and the second is the binding one.
+   *
+   * First, `accumulateOverhang` now counts the unmet plan as a goods deficit,
+   * so the same world produces more shortage pressure than it did when 0.34 was
+   * tuned; without a trim the whole reform spiral simply ran that much hotter.
+   *
+   * Second, and this is a PRE-EXISTING bug the new term only made more visible:
+   * the USSR-to-1991 guard was failing. Scenario E in
+   * `commandEconomyBalanceHarness` (a competently-run, orthodox, hands-off USSR)
+   * crossed COMMAND_CEILING in 1984 on the old weights, which is the Soviet
+   * Union voluntarily marketizing halfway through Chernenko. It was invisible
+   * because the scenario only ran 10 of the 38 years it was guarding. At 0.22
+   * it stays COMMAND for the full run to 1991.
+   *
+   * The mismanagement and collapse paths are almost untouched by the trim: they
+   * are dominated by the soePerformance and policyStance terms, so scenario C
+   * still reforms at yr+3.5 and scenario F still reaches market at yr+6.5.
+   */
+  blackMarket: 0.22,
   /** Weight on the SOE plan-fulfillment shortfall (baseline − perf). P3: trimmed
    *  from 0.25 so chronic plan misses remain the primary player-driven reform
    *  channel without a totally-collapsed world rocketing to fully-market in a few

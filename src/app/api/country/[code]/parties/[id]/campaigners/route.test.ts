@@ -32,6 +32,8 @@ describe("POST /api/country/[code]/parties/[id]/campaigners", () => {
     db = createMockDb();
     db.collection("characters");
     db.collection("politicalParties");
+    db.collection("committeeProposals");
+    db.collection("adminLogs");
 
     chairId = new ObjectId();
     memberA = new ObjectId();
@@ -67,6 +69,14 @@ describe("POST /api/country/[code]/parties/[id]/campaigners", () => {
       name: "Test Party",
       chairId,
       viceChairId: new ObjectId(),
+    } as never);
+
+    // Default: no campaigner nomination is already before the committee.
+    db.collectionMocks["committeeProposals"]!.find.mockReturnValue({
+      toArray: async () => [],
+    } as never);
+    db.collectionMocks["committeeProposals"]!.insertOne.mockResolvedValue({
+      insertedId: new ObjectId(),
     } as never);
 
     // Default: characters lookup returns matching members
@@ -210,7 +220,9 @@ describe("POST /api/country/[code]/parties/[id]/campaigners", () => {
     expect(body.error).toMatch(/not valid characters/i);
   });
 
-  it("happy path — chair sets 2 campaigners", async () => {
+  // Suggestion #269: additions go to the National Committee, they do not
+  // seat on the chair's say-so.
+  it("chair adding 2 names opens 2 nominations and seats nobody", async () => {
     db.collectionMocks["characters"]!.find.mockReturnValue({
       toArray: async () => [
         { _id: memberA, name: "Alice", party: "1", countryId: "US" },
@@ -224,11 +236,105 @@ describe("POST /api/country/[code]/parties/[id]/campaigners", () => {
     );
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.campaignerIds).toEqual([memberA.toString(), memberB.toString()]);
+    // Nobody was seated — the roster is still empty.
+    expect(body.campaignerIds).toEqual([]);
+    expect(body.pendingNominations).toHaveLength(2);
+    expect(db.collectionMocks["committeeProposals"]!.insertOne).toHaveBeenCalledTimes(2);
+    // No roster write when there is nothing to remove.
+    expect(db.collectionMocks["politicalParties"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("chair dropping a seated campaigner fires them immediately", async () => {
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: new ObjectId(),
+      sequentialId: 1,
+      countryId: "US",
+      name: "Test Party",
+      chairId,
+      viceChairId: new ObjectId(),
+      campaignerIds: [memberA, memberB],
+    } as never);
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest({ campaignerIds: [memberA.toString()] }), {
+      params: Promise.resolve({ code: "us", id: "1" }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.campaignerIds).toEqual([memberA.toString()]);
+    expect(body.pendingNominations).toEqual([]);
     expect(db.collectionMocks["politicalParties"]!.updateOne).toHaveBeenCalled();
+    expect(db.collectionMocks["committeeProposals"]!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects a second nomination for someone already before the committee", async () => {
+    db.collectionMocks["characters"]!.find.mockReturnValue({
+      toArray: async () => [{ _id: memberA, name: "Alice", party: "1", countryId: "US" }],
+    } as never);
+    db.collectionMocks["committeeProposals"]!.find.mockReturnValue({
+      toArray: async () => [
+        { type: "campaignerAppointment", campaignerAppointment: { targetCharacterId: memberA } },
+      ],
+    } as never);
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest({ campaignerIds: [memberA.toString()] }), {
+      params: Promise.resolve({ code: "us", id: "1" }),
+    });
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.error).toMatch(/already before the National Committee/i);
+  });
+
+  it("counts pending nominations against the cap", async () => {
+    const pendingOne = new ObjectId();
+    const pendingTwo = new ObjectId();
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: new ObjectId(),
+      sequentialId: 1,
+      countryId: "US",
+      name: "Test Party",
+      chairId,
+      viceChairId: new ObjectId(),
+      campaignerIds: [memberC],
+    } as never);
+    db.collectionMocks["committeeProposals"]!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          type: "campaignerAppointment",
+          campaignerAppointment: { targetCharacterId: pendingOne },
+        },
+        {
+          type: "campaignerAppointment",
+          campaignerAppointment: { targetCharacterId: pendingTwo },
+        },
+      ],
+    } as never);
+    db.collectionMocks["characters"]!.find.mockReturnValue({
+      toArray: async () => [{ _id: memberA, name: "Alice", party: "1", countryId: "US" }],
+    } as never);
+    const { POST } = await import("./route");
+    // 1 seated + 2 pending + 1 new = 4 > MAX_NATIONAL_CAMPAIGNERS.
+    const response = await POST(
+      makeRequest({ campaignerIds: [memberC.toString(), memberA.toString()] }),
+      { params: Promise.resolve({ code: "us", id: "1" }) }
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/over 3 campaigners/i);
   });
 
   it("happy path — empty array clears all campaigners", async () => {
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: new ObjectId(),
+      sequentialId: 1,
+      countryId: "US",
+      name: "Test Party",
+      chairId,
+      viceChairId: new ObjectId(),
+      campaignerIds: [memberA],
+    } as never);
     const { POST } = await import("./route");
     const response = await POST(makeRequest({ campaignerIds: [] }), {
       params: Promise.resolve({ code: "us", id: "1" }),
@@ -257,5 +363,9 @@ describe("POST /api/country/[code]/parties/[id]/campaigners", () => {
       params: Promise.resolve({ code: "us", id: "1" }),
     });
     expect(response.status).toBe(200);
+    // Admins bypass the committee — the seat lands directly.
+    const body = await response.json();
+    expect(body.campaignerIds).toEqual([memberA.toString()]);
+    expect(db.collectionMocks["committeeProposals"]!.insertOne).not.toHaveBeenCalled();
   });
 });

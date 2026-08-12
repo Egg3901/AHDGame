@@ -137,6 +137,11 @@ function BillDetailContent() {
 
   const isActive = bill.status === "active";
   const isActiveOther = bill.status === "active_other";
+  // Both chambers voting at once: the origin module and the second-chamber
+  // module are BOTH live, so every gate below that means "this chamber is on
+  // the floor" has to admit it. Without this the vote widgets render only once
+  // a vote exists, which on a bill nobody has voted on yet is never.
+  const isConcurrent = bill.status === "active_both";
   const isCabinetReview = bill.status === "cabinet_review";
   // JP Shūgiin override reuses the main votes/votingEndsAt fields, so reuse the
   // origin VoteBar — same shape as `active`, just with a 2/3 supermajority rule.
@@ -208,7 +213,7 @@ function BillDetailContent() {
   const heroEligible = chamberSeatCount(bill.currentChamber);
   const heroCast = heroVotes.for + heroVotes.abstain + heroVotes.against;
   const showSeatingHero =
-    heroEligible > 0 && (isActive || isActiveOther || isJpOverride || heroCast > 0);
+    heroEligible > 0 && (isActive || isActiveOther || isConcurrent || isJpOverride || heroCast > 0);
 
   return (
     <div className="min-h-screen bg-background">
@@ -381,6 +386,7 @@ function BillDetailContent() {
             {/* Vote module — seating-chart hero + tally bar + cast vote, unified */}
             {(isCabinetReview ||
               isActive ||
+              isConcurrent ||
               isJpOverride ||
               bill.votesFor + bill.votesAgainst + bill.votesAbstain > 0) && (
               <div className="space-y-4 rounded-xl border border-card-border bg-card p-5">
@@ -388,12 +394,13 @@ function BillDetailContent() {
                   <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
                     {chamberLabel(bill.currentChamber)} · Floor Vote
                   </h3>
-                  {(isActive || isJpOverride || isCabinetReview) && bill.votingEndsAt && (
-                    <span className="inline-flex items-center gap-1.5 text-xs text-warning">
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
-                      LIVE · <DeadlineCountdown deadline={bill.votingEndsAt} />
-                    </span>
-                  )}
+                  {(isActive || isConcurrent || isJpOverride || isCabinetReview) &&
+                    bill.votingEndsAt && (
+                      <span className="inline-flex items-center gap-1.5 text-xs text-warning">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
+                        LIVE · <DeadlineCountdown deadline={bill.votingEndsAt} />
+                      </span>
+                    )}
                 </div>
                 {filibustered &&
                   bill.filibusterInvocations &&
@@ -483,6 +490,7 @@ function BillDetailContent() {
 
             {/* Second chamber vote */}
             {(isActiveOther ||
+              isConcurrent ||
               bill.otherChamberVotesFor +
                 bill.otherChamberVotesAgainst +
                 bill.otherChamberVotesAbstain >
@@ -502,7 +510,7 @@ function BillDetailContent() {
                   votesFor={bill.otherChamberVotesFor}
                   votesAgainst={bill.otherChamberVotesAgainst}
                   votesAbstain={bill.otherChamberVotesAbstain}
-                  deadline={isActiveOther ? bill.otherChamberVotingEndsAt : null}
+                  deadline={isActiveOther || isConcurrent ? bill.otherChamberVotingEndsAt : null}
                   myVote={bill.myOtherChamberVote}
                   canVote={bill.canVoteOther && !voting}
                   onVote={(v) => handleVote(true, v)}

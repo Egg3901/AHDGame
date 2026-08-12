@@ -67,9 +67,22 @@ export async function getExecutiveCharacterIds(
 ): Promise<Set<string>> {
   const ids = new Set<string>();
 
+  // Query-side mirror of isExecutiveOffice so the scan touches executives
+  // only, not every player in the member countries. The in-memory check below
+  // stays as the source of truth.
   const chars = await db
     .collection<Character>("characters")
-    .find({ countryId: { $in: memberCountries }, userId: { $exists: true } })
+    .find({
+      countryId: { $in: memberCountries },
+      userId: { $exists: true },
+      $or: [
+        { "currentOffice.type": { $in: [...EXECUTIVE_OFFICE_KEYS] } },
+        {
+          "currentOffice.type": { $in: [...CABINET_OFFICE_TYPES] },
+          "currentOffice.positionId": { $in: [...EXECUTIVE_OFFICE_KEYS] },
+        },
+      ],
+    })
     .project<Pick<Character, "_id" | "currentOffice">>({ _id: 1, currentOffice: 1 })
     .toArray();
   for (const c of chars) {

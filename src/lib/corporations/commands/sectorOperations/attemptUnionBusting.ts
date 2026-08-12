@@ -21,6 +21,7 @@ import {
 import { sectorEconomicScale } from "@/lib/corporations/sectorProfitBasis";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { notifyUnionOfBustingAttempt } from "@/lib/unions/unionBustingNotice";
 
 export type AttemptUnionBustingResult =
   | {
@@ -214,6 +215,19 @@ export async function attemptUnionBusting(
   } else {
     await fireUnionBustingBackfirePulse(db, sector.sectorType, countryId);
   }
+
+  // The union side of the same event: without this an organizer sees a 20pp
+  // collapse with nothing tying it to an employer. Never throws, and runs
+  // after the writes have committed, so it cannot cost the CEO the action.
+  await notifyUnionOfBustingAttempt(db, {
+    countryId,
+    sectorType: sector.sectorType,
+    employerName: corporation.name,
+    employerId: corporation._id,
+    success,
+    unionizationBefore: priorUnionization,
+    unionizationAfter: newUnionization,
+  });
 
   return {
     ok: true,

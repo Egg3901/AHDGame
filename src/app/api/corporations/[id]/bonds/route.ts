@@ -25,6 +25,7 @@ import {
   calculateCreditScore,
   getBondCouponRate,
 } from "@/lib/constants/bonds";
+import { indexFundOwnershipFraction } from "@/lib/corporations/indexOwnership";
 import {
   computeCorporateCreditAtTurn,
   sumCorporateSectorNpv,
@@ -148,10 +149,15 @@ export async function GET(request: Request, { params }: RouteParams) {
       bondDefaultCreditPenaltyUntilTurn: corporation.bondDefaultCreditPenaltyUntilTurn,
       previousCompositeScore: corporation.creditCompositeSnapshot ?? undefined,
       fxByCurrency,
-      // Insider-concentration notch. The turn processor passes these, so without
-      // them the live screens (Overview / Bonds / Credit Rating tabs) showed a
-      // concentrated public corp one notch above the rating the turn persisted
-      // and the header + Financials tab display.
+      // Suggestion #62: same index-inclusion upgrade the turn's credit pass
+      // applies, for the same reason the CIP leg above is duplicated here: the
+      // rating this route displays has to be the rating the turn writes.
+      // `isPrivate` rides along because the upgrade is gated on it.
+      indexFundOwnershipFraction: indexFundOwnershipFraction(corporation),
+      // Insider-concentration notch, same argument. The turn processor passes
+      // these, so without them the live screens (Overview / Bonds / Credit
+      // Rating tabs) showed a concentrated public corp one notch above the
+      // rating the turn persisted and the header + Financials tab display.
       ceoOwnershipFraction: ceoOwnershipFraction(corporation),
       isPrivate: corporation.isPrivate ?? false,
     });

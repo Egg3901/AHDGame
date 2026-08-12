@@ -23,6 +23,23 @@ export interface CorporationVoteCast {
   castAt: Date;
 }
 
+/**
+ * A standing instruction from a fund's controlling unit holder on one vote.
+ *
+ * Stored on the vote rather than in its own collection: an instruction is only
+ * ever meaningful for one vote, so it lives and dies with that vote and needs
+ * no separate lifecycle or index. `directorCharacterId` is who gave it at the
+ * time; directorship is re-verified at resolve time, so selling units below the
+ * threshold before the vote closes drops the instruction rather than leaving a
+ * stale one in force.
+ */
+export interface CorporationVoteFundDirection {
+  fundId: ObjectId;
+  directorCharacterId: ObjectId;
+  vote: "yes" | "no";
+  castAt: Date;
+}
+
 export interface CorporationVotePayload {
   newLegalStructure?: LegalStructureId;
   destinationCountryId?: CountryId;
@@ -47,6 +64,12 @@ export interface CorporationVote {
   passThreshold: number;
   payload: CorporationVotePayload;
   votes: CorporationVoteCast[];
+  /**
+   * Instructions from controlling unit holders of index funds that hold shares
+   * in this corporation. Absent on every vote created before fund direction
+   * shipped, which resolves as an undirected fund (mirror or abstain).
+   */
+  fundDirections?: CorporationVoteFundDirection[];
   resolvedAt?: Date;
   createdAt: Date;
   updatedAt: Date;

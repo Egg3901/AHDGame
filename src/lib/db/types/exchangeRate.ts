@@ -56,6 +56,25 @@ export interface ExchangeRate {
   /** Chair-set FX intervention band policy. Null when no band is active. */
   interventionPolicy?: InterventionPolicy | null;
   /**
+   * B6 declared exchange-rate regime. Absent = "float", which is what every
+   * currency without a band or a peg already behaved as, so existing worlds
+   * read identically.
+   *
+   * This is the CHAIR's declaration, distinct from `hardPeg` (an admin
+   * operator tool). It is what the impossible-trinity constraint is resolved
+   * against — see `currency/exchangeRateRegime.ts`.
+   */
+  fxRegime?: import("@/lib/currency/exchangeRateRegime").FxRegime;
+  /** The peg's target rate, when `fxRegime` is "peg". */
+  pegTarget?: number | null;
+  /**
+   * Capital controls: the third leg of the trinity. Closing the capital
+   * account buys back monetary independence under a committed rate.
+   */
+  capitalControls?: boolean;
+  /** Turn the chair last changed the regime (cooldown gate). */
+  fxRegimeSetAtTurn?: number;
+  /**
    * Chair-set multiplier (0.5–1.5) on the spread fee when this currency is sold.
    * Default 1.0. Read in the hot path (executeMarketMakerTrade) off the already-
    * loaded fromExRate doc, so no extra query.

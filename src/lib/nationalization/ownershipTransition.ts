@@ -35,6 +35,8 @@ import { cleanupShareMarketActivityForCorporations } from "@/lib/corporations/cl
 import { payFundShareholderRows } from "@/lib/corporations/payFundShareholders";
 import { applyBrandFacilityLoss } from "@/lib/corporations/brandFacilityLoss";
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
+import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import type { CountryId } from "@/lib/constants/countries";
 import {
   ensurePrimaryNationalCorporation,
@@ -798,10 +800,14 @@ export async function payShareholders(
   target: Corporation,
   poolAnchor: number,
   fxByCurrency: ReadonlyMap<CurrencyCode, number>,
-  now: Date
+  now: Date,
+  ledger?: PayShareholdersLedgerContext
 ): Promise<void> {
   const allocation = allocateShareholderPool(target, poolAnchor, new Map());
   const forexEnabled = await isForexEnabled();
+  // Ledger legs for every holder credited below. Collected here and flushed once
+  // at the end so a throw part-way through does not log money that was reversed.
+  const ledgerEntries: PayShareholdersTxInput[] = [];
 
   const anchorToLocal = (amtAnchor: number, currency: string): number => {
     const rate = fxByCurrency.get(currency as CurrencyCode);
@@ -823,6 +829,10 @@ export async function payShareholders(
       charRows.map((r) => {
         const currency = currencyById.get(r.characterId) ?? "USD";
         const amt = forexEnabled ? anchorToLocal(r.payout, currency) : r.payout;
+        if (ledger)
+          ledgerEntries.push(
+            buyoutPayoutLeg(ledger, target, "character", new ObjectId(r.characterId), amt, currency)
+          );
         return {
           updateOne: {
             filter: { _id: new ObjectId(r.characterId) },
@@ -847,6 +857,20 @@ export async function payShareholders(
       imperialRows.map((r) => {
         const currency = currencyById.get(r.characterId) ?? "USD";
         const amt = forexEnabled ? anchorToLocal(r.payout, currency) : r.payout;
+        if (ledger)
+          ledgerEntries.push(
+            buyoutPayoutLeg(
+              ledger,
+              target,
+              "character",
+              new ObjectId(r.characterId),
+              amt,
+              currency,
+              {
+                imperial: true,
+              }
+            )
+          );
         return {
           updateOne: {
             filter: { _id: new ObjectId(r.characterId) },
@@ -877,6 +901,17 @@ export async function payShareholders(
           "USD") as CurrencyCode;
         const rate = fxByCurrency.get(creditorCurrency) ?? 1;
         const amtInCapital = Math.round(anchorToCorpLiquidCapital(r.payout, creditor ?? {}, rate));
+        if (ledger)
+          ledgerEntries.push(
+            buyoutPayoutLeg(
+              ledger,
+              target,
+              "corporation",
+              new ObjectId(r.corporationId),
+              amtInCapital,
+              creditorCurrency
+            )
+          );
         return {
           updateOne: {
             filter: { _id: new ObjectId(r.corporationId) },
@@ -896,6 +931,21 @@ export async function payShareholders(
     const rate = fxByCurrency.get(floatCurrency) ?? 1;
     const floatLocal = writeGovBudgetLocal(allocation.publicFloatRow.payout, floatCurrency, rate);
     await creditTreasuryProceeds(db, target.countryId, floatLocal, now);
+    if (ledger)
+      ledgerEntries.push({
+        type: "share_buyout_payout",
+        turn: ledger.turn,
+        createdAt: now,
+        subjectType: "government",
+        countryId: target.countryId,
+        subjectName: `${target.countryId} treasury`,
+        amount: Math.round(floatLocal),
+        currencyCode: floatCurrency,
+        counterpartyType: "corporation",
+        counterpartyId: target._id,
+        counterpartyName: target.name,
+        meta: { kind: ledger.kind, side: "public_float" },
+      });
   }
 
   // Index-fund shareholders → fund cash (₳). Same pool, no FX (cashAnchor is ₳).
@@ -904,6 +954,48 @@ export async function payShareholders(
   if (allocation.fundRows.length > 0) {
     await payFundShareholderRows(db, allocation.fundRows, target._id, now);
   }
+
+  // Flush every holder leg in one insert. Index-fund rows are deliberately not
+  // ledgered here: fund cash is not yet a ledger account (see the fund
+  // conservation work), so a leg with no counter-account would look like a leak.
+  if (ledger && ledgerEntries.length > 0) {
+    await emitTxBulk(db, ledgerEntries, await loadTxThresholds(db));
+  }
+}
+
+/** Ledger context for {@link payShareholders}; omit to skip emission entirely. */
+export interface PayShareholdersLedgerContext {
+  turn: number;
+  /** Short marker for what moved the money, e.g. "agreed_acquisition". */
+  kind: string;
+}
+
+type PayShareholdersTxInput = Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">;
+
+/** One holder-side buyout credit, counterparty being the corp being bought out. */
+function buyoutPayoutLeg(
+  ledger: PayShareholdersLedgerContext,
+  target: Corporation,
+  subjectType: "character" | "corporation",
+  subjectId: ObjectId,
+  amount: number,
+  currencyCode: string,
+  meta?: Record<string, unknown>
+): PayShareholdersTxInput {
+  return {
+    type: "share_buyout_payout",
+    turn: ledger.turn,
+    createdAt: new Date(),
+    subjectType,
+    subjectId,
+    subjectName: subjectType === "corporation" ? "(corp shareholder)" : "(shareholder)",
+    amount: Math.round(amount),
+    currencyCode: currencyCode as CurrencyCode,
+    counterpartyType: "corporation",
+    counterpartyId: target._id,
+    counterpartyName: target.name,
+    meta: { kind: ledger.kind, ...(meta ?? {}) },
+  };
 }
 
 /**

@@ -33,12 +33,28 @@ import {
 } from "@/lib/indexFunds/fundQueries";
 import { splitIndexFundDividend } from "@/lib/indexFunds/unitAccounting";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
+import type { CurrencyCode } from "@/lib/constants/currencies";
+import { buildPersonalBalanceInc, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import {
   buildIndexFundDividendTxEntry,
   logIndexFundDividendBulk,
 } from "@/lib/indexFunds/fundTxLog";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+
+/**
+ * ₳ → fund-currency rate for a holder payout, matching what redeem applies.
+ * Returns 1 with forex off (balances are ₳ directly) and on a missing rate,
+ * which is the same fail-soft the rest of the personal-wealth paths use.
+ */
+export async function loadFundPayoutFxRate(
+  db: Db,
+  fundCurrency: CurrencyCode,
+  forexEnabled: boolean
+): Promise<number> {
+  if (!forexEnabled) return 1;
+  const { rate, ok } = await loadCharacterFxRate(db, fundCurrency);
+  return ok ? rate : 1;
+}
 
 export type DividendPassThroughResult = {
   fundId: ObjectId;
@@ -112,6 +128,10 @@ export async function processIndexFundDividend(
 
   // Distribute the pass-through portion (25%) to unit holders proportionally.
   const forexEnabled = await isForexEnabled();
+  // Holder dividends are computed in ₳ and credited into the fund-currency
+  // wallet bucket, so they need the same ₳ → native conversion redeem applies.
+  // Without it a JPY fund paid a yen-labelled balance a raw ₳ figure.
+  const fundFxRate = await loadFundPayoutFxRate(db, fund.anchorCurrencyCode, forexEnabled);
   const positions = options?.prefetch?.positions ?? (await listFundPositions(db, fundId));
   const perUnitDividend = split.passThroughAnchor / fund.unitSupply;
   const turn = options?.turn ?? (await getCurrentTurn(db));
@@ -174,7 +194,11 @@ export async function processIndexFundDividend(
       const holderName = characterNameById.get(position.characterId.toString());
       if (!holderName) continue;
 
-      const inc = buildPersonalBalanceInc(holderDividend, fund.anchorCurrencyCode, forexEnabled);
+      const inc = buildPersonalBalanceInc(
+        holderDividend * fundFxRate,
+        fund.anchorCurrencyCode,
+        forexEnabled
+      );
       characterOps.push({
         updateOne: {
           filter: { _id: position.characterId },
@@ -190,6 +214,7 @@ export async function processIndexFundDividend(
             holderName,
           },
           amountAnchor: holderDividend,
+          amountNative: holderDividend * fundFxRate,
           units: position.units,
           corporationId,
           corporationName,
@@ -203,7 +228,11 @@ export async function processIndexFundDividend(
       const holderName = imperialNameById.get(position.imperialCharacterId.toString());
       if (!holderName) continue;
 
-      const inc = buildPersonalBalanceInc(holderDividend, fund.anchorCurrencyCode, forexEnabled);
+      const inc = buildPersonalBalanceInc(
+        holderDividend * fundFxRate,
+        fund.anchorCurrencyCode,
+        forexEnabled
+      );
       imperialOps.push({
         updateOne: {
           filter: { _id: position.imperialCharacterId },
@@ -219,6 +248,7 @@ export async function processIndexFundDividend(
             holderName,
           },
           amountAnchor: holderDividend,
+          amountNative: holderDividend * fundFxRate,
           units: position.units,
           corporationId,
           corporationName,
@@ -341,6 +371,16 @@ export async function processIndexFundDividendsBatch(
   if (valid.length === 0) return;
 
   const forexEnabled = await isForexEnabled();
+  // One rate lookup per distinct fund currency, reused across every accrual in
+  // the batch. Same ₳ → native conversion as the single-dividend path.
+  const fxRateByCurrency = new Map<string, number>();
+  const fundFxRateFor = async (currency: CurrencyCode): Promise<number> => {
+    const cached = fxRateByCurrency.get(currency);
+    if (cached !== undefined) return cached;
+    const rate = await loadFundPayoutFxRate(db, currency, forexEnabled);
+    fxRateByCurrency.set(currency, rate);
+    return rate;
+  };
   const turn = options?.turn ?? (await getCurrentTurn(db));
   const now = new Date();
 
@@ -433,6 +473,7 @@ export async function processIndexFundDividendsBatch(
 
     const positions = positionsByFund.get(accrual.fundId.toString()) ?? [];
     const perUnitDividend = split.passThroughAnchor / fund.unitSupply;
+    const fundFxRate = await fundFxRateFor(fund.anchorCurrencyCode);
     const corporationName = corpNameById.get(accrual.corporationId.toString());
     let holdersPaid = 0;
     let distributedAnchor = 0;
@@ -448,13 +489,18 @@ export async function processIndexFundDividendsBatch(
         addInc(
           charInc,
           position.characterId,
-          buildPersonalBalanceInc(holderDividend, fund.anchorCurrencyCode, forexEnabled)
+          buildPersonalBalanceInc(
+            holderDividend * fundFxRate,
+            fund.anchorCurrencyCode,
+            forexEnabled
+          )
         );
         holderTxEntries.push(
           buildIndexFundDividendTxEntry({
             fund,
             holder: { holderKind: "character", holderId: position.characterId, holderName },
             amountAnchor: holderDividend,
+            amountNative: holderDividend * fundFxRate,
             units: position.units,
             corporationId: accrual.corporationId,
             corporationName,
@@ -470,7 +516,11 @@ export async function processIndexFundDividendsBatch(
         addInc(
           impInc,
           position.imperialCharacterId,
-          buildPersonalBalanceInc(holderDividend, fund.anchorCurrencyCode, forexEnabled)
+          buildPersonalBalanceInc(
+            holderDividend * fundFxRate,
+            fund.anchorCurrencyCode,
+            forexEnabled
+          )
         );
         holderTxEntries.push(
           buildIndexFundDividendTxEntry({
@@ -481,6 +531,7 @@ export async function processIndexFundDividendsBatch(
               holderName,
             },
             amountAnchor: holderDividend,
+            amountNative: holderDividend * fundFxRate,
             units: position.units,
             corporationId: accrual.corporationId,
             corporationName,

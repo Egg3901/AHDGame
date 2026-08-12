@@ -10,7 +10,7 @@ export interface PortfolioHistory {
   _id: ObjectId;
   characterId: ObjectId;
   turn: number;
-  /** Gross assets in anchor units (stocks + bonds + all cash/savings). */
+  /** Gross assets in anchor units (stocks + bonds + funds + all cash/savings). */
   totalValue: number;
   /** Net worth after subtracting outstanding LOC principal + arrears. */
   netValue?: number;
@@ -18,6 +18,14 @@ export interface PortfolioHistory {
   stockValue?: number;
   /** Bond holdings value (units × faceValue × marketPrice) */
   bondValue?: number;
+  /**
+   * Index-fund holdings value (units × quotedNav) in ₳.
+   *
+   * Absent on snapshots taken before funds were included: consumers must treat
+   * `undefined` as "not measured", not as zero, or a player who has always held
+   * funds will appear to have suddenly gained wealth on the turn this shipped.
+   */
+  fundValue?: number;
   /** Cash + savings combined in anchor units. */
   cashValue?: number;
   /** Liquid personal cash only (internal units), for charts */

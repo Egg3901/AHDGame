@@ -66,6 +66,10 @@ export function toConflictView(doc: ConflictDoc, opts: ConflictViewOptions): Con
       : `${startYear} – present`;
 
   const occupier = occ.occupier === "A" ? doc.sideA : occ.occupier === "B" ? doc.sideB : null;
+  // The raw id is deliberate here and pinned by a test: the hub board's cards are a
+  // code-first surface ("NATO holds 30% of CN"), unlike the conflict RECORD page, whose
+  // prose resolves the host through `entityName`. A proxy host reads as SVN, which is
+  // the same idiom every other card uses.
   const status = occupier
     ? `${occupier.label} holds ${occ.occupier === "A" ? occ.pctA : occ.pctB}% of ${doc.hostCountry}`
     : `Contested — ${doc.sideA.label} ${occ.pctA}% / ${doc.sideB.label} ${occ.pctB}%`;

@@ -64,15 +64,11 @@ export async function sumFundBondHoldingsValueAnchor(
   const holdings = await listFundBondHoldings(db, fund._id);
   if (holdings.length === 0) return 0;
 
-  // Fail loud rather than valuing real bond holdings at zero: a silent 0
-  // erases the reserve bucket from NAV and reads as a backing collapse.
-  const anchorRate = exchangeRates[fund.anchorCurrencyCode];
-  if (!anchorRate || anchorRate <= 0) {
-    throw new Error(
-      `Missing exchange rate for fund anchor currency ${fund.anchorCurrencyCode}; cannot value bond holdings`
-    );
-  }
-
+  // Bond holdings are valued in ₳, the same unit as `cashAnchor` and NAV. The
+  // fund's own currency does not enter the sum, so no rate is loaded for it.
+  // Per-bond rates below still fail loud rather than valuing a real holding at
+  // zero: a silent 0 erases the reserve bucket from NAV and reads as a backing
+  // collapse.
   let total = 0;
   for (const row of holdings) {
     const localRate = exchangeRates[row.currencyCode];

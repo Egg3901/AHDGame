@@ -32,26 +32,32 @@ export async function withdrawAllCandidatesForUser(db: Db, userId: ObjectId): Pr
       { $set: { status: "withdrawn", withdrawnAt: now } }
     );
 
-  // Clean up tallies and campaigns per candidate
-  for (const candidate of activeCandidates) {
-    await removeWithdrawnCandidateFromTally(db, candidate.electionId, candidate._id.toString());
-
-    await db.collection("campaigns").updateOne(
-      {
-        electionId: candidate.electionId,
-        candidateId: candidate.characterId,
-        status: { $ne: "archived" },
-      },
-      {
-        $set: {
-          status: "archived",
-          archivedAt: now,
-          archivedReason: "banned",
-          updatedAt: now,
-        },
-      }
-    );
-  }
+  // Clean up tallies concurrently (atomic per-election updates) and archive
+  // all campaigns in one updateMany instead of a serial per-candidate walk.
+  await Promise.all([
+    ...activeCandidates.map((candidate) =>
+      removeWithdrawnCandidateFromTally(db, candidate.electionId, candidate._id.toString())
+    ),
+    activeCandidates.length > 0
+      ? db.collection("campaigns").updateMany(
+          {
+            $or: activeCandidates.map((candidate) => ({
+              electionId: candidate.electionId,
+              candidateId: candidate.characterId,
+            })),
+            status: { $ne: "archived" },
+          },
+          {
+            $set: {
+              status: "archived",
+              archivedAt: now,
+              archivedReason: "banned",
+              updatedAt: now,
+            },
+          }
+        )
+      : Promise.resolve(null),
+  ]);
 
   return activeCandidates.length;
 }

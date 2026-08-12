@@ -3,7 +3,10 @@
 import { Meter } from "../market/MarketPrimitives";
 import type { AllocSegment, AllocTone } from "./financialsModel";
 
-// Static class strings so Tailwind keeps them; tokens only.
+// Static class strings so Tailwind keeps them; tokens only. One map drives both
+// the bar segment and its legend dot, so the two can never drift apart.
+// Pension sits on gold rather than a second shade of accent: next to the
+// logistics segment two opacities of the same token were indistinguishable.
 const SEG_BG: Record<AllocTone, string> = {
   maintenance: "bg-error/70",
   growth: "bg-warning/80",
@@ -11,16 +14,7 @@ const SEG_BG: Record<AllocTone, string> = {
   logistics: "bg-accent/70",
   rd: "bg-secondary/70",
   salary: "bg-info/40",
-  tax: "bg-muted/60",
-  interest: "bg-primary/70",
-};
-const SEG_DOT: Record<AllocTone, string> = {
-  maintenance: "bg-error/70",
-  growth: "bg-warning/80",
-  marketing: "bg-info/70",
-  logistics: "bg-accent/70",
-  rd: "bg-secondary/70",
-  salary: "bg-info/40",
+  pension: "bg-gold-muted/70",
   tax: "bg-muted/60",
   interest: "bg-primary/70",
 };
@@ -63,7 +57,7 @@ export function AllocationBar({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {segments.map((s) => (
           <span key={s.key} className="inline-flex items-center gap-1 text-[10px] text-muted">
-            <span className={`h-2 w-2 rounded-sm ${SEG_DOT[s.tone]}`} />
+            <span className={`h-2 w-2 rounded-sm ${SEG_BG[s.tone]}`} />
             {s.label}
           </span>
         ))}

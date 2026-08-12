@@ -44,7 +44,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     if (!canUseNationalPartyInfluence(party, auth.user)) {
       return NextResponse.json(
         {
-          error: `Only the ${getPartyRoleLabel(countryId, "chair")} or ${getPartyRoleLabel(countryId, "viceChair")} can use party influence`,
+          error: `Only the ${getPartyRoleLabel(countryId, "chair")}, ${getPartyRoleLabel(countryId, "viceChair")}, or a confirmed campaigner can use party influence`,
         },
         { status: 403 }
       );
@@ -81,7 +81,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!canUseNationalPartyInfluence(party, auth.user)) {
       return NextResponse.json(
         {
-          error: `Only the ${getPartyRoleLabel(countryId, "chair")} or ${getPartyRoleLabel(countryId, "viceChair")} can use party influence`,
+          error: `Only the ${getPartyRoleLabel(countryId, "chair")}, ${getPartyRoleLabel(countryId, "viceChair")}, or a confirmed campaigner can use party influence`,
         },
         { status: 403 }
       );

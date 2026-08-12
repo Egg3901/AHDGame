@@ -14,6 +14,7 @@ import {
 import { createNotification } from "@/lib/notifications";
 import { executeAgreedAcquisition } from "./executeAgreedAcquisition";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { acquisitionsBarredByDivestiture } from "@/lib/corporations/mergerReview/gate";
 
 export const ACQUISITION_OFFER_DURATION_TURNS = 24;
 const OFFERS = "acquisitionOffers";
@@ -78,6 +79,8 @@ export async function proposeAcquisitionOffer(
     return { ok: false, error: "State-owned corporations cannot be acquired", status: 400 };
   if (!Number.isFinite(priceAnchor) || priceAnchor <= 0)
     return { ok: false, error: "Offer price must be a positive amount", status: 400 };
+  const barred = acquisitionsBarredByDivestiture(acquirer, currentTurn);
+  if (barred) return { ok: false, error: barred, status: 403 };
 
   const existing = await db.collection<AcquisitionOffer>(OFFERS).findOne({
     acquirerCorporationId: acquirer._id,

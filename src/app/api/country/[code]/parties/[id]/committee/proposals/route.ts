@@ -57,6 +57,20 @@ async function toProposalView(
     };
   }
 
+  let campaignerAppointmentField: ProposalView["campaignerAppointment"] | undefined;
+  if (proposal.type === "campaignerAppointment" && proposal.campaignerAppointment) {
+    const targetCharacter = await db
+      .collection<Character>("characters")
+      .findOne(
+        { _id: proposal.campaignerAppointment.targetCharacterId },
+        { projection: { name: 1 } }
+      );
+    campaignerAppointmentField = {
+      targetCharacterId: proposal.campaignerAppointment.targetCharacterId.toString(),
+      targetCharacterName: targetCharacter?.name ?? "Unknown",
+    };
+  }
+
   let removeOfficeHolderField: ProposalView["removeOfficeHolder"] | undefined;
   if (proposal.type === "removeOfficeHolder" && proposal.removeOfficeHolder) {
     const targetCharacter = await db
@@ -91,6 +105,7 @@ async function toProposalView(
     electionMethod: proposal.electionMethod,
     electionDuration: proposal.electionDuration,
     removeOfficeHolder: removeOfficeHolderField,
+    campaignerAppointment: campaignerAppointmentField,
     transactionApprovalMode: proposal.transactionApprovalMode,
     proposingVoteSummary: buildVoteSummary(proposal.proposingVotes, proposingCommitteeSize),
     targetVoteSummary:
@@ -291,6 +306,19 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     const body = parsed.data;
 
+    // Campaigner nominations originate from the Chair Office roster
+    // editor, which owns the cap and residency checks. Refuse hand-rolled
+    // ones here so those checks can't be side-stepped.
+    if (body.type === "campaignerAppointment") {
+      return NextResponse.json(
+        {
+          error:
+            "Nominate campaigners from the Chair Office Party Campaigners card, not the proposal form.",
+        },
+        { status: 400 }
+      );
+    }
+
     // Cooldown gate: reject if the relevant per-axis (positionShift) or
     // per-type (everything else) lock is still active. `getGameTime` runs
     // later for the turn used in the proposal doc — read it here too.
@@ -397,6 +425,8 @@ export async function POST(request: Request, { params }: RouteParams) {
         inRole = !!party.chairId && party.chairId.equals(targetOid);
       } else if (body.role === "viceChair") {
         inRole = !!party.viceChairId && party.viceChairId.equals(targetOid);
+      } else if (body.role === "campaigner") {
+        inRole = (party.campaignerIds ?? []).some((id) => id.equals(targetOid));
       } else {
         // committeeMember
         inRole = party.committeeIds.some((id) => id.equals(targetOid));

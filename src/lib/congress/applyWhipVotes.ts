@@ -7,6 +7,9 @@
 
 import type { Db } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
+import { resolveBillVoteField } from "@/lib/congress/billVoteField";
+import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
+import type { CountryId } from "@/lib/constants/countries";
 import type {
   Bill,
   CabinetNomination,
@@ -161,18 +164,49 @@ export async function applyWhipVotesToBill(
         ? bill.vetoOverrideVotes
         : bill.votes) ?? {};
 
+  /**
+   * On a CONCURRENT bill these forks are per-OFFICIAL, not per-bill.
+   *
+   * The same shape as `applyPlayerWhipToBill` MINUS the snapshot — this function writes
+   * no `whippedFromVote`. Routing an upper-chamber official through the lower branch
+   * would put their vote and weight in the lower tally, letting the bill pass on the
+   * other house's votes.
+   */
+  const isConcurrent = bill.status === "active_both";
+  const lowerOfficeType = isConcurrent
+    ? getOfficeTypeForChamber(
+        (bill.countryId ?? "US") as CountryId,
+        bill.originChamber === "joint" ? (bill.currentChamber ?? "") : bill.originChamber
+      )
+    : "";
+  const fieldForOfficial = (officeType: string) =>
+    isConcurrent
+      ? resolveBillVoteField(bill, { voterOfficeType: officeType, lowerOfficeType })
+      : voteField;
+  const votesInField = (field: string) =>
+    (field === "otherChamberVotes"
+      ? bill.otherChamberVotes
+      : field === "vetoOverrideVotes"
+        ? bill.vetoOverrideVotes
+        : bill.votes) ?? {};
+
+  /** Net per-field deltas — one bucket for every non-concurrent status. */
+  const byField = new Map<
+    string,
+    { updates: Record<string, "for" | "against" | "abstain">; f: number; a: number; ab: number }
+  >();
+  const bucket = (field: string) => {
+    let b = byField.get(field);
+    if (!b) {
+      b = { updates: {}, f: 0, a: 0, ab: 0 };
+      byField.set(field, b);
+    }
+    return b;
+  };
+
   const whipDirective = { direction };
-  const voteUpdates: Record<string, "for" | "against" | "abstain"> = {};
-  let incFor = 0;
-  let incAgainst = 0;
-  let incAbstain = 0;
   let fellInLine = 0;
   let ignored = 0;
-
-  // Track negative adjustments to subtract old votes being overridden
-  let decFor = 0;
-  let decAgainst = 0;
-  let decAbstain = 0;
 
   // Snapshot of cross-pressure forces per NPP — persisted at the end so the
   // prediction surface reflects the post-whip state.
@@ -192,7 +226,9 @@ export async function applyWhipVotesToBill(
     if (seenNppIds.has(nppIdStr)) continue;
     seenNppIds.add(nppIdStr);
     const nppKey = `npp_${nppIdStr}`;
-    const previousVote = existingVotes[nppKey];
+    // Read this official's OWN map: on a concurrent bill the two chambers are separate.
+    const officialField = fieldForOfficial(official.officeType);
+    const previousVote = votesInField(officialField)[nppKey];
 
     // Already voting in the whip direction — leave them alone
     if (previousVote === direction) {
@@ -240,19 +276,20 @@ export async function applyWhipVotesToBill(
     }
 
     const weight = official.seatsHeld ?? 1;
-    voteUpdates[nppKey] = vote;
+    const b = bucket(officialField);
+    b.updates[nppKey] = vote;
 
     // Subtract old vote tally if overriding a previous vote
     if (previousVote) {
-      if (previousVote === "for") decFor += weight;
-      else if (previousVote === "against") decAgainst += weight;
-      else decAbstain += weight;
+      if (previousVote === "for") b.f -= weight;
+      else if (previousVote === "against") b.a -= weight;
+      else b.ab -= weight;
     }
 
     // Add new vote tally
-    if (vote === "for") incFor += weight;
-    else if (vote === "against") incAgainst += weight;
-    else incAbstain += weight;
+    if (vote === "for") b.f += weight;
+    else if (vote === "against") b.a += weight;
+    else b.ab += weight;
 
     predictionOps.push({
       nppId: official.nppId,
@@ -263,29 +300,32 @@ export async function applyWhipVotesToBill(
     });
   }
 
-  if (Object.keys(voteUpdates).length === 0) {
+  if (byField.size === 0) {
     return { fellInLine, ignored };
   }
 
+  /** Counter names per vote field. Override carries no abstain counter. */
+  const TALLY: Record<string, [string, string, string | null]> = {
+    votes: ["votesFor", "votesAgainst", "votesAbstain"],
+    otherChamberVotes: [
+      "otherChamberVotesFor",
+      "otherChamberVotesAgainst",
+      "otherChamberVotesAbstain",
+    ],
+    vetoOverrideVotes: ["vetoOverrideVotesFor", "vetoOverrideVotesAgainst", null],
+  };
+
   // Build DB update
   const setFields: Record<string, unknown> = { updatedAt: new Date() };
-  for (const [k, v] of Object.entries(voteUpdates)) {
-    setFields[`${voteField}.${k}`] = v;
-  }
-
   const incFields: Record<string, number> = {};
-  if (isOtherChamber) {
-    incFields.otherChamberVotesFor = incFor - decFor;
-    incFields.otherChamberVotesAgainst = incAgainst - decAgainst;
-    incFields.otherChamberVotesAbstain = incAbstain - decAbstain;
-  } else if (isUsOverride) {
-    incFields.vetoOverrideVotesFor = incFor - decFor;
-    incFields.vetoOverrideVotesAgainst = incAgainst - decAgainst;
-  } else {
-    // Includes JP override_shugiin, which uses the main votes field.
-    incFields.votesFor = incFor - decFor;
-    incFields.votesAgainst = incAgainst - decAgainst;
-    incFields.votesAbstain = incAbstain - decAbstain;
+  for (const [field, b] of byField) {
+    for (const [k, v] of Object.entries(b.updates)) {
+      setFields[`${field}.${k}`] = v;
+    }
+    const [forKey, againstKey, abstainKey] = TALLY[field]!;
+    incFields[forKey] = b.f;
+    incFields[againstKey] = b.a;
+    if (abstainKey) incFields[abstainKey] = b.ab;
   }
 
   await db.collection<Bill>("bills").updateOne(

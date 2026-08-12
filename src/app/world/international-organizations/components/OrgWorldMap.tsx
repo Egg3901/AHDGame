@@ -8,6 +8,7 @@ import { REGION_SHARDS } from "@/lib/maps/regionManifest";
 import { computeRegionBlobs } from "@/lib/maps/regionOverlay";
 import { WORLD_OVERLAY_OWNER_FOLD } from "@/lib/maps/germanyGeometry";
 import { VIETNAM_BASE_FEATURE_ID, VIETNAM_GEO_URL } from "@/lib/maps/vietnamGeometry";
+import { HISTORICAL_GEO_URL } from "@/lib/maps/historicalGeometry";
 import type { OrgSummary } from "../orgTypes";
 import {
   memberFeatureIds as resolveMemberFeatureIds,
@@ -125,6 +126,27 @@ export function OrgWorldMap({ orgs }: { orgs: OrgSummary[] }) {
         } catch {
           // Best-effort: without it Vietnam draws as one unified outline.
         }
+        // The historical territories, for the same reason: the accession phase can
+        // admit one on its own, and an unmapped member simply would not shade.
+        // These overlay their host rather than replacing it — see historicalGeometry.
+        //
+        // ⚠️ Fetched here, but PATHED after the blob loop below rather than pushed
+        // onto `geojson.features`. This map has no single ordered feature array —
+        // draw order is insertion order into `next` — and the blobs are inserted
+        // last, so a territory added here would sit UNDER its host's blob wherever
+        // that host has a region shard (the Saar is one of Germany's Länder; Trieste
+        // is inside Italy's macro-regions) and never be seen.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let histFeatures: any[] = [];
+        try {
+          const histResp = await fetch(HISTORICAL_GEO_URL, { cache: "no-store" });
+          if (histResp.ok) {
+            const hist = await histResp.json();
+            histFeatures = hist?.features ?? [];
+          }
+        } catch {
+          // Best-effort: without it those territories are simply not drawn.
+        }
         const proj = d3.geoEqualEarth().fitSize([SVG_W, SVG_H], { type: "Sphere" });
         const pathGen = d3.geoPath(proj);
         const next = new Map<string, string | null>();
@@ -169,6 +191,12 @@ export function OrgWorldMap({ orgs }: { orgs: OrgSummary[] }) {
           if (!d) continue;
           next.set(key, d);
           owners.set(key, owner);
+        }
+
+        // Inserted last, so these draw over the base countries AND the region blobs.
+        for (const f of histFeatures) {
+          const d = pathGen(f);
+          if (d) next.set(String(f.id), d);
         }
 
         setBlobOwners(owners);

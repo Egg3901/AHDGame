@@ -41,7 +41,7 @@ export function valuation(
 }
 
 export type AllocTone =
-  "maintenance" | "growth" | "marketing" | "logistics" | "rd" | "salary" | "tax" | "interest";
+  "maintenance" | "growth" | "marketing" | "logistics" | "rd" | "salary" | "pension" | "tax" | "interest";
 
 export interface AllocSegment {
   key: AllocTone;
@@ -85,6 +85,7 @@ export function buildAllocation(
     seg("logistics", "Logistics", f.logisticsCosts),
     seg("rd", "R&D", f.rdCosts),
     seg("salary", "CEO salary", f.ceoSalaryCost),
+    seg("pension", "Pensions", f.pensionContributionCost + f.pensionTopUpCost),
     seg("tax", "Taxes", tax),
     seg("interest", "Net interest", netInterest),
   ].filter((s) => s.value > 0);

@@ -841,3 +841,227 @@ describe("GET /api/corporations/[id]/ceo/vote", () => {
     expect(data.totalSharesVoted).toBe(100);
   });
 });
+
+describe("sitting CEO handling", () => {
+  const okRateLimit = { ok: true as const, limit: 100, remaining: 99, resetAt: 0 };
+
+  it("lets shareholders vote for the sitting CEO even when they live outside the HQ state", async () => {
+    await setup();
+    const userId = new ObjectId().toString();
+    const corpId = new ObjectId();
+    const charId = new ObjectId();
+    const ceoId = new ObjectId();
+
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      makeCharacterAuth(userId, charId) as never
+    );
+    const { checkRateLimit } = await import("@/lib/api/rateLimit");
+    vi.mocked(checkRateLimit).mockReturnValue({ ...okRateLimit, resetAt: Date.now() + 60_000 });
+
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        _id: corpId,
+        name: "Test Corp",
+        countryId: "US",
+        headquartersState: "US_CA",
+        shareholders: [{ characterId: charId, shares: 100 }],
+        ceoId,
+        ceoVacant: false,
+        pendingCeoCharacterId: null,
+      },
+    } as any);
+
+    // The incumbent has moved to Texas since founding the corp in California.
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: ceoId,
+      homeState: "US_TX",
+      countryId: "US",
+      userId: new ObjectId(),
+    });
+    db.collectionMocks.corporationCeoVotes.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.corporationCeoVotes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          voterCharacterId: charId,
+          candidateCharacterId: ceoId,
+        },
+      ],
+    });
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      new Request("http://localhost/api/corporations/abc/ceo/vote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateCharacterId: ceoId.toString() }),
+      }),
+      { params: Promise.resolve({ id: "abc" }) }
+    );
+
+    expect(res.status).toBe(200);
+  });
+
+  it("clears a stale pending offer when the sitting CEO leads the tally", async () => {
+    await setup();
+    const userId = new ObjectId().toString();
+    const corpId = new ObjectId();
+    const charId = new ObjectId();
+    const ceoId = new ObjectId();
+
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      makeCharacterAuth(userId, charId) as never
+    );
+    const { checkRateLimit } = await import("@/lib/api/rateLimit");
+    vi.mocked(checkRateLimit).mockReturnValue({ ...okRateLimit, resetAt: Date.now() + 60_000 });
+
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        _id: corpId,
+        name: "Test Corp",
+        countryId: "US",
+        headquartersState: "US_CA",
+        shareholders: [{ characterId: charId, shares: 100 }],
+        ceoId,
+        ceoVacant: false,
+        // Left over from an earlier round of voting.
+        pendingCeoCharacterId: new ObjectId(),
+      },
+    } as any);
+
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: ceoId,
+      homeState: "US_CA",
+      countryId: "US",
+      userId: new ObjectId(),
+    });
+    db.collectionMocks.corporationCeoVotes.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.corporationCeoVotes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          voterCharacterId: charId,
+          candidateCharacterId: ceoId,
+        },
+      ],
+    });
+    db.collectionMocks.corporations.updateOne.mockResolvedValue({ modifiedCount: 1 });
+
+    const { createNotification } = await import("@/lib/notifications");
+    const { POST } = await import("./route");
+    const res = await POST(
+      new Request("http://localhost/api/corporations/abc/ceo/vote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateCharacterId: ceoId.toString() }),
+      }),
+      { params: Promise.resolve({ id: "abc" }) }
+    );
+
+    expect(res.status).toBe(200);
+    expect(createNotification).not.toHaveBeenCalled();
+    const update = db.collectionMocks.corporations.updateOne.mock.calls[0][1];
+    expect(update.$unset).toEqual({ pendingCeoCharacterId: "" });
+  });
+});
+
+describe("DELETE /api/corporations/[id]/ceo/vote", () => {
+  it("withdraws the caller's vote and clears the pending offer behind it", async () => {
+    await setup();
+    const userId = new ObjectId().toString();
+    const corpId = new ObjectId();
+    const charId = new ObjectId();
+    const rivalId = new ObjectId();
+
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      makeCharacterAuth(userId, charId) as never
+    );
+    const { checkRateLimit } = await import("@/lib/api/rateLimit");
+    vi.mocked(checkRateLimit).mockReturnValue({
+      ok: true,
+      limit: 100,
+      remaining: 99,
+      resetAt: Date.now() + 60_000,
+    });
+
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        _id: corpId,
+        name: "Test Corp",
+        countryId: "US",
+        headquartersState: "US_CA",
+        shareholders: [{ characterId: charId, shares: 100 }],
+        ceoVacant: true,
+        pendingCeoCharacterId: rivalId,
+      },
+    } as any);
+
+    db.collectionMocks.corporations.find.mockReturnValue({ toArray: async () => [] });
+    db.collectionMocks.corporationCeoVotes.deleteMany.mockResolvedValue({ deletedCount: 1 });
+    // The withdrawn vote was the only one on the books.
+    db.collectionMocks.corporationCeoVotes.find.mockReturnValue({ toArray: async () => [] });
+    db.collectionMocks.corporations.updateOne.mockResolvedValue({ modifiedCount: 1 });
+
+    const { DELETE } = await import("./route");
+    const res = await DELETE(new Request("http://localhost/api/corporations/abc/ceo/vote"), {
+      params: Promise.resolve({ id: "abc" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true, totalVotes: 0 });
+    const update = db.collectionMocks.corporations.updateOne.mock.calls[0][1];
+    expect(update.$unset).toEqual({ pendingCeoCharacterId: "" });
+  });
+
+  it("404s when the caller has no vote to withdraw", async () => {
+    await setup();
+    const userId = new ObjectId().toString();
+    const charId = new ObjectId();
+
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      makeCharacterAuth(userId, charId) as never
+    );
+    const { checkRateLimit } = await import("@/lib/api/rateLimit");
+    vi.mocked(checkRateLimit).mockReturnValue({
+      ok: true,
+      limit: 100,
+      remaining: 99,
+      resetAt: Date.now() + 60_000,
+    });
+
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        _id: new ObjectId(),
+        name: "Test Corp",
+        countryId: "US",
+        headquartersState: "US_CA",
+        shareholders: [{ characterId: charId, shares: 100 }],
+        ceoVacant: true,
+      },
+    } as any);
+
+    db.collectionMocks.corporations.find.mockReturnValue({ toArray: async () => [] });
+    db.collectionMocks.corporationCeoVotes.deleteMany.mockResolvedValue({ deletedCount: 0 });
+
+    const { DELETE } = await import("./route");
+    const res = await DELETE(new Request("http://localhost/api/corporations/abc/ceo/vote"), {
+      params: Promise.resolve({ id: "abc" }),
+    });
+
+    expect(res.status).toBe(404);
+  });
+});

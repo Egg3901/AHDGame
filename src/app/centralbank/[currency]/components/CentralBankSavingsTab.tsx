@@ -187,7 +187,7 @@ export function CentralBankSavingsTab({ countryId }: Props) {
             value={
               data.estimatedAccrualThisTurn > 0
                 ? formatNative(data.estimatedAccrualThisTurn, homeCurrency)
-                : "—"
+                : "-"
             }
             sub={
               data.turnsUntilCredit === 1
@@ -353,7 +353,7 @@ export function CentralBankSavingsTab({ countryId }: Props) {
                       {formatNative(row.balanceAfter, homeCurrency)}
                     </td>
                     <td className="px-4 py-2 text-right text-muted hidden sm:table-cell">
-                      {row.turn != null ? `T${row.turn}` : "—"}
+                      {row.turn != null ? `T${row.turn}` : "-"}
                     </td>
                   </tr>
                 ))}

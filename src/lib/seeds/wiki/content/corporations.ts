@@ -353,6 +353,30 @@ An IMF bailout active on the corporation applies a price multiplier.
 
 Some corporations are government-owned (e.g., the UK NHS). These cannot be purchased or attacked. Their revenue flows through the national budget rather than to a CEO.
 
+## Merger review
+
+When two corporations become one, the state may have a say. This applies to an agreed acquisition and to the squeeze-out that ends a hostile takeover, at the moment the two firms actually combine.
+
+**When it applies.** Both sides must be privately owned, and the market being consolidated must be a market. A state-owned corporation on either side is out of scope: consolidating firms the state already owns is an administrative matter, not a transaction anyone approves. In a command economy the whole system is dormant for the same reason.
+
+**What trips it.** The combined firm's share of a national industry, measured on the same basis the Market Share chart shows. The threshold comes from the country's competition law:
+
+| Enforcement level | Referred at a combined share of |
+| --- | --- |
+| No enforcement | Never |
+| Case-by-case review | 75% |
+| Active enforcement | 60% |
+| Structural enforcement | 50% |
+| Open markets charter | 40% |
+
+**Who decides.** The cabinet seat that country gives the job: the Attorney General in the United States, the Board of Trade in Britain (later Trade and Industry, later Business), the trade ministry elsewhere. The seat has six turns.
+
+**What they can decide.** Clear it, block it, or clear it on condition that the combined firm divests the industry that tripped the threshold. If the seat says nothing for six turns, the decision falls out of published bands: within 5 points of the threshold it clears, within 15 it clears with conditions, beyond that it is blocked. No hidden roll.
+
+**Conditions have teeth.** A divestiture order is discharged by measurement, not by paperwork. Spinning the business into a wholly-owned subsidiary changes nothing: the same group still holds the same share of the same market. You have to sell it down until the group no longer controls it. Miss the deadline and the corporation is fined 5% of its group revenue in that industry every turn, paid to the treasury, and cannot open new acquisitions until the order is met.
+
+**Blocked is blocked.** A blocked pairing cannot be retried. A cleared one does not need a second referral, so a hostile takeover that was referred can simply be run again once it clears.
+
 ## Interaction with politics
 
 Corporations connect to politics in several ways:

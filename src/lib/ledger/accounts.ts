@@ -20,6 +20,7 @@ import type {
  *   government:<countryId>:<currency>  federalBudget treasuryBalance
  *   fund:<id>:<currency>               index fund cash leg
  *   org:<id>:<currency>                international org funds
+ *   pension_scheme:<id>:<currency>     union pension scheme assets
  *   mint:<reason>:<currency>           system money creation (see plan §1.3)
  *   sink:<reason>:<currency>           system money destruction
  *   fx:<A>/<B>:<currency>              FX translation account (see plan §1.4)
@@ -36,6 +37,7 @@ export type LedgerAccountKind =
   | "government"
   | "fund"
   | "org"
+  | "pension_scheme"
   | "mint"
   | "sink"
   | "fx";
@@ -52,6 +54,15 @@ export type LedgerAccountKind =
  * money-supply view attributes them; adding it to the stock-check waits on a
  * dedicated PR that instruments the outbound state-party treasury flows too.
  * See docs/plans/2026-07-05-shadow-ledger-plan.md §3.
+ */
+/**
+ * `pension_scheme` is a DEFINED real-money account (PensionScheme.assetsAnchor)
+ * and is deliberately NOT stock-checked yet, for the same reason `state_party`
+ * is not: its assets will also move through fund subscriptions and benefit
+ * payments that are not instrumented yet, so stock-checking it now would
+ * manufacture divergences. Defining the account is what makes the employer's
+ * contribution derive to a real counterparty instead of reading as a leak;
+ * adding it to the stock-check waits on the PR that instruments the rest.
  */
 export const REAL_ACCOUNT_KINDS: readonly LedgerAccountKind[] = [
   "character",
@@ -108,6 +119,8 @@ export function subjectAccount(
       return null;
     case "government":
       return ids.countryId ? accountId("government", ids.countryId, currency) : null;
+    case "pension_scheme":
+      return ids.subjectId ? accountId("pension_scheme", ids.subjectId, currency) : null;
     default:
       return null;
   }
@@ -133,6 +146,8 @@ export function counterpartyAccount(
       return accountId("corporation", counterpartyId, currency);
     case "party":
       return accountId("party", counterpartyId, currency);
+    case "pension_scheme":
+      return accountId("pension_scheme", counterpartyId, currency);
     // government counterparties have no countryId on the tx row — not derivable.
     default:
       return null;

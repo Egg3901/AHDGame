@@ -50,20 +50,34 @@ export function canViewNationalTreasuryInsights(
   return getNationalPartyLeadershipRole(party, user.character?._id ?? null) !== null;
 }
 
+/**
+ * Who may reach the national NPP Management surface (Influence Actions
+ * and NPP Move): chair, vice-chair, admins, and committee-confirmed
+ * campaigners (suggestion #269).
+ *
+ * Campaigners reach this surface only after the National Committee
+ * confirms the chair's nomination, and the chair can fire them back out
+ * instantly — that pairing is what makes widening the seat safe.
+ * Recruitment stays chair / vice / admin (see `canRelocateOrRecruit`):
+ * it creates new bodies and commits party funds rather than steering
+ * NPPs the party already has.
+ */
 export function canUseNationalPartyInfluence(
   party: PoliticalParty,
   user: AuthUserWithCharacter
 ): boolean {
   if (user.isAdmin) return true;
-  const role = getNationalPartyLeadershipRole(party, user.character?._id ?? null);
-  // Campaigners spend PS (Build Org) only — NPP Management stays chair / vice / admin.
-  return role === "chair" || role === "viceChair";
+  const characterId = user.character?._id ?? null;
+  const role = getNationalPartyLeadershipRole(party, characterId);
+  if (role === "chair" || role === "viceChair") return true;
+  return isNationalCampaigner(party, characterId);
 }
 
 /**
- * Whether the user is a chair-assigned campaigner of the national party.
- * Campaigners can spend party PS to Build Org on the party's behalf.
- * NPP Management / Move / Recruitment stay chair / vice-chair / admin.
+ * Whether the user is a campaigner of the national party. Campaigners
+ * are chair-nominated and National-Committee-confirmed; they can spend
+ * party PS to Build Org and use NPP Management on the party's behalf.
+ * Recruitment stays chair / vice-chair / admin.
  */
 export function isNationalCampaigner(
   party: PoliticalParty,
@@ -181,9 +195,12 @@ export function resolveSpenderScope(
 }
 
 /**
- * Tighter auth predicate for actions explicitly excluded from the
- * campaigner role: NPP Move (`relocate_state`) and NPP Recruitment. Same
- * shape as `canSpendOnStateParty` minus the campaigner inclusions.
+ * Tighter auth predicate for actions still excluded from the campaigner
+ * role: NPP Recruitment. Same shape as `canSpendOnStateParty` minus the
+ * campaigner inclusions.
+ *
+ * NPP Move (`relocate_state`) moved out of this set with suggestion
+ * #269 — it is NPP Management, which confirmed campaigners now hold.
  */
 export function canRelocateOrRecruit(
   party: PoliticalParty,

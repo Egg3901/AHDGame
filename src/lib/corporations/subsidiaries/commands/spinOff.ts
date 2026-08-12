@@ -21,6 +21,7 @@ import {
   refundCorpLiquidCapital,
 } from "@/lib/financialTxLog/atomicCashGuard";
 import { emitTx } from "@/lib/financialTxLog/emit";
+import { creditTreasuryProceeds } from "@/lib/nationalization/treasury";
 import { isEligibleAsSubsidiaryParent, humanBlockedFromSubsidiaryCeo } from "../helpers";
 import { collectSiblingSubsidiaryCeoUserIds, resolveParentCeoUserId } from "../parentContext";
 import { pickOrCreateNppCeoForNewCorp } from "../nppCeoSelection";
@@ -197,6 +198,7 @@ export async function spinOff(
       legalStructure: getDefaultLegalStructureId(parent.countryId, { isPrivate: true }),
       isSpinOff: true,
       spunOffFromCorpId: parent._id,
+      spunOffAtTurn: turn,
       subsidiaryFormalizedAtTurn: turn,
       foundedAtTurn: turn,
       createdAt: now,
@@ -251,21 +253,65 @@ export async function spinOff(
       .collection<Corporation>("corporations")
       .updateOne({ _id: parent._id }, { $set: { lastSpinOffTurn: turn, updatedAt: now } });
 
-    await emitTx(db, {
-      type: "corp_capital_seed",
-      turn,
-      createdAt: now,
-      subjectType: "corporation",
-      subjectId: parent._id,
-      subjectName: parent.name,
-      amount: -costLocal,
-      balanceAfter: debit.newBalance,
-      currencyCode: parentCurrency ?? "USD",
-      counterpartyType: "corporation",
-      counterpartyId: newCorpId,
-      counterpartyName: nameTrimmed,
-      meta: { kind: "spin_off", sectorType, transferredSectors: transferredSectorIds.length },
-    });
+    // The incorporation fee is government revenue, not destroyed money: it goes
+    // to the parent's country treasury, and both legs are ledgered. Previously
+    // this was a single-sided debit with no counter-account, which read as a
+    // leak to any money-conservation check.
+    const feeCurrency = (parentCurrency ?? "USD") as CurrencyCode;
+    const feeToTreasury = await creditTreasuryProceeds(db, parent.countryId, costLocal, now);
+    await Promise.all([
+      emitTx(db, {
+        type: "corp_capital_seed",
+        turn,
+        createdAt: now,
+        subjectType: "corporation",
+        subjectId: parent._id,
+        subjectName: parent.name,
+        amount: -costLocal,
+        balanceAfter: debit.newBalance,
+        currencyCode: feeCurrency,
+        counterpartyType: "government",
+        counterpartyName: `${parent.countryId} treasury`,
+        meta: {
+          kind: "spin_off",
+          side: "incorporation_fee",
+          sectorType,
+          newCorporationId: newCorpId.toString(),
+          transferredSectors: transferredSectorIds.length,
+        },
+      }),
+      feeToTreasury > 0
+        ? emitTx(db, {
+            type: "gov_tax_revenue",
+            turn,
+            createdAt: now,
+            subjectType: "government",
+            countryId: parent.countryId,
+            subjectName: `${parent.countryId} treasury`,
+            amount: feeToTreasury,
+            currencyCode: feeCurrency,
+            counterpartyType: "corporation",
+            counterpartyId: parent._id,
+            counterpartyName: parent.name,
+            meta: { kind: "spin_off", side: "incorporation_fee" },
+          })
+        : Promise.resolve(),
+    ]);
+
+    // A standing divestiture order (C3 merger remedy) is re-measured after the
+    // spin-off. It does NOT discharge just because the business moved: the new
+    // corp is wholly parent-owned, so the group's market share is unchanged.
+    // This call is here so that the LATER sell-down settles the order promptly
+    // via the same path, and so the parent sees an accurate state immediately.
+    if (parent.pendingDivestiture) {
+      try {
+        const { settleDivestitureIfSatisfied } =
+          await import("@/lib/corporations/mergerReview/divestiture");
+        await settleDivestitureIfSatisfied(db, parent);
+      } catch {
+        // Best-effort: the turn sweep re-measures anyway.
+      }
+    }
 
     return { ok: true, newCorporationId: newCorpId.toString() };
   } catch (err) {

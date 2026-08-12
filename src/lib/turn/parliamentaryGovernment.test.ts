@@ -103,6 +103,8 @@ describe("failInProgressBills", () => {
             "active",
             "passed_origin",
             "active_other",
+            // A dissolution kills bills mid-vote in BOTH chambers too.
+            "active_both",
             "override_shugiin",
             "veto_override",
             "vetoed",

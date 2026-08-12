@@ -197,8 +197,10 @@ describe("governmentReformismFromEconomicPosition (P3 live reformism)", () => {
 });
 
 describe("marketizationDrift (P3 balance weights)", () => {
-  it("uses the tuned weights: bm 0.34, soe 0.18, pol 0.12", () => {
-    expect(MARKETIZATION_DRIFT_WEIGHTS.blackMarket).toBe(0.34);
+  it("uses the tuned weights: bm 0.22, soe 0.18, pol 0.12", () => {
+    // bm trimmed 0.34 -> 0.22 in 1.1 so the USSR-to-1991 historical guard holds
+    // once the unmet plan feeds the overhang. See MARKETIZATION_DRIFT_WEIGHTS.
+    expect(MARKETIZATION_DRIFT_WEIGHTS.blackMarket).toBe(0.22);
     expect(MARKETIZATION_DRIFT_WEIGHTS.soePerformance).toBe(0.18);
     expect(MARKETIZATION_DRIFT_WEIGHTS.policyStance).toBe(0.12);
   });
@@ -217,7 +219,7 @@ describe("marketizationDrift (P3 balance weights)", () => {
     const onlyBm = marketizationDrift(1, 1.0, 0); // black market only
     const onlySoe = marketizationDrift(0, 0.0, 0); // max SOE shortfall only
     const onlyPol = marketizationDrift(0, 1.0, 1); // reformist policy only
-    expect(onlyBm).toBeCloseTo(0.34, 5);
+    expect(onlyBm).toBeCloseTo(0.22, 5);
     expect(onlySoe).toBeCloseTo(0.18, 5); // 0.18 * (1.0 - 0.0)
     expect(onlyPol).toBeCloseTo(0.12, 5);
   });

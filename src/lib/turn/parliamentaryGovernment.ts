@@ -1577,6 +1577,7 @@ const LOWER_CHAMBER_FAIL_STATUSES: BillStatus[] = [
   "active",
   "passed_origin",
   "active_other",
+  "active_both",
   "override_shugiin",
   "veto_override",
   "vetoed",

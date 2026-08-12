@@ -60,60 +60,64 @@ export async function processSocialAxisDrift(
   let countriesProcessed = 0;
   let lawsCounted = 0;
 
-  for (const countryId of COUNTRY_ORDER) {
-    // Isolate each country: a single country's read/write failure must not
-    // abort drift for the others (mirrors getCountryState's defensive shape).
-    try {
-      const cfg = COUNTRY_CONFIGS[countryId];
-      const state = await getCountryState(db, countryId);
-      const position = state.socialAxisPosition ?? cfg.socialAxisBaseline ?? 0;
-      // First run starts at the previous turn so laws enacted in THIS turn's
-      // bill phases (stamped enactedTurn = enactmentTurn) are counted once.
-      const watermark = state.socialAxisDriftTurn ?? enactmentTurn - 1;
+  // Countries are independent (own state doc, own national policies); run the
+  // drift for all of them concurrently instead of a serial walk.
+  await Promise.all(
+    COUNTRY_ORDER.map(async (countryId) => {
+      // Isolate each country: a single country's read/write failure must not
+      // abort drift for the others (mirrors getCountryState's defensive shape).
+      try {
+        const cfg = COUNTRY_CONFIGS[countryId];
+        const state = await getCountryState(db, countryId);
+        const position = state.socialAxisPosition ?? cfg.socialAxisBaseline ?? 0;
+        // First run starts at the previous turn so laws enacted in THIS turn's
+        // bill phases (stamped enactedTurn = enactmentTurn) are counted once.
+        const watermark = state.socialAxisDriftTurn ?? enactmentTurn - 1;
 
-      const rows = await db
-        .collection<NationalPolicyRow>("statePolicies")
-        .find({
-          stateId: getNationalStateId(countryId),
-          enactedTurn: { $gt: watermark, $lte: enactmentTurn },
-        })
-        .project<NationalPolicyRow>({ legislationTypeId: 1, social: 1 })
-        .toArray();
-
-      let delta = 0;
-      let counted = 0;
-      if (rows.length > 0) {
-        const typeIds = [...new Set(rows.map((r) => r.legislationTypeId))];
-        const types = await db
-          .collection<LegislationTypeOptionsRow>("legislationTypes")
-          .find({ _id: { $in: typeIds } })
-          .project<LegislationTypeOptionsRow>({ policyOptions: 1 })
+        const rows = await db
+          .collection<NationalPolicyRow>("statePolicies")
+          .find({
+            stateId: getNationalStateId(countryId),
+            enactedTurn: { $gt: watermark, $lte: enactmentTurn },
+          })
+          .project<NationalPolicyRow>({ legislationTypeId: 1, social: 1 })
           .toArray();
-        const sociallyDifferentiated = new Set(
-          types
-            .filter((t) => (t.policyOptions ?? []).some((o) => (o.social ?? 0) !== 0))
-            .map((t) => String(t._id))
-        );
-        for (const row of rows) {
-          if (!sociallyDifferentiated.has(row.legislationTypeId)) continue;
-          delta += SOCIAL_AXIS_DRIFT_RATE * ((row.social ?? 0) - position);
-          counted++;
+
+        let delta = 0;
+        let counted = 0;
+        if (rows.length > 0) {
+          const typeIds = [...new Set(rows.map((r) => r.legislationTypeId))];
+          const types = await db
+            .collection<LegislationTypeOptionsRow>("legislationTypes")
+            .find({ _id: { $in: typeIds } })
+            .project<LegislationTypeOptionsRow>({ policyOptions: 1 })
+            .toArray();
+          const sociallyDifferentiated = new Set(
+            types
+              .filter((t) => (t.policyOptions ?? []).some((o) => (o.social ?? 0) !== 0))
+              .map((t) => String(t._id))
+          );
+          for (const row of rows) {
+            if (!sociallyDifferentiated.has(row.legislationTypeId)) continue;
+            delta += SOCIAL_AXIS_DRIFT_RATE * ((row.social ?? 0) - position);
+            counted++;
+          }
         }
+
+        delta = clamp(delta, -SOCIAL_AXIS_MAX_DRIFT_PER_TURN, SOCIAL_AXIS_MAX_DRIFT_PER_TURN);
+        const next = clamp(position + delta, AXIS_MIN, AXIS_MAX);
+
+        await updateCountryState(db, countryId, {
+          socialAxisPosition: Math.round(next * 100) / 100,
+          socialAxisDriftTurn: enactmentTurn,
+        });
+        countriesProcessed++;
+        lawsCounted += counted;
+      } catch (err) {
+        logger.error("socialAxisDrift", `skipped ${countryId}`, err);
       }
-
-      delta = clamp(delta, -SOCIAL_AXIS_MAX_DRIFT_PER_TURN, SOCIAL_AXIS_MAX_DRIFT_PER_TURN);
-      const next = clamp(position + delta, AXIS_MIN, AXIS_MAX);
-
-      await updateCountryState(db, countryId, {
-        socialAxisPosition: Math.round(next * 100) / 100,
-        socialAxisDriftTurn: enactmentTurn,
-      });
-      countriesProcessed++;
-      lawsCounted += counted;
-    } catch (err) {
-      logger.error("socialAxisDrift", `skipped ${countryId}`, err);
-    }
-  }
+    })
+  );
 
   return { countriesProcessed, lawsCounted };
 }

@@ -38,8 +38,11 @@ export function planFulfillment(soe: Pick<SoeState, "output" | "planTarget">): n
 
 /**
  * Aggregate (mean) plan fulfillment across a country's SOEs. Empty set →
- * SOE_PERF_BASELINE (no SOEs = no SOE-driven reform pressure this turn). This is
- * the `soePerf` fed to the marketization drift formula.
+ * SOE_PERF_BASELINE.
+ *
+ * This is the DIRECTOR'S SCORE and the dashboard readout: how the enterprises
+ * did against the quota the Gosplan chair actually set. It is deliberately NOT
+ * what drives the marketization dial — see {@link aggregateCapacityUtilisation}.
  */
 export function aggregatePlanFulfillment(
   soes: ReadonlyArray<Pick<SoeState, "output" | "planTarget">>
@@ -47,6 +50,48 @@ export function aggregatePlanFulfillment(
   if (soes.length === 0) return SOE_PERF_BASELINE;
   let sum = 0;
   for (const soe of soes) sum += planFulfillment(soe);
+  return sum / soes.length;
+}
+
+/**
+ * Capacity utilisation for one SOE = output / capacity, clamped to
+ * [0, MAX_PLAN_FULFILLMENT]. Capacity of 0 (or non-finite) → SOE_PERF_BASELINE
+ * (no information; neither adds nor relieves pressure).
+ */
+export function capacityUtilisation(soe: Pick<SoeState, "output" | "capacity">): number {
+  const capacity = soe.capacity;
+  if (!Number.isFinite(capacity) || capacity <= 0) return SOE_PERF_BASELINE;
+  const out = Number.isFinite(soe.output) ? soe.output : 0;
+  return clamp(out / capacity, 0, MAX_PLAN_FULFILLMENT);
+}
+
+/**
+ * Aggregate (mean) capacity utilisation across a country's SOEs. This is the
+ * `soePerf` fed to the marketization drift formula.
+ *
+ * WHY NOT PLAN FULFILLMENT. `planTarget` is a PLAYER-SET number: the Gosplan
+ * chair writes it through `POST /command-economy/plan`, bounded only above (at
+ * MAX_PLAN_TARGET_CAPACITY_MULTIPLE × capacity) and not at all below, because a
+ * cautious plan is a legitimate choice. Feeding output/planTarget into
+ * `marketizationDrift` therefore let the planner pick the denominator of their
+ * own grade and steer a world scalar with it: set every target near zero and
+ * fulfillment pins at MAX_PLAN_FULFILLMENT, contributing
+ * weights.soePerformance × (1 − 2) = −0.18 level-points per turn and entrenching
+ * the command economy against a shortage the enterprises are still producing.
+ * Set them at the 3× ceiling and the dial runs the other way just as cheaply.
+ *
+ * Capacity is not writable by the planner. Under plants it is the sectors'
+ * capital stock priced at the output mix, which only real investment moves. So
+ * the dial now keys off what the enterprises PHYSICALLY did with the plant they
+ * have, and the plan stays what it should be: the director's target, and the
+ * thing they are judged against.
+ */
+export function aggregateCapacityUtilisation(
+  soes: ReadonlyArray<Pick<SoeState, "output" | "capacity">>
+): number {
+  if (soes.length === 0) return SOE_PERF_BASELINE;
+  let sum = 0;
+  for (const soe of soes) sum += capacityUtilisation(soe);
   return sum / soes.length;
 }
 

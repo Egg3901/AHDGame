@@ -19,7 +19,6 @@
  */
 
 import type { Db } from "mongodb";
-import { IS_NUMERIC_BSON } from "@/lib/db/numericTypeFilter";
 import {
   buildAllRegistrationSeeds,
   validateSeed,
@@ -33,6 +32,7 @@ import { build2007RegistrationSeeds } from "@/lib/seeds/registration/registratio
 import { build2023RegistrationSeeds } from "@/lib/seeds/registration/registrationLanes2023";
 import type { CountryId } from "@/lib/constants/countries";
 import type { PoliticalParty, StatePartyOrg, StateRegistrationPool } from "@/lib/db/types";
+import { NUMERIC_BSON_TYPE } from "@/lib/db/queryHelpers";
 
 interface SeedResult {
   presetUsed: string;
@@ -212,7 +212,10 @@ export async function seedRegistrationLanes(
   const coveredCountries = [...new Set(bundle.map((row) => row.countryId))];
   const admittedUSStates = await db
     .collection<{ _id: string; countryId?: string; admittedYear?: number }>("states")
-    .find({ countryId: "US", admittedYear: IS_NUMERIC_BSON }, { projection: { _id: 1 } })
+    .find(
+      { countryId: "US", admittedYear: { $type: NUMERIC_BSON_TYPE } },
+      { projection: { _id: 1 } }
+    )
     .toArray();
   const validPoolIds = [
     ...bundle.map((row) => `${row.countryId}_${row.stateId}`),

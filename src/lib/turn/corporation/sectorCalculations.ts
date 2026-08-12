@@ -41,6 +41,7 @@ import {
   type AutomationIndexAccumulator,
 } from "@/lib/labour/laborCost";
 import { computeTechAssetValueAnchor } from "@/lib/corporations/techAssetValue";
+import { indexFundOwnershipFraction } from "@/lib/corporations/indexOwnership";
 // getCountryConfig is needed for the prime rate fallback:
 //   primeRateByCountry.get(sectorCountryId) ?? getCountryConfig(sectorCountryId).centralBank.defaultPrimeRate
 import { getCountryConfig } from "@/lib/constants/countries";
@@ -153,7 +154,9 @@ export function processSectors(
   market: MarketContext = MARKET_DISABLED,
   subsidiaryCorporationsEnabled: boolean = false,
   /** gameConfig.commandEconomyEnabled — gates the soft-budget exemptions. */
-  commandEconomyEnabled: boolean = false
+  commandEconomyEnabled: boolean = false,
+  /** gameConfig.privateBankingEnabled — branch/commodity capacity split. */
+  privateBankingEnabled: boolean = false
 ): SectorCalculationsResult {
   const currentTurn = typeof turn === "number" ? turn : 1;
 
@@ -209,6 +212,7 @@ export function processSectors(
     pendingStrikeEvents,
     pendingCapacityBindingEvents,
     sectorOps,
+    privateBankingEnabled,
   };
 
   const ceoSalaryPayments = new Map<string, Map<CurrencyCode, number>>();
@@ -796,6 +800,9 @@ export function processSectors(
       previousCompositeScore: corp.creditCompositeSnapshot ?? undefined,
       fxByCurrency: lookups.exchangeRatesByCurrency,
       ceoOwnershipFraction: ceoOwnershipFraction(corp),
+      // Suggestion #62: index-fund ownership earns a one-notch credit upgrade,
+      // netted against the insider-concentration downgrade above.
+      indexFundOwnershipFraction: indexFundOwnershipFraction(corp),
       isPrivate: corp.isPrivate ?? false,
       // P3a: capitalized build spend is an asset. `computeCorporateCreditAtTurn`
       // grew this leg but no production call site passed it, so a corp that had
@@ -1003,6 +1010,8 @@ export function processSectors(
       imfBailoutActive: corp.imfBailoutActive === true,
       lastShareStructureTurn: corp.lastShareStructureTurn ?? null,
       ceoOwnershipFraction: ceoOwnershipFraction(corp),
+      // Suggestion #62: index-fund ownership earns a bounded price premium.
+      indexFundOwnershipFraction: indexFundOwnershipFraction(corp),
       isPrivate: corp.isPrivate ?? false,
       techAssetValueAnchor: computeTechAssetValueAnchor(corp, currentYear),
     };

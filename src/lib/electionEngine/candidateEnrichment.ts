@@ -7,6 +7,7 @@ import { getDb } from "@/lib/mongodb";
 import type { Character, ElectionCandidate, NPP, PoliticalParty } from "@/lib/db/types";
 import { type CountryId, type CountryConfig } from "@/lib/constants/countries";
 import { resolveRegimeMultiplier } from "@/lib/turn/onePartyConstraints";
+import { isBlocListCountry } from "@/lib/constants/blocList";
 import { getCountryState, updateCountryState } from "@/lib/countryState";
 import type { NPPEndorsement } from "@/lib/db/types/nppInfluence";
 import type { EnrichedCandidate } from "./types";
@@ -93,6 +94,17 @@ export async function fetchEnrichedCandidates(
     // equal weight) for this election only, then clear the flag.
     const honestOverride = runtime.pendingHonestByElection;
     let effectiveMultipliers = runtime.opsVoteMultipliers ?? undefined;
+    // Bloc-list chambers weight nothing. The quota already fixes the party
+    // split (see `@/lib/constants/blocList`), so a ruling-party multiplier can
+    // no longer change who is seated; all it would still do is skew the
+    // DISPLAYED vote by 8x. Since the only thing the vote decides here is the
+    // order inside a party's own block, and the multiplier is uniform within a
+    // party and therefore cancels there, the honest reading is 1.0 across the
+    // board: the pie becomes real popularity, and the quota does the regime's
+    // work in the open.
+    if (isBlocListCountry(electionCountry)) {
+      effectiveMultipliers = { ruling: 1, approved: 1, independent: 1, banned: 0 };
+    }
     if (honestOverride) {
       const m = honestOverride.atMultiplier;
       effectiveMultipliers = { ruling: m, approved: m, independent: m, banned: m };

@@ -1,4 +1,5 @@
 import { HOUSE_SEATS, UK_COMMONS_SEATS, UK_REGIONAL_COUNCIL_SEATS } from "@/lib/constants";
+import { allocateBlocListSeats } from "./blocListAllocation";
 import { MODERN_ERA_START_YEAR } from "@/lib/constants/monetaryEra";
 import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
 
@@ -283,7 +284,15 @@ export function allocateSeats(
   ranked: RankedCandidate[],
   totalVotesCast: number,
   houseSeats: Record<string, number> = HOUSE_SEATS,
-  majoritarianBonus?: MajoritarianBonusConfig
+  majoritarianBonus?: MajoritarianBonusConfig,
+  /**
+   * Bloc-list quota (party sequentialId to share) for National Front chambers.
+   * When supplied on a multi-seat race the party split comes from the quota
+   * instead of the vote, and only the split INSIDE each party's block is
+   * decided by votes. See `@/lib/turn/election/blocListAllocation`. Undefined
+   * (every country but the DDR today) leaves the proportional path untouched.
+   */
+  blocListShares?: Readonly<Record<string, number>>
 ): SeatAllocationResult {
   // "senate" is single-seat for the US (one seat per class per state, always
   // totalSeats=1). Nigeria's Senate is a multi-seat-per-zone body (18-21 seats),
@@ -308,7 +317,13 @@ export function allocateSeats(
 
   const seatsEstimate: Record<string, number> = {};
 
-  if (isMultiSeat) {
+  if (isMultiSeat && blocListShares) {
+    // Bloc-list chamber: the quota decides the party split outright, so none of
+    // the eligibility / threshold / majoritarian machinery below applies. There
+    // is no cross-party contest to threshold.
+    const blocSeats = allocateBlocListSeats(authoritativeSeats, blocListShares, ranked);
+    for (const { id } of ranked) seatsEstimate[id] = blocSeats[id] ?? 0;
+  } else if (isMultiSeat) {
     for (const { id } of ranked) seatsEstimate[id] = 0;
 
     // Eligibility is a PARTY-level gate when `party` is provided: same-party

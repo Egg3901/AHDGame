@@ -1,6 +1,7 @@
 import type { ConflictDoc, ConflictSide } from "@/lib/db/types/conflict";
 import type { CountryId } from "@/lib/constants/countries";
 import { blocOf, type BlocLookup } from "@/lib/military/bloc";
+import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 import { OCCUPATION } from "./config";
 
 /**
@@ -34,6 +35,13 @@ export function sideOf(
   const id = countryId as CountryId;
   if (c.sideA.countries.includes(id)) return "A";
   if (c.sideB.countries.includes(id)) return "B";
+  // The faction itself, by exact id. This is the PERMISSIVE resolver — it already
+  // places unrostered bloc members by backer — so the clause grants placement to the
+  // named faction and to nobody else. Without it a proxy war's target resolves to no
+  // side, the offensive is built with `side: null`, and the walkover branch skips
+  // `joinSide` and `applyOccupation` together: control never moves, silently.
+  if (c.sideA.factionEntity === countryId) return "A";
+  if (c.sideB.factionEntity === countryId) return "B";
   const bloc = blocOf(blocs, countryId);
   const a = c.sideA.backer === bloc;
   const b = c.sideB.backer === bloc;
@@ -69,12 +77,14 @@ export function opposedBelligerents(
 
 /** The `control` a conflict is born at — the host's own side holds all of its soil. */
 export function initialControl(
-  hostCountry: CountryId,
+  hostCountry: WorldEntityId,
   sideA: ConflictSide,
   sideB: ConflictSide
 ): number {
-  if (sideA.countries.includes(hostCountry)) return 0;
-  if (sideB.countries.includes(hostCountry)) return 100;
+  // Rosters are CountryId[]; the host may be a world entity that is not one (a proxy
+  // war's host is never a belligerent). Widen the COMPARISON rather than the roster.
+  if ((sideA.countries as string[]).includes(hostCountry)) return 0;
+  if ((sideB.countries as string[]).includes(hostCountry)) return 100;
   return 50;
 }
 
@@ -146,8 +156,8 @@ export function derivedSupplies(c: SupplyInput): { supplyA: number; supplyB: num
 export type OccupationInput = Pick<ConflictDoc, "hostCountry" | "control" | "sideA" | "sideB">;
 
 export interface OccupationView {
-  /** The country whose soil is contested. */
-  host: CountryId;
+  /** The country whose soil is contested. May be a non-playable world entity. */
+  host: WorldEntityId;
   /** The side standing on foreign soil, or null when the host is on neither side. */
   occupier: Side | null;
   /** Percent of the host held by each side; integers summing to 100. */
@@ -158,8 +168,9 @@ export interface OccupationView {
 /** The readout: who holds how much of the host, and who is the occupier. */
 export function occupationOf(c: OccupationInput): OccupationView {
   const pctB = Math.round(c.control);
-  const hostOnA = c.sideA.countries.includes(c.hostCountry);
-  const hostOnB = c.sideB.countries.includes(c.hostCountry);
+  // Same widening as `initialControl`: the host may not be a CountryId at all.
+  const hostOnA = (c.sideA.countries as string[]).includes(c.hostCountry);
+  const hostOnB = (c.sideB.countries as string[]).includes(c.hostCountry);
   return {
     host: c.hostCountry,
     occupier: hostOnA ? "B" : hostOnB ? "A" : null,

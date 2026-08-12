@@ -610,10 +610,13 @@ export async function processNppCorporationDecisions(
         Math.floor(((gsPlants?.currentTurn ?? turn) - 1) / TURNS_PER_YEAR);
 
     const countryIds = [...new Set(nppCorps.map((c) => c.countryId))];
-    const primeByCountry = new Map<string, number>();
-    for (const cid of countryIds) {
-      primeByCountry.set(cid, await resolveCountryPrimeRate(db, cid));
-    }
+    const primeByCountry = new Map<string, number>(
+      await Promise.all(
+        countryIds.map(
+          async (cid) => [cid, await resolveCountryPrimeRate(db, cid)] as [string, number]
+        )
+      )
+    );
     const colDocs = await db
       .collection<StateMetrics>("macroMetrics")
       .find({}, { projection: { "economic.costOfLiving": 1 } })

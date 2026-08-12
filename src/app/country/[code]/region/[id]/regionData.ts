@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/mongodb";
+import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import type {
   State,
   StateDemographics,
@@ -123,7 +124,7 @@ export async function getRegionDemographics(stateId: string, countryId: CountryI
             .collection<DemographicCategory>("demographicCategories")
             .find({ _id: { $in: categoryFilter } })
             .toArray()
-        : db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+        : loadDemographicCategories(db),
     ]);
     return { demographics, categories };
   } catch (error) {
@@ -367,11 +368,28 @@ export async function getRegionOfficials(stateId: string, countryId: CountryId) 
       .sort({ officeType: 1, senateClass: 1, seatsHeld: -1 })
       .toArray();
 
+    // Characters, NPPs, and parties all key off the officials list alone —
+    // hydrate them in one round; users then key off the characters.
     const characterIds = officials.filter((o) => o.characterId).map((o) => o.characterId!);
-    const characters = await db
-      .collection<Character>("characters")
-      .find({ _id: { $in: characterIds } })
-      .toArray();
+    const nppIds = officials.filter((o) => o.nppId).map((o) => o.nppId!);
+    const partyIds = [...new Set(officials.map((o) => o.party).filter(Boolean))] as string[];
+    const partySeqIds = partyIds.map(Number).filter(Boolean);
+    const [characters, npps, parties] = await Promise.all([
+      db
+        .collection<Character>("characters")
+        .find({ _id: { $in: characterIds } })
+        .toArray(),
+      db
+        .collection<NPP>("npps")
+        .find({ _id: { $in: nppIds } })
+        .toArray(),
+      partySeqIds.length
+        ? db
+            .collection<PoliticalParty>("politicalParties")
+            .find({ sequentialId: { $in: partySeqIds }, countryId })
+            .toArray()
+        : Promise.resolve([] as PoliticalParty[]),
+    ]);
     const userIds = characters.map((c) => c.userId);
     const users = await db
       .collection<User>("users")
@@ -395,21 +413,8 @@ export async function getRegionOfficials(stateId: string, countryId: CountryId) 
       ])
     );
 
-    const nppIds = officials.filter((o) => o.nppId).map((o) => o.nppId!);
-    const npps = await db
-      .collection<NPP>("npps")
-      .find({ _id: { $in: nppIds } })
-      .toArray();
     const nppMap = new Map(npps.map((n) => [n._id.toString(), n]));
 
-    const partyIds = [...new Set(officials.map((o) => o.party).filter(Boolean))] as string[];
-    const partySeqIds = partyIds.map(Number).filter(Boolean);
-    const parties = partySeqIds.length
-      ? await db
-          .collection<PoliticalParty>("politicalParties")
-          .find({ sequentialId: { $in: partySeqIds }, countryId })
-          .toArray()
-      : [];
     const partyAbbrev = new Map(
       parties.map((p) => [String(p.sequentialId), p.abbreviation ?? String(p.sequentialId)])
     );

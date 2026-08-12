@@ -31,6 +31,11 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { getInflationTarget } from "@/lib/budget/inflation";
 import { processNppChairAutoRate } from "@/lib/nppAutonomy/nppChairAutoRate";
+import {
+  capScrutinyGain,
+  resolveRecoveryDelta,
+  stanceIsCorrect,
+} from "@/lib/centralBank/credibility";
 
 /** Fallback target inflation rate — deviations drive infamy */
 const TARGET_INFLATION = 2.0;
@@ -113,6 +118,7 @@ export async function processCentralBankChairTurn(
         | "_id"
         | "countryId"
         | "chairInfamy"
+        | "resolveStreak"
         | "chairCharacterId"
         | "chairMode"
         | "primeRate"
@@ -123,6 +129,7 @@ export async function processCentralBankChairTurn(
       _id: 1,
       countryId: 1,
       chairInfamy: 1,
+      resolveStreak: 1,
       chairCharacterId: 1,
       chairMode: 1,
       primeRate: 1,
@@ -199,7 +206,7 @@ export async function processCentralBankChairTurn(
   const bankBulkOps: Array<{
     updateOne: {
       filter: { _id: string };
-      update: { $set: { chairInfamy: number; updatedAt: Date } };
+      update: { $set: { chairInfamy: number; resolveStreak: number; updatedAt: Date } };
     };
   }> = [];
   const charBulkOps: Array<{
@@ -225,15 +232,29 @@ export async function processCentralBankChairTurn(
 
     const currentInfamy = Math.min(100, Math.max(0, finiteOr(bank.chairInfamy, 0)));
 
-    const totalDelta = computeScrutinyDelta(
+    const rawDelta = computeScrutinyDelta(inflationRate, gdpGrowth, currentInfamy, targetInflation);
+    // One bad print must not ruin a bank outright: ruin is earned over turns and
+    // can be seen coming. Improvements (negative delta) are never capped.
+    const totalDelta = capScrutinyGain(rawDelta);
+
+    // Resolve: holding the stance the corridor calls for pays down scrutiny even
+    // before inflation responds. This is the escape hatch from the credibility
+    // spiral — the recovery input is an action the chair controls, unlike the
+    // outcome that drives the penalty. Exempt from the high-scrutiny dampener in
+    // computeScrutinyDelta on purpose: dampening it would narrow the way out
+    // exactly when it is needed most.
+    const correctStance = stanceIsCorrect(
+      finiteOr(bank.primeRate, targetInflation),
       inflationRate,
-      gdpGrowth,
-      currentInfamy,
       targetInflation
     );
+    const resolve = resolveRecoveryDelta({
+      correctStance,
+      previousStreak: finiteOr(bank.resolveStreak, 0),
+    });
 
     const decayedInfamy = currentInfamy * INFAMY_DECAY;
-    const newInfamy = Math.min(100, Math.max(0, decayedInfamy + totalDelta));
+    const newInfamy = Math.min(100, Math.max(0, decayedInfamy + totalDelta - resolve.relief));
 
     if (
       currentInfamy >= HIGH_SCRUTINY_DIAGNOSTIC_THRESHOLD &&
@@ -254,7 +275,13 @@ export async function processCentralBankChairTurn(
     bankBulkOps.push({
       updateOne: {
         filter: { _id: bank._id },
-        update: { $set: { chairInfamy: newInfamy, updatedAt: new Date() } },
+        update: {
+          $set: {
+            chairInfamy: newInfamy,
+            resolveStreak: resolve.resolveStreak,
+            updatedAt: new Date(),
+          },
+        },
       },
     });
 

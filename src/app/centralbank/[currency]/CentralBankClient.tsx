@@ -19,7 +19,11 @@ import BackButton from "@/components/BackButton";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { centralBankApiUrl } from "@/lib/urls";
 import { CREDIT_RATINGS } from "@/lib/db/types/centralBank";
-import { FOREX_ACTIVE_COUNTRIES, type CurrencyCode } from "@/lib/constants/currencies";
+import {
+  FOREX_ACTIVE_COUNTRIES,
+  COUNTRY_CURRENCY_MAP,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
 import { formatCompactNumber } from "@/lib/utils/formatters";
 import { CentralBankSavingsTab } from "./components/CentralBankSavingsTab";
 import { CentralBankLoanTab } from "./components/CentralBankLoanTab";
@@ -30,12 +34,16 @@ import { CentralBankFinancialsTab } from "./components/CentralBankFinancialsTab"
 import { CentralBankMoneySupplyTab } from "./components/CentralBankMoneySupplyTab";
 import { InflationBreakdownTooltip } from "./components/InflationBreakdownTooltip";
 import { ChairCard } from "./components/ChairCard";
+import { DismissChairPanel } from "./components/DismissChairPanel";
+import { CurrencyRegimePanel } from "./components/CurrencyRegimePanel";
 import { PrimeRateCard } from "./components/PrimeRateCard";
 import { NominationsPanel } from "./components/NominationsPanel";
 import { LobbyingPanel } from "./components/LobbyingPanel";
 import { ratingColor } from "./components/centralBankUtils";
 import { CentralBankMembersTab, type CentralBankMember } from "./components/CentralBankMembersTab";
 import { FomcCommitteeTab } from "./components/FomcCommitteeTab";
+import { CentralBankReserveTab } from "./components/CentralBankReserveTab";
+import { CentralBankInsuranceTab } from "./components/CentralBankInsuranceTab";
 import type { BankData } from "./components/centralBankTypes";
 
 export type { CentralBankMember };
@@ -49,6 +57,8 @@ type CentralBankTab =
   | "balance-sheet"
   | "money-supply"
   | "intervention"
+  | "reserves"
+  | "insurance"
   | "admin";
 
 const VALID_TABS: CentralBankTab[] = [
@@ -60,6 +70,8 @@ const VALID_TABS: CentralBankTab[] = [
   "balance-sheet",
   "money-supply",
   "intervention",
+  "reserves",
+  "insurance",
   "admin",
 ];
 
@@ -251,7 +263,7 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
             : formatAmount(internalValue, homeCurrency);
         return `${homeValue} (${displayValue})`;
       })()
-    : "—";
+    : "-";
 
   const executiveLabel = config.officeTypes.find((o) => o.isExecutive)?.label ?? "executive";
 
@@ -371,23 +383,23 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                       <p className="font-semibold text-foreground">What is Savings Flow?</p>
                       <p className="text-muted leading-relaxed">
                         Tracks whether households are spending their savings or stashing more away,
-                        as net flows over recent turns versus total savings stock — not the same as
+                        as net flows over recent turns versus total savings stock - not the same as
                         a national accounting &quot;savings rate&quot; (% of GDP). It&apos;s one
                         input to inflation.
                       </p>
                       <ul className="space-y-1 text-muted">
                         <li>
-                          <span className="text-error font-semibold">Positive (+)</span> — people
+                          <span className="text-error font-semibold">Positive (+)</span> - people
                           are pulling money out of savings to spend. Extra demand pushes prices up
                           (inflationary).
                         </li>
                         <li>
-                          <span className="text-success font-semibold">Negative (−)</span> — people
+                          <span className="text-success font-semibold">Negative (−)</span> - people
                           are saving more than spending. Less demand eases prices (slightly
                           deflationary).
                         </li>
                         <li>
-                          <span className="font-semibold">Near zero</span> — spending and saving are
+                          <span className="font-semibold">Near zero</span> - spending and saving are
                           roughly balanced.
                         </li>
                       </ul>
@@ -489,6 +501,16 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
               label="FX Intervention"
             />
           )}
+          <TabButton
+            active={activeTab === "reserves"}
+            onClick={() => setActiveTab("reserves")}
+            label="Reserves"
+          />
+          <TabButton
+            active={activeTab === "insurance"}
+            onClick={() => setActiveTab("insurance")}
+            label="Insurance"
+          />
           {data.isAdmin && (
             <TabButton
               active={activeTab === "admin"}
@@ -546,7 +568,13 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
         </div>
       )}
       {activeTab === "intervention" && data.intervention && (
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+        <div className="mx-auto max-w-7xl space-y-6 px-4 sm:px-6">
+          <CurrencyRegimePanel
+            bankApiBasePath={bankApiBasePath}
+            isChair={data.isChair === true}
+            currentTurn={data.currentTurn ?? 0}
+            onChanged={fetchData}
+          />
           <CentralBankInterventionTab
             countryId={countryId}
             data={data.intervention}
@@ -556,6 +584,16 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
             currentTurn={data.currentTurn ?? 0}
             onChanged={fetchData}
           />
+        </div>
+      )}
+      {activeTab === "reserves" && (
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <CentralBankReserveTab currency={COUNTRY_CURRENCY_MAP[countryId]} />
+        </div>
+      )}
+      {activeTab === "insurance" && (
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <CentralBankInsuranceTab currency={COUNTRY_CURRENCY_MAP[countryId]} />
         </div>
       )}
       {activeTab === "admin" && data.isAdmin && (
@@ -605,6 +643,7 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                 chair={data.chair}
                 chairAppointedAt={data.chairAppointedAt}
                 chairInfamy={data.chairInfamy}
+                resolveStreak={data.resolveStreak}
                 chairTermExpiresAtTurn={data.chairTermExpiresAtTurn}
                 currentTurn={data.currentTurn}
                 currentInflation={data.currentInflation}
@@ -613,12 +652,22 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                 chairSelectionPending={data.chairSelectionPending}
                 chairMode={data.chairMode}
               />
+              {data.isExecutive && data.chair && data.chairMode !== "npp" && (
+                <DismissChairPanel
+                  chairTitle={data.chairTitle}
+                  chairName={data.chair.name}
+                  bankApiBasePath={bankApiBasePath}
+                  onChanged={fetchData}
+                />
+              )}
               <PrimeRateCard
                 primeRate={data.primeRate}
                 isChair={data.isChair}
                 chairControlsLocked={data.chairControlsLocked ?? false}
                 governmentControlled={data.governmentControlled ?? false}
                 viewerSetsRate={data.viewerSetsRate ?? false}
+                committeeSeated={data.committeeSeated ?? false}
+                onOpenCommittee={() => setActiveTab("committee")}
                 lastRateChangeTurn={data.lastRateChangeTurn}
                 currentTurn={data.currentTurn}
                 bankApiBasePath={bankApiBasePath}
@@ -637,7 +686,7 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
             </div>
 
             <div className="min-w-0 space-y-6 lg:col-span-2">
-              {/* Rate corridor (locked composite signature) — replaces the
+              {/* Rate corridor (locked composite signature) - replaces the
                   standalone inflation card; breakdown stays on the strip tile. */}
               <RateCorridor
                 interestRateHistory={data.interestRateHistory}

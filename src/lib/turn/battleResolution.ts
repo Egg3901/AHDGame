@@ -27,8 +27,11 @@ import {
 } from "@/lib/military/battle";
 import { buildCoalitionSide } from "@/lib/military/battleSides";
 import { loadMilitaryBlocs } from "@/lib/military/blocLookup";
-import { mergeOffensives, defendersAtFront } from "@/lib/military/coalition";
+import { mergeOffensives } from "@/lib/military/coalition";
 import { joinSide } from "@/lib/military/joinSide";
+import { isFactionEntity } from "@/lib/military/factionEntity";
+import { resolveDefendingSides } from "@/lib/military/defendingSides";
+import { buildFactionSide } from "@/lib/military/factionSide";
 import type { Front } from "@/lib/military/combat";
 import { getConflict, getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { conflictToFront } from "@/lib/military/createConflict";
@@ -150,6 +153,24 @@ async function applyOccupation(
   const tracksDepth = conflict.status === "active" || conflict.status === "winding_down";
   const status = deep ? ("winding_down" as const) : ("active" as const);
 
+  // A proxy war is not won by reaching a pole — it is won by HOLDING one. Stamp the
+  // clock here and let the turn step decide; clear it the moment the front comes off
+  // the pole, so a hold that is broken and re-established starts again from zero.
+  const atPole = control === 0 || control === 100;
+  const poleSide: Side | null = control === 0 ? "A" : control === 100 ? "B" : null;
+  const isProxyWar = conflict.type === "cold_war";
+  const poleFields: Partial<Pick<ConflictDoc, "poleSide" | "poleSinceTurn">> =
+    isProxyWar && atPole
+      ? // Re-stamp only on ARRIVAL. Rewriting `poleSinceTurn` every time a battle
+        // nudges an already-pinned front would reset the clock on every engagement and
+        // the three turns would never elapse.
+        conflict.poleSide === poleSide
+        ? {}
+        : { poleSide, poleSinceTurn: currentTurn }
+      : isProxyWar
+        ? { poleSide: null, poleSinceTurn: null }
+        : {};
+
   await getConflictsCollection(db).updateOne(
     { _id: conflict._id },
     {
@@ -161,11 +182,15 @@ async function applyOccupation(
         supplyBaseA,
         supplyBaseB,
         ...(tracksDepth && { status }),
+        ...poleFields,
       },
     }
   );
 
-  if (control === 0 || control === 100) {
+  // An interstate war ends the moment the front hits a pole. A proxy war does not:
+  // `resolveColdWarHolds` owns that, because the hold has to be measured on turns
+  // where nobody fought — and this function only runs when a battle MOVES the front.
+  if (atPole && !isProxyWar) {
     await resolveConflict(
       db,
       { ...moved, supplyA, supplyB },
@@ -244,18 +269,26 @@ export async function resolveBattleDeclarations(
       // A resolvable offensive pools every ally defending that side. An unresolvable
       // one has no sides to pool, so it fights the named target alone and moves no
       // ground — the long-standing behaviour for a matchup that cannot be placed.
-      const defenders = off.enemySide
-        ? defendersAtFront(conflict, atFront, theaterId, off.enemySide, blocs)
-        : unitsByCountry.get(principal.targetCountry)?.length
-          ? [principal.targetCountry]
-          : [];
+      // Both arms go through the shared helper — the `length === 0` walkover test
+      // below is the same question the forecast asks, and a second copy of it is how
+      // a forecast comes to disagree with the outcome it predicts.
+      const defending = resolveDefendingSides({
+        conflict,
+        atFront,
+        theaterId,
+        enemySide: off.enemySide,
+        blocs,
+        namedTarget: principal.targetCountry,
+        unitsByCountry,
+      });
+      const defenders = defending.defenderCountries;
 
       // Each side fights on its own derived supply — occupation degrades whoever is
       // being pushed back. An unplaced side fights at neutral supply.
       const supplyFor = (side: Side | null) =>
         side === "A" ? conflict.supplyA : side === "B" ? conflict.supplyB : undefined;
 
-      if (defenders.length === 0) {
+      if (defending.unopposed) {
         // Nobody home: the offensive walks forward. Without this, a nation that never
         // deploys anything is permanently immune to invasion.
         const walkoverBefore = conflict.control;
@@ -298,7 +331,14 @@ export async function resolveBattleDeclarations(
       // enrols nobody: there is no side to enrol them onto.
       if (off.side && off.enemySide) {
         for (const c of off.attackers) await joinSide(db, conflict, c, off.side);
-        for (const c of defenders) await joinSide(db, conflict, c, off.enemySide);
+        for (const c of defenders) {
+          // A faction is never enrolled into a roster: it IS the side, named by
+          // `factionEntity`. Writing it into `sideX.countries` would list North
+          // Vietnam as a member country of its own side, and would put a
+          // non-CountryId into a field every belligerent list reads as one.
+          if (isFactionEntity(conflict, c)) continue;
+          await joinSide(db, conflict, c as CountryId, off.enemySide);
+        }
       }
 
       const [attackerSides, defenderSides] = await Promise.all([
@@ -320,6 +360,16 @@ export async function resolveBattleDeclarations(
         ),
       ]);
 
+      // A faction owns no unit rows, so without this its side reaches the battle math
+      // empty and the attacker walks through it every single turn.
+      const factionSide = defending.factionDefends
+        ? buildFactionSide(conflict, defending.factionDefends, fronts[theaterId]!)
+        : null;
+      if (factionSide && factionSide.units.length > 0) {
+        factionSide.conflictSupply = supplyFor(defending.factionDefends);
+        defenderSides.push(factionSide);
+      }
+
       const result = resolvePvpBattle(
         attackerSides,
         defenderSides,
@@ -331,7 +381,34 @@ export async function resolveBattleDeclarations(
       // contingent's country and credits only its own generals, so each nation
       // bleeds its own troops and earns its own experience.
       for (const c of attackerSides) await persistSide(db, c, result.attacker, result.win);
-      for (const c of defenderSides) await persistSide(db, c, result.defender, !result.win);
+      for (const c of defenderSides) {
+        // The synthetic side has no `militaryUnits` rows and no generals — persisting
+        // it would bulk-write against a countryId that owns nothing. Its casualties go
+        // onto the conflict's `tokenStrength` below instead.
+        if (factionSide && c.country === factionSide.country) continue;
+        await persistSide(db, c, result.defender, !result.win);
+      }
+
+      // ⚠️ Deliberately its own write, NOT folded into `applyOccupation`'s `$set`:
+      // that function early-returns when `control` does not move, which is every
+      // battle once the front is pinned at a pole — exactly the state the three-turn
+      // hold is about. A stalemated front would grind the token force every turn and
+      // record none of it, which is the immortal wall this mechanism removes.
+      if (factionSide && factionSide.units.length > 0) {
+        const lost = Math.max(0, Math.round(result.defender.loss));
+        if (lost > 0) {
+          const key = defending.factionDefends === "A" ? "sideA" : "sideB";
+          const before =
+            (defending.factionDefends === "A"
+              ? conflict.sideA.tokenStrength
+              : conflict.sideB.tokenStrength) ?? 0;
+          const after = Math.max(0, before - lost);
+          await getConflictsCollection(db).updateOne(
+            { _id: conflict._id },
+            { $set: { [`${key}.tokenStrength`]: after } }
+          );
+        }
+      }
 
       // Territory: the winner pushes the front toward the loser's pole. A side that
       // broke off yields ground more cheaply than one broken in place. A matchup that

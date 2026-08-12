@@ -132,6 +132,19 @@ export interface ElectionResponse {
   isUpcoming: boolean;
   inGeneral: boolean;
 
+  /**
+   * How many candidates advance per party from this race's primary, resolved
+   * server-side against the world's live redistricting flag (US=1, UK/JP=3,
+   * one-party states=7, US House=3 when redistricting is on; single-winner
+   * executive races always 1).
+   *
+   * Display surfaces MUST read this rather than recomputing the cap — a client
+   * component has no access to gameState, so its own call would fall back to
+   * the legacy cap and disagree with what the turn resolver enforced
+   * (ticket-1041).
+   */
+  primaryAdvanceCount: number;
+
   // Core data (always present)
   candidates: EnrichedCandidate[];
   byParty: PartyGroup[];

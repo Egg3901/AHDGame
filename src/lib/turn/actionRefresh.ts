@@ -19,6 +19,10 @@ import {
   cabinetOfficeTypeForCountry,
   resolveOfficeActionBonus,
 } from "@/lib/actions/officeActionBonus";
+import {
+  resolveOfficeActionBonusForType,
+  resolveOfficeNiBonus,
+} from "@/lib/actions/officeBonusRegistry";
 import type { CountryId } from "@/lib/constants/countries";
 import type { SupremeCourtSeat } from "@/lib/db/types/scotus";
 import { JUSTICE_NI_BONUS_PER_TURN } from "@/lib/constants/justiceActions";
@@ -96,24 +100,8 @@ export async function processActionRefresh(
   // ── Position-based NI bonuses ────────────────────────────────────────────
   // Tiers: 2.5 (executive head), 2.0 (VP / top leaders / party chair),
   //        1.5 (deputy leaders / party vc/treasurer), 1.0 (rank-and-file legislators)
-  const OFFICE_NI_BONUS: Partial<Record<string, number>> = {
-    president: 2.5,
-    primeMinister: 2.5,
-    chancellor: 2.5,
-    vicePresident: 2.0,
-    senate: 1.0,
-    house: 1.0,
-    stateSenate: 1.0,
-    governor: 1.0,
-    usCabinet: 1.0,
-    commons: 1.0,
-    regionalCouncil: 1.0,
-    ukCabinet: 1.0,
-    bundestag: 1.0,
-    ministerPresident: 1.0,
-    deCabinet: 1.0,
-    parliamentaryCabinet: 1.0,
-  };
+  // Office tiers live in `resolveOfficeNiBonus`, which falls back to the
+  // per-country office registry so non-US legislators are not silently zeroed.
   const CONGRESS_LEADER_NI_BONUS: Partial<Record<LeadershipRole, number>> = {
     majority_leader_senate: 2.0,
     speaker_of_the_house: 2.0,
@@ -179,10 +167,12 @@ export async function processActionRefresh(
   const electedRows =
     cabinetSeatCharIds.length > 0
       ? await db
-          .collection<{ characterId: ObjectId; officeType: string }>("electedOfficials")
+          .collection<{ characterId: ObjectId; officeType: string; countryId?: CountryId }>(
+            "electedOfficials"
+          )
           .find(
             { characterId: { $in: cabinetSeatCharIds } },
-            { projection: { characterId: 1, officeType: 1 } }
+            { projection: { characterId: 1, officeType: 1, countryId: 1 } }
           )
           .toArray()
       : [];
@@ -190,9 +180,15 @@ export async function processActionRefresh(
   const seatTypeByCharId = new Map<string, string>();
   for (const row of electedRows) {
     const id = row.characterId.toString();
-    const bonus = config?.officeActionBonus?.[row.officeType] ?? 0;
+    const bonus = resolveOfficeActionBonusForType(
+      row.officeType,
+      config?.officeActionBonus,
+      row.countryId
+    );
     const prev = seatTypeByCharId.get(id);
-    const prevBonus = prev ? (config?.officeActionBonus?.[prev] ?? 0) : -1;
+    const prevBonus = prev
+      ? resolveOfficeActionBonusForType(prev, config?.officeActionBonus, row.countryId)
+      : -1;
     if (bonus > prevBonus) seatTypeByCharId.set(id, row.officeType);
   }
 
@@ -211,6 +207,7 @@ export async function processActionRefresh(
         isCabinetMember: cabinetCountry != null,
         cabinetOfficeType: cabinetCountry ? cabinetOfficeTypeForCountry(cabinetCountry) : undefined,
         officeActionBonus: config?.officeActionBonus,
+        countryId: character.countryId,
       });
     if (chairCharacterIds.has(character._id.toString())) {
       actionRefresh += chairActionBonus;
@@ -253,7 +250,7 @@ export async function processActionRefresh(
     if (character.currentOffice) {
       positionNiBonus = Math.max(
         positionNiBonus,
-        OFFICE_NI_BONUS[character.currentOffice.type] ?? 0
+        resolveOfficeNiBonus(character.currentOffice.type, character.countryId)
       );
     }
     const leaderRole = leaderRoleByCharId.get(charIdStr);

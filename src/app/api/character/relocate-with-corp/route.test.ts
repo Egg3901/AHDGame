@@ -281,11 +281,9 @@ describe("POST /api/character/relocate-with-corp", () => {
     const req = new Request("http://localhost/api/character/relocate-with-corp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // `targetCountryId` is what makes this cross-country. Without it the route
-      // falls back to the character's own countryId (US) and looks LON up as a
-      // US state. This passed before only because the mocked `findOne` ignores
-      // the countryId filter and handed back the UK doc anyway, so the case
-      // never exercised the real cross-country path.
+      // A cross-country move has to name the country: without it the route
+      // resolves the target to the CHARACTER's country, and the mock only
+      // returned a UK state doc because it ignores the filter it is passed.
       body: JSON.stringify({
         targetStateId: "LON",
         targetCountryId: "UK",

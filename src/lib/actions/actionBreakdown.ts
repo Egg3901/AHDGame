@@ -52,6 +52,7 @@ export function getActionBreakdown({
     isCabinetMember,
     cabinetOfficeType,
     officeActionBonus,
+    countryId,
   });
 
   const items: ActionBreakdownItem[] = [{ label: "Base", amount: baseActionsPerTurn }];

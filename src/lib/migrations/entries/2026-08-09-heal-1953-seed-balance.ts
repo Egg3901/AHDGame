@@ -12,9 +12,9 @@ import type { Migration, MigrationResult } from "../types";
 const PRESET = "1953-default";
 
 async function heal1953SeedBalance(db: Db, dryRun: boolean): Promise<MigrationResult> {
+  // The gameState singleton is keyed by the STRING "current", not an ObjectId,
+  // so the collection has to be typed or the driver infers `_id: ObjectId`.
   const gameState = await db
-    // Typed inline: an untyped handle defaults `_id` to ObjectId, and the
-    // gameState singleton is keyed by the string "current".
     .collection<{ _id: string; preset?: string }>("gameState")
     .findOne({ _id: "current" }, { projection: { preset: 1 } });
   if (gameState?.preset !== PRESET) {

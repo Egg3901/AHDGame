@@ -788,11 +788,21 @@ export function isNameFromCountryPool(name: string, countryId?: string): boolean
   const surnames = new Set(pool.surnames);
   const firstNames = new Set(pool.firstNames);
 
-  const familyMatches = family.some(
-    (token) =>
-      surnames.has(token) ||
-      // Russian feminine forms are derived, not stored.
-      pool.surnames.some((surname) => feminizeRussianSurname(surname) === token)
+  const matchesSurname = (candidate: string): boolean =>
+    surnames.has(candidate) ||
+    // Russian feminine forms are derived, not stored.
+    pool.surnames.some((surname) => feminizeRussianSurname(surname) === candidate);
+
+  // Surnames are not always one token. The Italian pool stores "De Luca" and
+  // "De Santis", so checking token by token asked whether "De" and "Luca" were
+  // surnames, found neither, and declared a name the generator had just
+  // produced to be foreign. That made ~3% of Italian NPPs permanently fail
+  // their own pool, and since the NPP name heal uses this predicate to decide
+  // who needs renaming, it would rename them on every run — to another name
+  // that could be compound again. Every contiguous run of the family tokens is
+  // a candidate, so a stored surname of any length matches.
+  const familyMatches = family.some((_, start) =>
+    family.slice(start).some((__, end) => matchesSurname(family.slice(start, start + end + 1).join(" ")))
   );
   return familyMatches && given.some((token) => firstNames.has(token));
 }

@@ -7,7 +7,7 @@
  */
 
 import { getDb } from "@/lib/mongodb";
-import type { Db } from "mongodb";
+import type { Db, Filter } from "mongodb";
 import { isLeadershipElectionClosed } from "@/lib/congress/leadershipElections";
 import type {
   NPP,
@@ -100,6 +100,13 @@ export interface NPPContext {
   statesById: Map<string, State>; // stateId -> state metadata
   /** Current game turn — surfaced here so vote-resolution writes don't issue their own gameState read. */
   currentTurn: number;
+  /**
+   * The world's reset preset. Legislature SHAPE is preset-dependent (DE's 1953 override
+   * flips `bicameral`; TR/ES flip `upperElectionSystem`), so any code resolving a
+   * country's chambers needs it. Read off the same gameState fetch as `currentTurn`
+   * rather than issuing another.
+   */
+  preset?: string;
 }
 
 // ─── Context Loader ────────────────────────────────────────────────────────────
@@ -118,6 +125,56 @@ export interface NPPContextOptions {
    * turn-based resolution would still treat as open.
    */
   currentTurn?: number;
+}
+
+/**
+ * The national bills an NPP tick may vote on.
+ *
+ * Exported so the `active_both` branch is directly assertable: this filter is the gate
+ * upstream of the entire NPP voting loop, and a missing branch means the loop never sees
+ * a concurrent bill at all — every one of them then fails with an empty upper tally and
+ * no error anywhere.
+ */
+export function buildActiveBillFilter(opts: {
+  currentTurn?: number;
+  now: Date;
+}): Record<string, unknown> {
+  const stillOpen = (turnField: string, dateField: string) =>
+    typeof opts.currentTurn === "number"
+      ? {
+          $or: [
+            { [turnField]: { $gt: opts.currentTurn } },
+            { [turnField]: { $exists: false }, [dateField]: { $gt: opts.now } },
+          ],
+        }
+      : { [dateField]: { $gt: opts.now } };
+
+  return {
+    $or: [
+      { status: "active", ...stillOpen("votingEndsOnTurn", "votingEndsAt") },
+      {
+        status: "active_other",
+        ...stillOpen("otherChamberVotingEndsOnTurn", "otherChamberVotingEndsAt"),
+      },
+      {
+        status: "veto_override",
+        ...stillOpen("overrideVotingEndsOnTurn", "overrideVotingEndsAt"),
+      },
+      // JP Shugiin override uses main votingEndsAt (reset by jpBillLifecycle)
+      { status: "override_shugiin", ...stillOpen("votingEndsOnTurn", "votingEndsAt") },
+      {
+        // Poll while EITHER chamber is open. NESTED, not spread: `stillOpen` returns
+        // `{ $or: [...] }` on the turn branch and a FLAT object on the date branch, so
+        // spreading two of them drops the first (same key) and spreading their `.$or`
+        // arrays throws on the flat branch.
+        status: "active_both",
+        $or: [
+          stillOpen("votingEndsOnTurn", "votingEndsAt"),
+          stillOpen("otherChamberVotingEndsOnTurn", "otherChamberVotingEndsAt"),
+        ],
+      },
+    ],
+  };
 }
 
 export async function loadNPPContext(now: Date, options?: NPPContextOptions): Promise<NPPContext> {
@@ -212,24 +269,12 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
       .toArray(),
     db
       .collection<Bill>("bills")
-      .find({
-        $or: [
-          { status: "active", ...billStillOpen("votingEndsOnTurn", "votingEndsAt") },
-          {
-            status: "active_other",
-            ...billStillOpen("otherChamberVotingEndsOnTurn", "otherChamberVotingEndsAt"),
-          },
-          {
-            status: "veto_override",
-            ...billStillOpen("overrideVotingEndsOnTurn", "overrideVotingEndsAt"),
-          },
-          // JP Shugiin override uses main votingEndsAt (reset by jpBillLifecycle)
-          {
-            status: "override_shugiin",
-            ...billStillOpen("votingEndsOnTurn", "votingEndsAt"),
-          },
-        ],
-      })
+      .find(
+        buildActiveBillFilter({
+          currentTurn: optionsCurrentTurn,
+          now: billDeadlineNow,
+        }) as Filter<Bill>
+      )
       .toArray(),
     db
       .collection<StateBill>("stateBills")
@@ -288,8 +333,9 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
   // gameState fall through to 0 — the field is purely informational.
   const gameStateDoc = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { currentTurn: 1 } });
+    .findOne({ _id: "current" }, { projection: { currentTurn: 1, preset: 1 } });
   const currentTurn = gameStateDoc?.currentTurn ?? 0;
+  const preset = typeof gameStateDoc?.preset === "string" ? gameStateDoc.preset : undefined;
 
   const nppMap = new Map(allNPPs.map((n) => [n._id.toString(), n]));
   const statePartyOrgs = new Map(statePartyOrgsArr.map((o) => [o._id, o]));
@@ -468,5 +514,6 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
     stateDemographicsMap,
     statesById,
     currentTurn,
+    preset,
   };
 }

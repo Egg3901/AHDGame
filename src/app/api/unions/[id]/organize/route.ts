@@ -1,7 +1,8 @@
 /**
- * POST /api/unions/[id]/organize — spend personal funds to raise membership
- * pressure on an unowned union. Organizers unlock leadership voting once
- * pressure crosses the election threshold. Gated on `labourSystemMode >= "full"`.
+ * POST /api/unions/[id]/organize — spend action points to raise a union's
+ * strength. Open to every character in the union's country whether or not the
+ * union has a president. Banked strength is the organizer's vote weight when
+ * the presidency is open. Gated on `labourSystemMode >= "full"`.
  */
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
@@ -53,9 +54,10 @@ export async function POST(_request: Request, { params }: RouteParams) {
 
     return NextResponse.json({
       success: true,
-      membershipPressure: result.membershipPressure,
+      strength: result.strength,
+      myStrength: result.myStrength,
       electionOpen: result.electionOpen,
-      cashSpent: result.cashSpent,
+      actionsSpent: result.actionsSpent,
     });
   } catch (error) {
     return handleRouteError(error);

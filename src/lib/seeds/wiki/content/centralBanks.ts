@@ -40,6 +40,72 @@ At infamy 75, positive effects are cut in half. At infamy 150+, they are reduced
 
 **Infamy penalty threshold:** Above 25 infamy, chair bonuses are halved (+0.25 NPI instead of +0.5) and 1.5 actions are debited each turn.
 
+**Scrutiny gain is capped at 8 per turn.** One catastrophic print cannot take a clean bank to ruin. A bad record has to be earned over time, and you can see it coming.
+
+## What scrutiny costs the economy
+
+Scrutiny is not only a tax on the Chair's standing. It changes how much a rate move is believed.
+
+A rate change shifts inflation expectations by a multiplier of \`0.6 + 0.4 x credibility\`, where credibility is \`1 - scrutiny/100\`. A spotless bank gets the full effect. A completely discredited one still gets 60% of it.
+
+The floor is deliberate, and so is the narrowness. Loan rates, corporate cost of capital and bond pricing are untouched by scrutiny: a discredited bank can still cause a recession with a big enough hike. What it has lost is the ability to talk inflation down cheaply. Policy always works. It just costs more to be believed.
+
+## Buying your way back: resolve
+
+The way out is not results. It is nerve.
+
+Each turn the bank's stance is checked against the rate corridor: above-target inflation calls for a restrictive stance, below-target for accommodative, inside the band for neutral. Hold the correct stance for **3 consecutive turns** and scrutiny falls by **6**, whether or not inflation has responded yet. Then the clock restarts.
+
+This is the escape hatch, and it is deliberately an action you control rather than an outcome you do not. A Chair willing to hold an unpopular line can always climb out. Break the stance and the streak resets to zero, and the relief has to be earned again.
+
+## Independence, and what it costs to take it
+
+A government can take control of its central bank. Each route has a price, paid in scrutiny by the **institution**, not the person.
+
+| What the government does | Scrutiny added |
+| --- | --- |
+| Sets the prime rate directly (only possible while the bank is government-controlled) | 12 |
+| Dismisses the sitting Chair before their term ends | 18 |
+| Revokes the bank's independence by statute | 22 |
+
+The ladder is ordered by how far the act goes. Overriding one decision is a disagreement. Removing the person who makes them is a statement about who the bank answers to. A statute outlasts the government that passed it.
+
+**Chair turnover is not a laundromat.** When a term expires, or a Chair resigns, the institution keeps **75%** of its scrutiny: the new Chair inherits most of the record, and gets a modest honeymoon. A **dismissal** keeps all of it and adds 18 on top, so firing the Chair is always worse than waiting them out. There is no arrangement of people that erases what the bank did.
+
+**Granting independence refunds nothing.** Otherwise granting and revoking in a loop would launder scrutiny. The only way down is resolve.
+
+Some countries start with the government in charge. The Bank of England had no operational independence until 1997, so a British world starting before then opens with the Treasury setting Bank Rate, and Parliament can legislate the transfer either way. The calendar never does it for you: a 1953 world played past 1997 still needs the statute.
+
+A bank shared across countries, like the European Central Bank, cannot have its independence legislated by one member's parliament.
+
+## Exchange-rate regimes and the impossible trinity
+
+The Chair declares the currency's regime: **float**, **band**, or **peg**. The choice is not a label. It is governed by the impossible trinity, and it costs something.
+
+A country cannot have all three of:
+
+1. a fixed exchange rate,
+2. free movement of capital,
+3. an independent monetary policy.
+
+Pick any two.
+
+| Regime | Capital account | What you get | What you give up |
+| --- | --- | --- | --- |
+| Float | Open | Independent rate, free capital | A stable exchange rate |
+| Peg or band | Open | Stable rate, free capital | **The policy rate** |
+| Peg or band | Closed (capital controls) | Stable rate, independent rate | Free movement of capital |
+
+**Peg your currency with an open capital account and the policy rate is no longer yours.** Attempts to change it are refused, because the rate is whatever defending the peg requires. Two ways back: float the currency, or impose capital controls and accept what that does to your economy. Both are moves you can make the same turn, and the refusal names them.
+
+**A band counts as a commitment.** A Chair who has promised to defend a corridor has promised to spend reserves defending it, and cannot also claim the rate is free. Treating a band as a float would make it a free option: commit publicly, defend nothing.
+
+**Floating with capital controls is a waste, and the game says so.** You give up a stable rate *and* free capital to buy an independence a float already gave you for nothing. It is a legal configuration, just a bad one, and the card names it rather than dressing it up as a trade.
+
+**A regime cannot be changed more than once a game year.** A regime nobody believes is not a regime.
+
+Declaring a float cancels any standing intervention band. They are contradictory promises, and leaving the band behind would keep the constraint binding against a commitment the Chair just withdrew.
+
 ## Chair selection
 
 When a term expires, a new Chair is selected from two pools:
@@ -191,9 +257,43 @@ The Central Bank page shows a running log of recent interventions:
 
 History is retained for the last 24 intervention events per currency.
 
+## The reserve requirement
+
+Where [Private Banking](/wiki/private-banking) is enabled, the rate and QE are not the Chair's only levers. The central bank also sets a **reserve requirement**: the fraction of deposits every private bank in the currency must hold back instead of lending.
+
+The Chair (or an admin) sets it from the **Reserve tab** on the Central Bank page. It can be set anywhere between **5% and 95%**; out-of-range values are refused rather than clamped. Until a Chair touches it, the era default applies: **10%** in modern worlds, **20%** in historical ones.
+
+The mechanic is exactly what it sounds like. A private bank's lendable headroom is:
+
+\`\`\`
+headroom = max(0, totalDeposits × (1 − reserveRatio) − totalLoans)
+\`\`\`
+
+Raise the ratio and every bank in the currency has less room to lend against the same deposit base; banks already at the old limit are frozen out of new lending until deposits grow or loans run off. Lower it and headroom opens up at once. This makes the requirement the third monetary lever next to the prime rate and QE: the rate prices credit, QE moves the money stock, the reserve requirement caps how much private credit the deposit base can carry at all.
+
+It also feeds insurance pricing: a bank holding thin reserves against the requirement pays a higher deposit-insurance premium (see below), so the ratio disciplines banks even before it binds them.
+
+## The deposit insurance fund
+
+Each currency with private banking carries a national **deposit insurance fund**. It is premium-funded, not appropriated: no money sits in it that banks did not pay in.
+
+**Premiums.** Every turn, each chartered bank pays a premium on its insured deposits. The base rate is **0.4% annually**, split across the turns of the game year, then risk-weighted by reserve cover:
+
+\`\`\`
+riskWeight = clamp(2 − actualReserveRatio / requiredReserveRatio, 0.5, 3)
+\`\`\`
+
+A bank holding exactly its required reserves pays the base rate. Thin reserves pay up to **3x**; a heavily reserved bank pays as little as **0.5x**. Running your bank hot is legal, but it is not free.
+
+**The insured cap.** Deposits are insured up to a per-depositor cap, anchored at **₳5,000,000** in modern USD reference terms and scaled to each currency and era the same way charter capital is. Balances above the cap are not the fund's problem.
+
+**When a bank fails.** The failed bank's remaining cash and posted capital form a recovery pool. Insured balances are kept whole; excess above the cap is paid pro rata from whatever recovery remains, and the unpaid part is a haircut the depositor eats. The bill for the kept balances is funded in strict order: recovery pool first, then the insurance fund, then a **Treasury backstop**. The backstop is unconditional and lands in the federal budget as a depositInsurance spending line, pushing the treasury into debt if it must. A country whose banks fail bigger than the fund pays for it in fiscal terms, in public.
+
+The Central Bank page's Insurance tab surfaces the fund: its balance, lifetime premiums collected, payouts, and how much the Treasury has ever been made to cover.
+
 ## Savings and credit lines
 
 The central bank system also manages player savings accounts and lines of credit. Interest on savings deposits flows through the central bank's reserve balance. The **savings APY is half the prime rate** (e.g., 5% prime → 2.5% APY). These are secondary functions separate from the main Chair role.
 
-See also: [Currency Exchange](/wiki/currency-exchange), [National Metrics](/wiki/national-metrics), [Sovereign Bonds](/wiki/sovereign-bonds), [Corporate Bonds](/wiki/corporate-bonds), [Government Approval](/wiki/government-approval), [Planned / Command Economies](/wiki/planned-economies)
+See also: [Currency Exchange](/wiki/currency-exchange), [National Metrics](/wiki/national-metrics), [Sovereign Bonds](/wiki/sovereign-bonds), [Corporate Bonds](/wiki/corporate-bonds), [Private Banking](/wiki/private-banking), [Government Approval](/wiki/government-approval), [Planned / Command Economies](/wiki/planned-economies)
 `;

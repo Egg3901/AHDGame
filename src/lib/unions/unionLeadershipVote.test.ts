@@ -25,7 +25,7 @@ describe("unionLeadershipVote", () => {
     expect(deduped[0].candidateCharacterId).toEqual(second.candidateCharacterId);
   });
 
-  it("picks a plurality winner", () => {
+  it("picks the winner by banked strength, not headcount", () => {
     const unionId = new ObjectId();
     const a = new ObjectId();
     const b = new ObjectId();
@@ -55,9 +55,44 @@ describe("unionLeadershipVote", () => {
         updatedAt: new Date(),
       },
     ] as UnionLeaderVote[];
-    expect(tallyUnionLeaderVotes(votes)).toEqual({
+    const [first, second, third] = votes;
+    const weights = new Map([
+      [first.voterCharacterId.toString(), 10],
+      [second.voterCharacterId.toString(), 10],
+      [third.voterCharacterId.toString(), 10],
+    ]);
+    expect(tallyUnionLeaderVotes(votes, weights)).toEqual({
       leaderId: a.toString(),
-      voteCount: 2,
+      voteCount: 20,
     });
+
+    // One heavily invested organizer outvotes two light ones.
+    const lopsided = new Map([
+      [first.voterCharacterId.toString(), 10],
+      [second.voterCharacterId.toString(), 500],
+      [third.voterCharacterId.toString(), 10],
+    ]);
+    expect(tallyUnionLeaderVotes(votes, lopsided)).toEqual({
+      leaderId: b.toString(),
+      voteCount: 500,
+    });
+  });
+
+  it("ignores voters with no banked strength", () => {
+    const unionId = new ObjectId();
+    const candidate = new ObjectId();
+    const voter = new ObjectId();
+    const votes = [
+      {
+        _id: new ObjectId(),
+        unionId,
+        voterCharacterId: voter,
+        candidateCharacterId: candidate,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ] as UnionLeaderVote[];
+    expect(tallyUnionLeaderVotes(votes, new Map())).toBeNull();
+    expect(tallyUnionLeaderVotes(votes, new Map([[voter.toString(), 0]]))).toBeNull();
   });
 });

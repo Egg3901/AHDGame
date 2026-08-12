@@ -62,7 +62,6 @@ export function planFloatAbsorptionAcrossFunds(
       const sharePriceAnchor = convertLocalPriceToAnchor(
         executionPrice,
         corp.liquidCurrencyCode,
-        fund.anchorCurrencyCode,
         exchangeRates
       );
       if (sharePriceAnchor === null || sharePriceAnchor <= 0) continue;
@@ -96,7 +95,6 @@ export function planFloatAbsorptionAcrossFunds(
       const sharePriceAnchor = convertLocalPriceToAnchor(
         executionPrice,
         corp.liquidCurrencyCode,
-        fund.anchorCurrencyCode,
         exchangeRates
       );
       if (sharePriceAnchor === null || sharePriceAnchor <= 0) continue;

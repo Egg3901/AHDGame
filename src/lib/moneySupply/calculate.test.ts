@@ -15,6 +15,7 @@ describe("money supply aggregates", () => {
       partyLiquid: 10,
       governmentLiquid: 50,
       fundLiquid: 15,
+      bankDeposits: 0,
       organizationLiquid: 5,
       householdSavings: 70,
       externalBroadMoney: 500,
@@ -58,5 +59,42 @@ describe("money supply aggregates", () => {
     const calm = annualizedMoneyGrowthPct(46_758_687_500, 46_816_364_643, 12);
     expect(calm).not.toBeNull();
     expect(Math.abs(calm!)).toBeLessThan(50);
+  });
+});
+
+describe("bank deposits in M2", () => {
+  const base = {
+    householdLiquid: 0,
+    campaignLiquid: 0,
+    nppLiquid: 0,
+    corporateLiquid: 0,
+    partyLiquid: 0,
+    governmentLiquid: 0,
+    fundLiquid: 0,
+    organizationLiquid: 0,
+    householdSavings: 0,
+    externalBroadMoney: 0,
+    bankDeposits: 0,
+    bankReserves: 0,
+    creditOutstanding: 0,
+    sovereignBondsOutstanding: 0,
+    centralBankBondHoldings: 0,
+  };
+
+  it("keeps M2 flat when a deposit moves from the external pool onto a bank book", () => {
+    const before = calculateMoneyAggregates({ ...base, externalBroadMoney: 1_000 });
+    // Capturing the deposit debits externalBroadMoney and credits the bank.
+    const after = calculateMoneyAggregates({
+      ...base,
+      externalBroadMoney: 600,
+      bankDeposits: 400,
+    });
+    expect(after.m2).toBe(before.m2);
+  });
+
+  it("leaves M1 untouched by bank deposits", () => {
+    const withDeposits = calculateMoneyAggregates({ ...base, bankDeposits: 400 });
+    expect(withDeposits.m1).toBe(0);
+    expect(withDeposits.m2).toBe(400);
   });
 });

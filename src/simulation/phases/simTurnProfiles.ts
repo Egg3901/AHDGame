@@ -37,7 +37,11 @@ export const ELECTIONS_SKIP_PHASES: ReadonlySet<string> = new Set<string>([
   // resourceAndFinanceStart — economy/finance core (corporationTurn = the hotspot)
   "corporationTurn",
   "unionsTurn",
+  "nppUnionBehavior",
   "savingsInterestTurn",
+  "npcBankPolicyTurn",
+  "bankingTurn",
+  "pensionTurn",
   "prospectingResolution",
   "bondTurn",
   "macroCountryTurn",
@@ -45,6 +49,7 @@ export const ELECTIONS_SKIP_PHASES: ReadonlySet<string> = new Set<string>([
   "contractSettlement",
   "lineOfCreditTurn",
   "recomputeSharePrices",
+  "bankSolvencyTurn",
   "financialSuspectScan",
   // stateEffectsAndNationalAggregation — the economy legs only. The approval /
   // demographic / snapshot legs of this mega-adapter (nationalMetrics, census,

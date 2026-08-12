@@ -29,33 +29,29 @@ vi.mock("@/lib/budget/inflation", () => ({
 // Minimal COUNTRY_CONFIGS with one presidential entry, one parliamentary entry,
 // DE on the ECB shared bank, and IE on its own Central Bank of Ireland.
 // COUNTRY_ORDER is required by getCentralBankScope / helpers.ts.
-// Partial mock. Only COUNTRY_ORDER and the handful of centralBank fields this
-// suite cares about are overridden; everything else passes through from the
-// real module, and the per-country overrides are MERGED into the real configs
-// rather than replacing them.
-//
-// A full replacement broke every time the code under test reached for another
-// export or another config field (most recently `getCountryDisplayName` via
-// worldEntityManifest, then `officeTypes` via executiveOffice) — a test-harness
-// failure dressed up as a product failure.
-vi.mock("@/lib/constants/countries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/constants/countries")>();
-  const withBank = (id: string, centralBank: Record<string, unknown>) => ({
-    ...(actual.COUNTRY_CONFIGS as Record<string, object>)[id],
-    centralBank,
-  });
-  return {
-    ...actual,
-    COUNTRY_ORDER: ["US", "UK", "DE", "IE"],
-    COUNTRY_CONFIGS: {
-      ...actual.COUNTRY_CONFIGS,
-      US: withBank("US", {}),
-      UK: withBank("UK", {}),
-      DE: withBank("DE", { sharedBankId: "ECB", centralBankIntorgId: "EU" }),
-      IE: withBank("IE", {}),
+vi.mock("@/lib/constants/countries", () => ({
+  COUNTRY_ORDER: ["US", "UK", "DE", "IE"],
+  // Something downstream of the recalc now formats a country name. The mock
+  // replaces the whole module, so an export it omits is a hard failure rather
+  // than a fallback to the real one.
+  getCountryDisplayName: (id: string) => id,
+  COUNTRY_CONFIGS: {
+    US: { id: "US", governmentType: "presidential", centralBank: {}, officeTypes: [] },
+    UK: { id: "UK", governmentType: "parliamentaryMonarchy", centralBank: {}, officeTypes: [] },
+    DE: {
+      id: "DE",
+      governmentType: "parliamentary",
+      centralBank: { sharedBankId: "ECB", centralBankIntorgId: "EU" },
+      officeTypes: [],
     },
-  };
-});
+    IE: {
+      id: "IE",
+      governmentType: "parliamentary",
+      centralBank: {},
+      officeTypes: [],
+    },
+  },
+}));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

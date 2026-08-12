@@ -144,6 +144,51 @@ describe("dividendPassThrough", () => {
       expect(db.collectionMocks["indexFundTransactions"]!.insertOne).toHaveBeenCalledTimes(2);
     });
 
+    it("converts the ₳ dividend into the fund's currency before crediting a wallet", async () => {
+      const fundId = new ObjectId();
+      const corporationId = new ObjectId();
+      const characterId = new ObjectId();
+
+      db.collectionMocks["indexFunds"]!.findOne.mockResolvedValue({
+        _id: fundId,
+        slug: "jp50",
+        name: "Nikkei 50 Index",
+        tickerSymbol: "JP50",
+        unitSupply: 1000,
+        quotedNav: 100,
+        anchorCurrencyCode: "JPY",
+        cashAnchor: 0,
+      });
+      db.collectionMocks["indexFundPositions"]!.find.mockReturnValue(
+        makeCursor([{ fundId, holderKind: "character", characterId, units: 1000 }])
+      );
+      db.collectionMocks["corporations"]!.findOne.mockResolvedValue({
+        _id: corporationId,
+        name: "Dividend Payer Corp",
+      });
+      db.collectionMocks["characters"]!.find.mockReturnValue(
+        makeCursor([{ _id: characterId, name: "Ren" }])
+      );
+      db.collectionMocks["gameState"]!.findOne.mockResolvedValue({ forexEnabled: true });
+      db.collection("gameConfig").findOne.mockResolvedValue({ forexEnabled: true });
+      db.collection("exchangeRates").findOne.mockResolvedValue({
+        currencyCode: "JPY",
+        rate: 102.23,
+      });
+
+      await processIndexFundDividend(db as unknown as Db, fundId, 1_000_000, corporationId, 500, {
+        turn: 42,
+      });
+
+      const charBulk = vi.mocked(db.collectionMocks["characters"]!.bulkWrite).mock.calls[0][0] as {
+        updateOne: { update: { $inc: Record<string, number> } };
+      }[];
+      const paidNative = Object.values(charBulk[0].updateOne.update.$inc)[0];
+      // 250,000 ₳ of pass-through at 102.23 JPY per ₳. Crediting the raw ₳ figure
+      // into a yen wallet, which is what this used to do, underpaid by ~102x.
+      expect(paidNative).toBeCloseTo(250_000 * 102.23, 0);
+    });
+
     it("returns zero distribution when fund has no unit supply", async () => {
       const fundId = new ObjectId();
       const corporationId = new ObjectId();

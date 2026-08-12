@@ -46,6 +46,10 @@ import { DIRECTIVE_DURATION_TURNS, getDirectiveDef } from "@/lib/constants/orgDi
 import { JOINT_STATEMENT_DURATION_TURNS } from "@/lib/internationalOrganizations/jointStatement";
 import { setOrganizationPosture } from "@/lib/internationalOrganizations/posture";
 import { POSTURE_META } from "@/lib/constants/orgPosture";
+import { getConflict } from "@/lib/db/collections/conflicts";
+import { hasBillLifecycle } from "@/lib/legislature/hasBillLifecycle";
+import { getHeadOfGovernmentCharacter } from "@/lib/api/headOfGovernment";
+import { buildJoinConflictBill } from "@/lib/internationalOrganizations/commands/buildJoinConflictBill";
 import {
   admitMember,
   resolveJoinApplication,
@@ -479,7 +483,19 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
       const effectMembers = (await getMembers(db, item.organizationId)).filter(
         (m): m is CountryId => m in COUNTRY_CONFIGS
       );
-      await applyResolutionEffect(db, item, effectMembers, currentTurn, sanctionsExpiresOnTurn);
+      // `members` (the voting roster, computed above) travels ALONGSIDE
+      // effectMembers rather than replacing it. Sanctions and aid bind every
+      // modelled member, voting or not — a client state is still bound by its
+      // bloc's embargo — but only a member with a legislature can be ASKED to
+      // legislate, which is what join_conflict does.
+      await applyResolutionEffect(
+        db,
+        item,
+        effectMembers,
+        currentTurn,
+        sanctionsExpiresOnTurn,
+        members
+      );
       if (item.type === "free_trade_agreement") {
         const partyNames = parties
           .map((p: string) => COUNTRY_CONFIGS[p as CountryId]?.name ?? p)
@@ -607,7 +623,15 @@ async function applyResolutionEffect(
   resolution: OrganizationLegislation,
   members: CountryId[],
   currentTurn: number,
-  expiresTurn?: number
+  expiresTurn?: number,
+  /**
+   * The VOTING roster — player-enabled members only.
+   *
+   * Separate from `members`, which is every modelled member: an effect that binds
+   * a country (sanctions, aid) is not the same set as one that asks a country to
+   * legislate. Only `join_conflict` needs this.
+   */
+  votingMemberIds: CountryId[] = []
 ): Promise<void> {
   switch (resolution.type) {
     case "free_trade_agreement":
@@ -662,6 +686,92 @@ async function applyResolutionEffect(
     case "set_dues": {
       if (resolution.duesRateAnnual !== undefined) {
         await setOrganizationDuesRate(db, resolution.organizationId, resolution.duesRateAnnual);
+      }
+      return;
+    }
+    case "join_conflict": {
+      const theaterId = resolution.joinConflictTheaterId;
+      const side = resolution.joinConflictSide;
+      if (!theaterId || !side) return;
+
+      // A resolution sits for 24 turns; the war it was about can end inside that
+      // window. Mirrors declareWar, which re-runs findWarBetween at enactment.
+      const conflict = await getConflict(db, theaterId);
+      if (!conflict || conflict.status === "resolved") {
+        await recordOrgHistoryEvent(
+          db,
+          resolution.proposingCountryId,
+          currentTurn,
+          `${resolution.organizationId}'s entry resolution lapsed: that conflict is over.`,
+          { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
+        );
+        return;
+      }
+
+      const preset = await loadWorldPreset(db);
+      const chosen = (
+        side === "A" ? conflict.sideA.countries : conflict.sideB.countries
+      ) as string[];
+      const other = (
+        side === "A" ? conflict.sideB.countries : conflict.sideA.countries
+      ) as string[];
+
+      for (const countryId of votingMemberIds) {
+        // A bill minted for a country no engine walks never closes — it sits at
+        // active_both forever, with nothing to resolve it and nothing reporting it.
+        if (!hasBillLifecycle(countryId)) {
+          await recordOrgHistoryEvent(
+            db,
+            countryId,
+            currentTurn,
+            `${COUNTRY_CONFIGS[countryId].name} could not act on ${resolution.organizationId}'s entry resolution: no legislature.`,
+            { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
+          );
+          continue;
+        }
+        // Already in, on the side the bloc chose: nothing to ask.
+        if (chosen.includes(countryId)) continue;
+        if (other.includes(countryId)) {
+          // A bloc resolution never switches a country's side mid-war.
+          await recordOrgHistoryEvent(
+            db,
+            countryId,
+            currentTurn,
+            `${COUNTRY_CONFIGS[countryId].name} is already fighting on the other side of ${conflict.name}.`,
+            { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
+          );
+          continue;
+        }
+
+        // The head of government sponsors it — the bill arrives at a foreign
+        // power's call, so it is filed in the government's name, not a member's.
+        const sponsor = await getHeadOfGovernmentCharacter(db, countryId);
+        if (!sponsor) {
+          await recordOrgHistoryEvent(
+            db,
+            countryId,
+            currentTurn,
+            `${COUNTRY_CONFIGS[countryId].name} could not act on ${resolution.organizationId}'s entry resolution: no head of government.`,
+            { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
+          );
+          continue;
+        }
+
+        await buildJoinConflictBill({
+          db,
+          countryId,
+          preset,
+          sponsor: { characterId: sponsor._id, characterName: sponsor.name },
+          conflictName: conflict.name,
+          organizationId: resolution.organizationId,
+          provision: {
+            type: "join_conflict",
+            theaterId,
+            side,
+            organizationId: resolution.organizationId,
+            resolutionId: resolution._id.toString(),
+          },
+        });
       }
       return;
     }

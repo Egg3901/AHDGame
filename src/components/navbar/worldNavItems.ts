@@ -95,6 +95,13 @@ export function buildWorldNavItems({
       show: true,
     },
     { id: "imf", label: "IMF", href: "/international/imf", section: "main", show: true },
+    {
+      id: "banking",
+      label: "Banking",
+      href: "/banking",
+      section: "main",
+      show: true,
+    },
   ];
 }
 
@@ -145,8 +152,9 @@ const WORLD_NAV_GROUPS: WorldNavGroupDef[] = [
     // equivalent, mirroring how the Nation section's Economy group carries
     // the country's own central bank.
     // Stock Market 2.82% > Sectors 0.40% > Currency Exchange 0.35% >
-    // Trade 0.10%; IMF and Unions are below the measurement floor.
-    itemIds: ["stockMarket", "sectors", "forex", "trade", "imf", "unions"],
+    // Trade 0.10%; Banking, IMF and Unions are below the measurement floor.
+    // Banking replaces the nation-details central-bank link as the world entry.
+    itemIds: ["stockMarket", "sectors", "forex", "trade", "banking", "imf", "unions"],
   },
   {
     id: "diplomacy",

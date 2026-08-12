@@ -3,8 +3,9 @@
  *
  * Scans every active/upcoming election whose primaryEndTime has already
  * passed and eliminates all but the top-scoring candidates per party, keeping
- * the cap returned by `getPrimaryWinnersForCountry` (1 for presidential
- * systems, 3 for parliamentary, 7 for one-party states).
+ * the cap returned by `getPrimaryWinnersForElection` (1 for presidential
+ * systems and single-winner executive races, 3 for parliamentary legislatures
+ * and US House under redistricting, 7 for one-party states).
  * Also initialises an ElectionVoteTally for elections that don't have one yet.
  *
  * Safe to call multiple times — elections that are already resolved (no party
@@ -37,6 +38,8 @@ import type {
 import { ObjectId } from "mongodb";
 import { parseSeatId } from "@/lib/seats/seatId";
 import { getGameTime } from "@/lib/time/gameTime";
+import { getGameState } from "@/lib/gameState";
+import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { primaryClosedFilter, electionOpenFilter } from "@/lib/elections/electionDeadlineFilters";
 
 // POST /api/admin/elections/resolve-primaries — Eliminates primary losers and initializes vote tallies for elections whose primary phase has ended.
@@ -51,6 +54,12 @@ export async function POST() {
     const now = new Date();
     // Turn-first phase filter; `now` stays wall-clock for audit timestamps.
     const { currentTurn, effectiveNow } = await getGameTime();
+
+    // The redistricting flag decides how many US House candidates advance (3 vs
+    // the legacy 1). This route withdraws everyone below the cap, so reading it
+    // is not cosmetic: resolving without it eliminated the two co-nominees that
+    // the turn resolver would have advanced (ticket-1041).
+    const redistrictingEnabled = isRedistrictingEnabled(await getGameState(db));
 
     // All elections whose primary window has closed but which are still running
     const pastPrimary = await db
@@ -135,11 +144,13 @@ export async function POST() {
       }
       // Primary-winners cap is driven by the country's `governmentType`
       // (presidential → 1, parliamentary → 3, onePartyState → 7), except
-      // single-winner executive races (governor/president) always cap at 1.
+      // single-winner executive races (governor/president) always cap at 1 and
+      // US House which advances 3 under the districted-redistricting system.
       // Keep the top `maxAdvancing` scored candidates per party, prune the rest.
       const maxAdvancing = getPrimaryWinnersForElection(
         (election.countryId ?? "US") as CountryId,
-        election.electionType
+        election.electionType,
+        redistrictingEnabled
       );
       const hasContestedParty = [...partyCounts.values()].some((v) => v > maxAdvancing);
 

@@ -17,6 +17,7 @@ import { initialControl } from "./occupation";
 import { OCCUPATION } from "./config";
 import { planOpeningForceDeployment } from "./openingForces";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
+import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 
 /**
  * Birth-data generation for a conflict — the flavor the 4 static theaters hardcoded
@@ -53,12 +54,15 @@ export interface BuildConflictInput {
   id: string;
   /** Public number, allocated by createConflict from the shared counter. */
   conflictId: number;
-  hostCountry: CountryId;
+  /** The map anchor. A world entity — a proxy war's host is not a playable country. */
+  hostCountry: WorldEntityId;
   type: ConflictType;
   sideA: ConflictSide;
   sideB: ConflictSide;
   startTurn: number;
   createdBy: "player" | "event" | "seed";
+  /** `cold_war`: every third-party country in the theatre. Defaults to the anchor. */
+  hostEntities?: WorldEntityId[];
   name?: string;
   /** What the war was declared for. Absent for event- and seed-created conflicts. */
   warGoal?: WarGoal;
@@ -79,7 +83,18 @@ export interface BuildConflictInput {
 const SEED_SUPPLY = OCCUPATION.supplyNeutral;
 
 export function buildConflict(input: BuildConflictInput): ConflictDoc {
-  const region = (homeRegionOf(input.hostCountry) ?? "noa") as RegionCode;
+  const home = homeRegionOf(input.hostCountry);
+  // A proxy war's host is a world entity supplied by an admin, not a validated CountryId
+  // arriving from a declaration — so the `?? "noa"` fallback below is a silent mis-file
+  // (a Vietnam war pinned in North America) rather than a safe default. Fail loudly; the
+  // admin route surfaces it as a validation message.
+  if (!home && input.type === "cold_war") {
+    throw new Error(
+      `No home region for proxy-war host ${input.hostCountry}. ` +
+        `Add a COUNTRY_HOME_REGION row before creating this conflict.`
+    );
+  }
+  const region = (home ?? "noa") as RegionCode;
   const reg = getRegion(region);
   const terrain = reg?.terrain ?? "Mixed";
   const infra = reg?.infra ?? 60;
@@ -121,6 +136,7 @@ export function buildConflict(input: BuildConflictInput): ConflictDoc {
     status: "active",
     createdBy: input.createdBy,
     startTurn: input.startTurn,
+    ...(input.hostEntities ? { hostEntities: input.hostEntities } : {}),
     ...(input.warGoal ? { warGoal: input.warGoal } : {}),
     ...(input.declaredByBillId ? { declaredByBillId: input.declaredByBillId } : {}),
   };

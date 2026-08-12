@@ -30,7 +30,10 @@ import {
 import { safeDistributeConversionSpread } from "@/lib/currency/marketMaker";
 import { corpToSectorCountrySpread } from "@/lib/currency/sectorFxSpread";
 import { insufficientCapitalMessage } from "@/lib/currency/insufficientCapitalMessage";
-import { fetchSectorMarketSharePercent } from "@/lib/corporations/marketShare";
+import {
+  fetchSectorCompetitorCount,
+  fetchSectorMarketSharePercent,
+} from "@/lib/corporations/marketShare";
 import {
   queueUndeliveredCost,
   undeliveredCost,
@@ -396,6 +399,10 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     // Dominance multiplier: fetched the same way setSectorGrowth does, so a
     // dominant sector pays the same premium to build as it does to grow.
     const marketSharePct = await fetchSectorMarketSharePercent(db, sector, corporation);
+    // How contested the cell is, which scales that dominance toll. Resolved
+    // here AND in the sector-detail quote from the same helper, so the price the
+    // dialog shows is the price this command charges.
+    const competitorCount = await fetchSectorCompetitorCount(db, sector, corporation._id);
     const ceoChar = corporation.ceoId
       ? await db
           .collection<Character>("characters")
@@ -429,6 +436,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       year: currentYear,
       eraUnitScale: getEraUnitScale(resolvePresetIdFromGameState(gameState)),
       marketSharePercent: marketSharePct,
+      competitorCount: competitorCount ?? undefined,
       primeRate,
       acumen: ceoAcumen,
       hostCostOfLivingIndex,

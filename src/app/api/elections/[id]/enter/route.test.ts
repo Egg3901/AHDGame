@@ -50,6 +50,18 @@ function makeReq(): Request {
   return new Request("http://test/route", { method: "POST" });
 }
 
+function emptyFindCursor() {
+  const cursor = {
+    toArray: vi.fn().mockResolvedValue([]),
+    sort: vi.fn(),
+    limit: vi.fn(),
+    next: vi.fn().mockResolvedValue(null),
+  };
+  cursor.sort.mockReturnValue(cursor);
+  cursor.limit.mockReturnValue(cursor);
+  return cursor;
+}
+
 interface SetupOpts {
   electionCountry: "CN" | "US";
   characterCountry: "CN" | "US";
@@ -70,6 +82,7 @@ function setupScenario(opts: SetupOpts): MockDb {
   db.collectionMocks.politicalParties.findOne.mockResolvedValue(opts.partyDocReturn);
   db.collectionMocks.characters.findOne.mockResolvedValue(null); // not a president
   db.collectionMocks.electionCandidates.findOne.mockResolvedValue(null);
+  db.collectionMocks.electionCandidates.find.mockReturnValue(emptyFindCursor());
   db.collectionMocks.electionCandidates.insertOne.mockResolvedValue({
     insertedId: new ObjectId(),
     acknowledged: true,
@@ -205,6 +218,7 @@ describe("POST /api/elections/[id]/enter — Senate class re-election restrictio
     db.collectionMocks.politicalParties.findOne.mockResolvedValue(null);
     db.collectionMocks.characters.findOne.mockResolvedValue(null);
     db.collectionMocks.electionCandidates.findOne.mockResolvedValue(null);
+    db.collectionMocks.electionCandidates.find.mockReturnValue(emptyFindCursor());
     db.collectionMocks.electionCandidates.insertOne.mockResolvedValue({
       insertedId: new ObjectId(),
       acknowledged: true,

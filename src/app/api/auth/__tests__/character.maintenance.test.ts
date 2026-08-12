@@ -7,7 +7,6 @@
  * still get through so they can verify a freshly-reset world.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createAsyncIterableCursor } from "@/lib/test-utils/mockDb";
 import { ObjectId } from "mongodb";
 
 vi.mock("@/lib/mongodb", () => ({
@@ -56,10 +55,11 @@ function buildMockDb(options: {
     collection: vi.fn().mockImplementation((name: string) => {
       if (name === "states") {
         return {
-          // `loadUsPoliticalStateIds` (called by the character POST since the
-          // statehood work) does a find() over states. Empty is correct here:
-          // these tests assert character creation, not admission gating.
-          find: vi.fn(() => createAsyncIterableCursor([])),
+          // `loadUsPoliticalStateIds` reads admitted states with find().
+          // Empty is faithful for these fixtures: the home states they use
+          // carry house seats for the preset, so admission is not what gates
+          // them.
+          find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
           findOne: vi.fn().mockResolvedValue({
             _id: "CA",
             name: "California",

@@ -61,4 +61,14 @@ export interface FundDetail {
   navChange48: number | null;
   holdings: FundHoldingRow[];
   targetConstituents: FundHoldingRow[];
+  // A5 sponsorship — all null on the seeded system funds.
+  sponsorCorporationId?: string | null;
+  sponsorName?: string | null;
+  expenseRatioAnnual?: number | null;
+  seedCapitalAnchor?: number | null;
+  feesPaidToSponsorAnchor?: number | null;
+  charteredAtTurn?: number | null;
+  windDownStartedAtTurn?: number | null;
+  /** True when the viewer is the CEO of the sponsoring corporation. */
+  viewerIsSponsorCeo?: boolean;
 }

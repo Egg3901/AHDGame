@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { dispatchStatusMeta, posName } from "./status";
+import { dispatchStatusMeta, posName, type DispatchTone } from "./status";
+import type { BillStatus } from "@/lib/db/types/legislation";
 
 describe("dispatchStatusMeta", () => {
   it("maps known statuses to label + tone + live flag", () => {
@@ -15,38 +16,32 @@ describe("dispatchStatusMeta", () => {
   });
 
   it("covers the full app BillStatus vocabulary", () => {
-    // Every real BillStatus must map to a non-fallback tone (fallback is muted+label===status).
-    const liveVoting = [
-      "active",
-      "active_other",
-      "veto_override",
-      "cabinet_review",
-      "override_shugiin",
-    ];
-    for (const s of liveVoting) {
-      expect(dispatchStatusMeta(s)).toMatchObject({ tone: "warning", live: true });
-    }
-    expect(dispatchStatusMeta("passed_origin").tone).toBe("info");
-    expect(dispatchStatusMeta("enrolled").tone).toBe("info");
-    expect(dispatchStatusMeta("signed").tone).toBe("success");
-    for (const s of ["failed", "vetoed", "override_failed", "withdrawn", "filibustered"]) {
-      expect(dispatchStatusMeta(s).tone).toBe("error");
-    }
-    expect(dispatchStatusMeta("proposed").tone).toBe("muted");
-    // none of these should fall through to the raw-status label
-    for (const s of [
-      ...liveVoting,
-      "passed_origin",
-      "enrolled",
-      "signed",
-      "failed",
-      "vetoed",
-      "override_failed",
-      "withdrawn",
-      "filibustered",
-      "proposed",
-    ]) {
-      expect(dispatchStatusMeta(s).label).not.toBe(s);
+    // A hand-written list here is an enumeration, not an inventory: it silently
+    // stops covering the vocabulary the moment a status is added, which is how
+    // `active_both` reached the Dispatch pill as a raw string. A Record keyed by
+    // BillStatus does not compile until the new status is listed.
+    const EXPECTED: Record<BillStatus, { tone: DispatchTone; live: boolean }> = {
+      active: { tone: "warning", live: true },
+      active_other: { tone: "warning", live: true },
+      active_both: { tone: "warning", live: true },
+      veto_override: { tone: "warning", live: true },
+      cabinet_review: { tone: "warning", live: true },
+      override_shugiin: { tone: "warning", live: true },
+      passed_origin: { tone: "info", live: false },
+      enrolled: { tone: "info", live: false },
+      signed: { tone: "success", live: false },
+      failed: { tone: "error", live: false },
+      vetoed: { tone: "error", live: false },
+      override_failed: { tone: "error", live: false },
+      withdrawn: { tone: "error", live: false },
+      filibustered: { tone: "error", live: false },
+      proposed: { tone: "muted", live: false },
+    };
+
+    for (const [status, expected] of Object.entries(EXPECTED)) {
+      expect(dispatchStatusMeta(status)).toMatchObject(expected);
+      // A fallback pill labels itself with the raw status string.
+      expect(dispatchStatusMeta(status).label).not.toBe(status);
     }
   });
 

@@ -1,7 +1,6 @@
 import { ObjectId, type Db } from "mongodb";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import { executeNationalPartyInfluence, INFLUENCE_ACTIONS } from "@/lib/influence";
-import { getNationalPartyLeadershipRole } from "@/lib/parties/access";
 import type { InfluenceType, PoliticalParty } from "@/lib/db/types";
 
 const NATIONAL_PARTY_MANAGEMENT_ACTIONS: InfluenceType[] = [
@@ -11,19 +10,6 @@ const NATIONAL_PARTY_MANAGEMENT_ACTIONS: InfluenceType[] = [
   "reduce_stubbornness",
   "relocate_state",
 ];
-
-/**
- * Defense-in-depth: NPP Move stays chair / vice-chair / admin even if a
- * campaigner somehow reaches this queue. Route auth already excludes
- * campaigners from the whole national influence surface (ticket #1028).
- */
-const CAMPAIGNER_EXCLUDED_ACTIONS: InfluenceType[] = ["relocate_state"];
-
-function canRelocate(party: PoliticalParty, actor: AuthUserWithCharacter): boolean {
-  if (actor.isAdmin) return true;
-  const role = getNationalPartyLeadershipRole(party, actor.character?._id ?? null);
-  return role === "chair" || role === "viceChair";
-}
 
 export interface NationalPartyInfluenceQueueItem {
   nppId: string;
@@ -54,17 +40,10 @@ export async function executeNationalPartyInfluenceQueue(
     } as const;
   }
 
-  // Per-action gate: NPP Move stays chair / vice / admin.
-  // Route-level `canUseNationalPartyInfluence` already excludes campaigners.
-  const blockedItem = queueItems.find(
-    (item) => CAMPAIGNER_EXCLUDED_ACTIONS.includes(item.influenceType) && !canRelocate(party, actor)
-  );
-  if (blockedItem) {
-    return {
-      error: `${INFLUENCE_ACTIONS[blockedItem.influenceType].name} requires the chair, vice chair, or admin (campaigners excluded).`,
-      status: 403,
-    } as const;
-  }
+  // Every action in this queue is NPP Management, which route-level
+  // `canUseNationalPartyInfluence` gates to chair / vice-chair / admin /
+  // confirmed campaigner. No per-action carve-out remains: NPP Move
+  // stopped being campaigner-excluded with suggestion #269.
 
   const partyId = String(party.sequentialId);
   const results: Array<{

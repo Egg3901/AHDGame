@@ -198,6 +198,15 @@ export interface CorporationDetail {
    * double-smooths and can diverge). Absent for pre-snapshot (legacy) corps.
    */
   creditRatingSnapshot?: string;
+  /**
+   * Percent of shares held by index funds (0–100, one decimal). Suggestion #62.
+   */
+  indexOwnershipPercent?: number;
+  /**
+   * True when index ownership has reached the level that earns the one-notch
+   * credit upgrade and the share-price premium.
+   */
+  indexInclusionActive?: boolean;
   /** Persisted smoothed composite score matching `creditRatingSnapshot`. */
   creditCompositeSnapshot?: number;
   /** Country owner ID for national corporations */
@@ -410,6 +419,12 @@ export interface Financials {
   logisticsCosts: number;
   rdCosts: number;
   ceoSalaryCost: number;
+  /** Bargained employer pension contribution under active collective agreements. */
+  pensionContributionCost: number;
+  /** Extra charged on top because a covered scheme is in deficit. */
+  pensionTopUpCost: number;
+  /** How many covered schemes are asking for that top-up. */
+  pensionSchemesInDeficit: number;
   operatingCosts: number;
   operatingIncome: number;
   /** Federal corporate tax this turn (aggregated across sectors at each sector's country rate). */

@@ -303,7 +303,7 @@ export default function FundFinancialsTab({
                     ? "text-warning"
                     : "text-error"
               }
-              tooltip="Assets divided by unit liability. <50% triggers auto-pause."
+              tooltip="Assets divided by unit liability. Below 50% the fund is under-backed and is flagged for review."
             />
 
             <div className="border-t-2 border-foreground/20 mt-3 pt-2">

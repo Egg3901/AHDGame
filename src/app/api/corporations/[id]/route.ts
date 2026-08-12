@@ -45,30 +45,31 @@ export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
     const db = await getDb();
-    const gameState = await getGameState();
+    const [gameState, config, resolved, authUser] = await Promise.all([
+      getGameState(),
+      // Private supply-agreements gate — a governor-set gameConfig flag ("default"
+      // doc), surfaced on the corp payload so the CEO panel can show/hide without
+      // an extra round-trip.
+      db
+        .collection<GameConfig>("gameConfig")
+        .findOne(
+          { _id: "default" },
+          { projection: { supplyAgreementsEnabled: 1, contractIssuanceEnabled: 1 } }
+        ),
+      resolveCorporation(db, id),
+      getAuthUser().catch(() => null),
+    ]);
     const currentTurn = gameState?.currentTurn ?? 0;
     // Global, non-sensitive feature flag — surfaced on the corp payload so the
     // page can show/hide the Tech tab without an extra round-trip.
     const techTreesEnabled = gameState?.sectorTechTreesEnabled === true;
-    // Private supply-agreements gate — a governor-set gameConfig flag ("default"
-    // doc), surfaced on the corp payload so the CEO panel can show/hide without
-    // an extra round-trip.
-    const config = await db
-      .collection<GameConfig>("gameConfig")
-      .findOne(
-        { _id: "default" },
-        { projection: { supplyAgreementsEnabled: 1, contractIssuanceEnabled: 1 } }
-      );
     const supplyAgreementsEnabled = config?.supplyAgreementsEnabled === true;
     // Extraction-contract gate — surfaced on the corp payload so the Contracts
     // tab (offers / active contracts) can show/hide without an extra round-trip.
     const contractIssuanceEnabled = await isContractIssuanceEnabled(config);
 
-    const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
-
-    const authUser = await getAuthUser().catch(() => null);
     const modViewEnabled =
       !authUser?.isAdmin &&
       authUser?.isModerator === true &&

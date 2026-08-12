@@ -161,11 +161,19 @@ export interface StrikeStepInputs {
    * degeneracy guard so a repeal can't instantly re-trigger the same strike.
    */
   unionsBanned?: boolean;
+  /** Active collective agreement prevents a new strike in this local. */
+  noStrikeProtected?: boolean;
 }
 
 export interface StrikeStepResult {
   next: StrikeState;
-  event: "started" | "resolved_concession" | "resolved_waitout" | "resolved_banned" | null;
+  event:
+    | "started"
+    | "resolved_concession"
+    | "resolved_waitout"
+    | "resolved_banned"
+    | "resolved_agreement"
+    | null;
   /** Unionization bump (pp) to apply this turn; 0 except on waitout. */
   unionizationBump: number;
 }
@@ -190,6 +198,19 @@ export function stepStrike(inputs: StrikeStepInputs): StrikeStepResult {
       return {
         next: { strikeStartedAtTurn: null, strikeCooldownUntilTurn: turn + STRIKE_COOLDOWN_TURNS },
         event: "resolved_banned",
+        unionizationBump: 0,
+      };
+    }
+    return { next: prior, event: null, unionizationBump: 0 };
+  }
+
+  // A settlement is labor peace, not a ban. It ends an in-flight strike with
+  // the normal cooldown and blocks new triggers for the negotiated period.
+  if (inputs.noStrikeProtected) {
+    if (prior.strikeStartedAtTurn != null) {
+      return {
+        next: { strikeStartedAtTurn: null, strikeCooldownUntilTurn: turn + STRIKE_COOLDOWN_TURNS },
+        event: "resolved_agreement",
         unionizationBump: 0,
       };
     }

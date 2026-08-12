@@ -15,6 +15,7 @@ import { DisplayPreferenceToggle } from "@/components/forex/DisplayPreferenceTog
 import CorporationPortfolioView from "./components/CorporationPortfolioView";
 import { FundHoldingsPanel } from "./components/FundHoldingsPanel";
 import { OpenShareOrdersPanel } from "./components/OpenShareOrdersPanel";
+import { TradeHistoryPanel } from "./components/TradeHistoryPanel";
 import {
   PortfolioShell,
   OwnerToggle,
@@ -46,7 +47,15 @@ interface MeCeoCorporation {
 }
 
 type Section =
-  "overview" | "cash" | "stocks" | "bonds" | "orders" | "funds" | "transfers" | "loans";
+  | "overview"
+  | "cash"
+  | "stocks"
+  | "bonds"
+  | "orders"
+  | "trades"
+  | "funds"
+  | "transfers"
+  | "loans";
 type ChartView = "total" | "breakdown";
 type SeriesView = "total" | "stocks" | "bonds" | "cash" | "savings";
 
@@ -70,6 +79,7 @@ const VALID_SECTIONS: Section[] = [
   "stocks",
   "bonds",
   "orders",
+  "trades",
   "funds",
   "transfers",
   "loans",
@@ -86,6 +96,17 @@ const LEGACY_TAB_MAP: Record<string, Section> = {
 // carries the same shape, so mirror that here rather than duplicate ~18 fields.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PortfolioSeed = any;
+
+/**
+ * Report a portfolio load failure, except 4xx. A signed-out or expired session
+ * answers /api/character/me and /api/character/portfolio with 401 — that is the
+ * auth flow working, not a fault, and it was the top client error in GlitchTip.
+ * fetchJson already reports network and 5xx faults with its own context.
+ */
+function reportPortfolioLoadError(err: unknown): void {
+  if (err instanceof HttpError && err.status >= 400 && err.status < 500) return;
+  Sentry.captureException(err, { tags: { feature: "portfolio" } });
+}
 
 interface PortfolioClientProps {
   /** Server-seeded portfolio payload so holdings render without a client round trip. */
@@ -306,7 +327,7 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
         // Was `.catch(() => {})` — a failed load silently rendered a $0
         // portfolio. Surface it to the user and report it.
         setLoadError(true);
-        Sentry.captureException(err, { tags: { feature: "portfolio" } });
+        reportPortfolioLoadError(err);
       })
       .finally(() => setLoading(false));
   }, [loadPortfolioAndMe, loadSecondaryOnly, applyPortfolio, initialPortfolio]);
@@ -412,7 +433,7 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
                 loadPortfolioAndMe()
                   .catch((err) => {
                     setLoadError(true);
-                    Sentry.captureException(err, { tags: { feature: "portfolio" } });
+                    reportPortfolioLoadError(err);
                   })
                   .finally(() => setLoading(false));
               }}
@@ -555,6 +576,13 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
       icon: <IconStocks />,
     },
     {
+      key: "trades",
+      label: "Trade History",
+      value: "",
+      delta: null,
+      icon: <IconStocks />,
+    },
+    {
       key: "funds",
       label: "Funds",
       value: formatAmount(fundHoldingsValue),
@@ -663,6 +691,8 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
           )}
 
           {activeSection === "orders" && <OpenShareOrdersPanel />}
+
+          {activeSection === "trades" && <TradeHistoryPanel />}
 
           {activeSection === "funds" && myCharacterId && (
             <FundHoldingsPanel characterId={myCharacterId} stockMarketHref={stockMarketFundsHref} />

@@ -125,6 +125,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             sharesSoldForLiquidity?: number;
             payoutLogs: Array<{ units: number; amountAnchor: number; navAnchor: number }>;
             finalNavAnchor: number;
+            /** ₳ → fund-currency rate the payouts were credited at. */
+            redeemFxRate: number;
           }
         | undefined;
 
@@ -184,8 +186,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         async function payRedeemableUnits(quote: typeof cashQuote): Promise<void> {
           if (quote.redeemableUnits <= 0) return;
 
-          await db.collection("indexFunds").updateOne(
-            { _id: fundState!._id },
+          // Balance-gated debit. Without the $gte guard two concurrent redeems
+          // could both read the same cash, both pass the affordability check and
+          // both debit, driving fund cash negative. The queued-redemption path
+          // already guards this way; the immediate path did not.
+          const cashDebit = await db.collection("indexFunds").updateOne(
+            { _id: fundState!._id, cashAnchor: { $gte: quote.paidAmountAnchor } },
             {
               $inc: {
                 cashAnchor: -quote.paidAmountAnchor,
@@ -194,6 +200,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             },
             s
           );
+          if (cashDebit.matchedCount === 0) {
+            throw new Error("FUND_CASH_RACE");
+          }
 
           const creditInc = buildPersonalBalanceInc(
             forexEnabled ? quote.paidAmountAnchor * blendedRedeemFxRate : quote.paidAmountAnchor,
@@ -327,6 +336,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           status: finalStatus,
           payoutLogs,
           finalNavAnchor: fundState.quotedNav,
+          redeemFxRate: blendedRedeemFxRate,
           ...(sharesSoldForLiquidity > 0 ? { sharesSoldForLiquidity } : {}),
         };
       };
@@ -337,6 +347,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         const code = (err as { code?: number } | undefined)?.code;
         if (code === 20 || code === 263) {
           await runRedemption();
+        } else if (err instanceof Error && err.message === "FUND_CASH_RACE") {
+          // Another redemption took the cash between the quote and the debit.
+          // Nothing was written, so the caller can simply retry.
+          return NextResponse.json(
+            { error: "Another redemption drew this fund's cash first. Try again." },
+            { status: 409 }
+          );
         } else {
           throw err;
         }
@@ -349,6 +366,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           units: payout.units,
           navAnchor: payout.navAnchor,
           amountAnchor: payout.amountAnchor,
+          amountNative: forexEnabled
+            ? payout.amountAnchor * result!.redeemFxRate
+            : payout.amountAnchor,
           source: "player",
           turn: auditTurn,
         });
@@ -382,7 +402,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         outcome: "ok",
       });
 
-      const { payoutLogs: _payoutLogs, finalNavAnchor: _finalNav, ...response } = result!;
+      const {
+        payoutLogs: _payoutLogs,
+        finalNavAnchor: _finalNav,
+        redeemFxRate: _redeemFxRate,
+        ...response
+      } = result!;
       return NextResponse.json({ success: true, ...response });
     } finally {
       await session.endSession();

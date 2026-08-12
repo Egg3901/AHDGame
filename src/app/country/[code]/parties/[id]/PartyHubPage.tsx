@@ -549,6 +549,12 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
     user?.character?.party === id &&
     user?.character?.countryId === party.countryId;
   const canUsePartyInfluenceEarly = user?.isAdmin || isChairEarly || isViceChairEarly;
+  // Committee-confirmed campaigners reach NPP Management but not Recruitment
+  // or the other chair/VC surfaces (suggestion #269), so this is a separate
+  // predicate rather than a widening of `canUsePartyInfluence`.
+  const isCampaignerEarly =
+    hasCharEarly && !!party?.campaigners?.some((c) => c.id === user?.character?.id);
+  const canManageNppsEarly = canUsePartyInfluenceEarly || isCampaignerEarly;
   const canViewExtendedTabsEarly = user?.isAdmin || isInPartyEarly || modViewEnabled;
 
   useEffect(() => {
@@ -581,7 +587,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
           "discussion",
         ])
       : new Set<NationalMainTab>(["overview", "members"]);
-    if (canViewExtendedTabsEarly && canUsePartyInfluenceEarly) allowed.add("actions");
+    if (canViewExtendedTabsEarly && canManageNppsEarly) allowed.add("actions");
     if (canViewExtendedTabsEarly && canActAsChairEarly) allowed.add("chair-office");
     if (canViewExtendedTabsEarly && user?.isAdmin) allowed.add("admin");
     if (allowed.has(tabParam as NationalMainTab)) {
@@ -603,7 +609,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
   }, [
     searchParams,
     party,
-    canUsePartyInfluenceEarly,
+    canManageNppsEarly,
     canViewExtendedTabsEarly,
     canActAsChairEarly,
     user?.isAdmin,
@@ -714,6 +720,11 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       isTreasurerSeatVacant,
     });
   const canUsePartyInfluence = user?.isAdmin || isChair || isViceChair;
+  const isCampaigner = hasChar && !!party.campaigners?.some((c) => c.id === user?.character?.id);
+  const canManageNpps = canUsePartyInfluence || isCampaigner;
+  // Campaigners only get the Management sub-tab, so the stored "recruitment"
+  // default has to collapse to it rather than rendering an empty panel.
+  const effectiveNppSubTab: NppSubTab = canUsePartyInfluence ? nppSubTab : "management";
   const canViewExtendedTabs = user?.isAdmin || isInParty || modViewEnabled;
   const sortedMembers = [...party.members].sort((a, b) => a.name.localeCompare(b.name));
   const candidatePositions = POSITIONS.filter((p) => electionData?.isCandidate[p]);
@@ -727,7 +738,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
           { id: "caucuses", label: "Caucuses" },
           { id: "whip-room", label: "Whip Room" },
           { id: "slate", label: "Slate" },
-          ...(canUsePartyInfluence ? [{ id: "actions" as NationalMainTab, label: "NPPs" }] : []),
+          ...(canManageNpps ? [{ id: "actions" as NationalMainTab, label: "NPPs" }] : []),
           { id: "elections", label: "Elections" },
           { id: "treasury", label: "Treasury" },
           { id: "members", label: `Members (${party.memberCount})` },
@@ -1097,12 +1108,14 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
             </div>
           </div>
           <div className="flex gap-1 rounded-lg border border-card-border bg-background p-1 w-fit overflow-x-auto max-w-full">
-            {(["recruitment", "management"] as NppSubTab[]).map((sub) => (
+            {(
+              (canUsePartyInfluence ? ["recruitment", "management"] : ["management"]) as NppSubTab[]
+            ).map((sub) => (
               <button
                 key={sub}
                 onClick={() => setNppSubTab(sub)}
                 className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
-                  nppSubTab === sub
+                  effectiveNppSubTab === sub
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted hover:text-foreground"
                 }`}
@@ -1111,7 +1124,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
               </button>
             ))}
           </div>
-          {nppSubTab === "recruitment" ? (
+          {effectiveNppSubTab === "recruitment" ? (
             <NppRecruitmentPanel partyId={party.id} countryId={party.countryId} isNational={true} />
           ) : (
             <NationalPartyInfluencePanel

@@ -10,6 +10,8 @@ import {
   type EnrichedCandidate,
 } from "@/lib/elections/candidateEnrichment";
 import { getPrimaryWinnersForElection, type CountryId } from "@/lib/constants/countries";
+import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
+import { selectGeneralPhaseDisplayCandidates } from "@/lib/elections/generalPhaseCandidates";
 import { getOrCreateVoteTally } from "@/lib/elections/voteTallyService";
 import { computeElectoralVotes } from "@/lib/elections/electoralVoteService";
 import { buildCharacterHref, buildNppHref } from "@/lib/utils/profileUrls";
@@ -223,22 +225,16 @@ export async function GET(request: Request) {
     // When primary is over, keep up to N nominees per party where N is the
     // primary-winner cap for this race (US=1, UK=3, JP=3; US House=3 when
     // redistricting is on; single-winner governor/president races always 1).
+    // Without the flag threaded through, US House capped at 1 here while the
+    // turn resolver had advanced 3, so /race under-reported the field.
     let displayCandidates: EnrichedCandidate[] = enrichedCandidates;
     if (!phase.inPrimary) {
       const maxPerParty = getPrimaryWinnersForElection(
         (election.countryId ?? "US") as CountryId,
         election.electionType,
-        gameState?.redistrictingEnabled === true
+        isRedistrictingEnabled(gameState)
       );
-      const partyCount = new Map<string, number>();
-      displayCandidates = [];
-      for (const c of [...enrichedCandidates].sort((a, b) => b.primaryScore - a.primaryScore)) {
-        const used = partyCount.get(c.party) ?? 0;
-        if (used < maxPerParty) {
-          displayCandidates.push(c);
-          partyCount.set(c.party, used + 1);
-        }
-      }
+      displayCandidates = selectGeneralPhaseDisplayCandidates(enrichedCandidates, maxPerParty);
     }
 
     // Get vote tally

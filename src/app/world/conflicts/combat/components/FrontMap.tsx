@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { RegionalGeoMap, type RegionCell } from "@/components/maps/RegionalGeoMap";
 import { useRegionGeometry } from "@/lib/maps/useRegionGeometry";
+import { useStaticHostGeometry } from "@/lib/maps/proxyHostGeometry";
 import { orderFeatures, occupiedCodes } from "@/lib/maps/frontGeometry";
 import { anchorOf } from "@/lib/maps/countryAnchors";
 import { MIL_COLOR, MIL_FONT } from "../../military/theme";
@@ -45,7 +46,24 @@ const DEFAULT_BOX = { width: 280, height: 400 };
  */
 export function FrontMap({ conflict }: { conflict: ConflictView }) {
   const { hostRegionCodes } = conflict;
-  const { features } = useRegionGeometry(hostRegionCodes);
+  const regionGeometry = useRegionGeometry(hostRegionCodes);
+  // A proxy war's host is not a full country, so it has no region codes and the
+  // shard machinery finds nothing for it. Its static feature is merged in here —
+  // and its code into the ROSTER below, without which RegionalGeoMap filters the
+  // feature straight back out and draws an empty box.
+  const staticHost = useStaticHostGeometry(conflict.hostCountry);
+  // Null means LOADING, as it does in `useRegionGeometry` — so both sources have to
+  // have resolved before this is an answer. Collapsing an unresolved source to []
+  // would report "no geometry" while a shard was still in flight, and the map would
+  // settle on the meter before its own features arrived.
+  const features = useMemo(() => {
+    if (regionGeometry.features == null || staticHost.features == null) return null;
+    return [...regionGeometry.features, ...staticHost.features];
+  }, [regionGeometry.features, staticHost.features]);
+  const rosterCodes = useMemo(
+    () => [...hostRegionCodes, ...staticHost.codes],
+    [hostRegionCodes, staticHost.codes]
+  );
 
   const pctB = Math.round(conflict.control);
   const pctA = 100 - pctB;
@@ -143,7 +161,7 @@ export function FrontMap({ conflict }: { conflict: ConflictView }) {
         >
           <RegionalGeoMap
             features={features}
-            regionCodes={hostRegionCodes}
+            regionCodes={rosterCodes}
             regionData={regionData}
             width={box.width}
             height={box.height}

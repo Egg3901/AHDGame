@@ -14,7 +14,6 @@ import {
 } from "@/lib/constants/countries";
 import {
   budgetUrl,
-  centralBankUrl,
   countryElectionsUrl,
   economyUrl,
   metricsUrl,
@@ -117,10 +116,10 @@ export function buildNationalDetailsSections(
     });
   }
 
-  // Traffic-ordered: the central bank is the most-visited Economy page by a
-  // wide margin (0.68% of all pageviews vs 0.24% for Economy, 0.13% Budget).
+  // Traffic-ordered: banking (formerly the country CB deep link) leads Economy.
+  // The hub lists every central bank and private bank; CB pages stay deep-linked.
   const economy: NationDetailItem[] = [
-    { id: "centralBank", label: config.centralBank.name, href: centralBankUrl(countryId) },
+    { id: "centralBank", label: "Banking", href: "/banking" },
     { id: "economy", label: "Economy", href: economyUrl(countryId) },
     { id: "budget", label: "National Budget", href: budgetUrl(countryId) },
   ];

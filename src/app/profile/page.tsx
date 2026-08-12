@@ -268,6 +268,38 @@ async function getCharacterData() {
 
   const nationalNpiOrdinalRank = await getNationalNpiOrdinalRank(db, character);
 
+  // Conflict-path reads are independent of one another — one round, with the
+  // posting load still gated on the commission (an uncommissioned character
+  // has no order of battle).
+  const conflictExtras = gameState?.conflictsEnabled
+    ? await (async () => {
+        const [doctrine, commission, generalEra, commands] = await Promise.all([
+          getNationalDoctrine(db, charCountryId ?? "US"),
+          getCharacterCommission(db, character._id.toString()),
+          resolveGeneralEra(db),
+          getMilitaryCommands(db, charCountryId ?? "US"),
+        ]);
+        return {
+          doctrineAdopted: doctrine.adopted,
+          // A dismissed general's retained record is not surfaced as an active profile.
+          general: commission.commissioned ? commission.general : null,
+          generalPosting: commission.commissioned
+            ? await loadGeneralPosting(db, character._id.toString(), charCountryId ?? "US")
+            : EMPTY_POSTING,
+          generalEra,
+          isCommandingGeneral: commands.some(
+            (c) => c.commandingGeneralId === character._id.toString()
+          ),
+        };
+      })()
+    : {
+        doctrineAdopted: {},
+        general: null,
+        generalPosting: EMPTY_POSTING,
+        generalEra: CUR_ERA_YEAR,
+        isCommandingGeneral: false,
+      };
+
   return {
     character,
     homeState,
@@ -302,26 +334,7 @@ async function getCharacterData() {
     onboardingChecklist,
     nationalNpiOrdinalRank,
     conflictsEnabled: !!gameState?.conflictsEnabled,
-    doctrineAdopted: gameState?.conflictsEnabled
-      ? (await getNationalDoctrine(db, charCountryId ?? "US")).adopted
-      : {},
-    ...(gameState?.conflictsEnabled
-      ? await getCharacterCommission(db, character._id.toString()).then(async (c) => ({
-          // A dismissed general's retained record is not surfaced as an active profile.
-          general: c.commissioned ? c.general : null,
-          // Gated on the commission just fetched: an uncommissioned character has no
-          // order of battle, so skip three collection reads rather than load nothing.
-          generalPosting: c.commissioned
-            ? await loadGeneralPosting(db, character._id.toString(), charCountryId ?? "US")
-            : EMPTY_POSTING,
-        }))
-      : { general: null, generalPosting: EMPTY_POSTING }),
-    generalEra: gameState?.conflictsEnabled ? await resolveGeneralEra(db) : CUR_ERA_YEAR,
-    isCommandingGeneral: gameState?.conflictsEnabled
-      ? (await getMilitaryCommands(db, charCountryId ?? "US")).some(
-          (c) => c.commandingGeneralId === character._id.toString()
-        )
-      : false,
+    ...conflictExtras,
     gameDateAnchor: gameState
       ? {
           currentTurn: gameState.currentTurn,
@@ -459,6 +472,7 @@ export default async function ProfilePage() {
       ? cabinetOfficeTypeForCountry((cabinetSeat.countryId ?? character.countryId) as CountryId)
       : undefined,
     officeActionBonus: gameConfig?.officeActionBonus,
+    countryId: (character.countryId ?? "US") as CountryId,
   });
   const chairActionBonus = chairBankRow ? (gameConfig?.chairActionBonus ?? 3) : 0;
   const totalActionsPerTurn = baseActionsPerTurn + officeActionBonus + chairActionBonus;

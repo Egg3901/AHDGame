@@ -705,6 +705,16 @@ export async function resolveBillProvisions(
           continue;
         }
 
+        if (provision.type === "join_conflict") {
+          provisionsResolved.push({
+            legislationTypeName: "Entry into the Conflict",
+            policyOptionName: `Join side ${provision.side} at ${provision.organizationId}'s call`,
+            effectDirection: 0,
+            directionLabel: "Center",
+          });
+          continue;
+        }
+
         const subsidyProvision = formatSubsidyProvisionLabel(provision);
         provisionsResolved.push({
           legislationTypeName: subsidyProvision.legislationTypeName,
@@ -924,6 +934,10 @@ export function billToDetail(
   const inOriginVote = bill.status === "active" || bill.status === "override_shugiin";
   const inOtherVote = bill.status === "active_other";
   const inCabinetReview = bill.status === "cabinet_review";
+  // Both chambers vote at once, so eligibility is per-CHAMBER-MEMBERSHIP rather than
+  // per-currentChamber: `isInCurrentChamber` below would gate the whole bill on the
+  // display default and silently hide the vote button from one entire house.
+  const inConcurrentVote = bill.status === "active_both";
 
   // isHouseMember = lower chamber member, isSenateMember = upper chamber member
   const currentChamberType = current === "joint" ? lowerChamberKey : current;
@@ -933,8 +947,8 @@ export function billToDetail(
 
   const canVoteOrigin = inCabinetReview
     ? canCabinetVote && myCharacterId != null && !bill.votes?.[myCharacterId]
-    : inOriginVote && isInCurrentChamber;
-  const canVoteOther = inOtherVote && isInCurrentChamber;
+    : (inOriginVote && isInCurrentChamber) || (inConcurrentVote && isHouseMember);
+  const canVoteOther = (inOtherVote && isInCurrentChamber) || (inConcurrentVote && isSenateMember);
   const originTotals = sumVoteByParty(voteByPartyOrigin) ?? {
     for: bill.votesFor,
     against: bill.votesAgainst,
@@ -1062,7 +1076,9 @@ export function billToDetail(
         inv.invokedAt instanceof Date ? inv.invokedAt.toISOString() : String(inv.invokedAt),
     })),
     canFilibuster:
-      // Only US Senate bills in the Senate that are actively being voted on
+      // Only US Senate bills in the Senate that are actively being voted on.
+      // Concurrent (`active_both`) bills are excluded here and refused by name in
+      // the filibuster command for the same reason — see nationalBillActions.
       !!myCharacterId &&
       isSenateMember &&
       bill.currentChamber === "senate" &&

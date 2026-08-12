@@ -31,6 +31,7 @@ import {
 } from "@/lib/turn/election/seatAllocation";
 import { withCommonsOrgRanking } from "@/lib/turn/election/commonsOrgRanking";
 import { loadApportionment } from "@/lib/elections/apportionment";
+import { blocListQuota } from "@/lib/constants/blocList";
 import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { districtedHouseResolution } from "@/lib/redistricting/districtedHouseResolution";
 import { getGameStateCollection } from "@/lib/db/collections";
@@ -364,7 +365,11 @@ export async function resolveOneGeneralElection(
         ranked,
         totalVotesCast,
         houseSeats,
-        majoritarianBonus
+        majoritarianBonus,
+        // National Front chambers: the quota decides the party split, not the
+        // vote. Undefined for every non-bloc-list country, so their allocation
+        // is byte-identical.
+        blocListQuota(election.countryId)?.shares
       );
 
     if (isMultiSeat) {

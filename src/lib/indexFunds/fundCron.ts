@@ -13,6 +13,7 @@
  * entry point — it is not registered in `src/lib/cron.ts`.
  */
 
+import { ObjectId } from "mongodb";
 import type { ClientSession, Db } from "mongodb";
 import type {
   Corporation,
@@ -43,6 +44,8 @@ import {
   buildIndexFundTargetConstituents,
   type IndexFundCandidate,
 } from "@/lib/indexFunds/constituents";
+import { describeFailure } from "./listingStandards";
+import { loadActiveWaiverIds, resolveDueListingPetitions } from "./petitions/service";
 import { creditSharesToFund } from "@/lib/corporations/shareholderOps";
 import {
   isOrderFlowPriceEligible,
@@ -85,7 +88,8 @@ import {
   fundBidLimitPriceLocal,
   INDEX_FUND_BID_MAX_OPEN_TURNS,
 } from "@/lib/indexFunds/fundBidPolicy";
-import { getCorpFxRate } from "@/lib/currency/corporationCapital";
+import { fxRateForCorpFromMap } from "@/lib/currency/corporationCapital";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ShareOrder } from "@/lib/db/types";
 import {
   loadOpenOrdersEscrowByFundId,
@@ -105,6 +109,12 @@ export type FundCronResult = {
   bondDeployments: number;
   nppsProcessed: number;
   nppInvested: number;
+  /** A5: sponsored funds charged their expense fee this pass. */
+  expenseFeesCharged: number;
+  expenseFeeAnchor: number;
+  /** A5: sponsored funds advanced through wind-up, and those that finished. */
+  windDownsAdvanced: number;
+  windDownsCompleted: number;
   errors: string[];
 };
 
@@ -127,12 +137,13 @@ type CorpRow = Pick<
   | "fundamentalSharePrice"
   | "totalShares"
   | "liquidCurrencyCode"
-> & { publicFloat?: number; shareBuybackMode?: string };
+> & { publicFloat?: number; shareBuybackMode?: string; liquidCapital?: number };
 
 type EligibleCorpRow = IndexFundCandidate & {
   publicFloat?: number;
   fundamentalSharePrice?: number;
   shareBuybackMode?: string;
+  liquidCapital?: number;
 };
 
 const INDEX_FUND_CORP_PROJECTION = {
@@ -146,6 +157,9 @@ const INDEX_FUND_CORP_PROJECTION = {
   liquidCurrencyCode: 1,
   publicFloat: 1,
   shareBuybackMode: 1,
+  // A7 listing standards: free float and solvency are screened before a corp
+  // may enter an index.
+  liquidCapital: 1,
 } as const;
 
 const INDEX_FUND_CORP_QUERY = {
@@ -468,6 +482,19 @@ export async function rebalanceFundToTarget(
     }
   }
 
+  // A4 perf: one FX map for the whole bid loop instead of a findOne per bid.
+  // `getCorpFxRate` hits `exchangeRates` (plus an era-fallback read) every call,
+  // and its own doc says to prefer the batch form inside loops. The cron already
+  // loaded the whole rate table once at the top of the run, so a per-bid query
+  // was re-reading data we were holding. At 50 constituents across every active
+  // fund that is hundreds of round trips a turn for a table that cannot change
+  // mid-pass.
+  const fxByCurrency = new Map<CurrencyCode, number>(
+    Object.entries(exchangeRates)
+      .filter(([, rate]) => typeof rate === "number" && rate > 0)
+      .map(([code, rate]) => [code as CurrencyCode, rate as number])
+  );
+
   // Determine which corps still have open bids after cancellation (to avoid stacking).
   const remainingOpenBids = await db
     .collection<ShareOrder>("shareOrders")
@@ -486,7 +513,7 @@ export async function rebalanceFundToTarget(
     try {
       const executionPriceLocal = resolveShareExecutionPrice(corp);
       const limitPriceLocal = fundBidLimitPriceLocal(executionPriceLocal);
-      const fxRate = await getCorpFxRate(db, corp);
+      const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
 
       // Re-fetch fund so cashAnchor reflects all prior writes in this pass.
       const freshFund = (await getFundById(db, fund._id)) ?? fund;
@@ -555,7 +582,9 @@ export async function rebalanceConstituents(
   fund: IndexFund,
   corps: IndexFundCandidate[],
   exchangeRates: Partial<Record<string, number>>,
-  _currentTurn: number
+  _currentTurn: number,
+  /** A7 part 2: corporations holding a committee waiver this turn. */
+  waivedIds?: Set<string>
 ): Promise<boolean> {
   const removed = findRemovedConstituentHoldings(fund, corps);
   if (removed.length > 0) {
@@ -573,6 +602,20 @@ export async function rebalanceConstituents(
   const definition = getAllFundDefinitions().find((d) => d.slug === fund.slug);
   if (!definition) return false;
 
+  // A7 listing standards: an incumbent gets a grace period before it is sold,
+  // so noise around the bar does not churn the position every turn. Incumbency
+  // is "targeted OR held" — a corp mid-purchase is already the fund's problem.
+  const incumbentIds = new Set<string>([
+    ...fund.targetConstituents.map((t) => t.corporationId.toString()),
+    ...fund.holdings.filter((h) => h.shares > 0).map((h) => h.corporationId.toString()),
+  ]);
+  const priorStreaks = new Map(
+    (fund.listingFailureStreaks ?? []).map((s) => [
+      s.corporationId.toString(),
+      s.consecutiveFailures,
+    ])
+  );
+
   const targets = buildIndexFundTargetConstituents({
     corporations: corps,
     definition: {
@@ -584,15 +627,58 @@ export async function rebalanceConstituents(
       anchorCurrencyCode: definition.anchorCurrencyCode,
     },
     exchangeRates,
+    retention: { incumbentIds, priorStreaks, waivedIds },
   });
 
-  const targetConstituents: IndexFundTargetConstituent[] = targets.map((t) => ({
+  const targetConstituents: IndexFundTargetConstituent[] = targets.constituents.map((t) => ({
     corporationId: t.corporationId,
     targetWeight: t.targetWeight,
     marketCapAnchor: t.marketCapAnchor,
   }));
 
-  await updateFundConstituents(db, fund._id, targetConstituents, new Date());
+  // Only carry streaks for corporations still in this index's candidate pool.
+  // A corp that left the mandate entirely (relisted abroad, went private) is not
+  // failing a standard, so keeping a stale count would drop it on re-entry.
+  const listingFailureStreaks: NonNullable<IndexFund["listingFailureStreaks"]> = targets.streaks.map((s) => ({
+    corporationId: new ObjectId(s.corporationId),
+    consecutiveFailures: s.consecutiveFailures,
+    failures: s.failures,
+  }));
+
+  await updateFundConstituents(
+    db,
+    fund._id,
+    targetConstituents,
+    new Date(),
+    listingFailureStreaks
+  );
+
+  // Divest what ran out of grace. `findRemovedConstituentHoldings` cannot see
+  // these: a delisted corp is still mechanically eligible, so without this it
+  // would sit in the book forever, out of the target and never sold.
+  if (targets.droppedIds.length > 0) {
+    const dropped = new Set(targets.droppedIds);
+    const delistedHoldings = fund.holdings.filter(
+      (h) => dropped.has(h.corporationId.toString()) && h.shares > 0
+    );
+    const delistedValue = computeHoldingsValueAnchor({ holdings: delistedHoldings });
+    if (delistedValue > 0) {
+      // Name the standard that was missed. "Delisted" with no reason gives a
+      // holder nothing to check the fund's judgement against.
+      const reasons = Array.from(
+        new Set(
+          targets.streaks
+            .filter((s) => dropped.has(s.corporationId))
+            .flatMap((s) => s.failures.map(describeFailure))
+        )
+      );
+      await sellFundHoldingsForRedemptionCash(db, fund, delistedValue, {
+        note: `Delisted for failing listing standards. ${reasons.join(" ")}`.trim(),
+        corporationIds: delistedHoldings.map((h) => h.corporationId),
+      });
+      fund = (await getFundById(db, fund._id)) ?? fund;
+    }
+  }
 
   await insertFundTransaction(db, {
     fundId: fund._id,
@@ -805,6 +891,10 @@ export async function runIndexFundCron(
     bondDeployments: 0,
     nppsProcessed: 0,
     nppInvested: 0,
+    expenseFeesCharged: 0,
+    expenseFeeAnchor: 0,
+    windDownsAdvanced: 0,
+    windDownsCompleted: 0,
     errors: [],
   };
 
@@ -945,6 +1035,18 @@ export async function runIndexFundCron(
     navReadyFundIds.some((id) => id.toString() === fund._id.toString())
   );
   const rebalancedFundIds = new Set<string>();
+
+  // A7 part 2: settle every petition whose deadline has passed BEFORE the
+  // screen runs, so a waiver granted this turn is honoured by this turn's
+  // rebalance rather than sitting inert until the next one.
+  try {
+    await resolveDueListingPetitions(db, currentTurn);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    result.errors.push(`Listing petitions: ${message}`);
+  }
+  const waivedIds = await loadActiveWaiverIds(db, currentTurn);
+
   for (const fund of funds) {
     if (!shouldRebalanceIndexFundConstituents(currentTurn, fund.targetConstituents.length)) {
       continue;
@@ -956,7 +1058,8 @@ export async function runIndexFundCron(
         fund,
         candidateCorps,
         exchangeRates,
-        currentTurn
+        currentTurn,
+        waivedIds
       );
       if (rebalanced) {
         result.rebalances++;
@@ -1101,6 +1204,33 @@ export async function runIndexFundCron(
     }
   }
   mark("step6-nppInvesting");
+
+  // Step 7 (A5): sponsored funds. Fees are charged AFTER NAV has been remarked
+  // this pass, so AUM is the current value rather than last turn's. Wind-downs
+  // run last because completing one deletes the fund from every earlier pass's
+  // working set.
+  try {
+    const { chargeSponsorExpenseFees } = await import(
+      "@/lib/indexFunds/sponsorship/expenseFees"
+    );
+    const activeFunds = await listActiveFunds(db);
+    const fees = await chargeSponsorExpenseFees(db, activeFunds, currentTurn);
+    result.expenseFeesCharged = fees.fundsCharged;
+    result.expenseFeeAnchor = fees.totalFeeAnchor;
+  } catch (err) {
+    result.errors.push(`Expense fees: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  try {
+    const { advanceWindDowns } = await import("@/lib/indexFunds/sponsorship/windUp");
+    const windDown = await advanceWindDowns(db, currentTurn);
+    result.windDownsAdvanced = windDown.fundsProcessed;
+    result.windDownsCompleted = windDown.fundsCompleted;
+    if (windDown.errors.length > 0) result.errors.push(...windDown.errors);
+  } catch (err) {
+    result.errors.push(`Wind-up: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  mark("step7-sponsorship");
 
   if (timingOn) {
     const total = passTimings.reduce((s, [, ms]) => s + ms, 0);

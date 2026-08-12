@@ -5,6 +5,7 @@ import {
   countriesInRegion,
   regionNeighbors,
   areAdjacent,
+  PROXY_WAR_HOSTS,
 } from "../regionTopology";
 import { STRATEGIC_REGIONS } from "../regions";
 import type { RegionCode } from "../types";
@@ -89,5 +90,20 @@ describe("regionTopology", () => {
     expect(regionNeighbors("weu")).toContain("eeu");
     expect(areAdjacent("weu", "eeu")).toBe(true);
     expect(areAdjacent("noa", "eas")).toBe(false);
+  });
+});
+
+describe("proxy-war hosts", () => {
+  it("gives every proxy-war host a home region", () => {
+    // Table-completeness, not spot-checks: buildConflict falls back to "noa" for an
+    // unknown host, so a missing row files a war in North America with no error.
+    for (const host of PROXY_WAR_HOSTS) {
+      expect(homeRegionOf(host), `${host} has no COUNTRY_HOME_REGION row`).toBeTruthy();
+    }
+  });
+
+  it("places the two Vietnams in south-east asia", () => {
+    expect(homeRegionOf("NVN")).toBe("sea");
+    expect(homeRegionOf("SVN")).toBe("sea");
   });
 });

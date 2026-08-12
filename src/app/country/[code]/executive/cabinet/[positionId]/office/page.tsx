@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useCabinetOffice } from "./useCabinetOffice";
+import { useMergerReviewQueue } from "./useMergerReviewQueue";
+import { MergerReviewQueuePanel } from "./components/MergerReviewQueuePanel";
 import { CabinetOfficeLayout } from "./components/CabinetOfficeLayout";
 import { CabinetStatStrip } from "./components/CabinetStatStrip";
 import { CabinetPositionRail } from "./components/CabinetPositionRail";
@@ -34,6 +36,7 @@ import {
   isFinanceMinister,
   isForeignMinister,
   isDefenseMinister,
+  isCompetitionSeat,
   type CabinetTabId,
 } from "./cabinetTabs";
 import { DeclareWarPanel } from "./components/military/DeclareWarPanel";
@@ -68,6 +71,14 @@ export default function CabinetOfficePage() {
   const identity = getCabinetIdentity(countryId);
 
   const conflictsEnabled = useConflictsEnabled();
+
+  // Declared above the early returns, like the hash effect below: hooks must run
+  // in the same order every render. `enabled` only skips a pointless request;
+  // the endpoint re-resolves the seat and is the only authority that matters.
+  const { data: mergerQueue, refetch: refetchMergerQueue } = useMergerReviewQueue(
+    isCompetitionSeat(countryId, positionId) && data?.canAct === true
+  );
+
   const [activeTab, setActiveTab] = useState<CabinetTabId>("overview");
 
   // Deep-link to a tab via the URL hash, e.g. .../office#commands — how the
@@ -83,11 +94,26 @@ export default function CabinetOfficePage() {
   useEffect(() => {
     const wanted = window.location.hash.slice(1);
     if (!wanted || !mechanics) return;
-    const available = resolveCabinetTabs({ countryId, positionId, mechanics, conflictsEnabled });
+    const available = resolveCabinetTabs({
+      countryId,
+      positionId,
+      mechanics,
+      conflictsEnabled,
+      competitionQueueApplies: true,
+    });
     if (available.some((t) => t.id === wanted)) setActiveTab(wanted as CabinetTabId);
     // Mount only: a later manual tab change must not be fought by the hash.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A #competition hash can select the tab before the queue has answered. If the
+  // answer is that the duty does not apply here, fall back rather than leave a
+  // blank body implying a feature this seat does not have.
+  useEffect(() => {
+    if (mergerQueue && mergerQueue.applies === false) {
+      setActiveTab((tab) => (tab === "competition" ? "overview" : tab));
+    }
+  }, [mergerQueue]);
 
   if (!mechanics || !positionConfig) {
     return <div className="p-8 text-center text-error">Unknown cabinet position</div>;
@@ -117,7 +143,13 @@ export default function CabinetOfficePage() {
   }
 
   const canAct = data.canAct;
-  const tabs = resolveCabinetTabs({ countryId, positionId, mechanics, conflictsEnabled });
+  const tabs = resolveCabinetTabs({
+    countryId,
+    positionId,
+    mechanics,
+    conflictsEnabled,
+    competitionQueueApplies: mergerQueue?.applies === true,
+  });
   const isFinance = isFinanceMinister(countryId, positionId);
   const isForeign = isForeignMinister(positionId);
   const isTrade = TRADE_MINISTER_POSITION_BY_COUNTRY[countryId as CountryId] === positionId;
@@ -399,6 +431,14 @@ export default function CabinetOfficePage() {
                     : null
                 }
                 placeholderLabel={flagshipLabel}
+              />
+            )}
+
+            {activeTab === "competition" && (
+              <MergerReviewQueuePanel
+                data={mergerQueue}
+                canAct={canAct}
+                onDecided={refetchMergerQueue}
               />
             )}
 

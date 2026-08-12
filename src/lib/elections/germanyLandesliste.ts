@@ -195,18 +195,21 @@ export async function generateLandeslistenForCycle(db: Db, cycle: number): Promi
     .toArray();
 
   const seen = new Set<string>();
+  const targets: Array<{ partyId: string; landId: string }> = [];
   for (const m of members) {
     if (!m.party || !m.homeState) continue;
     const key = `${m.party}:${m.homeState}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    await autoGenerateLandesliste(db, {
-      partyId: m.party,
-      landId: m.homeState,
-      cycle,
-      preserveExisting: true,
-    });
+    targets.push({ partyId: m.party, landId: m.homeState });
   }
+  // Each (party, Land) list is an independent idempotent upsert — generate
+  // them concurrently instead of serially.
+  await Promise.all(
+    targets.map(({ partyId, landId }) =>
+      autoGenerateLandesliste(db, { partyId, landId, cycle, preserveExisting: true })
+    )
+  );
 }
 
 /**

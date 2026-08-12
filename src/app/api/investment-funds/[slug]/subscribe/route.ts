@@ -194,7 +194,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const session = db.client.startSession();
     try {
       let subscriptionResult:
-        { units: number; costAnchor: number; nav: number; balanceAfter: number } | undefined;
+        | { units: number; costAnchor: number; nav: number; balanceAfter: number }
+        | undefined;
       let debitError: string | null = null;
 
       try {
@@ -240,6 +241,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         units: subscriptionResult!.units,
         navAnchor: subscriptionResult!.nav,
         amountAnchor: subscriptionResult!.costAnchor,
+        amountNative: totalCostNative,
         balanceAfter: subscriptionResult!.balanceAfter,
         source: "player",
         turn: auditTurn,

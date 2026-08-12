@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { getMessageStyle, resolveElectionYear } from "@/lib/utils/formatters";
-import { useCountdownTimer } from "@/hooks/useCountdownTimer";
 import { useElectionActions } from "@/hooks/useElectionActions";
 import type { ElectionDisplay, CharacterBasic, GameStateDisplay } from "@/lib/db/types";
 import type { ElectionResponse } from "@/lib/elections/resolveElection";
@@ -64,28 +63,33 @@ export function StateElections({
     Record<string, PresidentialStateData>
   >({});
 
-  useCountdownTimer(); // Force re-render every minute
-
   const countryId = propCountryId ?? "US";
   const regionLabel = COUNTRY_CONFIGS[countryId as CountryId]?.regionLabel ?? "State";
 
-  // Helper to get party color from fetched parties (country-scoped)
-  const getPartyColorHex = (partyId: string): string | null => {
-    const party = parties.find((p) => p.id === partyId && p.countryId === countryId);
-    return party?.color || null;
-  };
+  // Helper to get party color from fetched parties (country-scoped).
+  // Stable identities so memoized ElectionCards skip re-renders on parent ticks.
+  const getPartyColorHex = useCallback(
+    (partyId: string): string | null => {
+      const party = parties.find((p) => p.id === partyId && p.countryId === countryId);
+      return party?.color || null;
+    },
+    [parties, countryId]
+  );
 
   // Get party display name from fetched parties (country-scoped)
-  const getPartyName = (partyId: string): string => {
-    if (partyId === "independent") return "Independent";
-    const party = parties.find((p) => p.id === partyId && p.countryId === countryId);
-    return party?.name || partyId;
-  };
+  const getPartyName = useCallback(
+    (partyId: string): string => {
+      if (partyId === "independent") return "Independent";
+      const party = parties.find((p) => p.id === partyId && p.countryId === countryId);
+      return party?.name || partyId;
+    },
+    [parties, countryId]
+  );
 
   // Check if party is a custom party (not a major or independent)
-  const isCustomParty = (partyId: string): boolean => {
+  const isCustomParty = useCallback((partyId: string): boolean => {
     return partyId !== "independent" && !["1", "2"].includes(partyId);
-  };
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -169,37 +173,45 @@ export function StateElections({
   useEffect(() => {
     const presElections = elections.filter((e) => e.electionType === "president");
     if (presElections.length === 0) return;
-    for (const pe of presElections) {
-      fetch(`/api/elections/${pe.id}/state/${stateId}/subdivision-results`, {
-        signal: AbortSignal.timeout(15_000),
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (!data) return;
+    // Fetch all elections' subdivision results in parallel and commit once —
+    // one re-render for the list instead of one per completed fetch.
+    Promise.all(
+      presElections.map(async (pe) => {
+        try {
+          const r = await fetch(`/api/elections/${pe.id}/state/${stateId}/subdivision-results`, {
+            signal: AbortSignal.timeout(15_000),
+          });
+          const data = r.ok ? await r.json() : null;
+          if (!data) return null;
           const votes: Record<string, number> = {};
           for (const county of data.subdivisions ?? []) {
             for (const [cid, v] of Object.entries(county.votes as Record<string, number>)) {
               votes[cid] = (votes[cid] ?? 0) + v;
             }
           }
-          setPresidentialStateData((prev) => ({
-            ...prev,
-            [pe.id]: {
+          return [
+            pe.id,
+            {
               votes,
               candidateNames: data.candidateNames,
               candidateParties: data.candidateParties,
               partyColors: data.partyColors,
             },
-          }));
-        })
-        .catch((error) => {
+          ] as const;
+        } catch (error) {
           logError(error, {
             component: "StateElections",
             action: "fetch presidential election county data",
             metadata: { electionId: pe.id, stateId },
           });
-        });
-    }
+          return null;
+        }
+      })
+    ).then((entries) => {
+      const loaded = entries.filter((e): e is NonNullable<typeof e> => e !== null);
+      if (loaded.length === 0) return;
+      setPresidentialStateData((prev) => ({ ...prev, ...Object.fromEntries(loaded) }));
+    });
   }, [elections, stateId]);
 
   const { actionLoading, message, handleEnterRace, handleWithdraw, isInRace, isInAnyRace } =

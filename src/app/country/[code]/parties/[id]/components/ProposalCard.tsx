@@ -33,11 +33,13 @@ const POSITION_SHIFT_AXIS_LABEL: Record<string, string> = {
   culture: "Culture (retired)",
 };
 
-const REMOVE_ROLE_LABEL: Record<"chair" | "viceChair" | "committeeMember", string> = {
-  chair: "Chair",
-  viceChair: "Vice-Chair",
-  committeeMember: "Committee Member",
-};
+const REMOVE_ROLE_LABEL: Record<"chair" | "viceChair" | "committeeMember" | "campaigner", string> =
+  {
+    chair: "Chair",
+    viceChair: "Vice-Chair",
+    committeeMember: "Committee Member",
+    campaigner: "Campaigner",
+  };
 
 function ProposalTitle({ proposal }: { proposal: ProposalView }) {
   if (proposal.type === "rename" && proposal.rename) {
@@ -93,6 +95,13 @@ function ProposalTitle({ proposal }: { proposal: ProposalView }) {
     return (
       <span>
         Remove <strong>{REMOVE_ROLE_LABEL[role]}</strong> {targetCharacterName}
+      </span>
+    );
+  }
+  if (proposal.type === "campaignerAppointment" && proposal.campaignerAppointment) {
+    return (
+      <span>
+        Confirm <strong>{proposal.campaignerAppointment.targetCharacterName}</strong> as Campaigner
       </span>
     );
   }

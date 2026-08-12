@@ -93,7 +93,9 @@ vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn().mockResol
 vi.mock("@/lib/currency/characterFunds", () => ({ buildPersonalBalanceInc: vi.fn() }));
 vi.mock("@/lib/currency/corporationCapital", () => ({
   resolveCorpLiquidCurrencyCode: vi.fn().mockReturnValue("USD"),
-  getCorpFxRate: vi.fn().mockResolvedValue(1),
+  // A4: the bid loop reads the rate table it already loaded instead of a
+  // findOne per bid, so the batch form is what the cron imports now.
+  fxRateForCorpFromMap: vi.fn().mockReturnValue(1),
   corpLiquidCapitalToAnchor: vi.fn().mockImplementation((amount: number) => amount),
 }));
 

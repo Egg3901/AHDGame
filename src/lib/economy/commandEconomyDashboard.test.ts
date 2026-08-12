@@ -55,7 +55,7 @@ describe("computeMarketizationDrivers", () => {
       shortageIndex: 80,
       blackMarketPremium: 1.5,
       secondEconomyShare: 0.4,
-      soes: [{ output: 40, planTarget: 100 }],
+      soes: [{ output: 40, capacity: 100 }],
       creditAggressiveness: 0.9,
       budgetSoftness: 0.9,
     });
@@ -63,7 +63,7 @@ describe("computeMarketizationDrivers", () => {
       shortageIndex: 5,
       blackMarketPremium: 0.05,
       secondEconomyShare: 0.02,
-      soes: [{ output: 100, planTarget: 100 }],
+      soes: [{ output: 100, capacity: 100 }],
       creditAggressiveness: 0.3,
       budgetSoftness: 0.3,
     });

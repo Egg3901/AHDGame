@@ -7,7 +7,7 @@ import { isSameCountry } from "@/lib/api/sameCountry";
 import { createNotification } from "@/lib/notifications";
 import { isUnionLeadershipElectionOpen } from "@/lib/unions/unionEconomy";
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
-import { tallyUnionLeaderVotes } from "@/lib/unions/unionLeadershipVote";
+import { loadUnionVoteWeights, tallyUnionLeaderVotes } from "@/lib/unions/unionLeadershipVote";
 
 const DUPLICATE_KEY_ERROR_CODE = 11000;
 
@@ -50,11 +50,11 @@ export async function voteUnionLeader(
   const organizer = await db
     .collection<UnionOrganizer>("unionOrganizers")
     .findOne({ unionId: union._id, characterId: voter._id });
-  if (!organizer) {
+  if (!organizer || !(typeof organizer.strength === "number" && organizer.strength > 0)) {
     return {
       ok: false,
       status: 403,
-      error: "Only organizers who funded a drive may vote for president.",
+      error: "Run an organize drive before voting for president.",
     };
   }
 
@@ -108,11 +108,11 @@ export async function voteUnionLeader(
     });
   }
 
-  const allVotes = await db
-    .collection<UnionLeaderVote>("unionLeaderVotes")
-    .find({ unionId: union._id })
-    .toArray();
-  const tally = tallyUnionLeaderVotes(allVotes);
+  const [allVotes, weights] = await Promise.all([
+    db.collection<UnionLeaderVote>("unionLeaderVotes").find({ unionId: union._id }).toArray(),
+    loadUnionVoteWeights(db, union._id),
+  ]);
+  const tally = tallyUnionLeaderVotes(allVotes, weights);
   const leaderId = tally?.leaderId ?? null;
   const prevPending = union.pendingLeaderCharacterId?.toString() ?? null;
 

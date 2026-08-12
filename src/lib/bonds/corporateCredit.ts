@@ -20,6 +20,7 @@ import {
   type SectorCapexFields,
 } from "@/lib/corporations/sectorProfitBasis";
 import { sumBondPrincipalAnchor, sumBondAnnualInterestAnchor } from "@/lib/bonds/bondPrincipalSum";
+import { qualifiesForIndexInclusionBenefit } from "@/lib/corporations/indexOwnership";
 import { INSIDER_CONCENTRATION_THRESHOLD } from "@/lib/corporations/ceoOwnership";
 
 /** Active corporate bond issuances (excludes sovereign / treasury bonds). */
@@ -186,6 +187,14 @@ export interface CorporateCreditComputationInput {
   /** True when the corp is private — concentration penalty does not apply. */
   isPrivate?: boolean;
   /**
+   * Fraction of shares held by index funds (0–1), from
+   * `indexFundOwnershipFraction`. At or above INDEX_INCLUSION_THRESHOLD this
+   * earns a one-notch upgrade (suggestion #62). Private corps are exempt for
+   * the same reason they are exempt from the concentration penalty: they have
+   * no float for a fund to hold.
+   */
+  indexFundOwnershipFraction?: number;
+  /**
    * Live FX rates for anchor-normalizing bond amounts (post-v0.2.6 bonds
    * denominate in `bond.currencyCode`). Required so `totalDebt` and
    * `annualCouponObligations` match the ₳ units of `liquidCapitalAnchor` /
@@ -218,6 +227,8 @@ export function computeCorporateCreditAtTurn(input: CorporateCreditComputationIn
 
   const concentrationPenalty =
     !input.isPrivate && (input.ceoOwnershipFraction ?? 0) > INSIDER_CONCENTRATION_THRESHOLD;
+  const indexInclusionUpgrade =
+    !input.isPrivate && qualifiesForIndexInclusionBenefit(input.indexFundOwnershipFraction ?? 0);
 
   const creditRating = calculateCreditScore(
     input.liquidCapitalAnchor,
@@ -229,11 +240,13 @@ export function computeCorporateCreditAtTurn(input: CorporateCreditComputationIn
       bondDefaultCreditPenaltyActive: !!penaltyActive,
       previousCompositeScore: input.previousCompositeScore,
       insiderConcentrationPenalty: concentrationPenalty,
+      indexInclusionUpgrade,
     }
   );
 
   return {
     creditRating,
+    indexInclusionUpgrade,
     totalDebt,
     annualCouponObligations,
     totalEquity,

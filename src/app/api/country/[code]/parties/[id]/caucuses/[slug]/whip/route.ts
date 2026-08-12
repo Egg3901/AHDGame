@@ -302,7 +302,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
       const bill = await db.collection<Bill>("bills").findOne({
         _id: targetOid,
-        status: { $in: ["active", "active_other", "veto_override", "override_shugiin"] },
+        status: {
+          $in: ["active", "active_other", "active_both", "veto_override", "override_shugiin"],
+        },
         $or: [{ countryId }, { countryId: { $exists: false } }],
       });
       if (!bill) {
@@ -697,7 +699,20 @@ export async function POST(request: Request, { params }: RouteParams) {
                 .collection<LegislationType>("legislationTypes")
                 .findOne({ _id: bill.legislationTypeId })
             : Promise.resolve(null),
-          db.collection<StateDemographics>("stateDemographics").find({}).toArray(),
+          db
+            .collection<StateDemographics>("stateDemographics")
+            .find({
+              _id: {
+                $in: [
+                  ...new Set(
+                    [...nppMap.values()]
+                      .map((n) => n.homeState)
+                      .filter((s): s is string => typeof s === "string")
+                  ),
+                ],
+              },
+            })
+            .toArray(),
           db
             .collection<GameState>("gameState")
             .findOne({ _id: "current" }, { projection: { currentTurn: 1 } }),

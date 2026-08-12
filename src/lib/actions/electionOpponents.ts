@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/mongodb";
+import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { ObjectId } from "mongodb";
 import type {
   Character,
@@ -82,7 +83,7 @@ export async function getElectionOpponents(
         db
           .collection<StateDemographics>("stateDemographics")
           .findOne({ _id: character.homeState, countryId: character.countryId }),
-        db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+        loadDemographicCategories(db),
         db
           .collection<StatePartyOrg>("statePartyOrg")
           .find({ countryId: character.countryId, stateId: character.homeState })

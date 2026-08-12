@@ -128,7 +128,11 @@ function runScenario(s: Scenario): { samples: Sample[]; final: Sample } {
       s.gdpGrowth,
       share,
       relief,
-      creditInjection
+      creditInjection,
+      // The unmet plan is the goods the wage fund already paid for. The harness
+      // models realized output as competence x planTarget, so `soePerf` IS the
+      // fulfillment the live turn phase passes here.
+      soePerf
     );
     shortageIndex = shortageIndexFrom(overhang);
     const premium = blackMarketPremiumFrom(shortageIndex, overhang, s.tolerance);
@@ -270,7 +274,7 @@ const scenarios: Scenario[] = [
   },
   {
     ...base,
-    name: "E. Realistic NPP (soePerf 0.92) — 10yr historical-tracking guard",
+    name: "E. Realistic NPP (soePerf 0.92) - USSR-to-1991 historical-tracking guard",
     soeCompetence: 0.92,
     creditAggressiveness: 0.55,
     budgetSoftness: 0.85,
@@ -278,7 +282,12 @@ const scenarios: Scenario[] = [
     tolerance: 0.18,
     wageGrowth: 6,
     gdpGrowth: 4,
-    turns: 480, // 10 in-game years — must NOT reach market by accident
+    // 1953 to 1991, the whole Soviet run. Widened from 480 (10 years) because
+    // 10 years was too short to see the guard fail: on the pre-existing weights
+    // this scenario crossed COMMAND_CEILING in 1984 and the window ended two
+    // decades before that. A well-run orthodox USSR must stay COMMAND for the
+    // entire period, which it now does.
+    turns: 1824,
   },
   {
     ...base,

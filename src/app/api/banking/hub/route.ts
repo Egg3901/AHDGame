@@ -1,0 +1,277 @@
+import { NextResponse } from "next/server";
+import { getDb } from "@/lib/mongodb";
+import { withNoStore } from "@/lib/api/withNoStore";
+import { requireAuth } from "@/lib/api/requireAuth";
+import { handleRouteError } from "@/lib/api/errors";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import {
+  COUNTRY_CURRENCY_MAP,
+  getCountryIdForCurrency,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
+import { currencyCentralBankUrl } from "@/lib/urls";
+import { getBankId } from "@/lib/centralBank/helpers";
+import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
+import { getEffectiveBankRates } from "@/lib/banking/rates";
+import { getGameState } from "@/lib/gameState";
+import { getCountryDisplayName } from "@/lib/constants/countries";
+import { corporationPathIdFromDoc } from "@/lib/api/corporations/resolveQuery";
+import type { CentralBank } from "@/lib/db/types/centralBank";
+import type { Corporation, GameConfig } from "@/lib/db/types";
+import type { Character } from "@/lib/db/types";
+import type { BankCharterType } from "@/lib/db/types/bank";
+import { savingsApyPercent } from "@/lib/currency/savingsInterest";
+import type { ObjectId } from "mongodb";
+
+// GET /api/banking/hub - World banking hub payload (CBs, private banks, savings, loans).
+// Auth: requireAuth
+// Errors: 401
+
+type HubCentralBank = {
+  currency: CurrencyCode;
+  bankName: string;
+  countryId: CountryId;
+  countryName: string;
+  href: string;
+  primeRate: number;
+  savingsApyPercent: number;
+  isPrimary: boolean;
+};
+
+type HubPrivateBank = {
+  corporationId: string;
+  sequentialId: number | null;
+  name: string;
+  countryId: CountryId;
+  countryName: string;
+  currency: CurrencyCode;
+  operatorType: "player" | "npp";
+  charterType: BankCharterType;
+  depositRatePercent: number;
+  lendingRatePercent: number;
+  warningBand: "green" | "amber" | "red" | null;
+  confidence: number | null;
+  totalDeposits: number;
+  href: string;
+};
+
+type SavingsOption = {
+  holder: "centralBank" | string;
+  label: string;
+  depositRatePercent: number;
+};
+
+type HubSavingsRow = {
+  currency: CurrencyCode;
+  balance: number;
+  currentHolder: "centralBank" | string;
+  options: SavingsOption[];
+};
+
+async function handleGET() {
+  try {
+    const auth = await requireAuth();
+    if (!auth.ok) return auth.response;
+
+    const db = await getDb();
+    const [config, registered, gameState, banks] = await Promise.all([
+      db.collection<GameConfig>("gameConfig").findOne(
+        { _id: "default" },
+        {
+          projection: {
+            privateBankingEnabled: 1,
+            bankPropTradingEnabled: 1,
+            bankContagionEnabled: 1,
+          },
+        }
+      ),
+      getRegisteredCountryIds(db),
+      getGameState(db),
+      db
+        .collection<CentralBank>("centralBanks")
+        .find({})
+        .project({
+          _id: 1,
+          countryId: 1,
+          name: 1,
+          primeRate: 1,
+          currentInflation: 1,
+          intorgId: 1,
+        })
+        .toArray(),
+    ]);
+
+    const privateEnabled = await isPrivateBankingEnabled(config);
+    const character = auth.user.character as Character | null | undefined;
+    const primaryCountryId = (character?.countryId ?? "US") as CountryId;
+    const primaryCurrency = COUNTRY_CURRENCY_MAP[primaryCountryId] ?? "USD";
+
+    // One hub row per unique currency that a registered country uses.
+    const currencies = new Set<CurrencyCode>();
+    for (const id of registered) {
+      const code = COUNTRY_CURRENCY_MAP[id];
+      if (code) currencies.add(code);
+    }
+
+    const bankById = new Map(banks.map((b) => [String(b._id), b]));
+    const centralBanks: HubCentralBank[] = [];
+    for (const currency of [...currencies].sort()) {
+      const anchor = getCountryIdForCurrency(currency);
+      if (
+        !registered.includes(anchor) &&
+        !registered.some((id) => COUNTRY_CURRENCY_MAP[id] === currency)
+      ) {
+        continue;
+      }
+      const bankId = getBankId(anchor);
+      const bank = bankById.get(bankId);
+      const configRow = COUNTRY_CONFIGS[anchor];
+      if (!configRow) continue;
+      const prime =
+        typeof bank?.primeRate === "number" && Number.isFinite(bank.primeRate) ? bank.primeRate : 0;
+      const inflation =
+        typeof bank?.currentInflation === "number" && Number.isFinite(bank.currentInflation)
+          ? bank.currentInflation
+          : 0;
+      centralBanks.push({
+        currency,
+        bankName: bank?.name ?? configRow.centralBank.name,
+        countryId: anchor,
+        countryName: getCountryDisplayName(anchor, gameState?.preset),
+        href: currencyCentralBankUrl(currency),
+        primeRate: prime,
+        savingsApyPercent: savingsApyPercent(prime, inflation),
+        isPrimary: currency === primaryCurrency,
+      });
+    }
+    centralBanks.sort(
+      (a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.bankName.localeCompare(b.bankName)
+    );
+
+    let privateBanks: HubPrivateBank[] = [];
+    const savings: HubSavingsRow[] = [];
+    let ceoCorporations: Array<{ id: string; name: string }> = [];
+    const isAdmin = auth.user.isAdmin === true;
+
+    // Always load active charters for the private-bank table (flag on) and for
+    // admin unwind (flag off is a freeze; admins still need the escape hatch).
+    if (privateEnabled || isAdmin) {
+      type CharteredCorp = Pick<
+        Corporation,
+        "_id" | "sequentialId" | "name" | "countryId" | "ceoType" | "bankCharter"
+      >;
+      const chartered = (await db
+        .collection<Corporation>("corporations")
+        .find({ "bankCharter.status": "active" })
+        .project({
+          _id: 1,
+          sequentialId: 1,
+          name: 1,
+          countryId: 1,
+          ceoType: 1,
+          bankCharter: 1,
+        })
+        .toArray()) as CharteredCorp[];
+
+      privateBanks = await Promise.all(
+        chartered.map(async (corp) => {
+          const charter = corp.bankCharter!;
+          const rates = await getEffectiveBankRates(db, charter);
+          const countryId = (corp.countryId ??
+            getCountryIdForCurrency(charter.currency)) as CountryId;
+          return {
+            corporationId: corp._id.toString(),
+            sequentialId: corp.sequentialId ?? null,
+            name: corp.name,
+            countryId,
+            countryName: getCountryDisplayName(countryId, gameState?.preset),
+            currency: charter.currency,
+            operatorType: corp.ceoType === "npp" ? "npp" : "player",
+            charterType: charter.type,
+            depositRatePercent: rates.depositRatePercent,
+            lendingRatePercent: rates.lendingRatePercent,
+            warningBand: charter.warningBand ?? null,
+            confidence: typeof charter.confidence === "number" ? charter.confidence : null,
+            totalDeposits: charter.totalDeposits ?? 0,
+            href: `/corporation/${corporationPathIdFromDoc({
+              _id: corp._id as ObjectId,
+              sequentialId: corp.sequentialId,
+            })}?tab=bank`,
+          };
+        })
+      );
+      privateBanks.sort(
+        (a, b) =>
+          Number(a.operatorType === "npp") - Number(b.operatorType === "npp") ||
+          a.name.localeCompare(b.name)
+      );
+    }
+
+    if (privateEnabled && character) {
+      const balances = character.currencyBalances?.savings ?? {};
+      const holders = character.currencyBalances?.savingsHolder ?? {};
+      const depositTakers = privateBanks.filter(
+        (b) => b.charterType === "retail" || b.charterType === "universal"
+      );
+
+      for (const cb of centralBanks) {
+        const balance = balances[cb.currency] ?? 0;
+        const currentHolder = (holders[cb.currency] ?? "centralBank") as "centralBank" | string;
+        if (balance <= 0 && currentHolder === "centralBank") {
+          // Still list currencies the player might open; keep rows with any activity or primary.
+          if (cb.currency !== primaryCurrency) continue;
+        }
+        const options: SavingsOption[] = [
+          {
+            holder: "centralBank",
+            label: `${cb.bankName} (central bank)`,
+            depositRatePercent: cb.savingsApyPercent,
+          },
+          ...depositTakers
+            .filter((b) => b.currency === cb.currency)
+            .map((b) => ({
+              holder: b.corporationId,
+              label: b.name,
+              depositRatePercent: b.depositRatePercent,
+            })),
+        ];
+        savings.push({
+          currency: cb.currency,
+          balance,
+          currentHolder,
+          options,
+        });
+      }
+
+      const owned = await db
+        .collection<Corporation>("corporations")
+        .find({ userId: character.userId })
+        .project({ _id: 1, name: 1, sequentialId: 1 })
+        .toArray();
+      ceoCorporations = owned.map((c) => ({
+        id: c._id.toString(),
+        name: c.name,
+      }));
+    }
+
+    return NextResponse.json({
+      privateBankingEnabled: privateEnabled,
+      isAdmin,
+      characterId: character?._id?.toString() ?? null,
+      primaryCountryId,
+      primaryCurrency,
+      centralBanks,
+      privateBanks,
+      savings,
+      ceoCorporations,
+      lendingBanks: privateBanks.filter(
+        (b) => b.charterType === "retail" || b.charterType === "universal"
+      ),
+    });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
+export const GET = withNoStore(handleGET);

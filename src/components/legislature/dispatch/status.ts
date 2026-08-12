@@ -17,6 +17,7 @@ const STATUS_META: Record<string, DispatchStatusMeta> = {
   // live voting phases
   active: { label: "Voting Open", tone: "warning", live: true },
   active_other: { label: "2nd Chamber", tone: "warning", live: true },
+  active_both: { label: "Both Chambers", tone: "warning", live: true },
   veto_override: { label: "Override Vote", tone: "warning", live: true },
   cabinet_review: { label: "Cabinet Review", tone: "warning", live: true },
   override_shugiin: { label: "Shūgiin Override", tone: "warning", live: true },

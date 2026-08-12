@@ -38,7 +38,12 @@ export function billRequiresExecutiveAction(
   // and it would put two different two-thirds rules on one bill (two-thirds of
   // votes cast to pass, two-thirds of seats to override a veto).
   const hasDeclareWar = bill.provisions?.some((p) => p.type === "declare_war");
-  return !bill.internationalAction && !hasIntOrgProvision && !hasDeclareWar;
+  // Entry at a bloc's call is the same shape: the chambers ratify a decision the
+  // executive already stands behind, so there is no separate assent stage to
+  // return it to. The return expression must consume this — the declaration
+  // alone is inert.
+  const hasJoinConflict = bill.provisions?.some((p) => p.type === "join_conflict");
+  return !bill.internationalAction && !hasIntOrgProvision && !hasDeclareWar && !hasJoinConflict;
 }
 
 export function getInternationalActionLabel(action: BillInternationalAction): string {

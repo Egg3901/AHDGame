@@ -155,8 +155,7 @@ export async function seedAdmittedStatePolitics(
       // and can race the bulkWrite that just stamped it (and mock DBs never
       // surface that write). Update the row we already created.
       const orgId = getStatePartyOrgDocumentId(stateId, party);
-      // `getStatePartyOrgDocumentId` returns a composite string key, so the
-      // handle has to be typed or `_id` defaults to ObjectId.
+      // statePartyOrg is keyed by a composite STRING id, not an ObjectId.
       await db.collection<{ _id: string }>("statePartyOrg").updateOne(
         { _id: orgId },
         {

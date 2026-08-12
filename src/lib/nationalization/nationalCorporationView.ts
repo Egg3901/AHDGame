@@ -103,6 +103,19 @@ export interface NatViewSector {
   targetGrowthRate: number;
   /** Growth rate actually applied this turn (trends toward the target). */
   currentGrowthRate: number;
+  /**
+   * Active production method (suggestion #91). The national CEO panel never
+   * exposed this, so a state-owned sector was stuck on whatever it was seeded
+   * with — even though `setSectorStrategy` has always accepted the national
+   * CEO (it only checks `requireCeo`, with no state-owned exclusion).
+   */
+  strategyId: string;
+  /**
+   * Set while a retool is in flight; the strategy being moved AWAY from. The UI
+   * locks the selector while this is present, matching the command, which
+   * rejects a second change mid-transition.
+   */
+  transitionFromStrategyId?: string;
   /** CEO-set production-policy target (−25…+25); active level trends toward it 1pt/turn. */
   productionPolicy: number;
   /** Production level actually applied this turn (trends toward productionPolicy). */
@@ -384,6 +397,10 @@ export async function buildNationalCorporationView(
       profitMargin: s.profitMargin,
       targetGrowthRate: s.targetGrowthRate ?? 0,
       currentGrowthRate: s.currentGrowthRate ?? 0,
+      strategyId: s.strategyId ?? "standard",
+      ...(s.transitionFromStrategyId
+        ? { transitionFromStrategyId: s.transitionFromStrategyId }
+        : {}),
       productionPolicy: s.productionPolicy ?? 0,
       productionPolicyLevel: s.productionPolicyLevel ?? 0,
       capacityUnits:

@@ -27,7 +27,8 @@ export interface CommitteeProposal {
     | "electionMethod"
     | "electionDuration"
     | "removeOfficeHolder"
-    | "transactionApprovalMode";
+    | "transactionApprovalMode"
+    | "campaignerAppointment";
   status: "open" | "passed" | "rejected" | "expired";
   /** Always the proposing party's ObjectId */
   partyId: ObjectId;
@@ -72,6 +73,11 @@ export interface CommitteeProposal {
    * removable role via this mechanism (treasurer is chair-appointed and
    * removed via the existing appointment flow).
    *
+   * `campaigner` pulls the target from `campaignerIds`. Campaigners are
+   * chair-nominated but committee-confirmed, so the committee can strip
+   * the seat back out without the chair's consent. The chair can also
+   * fire a campaigner instantly via the campaigners route.
+   *
    * The target character is excluded from the voter set for this
    * proposal (procedural fairness — you can't vote on your own
    * removal). The effect handler clears `chairId` / `viceChairId` to
@@ -80,9 +86,24 @@ export interface CommitteeProposal {
    * helper when chair is vacated.
    */
   removeOfficeHolder?: {
-    role: "chair" | "viceChair" | "committeeMember";
+    role: "chair" | "viceChair" | "committeeMember" | "campaigner";
     targetCharacterId: ObjectId;
   };
+  /**
+   * Populated for type === "campaignerAppointment".
+   *
+   * Chair nominates a party member for a Campaigner seat; the National
+   * Committee confirms. On pass the target is added to
+   * `PoliticalParty.campaignerIds` (membership and the
+   * `MAX_NATIONAL_CAMPAIGNERS` cap are re-checked at resolution, so a
+   * nomination that passes late can still no-op).
+   *
+   * The nominee is excluded from the voter set — you don't confirm
+   * yourself. Unlike every other proposal type, several may be open at
+   * once (one per nominee) and no cooldown is set on pass; the chair
+   * has to be able to fill vacated slots immediately.
+   */
+  campaignerAppointment?: { targetCharacterId: ObjectId };
   /**
    * Populated for type === "transactionApprovalMode".
    *

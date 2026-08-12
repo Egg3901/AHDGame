@@ -90,6 +90,18 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // `unattributed` Phase-3 backlog.
   corp_capacity_build: "capacity_capex",
   corp_capacity_build_refund: "capacity_capex",
+  // Prop trading is the same shape as capacity capex: the contra side of a buy
+  // is the bank's own trading book, an ASSET account the shadow ledger does not
+  // carry. Both directions share ONE reason so the reconciler nets a purchase
+  // against its own sale per currency, and the standing book value shows up as
+  // a named `sink:prop_book` bucket instead of `unattributed` backlog.
+  bank_prop_trade_buy: "prop_book",
+  bank_prop_trade_sell: "prop_book",
+  // CB margin principal is created/destroyed at the central bank (LOC-style),
+  // so both directions share ONE reason and the reconciler nets a draw against
+  // its own repayment per currency instead of two unattributed flows.
+  bank_cb_margin_draw: "cb_margin",
+  bank_cb_margin_repay: "cb_margin",
 };
 
 /** Semantic mint/sink reason for a single-sided row; `unattributed` when unmapped. */

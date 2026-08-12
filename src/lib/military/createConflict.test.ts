@@ -177,3 +177,59 @@ describe("deployOpeningForces", () => {
     );
   });
 });
+
+describe("buildConflict host-region guard", () => {
+  it("throws for a cold_war host with no home region", () => {
+    expect(() =>
+      buildConflict(base({ type: "cold_war", hostCountry: "ZZZ", sideA: rebels, sideB: rebels }))
+    ).toThrow(/ZZZ/);
+  });
+
+  it("still falls back for other conflict types", () => {
+    // Only the proxy-war path is strict: every other type reaches here from a
+    // declaration, whose target is already a validated CountryId.
+    expect(buildConflict(base({ hostCountry: "ZZZ" })).region).toBe("noa");
+  });
+});
+
+describe("cold_war conflicts", () => {
+  const faction = (label: string, entity: string, backer: "west" | "east"): ConflictSide => ({
+    label,
+    countries: [],
+    kind: "generated",
+    backer,
+    factionEntity: entity,
+    tokenStrength: 40,
+  });
+
+  it("opens at a 50/50 split and carries its host roster", () => {
+    const c = buildConflict(
+      base({
+        type: "cold_war",
+        hostCountry: "SVN",
+        hostEntities: ["NVN", "SVN"],
+        sideA: faction("Republic of Vietnam", "SVN", "west"),
+        sideB: faction("DRV", "NVN", "east"),
+      })
+    );
+    // Neither faction entity is on a roster, so nobody holds the host's soil at birth.
+    expect(c.control).toBe(50);
+    expect(c.hostEntities).toEqual(["NVN", "SVN"]);
+    expect(c.region).toBe("sea");
+    expect(c.bloc).toBe("contested");
+  });
+
+  it("preserves each side's faction entity and token strength", () => {
+    const c = buildConflict(
+      base({
+        type: "cold_war",
+        hostCountry: "SVN",
+        sideA: faction("Republic of Vietnam", "SVN", "west"),
+        sideB: faction("DRV", "NVN", "east"),
+      })
+    );
+    expect(c.sideA.factionEntity).toBe("SVN");
+    expect(c.sideB.factionEntity).toBe("NVN");
+    expect(c.sideB.tokenStrength).toBe(40);
+  });
+});

@@ -11,6 +11,7 @@ import { getCampaignActionCost, getAdvertiseActionCost, getDonorActionCost } fro
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { FAVORABILITY_NATURAL_DECAY_THRESHOLD } from "@shared/constants/formulas";
+import { resolveOfficeActionBonusForType } from "@/lib/actions/officeBonusRegistry";
 import {
   projectFavorabilityDecay,
   projectInfamyDecay,
@@ -162,10 +163,11 @@ export async function GET() {
     const infamyProjection = projectInfamyDecay(infamy);
 
     // --- Office action bonus ---
-    const officeActionBonus =
-      character.currentOffice && config?.officeActionBonus
-        ? (config.officeActionBonus[character.currentOffice.type] ?? 0)
-        : 0;
+    const officeActionBonus = resolveOfficeActionBonusForType(
+      character.currentOffice?.type,
+      config?.officeActionBonus,
+      character.countryId
+    );
     /*
      * Chair bonus is independent of currentOffice: the role lives on
      * centralBanks.chairCharacterId and stacks with any elected seat.

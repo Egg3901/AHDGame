@@ -18,6 +18,7 @@ import type {
 import { TariffRestrictions } from "./TariffRestrictions";
 import { SubsidyBenefits } from "./SubsidyBenefits";
 import { SubsidiariesOverviewCard } from "./SubsidiariesOverviewCard";
+import { GroupOverviewCard } from "./GroupOverviewCard";
 import { formatMarketingStrength } from "@/lib/utils/formatters";
 import { SummaryBand } from "./financials/SummaryBand";
 import { GlanceRail } from "./financials/GlanceRail";
@@ -163,6 +164,7 @@ export default function FinancialsTab({
       {corporation.subsidiaries && corporation.subsidiaries.length > 0 && (
         <SubsidiariesOverviewCard subsidiaries={corporation.subsidiaries} />
       )}
+      <GroupOverviewCard corpId={corpId} />
       <SummaryBand
         corporation={corporation}
         financials={financials}
@@ -304,6 +306,28 @@ export default function FinancialsTab({
                   tooltip="Investment in logistics infrastructure. Reduces the margin penalty from operational sprawl when managing many sectors."
                 />
               )}
+              {financials.pensionContributionCost > 0 && (
+                <FinRowTip
+                  label="Pension Contributions"
+                  value={`(${fmt(scaleMoney(financials.pensionContributionCost, periodView))})`}
+                  valueClass="text-error"
+                  indent
+                  tooltip="Employer contributions to the union pension schemes covering this company's workers, at the rate set in the collective agreement. Charged on the covered wage bill every turn."
+                />
+              )}
+              {financials.pensionTopUpCost > 0 && (
+                <FinRowTip
+                  label="Pension Deficit Top-Up"
+                  value={`(${fmt(scaleMoney(financials.pensionTopUpCost, periodView))})`}
+                  valueClass="text-error"
+                  indent
+                  tooltip={`Charged on top of the agreed contribution because ${
+                    financials.pensionSchemesInDeficit === 1
+                      ? "a covered scheme holds"
+                      : `${financials.pensionSchemesInDeficit} covered schemes hold`
+                  } less than promised. It is a share of the shortfall, so it falls as the scheme recovers and rises if the scheme's investments fall. Bargaining the contribution rate up is what closes it.`}
+                />
+              )}
               {financials.ceoSalaryCost > 0 && (
                 <FinRowTip
                   label="CEO Compensation"
@@ -321,7 +345,7 @@ export default function FinancialsTab({
                   value={fmtSigned(scaleMoney(financials.operatingIncome, periodView))}
                   valueClass={financials.operatingIncome >= 0 ? "text-foreground" : "text-error"}
                   bold
-                  tooltip="Earnings Before Interest and Tax. Revenue minus all operating costs (maintenance, growth, marketing, logistics, CEO salary)."
+                  tooltip="Earnings Before Interest and Tax. Revenue minus all operating costs (maintenance, growth, marketing, logistics, pensions, CEO salary)."
                 />
               </div>
 

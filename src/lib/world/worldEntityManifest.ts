@@ -561,6 +561,8 @@ function emergentDecolonizationEntries(presetId: string): WorldEntityManifestEnt
       expectedYear: 1960,
       latestYear: 1965,
       transitionRuleId: "somalia-trust-to-somalia",
+      // The modern state outright, so its border is its own.
+      mapFeatureIds: ["706"],
       primarySphereId: "US",
       relationships: [
         {
@@ -594,6 +596,8 @@ function emergentDecolonizationEntries(presetId: string): WorldEntityManifestEnt
       expectedYear: 1960,
       latestYear: 1965,
       transitionRuleId: "belgian-congo-to-congo",
+      // Same territory as `BCO` one stage on; both claim 180, first writer wins.
+      mapFeatureIds: ["180"],
       primarySphereId: "US",
       relationships: [
         {
@@ -674,6 +678,8 @@ function emergentDecolonizationEntries(presetId: string): WorldEntityManifestEnt
       expectedYear: 1967,
       latestYear: 1972,
       transitionRuleId: "aden-to-south-yemen",
+      // Southern Yemen: no ISO numeric, so `historical-regions.json` supplies it.
+      mapFeatureIds: ["YD"],
       primarySphereId: "RU",
       relationships: [
         {
@@ -860,6 +866,10 @@ function decolonizationDependencyEntries(presetId: string): WorldEntityManifestE
       expectedYear: 1960,
       latestYear: 1965,
       transitionRuleId: "somalia-trust-to-somalia",
+      // BOTH Somalilands as one record, per the note above — which is exactly modern
+      // Somalia. Building the Italian south alone would match the name and
+      // contradict the definition, dropping the whole north.
+      mapFeatureIds: ["706"],
       flavorGaps: [
         "Models the Italian UN Trust Territory of Somaliland plus British Somaliland as one dependency record.",
       ],
@@ -908,6 +918,9 @@ function decolonizationDependencyEntries(presetId: string): WorldEntityManifestE
       expectedYear: 1967,
       latestYear: 1972,
       transitionRuleId: "aden-to-south-yemen",
+      // ⚠️ SHADOWS the asia1953 registry row of the same id, so claiming the
+      // feature only there had no effect. Geometry: `historical-regions.json`.
+      mapFeatureIds: ["ADN"],
     }),
     colonialDependency(presetId, {
       entityId: "POA",

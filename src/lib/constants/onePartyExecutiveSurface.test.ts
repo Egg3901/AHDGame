@@ -59,7 +59,16 @@ describe("getOnePartyExecutiveSurface", () => {
     expect(dd.memberLabel).toBe("Volkskammer Deputy");
     expect(dd.rulingPartyShortName).toBe("SED");
     expect(dd.headOfStatePlaque.title).toBe("Chairman of the Council of State");
-    expect(dd.seatsPanel.title).toBe("Volkskammer seats by party");
+    expect(dd.seatsPanel.title).toBe("Volkskammer seats by bloc party");
+  });
+
+  it("frames DD's non-SED parties as National Front bloc partners, not opposition", () => {
+    // The CDU, LDPD, NDPD and DBD sat in the National Front and held their
+    // Volkskammer seats by allocation. The generic surface labels this seat
+    // "the largest opposition party", which is wrong for the DDR.
+    const dd = getOnePartyExecutiveSurface("DD");
+    expect(dd.oppositionNote).toContain("National Front");
+    expect(dd.oppositionNote).not.toContain("opposition");
   });
 
   // The fallback branch still has to hold for a country with no head-of-state

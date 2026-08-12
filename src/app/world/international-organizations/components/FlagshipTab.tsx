@@ -6,6 +6,7 @@ import { DEFENSE_PLEDGE_TARGET_PCT, POSTURE_META } from "@/lib/constants/orgPost
 import { getDirectiveDef } from "@/lib/constants/orgDirectives";
 import { getAgencyDef } from "@/lib/constants/orgAgencies";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import type { OrganizationResolutionType } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary } from "../orgTypes";
 import { MetricTile } from "./OrgPrimitives";
 import { formatFundAmount } from "./fundCurrency";
@@ -20,7 +21,13 @@ import { useFundFormatter } from "./useFundFormatter";
  * posture, 2%-pledge, directives, sanctions, veto) land in Phase 2.
  */
 
-const POWER_LABEL: Record<string, string> = {
+/**
+ * Keyed by `OrganizationResolutionType`, not `string`: the Charter Powers chips
+ * render straight off the category's `powers` list, so a type added there without
+ * a label here shows the raw enum value to the player. Typed this way it does not
+ * compile until the label exists.
+ */
+const POWER_LABEL: Record<OrganizationResolutionType, string> = {
   free_trade_agreement: "Free-trade agreements",
   sanctions: "Sanctions",
   directive: "Directives",
@@ -29,6 +36,7 @@ const POWER_LABEL: Record<string, string> = {
   set_posture: "Alert posture",
   fund_agency: "Agency funding",
   set_dues: "Dues",
+  join_conflict: "Entry into conflicts",
 };
 
 function Section({

@@ -77,7 +77,11 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
       : isJP || isLegislativeOnly
         ? ["proposed", "active", "passed_origin", "active_other", "signed"]
         : ["proposed", "active", "passed_origin", "active_other", "enrolled", "signed"];
-  const currentIdx = statusOrder.indexOf(bill.status);
+  // Both chambers voting at once has no step of its own — the bill sits on the
+  // origin-chamber step while the second-chamber vote runs alongside it. Without
+  // this the lookup returns -1 and every step renders as still to come.
+  const timelineStatus = bill.status === "active_both" ? "active" : bill.status;
+  const currentIdx = statusOrder.indexOf(timelineStatus);
   // Override paths treat the last pre-override step as completed:
   // US → "enrolled" (index 4); JP → "active_other" (Sangiin vote completed with rejection)
   const effectiveIdx = isOverridePath
@@ -109,8 +113,8 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
             (isJPOverridePath && step.key === "active_other") ||
             (i === effectiveIdx &&
               !isTerminal &&
-              bill.status !== "active" &&
-              bill.status !== "active_other" &&
+              timelineStatus !== "active" &&
+              timelineStatus !== "active_other" &&
               !isOverridePath &&
               !isJPOverridePath);
           const isCurrent =

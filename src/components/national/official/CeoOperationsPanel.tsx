@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { facilityPlural } from "@/lib/constants/facilityVocabulary";
+import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 import { Button, SectionLabel, Slider } from "@/components/ui";
 import type {
   NationalCorporationViewModel,
@@ -654,7 +655,16 @@ function SectorOpsRow({
 }) {
   const [growth, setGrowth] = useState(sector.targetGrowthRate);
   const [production, setProduction] = useState(sector.productionPolicy);
+  const [strategy, setStrategy] = useState(sector.strategyId);
   const effects = getPolicyEffectInfo(production);
+
+  // Suggestion #91: the production method drives what a sector consumes and
+  // produces (and, under plants, its per-unit yield), but this panel never
+  // exposed it — so a state-owned sector ran forever on its seeded method while
+  // every private corp could retool. The command already accepted the national
+  // CEO; only the control was missing.
+  const strategies = SECTOR_STRATEGIES[sector.sectorType as CorporationType] ?? [];
+  const retooling = sector.transitionFromStrategyId != null;
 
   return (
     <div className="space-y-4 rounded-lg border border-card-border bg-card-elevated/40 p-4">
@@ -707,6 +717,55 @@ function SectorOpsRow({
           </span>
         </div>
       </div>
+
+      {/* Production method (suggestion #91) */}
+      {strategies.length > 1 && (
+        <div>
+          <div className="text-body-sm font-medium text-foreground">Production method</div>
+          <p className="text-body-xs text-muted">
+            How this sector makes what it makes. Each method uses different inputs and produces
+            different goods. Changing method costs a retooling period before the new one is live.
+          </p>
+          {retooling ? (
+            <p className="mt-2 text-body-xs text-warning">
+              Retooling in progress. You can pick a new method once it finishes.
+            </p>
+          ) : (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <select
+                value={strategy}
+                onChange={(e) => setStrategy(e.target.value)}
+                disabled={disabled}
+                aria-label="Production method"
+                className="flex-1 min-w-[12rem] rounded-lg border border-card-border bg-card px-3 py-2 text-body-sm text-foreground disabled:opacity-50"
+              >
+                {strategies.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <Button
+                onClick={() =>
+                  onPost(
+                    `/api/corporations/${corpId}/sectors/${sector.sectorId}/strategy`,
+                    { strategyId: strategy },
+                    "Retooling started."
+                  )
+                }
+                disabled={disabled || strategy === sector.strategyId}
+              >
+                Retool
+              </Button>
+            </div>
+          )}
+          {!retooling && (
+            <p className="mt-1.5 text-body-xs text-muted">
+              {strategies.find((s) => s.id === strategy)?.description ?? ""}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Capacity — plants: a build summary, not a slider. */}
       {plantsMode && (

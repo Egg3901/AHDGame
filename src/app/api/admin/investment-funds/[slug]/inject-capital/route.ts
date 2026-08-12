@@ -10,6 +10,8 @@ import { calculateBackingRatio } from "@/lib/indexFunds/unitAccounting";
 import { recomputeNav } from "@/lib/indexFunds/fundCron";
 import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
 import { createAdminLog } from "@/lib/adminLog";
+import { emitFundAdminMintLeg } from "@/lib/indexFunds/adminMintLedger";
+import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { sumFundBondHoldingsValueAnchor } from "@/lib/bonds/fundBondHoldings";
 import { loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import {
@@ -87,6 +89,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (updateResult.matchedCount === 0) {
       return NextResponse.json({ error: "Fund update failed" }, { status: 500 });
     }
+
+    await emitFundAdminMintLeg(db, {
+      fundId: fund._id,
+      fundName: fund.name,
+      fundSlug: fund.slug,
+      amountAnchor: amount,
+      currencyCode: fund.anchorCurrencyCode,
+      adminName: auth.admin.username,
+      turn: await getCurrentTurn(db),
+      tool: "inject_capital",
+    });
 
     await insertFundTransaction(db, {
       fundId: fund._id,

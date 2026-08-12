@@ -11,6 +11,8 @@ interface UpcomingElectionViewProps {
   activeParties: PartyGroup[];
   canEnter: boolean;
   actionLoading: boolean;
+  /** Candidates advancing per party (server-resolved). See ElectionDetail. */
+  advancingCount: number;
   onEnter: () => void;
   onRemoveSuccess: () => void;
 }
@@ -19,6 +21,7 @@ export function UpcomingElectionView({
   election,
   electionId,
   activeParties,
+  advancingCount,
   onRemoveSuccess,
 }: UpcomingElectionViewProps) {
   return (
@@ -53,6 +56,7 @@ export function UpcomingElectionView({
               isEnded={false}
               onRemoveSuccess={onRemoveSuccess}
               isPresident={election.electionType === "president"}
+              advancingCount={advancingCount}
             />
           ))}
         </div>

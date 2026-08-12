@@ -234,10 +234,22 @@ export interface CentralBank {
   chairAlignment?: "hawk" | "dove";
   primeRate: number;
   rateHistory: RateChangeRecord[];
+  /**
+   * Fraction (0..1) of private-bank deposits that must be held unlent.
+   * The central bank's third monetary lever alongside the prime rate and
+   * Regulation Q corridors. Absent => era default (see banking/reserves.ts).
+   */
+  bankReserveRequirement?: number;
   /** Turn number of the chair's most recent rate change. Used to enforce a cooldown between adjustments. */
   lastRateChangeTurn?: number;
   /** Chair infamy (0-100). Ticks up with high inflation / low growth, down with the inverse. */
   chairInfamy: number;
+  /**
+   * Consecutive turns the bank has held the stance the rate corridor calls for.
+   * Maturing the streak pays down scrutiny regardless of whether inflation has
+   * responded yet — credibility bought with resolve rather than results.
+   */
+  resolveStreak?: number;
   /** Turn number when the current chair's term expires */
   chairTermExpiresAtTurn: number | null;
   /**

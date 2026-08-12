@@ -132,14 +132,70 @@ export const waterQualityNode: RegistryNode = {
   compute: capitalCompute("infrastructure.waterQuality", 65, 35, 0.04, 0.88, 88),
 };
 
+/**
+ * Share of a region's sector revenue coming from generation and utilities at
+ * which the grid is considered adequately supplied. Roughly matches the real
+ * electricity + utilities share of output.
+ */
+export const GRID_ENERGY_REFERENCE_SHARE = 0.04;
+
+/** Most the energy term can ADD to the reliability target, in points. */
+export const GRID_ENERGY_MAX_BONUS = 0.8;
+
+/** Most the energy term can SUBTRACT, in points. */
+export const GRID_ENERGY_MAX_PENALTY = 0.5;
+
+/**
+ * Generation adequacy term for the grid target (suggestion #90).
+ *
+ * Before this, `powerGridReliability` moved on infrastructure SPENDING and
+ * lagged renewables and nothing else. An Energy Secretary could build
+ * generation every turn for a game decade and watch the number sit still,
+ * because no amount of installed energy capacity was an input to the grid
+ * metric — while `getGridReliabilityMarginModifier` taxed every corporation in
+ * the state for the resulting low reading. Generation was disconnected from the
+ * one metric it should obviously drive.
+ *
+ * Returns 0 with no sector data, so a region the provider cannot see keeps
+ * exactly its old spending-only target.
+ */
+export function gridEnergyAdequacyTerm(
+  rows: Array<{ revenue: number; sectorType?: string }>
+): number {
+  let energy = 0;
+  let total = 0;
+  for (const row of rows) {
+    const rev = Number.isFinite(row.revenue) ? Math.max(0, row.revenue) : 0;
+    if (rev <= 0) continue;
+    total += rev;
+    if (row.sectorType === "energy" || row.sectorType === "utilities") energy += rev;
+  }
+  if (total <= 0) return 0;
+
+  const share = energy / total;
+  // Ratio of actual generation share to the reference. 1 = adequately supplied.
+  const ratio = share / GRID_ENERGY_REFERENCE_SHARE;
+  if (ratio >= 1) {
+    // Diminishing returns above adequacy: doubling generation past what the
+    // region needs should help, but it must not buy an arbitrarily perfect grid.
+    return GRID_ENERGY_MAX_BONUS * Math.min(1, (ratio - 1) / 1.5);
+  }
+  return -GRID_ENERGY_MAX_PENALTY * (1 - ratio);
+}
+
 export const powerGridReliabilityNode: RegistryNode = {
   id: "infrastructure.powerGridReliability",
   categoryId: "infrastructure",
   metricId: "powerGridReliability",
   kind: "derived",
-  // Maintenance-decay + a small renewables-modernization term (lagged — grid
-  // investment follows the energy transition; Environment animates in P3).
-  inputs: [{ spending: "infrastructure" }, { lagged: "environment.renewableEnergy" }],
+  // Maintenance-decay, a small renewables-modernization term (lagged — grid
+  // investment follows the energy transition; Environment animates in P3), and
+  // the region's own generation adequacy (suggestion #90).
+  inputs: [
+    { spending: "infrastructure" },
+    { lagged: "environment.renewableEnergy" },
+    { provider: "sectorRevenueTax" },
+  ],
   bounds: [0, 100],
   inertia: 0.9,
   decimals: 2, // 2dp storage: per-turn decay steps (~0.05) stall on a 0.1 rounding grain
@@ -154,7 +210,14 @@ export const powerGridReliabilityNode: RegistryNode = {
         ? ctx.prev[id]
         : 98.5;
     const renewables = ctx.prev["environment.renewableEnergy"] ?? 25; // lagged, 0-100
-    const target = 97 + (spendResp(ctx) / 100) * 2.7 + (renewables - 25) * 0.004;
+    const payload = ctx.providers["sectorRevenueTax"] as
+      | {
+          owned: Array<{ revenue: number; sectorType?: string }>;
+          unowned: Array<{ revenue: number; sectorType?: string }>;
+        }
+      | undefined;
+    const energyTerm = payload ? gridEnergyAdequacyTerm([...payload.owned, ...payload.unowned]) : 0;
+    const target = 97 + (spendResp(ctx) / 100) * 2.7 + (renewables - 25) * 0.004 + energyTerm;
     return maintenanceDecay(base, target, 0.02 / (1 - 0.9));
   },
 };

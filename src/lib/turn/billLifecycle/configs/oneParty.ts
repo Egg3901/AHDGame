@@ -1,3 +1,4 @@
+import { CONCURRENT_VOTE_STAGE } from "./concurrentVoteStage";
 import type { Db } from "mongodb";
 import { createNotifications } from "@/lib/notifications";
 import type { CountryConfig } from "@/lib/constants/countries";
@@ -28,7 +29,12 @@ function makeOnePartyNotifier(lowerLabel: string): SponsorNotifier {
         status === "signed"
           ? `Your bill "${bill.title}" has been enacted by the ${lowerLabel}.`
           : status === "failed"
-            ? `Your bill "${bill.title}" has failed to pass the ${lowerLabel}.`
+            ? // The doc is the pre-transition one, so a concurrent bill still reads
+              // `active_both` — and naming the lower chamber would be wrong whenever
+              // it was the other house that voted it down.
+              bill.status === "active_both"
+              ? `Your bill "${bill.title}" has failed. A bill before both chambers has to clear both.`
+              : `Your bill "${bill.title}" has failed to pass the ${lowerLabel}.`
             : `Your bill "${bill.title}" passed its origin chamber and moves to the other chamber of the legislature.`;
 
       await createNotifications([
@@ -73,7 +79,10 @@ function makeOnePartyNotifier(lowerLabel: string): SponsorNotifier {
  * resolves the bills (scoped + snapshotted, #0836/#0982) and returns the enacted
  * categories the drifts consume.
  */
-export function buildOnePartyBillConfig(config: CountryConfig): BillLifecycleConfig {
+export function buildOnePartyBillConfig(
+  config: CountryConfig,
+  preset?: string
+): BillLifecycleConfig {
   const lowerKey = config.legislature.lowerChamber.key;
   const upperKey =
     config.legislature.bicameral && config.upperElectionSystem
@@ -82,7 +91,7 @@ export function buildOnePartyBillConfig(config: CountryConfig): BillLifecycleCon
   const lowerLabel = config.legislature.lowerChamber.shortName;
   // CN's chamber key "npc" maps to officeType "npcDelegate" — must round-trip.
   const officeTypeFor = (b: { currentChamber: string }) =>
-    getOfficeTypeForChamber(config.id, b.currentChamber);
+    getOfficeTypeForChamber(config.id, b.currentChamber, preset);
 
   if (upperKey) {
     // Bicameral crossover: origin chamber → sibling chamber → enact.
@@ -114,6 +123,7 @@ export function buildOnePartyBillConfig(config: CountryConfig): BillLifecycleCon
           // Crossover: send to the chamber the bill did NOT originate in.
           chamberOnEnter: (b) => (b.currentChamber === lowerKey ? upperKey : lowerKey),
         },
+        CONCURRENT_VOTE_STAGE,
       ],
     };
   }
@@ -134,6 +144,7 @@ export function buildOnePartyBillConfig(config: CountryConfig): BillLifecycleCon
         onPassStatus: "signed",
         votingDurationHours: VOTING_HOURS,
       },
+      CONCURRENT_VOTE_STAGE,
     ],
   };
 }

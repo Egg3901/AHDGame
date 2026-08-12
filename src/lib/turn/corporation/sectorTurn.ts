@@ -79,31 +79,6 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { computeBlendedMarginModifiers } from "@/lib/constants/commodities";
 import { readCorpEconomicAnchor, writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
-import {
-  computeSectorLaborCost,
-  getSectorLaborShare,
-  minWageFloorMultiplier,
-  clampWageLevel,
-  makeWageIndexAccumulator,
-  accumulateWageIndex,
-  makeAutomationIndexAccumulator,
-  accumulateAutomationIndex,
-} from "@/lib/labour/laborCost";
-import {
-  unionizationDriftTarget,
-  trendUnionization,
-  decayUnionizationUnderBan,
-  realWageIndex,
-  unionPremium,
-} from "@/lib/labour/unionization";
-import {
-  stepStrike,
-  trendWorkerExpectation,
-  lawAdjustedUnionizationThreshold,
-  STRIKE_REVENUE_THROTTLE,
-  STRIKE_MARGIN_PENALTY_PP,
-} from "@/lib/labour/strikes";
-import { unionLookupKey } from "@/lib/unions/unionLookups";
 import { computeSoeEfficiencyPenalty } from "@/lib/nationalization/soeEfficiency";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { sociMultiplier } from "@/lib/nationalization/concentration";
@@ -111,6 +86,7 @@ import { resolveSectorMandate } from "@/lib/nationalization/soeMandates";
 import { nationalizationProductivityFactor } from "@/lib/nationalization/transitionShock";
 import { corpAlignmentModifier } from "@/lib/economicModels/effects";
 import { getExpropriationRiskMarginModifier } from "@/lib/constants/corporations";
+import { commodityProductionCapacityScale } from "@/lib/banking/capacityAllocation";
 import {
   getSectorTechEffects,
   getSectorTechEffectsForYear,
@@ -136,6 +112,7 @@ import {
   disasterProductionFactor,
 } from "@/lib/crises/disasterMarginPenalty";
 import { resolveSectorGrowthPolicy } from "./sectorGrowthPolicy";
+import { resolveSectorLabourEconomics, resolveSectorLabourProductionEffects } from "./sectorLabour";
 import { computeSectorOutputUnits } from "./sectorOutputUnits";
 import type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
 
@@ -301,7 +278,8 @@ export function processSector(
   // in practice unionsEnabled always implies wagesEnabled via
   // LABOUR_MODE_ORDER, but LabourContext doesn't enforce that, so this
   // reads `sector.strikeStartedAtTurn` regardless of wagesEnabled.
-  const strikeActive = labour.unionsEnabled === true && sector.strikeStartedAtTurn != null;
+  const { outputFactor: labourOutputFactor, strikeMarginModifier } =
+    resolveSectorLabourProductionEffects(labour, sector);
   // Effective strategy rates, resolved once here and reused below by the
   // capacity haircut, price realization, and the blended commodity margin
   // modifiers (so non-standard strategies are priced against what the
@@ -841,7 +819,7 @@ export function processSector(
     clearingRevenueLeg *
     throughputFactor *
     capitalFactor *
-    (strikeActive ? 1 - STRIKE_REVENUE_THROTTLE : 1) *
+    labourOutputFactor *
     // Embargo: legacy total mothball earns nothing (factor 0); the trade-exposure
     // model keeps the domestic remainder (1 − exported share). 1 when unembargoed.
     embargoRevenueFactor;
@@ -911,14 +889,27 @@ export function processSector(
     // same constraint twice.
     (plantsEnabled ? 1 : capitalFactor) *
     plantsTechOutputMultiplier *
-    (strikeActive ? 1 - STRIKE_REVENUE_THROTTLE : 1);
+    labourOutputFactor;
+  // Locked decision 18: chartered financial capacity is split between commodity
+  // financial_services output and the branch network (deposit ceiling). Scale
+  // only the capacity that enters production; stored capitalStock is untouched.
+  // Gated on privateBankingEnabled + ACTIVE charter — zero change otherwise.
+  const bankingCommodityScale =
+    sector.sectorType === "financial"
+      ? commodityProductionCapacityScale(corp.bankCharter, env.privateBankingEnabled === true)
+      : 1;
+  const productionNameplateUnits = plantsEnabled
+    ? mothballed
+      ? 0
+      : plantsCapacity * bankingCommodityScale
+    : nameplateUnits * bankingCommodityScale;
   const { producedUnits, soldUnits } = computeSectorOutputUnits({
     // Plants inverts the P1 decomposition: units come from owned capacity, not
     // from the revenue nameplate. Everything downstream of `unitsBase` is the
     // same production-leg chain.
     // D12: mothballed plants are cold — zero units produced, hence zero offered
     // to the clearing book next turn.
-    nameplateUnits: plantsEnabled ? (mothballed ? 0 : plantsCapacity) : nameplateUnits,
+    nameplateUnits: productionNameplateUnits,
     productionFactor,
     soldFraction: market.clearingEnabled && clearing ? clearing.soldFraction : null,
   });
@@ -1197,9 +1188,9 @@ export function processSector(
   const disasterMarginMod = disasterPenalty.marginPenalty + disasterPhysicalDeferred;
   const regionalConditionMarginMod =
     lookups.regionalConditionMarginByState?.get(sector.stateId) ?? 0;
-  // v3 Phase 6: margin hit while a strike is active (alongside the
-  // revenue throttle computed above via the same `strikeActive` flag).
-  const strikeMarginMod = strikeActive ? STRIKE_MARGIN_PENALTY_PP : 0;
+  // v3 Phase 6: margin hit while a strike is active. The production leg was
+  // already consumed through the shared labour output factor above.
+  const strikeMarginMod = strikeMarginModifier;
   const totalMarginMod =
     stateMetricMargin.cappedTotal +
     commodityMod +
@@ -1269,149 +1260,29 @@ export function processSector(
   const computedWorkers = calculateWorkers(newRevenue, rawSkill);
 
   const grossMaintenance = hourlyRevenue * (1 - effectiveMargin / 100);
-  // Labour system (gated on labourSystemMode ≥ "wages"): carve an explicit
-  // labor cost OUT of maintenance so it can move independently with the wage
-  // slider / automation / minimum wage / unions in later phases. The labor
-  // share is per-sector (intensity) × per-era; labor is workers ×
-  // wage-per-worker. Baseline-invariant: at wageLevel=1 with no floor the
-  // split sums back to grossMaintenance, so profit is unchanged. Inert when
-  // the labour system is off.
-  let maintenance = grossMaintenance;
-  let sectorLaborCost = 0;
-  let newUnionization: number | undefined;
-  let newWorkerExpectationIndex: number | undefined;
-  let newStrikeStartedAtTurn: number | null | undefined;
-  let newStrikeCooldownUntilTurn: number | null | undefined;
-  if (labour.wagesEnabled) {
-    // Combined wage multiplier = CEO wage slider × minimum-wage floor ×
-    // automation × union premium. Each factor is 1 (or 0, for the
-    // premium) at baseline, so the carve-out stays profit-invariant
-    // until something moves off baseline. The min-wage floor (Kaitz)
-    // bites only sectors whose pay level sits below the floor —
-    // automation lowers labor cost.
-    const wageLevel = clampWageLevel(sector.wageLevel ?? 1);
-    const floorMult = minWageFloorMultiplier(
-      sector.sectorType,
-      labour.minWageRatioByCountry?.get(sectorCountryId) ?? 0
-    );
-    // v3 Phase 6: standing labor-cost surcharge from unionization. Reads
-    // the PRIOR turn's persisted unionization (not this turn's
-    // freshly-trended value, computed below) — consistent with the
-    // "decide this turn, consumed next turn" lag the rest of the labour
-    // system uses. 0 at unionization 0, so this is a no-op until the
-    // unionization metric has actually moved off baseline.
-    // Union ban (player suggestion #93): while a country's unions are
-    // banned, the standing premium is not applied and the unionization/
-    // strike machinery below switches to forced decay + no-trigger.
-    const unionsBanned =
-      labour.unionsEnabled && labour.unionsBannedByCountry?.has(sectorCountryId) === true;
-    const unionPremiumPct =
-      labour.unionsEnabled && !unionsBanned ? unionPremium(sector.unionization ?? 0) : 0;
-    const wageMultiplier =
-      wageLevel * floorMult * techEffects.laborCostMultiplier * (1 + unionPremiumPct / 100);
-    // v2: accumulate this sector's wage multiplier (per worker) into its state's
-    // labour wage index. Automation is excluded — it cuts headcount, not pay.
-    let acc = wageIndexByState.get(sector.stateId);
-    if (!acc) {
-      acc = makeWageIndexAccumulator();
-      wageIndexByState.set(sector.stateId, acc);
-    }
-    accumulateWageIndex(acc, computedWorkers, wageLevel, floorMult);
-    // v2-3b: separately accumulate the automation (tech laborCostMultiplier)
-    // signal into its own per-state index — see automationIndexByState's
-    // declaration for why it's not folded into the wage index above.
-    let automationAcc = automationIndexByState.get(sector.stateId);
-    if (!automationAcc) {
-      automationAcc = makeAutomationIndexAccumulator();
-      automationIndexByState.set(sector.stateId, automationAcc);
-    }
-    accumulateAutomationIndex(automationAcc, computedWorkers, techEffects.laborCostMultiplier);
-    const split = computeSectorLaborCost({
-      hourlyRevenue,
-      grossMaintenance,
-      laborShare0: getSectorLaborShare(sector.sectorType, currentYear),
-      wageMultiplier,
-    });
-    maintenance = split.maintenance;
-    sectorLaborCost = split.laborCost;
-
-    // v3 Phase 5 (gated on labourSystemMode ≥ "unions", a tier above
-    // "wages" so wageLevel/floorMult above are already in scope): NPC
-    // unionization pressure, pure state evolution, no economic effect
-    // yet — see unionization.ts for why this doesn't need v2's
-    // Δ-not-level discipline (it's a bounded target-trending stock, not
-    // a recursive series).
-    if (labour.unionsEnabled) {
-      // v3 Phase 7b/8: only read when fullEnabled — gate at the read site
-      // (same convention v2 established), so a field's mere presence in
-      // LabourContext at a lower tier never has an effect.
-      const unionLawBias = labour.fullEnabled
-        ? labour.unionLawBiasByCountry?.get(sectorCountryId)
-        : undefined;
-      const membershipPressure = labour.fullEnabled
-        ? labour.ownedUnionMembershipPressureByKey?.get(
-            unionLookupKey(sectorCountryId, sector.sectorType)
-          )
-        : undefined;
-      if (unionsBanned) {
-        // Union ban: target forced to 0 with accelerated decay — the
-        // condition-driven target is irrelevant while organizing is
-        // outlawed. Drift resumes from wherever this leaves the value
-        // once the ban is repealed.
-        newUnionization = decayUnionizationUnderBan(sector.unionization ?? 0);
-      } else {
-        const target = unionizationDriftTarget({
-          wageLevel,
-          costOfLivingIndex: sectorMetrics?.economic?.costOfLiving?.value,
-          unemploymentRate: sectorMetrics?.economic?.unemploymentRate?.value,
-          minWageKaitzRatio: labour.minWageRatioByCountry?.get(sectorCountryId),
-          unionLawBias,
-          membershipPressure,
-        });
-        newUnionization = trendUnionization(sector.unionization ?? 0, target);
-      }
-
-      // v3 Phase 6: strikes. realWage uses THIS turn's wageLevel (unlike
-      // unionPremiumPct above, which intentionally lags) since the
-      // worker-expectation trend and the strike trigger/resolution
-      // decision are themselves only consumed starting NEXT turn (via
-      // strikeStartedAtTurn persisted below) — no same-turn dependency
-      // issue, see strikes.ts's file docblock for the degeneracy-guard
-      // reasoning (hysteresis gap, slow expectation index, cooldown on
-      // every resolution path).
-      const realWage = realWageIndex(wageLevel, sectorMetrics?.economic?.costOfLiving?.value);
-      newWorkerExpectationIndex = trendWorkerExpectation(sector.workerExpectationIndex, realWage);
-      const strikeStep = stepStrike({
-        unionization: newUnionization,
-        realWage,
-        workerExpectation: newWorkerExpectationIndex,
-        turn: currentTurn,
-        prior: {
-          strikeStartedAtTurn: sector.strikeStartedAtTurn ?? null,
-          strikeCooldownUntilTurn: sector.strikeCooldownUntilTurn ?? null,
-        },
-        ...(unionLawBias !== undefined && {
-          unionizationThreshold: lawAdjustedUnionizationThreshold(unionLawBias),
-        }),
-        // Union ban: blocks new triggers and force-resolves an active
-        // strike ("resolved_banned") — see stepStrike's ban branch.
-        unionsBanned,
-      });
-      newStrikeStartedAtTurn = strikeStep.next.strikeStartedAtTurn;
-      newStrikeCooldownUntilTurn = strikeStep.next.strikeCooldownUntilTurn;
-      if (strikeStep.unionizationBump > 0) {
-        newUnionization = Math.min(100, newUnionization + strikeStep.unionizationBump);
-      }
-      if (strikeStep.event) {
-        pendingStrikeEvents.push({
-          sectorId: sector._id.toString(),
-          sectorType: sector.sectorType,
-          countryId: sectorCountryId,
-          event: strikeStep.event,
-        });
-      }
-    }
-  }
+  const {
+    maintenance,
+    sectorLaborCost,
+    newUnionization,
+    newWorkerExpectationIndex,
+    newStrikeStartedAtTurn,
+    newStrikeCooldownUntilTurn,
+  } = resolveSectorLabourEconomics({
+    labour,
+    sector,
+    sectorCountryId,
+    currentTurn,
+    currentYear,
+    hourlyRevenue,
+    grossMaintenance,
+    computedWorkers,
+    techLaborCostMultiplier: techEffects.laborCostMultiplier,
+    costOfLivingIndex: sectorMetrics?.economic?.costOfLiving?.value,
+    unemploymentRate: sectorMetrics?.economic?.unemploymentRate?.value,
+    wageIndexByState,
+    automationIndexByState,
+    pendingStrikeEvents,
+  });
   // Growth cost must be charged on the revenue the sector ACTUALLY realises, not
   // on its nominal book revenue.
   //
@@ -1523,7 +1394,7 @@ export function processSector(
     nationalizationTransition *
     plantsExtractionHardMin *
     throughputFactor *
-    (strikeActive ? 1 - STRIKE_REVENUE_THROTTLE : 1);
+    labourOutputFactor;
   const plantsOwnerIdleUnits = plantsEnabled
     ? ownerIdleUnits({
         capacity: plantsCapacity,
@@ -1958,8 +1829,8 @@ export function processSector(
   }
   // v3 Phase 6: persist the worker-expectation trend + strike state. Only
   // written when the strike computation actually ran above (requires both
-  // wagesEnabled and unionsEnabled — see the strikeActive comment near
-  // hourlyRevenue for why unionsEnabled alone doesn't imply that).
+  // wagesEnabled and unionsEnabled - see the labour output factor near
+  // hourlyRevenue for why unionsEnabled alone does not imply that).
   // Explicit `null` clears strikeStartedAtTurn/strikeCooldownUntilTurn on
   // resolution — matches the transitionFromStrategyId = null precedent
   // below (Mongo $set with a literal null sets BSON null, not unset).

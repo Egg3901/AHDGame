@@ -19,7 +19,6 @@ import { CampaignsListPanel } from "./CampaignsListPanel";
 import { CampaignManagerTab } from "./CampaignManagerTab";
 import { ElectionDetailSkeleton } from "./ElectionDetailSkeleton";
 import type { ElectionDetail } from "./ElectionDetailTypes";
-import { getPrimaryWinnersForElection, type CountryId } from "@/lib/constants/countries";
 import BackButton from "@/components/BackButton";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
 
@@ -217,18 +216,17 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   const isGeneralPhase = !localInPrimary && !localIsUpcoming;
   const showGeneralPanel = isGeneralPhase;
 
-  // Determine how many candidates advance from primary — driven by the
-  // country's `governmentType` (presidential → 1, parliamentary → 3,
-  // onePartyState → 7), except single-winner executive races (governor/
-  // president) which always advance 1, and US House which advances 3 when
-  // redistricting is on, via `getPrimaryWinnersForElection`.
-  const advancingCount = election.countryId
-    ? getPrimaryWinnersForElection(
-        election.countryId as CountryId,
-        election.electionType,
-        election.gameState?.redistrictingEnabled === true
-      )
-    : 1;
+  // How many candidates advance from the primary — driven by the country's
+  // `governmentType` (presidential → 1, parliamentary → 3, onePartyState → 7),
+  // except single-winner executive races (governor/president) which always
+  // advance 1, and US House which advances 3 when redistricting is on.
+  //
+  // Resolved server-side in `_enrichElection` and read off the payload rather
+  // than recomputed here: `getPrimaryWinnersForElection` needs gameState, so a
+  // client-side call has to have the flag shipped to it and can silently
+  // disagree with the cap the turn resolver actually enforced. Legacy payloads
+  // without the field fall back to 1.
+  const advancingCount = election.primaryAdvanceCount ?? 1;
 
   return (
     <div className="min-h-screen bg-background">
@@ -295,6 +293,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
                 activeParties={activeParties}
                 canEnter={canEnter}
                 actionLoading={actionLoading}
+                advancingCount={advancingCount}
                 onEnter={handleEnter}
                 onRemoveSuccess={fetchElection}
               />

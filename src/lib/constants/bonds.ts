@@ -128,6 +128,13 @@ export function calculateCreditScore(
     previousCompositeScore?: number;
     /** One-notch downgrade for insider concentration >65% on public corps. */
     insiderConcentrationPenalty?: boolean;
+    /**
+     * One-notch UPGRADE for a corp whose shares are meaningfully held by index
+     * funds (suggestion #62). The mirror of the concentration penalty: a broad,
+     * sticky passive holder base is cheaper capital. Nets against it — a corp
+     * that is both insider-concentrated and index-held ends where it started.
+     */
+    indexInclusionUpgrade?: boolean;
   }
 ): {
   rating: CreditRating;
@@ -199,12 +206,22 @@ export function calculateCreditScore(
   }
 
   if (options?.bondDefaultCreditPenaltyActive) {
+    // A live default overrides everything, including index inclusion. Passive
+    // funds holding your stock does not make you a good credit after you have
+    // missed a coupon.
     rating = "CCC";
     compositeScore = Math.min(compositeScore, 12);
-  } else if (options?.insiderConcentrationPenalty) {
-    const idx = CREDIT_RATINGS.indexOf(rating);
-    if (idx >= 0 && idx < CREDIT_RATINGS.length - 1) {
-      rating = CREDIT_RATINGS[idx + 1];
+  } else {
+    // Net the notch adjustments so the two never double-apply in sequence.
+    // CREDIT_RATINGS runs best → worst, so +1 index = one step toward the front.
+    const notches =
+      (options?.insiderConcentrationPenalty ? 1 : 0) - (options?.indexInclusionUpgrade ? 1 : 0);
+    if (notches !== 0) {
+      const idx = CREDIT_RATINGS.indexOf(rating);
+      if (idx >= 0) {
+        const next = Math.max(0, Math.min(CREDIT_RATINGS.length - 1, idx + notches));
+        rating = CREDIT_RATINGS[next];
+      }
     }
   }
 

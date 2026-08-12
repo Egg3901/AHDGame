@@ -120,6 +120,7 @@ import {
   GROWTH_COST_MULTIPLIER,
   acumenGrowthCostMultiplier,
   acumenRateSensitivity,
+  dominanceDensityFactor,
   getDominanceGrowthCostMultiplier,
   type CorporationType,
 } from "./corporations";
@@ -757,6 +758,15 @@ export interface BuildCostInputs {
   eraUnitScale: number;
   /** Sector's (state, type) market share %, for the dominance multiplier. */
   marketSharePercent?: number;
+  /**
+   * Distinct RIVAL corporations holding a sector in the same (state, type) cell
+   * — the building corp's own sectors excluded. Scales the dominance toll by
+   * how contested the market is (see {@link dominanceDensityFactor}).
+   *
+   * Absent ⇒ treated as crowded (full toll). That is the safe default: a caller
+   * that has not resolved density must not accidentally hand out a discount.
+   */
+  competitorCount?: number;
   /** Host country's prime rate (%), for the financing multiplier. */
   primeRate?: number;
   /** CEO Business Acumen; neutral when absent (NPP / vacant CEO). */
@@ -801,7 +811,7 @@ export interface BuildCostBreakdown {
  * NPP behaviour and the tests can never disagree about what a build costs.
  *
  *     total = units × capacityPricePerUnit(type, year)
- *                   × dominanceMult(share)
+ *                   × dominanceMult(share, competitorCount)
  *                   × rateMult(primeRate, acumen)
  *                   × acumenMult(acumen)
  *                   × techMult(growthCostMultiplier)
@@ -835,6 +845,13 @@ export interface BuildCostBreakdown {
  * price it can choose not to pay by not growing — and runs its existing plants
  * at an undistorted margin. `sectorTurn` gates the margin penalty and the
  * revenue tax off when plants is on; this multiplier is the whole toll.
+ *
+ * Because it IS the whole toll, it is also scaled by how contested the cell is
+ * (`dominanceDensityFactor`, suggestion #30). 60% of a two-firm state and 60%
+ * of a five-firm state are not the same achievement, and charging them alike
+ * left thin markets unbuilt while demand went unserved. Density scales only the
+ * toll's excess over 1.0, so a sub-threshold sector is unaffected at any
+ * density and the price stays continuous in both share and rival count.
  * (The dominance multiplier on the legacy growth-cost line is left alone: that
  * line is itself vestigial under plants and gating it would move the flip-turn
  * numbers for a dominant sector, which the flip identity forbids.)
@@ -850,6 +867,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     year,
     eraUnitScale,
     marketSharePercent = 0,
+    competitorCount,
     primeRate = 0,
     acumen = NEUTRAL_STAT,
     founding = false,
@@ -858,7 +876,12 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
   } = inputs;
   const safeUnits = Number.isFinite(units) && units > 0 ? units : 0;
   const unitPriceAnchor = capacityPricePerUnit(sectorType, year, eraUnitScale);
-  const dominanceMultiplier = getDominanceGrowthCostMultiplier(marketSharePercent);
+  // Dominance is scaled by how contested the cell is. The factor multiplies the
+  // toll's EXCESS over 1.0, so a market with no rivals still pays a monopoly
+  // premium, just a smaller one — and a sub-threshold sector (multiplier 1) is
+  // untouched at any density.
+  const rawDominance = getDominanceGrowthCostMultiplier(marketSharePercent);
+  const dominanceMultiplier = 1 + (rawDominance - 1) * dominanceDensityFactor(competitorCount);
   const rateMultiplier = Math.max(
     0.5,
     1 + ((Number.isFinite(primeRate) ? primeRate : 0) / 10) * acumenRateSensitivity(acumen)

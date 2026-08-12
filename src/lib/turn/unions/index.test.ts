@@ -7,6 +7,7 @@ import {
   duesTrickle,
   decayMembershipPressure,
   MEMBERSHIP_PRESSURE_DECAY_PER_TURN,
+  UNION_STRENGTH_DECAY_PER_TURN,
 } from "@/lib/unions/unionEconomy";
 import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoSectorShed";
 import { seedUnions } from "@/lib/admin/seed/seedUnions";
@@ -22,6 +23,11 @@ vi.mock("@/lib/labour/featureFlag", () => ({
 // the real seedUnions hits states/unions collections this mock db doesn't model.
 vi.mock("@/lib/admin/seed/seedUnions", () => ({
   seedUnions: vi.fn().mockResolvedValue(0),
+}));
+vi.mock("./labourRelationsTurn", () => ({
+  processLabourRelationsTurn: vi
+    .fn()
+    .mockResolvedValue({ campaignsMovedToDispute: 0, agreementsExpired: 0, mediationsExpired: 0 }),
 }));
 
 function makeUnion(overrides: Partial<Union> = {}): Union {
@@ -66,6 +72,10 @@ function mockDb({
   const unionsBulkWrite = vi.fn().mockResolvedValue({});
   const unionsUpdateMany = vi.fn().mockResolvedValue({});
   const unionsFind = vi.fn().mockReturnValue({ toArray: () => Promise.resolve(unions) });
+  const unionsDistinct = vi
+    .fn()
+    .mockImplementation(async () => unions.filter((u) => u.suspended).map((u) => u._id));
+  const organizersUpdateMany = vi.fn().mockResolvedValue({});
   const charactersUpdateMany = vi.fn().mockResolvedValue({});
   const db = {
     collection: (name: string) => {
@@ -75,7 +85,11 @@ function mockDb({
           countDocuments: vi.fn().mockResolvedValue(totalUnionCount ?? expectedFullRoster),
           bulkWrite: unionsBulkWrite,
           updateMany: unionsUpdateMany,
+          distinct: unionsDistinct,
         };
+      }
+      if (name === "unionOrganizers") {
+        return { updateMany: organizersUpdateMany };
       }
       if (name === "states") {
         return { distinct: vi.fn().mockResolvedValue(seededCountryIds) };
@@ -117,7 +131,15 @@ function mockDb({
       throw new Error(`unexpected collection ${name}`);
     },
   } as unknown as Db;
-  return { db, unionsBulkWrite, unionsUpdateMany, unionsFind, charactersUpdateMany };
+  return {
+    db,
+    unionsBulkWrite,
+    unionsUpdateMany,
+    unionsFind,
+    charactersUpdateMany,
+    unionsDistinct,
+    organizersUpdateMany,
+  };
 }
 
 describe("processUnionsTurn", () => {
@@ -188,6 +210,28 @@ describe("processUnionsTurn", () => {
     expect(ops).toHaveLength(2);
   });
 
+  it("decays union strength and every organizer's banked strength, led or not, skipping suspended unions", async () => {
+    const led = makeUnion({ membershipPressure: 50 });
+    const suspended = { ...makeUnion({ membershipPressure: 50 }), suspended: true };
+    const { db, unionsUpdateMany, organizersUpdateMany } = mockDb({
+      unions: [led, suspended],
+      activeCharacterIds: [led.ownerId!.toString(), suspended.ownerId!.toString()],
+    });
+
+    await processUnionsTurn(db);
+
+    const multiplier = 1 - UNION_STRENGTH_DECAY_PER_TURN;
+    const [unionFilter, unionUpdate] = unionsUpdateMany.mock.calls[0];
+    expect(unionUpdate.$mul.strength).toBeCloseTo(multiplier, 10);
+    expect(unionFilter._id.$nin).toContainEqual(suspended._id);
+    expect(unionFilter.strength).toEqual({ $gt: 0 });
+
+    expect(organizersUpdateMany).toHaveBeenCalledTimes(1);
+    const [organizerFilter, organizerUpdate] = organizersUpdateMany.mock.calls[0];
+    expect(organizerUpdate.$mul.strength).toBeCloseTo(multiplier, 10);
+    expect(organizerFilter.unionId.$nin).toContainEqual(suspended._id);
+  });
+
   it("code-review fix #5: auto-vacates leadership for a leader inactive beyond INACTIVE_CEO_TURN_THRESHOLD, excludes it from dues/decay", async () => {
     const union = makeUnion({ membershipPressure: 50 });
     const { db, unionsBulkWrite, unionsUpdateMany, charactersUpdateMany } = mockDb({
@@ -200,8 +244,10 @@ describe("processUnionsTurn", () => {
     expect(result.unionsProcessed).toBe(0);
     expect(unionsBulkWrite).not.toHaveBeenCalled(); // no dues/decay for the vacated union
 
-    expect(unionsUpdateMany).toHaveBeenCalledTimes(1);
-    const [unionFilter, unionUpdate] = unionsUpdateMany.mock.calls[0];
+    // Call 0 is the blanket strength decay, which runs for every union.
+    const vacancyCall = unionsUpdateMany.mock.calls.find((call) => "ownerId" in (call[1].$set ?? {}));
+    expect(vacancyCall).toBeDefined();
+    const [unionFilter, unionUpdate] = vacancyCall!;
     expect(unionFilter._id.$in).toContainEqual(union._id);
     expect(unionUpdate.$set.ownerId).toBeNull();
 

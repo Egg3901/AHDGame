@@ -24,6 +24,8 @@ import { applyNationalizeProvision } from "@/lib/nationalization/legislativeNati
 import { computeNationalizationProvisionDetail } from "@/lib/nationalization/billTargetPreview";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { declareWar } from "@/lib/military/declareWar";
+import { joinSide } from "@/lib/military/joinSide";
+import { getConflict } from "@/lib/db/collections/conflicts";
 import { applyPrivatizeProvision } from "@/lib/nationalization/legislativePrivatize";
 import { applyDesignateStrategicSectorProvision } from "@/lib/nationalization/legislativeDesignateStrategic";
 import { applyUnionLawProvision } from "@/lib/labour/unionLaws";
@@ -204,6 +206,22 @@ export async function applyLegislationEffect(
             billId: String(bill._id),
             currentTurn: await getCurrentTurn(db),
           });
+        } else if (p.type === "join_conflict") {
+          // Up to 48 turns of world state separate the bloc's vote from this
+          // effect — 24 at the organisation and 24 on the floor — so re-check
+          // both the conflict and this country's place in it. Must sit above the
+          // tariff catch-all below, which would otherwise cast it to a
+          // TariffProvision.
+          const conflict = await getConflict(db, p.theaterId);
+          if (conflict && conflict.status !== "resolved") {
+            const opposing = p.side === "A" ? conflict.sideB.countries : conflict.sideA.countries;
+            // Never switch a country's side: it can have been dragged onto the
+            // other one by its own declaration while this bill was on the floor.
+            if (!(opposing as string[]).includes(countryId)) {
+              // Idempotent — joinSide returns early if the roster already has it.
+              await joinSide(db, conflict, countryId, p.side);
+            }
+          }
         } else if (p.type === "embargo" || p.type === "end_embargo") {
           // Durable embargoes have no per-provision enactment write: the trade
           // turn's `reconcileSignedEmbargoBills` full-rebuilds legislation-origin

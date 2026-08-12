@@ -9,6 +9,7 @@ import {
   isEligibleIndexFundConstituent,
   type IndexFundCandidate,
 } from "./constituents";
+import { LISTING_GRACE_TURNS } from "./listingStandards";
 
 function corp(overrides: Partial<IndexFundCandidate> = {}): IndexFundCandidate {
   return {
@@ -108,7 +109,7 @@ describe("buildIndexFundTargetConstituents", () => {
   it("weights constituents by converted market cap", () => {
     const a = new ObjectId();
     const b = new ObjectId();
-    const result = buildIndexFundTargetConstituents({
+    const { constituents: result } = buildIndexFundTargetConstituents({
       corporations: [
         corp({ _id: a, sharePrice: 10, totalShares: 100, liquidCurrencyCode: "USD" }),
         corp({ _id: b, sharePrice: 20, totalShares: 100, liquidCurrencyCode: "USD" }),
@@ -127,7 +128,7 @@ describe("buildIndexFundTargetConstituents", () => {
       corp({ sharePrice: index + 1, totalShares: 100, liquidCurrencyCode: "USD" })
     );
 
-    const result = buildIndexFundTargetConstituents({
+    const { constituents: result } = buildIndexFundTargetConstituents({
       corporations,
       definition: { scope: "global", kind: "broad", anchorCurrencyCode: "USD" },
       exchangeRates: rates,
@@ -141,7 +142,7 @@ describe("buildIndexFundTargetConstituents", () => {
   it("supports country sector funds", () => {
     const techId = new ObjectId();
     const energyId = new ObjectId();
-    const result = buildIndexFundTargetConstituents({
+    const { constituents: result } = buildIndexFundTargetConstituents({
       corporations: [
         corp({ _id: techId, countryId: "US" as CountryId, type: "technology" as CorporationType }),
         corp({ _id: energyId, countryId: "US" as CountryId, type: "energy" as CorporationType }),
@@ -158,5 +159,142 @@ describe("buildIndexFundTargetConstituents", () => {
     });
 
     expect(result.map((row) => row.corporationId)).toEqual([energyId]);
+  });
+});
+
+describe("listing standards inside the basket build", () => {
+  const definition = {
+    scope: "country" as const,
+    kind: "broad" as const,
+    countryId: "US" as CountryId,
+    anchorCurrencyCode: "USD" as CurrencyCode,
+  };
+
+  /** Five peers around a median of 1,000, so the size floor sits at 50. */
+  function pool(): IndexFundCandidate[] {
+    return [10, 10, 10, 10, 10].map((price, i) =>
+      corp({ sharePrice: price, totalShares: 100 * (i + 1) })
+    );
+  }
+
+  it("excludes an applicant that is a rounding error next to its peers", () => {
+    const tiny = corp({ sharePrice: 1, totalShares: 1 });
+    const { constituents } = buildIndexFundTargetConstituents({
+      corporations: [...pool(), tiny],
+      definition,
+      exchangeRates: rates,
+    });
+    expect(constituents.map((c) => c.corporationId.toString())).not.toContain(tiny._id.toString());
+  });
+
+  it("keeps a failing INCUMBENT in the basket while it still has grace", () => {
+    const slipping = corp({ sharePrice: 1, totalShares: 1 });
+    const { constituents, droppedIds, streaks } = buildIndexFundTargetConstituents({
+      corporations: [...pool(), slipping],
+      definition,
+      exchangeRates: rates,
+      retention: {
+        incumbentIds: new Set([slipping._id.toString()]),
+        priorStreaks: new Map(),
+      },
+    });
+    expect(constituents.map((c) => c.corporationId.toString())).toContain(slipping._id.toString());
+    expect(droppedIds).toEqual([]);
+    expect(streaks).toEqual([
+      { corporationId: slipping._id.toString(), consecutiveFailures: 1, failures: ["size"] },
+    ]);
+  });
+
+  it("sells the incumbent once grace is exhausted", () => {
+    const slipping = corp({ sharePrice: 1, totalShares: 1 });
+    const { constituents, droppedIds } = buildIndexFundTargetConstituents({
+      corporations: [...pool(), slipping],
+      definition,
+      exchangeRates: rates,
+      retention: {
+        incumbentIds: new Set([slipping._id.toString()]),
+        priorStreaks: new Map([[slipping._id.toString(), LISTING_GRACE_TURNS - 1]]),
+      },
+    });
+    expect(constituents.map((c) => c.corporationId.toString())).not.toContain(
+      slipping._id.toString()
+    );
+    expect(droppedIds).toEqual([slipping._id.toString()]);
+  });
+
+  it("never fails a corporation for float it has no record of", () => {
+    // Reading absent float as zero would empty every index on the first
+    // rebalance, since most corporations carry no publicFloat at all.
+    const noFloat = corp({ sharePrice: 10, totalShares: 500 });
+    const { constituents } = buildIndexFundTargetConstituents({
+      corporations: [...pool(), noFloat],
+      definition,
+      exchangeRates: rates,
+    });
+    expect(constituents.map((c) => c.corporationId.toString())).toContain(noFloat._id.toString());
+  });
+});
+
+describe("committee waivers inside the basket build", () => {
+  const definition = {
+    scope: "country" as const,
+    kind: "broad" as const,
+    countryId: "US" as CountryId,
+    anchorCurrencyCode: "USD" as CurrencyCode,
+  };
+
+  function pool(): IndexFundCandidate[] {
+    return [10, 10, 10, 10, 10].map((price, i) =>
+      corp({ sharePrice: price, totalShares: 100 * (i + 1) })
+    );
+  }
+
+  it("admits a corporation that fails on size when it holds a waiver", () => {
+    const tiny = corp({ sharePrice: 1, totalShares: 1 });
+    const { constituents } = buildIndexFundTargetConstituents({
+      corporations: [...pool(), tiny],
+      definition,
+      exchangeRates: rates,
+      retention: {
+        incumbentIds: new Set(),
+        priorStreaks: new Map(),
+        waivedIds: new Set([tiny._id.toString()]),
+      },
+    });
+    expect(constituents.map((c) => c.corporationId.toString())).toContain(tiny._id.toString());
+  });
+
+  it("keeps an INSOLVENT corporation out however it was waived", () => {
+    // The waiver suppresses the qualification bars and never solvency, and it
+    // is enforced in the screen so no caller can grant what the rule forbids.
+    const broke = corp({ sharePrice: 10, totalShares: 500, liquidCapital: -1 });
+    const { constituents } = buildIndexFundTargetConstituents({
+      corporations: [...pool(), broke],
+      definition,
+      exchangeRates: rates,
+      retention: {
+        incumbentIds: new Set(),
+        priorStreaks: new Map(),
+        waivedIds: new Set([broke._id.toString()]),
+      },
+    });
+    expect(constituents.map((c) => c.corporationId.toString())).not.toContain(
+      broke._id.toString()
+    );
+  });
+
+  it("waives nothing for a corporation without one", () => {
+    const tiny = corp({ sharePrice: 1, totalShares: 1 });
+    const { constituents } = buildIndexFundTargetConstituents({
+      corporations: [...pool(), tiny],
+      definition,
+      exchangeRates: rates,
+      retention: {
+        incumbentIds: new Set(),
+        priorStreaks: new Map(),
+        waivedIds: new Set([new ObjectId().toString()]),
+      },
+    });
+    expect(constituents.map((c) => c.corporationId.toString())).not.toContain(tiny._id.toString());
   });
 });

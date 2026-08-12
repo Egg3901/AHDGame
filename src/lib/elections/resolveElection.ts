@@ -303,6 +303,16 @@ export async function resolveElections(
     elections.map((e) => [e._id.toString(), null])
   );
   const allIncumbentHolders = [...incumbentCharsRaw, ...incumbentNPPsRaw];
+  // Bucket holders by country+office so each election scans only its own
+  // office's holders instead of the full list (was O(elections × holders)).
+  const holdersByCountryOffice = new Map<string, typeof allIncumbentHolders>();
+  for (const h of allIncumbentHolders) {
+    if (!h.currentOffice) continue;
+    const key = `${h.countryId ?? "US"}:${h.currentOffice.type}`;
+    const bucket = holdersByCountryOffice.get(key) ?? [];
+    bucket.push(h);
+    holdersByCountryOffice.set(key, bucket);
+  }
   for (const election of elections) {
     if (!SINGLE_SEAT_TYPES.has(election.electionType)) continue;
     const isNational =
@@ -310,7 +320,9 @@ export async function resolveElections(
       election.electionType === "primeMinister" ||
       election.electionType === "uachtaran";
     const electionCountryId = election.countryId ?? "US";
-    const holder = allIncumbentHolders.find((h) => {
+    const candidatesForOffice =
+      holdersByCountryOffice.get(`${electionCountryId}:${election.electionType}`) ?? [];
+    const holder = candidatesForOffice.find((h) => {
       if (!h.currentOffice) return false;
       if (h.currentOffice.type !== election.electionType) return false;
       // Cross-country guard: only match holders in the same country as the
@@ -360,10 +372,22 @@ export async function resolveElections(
         .collection<PlayerEndorsement>("playerEndorsements")
         .find({ electionId: { $in: electionIds }, isActive: true })
         .toArray(),
+      // Only the last 72 snapshots per election are kept (see snapsLimited),
+      // so cap the fetch in the DB instead of loading full history and
+      // slicing in JS.
       db
         .collection<PrimarySnapshot>("primarySnapshots")
-        .find({ electionId: { $in: electionIds } })
-        .sort({ recordedAt: 1 })
+        .aggregate<PrimarySnapshot>([
+          { $match: { electionId: { $in: electionIds } } },
+          { $sort: { electionId: 1, recordedAt: -1 } },
+          {
+            $group: { _id: "$electionId", docs: { $push: "$$ROOT" } },
+          },
+          { $project: { docs: { $slice: ["$docs", 72] } } },
+          { $unwind: "$docs" },
+          { $replaceRoot: { newRoot: "$docs" } },
+          { $sort: { recordedAt: 1 } },
+        ])
         .toArray(),
       db
         .collection<Campaign>("campaigns")
@@ -373,7 +397,32 @@ export async function resolveElections(
         )
         .toArray(),
       hasPresident
-        ? db.collection<StatePartyOrg>("statePartyOrg").find({}).toArray()
+        ? db
+            .collection<StatePartyOrg>("statePartyOrg")
+            .find(
+              {
+                countryId: {
+                  $in: [
+                    ...new Set(
+                      elections
+                        .filter((e) => e.electionType === "president")
+                        .map((e) => e.countryId ?? "US")
+                    ),
+                  ],
+                },
+              },
+              {
+                projection: {
+                  stateId: 1,
+                  partyId: 1,
+                  countryId: 1,
+                  organization: 1,
+                  primarySurge: 1,
+                  primaryAllocation: 1,
+                },
+              }
+            )
+            .toArray()
         : Promise.resolve([] as StatePartyOrg[]),
     ]);
 

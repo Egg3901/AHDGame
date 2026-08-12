@@ -33,6 +33,7 @@ const BASE_ARGS = {
   governorCap: 0.15,
   governorRampTurns: 48,
   marketSharePercent: 10,
+  competitorCount: 3,
   primeRate: 4,
   ceoAcumen: NEUTRAL_STAT,
   hostCostOfLivingIndex: 100,

@@ -1,3 +1,4 @@
+import type { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type {
   Corporation,
@@ -119,6 +120,7 @@ export async function snapshotPortfolioValues(turn: number): Promise<number> {
       netValue: number;
       stockValue: number;
       bondValue: number;
+      fundValue: number;
       cashValue: number;
       liquidCashValue: number;
       savingsCashValue: number;
@@ -133,6 +135,7 @@ export async function snapshotPortfolioValues(turn: number): Promise<number> {
       netValue: Math.max(0, buckets.wealth - buckets.locDebt),
       stockValue: 0,
       bondValue: 0,
+      fundValue: 0,
       cashValue: buckets.wealth,
       liquidCashValue: buckets.liquid,
       savingsCashValue: buckets.savings,
@@ -156,6 +159,7 @@ export async function snapshotPortfolioValues(turn: number): Promise<number> {
         netValue: 0,
         stockValue: 0,
         bondValue: 0,
+        fundValue: 0,
         cashValue: 0,
         liquidCashValue: 0,
         savingsCashValue: 0,
@@ -166,6 +170,7 @@ export async function snapshotPortfolioValues(turn: number): Promise<number> {
         netValue: existing.netValue + stockValue,
         stockValue: existing.stockValue + stockValue,
         bondValue: existing.bondValue,
+        fundValue: existing.fundValue,
         cashValue: existing.cashValue,
         liquidCashValue: existing.liquidCashValue,
         savingsCashValue: existing.savingsCashValue,
@@ -193,6 +198,7 @@ export async function snapshotPortfolioValues(turn: number): Promise<number> {
           stockValue: 0,
           bondValue: 0,
           cashValue: 0,
+          fundValue: 0,
           liquidCashValue: 0,
           savingsCashValue: 0,
           locDebtValue: 0,
@@ -202,12 +208,66 @@ export async function snapshotPortfolioValues(turn: number): Promise<number> {
           netValue: existing.netValue + bondValueAnchor,
           stockValue: existing.stockValue,
           bondValue: existing.bondValue + bondValueAnchor,
+          fundValue: existing.fundValue,
           cashValue: existing.cashValue,
           liquidCashValue: existing.liquidCashValue,
           savingsCashValue: existing.savingsCashValue,
           locDebtValue: existing.locDebtValue,
         });
       }
+    }
+  }
+
+  // Index-fund positions. `quotedNav` and every other fund leg are ₳, so
+  // units x NAV needs no conversion. Omitting funds meant a player who held
+  // nothing else showed a flat portfolio line while their wealth moved.
+  const fundPositions = await db
+    .collection<{ fundId: ObjectId; holderKind: string; characterId?: ObjectId; units?: number }>(
+      "indexFundPositions"
+    )
+    .find(
+      { holderKind: "character", characterId: { $exists: true }, units: { $gt: 0 } },
+      { projection: { fundId: 1, characterId: 1, units: 1 } }
+    )
+    .toArray();
+
+  if (fundPositions.length > 0) {
+    const navByFundId = new Map<string, number>(
+      (
+        await db
+          .collection<{ _id: ObjectId; quotedNav?: number }>("indexFunds")
+          .find(
+            { _id: { $in: [...new Set(fundPositions.map((p) => p.fundId))] } },
+            { projection: { quotedNav: 1 } }
+          )
+          .toArray()
+      ).map((f) => [f._id.toString(), f.quotedNav ?? 0])
+    );
+
+    for (const position of fundPositions) {
+      const charId = position.characterId?.toString();
+      if (!charId) continue;
+      const nav = navByFundId.get(position.fundId.toString()) ?? 0;
+      const fundValueAnchor = (position.units ?? 0) * nav;
+      if (!(fundValueAnchor > 0)) continue;
+
+      const existing = portfolioMap.get(charId) ?? {
+        totalValue: 0,
+        netValue: 0,
+        stockValue: 0,
+        bondValue: 0,
+        fundValue: 0,
+        cashValue: 0,
+        liquidCashValue: 0,
+        savingsCashValue: 0,
+        locDebtValue: 0,
+      };
+      portfolioMap.set(charId, {
+        ...existing,
+        totalValue: existing.totalValue + fundValueAnchor,
+        netValue: existing.netValue + fundValueAnchor,
+        fundValue: existing.fundValue + fundValueAnchor,
+      });
     }
   }
 
@@ -228,6 +288,7 @@ export async function snapshotPortfolioValues(turn: number): Promise<number> {
       netValue: Math.round(values.netValue * 100) / 100,
       stockValue: Math.round(values.stockValue * 100) / 100,
       bondValue: Math.round(values.bondValue * 100) / 100,
+      fundValue: Math.round(values.fundValue * 100) / 100,
       cashValue: Math.round(values.cashValue * 100) / 100,
       liquidCashValue: Math.round(values.liquidCashValue * 100) / 100,
       savingsCashValue: Math.round(values.savingsCashValue * 100) / 100,

@@ -164,6 +164,16 @@ const REFERENCE: CollectionEntry[] = [
   { name: "unionEndorsements", category: "runtime" },
   { name: "unionLeaderVotes", category: "runtime" },
   { name: "unionOrganizers", category: "runtime" },
+  {
+    name: "bargainingCampaigns",
+    category: "runtime",
+    notes: "Release 1.1 union-employer negotiation history; tied to unions and corporations.",
+  },
+  {
+    name: "collectiveAgreements",
+    category: "runtime",
+    notes: "Release 1.1 enforceable wage and labor-peace terms; tied to campaign locals.",
+  },
   { name: "seats", category: "reference", seededBy: "seedSeats" },
   { name: "statePolicies", category: "reference", seededBy: "seedStatePolicies" },
   {
@@ -398,6 +408,21 @@ const RUNTIME: CollectionEntry[] = [
   // Bonds
   { name: "bonds", category: "runtime" },
   { name: "bondHistory", category: "runtime" },
+
+  // Private banking (1.1)
+  { name: "bankLoans", category: "runtime" },
+  { name: "bankCharterHistory", category: "runtime" },
+  { name: "depositInsuranceFunds", category: "runtime" },
+  {
+    name: "interbankLoans",
+    category: "runtime",
+    notes: "Retail/universal banks lending non-reserved cash to investment/universal banks.",
+  },
+  {
+    name: "bankingLaws",
+    category: "runtime",
+    notes: "Per-country banking separation law and rate corridors, enacted by bill or chair.",
+  },
 
   // Forex + commodities runtime
   { name: "currencyOrders", category: "runtime" },

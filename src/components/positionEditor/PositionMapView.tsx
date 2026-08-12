@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useAbortableEffectFetch } from "@/hooks/useAbortableEffectFetch";
 import Link from "next/link";
 import { USAMapPaths, type StateMapData } from "@/components/USAMapPaths";
 import { UKMapPaths } from "@/components/UKMapPaths";
@@ -48,10 +49,17 @@ export function PositionMapView() {
   const [selected, setSelected] = useState<PresetState | null>(null);
   const [axis, setAxis] = useState<"display" | "economic" | "social">("display");
 
-  useEffect(() => {
-    fetch(`/api/admin/position-editor/preset?era=${era}&country=${country}`)
-      .then((r) => r.json())
-      .then((d) => {
+  // Era and country are pickers, so this refetches in place. Without an abort a
+  // slow response for the previous pair can land after the new one and paint
+  // one era's leans onto another era's map.
+  useAbortableEffectFetch(
+    async (signal) => {
+      const response = await fetch(
+        `/api/admin/position-editor/preset?era=${era}&country=${country}`,
+        { signal }
+      );
+      const d = await response.json();
+      {
         const overrides = new Map(listOverrides(era, country).map((o) => [o.stateId, o]));
         const merged: PresetState[] = (d.states ?? []).map((s: PresetState) => {
           const ov = overrides.get(s.stateId);
@@ -69,8 +77,10 @@ export function PositionMapView() {
         });
         setSelected(null);
         setStates(merged);
-      });
-  }, [era, country]);
+      }
+    },
+    [era, country]
+  );
 
   const stateData = useMemo(() => {
     const out: Record<string, StateMapData> = {};

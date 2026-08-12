@@ -151,6 +151,11 @@ export interface Corporation {
   typeSwitchTurn?: number | null;
   /** Turn after which another type switch is allowed (cooldown) */
   typeSwitchCooldownUntilTurn?: number | null;
+  /**
+   * Private banking (1.1): the corp's chartered bank, if any. Requires owning
+   * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
+   */
+  bankCharter?: import("./bank").BankCharter;
   /** Character who owns/runs this corporation */
   ceoId: ObjectId;
   /** Whether the CEO is a regular character, imperial character, or NPP. Defaults to "character". */
@@ -531,6 +536,13 @@ export interface Corporation {
   isSpinOff?: boolean;
   spunOffFromCorpId?: ObjectId;
   /**
+   * Turn this corporation was spun off. Only the PARENT recorded a spin-off
+   * timestamp before (`lastSpinOffTurn`, a cooldown anchor), so the spun-off
+   * corp itself had no age. C6 group synergies need it for the brand
+   * inheritance window.
+   */
+  spunOffAtTurn?: number;
+  /**
    * Parent-set dividend floor (percent 0–100), folded into the existing
    * effective-dividend-rate `max(...)` rule. Only honored while
    * `parentDividendFloorSetByCorpId` still controls >50% voting of this corp;
@@ -543,6 +555,12 @@ export interface Corporation {
   lastSpinOffTurn?: number;
   /** Per-subsidiary cooldown anchor for parent capital injections into this corp. */
   lastCapitalInjectionTurn?: number;
+  /**
+   * Divestiture ordered as the remedy on a cleared-with-conditions merger (C3).
+   * Satisfied by spinning off the named industry; overdue it fines this corp
+   * every turn and bars it from opening new acquisitions.
+   */
+  pendingDivestiture?: import("./mergerReview").PendingDivestiture;
   createdAt: Date;
   updatedAt: Date;
 }

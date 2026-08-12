@@ -22,6 +22,7 @@ import type { Corporation } from "@/lib/db/types/corporation";
 import type { GameConfig, GameState } from "@/lib/db/types";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import { resolveCommandEconomyRoles, canSetRepression } from "@/lib/economy/commandEconomyAuth";
+import { aggregatePlanFulfillment } from "@/lib/economy/soe";
 import {
   computeMarketizationDrivers,
   gosbankCostLabel,
@@ -182,7 +183,10 @@ export async function loadCommandEconomyDashboard(
     marketizationLevel,
     drivers,
     soes,
-    aggregateFulfillment: drivers.soePerformance,
+    // The directors' grade, which is now a DIFFERENT number from
+    // `drivers.soePerformance` (capacity utilisation). Computed from the same
+    // presented SOEs so the headline agrees with the per-enterprise rows.
+    aggregateFulfillment: aggregatePlanFulfillment(soes),
     gosbank: {
       creditAggressiveness,
       budgetSoftness,

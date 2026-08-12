@@ -13,6 +13,8 @@
  * Spec: docs/superpowers/specs/2026-07-06-era-legislation-design.md (Appendix A).
  */
 
+import { BANKING_SEPARATION_ERA_ENTRIES } from "@/lib/seeds/shared/bankingSeparationLegislation";
+
 export const LEGISLATION_ERA: Record<string, number | "always"> = {
   // ── Windowed (74) — numbers are the first fileable calendar year ──────────
   // US (8)
@@ -732,6 +734,8 @@ export const LEGISLATION_ERA: Record<string, number | "always"> = {
   yu_social_security_fund: "always",
   yu_state_administration: "always",
   yu_universal_education: "always",
+  // Banking separation: reusable charter law, era-universal for every legislature.
+  ...BANKING_SEPARATION_ERA_ENTRIES,
 };
 
 /**

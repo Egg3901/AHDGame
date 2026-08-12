@@ -113,6 +113,10 @@ export function applyFogToFinancials(financials: Financials, factor: number): Fi
     logisticsCosts: fog(financials.logisticsCosts, factor),
     rdCosts: fog(financials.rdCosts, factor),
     ceoSalaryCost: fog(financials.ceoSalaryCost, factor),
+    pensionContributionCost: fog(financials.pensionContributionCost, factor),
+    pensionTopUpCost: fog(financials.pensionTopUpCost, factor),
+    // A count, not money. Fogging it would report a different number of schemes.
+    pensionSchemesInDeficit: financials.pensionSchemesInDeficit,
     operatingCosts: fog(financials.operatingCosts, factor),
     operatingIncome: fog(financials.operatingIncome, factor),
     federalTax: fog(financials.federalTax, factor),

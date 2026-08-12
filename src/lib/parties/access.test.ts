@@ -40,7 +40,7 @@ describe("party access helpers", () => {
     expect(getNationalPartyLeadershipRole(party as never, new ObjectId())).toBeNull();
   });
 
-  it("allows only chair, vice chair, or admins to use national party influence", () => {
+  it("allows chair, vice chair, and admins to use national party influence", () => {
     expect(
       canUseNationalPartyInfluence(
         party as never,
@@ -142,8 +142,17 @@ describe("campaigner role helpers", () => {
     expect(isStateCampaigner(null, stateCampaignerId)).toBe(false);
   });
 
-  it("canUseNationalPartyInfluence excludes national campaigner (Build Org only)", () => {
-    expect(canUseNationalPartyInfluence(party as never, mkUser(nationalCampaignerId))).toBe(false);
+  it("canUseNationalPartyInfluence — chair / vice / confirmed campaigner / admin allowed", () => {
+    expect(canUseNationalPartyInfluence(party as never, mkUser(chairId))).toBe(true);
+    expect(canUseNationalPartyInfluence(party as never, mkUser(viceChairId))).toBe(true);
+    // Suggestion #269: committee-confirmed campaigners hold NPP Management.
+    expect(canUseNationalPartyInfluence(party as never, mkUser(nationalCampaignerId))).toBe(true);
+    expect(canUseNationalPartyInfluence(party as never, mkUser(outsiderId, true))).toBe(true);
+  });
+
+  it("canUseNationalPartyInfluence — treasurer and plain members still excluded", () => {
+    expect(canUseNationalPartyInfluence(party as never, mkUser(treasurerId))).toBe(false);
+    expect(canUseNationalPartyInfluence(party as never, mkUser(outsiderId))).toBe(false);
   });
 
   it("canSpendOnStateParty — chair / vice / state campaigner / national chair / national campaigner / admin all allowed", () => {
@@ -177,7 +186,7 @@ describe("campaigner role helpers", () => {
     );
   });
 
-  it("canRelocateOrRecruit — campaigners EXCLUDED, chair / vice / admin only", () => {
+  it("canRelocateOrRecruit (Recruitment) — campaigners EXCLUDED, chair / vice / admin only", () => {
     // Both campaigner roles should fail
     expect(
       canRelocateOrRecruit(party as never, stateParty as never, mkUser(nationalCampaignerId))

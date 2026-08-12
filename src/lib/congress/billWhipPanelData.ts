@@ -58,6 +58,11 @@ interface BillWhipViewerContext {
 const ACTIONABLE_BILL_STATUSES = new Set([
   "active",
   "active_other",
+  // Both chambers are voting, so both are whippable. ⚠️ The whip WRITERS
+  // (applyPlayerWhip / applyWhipVotes) must already route per member before this is
+  // opened — otherwise a whipped upper-chamber member's vote and weight land in the
+  // lower tally and the bill can pass on the other house's votes.
+  "active_both",
   "veto_override",
   "override_shugiin",
 ]);
@@ -119,7 +124,11 @@ export async function buildBillWhipPanelData(
       : []),
   ];
   const activeChambers =
-    bill.status === "veto_override"
+    // Both of these run both chambers at once, so `currentChamber` — a display
+    // default on a concurrent bill — would hide the upper house entirely: its
+    // whips would fail the leader gate below and its members would never be
+    // listed, even though the whip routes accept votes from them.
+    bill.status === "veto_override" || bill.status === "active_both"
       ? chamberOptions.map((chamber) => chamber.key)
       : chamberOptions
           .filter((chamber) => chamber.key === bill.currentChamber)

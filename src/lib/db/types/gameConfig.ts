@@ -122,6 +122,16 @@ export interface GameConfig {
    * Defaults to **enabled** — absent/undefined means on; only explicit `false` disables.
    */
   lineOfCreditEnabled?: boolean;
+  /**
+   * Private banking (1.1): corp-chartered banks, deposits, lending, failure.
+   * Defaults to **disabled** — only explicit `true` enables. Flag-off is a
+   * read-only freeze: pages render, no actions accepted, nothing unwinds.
+   */
+  privateBankingEnabled?: boolean;
+  /** Kill switch: investment-bank proprietary trading (incl. leveraged forex). Default on when banking is on. */
+  bankPropTradingEnabled?: boolean;
+  /** Kill switch: bank-failure contagion cascade. Default on when banking is on. */
+  bankContagionEnabled?: boolean;
   /** Per-currency M1/M2 snapshots, monetary transmission, and central-bank operations. */
   moneySupplyEnabled?: boolean;
   /**

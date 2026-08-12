@@ -32,6 +32,7 @@ import {
 } from "@/lib/economy/commandEconomyState";
 import {
   aggregatePlanFulfillment,
+  aggregateCapacityUtilisation,
   resolveCreditAllocation,
   applyDirectedCreditToSoe,
   directedCreditBudget,
@@ -329,11 +330,21 @@ export async function processCommandEconomyTurn(
       }
       directedCreditReadout[state.sector] = Math.round(credit);
     }
-    // Score fulfillment AFTER credit — funding the right sectors lifts output.
+    // Score AFTER credit — funding the right sectors lifts output.
+    //
+    // Two different scores, deliberately:
+    //  - `soeFulfillment` (output / planTarget) is the DIRECTOR'S grade and the
+    //    goods-availability signal, because a plan the enterprises missed is
+    //    consumer goods the wage fund already paid for. It feeds the overhang.
+    //  - `soePerf` (output / capacity) drives the MARKETIZATION dial, because
+    //    `planTarget` is written by the Gosplan chair and using it here let the
+    //    planner choose the denominator of their own grade and steer a world
+    //    scalar with it. See `aggregateCapacityUtilisation`.
+    const scoredSoes = soes.map((s) => finalStateByCorp.get(s.corpId)!);
+    const soeFulfillment =
+      soes.length > 0 ? aggregatePlanFulfillment(scoredSoes) : SOE_PERF_BASELINE;
     const soePerf =
-      soes.length > 0
-        ? aggregatePlanFulfillment(soes.map((s) => finalStateByCorp.get(s.corpId)!))
-        : SOE_PERF_BASELINE;
+      soes.length > 0 ? aggregateCapacityUtilisation(scoredSoes) : SOE_PERF_BASELINE;
 
     // ── Issuance → overhang (the tradeoff) ───────────────────────────────────
     // `creditTotalFunded` (not `creditTotal`) — the replacement floor above is
@@ -363,7 +374,8 @@ export async function processCommandEconomyTurn(
       factors?.gdpGrowth ?? 0,
       share,
       relief,
-      creditInjection
+      creditInjection,
+      soeFulfillment
     );
     const shortageIndex = shortageIndexFrom(overhang);
     const blackMarketPremium = blackMarketPremiumFrom(shortageIndex, overhang, tolerance);

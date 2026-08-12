@@ -1,4 +1,7 @@
 import type { Db, ObjectId } from "mongodb";
+import { resolveBillVoteField } from "@/lib/congress/billVoteField";
+import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
+import type { CountryId } from "@/lib/constants/countries";
 import type { Bill, CabinetNomination, ElectedOfficial, SpeakerNomination } from "@/lib/db/types";
 import {
   getPMAppointmentVotesCollection,
@@ -53,7 +56,7 @@ export async function applyPlayerWhipToBill(
     .collection<ElectedOfficial>("electedOfficials")
     .find(
       { characterId: { $in: eligibleCharacterIds } },
-      { projection: { characterId: 1, seatsHeld: 1 } }
+      { projection: { characterId: 1, seatsHeld: 1, officeType: 1 } }
     )
     .toArray();
   const weightByCharId = new Map<string, number>(
@@ -61,25 +64,72 @@ export async function applyPlayerWhipToBill(
       .filter((o) => o.characterId != null)
       .map((o) => [o.characterId!.toString(), o.seatsHeld ?? 1])
   );
+  const officeTypeByCharId = new Map<string, string>(
+    officials
+      .filter((o) => o.characterId != null)
+      .map((o) => [o.characterId!.toString(), o.officeType])
+  );
+
+  /**
+   * On a CONCURRENT bill the four forks above are per-MEMBER, not per-bill.
+   *
+   * Whipping an upper-chamber member through the lower branch writes their vote AND
+   * their weight into the lower chamber's map and tally — so the bill can PASS on votes
+   * cast by the other house. That is worse than the fail-closed cases elsewhere in this
+   * change, because nothing looks wrong.
+   *
+   * The lower chamber is the bill's origin chamber; every other seated office type on a
+   * concurrent bill is the upper one.
+   */
+  const isConcurrent = bill.status === "active_both";
+  const lowerOfficeType = isConcurrent
+    ? getOfficeTypeForChamber(
+        (bill.countryId ?? "US") as CountryId,
+        bill.originChamber === "joint" ? (bill.currentChamber ?? "") : bill.originChamber
+      )
+    : "";
+
+  const routeFor = (key: string) => {
+    if (!isConcurrent) {
+      return { field: voteField, snapshot: snapshotField, existing: existingVotes };
+    }
+    const field = resolveBillVoteField(bill, {
+      voterOfficeType: officeTypeByCharId.get(key),
+      lowerOfficeType,
+    });
+    return field === "otherChamberVotes"
+      ? {
+          field,
+          snapshot: "otherChamberWhippedFromVote",
+          existing: bill.otherChamberVotes ?? {},
+        }
+      : { field, snapshot: "whippedFromVote", existing: bill.votes ?? {} };
+  };
+
+  /** Per-field net deltas — one bucket for every non-concurrent status. */
+  const net = new Map<string, { f: number; a: number; ab: number }>();
+  const netOf = (field: string) => {
+    let n = net.get(field);
+    if (!n) {
+      n = { f: 0, a: 0, ab: 0 };
+      net.set(field, n);
+    }
+    return n;
+  };
 
   let overridden = 0;
   let alreadyAligned = 0;
-  let incFor = 0;
-  let incAgainst = 0;
-  const incAbstain = 0;
-  let decFor = 0;
-  let decAgainst = 0;
-  let decAbstain = 0;
 
   const setFields: Record<string, unknown> = { updatedAt: new Date() };
 
   for (const charId of eligibleCharacterIds) {
     const key = charId.toString();
-    const previous = existingVotes[key];
+    const route = routeFor(key);
+    const previous = route.existing[key];
     const snapshot: "for" | "against" | "abstain" | "unvoted" = previous ?? "unvoted";
 
-    setFields[`${snapshotField}.${key}`] = snapshot;
-    setFields[`${voteField}.${key}`] = direction;
+    setFields[`${route.snapshot}.${key}`] = snapshot;
+    setFields[`${route.field}.${key}`] = direction;
 
     if (previous === direction) {
       alreadyAligned++;
@@ -88,35 +138,33 @@ export async function applyPlayerWhipToBill(
     overridden++;
 
     const weight = weightByCharId.get(key) ?? 1;
+    const n = netOf(route.field);
 
-    if (previous === "for") decFor += weight;
-    else if (previous === "against") decAgainst += weight;
-    else if (previous === "abstain") decAbstain += weight;
+    if (previous === "for") n.f -= weight;
+    else if (previous === "against") n.a -= weight;
+    else if (previous === "abstain") n.ab -= weight;
 
-    if (direction === "for") incFor += weight;
-    else incAgainst += weight;
+    if (direction === "for") n.f += weight;
+    else n.a += weight;
   }
 
+  /** Counter names per vote field. Override carries no abstain counter. */
+  const TALLY: Record<string, [string, string, string | null]> = {
+    votes: ["votesFor", "votesAgainst", "votesAbstain"],
+    otherChamberVotes: [
+      "otherChamberVotesFor",
+      "otherChamberVotesAgainst",
+      "otherChamberVotesAbstain",
+    ],
+    vetoOverrideVotes: ["vetoOverrideVotesFor", "vetoOverrideVotesAgainst", null],
+  };
+
   const incFields: Record<string, number> = {};
-  if (isOtherChamber) {
-    const netFor = incFor - decFor;
-    const netAgainst = incAgainst - decAgainst;
-    const netAbstain = incAbstain - decAbstain;
-    if (netFor !== 0) incFields.otherChamberVotesFor = netFor;
-    if (netAgainst !== 0) incFields.otherChamberVotesAgainst = netAgainst;
-    if (netAbstain !== 0) incFields.otherChamberVotesAbstain = netAbstain;
-  } else if (isOverride) {
-    const netFor = incFor - decFor;
-    const netAgainst = incAgainst - decAgainst;
-    if (netFor !== 0) incFields.vetoOverrideVotesFor = netFor;
-    if (netAgainst !== 0) incFields.vetoOverrideVotesAgainst = netAgainst;
-  } else {
-    const netFor = incFor - decFor;
-    const netAgainst = incAgainst - decAgainst;
-    const netAbstain = incAbstain - decAbstain;
-    if (netFor !== 0) incFields.votesFor = netFor;
-    if (netAgainst !== 0) incFields.votesAgainst = netAgainst;
-    if (netAbstain !== 0) incFields.votesAbstain = netAbstain;
+  for (const [field, n] of net) {
+    const [forKey, againstKey, abstainKey] = TALLY[field]!;
+    if (n.f !== 0) incFields[forKey] = n.f;
+    if (n.a !== 0) incFields[againstKey] = n.a;
+    if (abstainKey && n.ab !== 0) incFields[abstainKey] = n.ab;
   }
 
   await db

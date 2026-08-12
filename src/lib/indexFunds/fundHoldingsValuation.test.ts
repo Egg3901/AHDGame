@@ -56,30 +56,36 @@ describe("fundHoldingsValuation", () => {
     expect(refreshed[0].lastValueAnchor).toBe(20_000);
   });
 
-  it("cross-currency: converts JPY share price to USD anchor (rates are local-per-₳)", () => {
-    // Rates: local currency per 1 ₳. USD≈1.005, JPY=102.23.
-    // ¥30,000 share → ₳ first: 30,000 / 102.23 ≈ 293.5 ₳ → USD: 293.5 × 1.005 ≈ 294.9
+  it("converts a JPY share price into ₳ (rates are local-per-₳)", () => {
+    // Rates: local currency per 1 ₳. ¥30,000 / 102.23 ≈ 293.5 ₳. The fund's own
+    // currency is irrelevant: every fund leg is ₳.
     const rates = { USD: 1.005, JPY: 102.23 };
-    const result = convertLocalPriceToAnchor(30_000, "JPY", "USD", rates);
-    expect(result).toBeCloseTo(294.9, 0);
+    const result = convertLocalPriceToAnchor(30_000, "JPY", rates);
+    expect(result).toBeCloseTo(293.5, 0);
   });
 
-  it("cross-currency: converts CNY share price to USD anchor", () => {
-    // ¥3,221 CNY at rate 7.138 CNY/₳, USD 1.005/₳ → 3221 / 7.138 * 1.005 ≈ 453.5
+  it("converts a CNY share price into ₳", () => {
+    // ¥3,221 CNY at 7.138 CNY/₳ → 451.2 ₳
     const rates = { USD: 1.005, CNY: 7.138 };
-    const result = convertLocalPriceToAnchor(3_221, "CNY", "USD", rates);
-    expect(result).toBeCloseTo(453.5, 0);
+    const result = convertLocalPriceToAnchor(3_221, "CNY", rates);
+    expect(result).toBeCloseTo(451.2, 0);
   });
 
-  it("cross-currency: converts GBP share price to USD anchor", () => {
-    // £100 at GBP 0.8385/₳, USD 1.005/₳ → 100 / 0.8385 * 1.005 ≈ 119.9
+  it("converts a GBP share price into ₳", () => {
+    // £100 at 0.8385 GBP/₳ → 119.3 ₳
     const rates = { USD: 1.005, GBP: 0.8385 };
-    const result = convertLocalPriceToAnchor(100, "GBP", "USD", rates);
-    expect(result).toBeCloseTo(119.9, 0);
+    const result = convertLocalPriceToAnchor(100, "GBP", rates);
+    expect(result).toBeCloseTo(119.3, 0);
   });
 
-  it("same-currency short-circuit returns localPrice unchanged", () => {
-    expect(convertLocalPriceToAnchor(50, "USD", "USD", { USD: 1.005 })).toBe(50);
+  it("divides even a USD price by its rate: no currency is 1:1 with ₳", () => {
+    // The old same-currency short-circuit against the FUND's currency is what
+    // made a USD fund look correct while every other fund mispriced.
+    expect(convertLocalPriceToAnchor(50, "USD", { USD: 1.005 })).toBeCloseTo(49.75, 2);
+  });
+
+  it("treats a pre-forex corp with no home currency as already ₳", () => {
+    expect(convertLocalPriceToAnchor(50, undefined, { USD: 1.005 })).toBe(50);
   });
 
   it("MTM refresh applies correct cross-currency conversion for JPY corp in USD fund", () => {
@@ -103,8 +109,8 @@ describe("fundHoldingsValuation", () => {
     ]);
     const rates = { USD: 1.005, JPY: 102.23 };
     const refreshed = refreshFundHoldingsMarkToMarket(jpyFund, corpById, rates);
-    // 10 shares × ¥30,000 at JPY=102.23, USD=1.005 → 10 × 294.9 ≈ 2,949
-    expect(refreshed[0].lastValueAnchor).toBeCloseTo(2_949, 0);
+    // 10 shares × ¥30,000 at JPY=102.23 → 10 × 293.5 ≈ 2,935 ₳
+    expect(refreshed[0].lastValueAnchor).toBeCloseTo(2_935, 0);
   });
 
   it("updates NAV when holdings are marked to market", () => {

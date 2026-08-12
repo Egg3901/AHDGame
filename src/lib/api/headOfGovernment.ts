@@ -47,6 +47,27 @@ export async function getHeadOfGovernmentCharacterId(
 }
 
 /**
+ * The head of government as a sponsor: id plus display name.
+ *
+ * Anything that FILES something in the government's name needs the name too, and
+ * resolving it from the id at each call site duplicates the characters lookup.
+ * Returns null when the office is vacant, or when the seat names a character the
+ * characters collection no longer has.
+ */
+export async function getHeadOfGovernmentCharacter(
+  db: Db,
+  countryId: CountryId
+): Promise<{ _id: ObjectId; name: string } | null> {
+  const characterId = await getHeadOfGovernmentCharacterId(db, countryId);
+  if (!characterId) return null;
+  const character = await db
+    .collection<{ _id: ObjectId; name?: string }>("characters")
+    .findOne({ _id: characterId }, { projection: { name: 1 } });
+  if (!character) return null;
+  return { _id: characterId, name: character.name ?? "Head of Government" };
+}
+
+/**
  * Reverse lookup: which country (if any) is this character the head of
  * government of? Walks every active country once. Used by the
  * intorg "me" endpoint to gate UI buttons.
@@ -70,15 +91,17 @@ export async function findCountryHeadedBy(
   const legacyHit = legacy.find((l) => l.pmCharacterId?.toString() === idStr);
   if (legacyHit) return legacyHit.countryId;
 
-  for (const c of COUNTRY_ORDER) {
-    const runtime = await getCountryState(db, c);
-    if (runtime.governmentType !== "presidential") continue;
-    const row = await db.collection<ElectedOfficial>("electedOfficials").findOne({
-      countryId: c,
-      officeType: "president",
-      characterId,
-    });
-    if (row) return c;
+  // One lookup instead of a per-country getCountryState + findOne walk: a
+  // character holds at most one presidency, so find the row first and only
+  // then confirm that country is presidential.
+  const row = await db.collection<ElectedOfficial>("electedOfficials").findOne({
+    officeType: "president",
+    characterId,
+    countryId: { $in: COUNTRY_ORDER },
+  });
+  if (row) {
+    const runtime = await getCountryState(db, row.countryId as CountryId);
+    if (runtime.governmentType === "presidential") return row.countryId as CountryId;
   }
 
   return null;

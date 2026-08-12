@@ -159,6 +159,11 @@ const SIZE_CAP_EXEMPT = [
   "src/lib/constants/cnCabinetMechanics.ts",
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/metricDefinitions.ts",
+  // The world alignment roster: one declarative row per entity (key, name, tier,
+  // 1953 status, map feature ids, metropole) and no runtime logic. It grows by a
+  // line whenever an entity gains geometry, which is data entry rather than a
+  // decomposition signal — `alignmentRoster.test.ts` is what keeps it honest.
+  "src/lib/constants/alignmentRoster.ts",
   // GENERATED demographic composition weights. The generator emits a typed,
   // reviewable table of numeric records with no runtime logic.
   "src/lib/demographics/compositionWeights.generated.ts",
@@ -186,6 +191,12 @@ const SIZE_CAP_EXEMPT = [
 // Do not add new entries here for new code — decompose first.
 const SIZE_CAP_ALLOWLIST = new Set([
   // >2000 LOC (block tier)
+  // Pure data: 476 authored tech-tree slot literals for decades 1940-1970, zero
+  // functions. Decomposing it would split one table across files for no reader's
+  // benefit, which is what the "documented data files" exemption is for. This
+  // was blocking the whole architecture gate, so `npm run verify` failed for
+  // everyone and stopped being run.
+  "src/lib/constants/techTree/earlySectorFill.ts",
   "src/app/country/[code]/central-bank/CentralBankClient.tsx",
   "src/app/country/[code]/parties/[id]/components/CaucusesTab.tsx",
   "src/app/bond/[id]/page.tsx",
@@ -448,6 +459,144 @@ function printMatches(matches) {
   }
 }
 
+// ---- Client/server boundary rule ---------------------------------------
+//
+// A "use client" file that imports a module which (transitively) needs node
+// built-ins puts that whole graph in the BROWSER bundle. `next build` fails,
+// but nothing else does: tsc and vitest both resolve these imports happily,
+// which is how the 1.1 line stayed unbuildable for two days across twenty
+// failed deploys while every local gate reported green.
+//
+// The case that caused it: CentralBankReserveTab.tsx imported two numeric
+// constants from `@/lib/banking/reserves`, which imports mongodb and reaches
+// gdpAnchorRate, the turn engine, and finally `sharp`. Two numbers, 24 build
+// errors.
+//
+// This walks the real import graph from every client entry point, so it catches
+// the offence at any depth rather than only a direct import.
+
+/**
+ * Server-only modules that CANNOT be bundled for the browser at all: native
+ * binaries and the like. Reaching one of these from a client component is a
+ * guaranteed `next build` failure, so it blocks.
+ */
+const UNBUNDLEABLE_MODULES = new Set(["sharp", "canvas", "bcrypt", "sqlite3"]);
+
+/** Modules that mean "this can only run on the server". */
+const SERVER_ONLY_MODULES = new Set([
+  "mongodb",
+  "sharp",
+  "fs",
+  "node:fs",
+  "fs/promises",
+  "node:fs/promises",
+  "net",
+  "node:net",
+  "tls",
+  "node:tls",
+  "dns",
+  "node:dns",
+  "child_process",
+  "node:child_process",
+  "async_hooks",
+  "node:async_hooks",
+  "timers/promises",
+  "node:timers/promises",
+  ...UNBUNDLEABLE_MODULES,
+]);
+
+// STATIC imports only. TypeScript's type-position `import("mongodb").ObjectId`
+// is erased at build time but is indistinguishable from a dynamic import by
+// regex, and dynamic imports are code-split anyway, so following them produced
+// false positives without catching anything `next build` actually rejects.
+const IMPORT_RE = /(?:^|\n)\s*import\s+(?:type\s+)?[^;]*?from\s*["']([^"']+)["']/g;
+
+/** Imports of a file: [specifier, isTypeOnly]. Type imports are erased at build. */
+function readImports(file) {
+  let content;
+  try {
+    content = fs.readFileSync(file, "utf8");
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const m of content.matchAll(IMPORT_RE)) {
+    const spec = m[1];
+    if (!spec) continue;
+    const stmt = m[0];
+    // `import type {...}` is erased before bundling and cannot pull anything in.
+    out.push([spec, /\bimport\s+type\b/.test(stmt)]);
+  }
+  return out;
+}
+
+function resolveAlias(spec, fromFile) {
+  let base;
+  if (spec.startsWith("@/")) base = path.join(process.cwd(), "src", spec.slice(2));
+  else if (spec.startsWith(".")) base = path.resolve(path.dirname(fromFile), spec);
+  else return null;
+  for (const ext of [".ts", ".tsx", ".js", ".mjs"]) {
+    if (fs.existsSync(base + ext)) return base + ext;
+  }
+  for (const idx of ["/index.ts", "/index.tsx"]) {
+    if (fs.existsSync(base + idx)) return base + idx;
+  }
+  return fs.existsSync(base) && fs.statSync(base).isFile() ? base : null;
+}
+
+/**
+ * First path from `entry` to a server-only module, or null. Memoized across
+ * entry points; the cache holds the offending chain so the message can name it.
+ */
+function findServerOnlyPath(entry, cache = new Map(), stack = new Set()) {
+  if (cache.has(entry)) return cache.get(entry);
+  if (stack.has(entry)) return null; // cycle
+  stack.add(entry);
+
+  let found = null;
+  for (const [spec, isType] of readImports(entry)) {
+    if (isType) continue;
+    if (SERVER_ONLY_MODULES.has(spec)) {
+      found = [entry, spec];
+      break;
+    }
+    const next = resolveAlias(spec, entry);
+    if (!next) continue;
+    const deeper = findServerOnlyPath(next, cache, stack);
+    if (deeper) {
+      found = [entry, ...deeper];
+      break;
+    }
+  }
+
+  stack.delete(entry);
+  cache.set(entry, found);
+  return found;
+}
+
+function findClientServerViolations() {
+  const roots = ["src/app", "src/components"].map((d) => path.join(process.cwd(), d));
+  const violations = [];
+  const cache = new Map();
+  for (const root of roots) {
+    if (!fs.existsSync(root)) continue;
+    for (const file of walkDir(root)) {
+      if (!file.endsWith(".tsx") && !file.endsWith(".ts")) continue;
+      if (/\.(test|spec)\.tsx?$/.test(file)) continue;
+      let head;
+      try {
+        head = fs.readFileSync(file, "utf8").slice(0, 200);
+      } catch {
+        continue;
+      }
+      if (!/^\s*["']use client["']/m.test(head)) continue;
+      const chain = findServerOnlyPath(file, cache);
+      if (chain) violations.push({ file, chain });
+    }
+  }
+  return violations;
+}
+
 function main() {
   console.log("Architecture Audit");
   console.log("=".repeat(60));
@@ -482,6 +631,43 @@ function main() {
     }
 
     console.log();
+  }
+
+  // ---- Client/server boundary rule --------------------------------------
+  //
+  // Split by what `next build` actually does. Reaching a NATIVE module (sharp)
+  // is a guaranteed build failure, so it blocks. Reaching mongodb or a node
+  // built-in is a real boundary violation that the bundler currently tolerates,
+  // so it warns: it is one dependency away from becoming the blocking kind, and
+  // failing the build today for seven pre-existing cases would stop work
+  // without preventing anything.
+  const boundaryViolations = findClientServerViolations();
+  const printChain = ({ file, chain }) => {
+    console.log(`   ${path.relative(process.cwd(), file)}`);
+    const pretty = chain.map((step) =>
+      step.includes(path.sep) ? path.relative(process.cwd(), step) : step
+    );
+    console.log(`      ${pretty.join("\n      -> ")}`);
+  };
+  const fatal = boundaryViolations.filter((v) => UNBUNDLEABLE_MODULES.has(v.chain.at(-1)));
+  const latent = boundaryViolations.filter((v) => !UNBUNDLEABLE_MODULES.has(v.chain.at(-1)));
+
+  if (fatal.length > 0) {
+    console.log(`FAIL client component reaches an unbundleable module (${fatal.length})`);
+    console.log("   This fails `next build` and nothing else: tsc and vitest both resolve it.");
+    console.log("   Move the value the client needs into a module with no server imports.");
+    fatal.forEach(printChain);
+    console.log();
+    blockingCount += fatal.length;
+  } else {
+    console.log("PASS no client component reaches an unbundleable module");
+  }
+  if (latent.length > 0) {
+    console.log(`WARN client component reaches a server-only module (${latent.length})`);
+    console.log("   Tolerated by the bundler today. One native dependency away from fatal.");
+    latent.forEach(printChain);
+    console.log();
+    warningCount += latent.length;
   }
 
   // ---- Size cap rule ----------------------------------------------------

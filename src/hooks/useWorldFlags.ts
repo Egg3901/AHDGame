@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 
 export interface WorldFlags {
   preset: string;
@@ -36,22 +36,44 @@ const DEFAULT_FLAGS: WorldFlags = {
   loaded: false,
 };
 
-/** Fetches game-world era flags once on mount. Defaults to 2019-default
- *  behavior until the fetch resolves, so existing displays are unaffected
- *  on load and in 2019-default games. */
-export function useWorldFlags(): WorldFlags {
-  const [flags, setFlags] = useState<WorldFlags>(DEFAULT_FLAGS);
+// Module-level store: the flags are world-global, so one fetch serves every
+// consumer (currency provider, every metric card, ...) instead of one request
+// per mounted hook.
+let currentFlags: WorldFlags = DEFAULT_FLAGS;
+let fetchStarted = false;
+const listeners = new Set<() => void>();
 
-  useEffect(() => {
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  if (!fetchStarted) {
+    fetchStarted = true;
     fetch("/api/world/flags")
       .then((r) => r.json())
-      .then((data: WorldFlags) => setFlags({ ...data, loaded: true }))
+      .then((data: WorldFlags) => {
+        currentFlags = { ...data, loaded: true };
+        listeners.forEach((l) => l());
+      })
       .catch((err) => {
         // Silent — falls back to 2019-default behavior; keep the error observable.
         console.debug("world flags fetch failed", err);
-        setFlags((prev) => ({ ...prev, loaded: true }));
+        currentFlags = { ...currentFlags, loaded: true };
+        listeners.forEach((l) => l());
       });
-  }, []);
+  }
+  return () => listeners.delete(listener);
+}
 
-  return flags;
+function getSnapshot(): WorldFlags {
+  return currentFlags;
+}
+
+function getServerSnapshot(): WorldFlags {
+  return DEFAULT_FLAGS;
+}
+
+/** World era flags, fetched once per page load and shared by all consumers.
+ *  Defaults to 2019-default behavior until the fetch resolves, so existing
+ *  displays are unaffected on load and in 2019-default games. */
+export function useWorldFlags(): WorldFlags {
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

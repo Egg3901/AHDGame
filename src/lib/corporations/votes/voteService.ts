@@ -1,6 +1,8 @@
 import type { Db, ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { Character } from "@/lib/db/types/character";
+import { resolveFundStewardship } from "./fundStewardship";
+import type { FundInstruction } from "./fundStewardship";
 import type {
   CorporationVote,
   CorporationVoteType,
@@ -11,6 +13,22 @@ import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
 import { hasSuperShares, isValidSuperShareMultiplier } from "@/lib/corporations/superShares";
 
 export type VoteOutcome = "passed" | "failed" | "open";
+
+/**
+ * Fund instructions stored on a vote, keyed the way `resolveFundStewardship`
+ * reads them. The last instruction per fund wins, so a director who changes
+ * their mind does not need the earlier row removed.
+ */
+export function fundDirectionsFrom(vote: CorporationVote): Map<string, FundInstruction> {
+  const directions = new Map<string, FundInstruction>();
+  for (const d of vote.fundDirections ?? []) {
+    directions.set(d.fundId.toString(), {
+      vote: d.vote,
+      directorCharacterId: d.directorCharacterId,
+    });
+  }
+  return directions;
+}
 
 export function computeVoteOutcome(opts: {
   yesShares: number;
@@ -36,7 +54,8 @@ export function checkAutoResolve(opts: {
 }
 
 export type OpenVoteResult =
-  { ok: true; voteId: string } | { ok: false; error: string; status: number };
+  | { ok: true; voteId: string }
+  | { ok: false; error: string; status: number };
 
 export async function openCorporationVote(opts: {
   db: Db;
@@ -206,24 +225,44 @@ export async function resolveCorporationVoteIfReady(opts: {
 
   if (vote.status !== "open") return { outcome: vote.status as VoteOutcome, claimed: false };
 
-  const yesShares = vote.votes
-    .filter((v) => v.vote === "yes")
-    .reduce((s, v) => s + v.voteShares, 0);
-  const noShares = vote.votes.filter((v) => v.vote === "no").reduce((s, v) => s + v.voteShares, 0);
+  const castYes = vote.votes.filter((v) => v.vote === "yes").reduce((s, v) => s + v.voteShares, 0);
+  const castNo = vote.votes.filter((v) => v.vote === "no").reduce((s, v) => s + v.voteShares, 0);
+
+  // Fund stewardship: index funds hold real stakes that already sit in the
+  // denominator but could never be cast, so a fund-heavy corporation drifted
+  // toward permanent deadlock. Directed funds follow their controlling unit
+  // holder; passive ones mirror the majority actually cast; a fund with neither
+  // abstains AND drops out of the denominator, because measuring a threshold
+  // against shares nobody can cast is what caused the deadlock.
+  const corporation = await db
+    .collection<Corporation>("corporations")
+    .findOne({ _id: vote.corporationId });
+  const stewardship = corporation
+    ? await resolveFundStewardship(db, {
+        corporation,
+        castYes,
+        castNo,
+        directions: fundDirectionsFrom(vote),
+      })
+    : { yes: 0, no: 0, excludedFromDenominator: 0 };
+
+  const yesShares = castYes + stewardship.yes;
+  const noShares = castNo + stewardship.no;
+  const eligibleShares = Math.max(1, totalEligibleShares - stewardship.excludedFromDenominator);
 
   let outcome: VoteOutcome;
   if (currentTurn < vote.deadlineAtTurn) {
     outcome = checkAutoResolve({
       yesShares,
       noShares,
-      totalEligibleShares,
+      totalEligibleShares: eligibleShares,
       passThreshold: vote.passThreshold,
     });
     if (outcome === "open") return { outcome: "open", claimed: false };
   } else {
     outcome = computeVoteOutcome({
       yesShares,
-      totalEligibleShares,
+      totalEligibleShares: eligibleShares,
       passThreshold: vote.passThreshold,
     });
   }

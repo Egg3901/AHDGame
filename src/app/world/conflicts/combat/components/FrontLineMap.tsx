@@ -2,6 +2,7 @@
 
 import { useId, useMemo } from "react";
 import { useRegionGeometry } from "@/lib/maps/useRegionGeometry";
+import { useStaticHostGeometry } from "@/lib/maps/proxyHostGeometry";
 import { projectRegions, type ProjectedRegion } from "@/lib/maps/projectRegions";
 import { frontLine, sampleLand, type FrontBox, type PxPoint } from "@/lib/maps/frontLine";
 import { anchorOf } from "@/lib/maps/countryAnchors";
@@ -26,6 +27,10 @@ const FRONT_BOX: Record<string, FrontBox> = {
   CN: { w: 900, h: 638 },
   NG: { w: 900, h: 638 },
   US: { w: 1000, h: 750 },
+  // No entry for a proxy-war host: none of them is a playable country, so none has
+  // a map config to copy a box FROM, and inventing dimensions is how this table
+  // went wrong before. The portrait default suits them — Vietnam is tall and
+  // narrow, which is exactly the shape that default was chosen for.
 };
 const DEFAULT_FRONT_BOX: FrontBox = { w: 620, h: 837 };
 
@@ -101,14 +106,23 @@ export function FrontLineMap({
   sideBLabel,
 }: FrontLineMapProps) {
   const uid = useId().replace(/:/g, "");
-  const { features } = useRegionGeometry(hostRegionCodes);
+  const regionGeometry = useRegionGeometry(hostRegionCodes);
+  // A proxy war's host has no region codes at all, so the shard machinery returns
+  // nothing for it. Its static feature AND its roster code are merged in — the
+  // filter below drops any feature whose code is not in `codeKey`, so supplying
+  // one without the other renders an empty box.
+  const staticHost = useStaticHostGeometry(hostCountry);
+  const features = useMemo(
+    () => [...(regionGeometry.features ?? []), ...(staticHost.features ?? [])],
+    [regionGeometry.features, staticHost.features]
+  );
 
   const pctB = Math.round(control);
   const pctA = 100 - pctB;
 
   // Keyed on the sorted roster + control so the projection and the (comparatively
   // expensive) land sample are recomputed only when the war actually moves.
-  const codeKey = [...hostRegionCodes].sort().join(",");
+  const codeKey = [...hostRegionCodes, ...staticHost.codes].sort().join(",");
   const aKey = sideACountries.join(",");
   const bKey = sideBCountries.join(",");
 

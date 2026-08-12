@@ -21,7 +21,9 @@ export async function GET(_request: Request, { params }: RouteParams) {
       .sort({ earnedAt: -1 })
       .limit(5)
       .toArray();
-    const userIds = awards.map((award) => award.userId);
+    // Character-scoped awards (seeded and pre-multi-character grants) carry a
+    // characterId with no userId, so neither id can be assumed present.
+    const userIds = awards.flatMap((award) => (award.userId ? [award.userId] : []));
     const characterIds = awards.flatMap((award) => (award.characterId ? [award.characterId] : []));
     const [users, characters] = await Promise.all([
       db
@@ -43,10 +45,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
     return NextResponse.json({
       holders: awards.map((award) => ({
         name:
-          (award.characterId && characterNames.get(award.characterId.toString())) ??
-          userNames.get(award.userId.toString()) ??
+          (award.characterId ? characterNames.get(award.characterId.toString()) : undefined) ??
+          (award.userId ? userNames.get(award.userId.toString()) : undefined) ??
           "Player",
-        earnedAt: award.earnedAt.toISOString(),
+        earnedAt: (award.earnedAt instanceof Date ? award.earnedAt : new Date(0)).toISOString(),
       })),
     });
   } catch (error) {

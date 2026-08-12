@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { NextRequest } from "next/server";
 import { ObjectId } from "mongodb";
 import { eraForPreset } from "@/lib/seeds/presetSelector";
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
         db
           .collection<StateDemographics>("stateDemographics")
           .findOne({ _id: character.homeState, countryId: character.countryId }),
-        db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+        loadDemographicCategories(db),
         db
           .collection<StatePartyOrg>("statePartyOrg")
           .find({ countryId: character.countryId, stateId: character.homeState })
@@ -289,7 +290,7 @@ export async function POST(request: NextRequest) {
       db
         .collection<StateDemographics>("stateDemographics")
         .findOne({ _id: character.homeState, countryId: character.countryId }),
-      db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
+      loadDemographicCategories(db),
       db
         .collection<StatePartyOrg>("statePartyOrg")
         .find({ countryId: character.countryId, stateId: character.homeState })

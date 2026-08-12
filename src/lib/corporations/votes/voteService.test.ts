@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { computeVoteOutcome, checkAutoResolve } from "./voteService";
+import { ObjectId } from "mongodb";
+import { computeVoteOutcome, checkAutoResolve, fundDirectionsFrom } from "./voteService";
+import type { CorporationVote } from "@/lib/db/types/corporationVote";
 
 describe("computeVoteOutcome", () => {
   it("passes when yesShares meets threshold of all shares", () => {
@@ -55,5 +57,36 @@ describe("checkAutoResolve", () => {
         passThreshold: 0.5,
       })
     ).toBe("open");
+  });
+});
+
+describe("fundDirectionsFrom", () => {
+  it("keys instructions by fund id", () => {
+    const fundA = new ObjectId();
+    const fundB = new ObjectId();
+    const vote = {
+      fundDirections: [
+        { fundId: fundA, directorCharacterId: new ObjectId(), vote: "yes", castAt: new Date() },
+        { fundId: fundB, directorCharacterId: new ObjectId(), vote: "no", castAt: new Date() },
+      ],
+    } as unknown as CorporationVote;
+    const map = fundDirectionsFrom(vote);
+    expect(map.get(fundA.toString())?.vote).toBe("yes");
+    expect(map.get(fundB.toString())?.vote).toBe("no");
+  });
+
+  it("takes the last instruction per fund, so a director can change their mind", () => {
+    const fundA = new ObjectId();
+    const vote = {
+      fundDirections: [
+        { fundId: fundA, directorCharacterId: new ObjectId(), vote: "yes", castAt: new Date() },
+        { fundId: fundA, directorCharacterId: new ObjectId(), vote: "no", castAt: new Date() },
+      ],
+    } as unknown as CorporationVote;
+    expect(fundDirectionsFrom(vote).get(fundA.toString())?.vote).toBe("no");
+  });
+
+  it("is empty for a vote created before fund direction shipped", () => {
+    expect(fundDirectionsFrom({} as unknown as CorporationVote).size).toBe(0);
   });
 });

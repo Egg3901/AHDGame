@@ -13,6 +13,7 @@ const ACTIVE_BILL_STATUSES: ReadonlySet<BillStatus> = new Set([
   "active",
   "passed_origin",
   "active_other",
+  "active_both",
   "enrolled",
   "cabinet_review",
   "override_shugiin",

@@ -115,7 +115,13 @@ export async function updateFundConstituents(
   db: Db,
   fundId: ObjectId,
   targetConstituents: IndexFund["targetConstituents"],
-  lastRebalancedAt: Date
+  lastRebalancedAt: Date,
+  /**
+   * A7 listing-failure streaks. Written on every rebalance, including as an
+   * empty array: the list is the whole current picture, so anything not in it
+   * has stopped failing and must not keep an old count.
+   */
+  listingFailureStreaks?: IndexFund["listingFailureStreaks"]
 ): Promise<void> {
   await db.collection<IndexFund>(FUND_COLLECTION).updateOne(
     { _id: fundId },
@@ -123,6 +129,7 @@ export async function updateFundConstituents(
       $set: {
         targetConstituents,
         lastRebalancedAt,
+        ...(listingFailureStreaks ? { listingFailureStreaks } : {}),
         updatedAt: new Date(),
       },
     }
@@ -194,13 +201,19 @@ export async function setFundStatus(
     $set.pauseReason = reason ?? "manual";
     $set.pausedAt = new Date();
     if (pausedByUserId) $set.pausedByUserId = pausedByUserId;
-  } else {
-    $set.pauseReason = undefined;
-    $set.pausedAt = undefined;
-    $set.pausedByUserId = undefined;
+    await db.collection<IndexFund>(FUND_COLLECTION).updateOne({ _id: fundId }, { $set });
+    return;
   }
 
-  await db.collection<IndexFund>(FUND_COLLECTION).updateOne({ _id: fundId }, { $set });
+  // Reactivating must REMOVE the pause fields. `$set: undefined` leaves them in
+  // place on the stored document, which is why the paused-fund heal script had
+  // to `$unset` them by hand after an unpause that looked like it worked.
+  await db
+    .collection<IndexFund>(FUND_COLLECTION)
+    .updateOne(
+      { _id: fundId },
+      { $set, $unset: { pauseReason: "", pausedAt: "", pausedByUserId: "" } }
+    );
 }
 
 // ── Position (investor holding) queries ────────────────────────────────
@@ -271,7 +284,12 @@ export async function creditFundPosition(
   db: Db,
   fundId: ObjectId,
   holderKind: IndexFundPosition["holderKind"],
-  holderFilter: { characterId?: ObjectId; imperialCharacterId?: ObjectId; nppId?: ObjectId },
+  holderFilter: {
+    characterId?: ObjectId;
+    imperialCharacterId?: ObjectId;
+    nppId?: ObjectId;
+    pensionSchemeId?: ObjectId;
+  },
   units: number,
   nav: number,
   options?: FundQueryOptions
@@ -282,6 +300,7 @@ export async function creditFundPosition(
   if (holderFilter.imperialCharacterId)
     identityFields.imperialCharacterId = holderFilter.imperialCharacterId;
   if (holderFilter.nppId) identityFields.nppId = holderFilter.nppId;
+  if (holderFilter.pensionSchemeId) identityFields.pensionSchemeId = holderFilter.pensionSchemeId;
 
   // Try to increment an existing position.
   const incResult = await db
@@ -440,7 +459,8 @@ export async function upsertFundHoldingShares(
 }
 
 export type DebitFundPositionResult =
-  { ok: true; position: IndexFundPosition | null; legacyUnitsRedeemed: number } | { ok: false };
+  | { ok: true; position: IndexFundPosition | null; legacyUnitsRedeemed: number }
+  | { ok: false };
 
 /**
  * Atomically debit fund units from a holder position.

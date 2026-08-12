@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { useGameTurnStatus } from "@/hooks/useGameEvents";
 import {
   formatTimeRemaining,
@@ -13,6 +13,34 @@ import { formatRemainingTurns as formatRemainingTurnsLabel } from "@/lib/time/fo
 import type { GameClock } from "@/lib/time/gameClock.server";
 
 const DISPLAY_TICK_MS = 60_000;
+
+// One shared minute ticker for every mounted clock consumer. Election/bill
+// card lists previously installed one setInterval per card; now a single timer
+// runs while at least one subscriber is mounted, and all consumers re-render
+// in the same aligned wave.
+let displayTick = 0;
+const tickListeners = new Set<() => void>();
+let tickTimer: ReturnType<typeof setInterval> | null = null;
+
+function subscribeDisplayTick(listener: () => void): () => void {
+  tickListeners.add(listener);
+  if (!tickTimer) {
+    tickTimer = setInterval(() => {
+      displayTick++;
+      tickListeners.forEach((l) => l());
+    }, DISPLAY_TICK_MS);
+  }
+  return () => {
+    tickListeners.delete(listener);
+    if (tickListeners.size === 0 && tickTimer) {
+      clearInterval(tickTimer);
+      tickTimer = null;
+    }
+  };
+}
+
+const getDisplayTick = () => displayTick;
+const getServerDisplayTick = () => 0;
 
 /**
  * Build a client-side GameClock from the shared useGameTurnStatus snapshot.
@@ -29,11 +57,7 @@ export function useGameClock(): GameClock {
 
   // 60s tick to refresh realNow-derived values (drift readout, banner state).
   // clock.now itself does not change between turn-completion events.
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), DISPLAY_TICK_MS);
-    return () => clearInterval(id);
-  }, []);
+  useSyncExternalStore(subscribeDisplayTick, getDisplayTick, getServerDisplayTick);
 
   const realNow = new Date();
 

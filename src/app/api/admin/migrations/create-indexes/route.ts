@@ -209,6 +209,15 @@ export const INDEX_DEFINITIONS: [string, IndexSpecification, CreateIndexesOption
     },
   ],
 
+  // Personal trade history (suggestion #38). The per-owner lookups the
+  // /api/portfolio/trade-history route runs; the collection is append-only and
+  // grows without bound, so an unindexed scan here would get worse every turn.
+  ["shareTradeHistory", { "from.characterId": 1, turn: 1 }],
+  ["shareTradeHistory", { "to.characterId": 1, turn: 1 }],
+  ["shareTradeHistory", { "from.corporationId": 1, turn: 1 }],
+  ["shareTradeHistory", { "to.corporationId": 1, turn: 1 }],
+  ["shareTradeHistory", { corporationId: 1, kind: 1, turn: 1 }],
+
   // Tier 3 â€” Admin & infrastructure
   ["electionCandidates", { characterId: 1, electionId: 1 }],
   ["retiredCharacters", { userId: 1 }],

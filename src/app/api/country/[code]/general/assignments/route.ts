@@ -19,7 +19,7 @@ import {
 import { listCountryGenerals } from "@/lib/db/collections/characterGenerals";
 import { validateAssignments } from "@/lib/military/assignments";
 import { reconcileUnitTheaters } from "@/lib/military/reconcileTheaters";
-import { isValidUnitLocation } from "@/lib/military/theaters";
+import { verifyPosting } from "@/lib/military/rosterGate";
 
 const assignmentSchema = z.object({
   theaterId: z.string(),
@@ -73,9 +73,19 @@ export async function PUT(request: Request, { params }: RouteParams) {
     // Every posting must name a live conflict (or homeland reserve) — conflicts are
     // created during play, so this is a DB check, not a static-set membership test.
     for (const a of submitted) {
-      if (!(await isValidUnitLocation(db, a.theaterId))) {
+      const verdict = await verifyPosting(db, countryId, a.theaterId);
+      if (verdict === "unknown-theatre") {
         return NextResponse.json(
           { error: "That conflict is no longer live — a general cannot be posted to it." },
+          { status: 400 }
+        );
+      }
+      if (verdict === "not-a-belligerent") {
+        return NextResponse.json(
+          {
+            error:
+              "Your nation is not a belligerent in that conflict. Entry is decided by a bloc resolution and a vote of your legislature.",
+          },
           { status: 400 }
         );
       }

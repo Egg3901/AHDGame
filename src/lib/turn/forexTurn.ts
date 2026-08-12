@@ -43,6 +43,7 @@ import { isCommandEconomy, MARKETIZATION_SCHEDULE } from "@/lib/constants/comman
 import { rankReserveCurrencies } from "@/lib/centralBank/reserveCurrencyRanking";
 import { computeCurrencyVolumes } from "@/lib/currency/volumeTracker";
 import { computeInterventionPressure, isInBand } from "@/lib/currency/interventionCalculator";
+import { interventionAdherenceMultiplier } from "@/lib/centralBank/marketEffects";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { sendSystemMail } from "@/lib/mail/systemMail";
 import { getBankId } from "@/lib/centralBank/helpers";
@@ -576,26 +577,36 @@ async function applyIntervention(args: {
           ? "reserveBalance"
           : "forexRevenue";
 
+  // B4 market effect: a discredited bank's intervention holds the target less
+  // well. The reserve outlay is UNCHANGED; what shrinks is what the outlay
+  // buys, which is the right shape for a market that doubts the bank will hold
+  // the line. Floored, so even a maximally discredited bank still moves the
+  // rate.
+  const adherence = interventionAdherenceMultiplier(args.bank.chairInfamy ?? 0);
+  const effectiveSynthetic = intervention.syntheticVolume * adherence;
+
   // Re-run the rate pipeline with synthetic volume folded into the shared
   // volume-pressure term. This is what makes intervention affect the SAME
   // turn's published rate; the shared VOLUME_PRESSURE_CAP constrains it.
-  const syntheticBuy = intervention.syntheticVolume > 0 ? intervention.syntheticVolume : 0;
-  const syntheticSell = intervention.syntheticVolume < 0 ? -intervention.syntheticVolume : 0;
-  const combinedVolumes = {
-    buyVolume24: args.organicVolumes.buyVolume24 + syntheticBuy,
-    sellVolume24: args.organicVolumes.sellVolume24 + syntheticSell,
+  const runBlend = (syntheticVolume: number) => {
+    const syntheticBuy = syntheticVolume > 0 ? syntheticVolume : 0;
+    const syntheticSell = syntheticVolume < 0 ? -syntheticVolume : 0;
+    return computeRateUpdate(
+      args.rate,
+      args.baseRate,
+      args.countryId as Parameters<typeof computeRateUpdate>[2],
+      args.macro,
+      {
+        buyVolume24: args.organicVolumes.buyVolume24 + syntheticBuy,
+        sellVolume24: args.organicVolumes.sellVolume24 + syntheticSell,
+      },
+      undefined,
+      args.volatilityMultiplier ?? 1,
+      args.cyclePressure ?? 0,
+      args.currentYear
+    );
   };
-  const blended = computeRateUpdate(
-    args.rate,
-    args.baseRate,
-    args.countryId as Parameters<typeof computeRateUpdate>[2],
-    args.macro,
-    combinedVolumes,
-    undefined,
-    args.volatilityMultiplier ?? 1,
-    args.cyclePressure ?? 0,
-    args.currentYear
-  );
+  const blended = runBlend(effectiveSynthetic);
   const nextRate = Number.isFinite(blended.rate) ? blended.rate : args.rate;
   const nextMacroTarget = Number.isFinite(blended.macroTarget)
     ? blended.macroTarget
@@ -611,7 +622,15 @@ async function applyIntervention(args: {
 
   // Failure when reserves were fully drained AND the rate is still outside band
   // after the blended re-computation.
-  const stillBreached = !isInBand(nextRate, policy);
+  //
+  // Judged at FULL adherence on purpose. Charging infamy for a breach that the
+  // credibility dampener itself caused would close a scrutiny-feeds-scrutiny
+  // loop, which is the same spiral B4 separated the market effects to avoid.
+  // The dampened rate is what the world sees; the undampened rate is what the
+  // chair is blamed for.
+  const rateForBlame =
+    adherence >= 1 ? nextRate : (runBlend(intervention.syntheticVolume).rate ?? nextRate);
+  const stillBreached = !isInBand(Number.isFinite(rateForBlame) ? rateForBlame : nextRate, policy);
   const reservesDrained =
     desiredIntervention.reserveCost > 0 &&
     fundingPlan.availableInternal < desiredIntervention.reserveCost - 1e-9;
