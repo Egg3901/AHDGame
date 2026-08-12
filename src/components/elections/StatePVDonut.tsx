@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { partyFallbackColor, STATE_EV } from "./electionHelpers";
 
 interface StatePVDonutProps {
@@ -18,6 +19,7 @@ export function StatePVDonut({
   partyColors,
   stateId,
 }: StatePVDonutProps) {
+  const t = useTranslations("elections");
   const size = 120;
   const cx = size / 2;
   const cy = size / 2;
@@ -84,21 +86,21 @@ export function StatePVDonut({
             {winnerPct}%
           </text>
           <text x={cx} y={cy + 7} textAnchor="middle" fill="#94a3b8" fontSize={9}>
-            State PV
+            {t("statePV.statePV")}
           </text>
         </svg>
         <div
           className="absolute -bottom-1 -right-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white"
           style={{ backgroundColor: winnerColor }}
         >
-          {ev} EV
+          {t("statePV.ev", { count: ev })}
         </div>
       </div>
       <div className="space-y-1.5 min-w-0">
         {entries.map(([cid, votes]) => {
           const party = (candidateParties[cid] ?? "independent").toLowerCase();
           const color = partyColors?.[party] ?? partyFallbackColor(party);
-          const name = candidateNames[cid] ?? "Unknown";
+          const name = candidateNames[cid] ?? t("card.unknownCandidate");
           const pct = total > 0 ? (votes / total) * 100 : 0;
           return (
             <div key={cid}>

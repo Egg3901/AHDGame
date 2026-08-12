@@ -77,6 +77,12 @@ export const STATE_EV: Record<string, number> = {
 
 export const SENATE_CLASS_ROMAN: Record<number, string> = { 1: "I", 2: "II", 3: "III" };
 
+/** Translator shape accepted by `electionRaceTitle` for the class/seats suffixes. */
+type RaceTitleTranslator = (key: string, values?: Record<string, string | number>) => string;
+
+const defaultClassQualifier = (className: string | number) => ` (Class ${className})`;
+const defaultSeatsSuffix = (count: number) => ` · ${count} seat${count === 1 ? "" : "s"}`;
+
 export function electionRaceTitle(
   election: {
     electionType: string;
@@ -86,7 +92,10 @@ export function electionRaceTitle(
     countryId?: string;
     state?: string | null;
   },
-  year: number | null
+  year: number | null,
+  /** Optional `useTranslations("elections")` instance from the caller. English
+   * literal fallback is used when omitted (e.g. from non-component call sites). */
+  t?: RaceTitleTranslator
 ): string {
   // IE / SCO / WAL recycle the cross-country `governor` officeType for a titled
   // sub-national executive — IE's Cathaoirleach (Lord Mayor of Dublin/Cork,
@@ -101,17 +110,26 @@ export function electionRaceTitle(
     ? getRegionalBillAssentTitleForState(election.countryId as CountryId, election.state ?? null)
     : formatElectionTypeLabel(election.electionType, election.countryId as CountryId | undefined);
 
+  const classQualifier = (className: string | number) =>
+    t ? ` ${t("helpers.classQualifier", { className })}` : defaultClassQualifier(className);
+  const seatsSuffix = (count: number) =>
+    t ? ` · ${t("helpers.seatsSuffix", { count })}` : defaultSeatsSuffix(count);
+
   // US Senate: show class only (single-seat per class)
   if (election.electionType === "senate" && election.senateClass) {
-    const classLabel = ` (Class ${SENATE_CLASS_ROMAN[election.senateClass] ?? election.senateClass})`;
+    const classLabel = classQualifier(
+      SENATE_CLASS_ROMAN[election.senateClass] ?? election.senateClass
+    );
     return `${year != null ? `${year} ` : ""}${base}${classLabel}`;
   }
 
   // JP Sangiin: show class AND seat count (multi-seat proportional)
   if (election.electionType === "sangiin" && election.chamberClass) {
-    const classLabel = ` (Class ${SENATE_CLASS_ROMAN[election.chamberClass] ?? election.chamberClass})`;
+    const classLabel = classQualifier(
+      SENATE_CLASS_ROMAN[election.chamberClass] ?? election.chamberClass
+    );
     const seatsLabel =
-      election.totalSeats && election.totalSeats > 1 ? ` · ${election.totalSeats} seats` : "";
+      election.totalSeats && election.totalSeats > 1 ? seatsSuffix(election.totalSeats) : "";
     return `${year != null ? `${year} ` : ""}${base}${classLabel}${seatsLabel}`;
   }
 
@@ -129,7 +147,7 @@ export function electionRaceTitle(
       election.electionType === "peoplesCongress") &&
     election.totalSeats &&
     election.totalSeats > 1
-      ? ` · ${election.totalSeats} seats`
+      ? seatsSuffix(election.totalSeats)
       : "";
   return `${year != null ? `${year} ` : ""}${base}${seatsQualifier}`;
 }
