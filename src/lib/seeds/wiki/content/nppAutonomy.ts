@@ -40,7 +40,7 @@ This rail prevents autonomous NPP governments from overriding player-led countri
 
 ### v2: comingle (player countries)
 
-- **Caretaker CEOs**: NPP-run corporations where no player holds the CEO seat (when enabled).
+- **Caretaker CEOs**: NPP-run corporations where no player holds the CEO seat (when enabled). Under a full-flags world they also set wages, sign same-country supply agreements, prospect short deposits, and park idle treasury in high-coupon bonds.
 - Expanded ministerial and campaign autonomy alongside player characters.
 
 ### v3: economic depth
