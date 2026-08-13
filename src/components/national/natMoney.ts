@@ -18,5 +18,9 @@ export function natMoney(n: number, currency: string): string {
   const rounded = Math.round(n);
   const sign = rounded < 0 ? "-" : "";
   const sym = currencySymbol(currency);
-  return `${sign}${sym}${currencySymbolSep(sym)}${Math.abs(rounded).toLocaleString()}`;
+  // Pin en-US: the rest of the National Corporation cards format with an explicit
+  // "en-US" locale (comma thousands separator). A bare toLocaleString() used the
+  // runtime locale, so the same magnitude rendered "1,500" on one line and "1.500"
+  // on the adjacent Modernization line in dot-separator locales (ticket #1072).
+  return `${sign}${sym}${currencySymbolSep(sym)}${Math.abs(rounded).toLocaleString("en-US")}`;
 }

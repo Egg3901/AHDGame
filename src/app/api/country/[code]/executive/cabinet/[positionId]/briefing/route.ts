@@ -590,6 +590,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       },
       mechanics: {
         tierSetting: mechanics.tierSetting ?? null,
+        tierSettings: mechanics.tierSettings ?? null,
         regionalTarget: mechanics.regionalTarget ?? null,
         allocation: mechanics.allocation ?? null,
         advocacy: mechanics.advocacy ?? null,
@@ -617,6 +618,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       currentSettings: setting
         ? {
             tierSetting: setting.tierSetting ?? null,
+            tierSettings: setting.tierSettings ?? null,
             targetRegionId: setting.targetRegionId ?? null,
             targetCountryId: setting.targetCountryId ?? null,
             aidPriority: setting.aidPriority ?? null,

@@ -253,6 +253,24 @@ export default function CabinetOfficePage() {
                   />
                 )}
 
+                {/* Extra portfolio levers (e.g. HEW education + welfare). */}
+                {mechanics.tierSettings?.map((tierCfg) =>
+                  tierCfg.key ? (
+                    <TierSettingPanel
+                      key={tierCfg.key}
+                      config={tierCfg}
+                      tierKey={tierCfg.key}
+                      currentValue={
+                        data.currentSettings?.tierSettings?.[tierCfg.key] ?? tierCfg.defaultTier
+                      }
+                      canAct={canAct}
+                      countryCode={countryCode}
+                      positionId={positionId}
+                      onUpdate={refetch}
+                    />
+                  ) : null
+                )}
+
                 {/* Non-finance seats with a discretionary pool surface allocation on Overview
                     (finance ministers get it on the Treasury tab). */}
                 {mechanics.allocation && !isFinance && (
