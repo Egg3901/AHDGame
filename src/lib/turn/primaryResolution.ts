@@ -74,14 +74,6 @@ import { buildNationwideElectoratePreload } from "@/lib/electionEngine/nationwid
 export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): Promise<void> {
   const db = await getDb();
 
-  // US House top-3 primary advance is part of the districted-redistricting
-  // system; gate it on the flag so the legacy single-nominee behavior is
-  // unchanged when the feature is off.
-  const redistrictingGs = await db
-    .collection<{ _id: string; redistrictingEnabled?: boolean }>("gameState")
-    .findOne({ _id: "current" });
-  const redistrictingEnabled = redistrictingGs?.redistrictingEnabled === true;
-
   // Past-primary but not-yet-ended — turn-first (drift-immune, freezes on
   // pause) with a Date fallback for un-backfilled docs.
   const pastPrimary = await db
@@ -160,10 +152,10 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
 
   // Gate pre-pass: resolve each past-primary election exactly once.
   // Idempotency is keyed on tally.primaryResults (not "party count ≤ maxAdvancing"):
-  // US House with redistricting advances top-3, so a 2-candidate party never
-  // exceeds the cap — the old count gate skipped those races entirely, left
-  // co-nominees on the general ballot with no primaryResults, and the
-  // districted seat splitter fell back to general-vote shares (#1043).
+  // a multi-advance race (UK/JP/DE legislatures, one-party states) can seat
+  // fewer candidates than the cap, so the old count gate skipped those races
+  // entirely, left co-nominees on the general ballot with no primaryResults,
+  // and the districted seat splitter fell back to general-vote shares (#1043).
   // Computing the gate up front lets the character fetch below be ONE batched
   // $in query across every resolving election instead of one per election.
   const resolvingElections: Array<{
@@ -180,8 +172,7 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
     for (const c of candidates) partyCounts.set(c.party, (partyCounts.get(c.party) ?? 0) + 1);
     const maxAdvancing = getPrimaryWinnersForElection(
       (election.countryId ?? "US") as CountryId,
-      election.electionType,
-      redistrictingEnabled
+      election.electionType
     );
     const tally = tallyByElection.get(eid);
     // Already stamped — never re-init (would wipe general-phase vote accumulation).
