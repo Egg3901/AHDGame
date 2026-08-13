@@ -21,6 +21,7 @@ import {
   regionUrl,
   regionPartyUrl,
   regionLegislatureUrl,
+  regionElectionsUrl,
   cabinetOfficeUrl,
 } from "@/lib/urls";
 import {
@@ -176,6 +177,13 @@ export function ExperimentalMobileMenu({
                           className="flex items-center rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
                         >
                           {t("state.economy")}
+                        </Link>
+                        <Link
+                          href={regionElectionsUrl(homeState.countryId, homeState.id)}
+                          onClick={onClose}
+                          className="flex items-center rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
+                        >
+                          {t("state.elections")}
                         </Link>
                         <Link
                           href={regionLegislatureUrl(homeState.countryId, homeState.id)}
