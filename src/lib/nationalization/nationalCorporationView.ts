@@ -361,7 +361,17 @@ export async function buildNationalCorporationView(
       employmentGuaranteed: !!mandate.employmentGuaranteed,
       concentrationMultiplier: soeConcentrationMultiplier,
     });
-    const effectiveMarginPct = Math.max(0, s.profitMargin + efficiency.total);
+    // Use the margin the sector actually OPERATED at last turn
+    // (`effectiveProfitMargin`, written by sectorTurn) — `profitMargin` is a
+    // seeded constant no turn phase updates, and it collapsed operating profit
+    // (and treasury remittance / mandate subsidy) to ~0 for SOE sectors once the
+    // efficiency penalty was subtracted from it (ticket #1072). effectiveProfitMargin
+    // already bakes in the SOE penalty, so efficiency.total is NOT re-applied here.
+    // Fall back to the old computation for sectors not yet processed by a turn.
+    const effectiveMarginPct = Math.max(
+      0,
+      s.effectiveProfitMargin ?? s.profitMargin + efficiency.total
+    );
 
     // Public-value uplift: the SOE-internal share of this (state, sectorType)
     // drives the per-turn mandate-metric magnitude (same as the turn loop). Sums

@@ -42,7 +42,6 @@ import {
 import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import { logEconomicAction } from "@/lib/corporations/economicActionLog";
-import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { emitBuildCapexTx } from "@/lib/corporations/capexTxLog";
 import { getMarketSystemMode, isMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
@@ -224,16 +223,12 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       countryId = state?.countryId ?? "US";
     }
 
-    // A state-owned / nationalized sector is not the CEO's to build in, mothball
-    // or cancel refunds out of — `requireCeo` only proves seat identity, and a
-    // CEO keeps `corporationId` after a sector is nationalized. Same guard the
-    // acquisition commands apply.
-    if (isStateOwned(corporation)) {
-      return NextResponse.json(
-        { error: "This sector is state-owned. Its capacity is not yours to change." },
-        { status: 403 }
-      );
-    }
+    // No blanket state-owned block here: the appointed CEO of a National
+    // Corporation legitimately builds, mothballs and manages its capacity
+    // (ticket #1072). `requireCeo` above already proved the caller holds THIS
+    // corp's CEO seat, and the sector was fetched constrained to
+    // `corporationId: corporation._id`, so a sector nationalized AWAY from a
+    // former-private CEO no longer matches and cannot reach this handler.
     // A sector under offer must not have its capacity gutted mid-sale: CIP and
     // the build queue feed the valuation a buyer is quoted, and cancelling every
     // order refunds 75% to the seller while delivering a hollowed-out asset.
