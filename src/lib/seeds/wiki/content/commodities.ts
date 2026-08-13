@@ -263,6 +263,10 @@ From the Commodity pages (/commodity/[type]), you can see:
 - Global supply vs. demand breakdown
 - Which sector types are the main suppliers and buyers
 
+![The Freight and Transportation commodity page showing price, supply, demand, market flows, and price history](/static/wiki/player-guides/freight-market.png)
+
+Read the page from top to bottom. First choose the market scope: Global or a country exchange. Then compare supply with demand, check how much volume cleared or stayed unmet, and only then use the price chart to decide whether the imbalance is new or persistent. A high price by itself is not a build signal if supply already exceeds demand.
+
 Price history is retained for **5 game years** (240 turns) and pruned automatically after that.
 
 ## How commodity prices affect your corporation
@@ -280,5 +284,6 @@ Price history is retained for **5 game years** (240 turns) and pruned automatica
 - [Tariffs](/wiki/tariffs): how tariffs shift commodity blend weights and apply margin penalties
 - [National Budget](/wiki/national-budget): government spending that drives healthcare and real estate demand
 - [National Metrics](/wiki/national-metrics): GDP growth that scales retail demand
+- [Logistics: Freight, Sourcing, and Supply Chains](/wiki/logistics-guide): freight demand, landed prices, and the Logistics map
 - [Planned / Command Economies](/wiki/planned-economies) - Administered national prices, shortage, and overhang when command economy is enabled
 `;

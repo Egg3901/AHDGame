@@ -351,12 +351,15 @@ describe("processBankSolvencyTurn", () => {
   });
 
   it("amber band triggers 10% NPC flight with money conservation", async () => {
-    // Inputs tuned to amber via computeConfidence (see confidence.test.ts).
+    // Flight keys on the PRIOR published band, so the fixture sets it directly.
+    // Cash must cover the outflow: deposits carry their cash now, so a bank
+    // holding 1,000,000 of deposits on 50,000 of cash is not a state the engine
+    // can reach, and a run capped by empty tills would test nothing.
     const npcDeposits = 1_000_000;
     const corp = makeBankCorp(
       makeCharter({
         postedCapital: 50_000,
-        cashReserves: 50_000,
+        cashReserves: 1_000_000,
         totalDeposits: 1_000_000,
         totalLoans: 300_000,
         npcDeposits,
@@ -376,10 +379,12 @@ describe("processBankSolvencyTurn", () => {
 
     const live = liveCorps.get(corp._id.toString())!;
     const expectedOutflow = npcDeposits * FLIGHT_RATE_BY_BAND.amber;
-    expect(live.bankCharter!.warningBand).toBe("amber");
     expect(summary.fled).toBe(expectedOutflow);
     expect(live.bankCharter!.npcDeposits).toBe(npcDeposits - expectedOutflow);
+    // Conservation: what leaves the bank arrives in the household pool, and the
+    // bank's cash falls by the same amount. Depositors take their money.
     expect(cbState.externalBroadMoney).toBe(externalBefore + expectedOutflow);
+    expect(live.bankCharter!.cashReserves).toBe(1_000_000 - expectedOutflow);
     expect(summary.failures).toBe(0);
   });
 
