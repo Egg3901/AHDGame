@@ -15,7 +15,7 @@ import {
 import RunMeter from "../components/RunMeter";
 import DetailsDisclosure from "../components/DetailsDisclosure";
 import { fmtUnits, fmtPct } from "../lib/plants";
-import { facilitiesFromUnits } from "@/lib/constants/facilityQuantum";
+import { facilitiesFromUnits, plantSizeUnits } from "@/lib/constants/facilityQuantum";
 
 interface PlantPanelProps {
   plants: PlantsData;
@@ -183,9 +183,12 @@ export default function PlantPanel({
         <Stat
           label="Being built"
           value={fmtUnits(
-            plants.buildQueue.reduce(
-              (s, o) => s + Math.max(0, o.unitsOrdered - o.unitsDelivered),
-              0
+            facilitiesFromUnits(
+              sectorType,
+              plants.buildQueue.reduce(
+                (s, o) => s + Math.max(0, o.unitsOrdered - o.unitsDelivered),
+                0
+              )
             )
           )}
           sub={
@@ -193,7 +196,7 @@ export default function PlantPanel({
               ? `${money(plants.constructionInProgressAnchor)} paid`
               : "nothing on order"
           }
-          help="Capacity you have paid for that is still under construction. It builds a little each turn and is finished on the turn shown in the build list."
+          help={`${vocab.plural.charAt(0).toUpperCase()}${vocab.plural.slice(1)} you have paid for that are still under construction. They arrive a few at a time and are finished on the turn shown in the build list.`}
         />
       </div>
 
@@ -211,6 +214,15 @@ export default function PlantPanel({
               const buildWindow = o.onlineTurn - o.startTurn;
               const unitsPerTurn =
                 o.smooth && buildWindow > 0 ? o.unitsOrdered / buildWindow : null;
+              // Everything a player orders is a FACILITY. Capacity units are the
+              // engine's internal measure of what a facility produces, and
+              // quoting the queue in them read as though you were buying units
+              // of output directly.
+              const sitesOrdered = facilitiesFromUnits(sectorType, o.unitsOrdered);
+              const sitesDelivered = facilitiesFromUnits(sectorType, o.unitsDelivered);
+              const sitesPerTurn =
+                unitsPerTurn != null ? unitsPerTurn / plantSizeUnits(sectorType) : null;
+              const orderedNoun = sitesOrdered === 1 ? vocab.singular : vocab.plural;
               return (
                 <li
                   key={`${o.orderIndex}-${o.startTurn}`}
@@ -220,13 +232,13 @@ export default function PlantPanel({
                     <div className="min-w-0">
                       <p className="text-body-sm font-semibold text-foreground">
                         {o.smooth && o.turnsRemaining > 0
-                          ? `${fmtUnits(o.unitsDelivered)} of ${fmtUnits(o.unitsOrdered)} units built`
-                          : `${fmtUnits(o.unitsOrdered)} units`}
+                          ? `${fmtUnits(sitesDelivered)} of ${fmtUnits(sitesOrdered)} ${orderedNoun} built`
+                          : `${fmtUnits(sitesOrdered)} ${orderedNoun}`}
                       </p>
                       <p className="text-body-xs text-muted">
                         {o.turnsRemaining > 0
-                          ? unitsPerTurn != null
-                            ? `about ${fmtUnits(unitsPerTurn, unitsPerTurn < 10 ? 1 : 0)} units arriving each turn · done on turn ${o.onlineTurn} (${o.turnsRemaining} to go) · ${money(o.costPaidAnchor)} paid`
+                          ? sitesPerTurn != null
+                            ? `about ${fmtUnits(sitesPerTurn, sitesPerTurn < 10 ? 1 : 0)} ${sitesPerTurn === 1 ? vocab.singular : vocab.plural} arriving each turn · done on turn ${o.onlineTurn} (${o.turnsRemaining} to go) · ${money(o.costPaidAnchor)} paid`
                             : `ready on turn ${o.onlineTurn} (${o.turnsRemaining} to go) · ${money(o.costPaidAnchor)} paid`
                           : `arrives next turn · ${money(o.costPaidAnchor)} paid`}
                       </p>
