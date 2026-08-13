@@ -21,7 +21,13 @@ export interface FiscalStatStripProps {
   revenue: number;
   spending: number;
   gdp: number;
-  /** Real GDP growth %, for the GDP tile sub-line. */
+  /**
+   * `economicFactors.gdpGrowth`: the growth rate the budget projects revenue
+   * off. It is NOT the live rate. `fiscalYear.ts` copies the pipeline figure
+   * into it once per in-game year at rollover and it then holds for the whole
+   * fiscal year, so it can sit points away from the live rate on the Economy
+   * page. Labelled as an assumption for exactly that reason.
+   */
   gdpGrowth: number;
   /** Debt-to-GDP ratio (0–n, not %). */
   debtToGdp: number;
@@ -120,7 +126,17 @@ export function FiscalStatStrip({
       <StatTile
         label="GDP"
         value={money(gdp)}
-        sub={usdNote(gdp, `${pctSign(gdpGrowth)} growth`)}
+        sub={
+          <span
+            title={
+              "Growth assumption for this fiscal year, fixed at the last rollover. " +
+              "The budget projects revenue off it, so it does not move between rollovers. " +
+              "For the current rate, see the Economy page."
+            }
+          >
+            {usdNote(gdp, `${pctSign(gdpGrowth)} FY assumption`)}
+          </span>
+        }
         delta={compare ? <Delta now={gdp} prev={prev?.gdp} kind="money" sym={sym} /> : undefined}
       />
       <StatTile
