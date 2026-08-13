@@ -12,7 +12,9 @@ import {
   calculateStateRevenue,
   normalizeFederalTaxRates,
   normalizeStateTaxRates,
+  loadLatestSourcedImportAggregates,
 } from "./revenue";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { calculateFederalSpending, calculateStateSpending } from "./spending";
 import { applyLegacyTrustDelta } from "@/lib/sovereignDefault/sideEffects/trustHit";
 import { processAnnualDebt, triggerDebtCeilingCrisis, getDebtThreshold } from "./debt";
@@ -28,6 +30,7 @@ import {
 } from "@/lib/countrySystems/fiscalCalendar";
 import { evaluateSovereignAuctionForCountry } from "@/lib/sovereignDefault/crisisDetection";
 import { applyAusterityCap } from "@/lib/sovereignDefault/austerity";
+import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 
 // The current turn engine still processes fiscal-year rollover as one shared phase.
 // Pulling the anchor from country-systems makes the rule source explicit now, while
@@ -95,6 +98,21 @@ export async function processFiscalYear(
       .map((m) => [String(m._id), m.economic.gdpGrowth.value])
   );
   const processedBudgetIds = new Set<string>();
+
+  // Money wiring (interstate-logistics plan step 5, phase B): one flag check,
+  // one FX table, one sourcingNetworkLoad read for the whole annual pass -
+  // same hoist-once pattern as `refreshNationalBudgetRevenue`, never one read
+  // per country in this per-budget loop.
+  const [moneyWiringConfig, fxByCurrency] = await Promise.all([
+    db
+      .collection<GameConfig>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { interstateMoneyWiringEnabled: 1 } }),
+    loadFxRatesByCurrency(db),
+  ]);
+  const moneyWiringEnabled = moneyWiringConfig?.interstateMoneyWiringEnabled === true;
+  const sourcedImportsByCountry = moneyWiringEnabled
+    ? await loadLatestSourcedImportAggregates(db, currentTurn)
+    : new Map<string, { tariffPaid: number; importValue: number }>();
 
   for (const federalBudget of federalBudgets) {
     const budgetId = String(federalBudget._id);
@@ -175,7 +193,19 @@ export async function processFiscalYear(
       );
     }
 
-    const federalRevenue = await calculateFederalRevenue(db, normalizedTaxRates, budgetId);
+    const sourcedAgg = sourcedImportsByCountry.get(countryId);
+    const federalRevenue = await calculateFederalRevenue(
+      db,
+      normalizedTaxRates,
+      budgetId,
+      undefined,
+      undefined,
+      undefined,
+      fxByCurrency,
+      sourcedAgg
+        ? { tariffPaidAnchor: sourcedAgg.tariffPaid, importValueAnchor: sourcedAgg.importValue }
+        : undefined
+    );
 
     // Formula-grant programs (Medicaid, Highway Trust Fund, Education Block,
     // SNAP) are US-only — running them for UK/JP/DE wedges 27% of national

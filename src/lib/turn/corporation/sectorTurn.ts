@@ -1475,6 +1475,9 @@ export function processSector(
         inputMultiplier: getInputMultiplier(newPolicyLevel),
         turnsPerDay: TURNS_PER_DAY,
         mothballed,
+        // Money wiring (step 5, phase A): empty map when the flag is off, so
+        // this is a no-op until interstateMoneyWiringEnabled is flipped on.
+        statePremiums: lookups.landedPremiumByState?.get(sector.stateId),
       })
     : { total: 0, lines: [] };
   const inputsCost = inputsCostResult.total;

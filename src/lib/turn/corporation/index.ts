@@ -170,6 +170,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           prospectingEnabled: 1,
           commandEconomyEnabled: 1,
           privateBankingEnabled: 1,
+          interstateMoneyWiringEnabled: 1,
         },
       }
     ),
@@ -186,8 +187,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Market share (which drives the dominance growth-cost multiplier) switches
   // to the owned-capacity basis under the plants tier.
   const plantsEnabledForMarketShare = marketAtLeast(marketSystemMode, "plants");
+  const interstateMoneyWiringEnabled =
+    (marketGovernorConfig as { interstateMoneyWiringEnabled?: boolean } | null)
+      ?.interstateMoneyWiringEnabled === true;
   const lookups = await buildCorporationLookups(db, {
     plantsEnabled: plantsEnabledForMarketShare,
+    moneyWiringEnabled: interstateMoneyWiringEnabled,
   });
   const currentYear = gameState?.currentYear;
   // Soft-budget gate for the turn path (see sectorTurn's affordability brake and
@@ -1164,9 +1169,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       // what the contract priced. Best-effort.
       if (settledPremiums.length > 0) {
         try {
-          const { applyTransferPricingAudit } = await import(
-            "@/lib/corporations/groups/applyTransferPricingAudit"
-          );
+          const { applyTransferPricingAudit } =
+            await import("@/lib/corporations/groups/applyTransferPricingAudit");
           const tp = await applyTransferPricingAudit(
             db,
             settledPremiums,

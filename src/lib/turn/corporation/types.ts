@@ -126,6 +126,15 @@ export interface CorporationLookups {
    * marketSystemMode >= "realization"; always built (cheap), inert otherwise.
    */
   priceRatioByCommodity: Map<CommodityType, number>;
+  /**
+   * Money wiring (interstate-logistics plan step 5, phase A): per state, per
+   * commodity, last turn's landed-price premium per unit (₳) for out-of-state
+   * sourcing, read from the prior sourcingNetworkLoad doc. Empty when
+   * `interstateMoneyWiringEnabled` is off or no doc exists yet - computeInputsCost
+   * treats an absent/empty lookup as "no premium", matching pre-money-wiring
+   * behavior exactly.
+   */
+  landedPremiumByState?: Map<string, Map<CommodityType, number>>;
   nationalCommodityBalancesByCountry: Map<
     string,
     Map<CommodityType, { supply: number; demand: number }>
