@@ -18,14 +18,21 @@ function makeVm(overrides: Partial<OverviewViewModel> = {}): OverviewViewModel {
     stateId: "NIR",
     countryId: "UK",
     partyOrg: [
-      { id: "p1", abbr: "CON", color: "#0087DC", orgPct: 56.9, regPct: 31.7 },
-      { id: "p2", abbr: "SF", color: "#326760", orgPct: 34.0, regPct: 40.4 },
+      {
+        id: "p1",
+        abbr: "CON",
+        name: "Conservative Party",
+        color: "#0087DC",
+        orgPct: 56.9,
+        regPct: 31.7,
+      },
+      { id: "p2", abbr: "SF", name: "Sinn Fein", color: "#326760", orgPct: 34.0, regPct: 40.4 },
     ],
     unaffiliatedPct: 9.1,
     registrationPool: {
       parties: [
-        { id: "p1", abbr: "CON", color: "#0087DC", regPct: 31.7 },
-        { id: "p2", abbr: "SF", color: "#326760", regPct: 40.4 },
+        { id: "p1", abbr: "CON", name: "Conservative Party", color: "#0087DC", regPct: 31.7 },
+        { id: "p2", abbr: "SF", name: "Sinn Fein", color: "#326760", regPct: 40.4 },
       ],
       independent: 18.8,
       unregistered: 9.1,
@@ -52,7 +59,16 @@ describe("overview pies SSR <title> content (React #418 regression)", () => {
 
   it("AllPartyOrgPie single-slice branch server-renders a populated title", () => {
     const vm = makeVm({
-      partyOrg: [{ id: "p1", abbr: "CON", color: "#0087DC", orgPct: 100, regPct: 100 }],
+      partyOrg: [
+        {
+          id: "p1",
+          abbr: "CON",
+          name: "Conservative Party",
+          color: "#0087DC",
+          orgPct: 100,
+          regPct: 100,
+        },
+      ],
       unaffiliatedPct: 0,
     });
     const html = renderToString(<AllPartyOrgPie vm={vm} />);
@@ -70,7 +86,9 @@ describe("overview pies SSR <title> content (React #418 regression)", () => {
   it("AllPartyRegPie single-slice branch server-renders a populated title", () => {
     const vm = makeVm({
       registrationPool: {
-        parties: [{ id: "p1", abbr: "CON", color: "#0087DC", regPct: 100 }],
+        parties: [
+          { id: "p1", abbr: "CON", name: "Conservative Party", color: "#0087DC", regPct: 100 },
+        ],
         independent: 0,
         unregistered: 0,
         seeded: true,
