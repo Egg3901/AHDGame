@@ -116,7 +116,11 @@ function commoditiesOf(
   return (table ?? []).filter((f) => f.rate > 0).map((f) => f.commodity);
 }
 
-function sellerFill(party: NppAgreementParty, commodity: CommodityType, turn: number): number | null {
+function sellerFill(
+  party: NppAgreementParty,
+  commodity: CommodityType,
+  turn: number
+): number | null {
   let sold = 0;
   let n = 0;
   for (const s of party.sectors) {
@@ -262,17 +266,17 @@ export function decideNppSupplyAgreements(args: {
           turn,
         })
       : supplier.sectors.some(
-          (s) =>
-            s.mothballed !== true &&
-            commoditiesOf(
-              s.sectorType,
-              "supply",
-              s.strategyId,
-              s.transitionFromStrategyId,
-              s.transitionStartTurn,
-              turn
-            ).includes(a.commodity)
-        )
+            (s) =>
+              s.mothballed !== true &&
+              commoditiesOf(
+                s.sectorType,
+                "supply",
+                s.strategyId,
+                s.transitionFromStrategyId,
+                s.transitionStartTurn,
+                turn
+              ).includes(a.commodity)
+          )
         ? 1
         : 0;
     if (capacity > 0) continue;
@@ -320,7 +324,8 @@ export function decideNppSupplyAgreements(args: {
       });
       const uncommitted = Math.max(
         0,
-        capacity * CONTRACT_OVERCOMMIT_TOLERANCE - committedVolume(agreements, supplier.corpId, commodity)
+        capacity * CONTRACT_OVERCOMMIT_TOLERANCE -
+          committedVolume(agreements, supplier.corpId, commodity)
       );
       const volumeCap = uncommitted * NPP_CONTRACT_CAPACITY_SHARE;
       if (!(volumeCap > 0)) continue;
@@ -337,8 +342,7 @@ export function decideNppSupplyAgreements(args: {
         if (pairExists(agreements, supplier.corpId, buyer.corpId, commodity)) continue;
         const buyerRatio = priceRatioOf(commodity, buyer.countryId);
         if (!buyerStarved(buyer, commodity, turn, buyerRatio)) continue;
-        const score =
-          (fill == null ? 0.5 : 1 - fill) + Math.max(0, (buyerRatio ?? 1) - 1);
+        const score = (fill == null ? 0.5 : 1 - fill) + Math.max(0, (buyerRatio ?? 1) - 1);
         if (!best || score > best.score) {
           best = { buyer, commodity, volumeCap, pricePremium: premium, score };
         }
@@ -402,7 +406,10 @@ export async function processNppSupplyAgreements(
 
   const nppCorps = await db
     .collection<Corporation>("corporations")
-    .find({ ceoType: "npp", suspended: { $ne: true } }, { projection: { countryId: 1, countryOwnerId: 1, ownershipState: 1 } })
+    .find(
+      { ceoType: "npp", suspended: { $ne: true } },
+      { projection: { countryId: 1, countryOwnerId: 1, ownershipState: 1 } }
+    )
     .toArray();
   if (nppCorps.length === 0) return { accepted: 0, cancelled: 0, proposed: 0 };
 
@@ -425,10 +432,7 @@ export async function processNppSupplyAgreements(
     .collection<SupplyAgreement>("supplyAgreements")
     .find({
       status: { $in: ["pending", "active", "cancelling"] },
-      $or: [
-        { supplierCorpId: { $in: corpIds } },
-        { buyerCorpId: { $in: corpIds } },
-      ],
+      $or: [{ supplierCorpId: { $in: corpIds } }, { buyerCorpId: { $in: corpIds } }],
     })
     .toArray();
   const agreements: ExistingNppAgreement[] = rawAgreements.map((a) => ({
@@ -490,10 +494,12 @@ export async function processNppSupplyAgreements(
 
   for (const d of decisions) {
     if (d.action === "activate") {
-      const res = await db.collection<SupplyAgreement>("supplyAgreements").updateOne(
-        { _id: new ObjectId(d.agreementId), status: "pending" },
-        { $set: { status: "active", updatedAt: now } }
-      );
+      const res = await db
+        .collection<SupplyAgreement>("supplyAgreements")
+        .updateOne(
+          { _id: new ObjectId(d.agreementId), status: "pending" },
+          { $set: { status: "active", updatedAt: now } }
+        );
       if (res.modifiedCount > 0) accepted += 1;
     } else if (d.action === "cancelNotice") {
       const res = await db.collection<SupplyAgreement>("supplyAgreements").updateOne(

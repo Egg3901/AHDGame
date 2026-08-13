@@ -5,12 +5,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { DROPDOWN_PANEL_CLASS } from "@/components/navbar/dropdownStyles";
 import { UK_NATIONS, UK_REGIONS } from "@/lib/constants/uk";
-import {
-  regionUrl,
-  regionPartyUrl,
-  regionLegislatureUrl,
-  regionElectionsUrl,
-} from "@/lib/urls";
+import { regionUrl, regionPartyUrl, regionLegislatureUrl, regionElectionsUrl } from "@/lib/urls";
 
 interface StateDropdownProps {
   stateId: string;

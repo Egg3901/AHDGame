@@ -12,9 +12,7 @@ describe("prop-book trades net against each other", () => {
   });
 
   it("keeps the reclass distinct from capacity capex, which nets separately", () => {
-    expect(reasonForTxType("bank_prop_trade_buy")).not.toBe(
-      reasonForTxType("corp_capacity_build")
-    );
+    expect(reasonForTxType("bank_prop_trade_buy")).not.toBe(reasonForTxType("corp_capacity_build"));
   });
 
   it("leaves the genuinely one-sided banking rows unattributed rather than faking a pair", () => {

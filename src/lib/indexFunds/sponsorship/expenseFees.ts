@@ -110,15 +110,13 @@ export async function chargeSponsorExpenseFees(
 
     // Debit the fund first and only credit the sponsor if it landed, so a
     // failed guard cannot mint the fee.
-    const debited = await db
-      .collection<IndexFund>("indexFunds")
-      .updateOne(
-        { _id: fund._id, cashAnchor: { $gte: feeAnchor } },
-        {
-          $inc: { cashAnchor: -feeAnchor, feesPaidToSponsorAnchor: feeAnchor },
-          $set: { updatedAt: now },
-        }
-      );
+    const debited = await db.collection<IndexFund>("indexFunds").updateOne(
+      { _id: fund._id, cashAnchor: { $gte: feeAnchor } },
+      {
+        $inc: { cashAnchor: -feeAnchor, feesPaidToSponsorAnchor: feeAnchor },
+        $set: { updatedAt: now },
+      }
+    );
     if (debited.modifiedCount === 0) {
       outcome.suspended += 1;
       continue;

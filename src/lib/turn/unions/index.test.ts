@@ -245,7 +245,9 @@ describe("processUnionsTurn", () => {
     expect(unionsBulkWrite).not.toHaveBeenCalled(); // no dues/decay for the vacated union
 
     // Call 0 is the blanket strength decay, which runs for every union.
-    const vacancyCall = unionsUpdateMany.mock.calls.find((call) => "ownerId" in (call[1].$set ?? {}));
+    const vacancyCall = unionsUpdateMany.mock.calls.find(
+      (call) => "ownerId" in (call[1].$set ?? {})
+    );
     expect(vacancyCall).toBeDefined();
     const [unionFilter, unionUpdate] = vacancyCall!;
     expect(unionFilter._id.$in).toContainEqual(union._id);

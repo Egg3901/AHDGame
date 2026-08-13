@@ -286,20 +286,17 @@ export function RelocateButton({
                     {candidacyBreakdown.length > 0 && <> ({candidacyBreakdown.join(", ")})</>}.
                   </li>
                 )}
-                {status!.hasOffice &&
-                  (isCountryChange || status!.officeRequiresStateResidency) && (
+                {status!.hasOffice && (isCountryChange || status!.officeRequiresStateResidency) && (
                   <li className="text-error">
                     {isCountryChange
                       ? "You will automatically resign from your current office (country change)."
                       : "You will automatically resign from your current state/region office."}
                   </li>
                 )}
-                {status!.hasOffice &&
-                  !isCountryChange &&
-                  !status!.officeRequiresStateResidency && (
+                {status!.hasOffice && !isCountryChange && !status!.officeRequiresStateResidency && (
                   <li>
-                    Your national office (President, VP, cabinet, etc.) is kept — only
-                    state/region seats resign on an in-country move.
+                    Your national office (President, VP, cabinet, etc.) is kept — only state/region
+                    seats resign on an in-country move.
                   </li>
                 )}
                 {hasImperialCeoCorp && choosingMoveCorp && (

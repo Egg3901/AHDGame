@@ -3,10 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { CorporateSector } from "@/lib/db/types";
 import type { LabourContext } from "@/lib/labour/laborCost";
 import { STRIKE_MARGIN_PENALTY_PP, STRIKE_REVENUE_THROTTLE } from "@/lib/labour/strikes";
-import {
-  resolveSectorLabourEconomics,
-  resolveSectorLabourProductionEffects,
-} from "./sectorLabour";
+import { resolveSectorLabourEconomics, resolveSectorLabourProductionEffects } from "./sectorLabour";
 
 function sector(strikeStartedAtTurn: number | null = null): CorporateSector {
   return {

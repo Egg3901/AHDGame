@@ -76,7 +76,10 @@ export async function voteUnionLeader(
   // Sitting president stays votable even if they moved countries — otherwise
   // shareholders of organizing strength could not reaffirm them and any
   // challenger would run unopposed (CEO residency exemption parallel).
-  if (!isIncumbentCandidate && !isSameCountry(candidate, { countryId: union.countryId as CountryId })) {
+  if (
+    !isIncumbentCandidate &&
+    !isSameCountry(candidate, { countryId: union.countryId as CountryId })
+  ) {
     return {
       ok: false,
       status: 403,

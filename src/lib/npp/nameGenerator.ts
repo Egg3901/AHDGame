@@ -802,7 +802,9 @@ export function isNameFromCountryPool(name: string, countryId?: string): boolean
   // that could be compound again. Every contiguous run of the family tokens is
   // a candidate, so a stored surname of any length matches.
   const familyMatches = family.some((_, start) =>
-    family.slice(start).some((__, end) => matchesSurname(family.slice(start, start + end + 1).join(" ")))
+    family
+      .slice(start)
+      .some((__, end) => matchesSurname(family.slice(start, start + end + 1).join(" ")))
   );
   return familyMatches && given.some((token) => firstNames.has(token));
 }

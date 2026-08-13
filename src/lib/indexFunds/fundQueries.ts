@@ -459,8 +459,7 @@ export async function upsertFundHoldingShares(
 }
 
 export type DebitFundPositionResult =
-  | { ok: true; position: IndexFundPosition | null; legacyUnitsRedeemed: number }
-  | { ok: false };
+  { ok: true; position: IndexFundPosition | null; legacyUnitsRedeemed: number } | { ok: false };
 
 /**
  * Atomically debit fund units from a holder position.

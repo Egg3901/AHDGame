@@ -278,9 +278,7 @@ describe("committee waivers inside the basket build", () => {
         waivedIds: new Set([broke._id.toString()]),
       },
     });
-    expect(constituents.map((c) => c.corporationId.toString())).not.toContain(
-      broke._id.toString()
-    );
+    expect(constituents.map((c) => c.corporationId.toString())).not.toContain(broke._id.toString());
   });
 
   it("waives nothing for a corporation without one", () => {

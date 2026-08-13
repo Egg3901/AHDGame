@@ -3,7 +3,9 @@ import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { MergerReview } from "@/lib/db/types/mergerReview";
 
-vi.mock("@/lib/gameState", () => ({ getGameState: vi.fn().mockResolvedValue({ currentYear: 1953 }) }));
+vi.mock("@/lib/gameState", () => ({
+  getGameState: vi.fn().mockResolvedValue({ currentYear: 1953 }),
+}));
 vi.mock("@/lib/market/featureFlag", () => ({
   getMarketSystemModeForDb: vi.fn().mockResolvedValue("off"),
   marketAtLeast: () => false,
@@ -112,9 +114,9 @@ describe("assertMergerClearance", () => {
   it("is inert when either side is state-owned", async () => {
     const { db } = makeDb();
     const stateOwned = makeCorp({ _id: TGT, ownershipState: "stateOwned", countryId: "US" });
-    expect((await assertMergerClearance(db, acquirer(), stateOwned, "agreedAcquisition", 100)).ok).toBe(
-      true
-    );
+    expect(
+      (await assertMergerClearance(db, acquirer(), stateOwned, "agreedAcquisition", 100)).ok
+    ).toBe(true);
     const stateAcquirer = makeCorp({ countryOwnerId: "US" as never });
     expect(
       (await assertMergerClearance(db, stateAcquirer, target(), "agreedAcquisition", 100)).ok
@@ -143,7 +145,10 @@ describe("assertMergerClearance", () => {
   });
 
   it("passes a cleared pair straight through, carrying the clearance", async () => {
-    const cleared = { status: "clearedWithRemedy", remedySectorType: "steel" } as unknown as MergerReview;
+    const cleared = {
+      status: "clearedWithRemedy",
+      remedySectorType: "steel",
+    } as unknown as MergerReview;
     const { db } = makeDb(cleared);
     const r = await assertMergerClearance(db, acquirer(), target(), "hostileTakeover", 101);
     expect(r.ok).toBe(true);

@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { computeSupplierCommodityCapacityUnits } from "./supplyAgreementCapacity";
-import { plantsSupplyScaledUnits, commodityMixWeight, COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
+import {
+  plantsSupplyScaledUnits,
+  commodityMixWeight,
+  COMMODITY_BASE_PRICES,
+} from "@/lib/constants/commodities";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
 
 describe("computeSupplierCommodityCapacityUnits", () => {
@@ -31,8 +35,7 @@ describe("computeSupplierCommodityCapacityUnits", () => {
         productionPolicyLevel: 0,
       }) ?? 0;
     const rates = getEffectiveStrategyRates("manufacturing", "standard", null, null, 10);
-    const expected =
-      scaled * commodityMixWeight(rates.supply, COMMODITY_BASE_PRICES, "steel");
+    const expected = scaled * commodityMixWeight(rates.supply, COMMODITY_BASE_PRICES, "steel");
     expect(
       computeSupplierCommodityCapacityUnits({
         sectors: [

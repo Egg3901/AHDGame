@@ -273,8 +273,7 @@ export function pensionBenefitPayment(params: {
       : 0;
   if (due <= 0) return { paidAnchor: 0, unpaidAnchor: 0, cutFraction: 0 };
 
-  const cash =
-    Number.isFinite(params.cashAnchor) && params.cashAnchor > 0 ? params.cashAnchor : 0;
+  const cash = Number.isFinite(params.cashAnchor) && params.cashAnchor > 0 ? params.cashAnchor : 0;
   if (cash >= due) return { paidAnchor: due, unpaidAnchor: 0, cutFraction: 0 };
 
   return { paidAnchor: cash, unpaidAnchor: due - cash, cutFraction: (due - cash) / due };
@@ -306,8 +305,7 @@ export function pensionInvestableCashAnchor(params: {
   const inPayment = Number.isFinite(params.benefitsInPaymentAnchor)
     ? Math.max(0, params.benefitsInPaymentAnchor)
     : 0;
-  const buffer =
-    pensionBenefitsDueForTurn(inPayment) * PENSION_LIQUIDITY_BUFFER_TURNS;
+  const buffer = pensionBenefitsDueForTurn(inPayment) * PENSION_LIQUIDITY_BUFFER_TURNS;
 
   const afterBuffer = cash - buffer;
   const afterFloor = cash * (1 - PENSION_CASH_FLOOR_FRACTION);
