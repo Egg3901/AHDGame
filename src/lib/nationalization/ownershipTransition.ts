@@ -108,8 +108,20 @@ async function absorbSectorIntoNatCorp(
   now: Date,
   transitionMultiplier: number,
   plantsEnabled: boolean
-): Promise<void> {
+): Promise<ObjectId> {
   const sectors = db.collection<CorporateSector>("corporateSectors");
+  // Prior-owner provenance — captured from the donor row BEFORE it is re-parented
+  // or folded, so an emergency taking can be reversed (SCOTUS strike-down). On a
+  // merge this overwrites the survivor's provenance with the latest taking.
+  const provenance = {
+    formerCorporationId: sector.corporationId,
+    ...(sector.countryId ? { formerCountryId: sector.countryId } : {}),
+    formerRevenue: sector.revenue ?? 0,
+    ...(typeof sector.capitalStock === "number" && Number.isFinite(sector.capitalStock)
+      ? { formerCapitalStock: sector.capitalStock }
+      : {}),
+    takenAtTurn: absorbedAtTurn,
+  };
   // Transition revenue haircut: the state acquires a disrupted asset worth 15%
   // less than what the former owner held (compensation is paid on the full value
   // upstream, before this transfer). nationalizedAtTurn anchors the productivity
@@ -189,11 +201,13 @@ async function absorbSectorIntoNatCorp(
           absorbedAtTurn,
           nationalizedAtTurn: absorbedAtTurn,
           nationalizationTransitionMultiplier: transitionMultiplier,
+          nationalizationProvenance: provenance,
           updatedAt: now,
         },
       }
     );
     await sectors.deleteOne({ _id: sector._id });
+    return existing._id;
   } else {
     // RE-PARENT: the doc itself is re-pointed, so the plant state rides along
     // for free — except `capitalStock`, which must take the haircut. Without it
@@ -211,10 +225,12 @@ async function absorbSectorIntoNatCorp(
           absorbedAtTurn,
           nationalizedAtTurn: absorbedAtTurn,
           nationalizationTransitionMultiplier: transitionMultiplier,
+          nationalizationProvenance: provenance,
           updatedAt: now,
         },
       }
     );
+    return sector._id;
   }
 }
 
@@ -360,6 +376,13 @@ export interface NationalizeSectorResult {
   nationalCorporationId: ObjectId;
   /** Compensation credited to the donor's liquid capital, in the donor's currency. */
   compensationPaid: number;
+  /**
+   * The surviving NatCorp sector row after the taking — the re-parented donor row,
+   * or the merge survivor when folded into an existing (NatCorp, state, type)
+   * holding. Carries `nationalizationProvenance`, so this is the handle a reversal
+   * (e.g. a SCOTUS strike-down) uses to return the sector to its prior owner.
+   */
+  resultingSectorId: ObjectId;
 }
 
 /**
@@ -445,7 +468,7 @@ export async function nationalizeSector(
   // aggregate still includes it). No-op when the donor has no loyalty.
   await applyBrandFacilityLoss(db, donor._id, sector.revenue);
 
-  await absorbSectorIntoNatCorp(
+  const resultingSectorId = await absorbSectorIntoNatCorp(
     db,
     sector,
     nationalCorp._id,
@@ -503,7 +526,7 @@ export async function nationalizeSector(
     console.error("[nationalizationLedger] sector ledger write failed:", err);
   }
 
-  return { nationalCorporationId: nationalCorp._id, compensationPaid };
+  return { nationalCorporationId: nationalCorp._id, compensationPaid, resultingSectorId };
 }
 
 // ── Whole-corp absorption ─────────────────────────────────────────────────────
