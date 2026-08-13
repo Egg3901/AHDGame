@@ -323,7 +323,7 @@ describe("propTrading open/close/mark", () => {
 describe("forced liquidation confidence penalty", () => {
   it("subtracts the provisional flat penalty", () => {
     const base = computeConfidence({
-      liquidCapital: 200_000,
+      cashReserves: 200_000,
       postedCapital: 200_000,
       totalDeposits: 0,
       totalLoans: 0,
@@ -333,7 +333,7 @@ describe("forced liquidation confidence penalty", () => {
       panicTurns: 0,
     });
     const penalized = computeConfidence({
-      liquidCapital: 200_000,
+      cashReserves: 200_000,
       postedCapital: 200_000,
       totalDeposits: 0,
       totalLoans: 0,
