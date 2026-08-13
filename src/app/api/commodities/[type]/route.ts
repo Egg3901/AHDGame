@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { conditionalJson } from "@/lib/api/conditionalJson";
+import { loadReachableBooks, reachableBooksFor } from "@/lib/trade/queries/loadReachableBooks";
 import { getDb } from "@/lib/mongodb";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import type { CommodityFlow as CommodityFlowDoc } from "@/lib/db/types/commodityFlow";
@@ -192,6 +193,9 @@ export async function getCommodityDetailData(
   try {
     const includeHeavy = options.includeHeavy ?? true;
     const db = await getDb();
+    // Only the heavy payload renders the map, so the light header request does
+    // not pay for this read.
+    const reachableBooks = includeHeavy ? await loadReachableBooks(db) : null;
     const currentTurn = (await getGameState())?.currentTurn ?? 1;
     const targetTurn = Math.max(1, currentTurn - TURNS_PER_YEAR);
 
@@ -842,6 +846,11 @@ export async function getCommodityDetailData(
       nationalPrices: includeHeavy ? (currentPrice?.nationalPrices ?? {}) : {},
       nationalSupply: includeHeavy ? (currentPrice?.nationalSupply ?? {}) : {},
       nationalDemand: includeHeavy ? (currentPrice?.nationalDemand ?? {}) : {},
+      // Per-country reachable books for the map's Reachable lens (ticket
+      // #1077). Heavy-only: the light payload drives the header, which does not
+      // render the map. Undefined rather than {} when no book is persisted, so
+      // the client can tell "not available yet" from "every market is empty".
+      reachableBooks: includeHeavy ? reachableBooksFor(reachableBooks, commodity) : undefined,
       turn: currentPrice?.turn ?? 0,
       history: history.map((h: CommodityPriceHistory) => ({
         turn: h.turn,

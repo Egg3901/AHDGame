@@ -200,7 +200,11 @@ export default function CommodityRegionMap({
                             ? (stateSupply[stateId] ?? 0)
                             : (stateDemand[stateId] ?? 0),
                           maxValue,
-                          mode
+                          // Reachable is a per-COUNTRY book (sales clear at the
+                          // national level), so it has no per-state value to
+                          // paint. Inside a country drilldown it falls back to
+                          // demand rather than inventing a state-level ratio.
+                          mode === "reachable" ? "demand" : mode
                         );
                 const isHov = hovered === stateId;
 
