@@ -26,6 +26,7 @@ import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
 import { getCashReserves, requiredReserves, upstreamCapacity } from "@/lib/banking/bankCash";
 import { buildRiskReadout } from "@/lib/banking/riskReadout";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
+import { getCurrentTurn } from "@/lib/currentTurn";
 import {
   CREDIT_BANDS,
   DEFAULT_LENDING_PROFILE,
@@ -356,6 +357,8 @@ async function handleGET(_request: Request, { params }: RouteParams) {
         ownsFinancial,
       },
       currency,
+      // Drives the charter-switch cooldown countdown in the console.
+      currentTurn: await getCurrentTurn(db),
       legalCharterTypes: legalTypes,
       eligibleTypes,
       eligibilityReasons,
