@@ -138,11 +138,7 @@ function resolveBondCurrency(bond: Bond, fallbackCountry: string | undefined): C
   return "USD";
 }
 
-export async function processNppCorpTreasury(
-  db: Db,
-  turn: number,
-  now: Date
-): Promise<number> {
+export async function processNppCorpTreasury(db: Db, turn: number, now: Date): Promise<number> {
   const nppCorps = await db
     .collection<Corporation>("corporations")
     .find(

@@ -29,12 +29,10 @@ export type CharterEligibilityResult = {
 };
 
 export type IssueCharterResult =
-  | { ok: true; charter: BankCharter; postedCapital: number }
-  | { ok: false; reasons: string[] };
+  { ok: true; charter: BankCharter; postedCapital: number } | { ok: false; reasons: string[] };
 
 export type RevokeCharterResult =
-  | { ok: true; refundedCapital: number; charter: BankCharter }
-  | { ok: false; error: string };
+  { ok: true; refundedCapital: number; charter: BankCharter } | { ok: false; error: string };
 
 /**
  * Minimum capital to post for a bank charter, in `currency` face value.

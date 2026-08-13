@@ -12,7 +12,9 @@ import {
   type ListingVerdict,
 } from "./listingStandards";
 
-const candidate = (over: Partial<ListingCandidate> & { corporationId: string }): ListingCandidate => ({
+const candidate = (
+  over: Partial<ListingCandidate> & { corporationId: string }
+): ListingCandidate => ({
   marketCapAnchor: 1_000_000,
   freeFloatRatio: 0.5,
   insolvent: false,

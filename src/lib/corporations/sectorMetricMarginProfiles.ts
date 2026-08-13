@@ -591,8 +591,7 @@ function valueForMetric(
   metricId: string
 ): number | null {
   const categoryDoc = stateMetrics[category] as
-    | Record<string, { value?: number | null } | undefined>
-    | undefined;
+    Record<string, { value?: number | null } | undefined> | undefined;
   const value = categoryDoc?.[metricId]?.value;
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }

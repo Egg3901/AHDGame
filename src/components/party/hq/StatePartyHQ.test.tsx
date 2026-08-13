@@ -121,8 +121,7 @@ describe("StatePartyHQ", () => {
     fireEvent.click(screen.getByRole("button", { name: "Build Org" }));
     await waitFor(() => expect(screen.getByText(/Insufficient national PS/)).toBeTruthy());
     expect(
-      (screen.getByRole("button", { name: /Confirm \(5 Nat'l PS\)/ }) as HTMLButtonElement)
-        .disabled
+      (screen.getByRole("button", { name: /Confirm \(5 Nat'l PS\)/ }) as HTMLButtonElement).disabled
     ).toBe(true);
   });
 

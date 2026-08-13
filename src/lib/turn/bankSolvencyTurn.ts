@@ -68,7 +68,6 @@ const ZERO_SUMMARY: BankSolvencyTurnSummary = {
   forcedLiquidations: 0,
 };
 
-
 function isPropRunningCharter(charter: BankCharter | undefined): charter is BankCharter {
   return (
     charter != null &&

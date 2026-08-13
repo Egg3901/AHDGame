@@ -68,8 +68,7 @@ async function createPlannedIndexes(db: Db, dryRun: boolean): Promise<MigrationR
 
 export const migration: Migration = {
   id: "2026-08-10-index-listing-petition-indexes",
-  description:
-    "Uniqueness and read indexes for A7 index-committee listing petitions.",
+  description: "Uniqueness and read indexes for A7 index-committee listing petitions.",
   idempotent: true,
   execute: async (db, ctx) => createPlannedIndexes(db, ctx.dryRun),
 };

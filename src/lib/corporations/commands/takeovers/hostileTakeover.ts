@@ -170,7 +170,13 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
     const reviewTurn = await getCurrentTurn(db);
     const barred = acquisitionsBarredByDivestiture(parent, reviewTurn);
     if (barred) return NextResponse.json({ error: barred }, { status: 403 });
-    const clearance = await assertMergerClearance(db, parent, target, "hostileTakeover", reviewTurn);
+    const clearance = await assertMergerClearance(
+      db,
+      parent,
+      target,
+      "hostileTakeover",
+      reviewTurn
+    );
     if (!clearance.ok) {
       return NextResponse.json({ error: clearance.error }, { status: clearance.status });
     }

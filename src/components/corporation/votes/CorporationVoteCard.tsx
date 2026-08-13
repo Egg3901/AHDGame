@@ -138,9 +138,7 @@ export function CorporationVoteCard({
   // none, so the whole block stays hidden rather than showing an empty state.
   const fetchDirectableFunds = useCallback(async () => {
     try {
-      const res = await fetch(
-        `/api/corporations/${corporationId}/votes/${voteId}/fund-direction`
-      );
+      const res = await fetch(`/api/corporations/${corporationId}/votes/${voteId}/fund-direction`);
       if (!res.ok) return;
       const data = await res.json();
       setDirectableFunds(data.funds ?? []);
@@ -159,14 +157,11 @@ export function CorporationVoteCard({
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(
-        `/api/corporations/${corporationId}/votes/${voteId}/fund-direction`,
-        {
-          method: choice ? "POST" : "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(choice ? { fundId, vote: choice } : { fundId }),
-        }
-      );
+      const res = await fetch(`/api/corporations/${corporationId}/votes/${voteId}/fund-direction`, {
+        method: choice ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(choice ? { fundId, vote: choice } : { fundId }),
+      });
       if (!res.ok) throw new Error((await res.json()).error);
       await fetchVote();
       await fetchDirectableFunds();

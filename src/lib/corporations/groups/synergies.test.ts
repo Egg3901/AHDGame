@@ -81,10 +81,7 @@ describe("computeGroupSynergies", () => {
 
   it("does nothing for a group with no capability to share", () => {
     expect(
-      computeGroupSynergies(
-        [member({ corporationId: "a" }), member({ corporationId: "b" })],
-        100
-      )
+      computeGroupSynergies([member({ corporationId: "a" }), member({ corporationId: "b" })], 100)
     ).toEqual([]);
   });
 
@@ -107,7 +104,12 @@ describe("memberShareCap — the spin-off inheritance window", () => {
 
   it("gives a recent spin-off the raised ceiling", () => {
     const cap = memberShareCap(
-      member({ corporationId: "spun", isSpinOff: true, spunOffFromCorpId: "parent", spunOffAtTurn: 100 }),
+      member({
+        corporationId: "spun",
+        isSpinOff: true,
+        spunOffFromCorpId: "parent",
+        spunOffAtTurn: 100,
+      }),
       groupIds,
       100 + SPINOFF_BRAND_INHERITANCE_TURNS
     );
@@ -116,7 +118,12 @@ describe("memberShareCap — the spin-off inheritance window", () => {
 
   it("drops to the ordinary ceiling once the window closes", () => {
     const cap = memberShareCap(
-      member({ corporationId: "spun", isSpinOff: true, spunOffFromCorpId: "parent", spunOffAtTurn: 100 }),
+      member({
+        corporationId: "spun",
+        isSpinOff: true,
+        spunOffFromCorpId: "parent",
+        spunOffAtTurn: 100,
+      }),
       groupIds,
       100 + SPINOFF_BRAND_INHERITANCE_TURNS + 1
     );
@@ -128,7 +135,12 @@ describe("memberShareCap — the spin-off inheritance window", () => {
     // business is no longer in the group, there is nothing to be continuous
     // with.
     const cap = memberShareCap(
-      member({ corporationId: "spun", isSpinOff: true, spunOffFromCorpId: "gone", spunOffAtTurn: 100 }),
+      member({
+        corporationId: "spun",
+        isSpinOff: true,
+        spunOffFromCorpId: "gone",
+        spunOffAtTurn: 100,
+      }),
       groupIds,
       101
     );

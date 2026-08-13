@@ -59,8 +59,7 @@ export interface CharterFundInput {
 }
 
 export type CharterFundResult =
-  | { ok: false; error: string; status: number }
-  | { ok: true; fundId: ObjectId; slug: string };
+  { ok: false; error: string; status: number } | { ok: true; fundId: ObjectId; slug: string };
 
 /**
  * Validate a proposed charter WITHOUT touching the database. Exported so the
@@ -69,7 +68,14 @@ export type CharterFundResult =
 export function validateCharter(
   input: Pick<
     CharterFundInput,
-    "name" | "tickerSymbol" | "scope" | "countryId" | "kind" | "sectorType" | "expenseRatioAnnual" | "seedCapitalAnchor"
+    | "name"
+    | "tickerSymbol"
+    | "scope"
+    | "countryId"
+    | "kind"
+    | "sectorType"
+    | "expenseRatioAnnual"
+    | "seedCapitalAnchor"
   >,
   sponsorSectorTypes: CorporationType[]
 ): string | null {
@@ -78,15 +84,13 @@ export function validateCharter(
 
   const name = input.name.trim();
   if (name.length < 4 || name.length > 60) return "Fund name must be 4 to 60 characters.";
-  if (!/^[A-Z]{3,8}$/.test(input.tickerSymbol))
-    return "Ticker must be 3 to 8 uppercase letters.";
+  if (!/^[A-Z]{3,8}$/.test(input.tickerSymbol)) return "Ticker must be 3 to 8 uppercase letters.";
 
   if (input.scope === "country" && !input.countryId)
     return "A country-scoped fund needs a country.";
   if (input.scope === "global" && input.countryId)
     return "A global fund cannot also name a country.";
-  if (input.kind === "sector" && !input.sectorType)
-    return "A sector fund needs an industry.";
+  if (input.kind === "sector" && !input.sectorType) return "A sector fund needs an industry.";
   if (input.kind === "broad" && input.sectorType)
     return "A broad fund cannot also name an industry.";
 
@@ -111,10 +115,7 @@ export function sponsoredFundSlug(tickerSymbol: string): string {
   return `sponsored-${tickerSymbol.toLowerCase()}`;
 }
 
-export async function charterFund(
-  db: Db,
-  input: CharterFundInput
-): Promise<CharterFundResult> {
+export async function charterFund(db: Db, input: CharterFundInput): Promise<CharterFundResult> {
   const { sponsor, currentTurn } = input;
   const tickerSymbol = input.tickerSymbol.trim().toUpperCase();
   const name = input.name.trim();
@@ -155,9 +156,11 @@ export async function charterFund(
     };
 
   const now = new Date();
-  const anchorCurrencyCode = (input.scope === "country" && input.countryId
-    ? (COUNTRY_CURRENCY_MAP[input.countryId] ?? "USD")
-    : "USD") as CurrencyCode;
+  const anchorCurrencyCode = (
+    input.scope === "country" && input.countryId
+      ? (COUNTRY_CURRENCY_MAP[input.countryId] ?? "USD")
+      : "USD"
+  ) as CurrencyCode;
 
   let fundId: ObjectId;
   try {

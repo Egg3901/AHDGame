@@ -148,9 +148,7 @@ export async function fireFactionSplit(
       )
       .toArray(),
   ]);
-  const positionByChar = new Map(
-    defectorChars.map((c) => [c._id.toString(), c.policies ?? null])
-  );
+  const positionByChar = new Map(defectorChars.map((c) => [c._id.toString(), c.policies ?? null]));
   // One caucus per official: a character in several keeps the first, which is
   // deterministic on the collection's natural order and enough for cohesion.
   const caucusByChar = new Map<string, string>();

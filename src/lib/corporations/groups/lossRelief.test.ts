@@ -49,7 +49,9 @@ describe("computeGroupRelief", () => {
   });
 
   it("does nothing for a group with no profits", () => {
-    expect(computeGroupRelief([member(A, -1_000, 0), member(B, -500, 0)]).totalReliefAnchor).toBe(0);
+    expect(computeGroupRelief([member(A, -1_000, 0), member(B, -500, 0)]).totalReliefAnchor).toBe(
+      0
+    );
   });
 
   it("does nothing for a group that paid no tax", () => {

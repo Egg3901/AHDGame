@@ -24,8 +24,7 @@ export {
 } from "@/lib/banking/reserveBounds";
 
 export type SetReserveRequirementResult =
-  | { ok: true; ratio: number }
-  | { ok: false; error: string };
+  { ok: true; ratio: number } | { ok: false; error: string };
 
 /**
  * Reserve ratio the currency's central bank requires of private banks.

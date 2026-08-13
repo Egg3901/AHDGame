@@ -639,19 +639,14 @@ export async function rebalanceConstituents(
   // Only carry streaks for corporations still in this index's candidate pool.
   // A corp that left the mandate entirely (relisted abroad, went private) is not
   // failing a standard, so keeping a stale count would drop it on re-entry.
-  const listingFailureStreaks: NonNullable<IndexFund["listingFailureStreaks"]> = targets.streaks.map((s) => ({
-    corporationId: new ObjectId(s.corporationId),
-    consecutiveFailures: s.consecutiveFailures,
-    failures: s.failures,
-  }));
+  const listingFailureStreaks: NonNullable<IndexFund["listingFailureStreaks"]> =
+    targets.streaks.map((s) => ({
+      corporationId: new ObjectId(s.corporationId),
+      consecutiveFailures: s.consecutiveFailures,
+      failures: s.failures,
+    }));
 
-  await updateFundConstituents(
-    db,
-    fund._id,
-    targetConstituents,
-    new Date(),
-    listingFailureStreaks
-  );
+  await updateFundConstituents(db, fund._id, targetConstituents, new Date(), listingFailureStreaks);
 
   // Divest what ran out of grace. `findRemovedConstituentHoldings` cannot see
   // these: a delisted corp is still mechanically eligible, so without this it
@@ -1210,9 +1205,7 @@ export async function runIndexFundCron(
   // run last because completing one deletes the fund from every earlier pass's
   // working set.
   try {
-    const { chargeSponsorExpenseFees } = await import(
-      "@/lib/indexFunds/sponsorship/expenseFees"
-    );
+    const { chargeSponsorExpenseFees } = await import("@/lib/indexFunds/sponsorship/expenseFees");
     const activeFunds = await listActiveFunds(db);
     const fees = await chargeSponsorExpenseFees(db, activeFunds, currentTurn);
     result.expenseFeesCharged = fees.fundsCharged;

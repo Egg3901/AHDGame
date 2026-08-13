@@ -54,8 +54,7 @@ export function checkAutoResolve(opts: {
 }
 
 export type OpenVoteResult =
-  | { ok: true; voteId: string }
-  | { ok: false; error: string; status: number };
+  { ok: true; voteId: string } | { ok: false; error: string; status: number };
 
 export async function openCorporationVote(opts: {
   db: Db;
