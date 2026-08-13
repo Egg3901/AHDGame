@@ -126,3 +126,6 @@ scripts/landing-images/*
 
 .superpowers/
 worktrees/
+
+# One-off repair pre-images (contain player data; never in a public repo)
+scripts/.*-backup.json

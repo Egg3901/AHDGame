@@ -39,8 +39,6 @@ import {
   getPrimaryWinnersForElection,
   type CountryId,
 } from "@/lib/constants/countries";
-import { getGameState } from "@/lib/gameState";
-import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { parseSeatId } from "@/lib/seats/seatId";
 import { getGameTime } from "@/lib/time/gameTime";
 import { primaryOpenFilter } from "@/lib/elections/electionDeadlineFilters";
@@ -61,9 +59,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     // Game turn drives the turn-first primary-phase filter + the close mutation
     // below; `now` stays wall-clock for audit timestamps (withdrawnAt, etc.).
     const { currentTurn } = await getGameTime();
-    // Decides the US House primary cap (3 vs the legacy 1) below.
-    const redistrictingEnabled = isRedistrictingEnabled(await getGameState(db));
-
     // Optional additional filters from query params
     const { searchParams } = new URL(request.url);
     const state = searchParams.get("state");
@@ -200,12 +195,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
       // How many advance per party. This route used to hardcode 1, which
       // withdrew candidates the turn resolver would have advanced: 3 for
-      // UK/JP/DE legislatures and US House under redistricting, 7 for
-      // one-party states. Mirror `resolvePrimariesIfNeeded` exactly.
+      // UK/JP/DE legislatures, 7 for one-party states. Mirror
+      // `resolvePrimariesIfNeeded` exactly.
       const maxAdvancing = getPrimaryWinnersForElection(
         electionCountryId as CountryId,
-        election.electionType,
-        redistrictingEnabled
+        election.electionType
       );
 
       const loserIds: string[] = [];
