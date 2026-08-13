@@ -117,6 +117,8 @@ export interface InfluencePlayRow {
   turn: number;
   resolvedTurn: number | null;
   appliedPoints: number | null;
+  /** Spend returned to the fund because the play resolved at zero points. */
+  refunded: boolean;
 }
 
 export interface RivalIntelEntry {
@@ -453,6 +455,7 @@ export async function loadOrgInfluence(
     turn: p.turn,
     resolvedTurn: p.resolvedTurn,
     appliedPoints: p.appliedPoints,
+    refunded: p.refunded === true,
   }));
 
   // Members' own standing. Computed from `lead` via standingFor, deliberately

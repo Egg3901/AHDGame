@@ -32,6 +32,13 @@ export interface AlignmentPlay {
   /** Share points it contributed, after the channel weight. Null while pending. */
   appliedPoints: number | null;
   /**
+   * True when the spend was returned to the fund because the play resolved to
+   * exactly zero points — the target locked, or lost its alignment row, inside
+   * the turn between commit and resolve. Absent on rows written before refunds
+   * existed; read as "not refunded".
+   */
+  refunded?: boolean;
+  /**
    * What bought this pull. A `play` is money spent purely on influence; `aid` is
    * an aid package, which delivers the money to the recipient's treasury as well.
    * Absent on rows written before aid carried alignment weight — read as "play".
