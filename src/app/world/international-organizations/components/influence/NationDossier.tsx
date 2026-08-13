@@ -4,7 +4,10 @@ import { useState } from "react";
 import { POLE_TEXT, ShareBar } from "@/components/alignment/ShareBar";
 import type { InfluenceTarget, OrgInfluenceView } from "@/lib/alignment/queries/orgInfluence";
 import { formatShare, roundToShareGrid } from "@/lib/alignment/normalize";
+import { PER_NATION_TURN_CAP } from "@/lib/constants/alignmentEras";
+import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { useFundFormatter } from "../useFundFormatter";
+import { formatFundAmount } from "../fundCurrency";
 
 interface Props {
   view: OrgInfluenceView;
@@ -207,12 +210,39 @@ function CommitPlayForm({
     }
   }
 
+  // Everything below is in the FUND's own currency, never the viewer's. The
+  // costs stated above this form read in the viewer's preferred currency, so
+  // quoting the balance or the preview in anything else would leave a player
+  // typing a number that means something different from the one they just read.
+  const fundCode = COUNTRY_CONFIGS[view.fundCurrencyCountryId]?.currencyCode ?? "USD";
+  const inFundCurrency = (n: number) => formatFundAmount(n, fundCode);
+
+  const typed = Number(amount);
+  const pointCost = target.pointCostLocal ?? 0;
+  const hasPreview = typed > 0 && pointCost > 0;
+  // pointCostLocal already carries the non-aligned resistance, so this is points
+  // actually landed, not list price. The per-nation cap bounds the whole nation's
+  // turn, so anything past it is the ceiling talking, not this play.
+  const rawPoints = hasPreview ? typed / pointCost : 0;
+  const cappedPoints = Math.min(rawPoints, PER_NATION_TURN_CAP);
+  const overCap = rawPoints > PER_NATION_TURN_CAP;
+  const overBalance = typed > view.fundBalanceLocal;
+
   return (
     <form onSubmit={submit} className="space-y-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span className="text-body-xs uppercase tracking-wide text-muted">
+          Paid from the {view.fundCurrencyCountryId} organisation fund
+        </span>
+        <span className="font-mono text-body-xs tabular-nums text-foreground">
+          {inFundCurrency(view.fundBalanceLocal)} available
+        </span>
+      </div>
+
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex-1">
           <span className="mb-1 block text-body-xs uppercase tracking-wide text-muted">
-            Amount ({view.fundCurrencyCountryId})
+            Amount ({fundCode})
           </span>
           <input
             type="number"
@@ -231,6 +261,32 @@ function CommitPlayForm({
           {submitting ? "Committing…" : "Commit play"}
         </button>
       </div>
+
+      {hasPreview && (
+        <p className="text-body-xs text-muted">
+          Buys{" "}
+          <span className="font-mono tabular-nums text-foreground">
+            {formatShare(roundToShareGrid(cappedPoints))}
+          </span>{" "}
+          points at {inFundCurrency(pointCost)} each.{" "}
+          {overCap
+            ? `Past the ${PER_NATION_TURN_CAP}-point ceiling for one turn — the rest buys nothing unless a rival pushes back.`
+            : "One point is one share of this nation's alignment."}
+        </p>
+      )}
+
+      {overBalance && (
+        <p className="text-body-xs text-warning">
+          That is more than the fund holds. The play will be refused.
+        </p>
+      )}
+
+      <p className="text-body-xs text-muted">
+        The fund is debited now; the nation moves when the turn processes, and the points bought
+        appear under Recent plays. A play that lands on a nation which locks before then is refunded
+        in full.
+      </p>
+
       {error && <p className="text-body-sm text-error">{error}</p>}
     </form>
   );

@@ -63,11 +63,12 @@ async function ensureResidentTerritorialPartyOrgs(
     .find({
       countryId: "US",
       homeState: { $in: territoryIds },
-      // `null` is a real stored value here (older character docs) but is not in
-      // the declared type, so the literal is cast rather than dropped: removing
-      // it from the $nin would let null-party characters count as occupying a
-      // territory. Runtime array is unchanged.
-      party: { $exists: true, $nin: [null as unknown as string, ""] },
+      // `Character.party` is typed as a string, but characters written before
+      // the field was made non-optional persist it as null, so the runtime
+      // filter has to exclude both null and "". The cast keeps that behaviour
+      // while satisfying `$nin`'s element type; dropping null from the array
+      // would silently count party-less legacy residents as party members.
+      party: { $exists: true, $nin: [null, ""] as unknown as string[] },
     })
     .project<Pick<Character, "homeState">>({ homeState: 1 })
     .toArray();

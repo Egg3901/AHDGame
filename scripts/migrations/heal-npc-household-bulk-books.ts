@@ -44,6 +44,9 @@ type BankRow = {
 };
 
 type GameState = {
+  // The singleton is keyed by the literal string "current", not an ObjectId.
+  // Without this, `collection<GameState>` falls back to Mongo's default
+  // `_id: ObjectId` and the findOne below does not typecheck.
   _id: string;
   isProcessing?: boolean;
   currentTurn?: number;

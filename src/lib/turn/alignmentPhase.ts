@@ -50,6 +50,7 @@ import {
   getOrganizationMembershipsCollection,
 } from "@/lib/db/collections";
 import { removeOrganizationMembership } from "@/lib/internationalOrganizations/withdrawalBills";
+import { creditOrganizationFund } from "@/lib/internationalOrganizations/organizationFund";
 import {
   loadOrganizationDef,
   hasOpenMembershipProposal,
@@ -88,6 +89,11 @@ export interface AlignmentPhaseResult {
   rowsHealed: number;
   /** Queued influence plays consumed this turn. */
   playsResolved: number;
+  /**
+   * Plays that bought nothing and had their spend returned to the org fund —
+   * the target locked or lost its row between commit and resolve.
+   */
+  playsRefunded: number;
   /**
    * Bloc stress by channel organisation, 0-1. Reported rather than hidden: it
    * dampens the bloc's own plays, and a player who cannot see why their spending
@@ -130,6 +136,7 @@ export async function processAlignmentTurn(
       spheresSynced: 0,
       rowsHealed: 0,
       playsResolved: 0,
+      playsRefunded: 0,
       blocStress: {},
       defections: 0,
       defectionWarnings: 0,
@@ -245,12 +252,42 @@ export async function processAlignmentTurn(
   const channelFor = (organizationId: string) =>
     era.channels.find((c) => c.organizationId === organizationId);
 
-  /** Stamp a play as consumed. Resolved rows are kept for the audit trail. */
+  // Declared here rather than with the counters below because `resolvePlay`
+  // closes over it and is defined above them.
+  let playsRefunded = 0;
+
+  /**
+   * Stamp a play as consumed. Resolved rows are kept for the audit trail.
+   *
+   * A play that bought nothing is refunded. The fund is debited when the play is
+   * committed, a turn before it resolves, and `commitInfluencePlay` already
+   * refuses a locked target up front — so a zero here means the board changed
+   * inside that window (the target locked, or it has no alignment row at all),
+   * not that the sponsor gambled and lost. Keeping the money would charge a bloc
+   * full price for a push the engine declined to apply, with nothing in the UI
+   * to explain where it went.
+   *
+   * Only an exact zero refunds. A play that was scaled down by the per-nation
+   * cap did move the nation and is not a refund case.
+   *
+   * AID ROWS ARE NEVER REFUNDED. An aid package's money has already left for the
+   * recipient's treasury; the row here only records the political half of that
+   * bargain, and no org fund was debited to create it. Crediting the fund for a
+   * zero-resolve aid row would mint the amount outright — the recipient keeps
+   * the aid and the bloc gets the same sum back.
+   */
+  const refundable = (playDoc: AlignmentPlay) => playDoc.source !== "aid";
+
   const resolvePlay = async (playDoc: AlignmentPlay, appliedPoints: number) => {
+    const refunded = appliedPoints === 0 && refundable(playDoc) && playDoc.amountLocal > 0;
     await playsCol.updateOne(
       { _id: playDoc._id },
-      { $set: { resolvedTurn: currentTurn, appliedPoints } }
+      { $set: { resolvedTurn: currentTurn, appliedPoints, refunded } }
     );
+    if (refunded) {
+      await creditOrganizationFund(db, playDoc.organizationId, playDoc.amountLocal);
+      playsRefunded++;
+    }
   };
 
   // Close finished crises first, then read which targets are still in one: a
@@ -637,6 +674,7 @@ export async function processAlignmentTurn(
     spheresSynced,
     rowsHealed,
     playsResolved,
+    playsRefunded,
     blocStress: Object.fromEntries(
       [...stressByOrg.entries()].map(([orgId, b]) => [orgId, Math.round(b.stress * 1000) / 1000])
     ),
