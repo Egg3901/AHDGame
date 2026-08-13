@@ -1,5 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { resolveTabs } from "./RegionTabNav";
+import { regionElectionsUrl } from "@/lib/urls";
+
+describe("regionElectionsUrl ↔ resolveTabs contract", () => {
+  // The nav's State Elections link builds its href from regionElectionsUrl,
+  // and this resolver decides which tab that href actually opens. They live in
+  // different files, so without this test a rename of either the `tab`/`sub`
+  // param names or the "elections" sub-tab id would silently land the link on
+  // Politics > Officials instead, with nothing failing.
+  it("lands the nav's State Elections href on the Elections sub-tab", () => {
+    const url = new URL(regionElectionsUrl("US", "NY"), "https://example.test");
+    const params = url.searchParams;
+
+    expect(url.pathname).toBe("/country/us/region/NY");
+    expect(resolveTabs(params.get("tab"), params.get("sub"), false)).toEqual({
+      superTab: "politics",
+      subTab: "elections",
+    });
+  });
+});
 
 describe("resolveTabs", () => {
   describe("sub-tab switching (regression: legacy map was shadowing the sub param)", () => {
