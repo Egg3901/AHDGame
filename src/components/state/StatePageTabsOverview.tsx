@@ -5,6 +5,7 @@ import { buildOverviewViewModel } from "@/lib/states/overview/buildOverviewViewM
 import { AllPartyOrgPie } from "./overview/AllPartyOrgPie";
 import { AllPartyRegPie } from "./overview/AllPartyRegPie";
 import { PoliticalSummaryCard } from "./overview/PoliticalSummaryCard";
+import { PoolLegend, type PoolLegendRow } from "./overview/PoolLegend";
 import { EconomySummary } from "./overview/EconomySummary";
 import { ContestedPrimariesCard } from "./overview/PrimaryContestCard";
 import { RaceWatchlist } from "./overview/RaceWatchlist";
@@ -30,10 +31,17 @@ function RegistrationLegend({ vm }: { vm: OverviewViewModel }) {
       </div>
     );
   }
-  const rows = [
+  const rows: PoolLegendRow[] = [
     ...registrationPool.parties
       .filter((p) => p.regPct > 0)
-      .map((p) => ({ key: p.id, label: p.abbr, color: p.color, value: p.regPct })),
+      .map((p) => ({
+        key: p.id,
+        label: p.name,
+        abbr: p.abbr,
+        partyId: p.id,
+        color: p.color,
+        value: p.regPct,
+      })),
     {
       key: "independent",
       label: "Independent",
@@ -52,19 +60,7 @@ function RegistrationLegend({ vm }: { vm: OverviewViewModel }) {
       <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">
         Registration Pool
       </div>
-      <ul className="mt-2 space-y-1.5">
-        {rows.map((r) => (
-          <li key={r.key} className="flex items-center gap-2 text-sm">
-            <span
-              className="h-2.5 w-2.5 rounded-full shrink-0"
-              style={{ background: r.color }}
-              aria-hidden
-            />
-            <span className="flex-1 truncate">{r.label}</span>
-            <span className="shrink-0 tabular-nums">{r.value.toFixed(1)}%</span>
-          </li>
-        ))}
-      </ul>
+      <PoolLegend rows={rows} countryId={vm.countryId} />
     </div>
   );
 }
