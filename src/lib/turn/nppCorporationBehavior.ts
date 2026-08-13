@@ -208,15 +208,51 @@ const NPP_REINVEST_MAX_SECTORS_PER_TURN = 1;
  */
 const NPP_REINVEST_MAINTENANCE_CASH_SHARE = 0.25;
 
-const CASH_FLOOR = 2_000_000; // Never spend below this
+// ─── Cash rails (₳) ───────────────────────────────────────────────────────────
+//
+// These gate EVERY discretionary decision the brain makes: expansion (section
+// 5), dividends (section 4) and the growth leg of capacity reinvestment
+// (section 6) all require the corp to clear `effectiveCashFloor`, and expansion
+// additionally requires `EXPANSION_MIN_CASH` of surplus ON TOP of it.
+//
+// WHY THEY CAME DOWN 8x. The old ₳2,000,000 floor was authored against a
+// modern-era money scale and never re-based for the 1953 worlds that actually
+// run. Measured on prod at turn 79 across a 200-corp sample of the 476 NPP-run
+// corps: median liquid capital ₳1,724,110, and 105 of 200 sat BELOW the floor.
+// Over half the AI cohort was therefore locked out of expanding, paying a
+// dividend, or buying growth capacity, permanently, because a corp under the
+// floor cannot spend to earn its way back over it. The visible symptom is a
+// corp with healthy sectors (20-35% margins, selling out) whose share price
+// falls for twenty turns while it sits on idle cash doing nothing.
+//
+// This module already discovered the same failure once, for maintenance capex
+// alone, and patched around it with NPP_REINVEST_MAINTENANCE_CASH_SHARE rather
+// than fixing the floor. Lowering the floor is that fix generalized.
+//
+// The whole family moves by the same factor so the DESIGN RATIOS are untouched:
+// the floor is still 2x the safety rail, and expansion still demands 2.5x the
+// floor in surplus on top of it. Only the scale changed. At ₳250,000 the same
+// prod sample drops from 105/200 frozen to 36/200. The remainder are corps
+// that are genuinely broke, which is what the rail is for.
+//
+// STILL A CONSTANT, STILL WRONG IN PRINCIPLE. The cohort's cash spans four
+// orders of magnitude (p25 ₳398,719, p75 ₳52,833,977), so no single absolute
+// number fits both tails. The durable fix is to derive these from the corp's
+// own revenue and the world's era unit scale, the way `computeBuildCost`
+// already takes `eraUnitScale`. This is the calibration, not the cure.
+const CASH_FLOOR = 250_000; // Never spend below this
 const EXPANSION_COST = 500_000;
-const EXPANSION_MIN_CASH = 5_000_000; // Need this much above floor to expand
+const EXPANSION_MIN_CASH = 625_000; // Need this much above floor to expand
 const EXPANSION_MIN_MARGIN = 15; // Corp-level avg margin must be healthy
 const MAX_SECTORS = 5;
 
 // Hard safety rails: archetype modifiers scale the base levers above, but the
 // result is always clamped so no personality can bankrupt a profitable corp.
-const SAFE_CASH_FLOOR_MIN = 1_000_000; // an aggressive floor still leaves a buffer
+//
+// This one is a MAX(), so it is the binding floor whenever an archetype scales
+// CASH_FLOOR below it. Left at ₳1,000,000 it would have clamped the new
+// ₳250,000 floor straight back up and the change above would have been inert.
+const SAFE_CASH_FLOOR_MIN = 125_000; // an aggressive floor still leaves a buffer
 const MAX_DIVIDEND_RATE = 12; // cap any archetype-boosted payout
 
 /** Default archetype for corps whose CEO NPP can't be resolved (legacy / mid-migration). */
