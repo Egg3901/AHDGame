@@ -59,45 +59,10 @@ import { computeEscrowFundingTransfer } from "@/lib/corporations/escrowFunding";
 import { pushEarningsHistory, normalizedEarningsFromHistory } from "./earningsRollingAverage";
 import { applyEquityMethodEarnings } from "./equityMethodEarnings";
 import { processSector, type SectorTurnEnv } from "./sectorTurn";
-
-/**
- * Issuer-side bond interest expense in ₳. Post-v0.2.6 a bond's totalIssued
- * is denominated in `bond.currencyCode`; caller's corp income math runs in
- * ₳, so convert the bond-currency total to ₳ before summing. Pre-migration
- * bonds (no currencyCode) passthrough — their totalIssued is already ₳.
- */
-function perTurnIssuerBondInterestExpense(
-  issuerBonds: Bond[] | undefined,
-  fxByCurrency: ReadonlyMap<CurrencyCode, number>
-): number {
-  if (!issuerBonds?.length) return 0;
-  let annualCouponAnchor = 0;
-  for (const b of issuerBonds) {
-    const rate = b.currencyCode ? (fxByCurrency.get(b.currencyCode) ?? 1) : 1;
-    const couponLocal = (b.couponRate / 100) * b.totalIssued;
-    annualCouponAnchor += corpCapitalToAnchor(couponLocal, b.currencyCode, rate);
-  }
-  return annualCouponAnchor / TURNS_PER_YEAR;
-}
-
-/**
- * Holder-side coupon income in ₳. Each bond's coupon is denominated in
- * `bond.currencyCode`; a US corp holding a UK sovereign would otherwise
- * sum GBP into its ₳ income. Normalize per-bond before accumulating.
- */
-function perTurnBondCouponIncomeAsHolder(
-  positions: { bond: Bond; units: number }[] | undefined,
-  fxByCurrency: ReadonlyMap<CurrencyCode, number>
-): number {
-  if (!positions?.length) return 0;
-  let sumAnchor = 0;
-  for (const { bond, units } of positions) {
-    const couponLocal = perTurnCouponPayment(bond.couponRate, BOND_UNIT_FACE_VALUE) * units;
-    const rate = bond.currencyCode ? (fxByCurrency.get(bond.currencyCode) ?? 1) : 1;
-    sumAnchor += corpCapitalToAnchor(couponLocal, bond.currencyCode, rate);
-  }
-  return sumAnchor;
-}
+import {
+  perTurnIssuerBondInterestExpense,
+  perTurnBondCouponIncomeAsHolder,
+} from "@/lib/bonds/corpBondCashflows";
 
 /** Primary commodities that proxy R&D conditions for each sector type. */
 const SECTOR_RD_COMMODITIES: Partial<Record<string, [string, string?]>> = {
