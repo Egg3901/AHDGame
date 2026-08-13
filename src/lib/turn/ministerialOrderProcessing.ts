@@ -206,13 +206,20 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
     .project<
       Pick<
         CabinetSetting,
-        "_id" | "countryId" | "positionId" | "tierSetting" | "targetRegionId" | "advocacyActive"
+        | "_id"
+        | "countryId"
+        | "positionId"
+        | "tierSetting"
+        | "tierSettings"
+        | "targetRegionId"
+        | "advocacyActive"
       >
     >({
       _id: 1,
       countryId: 1,
       positionId: 1,
       tierSetting: 1,
+      tierSettings: 1,
       targetRegionId: 1,
       advocacyActive: 1,
     })
@@ -228,20 +235,40 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
 
     const positionMetrics = [...mechanics.nationalMetrics, ...mechanics.regionalMetrics];
 
-    // Tier setting effects (national)
+    // Apply a resolved tier option's effects to national metrics / inflation.
+    const applyTierEffects = (effects: Record<string, number>) => {
+      for (const [metric, modifier] of Object.entries(effects)) {
+        if (isInflationPressureKey(metric)) {
+          policyInflationByCountry[setting.countryId] =
+            (policyInflationByCountry[setting.countryId] ?? 0) + modifier;
+          continue;
+        }
+        const path = resolveMetricPath(metric, positionMetrics);
+        bucket.national[path] = (bucket.national[path] ?? 0) + modifier;
+      }
+    };
+
+    // Tier setting effects (national) — primary lever
     if (setting.tierSetting && mechanics.tierSetting) {
       const tier = mechanics.tierSetting.options.find((o) => o.id === setting.tierSetting);
       if (tier) {
-        for (const [metric, modifier] of Object.entries(tier.effects)) {
-          if (isInflationPressureKey(metric)) {
-            policyInflationByCountry[setting.countryId] =
-              (policyInflationByCountry[setting.countryId] ?? 0) + modifier;
-            continue;
-          }
-          const path = resolveMetricPath(metric, positionMetrics);
-          bucket.national[path] = (bucket.national[path] ?? 0) + modifier;
-        }
+        applyTierEffects(tier.effects);
         settingsApplied++;
+      }
+    }
+
+    // Extra portfolio levers (e.g. HEW education + welfare). Each selection is
+    // keyed by its tier's `key`; unset keys fall through to no effect (default).
+    if (setting.tierSettings && mechanics.tierSettings) {
+      for (const cfg of mechanics.tierSettings) {
+        if (!cfg.key) continue;
+        const selectedId = setting.tierSettings[cfg.key];
+        if (!selectedId) continue;
+        const option = cfg.options.find((o) => o.id === selectedId);
+        if (option) {
+          applyTierEffects(option.effects);
+          settingsApplied++;
+        }
       }
     }
 
