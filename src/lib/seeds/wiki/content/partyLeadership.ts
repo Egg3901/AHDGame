@@ -73,7 +73,7 @@ Only chair, vice chair, treasurer, or national chair can adjust these percentage
 
 ### NPP influence
 
-National chair and vice chair can spend party resources to influence NPPs in states where no player is active. State chairs and vice chairs can influence same-party NPPs in their state using party action pools and treasury.
+National chair, vice chair, and committee-confirmed campaigners can spend party resources to influence NPPs (boost stats, move them between states). Recruitment of new NPPs stays chair and vice chair. State chairs and vice chairs can influence same-party NPPs in their state using party action pools and treasury.
 
 ## National committee proposals
 
