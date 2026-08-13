@@ -90,6 +90,11 @@ describe("commodityPriceTurn", () => {
       insertMany: mockInsertMany,
       updateOne: mockTradeUpdateOne,
       deleteMany: vi.fn().mockResolvedValue({}),
+      // Lazy index creation is fire-and-forget on the real driver. The ledger
+      // ones sit behind marketSystemMode >= "ledger" (mocked "off" here), but
+      // the tradeFlowSnapshots {turn:-1} index for the reachable-book read runs
+      // on every turn, so the stub has to answer it.
+      createIndex: vi.fn().mockResolvedValue(""),
       // Config-flag reads (e.g. commodityScarcityDrift/stockCoverCap at the tail
       // of the turn) hit gameConfig.findOne; default to null so every flag reads
       // as off, matching getMarketSystemMode("off") above.
@@ -593,6 +598,7 @@ describe("commodityPriceTurn", () => {
           insertMany: mockInsertMany,
           updateOne: mockTradeUpdateOne,
           deleteMany: vi.fn().mockResolvedValue({}),
+          createIndex: vi.fn().mockResolvedValue(""),
           // Serves the gameState preset read. Every gameConfig flag reader checks
           // for an explicit `true`, so the extra field leaves them all off.
           findOne: vi.fn().mockResolvedValue({ preset: "1953-default" }),
