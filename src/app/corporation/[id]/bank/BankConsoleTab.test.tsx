@@ -182,6 +182,60 @@ describe("BankConsoleTab state groups", () => {
   });
 });
 
+describe("charter type switch (ticket 1069)", () => {
+  it("switches charter type via PATCH from the admin tab, warning about the deposit book", async () => {
+    const switchable = {
+      ...payload,
+      currentTurn: 150,
+      legalCharterTypes: ["retail", "investment", "universal"],
+    };
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) =>
+      init?.method === "PATCH"
+        ? ok({ success: true, charter: { ...switchable.charter, type: "investment" } })
+        : ok(switchable)
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+    // Retail bank with deposits switching to investment returns the book: confirm.
+    const confirmSpy = vi.fn(() => true);
+    window.confirm = confirmSpy as unknown as typeof window.confirm;
+
+    render(<BankConsoleTab corporationId="corp1" isCeo />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+    await screen.findByText("Change charter type");
+
+    // Default target is the first non-current legal type (investment).
+    fireEvent.click(screen.getByRole("button", { name: /Switch to Investment/i }));
+
+    await waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/corporations/corp1/bank/charter",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ type: "investment" }),
+        })
+      );
+    });
+  });
+
+  it("locks the switch during the cooldown window", async () => {
+    const cooling = {
+      ...payload,
+      currentTurn: 150,
+      legalCharterTypes: ["retail", "investment"],
+      charter: { ...payload.charter, charterSwitchCooldownUntilTurn: 160 },
+    };
+    global.fetch = vi.fn(async () => ok(cooling)) as unknown as typeof fetch;
+
+    render(<BankConsoleTab corporationId="corp1" isCeo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+
+    expect(await screen.findByText(/locked for 10 more turns/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Switch to/i })).toBeNull();
+  });
+});
+
 describe("charter issue block reason", () => {
   const unchartered = { ...payload, charter: null };
 

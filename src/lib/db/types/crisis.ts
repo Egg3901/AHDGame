@@ -41,6 +41,41 @@ export interface CrisisEffect {
   physicality?: "physical" | "financial";
 }
 
+/**
+ * A real-subsystem action a crisis decision option can invoke, in addition to
+ * its flat `effects`. Where `effects` only nudge metrics/approval, an `action`
+ * reaches into an actual game subsystem — files a bill, issues a taking, spawns
+ * a court case — so a crisis choice has genuine, contestable consequences that
+ * tie into the rest of the mechanics (ROTDM).
+ *
+ * Handlers live in `src/lib/crises/optionActions.ts` and are dispatched by
+ * `submitCrisisDecision` AFTER the option's `effects` apply and BEFORE the tree
+ * navigates. A handler that throws does not roll back already-applied effects;
+ * keep handlers side-effect-safe and idempotent where practical. This is the
+ * reusable hook every future crisis builds on — add a new `kind` + handler, not
+ * a new bespoke crisis engine.
+ */
+export type CrisisOptionAction =
+  /** Head of government seizes the target sector by emergency executive taking
+   *  (the `method: "executive"` nationalize path). Solvent player corps are
+   *  rejected upstream, which is what forces the court fight or the bill. */
+  | { kind: "executiveNationalize"; sectorType: string }
+  /** Spawn a Supreme Court docket case reviewing an executive taking. If the
+   *  sitting bench's economic lean diverges from the taking, the ruling reverts
+   *  it. This is the bridge that makes an executive order contestable. */
+  | { kind: "scotusChallenge"; axis: "economic" | "social"; revertLabel: string }
+  /** Introduce an emergency nationalization bill straight into active voting
+   *  (the crisis-aid fast path: no NPI/action cost, short window). Passage is
+   *  the authorization — fair-value taking, no court risk, but needs the votes. */
+  | { kind: "emergencyNationalizeBill"; sectorType: string; sectorCarveFraction?: number }
+  /** Open (or offer) government-brokered bargaining for the struck sector.
+   *  Pre-nationalization this is mediation; post-nationalization the SOE is the
+   *  employer and it is a direct negotiation. */
+  | { kind: "openBargaining"; sectorType: string }
+  /** Settle the dispute by conceding a wage floor across the struck sector,
+   *  ending the strike immediately at an inflationary cost. */
+  | { kind: "settleWageFloor"; sectorType: string };
+
 export interface CrisisDecisionOption {
   optionId: string;
   label: string;
@@ -50,6 +85,9 @@ export interface CrisisDecisionOption {
   requiredBudget?: number;
   requiredApproval?: number;
   collectiveContribution?: number;
+  /** Optional real-subsystem action fired when this option is chosen. See
+   *  {@link CrisisOptionAction}. Absent = effects-only (legacy behaviour). */
+  action?: CrisisOptionAction;
 }
 
 export interface CrisisDecisionNode {

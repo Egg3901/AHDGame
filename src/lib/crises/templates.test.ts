@@ -178,6 +178,7 @@ describe("P3.5 margin-shock physicality classification", () => {
         "labor_strikes",
         "port_closure",
         "power_grid_failure",
+        "steel_strike",
         "supply_chain_disruption",
       ].sort()
     );

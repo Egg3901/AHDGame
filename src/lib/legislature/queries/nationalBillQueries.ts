@@ -22,6 +22,7 @@ import {
   directionLabel,
   effectTargetLabelFromMetricId,
   resolveBillProvisions,
+  formatCreateDepartmentLabel,
 } from "@/lib/congress/billEnrichment";
 import { buildBillWhipPanelData } from "@/lib/congress/billWhipPanelData";
 import type { BillWhip } from "@/lib/db/types/billWhip";
@@ -361,7 +362,9 @@ export async function listNationalLegislatureBills(
                                 ? "Declaration of War"
                                 : provision.type === "join_conflict"
                                   ? "Entry into the Conflict"
-                                  : describeSubsidyProvision(provision);
+                                  : provision.type === "create_department"
+                                    ? formatCreateDepartmentLabel(provision).legislationTypeName
+                                    : describeSubsidyProvision(provision);
           return {
             legislationTypeId: provision.type,
             legislationTypeName,
