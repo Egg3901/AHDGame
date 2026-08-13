@@ -4,23 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui";
 import type { WhipDefianceItem, WhipDefianceSnapshot } from "@/lib/partyWhips/whipDefiance";
+import { whipIssuerRoleLabel } from "@/lib/partyWhips/issuerRole";
 
 function formatIssuedAt(value: string) {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function roleLabel(role: string) {
-  switch (role) {
-    case "chair":
-      return "Chair";
-    case "viceChair":
-      return "Vice Chair";
-    default:
-      return "Admin";
-  }
 }
 
 function toneForMode(mode: "soft" | "hard") {
@@ -44,8 +34,10 @@ function DefianceRow({ item }: { item: WhipDefianceItem }) {
           </div>
           <p className="mt-1 text-sm text-muted">{item.targetLabel}</p>
           <p className="mt-1 text-xs text-muted">
-            Wanted {item.whipDirection.toUpperCase()} · Current {item.currentVoteLabel} · Issued by{" "}
-            {roleLabel(item.issuerRole)}
+            Wanted {item.whipDirection.toUpperCase()} · Current {item.currentVoteLabel}
+            {whipIssuerRoleLabel(item.issuerRole)
+              ? ` · Issued by ${whipIssuerRoleLabel(item.issuerRole)}`
+              : ""}
           </p>
         </div>
         <div className="text-right text-xs text-muted">
