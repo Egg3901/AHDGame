@@ -10,7 +10,7 @@ import { getLendableHeadroom, getReserveRequirement } from "@/lib/banking/reserv
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { getCurrentTurn } from "@/lib/currentTurn";
-import { isLendingCharter } from "./charterKinds";
+import { isLendingCharter, isNamedLendingCharter } from "./charterKinds";
 
 /** Provisional - character loan rate = posted lending rate + this spread (pp). */
 export const CHARACTER_LOAN_SPREAD_PP = 1.5;
@@ -130,14 +130,15 @@ export async function originateLoan(
   }
 
   const charter = bankCorp.bankCharter;
-  if (!isLendingCharter(charter)) {
-    const rejectedType = bankCorp.bankCharter?.type;
+  // Named loans are open to every active charter. Investment banks lend to
+  // firms; only the household book is closed to them.
+  if (!isNamedLendingCharter(charter)) {
+    return { ok: false, error: "Corporation has no active bank charter" };
+  }
+  if (borrower.type === "character" && !isLendingCharter(charter)) {
     return {
       ok: false,
-      error:
-        rejectedType === "investment"
-          ? "Investment banks do not originate retail loans"
-          : "Corporation has no active retail or universal bank charter",
+      error: "An investment charter lends to corporations, not to individuals",
     };
   }
 
