@@ -8,6 +8,7 @@ import { regionPartyApiUrl } from "@/lib/urls";
 import { usePsSpendScope } from "@/components/state/politics/orgActions/usePsSpendScope";
 import { useActionPreview } from "@/components/state/politics/orgActions/useActionPreview";
 import { EstimateLine } from "@/components/state/politics/orgActions/EstimateLine";
+import { PoolLegend, type PoolLegendRow } from "@/components/state/overview/PoolLegend";
 
 const UNAFFILIATED_COLOR = "var(--card-border)";
 
@@ -89,10 +90,17 @@ export function PoliticalSummaryCard({
   // Pool legend rows: every party with a non-zero Org slice + the
   // unaffiliated remainder. Same format as the Registration Pool legend
   // so the two cards read as a matched pair.
-  const orgRows = [
+  const orgRows: PoolLegendRow[] = [
     ...partyOrg
       .filter((p) => p.orgPct > 0)
-      .map((p) => ({ key: p.id, label: p.abbr, color: p.color, value: p.orgPct })),
+      .map((p) => ({
+        key: p.id,
+        label: p.name,
+        abbr: p.abbr,
+        partyId: p.id,
+        color: p.color,
+        value: p.orgPct,
+      })),
   ];
   if (unaffiliatedPct > 0) {
     orgRows.push({
@@ -170,21 +178,7 @@ export function PoliticalSummaryCard({
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-4 shadow-sm">
       <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">Org Pool</div>
-      {orgRows.length > 0 && (
-        <ul className="mt-2 space-y-1.5">
-          {orgRows.map((r) => (
-            <li key={r.key} className="flex items-center gap-2 text-sm">
-              <span
-                className="h-2.5 w-2.5 rounded-full shrink-0"
-                style={{ background: r.color }}
-                aria-hidden
-              />
-              <span className="flex-1 truncate">{r.label}</span>
-              <span className="shrink-0 tabular-nums">{r.value.toFixed(1)}%</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {orgRows.length > 0 && <PoolLegend rows={orgRows} countryId={vm.countryId} />}
       <div className="mt-3 text-xs leading-snug text-[var(--muted)]">{standingLine}</div>
 
       <div className="mt-3 flex flex-wrap gap-2">

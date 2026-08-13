@@ -6,6 +6,7 @@ import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { findCaucusBySlug, listCaucusMemberships } from "@/lib/db/caucusLookup";
 import { getCountryConfig, COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Bill, BillWhip } from "@/lib/db/types";
+import { resolveWhipIssuerRole } from "@/lib/partyWhips/issuerRole";
 import {
   summarizePlayerWhips,
   type PlayerWhipSummaryEntry,
@@ -50,13 +51,7 @@ function resolveCaucusWhipRole(
   chairId: ObjectId | null,
   viceChairId: ObjectId | null
 ): string | undefined {
-  if (whip.issuedByRole === "chair") return "Chair";
-  if (whip.issuedByRole === "viceChair") return "Vice Chair";
-  if (whip.issuedByRole === "admin") return "Admin";
-  if (whip.issuedByCharacterId && chairId?.equals(whip.issuedByCharacterId)) return "Chair";
-  if (whip.issuedByCharacterId && viceChairId?.equals(whip.issuedByCharacterId))
-    return "Vice Chair";
-  return undefined;
+  return resolveWhipIssuerRole(whip, { chairId, viceChairId });
 }
 
 // GET /api/country/[code]/parties/[id]/caucuses/[slug]/whippable-bills — Return active bills where caucus members can be whipped

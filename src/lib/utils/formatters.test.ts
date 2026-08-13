@@ -167,6 +167,11 @@ describe("formatFundsCompact", () => {
   it("formats negative amounts", () => {
     expect(formatFundsCompact(-2500)).toBe("-$2.5K");
   });
+
+  it("spaces alphabetic prefixes so руб566B is not read as a dollar figure (ticket-1065)", () => {
+    expect(formatFundsCompact(565_992_434_499, "руб")).toBe("руб 566B");
+    expect(formatFundsCompact(-5_800_000_000, "руб")).toBe("-руб 5.8B");
+  });
 });
 
 describe("formatFundsCompact1dp", () => {
@@ -194,6 +199,11 @@ describe("formatFundsCompact1dp", () => {
 
   it("formats negative amounts with a leading minus", () => {
     expect(formatFundsCompact1dp(-31_000_000_000_000, "¥")).toBe("-¥31.0T");
+  });
+
+  it("spaces alphabetic prefixes (ticket-1065: руб566.0B looked like $566B)", () => {
+    expect(formatFundsCompact1dp(565_992_434_499, "руб")).toBe("руб 566.0B");
+    expect(formatFundsCompact1dp(5_800_000_000, "руб")).toBe("руб 5.8B");
   });
 });
 
