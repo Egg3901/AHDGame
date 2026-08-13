@@ -67,7 +67,11 @@ import {
   calculateStateRevenue,
   normalizeFederalTaxRates,
   normalizeStateTaxRates,
+  loadLatestSourcedImportAggregates,
 } from "@/lib/budget/revenue";
+import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
+import { getCurrentTurn } from "@/lib/currentTurn";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getSelectedPolicyOption } from "@/lib/budget/costs";
 import type { CountryId } from "@/lib/constants/countries";
 import { getCountryConfig, EU_EUROZONE_MEMBERS } from "@/lib/constants/countries";
@@ -155,7 +159,37 @@ async function applyTaxRateChange(
       [taxType]: selectedOptionRate,
     };
 
-    const newRevenue = await calculateFederalRevenue(db, newTaxRates, budgetId);
+    // Money wiring (interstate-logistics plan step 5, phase B): a tax-rate
+    // change bill is a rare event, not a per-turn hot loop, so a direct read
+    // here is cheap. Only the tariffs base has a sourced-flow counterpart -
+    // netting is a no-op (sourcedImports stays undefined) for every other tax.
+    let sourcedImports: { tariffPaidAnchor: number; importValueAnchor: number } | undefined;
+    if (taxType === "tariffs") {
+      const moneyWiringConfig = await db
+        .collection<GameConfig>("gameConfig")
+        .findOne({ _id: "default" }, { projection: { interstateMoneyWiringEnabled: 1 } });
+      if (moneyWiringConfig?.interstateMoneyWiringEnabled === true) {
+        const sourcedByCountry = await loadLatestSourcedImportAggregates(
+          db,
+          await getCurrentTurn(db)
+        );
+        const agg = sourcedByCountry.get(countryId);
+        if (agg) {
+          sourcedImports = { tariffPaidAnchor: agg.tariffPaid, importValueAnchor: agg.importValue };
+        }
+      }
+    }
+    const fxByCurrency = sourcedImports ? await loadFxRatesByCurrency(db) : undefined;
+    const newRevenue = await calculateFederalRevenue(
+      db,
+      newTaxRates,
+      budgetId,
+      undefined,
+      undefined,
+      undefined,
+      fxByCurrency,
+      sourcedImports
+    );
     const newSurplus = newRevenue.total - budget.spending.total;
 
     await db.collection<FederalBudget>("federalBudget").updateOne(

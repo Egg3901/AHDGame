@@ -188,6 +188,7 @@ function makeLookups(
     costOfLivingByState: new Map(),
     globalCommodityBalances: new Map(),
     priceRatioByCommodity: new Map(),
+    landedPremiumByState: new Map(),
     nationalCommodityBalancesByCountry: new Map(),
     countryClearingBooks: null,
     exportIntensityByCountry: new Map(),
