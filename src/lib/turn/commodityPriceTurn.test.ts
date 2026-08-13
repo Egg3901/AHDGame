@@ -631,6 +631,25 @@ describe("commodityPriceTurn", () => {
       expect(added).toBeCloseTo(0.0463 * eraScale, 1);
       expect(added).toBeLessThan((1.11 * eraScale) / 10);
     });
+
+    it("projects the WHOLE budget category map, not one named path", async () => {
+      // This projection used to pin `spending.byCategory.healthcare`, so when
+      // the defense -> ordnance leg was added its amount was stripped from the
+      // document before the demand loop ran and the feature was inert in
+      // production. Every other budget test passes `federalBudgets` straight
+      // through the mock, which bypasses projection entirely and therefore
+      // cannot catch this. Assert the projection itself.
+      setupMocks();
+      await processCommodityPriceTurn(100);
+
+      const budgetFind = mockFind.mock.calls.find(
+        (call) => call?.[1]?.projection && "spending.byCategory" in call[1].projection
+      );
+      expect(budgetFind, "federalBudget must project the whole byCategory map").toBeDefined();
+      // A named sub-path would silently drop every other category.
+      const projected = Object.keys(budgetFind![1].projection as Record<string, unknown>);
+      expect(projected.some((k) => k.startsWith("spending.byCategory."))).toBe(false);
+    });
   });
 });
 

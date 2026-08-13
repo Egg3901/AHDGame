@@ -32,6 +32,8 @@ import {
   MARKETING_ADVERTISING_DEMAND_RATE,
   GOVT_HEALTHCARE_DEMAND_RATE,
   GOVT_DEFENSE_ORDNANCE_DEMAND_RATE,
+  GOVT_SPEND_CATEGORY_ALIASES,
+  govtSpendForCategory,
   COMMODITY_PRICE_DRIFT_RATE,
   NATIONAL_COMMODITY_STABILIZER,
   COMMODITIES_NATIONAL_REGIONAL_PRICE_BLEND,
@@ -327,7 +329,13 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       .toArray(),
     db
       .collection<FederalBudget>("federalBudget")
-      .find({}, { projection: { countryId: 1, "spending.byCategory.healthcare": 1 } })
+      // The WHOLE category map, not named paths. This projection pinned
+      // `healthcare` only, so when #3880 added the defense -> ordnance leg the
+      // amount it needed was stripped before the loop ever saw it and the
+      // feature has been inert ever since. It also hid the `health` spelling
+      // that UK/CN/IE use. Projecting the map means adding a leg to
+      // GOVT_SPEND_DEMAND cannot silently read zero again.
+      .find({}, { projection: { countryId: 1, "spending.byCategory": 1 } })
       .toArray(),
     db
       .collection<ExchangeRate>("exchangeRates")
@@ -1065,8 +1073,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const turnsPerYear = 48;
   for (const { category, commodity, rate } of GOVT_SPEND_DEMAND) {
     const basePrice = LEDGER_BASE_PRICES[commodity];
+    const aliases = GOVT_SPEND_CATEGORY_ALIASES[category] ?? [category];
     for (const budget of federalBudgets) {
-      const annualSpendLocal = budget.spending?.byCategory?.[category] ?? 0;
+      const annualSpendLocal = govtSpendForCategory(budget.spending?.byCategory, aliases);
       if (annualSpendLocal <= 0) continue;
       const cid = budget.countryId;
       const annualSpendAnchor = annualSpendLocal / fxRateForCountry(cid);
