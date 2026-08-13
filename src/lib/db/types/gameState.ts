@@ -462,6 +462,12 @@ export interface GameState {
    * seats and stamps without posting news.
    */
   lastCabinetYearProcessed?: number;
+  /**
+   * Cabinet seat ids brought into existence early by a create_department bill,
+   * regardless of their era `yearEnabled` (e.g. "secretary_of_education" after the
+   * Department of Education Act). Read by rosterEra.isSeatActive / resolveSeatName.
+   */
+  manuallyEnabledSeats?: string[];
   createdAt: Date;
   updatedAt: Date;
 }
