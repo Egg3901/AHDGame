@@ -14,6 +14,7 @@ import type { VoteByParty } from "./billVoting";
 import type { OverrideChamberDisplay } from "./vetoOverrideTally";
 import type {
   Bill,
+  CreateDepartmentProvision,
   EndSubsidyProvision,
   LegislationPolicyOption,
   LegislationType,
@@ -322,6 +323,34 @@ function formatTariffProvisionLabel(provision: TariffProvision): string {
     default:
       return rateLabel;
   }
+}
+
+/**
+ * Human label for a `create_department` provision.
+ *
+ * Exists because the subsidy formatter below is the documented CATCH-ALL for
+ * unrecognised provisions, so adding `CreateDepartmentProvision` to
+ * `BillProvision` without a branch here silently routed department bills into
+ * it. That is not only a type error: a bill creating the Department of
+ * Education would have rendered with a subsidy label.
+ *
+ * The seat id is the only field the provision carries, so the label is derived
+ * from it rather than from a lookup table that would need maintaining in
+ * parallel with the roster.
+ */
+export function formatCreateDepartmentLabel(provision: CreateDepartmentProvision): {
+  legislationTypeName: string;
+  policyOptionName: string;
+} {
+  const seat = provision.positionId
+    .split("_")
+    .filter((part) => part.length > 0)
+    .map((part) => (part === "of" ? "of" : part.charAt(0).toUpperCase() + part.slice(1)))
+    .join(" ");
+  return {
+    legislationTypeName: "Executive Reorganization",
+    policyOptionName: `Establish the office of ${seat}`,
+  };
 }
 
 export function formatSubsidyProvisionLabel(provision: SubsidyProvision | EndSubsidyProvision): {
@@ -709,6 +738,17 @@ export async function resolveBillProvisions(
           provisionsResolved.push({
             legislationTypeName: "Entry into the Conflict",
             policyOptionName: `Join side ${provision.side} at ${provision.organizationId}'s call`,
+            effectDirection: 0,
+            directionLabel: "Center",
+          });
+          continue;
+        }
+
+        if (provision.type === "create_department") {
+          const dept = formatCreateDepartmentLabel(provision);
+          provisionsResolved.push({
+            legislationTypeName: dept.legislationTypeName,
+            policyOptionName: dept.policyOptionName,
             effectDirection: 0,
             directionLabel: "Center",
           });
