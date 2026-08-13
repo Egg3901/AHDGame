@@ -225,14 +225,14 @@ export function computePairwiseDriverDisplay(
     unit: "pts" as const,
   }));
 
-  // Presidential coattail — a nominal-share tilt (not a persuasion-driver),
+  // Presidential popularity — a nominal-share tilt (not a persuasion-driver),
   // surfaced as a distinct "%" row. Only the sitting President's party carries
   // a value; the pairwise row is the focus minus the opponent tilt.
   if (inputs.presidentialCoattailPctByParty) {
     const focusPct = inputs.presidentialCoattailPctByParty[focus.party] ?? 0;
     const oppPct = inputs.presidentialCoattailPctByParty[opponent.party] ?? 0;
     rows.push({
-      label: "Presidential Coattails",
+      label: "Presidential Popularity",
       contributionPct: focusPct - oppPct,
       color: focus.partyColor,
       unit: "%",
