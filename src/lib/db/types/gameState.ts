@@ -462,6 +462,12 @@ export interface GameState {
    * seats and stamps without posting news.
    */
   lastCabinetYearProcessed?: number;
+  /**
+   * Guard year for the militaryBranchYearCrossing turn phase (standing up a service
+   * whose `establishedYear` the world has now reached, e.g. the NVA in 1956). First
+   * run quietly stands up every active-but-empty branch and stamps without posting.
+   */
+  lastMilitaryBranchYearProcessed?: number;
   createdAt: Date;
   updatedAt: Date;
 }
