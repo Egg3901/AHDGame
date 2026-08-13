@@ -6,10 +6,12 @@ import {
 } from "@/lib/constants/alignmentEras";
 import { normalizeShares } from "./normalize";
 import { GDP_MILLIONS_TO_USD } from "@/lib/constants/internationalOrganizations";
-import { PLAY_MAX_POINTS, pointsForSpend, pullForPlay } from "./influence";
+import { PLAY_MAX_POINTS, POINT_COST_GDP_SHARE, pointsForSpend, pullForPlay } from "./influence";
 
-/** A mid-sized target: $10bn a year, so 1% of it is $100m. */
+/** A mid-sized target: $10bn a year, so a tenth of a percent of it is $10m. */
 const TEN_BILLION = 10_000_000_000;
+/** One point against TEN_BILLION, derived so a reprice moves the tests with it. */
+const ONE_POINT = TEN_BILLION * POINT_COST_GDP_SHARE;
 
 const POLES = polesForYear(1979);
 const at = (w: number, e: number) => normalizeShares({ WEST: w, EAST: e }, POLES);
@@ -17,22 +19,23 @@ const channel = (id: string): AlignmentChannel =>
   resolveAlignmentEra(1979).channels.find((c) => c.organizationId === id)!;
 
 describe("pointsForSpend", () => {
-  it("charges one point per one percent of the target's economy", () => {
-    expect(pointsForSpend(100_000_000, TEN_BILLION)).toBeCloseTo(1, 5);
-    expect(pointsForSpend(500_000_000, TEN_BILLION)).toBeCloseTo(5, 5);
+  it("charges one point per a tenth of a percent of the target's economy", () => {
+    expect(POINT_COST_GDP_SHARE).toBe(0.001);
+    expect(pointsForSpend(ONE_POINT, TEN_BILLION)).toBeCloseTo(1, 5);
+    expect(pointsForSpend(5 * ONE_POINT, TEN_BILLION)).toBeCloseTo(5, 5);
   });
 
   it("makes the same money go further in a smaller economy", () => {
     // The whole point of the rule: $100m is decisive in a small economy and
     // rounding error in a large one.
-    const spend = 100_000_000;
+    const spend = 10_000_000;
     expect(pointsForSpend(spend, 2_000_000_000)).toBeCloseTo(5, 5);
     expect(pointsForSpend(spend, 380_000_000_000)).toBeCloseTo(0.0263, 3);
   });
 
   it("is linear — no diminishing returns", () => {
-    expect(pointsForSpend(200_000_000, TEN_BILLION)).toBeCloseTo(
-      2 * pointsForSpend(100_000_000, TEN_BILLION),
+    expect(pointsForSpend(2 * ONE_POINT, TEN_BILLION)).toBeCloseTo(
+      2 * pointsForSpend(ONE_POINT, TEN_BILLION),
       5
     );
   });
@@ -54,9 +57,9 @@ describe("pointsForSpend", () => {
 
   it("prices a target whose GDP arrived in millions", () => {
     // The unit trap, asserted in the units the caller actually holds: a $6bn
-    // economy arrives as 6,000 millions, and 1% of it is $60m.
+    // economy arrives as 6,000 millions, and a tenth of a percent of it is $6m.
     const targetGdpUsd = 6_000 * GDP_MILLIONS_TO_USD;
-    expect(pointsForSpend(60_000_000, targetGdpUsd)).toBeCloseTo(1, 5);
+    expect(pointsForSpend(6_000_000, targetGdpUsd)).toBeCloseTo(1, 5);
   });
 });
 
@@ -71,14 +74,14 @@ describe("pullForPlay", () => {
 
     const nato = pullForPlay({
       channel: modern("NATO"),
-      amountUsd: 200_000_000, // 2% of a $10bn economy = 2 points
+      amountUsd: 2 * ONE_POINT, // two points' worth against a $10bn economy
       targetGdpUsd: TEN_BILLION,
       shares: modernShares,
       poles: modernPoles,
     });
     const eu = pullForPlay({
       channel: modern("EU"),
-      amountUsd: 200_000_000,
+      amountUsd: 2 * ONE_POINT,
       targetGdpUsd: TEN_BILLION,
       shares: modernShares,
       poles: modernPoles,

@@ -123,6 +123,7 @@ describe("InfluenceTab", () => {
               turn: 4,
               resolvedTurn: 5,
               appliedPoints: 3,
+              refunded: false,
             },
             {
               targetEntityId: "SE",
@@ -132,6 +133,7 @@ describe("InfluenceTab", () => {
               turn: 6,
               resolvedTurn: null,
               appliedPoints: null,
+              refunded: false,
             },
           ],
         }}
@@ -142,6 +144,35 @@ describe("InfluenceTab", () => {
     );
     expect(screen.getByText("3 pts")).toBeTruthy();
     expect(screen.getByText("pending")).toBeTruthy();
+  });
+
+  it("says refunded rather than 0 pts when the spend came back", () => {
+    // "0 pts" beside a spend reads as money taken for nothing. The refund path
+    // fires when a target locks between commit and resolve.
+    render(
+      <InfluenceTab
+        view={{
+          ...BASE,
+          recent: [
+            {
+              targetEntityId: "PL",
+              targetName: "Poland",
+              sponsorCountryId: "US",
+              amountLocal: 2.5e8,
+              turn: 4,
+              resolvedTurn: 5,
+              appliedPoints: 0,
+              refunded: true,
+            },
+          ],
+        }}
+        orgId="NATO"
+        viewerCountryId="US"
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByText("refunded")).toBeTruthy();
+    expect(screen.queryByText("0 pts")).toBeNull();
   });
 
   it("shows a member that pays tribute as a member without a vote", () => {
@@ -209,7 +240,9 @@ describe("InfluenceTab", () => {
     render(<InfluenceTab view={BASE} orgId="NATO" viewerCountryId="US" onChange={() => {}} />);
     expect(screen.getByTestId("balance-bar")).toBeTruthy();
     expect(screen.getAllByTestId("nation-row").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Recent plays/i)).toBeTruthy();
+    // The heading, not any mention: the dossier's spend note now points players
+    // at this panel by name, so a bare text match is ambiguous.
+    expect(screen.getByRole("heading", { name: /Recent plays/i })).toBeTruthy();
   });
 
   it("opens with the top-ranked nation already in the dossier", () => {
