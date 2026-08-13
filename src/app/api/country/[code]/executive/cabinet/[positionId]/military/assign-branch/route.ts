@@ -1,10 +1,9 @@
-// POST /api/country/[code]/executive/cabinet/[positionId]/military/[unitId]/assign
-// Assign a unit to a general (or to General Staff when null). The unit's theater is
-// derived from that general's posting, so it deploys wherever the general is posted.
-// Auth: defense holder or admin. Free (no action cost). Gated by conflictsEnabled +
-// defense seat. Errors: 400, 401, 403, 404.
+// POST /api/country/[code]/executive/cabinet/[positionId]/military/assign-branch
+// Assign every unit of a branch to a general (or to General Staff when null).
+// Same write as the per-unit assign route, batched. Auth: defense holder or
+// admin. Free (no action cost). Gated by conflictsEnabled + defense seat.
+// Errors: 400, 401, 403, 404.
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
@@ -19,13 +18,20 @@ import {
   listCountryGenerals,
 } from "@/lib/db/collections/characterGenerals";
 import { getMilitaryFormations } from "@/lib/db/collections/militaryFormations";
+import { theaterOfUnit } from "@/lib/military/assignments";
 import { assignmentSet } from "@/lib/military/assignmentSet";
-import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
+import {
+  DEFENSE_POSITION_BY_COUNTRY,
+  MILITARY_BRANCHES_BY_COUNTRY,
+} from "@/lib/constants/military";
 
-const assignSchema = z.object({ assignedGeneralId: z.string().nullable() });
+const assignBranchSchema = z.object({
+  branchId: z.string().min(1),
+  assignedGeneralId: z.string().nullable(),
+});
 
 interface RouteParams {
-  params: Promise<{ code: string; positionId: string; unitId: string }>;
+  params: Promise<{ code: string; positionId: string }>;
 }
 
 export async function POST(request: Request, { params }: RouteParams) {
@@ -33,7 +39,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const auth = await requireAuth();
     if (!auth.ok) return auth.response;
 
-    const { code, positionId, unitId } = await params;
+    const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
       return NextResponse.json({ error: "Invalid country" }, { status: 400 });
@@ -41,15 +47,17 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
       return NextResponse.json({ error: "Not a defense cabinet position" }, { status: 404 });
     }
-    if (!ObjectId.isValid(unitId)) {
-      return NextResponse.json({ error: "Invalid unit id" }, { status: 400 });
-    }
 
-    const parsed = await parseJsonBody(request, assignSchema);
+    const parsed = await parseJsonBody(request, assignBranchSchema);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
-    const { assignedGeneralId } = parsed.data;
+    const { branchId, assignedGeneralId } = parsed.data;
+
+    const catalog = MILITARY_BRANCHES_BY_COUNTRY[countryId] ?? [];
+    if (!catalog.some((b) => b.id === branchId)) {
+      return NextResponse.json({ error: "Unknown branch" }, { status: 400 });
+    }
 
     const db = await getDb();
     const gs = await (
@@ -71,7 +79,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    // A unit may only be assigned to a commissioned general of THIS country.
     if (assignedGeneralId) {
       const commission = await getCharacterCommission(db, assignedGeneralId);
       if (!commission.commissioned) {
@@ -83,24 +90,36 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
     }
 
-    // The unit's theater follows its general's posting (reserve when unassigned/unposted).
     const { conflictAssignments } = await getMilitaryFormations(db, countryId);
-
     const col = getMilitaryUnitsCollection(db);
-    const existing = await col.findOne(
-      { _id: new ObjectId(unitId), countryId },
-      { projection: { posture: 1 } }
-    );
-    if (!existing) {
-      return NextResponse.json({ error: "Unit not found" }, { status: 404 });
+    const units = await col
+      .find({ countryId, branchId }, { projection: { _id: 1, posture: 1 } })
+      .toArray();
+
+    if (units.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        assigned: 0,
+        assignedGeneralId,
+        theaterId: theaterOfUnit(assignedGeneralId, conflictAssignments),
+      });
     }
-    const set = assignmentSet(assignedGeneralId, conflictAssignments, existing.posture);
-    const theaterId = set.theaterId;
-    const posture = set.posture ?? existing.posture;
 
-    await col.updateOne({ _id: new ObjectId(unitId), countryId }, { $set: set });
+    await col.bulkWrite(
+      units.map((u) => ({
+        updateOne: {
+          filter: { _id: u._id, countryId },
+          update: { $set: assignmentSet(assignedGeneralId, conflictAssignments, u.posture) },
+        },
+      }))
+    );
 
-    return NextResponse.json({ ok: true, assignedGeneralId, theaterId, posture });
+    return NextResponse.json({
+      ok: true,
+      assigned: units.length,
+      assignedGeneralId,
+      theaterId: theaterOfUnit(assignedGeneralId, conflictAssignments),
+    });
   } catch (error) {
     return handleRouteError(error);
   }
