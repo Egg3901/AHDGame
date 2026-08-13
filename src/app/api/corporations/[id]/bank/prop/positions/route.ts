@@ -57,7 +57,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       success: true,
       position: result.position,
       cost: result.cost,
-      liquidCapital: result.liquidCapital,
+      cashReserves: result.cashReserves,
       propBookMarkValue: result.propBookMarkValue,
     });
   } catch (error) {
@@ -103,7 +103,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       success: true,
       proceeds: result.proceeds,
       realizedPnl: result.realizedPnl,
-      liquidCapital: result.liquidCapital,
+      cashReserves: result.cashReserves,
       propBookMarkValue: result.propBookMarkValue,
     });
   } catch (error) {

@@ -145,42 +145,10 @@ describe("atomicallyDebitCorpLiquidCapital", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.newBalance).toBe(600);
     expect(db.collectionMocks.corporations.findOneAndUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ _id: corpId, liquidCapital: { $gte: 400 } }),
+      { _id: corpId, liquidCapital: { $gte: 400 } },
       expect.objectContaining({ $inc: { liquidCapital: -400 } }),
       expect.objectContaining({ returnDocument: "after" })
     );
-  });
-
-  it("gates the debit on the bank reserve floor as well as the balance", async () => {
-    db.collectionMocks.corporations.findOneAndUpdate.mockResolvedValue({
-      _id: corpId,
-      liquidCapital: 600,
-    });
-
-    await atomicallyDebitCorpLiquidCapital(db as never, corpId, 400);
-
-    // The floor rides in the SAME atomic filter as the balance check. A
-    // read-then-write pair would let two concurrent spends both pass on stale
-    // data and jointly empty the reserve, which is the failure this whole
-    // module exists to make impossible.
-    const filter = db.collectionMocks.corporations.findOneAndUpdate.mock.calls[0][0];
-    expect(filter.$expr).toBeDefined();
-    expect(JSON.stringify(filter.$expr)).toContain("bankCharter.reserveFloor");
-    expect(JSON.stringify(filter.$expr)).toContain("bankCharter.status");
-  });
-
-  it("says the floor blocked the spend rather than reporting the corp broke", async () => {
-    db.collectionMocks.corporations.findOneAndUpdate.mockResolvedValue(null);
-    db.collectionMocks.corporations.findOne.mockResolvedValue({
-      _id: corpId,
-      liquidCapital: 10_000,
-      bankCharter: { status: "active", reserveFloor: 9_000 },
-    });
-
-    const result = await atomicallyDebitCorpLiquidCapital(db as never, corpId, 5_000);
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toMatch(/reserve floor/i);
   });
 
   it("rejects when corp's liquidCapital insufficient", async () => {

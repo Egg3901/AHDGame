@@ -36,17 +36,18 @@ export interface BankCharter {
   totalLoans?: number;
   reserves?: number;
   /**
-   * Cash the bank must keep against its deposit book
-   * (`totalDeposits × reserveRequirement`), recomputed each bankingTurn.
+   * The bank's own cash, ring-fenced from `corporation.liquidCapital`.
    *
-   * This is what makes the corp treasury stop being a single undifferentiated
-   * pot. `liquidCapital` holds depositor money and shareholder money together,
-   * so without a floor the CEO could spend depositor cash on anything the corp
-   * does — capacity, shares, dividends — and the reserve ratio was a number
-   * reported after the fact rather than a constraint. Every corp cash debit now
-   * refuses to take `liquidCapital` below this line while the charter is active.
+   * The corporation spends `liquidCapital`; the bank spends this. Every banking
+   * cash flow — deposit interest, loan servicing, insurance premiums, discount
+   * window, prop desk, interbank — moves this balance and never the parent's.
+   * The boundary is crossed only by `banking/bankCash.ts`: freely inward,
+   * supervised outward.
+   *
+   * Absent on charters written before the ring-fence; treat as 0 via
+   * `getCashReserves`.
    */
-  reserveFloor?: number;
+  cashReserves?: number;
   /**
    * CEO's household lending stance. Sets which credit bands the bank will
    * originate into from now on; it never re-prices or re-rates a loan already

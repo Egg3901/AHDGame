@@ -71,7 +71,9 @@ type ConsolePayload = {
     totalLoans: number;
     npcDeposits: number;
     reserves: number;
-    reserveFloor: number;
+    cashReserves: number;
+    requiredReserves: number;
+    upstreamCapacity: number;
     lendingProfile: LendingProfileId;
     discountWindowDebt: number;
     discountWindowArrears: number;
@@ -547,8 +549,7 @@ function bandMeaning(
 function HealthCard({ data }: { data: ConsolePayload }) {
   const charter = data.charter!;
   const capital = assessCapital({
-    postedCapital: charter.postedCapital,
-    liquidCapital: data.corporation.liquidCapital,
+    cashReserves: charter.cashReserves,
     totalLoans: charter.totalLoans,
     borrowings: borrowingsFromCharter(charter),
     propBookMarkValue: charter.propBookMarkValue,
@@ -810,8 +811,9 @@ function ActiveCharterPanel({
           <RecapitalizePanel
             corporationId={data.corporation.id}
             currency={charter.currency}
-            postedCapital={charter.postedCapital}
-            liquidCapital={data.corporation.liquidCapital}
+            cashReserves={charter.cashReserves}
+            requiredReservesAmount={charter.requiredReserves}
+            withdrawable={charter.upstreamCapacity}
             totalLoans={charter.totalLoans}
             propBookMarkValue={charter.propBookMarkValue}
             borrowings={borrowingsFromCharter(charter)}
@@ -2134,8 +2136,9 @@ function DiscountWindowPanel({
 function RecapitalizePanel({
   corporationId,
   currency,
-  postedCapital,
-  liquidCapital,
+  cashReserves,
+  requiredReservesAmount,
+  withdrawable,
   totalLoans,
   propBookMarkValue,
   borrowings,
@@ -2145,8 +2148,9 @@ function RecapitalizePanel({
 }: {
   corporationId: string;
   currency: CurrencyCode;
-  postedCapital: number;
-  liquidCapital: number;
+  cashReserves: number;
+  requiredReservesAmount: number;
+  withdrawable: number;
   totalLoans: number;
   propBookMarkValue: number;
   borrowings: BankBorrowings;
@@ -2155,8 +2159,7 @@ function RecapitalizePanel({
   showToast: (msg: string, variant?: "success" | "error" | "info") => void;
 }) {
   const position = assessCapital({
-    postedCapital,
-    liquidCapital,
+    cashReserves,
     totalLoans,
     borrowings,
     propBookMarkValue,
@@ -2169,7 +2172,7 @@ function RecapitalizePanel({
     if (shortfall > 0) setAmount(String(shortfall));
   }, [shortfall]);
 
-  const submit = async () => {
+  const move = async (direction: "in" | "out") => {
     const a = parseFloat(amount);
     if (!(a > 0)) {
       showToast("Positive amount required", "error");
@@ -2177,17 +2180,21 @@ function RecapitalizePanel({
     }
     setBusy(true);
     try {
-      const res = await fetch(`/api/corporations/${corporationId}/bank/recapitalize`, {
+      const path = direction === "in" ? "recapitalize" : "upstream";
+      const res = await fetch(`/api/corporations/${corporationId}/bank/${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount: a }),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
       if (!res.ok) {
-        showToast(json.error ?? "Could not post capital", "error");
+        showToast(json.error ?? "Could not move capital", "error");
         return;
       }
-      showToast(json.message ?? "Capital posted", "success");
+      showToast(
+        json.message ?? (direction === "in" ? "Capital posted" : "Cash withdrawn"),
+        "success"
+      );
       setAmount("");
       await onChanged();
     } finally {
@@ -2200,14 +2207,33 @@ function RecapitalizePanel({
       <div>
         <h3 className="text-base font-semibold text-foreground">Capital adequacy</h3>
         <p className="text-sm text-muted">
-          Posted capital absorbs losses before depositors do. Moving treasury cash into posted
-          capital cures a supervisory capital shortfall.
+          Money moved here crosses into the bank and stands behind the depositors. It leaves the
+          holding company&apos;s treasury for good unless the bank has surplus reserves to pay back.
         </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-muted">Bank cash</div>
+          <div className="font-mono tabular-nums text-foreground">
+            {formatBankMoney(cashReserves, currency)}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-muted">Held vs deposits</div>
+          <div className="font-mono tabular-nums text-foreground">
+            {formatBankMoney(requiredReservesAmount, currency)}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-muted">Free to withdraw</div>
+          <div className="font-mono tabular-nums text-foreground">
+            {formatBankMoney(withdrawable, currency)}
+          </div>
+        </div>
       </div>
       <div className="text-sm space-y-1">
         <p className="font-mono tabular-nums text-foreground">
-          Posted {formatBankMoney(postedCapital, currency)} · ratio{" "}
-          {(position.capitalRatio * 100).toFixed(1)}%
+          Capital ratio {(position.capitalRatio * 100).toFixed(1)}%
         </p>
         {shortfall > 0 ? (
           <p className="text-error">
@@ -2222,17 +2248,32 @@ function RecapitalizePanel({
       {canMutate && (
         <>
           <label className="block space-y-1 text-xs text-muted max-w-xs">
-            Amount from treasury
+            Amount
             <Input
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               inputMode="decimal"
-              aria-label="Recapitalization amount"
+              aria-label="Capital transfer amount"
             />
           </label>
-          <Button type="button" onClick={() => void submit()} disabled={busy}>
-            {busy ? "Posting..." : "Post capital"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" onClick={() => void move("in")} disabled={busy}>
+              {busy ? "Working..." : "Move into bank"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void move("out")}
+              disabled={busy || withdrawable <= 0}
+              title={
+                withdrawable > 0
+                  ? undefined
+                  : "Nothing free to withdraw: reserves are required against deposits, or the supervisor has not cleared the bank."
+              }
+            >
+              Withdraw to treasury
+            </Button>
+          </div>
         </>
       )}
     </section>

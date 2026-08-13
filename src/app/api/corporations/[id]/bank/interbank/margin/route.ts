@@ -61,7 +61,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       action: parsed.data.action,
       amount: result.amount,
       cbMarginDebt: result.cbMarginDebt,
-      liquidCapital: result.liquidCapital,
+      cashReserves: result.cashReserves,
     });
   } catch (error) {
     return handleRouteError(error);
