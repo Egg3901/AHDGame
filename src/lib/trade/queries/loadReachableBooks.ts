@@ -26,3 +26,22 @@ export function bookFor(
 ): ReachableBookEntry | undefined {
   return books?.[countryId]?.[commodity];
 }
+
+/**
+ * Pivot the stored `country -> commodity` cube into `country -> entry` for ONE
+ * commodity, which is the shape a per-commodity API row wants. Returns
+ * undefined when no books exist, so the field is simply absent from the payload
+ * and the client can tell "not available" from "all zero".
+ */
+export function reachableBooksFor(
+  books: ReachableBooksDoc | null,
+  commodity: CommodityType
+): Record<string, ReachableBookEntry> | undefined {
+  if (!books) return undefined;
+  const out: Record<string, ReachableBookEntry> = {};
+  for (const [countryId, byCommodity] of Object.entries(books)) {
+    const entry = byCommodity?.[commodity];
+    if (entry) out[countryId] = entry;
+  }
+  return out;
+}
