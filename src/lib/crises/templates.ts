@@ -142,7 +142,12 @@ function gdpLoss(fraction: number, label: string): CrisisEffect {
 function marginShock(
   value: number,
   label: string,
-  physicality: "physical" | "financial" = "financial"
+  physicality: "physical" | "financial" = "financial",
+  /** Restrict the shock to one corporation sector type (e.g. "manufacturing").
+   *  The per-turn margin/production application (crisisTurn.ts) already filters
+   *  on `sectorType`, so this concentrates the hit on the struck industry
+   *  instead of every corp in scope. Absent = economy-wide (legacy). */
+  sectorType: string | null = null
 ): CrisisEffect {
   return {
     effectType: "decay",
@@ -150,7 +155,7 @@ function marginShock(
     metricCategory: null,
     metricField: null,
     value,
-    sectorType: null,
+    sectorType,
     strategyId: null,
     label,
     physicality,
@@ -1875,6 +1880,216 @@ export const LABOR_STRIKES_TEMPLATE: CrisisTemplate = {
   },
 };
 
+/**
+ * Nationwide steel strike — the first crisis to use real-subsystem action hooks
+ * (see CrisisOptionAction). Steel has no dedicated sector type; it is produced by
+ * the `manufacturing` sector, so the strike concentrates its bite there and the
+ * supply shock propagates downstream (autos, defense, construction, energy) via
+ * the existing steel input-output demand already modelled in sectorStrategies.
+ *
+ * Each presidential option routes to its own terminal so the crisis INTERACTION
+ * resolves on the choice, while the real consequences play out over following
+ * turns in their own subsystems: the executive taking is reviewed by the Supreme
+ * Court (docket turn), the emergency bill runs the bill lifecycle, the wage-floor
+ * settlement lands a collective agreement that stops the strike. This is the
+ * template to copy when authoring future action-bearing crises.
+ */
+export const STEEL_STRIKE_TEMPLATE: CrisisTemplate = {
+  name: "Nationwide Steel Strike",
+  heroImage:
+    "https://images.unsplash.com/photo-1533630018502-c1cd6b2b1a1e?auto=format&fit=crop&w=1600&q=70",
+  description:
+    "The steelworkers have walked out nationwide. Blast furnaces bank down, and the shutdown ripples into autos, defense, construction, and power as steel supply dries up. The President must act.",
+  scope: "country",
+  countryIds: [],
+  regionIds: [],
+  durationTurns: 6,
+  durationByScope: { country: 6 },
+  effects: [
+    marginShock(-8, "Steel mills idled by the walkout", "physical", "manufacturing"),
+    fx("tick", "metric", "economy", "gdp", -0.025, "Lost steel output and downstream stoppages"),
+    fx("tick", "metric", "economy", "inflation", 0.02, "Steel scarcity drives input prices"),
+    fx("tick", "metric", "economy", "consumerConfidence", -0.02, "Shutdown anxiety"),
+    fx(
+      "tick",
+      "metric",
+      "economy",
+      "investorConfidence",
+      -0.02,
+      "Industrial paralysis unnerves markets"
+    ),
+    fx(
+      "tick",
+      "approval",
+      "government",
+      "overall",
+      -0.03,
+      "A paralysed economy erodes the government"
+    ),
+  ],
+  wireMessageOnStart:
+    "Steelworkers have struck nationwide. Furnaces are banking down and steel-dependent industry is grinding to a halt.",
+  wireMessageOnEnd:
+    "The steel strike is over. The settlement — imposed, negotiated, or won in court — reshapes the industry.",
+  interactionDefinition: {
+    decisionTree: [
+      {
+        nodeId: "response",
+        type: "choice",
+        title: "The steel strike is national",
+        description:
+          "Steel has stopped and the shutdown is spreading to every industry that depends on it. As President, how do you break the deadlock?",
+        requiredRoles: ["headOfState"],
+        timeLimitMinutes: null,
+        options: [
+          {
+            optionId: "response_executive_order",
+            label: "Nationalize by Executive Order",
+            description:
+              "Seize the steel industry by emergency executive order and run the mills as state enterprises. Fast and decisive — but the order will be challenged in the Supreme Court, which can strike it down.",
+            nextNodeId: "terminal_executive",
+            action: { kind: "executiveNationalize", sectorType: "manufacturing" },
+            effects: [
+              fx(
+                "flat",
+                "approval",
+                "government",
+                "overall",
+                0.03,
+                "Decisive action rallies support"
+              ),
+              fx(
+                "flat",
+                "metric",
+                "economy",
+                "investorConfidence",
+                -0.03,
+                "Seizure alarms investors"
+              ),
+            ],
+          },
+          {
+            optionId: "response_emergency_bill",
+            label: "Emergency Nationalization Bill",
+            description:
+              "Send Congress an emergency bill to nationalize steel at fair value. No court risk if it passes — but you need the votes, and the strike burns on while it is debated.",
+            nextNodeId: "terminal_bill",
+            action: {
+              kind: "emergencyNationalizeBill",
+              sectorType: "manufacturing",
+              sectorCarveFraction: 1,
+            },
+            effects: [
+              fx(
+                "flat",
+                "approval",
+                "government",
+                "overall",
+                0.01,
+                "A lawful path reassures moderates"
+              ),
+            ],
+          },
+          {
+            optionId: "response_bargain",
+            label: "Bring Both Sides to the Table",
+            description:
+              "Open government-brokered bargaining between the steelmakers and the union. Keeps the industry private and buys goodwill, but a deal is not guaranteed.",
+            nextNodeId: "terminal_bargain",
+            action: { kind: "openBargaining", sectorType: "manufacturing" },
+            effects: [
+              fx("flat", "approval", "government", "overall", 0.02, "Statesmanship plays well"),
+            ],
+          },
+          {
+            optionId: "response_settle",
+            label: "Concede the Wage Demands",
+            description:
+              "End the strike now by imposing the union's wage floor across the industry. Furnaces relight immediately, but the settlement embeds higher costs and inflation.",
+            nextNodeId: "terminal_settle",
+            action: { kind: "settleWageFloor", sectorType: "manufacturing" },
+            effects: [
+              fx("flat", "metric", "economy", "inflation", 0.03, "Wage settlement feeds inflation"),
+              fx(
+                "flat",
+                "approval",
+                "government",
+                "overall",
+                0.04,
+                "Workers reward the concession"
+              ),
+            ],
+          },
+          {
+            optionId: "response_hold_firm",
+            label: "Hold Firm",
+            description:
+              "Refuse to intervene and let the strike run its course. The economy bleeds, but you concede nothing and set no precedent.",
+            nextNodeId: "terminal_hold",
+            effects: [
+              fx("flat", "approval", "government", "overall", -0.04, "Inaction reads as weakness"),
+            ],
+          },
+        ],
+      },
+      {
+        nodeId: "terminal_executive",
+        type: "terminal",
+        title: "Order signed — now to the Court",
+        description:
+          "You have seized the steel mills by executive order. The state is running them, but a constitutional challenge is on its way to the Supreme Court.",
+        outcomeMessage:
+          "The President has nationalized steel by executive order. The seizure heads to the Supreme Court for review.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+      {
+        nodeId: "terminal_bill",
+        type: "terminal",
+        title: "Bill sent to Congress",
+        description:
+          "An emergency bill to nationalize the steel industry is before Congress on an expedited vote. Its fate rests with the legislature.",
+        outcomeMessage:
+          "An emergency bill to nationalize steel has been rushed to the floor of Congress.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+      {
+        nodeId: "terminal_bargain",
+        type: "terminal",
+        title: "Talks convened",
+        description:
+          "Government mediators have brought the steelmakers and the union to the table. A settlement is not guaranteed, but the guns are silent while they talk.",
+        outcomeMessage:
+          "The President has convened government-brokered talks between the steelmakers and the union.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+      {
+        nodeId: "terminal_settle",
+        type: "terminal",
+        title: "Strike settled",
+        description:
+          "You imposed the union's wage floor. The furnaces are relighting, but the industry carries higher costs from here on.",
+        outcomeMessage:
+          "The steel strike is settled: the President conceded the union's wage demands industry-wide.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+      {
+        nodeId: "terminal_hold",
+        type: "terminal",
+        title: "No intervention",
+        description: "You chose not to intervene. The strike will grind on until one side breaks.",
+        outcomeMessage: "The President declined to intervene in the steel strike. It runs on.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+    ],
+    autoResolveOnExpiry: true,
+  },
+};
+
 export const DEBT_DEFAULT_CONTAGION_TEMPLATE: CrisisTemplate = {
   name: "Sovereign Debt Default",
   heroImage:
@@ -3334,6 +3549,7 @@ export const ALL_CRISIS_TEMPLATES: Record<
   drought_famine: DROUGHT_FAMINE_TEMPLATE,
   housing_collapse: HOUSING_COLLAPSE_TEMPLATE,
   labor_strikes: LABOR_STRIKES_TEMPLATE,
+  steel_strike: STEEL_STRIKE_TEMPLATE,
   debt_default_contagion: DEBT_DEFAULT_CONTAGION_TEMPLATE,
   supply_chain_disruption: SUPPLY_CHAIN_DISRUPTION_TEMPLATE,
   tech_bubble_burst: TECH_BUBBLE_BURST_TEMPLATE,

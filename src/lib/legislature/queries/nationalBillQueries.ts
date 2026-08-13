@@ -22,6 +22,7 @@ import {
   directionLabel,
   effectTargetLabelFromMetricId,
   resolveBillProvisions,
+  formatCreateDepartmentLabel,
 } from "@/lib/congress/billEnrichment";
 import { buildBillWhipPanelData } from "@/lib/congress/billWhipPanelData";
 import type { BillWhip } from "@/lib/db/types/billWhip";
@@ -361,11 +362,8 @@ export async function listNationalLegislatureBills(
                                 ? "Declaration of War"
                                 : provision.type === "join_conflict"
                                   ? "Entry into the Conflict"
-                                  : // Excluded from the subsidy catch-all for the
-                                    // same reason as in billEnrichment: it is not
-                                    // a subsidy and reads wrong labelled as one.
-                                    provision.type === "create_department"
-                                    ? "New Department"
+                                  : provision.type === "create_department"
+                                    ? formatCreateDepartmentLabel(provision).legislationTypeName
                                     : describeSubsidyProvision(provision);
           return {
             legislationTypeId: provision.type,

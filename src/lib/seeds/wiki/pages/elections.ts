@@ -12,8 +12,22 @@ import { campaignStrategyContent } from "../content/campaignStrategy";
 import { campaignManagerContent } from "../content/campaignManager";
 import { primaryGeneralTacticsContent } from "../content/primaryGeneralTactics";
 import { snapElectionsContent } from "../content/snapElections";
+import { electionsPlayerGuideContent } from "../content/electionsPlayerGuide";
 
 export const electionsPages: readonly WikiSeedPage[] = [
+  {
+    slug: "elections-player-guide",
+    title: "Elections: A Granular Player Guide",
+    description:
+      "A visual walkthrough of the election board, primary and general race pages, campaign operations, persuasion drivers, and exactly how national political influence grows and is spent.",
+    content: electionsPlayerGuideContent,
+    category: "elections",
+    extraTags: ["elections", "npi", "national-influence", "primary", "general", "campaign"],
+    featured: true,
+    difficulty: "beginner",
+    contentType: "guide",
+    estimatedReadTime: 9,
+  },
   {
     slug: "election-mechanics",
     title: "Election Mechanics",
