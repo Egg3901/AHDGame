@@ -1,5 +1,6 @@
 /**
- * Backfill `bankCharter.cashReserves` for banks chartered before the ring-fence.
+ * Backfill `bankCharter.cashReserves` for ACTIVE banks chartered before the
+ * ring-fence.
  *
  * ## What moves and why
  *
@@ -82,7 +83,14 @@ async function main(): Promise<void> {
 
     const banks = await db
       .collection<BankRow>("corporations")
-      .find({ "bankCharter.status": { $in: ["active", "failed"] } })
+      // ACTIVE charters only. A failed bank has already been through
+      // resolution: its deposits and posted capital are zeroed and its
+      // corporation is often carrying a NEGATIVE liquidCapital, which is the
+      // corporation's own debt and not bank money. Copying that across would
+      // book negative reserves, and zeroing the corporation's balance would
+      // quietly forgive the debt. Failed charters keep an absent `cashReserves`,
+      // which reads as zero, which is the truth about what they hold.
+      .find({ "bankCharter.status": "active" })
       .project<BankRow>({ _id: 1, name: 1, liquidCapital: 1, bankCharter: 1 })
       .toArray();
 
