@@ -44,6 +44,10 @@ type BankRow = {
 };
 
 type GameState = {
+  // The singleton is keyed by the literal string "current", not an ObjectId.
+  // Without this, `collection<GameState>` falls back to Mongo's default
+  // `_id: ObjectId` and the findOne below does not typecheck.
+  _id: string;
   isProcessing?: boolean;
   currentTurn?: number;
 };
@@ -132,7 +136,7 @@ async function main(): Promise<void> {
           "bankCharter.status": "active",
           "bankCharter.type": { $in: ["retail", "universal"] },
         })
-        .project({ _id: 1, name: 1, ceoType: 1, liquidCapital: 1, bankCharter: 1 })
+        .project<BankRow>({ _id: 1, name: 1, ceoType: 1, liquidCapital: 1, bankCharter: 1 })
         .toArray(),
       db
         .collection<BankRow>("corporations")
@@ -140,7 +144,7 @@ async function main(): Promise<void> {
           "bankCharter.status": "failed",
           "bankCharter.type": { $in: ["retail", "universal"] },
         })
-        .project({ _id: 1, name: 1, ceoType: 1, liquidCapital: 1, bankCharter: 1 })
+        .project<BankRow>({ _id: 1, name: 1, ceoType: 1, liquidCapital: 1, bankCharter: 1 })
         .toArray(),
     ]);
     const allBanks = [...activeBanks, ...failedBanks];
@@ -244,7 +248,7 @@ async function main(): Promise<void> {
 
     for (const bank of activeBanks) {
       if (!affectedBankIds.has(bank._id.toHexString())) continue;
-      await db.collection<ActiveBankRow>("corporations").updateOne(
+      await db.collection<BankRow>("corporations").updateOne(
         { _id: bank._id, "bankCharter.status": "active" },
         {
           $set: {
