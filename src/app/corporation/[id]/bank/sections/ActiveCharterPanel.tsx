@@ -8,6 +8,7 @@ import type { BankTab, ConsolePayload, ShowToast } from "../types";
 import { charterLabel } from "../lib/helpers";
 import { StatCell } from "../components/StatCell";
 import { HealthCard } from "./HealthCard";
+import { RiskPanel } from "./RiskPanel";
 import { RateOffsetEditor } from "./RateOffsetEditor";
 import { LoanBookTable } from "./LoanBookTable";
 import { BlacklistEditor } from "./BlacklistEditor";
@@ -47,6 +48,7 @@ export function ActiveCharterPanel({
   return (
     <div className="space-y-6">
       <HealthCard data={data} />
+      {data.risk && <RiskPanel risk={data.risk} currency={charter.currency} />}
 
       <div className="flex flex-wrap gap-1 border-b border-card-border">
         {tabs.map((t) => (
@@ -146,15 +148,17 @@ export function ActiveCharterPanel({
 
       {tab === "funding" && (
         <div className="space-y-6">
-          <CapacityAllocationEditor
-            corporationId={data.corporation.id}
-            currency={charter.currency}
-            branchCapacityShare={charter.branchCapacityShare}
-            depositCeiling={data.depositCeiling ?? charter.depositCeiling}
-            canMutate={canMutate}
-            onChanged={onChanged}
-            showToast={showToast}
-          />
+          {depositTaking && (
+            <CapacityAllocationEditor
+              corporationId={data.corporation.id}
+              currency={charter.currency}
+              branchCapacityShare={charter.branchCapacityShare}
+              depositCeiling={data.depositCeiling ?? charter.depositCeiling}
+              canMutate={canMutate}
+              onChanged={onChanged}
+              showToast={showToast}
+            />
+          )}
           {depositTaking && (
             <DiscountWindowPanel
               corporationId={data.corporation.id}

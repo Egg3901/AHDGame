@@ -34,6 +34,25 @@ export type ConsolePayload = {
   eligibleTypes: BankCharterType[];
   eligibilityReasons: string[];
   capitalRequirement: number;
+  capitalRequirementByType: Record<BankCharterType, number>;
+  risk: {
+    cashReserves: number;
+    requiredReserves: number;
+    runFailureThreshold: number;
+    reserveCoverRatio: number;
+    headroomToFailure: number;
+    oneBandFromFailure: boolean;
+    terms: Array<{
+      key: string;
+      label: string;
+      contribution: number;
+      max: number;
+      lever: string;
+    }>;
+    confidence: number;
+    band: "green" | "amber" | "red";
+    verdict: string;
+  } | null;
   corridors: { deposit: Corridor; lending: Corridor } | null;
   reserveRatio: number | null;
   depositCeiling: number | null;
