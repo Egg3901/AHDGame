@@ -39,10 +39,7 @@ const ZERO: SupervisionSummary = {
   errors: [],
 };
 
-export async function processBankSupervision(
-  db: Db,
-  turn: number
-): Promise<SupervisionSummary> {
+export async function processBankSupervision(db: Db, turn: number): Promise<SupervisionSummary> {
   const summary: SupervisionSummary = { ...ZERO, errors: [] };
 
   const corps = await db
@@ -79,12 +76,9 @@ export async function processBankSupervision(
       // bank is back above the minimum, so a bank that cures and later breaches
       // again gets a fresh grace period rather than inheriting a stale one.
       const since =
-        standing === "undercapitalized"
-          ? (charter.undercapitalizedSinceTurn ?? turn)
-          : undefined;
+        standing === "undercapitalized" ? (charter.undercapitalizedSinceTurn ?? turn) : undefined;
 
-      const expired =
-        standing === "undercapitalized" && recapDeadlineExpired(since, turn);
+      const expired = standing === "undercapitalized" && recapDeadlineExpired(since, turn);
 
       if (expired) {
         await revokeForUndercapitalization(db, corp._id, corp.name, corp.userId, turn);
@@ -128,9 +122,7 @@ export async function processBankSupervision(
         });
       }
     } catch (err) {
-      summary.errors.push(
-        `${corp.name}: ${err instanceof Error ? err.message : String(err)}`
-      );
+      summary.errors.push(`${corp.name}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

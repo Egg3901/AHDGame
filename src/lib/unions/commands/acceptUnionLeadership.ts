@@ -31,10 +31,12 @@ export async function acceptUnionLeadership(
     union.ownerType !== "npp" &&
     union.ownerId.toString() === character._id.toString()
   ) {
-    await db.collection<Union>("unions").updateOne(
-      { _id: union._id },
-      { $unset: { pendingLeaderCharacterId: "" }, $set: { updatedAt: new Date() } }
-    );
+    await db
+      .collection<Union>("unions")
+      .updateOne(
+        { _id: union._id },
+        { $unset: { pendingLeaderCharacterId: "" }, $set: { updatedAt: new Date() } }
+      );
     return { ok: true, status: 200, unionId: union._id };
   }
   if (
@@ -90,11 +92,13 @@ export async function acceptUnionLeadership(
     if (charClaim.modifiedCount === 0) throw new Error("CHARACTER_ALREADY_LEADING");
 
     if (previousPlayerOwnerId && previousPlayerOwnerId.toString() !== character._id.toString()) {
-      await db.collection<Character>("characters").updateOne(
-        { _id: previousPlayerOwnerId, unionLeaderOf: union._id },
-        { $set: { unionLeaderOf: null, updatedAt: now } },
-        opts
-      );
+      await db
+        .collection<Character>("characters")
+        .updateOne(
+          { _id: previousPlayerOwnerId, unionLeaderOf: union._id },
+          { $set: { unionLeaderOf: null, updatedAt: now } },
+          opts
+        );
     }
   }
 

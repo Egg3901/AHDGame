@@ -15,8 +15,7 @@ export const STATUS_BAR_Z_INDEX_CLASS = "z-40";
 export const MODAL_OVERLAY_Z_INDEX_CLASS = "z-50";
 
 /** Container for the fixed bottom StatusBar. */
-export const STATUS_BAR_CONTAINER_CLASS =
-  `fixed bottom-0 left-0 right-0 ${STATUS_BAR_Z_INDEX_CLASS} border-t border-card-border/80 bg-card/85 backdrop-blur-xl pb-[env(safe-area-inset-bottom)] transition-opacity duration-150`;
+export const STATUS_BAR_CONTAINER_CLASS = `fixed bottom-0 left-0 right-0 ${STATUS_BAR_Z_INDEX_CLASS} border-t border-card-border/80 bg-card/85 backdrop-blur-xl pb-[env(safe-area-inset-bottom)] transition-opacity duration-150`;
 
 /**
  * Outer flex row for the StatusBar. Compact layouts (corp / elections) put the

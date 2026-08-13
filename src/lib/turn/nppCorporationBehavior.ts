@@ -13,7 +13,15 @@
  */
 
 import type { Db, ObjectId } from "mongodb";
-import type { Corporation, CorporateSector, SectorBuildOrder, StateMetrics, GameConfig, GameState, ExchangeRate } from "@/lib/db/types";
+import type {
+  Corporation,
+  CorporateSector,
+  SectorBuildOrder,
+  StateMetrics,
+  GameConfig,
+  GameState,
+  ExchangeRate,
+} from "@/lib/db/types";
 import type { NPP } from "@/lib/db/types/npp";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import {
@@ -1318,7 +1326,10 @@ export function makeNppCorpDecision(
       let target = NPP_WAGE_BASELINE;
       if (chronicLowFill || sp.marginCategory === "loss" || shortage <= 0.85) {
         target = NPP_WAGE_GLUT_TARGET;
-      } else if (shortage >= 1.15 && (sp.marginCategory === "healthy" || sp.marginCategory === "strong")) {
+      } else if (
+        shortage >= 1.15 &&
+        (sp.marginCategory === "healthy" || sp.marginCategory === "strong")
+      ) {
         target = NPP_WAGE_SHORTAGE_TARGET;
       }
       const current = sp.sector.wageLevel ?? NPP_WAGE_BASELINE;

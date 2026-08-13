@@ -73,10 +73,10 @@ export function assessCapital(input: {
   totalLoans: number;
   propBookMarkValue?: number;
 }): CapitalPosition {
-  const finite = (n: number | undefined) =>
-    typeof n === "number" && Number.isFinite(n) ? n : 0;
+  const finite = (n: number | undefined) => (typeof n === "number" && Number.isFinite(n) ? n : 0);
 
-  const capitalAnchor = Math.max(0, finite(input.postedCapital)) + Math.max(0, finite(input.liquidCapital));
+  const capitalAnchor =
+    Math.max(0, finite(input.postedCapital)) + Math.max(0, finite(input.liquidCapital));
   const riskAssetsAnchor =
     Math.max(0, finite(input.totalLoans)) + Math.max(0, finite(input.propBookMarkValue));
 

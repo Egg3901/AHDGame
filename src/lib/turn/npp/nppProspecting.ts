@@ -50,10 +50,19 @@ export function pickNppProspect(args: {
   }>;
   priceRatioOf: (resource: ExtractableResource) => number | null;
   priorSuccessCountOf: (stateId: string, resource: ExtractableResource) => number;
-  hasDeposit: (stateId: string, resource: ExtractableResource, countryId?: string | null) => boolean;
+  hasDeposit: (
+    stateId: string,
+    resource: ExtractableResource,
+    countryId?: string | null
+  ) => boolean;
 }): NppProspectPick | null {
   if (!(args.cashLocal > 0)) return null;
-  type Candidate = { stateId: string; resource: ExtractableResource; score: number; costLocal: number };
+  type Candidate = {
+    stateId: string;
+    resource: ExtractableResource;
+    score: number;
+    costLocal: number;
+  };
   let best: Candidate | null = null;
   for (const s of args.sectors) {
     if (s.sectorType !== "extraction") continue;
@@ -83,11 +92,7 @@ export function pickNppProspect(args: {
   return { corpId: args.corpId, stateId: best.stateId, resource: best.resource };
 }
 
-export async function processNppProspecting(
-  db: Db,
-  turn: number,
-  now: Date
-): Promise<number> {
+export async function processNppProspecting(db: Db, turn: number, now: Date): Promise<number> {
   const cfg = await db
     .collection<GameConfig>("gameConfig")
     .findOne({ _id: "default" }, { projection: { prospectingEnabled: 1 } });

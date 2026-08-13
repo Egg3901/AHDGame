@@ -18,10 +18,7 @@ export interface SynergyResult {
   errors: string[];
 }
 
-export async function applyGroupSynergies(
-  db: Db,
-  currentTurn: number
-): Promise<SynergyResult> {
+export async function applyGroupSynergies(db: Db, currentTurn: number): Promise<SynergyResult> {
   const result: SynergyResult = { groupsProcessed: 0, corpsLifted: 0, errors: [] };
 
   const membership = await resolveFormalizedGroups(db);
@@ -67,12 +64,8 @@ export async function applyGroupSynergies(
         marketingStrength: corp.marketingStrength ?? 0,
         logisticsStrength: corp.logisticsStrength ?? 0,
         ...(corp.isSpinOff ? { isSpinOff: true } : {}),
-        ...(corp.spunOffFromCorpId
-          ? { spunOffFromCorpId: corp.spunOffFromCorpId.toString() }
-          : {}),
-        ...(typeof corp.spunOffAtTurn === "number"
-          ? { spunOffAtTurn: corp.spunOffAtTurn }
-          : {}),
+        ...(corp.spunOffFromCorpId ? { spunOffFromCorpId: corp.spunOffFromCorpId.toString() } : {}),
+        ...(typeof corp.spunOffAtTurn === "number" ? { spunOffAtTurn: corp.spunOffAtTurn } : {}),
       });
     }
     if (members.length < 2) continue;

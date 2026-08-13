@@ -4,9 +4,12 @@ import { render, waitFor } from "@testing-library/react";
 import { useAbortableEffectFetch } from "../useAbortableEffectFetch";
 
 function Probe({ onSignal, dep = 1 }: { onSignal: (s: AbortSignal) => void; dep?: number }) {
-  useAbortableEffectFetch(async (signal) => {
-    onSignal(signal);
-  }, [dep]);
+  useAbortableEffectFetch(
+    async (signal) => {
+      onSignal(signal);
+    },
+    [dep]
+  );
   return null;
 }
 

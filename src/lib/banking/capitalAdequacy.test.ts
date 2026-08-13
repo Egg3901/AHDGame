@@ -59,10 +59,7 @@ describe("assessCapital", () => {
     // that are actually fine.
     const position = bank({ postedCapital: 30_000, totalLoans: 100_000 });
     const loss = 100_000 * STRESS_LOSS_FRACTION;
-    expect(position.stressedCapitalRatio).toBeCloseTo(
-      (30_000 - loss) / (100_000 - loss),
-      6
-    );
+    expect(position.stressedCapitalRatio).toBeCloseTo((30_000 - loss) / (100_000 - loss), 6);
   });
 
   it("treats malformed figures as zero rather than propagating NaN", () => {

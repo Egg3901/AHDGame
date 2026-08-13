@@ -1,9 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { feeDecision } from "./expenseFees";
-import {
-  FEE_SUSPENDED_BELOW_BACKING_RATIO,
-  expenseFeeForTurn,
-} from "./constants";
+import { FEE_SUSPENDED_BELOW_BACKING_RATIO, expenseFeeForTurn } from "./constants";
 
 const base = {
   status: "active" as const,
@@ -34,8 +31,9 @@ describe("feeDecision", () => {
     expect(impaired).toEqual({ feeAnchor: 0, reason: "impaired" });
     // Exactly at the threshold the fund is still paying: the suspension is a
     // floor, not a band.
-    expect(feeDecision({ ...base, backingRatio: FEE_SUSPENDED_BELOW_BACKING_RATIO }).feeAnchor)
-      .toBeGreaterThan(0);
+    expect(
+      feeDecision({ ...base, backingRatio: FEE_SUSPENDED_BELOW_BACKING_RATIO }).feeAnchor
+    ).toBeGreaterThan(0);
   });
 
   it("stops paying the sponsor the moment a wind-up starts", () => {

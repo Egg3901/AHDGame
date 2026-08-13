@@ -47,15 +47,7 @@ interface MeCeoCorporation {
 }
 
 type Section =
-  | "overview"
-  | "cash"
-  | "stocks"
-  | "bonds"
-  | "orders"
-  | "trades"
-  | "funds"
-  | "transfers"
-  | "loans";
+  "overview" | "cash" | "stocks" | "bonds" | "orders" | "trades" | "funds" | "transfers" | "loans";
 type ChartView = "total" | "breakdown";
 type SeriesView = "total" | "stocks" | "bonds" | "cash" | "savings";
 

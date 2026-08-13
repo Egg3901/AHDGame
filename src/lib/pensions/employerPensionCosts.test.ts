@@ -140,10 +140,7 @@ describe("employerPensionCostForTurn", () => {
   it("sums every agreement the employer is party to", async () => {
     withAgreements(
       db,
-      [
-        agreement(),
-        agreement({ sectorIds: [SECTOR_B], pensionContributionRate: 0.1 }),
-      ],
+      [agreement(), agreement({ sectorIds: [SECTOR_B], pensionContributionRate: 0.1 })],
       [scheme()]
     );
     const wageBill = new Map([

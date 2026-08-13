@@ -36,8 +36,7 @@ const FUND_TX = "indexFundTransactions";
 const POSITIONS = "indexFundPositions";
 
 export type WindUpResult =
-  | { ok: false; error: string; status: number }
-  | { ok: true; status: IndexFund["status"] };
+  { ok: false; error: string; status: number } | { ok: true; status: IndexFund["status"] };
 
 /**
  * Sponsor initiates wind-up. Idempotent: a fund already winding down or
@@ -53,18 +52,16 @@ export async function beginWindUp(
   if (fund.status === "winding_down" || fund.status === "delisted")
     return { ok: true, status: fund.status };
 
-  const claim = await db
-    .collection<IndexFund>("indexFunds")
-    .updateOne(
-      { _id: fund._id, status: { $in: ["active", "paused"] } },
-      {
-        $set: {
-          status: "winding_down",
-          windDownStartedAtTurn: currentTurn,
-          updatedAt: new Date(),
-        },
-      }
-    );
+  const claim = await db.collection<IndexFund>("indexFunds").updateOne(
+    { _id: fund._id, status: { $in: ["active", "paused"] } },
+    {
+      $set: {
+        status: "winding_down",
+        windDownStartedAtTurn: currentTurn,
+        updatedAt: new Date(),
+      },
+    }
+  );
   if (claim.modifiedCount === 0)
     return { ok: false, error: "This fund is no longer open.", status: 409 };
 
@@ -93,10 +90,7 @@ export interface WindDownPassResult {
  * One cron pass over every winding-down fund: sell what is left, and finish any
  * fund whose portfolio has become cash.
  */
-export async function advanceWindDowns(
-  db: Db,
-  currentTurn: number
-): Promise<WindDownPassResult> {
+export async function advanceWindDowns(db: Db, currentTurn: number): Promise<WindDownPassResult> {
   const result: WindDownPassResult = {
     fundsProcessed: 0,
     fundsCompleted: 0,

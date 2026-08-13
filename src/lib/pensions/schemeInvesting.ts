@@ -111,15 +111,13 @@ export async function runPensionSchemeInvestments(
       const now = new Date();
       // Guarded debit first. If the scheme's cash moved since the read (the
       // benefit pass runs earlier in the same turn), no units are issued.
-      const debit = await db
-        .collection<PensionScheme>(PENSION_SCHEMES)
-        .updateOne(
-          { _id: scheme._id, assetsAnchor: { $gte: costAnchor } },
-          {
-            $inc: { assetsAnchor: -costAnchor, totalInvestedAnchor: costAnchor },
-            $set: { updatedAt: now },
-          }
-        );
+      const debit = await db.collection<PensionScheme>(PENSION_SCHEMES).updateOne(
+        { _id: scheme._id, assetsAnchor: { $gte: costAnchor } },
+        {
+          $inc: { assetsAnchor: -costAnchor, totalInvestedAnchor: costAnchor },
+          $set: { updatedAt: now },
+        }
+      );
       if (debit.matchedCount === 0) continue;
 
       await creditFundPosition(

@@ -390,8 +390,7 @@ export async function buildSectorCommoditySections(args: {
   // Leontief minimum from current lagged balances; `applied` is last turn's
   // ramped factor (persisted by the corp phase).
   let throughput:
-    | { applied: number | null; projected: number; bindingInput: string | null }
-    | undefined;
+    { applied: number | null; projected: number; bindingInput: string | null } | undefined;
   if (market.throughputEnabled) {
     const demandRatesMap: Partial<Record<CommodityType, number>> = {};
     for (const f of demandFlows) demandRatesMap[f.commodity] = f.rate;

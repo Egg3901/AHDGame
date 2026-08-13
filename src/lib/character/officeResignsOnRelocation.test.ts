@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  officeHasStateResidency,
-  officeResignsOnRelocation,
-} from "./officeResignsOnRelocation";
+import { officeHasStateResidency, officeResignsOnRelocation } from "./officeResignsOnRelocation";
 
 describe("officeHasStateResidency", () => {
   it("is true for state-bound seats", () => {
@@ -33,16 +30,16 @@ describe("officeResignsOnRelocation", () => {
   });
 
   it("resigns state-bound offices on same-country moves", () => {
-    expect(
-      officeResignsOnRelocation({ type: "house", state: "CA", seatsHeld: 1 }, false)
-    ).toBe(true);
+    expect(officeResignsOnRelocation({ type: "house", state: "CA", seatsHeld: 1 }, false)).toBe(
+      true
+    );
   });
 
   it("resigns every office on cross-country moves", () => {
     expect(officeResignsOnRelocation({ type: "vicePresident" }, true)).toBe(true);
-    expect(
-      officeResignsOnRelocation({ type: "house", state: "CA", seatsHeld: 1 }, true)
-    ).toBe(true);
+    expect(officeResignsOnRelocation({ type: "house", state: "CA", seatsHeld: 1 }, true)).toBe(
+      true
+    );
   });
 
   it("is false when there is no office", () => {

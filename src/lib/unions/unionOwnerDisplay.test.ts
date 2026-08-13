@@ -16,7 +16,9 @@ describe("resolveUnionOwners", () => {
       toArray: async () => [{ _id: playerId, name: "Ada Prentice", sequentialId: 12 }],
     });
     const nppsFind = vi.fn().mockReturnValue({
-      toArray: async () => [{ _id: nppId, name: "Klaus Weber", sequentialId: 88, avatarUrl: "a.png" }],
+      toArray: async () => [
+        { _id: nppId, name: "Klaus Weber", sequentialId: 88, avatarUrl: "a.png" },
+      ],
     });
     const db = mockDb({
       characters: { find: charactersFind },
