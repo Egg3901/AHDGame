@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { InfluenceTarget, OrgInfluenceView } from "@/lib/alignment/queries/orgInfluence";
 import { NationDossier } from "./NationDossier";
 
@@ -149,6 +149,68 @@ describe("NationDossier costs and the display-currency preference", () => {
         onCommitted={() => {}}
       />
     );
-    expect(screen.getByText(/amount \(US\)/i)).toBeTruthy();
+    // The currency CODE, not the country id: "Amount (US)" read as a country
+    // and told a player nothing about which units the box wanted.
+    expect(screen.getByText(/amount \(USD\)/i)).toBeTruthy();
+    // ...and the source is named, which is what ticket #1064 could not work out.
+    expect(screen.getByText(/paid from the US organisation fund/i)).toBeTruthy();
+  });
+
+  it("shows the fund balance and what the typed amount buys", () => {
+    render(
+      <NationDossier
+        view={{ ...VIEW, fundBalanceLocal: 90_000_000 } as OrgInfluenceView}
+        target={TARGET}
+        orgId="NATO"
+        viewerCountryId="US"
+        onCommitted={() => {}}
+      />
+    );
+    // The balance was computed and typed on the view but rendered nowhere, so a
+    // player had no way to see what the fund held before spending from it.
+    // Split across text nodes in one span, so match on the container's content.
+    expect(
+      screen.getByText((_, el) => el?.textContent?.trim() === "$90.0M available")
+    ).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "152000000" } });
+    // TARGET prices a point at 76m, so 152m is exactly two points.
+    // Scoped to the preview line: "2.00" also appears on the share bar above.
+    expect(
+      screen.getByText((_, el) => {
+        const t = el?.textContent ?? "";
+        return t.startsWith("Buys") && t.includes("2.00") && t.includes("each");
+      })
+    ).toBeTruthy();
+  });
+
+  it("says the spend resolves on the turn, not immediately", () => {
+    // The literal question on ticket #1064: "once you commit play does it
+    // automatically shift or do you have to wait a turn?"
+    render(
+      <NationDossier
+        view={VIEW as OrgInfluenceView}
+        target={TARGET}
+        orgId="NATO"
+        viewerCountryId="US"
+        onCommitted={() => {}}
+      />
+    );
+    expect(screen.getByText(/the nation moves when the turn processes/i)).toBeTruthy();
+  });
+
+  it("warns when the amount is past the per-turn ceiling", () => {
+    render(
+      <NationDossier
+        view={VIEW as OrgInfluenceView}
+        target={TARGET}
+        orgId="NATO"
+        viewerCountryId="US"
+        onCommitted={() => {}}
+      />
+    );
+    // 76m a point, so the 5-point ceiling is 380m; 500m is past it.
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "500000000" } });
+    expect(screen.getByText(/past the 5-point ceiling/i)).toBeTruthy();
   });
 });

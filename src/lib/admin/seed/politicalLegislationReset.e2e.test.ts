@@ -150,12 +150,30 @@ describe("1953 reset — end-to-end political-legislation verification", () => {
 
     for (const cc of LAW_COUNTRY_IDS) {
       for (const law of getCatalog(cc)) {
+        // Every law gets a legislation TYPE, regional ones included: that is
+        // what makes them proposable at the Land / state level.
         expect(typeStore.has(law.id), `type ${law.id}`).toBe(true);
-        if (law.kind !== "tax") {
+        // But only NATIONAL laws get a national statePolicies row. Regional
+        // secondaries never write one, by design and by the seeder: see
+        // `seedPoliticalLegislation` (`if (law.allowedScope === "regional")
+        // continue`, and the same carve-out on its baseline filter), and the
+        // DD Land sidecar's own header, "they never write national
+        // statePolicies / national enactedLaws".
+        //
+        // Without the carve-out this assertion failed the moment a regional
+        // catalog existed. PR #17 added the six DD Land laws on 2026-08-12 and
+        // this test went red on `development` and shipped red to `main`,
+        // reporting a seeding bug that was not there.
+        if (law.kind !== "tax" && law.allowedScope !== "regional") {
           expect(policyStore.has(law.id), `policy ${law.id}`).toBe(true);
         }
       }
     }
+    // The regional sidecar is proposable but deliberately has no national
+    // policy row. Pinned explicitly so a future change to the seeder's scope
+    // handling fails here rather than silently flipping the rule above.
+    expect(typeStore.has("dd.sec.landPolytechnicEducation")).toBe(true);
+    expect(policyStore.has("dd.sec.landPolytechnicEducation")).toBe(false);
     // The stale old-generation policy record was cleaned.
     expect(policyStore.has("us_federal_income_tax_rate")).toBe(false);
   });
