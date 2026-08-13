@@ -15,6 +15,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { isBankPropTradingEnabled } from "@/lib/banking/featureFlag";
 import { mayDistribute } from "./capitalAdequacy";
+import { getCashReserves } from "./bankCash";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { escapeRegex } from "@/lib/utils/escapeRegex";
@@ -42,7 +43,7 @@ export type OpenPositionResult =
       ok: true;
       position: PropPosition;
       cost: number;
-      liquidCapital: number;
+      cashReserves: number;
       propBookMarkValue: number;
     }
   | { ok: false; error: string };
@@ -52,7 +53,7 @@ export type ClosePositionResult =
       ok: true;
       proceeds: number;
       realizedPnl: number;
-      liquidCapital: number;
+      cashReserves: number;
       propBookMarkValue: number;
     }
   | { ok: false; error: string };
@@ -142,20 +143,21 @@ async function resolvePositionRef(
 }
 
 /**
- * Equity base for prop leverage: liquid + posted + prop mark - interbank debt -
- * CB margin debt. Corporations have no CB savings surface (characters do), so
+ * Equity base for prop leverage: bank cash + prop mark - interbank debt - CB
+ * margin debt. Corporations have no CB savings surface (characters do), so
  * nothing is netted for CB-held savings.
+ *
+ * `postedCapital` is deliberately absent. Posting capital moves cash into
+ * `cashReserves` and increments the memo, so adding both counted the same money
+ * twice and handed every bank a free slice of leverage headroom equal to its
+ * contributed capital.
  */
 export function computePropEquityBase(
-  liquidCapital: number,
-  charter: Pick<
-    BankCharter,
-    "postedCapital" | "propBookMarkValue" | "interbankDebt" | "cbMarginDebt" | "propBook"
-  >,
+  cashReserves: number,
+  charter: Pick<BankCharter, "propBookMarkValue" | "interbankDebt" | "cbMarginDebt" | "propBook">,
   markValueOverride?: number
 ): number {
-  const liquid = Math.max(0, finiteOrZero(liquidCapital));
-  const posted = Math.max(0, finiteOrZero(charter.postedCapital));
+  const liquid = Math.max(0, finiteOrZero(cashReserves));
   const mark =
     markValueOverride !== undefined
       ? Math.max(0, finiteOrZero(markValueOverride))
@@ -164,7 +166,7 @@ export function computePropEquityBase(
         : sumPositionMarks(charter.propBook);
   const interbank = Math.max(0, finiteOrZero(charter.interbankDebt ?? 0));
   const margin = Math.max(0, finiteOrZero(charter.cbMarginDebt ?? 0));
-  return liquid + posted + mark - interbank - margin;
+  return liquid + mark - interbank - margin;
 }
 
 export function sumPositionMarks(positions: PropPosition[] | undefined): number {
@@ -289,7 +291,7 @@ export async function markBook(db: Db, charter: BankCharter): Promise<MarkBookRe
 }
 
 /**
- * Open (or add to) a prop position. Buys debit liquidCapital at the live mark
+ * Open (or add to) a prop position. Buys debit the bank's reserves at the live mark
  * into the position cost basis; the market is the cash counterparty (same cash
  * leg shape as float share trading: buyer pays mark × units up front).
  */
@@ -343,7 +345,7 @@ export async function openPosition(
     return { ok: false, error: "Could not price position (missing market data)" };
   }
 
-  const liquid = Math.max(0, corp.liquidCapital ?? 0);
+  const liquid = getCashReserves(corp.bankCharter);
   if (cost > liquid + 1e-9) {
     return { ok: false, error: "Insufficient liquid capital for purchase" };
   }
@@ -391,10 +393,10 @@ export async function openPosition(
     {
       _id: corporationId,
       "bankCharter.status": "active",
-      liquidCapital: { $gte: cost },
+      "bankCharter.cashReserves": { $gte: cost },
     },
     {
-      $inc: { liquidCapital: -cost },
+      $inc: { "bankCharter.cashReserves": -cost },
       $set: {
         "bankCharter.propBook": nextBook,
         "bankCharter.propBookMarkValue": nextMark,
@@ -433,13 +435,13 @@ export async function openPosition(
     ok: true,
     position,
     cost,
-    liquidCapital: nextLiquid,
+    cashReserves: nextLiquid,
     propBookMarkValue: nextMark,
   };
 }
 
 /**
- * Close units of a prop position at the live mark. Credits liquidCapital;
+ * Close units of a prop position at the live mark. Credits the bank's reserves;
  * realized P&L is proceeds vs pro-rata cost basis (market is cash counterparty).
  */
 export async function closePosition(
@@ -496,7 +498,7 @@ export async function closePosition(
   }
 
   const nextMark = sumPositionMarks(nextBook);
-  const nextLiquid = Math.max(0, (corp.liquidCapital ?? 0) + proceeds);
+  const nextLiquid = Math.max(0, getCashReserves(corp.bankCharter) + proceeds);
 
   const updated = await db.collection<Corporation>("corporations").updateOne(
     {
@@ -504,7 +506,7 @@ export async function closePosition(
       "bankCharter.status": "active",
     },
     {
-      $inc: { liquidCapital: proceeds },
+      $inc: { "bankCharter.cashReserves": proceeds },
       $set: {
         "bankCharter.propBook": nextBook,
         "bankCharter.propBookMarkValue": nextMark,
@@ -534,7 +536,7 @@ export async function closePosition(
     ok: true,
     proceeds,
     realizedPnl,
-    liquidCapital: nextLiquid,
+    cashReserves: nextLiquid,
     propBookMarkValue: nextMark,
   };
 }
@@ -547,15 +549,15 @@ export async function closePosition(
 export async function forceLiquidateToLeverageCap(
   db: Db,
   corporationId: ObjectId,
-  liquidCapital: number,
+  cashReserves: number,
   charter: BankCharter,
   marked: MarkBookResult
-): Promise<{ liquidCapital: number; charter: BankCharter; forced: boolean }> {
-  const equity = computePropEquityBase(liquidCapital, charter, marked.propBookMarkValue);
+): Promise<{ cashReserves: number; charter: BankCharter; forced: boolean }> {
+  const equity = computePropEquityBase(cashReserves, charter, marked.propBookMarkValue);
   const cap = PROP_LEVERAGE_MULTIPLE * Math.max(0, equity);
   if (!(marked.propBookMarkValue > cap + 1e-9) || marked.propBookMarkValue <= 0) {
     return {
-      liquidCapital,
+      cashReserves,
       charter: {
         ...charter,
         propBook: marked.positions,
@@ -585,7 +587,7 @@ export async function forceLiquidateToLeverageCap(
   }
 
   const nextMark = sumPositionMarks(nextPositions);
-  const nextLiquid = liquidCapital + cashBack;
+  const nextLiquid = cashReserves + cashBack;
   const nextCharter: BankCharter = {
     ...charter,
     propBook: nextPositions,
@@ -596,7 +598,7 @@ export async function forceLiquidateToLeverageCap(
     { _id: corporationId, "bankCharter.status": "active" },
     {
       $set: {
-        liquidCapital: nextLiquid,
+        "bankCharter.cashReserves": nextLiquid,
         "bankCharter.propBook": nextPositions,
         "bankCharter.propBookMarkValue": nextMark,
         updatedAt: new Date(),
@@ -604,5 +606,5 @@ export async function forceLiquidateToLeverageCap(
     }
   );
 
-  return { liquidCapital: nextLiquid, charter: nextCharter, forced: true };
+  return { cashReserves: nextLiquid, charter: nextCharter, forced: true };
 }

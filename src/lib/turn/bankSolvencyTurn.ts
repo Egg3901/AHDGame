@@ -291,7 +291,7 @@ async function evaluateOneBank(
   if (propRunning) {
     const marked = await markBook(db, charter);
     const liq = await forceLiquidateToLeverageCap(db, corp._id, liquidCapital, charter, marked);
-    liquidCapital = liq.liquidCapital;
+    liquidCapital = liq.cashReserves;
     charter = liq.charter;
     forcedLiquidation = liq.forced;
     if (!liq.forced) {
