@@ -13,10 +13,12 @@ import {
 } from "@/lib/constants/countries";
 import { logWireEvent } from "@/lib/wireEvent";
 import { applyCrisisEffects } from "./applyEffects";
+import { runCrisisOptionAction } from "./optionActions";
 import { spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { isCrisisAidBillsEnabled } from "./featureFlag";
 import { AID_MAX_PCT_GDP, AID_DEFAULT_PCT_GDP } from "@/lib/constants/crises";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
+import { getGameState } from "@/lib/gameState";
 
 /** Read a country's national treasury balance (the unified fiscal cash position). */
 async function getTreasuryBalance(db: Db, countryId: string): Promise<number> {
@@ -571,6 +573,23 @@ export async function submitCrisisDecision(
 
   if (appliedEffects.length > 0) {
     await applyEffectsForCrisis(db, interaction.crisisId, appliedEffects);
+  }
+
+  // ── Real-subsystem action hook. Runs after flat effects, before navigation,
+  //    so a choice can file a bill / issue a taking / spawn a court case in
+  //    addition to nudging metrics. Best-effort (see runCrisisOptionAction). ──
+  const chosenOption = currentNode.options?.find((o) => o.optionId === optionId);
+  if (crisis && chosenOption?.action) {
+    const gameState = await getGameState(db);
+    await runCrisisOptionAction({
+      db,
+      crisis,
+      interaction,
+      option: chosenOption,
+      characterId,
+      countryId,
+      currentTurn: gameState?.currentTurn ?? crisis.startTurn,
+    });
   }
 
   // ── Navigate. Landing on a terminal node applies its outcome and resolves. ──
