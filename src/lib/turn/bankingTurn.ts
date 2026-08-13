@@ -1,4 +1,4 @@
-import { ObjectId, type Db } from "mongodb";
+import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import type { Character, Corporation } from "@/lib/db/types";
 import type {
   BankCharter,
@@ -30,6 +30,15 @@ import { roundSavingsAmount, savingsApyPercent } from "@/lib/currency/savingsInt
 import { discountWindowRatePercent } from "@/lib/banking/discountWindow";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
+import {
+  CREDIT_BANDS,
+  DEFAULT_LENDING_PROFILE,
+  bandRatePercent,
+  bandsForProfile,
+  getCreditBand,
+  type CreditBandId,
+  type LendingProfileId,
+} from "@/lib/banking/creditBands";
 
 /** Max fraction of the household target that can migrate or be lent each turn. */
 export const MAX_NPC_FLOW_PER_TURN_FRACTION = 0.025;
@@ -528,6 +537,7 @@ async function processOneBank(
       cbDocId,
       cb,
       bankName: corp.name,
+      lendingProfile: live.bankCharter.lendingProfile,
     }
   );
   liquidCapital = bulkResult.liquidCapital;
@@ -539,6 +549,16 @@ async function processOneBank(
   // (f) Recompute aggregates + stamp lastBankingTurn (END of bank pass)
   const finalPlayerDeposits = playerDeposits + playerInterestPaid;
   const totalDeposits = finalPlayerDeposits + npcDeposits;
+
+  // Cash the corp treasury may not be spent below while this charter is active.
+  // Posted capital is netted off because it is already cash held aside behind
+  // the charter and counts toward the same requirement — without that, posting
+  // capital would raise the floor by the amount it lowered the balance and a
+  // recapitalization could lock the CEO out of their own treasury.
+  const reserveFloor = Math.max(
+    0,
+    totalDeposits * reserveRatioRequired - Math.max(0, live.bankCharter.postedCapital ?? 0)
+  );
 
   await db.collection<Corporation>("corporations").updateOne(
     {
@@ -556,6 +576,7 @@ async function processOneBank(
         "bankCharter.totalDeposits": totalDeposits,
         "bankCharter.totalLoans": totalLoans,
         "bankCharter.reserves": liquidCapital,
+        "bankCharter.reserveFloor": reserveFloor,
         "bankCharter.depositCeiling": depositCeiling,
         "bankCharter.lastBankingTurn": turn,
         updatedAt: new Date(),
@@ -789,6 +810,8 @@ type NpcBulkState = {
   cbDocId: string;
   cb?: Pick<CentralBank, "externalBroadMoney">;
   bankName: string;
+  /** CEO's stance: which credit bands this bank will originate into. */
+  lendingProfile?: LendingProfileId;
 };
 
 type NpcBulkResult = {
@@ -799,6 +822,28 @@ type NpcBulkResult = {
   shortfall: number;
 };
 
+/**
+ * Service the household book, one tranche per credit band.
+ *
+ * The book used to be a single `npcBulk` loan carrying one rate and one blended
+ * default rate — which is why the console could only report it as one implied
+ * number. It is now one loan document per band, so the same servicing loop
+ * produces a book that can be read by rating and shocked by composition.
+ *
+ * Two rules govern what the CEO's lending profile may touch:
+ *
+ *  - It selects which bands are ORIGINATED into from here on. Bands outside the
+ *    profile get a target of zero and wind down at the ordinary flow cap; they
+ *    are not called in, repriced, or written off early.
+ *  - A tranche already on the book keeps the rate it was originated at. Rate
+ *    changes reach the book only through new origination, which is what "does
+ *    not change existing loans" has to mean if it is to mean anything.
+ *
+ * A pre-split book has no `creditBand`. It is serviced as its own tranche with
+ * a target of zero, at its own stored rate, so it runs off gradually while the
+ * banded tranches build. Total book size lands in the same place; only its
+ * composition changes, and only at the flow cap.
+ */
 async function serviceNpcBulkBook(
   db: Db,
   turn: number,
@@ -812,111 +857,185 @@ async function serviceNpcBulkBook(
   let writtenOff = 0;
   let shortfall = 0;
 
-  let createdThisPass = false;
-  let loan = await db.collection<BankLoan>("bankLoans").findOne({
-    bankCorporationId,
-    borrowerType: "npcBulk",
-    status: { $in: ["current", "arrears"] },
-  });
-
-  const current = Math.max(0, loan?.outstanding ?? 0);
-  const nonNpcLoans = Math.max(0, totalLoans - current);
-  const npcFundingCapacity = Math.max(0, state.loanFundingCapacity - nonNpcLoans);
-  const npcBook = computeNpcLoanBook(npcFundingCapacity, lendingRatePercent);
-
-  if (!loan) {
-    // Ramp from zero with the same gradual flow cap as household deposits.
-    const initial = Math.max(0, npcFlowDelta(0, npcBook.volume));
-    const doc: BankLoan = {
-      _id: new ObjectId(),
+  const existing = await db
+    .collection<BankLoan>("bankLoans")
+    .find({
       bankCorporationId,
-      currency,
       borrowerType: "npcBulk",
-      principal: initial,
-      outstanding: initial,
-      ratePercent: lendingRatePercent,
-      originatedTurn: turn,
-      termTurns: NPC_BULK_TERM_TURNS,
-      status: "current",
-    };
-    await db.collection<BankLoan>("bankLoans").insertOne(doc);
-    totalLoans += initial;
-    loan = doc;
-    createdThisPass = true;
-  } else if (loan.lastProcessedTurn === turn) {
+      status: { $in: ["current", "arrears"] },
+    })
+    .toArray();
+
+  // Idempotency: the whole book is stamped together, so one processed tranche
+  // means the pass already ran for this bank this turn.
+  if (existing.some((loan) => loan.lastProcessedTurn === turn)) {
     return { liquidCapital, totalLoans, interestCollected, writtenOff, shortfall };
   }
 
-  const target = Math.max(0, npcBook.volume);
-  const adjust = createdThisPass ? 0 : npcFlowDelta(current, target);
-  const nextOutstandingBeforeYield = Math.max(0, current + adjust);
-  if (!createdThisPass) {
-    totalLoans = Math.max(0, totalLoans + adjust);
+  const currentTotal = existing.reduce((sum, loan) => sum + Math.max(0, loan.outstanding ?? 0), 0);
+  const nonNpcLoans = Math.max(0, totalLoans - currentTotal);
+  const npcFundingCapacity = Math.max(0, state.loanFundingCapacity - nonNpcLoans);
+
+  const openBands = bandsForProfile(state.lendingProfile);
+  const byBand = new Map<string, BankLoan>();
+  const legacy: BankLoan[] = [];
+  for (const loan of existing) {
+    if (loan.creditBand) byBand.set(loan.creditBand, loan);
+    else legacy.push(loan);
   }
 
-  // Interest is real cash the unmodeled NPC economy pays out of the central
-  // bank's externalBroadMoney pool (the named counterparty). Defaults destroy
-  // loan asset only - no cash moves for a writeoff.
-  const interest = (nextOutstandingBeforeYield * (lendingRatePercent / 100)) / TURNS_PER_YEAR;
-  const defaults =
-    (nextOutstandingBeforeYield * (npcBook.expectedDefaultRatePercent / 100)) / TURNS_PER_YEAR;
+  type TrancheWork = {
+    loan: BankLoan | null;
+    band: CreditBandId | undefined;
+    target: number;
+    ratePercent: number;
+    defaultRatePercent: number;
+  };
 
-  const poolAvailable =
-    typeof state.cb?.externalBroadMoney === "number" && Number.isFinite(state.cb.externalBroadMoney)
-      ? Math.max(0, state.cb.externalBroadMoney)
+  const work: TrancheWork[] = [];
+
+  for (const band of CREDIT_BANDS) {
+    const open = openBands.some((b) => b.id === band.id);
+    const loan = byBand.get(band.id) ?? null;
+    if (!open && !loan) continue;
+
+    const rate = bandRatePercent(band, lendingRatePercent);
+    // Demand for a band is its share of the bank's funding capacity, taken at
+    // the rate that band is actually charged: price still moves volume, it just
+    // moves it per band now instead of across the whole book at once.
+    const target = open
+      ? Math.max(0, computeNpcLoanBook(npcFundingCapacity * band.demandShare, rate).volume)
       : 0;
-  const interestAffordable = Math.min(interest, poolAvailable);
-  if (interestAffordable > 0) {
-    await db.collection<CentralBank>("centralBanks").updateOne(
-      { _id: state.cbDocId },
-      {
-        $inc: { externalBroadMoney: -interestAffordable },
-        $set: { updatedAt: new Date() },
+
+    work.push({
+      loan,
+      band: band.id,
+      target,
+      // An existing tranche keeps its originated rate; only a fresh one prices
+      // at today's rate.
+      ratePercent: loan ? (loan.ratePercent ?? rate) : rate,
+      defaultRatePercent: band.defaultRatePercent,
+    });
+  }
+
+  for (const loan of legacy) {
+    work.push({
+      loan,
+      band: undefined,
+      target: 0,
+      ratePercent: loan.ratePercent ?? lendingRatePercent,
+      defaultRatePercent: getCreditBand(undefined).defaultRatePercent,
+    });
+  }
+
+  const now = new Date();
+  const bulkOps: AnyBulkWriteOperation<BankLoan>[] = [];
+
+  for (const tranche of work) {
+    const current = Math.max(0, tranche.loan?.outstanding ?? 0);
+    const adjust = npcFlowDelta(current, tranche.target);
+    const nextOutstandingBeforeYield = Math.max(0, current + adjust);
+    if (nextOutstandingBeforeYield <= 0 && current <= 0) continue;
+
+    totalLoans = Math.max(0, totalLoans + adjust);
+
+    // Interest is real cash the unmodeled NPC economy pays out of the central
+    // bank's externalBroadMoney pool (the named counterparty). Defaults destroy
+    // loan asset only - no cash moves for a writeoff.
+    const interest = (nextOutstandingBeforeYield * (tranche.ratePercent / 100)) / TURNS_PER_YEAR;
+    const defaults =
+      (nextOutstandingBeforeYield * (tranche.defaultRatePercent / 100)) / TURNS_PER_YEAR;
+
+    const poolAvailable =
+      typeof state.cb?.externalBroadMoney === "number" &&
+      Number.isFinite(state.cb.externalBroadMoney)
+        ? Math.max(0, state.cb.externalBroadMoney)
+        : 0;
+    const interestAffordable = Math.min(interest, poolAvailable);
+    if (interestAffordable > 0) {
+      await db
+        .collection<CentralBank>("centralBanks")
+        .updateOne(
+          { _id: state.cbDocId },
+          { $inc: { externalBroadMoney: -interestAffordable }, $set: { updatedAt: now } }
+        );
+      if (state.cb) {
+        state.cb.externalBroadMoney = poolAvailable - interestAffordable;
       }
-    );
-    if (state.cb) {
-      state.cb.externalBroadMoney = poolAvailable - interestAffordable;
+      liquidCapital += interestAffordable;
+      interestCollected += interestAffordable;
     }
-    liquidCapital += interestAffordable;
-    interestCollected += interestAffordable;
+    if (interest > interestAffordable) {
+      shortfall += interest - interestAffordable;
+    }
+    writtenOff += defaults;
+
+    const afterDefaults = Math.max(0, nextOutstandingBeforeYield - defaults);
+    totalLoans = Math.max(0, totalLoans - defaults);
+
+    if (tranche.loan) {
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: tranche.loan._id },
+          update: {
+            $set: {
+              outstanding: afterDefaults,
+              principal: Math.max(tranche.loan.principal ?? 0, afterDefaults),
+              ratePercent: tranche.ratePercent,
+              status: afterDefaults <= 0 ? "repaid" : "current",
+              lastProcessedTurn: turn,
+            },
+          },
+        },
+      });
+    } else if (afterDefaults > 0) {
+      bulkOps.push({
+        insertOne: {
+          document: {
+            _id: new ObjectId(),
+            bankCorporationId,
+            currency,
+            borrowerType: "npcBulk",
+            creditBand: tranche.band,
+            principal: afterDefaults,
+            outstanding: afterDefaults,
+            ratePercent: tranche.ratePercent,
+            originatedTurn: turn,
+            termTurns: NPC_BULK_TERM_TURNS,
+            status: "current",
+            lastProcessedTurn: turn,
+          } as BankLoan,
+        },
+      });
+    }
+  }
+
+  if (bulkOps.length > 0) {
+    await db.collection<BankLoan>("bankLoans").bulkWrite(bulkOps);
+  }
+
+  // One interest row for the whole book rather than one per band: this fires
+  // for every bank every turn, and seven rows per bank per turn would bury the
+  // ledger for no extra information the tranches do not already carry.
+  if (interestCollected > 0) {
     await emitTx(db, {
       type: "bank_npc_loan_interest",
       turn,
-      createdAt: new Date(),
+      createdAt: now,
       subjectType: "corporation",
       subjectId: bankCorporationId,
       subjectName: state.bankName,
-      amount: interestAffordable,
+      amount: interestCollected,
       currencyCode: currency,
       counterpartyType: "system",
       counterpartyName: "NPC households",
       meta: {
         borrowerType: "npcBulk",
-        loanId: loan._id.toString(),
-        ratePercent: lendingRatePercent,
+        tranches: work.length,
+        lendingProfile: state.lendingProfile ?? DEFAULT_LENDING_PROFILE,
       },
     });
   }
-  if (interest > interestAffordable) {
-    shortfall += interest - interestAffordable;
-  }
-  writtenOff += defaults;
-
-  const afterDefaults = Math.max(0, nextOutstandingBeforeYield - defaults);
-  totalLoans = Math.max(0, totalLoans - defaults);
-
-  await db.collection<BankLoan>("bankLoans").updateOne(
-    { _id: loan._id },
-    {
-      $set: {
-        outstanding: afterDefaults,
-        principal: Math.max(loan.principal ?? 0, afterDefaults),
-        ratePercent: lendingRatePercent,
-        status: afterDefaults <= 0 ? "repaid" : "current",
-        lastProcessedTurn: turn,
-      },
-    }
-  );
 
   return { liquidCapital, totalLoans, interestCollected, writtenOff, shortfall };
 }

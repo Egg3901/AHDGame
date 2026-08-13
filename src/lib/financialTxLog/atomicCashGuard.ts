@@ -99,6 +99,27 @@ export async function refundCharacterCash(
  * corporation acts as buyer (corp buying bonds, corp buying shares of
  * another corp). `amount` is in the corp's `liquidCurrencyCode` — callers
  * must convert to that unit before calling this helper.
+ *
+ * ## The bank reserve floor
+ *
+ * A chartered bank keeps its depositors' money in the same `liquidCapital`
+ * field as its own operating cash. There is one pot and two kinds of claim on
+ * it, and until this guard there was nothing stopping the CEO spending the
+ * depositors' half: buy capacity, buy shares, buy bonds, pay it out, all from
+ * money the bank owes back on demand. The reserve ratio existed but it was
+ * measured after the fact, so it recorded the raid instead of preventing it.
+ *
+ * While a charter is active this debit additionally refuses to take
+ * `liquidCapital` below `bankCharter.reserveFloor` (deposits × the central
+ * bank's reserve requirement, recomputed each banking turn). The check rides in
+ * the same atomic filter as the balance check, via `$expr`, so it costs no
+ * extra read and cannot be raced past.
+ *
+ * The turn engine deliberately does NOT go through this helper — deposit
+ * interest, insurance premiums and loan servicing all move bank cash directly.
+ * Those are the bank meeting its obligations, not the corporation spending its
+ * depositors' money, and a floor that blocked them would strand a bank that
+ * owed interest it was holding the cash for.
  */
 export async function atomicallyDebitCorpLiquidCapital(
   db: Db,
@@ -109,14 +130,49 @@ export async function atomicallyDebitCorpLiquidCapital(
   if (!Number.isFinite(amountInCorpCapitalUnits) || amountInCorpCapitalUnits <= 0) {
     return { ok: false, error: "Invalid amount" };
   }
-  const result = await db
-    .collection("corporations")
-    .findOneAndUpdate(
-      { _id: corporationId, liquidCapital: { $gte: amountInCorpCapitalUnits } },
-      { $inc: { liquidCapital: -amountInCorpCapitalUnits }, $set: { updatedAt: new Date() } },
-      { returnDocument: "after", projection: { liquidCapital: 1 }, ...mongoOptions(options) }
-    );
-  if (!result) return { ok: false, error: "Insufficient corporate funds" };
+  const result = await db.collection("corporations").findOneAndUpdate(
+    {
+      _id: corporationId,
+      liquidCapital: { $gte: amountInCorpCapitalUnits },
+      $expr: {
+        $gte: [
+          { $subtract: [{ $ifNull: ["$liquidCapital", 0] }, amountInCorpCapitalUnits] },
+          {
+            $cond: [
+              { $eq: [{ $ifNull: ["$bankCharter.status", null] }, "active"] },
+              { $max: [0, { $ifNull: ["$bankCharter.reserveFloor", 0] }] },
+              0,
+            ],
+          },
+        ],
+      },
+    },
+    { $inc: { liquidCapital: -amountInCorpCapitalUnits }, $set: { updatedAt: new Date() } },
+    { returnDocument: "after", projection: { liquidCapital: 1 }, ...mongoOptions(options) }
+  );
+  if (!result) {
+    // Only on the failure path: one extra read to say WHICH limit was hit, so a
+    // bank CEO is not told they are broke when they are actually at the floor.
+    const doc = await db
+      .collection("corporations")
+      .findOne(
+        { _id: corporationId },
+        { projection: { liquidCapital: 1, bankCharter: 1 }, ...mongoOptions(options) }
+      );
+    const liquid = typeof doc?.liquidCapital === "number" ? doc.liquidCapital : 0;
+    const charter = doc?.bankCharter as { status?: string; reserveFloor?: number } | undefined;
+    const floor =
+      charter?.status === "active" && typeof charter.reserveFloor === "number"
+        ? Math.max(0, charter.reserveFloor)
+        : 0;
+    if (floor > 0 && liquid >= amountInCorpCapitalUnits) {
+      return {
+        ok: false,
+        error: "Bank reserve floor: that spend would dip into depositors' reserves",
+      };
+    }
+    return { ok: false, error: "Insufficient corporate funds" };
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return { ok: true, newBalance: (result as any).liquidCapital ?? 0 };
 }

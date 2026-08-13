@@ -36,8 +36,7 @@ import {
 } from "./constants";
 
 export type LifecycleResult<T = object> =
-  | { ok: false; error: string; status: number }
-  | ({ ok: true } & T);
+  { ok: false; error: string; status: number } | ({ ok: true } & T);
 
 async function notifyParties(
   db: Db,
@@ -192,7 +191,6 @@ export async function attachMergerRemedy(
       { $set: { pendingDivestiture: obligation, updatedAt: new Date() } }
     );
 }
-
 
 /**
  * Turn phase: fine every corporation sitting on an overdue divestiture.

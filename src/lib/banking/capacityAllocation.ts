@@ -37,8 +37,7 @@ export const MIN_BRANCH_CAPACITY_SHARE = 0.1;
 export const MAX_BRANCH_CAPACITY_SHARE = 0.9;
 
 export type SetBranchCapacityShareResult =
-  | { ok: true; branchCapacityShare: number }
-  | { ok: false; error: string };
+  { ok: true; branchCapacityShare: number } | { ok: false; error: string };
 
 /**
  * Resolved branch-capacity share on a charter. Unset / non-finite -> default 0.5.

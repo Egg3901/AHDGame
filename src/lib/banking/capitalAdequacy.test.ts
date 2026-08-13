@@ -11,7 +11,13 @@ import {
 } from "./capitalAdequacy";
 
 const bank = (over: Partial<Parameters<typeof assessCapital>[0]> = {}) =>
-  assessCapital({ postedCapital: 20_000, liquidCapital: 0, totalLoans: 100_000, ...over });
+  assessCapital({
+    postedCapital: 20_000,
+    liquidCapital: 0,
+    totalLoans: 100_000,
+    borrowings: {},
+    ...over,
+  });
 
 describe("assessCapital", () => {
   it("counts posted capital and the bank's own free cash", () => {
@@ -59,10 +65,7 @@ describe("assessCapital", () => {
     // that are actually fine.
     const position = bank({ postedCapital: 30_000, totalLoans: 100_000 });
     const loss = 100_000 * STRESS_LOSS_FRACTION;
-    expect(position.stressedCapitalRatio).toBeCloseTo(
-      (30_000 - loss) / (100_000 - loss),
-      6
-    );
+    expect(position.stressedCapitalRatio).toBeCloseTo((30_000 - loss) / (100_000 - loss), 6);
   });
 
   it("treats malformed figures as zero rather than propagating NaN", () => {
@@ -70,9 +73,98 @@ describe("assessCapital", () => {
       postedCapital: Number.NaN,
       liquidCapital: -500,
       totalLoans: 100_000,
+      borrowings: { discountWindowDebt: Number.NaN },
     });
     expect(Number.isFinite(position.capitalRatio)).toBe(true);
     expect(position.capitalAnchor).toBe(0);
+  });
+});
+
+describe("borrowed money is not capital", () => {
+  it("does not let a discount-window draw move the capital ratio", () => {
+    // The regression this whole module was rewritten for. A draw credits
+    // `liquidCapital` (discountWindowCommands.ts:80) and books the matching
+    // debt. Before, only the first half counted, so a bank could cure a capital
+    // breach by drawing on the emergency facility it needed because it was in
+    // trouble.
+    const before = bank({ postedCapital: 10_000, liquidCapital: 0, totalLoans: 100_000 });
+    const afterDraw = bank({
+      postedCapital: 10_000,
+      liquidCapital: 50_000,
+      totalLoans: 100_000,
+      borrowings: { discountWindowDebt: 50_000 },
+    });
+    expect(afterDraw.capitalAnchor).toBe(before.capitalAnchor);
+    expect(afterDraw.capitalRatio).toBeCloseTo(before.capitalRatio, 9);
+  });
+
+  it("counts every borrowing line, not just the window", () => {
+    const position = bank({
+      postedCapital: 100_000,
+      liquidCapital: 0,
+      borrowings: {
+        discountWindowDebt: 10_000,
+        discountWindowArrears: 1_000,
+        cbMarginDebt: 20_000,
+        cbMarginArrears: 2_000,
+        interbankDebt: 5_000,
+      },
+    });
+    expect(position.capitalAnchor).toBe(100_000 - 38_000);
+  });
+
+  it("reports a bank that owes more than it holds as insolvent, not as zero", () => {
+    const position = bank({
+      postedCapital: 1_000,
+      liquidCapital: 0,
+      totalLoans: 0,
+      borrowings: { discountWindowDebt: 50_000 },
+    });
+    expect(position.capitalAnchor).toBeLessThan(0);
+    expect(position.standing).toBe("undercapitalized");
+  });
+
+  it("makes lending cost ratio instead of creating it", () => {
+    // Loans are funded by the deposit base, so originating one grows the
+    // denominator and leaves equity alone.
+    const small = bank({ postedCapital: 20_000, liquidCapital: 0, totalLoans: 100_000 });
+    const large = bank({ postedCapital: 20_000, liquidCapital: 0, totalLoans: 200_000 });
+    expect(large.capitalAnchor).toBe(small.capitalAnchor);
+    expect(large.capitalRatio).toBeLessThan(small.capitalRatio);
+  });
+});
+
+describe("band-weighted stress", () => {
+  it("shocks a conservative book far less than an aggressive one", () => {
+    const conservative = bank({
+      postedCapital: 20_000,
+      totalLoans: 100_000,
+      bookTranches: [{ creditBand: "AAA", outstanding: 100_000 }],
+    });
+    const aggressive = bank({
+      postedCapital: 20_000,
+      totalLoans: 100_000,
+      bookTranches: [{ creditBand: "CCC", outstanding: 100_000 }],
+    });
+    expect(conservative.appliedStressLossFraction).toBeLessThan(
+      aggressive.appliedStressLossFraction
+    );
+    expect(conservative.stressedCapitalRatio).toBeGreaterThan(aggressive.stressedCapitalRatio);
+  });
+
+  it("falls back to the flat fraction for a book with no band detail", () => {
+    const position = bank({ totalLoans: 100_000 });
+    expect(position.appliedStressLossFraction).toBe(STRESS_LOSS_FRACTION);
+  });
+
+  it("does not let one banded tranche re-score a mostly-legacy book", () => {
+    // A legacy lump has no band. Scoring the whole book off the one AAA tranche
+    // that has ramped so far would report a junk book as prime.
+    const position = bank({
+      totalLoans: 100_000,
+      bookTranches: [{ outstanding: 90_000 }, { creditBand: "AAA", outstanding: 10_000 }],
+    });
+    expect(position.appliedStressLossFraction).toBeGreaterThan(0.1);
   });
 });
 

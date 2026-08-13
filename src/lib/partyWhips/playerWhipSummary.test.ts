@@ -44,10 +44,10 @@ describe("summarizePlayerWhips", () => {
     expect(summary.issuerRole).toBe("viceChair");
   });
 
-  it("falls back to admin for non-leadership issuers", () => {
+  it("does not invent an admin issuer for non-leadership whips", () => {
     const [summary] = summarizePlayerWhips([makeWhip(new ObjectId())], { chairId, viceChairId });
 
-    expect(summary.issuerRole).toBe("admin");
+    expect(summary.issuerRole).toBeUndefined();
   });
 
   it("prefers the stored issuer role for historical whips", () => {

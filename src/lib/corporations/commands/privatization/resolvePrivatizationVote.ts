@@ -266,8 +266,7 @@ export async function resolvePrivatizationVote(input: ResolveInput): Promise<Res
 
   // Consolidate cap table: CEO absorbs all non-CEO character/corp shares; float retires.
   const ceoEntry = corp.shareholders.find((s) => s.characterId?.toString() === ceoIdStr) as
-    | Shareholder
-    | undefined;
+    Shareholder | undefined;
   const ceoSharesAfter =
     (ceoEntry?.shares ?? 0) + nonCeoHolders.reduce((acc, h) => acc + h.shares, 0);
   const newShareholders: Shareholder[] = [

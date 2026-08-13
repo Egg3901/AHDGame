@@ -69,8 +69,7 @@ export async function findActiveWaiver(
 }
 
 export type FilePetitionResult =
-  | { ok: true; petition: IndexListingPetition }
-  | { ok: false; error: string; status: number };
+  { ok: true; petition: IndexListingPetition } | { ok: false; error: string; status: number };
 
 /**
  * File a petition and pay the lobbying contribution.
@@ -98,12 +97,20 @@ export async function fileListingPetition(opts: {
     return { ok: false, error: "Contribution must be a positive amount", status: 400 };
   }
   if (corporation.isPrivate) {
-    return { ok: false, error: "A private corporation has no index membership to petition for", status: 400 };
+    return {
+      ok: false,
+      error: "A private corporation has no index membership to petition for",
+      status: 400,
+    };
   }
 
   const existing = await findPendingPetition(db, corporation._id);
   if (existing) {
-    return { ok: false, error: "This corporation already has a petition before the committee", status: 409 };
+    return {
+      ok: false,
+      error: "This corporation already has a petition before the committee",
+      status: 409,
+    };
   }
   const waiver = await findActiveWaiver(db, corporation._id, currentTurn);
   if (waiver) {
@@ -123,11 +130,7 @@ export async function fileListingPetition(opts: {
     };
   }
 
-  const debit = await atomicallyDebitCorpLiquidCapital(
-    db,
-    corporation._id,
-    contributionAnchor
-  );
+  const debit = await atomicallyDebitCorpLiquidCapital(db, corporation._id, contributionAnchor);
   if (!debit.ok) return { ok: false, error: debit.error, status: 400 };
 
   const now = new Date();
@@ -150,9 +153,7 @@ export async function fileListingPetition(opts: {
   };
 
   try {
-    await db
-      .collection<IndexListingPetition>(INDEX_LISTING_PETITIONS)
-      .insertOne(petition);
+    await db.collection<IndexListingPetition>(INDEX_LISTING_PETITIONS).insertOne(petition);
   } catch (e) {
     // The debit already happened, so put it back rather than leaving the corp
     // out of pocket for a petition that does not exist.
@@ -172,12 +173,7 @@ export async function fileListingPetition(opts: {
       await isForexEnabled()
     );
   } else {
-    await creditTreasuryProceeds(
-      db,
-      corporation.countryId as CountryId,
-      contributionAnchor,
-      now
-    );
+    await creditTreasuryProceeds(db, corporation.countryId as CountryId, contributionAnchor, now);
   }
 
   // Both legs, so the ledger nets to zero: the corporation pays and either the

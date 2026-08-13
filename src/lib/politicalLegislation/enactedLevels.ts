@@ -29,10 +29,7 @@ export async function getEnactedLevels(db: Db, countryId: string): Promise<Map<s
     // rows must stay at 0 so they cannot leak into the national law target.
     if (law.allowedScope === "regional") {
       const index = recorded.get(law.id);
-      levels.set(
-        law.id,
-        typeof index === "number" ? Math.max(0, Math.min(4, index)) : 0
-      );
+      levels.set(law.id, typeof index === "number" ? Math.max(0, Math.min(4, index)) : 0);
       continue;
     }
     const index = recorded.get(law.id);

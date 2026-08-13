@@ -206,4 +206,59 @@ describe("runSourcingPass", () => {
     runSourcingPass(inputs);
     expect(JSON.stringify([...inputs.byState.get("A2")!.entries()])).toBe(before);
   });
+
+  it("landedPremiumByDestState: interstate fill carries shipping as extra cost", () => {
+    // Same as "buys from the cheapest landed seller": A1 buys 100 units from
+    // A2 at ask 90, shippingPerUnit = 1000 × 0.04 × 1 hop = 40.
+    const r = runSourcingPass(makeInputs());
+    const a1 = r.landedPremiumByDestState.get("A1")!.get("coal")!;
+    expect(a1.metUnits).toBeCloseTo(100);
+    expect(a1.extraCost).toBeCloseTo(100 * 40);
+    // Sellers/pure-domestic states never buy, so they carry no accumulator.
+    expect(r.landedPremiumByDestState.get("A2")?.get("coal")).toBeUndefined();
+  });
+
+  it("landedPremiumByDestState: local fill contributes met units at zero extra cost", () => {
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          [
+            "A1",
+            new Map([
+              ["coal", { supply: 60, demand: 100 }],
+              ["freight", { supply: 1000, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 1000, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 260, demand: 100 }]])]]),
+      })
+    );
+    const a1 = r.landedPremiumByDestState.get("A1")!.get("coal")!;
+    // 60 units local (free) + 40 interstate at shippingPerUnit 40.
+    expect(a1.metUnits).toBeCloseTo(100);
+    expect(a1.extraCost).toBeCloseTo(40 * 40);
+  });
+
+  it("importAggregatesByCountry: sums import value and tariff paid by buyer country", () => {
+    const r = runSourcingPass(makeInputs({ freightPrice: 100, tariffRatePct: () => 10 }));
+    const usAgg = r.importAggregatesByCountry.get("US")!;
+    expect(usAgg.importValue).toBeCloseTo(100 * 60);
+    expect(usAgg.tariffPaid).toBeCloseTo(100 * 60 * 0.1);
+  });
+
+  it("importAggregatesByCountry: no entry for a buyer country with no import flows", () => {
+    const r = runSourcingPass(makeInputs());
+    expect(r.importAggregatesByCountry.has("US")).toBe(false);
+  });
 });

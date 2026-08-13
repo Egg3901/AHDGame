@@ -70,7 +70,9 @@ function Figure({
   return (
     <div>
       <p className="text-[10px] uppercase tracking-wider text-muted">{label}</p>
-      <p className={`font-mono font-semibold ${tone === "error" ? "text-error" : "text-foreground"}`}>
+      <p
+        className={`font-mono font-semibold ${tone === "error" ? "text-error" : "text-foreground"}`}
+      >
         {value}
       </p>
       {caption && <p className="mt-0.5 text-body-sm text-muted">{caption}</p>}

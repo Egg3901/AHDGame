@@ -26,6 +26,8 @@ interface RelocationStatus {
   canRelocate: boolean;
   cooldownRemainingDays: number | null;
   hasOffice: boolean;
+  /** State/region-bound office — resigned on any move. National offices only resign on country change. */
+  officeRequiresStateResidency: boolean;
   isCeo: boolean;
   ceoCorpName: string | null;
   homeState: string | null;
@@ -94,6 +96,7 @@ export function RelocateButton({
           canRelocate: data.canRelocate ?? false,
           cooldownRemainingDays: data.cooldownRemainingDays ?? null,
           hasOffice: data.hasOffice ?? false,
+          officeRequiresStateResidency: data.officeRequiresStateResidency ?? false,
           isCeo: data.isCeo ?? false,
           ceoCorpName: data.ceoCorpName ?? null,
           homeState: data.homeState ?? null,
@@ -283,9 +286,17 @@ export function RelocateButton({
                     {candidacyBreakdown.length > 0 && <> ({candidacyBreakdown.join(", ")})</>}.
                   </li>
                 )}
-                {status!.hasOffice && (
+                {status!.hasOffice && (isCountryChange || status!.officeRequiresStateResidency) && (
                   <li className="text-error">
-                    You will automatically resign from your current office.
+                    {isCountryChange
+                      ? "You will automatically resign from your current office (country change)."
+                      : "You will automatically resign from your current state/region office."}
+                  </li>
+                )}
+                {status!.hasOffice && !isCountryChange && !status!.officeRequiresStateResidency && (
+                  <li>
+                    Your national office (President, VP, cabinet, etc.) is kept — only state/region
+                    seats resign on an in-country move.
                   </li>
                 )}
                 {hasImperialCeoCorp && choosingMoveCorp && (

@@ -343,8 +343,7 @@ export async function processCommandEconomyTurn(
     const scoredSoes = soes.map((s) => finalStateByCorp.get(s.corpId)!);
     const soeFulfillment =
       soes.length > 0 ? aggregatePlanFulfillment(scoredSoes) : SOE_PERF_BASELINE;
-    const soePerf =
-      soes.length > 0 ? aggregateCapacityUtilisation(scoredSoes) : SOE_PERF_BASELINE;
+    const soePerf = soes.length > 0 ? aggregateCapacityUtilisation(scoredSoes) : SOE_PERF_BASELINE;
 
     // ── Issuance → overhang (the tradeoff) ───────────────────────────────────
     // `creditTotalFunded` (not `creditTotal`) — the replacement floor above is

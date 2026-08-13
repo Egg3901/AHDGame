@@ -149,7 +149,10 @@ describe("pensionSchemeAssetsAnchor (phase 2)", () => {
 
   it("keeps the funding ratio unchanged across a subscription", () => {
     const liabilities = 10_000;
-    const before = pensionFundingRatio(pensionSchemeAssetsAnchor({ assetsAnchor: 8000 }), liabilities);
+    const before = pensionFundingRatio(
+      pensionSchemeAssetsAnchor({ assetsAnchor: 8000 }),
+      liabilities
+    );
     const after = pensionFundingRatio(
       pensionSchemeAssetsAnchor({ assetsAnchor: 800, investedValueAnchor: 7200 }),
       liabilities
@@ -172,9 +175,9 @@ describe("pensionSchemeAssetsAnchor (phase 2)", () => {
       100
     );
     expect(pensionSchemeAssetsAnchor({ assetsAnchor: -500, investedValueAnchor: 100 })).toBe(100);
-    expect(
-      pensionSchemeAssetsAnchor({ assetsAnchor: 100, investedValueAnchor: Number.NaN })
-    ).toBe(100);
+    expect(pensionSchemeAssetsAnchor({ assetsAnchor: 100, investedValueAnchor: Number.NaN })).toBe(
+      100
+    );
     expect(pensionSchemeAssetsAnchor({ assetsAnchor: 100, investedValueAnchor: -50 })).toBe(100);
   });
 
@@ -302,7 +305,8 @@ describe("pensionInvestableCashAnchor", () => {
   it("leaves enough behind that the buffered turns can all be paid in full", () => {
     const cash = 100_000;
     const inPayment = 300_000;
-    let remaining = cash - pensionInvestableCashAnchor({ cashAnchor: cash, benefitsInPaymentAnchor: inPayment });
+    let remaining =
+      cash - pensionInvestableCashAnchor({ cashAnchor: cash, benefitsInPaymentAnchor: inPayment });
     // Worst case: not one more ₳ ever arrives from an employer.
     for (let turn = 0; turn < PENSION_LIQUIDITY_BUFFER_TURNS; turn += 1) {
       const payment = pensionBenefitPayment({

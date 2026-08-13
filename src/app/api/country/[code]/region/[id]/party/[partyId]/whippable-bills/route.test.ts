@@ -144,13 +144,13 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/whippable-bills", 
     expect(body.house).toHaveLength(1);
     expect(body.house?.[0]?.bill.title).toBe("Federal Housing Reform");
     expect(body.house?.[0]?.existingWhips).toEqual([
-      expect.objectContaining({ direction: "for", mode: "soft" }),
+      expect.objectContaining({ direction: "for", mode: "soft", issuedByRole: "Chair" }),
     ]);
 
     expect(body.stateSenate).toHaveLength(1);
     expect(body.stateSenate?.[0]?.bill.title).toBe("Arizona Budget Act");
     expect(body.stateSenate?.[0]?.existingWhips).toEqual([
-      expect.objectContaining({ direction: "against", mode: "hard" }),
+      expect.objectContaining({ direction: "against", mode: "hard", issuedByRole: "Chair" }),
     ]);
   });
 });

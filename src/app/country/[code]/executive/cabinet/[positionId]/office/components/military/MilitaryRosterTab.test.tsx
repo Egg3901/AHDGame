@@ -107,13 +107,42 @@ describe("MilitaryRosterTab", () => {
   it("assigns a unit to a general from its Manage panel", async () => {
     renderTab([unit({ _id: "u9" })]);
     fireEvent.click(screen.getByText("Manage"));
-    fireEvent.change(screen.getByRole("combobox", { name: /assign .* to a general/i }), {
+    fireEvent.change(screen.getByRole("combobox", { name: /assign 1st vanguard/i }), {
       target: { value: "gen1" },
     });
     await Promise.resolve();
     expect(fetch).toHaveBeenCalledWith(
       "/api/country/us/executive/cabinet/secretary_of_defense/military/u9/assign",
       expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("stays on the navy tab after switching to it", () => {
+    renderTab([
+      unit({ _id: "u1", branchId: "army" }),
+      unit({ _id: "u2", branchId: "navy", name: "Carrier Group" }),
+    ]);
+    fireEvent.click(screen.getByText("U.S. Navy"));
+    expect(screen.getByText("Carrier Group")).toBeTruthy();
+    expect(screen.queryByText("1st Vanguard Infantry Division")).toBeNull();
+  });
+
+  it("assigns every unit of the visible branch in one order", async () => {
+    renderTab([
+      unit({ _id: "u1", branchId: "army" }),
+      unit({ _id: "u2", branchId: "navy", name: "Carrier Group" }),
+    ]);
+    fireEvent.click(screen.getByText("U.S. Navy"));
+    fireEvent.change(screen.getByRole("combobox", { name: /assign all u\.s\. navy units/i }), {
+      target: { value: "gen1" },
+    });
+    await Promise.resolve();
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/country/us/executive/cabinet/secretary_of_defense/military/assign-branch",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ branchId: "navy", assignedGeneralId: "gen1" }),
+      })
     );
   });
 

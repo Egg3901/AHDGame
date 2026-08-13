@@ -14,7 +14,7 @@ describe("STATUS_BAR_CONTAINER_CLASS", () => {
     // renders StatusBar after {children}. A tie put the bar over modal buttons on
     // phones, where the form is tall enough to reach the bottom of the viewport.
     expect(tailwindZ(STATUS_BAR_Z_INDEX_CLASS)).toBeLessThan(
-      tailwindZ(MODAL_OVERLAY_Z_INDEX_CLASS),
+      tailwindZ(MODAL_OVERLAY_Z_INDEX_CLASS)
     );
     expect(STATUS_BAR_CONTAINER_CLASS).toContain(STATUS_BAR_Z_INDEX_CLASS);
     expect(STATUS_BAR_CONTAINER_CLASS).not.toContain(MODAL_OVERLAY_Z_INDEX_CLASS);

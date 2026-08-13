@@ -16,7 +16,11 @@ import { emitTx } from "@/lib/financialTxLog/emit";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
-import { assessCapital, capitalShortfall } from "@/lib/banking/capitalAdequacy";
+import {
+  assessCapital,
+  borrowingsFromCharter,
+  capitalShortfall,
+} from "@/lib/banking/capitalAdequacy";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 
 interface RouteParams {
@@ -91,10 +95,16 @@ export async function POST(request: Request, { params }: RouteParams) {
       meta: { kind: "bank_recapitalization" },
     });
 
+    // Note the injection does NOT move the ratio on its own: posting capital
+    // shifts cash from `liquidCapital` into `postedCapital`, and equity counts
+    // both. What it changes is the CLAIM on that cash — posted capital is
+    // locked behind the charter and cannot be spent back out — which is what
+    // the reserve floor and the resolution waterfall care about.
     const position = assessCapital({
       postedCapital: (charter.postedCapital ?? 0) + amount,
       liquidCapital: Math.max(0, (corp.liquidCapital ?? 0) - amount),
       totalLoans: charter.totalLoans ?? 0,
+      borrowings: borrowingsFromCharter(charter),
       propBookMarkValue: charter.propBookMarkValue ?? 0,
     });
 

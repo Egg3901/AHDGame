@@ -16,33 +16,36 @@ export function CodeQualityTab() {
   // The environment selector refetches the same endpoints, so without an abort
   // a slow response for the previous environment can land after the new one and
   // leave the panel showing one environment's data under another's label.
-  useAbortableEffectFetch(async (signal) => {
-    try {
-      {
-        const envParam = environment ? `?environment=${environment}` : "";
-        const [latestRes, snapshotsRes] = await Promise.all([
-          fetch(`/api/admin/code-quality/snapshots/latest${envParam}`, { signal }),
-          fetch(
-            `/api/admin/code-quality/snapshots?limit=10${environment ? `&environment=${environment}` : ""}`,
-            { signal }
-          ),
-        ]);
+  useAbortableEffectFetch(
+    async (signal) => {
+      try {
+        {
+          const envParam = environment ? `?environment=${environment}` : "";
+          const [latestRes, snapshotsRes] = await Promise.all([
+            fetch(`/api/admin/code-quality/snapshots/latest${envParam}`, { signal }),
+            fetch(
+              `/api/admin/code-quality/snapshots?limit=10${environment ? `&environment=${environment}` : ""}`,
+              { signal }
+            ),
+          ]);
 
-        if (latestRes.ok) {
-          const data = await latestRes.json();
-          setLatest(data.snapshot);
-        } else {
-          setLatest(null);
+          if (latestRes.ok) {
+            const data = await latestRes.json();
+            setLatest(data.snapshot);
+          } else {
+            setLatest(null);
+          }
+          if (snapshotsRes.ok) {
+            const data = await snapshotsRes.json();
+            setSnapshots(data.snapshots);
+          }
         }
-        if (snapshotsRes.ok) {
-          const data = await snapshotsRes.json();
-          setSnapshots(data.snapshots);
-        }
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [environment]);
+    },
+    [environment]
+  );
 
   if (loading) {
     return <p className="text-sm text-muted">Loading code quality data...</p>;

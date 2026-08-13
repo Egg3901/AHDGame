@@ -226,7 +226,8 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
       <div>
         <h3 className="text-heading-sm font-semibold text-foreground">Industrial Relations</h3>
         <p className="mt-1 text-body text-muted">
-          Negotiate wage floors and labour peace with the unions representing your operating sectors.
+          Negotiate wage floors and labour peace with the unions representing your operating
+          sectors.
         </p>
       </div>
 
@@ -310,10 +311,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
                         : "None"
                     }
                   />
-                  <Metric
-                    label="Union leverage"
-                    value={campaign.mandate.leverage.toFixed(0)}
-                  />
+                  <Metric label="Union leverage" value={campaign.mandate.leverage.toFixed(0)} />
                 </div>
 
                 <details className="rounded-lg bg-card px-3 py-2 text-body">
@@ -332,8 +330,8 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
                   <p className="mt-2 text-body-sm text-muted">
                     Recomputed every turn from live conditions: how organized your locals are, the
                     gap between the pay you set and what workers expect, how scarce labour is
-                    nationally, and what the law gives collective bargaining. The union&apos;s strike
-                    fund is not visible to you.
+                    nationally, and what the law gives collective bargaining. The union&apos;s
+                    strike fund is not visible to you.
                   </p>
                 </details>
 

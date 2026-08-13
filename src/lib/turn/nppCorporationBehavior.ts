@@ -13,7 +13,19 @@
  */
 
 import type { Db, ObjectId } from "mongodb";
-import type { Corporation, CorporateSector, SectorBuildOrder, StateMetrics, GameConfig, GameState, ExchangeRate } from "@/lib/db/types";
+import type {
+  Corporation,
+  CorporateSector,
+  SectorBuildOrder,
+  StateMetrics,
+  GameConfig,
+  GameState,
+  ExchangeRate,
+  Bond,
+} from "@/lib/db/types";
+import type { CurrencyCode } from "@/lib/constants/currencies";
+import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
+import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
 import type { NPP } from "@/lib/db/types/npp";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import {
@@ -208,15 +220,51 @@ const NPP_REINVEST_MAX_SECTORS_PER_TURN = 1;
  */
 const NPP_REINVEST_MAINTENANCE_CASH_SHARE = 0.25;
 
-const CASH_FLOOR = 2_000_000; // Never spend below this
+// ─── Cash rails (₳) ───────────────────────────────────────────────────────────
+//
+// These gate EVERY discretionary decision the brain makes: expansion (section
+// 5), dividends (section 4) and the growth leg of capacity reinvestment
+// (section 6) all require the corp to clear `effectiveCashFloor`, and expansion
+// additionally requires `EXPANSION_MIN_CASH` of surplus ON TOP of it.
+//
+// WHY THEY CAME DOWN 8x. The old ₳2,000,000 floor was authored against a
+// modern-era money scale and never re-based for the 1953 worlds that actually
+// run. Measured on prod at turn 79 across a 200-corp sample of the 476 NPP-run
+// corps: median liquid capital ₳1,724,110, and 105 of 200 sat BELOW the floor.
+// Over half the AI cohort was therefore locked out of expanding, paying a
+// dividend, or buying growth capacity, permanently, because a corp under the
+// floor cannot spend to earn its way back over it. The visible symptom is a
+// corp with healthy sectors (20-35% margins, selling out) whose share price
+// falls for twenty turns while it sits on idle cash doing nothing.
+//
+// This module already discovered the same failure once, for maintenance capex
+// alone, and patched around it with NPP_REINVEST_MAINTENANCE_CASH_SHARE rather
+// than fixing the floor. Lowering the floor is that fix generalized.
+//
+// The whole family moves by the same factor so the DESIGN RATIOS are untouched:
+// the floor is still 2x the safety rail, and expansion still demands 2.5x the
+// floor in surplus on top of it. Only the scale changed. At ₳250,000 the same
+// prod sample drops from 105/200 frozen to 36/200. The remainder are corps
+// that are genuinely broke, which is what the rail is for.
+//
+// STILL A CONSTANT, STILL WRONG IN PRINCIPLE. The cohort's cash spans four
+// orders of magnitude (p25 ₳398,719, p75 ₳52,833,977), so no single absolute
+// number fits both tails. The durable fix is to derive these from the corp's
+// own revenue and the world's era unit scale, the way `computeBuildCost`
+// already takes `eraUnitScale`. This is the calibration, not the cure.
+const CASH_FLOOR = 250_000; // Never spend below this
 const EXPANSION_COST = 500_000;
-const EXPANSION_MIN_CASH = 5_000_000; // Need this much above floor to expand
+const EXPANSION_MIN_CASH = 625_000; // Need this much above floor to expand
 const EXPANSION_MIN_MARGIN = 15; // Corp-level avg margin must be healthy
 const MAX_SECTORS = 5;
 
 // Hard safety rails: archetype modifiers scale the base levers above, but the
 // result is always clamped so no personality can bankrupt a profitable corp.
-const SAFE_CASH_FLOOR_MIN = 1_000_000; // an aggressive floor still leaves a buffer
+//
+// This one is a MAX(), so it is the binding floor whenever an archetype scales
+// CASH_FLOOR below it. Left at ₳1,000,000 it would have clamped the new
+// ₳250,000 floor straight back up and the change above would have been inert.
+const SAFE_CASH_FLOOR_MIN = 125_000; // an aggressive floor still leaves a buffer
 const MAX_DIVIDEND_RATE = 12; // cap any archetype-boosted payout
 
 /** Default archetype for corps whose CEO NPP can't be resolved (legacy / mid-migration). */
@@ -376,6 +424,33 @@ interface NppCorpDecisionContext {
    * Absent/false leaves wages untouched so pre-labour worlds stay byte-identical.
    */
   labourWagesEnabled?: boolean;
+  /**
+   * NET per-turn debt service in ₳: issuer interest paid out, less coupon
+   * collected on bonds the corp holds. Positive is a drag.
+   *
+   * WHY THIS EXISTS. Until this field the brain had no concept of debt at all
+   * (`grep -c bond` over this module returned 0), so its profitability signal
+   * measured operations and corporate overhead and nothing else. A corp whose
+   * bond interest exceeds its entire operating profit therefore read as
+   * healthy, and the AI running it kept the overhead, never deleveraged and
+   * never reacted, while the share price fell every turn.
+   *
+   * Measured on prod at turn 79, corp 446 (Meyer Logistics), the corp this was
+   * found on: revenue ₳30,463, total costs ₳25,123, operating profit ₳5,340,
+   * bond coupon income ₳386, bond interest expense ₳6,390. Net income −₳664.
+   * Six sectors at 21.9-37.6% margin, five of six selling out. The operations
+   * were never the problem. Share price 17.35 → 4.38 across turns 59-79.
+   *
+   * This is the same class of blindness the module has been fixed for twice
+   * already: it read seeded `profitMargin` instead of the effective margin, and
+   * nominal instead of realized revenue. Each time the signal was stable and
+   * wrong, so the AI confidently did the wrong thing. Debt service is the third
+   * instance.
+   *
+   * Absent (pre-wiring callers, and every test that does not set it) leaves the
+   * old signal exactly as it was.
+   */
+  debtServiceAnchor?: number;
 }
 
 /**
@@ -685,6 +760,31 @@ export async function processNppCorporationDecisions(
     }
   }
 
+  // ─── Debt service, loaded once for the cohort ─────────────────────────────
+  // Same two maps `buildCorporationLookups` builds for the turn engine, and the
+  // same helpers it charges with, so the brain reads the number the engine
+  // actually bills rather than an approximation of it. Issuer side is corporate
+  // bonds only; holder side keeps sovereigns, because a corp parking cash in
+  // treasuries genuinely collects that coupon.
+  const activeBonds = await db.collection<Bond>("bonds").find({ matured: false }).toArray();
+  const issuerBondsByCorpId = new Map<string, Bond[]>();
+  const heldBondsByCorpId = new Map<string, { bond: Bond; units: number }[]>();
+  for (const b of activeBonds) {
+    if (isCorporateIssuerBond(b)) {
+      const cid = b.corporationId.toString();
+      const list = issuerBondsByCorpId.get(cid) ?? [];
+      list.push(b);
+      issuerBondsByCorpId.set(cid, list);
+    }
+    for (const h of b.holders ?? []) {
+      const holderCorpId = h.corporationId?.toString();
+      if (!holderCorpId) continue;
+      const held = heldBondsByCorpId.get(holderCorpId) ?? [];
+      held.push({ bond: b, units: h.units });
+      heldBondsByCorpId.set(holderCorpId, held);
+    }
+  }
+
   const labourCfg = await db
     .collection<GameConfig>("gameConfig")
     .findOne({ _id: "default" }, { projection: { labourSystemMode: 1 } });
@@ -704,6 +804,14 @@ export async function processNppCorporationDecisions(
         now,
         fxRate: (corpCurrency && fxByCurrency.get(corpCurrency)) || 1,
         fxByCurrency,
+        debtServiceAnchor: netPerTurnDebtServiceAnchor({
+          issuerBonds: issuerBondsByCorpId.get(corp._id.toString()),
+          heldPositions: heldBondsByCorpId.get(corp._id.toString()),
+          fxByCurrency: fxByCurrency as ReadonlyMap<CurrencyCode, number>,
+          // The government bond subsidy waives issuer interest for national
+          // enterprises, exactly as `perTurnBondDragOnNetIncome` does.
+          isNationalEnterprise: !!corp.countryOwnerId,
+        }),
         modifiers: ceoArchetypeModifiers(archetype),
         labourWagesEnabled,
       },
@@ -1043,7 +1151,19 @@ export function makeNppCorpDecision(
     (corp.logisticsBudget ?? 0) +
     (corp.rdBudget ?? 0) +
     (corp.ceoSalary ?? 0);
-  const totalIncome = grossRealizedIncome - priorOverhead;
+  // (3) Blind to its own debt. `priorOverhead` covers what the corp CHOOSES to
+  //     spend; it says nothing about what the corp is CONTRACTED to pay. Bond
+  //     interest is not discretionary, is often the largest single line on a
+  //     levered corp's books, and was entirely absent from this signal, so a
+  //     corp could be comfortably operating-profitable and still losing money
+  //     every turn with the brain reading it as healthy. See
+  //     `NppCorpDecisionContext.debtServiceAnchor` for the measured case.
+  //
+  //     Charged in the corp's own currency, because `priorOverhead` and
+  //     `grossRealizedIncome` are already corp-local and `debtServiceAnchor` is
+  //     ₳, the same conversion every other money constant in this module takes.
+  const debtServiceLocal = toCorpLocal(ctx.debtServiceAnchor ?? 0);
+  const totalIncome = grossRealizedIncome - priorOverhead - debtServiceLocal;
   const corpMargin = totalRevenue > 0 ? (totalIncome / totalRevenue) * 100 : 0;
   const isProfitable = totalIncome > 0 && profitableSectors > 0;
 
@@ -1282,7 +1402,10 @@ export function makeNppCorpDecision(
       let target = NPP_WAGE_BASELINE;
       if (chronicLowFill || sp.marginCategory === "loss" || shortage <= 0.85) {
         target = NPP_WAGE_GLUT_TARGET;
-      } else if (shortage >= 1.15 && (sp.marginCategory === "healthy" || sp.marginCategory === "strong")) {
+      } else if (
+        shortage >= 1.15 &&
+        (sp.marginCategory === "healthy" || sp.marginCategory === "strong")
+      ) {
         target = NPP_WAGE_SHORTAGE_TARGET;
       }
       const current = sp.sector.wageLevel ?? NPP_WAGE_BASELINE;

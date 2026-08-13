@@ -8,8 +8,7 @@ import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
 import { isDepositTakingCharter } from "./charterKinds";
 
 export type MoveCharacterSavingsResult =
-  | { ok: true; holder: SavingsHolder }
-  | { ok: false; error: string };
+  { ok: true; holder: SavingsHolder } | { ok: false; error: string };
 
 /**
  * Provisional NPC household deposit-capture math - flagged for user review.
@@ -86,7 +85,6 @@ export function computeNpcDepositShare(
     share: row.share * scale,
   }));
 }
-
 
 /**
  * Move a character's whole savings balance for `currency` between the central

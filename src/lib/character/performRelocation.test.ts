@@ -179,7 +179,7 @@ describe("performRelocation", () => {
     }
   });
 
-  it("auto-resigns from currentOffice on move", async () => {
+  it("auto-resigns from state-bound currentOffice on same-country move", async () => {
     const character = makeCharacter({
       currentOffice: { type: "house", state: "CA", seatsHeld: 1 },
     });
@@ -188,6 +188,57 @@ describe("performRelocation", () => {
     const outcome = await performRelocation(db as unknown as Db, character, target);
 
     expect(outcome.resignedFromOffice).toBe("house (CA)");
+    expect(db.collectionMocks.electedOfficials!.updateOne).toHaveBeenCalled();
+  });
+
+  it("keeps country-scoped offices (VP) on same-country move (ticket #1057)", async () => {
+    const character = makeCharacter({
+      currentOffice: { type: "vicePresident" },
+    });
+    const target = makeState("TX");
+
+    const outcome = await performRelocation(db as unknown as Db, character, target);
+
+    expect(outcome.resignedFromOffice).toBeNull();
+    expect(db.collectionMocks.electedOfficials!.updateOne).not.toHaveBeenCalled();
+    const updateCall = db.collectionMocks.characters!.updateOne.mock.calls.at(-1)!;
+    const setOp = (updateCall[1] as { $set: Partial<Character> }).$set;
+    expect(setOp).not.toHaveProperty("currentOffice");
+  });
+
+  it("keeps President on same-country move", async () => {
+    const character = makeCharacter({
+      currentOffice: { type: "president" },
+    });
+    const target = makeState("NY");
+
+    const outcome = await performRelocation(db as unknown as Db, character, target);
+
+    expect(outcome.resignedFromOffice).toBeNull();
+    expect(db.collectionMocks.electedOfficials!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("keeps cabinet office on same-country move", async () => {
+    const character = makeCharacter({
+      currentOffice: { type: "usCabinet", positionId: "secretary_of_state" },
+    });
+    const target = makeState("TX");
+
+    const outcome = await performRelocation(db as unknown as Db, character, target);
+
+    expect(outcome.resignedFromOffice).toBeNull();
+    expect(db.collectionMocks.electedOfficials!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("resigns VP on cross-country move", async () => {
+    const character = makeCharacter({
+      currentOffice: { type: "vicePresident" },
+    });
+    const target = makeState("LON", "UK");
+
+    const outcome = await performRelocation(db as unknown as Db, character, target);
+
+    expect(outcome.resignedFromOffice).toBe("vicePresident");
     expect(db.collectionMocks.electedOfficials!.updateOne).toHaveBeenCalled();
   });
 

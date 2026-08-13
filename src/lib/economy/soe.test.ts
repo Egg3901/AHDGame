@@ -212,9 +212,9 @@ describe("aggregateCapacityUtilisation (the drift driver)", () => {
 
   it("treats zero / non-finite capacity as no information", () => {
     expect(aggregateCapacityUtilisation([{ output: 10, capacity: 0 }])).toBe(SOE_PERF_BASELINE);
-    expect(
-      aggregateCapacityUtilisation([{ output: 10, capacity: Number.NaN }])
-    ).toBe(SOE_PERF_BASELINE);
+    expect(aggregateCapacityUtilisation([{ output: 10, capacity: Number.NaN }])).toBe(
+      SOE_PERF_BASELINE
+    );
     expect(aggregateCapacityUtilisation([])).toBe(SOE_PERF_BASELINE);
   });
 

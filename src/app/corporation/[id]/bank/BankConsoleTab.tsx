@@ -9,7 +9,17 @@ import { WarningBandBadge } from "@/components/banking/WarningBandBadge";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
 import type { BankCharterType } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { assessCapital, capitalShortfall } from "@/lib/banking/capitalAdequacy";
+import {
+  assessCapital,
+  borrowingsFromCharter,
+  capitalShortfall,
+  type BankBorrowings,
+} from "@/lib/banking/capitalAdequacy";
+import {
+  LENDING_PROFILES,
+  type CreditBandId,
+  type LendingProfileId,
+} from "@/lib/banking/creditBands";
 
 type Corridor = { minOffset: number; maxOffset: number };
 
@@ -61,6 +71,16 @@ type ConsolePayload = {
     totalLoans: number;
     npcDeposits: number;
     reserves: number;
+    reserveFloor: number;
+    lendingProfile: LendingProfileId;
+    discountWindowDebt: number;
+    discountWindowArrears: number;
+    cbMarginArrears: number;
+    capitalStanding: string | null;
+    capitalRatio: number | null;
+    stressedCapitalRatio: number | null;
+    appliedStressLossFraction: number | null;
+    charterSwitchCooldownUntilTurn: number | null;
     confidence: number | null;
     warningBand: "green" | "amber" | "red" | null;
     panicTurns: number;
@@ -88,6 +108,7 @@ type ConsolePayload = {
     id: string;
     borrowerType: string;
     borrower: Party | null;
+    creditBand: CreditBandId | null;
     principal: number;
     outstanding: number;
     ratePercent: number;
@@ -96,6 +117,22 @@ type ConsolePayload = {
     status: string;
     arrearsTurns: number;
   }>;
+  householdBook: {
+    rows: Array<{
+      band: CreditBandId;
+      outstanding: number;
+      ratePercent: number | null;
+      expectedDefaultRatePercent: number;
+      demandShare: number;
+      open: boolean;
+      isLegacy: boolean;
+      tranches: number;
+    }>;
+    total: number;
+    lendingProfile: LendingProfileId;
+    blendedRatePercent: number | null;
+    blendedExpectedDefaultPercent: number | null;
+  } | null;
   interbankLoans: Array<{
     id: string;
     lenderCorporationId: string;
@@ -513,6 +550,7 @@ function HealthCard({ data }: { data: ConsolePayload }) {
     postedCapital: charter.postedCapital,
     liquidCapital: data.corporation.liquidCapital,
     totalLoans: charter.totalLoans,
+    borrowings: borrowingsFromCharter(charter),
     propBookMarkValue: charter.propBookMarkValue,
   });
   const shortfall = capitalShortfall(capital);
@@ -730,13 +768,11 @@ function ActiveCharterPanel({
           <LoanBookTable
             loans={data.loans}
             currency={charter.currency}
-            npcBulkOutstanding={Math.max(
-              0,
-              charter.totalLoans -
-                data.loans
-                  .filter((l) => l.status === "current" || l.status === "arrears")
-                  .reduce((s, l) => s + l.outstanding, 0)
-            )}
+            householdBook={data.householdBook}
+            corporationId={data.corporation.id}
+            canMutate={canMutate}
+            onChanged={onChanged}
+            showToast={showToast}
           />
           {charter.blacklist ? (
             <BlacklistEditor
@@ -778,6 +814,7 @@ function ActiveCharterPanel({
             liquidCapital={data.corporation.liquidCapital}
             totalLoans={charter.totalLoans}
             propBookMarkValue={charter.propBookMarkValue}
+            borrowings={borrowingsFromCharter(charter)}
             canMutate={canMutate}
             onChanged={onChanged}
             showToast={showToast}
@@ -1174,26 +1211,221 @@ function BlacklistEditor({
   );
 }
 
+/** Colour ramp for the rating column: investment grade cools, junk warms. */
+const BAND_TONE: Record<CreditBandId, string> = {
+  AAA: "text-emerald-500",
+  AA: "text-emerald-500",
+  A: "text-teal-500",
+  BBB: "text-sky-500",
+  BB: "text-amber-500",
+  B: "text-orange-500",
+  CCC: "text-rose-500",
+};
+
+function HouseholdBookTable({
+  book,
+  currency,
+}: {
+  book: NonNullable<ConsolePayload["householdBook"]>;
+  currency: CurrencyCode;
+}) {
+  const max = Math.max(...book.rows.map((r) => r.outstanding), 1);
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-card-border bg-card">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-card-border px-4 py-3">
+        <div>
+          <span className="text-[10px] uppercase tracking-widest text-muted">Household book</span>
+          <div className="font-mono text-lg tabular-nums text-foreground">
+            {formatBankMoney(book.total, currency)}
+          </div>
+        </div>
+        <div className="flex gap-6 text-right text-xs">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-muted">Blended rate</div>
+            <div className="font-mono tabular-nums text-foreground">
+              {book.blendedRatePercent === null ? "—" : `${book.blendedRatePercent.toFixed(2)}%`}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-muted">Expected loss</div>
+            <div className="font-mono tabular-nums text-foreground">
+              {book.blendedExpectedDefaultPercent === null
+                ? "—"
+                : `${book.blendedExpectedDefaultPercent.toFixed(2)}%`}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[560px]">
+          <thead>
+            <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-widest text-muted">
+              <th className="px-4 py-3 font-semibold">Rating</th>
+              <th className="px-4 py-3 font-semibold text-right">Balance</th>
+              <th className="px-4 py-3 font-semibold">Share of book</th>
+              <th className="px-4 py-3 font-semibold text-right">Rate</th>
+              <th className="px-4 py-3 font-semibold text-right">Exp. default</th>
+            </tr>
+          </thead>
+          <tbody>
+            {book.rows.map((row) => (
+              <tr
+                key={row.band}
+                className={`border-b border-card-border/60 last:border-0 ${
+                  row.open ? "" : "opacity-55"
+                }`}
+              >
+                <td className="px-4 py-2.5">
+                  <span className={`font-mono font-semibold ${BAND_TONE[row.band]}`}>
+                    {row.band}
+                  </span>
+                  {!row.open && (
+                    <span className="ml-2 text-[10px] uppercase tracking-wide text-muted">
+                      closed
+                    </span>
+                  )}
+                  {row.isLegacy && (
+                    <span
+                      className="ml-2 text-[10px] uppercase tracking-wide text-muted"
+                      title="Originated before the book was split by rating. Runs off at its original rate."
+                    >
+                      legacy
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                  {row.outstanding > 0 ? formatBankMoney(row.outstanding, currency) : "—"}
+                </td>
+                <td className="px-4 py-2.5">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-card-border/60">
+                    <div
+                      className="h-full rounded-full bg-accent"
+                      style={{ width: `${(row.outstanding / max) * 100}%` }}
+                    />
+                  </div>
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                  {row.ratePercent === null ? "—" : `${row.ratePercent.toFixed(2)}%`}
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums text-muted">
+                  {row.expectedDefaultRatePercent.toFixed(2)}%
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function LendingProfilePicker({
+  corporationId,
+  current,
+  canMutate,
+  onChanged,
+  showToast,
+}: {
+  corporationId: string;
+  current: LendingProfileId;
+  canMutate: boolean;
+  onChanged: () => void;
+  showToast: (message: string, tone?: "success" | "error") => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  const save = async (profile: LendingProfileId) => {
+    if (profile === current || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/corporations/${corporationId}/bank/lending-profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        showToast(json.error ?? "Could not set the lending profile", "error");
+        return;
+      }
+      showToast(json.message ?? "Lending profile saved", "success");
+      onChanged();
+    } catch {
+      showToast("Could not set the lending profile", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-card-border bg-card p-4">
+      <div className="mb-1 text-sm font-semibold text-foreground">Lending stance</div>
+      <p className="mb-3 text-xs text-muted">
+        Sets which ratings the bank will lend to from the next turn. Loans already on the book keep
+        their rate and rating.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {LENDING_PROFILES.map((profile) => {
+          const active = profile.id === current;
+          return (
+            <button
+              key={profile.id}
+              type="button"
+              disabled={!canMutate || busy}
+              onClick={() => void save(profile.id)}
+              className={`rounded-lg border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                active ? "border-accent bg-accent/10" : "border-card-border hover:border-accent/50"
+              }`}
+            >
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm font-semibold text-foreground">{profile.label}</span>
+                <span className="font-mono text-[10px] uppercase tracking-wide text-muted">
+                  to {profile.floorBand}
+                </span>
+              </div>
+              <p className="mt-1 text-xs leading-snug text-muted">{profile.blurb}</p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function LoanBookTable({
   loans,
   currency,
-  npcBulkOutstanding,
+  householdBook,
+  corporationId,
+  canMutate,
+  onChanged,
+  showToast,
 }: {
   loans: ConsolePayload["loans"];
   currency: CurrencyCode;
-  npcBulkOutstanding: number;
+  householdBook: ConsolePayload["householdBook"];
+  corporationId: string;
+  canMutate: boolean;
+  onChanged: () => void;
+  showToast: (message: string, tone?: "success" | "error") => void;
 }) {
   const named = loans.filter((l) => l.borrowerType !== "npcBulk");
 
   return (
     <section className="space-y-3">
       <h3 className="text-base font-semibold text-foreground">Loan book</h3>
-      <div className="rounded-xl border border-card-border bg-card px-4 py-3 text-sm">
-        <span className="text-muted">NPC bulk outstanding (implied): </span>
-        <span className="font-mono tabular-nums">
-          {formatBankMoney(Math.max(0, npcBulkOutstanding), currency)}
-        </span>
-      </div>
+      {householdBook && <HouseholdBookTable book={householdBook} currency={currency} />}
+      {householdBook && (
+        <LendingProfilePicker
+          corporationId={corporationId}
+          current={householdBook.lendingProfile}
+          canMutate={canMutate}
+          onChanged={onChanged}
+          showToast={showToast}
+        />
+      )}
       {named.length === 0 ? (
         <EmptyState
           title="No player loans"
@@ -1906,6 +2138,7 @@ function RecapitalizePanel({
   liquidCapital,
   totalLoans,
   propBookMarkValue,
+  borrowings,
   canMutate,
   onChanged,
   showToast,
@@ -1916,11 +2149,18 @@ function RecapitalizePanel({
   liquidCapital: number;
   totalLoans: number;
   propBookMarkValue: number;
+  borrowings: BankBorrowings;
   canMutate: boolean;
   onChanged: () => Promise<void>;
   showToast: (msg: string, variant?: "success" | "error" | "info") => void;
 }) {
-  const position = assessCapital({ postedCapital, liquidCapital, totalLoans, propBookMarkValue });
+  const position = assessCapital({
+    postedCapital,
+    liquidCapital,
+    totalLoans,
+    borrowings,
+    propBookMarkValue,
+  });
   const shortfall = capitalShortfall(position);
   const [amount, setAmount] = useState(shortfall > 0 ? String(shortfall) : "");
   const [busy, setBusy] = useState(false);

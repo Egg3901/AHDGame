@@ -16,8 +16,24 @@ import type { AlignmentShares } from "./normalize";
 
 /** Ceiling on one play, so a single cheque cannot end the Cold War. */
 export const PLAY_MAX_POINTS = 10;
-/** Share of a target's annual GDP that buys one point of its alignment. */
-export const POINT_COST_GDP_SHARE = 0.01;
+/**
+ * Share of a target's annual GDP that buys one point of its alignment.
+ *
+ * A tenth of a percent. This was 1%, which priced every bloc out of its own
+ * mechanic: against live 1953 funds, NATO's entire treasury ($36m) bought 0.76
+ * points on the cheapest nation on the board, and the per-nation cap is 5. No
+ * western org could reach the cap on ANY target by emptying itself, so plays
+ * were never a contest — the side with the bigger seeded fund simply moved and
+ * the other could not answer. Netting opposing pulls only produces a back and
+ * forth if both sides can afford to push in the same turn.
+ *
+ * At a tenth of a percent the same $36m buys ~7.6 points on a small nation, so
+ * a bloc can max a turn's cap and still hold a reserve, while a large economy
+ * (India, ~$58bn) stays a superpower-scale project at ~$116m per effective
+ * point. Sized so the cap, not the balance, is the binding constraint on small
+ * targets and the balance still bites on big ones.
+ */
+export const POINT_COST_GDP_SHARE = 0.001;
 
 /**
  * Share points a spend buys against a target of this size.

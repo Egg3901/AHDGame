@@ -18,7 +18,6 @@ import type {
   NPP,
   PlayerWhipMode,
   StateDemographics,
-  WhipIssuerRole,
 } from "@/lib/db/types";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import {
@@ -56,18 +55,10 @@ import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import type { Db } from "mongodb";
 import { getPartyNppControlStatus } from "@/lib/parties/antiAbuseGuards";
 import { recordAudit } from "@/lib/audit/recordAudit";
+import { inferWhipIssuerRole } from "@/lib/partyWhips/issuerRole";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string }>;
-}
-
-function getWhipIssuerRole(
-  isChair: boolean | null | undefined,
-  isViceChair: boolean | null | undefined
-): WhipIssuerRole {
-  if (isChair) return "chair";
-  if (isViceChair) return "viceChair";
-  return "admin";
 }
 
 const whipSchema = z.object({
@@ -136,7 +127,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { targetType, targetId, chamber, direction, mode, candidacyId, audience } = parsed.data;
 
     const chamberLeaderRole = await getChamberLeaderRole(db, characterId, chamber, partyIdStr);
-    const issuerRole = chamberLeaderRole ?? getWhipIssuerRole(isChair, isViceChair);
+    const issuerRole = chamberLeaderRole ?? inferWhipIssuerRole(isChair, isViceChair);
 
     if (!isChair && !isViceChair && !isAdmin && !chamberLeaderRole) {
       return NextResponse.json(

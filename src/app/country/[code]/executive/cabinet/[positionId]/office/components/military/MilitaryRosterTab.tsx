@@ -172,15 +172,41 @@ export function MilitaryRosterTab({
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-foreground">{branch.name} · order of battle</h2>
-        <button
-          onClick={() => setRecruiting(true)}
-          disabled={!canAct || busy}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[color-mix(in_srgb,var(--gov)_40%,transparent)] bg-[color-mix(in_srgb,var(--gov)_10%,transparent)] px-3 py-1.5 text-[12px] font-semibold text-gov-soft hover:bg-[color-mix(in_srgb,var(--gov)_20%,transparent)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Recruit unit
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {canAct && commanders.length > 0 && branchUnits.length > 0 && (
+            <select
+              aria-label={`Assign all ${branch.name} units to a general`}
+              disabled={busy}
+              value=""
+              onChange={(e) => {
+                const v = e.target.value;
+                if (!v) return;
+                act("POST", `${basePath}/assign-branch`, {
+                  branchId: branch.id,
+                  assignedGeneralId: v === "__staff__" ? null : v,
+                });
+              }}
+              className="rounded-lg border border-card-border bg-card px-3 py-1.5 text-[12px] text-foreground disabled:opacity-50"
+            >
+              <option value="">Assign entire {branch.name}…</option>
+              {commanders.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} · {c.spec}
+                </option>
+              ))}
+              <option value="__staff__">General Staff (unassigned)</option>
+            </select>
+          )}
+          <button
+            onClick={() => setRecruiting(true)}
+            disabled={!canAct || busy}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[color-mix(in_srgb,var(--gov)_40%,transparent)] bg-[color-mix(in_srgb,var(--gov)_10%,transparent)] px-3 py-1.5 text-[12px] font-semibold text-gov-soft hover:bg-[color-mix(in_srgb,var(--gov)_20%,transparent)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Recruit unit
+          </button>
+        </div>
       </div>
 
       {recruiting && (
