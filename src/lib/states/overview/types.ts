@@ -18,6 +18,9 @@ export interface PartyOrgRow {
   /** PoliticalParty._id stringified. */
   id: string;
   abbr: string;
+  /** Full party name (`PoliticalParty.name`). Falls back to `abbr` when the
+   *  party doc is missing for this row. */
+  name: string;
   /** Hex color for UI rendering. */
   color: string;
   /** Org%, 0..100. */
@@ -156,7 +159,7 @@ export interface StateOverviewResult {
    * See design doc §4 (Registration storage + state-level pools).
    */
   registrationPool: {
-    parties: Array<{ id: string; abbr: string; color: string; regPct: number }>;
+    parties: Array<{ id: string; abbr: string; name: string; color: string; regPct: number }>;
     independent: number;
     unregistered: number;
     /** True once at least one party has a real Reg value in this state. */
