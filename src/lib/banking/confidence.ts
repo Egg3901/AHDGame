@@ -42,7 +42,8 @@ export const CONFIDENCE_BAND_AMBER_MIN = 0.4;
 export type ConfidenceBand = "green" | "amber" | "red";
 
 export type ConfidenceInput = {
-  liquidCapital: number;
+  /** The bank's ring-fenced cash (`bankCharter.cashReserves`). */
+  cashReserves: number;
   postedCapital: number;
   totalDeposits: number;
   totalLoans: number;
@@ -84,7 +85,7 @@ function finiteOrZero(value: number | undefined): number {
  *   confidence = clamp(raw - 0.12*min(panicTurns, 4) - (forcedLiq ? 0.15 : 0), 0, 1)
  */
 export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
-  const liquidCapital = Math.max(0, finiteOrZero(input.liquidCapital));
+  const cashReserves = Math.max(0, finiteOrZero(input.cashReserves));
   const postedCapital = Math.max(0, finiteOrZero(input.postedCapital));
   const totalDeposits = Math.max(0, finiteOrZero(input.totalDeposits));
   const totalLoans = Math.max(0, finiteOrZero(input.totalLoans));
@@ -96,13 +97,13 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
 
   const reserveCover = Math.min(
     CONFIDENCE_RESERVE_COVER_CAP,
-    liquidCapital / Math.max(1, reserveRatioRequired * totalDeposits)
+    cashReserves / Math.max(1, reserveRatioRequired * totalDeposits)
   );
   const capitalCover = Math.min(
     CONFIDENCE_CAPITAL_COVER_CAP,
     // Not `+ postedCapital`: posted capital is a memo of cash already inside
     // the reserve balance, so summing them double-counted the same money.
-    liquidCapital / Math.max(1, totalLoans)
+    cashReserves / Math.max(1, totalLoans)
   );
   const loanDenom = Math.max(1, totalLoans);
   const assetQuality =
