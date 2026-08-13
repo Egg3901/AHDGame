@@ -8,7 +8,12 @@ import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQu
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { ZOD_CURRENCY_ENUM } from "@/lib/constants/currencies";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
-import { issueCharter, revokeCharter, isChairOfCurrencyBank } from "@/lib/banking/charter";
+import {
+  issueCharter,
+  revokeCharter,
+  isChairOfCurrencyBank,
+  switchCharterType,
+} from "@/lib/banking/charter";
 import type { BankCharterType } from "@/lib/db/types/bank";
 
 interface RouteParams {
@@ -18,6 +23,10 @@ interface RouteParams {
 const issueSchema = z.object({
   type: z.enum(["retail", "investment", "universal"]),
   currency: z.enum(ZOD_CURRENCY_ENUM),
+});
+
+const switchSchema = z.object({
+  type: z.enum(["retail", "investment", "universal"]),
 });
 
 const revokeSchema = z.object({
@@ -71,6 +80,66 @@ export async function POST(request: Request, { params }: RouteParams) {
       success: true,
       charter: result.charter,
       postedCapital: result.postedCapital,
+    });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
+// PATCH /api/corporations/[id]/bank/charter — Switch charter type (CEO only).
+// Auth: requireAuth (CEO)
+// Errors: 400, 401, 403, 404, 429
+//
+// Separate verb from POST because this is not chartering: no capital is posted,
+// the charter keeps its history, and the corporation keeps its bank. It is the
+// CEO changing what kind of bank they run, which had no route at all before —
+// the only way out of a retail charter was to get the central-bank chair to
+// revoke it and then charter again from scratch, paying the capital twice.
+export async function PATCH(request: Request, { params }: RouteParams) {
+  try {
+    const auth = await requireAuth();
+    if (!auth.ok) return auth.response;
+
+    const rateLimit = checkRateLimit(`bank-charter-switch:${auth.user.userId}`, 5, 60_000);
+    if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
+
+    if (!(await isPrivateBankingEnabled())) {
+      throw notFound("Not found");
+    }
+
+    const { id } = await params;
+    const parsed = await parseJsonBody(request, switchSchema);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    }
+
+    const db = await getDb();
+    const resolved = await resolveCorporation(db, id);
+    if (!resolved.ok) return resolved.response;
+    const { corporation } = resolved;
+
+    const ceoCheck = requireCeo(corporation, auth.user.userId);
+    if (ceoCheck) return ceoCheck;
+
+    const result = await switchCharterType(
+      db,
+      corporation._id,
+      parsed.data.type as BankCharterType
+    );
+
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.reasons[0] ?? "Cannot switch charter type", reasons: result.reasons },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      charter: result.charter,
+      depositorsFlipped: result.depositorsFlipped,
+      npcDepositsReturned: result.npcDepositsReturned,
+      cooldownUntilTurn: result.cooldownUntilTurn,
     });
   } catch (error) {
     return handleRouteError(error);

@@ -63,7 +63,11 @@ async function ensureResidentTerritorialPartyOrgs(
     .find({
       countryId: "US",
       homeState: { $in: territoryIds },
-      party: { $exists: true, $nin: [null, ""] },
+      // `null` is a real stored value here (older character docs) but is not in
+      // the declared type, so the literal is cast rather than dropped: removing
+      // it from the $nin would let null-party characters count as occupying a
+      // territory. Runtime array is unchanged.
+      party: { $exists: true, $nin: [null as unknown as string, ""] },
     })
     .project<Pick<Character, "homeState">>({ homeState: 1 })
     .toArray();
