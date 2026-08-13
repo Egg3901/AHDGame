@@ -77,6 +77,15 @@ export async function reverseNationalizationTaking(
 
       if (prov && priorOwner && !priorOwner._id.equals(holder._id)) {
         // Re-parent to the recorded prior owner and restore pre-haircut economics.
+        //
+        // PLANTS-GATED: the `revenue` write below is the LEGACY nameplate, not
+        // the quantity. `formerCapitalStock` is restored in the same `$set`, and
+        // under plants `sectorTurn` restates revenue from owned capacity on the
+        // next tick, so the nameplate converges on the restored capacity rather
+        // than being double-counted against it. Restoring capacity without
+        // revenue would leave a stale pre-haircut nameplate visible for one
+        // turn; restoring revenue without capacity would be erased. Both, in one
+        // write, is the correct pairing.
         await sectorsCol.updateOne(
           { _id: sector._id },
           {
