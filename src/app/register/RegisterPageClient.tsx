@@ -5,6 +5,7 @@ import Image from "next/image";
 import { CDN_LOGO_URL, CDN_HERO_LINCOLN_URL } from "@/lib/images/staticCdnAssets";
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   OAUTH_DEVICE_KEY_COOKIE,
   OAUTH_FINGERPRINT_COOKIE,
@@ -27,6 +28,7 @@ const TURNSTILE_ENABLED = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY);
  * era-neutral Lincoln hero is the deliberate fallback.
  */
 export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: string }) {
+  const t = useTranslations("auth.register");
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -124,37 +126,37 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
 
     // Account validation
     if (!formData.email || !formData.username || !formData.password) {
-      setError("Please fill in all required fields");
+      setError(t("errors.fillRequired"));
       setIsLoading(false);
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match");
+      setError(t("errors.passwordsMismatch"));
       setIsLoading(false);
       return;
     }
 
     if (formData.password.length < 8) {
-      setError("Password must be at least 8 characters");
+      setError(t("errors.passwordMin"));
       setIsLoading(false);
       return;
     }
 
     if (!formData.termsAccepted) {
-      setError("You must accept the Terms of Service and Privacy Policy to register.");
+      setError(t("errors.acceptTerms"));
       setIsLoading(false);
       return;
     }
 
     if (!formData.ageConfirmed) {
-      setError("You must confirm that you are at least 13 years old to register.");
+      setError(t("errors.confirmAge"));
       setIsLoading(false);
       return;
     }
 
     if (TURNSTILE_ENABLED && !turnstileToken) {
-      setError("Please complete the verification challenge before registering.");
+      setError(t("errors.completeChallenge"));
       setIsLoading(false);
       return;
     }
@@ -183,7 +185,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
       const registerData = await registerRes.json();
 
       if (!registerRes.ok) {
-        throw new Error(registerData.error || "Registration failed");
+        throw new Error(registerData.error || t("errors.registrationFailed"));
       }
 
       // Step 2: Auto-login
@@ -200,7 +202,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
       });
 
       if (!loginRes.ok) {
-        throw new Error("Account created but login failed");
+        throw new Error(t("errors.accountCreatedLoginFailed"));
       }
 
       // Launch character creation immediately after account setup. Use a full
@@ -210,7 +212,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
       window.location.assign("/create-character");
       return;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      setError(err instanceof Error ? err.message : t("errors.generic"));
       setIsLoading(false);
     }
   };
@@ -225,7 +227,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
             <Image
               src={CDN_LOGO_URL}
               unoptimized
-              alt="A House Divided Logo"
+              alt={t("logoAlt")}
               width={36}
               height={36}
               className="object-contain shrink-0"
@@ -238,7 +240,8 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
             href="/login"
             className="text-right text-body-sm text-muted transition-colors hover:text-foreground sm:text-body"
           >
-            Already have an account? <span className="font-medium text-primary">Sign in</span>
+            {t("alreadyHaveAccount")}{" "}
+            <span className="font-medium text-primary">{t("headerSignIn")}</span>
           </Link>
         </div>
       </header>
@@ -264,33 +267,37 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
               <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-primary opacity-75" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
             </span>
-            New Player Registration
+            {t("badge")}
           </div>
           <h1 className="max-w-xl font-display text-display font-semibold tracking-tight text-foreground">
-            Create your account
+            {t("heading")}
           </h1>
-          <p className="mt-3 max-w-xl text-body text-muted sm:text-body-lg">
-            Set up your account to get started. You&apos;ll create your politician next.
-          </p>
+          <p className="mt-3 max-w-xl text-body text-muted sm:text-body-lg">{t("subheading")}</p>
           <div className="mt-5 flex flex-col gap-2 text-body-sm text-muted sm:flex-row sm:items-center sm:gap-5">
             <p>
-              New here?{" "}
-              <Link
-                href="https://wiki.ahousedividedgame.com/getting-started"
-                target="_blank"
-                className="font-medium text-primary hover:underline"
-              >
-                Read the player guide
-              </Link>
+              {t.rich("newHere", {
+                link: (chunks) => (
+                  <Link
+                    href="https://wiki.ahousedividedgame.com/getting-started"
+                    target="_blank"
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {chunks}
+                  </Link>
+                ),
+              })}
             </p>
             <span className="hidden text-card-border sm:inline" aria-hidden="true">
               /
             </span>
             <p>
-              Just want to explore first?{" "}
-              <Link href="/world" className="font-medium text-primary hover:underline">
-                Browse the world map
-              </Link>
+              {t.rich("exploreFirst", {
+                link: (chunks) => (
+                  <Link href="/world" className="font-medium text-primary hover:underline">
+                    {chunks}
+                  </Link>
+                ),
+              })}
             </p>
           </div>
         </div>
@@ -317,7 +324,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
                 d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5"
               />
             </svg>
-            This server is in test mode. You need a test secret to register.
+            {t("testModeNotice")}
           </div>
         )}
 
@@ -373,15 +380,22 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
                   className="mt-0.5 h-4 w-4 shrink-0 rounded border-card-border accent-primary"
                 />
                 <span className="text-body-sm leading-relaxed text-muted">
-                  I have read and agree to the{" "}
-                  <Link href="/terms" target="_blank" className="text-primary hover:underline">
-                    Terms of Service
-                  </Link>{" "}
-                  and{" "}
-                  <Link href="/privacy" target="_blank" className="text-primary hover:underline">
-                    Privacy Policy
-                  </Link>
-                  .
+                  {t.rich("termsCheckbox", {
+                    terms: (chunks) => (
+                      <Link href="/terms" target="_blank" className="text-primary hover:underline">
+                        {chunks}
+                      </Link>
+                    ),
+                    privacy: (chunks) => (
+                      <Link
+                        href="/privacy"
+                        target="_blank"
+                        className="text-primary hover:underline"
+                      >
+                        {chunks}
+                      </Link>
+                    ),
+                  })}
                 </span>
               </label>
               <label className="flex cursor-pointer items-start gap-3">
@@ -393,9 +407,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
                   }
                   className="mt-0.5 h-4 w-4 shrink-0 rounded border-card-border accent-primary"
                 />
-                <span className="text-body-sm leading-relaxed text-muted">
-                  I confirm that I am at least 13 years old.
-                </span>
+                <span className="text-body-sm leading-relaxed text-muted">{t("ageCheckbox")}</span>
               </label>
             </div>
             {TURNSTILE_ENABLED && (
@@ -408,8 +420,8 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
             )}
             <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-center sm:text-left">
-                <p className="text-body font-medium">Ready to get started?</p>
-                <p className="text-body-sm text-muted">Create your account to begin</p>
+                <p className="text-body font-medium">{t("readyToStart")}</p>
+                <p className="text-body-sm text-muted">{t("createToBegin")}</p>
               </div>
               <Button
                 type="submit"
@@ -419,7 +431,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
                 size="lg"
                 className="w-full shadow-glow-sm transition-shadow hover:shadow-glow sm:w-auto sm:min-w-60"
               >
-                {isLoading ? "Creating Account..." : "Create Account"}
+                {isLoading ? t("creatingAccount") : t("createAccount")}
               </Button>
             </div>
           </div>
@@ -430,12 +442,12 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
       <footer className="mt-8 border-t border-card-border bg-card-muted/50">
         <div className="mx-auto max-w-7xl space-y-3 px-4 py-5 sm:px-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-body-sm text-muted">A House Divided &mdash; Political Simulation</p>
+            <p className="text-body-sm text-muted">{t("footerTagline")}</p>
             <Link
               href="/login"
               className="text-body-sm text-muted transition-colors hover:text-foreground"
             >
-              Already have an account?
+              {t("alreadyHaveAccount")}
             </Link>
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1">
@@ -443,13 +455,13 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
               href="/privacy"
               className="text-body-sm text-muted/60 transition-colors hover:text-muted"
             >
-              Privacy Policy
+              {t("privacyPolicy")}
             </Link>
             <Link
               href="/terms"
               className="text-body-sm text-muted/60 transition-colors hover:text-muted"
             >
-              Terms of Service
+              {t("termsOfService")}
             </Link>
           </div>
         </div>

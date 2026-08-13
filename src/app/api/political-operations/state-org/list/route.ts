@@ -10,8 +10,8 @@ import type { CharacterStateOrg, PoliticalParty } from "@/lib/db/types";
  * GET /api/political-operations/state-org/list
  *
  * Returns the authenticated US character's per-state org levels for every
- * political US state (level 0 included). Consumed by the State Organization tab.
- * Unadmitted territories (Alaska/Hawaii under 1953) are omitted until admission.
+ * political US state or territory (level 0 included). Consumed by the State
+ * Organization tab.
  *
  * Auth: requireAuthWithCharacter (US-only)
  * Errors: 401, 403
@@ -26,7 +26,7 @@ export async function GET() {
     }
 
     const db = await getDb();
-    const [rows, party, { politicalIds }] = await Promise.all([
+    const [rows, party, { residentPoliticalIds }] = await Promise.all([
       db
         .collection<CharacterStateOrg>("characterStateOrg")
         .find({ characterId: character._id })
@@ -47,7 +47,7 @@ export async function GET() {
     ]);
     const byState = new Map(rows.map((r) => [r.stateId, r]));
 
-    const states = [...politicalIds].sort();
+    const states = [...residentPoliticalIds].sort();
     const result = states.map((stateId) => {
       const row = byState.get(stateId);
       return {

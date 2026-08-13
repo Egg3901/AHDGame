@@ -46,7 +46,10 @@ export async function resignUnionLeadership(
         .collection<Union>("unions")
         .updateOne(
           { _id: unionObjectId },
-          { $set: { ownerId: null, updatedAt: now }, $unset: { pendingLeaderCharacterId: "" } },
+          {
+            $set: { ownerId: null, updatedAt: now },
+            $unset: { pendingLeaderCharacterId: "", ownerType: "" },
+          },
           { session }
         );
       await db
@@ -63,7 +66,10 @@ export async function resignUnionLeadership(
         .collection<Union>("unions")
         .updateOne(
           { _id: unionObjectId },
-          { $set: { ownerId: null, updatedAt: now }, $unset: { pendingLeaderCharacterId: "" } }
+          {
+            $set: { ownerId: null, updatedAt: now },
+            $unset: { pendingLeaderCharacterId: "", ownerType: "" },
+          }
         );
       await db
         .collection<Character>("characters")

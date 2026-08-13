@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { getLocale, getTranslations } from "next-intl/server";
 import { ObjectId, type Filter } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import {
@@ -349,6 +350,7 @@ async function getCharacterData() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default async function ProfilePage() {
+  const [t, locale] = await Promise.all([getTranslations("profile"), getLocale()]);
   const data = await getCharacterData();
   if (!data) {
     // `getCharacterData` returns null for both "not authenticated" and
@@ -415,7 +417,7 @@ export default async function ProfilePage() {
     compassMarkers.push({
       economic: party.economicPosition,
       social: party.socialPosition,
-      label: "Party",
+      label: t("positions.markerParty"),
       color: profileAccentHex,
     });
   }
@@ -423,7 +425,7 @@ export default async function ProfilePage() {
     compassMarkers.push({
       economic: homeState.cachedEconomicLean,
       social: homeState.cachedSocialLean,
-      label: "State",
+      label: t("positions.markerState"),
       color: "#38bdf8",
     });
   }
@@ -571,7 +573,7 @@ export default async function ProfilePage() {
 
   const populationTier = getPopulationTier(statePopulation);
 
-  const memberSince = new Date(character.createdAt).toLocaleDateString("en-US", {
+  const memberSince = new Date(character.createdAt).toLocaleDateString(locale, {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -711,10 +713,8 @@ export default async function ProfilePage() {
 
               <section className="rounded-xl border border-card-border bg-card shadow-card overflow-hidden">
                 <div className="px-6 pt-5 pb-0">
-                  <SectionHeader>Finances</SectionHeader>
-                  <p className="-mt-2 mb-4 text-xs text-muted">
-                    Campaign resources and personal wealth, kept separate from political standing.
-                  </p>
+                  <SectionHeader>{t("finances.title")}</SectionHeader>
+                  <p className="-mt-2 mb-4 text-xs text-muted">{t("finances.subtitle")}</p>
                 </div>
                 <FinancialStrip
                   donorLevel={character.donorBaseLevel}
@@ -759,7 +759,7 @@ export default async function ProfilePage() {
 
               {(discordId || lastActivity) && (
                 <section className="rounded-xl border border-card-border bg-card p-5 shadow-card">
-                  <SectionHeader>Social</SectionHeader>
+                  <SectionHeader>{t("social.title")}</SectionHeader>
                   <div className="flex flex-wrap items-center gap-3">
                     {discordId && (
                       <DiscordBadge
@@ -800,7 +800,7 @@ export default async function ProfilePage() {
 
           {/* Achievements Full Width */}
           <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
-            <SectionHeader>Achievements</SectionHeader>
+            <SectionHeader>{t("achievements.title")}</SectionHeader>
             <ProfileAchievements
               characterId={character._id.toString()}
               characterHref={buildCharacterHref(character)}

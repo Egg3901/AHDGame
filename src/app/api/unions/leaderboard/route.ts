@@ -76,9 +76,7 @@ export async function GET(req: NextRequest) {
       countryName: COUNTRY_CONFIGS[u.countryId]?.name ?? u.countryId,
       sectorType: u.sectorType,
       sectorLabel: CORPORATION_TYPE_LABELS[u.sectorType] ?? u.sectorType,
-      leaderName: u.ownerId
-        ? (ownersById.get(u.ownerId.toString())?.name ?? "Unknown")
-        : null,
+      leaderName: u.ownerId ? (ownersById.get(u.ownerId.toString())?.name ?? "Unknown") : null,
       isVacant: u.ownerId == null,
       membershipPressure: u.membershipPressure,
       treasury: u.treasury,

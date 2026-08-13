@@ -11,26 +11,30 @@
  */
 import { describe, expect, it } from "vitest";
 import { renderToString } from "react-dom/server";
+import { NextIntlClientProvider } from "next-intl";
 import { ElectionPhaseStatusStrip } from "./ElectionPhaseStatusStrip";
 import { formatStableUtc } from "@/lib/time/localTime";
+import enElections from "../../../messages/en/elections.json";
 
 describe("ElectionPhaseStatusStrip SSR determinism (React #418 regression)", () => {
   it("server-renders absolute deadlines as <time> with the stable UTC string", () => {
     const endTime = "2026-07-15T04:00:00.000Z";
     const primaryEndTime = "2026-07-13T04:00:00.000Z";
     const html = renderToString(
-      <ElectionPhaseStatusStrip
-        phaseStatus={{
-          status: "active",
-          inPrimary: true,
-          startTime: "2026-07-09T04:00:00.000Z",
-          endTime,
-          primaryEndTime,
-          startTurn: null,
-          endTurn: null,
-          primaryEndTurn: null,
-        }}
-      />
+      <NextIntlClientProvider locale="en" messages={enElections}>
+        <ElectionPhaseStatusStrip
+          phaseStatus={{
+            status: "active",
+            inPrimary: true,
+            startTime: "2026-07-09T04:00:00.000Z",
+            endTime,
+            primaryEndTime,
+            startTurn: null,
+            endTurn: null,
+            primaryEndTurn: null,
+          }}
+        />
+      </NextIntlClientProvider>
     );
 
     // Deadlines come out as hydration-safe <time> elements…

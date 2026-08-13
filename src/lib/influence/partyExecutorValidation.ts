@@ -10,6 +10,7 @@ import type {
 } from "@/lib/db/types";
 import type { InfluenceType } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
+import { isNationalCampaigner } from "@/lib/parties/access";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
 import { INFLUENCE_ACTIONS } from "./constants";
 import { activeNppElectionCandidacyFilter } from "@/lib/elections/nppCandidacyQuery";
@@ -171,11 +172,12 @@ export async function validateNationalPartyInfluence(
 
   const user = await db.collection("users").findOne({ _id: actor.userId });
   const isAdmin = user?.isAdmin || false;
+  const isCampaigner = isNationalCampaigner(party, actorCharacterId);
 
-  if (!isChair && !isViceChair && !isAdmin) {
+  if (!isChair && !isViceChair && !isAdmin && !isCampaigner) {
     return {
       valid: false,
-      error: `Only the ${getPartyRoleLabel(party.countryId, "chair")} or ${getPartyRoleLabel(party.countryId, "viceChair")} can use party influence.`,
+      error: `Only the ${getPartyRoleLabel(party.countryId, "chair")}, ${getPartyRoleLabel(party.countryId, "viceChair")}, or a confirmed campaigner can use party influence.`,
     };
   }
 

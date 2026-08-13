@@ -14,20 +14,27 @@
  * Pure presentational; routing is delegated to `onTierChange` so the
  * caller can either navigate (via Next router) or update local state.
  */
+import { useTranslations } from "next-intl";
+
 export type RaceTier = "president" | "senate" | "stateSenate" | "governor" | "house";
 
 interface TierConfig {
   id: RaceTier;
-  label: string;
+  labelKey:
+    | "tierSelector.president"
+    | "tierSelector.senate"
+    | "tierSelector.house"
+    | "tierSelector.governor"
+    | "tierSelector.stateSenate";
   icon: string;
 }
 
 const TIERS: TierConfig[] = [
-  { id: "president", label: "Presidential", icon: "🇺🇸" },
-  { id: "senate", label: "Senate", icon: "🏛" },
-  { id: "house", label: "House", icon: "📍" },
-  { id: "governor", label: "Governor", icon: "🏰" },
-  { id: "stateSenate", label: "State Senate", icon: "🏢" },
+  { id: "president", labelKey: "tierSelector.president", icon: "🇺🇸" },
+  { id: "senate", labelKey: "tierSelector.senate", icon: "🏛" },
+  { id: "house", labelKey: "tierSelector.house", icon: "📍" },
+  { id: "governor", labelKey: "tierSelector.governor", icon: "🏰" },
+  { id: "stateSenate", labelKey: "tierSelector.stateSenate", icon: "🏢" },
 ];
 
 export function TierSelector({
@@ -45,16 +52,17 @@ export function TierSelector({
    */
   onTierChange?: (tier: RaceTier) => void;
 }) {
+  const t = useTranslations("elections");
   // Hide entirely outside the US.
   if (countryId.toUpperCase() !== "US") return null;
 
   return (
     <div className="flex flex-wrap items-center gap-2 px-1 py-2">
       <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-        Race Tier
+        {t("tierSelector.raceTier")}
       </span>
-      {TIERS.map((t) => {
-        const isActive = t.id === activeTier;
+      {TIERS.map((tier) => {
+        const isActive = tier.id === activeTier;
         const isClickable = !isActive && !!onTierChange;
         const baseClasses = `inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
           isClickable ? "cursor-pointer hover:bg-[var(--card-muted)]" : "cursor-default"
@@ -68,17 +76,18 @@ export function TierSelector({
                 : "color-mix(in srgb, var(--primary) 14%, transparent)",
             }
           : { borderColor: "var(--card-border)" };
+        const label = t(tier.labelKey);
         return (
           <button
-            key={t.id}
+            key={tier.id}
             type="button"
-            onClick={() => !isActive && onTierChange?.(t.id)}
+            onClick={() => !isActive && onTierChange?.(tier.id)}
             className={baseClasses}
             style={accentStyle}
-            title={t.label}
+            title={label}
           >
-            <span aria-hidden="true">{t.icon}</span>
-            <span>{t.label}</span>
+            <span aria-hidden="true">{tier.icon}</span>
+            <span>{label}</span>
           </button>
         );
       })}

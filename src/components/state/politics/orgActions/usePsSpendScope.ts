@@ -22,7 +22,9 @@ export function usePsSpendScope(
   countryCode: string,
   stateId: string,
   partyId: string | null,
-  enabled: boolean
+  enabled: boolean,
+  /** Bump to re-fetch balances after a successful spend. */
+  refetchKey = 0
 ): PsSpendScope {
   const [eligibleScopes, setEligibleScopes] = useState<PsSpendScope["eligibleScopes"]>(null);
   const [poolPS, setPoolPS] = useState<PsSpendScope["poolPS"]>(null);
@@ -45,7 +47,7 @@ export function usePsSpendScope(
     return () => {
       cancelled = true;
     };
-  }, [countryCode, stateId, partyId, enabled]);
+  }, [countryCode, stateId, partyId, enabled, refetchKey]);
 
   return { eligibleScopes, poolPS };
 }

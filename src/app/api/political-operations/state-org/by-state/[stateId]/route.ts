@@ -4,7 +4,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError, badRequest } from "@/lib/api/errors";
 import { ELECTORAL_VOTE_UNITS } from "@/lib/constants/states";
 import { loadUsPoliticalStateIds } from "@/lib/elections/usPoliticalHome";
-import { isUsPoliticalState } from "@/lib/elections/statehoodAdmission";
+import { isUsResidentPoliticalRegion } from "@/lib/elections/statehoodAdmission";
 import type { CharacterStateOrg, Character } from "@/lib/db/types";
 
 const VALID_STATES = new Set(ELECTORAL_VOTE_UNITS.map((u) => u.stateId));
@@ -36,7 +36,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
 
     const db = await getDb();
     const { admittedIds, preset } = await loadUsPoliticalStateIds(db);
-    if (!isUsPoliticalState(stateId, preset, admittedIds)) {
+    if (!isUsResidentPoliticalRegion(stateId, preset, admittedIds)) {
       return NextResponse.json(badRequest("Invalid state").toJson(), { status: 400 });
     }
 

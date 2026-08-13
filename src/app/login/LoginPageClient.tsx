@@ -5,6 +5,7 @@ import Image from "next/image";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   OAUTH_DEVICE_KEY_COOKIE,
   OAUTH_FINGERPRINT_COOKIE,
@@ -15,25 +16,26 @@ import { getOrCreateDeviceKey } from "@/lib/utils/deviceKey";
 import { loginDestination } from "@/lib/auth/lakesideLoginReturn";
 import { Input, Label, Button, SectionLabel } from "@/components/ui";
 
-const DISCORD_ERROR_MESSAGES: Record<string, string> = {
-  discord_not_configured: "Discord login is not configured on this server.",
-  access_denied: "Discord authorization was denied.",
-  missing_params: "Discord login failed. Please try again.",
-  invalid_state: "Discord login expired. Please try again.",
-  session_expired: "Discord login expired or was interrupted. Please try again.",
-  rate_limited: "You're sending requests too quickly. Please wait a moment and try again.",
-  not_configured: "Discord login is not configured on this server.",
-  exchange_failed: "Discord login failed. Please try again.",
-  already_linked: "This Discord account is already linked to another user.",
+/** Message keys under auth.login.errors, per OAuth failure reason. */
+const DISCORD_ERROR_KEYS: Record<string, string> = {
+  discord_not_configured: "discordNotConfigured",
+  access_denied: "discordAccessDenied",
+  missing_params: "discordFailed",
+  invalid_state: "discordExpired",
+  session_expired: "discordInterrupted",
+  rate_limited: "rateLimited",
+  not_configured: "discordNotConfigured",
+  exchange_failed: "discordFailed",
+  already_linked: "discordAlreadyLinked",
 };
 
-const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
-  not_configured: "Google login is not configured on this server.",
-  access_denied: "Google authorization was denied.",
-  missing_params: "Google login failed. Please try again.",
-  invalid_state: "Google login expired. Please try again.",
-  exchange_failed: "Google login failed. Please try again.",
-  already_linked: "This Google account is already linked to another user.",
+const GOOGLE_ERROR_KEYS: Record<string, string> = {
+  not_configured: "googleNotConfigured",
+  access_denied: "googleAccessDenied",
+  missing_params: "googleFailed",
+  invalid_state: "googleExpired",
+  exchange_failed: "googleFailed",
+  already_linked: "googleAlreadyLinked",
 };
 
 interface LoginPageClientProps {
@@ -52,6 +54,7 @@ export default function LoginPageClient({
   eraTagline,
   loginImageUrl,
 }: LoginPageClientProps) {
+  const t = useTranslations("auth.login");
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
@@ -85,11 +88,11 @@ export default function LoginPageClient({
     const discordStatus = searchParams.get("discord");
     const googleStatus = searchParams.get("google");
     if ((discordStatus === "error" && reason) || reason === "discord_not_configured") {
-      setError(DISCORD_ERROR_MESSAGES[reason] || "Discord login failed. Please try again.");
+      setError(t(`errors.${DISCORD_ERROR_KEYS[reason] || "discordFailed"}`));
     } else if (googleStatus === "error" && reason) {
-      setError(GOOGLE_ERROR_MESSAGES[reason] || "Google login failed. Please try again.");
+      setError(t(`errors.${GOOGLE_ERROR_KEYS[reason] || "googleFailed"}`));
     }
-  }, [searchParams]);
+  }, [searchParams, t]);
 
   useEffect(() => {
     generateFingerprintData().then(({ hash, components }) => {
@@ -154,11 +157,11 @@ export default function LoginPageClient({
 
       if (!res.ok) {
         if (data.error === "banned") {
-          const reason = encodeURIComponent(data.reason || "Violation of rules");
+          const reason = encodeURIComponent(data.reason || t("errors.bannedFallbackReason"));
           router.push(`/banned?reason=${reason}`);
           return;
         }
-        throw new Error(data.error || "Login failed");
+        throw new Error(data.error || t("errors.loginFailed"));
       }
 
       // Use a full navigation so the AuthDataProvider remounts and picks up the
@@ -169,7 +172,7 @@ export default function LoginPageClient({
       window.location.assign(nextPath);
       return;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      setError(err instanceof Error ? err.message : t("errors.generic"));
     } finally {
       setIsLoading(false);
     }
@@ -208,7 +211,7 @@ export default function LoginPageClient({
             <Image
               src={CDN_LOGO_URL}
               unoptimized
-              alt="A House Divided Logo"
+              alt={t("logoAlt")}
               width={36}
               height={36}
               className="object-contain"
@@ -262,7 +265,7 @@ export default function LoginPageClient({
             <Image
               src={CDN_LOGO_URL}
               unoptimized
-              alt="A House Divided Logo"
+              alt={t("logoAlt")}
               width={36}
               height={36}
               className="object-contain"
@@ -316,7 +319,7 @@ export default function LoginPageClient({
             <Image
               src={CDN_LOGO_URL}
               unoptimized
-              alt="A House Divided Logo"
+              alt={t("logoAlt")}
               width={36}
               height={36}
               className="object-contain"
@@ -345,23 +348,18 @@ export default function LoginPageClient({
                   />
                 </svg>
                 <div>
-                  <p className="text-body font-semibold text-warning">Maintenance Mode Active</p>
-                  <p className="text-body-sm text-muted">
-                    Only admin accounts can sign in during maintenance. New registrations are
-                    temporarily closed.
-                  </p>
+                  <p className="text-body font-semibold text-warning">{t("maintenanceTitle")}</p>
+                  <p className="text-body-sm text-muted">{t("maintenanceBody")}</p>
                 </div>
               </div>
             )}
 
             <div className="mb-7 border-b border-card-border pb-6">
-              <SectionLabel as="p">Account</SectionLabel>
+              <SectionLabel as="p">{t("sectionLabel")}</SectionLabel>
               <h1 className="mt-1 font-display text-display font-semibold tracking-tight text-foreground">
-                Welcome back
+                {t("heading")}
               </h1>
-              <p className="mt-2 text-body text-muted">
-                Sign in to continue your political career.
-              </p>
+              <p className="mt-2 text-body text-muted">{t("subheading")}</p>
             </div>
 
             {error && (
@@ -389,26 +387,26 @@ export default function LoginPageClient({
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-5">
                 <div>
-                  <Label htmlFor="email">Email or Username</Label>
+                  <Label htmlFor="email">{t("emailLabel")}</Label>
                   <Input
                     id="email"
                     type="text"
                     required
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="username or email@example.com"
+                    placeholder={t("emailPlaceholder")}
                     className="bg-card-muted"
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Password</Label>
+                    <Label htmlFor="password">{t("passwordLabel")}</Label>
                     <Link
                       href="/forgot-password"
                       className="text-body-sm font-medium text-primary transition-colors hover:text-primary-dark link-underline"
                     >
-                      Forgot password?
+                      {t("forgotPassword")}
                     </Link>
                   </div>
                   <Input
@@ -417,7 +415,7 @@ export default function LoginPageClient({
                     required
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Enter your password"
+                    placeholder={t("passwordPlaceholder")}
                     className="bg-card-muted"
                   />
                 </div>
@@ -429,7 +427,7 @@ export default function LoginPageClient({
                 size="lg"
                 className="w-full shadow-glow-sm transition-shadow hover:shadow-glow"
               >
-                Sign in
+                {t("signIn")}
               </Button>
             </form>
 
@@ -438,7 +436,7 @@ export default function LoginPageClient({
                 <div className="w-full border-t border-card-border" />
               </div>
               <div className="relative flex justify-center text-body-sm">
-                <span className="bg-card px-3 text-muted">or continue with</span>
+                <span className="bg-card px-3 text-muted">{t("orContinueWith")}</span>
               </div>
             </div>
 
@@ -454,7 +452,7 @@ export default function LoginPageClient({
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
                   <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                 </svg>
-                Continue with Google
+                {t("continueWithGoogle")}
               </button>
 
               <button
@@ -465,35 +463,40 @@ export default function LoginPageClient({
                 <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
                 </svg>
-                Continue with Discord
+                {t("continueWithDiscord")}
               </button>
             </div>
 
             {maintenanceMode ? (
               <p className="mt-8 text-center text-body-sm text-muted">
-                Registration is closed during maintenance.{" "}
-                <Link
-                  href="/maintenance"
-                  className="font-medium text-warning transition-colors hover:text-warning/80 link-underline"
-                >
-                  View details
-                </Link>
+                {t.rich("maintenanceRegistrationClosed", {
+                  link: (chunks) => (
+                    <Link
+                      href="/maintenance"
+                      className="font-medium text-warning transition-colors hover:text-warning/80 link-underline"
+                    >
+                      {chunks}
+                    </Link>
+                  ),
+                })}
               </p>
             ) : (
               <p className="mt-8 text-center text-body text-muted">
-                New to the game?{" "}
-                <Link
-                  href="/register"
-                  className="font-medium text-primary transition-colors hover:text-primary-dark link-underline"
-                >
-                  Create an account
-                </Link>
+                {t.rich("newToGame", {
+                  link: (chunks) => (
+                    <Link
+                      href="/register"
+                      className="font-medium text-primary transition-colors hover:text-primary-dark link-underline"
+                    >
+                      {chunks}
+                    </Link>
+                  ),
+                })}
               </p>
             )}
 
             <p className="mt-6 border-t border-card-border pt-5 text-center text-body-sm leading-relaxed text-muted/70">
-              By signing in, you agree to the use of essential cookies for authentication and
-              security purposes, including fraud prevention and multi-account detection.
+              {t("cookieNotice")}
             </p>
           </section>
         </div>

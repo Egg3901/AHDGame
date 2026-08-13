@@ -95,6 +95,7 @@ import {
   haircutScarcityRelief,
   weightedCapacityUtilization,
 } from "@/lib/extraction/capacityHaircut";
+import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
 
 export async function buildCorporationLookups(
   db: Db,
@@ -105,6 +106,13 @@ export async function buildCorporationLookups(
      * keeps the legacy revenue-based share exactly.
      */
     plantsEnabled?: boolean;
+    /**
+     * Money wiring (interstate-logistics plan step 5, phase A):
+     * gameConfig.interstateMoneyWiringEnabled. When true, loads last turn's
+     * sourcingNetworkLoad doc and exposes its landedPremiums as
+     * `landedPremiumByState`. Omitted/false keeps that map empty.
+     */
+    moneyWiringEnabled?: boolean;
   }
 ): Promise<CorporationLookups> {
   await reconcileSignedTariffBills(db);
@@ -881,6 +889,34 @@ export async function buildCorporationLookups(
     regionalConditionMarginByState.set(stateId, computeRegionalConditionMargin(modifiers));
   }
 
+  // Money wiring (interstate-logistics plan step 5, phase A): LAST turn's
+  // landed-price premiums, loaded only when the flag is on. `embargoTurn`
+  // above is this turn's number (getCurrentTurn), so "last turn" is the
+  // latest sourcingNetworkLoad doc at or before it - the sourcing pass writes
+  // its doc for `turn`, so on a normal cadence that's turn - 1, but reading
+  // <= current turn survives a doc gap without going in-turn-mutation-order
+  // sensitive.
+  const landedPremiumByState = new Map<string, Map<CommodityType, number>>();
+  if (options?.moneyWiringEnabled) {
+    const networkDoc = await db
+      .collection<SourcingNetworkDoc>("sourcingNetworkLoad")
+      .find({ turn: { $lte: embargoTurn } })
+      .sort({ turn: -1 })
+      .limit(1)
+      .toArray();
+    const doc = networkDoc[0];
+    if (doc?.landedPremiums) {
+      for (const [stateId, byCommodity] of Object.entries(doc.landedPremiums)) {
+        const m = new Map<CommodityType, number>();
+        for (const [commodity, premium] of Object.entries(byCommodity)) {
+          if (typeof premium === "number" && premium > 0)
+            m.set(commodity as CommodityType, premium);
+        }
+        if (m.size > 0) landedPremiumByState.set(stateId, m);
+      }
+    }
+  }
+
   return {
     eraYear,
     eraUnitScale,
@@ -917,6 +953,7 @@ export async function buildCorporationLookups(
     costOfLivingByState,
     globalCommodityBalances,
     priceRatioByCommodity,
+    landedPremiumByState,
     nationalCommodityBalancesByCountry,
     countryClearingBooks,
     exportIntensityByCountry,

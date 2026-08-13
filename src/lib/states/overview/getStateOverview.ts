@@ -117,9 +117,11 @@ export async function getStateOverview(
   // Build the per-party rows.
   const partyOrg: PartyOrgRow[] = partyOrgRows.map((row) => {
     const party = partyBySequentialId.get(row.partyId);
+    const abbr = party?.abbreviation ?? row.partyId.toUpperCase();
     return {
       id: row.partyId,
-      abbr: party?.abbreviation ?? row.partyId.toUpperCase(),
+      abbr,
+      name: party?.name ?? abbr,
       color: party?.color ?? NEUTRAL_PARTY_COLOR,
       orgPct: row.organization ?? 0,
       regPct: row.registration ?? 0,
@@ -166,7 +168,7 @@ export async function getStateOverview(
     parties: regSeeded
       ? partyOrg
           .filter((p) => p.regPct > 0)
-          .map((p) => ({ id: p.id, abbr: p.abbr, color: p.color, regPct: p.regPct }))
+          .map((p) => ({ id: p.id, abbr: p.abbr, name: p.name, color: p.color, regPct: p.regPct }))
       : [],
     independent: regPool?.independent ?? 0,
     unregistered: regPool?.unregistered ?? 0,

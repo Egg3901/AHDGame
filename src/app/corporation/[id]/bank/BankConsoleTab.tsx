@@ -1452,7 +1452,7 @@ function PropBookPanel({
             <Input
               value={ref}
               onChange={(e) => setRef(e.target.value)}
-              placeholder="corp id / bond id / fund / currency"
+              placeholder="company name or # / bond ID / fund name / currency"
               aria-label="Prop position ref"
             />
           </label>

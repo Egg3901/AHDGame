@@ -33,6 +33,9 @@ import { calculateFederalSpending } from "./spending";
 import { getEraContext, type EraContext } from "@/lib/era/context";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
+import { getCurrentTurn } from "@/lib/currentTurn";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
 
 /**
  * Spec B revenue ceiling (flag-on only). A Laffer soft-cap: tax take above ~40%
@@ -161,6 +164,33 @@ const GDP_SALES_FACTOR = 0.55; // 55% of GDP is consumer spending
 const GDP_IMPORT_FACTOR = 0.18; // 18% of GDP is imports
 const GDP_PROPERTY_FACTOR = 3.0; // Property value ~3x GDP
 
+/**
+ * Money wiring (interstate-logistics plan step 5, phase B). Loads the latest
+ * `sourcingNetworkLoad` doc at or before `upToTurn` and returns its
+ * `importAggregates`, keyed by buyer countryId, unconverted (anchor currency,
+ * one turn's worth). Callers hoist this ONCE per turn/fiscal-year pass and
+ * read per-country entries out of the returned map, matching the
+ * `landedPremiumByState` hoist pattern in `buildCorporationLookups`.
+ */
+export async function loadLatestSourcedImportAggregates(
+  db: Db,
+  upToTurn: number
+): Promise<Map<string, { tariffPaid: number; importValue: number }>> {
+  const docs = await db
+    .collection<SourcingNetworkDoc>("sourcingNetworkLoad")
+    .find({ turn: { $lte: upToTurn } })
+    .sort({ turn: -1 })
+    .limit(1)
+    .toArray();
+  const doc = docs[0];
+  const result = new Map<string, { tariffPaid: number; importValue: number }>();
+  if (!doc?.importAggregates) return result;
+  for (const [countryId, agg] of Object.entries(doc.importAggregates)) {
+    result.set(countryId, agg);
+  }
+  return result;
+}
+
 export async function calculateNationalGDP(db: Db, budgetId: string = "federal"): Promise<number> {
   // A1 SSOT (design §5.4): national GDP = Σ regional `state.gdp` — the per-turn
   // grown truth (the metric engine compounds each region's level every turn).
@@ -212,7 +242,16 @@ export async function calculateFederalRevenue(
   plantsContext?: PlantsBudgetContext,
   // Era context and FX map, hoisted the same way. Omitted ⇒ resolved inline.
   hoistedEraContext?: EraContext,
-  hoistedFxByCurrency?: ReadonlyMap<CurrencyCode, number>
+  hoistedFxByCurrency?: ReadonlyMap<CurrencyCode, number>,
+  // Money wiring (interstate-logistics plan step 5, phase B): this turn's
+  // sourcing-pass import aggregate for this budget's country, anchor
+  // currency, ONE TURN's worth (straight off `SourcingNetworkDoc.
+  // importAggregates[countryId]` - see `loadLatestSourcedImportAggregates`).
+  // Undefined ⇒ byte-identical to pre-wiring behavior (GDP-proxy tariffs
+  // only). When provided, tariffs are netted against the GDP proxy so the
+  // real sourced flow isn't double counted (the sourced imports are already
+  // inside `bases.importValue`'s GDP estimate) - see the netting block below.
+  sourcedImports?: { tariffPaidAnchor: number; importValueAnchor: number }
 ): Promise<FederalBudget["revenue"]> {
   const normalizedTaxRates = normalizeFederalTaxRates(taxRates) ?? {
     incomeTax: 0,
@@ -260,6 +299,11 @@ export async function calculateFederalRevenue(
     };
   }
 
+  // Resolved once, up front, so both the tariffs netting below and the
+  // original mid-function computation (further down) use the same id.
+  const netTariffCountryId = (federalBudget?.countryId ??
+    (budgetId in COUNTRY_CONFIGS ? (budgetId as CountryId) : COUNTRY_CONFIGS.US.id)) as CountryId;
+
   // Calculate revenue from bases × rates
   const incomeTax = bases.taxableIncome * (normalizedTaxRates.incomeTax / 100);
   const domesticCorporateTax =
@@ -267,7 +311,32 @@ export async function calculateFederalRevenue(
   const foreignCorporateTax =
     bases.foreignCorporateProfits * (normalizedTaxRates.foreignCorporateTax / 100);
   const payrollTax = bases.wagesAndSalaries * (normalizedTaxRates.payrollTax / 100);
-  const tariffs = bases.importValue * (normalizedTaxRates.tariffs / 100);
+  // Money wiring (phase B): with no sourced flow (flag off or a country the
+  // sourcing pass hasn't touched this turn), this is byte-identical to the
+  // old GDP-proxy line. With a sourced flow, we net the proxy against the
+  // real (annualized, fx-converted) sourced import value before applying the
+  // rate, then add the sourcing pass's own real tariff take on top - the
+  // sourced units are already inside `bases.importValue`'s GDP estimate, so
+  // booking the sourced tariff revenue WITHOUT netting the base would double
+  // count that slice of trade. `TURNS_PER_YEAR` annualizes the one-turn
+  // sourcing aggregate up to the same annual cadence `bases.importValue`
+  // already carries; the fx rate converts anchor (₳) to this country's local
+  // currency, matching every other amount in this file (local = anchor ×
+  // rate, the convention used by `anchorToCorpCapital`).
+  let tariffs: number;
+  if (sourcedImports) {
+    const fxCode = COUNTRY_CONFIGS[netTariffCountryId]?.currencyCode;
+    const fxRate = (fxCode && hoistedFxByCurrency?.get(fxCode)) || 1.0;
+    const annualizedSourcedImportValueLocal =
+      sourcedImports.importValueAnchor * TURNS_PER_YEAR * fxRate;
+    const annualizedSourcedTariffRevenueLocal =
+      sourcedImports.tariffPaidAnchor * TURNS_PER_YEAR * fxRate;
+    const nettedProxyBase = Math.max(0, bases.importValue - annualizedSourcedImportValueLocal);
+    tariffs =
+      nettedProxyBase * (normalizedTaxRates.tariffs / 100) + annualizedSourcedTariffRevenueLocal;
+  } else {
+    tariffs = bases.importValue * (normalizedTaxRates.tariffs / 100);
+  }
   const salesTax = bases.taxableSales * (normalizedTaxRates.salesTax / 100);
   // DE Solidaritätszuschlag — surcharge on income tax owed. Non-DE: rate undefined → 0.
   const solidaritySurcharge = incomeTax * ((normalizedTaxRates.solidaritySurcharge ?? 0) / 100);
@@ -302,8 +371,7 @@ export async function calculateFederalRevenue(
   // handled separately in calculateStateRevenue against propertyValue.
   const propertyValueBaseValue = (federalBudget?.gdp ?? 0) * 0.5;
   const propertyTax = propertyValueBaseValue * ((normalizedTaxRates.propertyTax ?? 0) / 100);
-  const budgetCountryId = (federalBudget?.countryId ??
-    (budgetId in COUNTRY_CONFIGS ? (budgetId as CountryId) : COUNTRY_CONFIGS.US.id)) as CountryId;
+  const budgetCountryId = netTariffCountryId;
   const publicEnterpriseRevenue = await calculateCountryOwnedBudgetRevenue(
     db,
     budgetCountryId,
@@ -402,17 +470,28 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
   const now = new Date();
   // One read each for the whole pass: the market mode / governor ramp, era
   // clock, and FX table cannot change mid-pass, and the per-country path would
-  // otherwise re-read them per budget.
-  const [plantsContext, eraContext, fxByCurrency] = await Promise.all([
+  // otherwise re-read them per budget. Money wiring (phase B): same hoist -
+  // one gameConfig flag check and one sourcingNetworkLoad read for the whole
+  // pass, never one per country.
+  const [plantsContext, eraContext, fxByCurrency, moneyWiringConfig] = await Promise.all([
     loadPlantsBudgetContext(db),
     getEraContext(db).catch(() => null),
     loadFxRatesByCurrency(db),
+    db
+      .collection<GameConfig>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { interstateMoneyWiringEnabled: 1 } }),
   ]);
+  const moneyWiringEnabled = moneyWiringConfig?.interstateMoneyWiringEnabled === true;
+  const sourcedImportsByCountry = moneyWiringEnabled
+    ? await loadLatestSourcedImportAggregates(db, await getCurrentTurn(db))
+    : new Map<string, { tariffPaid: number; importValue: number }>();
   const results = await Promise.all(
     budgets.map(async (budget) => {
       // Skip budgets missing taxRates (e.g. incompletely seeded countries) —
       // one bad document must not crash the entire corporation turn phase.
       if (!budget.taxRates) return null;
+      const countryId = budget.countryId ?? budget._id;
+      const sourcedAgg = sourcedImportsByCountry.get(countryId);
       const revenue = await calculateFederalRevenue(
         db,
         budget.taxRates,
@@ -420,7 +499,10 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
         budget,
         plantsContext,
         eraContext ?? undefined,
-        fxByCurrency
+        fxByCurrency,
+        sourcedAgg
+          ? { tariffPaidAnchor: sourcedAgg.tariffPaid, importValueAnchor: sourcedAgg.importValue }
+          : undefined
       );
       // Recalculate spending to include current enacted laws and debt interest
       const spending = await calculateFederalSpending(

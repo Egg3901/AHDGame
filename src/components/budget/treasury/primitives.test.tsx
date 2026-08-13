@@ -4,6 +4,7 @@
 import { describe, it, expect } from "vitest";
 import { render } from "@testing-library/react";
 import { Delta, Sparkline, StatTile } from "./primitives";
+import { FiscalStatStrip } from "./FiscalStatStrip";
 
 describe("Delta", () => {
   it("renders nothing when there is no prior value", () => {
@@ -45,5 +46,31 @@ describe("StatTile", () => {
     expect(container.textContent).toContain("Revenue");
     expect(container.textContent).toContain("¥49.6T");
     expect(container.textContent).toContain("of GDP");
+  });
+});
+
+describe("FiscalStatStrip USD equivalent (ticket-1065)", () => {
+  const base = {
+    sym: "руб",
+    revenue: 571_800_000_000,
+    spending: 565_992_434_499,
+    gdp: 1_029_166_000_000,
+    gdpGrowth: 5.2,
+    debtToGdp: 0.1,
+    rating: "AAA" as const,
+    treasuryReserve: 5_800_000_000,
+  };
+
+  it("keeps local-currency headlines and adds ≈ $ notes when toUsd is set", () => {
+    const { container } = render(<FiscalStatStrip {...base} toUsd={(n) => n / 9} />);
+    expect(container.textContent).toContain("руб 566.0B");
+    expect(container.textContent).toContain("≈ $62.9B");
+    expect(container.textContent).not.toContain("$565");
+  });
+
+  it("omits the dollar note when toUsd is absent (US budget, or flags not loaded)", () => {
+    const { container } = render(<FiscalStatStrip {...base} />);
+    expect(container.textContent).toContain("руб 566.0B");
+    expect(container.textContent).not.toContain("≈ $");
   });
 });
