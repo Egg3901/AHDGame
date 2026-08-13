@@ -23,6 +23,7 @@ import {
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
+import { getCashReserves, requiredReserves, upstreamCapacity } from "@/lib/banking/bankCash";
 import {
   CREDIT_BANDS,
   DEFAULT_LENDING_PROFILE,
@@ -376,7 +377,9 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               totalLoans: charter.totalLoans ?? 0,
               npcDeposits: charter.npcDeposits ?? 0,
               reserves: charter.reserves ?? 0,
-              reserveFloor: charter.reserveFloor ?? 0,
+              cashReserves: getCashReserves(charter),
+              requiredReserves: requiredReserves(charter, reserveRatio ?? 0),
+              upstreamCapacity: upstreamCapacity(charter, reserveRatio ?? 0),
               lendingProfile: charter.lendingProfile ?? DEFAULT_LENDING_PROFILE,
               discountWindowDebt: charter.discountWindowDebt ?? 0,
               discountWindowArrears: charter.discountWindowArrears ?? 0,

@@ -14,8 +14,8 @@
  * ## Capital is the bank's own money, not the cash in the drawer
  *
  * The first version of this module measured capital as `postedCapital +
- * liquidCapital`: the money posted at charter plus whatever cash the bank
- * happened to be holding. Money drawn on the discount window lands in
+ * liquidCapital`: the money posted at charter plus whatever cash the CORPORATION
+ * happened to be holding, which was also where the bank kept its money. Money drawn on the discount window lands in
  * `liquidCapital` (`discountWindowCommands.ts:80` increments it directly), and
  * so does a CB margin draw. Both are somebody else's claim on the bank, and
  * both counted as the bank's own capital.
@@ -25,7 +25,7 @@
  * drawing on the emergency facility that exists precisely because it is in
  * trouble. Capital is now:
  *
- *   equity = postedCapital + liquidCapital − discountWindow − cbMargin − interbank
+ *   equity = cashReserves − discountWindow − cbMargin − interbank
  *
  * A draw moves cash and the matching liability together and leaves the ratio
  * exactly where it was, which is the whole point: emergency liquidity should
@@ -112,8 +112,15 @@ export interface BankBorrowings {
 }
 
 export interface BankBalanceSheet {
-  postedCapital: number;
-  liquidCapital: number;
+  /**
+   * The bank's ring-fenced cash (`bankCharter.cashReserves`).
+   *
+   * NOT the corporation's `liquidCapital`, and NOT summed with `postedCapital`:
+   * posting capital moves cash into this balance and increments `postedCapital`
+   * as a memo of where it came from, so adding the two would count the same
+   * money twice.
+   */
+  cashReserves: number;
   /** Risk assets, not a funding source. See the note on deposits above. */
   totalLoans: number;
   /**
@@ -177,8 +184,7 @@ export function totalBorrowings(borrowings: BankBorrowings): number {
 }
 
 export function assessCapital(input: BankBalanceSheet): CapitalPosition {
-  const ownFunds =
-    Math.max(0, finite(input.postedCapital)) + Math.max(0, finite(input.liquidCapital));
+  const ownFunds = Math.max(0, finite(input.cashReserves));
 
   // Equity. Deliberately NOT floored at zero: a bank that owes more than it
   // holds is insolvent, and the supervisor needs to see that rather than a

@@ -14,6 +14,7 @@ import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { archiveCharter } from "@/lib/banking/charterHistory";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
+import { getCashReserves } from "@/lib/banking/bankCash";
 import { clampOffsets, getRateCorridors } from "@/lib/banking/regulationQ";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getCurrentTurn } from "@/lib/currentTurn";
@@ -195,6 +196,9 @@ export async function issueCharter(
     currency,
     charteredTurn,
     postedCapital,
+    // Posted capital IS the bank's opening cash. It was debited from the
+    // corporation a line below; this is where it lands.
+    cashReserves: postedCapital,
     depositOffset: initialOffsets.depositOffset,
     lendingOffset: initialOffsets.lendingOffset,
     blacklist: {},
@@ -253,7 +257,12 @@ export async function revokeCharter(
 
   const charter = corporation.bankCharter;
   const deposits = charter.totalDeposits ?? 0;
-  const refund = deposits <= 0 ? charter.postedCapital : 0;
+  // The bank's whole cash balance returns to the shareholder, not just the
+  // capital they posted. Before the ring-fence these were the same pot, so
+  // refunding `postedCapital` and leaving retained earnings behind happened to
+  // be a no-op; now the earnings are on the other side of a boundary and
+  // stranding them would quietly destroy them.
+  const refund = deposits <= 0 ? getCashReserves(charter) : 0;
   const revokedTurn = await getCurrentTurn(db);
   const now = new Date();
 
@@ -277,6 +286,7 @@ export async function revokeCharter(
   };
   if (refund > 0) {
     update.$inc = { liquidCapital: refund };
+    update.$set["bankCharter.cashReserves"] = 0;
   }
 
   const result = await db

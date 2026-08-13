@@ -24,6 +24,9 @@ function makeCharter(overrides: Partial<BankCharter> = {}): BankCharter {
     currency: "USD",
     charteredTurn: 1,
     postedCapital: 100_000,
+    // The bank's ring-fenced cash. Was the corporation's `liquidCapital` before
+    // the two balances were separated.
+    cashReserves: 1_000_000,
     depositOffset: 0,
     lendingOffset: 0,
     propBook: [],
@@ -35,15 +38,28 @@ function makeCharter(overrides: Partial<BankCharter> = {}): BankCharter {
 }
 
 describe("computePropEquityBase", () => {
-  it("sums liquid + posted + mark and nets interbank + CB margin debt", () => {
+  it("sums bank cash + mark and nets interbank + CB margin debt", () => {
     expect(
-      computePropEquityBase(50_000, {
-        postedCapital: 100_000,
+      computePropEquityBase(150_000, {
         propBookMarkValue: 80_000,
         interbankDebt: 20_000,
         cbMarginDebt: 10_000,
       })
     ).toBe(200_000);
+  });
+
+  it("does not add posted capital on top of the cash it already sits inside", () => {
+    // Posting capital moves cash into `cashReserves` and increments the memo.
+    // Counting both handed every bank leverage headroom equal to its own
+    // contributed capital, for free.
+    expect(
+      computePropEquityBase(150_000, {
+        postedCapital: 100_000,
+        propBookMarkValue: 0,
+        interbankDebt: 0,
+        cbMarginDebt: 0,
+      } as never)
+    ).toBe(150_000);
   });
 
   it("falls back to summing position marks when cache absent", () => {
@@ -53,7 +69,6 @@ describe("computePropEquityBase", () => {
     ];
     expect(
       computePropEquityBase(0, {
-        postedCapital: 0,
         propBook: book,
       })
     ).toBe(18);
@@ -136,19 +151,23 @@ describe("propTrading open/close/mark", () => {
 
     db.collectionMocks.corporations!.updateOne.mockImplementation(
       async (
-        filter: { _id?: ObjectId; liquidCapital?: unknown },
+        filter: { _id?: ObjectId; "bankCharter.cashReserves"?: unknown },
         update: { $inc?: Record<string, number>; $set?: Record<string, unknown> }
       ) => {
         if (!filter?._id?.equals(corpId)) return { matchedCount: 0, modifiedCount: 0 };
-        if (filter.liquidCapital && typeof filter.liquidCapital === "object") {
-          const gte = (filter.liquidCapital as { $gte?: number }).$gte ?? 0;
-          if ((liveCorp.liquidCapital ?? 0) < gte) return { matchedCount: 0, modifiedCount: 0 };
+        const gteFilter = filter["bankCharter.cashReserves"];
+        if (gteFilter && typeof gteFilter === "object") {
+          const gte = (gteFilter as { $gte?: number }).$gte ?? 0;
+          if ((liveCorp.bankCharter?.cashReserves ?? 0) < gte) {
+            return { matchedCount: 0, modifiedCount: 0 };
+          }
         }
-        if (update.$inc?.liquidCapital) {
-          liveCorp.liquidCapital = (liveCorp.liquidCapital ?? 0) + update.$inc.liquidCapital;
+        if (liveCorp.bankCharter && update.$inc?.["bankCharter.cashReserves"]) {
+          liveCorp.bankCharter.cashReserves =
+            (liveCorp.bankCharter.cashReserves ?? 0) + update.$inc["bankCharter.cashReserves"];
         }
-        if (update.$set?.liquidCapital !== undefined) {
-          liveCorp.liquidCapital = update.$set.liquidCapital as number;
+        if (liveCorp.bankCharter && update.$set?.["bankCharter.cashReserves"] !== undefined) {
+          liveCorp.bankCharter.cashReserves = update.$set["bankCharter.cashReserves"] as number;
         }
         if (liveCorp.bankCharter && update.$set) {
           if (update.$set["bankCharter.propBook"] !== undefined) {
@@ -173,7 +192,7 @@ describe("propTrading open/close/mark", () => {
   it("enforces leverage cap on open", async () => {
     // True equity stays ~300k once debt is netted; max mark = 900k.
     // Buy 901k of equity while holding enough cash → leverage breach.
-    liveCorp.liquidCapital = 950_000;
+    liveCorp.bankCharter!.cashReserves = 950_000;
     liveCorp.bankCharter = makeCharter({
       postedCapital: 100_000,
       interbankDebt: 750_000,
@@ -203,7 +222,7 @@ describe("propTrading open/close/mark", () => {
 
   it("conserves cash on open and close (market counterparty)", async () => {
     const targetId = equityCorp._id.toString();
-    const before = liveCorp.liquidCapital ?? 0;
+    const before = liveCorp.bankCharter!.cashReserves ?? 0;
     const opened = await openPosition(db as unknown as Db, corpId, {
       asset: "equity",
       ref: targetId,
@@ -212,7 +231,7 @@ describe("propTrading open/close/mark", () => {
     expect(opened.ok).toBe(true);
     if (!opened.ok) return;
     expect(opened.cost).toBe(10_000);
-    expect(liveCorp.liquidCapital).toBe(before - 10_000);
+    expect(liveCorp.bankCharter!.cashReserves).toBe(before - 10_000);
     expect(sumPositionMarks(liveCorp.bankCharter?.propBook)).toBe(10_000);
 
     // Mark price up: sharePrice 12 → close realizes gain from market.
@@ -226,7 +245,7 @@ describe("propTrading open/close/mark", () => {
     if (!closed.ok) return;
     expect(closed.proceeds).toBe(12_000);
     expect(closed.realizedPnl).toBe(2_000);
-    expect(liveCorp.liquidCapital).toBe(before + 2_000);
+    expect(liveCorp.bankCharter!.cashReserves).toBe(before + 2_000);
     expect(liveCorp.bankCharter?.propBook ?? []).toHaveLength(0);
   });
 
@@ -255,18 +274,18 @@ describe("propTrading open/close/mark", () => {
       ],
       propBookMarkValue: 1_000,
     });
-    const cashBefore = liveCorp.liquidCapital;
+    const cashBefore = liveCorp.bankCharter!.cashReserves;
     equityCorp.sharePrice = 15;
     const marked = await markBook(db as unknown as Db, liveCorp.bankCharter);
     expect(marked.propBookMarkValue).toBe(1_500);
-    expect(liveCorp.liquidCapital).toBe(cashBefore);
+    expect(liveCorp.bankCharter!.cashReserves).toBe(cashBefore);
   });
 
   it("force liquidation shrinks mark to leverage cap and returns cash", async () => {
     // L=50k + P=50k + M=1M - D=850k → equity=250k; ratio=4 > 3 → force
-    liveCorp.liquidCapital = 50_000;
     liveCorp.bankCharter = makeCharter({
       postedCapital: 50_000,
+      cashReserves: 50_000,
       interbankDebt: 850_000,
       propBook: [
         {
@@ -285,16 +304,16 @@ describe("propTrading open/close/mark", () => {
     const result = await forceLiquidateToLeverageCap(
       db as unknown as Db,
       corpId,
-      liveCorp.liquidCapital!,
+      liveCorp.bankCharter!.cashReserves!,
       liveCorp.bankCharter!,
       marked
     );
     expect(result.forced).toBe(true);
-    const equity = computePropEquityBase(result.liquidCapital, result.charter);
+    const equity = computePropEquityBase(result.cashReserves, result.charter);
     expect(result.charter.propBookMarkValue ?? 0).toBeLessThanOrEqual(
       PROP_LEVERAGE_MULTIPLE * equity + 1e-6
     );
-    expect(result.liquidCapital + (result.charter.propBookMarkValue ?? 0)).toBeCloseTo(
+    expect(result.cashReserves + (result.charter.propBookMarkValue ?? 0)).toBeCloseTo(
       50_000 + 1_000_000,
       5
     );
@@ -304,7 +323,7 @@ describe("propTrading open/close/mark", () => {
 describe("forced liquidation confidence penalty", () => {
   it("subtracts the provisional flat penalty", () => {
     const base = computeConfidence({
-      liquidCapital: 200_000,
+      cashReserves: 200_000,
       postedCapital: 200_000,
       totalDeposits: 0,
       totalLoans: 0,
@@ -314,7 +333,7 @@ describe("forced liquidation confidence penalty", () => {
       panicTurns: 0,
     });
     const penalized = computeConfidence({
-      liquidCapital: 200_000,
+      cashReserves: 200_000,
       postedCapital: 200_000,
       totalDeposits: 0,
       totalLoans: 0,

@@ -52,7 +52,9 @@ export type ConsolePayload = {
     totalLoans: number;
     npcDeposits: number;
     reserves: number;
-    reserveFloor: number;
+    cashReserves: number;
+    requiredReserves: number;
+    upstreamCapacity: number;
     lendingProfile: LendingProfileId;
     discountWindowDebt: number;
     discountWindowArrears: number;
