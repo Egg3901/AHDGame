@@ -63,7 +63,12 @@ async function ensureResidentTerritorialPartyOrgs(
     .find({
       countryId: "US",
       homeState: { $in: territoryIds },
-      party: { $exists: true, $nin: [null, ""] },
+      // `Character.party` is typed as a string, but characters written before
+      // the field was made non-optional persist it as null, so the runtime
+      // filter has to exclude both null and "". The cast keeps that behaviour
+      // while satisfying `$nin`'s element type; dropping null from the array
+      // would silently count party-less legacy residents as party members.
+      party: { $exists: true, $nin: [null, ""] as unknown as string[] },
     })
     .project<Pick<Character, "homeState">>({ homeState: 1 })
     .toArray();
