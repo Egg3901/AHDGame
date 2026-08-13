@@ -266,6 +266,51 @@ describe("validateNationalPartyInfluence", () => {
     expect(result.error).toMatch(/already.*max/i);
   });
 
+  it("allows a confirmed national campaigner to use NPP management (ticket 1067)", async () => {
+    const campaignerId = new ObjectId();
+    party.chairId = new ObjectId();
+    party.viceChairId = new ObjectId();
+    party.campaignerIds = [campaignerId];
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: campaignerId,
+      userId,
+    });
+
+    const result = await validateNationalPartyInfluence(
+      party,
+      npp,
+      "boost_favorability",
+      0,
+      campaignerId,
+      {}
+    );
+
+    expect(result).toEqual({ valid: true });
+  });
+
+  it("still rejects a party member who is not chair, vice, or campaigner", async () => {
+    const outsiderId = new ObjectId();
+    party.chairId = new ObjectId();
+    party.viceChairId = new ObjectId();
+    party.campaignerIds = [];
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: outsiderId,
+      userId,
+    });
+
+    const result = await validateNationalPartyInfluence(
+      party,
+      npp,
+      "boost_favorability",
+      0,
+      outsiderId,
+      {}
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/confirmed campaigner/i);
+  });
+
   it("still allows boost_favorability when fav is 99", async () => {
     npp.favorability = 99;
     const result = await validateNationalPartyInfluence(
