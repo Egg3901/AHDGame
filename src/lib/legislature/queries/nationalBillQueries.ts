@@ -361,7 +361,12 @@ export async function listNationalLegislatureBills(
                                 ? "Declaration of War"
                                 : provision.type === "join_conflict"
                                   ? "Entry into the Conflict"
-                                  : describeSubsidyProvision(provision);
+                                  : // Excluded from the subsidy catch-all for the
+                                    // same reason as in billEnrichment: it is not
+                                    // a subsidy and reads wrong labelled as one.
+                                    provision.type === "create_department"
+                                    ? "New Department"
+                                    : describeSubsidyProvision(provision);
           return {
             legislationTypeId: provision.type,
             legislationTypeName,

@@ -715,6 +715,19 @@ export async function resolveBillProvisions(
           continue;
         }
 
+        // create_department joined BillProvision without being excluded from
+        // the subsidy fallback below, so it both failed to typecheck and would
+        // have been labelled as a subsidy in the bill view.
+        if (provision.type === "create_department") {
+          provisionsResolved.push({
+            legislationTypeName: "New Department",
+            policyOptionName: `Stand up ${provision.positionId.replace(/_/g, " ")}`,
+            effectDirection: 0,
+            directionLabel: "Center",
+          });
+          continue;
+        }
+
         const subsidyProvision = formatSubsidyProvisionLabel(provision);
         provisionsResolved.push({
           legislationTypeName: subsidyProvision.legislationTypeName,
