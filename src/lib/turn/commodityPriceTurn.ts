@@ -70,6 +70,7 @@ import {
 } from "@/lib/turn/householdConsumption";
 import { buildCommodityFlowDocs, COMMODITY_FLOW_RETENTION_TURNS } from "@/lib/market/flowLedger";
 import { runSourcingPass } from "@/lib/logistics/sourcing";
+import { applyFreightHaulDemand } from "@/lib/logistics/freightDemand";
 import { buildSourcingDocs, SOURCING_FLOW_RETENTION_TURNS } from "@/lib/logistics/sourcingLedger";
 import { stateHops } from "@/lib/logistics/stateDistance";
 import { importerTariffOnFlow } from "@/lib/trade/tariffDrag";
@@ -1181,6 +1182,15 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         db.collection("sourcingNetworkLoad").deleteMany({ turn: { $lt: sourcingPruneCutoff } }),
       ]);
     }
+
+    // Freight demand wiring (ticket #1039): haul TEU is booked as real freight
+    // demand before clearing, so the Logistics map and sold % read one market.
+    applyFreightHaulDemand(sourcingResult.freightTeuByState, {
+      global,
+      byState,
+      byCountry,
+      stateToCountry,
+    });
   }
 
   const tradeClearing = clearAllCommodities(COUNTRY_ORDER, byCountry, affinityFor, capUnitsFor);
