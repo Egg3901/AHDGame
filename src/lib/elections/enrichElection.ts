@@ -566,6 +566,10 @@ export async function _enrichElection(
   // current tally), instead of the statewide proportional estimate above — so
   // the live "Projected Seats" panel matches how the race will actually resolve.
   // Falls back to the proportional estimate for states with no districts drawn.
+  // Read-only: `persist` is left off, so this projection cannot write holders.
+  // It used to, which meant opening a live House race rewrote that state's
+  // sitting members from an in-progress tally, and wrote `npps` ids into
+  // `holderCharacterId` because this path has no NPP id map.
   if (
     election.electionType === "house" &&
     (countryId ?? "US") === "US" &&
