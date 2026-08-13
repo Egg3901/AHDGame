@@ -21,7 +21,11 @@ import type {
   GameConfig,
   GameState,
   ExchangeRate,
+  Bond,
 } from "@/lib/db/types";
+import type { CurrencyCode } from "@/lib/constants/currencies";
+import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
+import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
 import type { NPP } from "@/lib/db/types/npp";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import {
@@ -420,6 +424,33 @@ interface NppCorpDecisionContext {
    * Absent/false leaves wages untouched so pre-labour worlds stay byte-identical.
    */
   labourWagesEnabled?: boolean;
+  /**
+   * NET per-turn debt service in ₳: issuer interest paid out, less coupon
+   * collected on bonds the corp holds. Positive is a drag.
+   *
+   * WHY THIS EXISTS. Until this field the brain had no concept of debt at all
+   * (`grep -c bond` over this module returned 0), so its profitability signal
+   * measured operations and corporate overhead and nothing else. A corp whose
+   * bond interest exceeds its entire operating profit therefore read as
+   * healthy, and the AI running it kept the overhead, never deleveraged and
+   * never reacted, while the share price fell every turn.
+   *
+   * Measured on prod at turn 79, corp 446 (Meyer Logistics), the corp this was
+   * found on: revenue ₳30,463, total costs ₳25,123, operating profit ₳5,340,
+   * bond coupon income ₳386, bond interest expense ₳6,390. Net income −₳664.
+   * Six sectors at 21.9-37.6% margin, five of six selling out. The operations
+   * were never the problem. Share price 17.35 → 4.38 across turns 59-79.
+   *
+   * This is the same class of blindness the module has been fixed for twice
+   * already: it read seeded `profitMargin` instead of the effective margin, and
+   * nominal instead of realized revenue. Each time the signal was stable and
+   * wrong, so the AI confidently did the wrong thing. Debt service is the third
+   * instance.
+   *
+   * Absent (pre-wiring callers, and every test that does not set it) leaves the
+   * old signal exactly as it was.
+   */
+  debtServiceAnchor?: number;
 }
 
 /**
@@ -729,6 +760,31 @@ export async function processNppCorporationDecisions(
     }
   }
 
+  // ─── Debt service, loaded once for the cohort ─────────────────────────────
+  // Same two maps `buildCorporationLookups` builds for the turn engine, and the
+  // same helpers it charges with, so the brain reads the number the engine
+  // actually bills rather than an approximation of it. Issuer side is corporate
+  // bonds only; holder side keeps sovereigns, because a corp parking cash in
+  // treasuries genuinely collects that coupon.
+  const activeBonds = await db.collection<Bond>("bonds").find({ matured: false }).toArray();
+  const issuerBondsByCorpId = new Map<string, Bond[]>();
+  const heldBondsByCorpId = new Map<string, { bond: Bond; units: number }[]>();
+  for (const b of activeBonds) {
+    if (isCorporateIssuerBond(b)) {
+      const cid = b.corporationId.toString();
+      const list = issuerBondsByCorpId.get(cid) ?? [];
+      list.push(b);
+      issuerBondsByCorpId.set(cid, list);
+    }
+    for (const h of b.holders ?? []) {
+      const holderCorpId = h.corporationId?.toString();
+      if (!holderCorpId) continue;
+      const held = heldBondsByCorpId.get(holderCorpId) ?? [];
+      held.push({ bond: b, units: h.units });
+      heldBondsByCorpId.set(holderCorpId, held);
+    }
+  }
+
   const labourCfg = await db
     .collection<GameConfig>("gameConfig")
     .findOne({ _id: "default" }, { projection: { labourSystemMode: 1 } });
@@ -748,6 +804,14 @@ export async function processNppCorporationDecisions(
         now,
         fxRate: (corpCurrency && fxByCurrency.get(corpCurrency)) || 1,
         fxByCurrency,
+        debtServiceAnchor: netPerTurnDebtServiceAnchor({
+          issuerBonds: issuerBondsByCorpId.get(corp._id.toString()),
+          heldPositions: heldBondsByCorpId.get(corp._id.toString()),
+          fxByCurrency: fxByCurrency as ReadonlyMap<CurrencyCode, number>,
+          // The government bond subsidy waives issuer interest for national
+          // enterprises, exactly as `perTurnBondDragOnNetIncome` does.
+          isNationalEnterprise: !!corp.countryOwnerId,
+        }),
         modifiers: ceoArchetypeModifiers(archetype),
         labourWagesEnabled,
       },
@@ -1087,7 +1151,19 @@ export function makeNppCorpDecision(
     (corp.logisticsBudget ?? 0) +
     (corp.rdBudget ?? 0) +
     (corp.ceoSalary ?? 0);
-  const totalIncome = grossRealizedIncome - priorOverhead;
+  // (3) Blind to its own debt. `priorOverhead` covers what the corp CHOOSES to
+  //     spend; it says nothing about what the corp is CONTRACTED to pay. Bond
+  //     interest is not discretionary, is often the largest single line on a
+  //     levered corp's books, and was entirely absent from this signal, so a
+  //     corp could be comfortably operating-profitable and still losing money
+  //     every turn with the brain reading it as healthy. See
+  //     `NppCorpDecisionContext.debtServiceAnchor` for the measured case.
+  //
+  //     Charged in the corp's own currency, because `priorOverhead` and
+  //     `grossRealizedIncome` are already corp-local and `debtServiceAnchor` is
+  //     ₳, the same conversion every other money constant in this module takes.
+  const debtServiceLocal = toCorpLocal(ctx.debtServiceAnchor ?? 0);
+  const totalIncome = grossRealizedIncome - priorOverhead - debtServiceLocal;
   const corpMargin = totalRevenue > 0 ? (totalIncome / totalRevenue) * 100 : 0;
   const isProfitable = totalIncome > 0 && profitableSectors > 0;
 
