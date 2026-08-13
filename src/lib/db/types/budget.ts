@@ -171,6 +171,13 @@ export interface EconomicGrowthFactors {
   tradeGrowth: number; // Import/export growth
   lastUpdated: Date;
 
+  /**
+   * Country household price level relative to the world's launch/reset level
+   * (`1` = baseline). Advanced from settled CPI with partial pass-through.
+   * It is a readout for real purchasing power, never an input to CPI.
+   */
+  householdPriceIndex?: number;
+
   // ── Command-economy readouts (P1+) ────────────────────────────────────────
   // Present only for planned economies while `commandEconomyEnabled` is on;
   // undefined for market economies / flag off. See @/lib/economy/commandEconomyState.

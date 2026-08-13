@@ -8,8 +8,10 @@ import { RealEconomyPanel } from "./RealEconomyPanel";
 const realEconomy = {
   wageGrowth: 1.8,
   tradeGrowth: -0.4,
+  householdPriceIndex: 1.25,
   unemployment: { value: 4.6, trend: -0.2 },
   medianIncome: { value: 74_200, trend: 1.1 },
+  realMedianIncome: 59_360,
   population: 151_300_000,
 };
 
@@ -31,6 +33,10 @@ describe("RealEconomyPanel", () => {
     expect(screen.getByText("4.6%")).toBeTruthy();
     expect(screen.getByText("Median income")).toBeTruthy();
     expect(screen.getByText("$74200")).toBeTruthy();
+    expect(screen.getByText("Real median income")).toBeTruthy();
+    expect(screen.getByText("$59360")).toBeTruthy();
+    expect(screen.getByText("Household prices")).toBeTruthy();
+    expect(screen.getByText("125.0")).toBeTruthy();
     // SP6 statistics-home rows
     expect(screen.getByText("GDP per capita")).toBeTruthy();
     expect(screen.getByText("$2600")).toBeTruthy();
@@ -93,8 +99,10 @@ describe("RealEconomyPanel", () => {
         realEconomy={{
           wageGrowth: null,
           tradeGrowth: null,
+          householdPriceIndex: 1,
           unemployment: { value: null, trend: null },
           medianIncome: { value: null, trend: null },
+          realMedianIncome: null,
           population: null,
         }}
         gdpPerCapita={null}
