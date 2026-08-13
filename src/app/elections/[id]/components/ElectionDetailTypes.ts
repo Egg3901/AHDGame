@@ -266,7 +266,7 @@ export interface ElectionDetail {
 
   /**
    * Per-party presidential coattail percentage tilt (presidentialModifier − 1,
-   * ×100) for the Presidential Coattails row — the sitting President's party at
+   * ×100) for the Presidential Popularity row — the sitting President's party at
    * its national-approval-driven multiplier. General-phase non-presidential races.
    */
   presidentialCoattailPctByParty?: Record<string, number>;
