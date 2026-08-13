@@ -220,7 +220,7 @@ const NPP_REINVEST_MAINTENANCE_CASH_SHARE = 0.25;
 // run. Measured on prod at turn 79 across a 200-corp sample of the 476 NPP-run
 // corps: median liquid capital ₳1,724,110, and 105 of 200 sat BELOW the floor.
 // Over half the AI cohort was therefore locked out of expanding, paying a
-// dividend, or buying growth capacity — permanently, because a corp under the
+// dividend, or buying growth capacity, permanently, because a corp under the
 // floor cannot spend to earn its way back over it. The visible symptom is a
 // corp with healthy sectors (20-35% margins, selling out) whose share price
 // falls for twenty turns while it sits on idle cash doing nothing.
@@ -232,7 +232,7 @@ const NPP_REINVEST_MAINTENANCE_CASH_SHARE = 0.25;
 // The whole family moves by the same factor so the DESIGN RATIOS are untouched:
 // the floor is still 2x the safety rail, and expansion still demands 2.5x the
 // floor in surplus on top of it. Only the scale changed. At ₳250,000 the same
-// prod sample drops from 105/200 frozen to 36/200 — the remainder are corps
+// prod sample drops from 105/200 frozen to 36/200. The remainder are corps
 // that are genuinely broke, which is what the rail is for.
 //
 // STILL A CONSTANT, STILL WRONG IN PRINCIPLE. The cohort's cash spans four

@@ -1,5 +1,5 @@
 /**
- * REGRESSION — the NPP cash rails must be reachable in a 1953-scale world.
+ * REGRESSION: the NPP cash rails must be reachable in a 1953-scale world.
  *
  * `CASH_FLOOR` / `SAFE_CASH_FLOOR_MIN` / `EXPANSION_MIN_CASH` gate EVERY
  * discretionary decision the brain makes: dividends (section 4), expansion
@@ -10,7 +10,7 @@
  * Measured on prod at turn 79, across a 200-corp sample of the 476 NPP-run
  * corps: median liquid capital ₳1,724,110, and 105 of 200 BELOW the floor. Over
  * half the AI cohort was locked out of expanding, paying a dividend or buying
- * growth capacity — permanently, since a corp under the floor cannot spend to
+ * growth capacity, permanently, since a corp under the floor cannot spend to
  * earn its way back over it. The visible symptom was a corp with healthy
  * sectors (20-35% margins, selling out) whose share price fell for twenty turns
  * while it sat on idle cash doing nothing. Meyer Logistics, prod corp 446, is
@@ -111,7 +111,7 @@ describe("NPP cash rails at 1953 scale", () => {
   it("pays a dividend at a cash level the old ₳2,000,000 floor froze", () => {
     // cautious floor = max(SAFE_CASH_FLOOR_MIN, CASH_FLOOR × 1.5) = ₳375,000.
     // Under the old constants that was max(1,000,000, 3,000,000) = ₳3,000,000,
-    // so this corp — profitable, 30% margin — paid nothing.
+    // so this corp, profitable at a 30% margin, paid nothing.
     const decision = decide(1_000_000, "cautious");
     expect(decision.updates.dividendRate).toBeGreaterThan(0);
   });
@@ -126,7 +126,7 @@ describe("NPP cash rails at 1953 scale", () => {
   });
 
   it("still refuses a corp genuinely below its floor", () => {
-    // The rail must keep doing its job — ₳50,000 is under every archetype's
+    // The rail must keep doing its job: ₳50,000 is under every archetype's
     // floor, so no dividend and no expansion.
     const decision = decide(50_000, "aggressive");
     expect(decision.updates.dividendRate ?? 0).toBe(0);
@@ -136,7 +136,7 @@ describe("NPP cash rails at 1953 scale", () => {
   it("lets a mid-size corp reach the expansion gate", () => {
     // cautious expansion needs surplus > EXPANSION_MIN_CASH × 1.5 = ₳937,500
     // on top of the ₳375,000 floor. Under the old constants that was ₳7,500,000
-    // of surplus over a ₳3,000,000 floor — unreachable for most of the cohort.
+    // of surplus over a ₳3,000,000 floor, unreachable for most of the cohort.
     const decision = decide(4_000_000, "cautious");
     expect(decision.newSectors).toHaveLength(1);
   });
