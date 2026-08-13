@@ -158,7 +158,7 @@ describe("banking lending", () => {
       expect(result).toEqual({ ok: false, error: "Private banking is not enabled" });
     });
 
-    it("rejects investment charters", async () => {
+    it("rejects an investment charter lending to an INDIVIDUAL (firms are allowed)", async () => {
       const bankId = new ObjectId();
       db.collectionMocks.corporations!.findOne.mockResolvedValue(
         makeBankCorp(makeActiveRetailCharter({ type: "investment" }), { _id: bankId })
@@ -173,7 +173,7 @@ describe("banking lending", () => {
       );
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error).toMatch(/Investment banks/i);
+        expect(result.error).toMatch(/lends to corporations, not to individuals/i);
       }
     });
 
