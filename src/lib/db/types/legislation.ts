@@ -319,6 +319,20 @@ export interface CentralBankIndependenceProvision {
   action: "grant" | "revoke";
 }
 
+/**
+ * Structural act that splits a combined cabinet department in two. The historical
+ * case is the Department of Education Organization Act (1979-80), which carved the
+ * Department of Education out of Health, Education, and Welfare (HEW), leaving HHS.
+ * Passage enables `positionId` regardless of its era `yearEnabled` (recorded in
+ * `gameState.manuallyEnabledSeats`) and renames the parent seat to its post-split
+ * name. See `applyCreateDepartmentProvision` and `rosterEra.isSeatActive`.
+ */
+export interface CreateDepartmentProvision {
+  type: "create_department";
+  /** Seat id to bring into existence early, e.g. "secretary_of_education". */
+  positionId: string;
+}
+
 export type BillProvision =
   | PolicyProvision
   | TariffProvision
@@ -334,6 +348,7 @@ export type BillProvision =
   | UnionLawProvision
   | ElectoralLawProvision
   | CentralBankIndependenceProvision
+  | CreateDepartmentProvision
   | DeclareWarProvision
   | JoinConflictProvision;
 
@@ -359,7 +374,8 @@ export function isPolicyProvision(p: BillProvision): p is PolicyProvision {
     p.type !== "euro_adoption" &&
     p.type !== "union_law" &&
     p.type !== "electoral_law" &&
-    p.type !== "central_bank_independence"
+    p.type !== "central_bank_independence" &&
+    p.type !== "create_department"
   );
 }
 

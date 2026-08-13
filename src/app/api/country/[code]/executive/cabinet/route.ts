@@ -17,7 +17,7 @@ import {
 } from "@/lib/constants/countries";
 import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { resolveCabinetRoster } from "@/lib/cabinet/rosterEra";
-import { getLiveGameYear } from "@/lib/cabinet/liveGameYear";
+import { getLiveGameYear, getManuallyEnabledSeats } from "@/lib/cabinet/liveGameYear";
 import type { Character, PoliticalParty } from "@/lib/db/types";
 import type { UnifiedCabinetMember } from "@/lib/db/types/unifiedCabinetMember";
 import { ObjectId } from "mongodb";
@@ -158,7 +158,8 @@ async function handleParliamentaryCabinet(countryId: CountryId) {
 
   const cabinetPositions = resolveCabinetRoster(
     getCabinetPositions(countryId),
-    await getLiveGameYear(db)
+    await getLiveGameYear(db),
+    await getManuallyEnabledSeats(db)
   );
 
   // Build positions with members and cooldowns
