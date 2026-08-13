@@ -24,6 +24,9 @@ import type {
 import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { concentrationStatus } from "@/lib/nationalization/concentrationStatus";
 import { getTreasuryIdentity } from "@/lib/constants/treasuryIdentity";
+import { budgetUsdEquivalent } from "@/lib/currency/budgetUsdEquivalent";
+import { currencySymbolSep } from "@/lib/currency/symbolSep";
+import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { budgetApiUrl } from "@/lib/urls";
 import { getCurrencyPrefix } from "@/lib/utils/budgetCalculations";
 
@@ -581,6 +584,7 @@ function getNumericField(record: unknown, key: string): number | undefined {
 
 export function NationalBudgetClient() {
   const { code } = useParams<{ code: string }>();
+  const { preset, loaded: worldFlagsLoaded } = useWorldFlags();
   const countryParam = code?.toUpperCase() as CountryId | undefined;
   const countryId: CountryId =
     countryParam && countryParam in COUNTRY_CONFIGS
@@ -624,19 +628,26 @@ export function NationalBudgetClient() {
   const isStaleCountryBudget =
     data?.budget?.countryId != null && data.budget.countryId !== countryId;
 
-  const formatMoney = useMemo(
-    () => (n: number) => {
-      if (n >= 1e12 || n <= -1e12) return `${moneyPrefix}${(n / 1e12).toFixed(1)}T`;
-      if (n >= 1e9 || n <= -1e9) return `${moneyPrefix}${(n / 1e9).toFixed(1)}B`;
-      return `${moneyPrefix}${(n / 1e6).toFixed(1)}M`;
-    },
-    [moneyPrefix]
-  );
+  const formatMoney = useMemo(() => {
+    const sep = currencySymbolSep(moneyPrefix);
+    return (n: number) => {
+      const sign = n < 0 ? "-" : "";
+      const abs = Math.abs(n);
+      const body =
+        abs >= 1e12
+          ? `${(abs / 1e12).toFixed(1)}T`
+          : abs >= 1e9
+            ? `${(abs / 1e9).toFixed(1)}B`
+            : `${(abs / 1e6).toFixed(1)}M`;
+      return `${sign}${moneyPrefix}${sep}${body}`;
+    };
+  }, [moneyPrefix]);
 
-  const formatUnitMoney = useMemo(
-    () => (n: number) => `${moneyPrefix}${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`,
-    [moneyPrefix]
-  );
+  const formatUnitMoney = useMemo(() => {
+    const sep = currencySymbolSep(moneyPrefix);
+    return (n: number) =>
+      `${moneyPrefix}${sep}${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  }, [moneyPrefix]);
 
   if (loading || isStaleCountryBudget) {
     return (
@@ -915,6 +926,9 @@ export function NationalBudgetClient() {
               treasuryReserve={treasuryBalance}
               compare={compare}
               prev={prevFyPoint}
+              toUsd={
+                worldFlagsLoaded ? (n) => budgetUsdEquivalent(n, countryId, preset) : undefined
+              }
             />
           }
         />

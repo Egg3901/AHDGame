@@ -1,5 +1,6 @@
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
+import { currencySymbolSep } from "@/lib/currency/symbolSep";
 import {
   COUNTRIES_WITH_CONCURRENT_GENERAL_ELECTIONS,
   type CountryId,
@@ -230,10 +231,11 @@ export function formatIndex100(value: number): string {
  * @returns Formatted string (e.g., "$1.2M", "£263K", "¥500")
  */
 export function formatFundsCompact(amount: number, symbol = "$"): string {
-  if (!Number.isFinite(amount)) return `${symbol}—`;
+  const sep = currencySymbolSep(symbol);
+  if (!Number.isFinite(amount)) return `${symbol}${sep}—`;
   const plain = formatCompactNumber(amount);
-  if (plain.startsWith("-")) return `-${symbol}${plain.slice(1)}`;
-  return `${symbol}${plain}`;
+  if (plain.startsWith("-")) return `-${symbol}${sep}${plain.slice(1)}`;
+  return `${symbol}${sep}${plain}`;
 }
 
 /**
@@ -290,7 +292,8 @@ export function formatCurrencyCompactChip(amount: number, symbol = "$"): string 
  * @param symbol - Currency symbol to prefix (defaults to "$")
  */
 export function formatFundsCompact1dp(amount: number, symbol = "$"): string {
-  if (!Number.isFinite(amount)) return `${symbol}—`;
+  const sep = currencySymbolSep(symbol);
+  if (!Number.isFinite(amount)) return `${symbol}${sep}—`;
   const neg = amount < 0;
   const abs = Math.abs(amount);
   let core: string;
@@ -305,7 +308,7 @@ export function formatFundsCompact1dp(amount: number, symbol = "$"): string {
   } else {
     core = abs.toFixed(1);
   }
-  return `${neg ? "-" : ""}${symbol}${core}`;
+  return `${neg ? "-" : ""}${symbol}${sep}${core}`;
 }
 
 /**
