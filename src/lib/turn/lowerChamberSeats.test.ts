@@ -22,7 +22,8 @@ describe("lowerChamberMajorityThreshold", () => {
   it("is a simple majority of the chamber", () => {
     expect(lowerChamberMajorityThreshold(160)).toBe(81); // baseline Dáil
     expect(lowerChamberMajorityThreshold(225)).toBe(113); // Dáil after NI joins
-    expect(lowerChamberMajorityThreshold(650)).toBe(326); // Commons
+    expect(lowerChamberMajorityThreshold(650)).toBe(326); // modern Commons
+    expect(lowerChamberMajorityThreshold(625)).toBe(313); // 1950–55 Commons
   });
 });
 
@@ -53,6 +54,18 @@ describe("getLiveLowerChamberSeats", () => {
     const deSeats = getCountryConfig("DE").legislature.lowerChamber.seats;
     expect(await getLiveLowerChamberSeats(db as unknown as Db, "DE")).toBe(deSeats);
     expect(deSeats).not.toBe(299);
+  });
+
+  it("uses the 1953 Commons size (625) when the world preset is 1953-default", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1953-default" });
+    db.collection("states").find.mockReturnValue(cursorOf([]));
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "UK")).toBe(625);
+  });
+
+  it("uses the modern Commons size (650) outside 1953", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "2019-default" });
+    db.collection("states").find.mockReturnValue(cursorOf([]));
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "UK")).toBe(650);
   });
 });
 

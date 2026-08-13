@@ -12,7 +12,8 @@ import type {
   ElectionCandidate,
   ElectedOfficial,
 } from "@/lib/db/types";
-import { UK_COMMONS_SEATS } from "@/lib/constants";
+import { getUkCommonsSeats } from "@/lib/constants/states";
+import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { allocateSeats, getMajoritarianBonus } from "@/lib/turn/election/seatAllocation";
 import { loadCommonsOrgRankings } from "@/lib/turn/election/commonsOrgRanking";
 
@@ -35,6 +36,7 @@ export async function GET() {
     if (!auth.ok) return auth.response;
 
     const db = await getDb();
+    const commonsSeats = getUkCommonsSeats(await getGameStatePreset(db));
 
     // Find most recent resolved commons elections per UK region
     const recentElections = await db
@@ -86,7 +88,7 @@ export async function GET() {
     for (const [region, election] of latestByRegion) {
       const officials = officialsByRegion.get(region) ?? [];
       const actualSeats = officials.reduce((sum, o) => sum + (o.seatsHeld ?? 1), 0);
-      const expectedSeats = UK_COMMONS_SEATS[region] ?? election.totalSeats ?? 0;
+      const expectedSeats = commonsSeats[region] ?? election.totalSeats ?? 0;
 
       let status: "missing" | "mismatch" | "ok" = "ok";
       if (officials.length === 0) {
@@ -136,6 +138,7 @@ export async function POST() {
     if (!auth.ok) return auth.response;
 
     const db = await getDb();
+    const commonsSeats = getUkCommonsSeats(await getGameStatePreset(db));
     const now = new Date();
 
     // Find most recent resolved commons elections per UK region
@@ -231,7 +234,7 @@ export async function POST() {
 
       if (ranked.length === 0) continue;
 
-      const totalSeats = election.totalSeats ?? UK_COMMONS_SEATS[region] ?? 1;
+      const totalSeats = election.totalSeats ?? commonsSeats[region] ?? 1;
       const { winners } = allocateSeats(
         "commons",
         region,
@@ -241,7 +244,9 @@ export async function POST() {
         undefined,
         majoritarianBonus && orgRankings.get(region)?.length
           ? { ...majoritarianBonus, orgRanking: orgRankings.get(region) }
-          : majoritarianBonus
+          : majoritarianBonus,
+        undefined,
+        commonsSeats
       );
 
       for (const [candidateId, seats] of winners) {

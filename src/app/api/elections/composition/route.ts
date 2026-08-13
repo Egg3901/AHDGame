@@ -19,6 +19,7 @@ import { isPrimaryEnded } from "@/lib/elections/phases";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { resolveOfficeKeyForElectionType } from "@/lib/elections/officeResolution";
 import { COUNTRY_CONFIGS, type ChamberConfig, type CountryId } from "@/lib/constants/countries";
+import { getLiveLowerChamberSeats, getLiveUpperChamberSeats } from "@/lib/turn/lowerChamberSeats";
 import type {
   Election,
   ElectedOfficial,
@@ -138,11 +139,19 @@ export async function GET(request: Request) {
         });
     }
 
-    async function buildChamber(chamber: ChamberConfig): Promise<ChamberCompositionData> {
+    async function buildChamber(
+      chamber: ChamberConfig,
+      isLower: boolean
+    ): Promise<ChamberCompositionData> {
       // Seated members are stored under the office type, which is not always the
       // chamber key (CN: chamber "npc" -> office "npcDelegate").
       const officeType = getOfficeTypeForChamber(countryId, chamber.key);
       const multiSeat = chamber.seats > 1;
+      // Live size (era overlay + region sum) so a 1953 Commons is 625, not the
+      // modern-config 650 (ticket #1078).
+      const totalSeats = isLower
+        ? await getLiveLowerChamberSeats(db, countryId)
+        : await getLiveUpperChamberSeats(db, countryId);
 
       const chamberOfficials = officials.filter((o) => o.officeType === officeType);
       const current = new Map<string, number>();
@@ -249,7 +258,7 @@ export async function GET(request: Request) {
       return {
         key: chamber.key,
         name: chamber.name,
-        totalSeats: chamber.seats,
+        totalSeats,
         current: toPartySeats(current),
         projected: toPartySeats(projected),
         inGeneral: generalElections.length > 0,
@@ -257,8 +266,8 @@ export async function GET(request: Request) {
     }
 
     const [lowerData, upperData] = await Promise.all([
-      lower ? buildChamber(lower) : Promise.resolve(null),
-      upper ? buildChamber(upper) : Promise.resolve(null),
+      lower ? buildChamber(lower, true) : Promise.resolve(null),
+      upper ? buildChamber(upper, false) : Promise.resolve(null),
     ]);
 
     const upperOfficeType = upper ? getOfficeTypeForChamber(countryId, upper.key) : null;
