@@ -18,6 +18,7 @@ import { RecapitalizePanel } from "./RecapitalizePanel";
 import { PropBookPanel } from "./PropBookPanel";
 import { InterbankPanel } from "./InterbankPanel";
 import { RevokeCharterForm } from "./RevokeCharterForm";
+import { CharterSwitchForm } from "./CharterSwitchForm";
 
 export function ActiveCharterPanel({
   data,
@@ -228,6 +229,12 @@ export function ActiveCharterPanel({
               {formatBankMoney(charter.postedCapital, charter.currency)}.
             </p>
           </section>
+          <CharterSwitchForm
+            data={data}
+            canMutate={canMutate}
+            onChanged={onChanged}
+            showToast={showToast}
+          />
           {data.canRevoke ? (
             <RevokeCharterForm
               corporationId={data.corporation.id}

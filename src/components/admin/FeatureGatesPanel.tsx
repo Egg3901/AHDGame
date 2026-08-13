@@ -16,6 +16,11 @@ interface BooleanGate {
 const BOOLEAN_GATES: BooleanGate[] = [
   { key: "forexEnabled", label: "Forex", desc: "Multi-currency exchange-rate system." },
   {
+    key: "nppCorpStrategyEnabled",
+    label: "NPP corp strategy loop",
+    desc: "NPP-run corporations switch approach (expand, harvest, defend, retrench, pivot) when the current one stops improving their margin. Off pins every corp to expand, which is the pre-v5 behaviour.",
+  },
+  {
     key: "playerRandomEventsEnabled",
     label: "Player random events",
     desc: "PREE offers new players random events.",
