@@ -312,6 +312,23 @@ describe("legacyAdjustedDisplayUnits (#857 grandfather display)", () => {
     ).toBeCloseTo(10 / rate, 6);
   });
 
+  it("ticket #1072: non-legacy redeem ₳ payout equals subscribe cost (shared display basis)", () => {
+    // Subscribe quotes `units * nav` in ₳ then formatFull converts through the
+    // wallet preference. Redeem must start from the same ₳ figure — not native
+    // face × fund symbol — so a DD viewer does not see M376 to buy and $79 to
+    // sell the same unit.
+    const nav = 79;
+    const units = 1;
+    const subscribe = quoteIndexFundSubscription(nav, units);
+    const displayUnits = legacyAdjustedDisplayUnits({
+      units,
+      legacyUnits: 0,
+      fundFxRate: 1,
+      forexEnabled: true,
+    });
+    expect(displayUnits * nav).toBe(subscribe.costAnchor);
+  });
+
   it("returns raw units when forex is off, position is empty, or rate is invalid", () => {
     expect(
       legacyAdjustedDisplayUnits({
