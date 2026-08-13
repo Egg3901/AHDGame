@@ -39,6 +39,7 @@ import {
 } from "@/lib/db/collections/cabinetSettings";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import { resolveMetricPath } from "@/lib/cabinet/resolveMetricPath";
+import { SETTING_CHANGE_COOLDOWN_TURNS } from "@/lib/cabinet/settingCooldowns";
 import {
   computeMinisterialOrderExpiresTurn,
   expireMinisterialOrders,
@@ -51,9 +52,6 @@ import { METRIC_TO_DOMAIN } from "./selectNppBill";
 import { deriveGoverningArchetype, governingArchetypeModifiers } from "./governingArchetype";
 import { loadDomainHealth } from "./governingMetrics";
 import { nppAutonomyAtLeast } from "./featureFlag";
-
-/** Tier settings can only change once per this many turns (matches the API). */
-const TIER_CHANGE_COOLDOWN_TURNS = 24;
 
 /** Map a position metric to its agenda domain, or null if it has no mapping. */
 function domainForMetric(category: string, metricId: string): string | null {
@@ -322,7 +320,7 @@ async function applyMinisterialPlanForMinister(
   // Tier change — respect the 24-turn cooldown, mirroring the settings API.
   const tierCooldownOk =
     setting?.lastChangedTurn === undefined ||
-    currentTurn - setting.lastChangedTurn >= TIER_CHANGE_COOLDOWN_TURNS;
+    currentTurn - setting.lastChangedTurn >= SETTING_CHANGE_COOLDOWN_TURNS;
   if (plan.tier && tierCooldownOk) {
     await settingsCol.updateOne(
       { _id: settingId },
