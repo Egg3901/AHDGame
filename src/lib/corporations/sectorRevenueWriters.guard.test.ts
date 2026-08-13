@@ -155,6 +155,14 @@ interface WriterEntry {
 
 const ALLOWED_WRITERS: Record<string, WriterEntry> = {
   // ─── Reviewed and gated (this sweep) ─────────────────────────────────────
+  "src/lib/nationalization/reverseNationalization.ts": {
+    writeSites: 1,
+    status: "plants-gated",
+    reason:
+      "Hand-back restores formerCapitalStock alongside formerRevenue, so under " +
+      "plants the nameplate is restated from the restored capacity next turn and " +
+      "the revenue write is the legacy view, not the quantity.",
+  },
   "src/lib/turn/corporation/rdInnovation.ts": {
     writeSites: 1,
     status: "plants-gated",
