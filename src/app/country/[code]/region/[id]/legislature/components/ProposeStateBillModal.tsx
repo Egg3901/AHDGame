@@ -13,6 +13,10 @@ import {
 import type { BillCategory } from "@shared/constants/legislation";
 import { PolicyEffectIndicators } from "@/components/legislation/PolicyEffectIndicators";
 import {
+  LawProvisionComparison,
+  BillFiscalImpactStrip,
+} from "@/components/bills/LawProvisionComparison";
+import {
   LegislationTypeOption,
   MAX_PROVISIONS,
   getEconomicLabel,
@@ -84,16 +88,17 @@ export function ProposeStateBillModal({
   // "State" for the US-style state model (which also has a sub-national chamber).
   const billScope = countryConfig.subNationalChamber?.regionalModel ? "Regional" : "State";
 
-  // Fetch legislation types for selected category, scoped to the correct country
+  // Fetch legislation types for selected category, scoped to the correct country.
+  // regionId prices new-gen fiscal estimates at the Land/region GDP, not national.
   useEffect(() => {
     fetch(
-      `/api/game/legislation-types?category=${encodeURIComponent(category)}&scope=state&country=${country}&nocache=1`,
+      `/api/game/legislation-types?category=${encodeURIComponent(category)}&scope=state&country=${country}&regionId=${encodeURIComponent(stateId)}&nocache=1`,
       { cache: "no-store" }
     )
       .then((r) => (r.ok ? r.json() : []))
       .then((list: LegislationTypeOption[]) => setLegislationTypes(list || []))
       .catch(() => setLegislationTypes([]));
-  }, [category, country]);
+  }, [category, country, stateId]);
 
   // Fetch user's action and NPI balance
   useEffect(() => {
@@ -562,17 +567,41 @@ export function ProposeStateBillModal({
                       </div>
                       {/* Explanation text below provision */}
                       {p.legislationTypeId && (
-                        <div className="text-xs text-muted/80 italic pt-1 border-t border-card-border/50 mt-2">
+                        <div className="text-xs pt-1 border-t border-card-border/50 mt-2">
                           {(() => {
                             const selectedOpt = options.find((o) => o.id === p.policyOptionId);
-                            if (selectedOpt?.explanation) return selectedOpt.explanation;
-                            if (type?.explanation) return type.explanation;
-                            if (type?.description) return type.description;
-                            return null;
+                            if (type?.politicalMetricTargets?.length) {
+                              return (
+                                <div className="space-y-1">
+                                  {type.description && (
+                                    <p className="italic text-muted/80">{type.description}</p>
+                                  )}
+                                  {selectedOpt?.explanation && (
+                                    <p className="text-muted">{selectedOpt.explanation}</p>
+                                  )}
+                                </div>
+                              );
+                            }
+                            const explanation =
+                              selectedOpt?.explanation ?? type?.explanation ?? type?.description;
+                            return explanation ? (
+                              <span className="italic text-muted/80">{explanation}</span>
+                            ) : null;
                           })()}
                         </div>
                       )}
-                      {/* Effect indicators */}
+                      {/* New-gen laws: Current law → Proposed with fiscal + metric deltas. */}
+                      {p.legislationTypeId && type && (
+                        <div className="pt-2">
+                          <LawProvisionComparison
+                            countryId={countryId}
+                            lt={type}
+                            currentIndex={currentPolicies[p.legislationTypeId]}
+                            proposedIndex={options.findIndex((o) => o.id === p.policyOptionId)}
+                          />
+                        </div>
+                      )}
+                      {/* Effect indicators (legacy weighted targets + archetype approvals) */}
                       {p.legislationTypeId && (
                         <PolicyEffectIndicators
                           effectTargetsWeighted={type?.effectTargetsWeighted}
@@ -594,6 +623,19 @@ export function ProposeStateBillModal({
                   );
                 })}
               </div>
+              <BillFiscalImpactStrip
+                countryId={countryId}
+                rows={provisions.map((row) => {
+                  const lt = legislationTypes.find((t) => t._id === row.legislationTypeId);
+                  return {
+                    lt,
+                    currentIndex: currentPolicies[row.legislationTypeId],
+                    proposedIndex: (lt?.policyOptions ?? []).findIndex(
+                      (o) => o.id === row.policyOptionId
+                    ),
+                  };
+                })}
+              />
             </div>
           )}
 

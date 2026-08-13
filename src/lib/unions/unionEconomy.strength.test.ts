@@ -14,11 +14,17 @@ describe("union strength", () => {
     expect(unionStrength({ strength: 40 })).toBe(40);
   });
 
-  it("opens the leadership election on strength, only while unowned", () => {
+  it("opens the leadership contest on strength, even while a president sits", () => {
     const atThreshold = LEADERSHIP_ELECTION_MIN_STRENGTH;
-    expect(isUnionLeadershipElectionOpen({ ownerId: null, strength: atThreshold })).toBe(true);
-    expect(isUnionLeadershipElectionOpen({ ownerId: null, strength: atThreshold - 1 })).toBe(false);
-    expect(isUnionLeadershipElectionOpen({ ownerId: null, strength: undefined })).toBe(false);
+    expect(isUnionLeadershipElectionOpen({ strength: atThreshold })).toBe(true);
+    expect(isUnionLeadershipElectionOpen({ strength: atThreshold - 1 })).toBe(false);
+    expect(isUnionLeadershipElectionOpen({ strength: undefined })).toBe(false);
+    // Seated owner no longer closes the contest — CEO-style rolling fight.
+    expect(
+      isUnionLeadershipElectionOpen({
+        strength: atThreshold,
+      })
+    ).toBe(true);
   });
 
   it("needs ten drives from scratch to open an election", () => {

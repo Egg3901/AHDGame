@@ -231,6 +231,15 @@ export interface GameConfig {
    */
   commodityScarcityDriftEnabled?: boolean;
   /**
+   * Money wiring (interstate-logistics plan step 5, phase A): when true, a
+   * sector's input bill adds the landed-price premium for out-of-state
+   * sourcing (last turn's sourcingNetworkLoad doc) on top of the global lagged
+   * price ratio, so plants in states that source interstate/import actually
+   * pay for it. Off (or unset) → inputsCost is unchanged, matching the
+   * record-only sourcing pass behavior from before this flag existed.
+   */
+  interstateMoneyWiringEnabled?: boolean;
+  /**
    * Legacy-stockpile cover cap (week-1 clearing balance pass): when true,
    * shadow-inventory stock above STOCK_COVER_CAP_TURNS × current demand takes
    * an additional EXCESS_STOCK_SPOILAGE_RATE per-turn spoilage on the excess

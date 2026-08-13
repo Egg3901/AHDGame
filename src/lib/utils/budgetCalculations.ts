@@ -41,6 +41,9 @@ export function calculateFederalRevenue(
   const domesticCorporateTax = bases.domesticCorporateProfits * (rates.domesticCorporateTax / 100);
   const foreignCorporateTax = bases.foreignCorporateProfits * (rates.foreignCorporateTax / 100);
   const payrollTax = bases.wagesAndSalaries * (rates.payrollTax / 100);
+  // UI-only estimate on the GDP proxy. The live booking path (budget/revenue.ts)
+  // nets this against real sourced import flow when interstateMoneyWiringEnabled
+  // is on; this client-side display helper intentionally stays on the proxy.
   const tariffs = bases.importValue * (rates.tariffs / 100);
   const salesTax = bases.taxableSales * (rates.salesTax / 100);
   // DE Solidaritätszuschlag — surcharge on income tax owed. Other countries: rates.solidaritySurcharge undefined/0.

@@ -19,8 +19,7 @@ import {
   listCountryGenerals,
 } from "@/lib/db/collections/characterGenerals";
 import { getMilitaryFormations } from "@/lib/db/collections/militaryFormations";
-import { theaterOfUnit } from "@/lib/military/assignments";
-import { postureFloorFor } from "@/lib/military/theaters";
+import { assignmentSet } from "@/lib/military/assignmentSet";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 
 const assignSchema = z.object({ assignedGeneralId: z.string().nullable() });
@@ -86,7 +85,6 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // The unit's theater follows its general's posting (reserve when unassigned/unposted).
     const { conflictAssignments } = await getMilitaryFormations(db, countryId);
-    const theaterId = theaterOfUnit(assignedGeneralId, conflictAssignments);
 
     const col = getMilitaryUnitsCollection(db);
     const existing = await col.findOne(
@@ -96,14 +94,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!existing) {
       return NextResponse.json({ error: "Unit not found" }, { status: 404 });
     }
-    // A unit deployed to a Conflict cannot be Garrison — floor it up to Standard.
-    const posture = postureFloorFor(theaterId, existing.posture);
-    const postureChanged = posture !== existing.posture;
+    const set = assignmentSet(assignedGeneralId, conflictAssignments, existing.posture);
+    const theaterId = set.theaterId;
+    const posture = set.posture ?? existing.posture;
 
-    await col.updateOne(
-      { _id: new ObjectId(unitId), countryId },
-      { $set: { assignedGeneralId, theaterId, ...(postureChanged && { posture }) } }
-    );
+    await col.updateOne({ _id: new ObjectId(unitId), countryId }, { $set: set });
 
     return NextResponse.json({ ok: true, assignedGeneralId, theaterId, posture });
   } catch (error) {

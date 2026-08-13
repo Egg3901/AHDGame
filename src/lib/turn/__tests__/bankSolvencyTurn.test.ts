@@ -20,6 +20,7 @@ function makeCharter(overrides: Partial<BankCharter> = {}): BankCharter {
     currency: "USD",
     charteredTurn: 1,
     postedCapital: 50_000,
+    cashReserves: 50_000,
     depositOffset: 0,
     lendingOffset: 0,
     totalDeposits: 1_000_000,
@@ -195,6 +196,9 @@ describe("processBankSolvencyTurn", () => {
       };
       if (u.$inc) {
         for (const [key, value] of Object.entries(u.$inc)) {
+          if (key === "bankCharter.cashReserves" && live.bankCharter) {
+            live.bankCharter.cashReserves = (live.bankCharter.cashReserves ?? 0) + value;
+          }
           if (key === "liquidCapital") {
             live.liquidCapital = (live.liquidCapital ?? 0) + value;
           } else if (key.startsWith("bankCharter.")) {
@@ -352,6 +356,7 @@ describe("processBankSolvencyTurn", () => {
     const corp = makeBankCorp(
       makeCharter({
         postedCapital: 50_000,
+        cashReserves: 50_000,
         totalDeposits: 1_000_000,
         totalLoans: 300_000,
         npcDeposits,
@@ -383,6 +388,7 @@ describe("processBankSolvencyTurn", () => {
     const corp = makeBankCorp(
       makeCharter({
         postedCapital: 10_000,
+        cashReserves: 10_000,
         totalDeposits: 1_000_000,
         totalLoans: 500_000,
         npcDeposits,
@@ -431,6 +437,7 @@ describe("processBankSolvencyTurn", () => {
         status: "failed",
         failedTurn: TURN - 5,
         postedCapital: 0,
+        cashReserves: 0,
         totalDeposits: 40_000,
         npcDeposits: 40_000,
         lastSolvencyTurn: TURN - 5,
@@ -456,6 +463,7 @@ describe("processBankSolvencyTurn", () => {
     const failing = makeBankCorp(
       makeCharter({
         postedCapital: 10_000,
+        cashReserves: 10_000,
         totalDeposits: 1_000_000,
         totalLoans: 500_000,
         npcDeposits: 500_000,
@@ -467,6 +475,7 @@ describe("processBankSolvencyTurn", () => {
     const usdPeer = makeBankCorp(
       makeCharter({
         postedCapital: 500_000,
+        cashReserves: 500_000,
         totalDeposits: 100_000,
         totalLoans: 10_000,
         npcDeposits: 50_000,
@@ -478,6 +487,7 @@ describe("processBankSolvencyTurn", () => {
     const gbpPeer = makeBankCorp(
       makeCharter({
         postedCapital: 500_000,
+        cashReserves: 500_000,
         totalDeposits: 100_000,
         totalLoans: 10_000,
         npcDeposits: 50_000,
@@ -517,6 +527,7 @@ describe("processBankSolvencyTurn", () => {
     const failing = makeBankCorp(
       makeCharter({
         postedCapital: 10_000,
+        cashReserves: 10_000,
         totalDeposits: 1_000_000,
         totalLoans: 500_000,
         npcDeposits: 500_000,
@@ -527,6 +538,7 @@ describe("processBankSolvencyTurn", () => {
     const peer = makeBankCorp(
       makeCharter({
         postedCapital: 500_000,
+        cashReserves: 500_000,
         totalDeposits: 100_000,
         totalLoans: 10_000,
         npcDeposits: 50_000,
@@ -551,6 +563,7 @@ describe("processBankSolvencyTurn", () => {
     const corp = makeBankCorp(
       makeCharter({
         postedCapital: 500_000,
+        cashReserves: 500_000,
         totalDeposits: 100_000,
         totalLoans: 10_000,
         npcDeposits: 50_000,
@@ -572,6 +585,7 @@ describe("processBankSolvencyTurn", () => {
     const corp = makeBankCorp(
       makeCharter({
         postedCapital: 50_000,
+        cashReserves: 50_000,
         totalDeposits: 1_000_000,
         totalLoans: 300_000,
         npcDeposits: 1_000_000,
@@ -603,6 +617,7 @@ describe("processBankSolvencyTurn", () => {
       makeCharter({
         type: "investment",
         postedCapital: 50_000,
+        cashReserves: 50_000,
         totalDeposits: 0,
         totalLoans: 0,
         npcDeposits: 0,
@@ -647,8 +662,7 @@ describe("processBankSolvencyTurn", () => {
     expect(summary.forcedLiquidations).toBe(1);
     const live = liveCorps.get(ib._id.toString())!;
     const equity =
-      (live.liquidCapital ?? 0) +
-      (live.bankCharter!.postedCapital ?? 0) +
+      (live.bankCharter!.cashReserves ?? 0) +
       (live.bankCharter!.propBookMarkValue ?? 0) -
       (live.bankCharter!.interbankDebt ?? 0) -
       (live.bankCharter!.cbMarginDebt ?? 0);
@@ -673,6 +687,7 @@ describe("processBankSolvencyTurn", () => {
       makeCharter({
         type: "investment",
         postedCapital: 0,
+        cashReserves: 0,
         totalDeposits: 0,
         totalLoans: 0,
         npcDeposits: 0,

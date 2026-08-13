@@ -2,9 +2,19 @@
  * @vitest-environment happy-dom
  */
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render as rtlRender, screen } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
 import type { ElectionDisplay } from "@/lib/db/types";
 import { ElectionMap } from "./ElectionMap";
+import enElections from "../../../../messages/en/elections.json";
+
+function render(ui: React.ReactElement) {
+  return rtlRender(
+    <NextIntlClientProvider locale="en" messages={enElections}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}
 
 vi.mock("@/components/CountryMapPaths", async () => {
   const actual = await vi.importActual<typeof import("@/components/CountryMapPaths")>(
@@ -87,11 +97,13 @@ describe("ElectionMap", () => {
     expect(screen.queryByText("No polling data")).toBeNull();
 
     rerender(
-      <ElectionMap
-        countryId="US"
-        electionsByState={[{ stateId: "IA", elections: [election({ polling: undefined })] }]}
-        onRegionClick={vi.fn()}
-      />
+      <NextIntlClientProvider locale="en" messages={enElections}>
+        <ElectionMap
+          countryId="US"
+          electionsByState={[{ stateId: "IA", elections: [election({ polling: undefined })] }]}
+          onRegionClick={vi.fn()}
+        />
+      </NextIntlClientProvider>
     );
     expect(screen.getByText("No polling data")).toBeTruthy();
   });

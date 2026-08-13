@@ -22,9 +22,7 @@ import type { BankCharter } from "@/lib/db/types/bank";
  * an alias rather than folded away so the call sites still read as what they
  * are checking.
  */
-export function isDepositTakingCharter(
-  charter: BankCharter | undefined
-): charter is BankCharter {
+export function isDepositTakingCharter(charter: BankCharter | undefined): charter is BankCharter {
   return (
     charter != null &&
     charter.status === "active" &&

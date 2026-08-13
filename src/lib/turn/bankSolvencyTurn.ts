@@ -11,6 +11,7 @@ import {
   isPrivateBankingEnabled,
 } from "@/lib/banking/featureFlag";
 import { archiveCharter } from "@/lib/banking/charterHistory";
+import { getCashReserves } from "@/lib/banking/bankCash";
 import { computeConfidence, type ConfidenceBand } from "@/lib/banking/confidence";
 import { resolveFailedBankDepositors } from "@/lib/banking/insurance";
 import {
@@ -67,7 +68,6 @@ const ZERO_SUMMARY: BankSolvencyTurnSummary = {
   haircutsApplied: 0,
   forcedLiquidations: 0,
 };
-
 
 function isPropRunningCharter(charter: BankCharter | undefined): charter is BankCharter {
   return (
@@ -281,7 +281,12 @@ async function evaluateOneBank(
   }
 
   const currency = charter.currency as CurrencyCode;
-  let liquidCapital = Math.max(0, live.liquidCapital ?? 0);
+  // The BANK's ring-fenced cash, not the holding company's treasury. Reading
+  // `live.liquidCapital` here after the ring-fence would have compared the
+  // parent's balance against the bank's deposit obligations: once the migration
+  // moves cash onto the charter, `cover` collapses to posted capital alone and
+  // every deposit-taking bank fails its liquidity test on the next pass.
+  let cashReserves = getCashReserves(charter);
   let npcDeposits = Math.max(0, charter.npcDeposits ?? 0);
   const totalLoans = Math.max(0, charter.totalLoans ?? 0);
   const totalDepositsBefore = Math.max(0, charter.totalDeposits ?? 0);
@@ -291,8 +296,8 @@ async function evaluateOneBank(
   // Mark prop book before confidence so leverage / equity use fresh prices.
   if (propRunning) {
     const marked = await markBook(db, charter);
-    const liq = await forceLiquidateToLeverageCap(db, corp._id, liquidCapital, charter, marked);
-    liquidCapital = liq.liquidCapital;
+    const liq = await forceLiquidateToLeverageCap(db, corp._id, cashReserves, charter, marked);
+    cashReserves = liq.cashReserves;
     charter = liq.charter;
     forcedLiquidation = liq.forced;
     if (!liq.forced) {
@@ -330,7 +335,7 @@ async function evaluateOneBank(
 
   const postedCapital = Math.max(0, charter.postedCapital ?? 0);
   const { confidence, band } = computeConfidence({
-    liquidCapital,
+    cashReserves,
     postedCapital,
     totalDeposits: totalDepositsBefore,
     totalLoans,
@@ -381,12 +386,14 @@ async function evaluateOneBank(
 
   const totalDeposits = Math.max(0, totalDepositsBefore - fled);
   const priorBand = charter.warningBand;
-  const equityBase = computePropEquityBase(liquidCapital, charter);
+  const equityBase = computePropEquityBase(cashReserves, charter);
 
   let fails = false;
   if (depositTaking) {
     const requiredLiquidity = reserveRatioRequired * totalDeposits;
-    const cover = liquidCapital + postedCapital;
+    // Not `+ postedCapital`: posted capital is a memo of cash already inside the
+    // reserve balance, so adding it counted the same money twice.
+    const cover = cashReserves;
     fails = priorBand === "red" && cover < RUN_FAILURE_COVER_FRACTION * requiredLiquidity;
   } else if (propRunning) {
     // Investment banks: red band + insolvent equity base.

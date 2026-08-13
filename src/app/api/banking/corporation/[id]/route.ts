@@ -23,12 +23,87 @@ import {
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
+import { getCashReserves, requiredReserves, upstreamCapacity } from "@/lib/banking/bankCash";
+import {
+  CREDIT_BANDS,
+  DEFAULT_LENDING_PROFILE,
+  LEGACY_BAND,
+  bandsForProfile,
+  getCreditBand,
+} from "@/lib/banking/creditBands";
 import type { Character, Corporation, CorporateSector, GameConfig } from "@/lib/db/types";
-import type { BankCharterType, BankLoan, InterbankLoan } from "@/lib/db/types/bank";
+import type { BankCharter, BankCharterType, BankLoan, InterbankLoan } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
+}
+
+/**
+ * The household loan book grouped by credit band, best credit first.
+ *
+ * Every band the profile is open to appears even at zero outstanding, so the
+ * table shows the shape of the book the bank is building rather than only the
+ * rows that happen to be non-empty — a band sitting at zero because it has not
+ * ramped yet reads very differently from one that is closed.
+ *
+ * Tranches originated before the split carry no band and are reported under
+ * `LEGACY_BAND` with `isLegacy`, so the console can say plainly that those are
+ * running off at their original rate rather than pretending they were rated.
+ */
+function buildHouseholdBook(loans: BankLoan[], charter: BankCharter | null | undefined) {
+  const bulk = loans.filter(
+    (loan) =>
+      loan.borrowerType === "npcBulk" && (loan.status === "current" || loan.status === "arrears")
+  );
+  const openBands = new Set(bandsForProfile(charter?.lendingProfile).map((b) => b.id));
+
+  const rows = CREDIT_BANDS.map((band) => {
+    const banded = bulk.filter((loan) => loan.creditBand === band.id);
+    const legacy = band.id === LEGACY_BAND ? bulk.filter((loan) => !loan.creditBand) : [];
+    const outstanding =
+      banded.reduce((sum, l) => sum + Math.max(0, l.outstanding ?? 0), 0) +
+      legacy.reduce((sum, l) => sum + Math.max(0, l.outstanding ?? 0), 0);
+
+    // Weighted by outstanding: an average that ignored size would let a nearly
+    // repaid tranche drag the reported rate as hard as the whole book.
+    const all = [...banded, ...legacy];
+    const weightedRate =
+      outstanding > 0
+        ? all.reduce((sum, l) => sum + Math.max(0, l.outstanding ?? 0) * (l.ratePercent ?? 0), 0) /
+          outstanding
+        : null;
+
+    return {
+      band: band.id,
+      outstanding,
+      ratePercent: weightedRate,
+      expectedDefaultRatePercent: band.defaultRatePercent,
+      demandShare: band.demandShare,
+      open: openBands.has(band.id),
+      isLegacy: legacy.length > 0,
+      tranches: all.length,
+    };
+  });
+
+  const total = rows.reduce((sum, r) => sum + r.outstanding, 0);
+  return {
+    rows,
+    total,
+    lendingProfile: charter?.lendingProfile ?? DEFAULT_LENDING_PROFILE,
+    // Blended cost of the book, for the one-line summary above the table.
+    blendedRatePercent:
+      total > 0
+        ? rows.reduce((sum, r) => sum + r.outstanding * (r.ratePercent ?? 0), 0) / total
+        : null,
+    blendedExpectedDefaultPercent:
+      total > 0
+        ? rows.reduce(
+            (sum, r) => sum + r.outstanding * getCreditBand(r.band).defaultRatePercent,
+            0
+          ) / total
+        : null,
+  };
 }
 
 // GET /api/banking/corporation/[id] - Bank console payload for a corporation.
@@ -302,6 +377,18 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               totalLoans: charter.totalLoans ?? 0,
               npcDeposits: charter.npcDeposits ?? 0,
               reserves: charter.reserves ?? 0,
+              cashReserves: getCashReserves(charter),
+              requiredReserves: requiredReserves(charter, reserveRatio ?? 0),
+              upstreamCapacity: upstreamCapacity(charter, reserveRatio ?? 0),
+              lendingProfile: charter.lendingProfile ?? DEFAULT_LENDING_PROFILE,
+              discountWindowDebt: charter.discountWindowDebt ?? 0,
+              discountWindowArrears: charter.discountWindowArrears ?? 0,
+              cbMarginArrears: charter.cbMarginArrears ?? 0,
+              capitalStanding: charter.capitalStanding ?? null,
+              capitalRatio: charter.capitalRatio ?? null,
+              stressedCapitalRatio: charter.stressedCapitalRatio ?? null,
+              appliedStressLossFraction: charter.appliedStressLossFraction ?? null,
+              charterSwitchCooldownUntilTurn: charter.charterSwitchCooldownUntilTurn ?? null,
               confidence: charter.confidence ?? null,
               warningBand: charter.warningBand ?? null,
               panicTurns: charter.panicTurns ?? 0,
@@ -325,6 +412,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
         id: loan._id.toString(),
         borrowerType: loan.borrowerType,
         borrower: describeParty(loan.borrowerType, loan.borrowerId?.toString() ?? null),
+        creditBand: loan.creditBand ?? null,
         principal: loan.principal,
         outstanding: loan.outstanding,
         ratePercent: loan.ratePercent,
@@ -333,6 +421,10 @@ async function handleGET(_request: Request, { params }: RouteParams) {
         status: loan.status,
         arrearsTurns: loan.arrearsTurns ?? 0,
       })),
+      // The household book, by rating, best credit first. This is what the
+      // console used to be unable to show: the book was one lump with one rate,
+      // so "NPC bulk outstanding (implied)" was genuinely all there was to say.
+      householdBook: buildHouseholdBook(loans, charter),
       interbankLoans: interbankLoans.map((loan) => ({
         id: loan._id.toString(),
         lenderCorporationId: loan.lenderCorporationId.toString(),

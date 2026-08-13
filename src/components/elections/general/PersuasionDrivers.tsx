@@ -17,6 +17,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   computePairwiseDriverDisplay,
   pickDefaultDriverPair,
@@ -75,6 +76,7 @@ function CandidateSelect({
 }
 
 function DriverBarRow({ driver: d, maxAbs }: { driver: PersuasionDriver; maxAbs: number }) {
+  const t = useTranslations("elections");
   const isPositive = d.contributionPct >= 0;
   const widthPct = maxAbs > 0 ? (Math.abs(d.contributionPct) / maxAbs) * 50 : 0; // 50% per side of midline
   return (
@@ -87,7 +89,7 @@ function DriverBarRow({ driver: d, maxAbs }: { driver: PersuasionDriver; maxAbs:
         >
           {isPositive && d.contributionPct > 0 ? "+" : ""}
           {d.contributionPct.toFixed(1)}
-          {d.unit === "%" ? "%" : " pts"}
+          {d.unit === "%" ? "%" : ` ${t("persuasion.pts")}`}
         </span>
       </div>
       {/* Diverging bar centered on a midline */}
@@ -123,6 +125,7 @@ export function PersuasionDrivers({
   candidates: PersuasionDriverCandidate[];
   inputs: DriverDisplayInputs;
 }) {
+  const t = useTranslations("elections");
   const defaultPair = useMemo(() => pickDefaultDriverPair(candidates), [candidates]);
   const [focusId, setFocusId] = useState<string | null>(defaultPair?.focusId ?? null);
   const [opponentId, setOpponentId] = useState<string | null>(defaultPair?.opponentId ?? null);
@@ -170,7 +173,7 @@ export function PersuasionDrivers({
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
       <div className="mb-2 flex items-baseline justify-between">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          Persuasion Drivers
+          {t("persuasion.title")}
         </h3>
         <span className="text-[10px] uppercase tracking-wider text-muted">{stateId}</span>
       </div>
@@ -179,42 +182,39 @@ export function PersuasionDrivers({
         <>
           <div className="mb-3 flex flex-wrap items-end gap-3">
             <CandidateSelect
-              label="Focus"
+              label={t("persuasion.focus")}
               value={focus.id}
               options={candidates}
               onChange={handleFocusChange}
             />
             <CandidateSelect
-              label="Opponent"
+              label={t("persuasion.opponent")}
               value={opponent.id}
               options={opponentOptions}
               onChange={setOpponentId}
             />
           </div>
           <p className="mb-3 text-xs text-muted leading-snug">
-            Why <span className="font-semibold">{stateName}</span> voters lean toward{" "}
-            <span className="font-semibold" style={{ color: focus.partyColor }}>
-              {focus.name}
-            </span>{" "}
-            over <span className="font-semibold">{opponent.name}</span>. Each driver is signed:{" "}
-            <span className="font-semibold">+</span> = lift,{" "}
-            <span className="font-semibold">&minus;</span> = drag. Drivers are relative within this
-            list and only move the persuadable slice of each party&apos;s vote, so their real effect
-            is small. Coattail rows are direct share tilts in %. A raw vote lead does not equal the
-            sum of these bars.
+            {t.rich("persuasion.explanation", {
+              state: () => <span className="font-semibold">{stateName}</span>,
+              focus: () => (
+                <span className="font-semibold" style={{ color: focus.partyColor }}>
+                  {focus.name}
+                </span>
+              ),
+              opponent: () => <span className="font-semibold">{opponent.name}</span>,
+              b: (chunks) => <span className="font-semibold">{chunks}</span>,
+            })}
           </p>
         </>
       ) : null}
 
       {!hasDrivers ? (
-        <p className="text-xs italic text-muted">
-          No persuasion drivers computed for {stateName} yet — drivers populate once vote data and
-          enrichment data are loaded.
-        </p>
+        <p className="text-xs italic text-muted">{t("persuasion.empty", { state: stateName })}</p>
       ) : (
         <div className="flex flex-col gap-2">
           <div className="text-[10px] uppercase tracking-wider text-muted">
-            Persuasion drivers (pts of the persuadable slice)
+            {t("persuasion.driversGroup")}
           </div>
           {driverRows.map((d) => (
             <DriverBarRow key={d.label} driver={d} maxAbs={maxAbs} />
@@ -222,7 +222,7 @@ export function PersuasionDrivers({
           {coattailRows.length > 0 ? (
             <>
               <div className="mt-1 border-t border-card-border pt-2 text-[10px] uppercase tracking-wider text-muted">
-                Coattail tilts (direct % of vote share)
+                {t("persuasion.coattailsGroup")}
               </div>
               {coattailRows.map((d) => (
                 <DriverBarRow key={d.label} driver={d} maxAbs={maxAbs} />

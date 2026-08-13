@@ -128,6 +128,12 @@ export interface InputsCostResult {
  * `rates` should already carry tech `inputCost` effects (they are input-rate
  * multipliers — see the tech disposition table in `sectorTurn`), so an
  * efficiency tech shows up as fewer units bought, not as a margin bonus.
+ *
+ * `statePremiums` (money wiring step 5, config-gated) adds the sector's home
+ * state's landed-price surcharge for out-of-state sourcing on top of the
+ * global ratio: unitPrice = basePrice × ratio + premium. Same one-turn lag as
+ * the price ratios (the premium comes from last turn's sourcing pass).
+ * Omitted or empty ⇒ output is byte-identical to the pre-money-wiring formula.
  */
 export function computeInputsCost(args: {
   /**
@@ -149,6 +155,12 @@ export function computeInputsCost(args: {
   turnsPerDay: number;
   /** Mothballed plants are cold: no production, no inputs. */
   mothballed?: boolean;
+  /**
+   * Commodity → landed-price premium per unit (₳), for the sector's home
+   * state. Absent or empty leaves unitPrice unchanged (pre-money-wiring
+   * behavior).
+   */
+  statePremiums?: ReadonlyMap<CommodityType, number>;
 }): InputsCostResult {
   const {
     nominalDailyRevenue,
@@ -159,6 +171,7 @@ export function computeInputsCost(args: {
     inputMultiplier,
     turnsPerDay,
     mothballed,
+    statePremiums,
   } = args;
   if (
     mothballed === true ||
@@ -179,7 +192,10 @@ export function computeInputsCost(args: {
     const units = ((nominalDailyRevenue * rate) / basePrice / turnsPerDay) * util * inputMult;
     if (!(units > 0)) continue;
     const ratio = priceRatios.get(key);
-    const unitPrice = basePrice * (Number.isFinite(ratio) && (ratio as number) > 0 ? ratio! : 1);
+    const premium = statePremiums?.get(key);
+    const unitPrice =
+      basePrice * (Number.isFinite(ratio) && (ratio as number) > 0 ? ratio! : 1) +
+      (Number.isFinite(premium) && (premium as number) > 0 ? premium! : 0);
     const cost = units * unitPrice;
     if (!Number.isFinite(cost)) continue;
     total += cost;

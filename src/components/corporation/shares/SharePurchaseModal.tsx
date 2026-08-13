@@ -42,6 +42,7 @@ interface SharePurchaseModalProps {
     liquidCapital: number;
     /** liquidCapital is stored in this currency (corp's home). Missing on pre-forex corps — treat as USD/₳. */
     liquidCurrencyCode?: string;
+    isInvestmentBank?: boolean;
   } | null;
   myOrders: MyShareOrder[];
   marketOrders: MarketOrder[];
@@ -95,7 +96,9 @@ export default function SharePurchaseModal({
   const [atMarketSide, setAtMarketSide] = useState<OrderSide>("buy");
   const [limitAsCorp, setLimitAsCorp] = useState(false);
   const [buyAsCorp, setBuyAsCorp] = useState(false);
+  const [buyAsInvestmentBank, setBuyAsInvestmentBank] = useState(false);
   const [sellAsCorp, setSellAsCorp] = useState(false);
+  const [sellAsInvestmentBank, setSellAsInvestmentBank] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -167,12 +170,16 @@ export default function SharePurchaseModal({
   const buyCost = quantity * (mode === "limit" ? limitPriceInternal : sharePriceAnchor);
 
   // ─── Budget / affordability ───────────────────────────────────────────────────
-  const activeBudget = mode === "float" && buyAsCorp ? myCorpLiquidInternal : personalCashAnchor;
+  const activeBudget =
+    mode === "float" && (buyAsCorp || buyAsInvestmentBank)
+      ? myCorpLiquidInternal
+      : personalCashAnchor;
 
   const selectedPayBalance = (myCurrencyBalances?.[selectedPayCurrency] ?? 0) as number;
 
   const shouldUseImplicitAutoConvert =
     !buyAsCorp &&
+    !buyAsInvestmentBank &&
     !!myCurrencyBalances &&
     autoConvertEnabled &&
     selectedPayCurrency === homeCurrencyCode;
@@ -203,7 +210,7 @@ export default function SharePurchaseModal({
       : null;
 
   const explicitPayEstimate =
-    !buyAsCorp && myCurrencyBalances && !shouldUseImplicitAutoConvert
+    !buyAsCorp && !buyAsInvestmentBank && myCurrencyBalances && !shouldUseImplicitAutoConvert
       ? estimateExplicitPayCoverage({
           requiredAmount: buyCostInHome,
           fromCurrency: selectedPayCurrency,
@@ -214,7 +221,7 @@ export default function SharePurchaseModal({
       : null;
 
   const implicitAutoConvertEstimate =
-    !buyAsCorp && myCurrencyBalances && shouldUseImplicitAutoConvert
+    !buyAsCorp && !buyAsInvestmentBank && myCurrencyBalances && shouldUseImplicitAutoConvert
       ? estimateImplicitAutoConvertCoverage({
           requiredAmount: buyCostInHome,
           targetCurrency: homeCurrencyCode,
@@ -224,7 +231,7 @@ export default function SharePurchaseModal({
       : null;
 
   const maxImplicitSpendableInHome =
-    !buyAsCorp && myCurrencyBalances && shouldUseImplicitAutoConvert
+    !buyAsCorp && !buyAsInvestmentBank && myCurrencyBalances && shouldUseImplicitAutoConvert
       ? (Object.entries(myCurrencyBalances) as [CurrencyCode, number][])
           .filter(([, balance]) => (balance ?? 0) > 0)
           .reduce((total, [code, balance]) => {
@@ -242,7 +249,7 @@ export default function SharePurchaseModal({
       : 0;
 
   const maxExplicitSpendableInHome =
-    !buyAsCorp && myCurrencyBalances && !shouldUseImplicitAutoConvert
+    !buyAsCorp && !buyAsInvestmentBank && myCurrencyBalances && !shouldUseImplicitAutoConvert
       ? estimateMaxConvertibleAmount({
           fromCurrency: selectedPayCurrency,
           toCurrency: homeCurrencyCode,
@@ -291,14 +298,17 @@ export default function SharePurchaseModal({
   const maxBuyableShares = Math.max(
     0,
     Math.min(
-      floatAvailable,
+      buyAsInvestmentBank ? Number.MAX_SAFE_INTEGER : floatAvailable,
       refineMaxAffordableInteger({
-        initialGuess: maxAffordableShares(buyAsCorp, sharePriceAnchor, corporation.sharePrice),
-        upperBound: floatAvailable,
+        initialGuess: buyAsInvestmentBank
+          ? Math.floor(myCorpLiquidInternal / sharePriceAnchor)
+          : maxAffordableShares(buyAsCorp, sharePriceAnchor, corporation.sharePrice),
+        upperBound: buyAsInvestmentBank ? Number.MAX_SAFE_INTEGER : floatAvailable,
         canAfford: (candidateShares) => {
           if (candidateShares <= 0) return true;
           const candidateCost = candidateShares * sharePriceAnchor;
           const candidateCostInHome = homeRate ? candidateCost * homeRate : candidateCost;
+          if (buyAsInvestmentBank) return candidateCost <= myCorpLiquidInternal;
           if (buyAsCorp) {
             const estimate = estimateCorpWalletSpend({
               requiredAmount: candidateShares * corporation.sharePrice,
@@ -371,19 +381,21 @@ export default function SharePurchaseModal({
   );
 
   // ─── Affordability flags ──────────────────────────────────────────────────────
-  const floatInsufficient = mode === "float" && quantity > floatAvailable;
+  const floatInsufficient = mode === "float" && !buyAsInvestmentBank && quantity > floatAvailable;
   const floatFundsShort =
     mode === "float" &&
     quantity > 0 &&
-    (buyAsCorp
-      ? !(corpAtMarketBuyEstimate?.canAfford ?? false)
-      : !myCurrencyBalances
-        ? buyCost > myCashOnHand
-        : shouldUseImplicitAutoConvert
-          ? (implicitAutoConvertEstimate?.spendableInTarget ?? 0) < buyCostInHome
-          : selectedPayCurrency === homeCurrencyCode
-            ? selectedPayBalance < buyCostInHome
-            : !(explicitPayEstimate?.canAfford ?? false));
+    (buyAsInvestmentBank
+      ? buyCost > myCorpLiquidInternal
+      : buyAsCorp
+        ? !(corpAtMarketBuyEstimate?.canAfford ?? false)
+        : !myCurrencyBalances
+          ? buyCost > myCashOnHand
+          : shouldUseImplicitAutoConvert
+            ? (implicitAutoConvertEstimate?.spendableInTarget ?? 0) < buyCostInHome
+            : selectedPayCurrency === homeCurrencyCode
+              ? selectedPayBalance < buyCostInHome
+              : !(explicitPayEstimate?.canAfford ?? false));
 
   const limitBuyBudget = limitAsCorp ? myCorpLiquidInternal : personalCashAnchor;
   const limitBuyFundsShort =
@@ -407,11 +419,14 @@ export default function SharePurchaseModal({
     mode === "limit" && orderSide === "sell" && toInternal(limitPrice) <= sharePriceAnchor;
 
   const sellAtMarketInsufficient =
-    atMarketSide === "sell" && quantity > (sellAsCorp ? myCorporationShares : myShares);
+    atMarketSide === "sell" &&
+    !sellAsInvestmentBank &&
+    quantity > (sellAsCorp ? myCorporationShares : myShares);
 
   const ratesNeededButMissing =
     !exchangeRates &&
     ((!(buyAsCorp ?? false) &&
+      !buyAsInvestmentBank &&
       !!myCurrencyBalances &&
       (shouldUseImplicitAutoConvert
         ? (myCurrencyBalances[homeCurrencyCode] ?? 0) < buyCostInHome
@@ -543,8 +558,14 @@ export default function SharePurchaseModal({
     setAtMarketSide(side);
     resetQuantity(0);
     setError("");
-    if (side === "sell") setBuyAsCorp(false);
-    if (side === "buy") setSellAsCorp(false);
+    if (side === "sell") {
+      setBuyAsCorp(false);
+      setBuyAsInvestmentBank(false);
+    }
+    if (side === "buy") {
+      setSellAsCorp(false);
+      setSellAsInvestmentBank(false);
+    }
   }
 
   function switchOrderSide(side: OrderSide) {
@@ -561,6 +582,25 @@ export default function SharePurchaseModal({
     setError("");
     setLoading(true);
     try {
+      if (buyAsInvestmentBank && myCorporation) {
+        const res = await fetch(`/api/corporations/${myCorporation.id}/bank/prop/positions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ asset: "equity", ref: corporation._id, units: quantity }),
+        });
+        const data = (await res.json()) as { cost?: number; error?: string };
+        if (!res.ok) {
+          setError(data.error ?? "Could not open investment-bank position");
+          return;
+        }
+        setSuccessMsg(
+          `Investment bank opened a ${quantity.toLocaleString()}-share position for ${formatAmount(data.cost ?? 0)}`
+        );
+        onSuccess();
+        requestCharacterStatsRefetch();
+        onClose();
+        return;
+      }
       const res = await fetch(`/api/corporations/${corpId}/shares/buy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -590,6 +630,22 @@ export default function SharePurchaseModal({
     setError("");
     setLoading(true);
     try {
+      if (sellAsInvestmentBank && myCorporation) {
+        const res = await fetch(`/api/corporations/${myCorporation.id}/bank/prop/positions`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ asset: "equity", ref: corporation._id, units: quantity }),
+        });
+        const data = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          setError(data.error ?? "Could not close investment-bank position");
+          return;
+        }
+        onSuccess();
+        requestCharacterStatsRefetch();
+        onClose();
+        return;
+      }
       const res = await fetch(`/api/corporations/${corpId}/shares/sell`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -792,13 +848,17 @@ export default function SharePurchaseModal({
               <SharePurchaseAtMarketView
                 atMarketSide={atMarketSide}
                 buyAsCorp={buyAsCorp}
+                buyAsInvestmentBank={buyAsInvestmentBank}
                 sellAsCorp={sellAsCorp}
+                sellAsInvestmentBank={sellAsInvestmentBank}
                 quantity={quantity}
                 quantityDraft={quantityDraft}
                 selectedPayCurrency={selectedPayCurrency}
                 onSwitchSide={switchAtMarketSide}
                 setBuyAsCorp={setBuyAsCorp}
+                setBuyAsInvestmentBank={setBuyAsInvestmentBank}
                 setSellAsCorp={setSellAsCorp}
+                setSellAsInvestmentBank={setSellAsInvestmentBank}
                 setQuantity={setQuantity}
                 setQuantityDraft={setQuantityDraft}
                 setSelectedPayCurrency={setSelectedPayCurrency}

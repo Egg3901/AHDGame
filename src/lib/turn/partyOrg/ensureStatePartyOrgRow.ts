@@ -39,20 +39,17 @@ export async function ensureStatePartyOrgRow(
   args: EnsureStatePartyOrgRowArgs
 ): Promise<StatePartyOrg> {
   // Federal districts like DC are not organizable US states — they elect no
-  // offices and host no state party organization. Unadmitted territories
-  // (Alaska/Hawaii under 1953-default) are the same until statehood admission
-  // stamps admittedYear and then calls this helper.
+  // offices and host no state party organization. Alaska and Hawaii, however,
+  // are playable territories with their own party chapters before admission.
   if (args.countryId === "US") {
     if (!isUsElectoralState(args.stateId)) {
       throw new Error(
         `Cannot create a state party org for non-electoral US region "${args.stateId}".`
       );
     }
-    const { politicalIds } = await loadUsPoliticalStateIds(db);
-    if (!politicalIds.has(args.stateId)) {
-      throw new Error(
-        `Cannot create a state party org for US territory "${args.stateId}" until it is admitted to the Union.`
-      );
+    const { residentPoliticalIds } = await loadUsPoliticalStateIds(db);
+    if (!residentPoliticalIds.has(args.stateId)) {
+      throw new Error(`Cannot create a state party org for US region "${args.stateId}".`);
     }
   }
 

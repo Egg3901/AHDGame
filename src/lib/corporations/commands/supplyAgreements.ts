@@ -13,17 +13,10 @@ import {
   CONTRACT_CANCEL_NOTICE_TURNS,
   type SupplyAgreement,
 } from "@/lib/db/types/supplyAgreement";
-import {
-  COMMODITY_TYPES,
-  COMMODITY_BASE_PRICES,
-  commodityMixWeight,
-  embargoSupplyFactorFor,
-  plantsSupplyScaledUnits,
-  type CommodityType,
-} from "@/lib/constants/commodities";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { recordAudit } from "@/lib/audit/recordAudit";
+import { computeSupplierCommodityCapacityUnits } from "@/lib/corporations/supplyAgreementCapacity";
 
 /**
  * Private supply agreement lifecycle (bilateral, both-consent). The supplier's
@@ -132,34 +125,12 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
             .collection<GameState>("gameState")
             .findOne({ _id: "current" }, { projection: { currentTurn: 1 } })
         )?.currentTurn ?? 0;
-      let capacityUnits = 0;
-      for (const s of sectors) {
-        // Mothballed plants are cold: they back no promise.
-        if (s.mothballed === true) continue;
-        const capacity = typeof s.capitalStock === "number" ? s.capitalStock : 0;
-        if (!(capacity > 0)) continue;
-        const rates = getEffectiveStrategyRates(
-          s.sectorType,
-          s.strategyId ?? "standard",
-          s.transitionFromStrategyId,
-          s.transitionStartTurn,
-          turnNow
-        );
-        const scaled =
-          plantsSupplyScaledUnits({
-            producedUnits: capacity,
-            isNatcorp: !!supplier.countryOwnerId,
-            productionPolicyLevel: s.productionPolicyLevel,
-            embargoSupplyFactor: embargoSupplyFactorFor(s),
-          }) ?? 0;
-        capacityUnits +=
-          scaled *
-          commodityMixWeight(
-            rates.supply ?? {},
-            COMMODITY_BASE_PRICES,
-            body.commodity as CommodityType
-          );
-      }
+      const capacityUnits = computeSupplierCommodityCapacityUnits({
+        sectors,
+        commodity: body.commodity as CommodityType,
+        isNatcorp: !!supplier.countryOwnerId,
+        turn: turnNow,
+      });
       const maxCap = capacityUnits * CONTRACT_OVERCOMMIT_TOLERANCE;
       if (!(maxCap > 0)) {
         return NextResponse.json(

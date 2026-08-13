@@ -18,6 +18,13 @@ export interface StatePartyHQProps {
   canManage: boolean;
   /** Chair / vice-chair / admin — may spend national PS (bulk Build Org). */
   canSpendPs: boolean;
+  /**
+   * National party Political Strength reserve. Bulk Build Org always debits
+   * this pool (not the per-state totals shown in the table) — ticket #1059.
+   */
+  nationalPoliticalStrength: number;
+  /** Refresh national party data after a bulk national-PS spend. */
+  onNationalPsSpent?: () => void;
 }
 
 function fmtMoney(v: number): string {
@@ -32,6 +39,8 @@ export function StatePartyHQ({
   partyColor,
   canManage,
   canSpendPs,
+  nationalPoliticalStrength,
+  onNationalPsSpent,
 }: StatePartyHQProps) {
   const { showToast } = useToast();
   const [rows, setRows] = useState<StatePartyRow[]>([]);
@@ -44,6 +53,12 @@ export function StatePartyHQ({
   const [openId, setOpenId] = useState<string | null>(null);
   const [bulkMode, setBulkMode] = useState<BulkMode | null>(null);
   const [busy, setBusy] = useState(false);
+  // Local copy so the bulk bar updates immediately after spends without waiting
+  // on a parent refetch (activity recovery means we can't subtract exactly).
+  const [nationalPs, setNationalPs] = useState(nationalPoliticalStrength);
+  useEffect(() => {
+    setNationalPs(nationalPoliticalStrength);
+  }, [nationalPoliticalStrength]);
 
   // Per-region preview cache for the live bulk Build Org estimate.
   const [buildPreviews, setBuildPreviews] = useState<Record<string, BulkPreview>>({});
@@ -125,8 +140,7 @@ export function StatePartyHQ({
     const avgOrg = rows.reduce((s, r) => s + r.organization, 0) / n;
     const treasury = rows.reduce((s, r) => s + r.treasury, 0);
     const ps = rows.reduce((s, r) => s + r.politicalStrength, 0);
-    const npps = rows.reduce((s, r) => s + r.nppCount, 0);
-    return { avgOrg, treasury, ps, npps };
+    return { avgOrg, treasury, ps };
   }, [rows]);
 
   const weak = useMemo(
@@ -218,10 +232,18 @@ export function StatePartyHQ({
       showToast("No eligible states in selection", "info");
       return;
     }
+    if (estimate && estimate.totalPS > nationalPs + 1e-6) {
+      showToast(
+        `Not enough national PS: need ${estimate.totalPS}, have ${nationalPs.toFixed(1)}`,
+        "error"
+      );
+      return;
+    }
     setBusy(true);
     try {
       let done = 0;
       let failed = 0;
+      let spent = 0;
       let firstError = "";
       const noteFail = async (res?: Response) => {
         failed += 1;
@@ -235,10 +257,16 @@ export function StatePartyHQ({
         const res = await fetch(`${base}/build-org`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          // National HQ bulk Build Org always spends the national reserve —
+          // never the per-state PS column shown in the table.
           body: JSON.stringify({ psPool: "national" }),
         });
-        if (res.ok) done += 1;
-        else await noteFail(res);
+        if (res.ok) {
+          done += 1;
+          const d = await res.json().catch(() => ({}));
+          if (typeof d?.psCost === "number") spent += d.psCost;
+          if (typeof d?.newPS === "number") setNationalPs(d.newPS);
+        } else await noteFail(res);
       }
 
       if (done === 0) {
@@ -250,14 +278,16 @@ export function StatePartyHQ({
 
       showToast(
         failed > 0
-          ? `Built org in ${done} states · ${failed} failed`
-          : `Built org in ${done} states`,
+          ? `Built org in ${done} states from national PS · ${failed} failed`
+          : `Built org in ${done} states from national PS` +
+              (spent > 0 ? ` (−${spent.toFixed(0)} Nat'l PS before recovery)` : ""),
         failed > 0 ? "info" : "success"
       );
       setBulkMode(null);
       setSel(new Set());
       setBuildPreviews({});
       await fetchRows();
+      onNationalPsSpent?.();
     } finally {
       setBusy(false);
     }
@@ -284,8 +314,8 @@ export function StatePartyHQ({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Tile label="Avg organization" value={`${totals.avgOrg.toFixed(1)}%`} accent={partyColor} />
         <Tile label="Total treasury" value={fmtMoney(totals.treasury)} />
-        <Tile label="Political strength" value={totals.ps.toFixed(0)} />
-        <Tile label="NPPs" value={String(totals.npps)} />
+        <Tile label="State PS (sum)" value={totals.ps.toFixed(0)} />
+        <Tile label="National PS" value={nationalPs.toFixed(1)} accent={partyColor} />
       </div>
 
       {/* Priority banner */}
@@ -351,8 +381,9 @@ export function StatePartyHQ({
           {canSpendPs && bulkMode && estimate && (
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-card-border pb-2 text-xs">
               <span className="font-medium">
-                Build Org · {estimate.states} states · Est.{" "}
-                <b className="tabular-nums">{estimate.totalPS} PS</b> ·{" "}
+                Build Org · Nat&apos;l PS · {estimate.states} states · Est.{" "}
+                <b className="tabular-nums">{estimate.totalPS} Nat&apos;l PS</b>
+                <span className="text-muted"> (have {nationalPs.toFixed(1)})</span> ·{" "}
                 {estimate.states > 1 ? (
                   <>
                     avg{" "}
@@ -366,14 +397,17 @@ export function StatePartyHQ({
                 )}
                 {estimate.skipped.length > 0 ? ` · ${estimate.skipped.length} skipped` : ""}
                 {estimate.pending.length > 0 ? " · estimating…" : ""}
+                {estimate.totalPS > nationalPs + 1e-6 ? (
+                  <span className="ml-2 font-semibold text-error">Insufficient national PS</span>
+                ) : null}
               </span>
               <span className="flex gap-2">
                 <button
-                  disabled={busy || estimate.states === 0}
+                  disabled={busy || estimate.states === 0 || estimate.totalPS > nationalPs + 1e-6}
                   onClick={() => runBulkSpend()}
                   className="rounded-md bg-primary px-3 py-1 font-medium text-white disabled:opacity-50"
                 >
-                  {busy ? "Working…" : `Confirm (${estimate.totalPS} PS)`}
+                  {busy ? "Working…" : `Confirm (${estimate.totalPS} Nat'l PS)`}
                 </button>
                 <button
                   className="text-muted hover:text-foreground"

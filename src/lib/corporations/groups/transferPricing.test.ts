@@ -37,9 +37,9 @@ describe("isTransferPricingPosition", () => {
   });
 
   it("ignores a price that is materially at market", () => {
-    expect(
-      isTransferPricingPosition(position({ pricePremium: ARMS_LENGTH_TOLERANCE }), true)
-    ).toBe(false);
+    expect(isTransferPricingPosition(position({ pricePremium: ARMS_LENGTH_TOLERANCE }), true)).toBe(
+      false
+    );
     expect(
       isTransferPricingPosition(position({ pricePremium: -ARMS_LENGTH_TOLERANCE }), true)
     ).toBe(false);

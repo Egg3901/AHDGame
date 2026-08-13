@@ -2,13 +2,14 @@ import type { Db } from "mongodb";
 import type { Seat } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { buildSeatId, getLocalRegionId } from "@/lib/seats";
-import { UK_COMMONS_SEATS, SENATE_CLASSES, getCnPeoplesCongressSeats } from "@/lib/constants";
+import { SENATE_CLASSES, getCnPeoplesCongressSeats } from "@/lib/constants";
 import {
   STATE_IDS,
   JP_SHUGIIN_SEATS,
   JP_SANGIIN_SEATS,
   DE_WAHLKREIS_SEATS,
   getHouseSeats,
+  getUkCommonsSeats,
 } from "@/lib/constants/states";
 import { JP_REGIONS } from "@/lib/constants/japan";
 import { deRegions } from "@/lib/seeds/de/deRegions";
@@ -16,6 +17,7 @@ import { brRegions } from "@/lib/seeds/br/brRegions";
 import { ngRegions } from "@/lib/seeds/ng/ngRegions";
 import { cnRegions } from "@/lib/seeds/cn/cnRegions";
 import { ieRegions } from "@/lib/seeds/ie/ieRegions";
+import { TERRITORY_ADMISSIONS } from "@/lib/elections/statehoodAdmission";
 
 // State name lookup for display names
 const STATE_NAMES: Record<string, string> = {
@@ -321,6 +323,27 @@ export function buildUsStateSeats(stateId: string, houseSeats: number, now: Date
   return seats;
 }
 
+/**
+ * The sole elected office in an unadmitted US territory. Territorial governors
+ * are deliberately represented by the existing governor election family, so
+ * candidacy, election resolution, and executive powers use the established
+ * path. House, Senate, and state-Senate seats are only added on admission by
+ * {@link buildUsStateSeats}.
+ */
+export function buildUsTerritorialGovernorSeat(stateId: string, now: Date): Seat {
+  const stateName = getStateName(stateId, "US");
+  return {
+    _id: buildSeatId("US", "governor", stateId),
+    countryId: "US",
+    electionType: "governor",
+    state: stateId,
+    displayName: `${stateName} Territorial Governor`,
+    shortName: `${getLocalRegionId(stateId, "US")} Terr Gov`,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 export async function seedSeats(
   db: Db,
   reset: boolean,
@@ -331,6 +354,8 @@ export async function seedSeats(
   const now = new Date();
   // House seat counts per state depend on the preset's apportionment era.
   const houseSeatsByState = getHouseSeats(preset);
+  // Commons likewise — 625 in 1953-default, else the modern 650 map (#1058).
+  const ukCommonsSeatsByRegion = getUkCommonsSeats(preset);
 
   // States admitted mid-game are absent from that frozen map, so read their
   // live delegation size off the state docs. Without this a reset of a world
@@ -372,25 +397,25 @@ export async function seedSeats(
   // US states
   for (const stateId of STATE_IDS) {
     // A US state absent from the active-era apportionment map is a pre-statehood
-    // territory in this preset (Alaska/Hawaii under 1953-default, which uses the
-    // 1950 census): it elects no House member, Senators, Governor or State Senate.
-    // Skipping seat creation here is how that "territory" status is represented.
-    // ...unless it was admitted mid-game, in which case a reset must keep it a
-    // state rather than demoting it back to a territory.
+    // territory in this preset (Alaska/Hawaii under 1953-default). It elects a
+    // territorial governor, but no House member, Senators, or State Senate.
+    // Once admitted mid-game, a reset retains the full state seat set.
     const seatCount = houseSeatsByState[stateId] ?? admittedHouseSeats.get(stateId);
-    if (seatCount == null) continue;
-
-    seats.push(...buildUsStateSeats(stateId, seatCount, now));
+    if (seatCount != null) {
+      seats.push(...buildUsStateSeats(stateId, seatCount, now));
+    } else if (TERRITORY_ADMISSIONS.some((territory) => territory.stateId === stateId)) {
+      seats.push(buildUsTerritorialGovernorSeat(stateId, now));
+    }
   }
 
   // UK Commons
-  for (const regionId of Object.keys(UK_COMMONS_SEATS)) {
+  for (const regionId of Object.keys(ukCommonsSeatsByRegion)) {
     seats.push({
       _id: buildSeatId("UK", "commons", regionId),
       countryId: "UK",
       electionType: "commons",
       state: regionId,
-      totalSeats: UK_COMMONS_SEATS[regionId],
+      totalSeats: ukCommonsSeatsByRegion[regionId],
       displayName: buildDisplayName("UK", "commons", regionId),
       shortName: buildShortName("UK", "commons", regionId),
       createdAt: now,

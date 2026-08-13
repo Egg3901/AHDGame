@@ -57,7 +57,9 @@ describe("thresholdForLevel", () => {
 describe("autoResolveDecision", () => {
   it("clears a deal that only just trips the threshold", () => {
     expect(autoResolveDecision(60, 60)).toBe("cleared");
-    expect(autoResolveDecision(60 + MERGER_REVIEW_REMEDY_MARGIN_PERCENT - 0.01, 60)).toBe("cleared");
+    expect(autoResolveDecision(60 + MERGER_REVIEW_REMEDY_MARGIN_PERCENT - 0.01, 60)).toBe(
+      "cleared"
+    );
   });
 
   it("orders a remedy in the middle band", () => {

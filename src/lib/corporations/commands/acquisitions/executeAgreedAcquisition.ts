@@ -94,9 +94,14 @@ export async function executeAgreedAcquisition(
   // Merger review (C3). Runs BEFORE any money moves: a referral must leave the
   // two corporations exactly as it found them. A cleared review returns here
   // with the (possibly conditional) clearance attached.
-  const clearance = await assertMergerClearance(db, acquirer, target, "agreedAcquisition", currentTurn);
-  if (!clearance.ok)
-    return { ok: false, error: clearance.error, status: clearance.status };
+  const clearance = await assertMergerClearance(
+    db,
+    acquirer,
+    target,
+    "agreedAcquisition",
+    currentTurn
+  );
+  if (!clearance.ok) return { ok: false, error: clearance.error, status: clearance.status };
 
   const now = new Date();
   const [targetSectors, fxByCurrency, acquirerFxRate, targetFxRate] = await Promise.all([

@@ -42,13 +42,14 @@ export async function resignUnionLeadership(
   const now = new Date();
   await runWithOptionalTransaction(
     async (session) => {
-      await db
-        .collection<Union>("unions")
-        .updateOne(
-          { _id: unionObjectId },
-          { $set: { ownerId: null, updatedAt: now }, $unset: { pendingLeaderCharacterId: "" } },
-          { session }
-        );
+      await db.collection<Union>("unions").updateOne(
+        { _id: unionObjectId },
+        {
+          $set: { ownerId: null, updatedAt: now },
+          $unset: { pendingLeaderCharacterId: "", ownerType: "" },
+        },
+        { session }
+      );
       await db
         .collection<Character>("characters")
         .updateOne(
@@ -59,12 +60,13 @@ export async function resignUnionLeadership(
       await db.collection("unionLeaderVotes").deleteMany({ unionId: unionObjectId }, { session });
     },
     async () => {
-      await db
-        .collection<Union>("unions")
-        .updateOne(
-          { _id: unionObjectId },
-          { $set: { ownerId: null, updatedAt: now }, $unset: { pendingLeaderCharacterId: "" } }
-        );
+      await db.collection<Union>("unions").updateOne(
+        { _id: unionObjectId },
+        {
+          $set: { ownerId: null, updatedAt: now },
+          $unset: { pendingLeaderCharacterId: "", ownerType: "" },
+        }
+      );
       await db
         .collection<Character>("characters")
         .updateOne({ _id: character._id }, { $set: { unionLeaderOf: null, updatedAt: now } });

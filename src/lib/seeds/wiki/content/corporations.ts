@@ -122,6 +122,8 @@ Two multipliers exist specifically so entrenched monopolies stay breakable:
 
 Non-player corporations raid too. An aggressive NPP-run corporation picks whichever target gives it the best expected capture, waits out a 24-turn cooldown between strikes, and holds a small MS reserve back. A corporation sitting on low Marketing Strength reads to that logic as a soft target.
 
+When the matching feature flags are on, NPP CEOs also run the operator loop a player would: wages (quality hangs off that), same-country [supply agreements](/wiki/supply-agreements), extraction [prospecting](/wiki/resources-overview) against short deposits, and parking idle treasury in high-coupon [bonds](/wiki/corporate-bonds) instead of letting cash sit.
+
 ## Reading the numbers: time and money
 
 Two different clocks run in this game. Mixing them up is the most common source of confusion about sector economics.

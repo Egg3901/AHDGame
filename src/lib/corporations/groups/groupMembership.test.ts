@@ -8,12 +8,7 @@ const GRANDCHILD = new ObjectId();
 const OUTSIDER = new ObjectId();
 
 /** A corp whose sole corporate shareholder holds `pct` of a 100-share float. */
-function corp(
-  id: ObjectId,
-  holder: ObjectId | null,
-  pct: number,
-  formalized: boolean
-) {
+function corp(id: ObjectId, holder: ObjectId | null, pct: number, formalized: boolean) {
   return {
     _id: id,
     totalShares: 100,

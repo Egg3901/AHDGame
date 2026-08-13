@@ -86,7 +86,11 @@ describe("groupIndustrySharePercent", () => {
         ],
       ]) as never
     );
-    const { db } = makeDb([ownedBy(PARENT, null, 0), ownedBy(CHILD, PARENT, 60), ownedBy(OUTSIDER, null, 0)]);
+    const { db } = makeDb([
+      ownedBy(PARENT, null, 0),
+      ownedBy(CHILD, PARENT, 60),
+      ownedBy(OUTSIDER, null, 0),
+    ]);
     const share = await groupIndustrySharePercent(db, PARENT, "US", "steel" as never, false);
     expect(share).toBe(70);
   });

@@ -340,10 +340,9 @@ export async function POST(request: Request) {
     // effects in under category:"custom".
     const rawProvisions = category === "custom" ? [] : clientProvisions;
 
-    // proposeBillSchema accepts chambers for every country we support so the
-    // shared validator stays simple. This route is US-only; reject foreign
-    // chamber values up front so we never construct a Bill with
-    // countryId: "US" and an originChamber from a different legislature.
+    // proposeBillSchema is country-neutral so country configs can add chamber
+    // keys without changing the shared body shape. This route is US-only;
+    // reject foreign chamber values before constructing a US bill.
     const US_CONGRESS_CHAMBERS = ["house", "senate", "joint"] as const;
     if (!(US_CONGRESS_CHAMBERS as readonly string[]).includes(chamber)) {
       logRequest("POST", path, 400, Date.now() - start);

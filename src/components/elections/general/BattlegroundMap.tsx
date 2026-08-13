@@ -17,6 +17,7 @@
  * See plan §"Phase 5b — Tasks" 5b.4 + D5.
  */
 
+import { useTranslations } from "next-intl";
 import { USAMapPaths, type StateMapData } from "@/components/USAMapPaths";
 import type {
   BattlegroundHoverCardData,
@@ -24,12 +25,15 @@ import type {
   MarginTier,
 } from "@/lib/elections/generalViewModel";
 
-const TIER_LABEL: Record<MarginTier, string> = {
-  safe: "Safe",
-  likely: "Likely",
-  lean: "Lean",
-  tossup: "Toss-up",
-};
+/** Translated tier label lookup. Built inline where `t` is available. */
+function tierLabels(t: ReturnType<typeof useTranslations>): Record<MarginTier, string> {
+  return {
+    safe: t("battleground.tierSafe"),
+    likely: t("battleground.tierLikely"),
+    lean: t("battleground.tierLean"),
+    tossup: t("battleground.tierTossup"),
+  };
+}
 
 const TIER_BAND: Record<MarginTier, string> = {
   safe: "≥ 15pp",
@@ -69,6 +73,8 @@ export function shadeColorForTier(color: string, tier: MarginTier): string {
  * Exported for unit testing — also rendered inline by `BattlegroundMap`.
  */
 export function HoverCard({ data }: { data: BattlegroundHoverCardData }) {
+  const t = useTranslations("elections");
+  const TIER_LABEL = tierLabels(t);
   return (
     <div className="min-w-[200px]">
       <div className="text-xs font-semibold text-slate-100">{data.stateName}</div>
@@ -113,6 +119,8 @@ export function BattlegroundMap({
   onSelectState?: (stateId: string) => void;
   collapseEmptyTiers?: boolean;
 }) {
+  const t = useTranslations("elections");
+  const TIER_LABEL = tierLabels(t);
   const stateData: Record<string, StateMapData> = {};
   const presentTiers = new Set<MarginTier>();
   for (const [stateId, info] of Object.entries(marginByState)) {
@@ -135,10 +143,10 @@ export function BattlegroundMap({
     <div className="rounded-xl border border-card-border bg-card p-3 sm:p-6 overflow-hidden shadow-panel">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          Battleground Map
+          {t("battleground.title")}
         </h3>
         <span className="text-[10px] uppercase tracking-wider text-muted">
-          Margin tiers — same shading as the popular-vote view
+          {t("battleground.subtitle")}
         </span>
       </div>
       <div
@@ -153,13 +161,12 @@ export function BattlegroundMap({
       </div>
 
       {!hasData ? (
-        <p className="mt-3 text-xs text-muted">
-          Margin data populates as votes accumulate. States with fewer than two non-zero candidates
-          appear unshaded.
-        </p>
+        <p className="mt-3 text-xs text-muted">{t("battleground.emptyHint")}</p>
       ) : (
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
-          <span className="text-[10px] uppercase tracking-wider text-muted">Margin tiers:</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted">
+            {t("battleground.marginTiers")}
+          </span>
           {tiersToShow.map((tier) => (
             <span key={tier} className="flex items-center gap-1.5 text-muted">
               <span
@@ -175,7 +182,9 @@ export function BattlegroundMap({
           {highlightedStates && highlightedStates.length > 0 ? (
             <span className="flex items-center gap-1.5 text-purple-400">
               <span className="inline-block h-3 w-3 rounded-sm border-2 border-purple-400" />
-              <span className="text-xs">Battleground ({highlightedStates.length})</span>
+              <span className="text-xs">
+                {t("battleground.battlegroundCount", { count: highlightedStates.length })}
+              </span>
             </span>
           ) : null}
         </div>

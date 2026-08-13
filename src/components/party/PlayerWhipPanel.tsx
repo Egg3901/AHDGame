@@ -8,6 +8,7 @@ import { partyApiUrl, legislatureUrl } from "@/lib/urls";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { WhipTabsLayout } from "./whipTabsLayout";
 import type { PlayerWhipIssuerRole } from "@/lib/partyWhips/playerWhipSummary";
+import { whipIssuerRoleLabel } from "@/lib/partyWhips/issuerRole";
 import type { PlayerWhipMode } from "@/lib/db/types";
 import type { WhipEndpointConfig } from "./WhipTabs";
 
@@ -15,7 +16,7 @@ interface PlayerWhipEntry {
   direction: string;
   attemptNumber: number;
   createdAt: string;
-  issuerRole: PlayerWhipIssuerRole;
+  issuerRole?: PlayerWhipIssuerRole;
   mode: PlayerWhipMode;
   candidacyId?: string;
 }
@@ -233,17 +234,6 @@ export function PlayerWhipPanel({
       timeStyle: "short",
     }).format(new Date(value));
 
-  const getIssuerLabel = (role: PlayerWhipIssuerRole) => {
-    switch (role) {
-      case "chair":
-        return "Chair";
-      case "viceChair":
-        return "Vice Chair";
-      default:
-        return "Admin";
-    }
-  };
-
   const getModeLabel = (mode: PlayerWhipMode) => (mode === "soft" ? "Soft" : "Hard");
 
   const hasModeWhip = (existingWhips: PlayerWhipEntry[]) =>
@@ -270,7 +260,7 @@ export function PlayerWhipPanel({
         directionLabel,
         candidateLabel,
         formatIssuedAt(whip.createdAt),
-        getIssuerLabel(whip.issuerRole),
+        whipIssuerRoleLabel(whip.issuerRole),
       ].filter((value): value is string => Boolean(value));
       return (
         <div

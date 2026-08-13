@@ -38,9 +38,9 @@ describe("validateCharter", () => {
       validateCharter({ ...ok, scope: "global", countryId: "US" as never }, financial)
     ).toMatch(/cannot also name a country/i);
     expect(validateCharter({ ...ok, kind: "sector" }, financial)).toMatch(/needs an industry/i);
-    expect(
-      validateCharter({ ...ok, sectorType: "technology" as never }, financial)
-    ).toMatch(/cannot also name an industry/i);
+    expect(validateCharter({ ...ok, sectorType: "technology" as never }, financial)).toMatch(
+      /cannot also name an industry/i
+    );
   });
 
   it("holds the expense ratio inside its band at both ends", () => {

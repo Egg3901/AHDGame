@@ -131,7 +131,9 @@ describe("resolveFundStewardship", () => {
  * mirror-or-abstain. These cover the path end to end from a stored instruction.
  */
 describe("resolveFundStewardship with an instruction", () => {
-  function dbWithPositions(positions: { holderKind: string; characterId?: ObjectId; units: number }[]) {
+  function dbWithPositions(
+    positions: { holderKind: string; characterId?: ObjectId; units: number }[]
+  ) {
     return {
       collection: vi.fn(() => ({
         find: vi.fn(() => ({ toArray: async () => positions })),
@@ -148,7 +150,9 @@ describe("resolveFundStewardship with an instruction", () => {
       corporation: corpWithFundStake(400),
       castYes: 500,
       castNo: 100,
-      directions: new Map([[fundId.toString(), { vote: "no" as const, directorCharacterId: holderId }]]),
+      directions: new Map([
+        [fundId.toString(), { vote: "no" as const, directorCharacterId: holderId }],
+      ]),
     });
     // Mirroring would have added 400 to YES. Control means control.
     expect(result).toEqual({ yes: 0, no: 400, excludedFromDenominator: 0 });
@@ -163,21 +167,23 @@ describe("resolveFundStewardship with an instruction", () => {
       corporation: corpWithFundStake(400),
       castYes: 500,
       castNo: 100,
-      directions: new Map([[fundId.toString(), { vote: "no" as const, directorCharacterId: holderId }]]),
+      directions: new Map([
+        [fundId.toString(), { vote: "no" as const, directorCharacterId: holderId }],
+      ]),
     });
     // Falls back to mirroring rather than honouring a stale instruction.
     expect(result).toEqual({ yes: 400, no: 0, excludedFromDenominator: 0 });
   });
 
   it("lets a directed fund carry a vote nobody else voted on", async () => {
-    const db = dbWithPositions([
-      { holderKind: "character", characterId: holderId, units: 1000 },
-    ]);
+    const db = dbWithPositions([{ holderKind: "character", characterId: holderId, units: 1000 }]);
     const result = await resolveFundStewardship(db, {
       corporation: corpWithFundStake(400),
       castYes: 0,
       castNo: 0,
-      directions: new Map([[fundId.toString(), { vote: "yes" as const, directorCharacterId: holderId }]]),
+      directions: new Map([
+        [fundId.toString(), { vote: "yes" as const, directorCharacterId: holderId }],
+      ]),
     });
     // Without an instruction this is the abstain case. With one it is a vote,
     // and the shares stay in the denominator because they were cast.
@@ -193,7 +199,9 @@ describe("resolveFundStewardship with an instruction", () => {
       corporation: corpWithFundStake(400),
       castYes: 500,
       castNo: 100,
-      directions: new Map([[fundId.toString(), { vote: "no" as const, directorCharacterId: holderId }]]),
+      directions: new Map([
+        [fundId.toString(), { vote: "no" as const, directorCharacterId: holderId }],
+      ]),
     });
     // 100 of 1000 units is not control, so the instruction does not bind.
     expect(result).toEqual({ yes: 400, no: 0, excludedFromDenominator: 0 });

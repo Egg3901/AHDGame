@@ -35,6 +35,14 @@ function baselineTotals(countryId: LawCountryId) {
   const byKey: Record<string, number> = {};
   for (const law of getCatalog(countryId)) {
     if (law.kind === "tax") continue;
+    // Regional secondaries are Land / state spending, not national outlays, and
+    // they are costed against national BASES here. Summing them inflated the
+    // national baseline against the doc's figure: PR #17 added the six DD Land
+    // laws (all baselineLevel 3) on 2026-08-12 and pushed DD's deviation 3.3pt
+    // off the doc, well past the 1pt pin. Same carve-out the seeder applies
+    // (`seedPoliticalLegislation`: allowedScope === "regional" continue) and the
+    // reset e2e now applies.
+    if (law.allowedScope === "regional") continue;
     const level = law.baselineLevel ?? 0;
     if (level === 0) continue;
     const fiscal = computeLawCost(law.levels![level], BASES[countryId], countryId, null);

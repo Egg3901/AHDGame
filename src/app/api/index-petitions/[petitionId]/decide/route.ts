@@ -7,10 +7,7 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { resolveMergerAuthority } from "@/lib/corporations/mergerReview/authority";
-import {
-  decideListingPetition,
-  INDEX_LISTING_PETITIONS,
-} from "@/lib/indexFunds/petitions/service";
+import { decideListingPetition, INDEX_LISTING_PETITIONS } from "@/lib/indexFunds/petitions/service";
 import type { IndexListingPetition } from "@/lib/db/types/indexListingPetition";
 
 /**

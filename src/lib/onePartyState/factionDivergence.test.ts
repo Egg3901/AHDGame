@@ -13,7 +13,9 @@ const CPSU = { economic: -4, social: 2 };
 describe("scoreDivergence", () => {
   it("scores a loyalist at zero and a polar opposite at one", () => {
     expect(scoreDivergence({ characterId: "a", economic: -4, social: 2 }, CPSU)).toBe(0);
-    expect(scoreDivergence({ characterId: "b", economic: 5, social: -5 }, { economic: -5, social: 5 })).toBe(1);
+    expect(
+      scoreDivergence({ characterId: "b", economic: 5, social: -5 }, { economic: -5, social: 5 })
+    ).toBe(1);
   });
 
   it("rises monotonically with distance from the line", () => {
@@ -27,7 +29,9 @@ describe("scoreDivergence", () => {
   it("treats a missing position as loyal rather than maximally divergent", () => {
     // Otherwise every imported official with no recorded position is purged first.
     expect(scoreDivergence({ characterId: "a", economic: null, social: 2 }, CPSU)).toBe(0);
-    expect(scoreDivergence({ characterId: "b", economic: undefined, social: undefined }, CPSU)).toBe(0);
+    expect(
+      scoreDivergence({ characterId: "b", economic: undefined, social: undefined }, CPSU)
+    ).toBe(0);
     expect(scoreDivergence({ characterId: "c", economic: Number.NaN, social: 1 }, CPSU)).toBe(0);
   });
 });
@@ -107,7 +111,10 @@ describe("factionCentreOfGravity", () => {
 
   it("ignores defectors with unusable positions rather than dragging the centre to zero", () => {
     const centre = factionCentreOfGravity(
-      [{ economic: 2, social: 2 }, { economic: Number.NaN, social: 0 }],
+      [
+        { economic: 2, social: 2 },
+        { economic: Number.NaN, social: 0 },
+      ],
       CPSU
     );
     expect(centre).toEqual({ economic: 2, social: 2 });

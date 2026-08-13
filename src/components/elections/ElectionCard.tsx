@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { getPartyColor } from "@/lib/utils/politics";
 import { useGameClock } from "@/contexts/useGameClock";
 import type { ElectionDisplay } from "@/lib/db/types";
@@ -88,6 +89,7 @@ export const ElectionCard = memo(function ElectionCard({
   onWithdraw,
   liveResultsEnabled = false,
 }: ElectionCardProps) {
+  const t = useTranslations("elections");
   const clock = useGameClock();
   const inThisRace = isInRace(election);
   const inAnyRace = isInAnyRace();
@@ -129,12 +131,12 @@ export const ElectionCard = memo(function ElectionCard({
         : "bg-muted/15 text-muted border-card-border";
 
   const statusLabel = isUpcoming
-    ? "Upcoming"
+    ? t("status.upcoming")
     : election.status === "completed"
-      ? "Completed"
+      ? t("status.completed")
       : effectiveInPrimary
-        ? "Primary Phase"
-        : "General Phase";
+        ? t("status.primaryPhase")
+        : t("status.generalPhase");
 
   // Build polling donut entries
   const isPrimaryPolling = election.polling?.source === "primary";
@@ -153,7 +155,7 @@ export const ElectionCard = memo(function ElectionCard({
         .sort(([, a], [, b]) => b - a);
       for (const [candidateId, pct] of entries) {
         const partyId = election.polling!.candidateParties[candidateId] ?? "independent";
-        const name = election.polling!.candidateNames[candidateId] ?? "Unknown";
+        const name = election.polling!.candidateNames[candidateId] ?? t("card.unknownCandidate");
         const baseColor =
           election.polling!.candidatePartyColors?.[candidateId] ??
           getPartyColorHex(partyId) ??
@@ -252,7 +254,7 @@ export const ElectionCard = memo(function ElectionCard({
             href={buildElectionHref(election)}
             className="font-semibold text-base hover:text-primary transition-colors flex items-center gap-2"
           >
-            {electionRaceTitle(election, gameYear)}
+            {electionRaceTitle(election, gameYear, t)}
             <svg
               className="w-4 h-4 text-muted/50"
               fill="none"
@@ -264,7 +266,7 @@ export const ElectionCard = memo(function ElectionCard({
           </Link>
           {election.incumbent && (
             <p className="mt-0.5 text-xs text-muted leading-tight">
-              Incumbent:{" "}
+              {t("card.incumbent")}{" "}
               <span
                 className="font-medium"
                 style={{ color: election.incumbent.partyColor ?? undefined }}
@@ -292,14 +294,18 @@ export const ElectionCard = memo(function ElectionCard({
             <div className="px-3 py-1.5 flex items-center justify-between text-[10px] font-medium bg-blue-500/10 border-b border-blue-500/20 text-blue-400">
               <span className="flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-                {election.electionType === "president" ? "Popular Vote" : "Live Vote Tally"}
+                {election.electionType === "president"
+                  ? t("card.popularVote")
+                  : t("card.liveVoteTally")}
               </span>
               {election.generalTally.turnSnapshots.length > 0 && (
                 <span className="text-muted font-normal">
-                  {formatVotesCompact(
-                    Object.values(election.generalTally.totalVotes).reduce((s, v) => s + v, 0)
-                  )}{" "}
-                  votes · {election.generalTally.turnSnapshots.length} turns
+                  {t("card.votesTurns", {
+                    votes: formatVotesCompact(
+                      Object.values(election.generalTally.totalVotes).reduce((s, v) => s + v, 0)
+                    ),
+                    turnCount: election.generalTally.turnSnapshots.length,
+                  })}
                 </span>
               )}
             </div>
@@ -315,7 +321,8 @@ export const ElectionCard = memo(function ElectionCard({
                       election.polling!.candidatePartyColors?.[candidateId] ??
                       getPartyColorHex(party) ??
                       "#9CA3AF",
-                    label: election.polling!.candidateNames[candidateId] ?? "Unknown",
+                    label:
+                      election.polling!.candidateNames[candidateId] ?? t("card.unknownCandidate"),
                   };
                 });
                 return (
@@ -327,18 +334,22 @@ export const ElectionCard = memo(function ElectionCard({
                       {/* Column headers */}
                       <div className="flex items-center gap-2 mb-1.5 text-[9px] uppercase tracking-wider text-muted/50 font-medium select-none">
                         <div className="w-5 shrink-0" />
-                        <div className="w-36 shrink-0">Candidate</div>
-                        <div className="w-32 shrink-0">Party</div>
+                        <div className="w-36 shrink-0">{t("card.candidateHeader")}</div>
+                        <div className="w-32 shrink-0">{t("card.partyHeader")}</div>
                         <div className="flex-1 min-w-0" />
-                        <div className="shrink-0 w-8 text-right">Votes</div>
-                        {showSeats && <div className="shrink-0 w-8 text-right">Seats</div>}
+                        <div className="shrink-0 w-8 text-right">{t("card.votesHeader")}</div>
+                        {showSeats && (
+                          <div className="shrink-0 w-8 text-right">{t("card.seatsHeader")}</div>
+                        )}
                         <div className="shrink-0 w-10 text-right">%</div>
                       </div>
                       <div className="space-y-1.5">
                         {generalEntries.map(([candidateId, pct], i) => {
                           const party =
                             election.polling!.candidateParties[candidateId] ?? "independent";
-                          const name = election.polling!.candidateNames[candidateId] ?? "Unknown";
+                          const name =
+                            election.polling!.candidateNames[candidateId] ??
+                            t("card.unknownCandidate");
                           const partyDisplayName =
                             election.polling!.candidatePartyNames?.[candidateId] ?? "";
                           const color =
@@ -426,12 +437,12 @@ export const ElectionCard = memo(function ElectionCard({
         {primaryGroups.length > 0 && effectiveInPrimary && (
           <div className="space-y-3">
             <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-              Primary Results
+              {t("card.primaryResults")}
             </div>
             <PrimaryCardGrid
               primaries={primaryGroups.map((group) => ({
                 partyId: group.partyId,
-                partyName: `${group.partyName} Primary`,
+                partyName: t("card.partyPrimary", { party: group.partyName }),
                 partyColor: group.baseColor,
                 isUncontested: group.candidates.length === 1,
                 candidates: group.candidates.map((c, i) => ({
@@ -454,7 +465,7 @@ export const ElectionCard = memo(function ElectionCard({
         {hasPolling && !isPrimaryPolling && generalEntries && !election.generalTally && (
           <div className="space-y-2">
             <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-              Polling
+              {t("card.polling")}
             </div>
             <div className="rounded-lg border border-card-border/60 px-3 py-3">
               {(() => {
@@ -468,7 +479,8 @@ export const ElectionCard = memo(function ElectionCard({
                       election.polling!.candidatePartyColors?.[candidateId] ??
                       getPartyColorHex(party) ??
                       "#9CA3AF",
-                    label: election.polling!.candidateNames[candidateId] ?? "Unknown",
+                    label:
+                      election.polling!.candidateNames[candidateId] ?? t("card.unknownCandidate"),
                   };
                 });
                 return (
@@ -480,17 +492,21 @@ export const ElectionCard = memo(function ElectionCard({
                       {/* Column headers */}
                       <div className="flex items-center gap-2 mb-1.5 text-[9px] uppercase tracking-wider text-muted/50 font-medium select-none">
                         <div className="w-5 shrink-0" />
-                        <div className="w-36 shrink-0">Candidate</div>
-                        <div className="w-32 shrink-0">Party</div>
+                        <div className="w-36 shrink-0">{t("card.candidateHeader")}</div>
+                        <div className="w-32 shrink-0">{t("card.partyHeader")}</div>
                         <div className="flex-1 min-w-0" />
-                        {showSeats && <div className="shrink-0 w-8 text-right">Seats</div>}
+                        {showSeats && (
+                          <div className="shrink-0 w-8 text-right">{t("card.seatsHeader")}</div>
+                        )}
                         <div className="shrink-0 w-10 text-right">%</div>
                       </div>
                       <div className="space-y-1.5">
                         {generalEntries.map(([candidateId, pct], i) => {
                           const party =
                             election.polling!.candidateParties[candidateId] ?? "independent";
-                          const name = election.polling!.candidateNames[candidateId] ?? "Unknown";
+                          const name =
+                            election.polling!.candidateNames[candidateId] ??
+                            t("card.unknownCandidate");
                           const partyDisplayName =
                             election.polling!.candidatePartyNames?.[candidateId] ?? "";
                           const color =
@@ -576,7 +592,7 @@ export const ElectionCard = memo(function ElectionCard({
           {!effectiveInPrimary && !(hasPolling && !isPrimaryPolling) && (
             <div className="flex-1 space-y-2">
               <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-                Candidates
+                {t("card.candidates")}
               </div>
               {election.candidates.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
@@ -621,7 +637,7 @@ export const ElectionCard = memo(function ElectionCard({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted italic">No registered candidates</p>
+                <p className="text-xs text-muted italic">{t("card.noRegisteredCandidates")}</p>
               )}
             </div>
           )}
@@ -634,11 +650,11 @@ export const ElectionCard = memo(function ElectionCard({
                   disabled={isLoading}
                   className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
                 >
-                  {isLoading ? "Processing…" : "Withdraw"}
+                  {isLoading ? t("card.processing") : t("card.withdraw")}
                 </button>
               ) : isEntryBlocked ? (
-                <span className="text-xs italic text-muted" title="Filing closed for this race.">
-                  Filing closed
+                <span className="text-xs italic text-muted" title={t("card.filingClosedTitle")}>
+                  {t("card.filingClosed")}
                 </span>
               ) : (
                 canShowEnterButton &&
@@ -649,7 +665,7 @@ export const ElectionCard = memo(function ElectionCard({
                     disabled={isLoading}
                     className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-white shadow-sm transition-all hover:bg-primary-dark hover:shadow-md disabled:opacity-50 disabled:shadow-none"
                   >
-                    {isLoading ? "Joining…" : "Enter Race"}
+                    {isLoading ? t("card.joining") : t("card.enterRace")}
                   </button>
                 )
               )}
@@ -666,7 +682,7 @@ export const ElectionCard = memo(function ElectionCard({
               {election.status === "active" && (
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
               )}
-              Live Results →
+              {t("card.liveResults")}
             </Link>
           </div>
         )}

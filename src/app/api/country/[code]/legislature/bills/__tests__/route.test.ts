@@ -239,7 +239,7 @@ vi.mock("@/lib/api/parliamentaryFreeze", () => ({
 const { requireBasicAuth } = await import("@/lib/api/requireAuth");
 const { checkLegislationFreeze } = await import("@/lib/api/parliamentaryFreeze");
 
-describe("POST /api/country/[code]/legislature/bills (JP)", () => {
+describe("POST /api/country/[code]/legislature/bills", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(checkLegislationFreeze).mockResolvedValue({ ok: true } as never);
@@ -247,6 +247,7 @@ describe("POST /api/country/[code]/legislature/bills (JP)", () => {
 
   const jpParams = { params: Promise.resolve({ code: "jp" }) };
   const ukParams = { params: Promise.resolve({ code: "uk" }) };
+  const ruParams = { params: Promise.resolve({ code: "ru" }) };
 
   function makeLegislaturePostDb(opts: {
     charId: ObjectId;
@@ -303,6 +304,7 @@ describe("POST /api/country/[code]/legislature/bills (JP)", () => {
       }),
     };
     const partiesCollection = {
+      findOne: vi.fn().mockResolvedValue(null),
       find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
     };
     const mockDb = {
@@ -525,6 +527,73 @@ describe("POST /api/country/[code]/legislature/bills (JP)", () => {
     expect(inserted.originChamber).toBe("bundestag");
     expect(inserted.currentChamber).toBe("bundestag");
     expect(inserted.countryId).toBe("DE");
+  });
+
+  it("allows a seated Supreme Soviet deputy to propose a bill", async () => {
+    const charId = new ObjectId();
+    const userId = new ObjectId();
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: userId.toString(), isAdmin: false },
+    } as never);
+    const { billCollection } = makeLegislaturePostDb({
+      charId,
+      userId,
+      officeType: "supremeSovietDeputy",
+    });
+
+    const { POST } = await import("@/app/api/country/[code]/legislature/bills/route");
+    const response = await POST(
+      postReq({
+        title: "Global Alliance Web",
+        summary: "Strengthens Soviet alliances and fraternal diplomacy.",
+        chamber: "sovietOfTheUnion",
+        category: "tax",
+        provisions: [
+          {
+            legislationTypeId: "lt_tax_income",
+            policyOptionId: "opt_center",
+            effectDirection: 0,
+            economic: 0,
+            social: 0,
+          },
+        ],
+      }),
+      ruParams
+    );
+
+    expect(response.status).toBe(201);
+    const inserted = billCollection.insertOne.mock.calls[0]![0] as {
+      originChamber: string;
+      currentChamber: string;
+      countryId: string;
+    };
+    expect(inserted.originChamber).toBe("sovietOfTheUnion");
+    expect(inserted.currentChamber).toBe("sovietOfTheUnion");
+    expect(inserted.countryId).toBe("RU");
+  });
+
+  it("rejects a chamber that is not configured for the country", async () => {
+    const charId = new ObjectId();
+    const userId = new ObjectId();
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: userId.toString(), isAdmin: false },
+    } as never);
+    const { billCollection } = makeLegislaturePostDb({
+      charId,
+      userId,
+      officeType: "supremeSovietDeputy",
+    });
+
+    const { POST } = await import("@/app/api/country/[code]/legislature/bills/route");
+    const response = await POST(postReq({ ...validBody, chamber: "house" }), ruParams);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining("Invalid chamber"),
+    });
+    expect(billCollection.insertOne).not.toHaveBeenCalled();
   });
 
   it("allows a Commons member to propose an end-subsidy bill", async () => {

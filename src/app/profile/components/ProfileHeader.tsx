@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import type { Character, PoliticalParty } from "@/lib/db/types";
 import type { PatreonTier, ProfileBorderKey } from "@/lib/db/types";
 import { getCountryConfig } from "@/lib/constants/countries";
@@ -60,6 +61,7 @@ export function ProfileHeader({
   ownProfileHref,
   wikiProfileHref,
 }: ProfileHeaderProps) {
+  const t = useTranslations("profile.header");
   const partyHex = getPartyHex(character.party, party?.color ?? undefined);
   const accentHex = patreonHighlightColor ?? partyHex;
   // Prefer persisted countryId; fall back to URL slug from the page (avoids crashes when legacy
@@ -68,7 +70,7 @@ export function ProfileHeader({
   const countryCfg = getCountryConfig(countryId);
   const partyAbbrev =
     character.party === "independent"
-      ? "IND"
+      ? t("independent")
       : party?.abbreviation?.trim() || party?.name.slice(0, 3).toUpperCase() || "?";
 
   return (
@@ -157,12 +159,12 @@ export function ProfileHeader({
                 />
                 {user.isAdmin && (
                   <span className="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-warning sm:text-[10px]">
-                    Admin
+                    {t("admin")}
                   </span>
                 )}
                 {user.isModerator && !user.isAdmin && (
                   <span className="shrink-0 rounded-full border border-info/30 bg-info/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-info sm:text-[10px]">
-                    Moderator
+                    {t("moderator")}
                   </span>
                 )}
               </div>
@@ -184,7 +186,7 @@ export function ProfileHeader({
                   </Link>
                 ) : (
                   <span className="inline-flex shrink-0 items-center rounded-md border border-card-border bg-card-elevated/60 px-1.5 py-0.5 font-semibold leading-none text-foreground/80">
-                    IND
+                    {t("independent")}
                   </span>
                 )}
                 <Link
@@ -228,7 +230,7 @@ export function ProfileHeader({
                     d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                   />
                 </svg>
-                Member since {memberSince}
+                {t("memberSince", { date: memberSince })}
               </p>
 
               {ownProfileHref && (
@@ -245,7 +247,7 @@ export function ProfileHeader({
                         d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
                       />
                     </svg>
-                    Edit Profile
+                    {t("editProfile")}
                   </Link>
                   <CopyProfileLinkButton href={ownProfileHref} />
                 </div>
@@ -256,7 +258,7 @@ export function ProfileHeader({
                     href={wikiProfileHref}
                     className="text-xs text-primary hover:underline font-medium"
                   >
-                    View wiki profile →
+                    {t("viewWikiProfile")}
                   </Link>
                 </div>
               )}
@@ -278,7 +280,7 @@ export function ProfileHeader({
                     d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
                   />
                 </svg>
-                Edit Profile
+                {t("editProfile")}
               </Link>
             </div>
           )}
@@ -288,7 +290,7 @@ export function ProfileHeader({
                 href={wikiProfileHref}
                 className="inline-flex items-center gap-1 text-sm text-primary hover:underline font-medium"
               >
-                View wiki profile →
+                {t("viewWikiProfile")}
               </Link>
             </div>
           )}
@@ -296,7 +298,7 @@ export function ProfileHeader({
 
         <div className="mt-6">
           <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted">
-            Biography
+            {t("biography")}
           </h2>
           <div className="border-l-2 border-primary/60 bg-primary/5 pl-3 sm:pl-4 py-1.5 rounded-r-md">
             {character.bio ? (
@@ -304,9 +306,7 @@ export function ProfileHeader({
                 &quot;{character.bio}&quot;
               </p>
             ) : (
-              <p className="text-sm italic text-muted/50">
-                This player has not published a public biography yet.
-              </p>
+              <p className="text-sm italic text-muted/50">{t("noBio")}</p>
             )}
           </div>
           {campaignSongUrl && (
