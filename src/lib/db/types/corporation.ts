@@ -1002,6 +1002,26 @@ export interface CorporateSector {
    */
   absorbedAtTurn?: number;
   /**
+   * Prior-owner provenance stamped at taking time so an executive/emergency
+   * nationalization can be UNDONE (e.g. a Supreme Court strike-down of the
+   * emergency taking). Records who held the sector and its pre-haircut economics
+   * before the state absorbed it. Absent on seeded / never-nationalized sectors,
+   * and on takings that predate this field. On a NatCorp merge this reflects the
+   * MOST RECENT taking folded into the surviving row.
+   */
+  nationalizationProvenance?: {
+    /** The corporation that held this sector immediately before the taking. */
+    formerCorporationId: ObjectId;
+    /** The sector's home country before the taking (usually the taking country). */
+    formerCountryId?: string;
+    /** Revenue (donor currency) before the transition haircut. */
+    formerRevenue?: number;
+    /** Capital stock before the transition haircut (plants mode). */
+    formerCapitalStock?: number;
+    /** Turn the taking occurred. */
+    takenAtTurn: number;
+  };
+  /**
    * Turn this sector was nationalized — anchor for the transition productivity
    * shock (decays over NATIONALIZATION_TRANSITION_TURNS). Stamped at the moment of
    * a taking; absent on never-nationalized sectors (no shock).
