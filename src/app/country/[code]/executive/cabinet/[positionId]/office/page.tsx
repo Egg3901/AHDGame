@@ -119,7 +119,10 @@ export default function CabinetOfficePage() {
     return <div className="p-8 text-center text-error">Unknown cabinet position</div>;
   }
 
-  if (loading) {
+  // Skeleton only on the first load. A refresh with data already in hand must
+  // keep the office mounted or roster state (branch tab, open Manage panel)
+  // resets to Ground after every assign.
+  if (loading && !data) {
     return (
       <div className="min-h-screen bg-background pb-16">
         <main className="mx-auto max-w-7xl space-y-4 px-4 py-8 sm:px-6">
