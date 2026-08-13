@@ -1,5 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { statusBarRowClassName } from "./statusBarLayoutClasses";
+import {
+  MODAL_OVERLAY_Z_INDEX_CLASS,
+  STATUS_BAR_CONTAINER_CLASS,
+  STATUS_BAR_Z_INDEX_CLASS,
+  statusBarRowClassName,
+} from "./statusBarLayoutClasses";
+
+const tailwindZ = (className: string) => Number(className.replace("z-", ""));
+
+describe("STATUS_BAR_CONTAINER_CLASS", () => {
+  it("stacks below modal overlays so a fixed bar cannot cover a modal's action row", () => {
+    // ticket-1061: at equal z-index the later DOM node wins, and the root layout
+    // renders StatusBar after {children}. A tie put the bar over modal buttons on
+    // phones, where the form is tall enough to reach the bottom of the viewport.
+    expect(tailwindZ(STATUS_BAR_Z_INDEX_CLASS)).toBeLessThan(
+      tailwindZ(MODAL_OVERLAY_Z_INDEX_CLASS),
+    );
+    expect(STATUS_BAR_CONTAINER_CLASS).toContain(STATUS_BAR_Z_INDEX_CLASS);
+    expect(STATUS_BAR_CONTAINER_CLASS).not.toContain(MODAL_OVERLAY_Z_INDEX_CLASS);
+  });
+
+  it("keeps the bar pinned to the bottom edge with safe-area padding", () => {
+    expect(STATUS_BAR_CONTAINER_CLASS).toContain("fixed bottom-0 left-0 right-0");
+    expect(STATUS_BAR_CONTAINER_CLASS).toContain("pb-[env(safe-area-inset-bottom)]");
+  });
+});
 
 describe("statusBarRowClassName", () => {
   it("keeps a horizontal gap for elections/corp/standard so left online count cannot sit flush on Profile", () => {
