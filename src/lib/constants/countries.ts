@@ -6430,13 +6430,6 @@ export function getPrimaryWinnersForCountry(countryId: CountryId): number {
   return getPrimaryWinnersForGovernmentType(config.governmentType);
 }
 
-/** US House primaries advance the top N per party (vs 1 for other US races),
- *  so the districted-redistricting resolver can split a party's district wins
- *  by primary share. This is an inherently election-type-specific exception
- *  that does not fit the government-type table, so it lives here in the
- *  country source-of-truth file per the country-system convention. */
-export const US_HOUSE_PRIMARY_ADVANCE = 3;
-
 /**
  * Election types that elect a single office-holder via a directly-contested
  * ballot, so exactly one candidate per party may advance from the primary —
@@ -6473,32 +6466,23 @@ export const SINGLE_WINNER_EXECUTIVE_ELECTION_TYPES: ReadonlySet<string> = new S
 /**
  * Resolve the primary-winner cap for a specific (country, electionType).
  *
- * Two election-type exceptions override the government-type default:
- * - Single-winner executive offices ({@link SINGLE_WINNER_EXECUTIVE_ELECTION_TYPES})
- *   always advance exactly one candidate per party — a governor/president race
- *   fills one seat, so parliamentary/one-party multi-advance would split its vote.
- * - US House advances {@link US_HOUSE_PRIMARY_ADVANCE} when the districted-
- *   redistricting system is enabled, so legacy worlds keep the single nominee.
+ * One election-type exception overrides the government-type default:
+ * single-winner executive offices ({@link SINGLE_WINNER_EXECUTIVE_ELECTION_TYPES})
+ * always advance exactly one candidate per party — a governor/president race
+ * fills one seat, so parliamentary/one-party multi-advance would split its vote.
  *
  * Otherwise it equals {@link getPrimaryWinnersForCountry}.
  *
- * `redistrictingEnabled` is REQUIRED and deliberately has no default. It used to
- * default to `false`, which silently gave every caller that forgot it the legacy
- * single-nominee cap: the turn resolver advanced three US House nominees per
- * party while every display surface showed one (ticket-1041). Read it from the
- * world's gameState via `isRedistrictingEnabled(gameState)`; pass a literal
- * `false` only where no gameState exists and the legacy cap is genuinely wanted.
+ * US House used to advance three per party under the districted-redistricting
+ * system so the resolver could split a state's delegation by primary share.
+ * That was reverted: a party's own filler NPP survived the primary alongside
+ * the player who beat it and then took a proportional slice of the delegation,
+ * which is not how a primary is meant to work. US House is back to one nominee
+ * per party, like every other US race.
  */
-export function getPrimaryWinnersForElection(
-  countryId: CountryId,
-  electionType: string,
-  redistrictingEnabled: boolean
-): number {
+export function getPrimaryWinnersForElection(countryId: CountryId, electionType: string): number {
   if (SINGLE_WINNER_EXECUTIVE_ELECTION_TYPES.has(electionType)) {
     return 1;
-  }
-  if (redistrictingEnabled && countryId === "US" && electionType === "house") {
-    return US_HOUSE_PRIMARY_ADVANCE;
   }
   return getPrimaryWinnersForCountry(countryId);
 }
