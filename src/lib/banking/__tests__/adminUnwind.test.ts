@@ -13,6 +13,7 @@ function makeActiveCharter(overrides: Partial<BankCharter> = {}): BankCharter {
     currency: "USD",
     charteredTurn: 10,
     postedCapital: 10_000_000,
+    cashReserves: 10_000_000,
     depositOffset: 0,
     lendingOffset: 0,
     npcDeposits: 2_500_000,

@@ -167,8 +167,9 @@ export function ActiveCharterPanel({
           <RecapitalizePanel
             corporationId={data.corporation.id}
             currency={charter.currency}
-            postedCapital={charter.postedCapital}
-            liquidCapital={data.corporation.liquidCapital}
+            cashReserves={charter.cashReserves}
+            requiredReservesAmount={charter.requiredReserves}
+            withdrawable={charter.upstreamCapacity}
             totalLoans={charter.totalLoans}
             propBookMarkValue={charter.propBookMarkValue}
             borrowings={borrowingsFromCharter(charter)}

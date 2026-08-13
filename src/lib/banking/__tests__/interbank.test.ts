@@ -69,8 +69,12 @@ describe("interbank lend/repay", () => {
         {
           _id: lenderId,
           name: "Retail",
-          liquidCapital: 500_000,
-          bankCharter: makeCharter("retail", { totalDeposits: 1_000_000, totalLoans: 0 }),
+          liquidCapital: 0,
+          bankCharter: makeCharter("retail", {
+            totalDeposits: 1_000_000,
+            totalLoans: 0,
+            cashReserves: 500_000,
+          }),
         } as unknown as Corporation,
       ],
       [
@@ -78,11 +82,12 @@ describe("interbank lend/repay", () => {
         {
           _id: borrowerId,
           name: "IB",
-          liquidCapital: 50_000,
+          liquidCapital: 0,
           bankCharter: makeCharter("investment", {
             totalDeposits: 0,
             totalLoans: 0,
             propBookMarkValue: 200_000,
+            cashReserves: 50_000,
           }),
         } as unknown as Corporation,
       ],
@@ -110,22 +115,24 @@ describe("interbank lend/repay", () => {
 
     db.collectionMocks.corporations!.updateOne.mockImplementation(
       async (
-        filter: { _id?: ObjectId; liquidCapital?: { $gte?: number } },
+        filter: { _id?: ObjectId; "bankCharter.cashReserves"?: { $gte?: number } },
         update: { $inc?: Record<string, number>; $set?: Record<string, unknown> }
       ) => {
         if (!filter?._id) return { matchedCount: 0, modifiedCount: 0 };
         const c = live.get(filter._id.toString());
         if (!c) return { matchedCount: 0, modifiedCount: 0 };
         if (
-          filter.liquidCapital?.$gte != null &&
-          (c.liquidCapital ?? 0) < filter.liquidCapital.$gte
+          filter["bankCharter.cashReserves"]?.$gte != null &&
+          (c.bankCharter?.cashReserves ?? 0) < filter["bankCharter.cashReserves"]!.$gte!
         ) {
           return { matchedCount: 0, modifiedCount: 0 };
         }
         if (update.$inc) {
           for (const [k, v] of Object.entries(update.$inc)) {
             if (k === "liquidCapital") c.liquidCapital = (c.liquidCapital ?? 0) + v;
-            else if (k === "bankCharter.interbankDebt" && c.bankCharter) {
+            if (k === "bankCharter.cashReserves" && c.bankCharter) {
+              c.bankCharter.cashReserves = (c.bankCharter.cashReserves ?? 0) + v;
+            } else if (k === "bankCharter.interbankDebt" && c.bankCharter) {
               c.bankCharter.interbankDebt = (c.bankCharter.interbankDebt ?? 0) + v;
             } else if (k === "bankCharter.cbMarginDebt" && c.bankCharter) {
               c.bankCharter.cbMarginDebt = (c.bankCharter.cbMarginDebt ?? 0) + v;
@@ -176,12 +183,14 @@ describe("interbank lend/repay", () => {
   });
 
   it("moves cash lender → borrower and tracks interbankDebt (not totalLoans)", async () => {
-    const lenderBefore = live.get(lenderId.toString())!.liquidCapital!;
-    const borrowerBefore = live.get(borrowerId.toString())!.liquidCapital!;
+    const lenderBefore = live.get(lenderId.toString())!.bankCharter!.cashReserves!;
+    const borrowerBefore = live.get(borrowerId.toString())!.bankCharter!.cashReserves!;
     const result = await lendInterbank(db as unknown as Db, lenderId, borrowerId, 100_000, 5);
     expect(result.ok).toBe(true);
-    expect(live.get(lenderId.toString())!.liquidCapital).toBe(lenderBefore - 100_000);
-    expect(live.get(borrowerId.toString())!.liquidCapital).toBe(borrowerBefore + 100_000);
+    expect(live.get(lenderId.toString())!.bankCharter!.cashReserves).toBe(lenderBefore - 100_000);
+    expect(live.get(borrowerId.toString())!.bankCharter!.cashReserves).toBe(
+      borrowerBefore + 100_000
+    );
     expect(live.get(borrowerId.toString())!.bankCharter!.interbankDebt).toBe(100_000);
     expect(live.get(lenderId.toString())!.bankCharter!.totalLoans).toBe(0);
     expect(loans).toHaveLength(1);
@@ -240,10 +249,11 @@ describe("CB margin draw/repay", () => {
     live = {
       _id: corpId,
       name: "IB",
-      liquidCapital: 10_000,
+      liquidCapital: 0,
       bankCharter: makeCharter("investment", {
         propBookMarkValue: 100_000,
         cbMarginDebt: 0,
+        cashReserves: 10_000,
       }),
     } as unknown as Corporation;
 
@@ -264,14 +274,14 @@ describe("CB margin draw/repay", () => {
       async (
         filter: {
           _id?: ObjectId;
-          liquidCapital?: { $gte?: number };
+          "bankCharter.cashReserves"?: { $gte?: number };
           "bankCharter.cbMarginDebt"?: { $gte?: number };
         },
         update: { $inc?: Record<string, number> }
       ) => {
         if (
-          filter.liquidCapital?.$gte != null &&
-          (live.liquidCapital ?? 0) < filter.liquidCapital.$gte
+          filter["bankCharter.cashReserves"]?.$gte != null &&
+          (live.bankCharter?.cashReserves ?? 0) < filter["bankCharter.cashReserves"]!.$gte!
         ) {
           return { matchedCount: 0, modifiedCount: 0 };
         }
@@ -282,8 +292,13 @@ describe("CB margin draw/repay", () => {
           return { matchedCount: 0, modifiedCount: 0 };
         }
         if (update.$inc) {
+          if (update.$inc["bankCharter.cashReserves"] && live.bankCharter) {
+            live.bankCharter.cashReserves =
+              (live.bankCharter.cashReserves ?? 0) + update.$inc["bankCharter.cashReserves"];
+          }
           if (update.$inc.liquidCapital) {
-            live.liquidCapital = (live.liquidCapital ?? 0) + update.$inc.liquidCapital;
+            live.bankCharter!.cashReserves =
+              (live.bankCharter!.cashReserves ?? 0) + update.$inc.liquidCapital;
           }
           if (update.$inc["bankCharter.cbMarginDebt"] && live.bankCharter) {
             live.bankCharter.cbMarginDebt =
@@ -303,16 +318,16 @@ describe("CB margin draw/repay", () => {
     expect(ok.ok).toBe(true);
     if (!ok.ok) return;
     // Creation: liquid rises, debt rises (no CB pool debit).
-    expect(live.liquidCapital).toBe(60_000);
+    expect(live.bankCharter!.cashReserves).toBe(60_000);
     expect(live.bankCharter!.cbMarginDebt).toBe(50_000);
   });
 
   it("destroys cash on repay (creation/destruction symmetry)", async () => {
     await drawCbMargin(db as unknown as Db, corpId, 40_000);
-    const before = live.liquidCapital!;
+    const before = live.bankCharter!.cashReserves!;
     const repaid = await repayCbMargin(db as unknown as Db, corpId, 15_000);
     expect(repaid.ok).toBe(true);
-    expect(live.liquidCapital).toBe(before - 15_000);
+    expect(live.bankCharter!.cashReserves).toBe(before - 15_000);
     expect(live.bankCharter!.cbMarginDebt).toBe(25_000);
   });
 
@@ -384,7 +399,7 @@ describe("interbank default write-off via bankingTurn", () => {
         {
           _id: lenderId,
           name: "Retail",
-          liquidCapital: 100_000,
+          liquidCapital: 0,
           bankCharter: makeCharter("retail", {
             totalDeposits: 0,
             totalLoans: 0,
@@ -483,12 +498,12 @@ describe("interbank default write-off via bankingTurn", () => {
   });
 
   it("defaults after ARREARS_DEFAULT_TURNS and writes off to lender (no cash recovery)", async () => {
-    const lenderCashBefore = live.get(lenderId.toString())!.liquidCapital!;
+    const lenderCashBefore = live.get(lenderId.toString())!.bankCharter!.cashReserves!;
     const summary = await processBankingTurn(db as unknown as Db, 100);
     expect(loans[0]!.status).toBe("defaulted");
     expect(summary.interbankDefaultsWrittenOff).toBe(10_000);
     // Borrower had 0 liquid so no interest paid; lender cash unchanged on writeoff.
-    expect(live.get(lenderId.toString())!.liquidCapital).toBe(lenderCashBefore);
+    expect(live.get(lenderId.toString())!.bankCharter!.cashReserves).toBe(lenderCashBefore);
     expect(live.get(borrowerId.toString())!.bankCharter!.interbankDebt).toBe(0);
   });
 });

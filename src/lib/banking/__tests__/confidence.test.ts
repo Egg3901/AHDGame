@@ -9,7 +9,7 @@ import {
 
 function baseInput(overrides: Partial<ConfidenceInput> = {}): ConfidenceInput {
   return {
-    liquidCapital: 100_000,
+    cashReserves: 100_000,
     postedCapital: 100_000,
     totalDeposits: 1_000_000,
     totalLoans: 200_000,
@@ -23,9 +23,9 @@ function baseInput(overrides: Partial<ConfidenceInput> = {}): ConfidenceInput {
 
 describe("computeConfidence", () => {
   it("is monotonic in reserves and capital (more => higher)", () => {
-    const thin = computeConfidence(baseInput({ liquidCapital: 20_000, postedCapital: 20_000 }));
-    const mid = computeConfidence(baseInput({ liquidCapital: 80_000, postedCapital: 80_000 }));
-    const thick = computeConfidence(baseInput({ liquidCapital: 200_000, postedCapital: 200_000 }));
+    const thin = computeConfidence(baseInput({ cashReserves: 20_000, postedCapital: 20_000 }));
+    const mid = computeConfidence(baseInput({ cashReserves: 80_000, postedCapital: 80_000 }));
+    const thick = computeConfidence(baseInput({ cashReserves: 200_000, postedCapital: 200_000 }));
     expect(mid.confidence).toBeGreaterThan(thin.confidence);
     expect(thick.confidence).toBeGreaterThan(mid.confidence);
   });
@@ -52,14 +52,14 @@ describe("computeConfidence", () => {
   it("maps bands at the provisional thresholds", () => {
     // Tuned inputs: green / amber / red around the exported cutoffs.
     const green = computeConfidence(
-      baseInput({ liquidCapital: 200_000, postedCapital: 200_000, totalLoans: 100_000 })
+      baseInput({ cashReserves: 200_000, postedCapital: 200_000, totalLoans: 100_000 })
     );
     expect(green.confidence).toBeGreaterThanOrEqual(CONFIDENCE_BAND_GREEN_MIN);
     expect(green.band).toBe("green");
 
     const amber = computeConfidence(
       baseInput({
-        liquidCapital: 40_000,
+        cashReserves: 40_000,
         postedCapital: 50_000,
         totalDeposits: 1_000_000,
         totalLoans: 300_000,
@@ -72,7 +72,7 @@ describe("computeConfidence", () => {
 
     const red = computeConfidence(
       baseInput({
-        liquidCapital: 5_000,
+        cashReserves: 5_000,
         postedCapital: 5_000,
         totalDeposits: 1_000_000,
         totalLoans: 500_000,
@@ -86,12 +86,12 @@ describe("computeConfidence", () => {
 
   it("clamps confidence to [0, 1]", () => {
     const high = computeConfidence(
-      baseInput({ liquidCapital: 10_000_000, postedCapital: 10_000_000, totalLoans: 1 })
+      baseInput({ cashReserves: 10_000_000, postedCapital: 10_000_000, totalLoans: 1 })
     );
     expect(high.confidence).toBeLessThanOrEqual(1);
     const low = computeConfidence(
       baseInput({
-        liquidCapital: 0,
+        cashReserves: 0,
         postedCapital: 0,
         totalLoans: 1_000_000,
         arrearsOutstanding: 1_000_000,
