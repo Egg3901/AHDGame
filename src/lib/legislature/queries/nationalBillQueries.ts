@@ -30,6 +30,7 @@ import {
   buildVotesByParty,
   type ScopedVoteOfficial,
 } from "@/lib/congress/billVoting";
+import { resolveBillCardTally, type BillCardTally } from "@/lib/legislature/stateBillVoteScope";
 import { snapshotWeightMap } from "@/lib/legislature/voteSnapshot";
 import {
   buildChamberSeatMap,
@@ -98,6 +99,50 @@ function resolveVoteOfficeType(
 ): string | null {
   if (!chamberKey || chamberKey === "cabinet") return null;
   return getOfficeTypeForChamber(countryId, chamberKey === "joint" ? lowerKey : chamberKey);
+}
+
+/**
+ * Live-scoped origin/other tallies for a national bill-list card. Shared by the
+ * US Congress list and every country legislature list so The Count cannot
+ * exceed the current chamber after a seat transfer (ticket #1075).
+ */
+export function nationalBillListTallies(
+  bill: Bill,
+  officials: ScopedVoteOfficial[],
+  countryId: CountryId,
+  lowerKey: string,
+  upperKey: string | null | undefined
+): { origin: BillCardTally; other: BillCardTally } {
+  const originOfficeType = resolveVoteOfficeType(
+    countryId,
+    resolvePrimaryVoteChamberKey(bill, lowerKey),
+    lowerKey
+  );
+  const otherOfficeType = resolveVoteOfficeType(
+    countryId,
+    resolveOtherVoteChamberKey(bill, upperKey),
+    lowerKey
+  );
+  return {
+    origin: resolveBillCardTally(
+      bill.votes,
+      { for: bill.votesFor, against: bill.votesAgainst, abstain: bill.votesAbstain },
+      bill.voteSnapshot,
+      officials,
+      originOfficeType ? { countryId, officeType: originOfficeType } : null
+    ),
+    other: resolveBillCardTally(
+      bill.otherChamberVotes,
+      {
+        for: bill.otherChamberVotesFor ?? 0,
+        against: bill.otherChamberVotesAgainst ?? 0,
+        abstain: bill.otherChamberVotesAbstain ?? 0,
+      },
+      bill.otherChamberVoteSnapshot,
+      officials,
+      otherOfficeType ? { countryId, officeType: otherOfficeType } : null
+    ),
+  };
 }
 
 function describeTariffProvision(
@@ -169,7 +214,7 @@ export async function listNationalLegislatureBills(
     db
       .collection<Bill>("bills")
       .find(billFilter)
-      .project<Bill>({ votes: 0, otherChamberVotes: 0, fullText: 0 })
+      .project<Bill>({ fullText: 0 })
       .sort({ proposedAt: -1 })
       .skip(skip)
       .limit(BILL_PAGE_LIMIT)
@@ -185,6 +230,34 @@ export async function listNationalLegislatureBills(
 
   const partyMap = new Map(parties.map((p) => [String(p.sequentialId), p]));
   const legislationTypeMap = new Map(legislationTypesList.map((lt) => [lt._id, lt]));
+
+  // Load both chambers' CURRENT seat holders once so every card can live-scope
+  // its tally. The stored votesFor/votesAgainst counters keep de-seated NPP
+  // votes after a House repair or election, so The Count can exceed the
+  // chamber (ticket #1075: 250-215 on a 435-seat House). Detail/resolution
+  // already scope; only the list card did not. Mirrors the state-list #973 fix.
+  const chamberOfficeTypes = [
+    getOfficeTypeForChamber(countryId, lowerKey, preset),
+    ...(upperKeyForGet ? [getOfficeTypeForChamber(countryId, upperKeyForGet, preset)] : []),
+  ];
+  const chamberOfficials: ScopedVoteOfficial[] = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .find(
+      {
+        countryId,
+        officeType: { $in: chamberOfficeTypes },
+      },
+      {
+        projection: {
+          characterId: 1,
+          countryId: 1,
+          nppId: 1,
+          officeType: 1,
+          seatsHeld: 1,
+        },
+      }
+    )
+    .toArray();
 
   let myCharacterId: string | null = null;
   let canPropose = false;
@@ -285,32 +358,23 @@ export async function listNationalLegislatureBills(
   }
 
   const myVoteMap = new Map<string, { origin: string | null; other: string | null }>();
-  if (myCharacterId && bills.length > 0) {
-    const billIds = bills.map((bill) => bill._id);
-    const voteRows = await db
-      .collection("bills")
-      .find(
-        { _id: { $in: billIds } },
-        {
-          projection: {
-            [`votes.${myCharacterId}`]: 1,
-            [`otherChamberVotes.${myCharacterId}`]: 1,
-          },
-        }
-      )
-      .toArray();
-    for (const row of voteRows) {
-      const votes = (row as Record<string, unknown>).votes as Record<string, string> | undefined;
-      const otherVotes = (row as Record<string, unknown>).otherChamberVotes as
-        Record<string, string> | undefined;
-      myVoteMap.set(row._id.toString(), {
-        origin: votes?.[myCharacterId] ?? null,
-        other: otherVotes?.[myCharacterId] ?? null,
+  if (myCharacterId) {
+    for (const bill of bills) {
+      myVoteMap.set(bill._id.toString(), {
+        origin: bill.votes?.[myCharacterId] ?? null,
+        other: bill.otherChamberVotes?.[myCharacterId] ?? null,
       });
     }
   }
 
   const billDisplays: BillDisplay[] = bills.map((bill) => {
+    const { origin: originTally, other: otherTally } = nationalBillListTallies(
+      bill,
+      chamberOfficials,
+      countryId,
+      lowerKey,
+      upperKeyForGet ?? null
+    );
     const partySlug = bill.sponsorParty ?? "";
     const party = partyMap.get(partySlug);
     const firstPolicy = bill.provisions?.find(isPolicyProvision);
@@ -459,13 +523,13 @@ export async function listNationalLegislatureBills(
       sponsorPartyName: party?.name ?? (partySlug || "Independent"),
       sponsorPartyColor: getPartyHex(partySlug, party?.color),
       status: bill.status,
-      votesFor: bill.votesFor,
-      votesAgainst: bill.votesAgainst,
-      votesAbstain: bill.votesAbstain,
-      totalVotes: bill.votesFor + bill.votesAgainst + bill.votesAbstain,
-      otherChamberVotesFor: 0,
-      otherChamberVotesAgainst: 0,
-      otherChamberVotesAbstain: 0,
+      votesFor: originTally.for,
+      votesAgainst: originTally.against,
+      votesAbstain: originTally.abstain,
+      totalVotes: originTally.for + originTally.against + originTally.abstain,
+      otherChamberVotesFor: otherTally.for,
+      otherChamberVotesAgainst: otherTally.against,
+      otherChamberVotesAbstain: otherTally.abstain,
       category: bill.category ?? "general",
       legislationTypeId: headlineLegislationTypeId,
       legislationTypeName:

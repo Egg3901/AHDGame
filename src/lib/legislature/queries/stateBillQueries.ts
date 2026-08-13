@@ -8,10 +8,7 @@ import {
 import { subNationalChamberSeats } from "@/lib/constants/states";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { buildVotesByParty, type ScopedVoteOfficial } from "@/lib/congress/billVoting";
-import {
-  scopeStateBillVotes,
-  scopeStateBillVotesWithOfficials,
-} from "@/lib/legislature/stateBillVoteScope";
+import { resolveBillCardTally, scopeStateBillVotes } from "@/lib/legislature/stateBillVoteScope";
 import { snapshotWeightMap } from "@/lib/legislature/voteSnapshot";
 import type {
   Character,
@@ -167,22 +164,16 @@ export async function listStateLegislatureBills(
   // matching the bill detail page's `hasScopedVotes` guard.
   const scopedTallyByBill = new Map<string, { for: number; against: number; abstain: number }>();
   for (const bill of bills) {
-    // A concluded phase has a frozen snapshot — use it verbatim so a post-election
-    // chamber turnover cannot recompute (and collapse) the historical tally (#0982).
-    if (bill.voteSnapshot) {
-      scopedTallyByBill.set(bill._id.toString(), { ...bill.voteSnapshot.totals });
-      continue;
-    }
-    const scoped = scopeStateBillVotesWithOfficials(bill.votes, chamberOfficials, {
-      countryId,
-      officeType: subNationalOffice,
-    });
-    const hasScoped = Object.keys(scoped.votes ?? {}).length > 0;
-    scopedTallyByBill.set(bill._id.toString(), {
-      for: hasScoped ? scoped.totals.for : bill.votesFor,
-      against: hasScoped ? scoped.totals.against : bill.votesAgainst,
-      abstain: hasScoped ? scoped.totals.abstain : bill.votesAbstain,
-    });
+    scopedTallyByBill.set(
+      bill._id.toString(),
+      resolveBillCardTally(
+        bill.votes,
+        { for: bill.votesFor, against: bill.votesAgainst, abstain: bill.votesAbstain },
+        bill.voteSnapshot,
+        chamberOfficials,
+        subNationalOffice ? { countryId, officeType: subNationalOffice } : null
+      )
+    );
   }
 
   return {
