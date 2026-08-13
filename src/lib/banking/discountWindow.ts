@@ -49,11 +49,7 @@ export const DISCOUNT_WINDOW_CAP_FRACTION = 0.25;
 export const DISCOUNT_WINDOW_STIGMA = 0.1;
 
 export type DiscountWindowDenial =
-  | "not_deposit_taking"
-  | "charter_inactive"
-  | "no_deposits"
-  | "cap_exhausted"
-  | "invalid_amount";
+  "not_deposit_taking" | "charter_inactive" | "no_deposits" | "cap_exhausted" | "invalid_amount";
 
 export interface DiscountWindowQuote {
   /** Maximum outstanding debt this bank may carry. */

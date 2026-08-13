@@ -41,7 +41,15 @@ export function valuation(
 }
 
 export type AllocTone =
-  "maintenance" | "growth" | "marketing" | "logistics" | "rd" | "salary" | "pension" | "tax" | "interest";
+  | "maintenance"
+  | "growth"
+  | "marketing"
+  | "logistics"
+  | "rd"
+  | "salary"
+  | "pension"
+  | "tax"
+  | "interest";
 
 export interface AllocSegment {
   key: AllocTone;

@@ -39,7 +39,7 @@ Extraction corporations with active R&D budgets can permanently increase a state
 
 ### Prospecting: funding a geological survey
 
-Prospecting is a deliberate, paid alternative to waiting on R&D breakthroughs. Any extraction corporation with a sector in a state, or that state's own government (national or state level), can commission a geological survey targeting one resource in one state.
+Prospecting is a deliberate, paid alternative to waiting on R&D breakthroughs. Any extraction corporation with a sector in a state, or that state's own government (national or state level), can commission a geological survey targeting one resource in one state. NPP miners do this too when the deposit is short and they can afford the survey.
 
 A survey takes 12 turns to complete. The corporation launching a survey pays a starting cost of ₳500,000, which climbs the more that state and resource have already been successfully surveyed (up to 4x the base cost, capping how many times a deposit can be squeezed for new capacity). Government-funded surveys draw from the national treasury or the state budget instead of a corporation's cash.
 

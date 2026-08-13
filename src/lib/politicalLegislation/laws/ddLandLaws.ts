@@ -221,7 +221,8 @@ export const DD_LAND_LAWS: PoliticalLaw[] = [
       },
       {
         name: "District Cultural Roster",
-        description: "A district cultural roster funds houses of culture, youth clubs, and libraries.",
+        description:
+          "A district cultural roster funds houses of culture, youth clubs, and libraries.",
         gdpCostFraction: 0.0009,
       },
       {
@@ -248,8 +249,7 @@ export const DD_LAND_LAWS: PoliticalLaw[] = [
       { metricId: "environment.conservation", weight: 0.3 },
     ],
     title: "Industrial Sanitation and Land Reclamation Act",
-    description:
-      "Smoke, slag, and the slow reclaiming of spoil tips the combine leaves behind.",
+    description: "Smoke, slag, and the slow reclaiming of spoil tips the combine leaves behind.",
     category: "environment",
     allowedScope: "regional",
     baselineLevel: 2,

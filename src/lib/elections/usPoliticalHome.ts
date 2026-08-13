@@ -2,7 +2,7 @@ import type { Db } from "mongodb";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { State } from "@/lib/db/types/state";
 import { getHouseSeats } from "@/lib/constants/states";
-import { admittedStateIdsAsOf } from "@/lib/elections/statehoodAdmission";
+import { admittedStateIdsAsOf, TERRITORY_ADMISSIONS } from "@/lib/elections/statehoodAdmission";
 import { NUMERIC_BSON_TYPE } from "@/lib/db/queryHelpers";
 
 /**
@@ -14,6 +14,8 @@ export async function loadUsPoliticalStateIds(db: Db): Promise<{
   currentYear: number;
   admittedIds: Set<string>;
   politicalIds: Set<string>;
+  /** Full states plus playable US territories with territorial politics. */
+  residentPoliticalIds: Set<string>;
 }> {
   const gameState = await db
     .collection<GameState>("gameState")
@@ -29,10 +31,14 @@ export async function loadUsPoliticalStateIds(db: Db): Promise<{
     .toArray()) as unknown as Array<{ _id: string; admittedYear?: number }>;
   const admittedIds = new Set(admittedStateIdsAsOf(admissionBearing, currentYear));
   const politicalIds = new Set<string>([...Object.keys(getHouseSeats(preset)), ...admittedIds]);
-  return { preset, currentYear, admittedIds, politicalIds };
+  const residentPoliticalIds = new Set<string>([
+    ...politicalIds,
+    ...TERRITORY_ADMISSIONS.map((territory) => territory.stateId),
+  ]);
+  return { preset, currentYear, admittedIds, politicalIds, residentPoliticalIds };
 }
 
-/** Player-facing reject copy when someone tries to home in an unadmitted territory. */
+/** Player-facing reject copy for a US region without territorial or state politics. */
 export function unplayableTerritoryHomeError(stateName: string): string {
-  return `${stateName} is a US territory and cannot be chosen as a home state until it is admitted to the Union.`;
+  return `${stateName} cannot be chosen as a political home region.`;
 }

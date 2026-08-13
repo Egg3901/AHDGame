@@ -100,7 +100,9 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
   );
   const capitalCover = Math.min(
     CONFIDENCE_CAPITAL_COVER_CAP,
-    (liquidCapital + postedCapital) / Math.max(1, totalLoans)
+    // Not `+ postedCapital`: posted capital is a memo of cash already inside
+    // the reserve balance, so summing them double-counted the same money.
+    liquidCapital / Math.max(1, totalLoans)
   );
   const loanDenom = Math.max(1, totalLoans);
   const assetQuality =

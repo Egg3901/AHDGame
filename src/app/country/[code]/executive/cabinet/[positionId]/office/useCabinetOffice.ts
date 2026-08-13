@@ -344,29 +344,37 @@ export function useCabinetOffice(countryCode: string, positionId: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `/api/country/${countryCode}/executive/cabinet/${positionId}/briefing`
-      );
-      if (!res.ok) {
-        const json = await res.json();
-        setError((json as { error?: string }).error ?? "Failed to load office data");
-        return;
+  const fetchData = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      // A silent refresh keeps the existing tree mounted. Flipping `loading` here
+      // unmounted the roster after every assign/recruit, which reset the branch
+      // tab back to Ground and closed any open Manage panel.
+      if (!opts?.silent) setLoading(true);
+      try {
+        const res = await fetch(
+          `/api/country/${countryCode}/executive/cabinet/${positionId}/briefing`
+        );
+        if (!res.ok) {
+          const json = await res.json();
+          setError((json as { error?: string }).error ?? "Failed to load office data");
+          return;
+        }
+        setData((await res.json()) as CabinetOfficeData);
+        setError(null);
+      } catch {
+        setError("Network error");
+      } finally {
+        setLoading(false);
       }
-      setData((await res.json()) as CabinetOfficeData);
-      setError(null);
-    } catch {
-      setError("Network error");
-    } finally {
-      setLoading(false);
-    }
-  }, [countryCode, positionId]);
+    },
+    [countryCode, positionId]
+  );
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [fetchData]);
 
-  return { data, loading, error, refetch: fetchData };
+  const refetch = useCallback(() => fetchData({ silent: true }), [fetchData]);
+
+  return { data, loading, error, refetch };
 }

@@ -36,6 +36,15 @@ export interface SourcingNetworkDoc {
   turn: number;
   /** Per-state freight consumed this turn, by class — network load for the UI. */
   freightTeuByState: Record<string, Record<FreightClass, number>>;
+  /**
+   * Per destination state, per commodity: premiumPerUnit = extraCost / metUnits,
+   * rounded to 4 decimals. Omits entries where metUnits <= 0 or the premium
+   * rounds to <= 0. This is the one-turn-lagged surcharge money wiring reads
+   * for out-of-state sourcing.
+   */
+  landedPremiums: Record<string, Record<CommodityType, number>>;
+  /** Per buyer country: tariff paid and import value, rounded to 2 decimals. Omits zero entries. */
+  importAggregates: Record<string, { tariffPaid: number; importValue: number }>;
   createdAt: Date;
 }
 
@@ -86,5 +95,30 @@ export function buildSourcingDocs(
     };
   }
 
-  return { commodityDocs, networkDoc: { turn, freightTeuByState, createdAt: now } };
+  const landedPremiums: Record<string, Record<CommodityType, number>> = {};
+  for (const [stateId, byCommodity] of result.landedPremiumByDestState) {
+    const perCommodity: Partial<Record<CommodityType, number>> = {};
+    for (const [commodity, acc] of byCommodity) {
+      if (acc.metUnits <= 0) continue;
+      const premiumPerUnit = Math.round((acc.extraCost / acc.metUnits) * 10000) / 10000;
+      if (premiumPerUnit <= 0) continue;
+      perCommodity[commodity] = premiumPerUnit;
+    }
+    if (Object.keys(perCommodity).length > 0) {
+      landedPremiums[stateId] = perCommodity as Record<CommodityType, number>;
+    }
+  }
+
+  const importAggregates: Record<string, { tariffPaid: number; importValue: number }> = {};
+  for (const [countryId, agg] of result.importAggregatesByCountry) {
+    const importValue = Math.round(agg.importValue * 100) / 100;
+    const tariffPaid = Math.round(agg.tariffPaid * 100) / 100;
+    if (importValue <= 0 && tariffPaid <= 0) continue;
+    importAggregates[countryId] = { tariffPaid, importValue };
+  }
+
+  return {
+    commodityDocs,
+    networkDoc: { turn, freightTeuByState, landedPremiums, importAggregates, createdAt: now },
+  };
 }

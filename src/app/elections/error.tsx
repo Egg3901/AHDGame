@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { ErrorPageContent } from "@/components/ui";
 
 export default function ElectionsError({
@@ -9,15 +10,16 @@ export default function ElectionsError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useTranslations("elections");
   return (
     <ErrorPageContent
       error={error}
       reset={reset}
-      description="The elections page couldn't load. This may be a temporary issue."
+      description={t("error.description")}
       logPrefix="Elections page error"
       navigationLinks={[
-        { href: "/elections", label: "Back to Elections" },
-        { href: "/dashboard", label: "Dashboard" },
+        { href: "/elections", label: t("error.backToElections") },
+        { href: "/dashboard", label: t("error.dashboard") },
       ]}
       fullScreen
     />

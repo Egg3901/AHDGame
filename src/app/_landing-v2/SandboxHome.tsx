@@ -17,6 +17,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { cdnStatic, CDN_WORLD_GEO_URL } from "@/lib/images/cdnUrls";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 import { SectionLabel } from "@/components/ui/SectionLabel";
@@ -65,18 +66,33 @@ const CommunitySupportSection = dynamic(() =>
 /* -------------------------------------------------------------------------- */
 
 type BlocId = "western" | "eastern";
+type TFunc = ReturnType<typeof useTranslations>;
 
-const BLOC_META: Record<BlocId, { label: string; badge: "info" | "primary" }> = {
-  western: { label: "Western Market Economies", badge: "info" },
-  eastern: { label: "Eastern Bloc", badge: "primary" },
-};
+const blocMeta = (t: TFunc): Record<BlocId, { label: string; badge: "info" | "primary" }> => ({
+  western: { label: t("landing.blocs.western"), badge: "info" },
+  eastern: { label: t("landing.blocs.eastern"), badge: "primary" },
+});
 
 /** Playability remains a secondary cue on each chip; primary grouping is bloc. */
-const TIER_CHIP: Record<EraNation["tier"], { label: string; className: string }> = {
-  player: { label: "Playable", className: "text-success" },
-  econ: { label: "Economy", className: "text-info" },
-  npp: { label: "Soon", className: "text-muted" },
-};
+const tierChip = (
+  t: TFunc
+): Record<EraNation["tier"], { label: string; title: string; className: string }> => ({
+  player: {
+    label: t("landing.tiers.playable"),
+    title: t("landing.tiers.playableTitle"),
+    className: "text-success",
+  },
+  econ: {
+    label: t("landing.tiers.economy"),
+    title: t("landing.tiers.economyTitle"),
+    className: "text-info",
+  },
+  npp: {
+    label: t("landing.tiers.soon"),
+    title: t("landing.tiers.soonTitle"),
+    className: "text-muted",
+  },
+});
 
 /** Only one-party/command systems land in Eastern Bloc — never default unknowns there. */
 function isEasternBloc(governmentType: GovernmentType | undefined): boolean {
@@ -112,78 +128,78 @@ function links(isSignedIn: boolean) {
   };
 }
 
-const FOOTER_NAV = [
-  {
-    heading: "Game",
-    links: [
-      { href: "/world", label: "World map" },
-      { href: "/news", label: "News wire" },
-      { href: "/changelog", label: "What's new" },
-      { href: "/register", label: "Create account" },
-    ],
-  },
-  {
-    heading: "Learn",
-    links: [
-      { href: "/guides", label: "Guides" },
-      { href: "/wiki", label: "Wiki" },
-      { href: "/faq", label: "FAQ" },
-      { href: "/about", label: "About" },
-    ],
-  },
-  {
-    heading: "Legal",
-    links: [
-      { href: "/privacy", label: "Privacy Policy" },
-      { href: "/terms", label: "Terms of Service" },
-      { href: "/contact", label: "Contact" },
-    ],
-  },
-] as const;
+const footerNav = (t: TFunc) =>
+  [
+    {
+      heading: t("landing.footer.game"),
+      links: [
+        { href: "/world", label: t("landing.footer.worldMap") },
+        { href: "/news", label: t("landing.footer.newsWire") },
+        { href: "/changelog", label: t("landing.footer.whatsNew") },
+        { href: "/register", label: t("landing.footer.createAccount") },
+      ],
+    },
+    {
+      heading: t("landing.footer.learn"),
+      links: [
+        { href: "/guides", label: t("landing.footer.guides") },
+        { href: "/wiki", label: t("landing.footer.wiki") },
+        { href: "/faq", label: t("landing.footer.faq") },
+        { href: "/about", label: t("landing.footer.about") },
+      ],
+    },
+    {
+      heading: t("landing.footer.legal"),
+      links: [
+        { href: "/privacy", label: t("landing.footer.privacy") },
+        { href: "/terms", label: t("landing.footer.terms") },
+        { href: "/contact", label: t("landing.footer.contact") },
+      ],
+    },
+  ] as const;
 
-const LEARN_LINKS = [
-  {
-    href: "/guides",
-    title: "Player guides",
-    body: "Step-by-step guides to running for office, founding corporations, and trading bonds, forex, and commodities.",
-    cta: "Browse the guides",
-  },
-  {
-    href: "/wiki",
-    title: "Game wiki",
-    body: "The full reference: elections, legislation, parties, central banks, and every country in the simulation.",
-    cta: "Open the wiki",
-  },
-  {
-    href: "/news",
-    title: "News wire",
-    body: "Player-written headlines, campaign coverage, and policy editorials straight from the live world.",
-    cta: "Read the wire",
-  },
-  {
-    href: "/faq",
-    title: "FAQ & about",
-    body: "How the hourly game clock works, what it costs (nothing), and who builds A House Divided.",
-    cta: "Get answers",
-  },
-] as const;
+const learnLinks = (t: TFunc) =>
+  [
+    {
+      href: "/guides",
+      title: t("landing.learnLinks.guidesTitle"),
+      body: t("landing.learnLinks.guidesBody"),
+      cta: t("landing.learnLinks.guidesCta"),
+    },
+    {
+      href: "/wiki",
+      title: t("landing.learnLinks.wikiTitle"),
+      body: t("landing.learnLinks.wikiBody"),
+      cta: t("landing.learnLinks.wikiCta"),
+    },
+    {
+      href: "/news",
+      title: t("landing.learnLinks.newsTitle"),
+      body: t("landing.learnLinks.newsBody"),
+      cta: t("landing.learnLinks.newsCta"),
+    },
+    {
+      href: "/faq",
+      title: t("landing.learnLinks.faqTitle"),
+      body: t("landing.learnLinks.faqBody"),
+      cta: t("landing.learnLinks.faqCta"),
+    },
+  ] as const;
 
 /**
  * Era-neutral tile copy. Anything an era does not override falls back to these,
  * so a new preset can never inherit another decade's politics by accident (a
  * 1953 world used to advertise "the post-Watergate trust deficit").
  */
-const DEFAULT_TILE_BODIES: Record<EraTileKey, string> = {
-  stateMetrics:
-    "Track demographics, unemployment, and the institutional trust every incumbent is spending down.",
-  ballot:
-    "Run for House, Senate, Governor, or the state legislature. Primaries first, then the general.",
-  bills: "Draft bills, whip votes, and trade amendments to get your programme through the chamber.",
-  industrial: "Found corporations, grow sectors, and pay dividends out of what you build.",
-  markets: "Trade commodities and currencies against every other economy in the world.",
-  newsroom: "Follow every bill, crisis, and cabinet shuffle through the in-game wire and wiki.",
-  centralBanks: "Set the prime rate and manage a line of credit for a whole national economy.",
-};
+const defaultTileBodies = (t: TFunc): Record<EraTileKey, string> => ({
+  stateMetrics: t("landing.tiles.stateMetricsBody"),
+  ballot: t("landing.tiles.ballotBody"),
+  bills: t("landing.tiles.billsBody"),
+  industrial: t("landing.tiles.industrialBody"),
+  markets: t("landing.tiles.marketsBody"),
+  newsroom: t("landing.tiles.newsroomBody"),
+  centralBanks: t("landing.tiles.centralBanksBody"),
+});
 
 const TILE_IMAGES = {
   stateMetrics: "state-metrics",
@@ -206,6 +222,7 @@ function BentoTile({
   href,
   imageSlug,
   className,
+  enterLabel,
 }: {
   index: number;
   title: string;
@@ -213,6 +230,7 @@ function BentoTile({
   href: string;
   imageSlug: string;
   className?: string;
+  enterLabel: string;
 }) {
   // This art is decorative (aria-hidden) and only ever visible on hover/focus,
   // so it is mounted on first hover instead of at page load. The six tile
@@ -258,7 +276,8 @@ function BentoTile({
         </div>
         <p className="text-body leading-relaxed text-muted">{body}</p>
         <span className="mt-3 inline-flex items-center gap-1 text-body-sm font-medium text-primary transition-transform group-hover:translate-x-0.5">
-          Enter<span aria-hidden="true">→</span>
+          {enterLabel}
+          <span aria-hidden="true">→</span>
         </span>
       </div>
     </Link>
@@ -282,6 +301,7 @@ export function SandboxHome({
   /** Server-fetched Discord member/online counts for the community section. */
   discordStats?: DiscordInviteStats | null;
 }) {
+  const t = useTranslations("auth");
   const eraConfig = getEraConfig(era);
   const [hoveredBloc, setHoveredBloc] = useState<BlocId | null>(null);
   // True while the globe is idling through its historical-crisis showcase —
@@ -323,8 +343,12 @@ export function SandboxHome({
     [countriesByBloc]
   );
 
-  const tileBody = (key: EraTileKey): string =>
-    eraConfig.tileBodies?.[key] ?? DEFAULT_TILE_BODIES[key];
+  const tileBodies = useMemo(() => defaultTileBodies(t), [t]);
+  const tileBody = (key: EraTileKey): string => eraConfig.tileBodies?.[key] ?? tileBodies[key];
+  const bloc = useMemo(() => blocMeta(t), [t]);
+  const tier = useMemo(() => tierChip(t), [t]);
+  const footer = useMemo(() => footerNav(t), [t]);
+  const learn = useMemo(() => learnLinks(t), [t]);
 
   const wireframeColor = eraConfig.wireframeColor ?? undefined;
   // Sphere / conflict / crisis theatres for this era, mirroring the world
@@ -454,22 +478,22 @@ export function SandboxHome({
             <div className="mt-7 flex flex-wrap items-center gap-3">
               {isSignedIn ? (
                 <Link href={l.primary} className={PRIMARY_BUTTON_CLASSES}>
-                  Back to dashboard
+                  {t("landing.backToDashboard")}
                   <span aria-hidden="true">→</span>
                 </Link>
               ) : (
                 <>
                   <Link href="/register" className={PRIMARY_BUTTON_CLASSES}>
-                    Sign up
+                    {t("landing.signUp")}
                     <span aria-hidden="true">→</span>
                   </Link>
                   <Link href="/login" className={SECONDARY_BUTTON_CLASSES}>
-                    Sign in
+                    {t("landing.signIn")}
                   </Link>
                 </>
               )}
               <Link href={l.secondary} className={SECONDARY_BUTTON_CLASSES}>
-                Explore
+                {t("landing.explore")}
               </Link>
             </div>
             {/* Full-width pill under the actions: a link out to the 1953 world
@@ -481,9 +505,9 @@ export function SandboxHome({
               className="pointer-events-auto mt-5 flex w-full max-w-lg items-center gap-2.5 rounded-full border border-card-border bg-card/70 py-1.5 pl-1.5 pr-3.5 text-body-xs font-medium text-foreground backdrop-blur-sm transition-colors hover:border-primary/50 hover:bg-card"
             >
               <span className="rounded-full bg-primary px-2 py-0.5 font-mono text-[0.65rem] font-bold uppercase tracking-wider text-white">
-                New
+                {t("landing.newBadge")}
               </span>
-              <span className="text-muted">v1.0.0 · Explore the 1953 World</span>
+              <span className="text-muted">{t("landing.promoPill")}</span>
               <span aria-hidden="true" className="ml-auto text-primary">
                 →
               </span>
@@ -498,7 +522,7 @@ export function SandboxHome({
           }`}
         >
           <span className="text-body-xs uppercase tracking-widest text-muted">
-            Drag the globe · scroll to enter
+            {t("landing.scrollCue")}
           </span>
           <span className="block h-5 w-[1px] animate-pulse bg-muted/60" />
         </div>
@@ -513,53 +537,59 @@ export function SandboxHome({
 
         {/* The halls of power */}
         <section id="play" className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
-          <SectionLabel as="h2">The halls of power</SectionLabel>
+          <SectionLabel as="h2">{t("landing.hallsOfPower")}</SectionLabel>
           <p className="mb-8 max-w-2xl text-body-lg leading-relaxed text-muted">
             {eraConfig.playSectionDek}
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <BentoTile
               index={1}
-              title="State metrics"
+              title={t("landing.tiles.stateMetrics")}
               body={tileBody("stateMetrics")}
               href={l.tiles.stateMetrics}
               imageSlug={TILE_IMAGES.stateMetrics}
               className="lg:row-span-2"
+              enterLabel={t("landing.enter")}
             />
             <BentoTile
               index={2}
-              title="The ballot box"
+              title={t("landing.tiles.ballot")}
               body={tileBody("ballot")}
               href={l.tiles.ballot}
               imageSlug={TILE_IMAGES.ballot}
+              enterLabel={t("landing.enter")}
             />
             <BentoTile
               index={3}
-              title="Legislative combat"
+              title={t("landing.tiles.bills")}
               body={tileBody("bills")}
               href={l.tiles.bills}
               imageSlug={TILE_IMAGES.bills}
+              enterLabel={t("landing.enter")}
             />
             <BentoTile
               index={4}
-              title="Industrial empires"
+              title={t("landing.tiles.industrial")}
               body={tileBody("industrial")}
               href={l.tiles.industrial}
               imageSlug={TILE_IMAGES.industrial}
+              enterLabel={t("landing.enter")}
             />
             <BentoTile
               index={5}
-              title="Global markets"
+              title={t("landing.tiles.markets")}
               body={tileBody("markets")}
               href={l.tiles.markets}
               imageSlug={TILE_IMAGES.markets}
+              enterLabel={t("landing.enter")}
             />
             <BentoTile
               index={6}
-              title="The newsroom"
+              title={t("landing.tiles.newsroom")}
               body={tileBody("newsroom")}
               href={l.tiles.newsroom}
               imageSlug={TILE_IMAGES.newsroom}
+              enterLabel={t("landing.enter")}
             />
             {/* Wide world tile with inline tier chips */}
             <div
@@ -594,24 +624,24 @@ export function SandboxHome({
                 <div className="mb-3 flex items-center gap-2">
                   <span className="font-mono text-body-xs text-primary">07</span>
                   <h3 className="text-heading-sm font-semibold text-foreground">
-                    The world in {eraConfig.year}
+                    {t("landing.worldInYear", { year: eraConfig.year })}
                   </h3>
                 </div>
                 <p className="mb-4 text-body leading-relaxed text-muted">
                   {eraConfig.worldSectionDek}
                 </p>
                 <div className="space-y-3">
-                  {visibleBlocs.map((bloc) => {
-                    const meta = BLOC_META[bloc];
-                    const countries = countriesByBloc[bloc];
-                    const isDimmed = hoveredBloc !== null && hoveredBloc !== bloc;
+                  {visibleBlocs.map((blocId) => {
+                    const meta = bloc[blocId];
+                    const countries = countriesByBloc[blocId];
+                    const isDimmed = hoveredBloc !== null && hoveredBloc !== blocId;
                     return (
                       <div
-                        key={bloc}
+                        key={blocId}
                         className={`transition-opacity duration-200 ${
                           isDimmed ? "opacity-40" : "opacity-100"
                         }`}
-                        onMouseEnter={() => setHoveredBloc(bloc)}
+                        onMouseEnter={() => setHoveredBloc(blocId)}
                         onMouseLeave={() => setHoveredBloc(null)}
                       >
                         <div className="mb-1.5 flex items-center gap-2">
@@ -619,12 +649,12 @@ export function SandboxHome({
                             {meta.label}
                           </Badge>
                           <span className="text-body-xs text-muted">
-                            {countries.length} nation{countries.length === 1 ? "" : "s"}
+                            {t("landing.nationCount", { count: countries.length })}
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {countries.map((c) => {
-                            const tierMeta = TIER_CHIP[c.tier];
+                            const tierMeta = tier[c.tier];
                             return (
                               <span
                                 key={c.id}
@@ -635,13 +665,7 @@ export function SandboxHome({
                                 {c.name}
                                 <span
                                   className={`font-medium ${tierMeta.className}`}
-                                  title={
-                                    c.tier === "player"
-                                      ? "Playable"
-                                      : c.tier === "econ"
-                                        ? "Economy preview"
-                                        : "Coming soon"
-                                  }
+                                  title={tierMeta.title}
                                 >
                                   · {tierMeta.label}
                                 </span>
@@ -657,11 +681,12 @@ export function SandboxHome({
             </div>
             <BentoTile
               index={8}
-              title="Central banks"
+              title={t("landing.tiles.centralBanks")}
               body={tileBody("centralBanks")}
               href={l.tiles.centralBanks}
               imageSlug={TILE_IMAGES.centralBanks}
               className="lg:col-start-4 lg:row-start-2"
+              enterLabel={t("landing.enter")}
             />
           </div>
         </section>
@@ -673,10 +698,11 @@ export function SandboxHome({
                 world right now, so it cannot be headed "Leaders of the era":
                 on a world mid-crisis the section promised portraits and
                 delivered freight reroutes. */}
-            <SectionLabel as="h2">The world in {eraConfig.year}</SectionLabel>
+            <SectionLabel as="h2">
+              {t("landing.worldInYear", { year: eraConfig.year })}
+            </SectionLabel>
             <p className="mb-8 max-w-2xl text-body-lg leading-relaxed text-muted">
-              The people in charge, and the crises running live right now. Swipe or use arrow keys
-              to browse.
+              {t("landing.carouselDek")}
             </p>
             <FlavorCardCarousel staticCards={getEraFlavorCards(era)} crises={crises} />
           </div>
@@ -685,13 +711,12 @@ export function SandboxHome({
         {/* Learn the game */}
         <section className="border-t border-card-border">
           <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
-            <SectionLabel as="h2">Learn the game</SectionLabel>
+            <SectionLabel as="h2">{t("landing.learnHeading")}</SectionLabel>
             <p className="mb-8 max-w-2xl text-body-lg leading-relaxed text-muted">
-              Guides, a living wiki, and the in-character news wire — everything you need before
-              your first campaign, no account required.
+              {t("landing.learnDek")}
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {LEARN_LINKS.map((item) => (
+              {learn.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -721,7 +746,7 @@ export function SandboxHome({
             <p className="mx-auto mt-3 max-w-xl text-body-lg text-muted">{eraConfig.closingDek}</p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Link href={l.closing} className={PRIMARY_BUTTON_CLASSES}>
-                {isSignedIn ? "Back to dashboard" : eraConfig.closingCta}
+                {isSignedIn ? t("landing.backToDashboard") : eraConfig.closingCta}
                 <span aria-hidden="true">→</span>
               </Link>
               {/* Moved out of the hero: the Android build is for people already
@@ -733,7 +758,7 @@ export function SandboxHome({
                 rel="noopener noreferrer"
                 className={GHOST_BUTTON_CLASSES}
               >
-                Get the app (beta)
+                {t("landing.getApp")}
                 <span aria-hidden="true">↓</span>
               </a>
             </div>
@@ -744,10 +769,10 @@ export function SandboxHome({
         <footer className="border-t border-card-border bg-card-muted/30">
           <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
             <nav
-              aria-label="Footer"
+              aria-label={t("landing.footer.navLabel")}
               className="mx-auto mb-8 grid max-w-3xl grid-cols-2 gap-8 text-left sm:grid-cols-3"
             >
-              {FOOTER_NAV.map((col) => (
+              {footer.map((col) => (
                 <div key={col.heading}>
                   <h3 className="mb-2 text-body-xs font-semibold uppercase tracking-widest text-muted/80">
                     {col.heading}
@@ -763,7 +788,7 @@ export function SandboxHome({
                         </Link>
                       </li>
                     ))}
-                    {col.heading === "Legal" && (
+                    {col.heading === t("landing.footer.legal") && (
                       <li>
                         <CookieSettingsLink
                           hideOnPrivacyPage
@@ -791,17 +816,10 @@ export function SandboxHome({
                 height={20}
                 className="opacity-80"
               />
-              <span>a Lakeside Games game</span>
+              <span>{t("landing.byLakeside")}</span>
             </a>
             <p className="mx-auto mt-3 max-w-3xl text-body-xs leading-relaxed text-muted/70">
-              Landing imagery via Wikimedia Commons. CC BY 4.0: &ldquo;1977 Israeli legislative
-              election&rdquo; — Danny Gotfried / Israel Press and Photo Agency (Dan Hadani
-              collection, National Library of Israel). CC BY-SA 2.0: &ldquo;Berlin — Checkpoint
-              Charlie&rdquo; — Roger Wollstadt. All other landing images are public domain (NARA /
-              EPA DOCUMERICA / White House / Library of Congress / Federal Reserve / FSA-OWI).
-              Leader portraits via Wikimedia Commons, public domain: George H.W. Bush — David Valdez
-              / White House; John Major — PFC Tracey L. Hall-Leahy, U.S. Army; Deng Xiaoping —
-              public domain.
+              {t("landing.attribution")}
             </p>
           </div>
         </footer>

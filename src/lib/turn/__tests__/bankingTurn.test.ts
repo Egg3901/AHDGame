@@ -29,6 +29,7 @@ function makeCharter(overrides: Partial<BankCharter> = {}): BankCharter {
     currency: "USD",
     charteredTurn: 1,
     postedCapital: 10_000_000,
+    cashReserves: 10_000_000,
     depositOffset: 0,
     lendingOffset: 0,
     totalDeposits: 0,
@@ -103,7 +104,7 @@ describe("processBankingTurn", () => {
     bankId = new ObjectId();
     bankCorp = makeBankCorp(makeCharter({ npcDeposits: 1_000_000 }), {
       _id: bankId,
-      liquidCapital: 10_000_000,
+      liquidCapital: 0,
     });
     liveCorp = structuredClone(bankCorp);
 
@@ -197,6 +198,9 @@ describe("processBankingTurn", () => {
           if (typeof u.$set.liquidCapital === "number") {
             liveCorp.liquidCapital = u.$set.liquidCapital as number;
           }
+          if (typeof u.$set["bankCharter.cashReserves"] === "number") {
+            liveCorp.bankCharter!.cashReserves = u.$set["bankCharter.cashReserves"] as number;
+          }
           if (typeof u.$set["bankCharter.npcDeposits"] === "number") {
             liveCorp.bankCharter!.npcDeposits = u.$set["bankCharter.npcDeposits"] as number;
           }
@@ -205,6 +209,9 @@ describe("processBankingTurn", () => {
           }
           if (typeof u.$set["bankCharter.totalLoans"] === "number") {
             liveCorp.bankCharter!.totalLoans = u.$set["bankCharter.totalLoans"] as number;
+          }
+          if (typeof u.$set["bankCharter.reserves"] === "number") {
+            liveCorp.bankCharter!.reserves = u.$set["bankCharter.reserves"] as number;
           }
           if (typeof u.$set["bankCharter.lastBankingTurn"] === "number") {
             liveCorp.bankCharter!.lastBankingTurn = u.$set["bankCharter.lastBankingTurn"] as number;
@@ -215,6 +222,10 @@ describe("processBankingTurn", () => {
         }
         if (u.$inc?.liquidCapital) {
           liveCorp.liquidCapital = (liveCorp.liquidCapital ?? 0) + u.$inc.liquidCapital;
+        }
+        if (u.$inc?.["bankCharter.cashReserves"]) {
+          liveCorp.bankCharter!.cashReserves =
+            (liveCorp.bankCharter!.cashReserves ?? 0) + u.$inc["bankCharter.cashReserves"];
         }
       }
       return { matchedCount: 1, modifiedCount: 1 };
@@ -357,17 +368,17 @@ describe("processBankingTurn", () => {
     db.collectionMocks.corporations!.find.mockReturnValue(findCursor([bankCorp]));
 
     const cbBefore = cbState.externalBroadMoney;
-    const liqBefore = liveCorp.liquidCapital;
+    const liqBefore = liveCorp.bankCharter!.cashReserves;
     const savBefore = characterState.savings;
 
     const second = await processBankingTurn(db as unknown as Db, TURN);
     expect(second.banksProcessed).toBe(0);
     expect(cbState.externalBroadMoney).toBe(cbBefore);
-    expect(liveCorp.liquidCapital).toBe(liqBefore);
+    expect(liveCorp.bankCharter!.cashReserves).toBe(liqBefore);
     expect(characterState.savings).toBe(savBefore);
   });
 
-  it("conserves deposit interest: character + npc credits == liquidCapital debit (net of premium)", async () => {
+  it("conserves deposit interest: character + npc credits == bank cash debit (net of premium)", async () => {
     // Disable NPC flow by setting npcDeposits already at a stable target-ish
     // and give the bank enough cash. Use depositOffset so rate is known.
     liveCorp.bankCharter!.depositOffset = 0;
@@ -396,7 +407,7 @@ describe("processBankingTurn", () => {
     // No NPC bulk income either
     db.collectionMocks.states!.find.mockReturnValue(findCursor([{ _id: "CA", gdp: 0 }]));
 
-    const liqBefore = liveCorp.liquidCapital ?? 0;
+    const liqBefore = liveCorp.bankCharter!.cashReserves ?? 0;
     const savBefore = characterState.savings;
     const fundBefore = fundState.balance;
     // deposit rate = max(0.05, 4+0) = 4%. Interest = 48000 * 0.04 / 48 = 40
@@ -406,13 +417,13 @@ describe("processBankingTurn", () => {
 
     const characterCredit = characterState.savings - savBefore;
     const premiumPaid = fundState.balance - fundBefore;
-    const liquidDebit = liqBefore - (liveCorp.liquidCapital ?? 0);
+    const liquidDebit = liqBefore - (liveCorp.bankCharter!.cashReserves ?? 0);
     expect(summary.depositInterestPaid).toBeCloseTo(expectedInterest, 5);
     expect(characterCredit).toBeCloseTo(expectedInterest, 5);
     expect(liquidDebit).toBeCloseTo(expectedInterest + premiumPaid, 5);
   });
 
-  it("conserves insurance premium: fund gain == bank liquidCapital debit", async () => {
+  it("conserves insurance premium: fund gain == bank cash debit", async () => {
     liveCorp.bankCharter!.npcDeposits = 0;
     bankCorp.bankCharter!.npcDeposits = 0;
     cbState.externalBroadMoney = 0;
@@ -441,7 +452,7 @@ describe("processBankingTurn", () => {
       toArray: vi.fn().mockResolvedValue([{ total: 480_000 }]),
     });
 
-    const liqBefore = liveCorp.liquidCapital ?? 0;
+    const liqBefore = liveCorp.bankCharter!.cashReserves ?? 0;
     const fundBefore = fundState.balance;
     const savBefore = characterState.savings;
 
@@ -449,7 +460,7 @@ describe("processBankingTurn", () => {
 
     const interestPaid = characterState.savings - savBefore;
     const premiumPaid = fundState.balance - fundBefore;
-    const liquidDebit = liqBefore - (liveCorp.liquidCapital ?? 0);
+    const liquidDebit = liqBefore - (liveCorp.bankCharter!.cashReserves ?? 0);
 
     expect(premiumPaid).toBeGreaterThan(0);
     expect(fundState.premiumsCollectedLifetime).toBeCloseTo(premiumPaid, 8);
@@ -500,14 +511,17 @@ describe("processBankingTurn", () => {
     // npcDeposits also receives deposit interest after the flow, so final stock
     // is delta + interest, not delta alone.
     expect(npcAfter).toBeGreaterThanOrEqual(summary.npcDepositDelta);
+    const npcLoan = loans.find((loan) => loan.borrowerType === "npcBulk");
+    expect(npcLoan?.outstanding ?? 0).toBeLessThanOrEqual(npcAfter * 0.9 + 1e-6);
+    expect(liveCorp.bankCharter!.reserves).toBeCloseTo(liveCorp.bankCharter!.cashReserves ?? 0, 8);
     expect(Math.abs(summary.npcDepositDelta)).toBeLessThanOrEqual(
       MAX_NPC_FLOW_PER_TURN_FRACTION * Math.max(summary.npcDepositDelta, broadBefore) + 1e-6
     );
   });
 
   it("pays deposit interest pro rata when bank cash is insufficient and never goes negative", async () => {
-    liveCorp.liquidCapital = 10;
-    bankCorp.liquidCapital = 10;
+    liveCorp.bankCharter!.cashReserves = 10;
+    bankCorp.bankCharter!.cashReserves = 10;
     liveCorp.bankCharter!.npcDeposits = 0;
     bankCorp.bankCharter!.npcDeposits = 0;
     cbState.externalBroadMoney = 0;
@@ -535,7 +549,7 @@ describe("processBankingTurn", () => {
     expect(summary.depositInterestShortfall).toBeGreaterThan(0);
     expect(summary.depositInterestPaid).toBeLessThanOrEqual(10 + 1e-9);
     expect(characterState.savings - savBefore).toBeCloseTo(summary.depositInterestPaid, 5);
-    expect(liveCorp.liquidCapital ?? 0).toBeGreaterThanOrEqual(0);
+    expect(liveCorp.bankCharter!.cashReserves ?? 0).toBeGreaterThanOrEqual(0);
   });
 
   it("conserves loan payment: borrower debit == bank credit; outstanding drops by principal", async () => {
@@ -580,7 +594,7 @@ describe("processBankingTurn", () => {
     bankCorp.bankCharter!.totalLoans = outstanding;
 
     const personalBefore = characterState.personal;
-    const liqBefore = liveCorp.liquidCapital ?? 0;
+    const liqBefore = liveCorp.bankCharter!.cashReserves ?? 0;
 
     const interestDue = (outstanding * (ratePercent / 100)) / TURNS_PER_YEAR;
     const principalDue = outstanding / termTurns;
@@ -591,7 +605,7 @@ describe("processBankingTurn", () => {
     expect(summary.loanInterestCollected).toBeCloseTo(interestDue, 5);
     expect(summary.loanPrincipalRepaid).toBeCloseTo(principalDue, 5);
     expect(personalBefore - characterState.personal).toBeCloseTo(paymentDue, 5);
-    expect((liveCorp.liquidCapital ?? 0) - liqBefore).toBeCloseTo(paymentDue, 5);
+    expect((liveCorp.bankCharter!.cashReserves ?? 0) - liqBefore).toBeCloseTo(paymentDue, 5);
     expect(loans[0].outstanding).toBeCloseTo(outstanding - principalDue, 5);
     expect(loans[0].lastProcessedTurn).toBe(TURN);
   });

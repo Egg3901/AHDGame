@@ -253,6 +253,30 @@ export const UK_COMMONS_SEATS: Record<string, number> = {
 
 export const TOTAL_UK_COMMONS_SEATS = 650;
 
+/**
+ * UK Commons seat counts by region — 1950–1955 redistribution (in force for
+ * the `1953-default` preset). Mirrors `ukRegions1953.houseDistricts` exactly
+ * (England 506 / Scotland 71 / Wales 36 / Northern Ireland 12 = 625). Without
+ * this map, spawn/allocate still used the modern 650-seat `UK_COMMONS_SEATS`
+ * and seated 650 MPs against a 625-seat / majority-313 chamber (ticket #1058).
+ */
+export const UK_COMMONS_SEATS_1953: Record<string, number> = {
+  LON: 91,
+  SEE: 81,
+  SWE: 43,
+  EAE: 47,
+  EMI: 37,
+  WMI: 53,
+  YHU: 52,
+  NWE: 75,
+  NEE: 27,
+  SCO: 71,
+  WAL: 36,
+  NIR: 12,
+};
+
+export const TOTAL_UK_COMMONS_SEATS_1953 = 625;
+
 /** RU (Soviet Union) region id → display name. Matches ruRegions seed names. */
 export const RU_REGION_NAMES: Record<string, string> = {
   CEN: "Central Russia",
@@ -801,6 +825,19 @@ export const ELECTORAL_VOTE_UNITS_1953: { unitId: string; ev: number; stateId: s
 export function getHouseSeats(preset: string | undefined): Record<string, number> {
   if (preset === "1953-default") return HOUSE_SEATS_1953;
   return preset === "1991-default" ? HOUSE_SEATS_1991 : HOUSE_SEATS;
+}
+
+/**
+ * Preset-aware UK Commons seat map. `1953-default` → 625-seat 1950–55
+ * redistribution; every other preset → the modern 650-seat map.
+ */
+export function getUkCommonsSeats(preset: string | undefined): Record<string, number> {
+  return preset === "1953-default" ? UK_COMMONS_SEATS_1953 : UK_COMMONS_SEATS;
+}
+
+/** National Commons size for the active preset (625 in 1953, else 650). */
+export function getTotalUkCommonsSeats(preset: string | undefined): number {
+  return preset === "1953-default" ? TOTAL_UK_COMMONS_SEATS_1953 : TOTAL_UK_COMMONS_SEATS;
 }
 
 export function getElectoralVotes(preset: string | undefined): Record<string, number> {

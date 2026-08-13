@@ -1,5 +1,5 @@
-import { ObjectId, type Db } from "mongodb";
-import type { Character, Corporation, State } from "@/lib/db/types";
+import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
+import type { Character, Corporation } from "@/lib/db/types";
 import type {
   BankCharter,
   BankLoan,
@@ -9,7 +9,6 @@ import type {
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
-import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { isBankPropTradingEnabled, isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
@@ -31,9 +30,19 @@ import { roundSavingsAmount, savingsApyPercent } from "@/lib/currency/savingsInt
 import { discountWindowRatePercent } from "@/lib/banking/discountWindow";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
+import { getCashReserves } from "@/lib/banking/bankCash";
+import {
+  CREDIT_BANDS,
+  DEFAULT_LENDING_PROFILE,
+  bandRatePercent,
+  bandsForProfile,
+  getCreditBand,
+  type CreditBandId,
+  type LendingProfileId,
+} from "@/lib/banking/creditBands";
 
-/** Provisional - max fraction of current/target NPC deposits that may flow per turn. */
-export const MAX_NPC_FLOW_PER_TURN_FRACTION = 0.25;
+/** Max fraction of the household target that can migrate or be lent each turn. */
+export const MAX_NPC_FLOW_PER_TURN_FRACTION = 0.025;
 
 /** Provisional - consecutive shortfall turns before a player loan defaults. */
 export const ARREARS_DEFAULT_TURNS = 8;
@@ -50,7 +59,7 @@ export type BankingTurnSummary = {
   defaultsWrittenOff: number;
   npcDepositDelta: number;
   npcBulkShortfall: number;
-  /** Premium due that could not be paid from bank liquidCapital. */
+  /** Premium due that could not be paid from the bank's cash reserves. */
   premiumShortfall: number;
   /** Interbank interest paid borrower → lender. */
   interbankInterestPaid: number;
@@ -95,25 +104,6 @@ function npcFlowDelta(current: number, target: number): number {
   const maxOutflow = MAX_NPC_FLOW_PER_TURN_FRACTION * cur;
   const maxInflow = MAX_NPC_FLOW_PER_TURN_FRACTION * Math.max(target, cur);
   return clamp(desired, -maxOutflow, maxInflow);
-}
-
-/**
- * National GDP proxy in home-currency face units: sum of regional `states.gdp`
- * (stored in millions) × 1_000_000 for the currency's anchor country, excluding
- * national-scope pseudo-states. Same source `fiscalBaseGrowth` uses.
- */
-async function loadCountryGdpFace(db: Db, currency: CurrencyCode): Promise<number> {
-  const countryId = getCountryIdForCurrency(currency);
-  const states = await db
-    .collection<State>("states")
-    .find({ countryId })
-    .project({ _id: 1, gdp: 1 })
-    .toArray();
-  const millions = states.reduce((sum, s) => {
-    if (NATIONAL_SCOPE_IDS.has(String(s._id))) return sum;
-    return sum + (typeof s.gdp === "number" && Number.isFinite(s.gdp) ? s.gdp : 0);
-  }, 0);
-  return millions * 1_000_000;
 }
 
 type DepositTaker = {
@@ -216,14 +206,12 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     }
   }
 
-  const gdpByCurrency = new Map<CurrencyCode, number>();
   const summary: BankingTurnSummary = { ...ZERO_SUMMARY };
 
   for (const row of depositTakers) {
     const bankResult = await processOneBank(db, turn, row, {
       npcShareByBankId,
       cbById,
-      gdpByCurrency,
     });
     summary.banksProcessed += 1;
     summary.depositInterestPaid += bankResult.depositInterestPaid;
@@ -249,7 +237,6 @@ type BankPassCaches = {
     string,
     Pick<CentralBank, "_id" | "primeRate" | "inflationHistory" | "externalBroadMoney">
   >;
-  gdpByCurrency: Map<CurrencyCode, number>;
 };
 
 type BankPassResult = {
@@ -294,7 +281,7 @@ async function processOneBank(
     return result;
   }
 
-  let liquidCapital = Math.max(0, live.liquidCapital ?? 0);
+  let cashReserves = getCashReserves(live.bankCharter);
   let npcDeposits = Math.max(0, live.bankCharter.npcDeposits ?? 0);
   let totalLoans = Math.max(0, live.bankCharter.totalLoans ?? 0);
 
@@ -372,7 +359,7 @@ async function processOneBank(
     }
   }
 
-  // (c) Deposit interest - player balances + npcDeposits, paid from liquidCapital
+  // (c) Deposit interest - player balances + npcDeposits, paid from cashReserves
   type PlayerCredit = { characterId: ObjectId; interest: number };
   const playerCredits: PlayerCredit[] = [];
   let playerInterestDue = 0;
@@ -388,9 +375,9 @@ async function processOneBank(
   const totalInterestDue = playerInterestDue + npcInterestDue;
 
   let interestScale = 1;
-  if (totalInterestDue > liquidCapital && totalInterestDue > 0) {
-    interestScale = liquidCapital / totalInterestDue;
-    result.depositInterestShortfall += totalInterestDue - liquidCapital;
+  if (totalInterestDue > cashReserves && totalInterestDue > 0) {
+    interestScale = cashReserves / totalInterestDue;
+    result.depositInterestShortfall += totalInterestDue - cashReserves;
   }
 
   const creditOps: {
@@ -447,7 +434,7 @@ async function processOneBank(
   const npcInterestPaid = roundSavingsAmount(npcInterestDue * interestScale, currency);
   const totalInterestPaid = playerInterestPaid + npcInterestPaid;
   if (totalInterestPaid > 0 || npcInterestPaid > 0) {
-    liquidCapital = Math.max(0, liquidCapital - totalInterestPaid);
+    cashReserves = Math.max(0, cashReserves - totalInterestPaid);
     npcDeposits = Math.max(0, npcDeposits + npcInterestPaid);
     result.depositInterestPaid += totalInterestPaid;
   }
@@ -473,7 +460,7 @@ async function processOneBank(
   const insuredDeposits = sumInsuredPlayerDeposits(postInterestBalances, insuredCap) + npcDeposits;
   const depositBaseForRatio =
     postInterestBalances.reduce((s, b) => s + Math.max(0, b), 0) + npcDeposits;
-  const reserveRatioActual = computeReserveRatioActual(liquidCapital, depositBaseForRatio);
+  const reserveRatioActual = computeReserveRatioActual(cashReserves, depositBaseForRatio);
   const reserveRatioRequired = await getReserveRequirement(db, currency);
   const premiumDue = computeInsurancePremium(
     insuredDeposits,
@@ -481,11 +468,11 @@ async function processOneBank(
     reserveRatioRequired
   );
   if (premiumDue > 0) {
-    const premiumPaid = Math.min(premiumDue, liquidCapital);
+    const premiumPaid = Math.min(premiumDue, cashReserves);
     const shortfall = premiumDue - premiumPaid;
     if (shortfall > 0) result.premiumShortfall += shortfall;
     if (premiumPaid > 0) {
-      liquidCapital = Math.max(0, liquidCapital - premiumPaid);
+      cashReserves = Math.max(0, cashReserves - premiumPaid);
       await ensureFund(db, currency);
       await db.collection<DepositInsuranceFund>("depositInsuranceFunds").updateOne(
         { _id: currency },
@@ -527,18 +514,17 @@ async function processOneBank(
         result.loanInterestCollected += loanResult.interestCollected;
         result.loanPrincipalRepaid += loanResult.principalRepaid;
         result.defaultsWrittenOff += loanResult.writtenOff;
-        liquidCapital += loanResult.bankCredit;
+        cashReserves += loanResult.bankCredit;
         totalLoans = Math.max(0, totalLoans + loanResult.totalLoansDelta);
       }
     })
   );
 
-  // (e) NPC bulk book
-  if (!caches.gdpByCurrency.has(currency)) {
-    caches.gdpByCurrency.set(currency, await loadCountryGdpFace(db, currency));
-  }
-  const regionalGdp = caches.gdpByCurrency.get(currency) ?? 0;
-  const npcBook = computeNpcLoanBook(regionalGdp, rates.lendingRatePercent);
+  // (e) NPC household loans. The book grows only from deposits actually held
+  // by this bank after its reserve requirement. Rates set utilization, while
+  // named loans consume the same capacity inside serviceNpcBulkBook.
+  const loanFundingCapacity =
+    (playerDeposits + playerInterestPaid + npcDeposits) * (1 - reserveRatioRequired);
   const bulkResult = await serviceNpcBulkBook(
     db,
     turn,
@@ -546,15 +532,16 @@ async function processOneBank(
     currency,
     rates.lendingRatePercent,
     {
-      targetVolume: npcBook.volume,
-      expectedDefaultRatePercent: npcBook.expectedDefaultRatePercent,
-      liquidCapital,
+      loanFundingCapacity,
+      cashReserves,
       totalLoans,
       cbDocId,
       cb,
+      bankName: corp.name,
+      lendingProfile: live.bankCharter.lendingProfile,
     }
   );
-  liquidCapital = bulkResult.liquidCapital;
+  cashReserves = bulkResult.cashReserves;
   totalLoans = bulkResult.totalLoans;
   result.loanInterestCollected += bulkResult.interestCollected;
   result.defaultsWrittenOff += bulkResult.writtenOff;
@@ -575,10 +562,11 @@ async function processOneBank(
     },
     {
       $set: {
-        liquidCapital,
+        "bankCharter.cashReserves": cashReserves,
         "bankCharter.npcDeposits": npcDeposits,
         "bankCharter.totalDeposits": totalDeposits,
         "bankCharter.totalLoans": totalLoans,
+        "bankCharter.reserves": cashReserves,
         "bankCharter.depositCeiling": depositCeiling,
         "bankCharter.lastBankingTurn": turn,
         updatedAt: new Date(),
@@ -805,22 +793,47 @@ async function debitBorrower(
 }
 
 type NpcBulkState = {
-  targetVolume: number;
-  expectedDefaultRatePercent: number;
-  liquidCapital: number;
+  /** Total lending capacity from deposits after the reserve requirement. */
+  loanFundingCapacity: number;
+  cashReserves: number;
   totalLoans: number;
   cbDocId: string;
   cb?: Pick<CentralBank, "externalBroadMoney">;
+  bankName: string;
+  /** CEO's stance: which credit bands this bank will originate into. */
+  lendingProfile?: LendingProfileId;
 };
 
 type NpcBulkResult = {
-  liquidCapital: number;
+  cashReserves: number;
   totalLoans: number;
   interestCollected: number;
   writtenOff: number;
   shortfall: number;
 };
 
+/**
+ * Service the household book, one tranche per credit band.
+ *
+ * The book used to be a single `npcBulk` loan carrying one rate and one blended
+ * default rate — which is why the console could only report it as one implied
+ * number. It is now one loan document per band, so the same servicing loop
+ * produces a book that can be read by rating and shocked by composition.
+ *
+ * Two rules govern what the CEO's lending profile may touch:
+ *
+ *  - It selects which bands are ORIGINATED into from here on. Bands outside the
+ *    profile get a target of zero and wind down at the ordinary flow cap; they
+ *    are not called in, repriced, or written off early.
+ *  - A tranche already on the book keeps the rate it was originated at. Rate
+ *    changes reach the book only through new origination, which is what "does
+ *    not change existing loans" has to mean if it is to mean anything.
+ *
+ * A pre-split book has no `creditBand`. It is serviced as its own tranche with
+ * a target of zero, at its own stored rate, so it runs off gradually while the
+ * banded tranches build. Total book size lands in the same place; only its
+ * composition changes, and only at the flow cap.
+ */
 async function serviceNpcBulkBook(
   db: Db,
   turn: number,
@@ -829,97 +842,192 @@ async function serviceNpcBulkBook(
   lendingRatePercent: number,
   state: NpcBulkState
 ): Promise<NpcBulkResult> {
-  let { liquidCapital, totalLoans } = state;
+  let { cashReserves, totalLoans } = state;
   let interestCollected = 0;
   let writtenOff = 0;
   let shortfall = 0;
 
-  let createdThisPass = false;
-  let loan = await db.collection<BankLoan>("bankLoans").findOne({
-    bankCorporationId,
-    borrowerType: "npcBulk",
-    status: { $in: ["current", "arrears"] },
-  });
-
-  if (!loan) {
-    // Ramp from zero - same 25% flow cap as deposit NPC migration.
-    const initial = Math.max(0, npcFlowDelta(0, state.targetVolume));
-    const doc: BankLoan = {
-      _id: new ObjectId(),
+  const existing = await db
+    .collection<BankLoan>("bankLoans")
+    .find({
       bankCorporationId,
-      currency,
       borrowerType: "npcBulk",
-      principal: initial,
-      outstanding: initial,
-      ratePercent: lendingRatePercent,
-      originatedTurn: turn,
-      termTurns: NPC_BULK_TERM_TURNS,
-      status: "current",
-    };
-    await db.collection<BankLoan>("bankLoans").insertOne(doc);
-    totalLoans += initial;
-    loan = doc;
-    createdThisPass = true;
-  } else if (loan.lastProcessedTurn === turn) {
-    return { liquidCapital, totalLoans, interestCollected, writtenOff, shortfall };
+      status: { $in: ["current", "arrears"] },
+    })
+    .toArray();
+
+  // Idempotency: the whole book is stamped together, so one processed tranche
+  // means the pass already ran for this bank this turn.
+  if (existing.some((loan) => loan.lastProcessedTurn === turn)) {
+    return { cashReserves, totalLoans, interestCollected, writtenOff, shortfall };
   }
 
-  const current = Math.max(0, loan.outstanding ?? 0);
-  const target = Math.max(0, state.targetVolume);
-  const adjust = createdThisPass ? 0 : npcFlowDelta(current, target);
-  const nextOutstandingBeforeYield = Math.max(0, current + adjust);
-  if (!createdThisPass) {
-    totalLoans = Math.max(0, totalLoans + adjust);
+  const currentTotal = existing.reduce((sum, loan) => sum + Math.max(0, loan.outstanding ?? 0), 0);
+  const nonNpcLoans = Math.max(0, totalLoans - currentTotal);
+  const npcFundingCapacity = Math.max(0, state.loanFundingCapacity - nonNpcLoans);
+
+  const openBands = bandsForProfile(state.lendingProfile);
+  const byBand = new Map<string, BankLoan>();
+  const legacy: BankLoan[] = [];
+  for (const loan of existing) {
+    if (loan.creditBand) byBand.set(loan.creditBand, loan);
+    else legacy.push(loan);
   }
 
-  // Interest is real cash the unmodeled NPC economy pays out of the central
-  // bank's externalBroadMoney pool (the named counterparty). Defaults destroy
-  // loan asset only - no cash moves for a writeoff.
-  const interest = (nextOutstandingBeforeYield * (lendingRatePercent / 100)) / TURNS_PER_YEAR;
-  const defaults =
-    (nextOutstandingBeforeYield * (state.expectedDefaultRatePercent / 100)) / TURNS_PER_YEAR;
+  type TrancheWork = {
+    loan: BankLoan | null;
+    band: CreditBandId | undefined;
+    target: number;
+    ratePercent: number;
+    defaultRatePercent: number;
+  };
 
-  const poolAvailable =
-    typeof state.cb?.externalBroadMoney === "number" && Number.isFinite(state.cb.externalBroadMoney)
-      ? Math.max(0, state.cb.externalBroadMoney)
+  const work: TrancheWork[] = [];
+
+  for (const band of CREDIT_BANDS) {
+    const open = openBands.some((b) => b.id === band.id);
+    const loan = byBand.get(band.id) ?? null;
+    if (!open && !loan) continue;
+
+    const rate = bandRatePercent(band, lendingRatePercent);
+    // Demand for a band is its share of the bank's funding capacity, taken at
+    // the rate that band is actually charged: price still moves volume, it just
+    // moves it per band now instead of across the whole book at once.
+    const target = open
+      ? Math.max(0, computeNpcLoanBook(npcFundingCapacity * band.demandShare, rate).volume)
       : 0;
-  const interestAffordable = Math.min(interest, poolAvailable);
-  if (interestAffordable > 0) {
-    await db.collection<CentralBank>("centralBanks").updateOne(
-      { _id: state.cbDocId },
-      {
-        $inc: { externalBroadMoney: -interestAffordable },
-        $set: { updatedAt: new Date() },
+
+    work.push({
+      loan,
+      band: band.id,
+      target,
+      // An existing tranche keeps its originated rate; only a fresh one prices
+      // at today's rate.
+      ratePercent: loan ? (loan.ratePercent ?? rate) : rate,
+      defaultRatePercent: band.defaultRatePercent,
+    });
+  }
+
+  for (const loan of legacy) {
+    work.push({
+      loan,
+      band: undefined,
+      target: 0,
+      ratePercent: loan.ratePercent ?? lendingRatePercent,
+      defaultRatePercent: getCreditBand(undefined).defaultRatePercent,
+    });
+  }
+
+  const now = new Date();
+  const bulkOps: AnyBulkWriteOperation<BankLoan>[] = [];
+
+  for (const tranche of work) {
+    const current = Math.max(0, tranche.loan?.outstanding ?? 0);
+    const adjust = npcFlowDelta(current, tranche.target);
+    const nextOutstandingBeforeYield = Math.max(0, current + adjust);
+    if (nextOutstandingBeforeYield <= 0 && current <= 0) continue;
+
+    totalLoans = Math.max(0, totalLoans + adjust);
+
+    // Interest is real cash the unmodeled NPC economy pays out of the central
+    // bank's externalBroadMoney pool (the named counterparty). Defaults destroy
+    // loan asset only - no cash moves for a writeoff.
+    const interest = (nextOutstandingBeforeYield * (tranche.ratePercent / 100)) / TURNS_PER_YEAR;
+    const defaults =
+      (nextOutstandingBeforeYield * (tranche.defaultRatePercent / 100)) / TURNS_PER_YEAR;
+
+    const poolAvailable =
+      typeof state.cb?.externalBroadMoney === "number" &&
+      Number.isFinite(state.cb.externalBroadMoney)
+        ? Math.max(0, state.cb.externalBroadMoney)
+        : 0;
+    const interestAffordable = Math.min(interest, poolAvailable);
+    if (interestAffordable > 0) {
+      await db
+        .collection<CentralBank>("centralBanks")
+        .updateOne(
+          { _id: state.cbDocId },
+          { $inc: { externalBroadMoney: -interestAffordable }, $set: { updatedAt: now } }
+        );
+      if (state.cb) {
+        state.cb.externalBroadMoney = poolAvailable - interestAffordable;
       }
-    );
-    if (state.cb) {
-      state.cb.externalBroadMoney = poolAvailable - interestAffordable;
+      cashReserves += interestAffordable;
+      interestCollected += interestAffordable;
     }
-    liquidCapital += interestAffordable;
-    interestCollected += interestAffordable;
-  }
-  if (interest > interestAffordable) {
-    shortfall += interest - interestAffordable;
-  }
-  writtenOff += defaults;
+    if (interest > interestAffordable) {
+      shortfall += interest - interestAffordable;
+    }
+    writtenOff += defaults;
 
-  const afterDefaults = Math.max(0, nextOutstandingBeforeYield - defaults);
-  totalLoans = Math.max(0, totalLoans - defaults);
+    const afterDefaults = Math.max(0, nextOutstandingBeforeYield - defaults);
+    totalLoans = Math.max(0, totalLoans - defaults);
 
-  await db.collection<BankLoan>("bankLoans").updateOne(
-    { _id: loan._id },
-    {
-      $set: {
-        outstanding: afterDefaults,
-        principal: Math.max(loan.principal ?? 0, afterDefaults),
-        ratePercent: lendingRatePercent,
-        status: afterDefaults <= 0 ? "repaid" : "current",
-        lastProcessedTurn: turn,
+    if (tranche.loan) {
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: tranche.loan._id },
+          update: {
+            $set: {
+              outstanding: afterDefaults,
+              principal: Math.max(tranche.loan.principal ?? 0, afterDefaults),
+              ratePercent: tranche.ratePercent,
+              status: afterDefaults <= 0 ? "repaid" : "current",
+              lastProcessedTurn: turn,
+            },
+          },
+        },
+      });
+    } else if (afterDefaults > 0) {
+      bulkOps.push({
+        insertOne: {
+          document: {
+            _id: new ObjectId(),
+            bankCorporationId,
+            currency,
+            borrowerType: "npcBulk",
+            creditBand: tranche.band,
+            principal: afterDefaults,
+            outstanding: afterDefaults,
+            ratePercent: tranche.ratePercent,
+            originatedTurn: turn,
+            termTurns: NPC_BULK_TERM_TURNS,
+            status: "current",
+            lastProcessedTurn: turn,
+          } as BankLoan,
+        },
+      });
+    }
+  }
+
+  if (bulkOps.length > 0) {
+    await db.collection<BankLoan>("bankLoans").bulkWrite(bulkOps);
+  }
+
+  // One interest row for the whole book rather than one per band: this fires
+  // for every bank every turn, and seven rows per bank per turn would bury the
+  // ledger for no extra information the tranches do not already carry.
+  if (interestCollected > 0) {
+    await emitTx(db, {
+      type: "bank_npc_loan_interest",
+      turn,
+      createdAt: now,
+      subjectType: "corporation",
+      subjectId: bankCorporationId,
+      subjectName: state.bankName,
+      amount: interestCollected,
+      currencyCode: currency,
+      counterpartyType: "system",
+      counterpartyName: "NPC households",
+      meta: {
+        borrowerType: "npcBulk",
+        tranches: work.length,
+        lendingProfile: state.lendingProfile ?? DEFAULT_LENDING_PROFILE,
       },
-    }
-  );
+    });
+  }
 
-  return { liquidCapital, totalLoans, interestCollected, writtenOff, shortfall };
+  return { cashReserves, totalLoans, interestCollected, writtenOff, shortfall };
 }
 
 /**
@@ -999,7 +1107,7 @@ async function serviceInterbankAndCbMargin(
     const rate = cbMarginRatePercent(primeByCurrency.get(currency) ?? 0);
     const debt = hasMargin ? Math.max(0, charter.cbMarginDebt ?? 0) : 0;
     const interestDue = (debt * (rate / 100)) / TURNS_PER_YEAR;
-    const liquid = Math.max(0, corp.liquidCapital ?? 0);
+    const liquid = getCashReserves(charter);
     const paid = Math.min(interestDue, liquid);
     const shortfall = Math.max(0, interestDue - paid);
 
@@ -1023,7 +1131,7 @@ async function serviceInterbankAndCbMargin(
     };
     if (paid > 0 || shortfall > 0) {
       marginUpdate.$inc = {
-        ...(paid > 0 ? { liquidCapital: -paid } : {}),
+        ...(paid > 0 ? { "bankCharter.cashReserves": -paid } : {}),
         ...(shortfall > 0 ? { "bankCharter.cbMarginArrears": shortfall } : {}),
       };
     }
@@ -1063,7 +1171,7 @@ async function serviceInterbankAndCbMargin(
           ...(windowPaid > 0 || windowShortfall > 0
             ? {
                 $inc: {
-                  ...(windowPaid > 0 ? { liquidCapital: -windowPaid } : {}),
+                  ...(windowPaid > 0 ? { "bankCharter.cashReserves": -windowPaid } : {}),
                   ...(windowShortfall > 0
                     ? { "bankCharter.discountWindowArrears": windowShortfall }
                     : {}),
@@ -1123,8 +1231,9 @@ async function serviceOneInterbankLoan(
   const interestDue = (outstanding * (loan.ratePercent / 100)) / TURNS_PER_YEAR;
   const borrower = await db
     .collection<Corporation>("corporations")
-    .findOne({ _id: loan.borrowerCorporationId }, { projection: { liquidCapital: 1 } });
-  const available = Math.max(0, borrower?.liquidCapital ?? 0);
+    .findOne({ _id: loan.borrowerCorporationId }, { projection: { bankCharter: 1 } });
+  // Both sides of an interbank loan are banks, so both legs move bank cash.
+  const available = getCashReserves(borrower?.bankCharter);
   const payment = Math.min(interestDue, available);
 
   if (payment < interestDue - 1e-9) {
@@ -1133,14 +1242,14 @@ async function serviceOneInterbankLoan(
       await db
         .collection<Corporation>("corporations")
         .updateOne(
-          { _id: loan.borrowerCorporationId, liquidCapital: { $gte: payment } },
-          { $inc: { liquidCapital: -payment }, $set: { updatedAt: new Date() } }
+          { _id: loan.borrowerCorporationId, "bankCharter.cashReserves": { $gte: payment } },
+          { $inc: { "bankCharter.cashReserves": -payment }, $set: { updatedAt: new Date() } }
         );
       await db
         .collection<Corporation>("corporations")
         .updateOne(
           { _id: loan.lenderCorporationId },
-          { $inc: { liquidCapital: payment }, $set: { updatedAt: new Date() } }
+          { $inc: { "bankCharter.cashReserves": payment }, $set: { updatedAt: new Date() } }
         );
     }
 
@@ -1183,14 +1292,14 @@ async function serviceOneInterbankLoan(
   await db
     .collection<Corporation>("corporations")
     .updateOne(
-      { _id: loan.borrowerCorporationId, liquidCapital: { $gte: payment } },
-      { $inc: { liquidCapital: -payment }, $set: { updatedAt: new Date() } }
+      { _id: loan.borrowerCorporationId, "bankCharter.cashReserves": { $gte: payment } },
+      { $inc: { "bankCharter.cashReserves": -payment }, $set: { updatedAt: new Date() } }
     );
   await db
     .collection<Corporation>("corporations")
     .updateOne(
       { _id: loan.lenderCorporationId },
-      { $inc: { liquidCapital: payment }, $set: { updatedAt: new Date() } }
+      { $inc: { "bankCharter.cashReserves": payment }, $set: { updatedAt: new Date() } }
     );
   await db.collection<InterbankLoan>("interbankLoans").updateOne(
     { _id: loan._id, lastProcessedTurn: { $ne: turn } },

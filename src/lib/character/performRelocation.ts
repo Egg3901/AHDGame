@@ -16,6 +16,7 @@ import { updatePartyPresence } from "@/lib/turn/partyOrg/presence";
 import { cleanupCaucusParticipationForCharacters } from "@/lib/caucus/cleanupCaucusParticipationForCharacters";
 import { closeCeoTenure } from "@/lib/corporations/ceoHistory";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
+import { officeResignsOnRelocation } from "@/lib/character/officeResignsOnRelocation";
 
 export interface RelocationOutcome {
   resignedFromOffice: string | null;
@@ -74,9 +75,14 @@ export async function performRelocation(
   const lastRelocatedAt = gameTime.effectiveNow;
   const lastRelocatedTurn = gameTime.currentTurn;
 
-  // 1. Auto-resign from office, if any.
+  // 1. Auto-resign from office when residency breaks.
+  //    State/region-bound seats always resign. Country-scoped seats (VP, President,
+  //    cabinet, …) only resign on a country change — ticket #1057.
   let resignedFromOffice: string | null = null;
-  if (character.currentOffice) {
+  if (
+    character.currentOffice &&
+    officeResignsOnRelocation(character.currentOffice, countryChanged)
+  ) {
     const officeType = character.currentOffice.type;
     const officeState = "state" in character.currentOffice ? character.currentOffice.state : null;
     await db.collection("electedOfficials").updateOne(

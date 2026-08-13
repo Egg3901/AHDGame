@@ -1,5 +1,6 @@
 import type { Election, GameState } from "@/lib/db/types";
-import { UK_COMMONS_SEATS, DE_WAHLKREIS_SEATS } from "@/lib/constants";
+import { DE_WAHLKREIS_SEATS } from "@/lib/constants";
+import { getUkCommonsSeats } from "@/lib/constants/states";
 import { loadApportionment } from "@/lib/elections/apportionment";
 import { getSeatIdFromElection } from "@/lib/seats";
 import { DEFAULT_DURATIONS } from "@/lib/constants/electionDurations";
@@ -207,7 +208,9 @@ export async function spawnCommonsElection(
       state: fromElection.state!,
     }),
     status,
-    totalSeats: fromElection.totalSeats ?? UK_COMMONS_SEATS[fromElection.state!] ?? 1,
+    // Prefer the era map over the prior race's totalSeats — earlier cycles may
+    // still carry the modern 650-seat counts under a 1953 world (#1058).
+    totalSeats: getUkCommonsSeats(ctx.preset)[fromElection.state!] ?? fromElection.totalSeats ?? 1,
     startTime: now,
     primaryEndTime,
     endTime,

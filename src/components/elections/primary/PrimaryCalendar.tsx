@@ -20,6 +20,8 @@
  * See plan §"Phase 4 — Tasks" 4.2.
  */
 
+import { useTranslations } from "next-intl";
+
 export interface CalendarWave {
   /** Display label for the row, e.g. "Super Tuesday" or "T-3 (Nevada + SC)". */
   label: string;
@@ -54,13 +56,13 @@ export function PrimaryCalendar({
   winnerColorByState?: Record<string, string | undefined>;
   turnsToEnd?: number | null;
 }) {
+  const t = useTranslations("elections");
   const accent = partyColor ?? "var(--primary)";
 
   if (waves.length === 0) {
     return (
       <div className="rounded-xl border border-card-border bg-card p-4 text-xs text-muted">
-        No primary calendar data yet — the wave schedule populates once the primary enters its
-        stagger window.
+        {t("primaryCalendar.empty")}
       </div>
     );
   }
@@ -69,10 +71,10 @@ export function PrimaryCalendar({
     <div className="rounded-xl border border-card-border bg-card p-4">
       <div className="mb-3 flex items-baseline justify-between">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          Primary Calendar
+          {t("primaryCalendar.title")}
         </h3>
         <span className="text-[10px] uppercase tracking-wider text-muted">
-          Past contests show winner; future shows wave timing
+          {t("primaryCalendar.subtitle")}
         </span>
       </div>
       <div className="flex max-h-[560px] flex-col gap-3 overflow-y-auto pr-1">
@@ -84,12 +86,12 @@ export function PrimaryCalendar({
           // we have no current-turn anchor to compute "from now" against.
           const firesIn = turnsToEnd != null ? Math.max(0, turnsToEnd - w.turnsRemaining) : null;
           const turnsLabel = w.isPast
-            ? "Voted"
+            ? t("primaryCalendar.voted")
             : firesIn == null
               ? `T-${w.turnsRemaining}`
               : firesIn === 0
-                ? "Voting now"
-                : `In ${firesIn} turn${firesIn === 1 ? "" : "s"}`;
+                ? t("primaryCalendar.votingNow")
+                : t("primaryCalendar.inTurns", { count: firesIn });
           return (
             <div key={w.turnsRemaining} className="flex items-start gap-3">
               <div className="min-w-[88px] text-right">
@@ -146,7 +148,11 @@ export function PrimaryCalendar({
                           ? `color-mix(in srgb, ${accent} 10%, transparent)`
                           : undefined,
                       }}
-                      title={showWinner ? `${stateId} — voted` : `${stateId} — upcoming`}
+                      title={
+                        showWinner
+                          ? t("primaryCalendar.chipVoted", { state: stateId })
+                          : t("primaryCalendar.chipUpcoming", { state: stateId })
+                      }
                     >
                       {stateId}
                     </button>

@@ -34,33 +34,29 @@ export async function payFundHolderCash(
   const fundFxRate = await loadFundPayoutFxRate(db, fund.anchorCurrencyCode, forexEnabled);
 
   if (position.holderKind === "character" && position.characterId) {
-    await db
-      .collection("characters")
-      .updateOne(
-        { _id: position.characterId },
-        {
-          $inc: buildPersonalBalanceInc(
-            payoutAnchor * fundFxRate,
-            fund.anchorCurrencyCode,
-            forexEnabled
-          ),
-          $set: { updatedAt: now },
-        }
-      );
+    await db.collection("characters").updateOne(
+      { _id: position.characterId },
+      {
+        $inc: buildPersonalBalanceInc(
+          payoutAnchor * fundFxRate,
+          fund.anchorCurrencyCode,
+          forexEnabled
+        ),
+        $set: { updatedAt: now },
+      }
+    );
   } else if (position.holderKind === "imperial_character" && position.imperialCharacterId) {
-    await db
-      .collection("imperialCharacters")
-      .updateOne(
-        { _id: position.imperialCharacterId },
-        {
-          $inc: buildPersonalBalanceInc(
-            payoutAnchor * fundFxRate,
-            fund.anchorCurrencyCode,
-            forexEnabled
-          ),
-          $set: { updatedAt: now },
-        }
-      );
+    await db.collection("imperialCharacters").updateOne(
+      { _id: position.imperialCharacterId },
+      {
+        $inc: buildPersonalBalanceInc(
+          payoutAnchor * fundFxRate,
+          fund.anchorCurrencyCode,
+          forexEnabled
+        ),
+        $set: { updatedAt: now },
+      }
+    );
   } else if (position.holderKind === "npp" && position.nppId) {
     // NPP investment cash is denominated in ₳ already — no rate.
     await db
@@ -80,9 +76,7 @@ export async function payFundHolderCash(
     turn: currentTurn,
     holderKind: position.holderKind,
     ...(position.characterId ? { characterId: position.characterId } : {}),
-    ...(position.imperialCharacterId
-      ? { imperialCharacterId: position.imperialCharacterId }
-      : {}),
+    ...(position.imperialCharacterId ? { imperialCharacterId: position.imperialCharacterId } : {}),
     ...(position.nppId ? { nppId: position.nppId } : {}),
     units: position.units,
     amountAnchor: payoutAnchor,

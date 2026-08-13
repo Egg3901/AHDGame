@@ -1,11 +1,11 @@
 /**
  * Copy helpers for the country-map Logistics mode.
  *
- * The map shows freight *capacity* (CommodityPrice.stateSupply.freight — what
+ * The map shows freight *capacity* (CommodityPrice.stateSupply.freight, what
  * logistics sectors clear against) alongside origin-state interstate *haul load*
- * from `sourcingNetworkLoad` (record-only landed-price sourcing). Haul alone is
- * not market demand; money wiring (interstate-logistics plan step 5) is still
- * off, so sold % still follows the global freight market (ticket #1039).
+ * from `sourcingNetworkLoad`. Since ticket #1039 haul TEU is booked as real
+ * freight demand in the market turn (state legs + global), so haul moves freight
+ * prices and sold %. Money wiring (plan step 5, who pays shipping) is still off.
  */
 
 export type FreightHaulLoadEntry = {
@@ -56,7 +56,7 @@ export function freightHaulLoadTooltip(stateId: string, entry: FreightHaulLoadEn
     lines.push(`Projected haul load: ${formatFreightTeu(haul)} TEU/turn`);
   }
   lines.push(`Bulk: ${bulk} · Special: ${special}`);
-  lines.push("Haul is shadow-ledger network load — not sold % demand");
+  lines.push("Haul counts as freight demand in the market turn");
   return lines;
 }
 
@@ -66,8 +66,8 @@ export function freightHaulLoadCaption(hasData: boolean): string {
   }
   return (
     "Green intensity follows freight capacity (TEU logistics clear against). Tooltips also show " +
-    "projected interstate haul from the landed-price shadow ledger — that haul is network load, " +
-    "not market demand. Sold % still follows the global freight market until money wiring ships."
+    "interstate haul from the landed-price sourcing pass. Haul is booked as freight demand each " +
+    "market turn, so heavy-haul states lift freight prices and sold %."
   );
 }
 

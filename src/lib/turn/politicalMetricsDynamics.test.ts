@@ -386,8 +386,7 @@ describe("processPoliticalMetricsDynamics", () => {
 
     const ops = (db.collectionMocks.politicalMetrics.bulkWrite as ReturnType<typeof vi.fn>).mock
       .calls[0]?.[0] as
-      | Array<{ updateOne: { update: { $set: Record<string, unknown> } } }>
-      | undefined;
+      Array<{ updateOne: { update: { $set: Record<string, unknown> } } }> | undefined;
     for (const op of ops ?? []) {
       expect(op.updateOne.update.$set).not.toHaveProperty("labourResiduals");
     }
@@ -405,8 +404,7 @@ describe("processPoliticalMetricsDynamics", () => {
 
     const ops = (db.collectionMocks.politicalMetrics.bulkWrite as ReturnType<typeof vi.fn>).mock
       .calls[0]?.[0] as
-      | Array<{ updateOne: { update: { $set: { values: Record<string, number> } } } }>
-      | undefined;
+      Array<{ updateOne: { update: { $set: { values: Record<string, number> } } } }> | undefined;
     // Whether the engine families moved enough to trigger a write is not this
     // test's business; that every family nothing else bends stayed exactly put is.
     const next = ops?.[0]?.updateOne.update.$set.values ?? values;
@@ -562,8 +560,7 @@ describe("Bridge B — macro conditions bend the political equilibrium", () => {
       }));
     return processPoliticalMetricsDynamics(db as unknown as Db, 100).then(() => {
       const call = db.collectionMocks.politicalMetrics.bulkWrite.mock.calls[0]?.[0] as
-        | Array<{ updateOne: { update: { $set: Record<string, unknown> } } }>
-        | undefined;
+        Array<{ updateOne: { update: { $set: Record<string, unknown> } } }> | undefined;
       return call?.[0]?.updateOne.update.$set;
     });
   }

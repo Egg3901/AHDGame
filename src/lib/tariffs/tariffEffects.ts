@@ -7,8 +7,15 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { fireTariffPulse } from "@/lib/corporations/sentimentEvents";
-import { calculateFederalRevenue, normalizeFederalTaxRates } from "@/lib/budget/revenue";
+import {
+  calculateFederalRevenue,
+  normalizeFederalTaxRates,
+  loadLatestSourcedImportAggregates,
+} from "@/lib/budget/revenue";
 import { isFtaActive, type FtaPairSet, type FtaCoverage } from "./ftaOverrides";
+import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
+import { getCurrentTurn } from "@/lib/currentTurn";
 
 function finiteRate(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -438,7 +445,34 @@ export async function applyTariffProvision(
         ...normalizedTaxRates,
         tariffs: provision.rate,
       };
-      const newRevenue = await calculateFederalRevenue(db, newTaxRates, budgetId);
+      // Money wiring (interstate-logistics plan step 5, phase B): this is a
+      // rare rate-change event (a tariff bill just enacted), not a per-turn
+      // hot loop, so a direct read here (rather than a caller-hoisted map)
+      // stays cheap. Same netting rule as `refreshNationalBudgetRevenue`.
+      const moneyWiringConfig = await db
+        .collection<GameConfig>("gameConfig")
+        .findOne({ _id: "default" }, { projection: { interstateMoneyWiringEnabled: 1 } });
+      let sourcedImports: { tariffPaidAnchor: number; importValueAnchor: number } | undefined;
+      if (moneyWiringConfig?.interstateMoneyWiringEnabled === true) {
+        const [sourcedByCountry] = await Promise.all([
+          loadLatestSourcedImportAggregates(db, await getCurrentTurn(db)),
+        ]);
+        const agg = sourcedByCountry.get(countryId);
+        if (agg) {
+          sourcedImports = { tariffPaidAnchor: agg.tariffPaid, importValueAnchor: agg.importValue };
+        }
+      }
+      const fxByCurrency = sourcedImports ? await loadFxRatesByCurrency(db) : undefined;
+      const newRevenue = await calculateFederalRevenue(
+        db,
+        newTaxRates,
+        budgetId,
+        undefined,
+        undefined,
+        undefined,
+        fxByCurrency,
+        sourcedImports
+      );
       const newSurplus = newRevenue.total - (budget.spending?.total ?? 0);
       await db.collection<FederalBudget>("federalBudget").updateOne(
         { _id: budgetId },

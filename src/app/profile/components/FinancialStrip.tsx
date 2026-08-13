@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useTranslations, useLocale } from "next-intl";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { type CurrencyCode, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
@@ -23,6 +24,8 @@ const INFO_ICON = (
     />
   </svg>
 );
+
+type FinancesT = ReturnType<typeof useTranslations>;
 
 export interface CampaignIncomeData {
   populationTier: string;
@@ -90,11 +93,13 @@ function DonorPanel({
   donorIncome,
   formatFull,
   currencyCode,
+  t,
 }: {
   donorIncome: DonorIncomeData;
   /** FX-aware formatter — applies display-currency preference + conversion. */
   formatFull: (internalAmount: number, nativeCurrencyCode?: CurrencyCode) => string;
   currencyCode: CurrencyCode;
+  t: FinancesT;
 }) {
   const mult = donorIncome.influenceMultiplier;
   const hasBoost = mult > 1.005;
@@ -102,25 +107,25 @@ function DonorPanel({
     <div className="border-t border-card-border bg-card-elevated/30 px-5 py-3">
       <div className="space-y-1.5 text-xs">
         <div className="flex justify-between">
-          <span className="text-muted">Passive Income</span>
+          <span className="text-muted">{t("passiveIncome")}</span>
           <span className="text-success tabular-nums">
-            +{formatFull(donorIncome.passivePerHour, currencyCode)}/hr
+            {t("plusPerHour", { amount: formatFull(donorIncome.passivePerHour, currencyCode) })}
           </span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted">Per Level ({donorIncome.populationTier})</span>
+          <span className="text-muted">{t("perLevel", { tier: donorIncome.populationTier })}</span>
           <span className="text-muted tabular-nums">
-            +{formatFull(donorIncome.perLevelRate, currencyCode)}/hr
+            {t("plusPerHour", { amount: formatFull(donorIncome.perLevelRate, currencyCode) })}
           </span>
         </div>
         {hasBoost && (
           <div className="flex justify-between">
-            <span className="text-muted">Influence Bonus</span>
+            <span className="text-muted">{t("influenceBonus")}</span>
             <span className="text-primary tabular-nums font-semibold">{mult.toFixed(2)}x</span>
           </div>
         )}
         <div className="flex justify-between pt-1.5 border-t border-card-border">
-          <span className="text-muted">Fundraise Action Yield</span>
+          <span className="text-muted">{t("fundraiseYield")}</span>
           <span className="text-foreground tabular-nums font-semibold">
             {formatFull(donorIncome.fundraiseYield, currencyCode)}
           </span>
@@ -133,23 +138,27 @@ function DonorPanel({
 function CampaignPanel({
   campaignIncome,
   formatCampaignFull,
+  t,
 }: {
   campaignIncome: CampaignIncomeData;
   /** Full-line formatter — respects FOREX display preference (internal ₳ vs converted). */
   formatCampaignFull: (internalAmount: number) => string;
+  t: FinancesT;
 }) {
   return (
     <div className="border-t border-card-border bg-card-elevated/30 px-5 py-3">
       <div className="space-y-1.5 text-xs">
         <div className="flex justify-between">
-          <span className="text-muted">Base Gen ({campaignIncome.populationTier})</span>
+          <span className="text-muted">
+            {t("baseGen", { tier: campaignIncome.populationTier })}
+          </span>
           <span className="text-success tabular-nums">
             +{formatCampaignFull(campaignIncome.baseGen)}
           </span>
         </div>
         {campaignIncome.donorBonus > 0 && (
           <div className="flex justify-between">
-            <span className="text-muted">Donor Network Bonus</span>
+            <span className="text-muted">{t("donorBonus")}</span>
             <span className="text-success tabular-nums">
               +{formatCampaignFull(campaignIncome.donorBonus)}
             </span>
@@ -157,7 +166,7 @@ function CampaignPanel({
         )}
         {campaignIncome.officeBonus > 0 && (
           <div className="flex justify-between">
-            <span className="text-muted">Office Salary</span>
+            <span className="text-muted">{t("officeSalary")}</span>
             <span className="text-success tabular-nums">
               +{formatCampaignFull(campaignIncome.officeBonus)}
             </span>
@@ -165,14 +174,14 @@ function CampaignPanel({
         )}
         {campaignIncome.totalTax > 0 && (
           <div className="flex justify-between">
-            <span className="text-muted">Party Taxes</span>
+            <span className="text-muted">{t("partyTaxes")}</span>
             <span className="text-error tabular-nums">
               &minus;{formatCampaignFull(campaignIncome.totalTax)}
             </span>
           </div>
         )}
         <div className="flex justify-between border-t border-card-border pt-1.5 font-semibold">
-          <span className="text-foreground">Net / hr</span>
+          <span className="text-foreground">{t("netPerHour")}</span>
           <span
             className={`tabular-nums ${campaignIncome.netIncome >= 0 ? "text-success" : "text-error"}`}
           >
@@ -193,6 +202,8 @@ function CashPanel({
   currencyCode,
   displayCurrencyPreference,
   portfolioHref,
+  locale,
+  t,
 }: {
   personalIncome: PersonalIncomeData;
   formatFull: (internalAmount: number, nativeCurrencyCode?: CurrencyCode) => string;
@@ -201,6 +212,8 @@ function CashPanel({
   currencyCode: CurrencyCode;
   displayCurrencyPreference: string;
   portfolioHref: string;
+  locale: string;
+  t: FinancesT;
 }) {
   // ceoSalaryPerHour is stored in the corp's liquidCurrencyCode post-v0.2.6.
   // Normalize to ₳ so formatFull honors wallet-pref display.
@@ -267,13 +280,15 @@ function CashPanel({
                     className="tabular-nums text-right text-foreground self-center"
                   >
                     {sym}
-                    {Math.round(liquid).toLocaleString("en-US")}
+                    {Math.round(liquid).toLocaleString(locale)}
                   </span>,
                   <span
                     key={`${code}-s`}
                     className="tabular-nums text-right text-muted self-center"
                   >
-                    {savings > 0 ? `${sym}${formatCompactNumber(savings)} sav` : ""}
+                    {savings > 0
+                      ? t("savingsChip", { amount: `${sym}${formatCompactNumber(savings)}` })
+                      : ""}
                   </span>,
                   <span
                     key={`${code}-h`}
@@ -294,10 +309,12 @@ function CashPanel({
                   className="tabular-nums text-right text-foreground self-center"
                 >
                   {sym}
-                  {Math.round(liquid).toLocaleString("en-US")}
+                  {Math.round(liquid).toLocaleString(locale)}
                 </span>,
                 <span key={`${code}-s`} className="tabular-nums text-right text-muted self-center">
-                  {savings > 0 ? `(${sym}${formatCompactNumber(savings)} sav)` : ""}
+                  {savings > 0
+                    ? `(${t("savingsChip", { amount: `${sym}${formatCompactNumber(savings)}` })})`
+                    : ""}
                 </span>,
               ];
             })}
@@ -306,7 +323,7 @@ function CashPanel({
 
         {forexCurrencies.length > 0 && (
           <div className="flex justify-between border-t border-card-border pt-1.5 font-semibold">
-            <span className="text-muted">Total</span>
+            <span className="text-muted">{t("total")}</span>
             <span className="text-foreground tabular-nums">{formatFull(totalAnchor)}</span>
           </div>
         )}
@@ -320,25 +337,31 @@ function CashPanel({
           >
             {ceoSalaryPerHour > 0 && (
               <div className="flex justify-between">
-                <span className="text-muted">CEO Salary</span>
+                <span className="text-muted">{t("ceoSalary")}</span>
                 <span className="text-success tabular-nums">
-                  +{formatFull(ceoSalaryPerHourAnchor, ceoSalaryCode ?? currencyCode)}/hr
+                  {t("plusPerHour", {
+                    amount: formatFull(ceoSalaryPerHourAnchor, ceoSalaryCode ?? currencyCode),
+                  })}
                 </span>
               </div>
             )}
             {(personalIncome.bondIncomePerTurn ?? 0) > 0 && (
               <div className="flex justify-between">
-                <span className="text-muted">Bond coupon income</span>
+                <span className="text-muted">{t("bondIncome")}</span>
                 <span className="text-success tabular-nums">
-                  +{formatFull(personalIncome.bondIncomePerTurn!, currencyCode)}/turn
+                  {t("plusPerTurn", {
+                    amount: formatFull(personalIncome.bondIncomePerTurn!, currencyCode),
+                  })}
                 </span>
               </div>
             )}
             {(personalIncome.dividendIncomePerTurn ?? 0) > 0 && (
               <div className="flex justify-between">
-                <span className="text-muted">Dividend Income</span>
+                <span className="text-muted">{t("dividendIncome")}</span>
                 <span className="text-success tabular-nums">
-                  +{formatFull(personalIncome.dividendIncomePerTurn!, currencyCode)}/turn
+                  {t("plusPerTurn", {
+                    amount: formatFull(personalIncome.dividendIncomePerTurn!, currencyCode),
+                  })}
                 </span>
               </div>
             )}
@@ -350,7 +373,7 @@ function CashPanel({
             href={portfolioHref}
             className="text-xs text-primary hover:underline inline-flex items-center gap-1"
           >
-            View Portfolio
+            {t("viewPortfolio")}
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
@@ -372,6 +395,8 @@ export function FinancialStrip({
   personalIncome,
   portfolioHref = "/portfolio",
 }: FinancialStripProps) {
+  const t = useTranslations("profile.finances");
+  const locale = useLocale();
   const { formatAmountChip, formatFull, toInternalFrom, displayCurrencyPreference } = useCurrency();
   const [panel, setPanel] = useState<Panel>(null);
   const currencyCode = (currency || "USD") as CurrencyCode;
@@ -412,7 +437,8 @@ export function FinancialStrip({
           <InfoTooltip
             trigger={
               <span className="text-[11px] text-muted font-medium">
-                Donor Network{INFO_ICON}
+                {t("donorNetwork")}
+                {INFO_ICON}
                 {donorIncome && (
                   <span className="ml-1 text-[9px] text-primary/60">
                     {panel === "donor" ? "\u25B2" : "\u25BC"}
@@ -422,13 +448,12 @@ export function FinancialStrip({
             }
           >
             <p className="text-muted">
-              Fundraising tier. Spend money via Actions to level it up — each level permanently
-              increases hourly income. The cap scales with the home state&apos;s population.
-              {donorIncome && " Tap to see income breakdown."}
+              {t("donorTooltip")}
+              {donorIncome && ` ${t("tapIncomeBreakdown")}`}
             </p>
           </InfoTooltip>
           <span className="text-sm font-bold tabular-nums text-success">
-            Level {donorLevel}
+            {t("level", { level: donorLevel })}
             <span className="text-[10px] text-muted font-normal ml-1">/ {maxDonorLevel}</span>
           </span>
         </div>
@@ -438,6 +463,7 @@ export function FinancialStrip({
             donorIncome={donorIncome}
             formatFull={formatFull}
             currencyCode={currencyCode}
+            t={t}
           />
         )}
 
@@ -450,7 +476,8 @@ export function FinancialStrip({
           <InfoTooltip
             trigger={
               <span className="text-[11px] text-muted font-medium">
-                Campaign Cash{INFO_ICON}
+                {t("campaignCash")}
+                {INFO_ICON}
                 {campaignIncome && (
                   <span className="ml-1 text-[9px] text-primary/60">
                     {panel === "campaign" ? "\u25B2" : "\u25BC"}
@@ -460,9 +487,8 @@ export function FinancialStrip({
             }
           >
             <p className="text-muted">
-              Campaign war chest used for elections, political actions, and donor upgrades. Cannot
-              be used for personal expenses.
-              {campaignIncome && " Tap to see hourly income breakdown."}
+              {t("campaignTooltip")}
+              {campaignIncome && ` ${t("tapHourlyBreakdown")}`}
             </p>
           </InfoTooltip>
           <span className="text-sm font-bold tabular-nums">
@@ -471,7 +497,11 @@ export function FinancialStrip({
         </div>
         {/* Campaign panel — directly under campaign cell on mobile */}
         {panel === "campaign" && campaignIncome && (
-          <CampaignPanel campaignIncome={campaignIncome} formatCampaignFull={formatCampaignFull} />
+          <CampaignPanel
+            campaignIncome={campaignIncome}
+            formatCampaignFull={formatCampaignFull}
+            t={t}
+          />
         )}
 
         {/* Cash on Hand */}
@@ -483,7 +513,8 @@ export function FinancialStrip({
           <InfoTooltip
             trigger={
               <span className="text-[11px] text-muted font-medium">
-                Personal Cash{INFO_ICON}
+                {t("personalCash")}
+                {INFO_ICON}
                 {personalIncome && (
                   <span className="ml-1 text-[9px] text-primary/60">
                     {panel === "cash" ? "\u25B2" : "\u25BC"}
@@ -494,15 +525,14 @@ export function FinancialStrip({
           >
             <>
               <p className="text-muted">
-                Personal cash on hand, separate from campaign funds. CEO salary and bond coupon
-                income are paid here.
-                {personalIncome && " Tap to see hourly income breakdown."}
+                {t("personalTooltip")}
+                {personalIncome && ` ${t("tapHourlyBreakdown")}`}
               </p>
               <Link
                 href={portfolioHref}
                 className="mt-2 inline-block text-xs text-primary hover:underline"
               >
-                View currency wallet →
+                {t("viewWallet")}
               </Link>
             </>
           </InfoTooltip>
@@ -520,6 +550,8 @@ export function FinancialStrip({
             currencyCode={currencyCode}
             displayCurrencyPreference={displayCurrencyPreference}
             portfolioHref={portfolioHref}
+            locale={locale}
+            t={t}
           />
         )}
       </div>
@@ -536,7 +568,8 @@ export function FinancialStrip({
             <InfoTooltip
               trigger={
                 <span className="text-[11px] text-muted font-medium">
-                  Donor Network{INFO_ICON}
+                  {t("donorNetwork")}
+                  {INFO_ICON}
                   {donorIncome && (
                     <span className="ml-1 text-[9px] text-primary/60">
                       {panel === "donor" ? "\u25B2" : "\u25BC"}
@@ -546,13 +579,12 @@ export function FinancialStrip({
               }
             >
               <p className="text-muted">
-                Fundraising tier. Spend money via Actions to level it up — each level permanently
-                increases hourly income. The cap scales with the home state&apos;s population.
-                {donorIncome && " Click to see income breakdown."}
+                {t("donorTooltip")}
+                {donorIncome && ` ${t("clickIncomeBreakdown")}`}
               </p>
             </InfoTooltip>
             <span className="text-sm font-bold tabular-nums text-success">
-              Level {donorLevel}
+              {t("level", { level: donorLevel })}
               <span className="text-[10px] text-muted font-normal ml-1">/ {maxDonorLevel}</span>
             </span>
           </div>
@@ -566,7 +598,8 @@ export function FinancialStrip({
             <InfoTooltip
               trigger={
                 <span className="text-[11px] text-muted font-medium">
-                  Campaign Cash{INFO_ICON}
+                  {t("campaignCash")}
+                  {INFO_ICON}
                   {campaignIncome && (
                     <span className="ml-1 text-[9px] text-primary/60">
                       {panel === "campaign" ? "\u25B2" : "\u25BC"}
@@ -576,9 +609,8 @@ export function FinancialStrip({
               }
             >
               <p className="text-muted">
-                Campaign war chest used for elections, political actions, and donor upgrades. Cannot
-                be used for personal expenses.
-                {campaignIncome && " Click to see hourly income breakdown."}
+                {t("campaignTooltip")}
+                {campaignIncome && ` ${t("clickHourlyBreakdown")}`}
               </p>
             </InfoTooltip>
             <span className="text-sm font-bold tabular-nums">
@@ -595,7 +627,8 @@ export function FinancialStrip({
             <InfoTooltip
               trigger={
                 <span className="text-[11px] text-muted font-medium">
-                  Personal Cash{INFO_ICON}
+                  {t("personalCash")}
+                  {INFO_ICON}
                   {personalIncome && (
                     <span className="ml-1 text-[9px] text-primary/60">
                       {panel === "cash" ? "\u25B2" : "\u25BC"}
@@ -606,15 +639,14 @@ export function FinancialStrip({
             >
               <>
                 <p className="text-muted">
-                  Personal cash on hand, separate from campaign funds. CEO salary and bond coupon
-                  income are paid here.
-                  {personalIncome && " Click to see hourly income breakdown."}
+                  {t("personalTooltip")}
+                  {personalIncome && ` ${t("clickHourlyBreakdown")}`}
                 </p>
                 <Link
                   href={portfolioHref}
                   className="mt-2 inline-block text-xs text-primary hover:underline"
                 >
-                  View currency wallet →
+                  {t("viewWallet")}
                 </Link>
               </>
             </InfoTooltip>
@@ -630,10 +662,15 @@ export function FinancialStrip({
             donorIncome={donorIncome}
             formatFull={formatFull}
             currencyCode={currencyCode}
+            t={t}
           />
         )}
         {panel === "campaign" && campaignIncome && (
-          <CampaignPanel campaignIncome={campaignIncome} formatCampaignFull={formatCampaignFull} />
+          <CampaignPanel
+            campaignIncome={campaignIncome}
+            formatCampaignFull={formatCampaignFull}
+            t={t}
+          />
         )}
         {panel === "cash" && personalIncome && (
           <CashPanel
@@ -644,6 +681,8 @@ export function FinancialStrip({
             currencyCode={currencyCode}
             displayCurrencyPreference={displayCurrencyPreference}
             portfolioHref={portfolioHref}
+            locale={locale}
+            t={t}
           />
         )}
       </div>

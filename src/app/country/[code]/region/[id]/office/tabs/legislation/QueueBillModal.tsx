@@ -11,6 +11,7 @@ import {
 import type { BillCategory } from "@shared/constants/legislation";
 import type { LegislationTypeOption } from "@/lib/legislature/dto/stateLegislature";
 import { PolicyEffectIndicators } from "@/components/legislation/PolicyEffectIndicators";
+import { LawProvisionComparison } from "@/components/bills/LawProvisionComparison";
 import { SubsidySectorSelect } from "@/components/bills/SubsidySectorSelect";
 
 export interface EligibleNpp {
@@ -69,11 +70,12 @@ export function QueueBillModal({
   const isSubsidyCat = SUBSIDY_BILL_CATEGORIES.has(category as BillCategory);
 
   // Fetch legislation types for the selected category, scoped to country + state.
+  // regionId prices new-gen fiscal estimates at the Land/region GDP, not national.
   useEffect(() => {
     if (!open) return;
     const country = countryId.toLowerCase();
     fetch(
-      `/api/game/legislation-types?category=${encodeURIComponent(category)}&scope=state&country=${country}&nocache=1`,
+      `/api/game/legislation-types?category=${encodeURIComponent(category)}&scope=state&country=${country}&regionId=${encodeURIComponent(stateId)}&nocache=1`,
       { cache: "no-store" }
     )
       .then((r) => (r.ok ? r.json() : []))
@@ -84,7 +86,7 @@ export function QueueBillModal({
         setEffectDirection(0);
       })
       .catch(() => setLegislationTypes([]));
-  }, [open, category, countryId]);
+  }, [open, category, countryId, stateId]);
 
   // Fetch the governor's action / NPI balance to drive cost affordability.
   useEffect(() => {
@@ -424,6 +426,20 @@ export function QueueBillModal({
             </select>
             {(() => {
               const selectedOpt = policyOptions.find((o) => o.id === policyOptionId);
+              // New-gen catalog laws: flavor line + selected level explanation.
+              // Legacy: single winner-takes-all line.
+              if (selectedType?.politicalMetricTargets?.length) {
+                return (
+                  <div className="mb-2 space-y-1 pb-2 border-b border-card-border/50">
+                    {selectedType.description && (
+                      <p className="text-xs italic text-muted/80">{selectedType.description}</p>
+                    )}
+                    {selectedOpt?.explanation && (
+                      <p className="text-xs text-muted">{selectedOpt.explanation}</p>
+                    )}
+                  </div>
+                );
+              }
               const explanation =
                 selectedOpt?.explanation ??
                 selectedType?.explanation ??
@@ -435,6 +451,16 @@ export function QueueBillModal({
                 </p>
               ) : null;
             })()}
+            {selectedType && (
+              <div className="mb-3">
+                <LawProvisionComparison
+                  countryId={countryId}
+                  lt={selectedType}
+                  currentIndex={currentPolicies[legId]}
+                  proposedIndex={policyOptions.findIndex((o) => o.id === policyOptionId)}
+                />
+              </div>
+            )}
             <div className="mb-3">
               <PolicyEffectIndicators
                 effectTargetsWeighted={selectedType?.effectTargetsWeighted}

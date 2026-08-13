@@ -3,7 +3,7 @@
  * failed-bank depositor resolution with a Treasury backstop.
  *
  * Failure resolution money model (deliberately explicit):
- *   The failed bank's books die. Recovery pool = max(0, liquidCapital) +
+ *   The failed bank's books die. Recovery pool = max(0, cashReserves) +
  *   postedCapital; both are zeroed on the corp. Every kept player balance and
  *   every returned NPC deposit must be re-backed. totalKept = sum(insured +
  *   paidExcess) + npcDeposits is funded in priority order from (1) recovery
@@ -25,6 +25,7 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import { getCashReserves } from "@/lib/banking/bankCash";
 import {
   getGdpAnchorRate,
   loadWorldEraUnitScale,
@@ -203,9 +204,15 @@ export async function resolveFailedBankDepositors(
   const insuredCap = await getInsuredCap(db, currency);
   await ensureFund(db, currency);
 
-  // (a) Recovery pool from the failed corp's remaining cash + posted capital.
-  const recoveryPool =
-    Math.max(0, corp.liquidCapital ?? 0) + Math.max(0, charter.postedCapital ?? 0);
+  // (a) Recovery pool: the bank's ring-fenced cash, and only that.
+  //
+  // This used to be `liquidCapital + postedCapital`, back when the bank kept its
+  // money in the corporation's treasury. Both halves of that are now wrong.
+  // The corporation's cash is on the other side of the ring-fence and is not
+  // available to depositors, and `postedCapital` is a memo of money that is
+  // already counted inside `cashReserves`, so adding it would have paid
+  // depositors twice out of a pot that only holds it once.
+  const recoveryPool = getCashReserves(charter);
   // No stamp guard here any more: the claim above already stamped it, and
   // repeating that filter would match nothing and silently skip the write.
   // Serialization is the claim's job; this step just does the work.
@@ -213,7 +220,7 @@ export async function resolveFailedBankDepositors(
     { _id: corporationId, "bankCharter.status": "failed" },
     {
       $set: {
-        liquidCapital: 0,
+        "bankCharter.cashReserves": 0,
         "bankCharter.postedCapital": 0,
         updatedAt: new Date(),
       },

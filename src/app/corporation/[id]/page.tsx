@@ -102,6 +102,7 @@ export default function CorporationDetailPage() {
     name: string;
     liquidCapital: number;
     liquidCurrencyCode?: string;
+    isInvestmentBank?: boolean;
   } | null>(null);
   const [isPendingCeo, setIsPendingCeo] = useState(false);
   const hasLoaded = useRef(false);
@@ -262,6 +263,7 @@ export default function CorporationDetailPage() {
             name: string;
             liquidCapital?: number;
             liquidCurrencyCode?: string;
+            isInvestmentBank?: boolean;
             isNationalCorp?: boolean;
           } | null;
         };
@@ -288,6 +290,7 @@ export default function CorporationDetailPage() {
               name: data.corporation.name,
               liquidCapital: data.corporation.liquidCapital ?? 0,
               liquidCurrencyCode: data.corporation.liquidCurrencyCode,
+              isInvestmentBank: data.corporation.isInvestmentBank,
             });
           } else {
             setMyCorporation(null);

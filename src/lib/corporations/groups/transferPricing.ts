@@ -78,10 +78,7 @@ export interface AuditAssessment {
  * are in different countries, and the price is not arm's length.
  */
 export function isTransferPricingPosition(
-  position: Pick<
-    IntraGroupPosition,
-    "supplierCountryId" | "buyerCountryId" | "pricePremium"
-  >,
+  position: Pick<IntraGroupPosition, "supplierCountryId" | "buyerCountryId" | "pricePremium">,
   sameGroup: boolean
 ): boolean {
   if (!sameGroup) return false;

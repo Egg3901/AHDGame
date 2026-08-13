@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { LegislationTypeOption } from "@/lib/legislature/dto/stateLegislature";
 import { PolicyEffectIndicators } from "@/components/legislation/PolicyEffectIndicators";
+import { LawProvisionComparison } from "@/components/bills/LawProvisionComparison";
 import {
   EXEC_ORDER_AP_COST_PER_STEP,
   EXEC_ORDER_DURATION_TURNS,
@@ -82,11 +83,13 @@ export function IssueOrderModal({
   const [currentPolicies, setCurrentPolicies] = useState<Record<string, number>>({});
 
   // Fetch legislation types for the selected category. Mirrors the cascade
-  // ProposeStateBillModal / QueueBillModal use.
+  // ProposeStateBillModal / QueueBillModal use. regionId prices new-gen
+  // fiscal estimates at the Land/region GDP for state-scoped orders.
   useEffect(() => {
     if (!open) return;
+    const regionParam = scope === "state" ? `&regionId=${encodeURIComponent(stateId)}` : "";
     fetch(
-      `/api/game/legislation-types?category=${encodeURIComponent(category)}&scope=${scope}&country=${countryId.toLowerCase()}&nocache=1`,
+      `/api/game/legislation-types?category=${encodeURIComponent(category)}&scope=${scope}&country=${countryId.toLowerCase()}${regionParam}&nocache=1`,
       { cache: "no-store" }
     )
       .then((r) => (r.ok ? r.json() : []))
@@ -96,7 +99,7 @@ export function IssueOrderModal({
         setTypesForCategory(list.filter((t) => (t.policyOptions?.length ?? 0) > 0));
       })
       .catch(() => setTypesForCategory([]));
-  }, [open, countryId, scope, category]);
+  }, [open, countryId, scope, category, stateId]);
 
   // Reset selection when the user switches categories.
   function pickCategory(newCategory: string) {
@@ -308,7 +311,15 @@ export function IssueOrderModal({
             ) : null}
 
             {!wouldNoOp && !wouldClamp && proposedOption && (
-              <div className="mb-3">
+              <div className="mb-3 space-y-2">
+                {selectedType && (
+                  <LawProvisionComparison
+                    countryId={countryId}
+                    lt={selectedType}
+                    currentIndex={currentIndex}
+                    proposedIndex={proposedIndex}
+                  />
+                )}
                 <PolicyEffectIndicators
                   effectTargetsWeighted={selectedType?.effectTargetsWeighted}
                   effectDirection={shift > 0 ? 1 : -1}

@@ -104,7 +104,8 @@ export function isStateCampaigner(
  * national campaigner of the same party (cross-state authority).
  *
  * Not allowed: state treasurer (treasury role), regular members.
- * NPP Management is gated separately (chair / vice / admin only).
+ * National NPP Management is `canUseNationalPartyInfluence` (includes
+ * confirmed campaigners). State NPP Management stays chair / vice / admin.
  */
 export function canSpendOnStateParty(
   party: PoliticalParty,

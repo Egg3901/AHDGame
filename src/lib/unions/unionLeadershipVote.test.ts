@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
 import type { UnionLeaderVote } from "@/lib/db/types/union";
-import { dedupeUnionLeaderVotes, tallyUnionLeaderVotes } from "./unionLeadershipVote";
+import {
+  dedupeUnionLeaderVotes,
+  leadingUnionCandidate,
+  tallyUnionLeaderVotes,
+} from "./unionLeadershipVote";
 
 describe("unionLeadershipVote", () => {
   it("dedupes to the latest vote per organizer", () => {
@@ -66,7 +70,6 @@ describe("unionLeadershipVote", () => {
       voteCount: 20,
     });
 
-    // One heavily invested organizer outvotes two light ones.
     const lopsided = new Map([
       [first.voterCharacterId.toString(), 10],
       [second.voterCharacterId.toString(), 500],
@@ -94,5 +97,25 @@ describe("unionLeadershipVote", () => {
     ] as UnionLeaderVote[];
     expect(tallyUnionLeaderVotes(votes, new Map())).toBeNull();
     expect(tallyUnionLeaderVotes(votes, new Map([[voter.toString(), 0]]))).toBeNull();
+  });
+
+  it("keeps the incumbent on a tie", () => {
+    const incumbent = "inc-1";
+    const challenger = "chal-1";
+    const counts = new Map([
+      [challenger, 50],
+      [incumbent, 50],
+    ]);
+    expect(leadingUnionCandidate(counts, incumbent)).toBe(incumbent);
+    expect(leadingUnionCandidate(counts, null)).toBe(challenger);
+    expect(
+      leadingUnionCandidate(
+        new Map([
+          [challenger, 51],
+          [incumbent, 50],
+        ]),
+        incumbent
+      )
+    ).toBe(challenger);
   });
 });

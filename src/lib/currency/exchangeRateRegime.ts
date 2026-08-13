@@ -99,10 +99,7 @@ export function resolveTrinity(regime: FxRegime, capitalControls: boolean): Trin
  * rather than just the wall — the two escapes are named because both are real
  * moves they can make this turn.
  */
-export function rateChangeRefusal(
-  regime: FxRegime,
-  capitalControls: boolean
-): string | null {
+export function rateChangeRefusal(regime: FxRegime, capitalControls: boolean): string | null {
   const trinity = resolveTrinity(regime, capitalControls);
   if (trinity.monetaryIndependence) return null;
   return regime === "peg"

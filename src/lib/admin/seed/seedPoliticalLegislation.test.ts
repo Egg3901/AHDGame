@@ -127,9 +127,7 @@ describe("seedPoliticalLegislationBaseline", () => {
     const policyUpserts = bulkOps(db.collectionMocks.statePolicies.bulkWrite);
     // 103 national program laws × 4 countries + 6 DD Land laws × 6 Länder.
     expect(policyUpserts.length).toBe(412 + 36);
-    const landScoped = policyUpserts.filter(
-      (c) => (c[0] as { scope?: string }).scope === "state"
-    );
+    const landScoped = policyUpserts.filter((c) => (c[0] as { scope?: string }).scope === "state");
     expect(landScoped.length).toBe(36);
     const lawReplaces = bulkOps(db.collectionMocks.enactedLaws.bulkWrite);
     const expectedEnacted = LAW_COUNTRY_IDS.flatMap((cc) =>

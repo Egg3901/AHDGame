@@ -12,10 +12,10 @@ describe("TierSelector — tier configuration", () => {
     ]);
   });
 
-  it("each tier has an icon and label", () => {
+  it("each tier has an icon and a translation key", () => {
     for (const t of __ALL_TIERS_FOR_TEST) {
       expect(t.icon).toBeTruthy();
-      expect(t.label).toBeTruthy();
+      expect(t.labelKey).toBeTruthy();
     }
   });
 });

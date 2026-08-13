@@ -78,6 +78,7 @@ describe("districtedHouseResolution", () => {
       candidateCharacterId: { dca: "507f1f77bcf86cd799439011", gca: "507f1f77bcf86cd799439012" },
       primaryShares: null,
       now: new Date("2026-01-01"),
+      persist: true,
     });
 
     expect(res).not.toBeNull();
@@ -91,6 +92,43 @@ describe("districtedHouseResolution", () => {
     expect(docs.find((d) => d.index === 1)!.holderParty).toBe("DEM");
     expect(docs.find((d) => d.index === 2)!.holderParty).toBe("GOP");
     expect(docs.find((d) => d.index === 1)!.holderCharacterId).not.toBeNull();
+  });
+
+  // `enrichElection` runs this same resolver to draw the live "Projected Seats"
+  // panel on every House race page view. While persistence was unconditional,
+  // opening a live race rewrote that state's sitting members from an
+  // in-progress tally — and since the projection path has no NPP id map, it
+  // wrote `npps` ids into `holderCharacterId`, so every NPP-held seat resolved
+  // against `characters`, found nothing, and rendered unheld.
+  it("does not touch the district docs unless persist is set", async () => {
+    const { db, store } = makeFakeDb({
+      politicalParties: PARTIES,
+      congressionalDistricts: docsFor([
+        { left: 16, right: 0, grey: 0 },
+        { left: 0, right: 16, grey: 0 },
+      ]),
+    });
+
+    const res = await districtedHouseResolution(db, {
+      countryId: "US",
+      stateId: "TX",
+      candidateVotes: { d: 1000, g: 400 },
+      candidateParty: { d: "DEM", g: "GOP" },
+      candidateCharacterId: { d: CHAR, g: CHAR },
+      primaryShares: null,
+      now: new Date("2026-01-01"),
+    });
+
+    // The projection is still returned in full.
+    expect(res!.authoritativeSeats).toBe(2);
+    expect(Object.values(res!.seatsEstimate).reduce((a, b) => a + b, 0)).toBe(2);
+    // ...but nothing was written.
+    for (const doc of store.congressionalDistricts as Record<string, unknown>[]) {
+      expect(doc.holderCharacterId).toBeUndefined();
+      expect(doc.holderNppId).toBeUndefined();
+      expect(doc.holderParty).toBeUndefined();
+      expect(doc.updatedAt).toBeUndefined();
+    }
   });
 });
 
@@ -129,6 +167,9 @@ async function resolve(
     candidateCharacterId: { d: CHAR, g: CHAR },
     primaryShares: null,
     now: new Date("2026-01-01"),
+    // These cases assert what the turn resolver writes, so they take the
+    // persisting path. The read-only default is covered separately above.
+    persist: true,
     ...args,
   });
   return { res, store };
