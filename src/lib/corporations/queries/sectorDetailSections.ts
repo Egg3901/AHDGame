@@ -1105,11 +1105,13 @@ export interface SectorPlantsSection {
   /** Untapped demand in this (state, sectorType) market, units/day. */
   headroomUnits: number;
   /**
-   * True buyers' room in sector output units: unmet world demand across this
-   * sector's output mix (min over legs — the market stops absorbing when the
-   * first leg saturates). 0 in a glut. `headroomUnits` above is the unowned
-   * pool = claimable market SHARE, a different thing; the UI must not present
-   * it as demand (ticket #1027 follow-up).
+   * True buyers' room in sector output units: unmet demand across this
+   * sector's output mix in the COUNTRY book the plant sells into (min over
+   * legs — the market stops absorbing when the first leg saturates). 0 in a
+   * glut. `headroomUnits` above is the unowned pool = claimable market SHARE,
+   * a different thing; the UI must not present it as demand (ticket #1027).
+   * Must not use the world book — a national shortage still has room when
+   * some other country is in glut (ticket #1077).
    */
   demandGapUnits: number;
   currentTurn: number;

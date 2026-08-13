@@ -548,8 +548,9 @@ export interface PlantsData {
   headroomUnits: number;
   /**
    * True buyers' room in sector output units (unmet demand across the output
-   * mix, min over legs; 0 in a glut). `headroomUnits` is claimable market
-   * share, NOT demand — optional because payloads predating the split omit it.
+   * mix in the country book the plant sells into, min over legs; 0 in a glut).
+   * `headroomUnits` is claimable market share, NOT demand. Optional because
+   * payloads predating the split omit it.
    */
   demandGapUnits?: number;
   currentTurn: number;

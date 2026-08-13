@@ -20,11 +20,9 @@ import type {
 } from "@/lib/db/types";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
-import {
-  commodityMixWeight,
-  COMMODITY_BASE_PRICES,
-  type CommodityType,
-} from "@/lib/constants/commodities";
+import { demandGapUnitsForMix, stateCommodityBalances } from "@/lib/market/demandGapUnits";
+import { getNationalCommodityBalance } from "@/lib/commodity-map";
+import type { CommodityType } from "@/lib/constants/commodities";
 import { getStrategy } from "@/lib/constants/sectorStrategies";
 import { CAPACITY_BUILD_TURNS, computeBuildCost } from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
@@ -114,34 +112,39 @@ export async function GET(request: Request, { params }: RouteParams) {
       );
     }
 
-    // World demand gap for this sector type's output mix (min over legs — the
-    // market stops absorbing when the first leg saturates; 0 in a glut). The
-    // unowned pool's headroom is claimable market SHARE, not buyers; ranking
-    // and labelling it "untapped demand" steered players straight into gluts
-    // (ticket #1027 follow-up).
-    let sectorDemandGapUnits = Number.POSITIVE_INFINITY;
+    // Buyer-room for this sector type's output mix. The unowned pool's
+    // headroom is claimable market SHARE, not buyers; ranking and labelling it
+    // "untapped demand" steered players straight into gluts (ticket #1027).
+    // Ticket #1077: that cap used the WORLD book, so a US food shortage
+    // (D/S 2.88) read as "room for 0 farms" because Eastern Bloc surplus put
+    // global food in glut. Clearing is partitioned by country — a Connecticut
+    // farm sells into the US book. Price docs stay in scope so each suggestion
+    // can cap at min(country gap, state gap).
+    type PriceDoc = {
+      commodity: CommodityType;
+      nationalSupply?: Record<string, number>;
+      nationalDemand?: Record<string, number>;
+      stateSupply?: Record<string, number>;
+      stateDemand?: Record<string, number>;
+    };
+    let priceDocs: PriceDoc[] = [];
+    const plantsSupplyMix = plantsMode ? (getStrategy(sectorType, "standard").supply ?? {}) : {};
     if (plantsMode) {
-      const priceDocs = await db
-        .collection<{ commodity: CommodityType; globalSupply?: number; globalDemand?: number }>(
-          "commodityPrices"
+      priceDocs = await db
+        .collection<PriceDoc>("commodityPrices")
+        .find(
+          {},
+          {
+            projection: {
+              commodity: 1,
+              nationalSupply: 1,
+              nationalDemand: 1,
+              stateSupply: 1,
+              stateDemand: 1,
+            },
+          }
         )
-        .find({}, { projection: { commodity: 1, globalSupply: 1, globalDemand: 1 } })
         .toArray();
-      const balances = new Map(priceDocs.map((p) => [p.commodity, p]));
-      const supplyMix = getStrategy(sectorType, "standard").supply ?? {};
-      let minUnits = Number.POSITIVE_INFINITY;
-      for (const [mixCommodity, mixRate] of Object.entries(supplyMix) as [
-        CommodityType,
-        number,
-      ][]) {
-        if (!(mixRate > 0)) continue;
-        const w = commodityMixWeight(supplyMix, COMMODITY_BASE_PRICES, mixCommodity);
-        if (!(w > 0)) continue;
-        const bal = balances.get(mixCommodity);
-        const gap = Math.max(0, (bal?.globalDemand ?? 0) - (bal?.globalSupply ?? 0));
-        minUnits = Math.min(minUnits, gap / w);
-      }
-      sectorDemandGapUnits = Number.isFinite(minUnits) ? minUnits : 0;
     }
 
     const { ObjectId } = await import("mongodb");
@@ -399,6 +402,31 @@ export async function GET(request: Request, { params }: RouteParams) {
       siblingsByState.get(s.stateId)!.push(s);
     }
 
+    const stateCountryMap = new Map(states.map((s) => [String(s._id), s.countryId]));
+    const countryGapById = new Map<string, number>();
+    const countryDemandGap = (countryId: string): number => {
+      const cached = countryGapById.get(countryId);
+      if (cached != null) return cached;
+      const balances = new Map(
+        priceDocs.map((p) => [
+          p.commodity,
+          getNationalCommodityBalance(
+            {
+              nationalSupply: p.nationalSupply,
+              nationalDemand: p.nationalDemand,
+              stateSupply: p.stateSupply ?? {},
+              stateDemand: p.stateDemand ?? {},
+            },
+            countryId,
+            stateCountryMap
+          ),
+        ])
+      );
+      const gap = demandGapUnitsForMix(plantsSupplyMix, balances);
+      countryGapById.set(countryId, gap);
+      return gap;
+    };
+
     const ranked = stateIds
       .map((stateId) => {
         const state = stateMap.get(stateId);
@@ -428,12 +456,18 @@ export async function GET(request: Request, { params }: RouteParams) {
             ? unownedDoc.headroomUnits
             : computeUnownedHeadroomUnits(sectorType, unownedRevenue, eraUnitScale)
           : null;
-        // Cap the pool share at what buyers can actually absorb — in a glut the
-        // pool reads huge while extra output simply goes unsold.
+        // Cap the pool share at what buyers can actually absorb. Country gap
+        // is the partitioned clearing book (ticket #1077 — a world glut must
+        // not zero a national shortage). State gap is the in-state unmet
+        // demand the picker labels "Room for".
+        const buyerGap = plantsMode
+          ? Math.min(
+              countryDemandGap(state.countryId),
+              demandGapUnitsForMix(plantsSupplyMix, stateCommodityBalances(priceDocs, stateId))
+            )
+          : Number.POSITIVE_INFINITY;
         const headroomUnits =
-          poolHeadroomUnits != null
-            ? Math.round(Math.min(poolHeadroomUnits, sectorDemandGapUnits))
-            : null;
+          poolHeadroomUnits != null ? Math.round(Math.min(poolHeadroomUnits, buyerGap)) : null;
         const starterBuildCostAnchor = plantsMode
           ? (starterBuildCostByState.get(stateId) ?? 0)
           : null;

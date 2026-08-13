@@ -41,11 +41,8 @@ import type {
   MacroEconomicValues,
 } from "@/lib/constants/corporations";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
-import {
-  commodityMixWeight,
-  COMMODITY_BASE_PRICES,
-  type CommodityType,
-} from "@/lib/constants/commodities";
+import type { CommodityType } from "@/lib/constants/commodities";
+import { demandGapUnitsForMix } from "@/lib/market/demandGapUnits";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityPrice, GameConfig, GameState } from "@/lib/db/types";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
@@ -698,27 +695,15 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       );
       // True buyers' room for THIS sector's outputs, in sector output units.
       // `headroomUnits` (the unowned pool) measures claimable market SHARE —
-      // under a clearing glut it reads tens of thousands of "room" while every
-      // leg goes unsold (ticket #1027 follow-up: player read it as demand). A
-      // sector unit splits across its output mix by commodityMixWeight, so the
-      // market absorbs extra units only until the FIRST output leg runs out of
-      // unmet demand — hence the min, not a sum.
-      let demandGapUnits = 0;
-      {
-        let minUnits = Infinity;
-        for (const [gapCommodity, gapRate] of Object.entries(effectiveSupply) as [
-          CommodityType,
-          number,
-        ][]) {
-          if (!(gapRate > 0)) continue;
-          const w = commodityMixWeight(effectiveSupply, COMMODITY_BASE_PRICES, gapCommodity);
-          if (!(w > 0)) continue;
-          const bal = globalBalances.get(gapCommodity);
-          const gap = Math.max(0, (bal?.demand ?? 0) - (bal?.supply ?? 0));
-          minUnits = Math.min(minUnits, gap / w);
-        }
-        demandGapUnits = Number.isFinite(minUnits) ? minUnits : 0;
-      }
+      // under a clearing glut it reads tens of thousands of "room" while extra
+      // output goes unsold (ticket #1027). Ticket #1077: use the COUNTRY book
+      // this plant actually sells into (tradePartition), not the world book —
+      // a US food shortage is still a shortage when Eastern Bloc surplus puts
+      // global food in glut.
+      const demandGapUnits = demandGapUnitsForMix(
+        effectiveSupply,
+        nationalBalancesByCountry.get(sectorCountryId) ?? globalBalances
+      );
 
       plants = buildSectorPlantsSection({
         sector,

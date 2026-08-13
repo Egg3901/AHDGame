@@ -38,6 +38,7 @@ beforeEach(async () => {
   db.collection("gameState");
   db.collection("federalBudget");
   db.collection("macroMetrics");
+  db.collection("commodityPrices");
 
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
@@ -215,6 +216,82 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
     expect(stateIds[0]).toBe("MD");
     expect(stateIds).toContain("CA");
     expect(stateIds).toHaveLength(5);
+  });
+
+  it("shows US agriculture room when food is nationally short even if the world is in glut (ticket #1077)", async () => {
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        _id: new ObjectId(),
+        userId: "user1",
+        countryId: "US",
+        type: "agriculture",
+        secondaryType: null,
+        marketingStrength: 0,
+        liquidCapital: 1_000_000,
+      },
+    } as never);
+
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "plants",
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 97,
+      currentYear: 1954,
+    });
+    db.collectionMocks.unownedSectors.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        { stateId: "CT", sectorType: "agriculture", revenue: 50_000, headroomUnits: 100_000 },
+        { stateId: "DUB", sectorType: "agriculture", revenue: 80_000, headroomUnits: 200_000 },
+      ]),
+    });
+    db.collectionMocks.states.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: "CT", name: "Connecticut", countryId: "US" },
+        { _id: "DUB", name: "Dublin", countryId: "IE" },
+      ]),
+    });
+    db.collectionMocks.corporateSectors.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.macroMetrics.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    // Live ticket #1077 shape: world food glut, US short, CT short, Ukraine glut.
+    db.collectionMocks.commodityPrices.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        {
+          commodity: "food",
+          nationalSupply: { US: 299_765, IE: 181_410 },
+          nationalDemand: { US: 863_551, IE: 61_732 },
+          stateSupply: { CT: 1_225, DUB: 50_000 },
+          stateDemand: { CT: 21_578, DUB: 10_000 },
+        },
+      ]),
+    });
+
+    const { GET } = await import("./route");
+    const response = await GET(makeRequest("sectorType=agriculture&mode=unowned"), ctx());
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    const byState = new Map(
+      (data.suggestions as { stateId: string; headroomUnits: number }[]).map((s) => [
+        s.stateId,
+        s.headroomUnits,
+      ])
+    );
+    // CT in-state gap is 21578 - 1225 = 20353, which binds before the US
+    // country gap (~564k) and the 100k pool.
+    expect(byState.get("CT")).toBe(20_353);
+    // Ireland's country book is in glut, so extra farms would not sell.
+    expect(byState.get("DUB")).toBe(0);
   });
 });
 
