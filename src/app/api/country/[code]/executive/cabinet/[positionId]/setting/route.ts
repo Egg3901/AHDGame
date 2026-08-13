@@ -16,6 +16,8 @@ import { z } from "zod";
 
 const settingSchema = z.object({
   tierSetting: z.string().nullable().optional(),
+  // Per-key selections for seats carrying extra policy levers (mechanics.tierSettings[]).
+  tierSettings: z.record(z.string(), z.string()).optional(),
   targetRegionId: z.string().nullable().optional(),
   targetCountryId: z.string().nullable().optional(),
   aidPriority: z.enum(["economic", "humanitarian", "security"]).nullable().optional(),
@@ -102,6 +104,22 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
     }
 
+    // Validate extra-tier selections against their matching config by key
+    if (parsed.data.tierSettings) {
+      for (const [key, value] of Object.entries(parsed.data.tierSettings)) {
+        const cfg = mechanics.tierSettings?.find((t) => t.key === key);
+        if (!cfg) {
+          return NextResponse.json({ error: `Unknown tier '${key}'` }, { status: 400 });
+        }
+        if (!cfg.options.some((o) => o.id === value)) {
+          return NextResponse.json(
+            { error: `Invalid selection for tier '${key}'` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     if (parsed.data.targetCountryId) {
       const enabledCountryIds = await getEnabledCountryIds();
       const validTargetCountryIds = enabledCountryIds.filter(
@@ -123,6 +141,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     };
 
     if (parsed.data.tierSetting !== undefined) update.tierSetting = parsed.data.tierSetting;
+    // Merge extra-tier selections by dotted path so levers change independently.
+    if (parsed.data.tierSettings) {
+      for (const [key, value] of Object.entries(parsed.data.tierSettings)) {
+        update[`tierSettings.${key}`] = value;
+      }
+    }
     if (parsed.data.targetRegionId !== undefined)
       update.targetRegionId = parsed.data.targetRegionId;
     if (parsed.data.targetCountryId !== undefined)

@@ -967,6 +967,35 @@ export const US_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
         format: "index",
         higherIsBetter: true,
       },
+      // HEW-era education + welfare readouts (split off by the Department of Education Act).
+      {
+        category: "education",
+        metricId: "highSchoolGradRate",
+        label: "High School Graduation Rate",
+        format: "percent",
+        higherIsBetter: true,
+      },
+      {
+        category: "education",
+        metricId: "workforceSkill",
+        label: "Workforce Skill Level",
+        format: "index",
+        higherIsBetter: true,
+      },
+      {
+        category: "economic",
+        metricId: "povertyRate",
+        label: "Poverty Rate",
+        format: "percent",
+        higherIsBetter: false,
+      },
+      {
+        category: "social",
+        metricId: "incomeInequality",
+        label: "Income Inequality",
+        format: "index",
+        higherIsBetter: false,
+      },
     ],
     regionalMetrics: [
       {
@@ -1027,6 +1056,87 @@ export const US_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
         },
       ],
     },
+    // HEW-era portfolios: while this seat is the unified Department of Health,
+    // Education, and Welfare it carries education and welfare policy levers on
+    // top of its healthcare tier. A "Department of Education Act" bill later
+    // splits these off (see legislationEffects create_department + rosterEra).
+    tierSettings: [
+      {
+        key: "education",
+        name: "Education Focus",
+        description:
+          "Set the federal education policy direction. Vocational focus improves near-term workforce skills; academic focus builds long-term test performance and college enrollment; balanced delivers steady improvement across both.",
+        defaultTier: "balanced",
+        options: [
+          {
+            id: "vocational",
+            label: "Vocational",
+            description:
+              "Prioritize trade and vocational training. Boosts workforce skill faster but reduces academic test performance emphasis.",
+            effects: {
+              "education.workforceSkill": 0.03,
+              "education.testPerformance": -0.01,
+              "education.universityEnrollment": -0.01,
+            },
+          },
+          {
+            id: "balanced",
+            label: "Balanced",
+            description: "Balanced curriculum approach. No additional metric effects.",
+            effects: {},
+          },
+          {
+            id: "academic",
+            label: "Academic",
+            description:
+              "Prioritize academic excellence and college preparation. Accelerates test performance and college enrollment but does not directly help workforce skills.",
+            effects: {
+              "education.testPerformance": 0.02,
+              "education.universityEnrollment": 0.02,
+              "education.workforceSkill": -0.01,
+            },
+          },
+        ],
+      },
+      {
+        key: "welfare",
+        name: "Welfare Model",
+        description:
+          "Set federal welfare and transfer generosity. Broad transfers cut poverty and inequality and lift mobility but weigh on the budget; lean transfers ease fiscal pressure at the cost of higher poverty and inequality.",
+        defaultTier: "standard",
+        options: [
+          {
+            id: "lean",
+            label: "Lean",
+            description:
+              "Trim transfer programs. Eases the budget but poverty and income inequality drift up.",
+            effects: {
+              "economic.povertyRate": 0.02,
+              "social.incomeInequality": 0.01,
+              "governance.budgetBalance": 0.01,
+            },
+          },
+          {
+            id: "standard",
+            label: "Standard",
+            description: "Maintain existing transfer programs. No additional metric effects.",
+            effects: {},
+          },
+          {
+            id: "broad",
+            label: "Broad",
+            description:
+              "Expand transfers and the social safety net. Cuts poverty and inequality and lifts social mobility, but increases fiscal pressure.",
+            effects: {
+              "economic.povertyRate": -0.02,
+              "social.incomeInequality": -0.02,
+              "social.socialMobility": 0.02,
+              "governance.budgetBalance": -0.02,
+            },
+          },
+        ],
+      },
+    ],
     regionalTarget: {
       name: "Public Health Campaign",
       description:
