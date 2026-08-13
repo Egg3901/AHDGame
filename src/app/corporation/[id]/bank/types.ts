@@ -30,6 +30,8 @@ export type ConsolePayload = {
     ownsFinancial: boolean;
   };
   currency: CurrencyCode;
+  /** Current game turn, for the charter-switch cooldown countdown. */
+  currentTurn: number;
   legalCharterTypes: BankCharterType[];
   eligibleTypes: BankCharterType[];
   eligibilityReasons: string[];
