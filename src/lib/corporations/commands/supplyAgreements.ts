@@ -13,10 +13,7 @@ import {
   CONTRACT_CANCEL_NOTICE_TURNS,
   type SupplyAgreement,
 } from "@/lib/db/types/supplyAgreement";
-import {
-  COMMODITY_TYPES,
-  type CommodityType,
-} from "@/lib/constants/commodities";
+import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { computeSupplierCommodityCapacityUnits } from "@/lib/corporations/supplyAgreementCapacity";

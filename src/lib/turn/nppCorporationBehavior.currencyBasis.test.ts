@@ -218,9 +218,14 @@ describe("NPP decisions in a non-anchor currency", () => {
   });
 
   it("blocks a founding the corp cannot actually afford in local terms", () => {
-    // Local cash that LOOKS like plenty against ₳ constants (500M) but is only
-    // ~1.4M ₳ once converted — below the ₳ cash floor + min-cash gate.
-    const broke = corp({ liquidCapital: 500_000_000 } as Partial<Corporation>);
+    // Local cash that LOOKS like plenty against ₳ constants (30M) but is only
+    // ~83k ₳ once converted — below the ₳ cash floor + min-cash gate.
+    //
+    // Sized to fail against SAFE_CASH_FLOOR_MIN (₳125,000), the MAX() rail, so
+    // this stays a test of the CURRENCY BASIS and not of the floor's calibration:
+    // no archetype multiplier can scale the floor below that rail, so the
+    // assertion holds whatever the cash constants are re-based to next.
+    const broke = corp({ liquidCapital: 30_000_000 } as Partial<Corporation>);
     expect(decide(broke, JPY_RATE, plantsCtx).newSectors).toBeUndefined();
     // Same corp, same numbers, in an anchor-rate currency: it can afford it.
     expect(decide(broke, 1, plantsCtx).newSectors).toHaveLength(1);

@@ -36,6 +36,28 @@ export interface BankCharter {
   totalLoans?: number;
   reserves?: number;
   /**
+   * Cash the bank must keep against its deposit book
+   * (`totalDeposits × reserveRequirement`), recomputed each bankingTurn.
+   *
+   * This is what makes the corp treasury stop being a single undifferentiated
+   * pot. `liquidCapital` holds depositor money and shareholder money together,
+   * so without a floor the CEO could spend depositor cash on anything the corp
+   * does — capacity, shares, dividends — and the reserve ratio was a number
+   * reported after the fact rather than a constraint. Every corp cash debit now
+   * refuses to take `liquidCapital` below this line while the charter is active.
+   */
+  reserveFloor?: number;
+  /**
+   * CEO's household lending stance. Sets which credit bands the bank will
+   * originate into from now on; it never re-prices or re-rates a loan already
+   * on the book. See `banking/creditBands.ts`.
+   */
+  lendingProfile?: import("@/lib/banking/creditBands").LendingProfileId;
+  /** Turn the charter type was last switched. Absent = never switched. */
+  charterSwitchTurn?: number;
+  /** Charter type is locked until this turn. See `CHARTER_SWITCH_COOLDOWN_TURNS`. */
+  charterSwitchCooldownUntilTurn?: number;
+  /**
    * Captured NPC household deposits in home-currency face value. Moved each
    * bankingTurn between this charter and the CB's externalBroadMoney.
    */
@@ -118,6 +140,12 @@ export interface BankCharter {
   /** The same ratio after the published supervisory shock. */
   stressedCapitalRatio?: number;
   /**
+   * Share of the loan book the last supervisory pass assumed would default at
+   * once, derived from the book's credit-band mix. Published so the console can
+   * show the shock this bank was measured against.
+   */
+  appliedStressLossFraction?: number;
+  /**
    * Turn the CURRENT undercapitalization began. Cleared the moment the bank is
    * back above the minimum, so curing and later breaching again earns a fresh
    * grace period rather than inheriting a stale clock.
@@ -146,6 +174,16 @@ export interface BankLoan {
   currency: CurrencyCode;
   borrowerType: "corporation" | "character" | "npcBulk";
   borrowerId?: ObjectId;
+  /**
+   * Credit band, for `npcBulk` tranches. The household book is one doc per
+   * band rather than one lump, which is what lets the console report it by
+   * rating and the supervisor shock it by composition.
+   *
+   * Absent on named player loans (they carry the borrower's own rating) and on
+   * books originated before the split, which are reported under
+   * `creditBands.LEGACY_BAND`.
+   */
+  creditBand?: import("@/lib/banking/creditBands").CreditBandId;
   principal: number;
   outstanding: number;
   ratePercent: number;

@@ -59,9 +59,10 @@ export async function loadSchemeInvestedValues(
     const schemeId = position.pensionSchemeId?.toString();
     if (!schemeId) continue;
     const nav = navByFund.get(position.fundId.toString()) ?? 0;
-    const units = typeof position.units === "number" && Number.isFinite(position.units)
-      ? Math.max(0, position.units)
-      : 0;
+    const units =
+      typeof position.units === "number" && Number.isFinite(position.units)
+        ? Math.max(0, position.units)
+        : 0;
     const value = units * (Number.isFinite(nav) ? Math.max(0, nav) : 0);
     byScheme.set(schemeId, (byScheme.get(schemeId) ?? 0) + value);
   }

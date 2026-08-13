@@ -210,8 +210,7 @@ export async function spawnCommonsElection(
     status,
     // Prefer the era map over the prior race's totalSeats — earlier cycles may
     // still carry the modern 650-seat counts under a 1953 world (#1058).
-    totalSeats:
-      getUkCommonsSeats(ctx.preset)[fromElection.state!] ?? fromElection.totalSeats ?? 1,
+    totalSeats: getUkCommonsSeats(ctx.preset)[fromElection.state!] ?? fromElection.totalSeats ?? 1,
     startTime: now,
     primaryEndTime,
     endTime,

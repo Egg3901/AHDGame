@@ -746,7 +746,10 @@ export default function UnionDashboardPage({ params }: PageProps) {
                   <div className="flex items-center gap-2">
                     <span className="text-muted">Sitting:</span>
                     {presidentHref ? (
-                      <Link href={presidentHref} className="font-semibold text-primary hover:opacity-80">
+                      <Link
+                        href={presidentHref}
+                        className="font-semibold text-primary hover:opacity-80"
+                      >
                         {leader.name}
                       </Link>
                     ) : (
@@ -773,7 +776,9 @@ export default function UnionDashboardPage({ params }: PageProps) {
                     {voteTallies.map((t) => (
                       <li key={t.characterId} className="flex justify-between gap-4">
                         <span>{t.name}</span>
-                        <span className="font-mono tabular-nums">{Math.round(t.votes)} strength</span>
+                        <span className="font-mono tabular-nums">
+                          {Math.round(t.votes)} strength
+                        </span>
                       </li>
                     ))}
                   </ul>

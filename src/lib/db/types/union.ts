@@ -182,17 +182,10 @@ export interface BargainingMandate {
  * a cooling-off period.
  */
 export type BargainingCampaignStatus =
-  | "negotiating"
-  | "dispute"
-  | "settled"
-  | "withdrawn"
-  | "lapsed";
+  "negotiating" | "dispute" | "settled" | "withdrawn" | "lapsed";
 
 export type BargainingEscalationLevel =
-  | "none"
-  | "overtime_ban"
-  | "selective_strike"
-  | "industry_strike";
+  "none" | "overtime_ban" | "selective_strike" | "industry_strike";
 
 export type BargainingMediationStatus = "pending" | "rejected" | "expired";
 

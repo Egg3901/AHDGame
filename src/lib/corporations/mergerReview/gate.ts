@@ -28,11 +28,7 @@ import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/comman
 import { createNotification } from "@/lib/notifications";
 import { computeMergerConcentration } from "./concentration";
 import { resolveMergerAuthority } from "./authority";
-import {
-  ANTITRUST_LAW_BY_COUNTRY,
-  MERGER_REVIEW_TURNS,
-  thresholdForLevel,
-} from "./constants";
+import { ANTITRUST_LAW_BY_COUNTRY, MERGER_REVIEW_TURNS, thresholdForLevel } from "./constants";
 
 export const MERGER_REVIEWS = "mergerReviews";
 
@@ -63,11 +59,7 @@ export type MergerClearance =
  * Whether merger review can apply to this pair at all. Ownership and
  * marketization only — never a country list.
  */
-async function reviewApplies(
-  db: Db,
-  acquirer: Corporation,
-  target: Corporation
-): Promise<boolean> {
+async function reviewApplies(db: Db, acquirer: Corporation, target: Corporation): Promise<boolean> {
   // Both sides must be privately owned. A state-owned corp on either side makes
   // the deal an act of the state, not a transaction the state reviews.
   if (acquirer.countryOwnerId || acquirer.ownershipState === "stateOwned") return false;
@@ -132,7 +124,11 @@ export async function assertMergerClearance(
   if (threshold == null) return { ok: true };
 
   const gameState = await getGameState(db);
-  const authority = await resolveMergerAuthority(db, target.countryId, gameState?.currentYear ?? null);
+  const authority = await resolveMergerAuthority(
+    db,
+    target.countryId,
+    gameState?.currentYear ?? null
+  );
   if (!authority) return { ok: true };
 
   const marketMode = await getMarketSystemModeForDb(db);

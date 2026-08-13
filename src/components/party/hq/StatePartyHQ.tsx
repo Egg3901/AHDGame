@@ -383,11 +383,7 @@ export function StatePartyHQ({
               <span className="font-medium">
                 Build Org · Nat&apos;l PS · {estimate.states} states · Est.{" "}
                 <b className="tabular-nums">{estimate.totalPS} Nat&apos;l PS</b>
-                <span className="text-muted">
-                  {" "}
-                  (have {nationalPs.toFixed(1)})
-                </span>{" "}
-                ·{" "}
+                <span className="text-muted"> (have {nationalPs.toFixed(1)})</span> ·{" "}
                 {estimate.states > 1 ? (
                   <>
                     avg{" "}

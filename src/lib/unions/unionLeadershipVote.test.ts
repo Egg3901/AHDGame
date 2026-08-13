@@ -109,7 +109,13 @@ describe("unionLeadershipVote", () => {
     expect(leadingUnionCandidate(counts, incumbent)).toBe(incumbent);
     expect(leadingUnionCandidate(counts, null)).toBe(challenger);
     expect(
-      leadingUnionCandidate(new Map([[challenger, 51], [incumbent, 50]]), incumbent)
+      leadingUnionCandidate(
+        new Map([
+          [challenger, 51],
+          [incumbent, 50],
+        ]),
+        incumbent
+      )
     ).toBe(challenger);
   });
 });

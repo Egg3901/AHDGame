@@ -137,7 +137,9 @@ export function BuildOrgPanel({
 
   // Header reserve must match the pool the preview will debit — national chairs
   // were shown state PS (often near cap) while Strength Capacity drained (ticket #1059).
-  const headerPs = paysFromNationalPool ? (poolPS?.nationalPoolPS ?? 0) : (poolPS?.statePoolPS ?? ps);
+  const headerPs = paysFromNationalPool
+    ? (poolPS?.nationalPoolPS ?? 0)
+    : (poolPS?.statePoolPS ?? ps);
   const headerCapLabel = paysFromNationalPool ? "Nat'l" : String(effectiveCap);
   const headerPoolLabel = paysFromNationalPool ? "National PS" : "Your PS";
   const headerPoolTooltip = paysFromNationalPool

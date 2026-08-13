@@ -28,7 +28,15 @@ function mergeWithFallback(base: Messages, overlay: Messages): Messages {
 
 // One catalog file per top-level namespace, under messages/<locale>/. Keeping
 // namespaces in separate files keeps catalog diffs reviewable as they grow.
-const NAMESPACES = ["layout", "nav", "settings", "tutorial", "auth", "profile", "elections"] as const;
+const NAMESPACES = [
+  "layout",
+  "nav",
+  "settings",
+  "tutorial",
+  "auth",
+  "profile",
+  "elections",
+] as const;
 
 async function loadCatalog(locale: string): Promise<Messages> {
   const parts = await Promise.all(

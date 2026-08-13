@@ -131,8 +131,8 @@ describe("waiver validity", () => {
   });
 
   it("runs WAIVER_TURNS past the decision", () => {
-    expect(isWaiverActive({ status: "granted", waiverUntilTurn: 10 + WAIVER_TURNS }, 10 + WAIVER_TURNS)).toBe(
-      true
-    );
+    expect(
+      isWaiverActive({ status: "granted", waiverUntilTurn: 10 + WAIVER_TURNS }, 10 + WAIVER_TURNS)
+    ).toBe(true);
   });
 });

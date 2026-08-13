@@ -125,15 +125,13 @@ describe("runPensionBenefitsTurn", () => {
 
   it("cuts PRO RATA and mints nothing when the assets are not there", async () => {
     db.collection("pensionSchemes").find.mockReturnValue({
-      toArray: vi
-        .fn()
-        .mockResolvedValue([
-          baseScheme({
-            assetsAnchor: 5,
-            liabilitiesAnchor: 100_000,
-            benefitsInPaymentAnchor: 100_000,
-          }),
-        ]),
+      toArray: vi.fn().mockResolvedValue([
+        baseScheme({
+          assetsAnchor: 5,
+          liabilitiesAnchor: 100_000,
+          benefitsInPaymentAnchor: 100_000,
+        }),
+      ]),
     });
 
     const result = await runPensionBenefitsTurn(db as unknown as Db, 10);
@@ -157,15 +155,13 @@ describe("runPensionBenefitsTurn", () => {
 
   it("pays nothing at all from an empty scheme", async () => {
     db.collection("pensionSchemes").find.mockReturnValue({
-      toArray: vi
-        .fn()
-        .mockResolvedValue([
-          baseScheme({
-            assetsAnchor: 0,
-            liabilitiesAnchor: 50_000,
-            benefitsInPaymentAnchor: 50_000,
-          }),
-        ]),
+      toArray: vi.fn().mockResolvedValue([
+        baseScheme({
+          assetsAnchor: 0,
+          liabilitiesAnchor: 50_000,
+          benefitsInPaymentAnchor: 50_000,
+        }),
+      ]),
     });
 
     const result = await runPensionBenefitsTurn(db as unknown as Db, 10);

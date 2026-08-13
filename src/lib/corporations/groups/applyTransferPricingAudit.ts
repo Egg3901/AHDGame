@@ -138,12 +138,7 @@ export async function applyTransferPricingAudit(
       const debit = await atomicallyDebitCorpLiquidCapital(db, liable._id, localAmount);
       const collected = debit.ok ? localAmount : 0;
       if (collected > 0) {
-        await creditTreasuryProceeds(
-          db,
-          assessment.claimantCountryId as CountryId,
-          collected,
-          now
-        );
+        await creditTreasuryProceeds(db, assessment.claimantCountryId as CountryId, collected, now);
         await emitTx(db, {
           type: "corp_fine",
           turn: currentTurn,
@@ -165,18 +160,16 @@ export async function applyTransferPricingAudit(
         });
       }
 
-      await db
-        .collection<SupplyAgreement>(AGREEMENTS)
-        .updateOne(
-          { _id: new ObjectId(premium.agreementId) },
-          {
-            $set: {
-              transferPricingExposureAnchor: 0,
-              lastTransferPricingAuditTurn: currentTurn,
-              updatedAt: now,
-            },
-          }
-        );
+      await db.collection<SupplyAgreement>(AGREEMENTS).updateOne(
+        { _id: new ObjectId(premium.agreementId) },
+        {
+          $set: {
+            transferPricingExposureAnchor: 0,
+            lastTransferPricingAuditTurn: currentTurn,
+            updatedAt: now,
+          },
+        }
+      );
 
       if (liable.userId) {
         void createNotification({

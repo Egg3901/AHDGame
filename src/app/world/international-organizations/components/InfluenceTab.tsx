@@ -59,6 +59,21 @@ export function InfluenceTab({
     <div className="space-y-5">
       <BalanceBar view={view} />
 
+      {/* The rules for this tab are a wiki page nobody could find from here:
+          the first question on ticket #1064 was "is there a wiki page for this?"
+          and a moderator had to paste the link by hand. */}
+      <p className="text-body-xs text-muted">
+        Spending here moves a nation between the poles.{" "}
+        <a
+          href="https://wiki.ahousedividedgame.com/world-alignment"
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2 transition-colors hover:text-foreground"
+        >
+          How world alignment works
+        </a>
+      </p>
+
       {viewerCountryId && view.targets.length === 0 && (
         <Panel>
           <p className="text-body-sm text-muted">
@@ -213,6 +228,10 @@ export function InfluenceTab({
                     <td className="px-2 py-2 text-right font-mono text-body-sm tabular-nums sm:px-3">
                       {p.resolvedTurn == null ? (
                         <span className="text-muted">pending</span>
+                      ) : p.refunded ? (
+                        // Distinct from "0 pts": the money came back, and a row
+                        // reading zero next to a spend looks like theft.
+                        <span className="text-muted">refunded</span>
                       ) : (
                         `${p.appliedPoints ?? 0} pts`
                       )}
