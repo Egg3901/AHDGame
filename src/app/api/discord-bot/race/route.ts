@@ -10,7 +10,6 @@ import {
   type EnrichedCandidate,
 } from "@/lib/elections/candidateEnrichment";
 import { getPrimaryWinnersForElection, type CountryId } from "@/lib/constants/countries";
-import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { selectGeneralPhaseDisplayCandidates } from "@/lib/elections/generalPhaseCandidates";
 import { getOrCreateVoteTally } from "@/lib/elections/voteTallyService";
 import { computeElectoralVotes } from "@/lib/elections/electoralVoteService";
@@ -223,16 +222,13 @@ export async function GET(request: Request) {
     );
 
     // When primary is over, keep up to N nominees per party where N is the
-    // primary-winner cap for this race (US=1, UK=3, JP=3; US House=3 when
-    // redistricting is on; single-winner governor/president races always 1).
-    // Without the flag threaded through, US House capped at 1 here while the
-    // turn resolver had advanced 3, so /race under-reported the field.
+    // primary-winner cap for this race (US=1, UK=3, JP=3; single-winner
+    // governor/president races always 1).
     let displayCandidates: EnrichedCandidate[] = enrichedCandidates;
     if (!phase.inPrimary) {
       const maxPerParty = getPrimaryWinnersForElection(
         (election.countryId ?? "US") as CountryId,
-        election.electionType,
-        isRedistrictingEnabled(gameState)
+        election.electionType
       );
       displayCandidates = selectGeneralPhaseDisplayCandidates(enrichedCandidates, maxPerParty);
     }

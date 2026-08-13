@@ -8,12 +8,11 @@
  * candidacies are still `status: "active"` in the database.
  *
  * `maxPerParty` MUST come from `getPrimaryWinnersForElection(countryId,
- * electionType, redistrictingEnabled)` using the world's live redistricting
- * flag. Passing a cap computed without that flag is what caused ticket-1041:
- * US House advances three nominees per party under the districted-redistricting
- * system, but every display surface hard-capped at one, so a player who won
- * their primary appeared to be their party's sole nominee and was blindsided
- * when their two co-nominees took districts in the general.
+ * electionType)` rather than a local constant. Hard-coding it is what caused
+ * ticket-1041: the display surfaces capped at one while the turn resolver
+ * advanced three, so a player who won their primary appeared to be their
+ * party's sole nominee and was blindsided when co-nominees took seats in the
+ * general.
  *
  * The viewer's own candidate is always kept, even when they placed below the
  * cap, so a primary loser can still find their own row on the race page.
