@@ -358,6 +358,8 @@ export async function resolveOneGeneralElection(
           }
         ).districtCampaignBoosts,
         now,
+        // The one caller that may write holders: this is the real result.
+        persist: true,
       });
     }
 
