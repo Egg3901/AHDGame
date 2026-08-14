@@ -69,8 +69,8 @@ import {
   type HouseholdStateSignals,
 } from "@/lib/turn/householdConsumption";
 import { buildCommodityFlowDocs, COMMODITY_FLOW_RETENTION_TURNS } from "@/lib/market/flowLedger";
-import { runSourcingPass } from "@/lib/logistics/sourcing";
 import { applyFreightHaulDemand } from "@/lib/logistics/freightDemand";
+import { settleFreightNetwork, type FreightSettlement } from "@/lib/logistics/settlement";
 import { buildSourcingDocs, SOURCING_FLOW_RETENTION_TURNS } from "@/lib/logistics/sourcingLedger";
 import { stateHops } from "@/lib/logistics/stateDistance";
 import { importerTariffOnFlow } from "@/lib/trade/tariffDrag";
@@ -287,6 +287,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             "economic.medianIncome.value": 1,
             "economic.unemploymentRate.value": 1,
             "economic.consumerConfidence.value": 1,
+            "infrastructure.roadCondition.value": 1,
           },
         }
       )
@@ -427,11 +428,18 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const stateGdpMap = new Map<string, number>();
   // stateToCountry used by national aggregation block below
   const stateToCountry = new Map<string, string>();
+  const roadConditionByState = new Map<string, number>();
   for (const state of allStates) {
     if (NATIONAL_SCOPE_IDS.has(state._id)) continue;
     stateToCountry.set(state._id, state.countryId);
     if (state.gdp && state.gdp > 0) {
       stateGdpMap.set(state._id, state.gdp);
+    }
+  }
+  for (const metrics of allStateMetrics) {
+    const road = metrics.infrastructure?.roadCondition?.value;
+    if (typeof road === "number" && Number.isFinite(road)) {
+      roadConditionByState.set(String(metrics._id), road);
     }
   }
 
@@ -1122,18 +1130,30 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     existingPrices.map((p) => [p.commodity, p])
   );
 
-  // ── Landed-price sourcing pass (RECORD-ONLY — interstate-logistics Rev 4) ──
-  // Runs on the PRE-clearing balances (the same real balances the aggregate
-  // clearing sees) and mutates nothing: it shadows which sellers each state
-  // would buy from at landed price (ask + per-hop freight + tariff), gated by
-  // per-state freight capacity, and persists the flow ledger for tuning before
-  // any money wiring reads it. Ordering constraint: must stay above
-  // clearAllCommodities/applyTradeConvergence, which relieve byCountry in place.
+  // Freight is a separately-soaked rollout.  The market ladder enables the
+  // ledger needed to observe routes, while this gate decides whether those
+  // deliveries constrain next turn's local plant inputs.
+  const freightSettlementConfig = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { freightSettlementMode: 1 } });
+  const freightSettlementActive =
+    freightSettlementConfig?.freightSettlementMode === "active" &&
+    marketAtLeast(marketSystemMode, "clearing");
+  let freightSettlement: FreightSettlement | null = null;
+
+  // ── Landed-price freight settlement (shadow or active) ──
+  // Runs on PRE-clearing balances, preserving those raw balances for aggregate
+  // clearing. It determines which sellers each state can buy from at landed
+  // price (ask + per-hop freight + tariff), bounded by origin freight capacity.
+  // Shadow persists routes only. Active additionally persists delivered input
+  // availability for the following corporation turn. Ordering constraint: stay
+  // above clearAllCommodities/applyTradeConvergence, which relieve byCountry
+  // in place.
   if (marketAtLeast(marketSystemMode, "ledger")) {
     const sourcingStates = allStates
       .filter((s) => !NATIONAL_SCOPE_IDS.has(s._id) && stateToCountry.has(s._id))
       .map((s) => ({ stateId: s._id, countryId: s.countryId as CountryId }));
-    const sourcingResult = runSourcingPass({
+    freightSettlement = settleFreightNetwork({
       states: sourcingStates,
       byState,
       byCountry,
@@ -1143,6 +1163,11 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       freightPrice: existingPriceMap.get("freight")?.globalPrice ?? LEDGER_BASE_PRICES.freight,
       eraUnitScale: ledgerEraUnitScale,
       hops: stateHops,
+      shippingCostMultiplier: (_country, from, to) => {
+        const average =
+          ((roadConditionByState.get(from) ?? 60) + (roadConditionByState.get(to) ?? 60)) / 2;
+        return Math.max(0.97, Math.min(1.03, 1 - ((average - 60) / 40) * 0.03));
+      },
       tariffRatePct: (commodity, exporter, importer) => {
         const sectorType = PRIMARY_SECTOR_BY_COMMODITY[commodity];
         return sectorType
@@ -1153,7 +1178,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       isBlocked: (commodity, exporter, importer) =>
         affinityFor(commodity, exporter, importer) === 0,
     });
-    const { commodityDocs, networkDoc } = buildSourcingDocs(sourcingResult, turn, now);
+    const { commodityDocs, networkDoc } = buildSourcingDocs(freightSettlement.sourcing, turn, now);
     if (commodityDocs.length > 0) {
       // Lazy index for the {commodity} + latest-turn read path, mirroring
       // commodityFlows. Fire-and-forget.
@@ -1185,7 +1210,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
 
     // Freight demand wiring (ticket #1039): haul TEU is booked as real freight
     // demand before clearing, so the Logistics map and sold % read one market.
-    applyFreightHaulDemand(sourcingResult.freightTeuByState, {
+    applyFreightHaulDemand(freightSettlement.sourcing.freightTeuByState, {
       global,
       byState,
       byCountry,
@@ -1379,9 +1404,13 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           countryId && nationalPrices[countryId] != null
             ? nationalPrices[countryId]
             : globalMktPrice;
+        const deliveredSupply = freightSettlementActive
+          ? (freightSettlement?.deliveredSupplyByCommodity.get(commodity)?.get(stateId) ??
+            stateBal.supply)
+          : stateBal.supply;
         const regionalLeg = isMacroPriceBlend
           ? nationalLeg
-          : computeMarketPrice(effBasePrice, stateBal.supply, stateBal.demand, priceKnee);
+          : computeMarketPrice(effBasePrice, deliveredSupply, stateBal.demand, priceKnee);
         const targetPrice = blendPrice(globalMktPrice, nationalLeg, regionalLeg);
         const previousPrice = existing?.statePrices?.[stateId] ?? targetPrice;
         statePrice =
@@ -1395,6 +1424,17 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       stateDemand[stateId] = Math.round(stateBal.demand * 100) / 100;
     }
 
+    const deliveredSupply = freightSettlementActive
+      ? Object.fromEntries(
+          freightSettlement?.deliveredSupplyByCommodity.get(commodity)?.entries() ?? []
+        )
+      : undefined;
+    const inputAvailability = freightSettlementActive
+      ? Object.fromEntries(
+          freightSettlement?.inputAvailabilityByCommodity.get(commodity)?.entries() ?? []
+        )
+      : undefined;
+
     ops.push({
       updateOne: {
         filter: { commodity },
@@ -1407,6 +1447,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             statePrices,
             stateSupply,
             stateDemand,
+            ...(deliveredSupply ? { stateDeliveredSupply: deliveredSupply } : {}),
+            ...(inputAvailability ? { stateInputAvailability: inputAvailability } : {}),
             nationalPrices,
             nationalSupply,
             nationalDemand,

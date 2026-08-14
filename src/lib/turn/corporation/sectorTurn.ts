@@ -347,12 +347,17 @@ export function processSector(
       ? computePriceRealization(strategyRates.supply, lookups.priceRatioByCommodity)
       : 1;
   // Throughput coupling (marketSystemMode >= "clearing", audit t806 D1):
-  // realized output is throttled by the scarcest available input
-  // (Leontief), using LAGGED global balances so a throttled sector can't
-  // deepen the shortage that throttled it within the same turn. Ramped in
-  // per sector over the same 240-turn window as the capacity haircut.
+  // realized output is throttled by the scarcest available input (Leontief),
+  // using lagged local delivery availability when freight settlement is active
+  // and lagged global balances otherwise. A throttled sector therefore cannot
+  // deepen the shortage that throttled it within the same turn. Ramped in per
+  // sector over the same 240-turn window as the capacity haircut.
   const throughputRaw = market.throughputEnabled
-    ? computeThroughput(strategyRates.demand, lookups.globalCommodityBalances)
+    ? computeThroughput(
+        strategyRates.demand,
+        lookups.globalCommodityBalances,
+        lookups.stateInputAvailabilityByState.get(sector.stateId)
+      )
     : { throughput: 1, bindingInput: null };
   const throughputStartTurn =
     market.throughputEnabled && throughputRaw.throughput < 1

@@ -8,6 +8,8 @@ export interface FreightDemandEntry {
   total: number;
   /** Freight commodity supply in this state (TEU capacity logistics clear against). */
   capacity: number;
+  /** Unowned logistics market in anchor currency. Opportunity, never capacity. */
+  openMarket: number;
 }
 
 /** JSON contract returned by the map logistics endpoint. */

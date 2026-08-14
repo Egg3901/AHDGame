@@ -182,6 +182,8 @@ export interface SourcingInputs {
   eraUnitScale?: number;
   /** Same-country hop distance; null = no route. */
   hops: (country: CountryId, from: string, to: string) => number | null;
+  /** Optional domestic route-cost modifier. Defaults to 1. */
+  shippingCostMultiplier?: (country: CountryId, from: string, to: string) => number;
   /** Importer-side tariff rate in percent for a foreign flow. */
   tariffRatePct: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => number;
   /** True when an embargo blocks the directed flow exporter→importer. */
@@ -203,6 +205,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     freightPrice,
     eraUnitScale = 1,
     hops,
+    shippingCostMultiplier,
     tariffRatePct,
     isBlocked,
   } = inputs;
@@ -319,7 +322,10 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
           hops(buyer.countryId, seller.stateId, buyer.stateId) ?? UNREACHABLE_HOP_EQUIV;
         if (hopCount <= 0) continue;
         const ask = statePrices[seller.stateId] ?? basePrice;
-        const shippingPerUnit = shippingPerUnitPerHop * hopCount;
+        const routeMultiplier = shippingCostMultiplier
+          ? Math.max(0, shippingCostMultiplier(buyer.countryId, seller.stateId, buyer.stateId))
+          : 1;
+        const shippingPerUnit = shippingPerUnitPerHop * hopCount * routeMultiplier;
         candidates.push({
           originType: "state",
           originId: seller.stateId,
