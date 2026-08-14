@@ -128,6 +128,19 @@ export interface GameConfig {
    * read-only freeze: pages render, no actions accepted, nothing unwinds.
    */
   privateBankingEnabled?: boolean;
+  /**
+   * Gate on player-chartered ADVANCED bank types. When absent/false, players may
+   * only charter (or switch to) a RETAIL bank; investment and universal charters
+   * are withheld until this is turned on. Existing charters are grandfathered —
+   * this only gates creation and type switches.
+   */
+  playerAdvancedBankChartersEnabled?: boolean;
+  /**
+   * Gate on players SPONSORING their own index funds. When absent/false, the
+   * default (system) funds still trade normally, but a corporation cannot
+   * charter a new sponsored fund. Independent of `indexFundsMode`.
+   */
+  playerFundSponsorshipEnabled?: boolean;
   /** Kill switch: investment-bank proprietary trading (incl. leveraged forex). Default on when banking is on. */
   bankPropTradingEnabled?: boolean;
   /** Kill switch: bank-failure contagion cascade. Default on when banking is on. */
