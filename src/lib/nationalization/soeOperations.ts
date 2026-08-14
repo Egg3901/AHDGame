@@ -114,8 +114,8 @@ export function buildMandateMetricOps(input: MetricOpInput): MetricBulkOp[] {
 
 type RdModernizationOp = {
   updateOne: {
-    filter: { _id: Corporation["_id"]; liquidCapital?: { $gte: number } };
-    update: { $set: { rdScore: number; updatedAt: Date }; $inc?: { liquidCapital: number } };
+    filter: { _id: Corporation["_id"] };
+    update: { $set: { rdScore: number; updatedAt: Date } };
   };
 };
 
@@ -133,11 +133,20 @@ const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x
  * target      = intensity × MAX
  * next        = clamp(momentum + clamp(target−momentum, −DECAY, +RAMP_UP), 0, MAX)
  *
- * Spend is debited only when affordable (guarded `$gte`), so the treasury never
- * silently funds R&D. Returns one op per corp whose score moves or that spends.
+ * FUNDING. `spend` is capped at `revenue × FULL_FUND_FRACTION` — the corp's own
+ * per-turn revenue — so it is affordable from operations by construction. The
+ * cost is charged as an operating expense in
+ * {@link estimateNationalizedOperatingIncome}, which drives BOTH the treasury
+ * remittance and the budget page's State Enterprises line, so the treasury funds
+ * R&D by remitting less (never silently, never for free). It is deliberately NOT
+ * debited from `liquidCapital`: SOE operating profit is remitted to the treasury
+ * each turn and never banked as corp cash, so a `liquid >= spend` gate could
+ * never pass for a normally-operating SOE and pinned every player-run corp at
+ * rdScore 0 regardless of budget (ticket #1072). Returns one op per corp whose
+ * score moves.
  */
 export function buildRdModernizationOps(
-  corps: Array<Pick<Corporation, "_id" | "rdScore" | "liquidCapital" | "rdBudgetPerTurn">>,
+  corps: Array<Pick<Corporation, "_id" | "rdScore" | "rdBudgetPerTurn">>,
   revenueByCorp: Map<string, number>,
   now: Date
 ): RdModernizationOp[] {
@@ -148,10 +157,9 @@ export function buildRdModernizationOps(
     const budget = Math.max(0, Math.round(c.rdBudgetPerTurn ?? 0));
     const revenue = Math.max(0, revenueByCorp.get(c._id.toString()) ?? 0);
     const fullFundBudget = revenue * NATCORP_RD_FULL_FUND_REVENUE_FRACTION;
-    const desiredSpend = Math.min(budget, fullFundBudget);
-    const liquid = Number.isFinite(c.liquidCapital) ? (c.liquidCapital as number) : 0;
-    const affordable = desiredSpend > 0 && liquid >= desiredSpend;
-    const spend = affordable ? Math.round(desiredSpend) : 0;
+    // Capped at the corp's own revenue, so spend is self-affordable from
+    // operations — see the FUNDING note above.
+    const spend = Math.round(Math.min(budget, fullFundBudget));
     const intensity = fullFundBudget > 0 ? Math.min(1, spend / fullFundBudget) : 0;
     const target = intensity * NATCORP_RD_MOMENTUM_MAX;
     const gap = target - momentum;
@@ -160,16 +168,14 @@ export function buildRdModernizationOps(
         ? Math.min(gap, NATCORP_RD_RAMP_UP_PER_TURN)
         : Math.max(gap, -NATCORP_RD_DECAY_PER_TURN);
     const next = Math.round(clamp(momentum + delta, 0, NATCORP_RD_MOMENTUM_MAX) * 100) / 100;
-    if (next === momentum && spend === 0) continue; // nothing to write
+    if (next === momentum) continue; // nothing to write
 
-    const op: RdModernizationOp = {
+    ops.push({
       updateOne: {
-        filter: spend > 0 ? { _id: c._id, liquidCapital: { $gte: spend } } : { _id: c._id },
+        filter: { _id: c._id },
         update: { $set: { rdScore: next, updatedAt: now } },
       },
-    };
-    if (spend > 0) op.updateOne.update.$inc = { liquidCapital: -spend };
-    ops.push(op);
+    });
   }
   return ops;
 }
@@ -384,8 +390,9 @@ export async function processSoeOperations(
   }
 
   // Per-turn modernization (R&D): advance each SOE's decaying, scale-aware
-  // momentum from its CEO-set budget (relative to its own revenue). Runs before
-  // treasury-backing so the affordability guard — not the treasury — bounds it.
+  // momentum from its CEO-set budget (relative to its own revenue). The spend is
+  // capped at the corp's revenue and charged through operating income (remittance
+  // + budget line), not against liquidCapital — see buildRdModernizationOps.
   const revenueByCorp = new Map<string, number>();
   for (const s of sectors) {
     const k = s.corporationId.toString();
