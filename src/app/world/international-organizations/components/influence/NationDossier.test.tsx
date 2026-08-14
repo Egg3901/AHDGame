@@ -20,6 +20,7 @@ const VIEW = {
   fundCurrencyCountryId: "US",
   joinShare: 60,
   leaveShare: 40,
+  sustainTurns: 24,
   channel: { poleId: "WEST", poleLabel: "West", accentToken: "info", weight: 1 },
   rivalIntel: {
     YU: [{ poleLabel: "East", accentToken: "error", pointsLanded: 6, turnsAgo: 1 }],
@@ -46,6 +47,7 @@ const TARGET = {
   turnCapCostLocal: 380_000_000,
   costToGate: 2_888_000_000,
   resistsAtHalfStrength: false,
+  joinCountdown: null,
 } as unknown as InfluenceTarget;
 
 const renderDossier = (
@@ -117,6 +119,31 @@ describe("NationDossier", () => {
     // "38 short" would be nonsense for a nation that has already cleared it.
     renderDossier({ ourShare: 72, shares: { WEST: 72, EAST: 10 }, nonAligned: 18 });
     expect(screen.getByText(/already past the 60/i)).toBeTruthy();
+  });
+
+  it("shows the sustain countdown while a nation over the gate has not applied", () => {
+    // The whole point of the fix: a share past 60 that has not "joined" is
+    // working as designed, so the dossier says how many turns remain.
+    renderDossier({
+      ourShare: 62,
+      shares: { WEST: 62, EAST: 10 },
+      nonAligned: 28,
+      joinCountdown: { turnsHeld: 21, turnsToApply: 3 },
+    });
+    expect(screen.getByText(/held above the 60 for/i)).toBeTruthy();
+    expect(screen.getByText(/21\/24/)).toBeTruthy();
+    expect(screen.getByText(/applies to join in/i)).toBeTruthy();
+  });
+
+  it("says the members now vote once the run is complete", () => {
+    renderDossier({
+      ourShare: 62,
+      shares: { WEST: 62, EAST: 10 },
+      nonAligned: 28,
+      joinCountdown: { turnsHeld: 24, turnsToApply: 0 },
+    });
+    expect(screen.getByText(/applying to join/i)).toBeTruthy();
+    expect(screen.getByText(/members.+vote now decides/i)).toBeTruthy();
   });
 });
 
