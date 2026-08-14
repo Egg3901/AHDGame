@@ -1323,10 +1323,40 @@ export function applyPlannedEconomyOutputMix(
  */
 export const PLANNED_ECONOMY_MEDIA_SUPPLY_FACTOR = 0.25;
 
-/** The derate for one sector: 1 for everything that is not planned-economy media. */
+/**
+ * Share of a MARKET economy's media output that reaches the advertising market.
+ *
+ * Same seeding problem as the bloc, minus the command-economy angle: media
+ * nameplate is roughly 20x what any advertising market absorbs. Prod turn 120,
+ * after the bloc re-point removed 57% of world supply, still read 2,705,394
+ * supply against 136,553 demand — 19.8x, price 0.68 against an era base of 2.15,
+ * i.e. still pinned to the 0.32x deflation clamp.
+ *
+ * Ownership offers no lever here: Western media corps ("Metro News", "Prime
+ * Media") are ordinary seeded corps with real ObjectIds and no `countryOwnerId`,
+ * indistinguishable from a player's. And the output mix cannot help either —
+ * `commodityMixWeight` is 1 for a single-commodity mix whatever the rate, so
+ * capacity is the only term. Derating the market contribution is the reversible
+ * form of right-sizing it.
+ *
+ * This RAISES media revenue rather than cutting it, which is counterintuitive
+ * enough to be worth stating: those sectors currently clear about 2% of output
+ * at a third of base price, so realized value is ~0.006 of nameplate. At 0.10
+ * of nameplate clearing near fully at a recovered price it is ~0.10 — an order
+ * of magnitude better. The glut is what is impoverishing them.
+ *
+ * 0.10 is deliberately a step, not a landing: it takes world advertising to
+ * roughly 2x rather than straight to balance, so the price move can be soaked
+ * before tuning further. Proper fix is to right-size the seed; see ops-knowledge
+ * `plants-output-mix-invariants`.
+ */
+export const MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR = 0.1;
+
+/** The derate for one sector: 1 for everything that is not media. */
 export function plannedEconomyMediaSupplyFactor(
   sectorType: CorporationType,
   plannedEconomy: boolean
 ): number {
-  return plannedEconomy && sectorType === "media" ? PLANNED_ECONOMY_MEDIA_SUPPLY_FACTOR : 1;
+  if (sectorType !== "media") return 1;
+  return plannedEconomy ? PLANNED_ECONOMY_MEDIA_SUPPLY_FACTOR : MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR;
 }
