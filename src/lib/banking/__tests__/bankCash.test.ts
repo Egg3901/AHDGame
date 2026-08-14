@@ -21,6 +21,10 @@ function charter(over: Partial<BankCharter> = {}): BankCharter {
     depositOffset: 0,
     lendingOffset: 0,
     totalDeposits: 1_000_000,
+    // 500k cash + 800k loans − 1M deposits = 200k equity: enough that the
+    // reserve requirement, not equity, is the binding ceiling on the default
+    // fixture. Equity-bound cases set their own numbers.
+    totalLoans: 800_000,
     capitalStanding: "adequate",
     ...over,
   } as BankCharter;
@@ -52,6 +56,40 @@ describe("reserve arithmetic", () => {
     // published shock does not get to pay its owner in the meantime.
     expect(upstreamCapacity(charter({ capitalStanding: "stressed" }), 0.2)).toBe(0);
     expect(upstreamCapacity(charter({ capitalStanding: "undercapitalized" }), 0.2)).toBe(0);
+  });
+
+  it("caps the payout at book equity, not just the reserve surplus", () => {
+    // Reserves sit well above the 20% requirement, but the deposits they back
+    // are not the owner's money. Equity = 500k cash + 100k loans − 1M deposits
+    // = −400k, so nothing may be upstreamed even though 300k looks 'surplus'.
+    expect(upstreamCapacity(charter({ totalLoans: 100_000 }), 0.2)).toBe(0);
+    // With loans covering more of the deposit liability the owner has real
+    // equity: 500k + 850k − 1M = 350k, but only the 300k reserve surplus fits.
+    expect(upstreamCapacity(charter({ totalLoans: 850_000 }), 0.2)).toBe(300_000);
+    // Equity below the reserve surplus becomes the binding ceiling: 500k + 700k
+    // − 1M = 200k < 300k surplus.
+    expect(upstreamCapacity(charter({ totalLoans: 700_000 }), 0.2)).toBe(200_000);
+  });
+
+  it("counts borrowed cash as a liability, not distributable capital", () => {
+    // A bank that drew emergency liquidity holds the cash but owes it back;
+    // upstreaming it would hand the owner the central bank's money. 500k cash +
+    // 800k loans − (1M deposits + 300k window) = 0 equity.
+    expect(upstreamCapacity(charter({ discountWindowDebt: 300_000 }), 0.2)).toBe(0);
+    expect(upstreamCapacity(charter({ interbankDebt: 300_000 }), 0.2)).toBe(0);
+    expect(upstreamCapacity(charter({ cbMarginDebt: 300_000 }), 0.2)).toBe(0);
+  });
+
+  it("blocks extraction from an NPC-deposit-inflated reserve base (ticket #1088)", () => {
+    // The Hagemeyer case: a days-old retail bank handed a ~1.3B NPC deposit
+    // base, ~1.02B reserves, 124M loans. Reserve surplus looks like hundreds of
+    // millions, but book equity is negative — none of it is the owner's.
+    const hagemeyer = charter({
+      cashReserves: 1_020_159_685,
+      totalDeposits: 1_303_882_142,
+      totalLoans: 124_295_401,
+    });
+    expect(upstreamCapacity(hagemeyer, 0.1)).toBe(0);
   });
 });
 
@@ -177,7 +215,24 @@ describe("upstreamBankCash", () => {
     const result = await upstreamBankCash(db as unknown as Db, corpId, 1_000, 0.2);
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toMatch(/no surplus/i);
+    expect(result.error).toMatch(/no distributable capital/i);
+  });
+
+  it("refuses to pay the owner out of an NPC-deposit-inflated reserve base", async () => {
+    // Negative book equity despite reserves far above the requirement: the
+    // exploit path from ticket #1088 must not reach the write.
+    db.collectionMocks.corporations!.findOne.mockResolvedValue({
+      _id: corpId,
+      liquidCapital: 0,
+      bankCharter: charter({
+        cashReserves: 1_020_159_685,
+        totalDeposits: 1_303_882_142,
+        totalLoans: 124_295_401,
+      }),
+    });
+    const result = await upstreamBankCash(db as unknown as Db, corpId, 100_000_000, 0.1);
+    expect(result.ok).toBe(false);
+    expect(db.collectionMocks.corporations!.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it("never books negative contributed capital when paying out earnings", async () => {

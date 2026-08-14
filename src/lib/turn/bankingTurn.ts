@@ -12,7 +12,7 @@ import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { isBankPropTradingEnabled, isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
-import { computeNpcDepositShare } from "@/lib/banking/deposits";
+import { computeNpcDepositShare, equityCappedDepositCeiling } from "@/lib/banking/deposits";
 import { domesticDepositRetention } from "@/lib/centralBank/marketEffects";
 import {
   computeInsurancePremium,
@@ -30,7 +30,7 @@ import { roundSavingsAmount, savingsApyPercent } from "@/lib/currency/savingsInt
 import { discountWindowRatePercent } from "@/lib/banking/discountWindow";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
-import { getCashReserves } from "@/lib/banking/bankCash";
+import { getCashReserves, bankEquity } from "@/lib/banking/bankCash";
 import {
   CREDIT_BANDS,
   DEFAULT_LENDING_PROFILE,
@@ -306,11 +306,17 @@ async function processOneBank(
   // Deposit ceiling from financial-sector capacity × branch share. Caps NPC
   // target (and therefore inflow). Outflow always allowed. Player deposits
   // alone above the ceiling are grandfathered: NPC target contribution → 0.
-  const depositCeiling = await getBankDepositCeiling(db, {
+  const capacityCeiling = await getBankDepositCeiling(db, {
     ...corp,
     bankCharter: live.bankCharter,
     liquidCapital: live.liquidCapital,
   });
+  // Capacity sizes the ceiling, but a bank may only anchor a deposit base it has
+  // the capital to stand behind. Cap the ceiling at a leverage multiple of book
+  // equity so an undercapitalized bank (little/negative equity) cannot grow — or
+  // keep — a base far larger than its capital. Negative equity drives this to 0,
+  // and the normal per-turn NPC outflow then unwinds the excess gradually.
+  const depositCeiling = equityCappedDepositCeiling(capacityCeiling, bankEquity(live.bankCharter));
   const npcRoom = Math.max(0, depositCeiling - playerDeposits);
 
   // (b) NPC deposit flow - CB update first, then corp npcDeposits

@@ -1,4 +1,4 @@
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { NationalDoctrine } from "@/lib/db/types/nationalDoctrine";
 import type { CountryId } from "@/lib/constants/countries";
 import { DEFAULT_ADOPTED, DEFAULT_POINTS } from "@/lib/military/doctrineTree";
@@ -52,6 +52,9 @@ export async function settleDoctrineIncome(
   if (!doc) {
     const points = DEFAULT_POINTS + grant;
     await col.insertOne({
+      // Set _id explicitly: NationalDoctrine's index-signature field (adopted)
+      // defeats the driver's OptionalUnlessRequiredId, so _id is required here.
+      _id: new ObjectId(),
       countryId: id,
       adopted: { ...DEFAULT_ADOPTED },
       points,

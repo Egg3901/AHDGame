@@ -7,6 +7,7 @@ import {
   NPC_DEPOSIT_MAX_SHARE_PER_BANK,
   NPC_DEPOSIT_MAX_TOTAL_SHARE,
   computeNpcDepositShare,
+  equityCappedDepositCeiling,
 } from "../deposits";
 import { isBlockedBorrower, isBlockedDepositor } from "../blacklist";
 
@@ -245,6 +246,37 @@ describe("banking deposits", () => {
         expect(row.share).toBeGreaterThanOrEqual(0);
         expect(row.share).toBeLessThanOrEqual(NPC_DEPOSIT_MAX_SHARE_PER_BANK);
       }
+    });
+  });
+
+  describe("equityCappedDepositCeiling", () => {
+    it("leaves a well-capitalized bank's ceiling untouched", () => {
+      // Equity x 12 is far above the capacity ceiling: the capacity limit binds.
+      expect(equityCappedDepositCeiling(1_000_000, 500_000)).toBe(1_000_000);
+    });
+
+    it("caps the ceiling at 12x equity when equity is the binding limit", () => {
+      expect(equityCappedDepositCeiling(1_000_000, 50_000)).toBe(600_000);
+    });
+
+    it("drives the ceiling to zero for a bank with non-positive equity", () => {
+      expect(equityCappedDepositCeiling(1_000_000, 0)).toBe(0);
+      expect(equityCappedDepositCeiling(1_000_000, -167_000_000)).toBe(0);
+    });
+
+    it("matches the live-bank picture at the time of the fix", () => {
+      // Solvent French banks keep their multi-billion ceilings; the two
+      // negative-equity banks (Hagemeyer, The Money Printer) are pinned to 0.
+      expect(equityCappedDepositCeiling(12_274_670_057, 2_270_000_000)).toBe(12_274_670_057);
+      expect(equityCappedDepositCeiling(12_772_441_384, 4_710_000_000)).toBe(12_772_441_384);
+      expect(equityCappedDepositCeiling(7_585_266_109, -157_000_000)).toBe(0); // Hagemeyer
+      expect(equityCappedDepositCeiling(1_165_722_294, -167_000_000)).toBe(0); // The Money Printer
+    });
+
+    it("clamps non-finite inputs to a safe number", () => {
+      expect(equityCappedDepositCeiling(Number.NaN, 100)).toBe(0);
+      expect(equityCappedDepositCeiling(1_000, Number.NaN)).toBe(0);
+      expect(equityCappedDepositCeiling(-5, 100)).toBe(0);
     });
   });
 });
