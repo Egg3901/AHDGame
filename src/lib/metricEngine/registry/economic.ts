@@ -33,7 +33,14 @@ import {
 
 /** Per-state payload the phase extracts from `sectorRevenueTaxProvider` for one state. */
 export interface SectorRevenueTaxPayload {
-  owned: Array<{ revenue: number; currentGrowthRate: number; sectorType?: CorporationType }>;
+  owned: Array<{
+    revenue: number;
+    currentGrowthRate: number;
+    sectorType?: CorporationType;
+    realizedRevenue?: number;
+    hostRevenue?: number;
+    hostRealizedRevenue?: number;
+  }>;
   unowned: Array<{ revenue: number; sectorType?: CorporationType }>;
   federalSalesTax: number;
   stateSalesTax: number;
@@ -48,12 +55,19 @@ export interface SectorRevenueTaxPayload {
    */
   plantsEnabled?: boolean;
   /**
-   * P2/D7: Σ owned-sector realized revenue (₳, same FX normalization as
-   * `owned[].revenue`) persisted for this region on a PRIOR turn, plus the turn
-   * gap since. Absent on the flip turn / unseeded regions → legacy signal.
+   * P2/D7: Σ owned-sector realized revenue persisted for this region on a PRIOR
+   * turn, plus the turn gap since. Same unit as `realizedRevenueNow` (host
+   * currency once `sectorRealizedRevenueUnit === "host"`, else the legacy ₳
+   * snapshot). Absent on the flip turn / unseeded regions → legacy signal.
    */
   realizedRevenuePrev?: number;
   turnsSincePrev?: number;
+  /**
+   * This turn's Σ owned realized revenue in the same unit as `realizedRevenuePrev`.
+   * The phase computes it so the node does not have to know host vs ₳. When
+   * omitted the node falls back to summing `owned` (legacy ₳ path).
+   */
+  realizedRevenueNow?: number;
 }
 
 /**
@@ -97,9 +111,13 @@ export const sectorGrowthNode: RegistryNode = {
     // average. Region level, unowned mass excluded, pre-clamped to the node
     // bounds. No baseline yet (flip turn) → legacy signal, so the cutover turn
     // cannot spike the EMA. Non-plants is untouched (byte-identical).
+    const realizedNow =
+      typeof p.realizedRevenueNow === "number" && Number.isFinite(p.realizedRevenueNow)
+        ? p.realizedRevenueNow
+        : sumRealizedRevenue(p.owned, true);
     const plantsSignal = p.plantsEnabled
       ? computeRealizedRevenueGrowthRate(
-          sumRealizedRevenue(p.owned, true),
+          realizedNow,
           p.realizedRevenuePrev,
           p.turnsSincePrev,
           TURNS_PER_YEAR

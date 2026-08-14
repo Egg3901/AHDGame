@@ -1,12 +1,11 @@
 import type { Db } from "mongodb";
 import type { CorporateSector, UnownedSector, Corporation } from "@/lib/db/types";
 import type { FederalBudget, StateBudget } from "@/lib/db/types/budget";
-import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CorporationType } from "@/lib/constants/corporations";
 import {
-  fxRateForCorpFromMap,
+  fxRateForSectorHostFromMap,
   loadFxRatesByCurrency,
-  resolveCorpLiquidCurrencyCode,
+  resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { deriveFiscalState } from "@/lib/budget/treasuryBalance";
@@ -32,7 +31,16 @@ export interface SectorRevenueTax {
   /** Per-state owned-sector revenue (FX-normalized to ₳) + growth rate. */
   ownedByState: Map<
     string,
-    Array<{ revenue: number; currentGrowthRate: number; sectorType?: CorporationType }>
+    Array<{
+      revenue: number;
+      currentGrowthRate: number;
+      sectorType?: CorporationType;
+      realizedRevenue?: number;
+      /** Host-currency nameplate — plants GDP signal (ticket #1084). */
+      hostRevenue: number;
+      /** Host-currency realized revenue when the sector has one. */
+      hostRealizedRevenue?: number;
+    }>
   >;
   /** Per-state unowned-sector revenue (₳-native). */
   unownedByState: Map<string, Array<{ revenue: number; sectorType?: CorporationType }>>;
@@ -83,9 +91,11 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
           | "growthRate"
           | "corporationId"
           | "sectorType"
+          | "countryId"
         >
       >({
         stateId: 1,
+        countryId: 1,
         revenue: 1,
         // P2/D7: the plants realized-revenue signal (and the baseline snapshot
         // the phase persists) must read what the sector ACTUALLY earned. Under
@@ -114,10 +124,9 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
     db
       .collection<Corporation>("corporations")
       .find({})
-      .project<Pick<Corporation, "_id" | "countryId" | "liquidCurrencyCode">>({
+      .project<Pick<Corporation, "_id" | "countryId">>({
         _id: 1,
         countryId: 1,
-        liquidCurrencyCode: 1,
       })
       .toArray(),
     loadFxRatesByCurrency(db),
@@ -149,24 +158,20 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
     "plants"
   );
 
-  // Per-corp currency lookup so each sector's revenue can be normalized to ₳
-  // before the cross-corp weighted aggregation.
-  const currencyByCorpId = new Map<string, { code: CurrencyCode | undefined; rate: number }>();
-  for (const corp of corporations) {
-    currencyByCorpId.set(corp._id.toString(), {
-      code: resolveCorpLiquidCurrencyCode(corp),
-      rate: fxRateForCorpFromMap(corp, fxByCurrency),
-    });
-  }
+  // Host-currency lookup: sector economic fields are stored in the HOST state's
+  // currency (PR #3466), not the owning corp's. Convert to ₳ with the host rate
+  // so a foreign owner's FX cannot revalue host-market earnings. Raw host
+  // amounts ride along for the plants GDP signal, which must compare
+  // host-to-host so FX noise cannot annualize into phantom growth (#1084).
+  const corpById = new Map(corporations.map((c) => [c._id.toString(), c]));
 
   const ownedByState = new Map<
     string,
     Array<{
       revenue: number;
-      /** P2/D7: FX-normalized realized revenue when the sector has one; the
-       *  plants signal + the persisted baseline both read this in preference
-       *  to `revenue` (which under plants is the capacity nameplate). */
       realizedRevenue?: number;
+      hostRevenue: number;
+      hostRealizedRevenue?: number;
       currentGrowthRate: number;
       sectorType?: CorporationType;
     }>
@@ -178,13 +183,19 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
 
   for (const sector of ownedSectors) {
     const corpKey = sector.corporationId?.toString();
-    const fx = corpKey ? currencyByCorpId.get(corpKey) : undefined;
-    const revenueAnchor = readCorpEconomicAnchor(sector.revenue, fx?.code, fx?.rate ?? 1);
-    // Same FX normalization as `revenue` so the two are directly comparable and
-    // `sumRealizedRevenue` can prefer one over the other per sector.
-    const realizedAnchor =
+    const corp = corpKey ? corpById.get(corpKey) : undefined;
+    const hostCode = resolveSectorHostCurrencyCode(sector, corp);
+    const hostRate = fxRateForSectorHostFromMap(sector, corp, fxByCurrency);
+    const hostRevenue =
+      typeof sector.revenue === "number" && Number.isFinite(sector.revenue) ? sector.revenue : 0;
+    const hostRealized =
       typeof sector.realizedRevenue === "number" && Number.isFinite(sector.realizedRevenue)
-        ? readCorpEconomicAnchor(sector.realizedRevenue, fx?.code, fx?.rate ?? 1)
+        ? sector.realizedRevenue
+        : undefined;
+    const revenueAnchor = readCorpEconomicAnchor(hostRevenue, hostCode, hostRate);
+    const realizedAnchor =
+      hostRealized !== undefined
+        ? readCorpEconomicAnchor(hostRealized, hostCode, hostRate)
         : undefined;
     const list = ownedByState.get(sector.stateId) ?? [];
     // Fallback chain: new field → legacy field → 0 (undefined would propagate NaN).
@@ -192,6 +203,8 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
     list.push({
       revenue: revenueAnchor,
       ...(realizedAnchor !== undefined ? { realizedRevenue: realizedAnchor } : {}),
+      hostRevenue,
+      ...(hostRealized !== undefined ? { hostRealizedRevenue: hostRealized } : {}),
       currentGrowthRate: growth,
       sectorType: sector.sectorType,
     });
