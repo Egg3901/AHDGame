@@ -37,6 +37,12 @@ export interface DefenceContract {
   component: UnitDomain;
   lotsOrdered: number;
   lotsDelivered: number;
+  /**
+   * Fractional materiel produced but not yet turned into a whole delivered lot, carried turn to
+   * turn. Always in [0, 1). Without it a plant producing under one lot per turn delivers nothing
+   * forever, because each turn's sub-lot output was floored to zero and discarded.
+   */
+  deliveryCarry?: number;
   /** Struck at award, in the country's local currency. Does not drift with GDP afterwards. */
   pricePerLot: number;
   status: DefenceContractStatus;
