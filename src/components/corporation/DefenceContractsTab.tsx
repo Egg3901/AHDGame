@@ -6,6 +6,18 @@ import type { CorporationDefenceView } from "./CorporationPageTypes";
 
 const GRADE_LABEL = ["None", "Legacy", "Modernised", "Cutting-edge"];
 
+/**
+ * A delivery rate can be well under one lot per turn for a small plant — it still delivers, just
+ * slowly, as the fractional output accumulates. Show that honestly rather than rounding it to a
+ * flat "0/turn" that reads as broken.
+ */
+function formatRate(n: number): string {
+  if (n <= 0) return "0";
+  if (n >= 10) return Math.round(n).toLocaleString("en-US");
+  if (n >= 1) return n.toFixed(1);
+  return n.toFixed(2);
+}
+
 const STATUS_TONE: Record<string, string> = {
   pending: "text-[var(--warning)] border-[color-mix(in_srgb,var(--warning)_45%,transparent)]",
   active: "text-[var(--success)] border-[color-mix(in_srgb,var(--success)_40%,transparent)]",
@@ -85,7 +97,7 @@ export default function DefenceContractsTab({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Tile label="Offers awaiting you" value={pending.length.toLocaleString("en-US")} />
         <Tile label="Lots outstanding" value={outstanding.toLocaleString("en-US")} />
-        <Tile label="Lots per turn" value={perTurn.toLocaleString("en-US")} />
+        <Tile label="Lots per turn" value={formatRate(perTurn)} />
         <Tile label="Earned to date" value={formatAmount(defence?.totalEarned ?? 0)} />
       </div>
 
@@ -233,7 +245,7 @@ export default function DefenceContractsTab({
                       </div>
                       <div className="text-[11px] text-muted">
                         {c.status === "active"
-                          ? `${remaining.toLocaleString("en-US")} outstanding · ${c.projectedLotsPerTurn.toLocaleString("en-US")}/turn`
+                          ? `${remaining.toLocaleString("en-US")} outstanding · ${formatRate(c.projectedLotsPerTurn)}/turn`
                           : c.status === "pending"
                             ? "awaiting your answer"
                             : `${Math.round(pct)}% delivered`}

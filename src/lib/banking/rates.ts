@@ -15,8 +15,7 @@ export const MIN_DEPOSIT_RATE_PERCENT = 0.05;
 export const MIN_LENDING_RATE_PERCENT = 0.1;
 
 export type SetBankRatesResult =
-  | { ok: true; depositOffset: number; lendingOffset: number }
-  | { ok: false; error: string };
+  { ok: true; depositOffset: number; lendingOffset: number } | { ok: false; error: string };
 
 /**
  * CEO sets deposit and lending offsets against prime. Rejects out-of-corridor

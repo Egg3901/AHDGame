@@ -1,11 +1,11 @@
 /**
  * Copy helpers for the country-map Logistics mode.
  *
- * The map shows freight *capacity* (CommodityPrice.stateSupply.freight — what
+ * The map shows freight *capacity* (CommodityPrice.stateSupply.freight, what
  * logistics sectors clear against) alongside origin-state interstate *haul load*
- * from `sourcingNetworkLoad` (record-only landed-price sourcing). Haul alone is
- * not market demand; money wiring (interstate-logistics plan step 5) is still
- * off, so sold % still follows the global freight market (ticket #1039).
+ * from `sourcingNetworkLoad`. Since ticket #1039 haul TEU is booked as real
+ * freight demand in the market turn (state legs + global), so haul moves freight
+ * prices and sold %. Money wiring (plan step 5, who pays shipping) is still off.
  */
 
 export type FreightHaulLoadEntry = {
@@ -14,6 +14,8 @@ export type FreightHaulLoadEntry = {
   total: number;
   /** Freight TEU supply in-state; 0 when unknown. */
   capacity?: number;
+  /** Unowned logistics market. This is an opportunity, not freight supply. */
+  openMarket?: number;
 };
 
 export const FREIGHT_HAUL_LOAD_MODE_DESCRIPTION =
@@ -52,11 +54,14 @@ export function freightHaulLoadTooltip(stateId: string, entry: FreightHaulLoadEn
         ? `Interstate haul: ${formatFreightTeu(haul)} TEU/turn (${util})`
         : `Interstate haul: ${formatFreightTeu(haul)} TEU/turn`
     );
-  } else {
+  } else if (entry.capacity === undefined) {
     lines.push(`Projected haul load: ${formatFreightTeu(haul)} TEU/turn`);
+  } else {
+    lines.push(`No operating freight capacity`);
   }
+  if ((entry.openMarket ?? 0) > 0) lines.push("Open logistics market available");
   lines.push(`Bulk: ${bulk} · Special: ${special}`);
-  lines.push("Haul is shadow-ledger network load — not sold % demand");
+  lines.push("Haul counts as freight demand; open market is not operating capacity");
   return lines;
 }
 
@@ -65,9 +70,9 @@ export function freightHaulLoadCaption(hasData: boolean): string {
     return "No freight data yet — capacity fills from the market turn; haul load after the sourcing pass runs.";
   }
   return (
-    "Green intensity follows freight capacity (TEU logistics clear against). Tooltips also show " +
-    "projected interstate haul from the landed-price shadow ledger — that haul is network load, " +
-    "not market demand. Sold % still follows the global freight market until money wiring ships."
+    "Green shows operating freight capacity. Amber shows an unowned logistics market waiting " +
+    "for an operator. Tooltips show interstate haul from the freight settlement ledger. Haul is " +
+    "booked as freight demand each market turn, so heavy-haul states lift freight prices and sold %."
   );
 }
 
@@ -80,5 +85,6 @@ export function freightHaulLoadLabel(entry: FreightHaulLoadEntry | number): stri
   if (capacity > 0) {
     return `${formatFreightTeu(capacity)} TEU`;
   }
+  if ((entry.openMarket ?? 0) > 0) return "Open market";
   return `${formatFreightTeu(entry.total)} TEU`;
 }

@@ -158,7 +158,7 @@ describe("banking lending", () => {
       expect(result).toEqual({ ok: false, error: "Private banking is not enabled" });
     });
 
-    it("rejects investment charters", async () => {
+    it("rejects an investment charter lending to an INDIVIDUAL (firms are allowed)", async () => {
       const bankId = new ObjectId();
       db.collectionMocks.corporations!.findOne.mockResolvedValue(
         makeBankCorp(makeActiveRetailCharter({ type: "investment" }), { _id: bankId })
@@ -173,7 +173,7 @@ describe("banking lending", () => {
       );
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error).toMatch(/Investment banks/i);
+        expect(result.error).toMatch(/lends to corporations, not to individuals/i);
       }
     });
 
@@ -561,6 +561,14 @@ describe("banking lending", () => {
   });
 
   describe("computeNpcLoanBook", () => {
+    it("uses lendable household deposits, never GDP, as its funding base", () => {
+      // A new bank with $75M of lendable deposits may fill that capacity at a
+      // normal loan rate. National GDP must not create an unfunded loan book.
+      const book = computeNpcLoanBook(75_000_000, 4);
+
+      expect(book.volume).toBe(75_000_000);
+    });
+
     it("shrinks volume and raises default rate when lending rate rises", () => {
       const low = computeNpcLoanBook(1_000_000, 4);
       const high = computeNpcLoanBook(1_000_000, 10);
@@ -572,7 +580,7 @@ describe("banking lending", () => {
       const cases = [-50, 0, 4, 6, 50, 200];
       for (const rate of cases) {
         const book = computeNpcLoanBook(1_000_000, rate);
-        const factor = book.volume / (0.15 * 1_000_000);
+        const factor = book.volume / 1_000_000;
         expect(factor).toBeGreaterThanOrEqual(NPC_LOAN_BOOK_VOLUME_FACTOR_MIN - 1e-12);
         expect(factor).toBeLessThanOrEqual(NPC_LOAN_BOOK_VOLUME_FACTOR_MAX + 1e-12);
         expect(book.expectedDefaultRatePercent).toBeGreaterThanOrEqual(

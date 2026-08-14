@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import type { Character, State } from "@/lib/db/types";
 import { SectionHeader } from "./ProfileMeters";
 import { InfoTooltip } from "@/components/InfoTooltip";
@@ -130,6 +131,7 @@ export function PoliticalStanding({
   isOwnProfile = true,
   nationalNpiLeaderRank,
 }: PoliticalStandingProps) {
+  const t = useTranslations("profile.standing");
   // Action cap and hoard threshold scale with the character's Energy stat
   // (engine: actionRefresh.ts → energyActionLimits). Unmigrated characters with
   // no Energy stat fall back to the baseline via STAT_MIN, matching the engine.
@@ -145,7 +147,7 @@ export function PoliticalStanding({
     <div className="rounded-xl border border-card-border bg-card shadow-card overflow-hidden">
       {/* Header */}
       <div className="px-6 pt-5 pb-0">
-        <SectionHeader>Political Standing</SectionHeader>
+        <SectionHeader>{t("title")}</SectionHeader>
       </div>
 
       {/* Stat rows */}
@@ -156,7 +158,8 @@ export function PoliticalStanding({
             <InfoTooltip
               trigger={
                 <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Actions{INFO_ICON}
+                  {t("actions")}
+                  {INFO_ICON}
                 </span>
               }
             >
@@ -164,15 +167,20 @@ export function PoliticalStanding({
                 <p>
                   {baseActionsPerTurn != null && officeActionBonus != null ? (
                     <>
-                      {baseActionsPerTurn} base
-                      {officeActionBonus > 0 && <> + {officeActionBonus} office</>}
-                      {(chairActionBonus ?? 0) > 0 && <> + {chairActionBonus} chair</>}
+                      {t("actionsBase", { count: baseActionsPerTurn })}
+                      {officeActionBonus > 0 && (
+                        <> + {t("actionsOffice", { count: officeActionBonus })}</>
+                      )}
+                      {(chairActionBonus ?? 0) > 0 && (
+                        <> + {t("actionsChair", { count: chairActionBonus ?? 0 })}</>
+                      )}
                       {(bonusActionsFromParty ?? 0) > 0 && (
-                        <> + {bonusActionsFromParty} party</>
-                      )} = <strong>{actionsPerTurn}</strong> actions/turn
+                        <> + {t("actionsParty", { count: bonusActionsFromParty ?? 0 })}</>
+                      )}{" "}
+                      = <strong>{actionsPerTurn}</strong> {t("actionsPerTurnUnit")}
                     </>
                   ) : (
-                    <>{totalActionsPerTurn} actions per turn (base + office bonuses).</>
+                    <>{t("actionsSimple", { count: totalActionsPerTurn })}</>
                   )}
                 </p>
                 {actionBreakdown && actionBreakdown.length > 0 && (
@@ -185,17 +193,21 @@ export function PoliticalStanding({
                     ))}
                   </div>
                 )}
-                <p>1 turn = 1 real hour. 48 turns = 1 game year. Cap: {actionCap}.</p>
+                <p>{t("turnExplainer", { cap: actionCap })}</p>
                 <p>
-                  Above {hoardThreshold} actions, a hoarding penalty of {ACTION_HOARDING_PENALTY}
-                  /turn applies.
+                  {t("hoardWarning", {
+                    threshold: hoardThreshold,
+                    penalty: ACTION_HOARDING_PENALTY,
+                  })}
                 </p>
               </div>
             </InfoTooltip>
             <div className="text-[10px] text-muted/70 font-medium mt-0.5">
-              +{actionsPerTurn}/turn
+              {t("perTurn", { count: actionsPerTurn })}
               {actionHoarding && (
-                <span className="text-error ml-1">-{ACTION_HOARDING_PENALTY} hoard</span>
+                <span className="text-error ml-1">
+                  {t("hoardTag", { penalty: ACTION_HOARDING_PENALTY })}
+                </span>
               )}
             </div>
           </div>
@@ -211,7 +223,7 @@ export function PoliticalStanding({
                   href="/actions"
                   className="text-primary/80 hover:text-primary hover:underline"
                 >
-                  Campaign Office →
+                  {t("campaignOffice")}
                 </Link>
               </div>
             )}
@@ -224,14 +236,12 @@ export function PoliticalStanding({
             <InfoTooltip
               trigger={
                 <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Influence{INFO_ICON}
+                  {t("influence")}
+                  {INFO_ICON}
                 </span>
               }
             >
-              <p className="text-muted">
-                Political foothold in home state. Spend actions to grow it; it decays each turn.
-                Higher influence improves odds in state elections and unlocks local power.
-              </p>
+              <p className="text-muted">{t("influenceTooltip")}</p>
             </InfoTooltip>
             <div className="text-[10px] text-muted/70 font-medium mt-0.5">{homeState?.name}</div>
           </div>
@@ -241,7 +251,7 @@ export function PoliticalStanding({
               {influence.toFixed(1)}%
             </span>
             <div className="text-[10px] text-error/80 font-medium mt-0.5">
-              Decay -{influenceDecay}%
+              {t("decay", { value: influenceDecay })}
             </div>
           </div>
         </div>
@@ -252,18 +262,15 @@ export function PoliticalStanding({
             <InfoTooltip
               trigger={
                 <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                  National{INFO_ICON}
+                  {t("national")}
+                  {INFO_ICON}
                 </span>
               }
             >
-              <p className="text-muted">
-                Standing on the national stage. Grows passively each turn based on state influence.
-                The bar shows rank relative to the top player in the country. Top three nationally
-                earn a subtle glow on this bar.
-              </p>
+              <p className="text-muted">{t("nationalTooltip")}</p>
             </InfoTooltip>
             <div className="text-[10px] text-muted/70 font-medium mt-0.5">
-              #1: {maxNPI.toFixed(1)}
+              {t("nationalTop", { value: maxNPI.toFixed(1) })}
             </div>
           </div>
           <div
@@ -287,7 +294,7 @@ export function PoliticalStanding({
               {nationalInfluence.toFixed(1)}
             </span>
             <div className="text-[10px] text-success/80 font-medium mt-0.5">
-              Gain +{nationalGainPerTurn}
+              {t("gain", { value: nationalGainPerTurn })}
             </div>
           </div>
         </div>
@@ -298,16 +305,16 @@ export function PoliticalStanding({
             <InfoTooltip
               trigger={
                 <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Favorability{INFO_ICON}
+                  {t("favorability")}
+                  {INFO_ICON}
                 </span>
               }
             >
-              <p className="text-muted">
-                Public approval rating. Stable at 60% or below unless attacks, infamy, or other
-                hostile effects push it down. Above 60%, it naturally cools back toward that floor.
-              </p>
+              <p className="text-muted">{t("favorabilityTooltip")}</p>
             </InfoTooltip>
-            <div className="text-[10px] text-muted/70 font-medium mt-0.5">Public approval</div>
+            <div className="text-[10px] text-muted/70 font-medium mt-0.5">
+              {t("publicApproval")}
+            </div>
           </div>
           <InlineBar pct={favorability} color={favColor} />
           <div className="text-right">
@@ -316,7 +323,7 @@ export function PoliticalStanding({
             </span>
             {favDecayDisplay && (
               <div className="text-[10px] text-error/80 font-medium mt-0.5">
-                Decay -{favDecayDisplay}%
+                {t("decay", { value: favDecayDisplay })}
               </div>
             )}
           </div>
@@ -328,16 +335,16 @@ export function PoliticalStanding({
             <InfoTooltip
               trigger={
                 <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Infamy{INFO_ICON}
+                  {t("infamy")}
+                  {INFO_ICON}
                 </span>
               }
             >
-              <p className="text-muted">
-                Negative reputation from hostile actions. Above 20%, it reduces your favorability
-                each turn. Keep it low to maintain voter appeal.
-              </p>
+              <p className="text-muted">{t("infamyTooltip")}</p>
             </InfoTooltip>
-            <div className="text-[10px] text-muted/70 font-medium mt-0.5">Public notoriety</div>
+            <div className="text-[10px] text-muted/70 font-medium mt-0.5">
+              {t("publicNotoriety")}
+            </div>
           </div>
           <InlineHeatBar pct={infamy} />
           <div className="text-right">
@@ -348,9 +355,11 @@ export function PoliticalStanding({
             </span>
             <div className="text-[10px] font-medium mt-0.5">
               {infamyPenalty ? (
-                <span className="text-error/80">-{infamyPenalty}% fav</span>
+                <span className="text-error/80">
+                  {t("infamyFavPenalty", { value: infamyPenalty })}
+                </span>
               ) : (
-                <span className="text-success/80">Safe</span>
+                <span className="text-success/80">{t("safe")}</span>
               )}
             </div>
           </div>
@@ -363,31 +372,32 @@ export function PoliticalStanding({
               <InfoTooltip
                 trigger={
                   <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                    Party Infl.{INFO_ICON}
+                    {t("partyInfluence")}
+                    {INFO_ICON}
                   </span>
                 }
               >
                 <div className="text-muted space-y-1">
-                  <p>
-                    Standing within the party. Accumulates each turn based on policy alignment,
-                    leadership roles, and infamy.
-                  </p>
+                  <p>{t("partyInfluenceTooltip")}</p>
                   {bonusActionsFromParty != null && (
                     <p>
-                      Currently earning <strong>+{bonusActionsFromParty}</strong> bonus action
-                      {bonusActionsFromParty !== 1 ? "s" : ""}/turn (max{" "}
-                      {partyInfluenceMaxBonus ?? 6}).
+                      {t("partyBonusEarning", {
+                        count: bonusActionsFromParty,
+                        max: partyInfluenceMaxBonus ?? 6,
+                      })}
                     </p>
                   )}
                   {partyInfluenceShare != null && (
-                    <p>{partyInfluenceShare}% of party&apos;s total influence pool.</p>
+                    <p>{t("partyShare", { share: partyInfluenceShare })}</p>
                   )}
                 </div>
               </InfoTooltip>
               <div className="text-[10px] text-muted/70 font-medium mt-0.5">
                 {partyInfluenceNetGain != null
-                  ? `${partyInfluenceNetGain >= 0 ? "+" : ""}${partyInfluenceNetGain.toFixed(1)}/turn`
-                  : "Within-party standing"}
+                  ? t("netPerTurn", {
+                      value: `${partyInfluenceNetGain >= 0 ? "+" : ""}${partyInfluenceNetGain.toFixed(1)}`,
+                    })
+                  : t("withinPartyStanding")}
               </div>
             </div>
             <InlineBar pct={character.partyInfluence ?? 0} color="var(--primary)" />
@@ -397,8 +407,8 @@ export function PoliticalStanding({
               </span>
               <div className="text-[10px] text-muted/70 font-medium mt-0.5">
                 {bonusActionsFromParty != null
-                  ? `+${bonusActionsFromParty} bonus act.`
-                  : "Bonus actions"}
+                  ? t("bonusActCount", { count: bonusActionsFromParty })
+                  : t("bonusActions")}
               </div>
             </div>
           </div>

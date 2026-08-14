@@ -5,7 +5,9 @@
  * - Regional political capital (politicalInfluence, donorBaseLevel, groupFavorability) always resets to 0.
  * - nationalInfluence, partyInfluence, and party only reset on country change.
  * - Active candidacies (general/primary, state-party, national-party, committee) are auto-withdrawn.
- * - currentOffice, CEO role, and central-bank chair (country change only) are auto-resigned.
+ * - State/region-bound currentOffice seats auto-resign; country-scoped offices (VP, President,
+ *   cabinet, …) only resign on country change. CEO role always resigns (unless NatCorp same-country
+ *   / relocate-with-corp). Central-bank chair resigns on country change only.
  * - A "relocated" entry is appended to careerHistory.
  *
  * Blocking conditions:
@@ -36,8 +38,9 @@ import {
   RELOCATION_COOLDOWN_TURNS,
   RELOCATION_COOLDOWN_DAYS,
 } from "@/lib/character/relocationCooldown";
+import { officeHasStateResidency } from "@/lib/character/officeResignsOnRelocation";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
-import { isUsPoliticalState } from "@/lib/elections/statehoodAdmission";
+import { isUsResidentPoliticalRegion } from "@/lib/elections/statehoodAdmission";
 import {
   loadUsPoliticalStateIds,
   unplayableTerritoryHomeError,
@@ -83,7 +86,7 @@ export async function POST(request: Request) {
 
     if (targetCountryId === "US") {
       const { admittedIds, preset } = await loadUsPoliticalStateIds(db);
-      if (!isUsPoliticalState(normalizedTarget, preset, admittedIds)) {
+      if (!isUsResidentPoliticalRegion(normalizedTarget, preset, admittedIds)) {
         return NextResponse.json(
           { error: unplayableTerritoryHomeError(targetState.name) },
           { status: 400 }
@@ -240,6 +243,9 @@ export async function GET() {
       cooldownDays: RELOCATION_COOLDOWN_DAYS,
       homeState: auth.character.homeState,
       hasOffice: !!auth.character.currentOffice,
+      // True when an in-country move would vacate the seat (governor/house/…).
+      // Country-scoped offices (VP/President/cabinet) only resign on country change.
+      officeRequiresStateResidency: officeHasStateResidency(auth.character.currentOffice),
       isCeo: !!ceoCorp,
       ceoCorpName: ceoCorp?.name ?? null,
       activeCandidacies: candidacies,

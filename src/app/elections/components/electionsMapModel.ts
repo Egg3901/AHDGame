@@ -137,13 +137,27 @@ export function isMapAvailable(
   return groups.some((g) => g.elections.length > 0 && regions.has(g.stateId));
 }
 
-function raceLabel(electionType: string): string {
-  if (electionType === "stateSenate") return "State Sen";
+/** Display strings the tooltip needs; the render site passes translations. */
+export interface MapTooltipLabels {
+  uncontested: string;
+  stateSenateShort: string;
+}
+
+const DEFAULT_TOOLTIP_LABELS: MapTooltipLabels = {
+  uncontested: "Uncontested",
+  stateSenateShort: "State Sen",
+};
+
+function raceLabel(electionType: string, labels: MapTooltipLabels): string {
+  if (electionType === "stateSenate") return labels.stateSenateShort;
   return electionType.charAt(0).toUpperCase() + electionType.slice(1);
 }
 
 /** Color/label/tooltip per region. Input is already race-filtered by the caller. */
-export function buildRegionMapData(groups: MapRegionGroup[]): Record<string, RegionMapData> {
+export function buildRegionMapData(
+  groups: MapRegionGroup[],
+  labels: MapTooltipLabels = DEFAULT_TOOLTIP_LABELS
+): Record<string, RegionMapData> {
   const result: Record<string, RegionMapData> = {};
 
   for (const { stateId, elections } of groups) {
@@ -155,10 +169,10 @@ export function buildRegionMapData(groups: MapRegionGroup[]): Record<string, Reg
       label: stateId,
       tooltip: elections.map((el) => {
         const p = el.polling;
-        const leader = p?.leaderName ?? "Uncontested";
+        const leader = p?.leaderName ?? labels.uncontested;
         const pct = p?.leaderId ? ` ${(p.sharesPct[p.leaderId] ?? 0).toFixed(1)}%` : "";
         const comp = isCompetitiveElection(el) ? " ⚡" : "";
-        return `${raceLabel(el.electionType)}: ${leader}${pct}${comp}`;
+        return `${raceLabel(el.electionType, labels)}: ${leader}${pct}${comp}`;
       }),
     };
   }

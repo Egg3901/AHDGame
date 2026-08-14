@@ -30,6 +30,7 @@ import { runCensus } from "@/lib/turn/census";
 import { runStatehoodAdmission } from "@/lib/turn/statehood";
 import { runEraCrossing, runMetricActivation } from "@/lib/turn/eraCrossing";
 import { runCabinetYearCrossing } from "@/lib/turn/cabinetYearCrossing";
+import { runMilitaryBranchYearCrossing } from "@/lib/turn/militaryBranchYearCrossing";
 import { computeNationalMetrics } from "@/lib/nationalMetrics";
 import { processFiscalBaseGrowth } from "@/lib/turn/fiscalBaseGrowth";
 import { processEconomicModelTurn } from "@/lib/turn/economicModelTurn";
@@ -319,6 +320,21 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       transferred: cabinetYearResult?.transferred.length ?? 0,
       posted: cabinetYearResult?.posted.length ?? 0,
       ...(cabinetYearResult?.healed ? { healed: true } : {}),
+    };
+
+    // Military branch year crossing: stand up a service whose founding year the
+    // world has now reached (the NVA in 1956, the Bundesheer in 1955). Without
+    // this the bootstrap seeder's one-shot skip is permanent and the country
+    // never gets an army at all. First run stands up active-but-empty branches
+    // silently; later runs post one item per service raised.
+    const militaryBranchResult = await runtime.runPhase("militaryBranchYearCrossing", () =>
+      runMilitaryBranchYearCrossing(db)
+    );
+    phaseResults.militaryBranchYearCrossing = {
+      ran: militaryBranchResult?.ran ?? false,
+      branchesRaised: militaryBranchResult?.raised.length ?? 0,
+      posted: militaryBranchResult?.posted.length ?? 0,
+      ...(militaryBranchResult?.healed ? { healed: true } : {}),
     };
 
     const metricsResult = await runtime.runPhase("nationalMetrics", () =>

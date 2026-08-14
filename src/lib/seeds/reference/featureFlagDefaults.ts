@@ -90,6 +90,7 @@ export const DEFAULT_GAME_STATE_FLAGS = {
   // International-organisation alignment. Staged rollout, fail-closed at
   // runtime; default on for fresh worlds so the full feature set ships.
   intOrgAlignmentEnabled: true,
+  nppCorpStrategyEnabled: true,
 } as const satisfies Partial<GameState>;
 
 export type DefaultGameStateFlagKey = keyof typeof DEFAULT_GAME_STATE_FLAGS;

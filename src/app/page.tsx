@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { getAuthUser } from "@/lib/auth";
-import { DEFAULT_SITE_DESCRIPTION, publicPageMetadata } from "@/lib/siteMetadata";
+import { publicPageMetadata } from "@/lib/siteMetadata";
 import { getCachedLandingData } from "@/lib/landing/cachedLandingData";
 import { buildGovernmentTypeMap } from "@/lib/landing/governmentTypeMap";
 import { fetchDiscordInviteStats } from "@/lib/discord/inviteStats";
@@ -12,11 +13,14 @@ import { SandboxHome } from "./_landing-v2/SandboxHome";
 // short in-process TTL cache (see getCachedLandingData) so anonymous stampedes
 // do not each pay 5+ fresh DB round-trips.
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = publicPageMetadata({
-  title: "A House Divided | Political & Economic Sim Game",
-  description: DEFAULT_SITE_DESCRIPTION,
-  pathname: "/",
-});
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("auth");
+  return publicPageMetadata({
+    title: t("landing.metaTitle"),
+    description: t("landing.metaDescription"),
+    pathname: "/",
+  });
+}
 
 export default async function LandingPage() {
   const user = await getAuthUser();

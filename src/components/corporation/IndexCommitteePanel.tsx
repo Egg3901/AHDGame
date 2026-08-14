@@ -54,31 +54,34 @@ export default function IndexCommitteePanel({ corpId }: { corpId: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const load = useCallback(async (signal?: AbortSignal) => {
-    try {
-      const [standingRes, inboxRes] = await Promise.all([
-        fetch(`/api/corporations/${corpId}/index-petition`, { signal }),
-        fetch(`/api/index-petitions`, { signal }),
-      ]);
-      if (standingRes.ok) {
-        const data: IssuerStanding = await standingRes.json();
-        setStanding(data);
-        if (!contribution) {
-          setContribution(String(Math.round(data.suggestedContributionAnchor)));
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const [standingRes, inboxRes] = await Promise.all([
+          fetch(`/api/corporations/${corpId}/index-petition`, { signal }),
+          fetch(`/api/index-petitions`, { signal }),
+        ]);
+        if (standingRes.ok) {
+          const data: IssuerStanding = await standingRes.json();
+          setStanding(data);
+          if (!contribution) {
+            setContribution(String(Math.round(data.suggestedContributionAnchor)));
+          }
         }
+        if (inboxRes.ok) {
+          const data = await inboxRes.json();
+          setInbox(data.petitions ?? []);
+          setSeatName(data.seat?.seatName ?? null);
+        }
+      } catch {
+        // the panel is supplementary; the rest of the tab still works
       }
-      if (inboxRes.ok) {
-        const data = await inboxRes.json();
-        setInbox(data.petitions ?? []);
-        setSeatName(data.seat?.seatName ?? null);
-      }
-    } catch {
-      // the panel is supplementary; the rest of the tab still works
-    }
-    // `contribution` is deliberately not a dependency: refilling it on every
-    // reload would overwrite what the player is in the middle of typing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [corpId]);
+      // `contribution` is deliberately not a dependency: refilling it on every
+      // reload would overwrite what the player is in the middle of typing.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [corpId]
+  );
 
   // Aborts on unmount: without it the response lands on a component nobody is
   // looking at, and in tests it rejects during happy-dom teardown.
@@ -130,8 +133,8 @@ export default function IndexCommitteePanel({ corpId }: { corpId: string }) {
       <div>
         <h3 className="font-semibold text-sm">Index committee</h3>
         <p className="text-xs text-muted-foreground">
-          A corporation that misses a listing standard can ask to be admitted to the indices
-          anyway. Solvency is never waivable.
+          A corporation that misses a listing standard can ask to be admitted to the indices anyway.
+          Solvency is never waivable.
         </p>
       </div>
 
@@ -172,10 +175,9 @@ export default function IndexCommitteePanel({ corpId }: { corpId: string }) {
                 Lobbying contribution
               </label>
               <p className="text-muted-foreground">
-                Paid from corporate cash on filing and never refunded. An unattended petition
-                needs at least{" "}
-                {formatAnchor(standing.suggestedContributionAnchor)} to carry, and a shortfall
-                too far below the bar is refused at any price.
+                Paid from corporate cash on filing and never refunded. An unattended petition needs
+                at least {formatAnchor(standing.suggestedContributionAnchor)} to carry, and a
+                shortfall too far below the bar is refused at any price.
               </p>
               <div className="flex gap-2">
                 <input

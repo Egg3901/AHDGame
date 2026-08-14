@@ -247,22 +247,10 @@ export const proposeBillSchema = z
   .object({
     title: moderatedBillTitle(),
     summary: moderatedBillText(z.string().min(1, "Summary required")),
-    chamber: z.enum([
-      "house",
-      "senate",
-      "joint",
-      "commons",
-      "lords",
-      "shugiin",
-      "sangiin",
-      "bundestag",
-      "bundesrat",
-      "dail",
-      "seanad",
-      "npc",
-      "cppcc",
-      "chamber",
-    ]),
+    // Country legislature chamber keys come from country config. Keep the
+    // shared body schema country-neutral; each route validates the key against
+    // its configured legislature after parsing.
+    chamber: z.string().min(1, "Chamber required"),
     category: z.enum(BILL_CATEGORIES),
     fullText: moderatedBillText(z.string()).optional(),
     provisions: z

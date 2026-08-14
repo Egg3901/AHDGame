@@ -115,8 +115,7 @@ export async function updatePrimeRate(params: {
       // An active intervention band counts as a commitment even when the
       // regime field was never set — the promise to defend a corridor is the
       // commitment, not the label on it.
-      const regime: FxRegime =
-        fxDoc.fxRegime ?? (fxDoc.interventionPolicy ? "band" : "float");
+      const regime: FxRegime = fxDoc.fxRegime ?? (fxDoc.interventionPolicy ? "band" : "float");
       const refusal = rateChangeRefusal(regime, fxDoc.capitalControls === true);
       if (refusal) {
         return { ok: false as const, status: 409, error: refusal };

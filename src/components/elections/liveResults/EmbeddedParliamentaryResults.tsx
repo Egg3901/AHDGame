@@ -7,6 +7,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { ParliamentaryResultsView } from "@/app/elections/[id]/results/components/ParliamentaryResultsView";
 import { useElectionNightLoad, useElectionNightPoll } from "@/hooks/useElectionNight";
 import { electionNightTitle } from "@/lib/elections/liveResults/electionNight";
@@ -22,8 +23,10 @@ export function EmbeddedParliamentaryResults({
   electionType?: string;
   title?: string;
 }) {
+  const t = useTranslations("elections");
   const { state, reload } = useElectionNightLoad(electionId);
-  const heading = title ?? (electionType ? electionNightTitle(electionType) : "Election Night");
+  const heading =
+    title ?? (electionType ? electionNightTitle(electionType) : t("embeddedResults.electionNight"));
 
   if (state.kind === "loading") {
     return <div className="mb-6 h-40 animate-pulse rounded-xl border border-card-border bg-card" />;
@@ -34,7 +37,7 @@ export function EmbeddedParliamentaryResults({
       <div className="mb-6 rounded-xl border border-card-border bg-card p-4 text-center text-sm text-muted">
         {state.message}{" "}
         <button type="button" className="underline" onClick={reload}>
-          Retry
+          {t("embeddedResults.retry")}
         </button>
       </div>
     );
@@ -58,6 +61,7 @@ function EmbeddedParliamentaryResultsReady({
   initialData: ElectionResultsResponse;
   title: string;
 }) {
+  const t = useTranslations("elections");
   const { data } = useElectionNightPoll(electionId, initialData);
 
   return (
@@ -68,7 +72,7 @@ function EmbeddedParliamentaryResultsReady({
           href={`/elections/${electionId}/results`}
           className="text-xs font-medium text-primary hover:underline"
         >
-          Full election night →
+          {t("embeddedResults.fullElectionNight")}
         </Link>
       </div>
       <ParliamentaryResultsView data={data} />

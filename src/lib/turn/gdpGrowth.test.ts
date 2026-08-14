@@ -3,6 +3,7 @@ import {
   computeConsumptionTaxAdjustedGrowthRate,
   computeRealizedRevenueGrowthRate,
   computeWeightedGrowthRate,
+  sumHostRealizedRevenue,
   sumRealizedRevenue,
   SECTOR_SIGNAL_MAX,
   SECTOR_SIGNAL_MIN,
@@ -188,5 +189,38 @@ describe("sumRealizedRevenue", () => {
 
   it("below plants is unaffected by a realized zero", () => {
     expect(sumRealizedRevenue([{ revenue: 1000, realizedRevenue: 0 }], false)).toBe(1000);
+  });
+});
+
+describe("sumHostRealizedRevenue (plants GDP signal, ticket #1084)", () => {
+  it("prefers host realized over host nameplate", () => {
+    expect(
+      sumHostRealizedRevenue([
+        { hostRevenue: 1000, hostRealizedRevenue: 600 },
+        { hostRevenue: 500, hostRealizedRevenue: 450 },
+      ])
+    ).toBe(1050);
+  });
+
+  it("falls back to host nameplate when realized is missing", () => {
+    expect(sumHostRealizedRevenue([{ hostRevenue: 1000 }, { hostRevenue: 500 }])).toBe(1500);
+  });
+
+  it("treats a realized zero as real", () => {
+    expect(sumHostRealizedRevenue([{ hostRevenue: 1000, hostRealizedRevenue: 0 }])).toBe(0);
+  });
+});
+
+describe("computeRealizedRevenueGrowthRate FX contamination (ticket #1084)", () => {
+  it("a ~0.2% FX-only ₳ restatement annualizes to a several-point GDP jig", () => {
+    const local = 1000;
+    const prevAnchor = local / 0.8;
+    const nowAnchor = local / 0.8016;
+    // (0.8/0.8016 − 1) × 100 × 48 ≈ −9.58pp of phantom growth (inside the ±10/15 clamp)
+    expect(computeRealizedRevenueGrowthRate(nowAnchor, prevAnchor, 1, 48)).toBeCloseTo(-9.58, 1);
+  });
+
+  it("the same local revenue compared host-to-host is zero growth", () => {
+    expect(computeRealizedRevenueGrowthRate(1000, 1000, 1, 48)).toBe(0);
   });
 });

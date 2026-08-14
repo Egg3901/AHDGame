@@ -89,6 +89,13 @@ describe("GET /api/elections/composition", () => {
     expect(body.lower.totalSeats).not.toBe(COUNTRY_CONFIGS.US.legislature.lowerChamber.seats);
   });
 
+  it("uses the 1953 Commons size when the world is 1953-default (ticket #1078)", async () => {
+    await setup();
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1953-default" });
+    const { body } = await call(`${BASE}?country=UK`);
+    expect(body.lower.totalSeats).toBe(625);
+  });
+
   it("omits an appointed upper chamber, which is never contested", async () => {
     await setup();
     // UK Lords and the DE Bundesrat are appointed, so there is no election to

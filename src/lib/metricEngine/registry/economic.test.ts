@@ -84,6 +84,29 @@ describe("sectorGrowthNode (the cyclical signal — old gdpGrowth logic)", () =>
     );
     expect(out.value).toBe(15);
   });
+
+  it("uses realizedRevenueNow for the plants delta (ticket #1084 host/host)", () => {
+    // Identical host revenue both turns → 0% even if ₳ restatement would jig.
+    const out = evalNode(
+      sectorGrowthNode,
+      ctx({
+        providers: {
+          sectorRevenueTax: payload({
+            plantsEnabled: true,
+            realizedRevenueNow: 1000,
+            realizedRevenuePrev: 1000,
+            turnsSincePrev: 1,
+            countryId: "UK",
+            federalSalesTax: 20,
+            stateSalesTax: 0,
+            unowned: [],
+          }),
+        },
+      }),
+      "s1"
+    );
+    expect(out.value).toBe(0);
+  });
 });
 
 describe("gdpGrowthNode (potential + output-gap integration, P1c-2)", () => {

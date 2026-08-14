@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { DROPDOWN_PANEL_CLASS } from "@/components/navbar/dropdownStyles";
 import { UK_NATIONS, UK_REGIONS } from "@/lib/constants/uk";
-import { regionUrl, regionPartyUrl, regionLegislatureUrl } from "@/lib/urls";
+import { regionUrl, regionPartyUrl, regionLegislatureUrl, regionElectionsUrl } from "@/lib/urls";
 
 interface StateDropdownProps {
   stateId: string;
@@ -165,6 +165,30 @@ export function StateDropdown({
                 />
               </svg>
               {t("state.economy")}
+            </Link>
+
+            {/* State Elections — the Politics > Elections sub-tab, where the
+                state's races live. Distinct from "My Election" below, which
+                jumps to the viewer's own race. */}
+            <Link
+              href={regionElectionsUrl(countryId, stateId)}
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-background/60"
+            >
+              <svg
+                className="h-4 w-4 text-muted"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              {t("state.elections")}
             </Link>
 
             {/* State Legislature */}

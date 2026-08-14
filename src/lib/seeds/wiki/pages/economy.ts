@@ -12,6 +12,8 @@ import { stockMarketContent } from "../content/stockMarket";
 import { commoditiesContent } from "../content/commodities";
 import { marketSystemGuideContent } from "../content/marketSystemGuide";
 import { plantsCorpGuideContent } from "../content/plantsCorpGuide";
+import { logisticsGuideContent } from "../content/logisticsGuide";
+import { privateBankingContent } from "../content/privateBanking";
 import { currencyExchangeContent } from "../content/currencyExchange";
 import { centralBanksContent } from "../content/centralBanks";
 import { plannedEconomiesContent } from "../content/plannedEconomies";
@@ -192,6 +194,32 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 12,
+  },
+  {
+    slug: "logistics-guide",
+    title: "Logistics: Freight, Sourcing, and Supply Chains",
+    description:
+      "A visual player guide to freight markets, the Logistics map, landed-price sourcing, domestic haul capacity, and where to build logistics sectors.",
+    content: logisticsGuideContent,
+    category: "economy",
+    extraTags: ["logistics", "freight", "sourcing", "supply-chain", "teu"],
+    featured: true,
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 8,
+  },
+  {
+    slug: "private-banking",
+    title: "Private Banking",
+    description:
+      "How finance corporations charter banks, allocate branch capacity, set rates, take deposits, lend, survive runs, meet capital rules, and use proprietary trading.",
+    content: privateBankingContent,
+    category: "economy",
+    extraTags: ["banking", "deposits", "loans", "insurance", "capital", "prop-trading"],
+    featured: true,
+    difficulty: "advanced",
+    contentType: "guide",
+    estimatedReadTime: 10,
   },
   {
     slug: "currency-exchange",

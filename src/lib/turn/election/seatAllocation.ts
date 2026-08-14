@@ -292,7 +292,13 @@ export function allocateSeats(
    * decided by votes. See `@/lib/turn/election/blocListAllocation`. Undefined
    * (every country but the DDR today) leaves the proportional path untouched.
    */
-  blocListShares?: Readonly<Record<string, number>>
+  blocListShares?: Readonly<Record<string, number>>,
+  /**
+   * Preset-aware Commons seat map. Defaults to the modern 650-seat
+   * `UK_COMMONS_SEATS`; pass `getUkCommonsSeats(preset)` so a 1953 world
+   * allocates the 625-seat redistribution (ticket #1058).
+   */
+  commonsSeats: Record<string, number> = UK_COMMONS_SEATS
 ): SeatAllocationResult {
   // "senate" is single-seat for the US (one seat per class per state, always
   // totalSeats=1). Nigeria's Senate is a multi-seat-per-zone body (18-21 seats),
@@ -305,12 +311,13 @@ export function allocateSeats(
   // Use authoritative seat count for House/Commons to prevent over-allocation.
   // `houseSeats` defaults to the 2020-census `HOUSE_SEATS`; pass
   // `getHouseSeats(preset)` to allocate with the active preset's apportionment
-  // (e.g. the 1990 census for a 1991 game).
+  // (e.g. the 1990 census for a 1991 game). Commons likewise: pass
+  // `getUkCommonsSeats(preset)` so 1953 worlds do not seat the modern 650 map.
   const authoritativeSeats =
     electionType === "house"
       ? (houseSeats[state!] ?? totalSeats)
-      : electionType === "commons"
-        ? (UK_COMMONS_SEATS[state!] ?? totalSeats)
+      : electionType === "commons" || electionType === "snap_commons"
+        ? (commonsSeats[state!] ?? totalSeats)
         : electionType === "regionalCouncil"
           ? (UK_REGIONAL_COUNCIL_SEATS[state!] ?? totalSeats)
           : totalSeats;

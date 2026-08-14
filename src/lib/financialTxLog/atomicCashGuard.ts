@@ -99,6 +99,15 @@ export async function refundCharacterCash(
  * corporation acts as buyer (corp buying bonds, corp buying shares of
  * another corp). `amount` is in the corp's `liquidCurrencyCode` — callers
  * must convert to that unit before calling this helper.
+ *
+ * This helper is the HOLDING COMPANY's cash and nothing else. A chartered bank's
+ * money lives in `bankCharter.cashReserves` and is moved by the helpers in
+ * `banking/bankCash.ts`. That separation is structural on purpose: an earlier
+ * attempt kept both in `liquidCapital` and bolted a reserve floor onto this
+ * filter, which meant every one of the thirty-odd callers here had to be right
+ * about a rule none of them knew existed, and it froze eight of twelve live
+ * banks out of ordinary corporate spending on the turn it shipped. Two fields
+ * make the raid unrepresentable instead of merely refused.
  */
 export async function atomicallyDebitCorpLiquidCapital(
   db: Db,

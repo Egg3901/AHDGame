@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
-import { getNationalBillDetail, listNationalLegislatureBills } from "./nationalBillQueries";
+import {
+  getNationalBillDetail,
+  listNationalLegislatureBills,
+  nationalBillListTallies,
+} from "./nationalBillQueries";
+import type { Bill } from "@/lib/db/types";
+import type { ScopedVoteOfficial } from "@/lib/congress/billVoting";
 
 describe("getNationalBillDetail — frozen snapshot for concluded bills (#0982)", () => {
   it("uses the origin voteSnapshot for a signed bill instead of re-scoping to the new chamber", async () => {
@@ -96,6 +102,109 @@ describe("listNationalLegislatureBills — chamber tabs", () => {
     expect(clause).toContainEqual({ currentChamber: "lords" });
     // ...without displacing the UK scope, which is itself an $or on the same object.
     expect(filter.$or).toBeDefined();
+  });
+});
+
+describe("nationalBillListTallies — ticket #1075", () => {
+  it("live-scopes an open House bill so The Count cannot exceed 435 after a seat transfer", () => {
+    const player = new ObjectId();
+    const nppOld = new ObjectId();
+    const nppDem = new ObjectId();
+    const nppFlp = new ObjectId();
+    const bill = {
+      _id: new ObjectId(),
+      countryId: "US",
+      title: "Federal Sales and Excise Tax Act",
+      status: "active",
+      originChamber: "house",
+      currentChamber: "house",
+      votesFor: 250,
+      votesAgainst: 215,
+      votesAbstain: 0,
+      votes: {
+        [`npp_${nppOld.toString()}`]: "for",
+        [player.toString()]: "for",
+        [`npp_${nppDem.toString()}`]: "for",
+        [`npp_${nppFlp.toString()}`]: "against",
+      },
+    } as unknown as Bill;
+    const officials: ScopedVoteOfficial[] = [
+      { characterId: player, countryId: "US", officeType: "house", seatsHeld: 30 },
+      { characterId: null, nppId: nppDem, countryId: "US", officeType: "house", seatsHeld: 190 },
+      { characterId: null, nppId: nppFlp, countryId: "US", officeType: "house", seatsHeld: 215 },
+    ];
+
+    const { origin } = nationalBillListTallies(bill, officials, "US", "house", "senate");
+
+    expect(origin).toEqual({ for: 220, against: 215, abstain: 0 });
+    expect(origin.for + origin.against + origin.abstain).toBe(435);
+  });
+});
+
+describe("listNationalLegislatureBills — ticket #1075 live-scoped The Count", () => {
+  it("returns scoped origin totals on the list card, not the inflated stored aggregate", async () => {
+    const player = new ObjectId();
+    const nppOld = new ObjectId();
+    const nppDem = new ObjectId();
+    const nppFlp = new ObjectId();
+    const billId = new ObjectId();
+    const bill = {
+      _id: billId,
+      countryId: "US",
+      title: "Federal Sales and Excise Tax Act",
+      summary: "A tax bill",
+      status: "active",
+      originChamber: "house",
+      currentChamber: "house",
+      sponsorId: new ObjectId(),
+      sponsorName: "Saucy Santana",
+      sponsorParty: "1",
+      category: "tax",
+      proposedAt: new Date("2026-08-12T00:00:00Z"),
+      votesFor: 250,
+      votesAgainst: 215,
+      votesAbstain: 0,
+      votes: {
+        [`npp_${nppOld.toString()}`]: "for",
+        [player.toString()]: "for",
+        [`npp_${nppDem.toString()}`]: "for",
+        [`npp_${nppFlp.toString()}`]: "against",
+      },
+    };
+
+    const db = createMockDb();
+    db.collection("bills");
+    db.collectionMocks["bills"]!.find.mockReturnValue({
+      toArray: async () => [bill],
+      project: () => ({
+        sort: () => ({ skip: () => ({ limit: () => ({ toArray: async () => [bill] }) }) }),
+      }),
+    });
+    db.collectionMocks["bills"]!.countDocuments.mockResolvedValue(1);
+    db.collection("politicalParties");
+    db.collectionMocks["politicalParties"]!.find.mockReturnValue({ toArray: async () => [] });
+    db.collection("legislationTypes");
+    db.collectionMocks["legislationTypes"]!.find.mockReturnValue({ toArray: async () => [] });
+    db.collection("electedOfficials");
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue({
+      toArray: async () => [
+        { characterId: player, countryId: "US", officeType: "house", seatsHeld: 30 },
+        { characterId: null, nppId: nppDem, countryId: "US", officeType: "house", seatsHeld: 190 },
+        { characterId: null, nppId: nppFlp, countryId: "US", officeType: "house", seatsHeld: 215 },
+      ],
+    });
+    db.collection("gameState");
+
+    const page = await listNationalLegislatureBills(db as unknown as Db, {
+      countryId: "US",
+      chamber: "house",
+      authUser: { isAdmin: true, userId: new ObjectId().toString() } as never,
+    });
+
+    expect(page.bills).toHaveLength(1);
+    expect(page.bills[0]!.votesFor).toBe(220);
+    expect(page.bills[0]!.votesAgainst).toBe(215);
+    expect(page.bills[0]!.votesFor + page.bills[0]!.votesAgainst).toBe(435);
   });
 });
 

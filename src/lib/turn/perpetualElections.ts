@@ -2,9 +2,7 @@ import { AsyncLocalStorage } from "async_hooks";
 import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getCountryAccessFromDb, withCountryAccessSnapshot } from "@/lib/countryAccess";
-import { NG_REGIONAL_COUNCIL_SEATS } from "@/lib/constants/states";
-import type { Election, ElectionStatus, GameState, State } from "@/lib/db/types";
-import { UK_COMMONS_SEATS } from "@/lib/turn/electionResolution";
+import type { Election, ElectionStatus, GameState, Seat, State } from "@/lib/db/types";
 import { US_STATE_FILTER } from "@/lib/utils/electionLabels";
 import { MS_PER_TURN, STARTING_YEAR } from "@/lib/constants/turnTime";
 import {
@@ -14,14 +12,17 @@ import {
   getCnPeoplesCongressSeats,
 } from "@/lib/constants";
 import {
+  NG_REGIONAL_COUNCIL_SEATS,
   JP_SHUGIIN_SEATS,
   JP_SANGIIN_SEATS,
   DE_WAHLKREIS_SEATS,
   getHouseSeats,
+  getUkCommonsSeats,
   isUsElectoralState,
 } from "@/lib/constants/states";
 import { loadApportionment } from "@/lib/elections/apportionment";
-import { admittedStateIdsAsOf } from "@/lib/elections/statehoodAdmission";
+import { admittedStateIdsAsOf, TERRITORY_ADMISSIONS } from "@/lib/elections/statehoodAdmission";
+import { buildUsTerritorialGovernorSeat } from "@/lib/admin/seed/seedSeats";
 import { type CountryId } from "@/lib/constants/countries";
 import { DEFAULT_DURATIONS } from "@/lib/constants/electionDurations";
 import { pickNextCanonicalCycle, turnToWallClock } from "@/lib/elections/canonicalCycle";
@@ -545,6 +546,38 @@ export async function ensurePerpetualElections(now: Date, currentTurn?: number):
     .filter(
       (id) => isUsElectoralState(id) && (presetHouseSeats[id] != null || admittedIds.has(id))
     );
+  const fullStateIds = new Set(stateIds);
+  // Alaska and Hawaii are playable territories before statehood. They retain
+  // the normal governor race machinery but no federal or state-legislative
+  // elections until admission moves them into `stateIds` above.
+  const territorialGovernorStateIds = states
+    .map((s) => s._id as string)
+    .filter(
+      (id) =>
+        !fullStateIds.has(id) && TERRITORY_ADMISSIONS.some((territory) => territory.stateId === id)
+    );
+
+  // Existing worlds predate territorial governor seat seeding. Upsert the
+  // deterministic rows here so deployment heals them on the next turn, while
+  // bootstrap/reset gets the same rows from `seedSeats`.
+  if (territorialGovernorStateIds.length > 0) {
+    const territorySeats = territorialGovernorStateIds.map((stateId) =>
+      buildUsTerritorialGovernorSeat(stateId, now)
+    );
+    await db.collection<Seat>("seats").bulkWrite(
+      territorySeats.map((seat) => {
+        const { _id, ...body } = seat;
+        return {
+          updateOne: {
+            filter: { _id },
+            update: { $setOnInsert: body },
+            upsert: true,
+          },
+        };
+      }),
+      { ordered: false }
+    );
+  }
 
   const liveElections = await db
     .collection<Election>("elections")
@@ -714,6 +747,23 @@ export async function ensurePerpetualElections(now: Date, currentTurn?: number):
     }
   }
 
+  // ── Territorial governors (AK/HI before admission) ───────────────────────
+  for (const stateId of territorialGovernorStateIds) {
+    if (liveGov.has(stateId)) continue;
+    const prev = lastCompleted((e) => e.electionType === "governor" && e.state === stateId);
+    const doc = buildCanonicalSpawn({
+      electionType: "governor",
+      countryId: "US",
+      state: stateId,
+      prev,
+      currentTurn: resolvedTurn,
+      now,
+      fallbackTotalSeats: 1,
+      ctx,
+    });
+    if (doc) toInsert.push(doc);
+  }
+
   // ── President (national, anchored to LARP presidential year) ───────────────
   // The canonical LARP window + 24h+24h gate ensures president only spawns in
   // valid windows — no separate year-guard needed.
@@ -845,6 +895,7 @@ function endTimeToLarpTurn(endTime: Date, nowRef: Date, currentTurn: number): nu
 export async function ensureUKElections(now: Date): Promise<void> {
   const db = await getDb();
   const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const commonsSeatsByRegion = getUkCommonsSeats(ctx.preset);
 
   const ukRegions = await db
     .collection<State>("states")
@@ -864,6 +915,30 @@ export async function ensureUKElections(now: Date): Promise<void> {
       status: { $in: ["active", "upcoming"] },
     })
     .toArray();
+
+  // Heal live races that still carry the modern 650-seat map under a 1953
+  // world (or any other era mismatch). Same pattern as NG houseDistricts
+  // force-heal — without this, projections keep reading the wrong totalSeats
+  // until the next cycle, even after allocateSeats is era-aware (#1058).
+  const seatHealOps = liveElections.flatMap((e) => {
+    const expected = e.state ? commonsSeatsByRegion[e.state] : undefined;
+    if (expected == null || e.totalSeats === expected) return [];
+    return [
+      {
+        updateOne: {
+          filter: { _id: e._id },
+          update: { $set: { totalSeats: expected, updatedAt: now } },
+        },
+      },
+    ];
+  });
+  if (seatHealOps.length > 0) {
+    await db.collection<Election>("elections").bulkWrite(seatHealOps);
+    console.log(
+      `[Turn] ensureUKElections: healed totalSeats on ${seatHealOps.length} live Commons race(s)`
+    );
+  }
+
   const liveCommons = new Set(liveElections.map((e) => e.state));
 
   const completedElections = await db
@@ -928,7 +1003,7 @@ export async function ensureUKElections(now: Date): Promise<void> {
       cycle: spawn.cycle,
       electionYear: electionToLarpYear("commons", spawn.cycle, undefined, undefined, ctx),
       status,
-      totalSeats: prev?.totalSeats ?? UK_COMMONS_SEATS[regionId] ?? 1,
+      totalSeats: commonsSeatsByRegion[regionId] ?? prev?.totalSeats ?? 1,
       startTime,
       primaryEndTime,
       endTime,

@@ -43,7 +43,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid review id" }, { status: 400 });
 
     const parsed = await parseJsonBody(request, decideSchema);
-    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success)
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
 
     const db = await getDb();
     const review = await db
@@ -65,10 +66,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const character = await db
       .collection<Character>("characters")
-      .findOne(
-        { userId: new ObjectId(auth.user.userId) },
-        { projection: { _id: 1 } }
-      );
+      .findOne({ userId: new ObjectId(auth.user.userId) }, { projection: { _id: 1 } });
     if (!character || !authority.holderCharacterId.equals(character._id))
       return NextResponse.json(
         { error: `Only the ${authority.seatName} can decide this referral.` },
@@ -83,8 +81,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       decidedByCharacterId: character._id,
       ...(parsed.data.note ? { decisionNote: parsed.data.note } : {}),
     });
-    if (!result.ok)
-      return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
 
     return NextResponse.json({
       success: true,

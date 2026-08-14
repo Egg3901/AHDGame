@@ -126,11 +126,36 @@ export interface SourcingCommoditySummary {
   capacityBoundUnits: number;
 }
 
+/** Delivered units and the extra-cost-over-local-price they carried, for a state/commodity. */
+export interface LandedPremiumAccumulator {
+  metUnits: number;
+  extraCost: number;
+}
+
+/** Per-buyer-country import totals (for tariff-revenue and import-value reporting). */
+export interface ImportAggregate {
+  tariffPaid: number;
+  importValue: number;
+}
+
 export interface SourcingResult {
   flows: SourcingFlow[];
   summaries: SourcingCommoditySummary[];
   /** TEU consumed per state per class — the load on each shipping network. */
   freightTeuByState: Map<string, Record<FreightClass, number>>;
+  /**
+   * Per destination state, per commodity: units actually delivered (local fill
+   * plus interstate plus import) and the extra cost over local ask those units
+   * carried (shipping plus tariff; zero for local fill). Money wiring (step 5)
+   * divides extraCost by metUnits to get the per-unit landed premium a buyer in
+   * that state pays for out-of-state sourcing.
+   */
+  landedPremiumByDestState: Map<string, Map<CommodityType, LandedPremiumAccumulator>>;
+  /**
+   * Per buyer country: total tariff paid and total import value (units × ask)
+   * across all import flows into that country this turn.
+   */
+  importAggregatesByCountry: Map<string, ImportAggregate>;
 }
 
 type Balance = { supply: number; demand: number };
@@ -157,6 +182,8 @@ export interface SourcingInputs {
   eraUnitScale?: number;
   /** Same-country hop distance; null = no route. */
   hops: (country: CountryId, from: string, to: string) => number | null;
+  /** Optional domestic route-cost modifier. Defaults to 1. */
+  shippingCostMultiplier?: (country: CountryId, from: string, to: string) => number;
   /** Importer-side tariff rate in percent for a foreign flow. */
   tariffRatePct: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => number;
   /** True when an embargo blocks the directed flow exporter→importer. */
@@ -178,6 +205,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     freightPrice,
     eraUnitScale = 1,
     hops,
+    shippingCostMultiplier,
     tariffRatePct,
     isBlocked,
   } = inputs;
@@ -200,6 +228,26 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
 
   const flows: SourcingFlow[] = [];
   const summaries: SourcingCommoditySummary[] = [];
+  const landedPremiumByDestState = new Map<string, Map<CommodityType, LandedPremiumAccumulator>>();
+  const importAggregatesByCountry = new Map<string, ImportAggregate>();
+
+  const addLandedPremium = (
+    destStateId: string,
+    commodity: CommodityType,
+    units: number,
+    extraCost: number
+  ) => {
+    if (units <= 0) return;
+    let byCommodity = landedPremiumByDestState.get(destStateId);
+    if (!byCommodity) {
+      byCommodity = new Map();
+      landedPremiumByDestState.set(destStateId, byCommodity);
+    }
+    const acc = byCommodity.get(commodity) ?? { metUnits: 0, extraCost: 0 };
+    acc.metUnits += units;
+    acc.extraCost += extraCost;
+    byCommodity.set(commodity, acc);
+  };
 
   for (const commodity of SHIPPED_COMMODITIES) {
     const freightClass = FREIGHT_CLASS_BY_COMMODITY[commodity]!;
@@ -223,6 +271,8 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       localFillByState.set(stateId, local);
       spareByState.set(stateId, Math.max(0, supply - demand));
       unmetByState.set(stateId, Math.max(0, demand - supply));
+      // Local fill is free: it contributes met units with zero extra cost.
+      addLandedPremium(stateId, commodity, local, 0);
     }
     // Foreign national spare (a country's own interstate flows already use the
     // state-level spare above; the national pool is only offered abroad).
@@ -272,7 +322,10 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
           hops(buyer.countryId, seller.stateId, buyer.stateId) ?? UNREACHABLE_HOP_EQUIV;
         if (hopCount <= 0) continue;
         const ask = statePrices[seller.stateId] ?? basePrice;
-        const shippingPerUnit = shippingPerUnitPerHop * hopCount;
+        const routeMultiplier = shippingCostMultiplier
+          ? Math.max(0, shippingCostMultiplier(buyer.countryId, seller.stateId, buyer.stateId))
+          : 1;
+        const shippingPerUnit = shippingPerUnitPerHop * hopCount * routeMultiplier;
         candidates.push({
           originType: "state",
           originId: seller.stateId,
@@ -355,6 +408,20 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         }
         unmet -= take;
 
+        // Delivered-units + extra-cost accumulation for money wiring, regardless
+        // of the itemization floor below (that floor only caps the doc's flow
+        // list; the aggregates must stay exact).
+        addLandedPremium(buyer.stateId, commodity, take, take * cand.shippingPerUnit + tariffPaid);
+        if (cand.originType === "country") {
+          const agg = importAggregatesByCountry.get(buyer.countryId) ?? {
+            tariffPaid: 0,
+            importValue: 0,
+          };
+          agg.tariffPaid += tariffPaid;
+          agg.importValue += take * cand.ask;
+          importAggregatesByCountry.set(buyer.countryId, agg);
+        }
+
         if (take >= FLOW_RECORD_FLOOR_UNITS) {
           flows.push({
             commodity,
@@ -387,5 +454,11 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     summaries.push(summary);
   }
 
-  return { flows, summaries, freightTeuByState: freightUsedByState };
+  return {
+    flows,
+    summaries,
+    freightTeuByState: freightUsedByState,
+    landedPremiumByDestState,
+    importAggregatesByCountry,
+  };
 }

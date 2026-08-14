@@ -53,16 +53,21 @@ export interface State {
    */
   outputGap?: number;
   /**
-   * P2/D7 (plants mode): Σ owned-sector realized revenue (₳, FX-normalized the
-   * same way the metric engine's sector provider normalizes it) as of
+   * P2/D7 (plants mode): Σ owned-sector realized revenue as of
    * `sectorRealizedRevenueTurn`. The engine's cyclical sector signal reads this
    * as the previous-turn baseline for the annualized realized-revenue delta that
    * replaces the (vestigial under plants) `currentGrowthRate` average. Persisted
    * next to `outputGap`/`capitalStock` — the same per-region prior-value pattern.
    * Absent ⇒ no baseline ⇒ the signal falls back to the legacy weighted average.
+   *
+   * Unit is `sectorRealizedRevenueUnit`. `"host"` = host-state currency (the
+   * unit sector fields are stored in). Missing unit = the legacy ₳-normalized
+   * snapshot; the engine uses that ₳ path for one more turn then rewrites as
+   * host so an FX move cannot annualize into phantom GDP growth (ticket #1084).
    */
   sectorRealizedRevenue?: number;
   sectorRealizedRevenueTurn?: number;
+  sectorRealizedRevenueUnit?: "host";
   /**
    * O1c (design §5, macroGrowthV1): the paid corporate growth cost (₳, per turn)
    * summed over this region's sectors, written by the corp turn. The metric

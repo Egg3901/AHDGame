@@ -38,9 +38,24 @@ export const FEATURE_GATE_BOOLEAN_KEYS = [
   "granularPollEnabled",
   "seasonRecapEnabled",
   "intOrgAlignmentEnabled",
+  "nppCorpStrategyEnabled",
 ] as const;
 
 type FeatureGateBooleanKey = (typeof FEATURE_GATE_BOOLEAN_KEYS)[number];
+
+/**
+ * Gates whose ABSENCE means enabled.
+ *
+ * Every other flag here reads `doc[key] === true`, so a field that was never
+ * written reads false. That is right for a staged rollout and wrong for a
+ * behaviour that already shipped on: adding such a flag to this endpoint would
+ * have reported it as OFF on every existing world while the engine ran it, and
+ * the first admin write would have been the first time the two agreed.
+ *
+ * For these keys, absent and `true` both read enabled; only an explicit `false`
+ * disables.
+ */
+export const FEATURE_GATE_DEFAULT_ON: ReadonlySet<string> = new Set(["nppCorpStrategyEnabled"]);
 
 const bodySchema = z.discriminatedUnion("kind", [
   z.object({
@@ -64,7 +79,10 @@ async function readState(): Promise<FeatureGatesState> {
   const doc = await db.collection<GameState>("gameState").findOne({ _id: "current" });
 
   const booleans = Object.fromEntries(
-    FEATURE_GATE_BOOLEAN_KEYS.map((k) => [k, (doc as Record<string, unknown> | null)?.[k] === true])
+    FEATURE_GATE_BOOLEAN_KEYS.map((k) => {
+      const raw = (doc as Record<string, unknown> | null)?.[k];
+      return [k, FEATURE_GATE_DEFAULT_ON.has(k) ? raw !== false : raw === true];
+    })
   ) as Record<FeatureGateBooleanKey, boolean>;
 
   // Level read mirrors getNppAutonomyLevel: explicit level wins, else legacy boolean.

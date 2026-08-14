@@ -189,6 +189,17 @@ export interface GameConfig {
    */
   marketSystemModeUpdatedTurn?: number;
   /**
+   * Geographic freight rollout. Shadow records routes for calibration; active
+   * also feeds delivered state inputs into next turn's plant throughput.
+   */
+  freightSettlementMode?: "shadow" | "active";
+  /** Username of the admin who last changed the freight-settlement rollout. */
+  freightSettlementModeUpdatedBy?: string;
+  /** When the freight-settlement rollout was last changed (ISO 8601). */
+  freightSettlementModeUpdatedAt?: string;
+  /** World turn at which the freight-settlement rollout was last changed. */
+  freightSettlementModeUpdatedTurn?: number;
+  /**
    * SIM-ONLY turn-phase profile (headless worldsim; never set in prod).
    * "elections-only" makes processTurn() skip the economy/finance/ledger
    * phases (see ELECTIONS_SKIP_PHASES in src/simulation/phases/simTurnProfiles.ts)
@@ -230,6 +241,15 @@ export interface GameConfig {
    * unset) → memoryless baseline, multipliers reset to 1.
    */
   commodityScarcityDriftEnabled?: boolean;
+  /**
+   * Money wiring (interstate-logistics plan step 5, phase A): when true, a
+   * sector's input bill adds the landed-price premium for out-of-state
+   * sourcing (last turn's sourcingNetworkLoad doc) on top of the global lagged
+   * price ratio, so plants in states that source interstate/import actually
+   * pay for it. Off (or unset) → inputsCost is unchanged, matching the
+   * record-only sourcing pass behavior from before this flag existed.
+   */
+  interstateMoneyWiringEnabled?: boolean;
   /**
    * Legacy-stockpile cover cap (week-1 clearing balance pass): when true,
    * shadow-inventory stock above STOCK_COVER_CAP_TURNS × current demand takes

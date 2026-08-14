@@ -647,6 +647,26 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     }
   }
 
+  // Every command-economy seeder above reads `commandEconomyEnabled` itself and
+  // falls back to the legacy single-corp shape via a silent `return` or an empty
+  // filter. Read back what they actually produced. A command country that came
+  // up with no enterprises or no producing sectors is an unplayable economy, and
+  // it must stop the bootstrap here rather than ship and be found by players 73
+  // turns later. See verifyCommandEconomySeed for the incident this encodes.
+  {
+    const { verifyCommandEconomySeed } = await import("@/lib/admin/seed/verifyCommandEconomySeed");
+    const report = await verifyCommandEconomySeed(db, preset);
+    for (const issue of report.issues) log(`[command-economy] ${issue}`);
+    if (report.fatal.length > 0) {
+      throw new Error(
+        `Command-economy seed failed for ${report.fatal.join(", ")}: ${report.issues.join(" | ")}`
+      );
+    }
+    if (report.checked && report.issues.length === 0) {
+      log(`[command-economy] ${report.countries.length} command country(s) verified`);
+    }
+  }
+
   // Political-legislation v2 (spec §7): the authored 1953 enacted baseline +
   // one budget sync. Runs after states AND budgets exist (it prices baseline
   // laws on the regional-rollup fiscal base). No-op on other presets.

@@ -43,6 +43,7 @@ import {
   isWhippableChamber,
 } from "@/lib/partyWhips/constraints";
 import { getPartyNppControlStatus } from "@/lib/parties/antiAbuseGuards";
+import { inferWhipIssuerRole } from "@/lib/partyWhips/issuerRole";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string; partyId: string }>;
@@ -214,6 +215,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       stateId,
       partyId: partyKey,
       issuedByCharacterId: characterId,
+      issuedByRole: inferWhipIssuerRole(isChair, isViceChair),
       audience: "npp",
       attemptNumber,
       createdAt: now,

@@ -2,9 +2,7 @@ import { EXTRACTABLE_RESOURCES, type ExtractableResource } from "@/lib/constants
 import type { SectorStrategy } from "@/lib/constants/sectorStrategies";
 
 export type StateExtractionResources =
-  | Partial<Record<ExtractableResource | string, number>>
-  | null
-  | undefined;
+  Partial<Record<ExtractableResource | string, number>> | null | undefined;
 
 export function getExtractionStrategyResources(
   strategy: Pick<SectorStrategy, "supply">

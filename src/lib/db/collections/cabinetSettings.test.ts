@@ -12,12 +12,20 @@ describe("resetCabinetSettingCooldowns", () => {
     db.collection("cabinetSettings");
   });
 
-  it("unsets both per-holder cooldown timestamps for the position", async () => {
+  it("unsets every per-holder cooldown timestamp for the position", async () => {
     await resetCabinetSettingCooldowns(db as unknown as Db, "US", "secretary_of_treasury");
 
     expect(db.collectionMocks.cabinetSettings.updateOne).toHaveBeenCalledWith(
       { _id: "US_secretary_of_treasury" },
-      { $unset: { lastChangedTurn: "", lastAllocationChangedTurn: "" } }
+      {
+        $unset: {
+          lastChangedTurn: "",
+          lastAllocationChangedTurn: "",
+          lastRegionChangedTurn: "",
+          lastTargetCountryChangedTurn: "",
+          lastAidPriorityChangedTurn: "",
+        },
+      }
     );
   });
 

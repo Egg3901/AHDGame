@@ -32,7 +32,10 @@ import { BreakdownRow } from "./statusbar/BreakdownRow";
 import { CorpCashStatusChip } from "./statusbar/CorpCashStatusChip";
 import { StatusChip } from "./statusbar/StatusChip";
 import { OnlineStatusDot } from "./statusbar/OnlineStatusDot";
-import { statusBarRowClassName } from "./statusbar/statusBarLayoutClasses";
+import {
+  STATUS_BAR_CONTAINER_CLASS,
+  statusBarRowClassName,
+} from "./statusbar/statusBarLayoutClasses";
 import { useStatusBarLayout, type StatusBarLayout } from "./statusbar/useStatusBarLayout";
 
 export type { StatusBarLayout };
@@ -315,7 +318,7 @@ export function StatusBar() {
   return (
     <div
       data-statusbar
-      className={`fixed bottom-0 left-0 right-0 z-50 border-t border-card-border/80 bg-card/85 backdrop-blur-xl pb-[env(safe-area-inset-bottom)] transition-opacity duration-150 ${stats ? "opacity-100" : "pointer-events-none opacity-0"}`}
+      className={`${STATUS_BAR_CONTAINER_CLASS} ${stats ? "opacity-100" : "pointer-events-none opacity-0"}`}
       role="complementary"
       aria-label="Character stats and turn timer"
     >

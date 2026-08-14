@@ -121,11 +121,26 @@ export interface CorporationLookups {
   // Commodity supply/demand data for margin calculation
   globalCommodityBalances: Map<CommodityType, { supply: number; demand: number }>;
   /**
+   * Lagged state delivery availability from active freight settlement.  Only
+   * physical commodities with a resolved route are present; all others retain
+   * the global throughput fallback.
+   */
+  stateInputAvailabilityByState: Map<string, Map<CommodityType, number>>;
+  /**
    * Lagged global price / base price per commodity (prior turn's computed
    * price). Read by the price-realization multiplier when
    * marketSystemMode >= "realization"; always built (cheap), inert otherwise.
    */
   priceRatioByCommodity: Map<CommodityType, number>;
+  /**
+   * Money wiring (interstate-logistics plan step 5, phase A): per state, per
+   * commodity, last turn's landed-price premium per unit (₳) for out-of-state
+   * sourcing, read from the prior sourcingNetworkLoad doc. Empty when
+   * `interstateMoneyWiringEnabled` is off or no doc exists yet - computeInputsCost
+   * treats an absent/empty lookup as "no premium", matching pre-money-wiring
+   * behavior exactly.
+   */
+  landedPremiumByState?: Map<string, Map<CommodityType, number>>;
   nationalCommodityBalancesByCountry: Map<
     string,
     Map<CommodityType, { supply: number; demand: number }>

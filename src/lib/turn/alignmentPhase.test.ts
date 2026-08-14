@@ -7,6 +7,9 @@ vi.mock("@/lib/countryAccess", () => ({ getAllCountryAccess: vi.fn().mockResolve
 vi.mock("@/lib/internationalOrganizations/withdrawalBills", () => ({
   removeOrganizationMembership: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/internationalOrganizations/organizationFund", () => ({
+  creditOrganizationFund: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/internationalOrganizations/service", () => ({
   loadOrganizationDef: vi.fn().mockResolvedValue({ id: "NATO", name: "NATO" }),
   hasOpenMembershipProposal: vi.fn().mockResolvedValue(false),
@@ -23,6 +26,8 @@ const { getAllCountryAccess } = await import("@/lib/countryAccess");
 const { removeOrganizationMembership } =
   await import("@/lib/internationalOrganizations/withdrawalBills");
 const { hasOpenMembershipProposal } = await import("@/lib/internationalOrganizations/service");
+const { creditOrganizationFund } =
+  await import("@/lib/internationalOrganizations/organizationFund");
 const { isOrganizationFoundedLive } = await import("@/lib/internationalOrganizations/founding");
 
 describe("processAlignmentTurn", () => {
@@ -120,9 +125,9 @@ describe("processAlignmentTurn", () => {
     vi.mocked(isOrganizationFoundedLive).mockResolvedValue(true);
     // Influence is priced against the target's live economy. YU is macro-tier,
     // so its GDP comes from sector capacity: 625 a turn × 48 = 30,000 USD
-    // millions, a $30bn economy. That makes the fixture's $900m play worth
-    // exactly 3 points (1% of $30bn buys one), which is the size these cases
-    // were written around.
+    // millions, a $30bn economy. At a tenth of a percent a point costs $30m
+    // here, so the fixture's $900m play saturates the per-nation cap — cases
+    // that need to observe a sub-cap effect override the amount.
     targetEconomy(625);
   });
 
@@ -136,6 +141,7 @@ describe("processAlignmentTurn", () => {
       spheresSynced: 0,
       rowsHealed: 0,
       playsResolved: 0,
+      playsRefunded: 0,
       blocStress: {},
       defections: 0,
       defectionWarnings: 0,
@@ -295,6 +301,7 @@ describe("processAlignmentTurn", () => {
       spheresSynced: 0,
       rowsHealed: 0,
       playsResolved: 0,
+      playsRefunded: 0,
       // 1953 channels are NATO and the Warsaw Pact; both settled here.
       blocStress: { NATO: 0, WARSAW_PACT: 0 },
       defections: 0,
@@ -490,8 +497,10 @@ describe("processAlignmentTurn", () => {
     };
     const { processAlignmentTurn } = await import("./alignmentPhase");
 
+    // Sub-cap on purpose: proportionality is only observable below the
+    // per-nation ceiling, and $30bn at a tenth of a percent is $30m a point.
     alignments([shares]);
-    plays([play()]);
+    plays([play({ amountUsd: 90_000_000, amountLocal: 90_000_000 })]);
     targetEconomy(625); // $30bn
     await processAlignmentTurn(db as unknown as Db, 4);
     const smallEconomyGain = written().shares.WEST! - 22;
@@ -505,7 +514,7 @@ describe("processAlignmentTurn", () => {
     vi.mocked(hasOpenMembershipProposal).mockResolvedValue(false);
     vi.mocked(isOrganizationFoundedLive).mockResolvedValue(true);
     alignments([shares]);
-    plays([play()]);
+    plays([play({ amountUsd: 90_000_000, amountLocal: 90_000_000 })]);
     targetEconomy(6_250); // $300bn
     await processAlignmentTurn(db as unknown as Db, 4);
     const largeEconomyGain = written().shares.WEST! - 22;
@@ -542,6 +551,84 @@ describe("processAlignmentTurn", () => {
     expect(written().shares.WEST).toBe(22);
   });
 
+  it("refunds a play that resolves at zero, and marks the row", async () => {
+    // The fund is debited a turn before the play resolves, and the command
+    // already refuses a locked target up front — so a zero here means the board
+    // moved inside that window, not that the sponsor gambled. Keeping the money
+    // would charge full price for a push the engine declined to apply.
+    alignments([
+      {
+        entityId: "YU",
+        eraKey: "cold-war",
+        // Lead 88: locked. computeDrift no-ops it, so the play buys nothing.
+        shares: { WEST: 2, EAST: 90 },
+        nonAligned: 8,
+        previous: null,
+        turn: 3,
+      },
+    ]);
+    plays([play({ amountLocal: 250_000_000 })]);
+    const { processAlignmentTurn } = await import("./alignmentPhase");
+    const r = await processAlignmentTurn(db as unknown as Db, 4);
+
+    expect(r.playsResolved).toBe(1);
+    expect(r.playsRefunded).toBe(1);
+    expect(creditOrganizationFund).toHaveBeenCalledWith(expect.anything(), "NATO", 250_000_000);
+
+    const stamped = db.collection("alignmentPlays").updateOne.mock.calls[0]![1] as {
+      $set: { appliedPoints: number; refunded: boolean };
+    };
+    expect(stamped.$set).toMatchObject({ appliedPoints: 0, refunded: true });
+  });
+
+  it("never refunds an aid row, whose money already left for the recipient", async () => {
+    // An aid package disburses to the recipient's treasury and only RECORDS its
+    // political half here — no org fund was debited to create the row. Refunding
+    // one would mint the amount: the recipient keeps the aid and the bloc is
+    // handed the same sum back.
+    alignments([
+      {
+        entityId: "YU",
+        eraKey: "cold-war",
+        shares: { WEST: 2, EAST: 90 }, // locked, so it resolves at zero
+        nonAligned: 8,
+        previous: null,
+        turn: 3,
+      },
+    ]);
+    plays([play({ amountLocal: 250_000_000, source: "aid" })]);
+    const { processAlignmentTurn } = await import("./alignmentPhase");
+    const r = await processAlignmentTurn(db as unknown as Db, 4);
+
+    expect(r.playsResolved).toBe(1);
+    expect(r.playsRefunded).toBe(0);
+    expect(creditOrganizationFund).not.toHaveBeenCalled();
+
+    const stamped = db.collection("alignmentPlays").updateOne.mock.calls[0]![1] as {
+      $set: { refunded: boolean };
+    };
+    expect(stamped.$set.refunded).toBe(false);
+  });
+
+  it("does not refund a play that moved the nation", async () => {
+    alignments([
+      {
+        entityId: "YU",
+        eraKey: "cold-war",
+        shares: { WEST: 22, EAST: 50 },
+        nonAligned: 28,
+        previous: null,
+        turn: 3,
+      },
+    ]);
+    plays([play({ amountUsd: 60_000_000, amountLocal: 60_000_000 })]);
+    const { processAlignmentTurn } = await import("./alignmentPhase");
+    const r = await processAlignmentTurn(db as unknown as Db, 4);
+
+    expect(r.playsRefunded).toBe(0);
+    expect(creditOrganizationFund).not.toHaveBeenCalled();
+  });
+
   // Bloc stress reaching the resolution, not just the helper. A correct
   // `computeBlocStress` that the phase never consulted would leave an
   // overextended alliance pushing exactly as hard as a settled one.
@@ -570,7 +657,10 @@ describe("processAlignmentTurn", () => {
     async function runWithNatoMembers(rows: object[]) {
       alignments(yu());
       memberships(rows);
-      plays([play()]);
+      // Deliberately sub-cap. Stress scales the pull, so a spend that saturates
+      // the per-nation ceiling lands on the cap either way and the dampening
+      // becomes invisible — both arms would read the same number.
+      plays([play({ amountUsd: 60_000_000, amountLocal: 60_000_000 })]);
       const { processAlignmentTurn } = await import("./alignmentPhase");
       const r = await processAlignmentTurn(db as unknown as Db, 4);
       return { result: r, shares: written().shares };

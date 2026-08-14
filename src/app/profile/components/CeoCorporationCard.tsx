@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { CorporationLogo } from "@/components/corporation/CorporationLogo";
 
 export interface CeoCorporationCardProps {
@@ -16,12 +17,13 @@ export function CeoCorporationCard({
   brandColor,
   isNationalEnterprise,
 }: CeoCorporationCardProps) {
+  const t = useTranslations("profile.ceo");
   const href = `/corporation/${corporationRouteId}`;
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
       <h2 className="text-[11px] font-semibold uppercase tracking-widest text-muted mb-3">
-        Chief Executive
+        {t("title")}
       </h2>
       <div className="flex gap-3">
         <div
@@ -33,13 +35,13 @@ export function CeoCorporationCard({
         <div className="min-w-0 flex-1">
           <p className="font-medium text-foreground leading-snug break-words">{corporationName}</p>
           {isNationalEnterprise && (
-            <p className="mt-0.5 text-body-xs text-muted">National enterprise</p>
+            <p className="mt-0.5 text-body-xs text-muted">{t("nationalEnterprise")}</p>
           )}
           <Link
             href={href}
             className="mt-2 inline-block text-body-sm font-medium text-primary hover:underline"
           >
-            View corporation
+            {t("viewCorporation")}
           </Link>
         </div>
       </div>

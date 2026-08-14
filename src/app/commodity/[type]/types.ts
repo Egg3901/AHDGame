@@ -62,6 +62,24 @@ export interface CommodityDetail {
   nationalDemand?: Record<string, number>;
   /** Authoritative per-country market prices from the turn engine. */
   nationalPrices?: Record<string, number>;
+  /**
+   * Per-country reachable market book for this commodity (ticket #1077): own
+   * production against the demand that country's sellers can actually serve.
+   * Absent until a world has run a turn on 1.1.2 or later, which hides the
+   * map's Reachable lens rather than painting every market empty.
+   */
+  reachableBooks?: Record<
+    string,
+    {
+      supply: number;
+      demand: number;
+      domesticDemand: number;
+      imports: number;
+      exports: number;
+      blockedSupply: number;
+      untradedSupply: number;
+    }
+  >;
   /** Maps stateId → countryId for multi-country commodity views */
   stateCountryMap?: Record<string, string>;
   /** Per-state extraction ceiling (units/turn). Only populated for extractable resources. */

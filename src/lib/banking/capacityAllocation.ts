@@ -7,6 +7,7 @@ import { impliedOutputUnits } from "@/lib/market/capital";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { getStrategy } from "@/lib/constants/sectorStrategies";
+import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
 
 /**
  * Default share of financial-sector capacity allocated to the branch network
@@ -22,7 +23,9 @@ export const DEFAULT_BRANCH_CAPACITY_SHARE = 0.5;
  *   k = supply_rate / basePrice = 0.5 / 2000 = 0.00025 units per ₳ of daily revenue
  *   A typical single financial sector at DEFAULT_SECTOR_STARTING_REVENUE (1M ₳/day)
  *     => capacity units = 1_000_000 × 0.00025 = 250
- *   Charter capital = 10 × CORPORATION_FOUNDING_COST = 10M
+ *   Charter capital = CHARTER_CAPITAL_FOUNDING_MULTIPLE × CORPORATION_FOUNDING_COST
+ *     (modern reference; era- and FX-scaled at call time, so the 1953 US figure
+ *     is ~71,700 rather than the raw modern number)
  *   Target deposits at 50% branch share ~ 10-20× charter = 100M-200M
  *     => DEPOSIT_CEILING_PER_CAPACITY_UNIT = target / (units × 0.5)
  *       in [800_000, 1_600_000]; midpoint 1_200_000 gives
@@ -37,8 +40,7 @@ export const MIN_BRANCH_CAPACITY_SHARE = 0.1;
 export const MAX_BRANCH_CAPACITY_SHARE = 0.9;
 
 export type SetBranchCapacityShareResult =
-  | { ok: true; branchCapacityShare: number }
-  | { ok: false; error: string };
+  { ok: true; branchCapacityShare: number } | { ok: false; error: string };
 
 /**
  * Resolved branch-capacity share on a charter. Unset / non-finite -> default 0.5.
@@ -99,7 +101,7 @@ export function financialSectorCapacityUnits(
  */
 export async function getBankDepositCeiling(db: Db, corp: Corporation): Promise<number> {
   const charter = corp.bankCharter;
-  if (!charter || charter.status !== "active") return 0;
+  if (!isDepositTakingCharter(charter)) return 0;
 
   const [sectors, eraUnitScale] = await Promise.all([
     db
@@ -129,6 +131,13 @@ export function commodityProductionCapacityScale(
   privateBankingEnabled: boolean
 ): number {
   if (!privateBankingEnabled || charter?.status !== "active") return 1;
+  // Only a DEPOSIT-TAKING charter runs a branch network, so only it pays for
+  // one. This used to apply to every active charter with no type check, which
+  // meant an investment bank surrendered up to half its financial sector's
+  // commodity output to branches that are legally barred from taking a deposit.
+  // It was a pure loss with no corresponding business, and the single cheapest
+  // thing making the charter unviable.
+  if (!isDepositTakingCharter(charter)) return 1;
   return Math.max(0, 1 - getBranchCapacityShare(charter));
 }
 

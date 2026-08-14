@@ -15,7 +15,8 @@ Every relocation, even within the same country:
 - **Group Favorability** (any state-specific demographic favorability tracks) → cleared.
 - **State / regional party leadership** in the region you left (chair, vice chair, treasurer) → vacated; party replaces you via the next election.
 - **Any active candidacy** (general election, primary, state-party leadership, national-party leadership, committee) → withdrawn.
-- **Current office** → auto-resigned. The seat is vacated in \`electedOfficials\` and the perpetual-election system will spawn a replacement race.
+- **State / regional offices** (governor, house, senate, state legislature, …) → auto-resigned. The seat is vacated in \`electedOfficials\` and the perpetual-election system will spawn a replacement race.
+- **National / country-scoped offices** (President, Vice President, cabinet, chancellor, …) → **kept** on an in-country move. They only auto-resign when you change country (same rule as Central Bank Chair).
 - **CEO of a corporation** → removed unless you use the combined relocate-with-corp flow (see below).
 - **Career history** → a \`"relocated"\` entry is appended with \`fromState\` / \`toState\` (and \`fromCountry\` / \`toCountry\` if the country changed).
 
@@ -30,6 +31,7 @@ Changing country is more expensive than changing state:
 - **National committee memberships** → cleared.
 - **Coalition chair** (if your party led one) → cleared.
 - **Central Bank Chair** → auto-resigned.
+- **National / country-scoped elected offices** (President, VP, cabinet, …) → auto-resigned.
 
 After a cross-country move you're effectively starting your political career over. You keep your money, your corporate holdings, and your personal history, but your political network is gone.
 
@@ -101,7 +103,8 @@ Cross-country moves are **heavy**. Plan for weeks of rebuild. Verify your target
 ### Timing around elections
 
 - **Don't relocate during a candidacy**: your candidacy is withdrawn, handing the race to opponents.
-- **Don't relocate during a term of office**: you auto-resign; the seat is lost.
+- **Don't relocate during a state/region term of office**: those seats auto-resign.
+- **National offices (President, VP, cabinet)** survive an in-country move; they are only vacated when you change country.
 - **Do relocate between cycles**, early in a build phase, so you have weeks to rebuild PI before the next primary.
 
 ## Admin and moderator overrides

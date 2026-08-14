@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 
 /**
@@ -10,6 +11,7 @@ import { useAuthMe } from "@/contexts/AuthDataContext";
  * `StatAllocationGate` modal so they can pick up where they left off.
  */
 export function StatAllocationBanner() {
+  const t = useTranslations("profile.statAllocation");
   const { refetch } = useAuthMe();
   const [returning, setReturning] = useState(false);
   const [opened, setOpened] = useState(false);
@@ -39,13 +41,11 @@ export function StatAllocationBanner() {
       className="w-full rounded-xl border border-primary/30 bg-card px-4 py-3 shadow-card flex items-center justify-between gap-4 text-left transition-colors hover:border-primary/60 disabled:opacity-60"
     >
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-foreground">Allocate your stats</span>
-        <span className="mt-0.5 block text-xs text-muted">
-          You set this aside earlier. Return to lock in your one-time build →
-        </span>
+        <span className="block text-sm font-semibold text-foreground">{t("title")}</span>
+        <span className="mt-0.5 block text-xs text-muted">{t("body")}</span>
       </span>
       <span className="shrink-0 text-xs font-medium text-primary">
-        {returning ? "Opening…" : "Return to stats"}
+        {returning ? t("opening") : t("returnToStats")}
       </span>
     </button>
   );

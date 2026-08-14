@@ -91,6 +91,24 @@ export interface CommodityData {
   nationalSupply?: Record<string, number>;
   nationalDemand?: Record<string, number>;
   nationalPrices?: Record<string, number>;
+  /**
+   * Per-country reachable market book (scope=full only) — drives the Reachable
+   * lens, which is the one a build decision should use. `demand` is what this
+   * country's sellers can actually reach; `blockedSupply`/`untradedSupply` are
+   * disclosure only and must never enter a ratio (ticket #1077).
+   */
+  reachableBooks?: Record<
+    string,
+    {
+      supply: number;
+      demand: number;
+      domesticDemand: number;
+      imports: number;
+      exports: number;
+      blockedSupply: number;
+      untradedSupply: number;
+    }
+  >;
   turn: number;
 }
 

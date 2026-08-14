@@ -2,6 +2,10 @@ export const privateBankingContent = `# Private Banking
 
 Finance corporations can charter a private bank when the world flag is on. A bank takes deposits, lends against a reserve requirement, posts rates inside a corridor set by the central bank, and can fail. This guide covers charters, rates, deposits, loans, runs, insurance, and proprietary trading.
 
+Open **World > Banking** to choose a currency and compare chartered banks. Bank owners manage the charter from their corporation page. The country's central-bank page is the public source for prime rate, reserve policy, insurance, and the rate corridor that private banks must obey.
+
+![The Federal Reserve page showing the prime rate, rate corridor, credit spreads, reserves, and insurance navigation](/static/wiki/player-guides/central-bank.png)
+
 ## Charters and the separation law
 
 A corporation that owns at least one financial sector may issue exactly one bank charter. Chartering posts minimum capital from the corporation treasury (scaled by era and currency) and is automatic once the objective gates pass: financial sector ownership, legal charter type, matching treasury currency, and enough cash.
@@ -128,4 +132,5 @@ Drawing creates money at the central bank; repaying destroys it. Both legs are l
 - [Stock Market](/wiki/stock-market): equities the prop book can hold.
 - [Index Funds](/wiki/index-funds): fund units and blacklist constituents.
 - [Corporations](/wiki/corporations): founding and running financial sectors.
+- [Running a Corporation under the Plants System](/wiki/plants-corp-guide): capacity, cash flow, and debt discipline.
 `;

@@ -5,59 +5,27 @@ import Image from "next/image";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import RecordFingerprintOnMount from "@/components/auth/RecordFingerprintOnMount";
 
-const MESSAGES: Record<string, { title: string; message: string; ok: boolean }> = {
-  success: {
-    title: "Google linked!",
-    message: "Your Google account has been linked successfully.",
-    ok: true,
-  },
-  login_success: {
-    title: "Signed in with Google!",
-    message: "You're now signed in. Redirecting you...",
-    ok: true,
-  },
-  error: {
-    title: "Something went wrong",
-    message: "Google linking failed. Please try again.",
-    ok: false,
-  },
-  exchange_failed: {
-    title: "Connection failed",
-    message: "Google authentication failed. Please try again.",
-    ok: false,
-  },
-  missing_params: {
-    title: "Session expired",
-    message: "Your session expired. Please try again.",
-    ok: false,
-  },
-  access_denied: {
-    title: "Authorization denied",
-    message: "You cancelled the Google authorization.",
-    ok: false,
-  },
-  already_linked: {
-    title: "Already linked",
-    message: "This Google account is already linked to another user.",
-    ok: false,
-  },
-  invalid_state: {
-    title: "Session expired",
-    message: "Your session expired. Please try again.",
-    ok: false,
-  },
-  not_configured: {
-    title: "Not configured",
-    message: "Google sign-in is not configured on this server.",
-    ok: false,
-  },
+/** Maps the API's status/reason code to a key under auth.oauthResult. */
+const RESULT_KEYS: Record<string, { key: string; ok: boolean }> = {
+  success: { key: "success", ok: true },
+  login_success: { key: "loginSuccess", ok: true },
+  error: { key: "error", ok: false },
+  exchange_failed: { key: "exchangeFailed", ok: false },
+  missing_params: { key: "sessionExpired", ok: false },
+  access_denied: { key: "accessDenied", ok: false },
+  already_linked: { key: "alreadyLinked", ok: false },
+  invalid_state: { key: "sessionExpired", ok: false },
+  not_configured: { key: "notConfigured", ok: false },
 };
 
 const DEFAULT_NEXT = "/settings";
+const PROVIDER = "Google";
 
 export default function GoogleAuthResultPage() {
+  const t = useTranslations("auth.oauthResult");
   const searchParams = useSearchParams();
   const router = useRouter();
   const [countdown, setCountdown] = useState(3);
@@ -66,7 +34,12 @@ export default function GoogleAuthResultPage() {
   const reason = searchParams.get("reason");
   const next = searchParams.get("next") ?? DEFAULT_NEXT;
 
-  const info = (reason ? MESSAGES[reason] : MESSAGES[status]) ?? MESSAGES.error;
+  const resolved = (reason ? RESULT_KEYS[reason] : RESULT_KEYS[status]) ?? RESULT_KEYS.error;
+  const info = {
+    ok: resolved.ok,
+    title: t(`${resolved.key}.title`, { provider: PROVIDER }),
+    message: t(`${resolved.key}.message`, { provider: PROVIDER }),
+  };
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -89,7 +62,7 @@ export default function GoogleAuthResultPage() {
         <Image
           src={CDN_LOGO_URL}
           unoptimized
-          alt="A House Divided Logo"
+          alt={t("logoAlt")}
           width={36}
           height={36}
           className="object-contain"
@@ -139,14 +112,12 @@ export default function GoogleAuthResultPage() {
         </div>
         <h1 className="text-xl font-bold">{info.title}</h1>
         <p className="mt-2 text-muted">{info.message}</p>
-        <p className="mt-4 text-sm text-muted">
-          Redirecting in {countdown} second{countdown !== 1 ? "s" : ""}...
-        </p>
+        <p className="mt-4 text-sm text-muted">{t("redirecting", { seconds: countdown })}</p>
         <Link
           href={next}
           className="mt-6 inline-block rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
-          Continue now
+          {t("continueNow")}
         </Link>
       </div>
     </div>

@@ -147,6 +147,7 @@ function baseLookups(corporations: Corporation[], sectors: CorporateSector[]): C
     costOfLivingByState: new Map(),
     globalCommodityBalances: new Map(),
     priceRatioByCommodity: new Map(),
+    landedPremiumByState: new Map(),
     nationalCommodityBalancesByCountry: new Map(),
     countryClearingBooks: null,
     exportIntensityByCountry: new Map(),
@@ -173,6 +174,7 @@ function baseLookups(corporations: Corporation[], sectors: CorporateSector[]): C
     marketShareBySectorId: new Map(),
     stateSectorSpecializationByState: new Map(),
     activeDisasterEffectsByState: new Map(),
+    stateInputAvailabilityByState: new Map(),
   };
 }
 

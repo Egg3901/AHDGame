@@ -194,8 +194,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const session = db.client.startSession();
     try {
       let subscriptionResult:
-        | { units: number; costAnchor: number; nav: number; balanceAfter: number }
-        | undefined;
+        { units: number; costAnchor: number; nav: number; balanceAfter: number } | undefined;
       let debitError: string | null = null;
 
       try {

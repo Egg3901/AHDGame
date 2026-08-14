@@ -44,7 +44,10 @@ interface RouteParams {
 
 async function loadContext(id: string, voteId: string) {
   if (!ObjectId.isValid(voteId)) {
-    return { ok: false as const, response: NextResponse.json({ error: "Invalid vote ID" }, { status: 400 }) };
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "Invalid vote ID" }, { status: 400 }),
+    };
   }
   const db = await getDb();
   const resolved = await resolveCorporation(db, id);
@@ -55,7 +58,10 @@ async function loadContext(id: string, voteId: string) {
     corporationId: resolved.corporation._id,
   });
   if (!vote) {
-    return { ok: false as const, response: NextResponse.json({ error: "Vote not found" }, { status: 404 }) };
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "Vote not found" }, { status: 404 }),
+    };
   }
   return { ok: true as const, db, corporation: resolved.corporation, vote };
 }
@@ -208,9 +214,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
  * a decisive direction would sit open until someone loaded the vote page.
  */
 async function resolveIfReady(db: Db, voteId: ObjectId, corporation: Corporation) {
-  const updated = await db
-    .collection<CorporationVote>("corporationVotes")
-    .findOne({ _id: voteId });
+  const updated = await db.collection<CorporationVote>("corporationVotes").findOne({ _id: voteId });
   if (!updated || updated.status !== "open") return;
 
   const gameState = await getGameState();

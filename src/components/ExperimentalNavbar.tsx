@@ -37,6 +37,7 @@ import {
   regionUrl,
   regionPartyUrl,
   regionLegislatureUrl,
+  regionElectionsUrl,
   cabinetOfficeUrl,
 } from "@/lib/urls";
 import { UK_NATIONS, UK_REGIONS } from "@/lib/constants/uk";
@@ -551,6 +552,9 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
         onNavigate={closeAll}
       >
         {t("state.economy")}
+      </MenuRow>
+      <MenuRow href={regionElectionsUrl(homeState.countryId, homeState.id)} onNavigate={closeAll}>
+        {t("state.elections")}
       </MenuRow>
       <MenuRow href={regionLegislatureUrl(homeState.countryId, homeState.id)} onNavigate={closeAll}>
         {stateLegislatureLabel}

@@ -44,9 +44,7 @@ export default function MergerReviewPanel() {
   return (
     <section className="rounded-lg border border-card-border bg-card p-4">
       <h3 className="mb-2 text-sm font-semibold text-foreground">Merger review</h3>
-      <p className="mb-2 text-xs text-muted">
-        Deals of yours that competition policy has touched.
-      </p>
+      <p className="mb-2 text-xs text-muted">Deals of yours that competition policy has touched.</p>
       <ul className="space-y-2">
         {data.involving.map((review) => (
           <MergerReviewCard key={review.id} review={review} />
