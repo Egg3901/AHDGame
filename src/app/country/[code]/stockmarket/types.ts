@@ -99,7 +99,15 @@ export interface CommodityData {
    */
   reachableBooks?: Record<
     string,
-    { supply: number; demand: number; blockedSupply: number; untradedSupply: number }
+    {
+      supply: number;
+      demand: number;
+      domesticDemand: number;
+      imports: number;
+      exports: number;
+      blockedSupply: number;
+      untradedSupply: number;
+    }
   >;
   turn: number;
 }
