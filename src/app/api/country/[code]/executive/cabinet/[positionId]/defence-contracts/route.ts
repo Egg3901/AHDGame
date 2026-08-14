@@ -25,6 +25,7 @@ import { canSupply } from "@/lib/turn/defenceDeliveryTurn";
 import { lotPrice } from "@/lib/military/arsenal";
 import { militaryPriceAnchor } from "@/lib/military/procurement";
 import { awardContract, cancelContract } from "@/lib/db/collections/defenceContracts";
+import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { createNotifications } from "@/lib/notifications";
 import { COUNTRY_CONFIGS as COUNTRIES } from "@/lib/constants/countries";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
@@ -125,10 +126,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!corp) {
       return NextResponse.json({ error: "No such corporation" }, { status: 404 });
     }
-    // Domestic-only, and a currency check on top of it: `liquidCurrencyCode` is absent on
-    // pre-forex corps and documented "treat as USD", so a mismatch here would pay one
-    // currency into a balance denominated in another. Refused at award rather than
-    // discovered as a permanently stalled contract at delivery.
+    // Domestic-only, plus a currency check. Missing `liquidCurrencyCode` is inferred from
+    // the corp's country (same as the rest of the corp economy), not treated as USD.
     if (!canSupply(corp, countryId)) {
       return NextResponse.json(
         {
@@ -161,6 +160,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
+    const stateOwned = isStateOwned(corp);
     const contract = await awardContract(db, {
       countryId,
       corporationId: corp._id,
@@ -172,22 +172,27 @@ export async function POST(request: Request, { params }: RouteParams) {
       lotsOrdered: parsed.data.lotsOrdered,
       pricePerLot,
       awardedTurn: gameState?.currentTurn ?? 1,
+      activateImmediately: stateOwned,
     });
 
-    // The offer is worthless if the CEO never learns of it — it sits pending until they
-    // answer, and nothing is built or billed in the meantime.
+    // A private CEO must learn of the offer or it sits pending forever. A National
+    // Corporation has no one to accept; the order is already active.
     if (corp.userId) {
       const buyer = COUNTRIES[countryId]?.name ?? countryId;
       await createNotifications([
         {
           userId: corp.userId,
           type: "defence_contract_offered",
-          title: "Defence Contract Offered",
-          message:
-            `${buyer} has offered ${corp.name ?? "your corporation"} a contract for ` +
-            `${parsed.data.lotsOrdered.toLocaleString("en-US")} lots of ${components[0]} ` +
-            `materiel at ${Math.round(pricePerLot).toLocaleString("en-US")} per lot, paid on ` +
-            `delivery. Accept or decline it on your corporation's Defence tab.`,
+          title: stateOwned ? "Defence Contract Awarded" : "Defence Contract Offered",
+          message: stateOwned
+            ? `${buyer} has placed an order with ${corp.name ?? "your corporation"} for ` +
+              `${parsed.data.lotsOrdered.toLocaleString("en-US")} lots of ${components[0]} ` +
+              `materiel at ${Math.round(pricePerLot).toLocaleString("en-US")} per lot, paid on ` +
+              `delivery. Deliveries begin next turn.`
+            : `${buyer} has offered ${corp.name ?? "your corporation"} a contract for ` +
+              `${parsed.data.lotsOrdered.toLocaleString("en-US")} lots of ${components[0]} ` +
+              `materiel at ${Math.round(pricePerLot).toLocaleString("en-US")} per lot, paid on ` +
+              `delivery. Accept or decline it on your corporation's Defence tab.`,
           metadata: {
             contractId: contract._id.toString(),
             corporationId: corp._id.toString(),

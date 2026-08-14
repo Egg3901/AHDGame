@@ -86,6 +86,22 @@ describe("MilitaryBudgetTab", () => {
     expect(screen.queryByText(/Overspend/)).toBeNull();
     expect(screen.getByText(/Accrues/)).toBeTruthy();
   });
+
+  it("shows the enacted annual line and the legislature path to change it", () => {
+    render(
+      <MilitaryBudgetTab
+        countryId="RU"
+        units={[unit({})]}
+        forceSummary={summary()}
+        currencySymbol="₽"
+      />
+    );
+    expect(screen.getByText(/Propose a defence bill/)).toBeTruthy();
+    expect(screen.getByText(/National budget/)).toBeTruthy();
+    const propose = screen.getByText(/Propose a defence bill/).closest("a");
+    expect(propose?.getAttribute("href")).toBe("/country/ru/legislature");
+    expect(screen.getByText(/This tab does not set the line/)).toBeTruthy();
+  });
 });
 
 describe("MilitaryOperationsTab", () => {

@@ -26,6 +26,7 @@ import { resolveColdWarHolds } from "./coldWarHolds";
 import { processGeneralTenure } from "./generalTenure";
 import { applyReinforcement } from "./reinforcement";
 import { applyDefenseAppropriation } from "./defenseAppropriationTurn";
+import { settleDoctrineIncome } from "@/lib/db/collections/nationalDoctrine";
 import { applyDefenceDeliveries } from "./defenceDeliveryTurn";
 import { applyDefenceRefit } from "./defenceRefitTurn";
 import { maxTechTierForPreset } from "@/lib/admin/seed/seedMilitaryUnits";
@@ -351,6 +352,16 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
       await applyDefenceDeliveries(db, cid, defenceYear, defenceEraMaxGrade, currentTurn);
     }
     await applyDefenceRefit(db, cid);
+  }
+
+  // Yearly doctrine-point income. Same reach as the appropriation sweep: every
+  // country in the defense map, seat or not — points sit unused until a seat
+  // exists, and a later-enabled seat must not start from a frozen 12.
+  const doctrineStartYear = defenceGameState?.startingYear;
+  if (defenceYear != null && doctrineStartYear != null) {
+    for (const cid of Object.keys(DEFENSE_POSITION_BY_COUNTRY)) {
+      await settleDoctrineIncome(db, cid, doctrineStartYear, defenceYear);
+    }
   }
 
   // 4b. Defense military force effects — aggregate each country's force into the

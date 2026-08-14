@@ -50,7 +50,9 @@ Each currency has a deposit insurance fund with an insured cap (era and FX ancho
 Deposit taking banks lend:
 
 - An **NPC bulk book** sized off regional GDP and the lending rate (higher rates mean less volume and a worse credit mix).
-- Named **player** loans to characters and corporations.
+- Named **player** loans to characters and corporations. Character loans credit **personal cash** in the loan currency immediately (not savings). Corporation loans credit that company's **liquid capital**. Proceeds never appear in the banking hub savings list; open loans are listed under Your accounts, with the destination named.
+
+Principal is the lowest of three numbers, shown on the form: the lending bank's **cash reserves** (the ring-fenced bank vault, not the holding company's liquid capital), leftover **deposit headroom** after the reserve requirement, and **35% of demonstrated per-turn income** after existing private-bank payments. That cap is not bond issuance headroom. A corporation with a large bond programme can still be refused a private-bank loan if the bank's vault or the borrower's income cannot support it.
 
 Reserve requirements set by the central bank limit how much of the deposit base can be lent. Banks may blacklist corporations, characters, and every constituent of a named index fund.
 

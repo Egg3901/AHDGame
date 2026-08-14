@@ -19,6 +19,15 @@ import { formatBankMoney, formatRatePercent } from "@/components/banking/formatB
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import type { BankCharterType } from "@/lib/db/types/bank";
+import {
+  CHARACTER_LOAN_SPREAD_PP,
+  NAMED_LOAN_DTI_MAX_FRACTION,
+  bindingNamedLoanCap,
+  maxPrincipalFromIncome,
+  namedLoanPaymentDue,
+  namedLoanPrincipalCap,
+  remainingLoanTurns,
+} from "@/lib/banking/lendingMath";
 
 type HubCentralBank = {
   currency: CurrencyCode;
@@ -45,6 +54,8 @@ type HubPrivateBank = {
   warningBand: "green" | "amber" | "red" | null;
   confidence: number | null;
   totalDeposits: number;
+  cashReserves: number;
+  lendableHeadroom: number;
   href: string;
 };
 
@@ -59,6 +70,32 @@ type HubSavingsRow = {
   }>;
 };
 
+type HubCeoCorporation = {
+  id: string;
+  name: string;
+  liquidCapital: number;
+  incomePerTurn: number;
+  currency: CurrencyCode;
+};
+
+type HubLoan = {
+  id: string;
+  bankCorporationId: string;
+  bankName: string;
+  bankSequentialId: number | null;
+  currency: CurrencyCode;
+  borrowerType: "character" | "corporation";
+  borrowerId: string | null;
+  borrowerName: string;
+  creditedTo: "personalCash" | "corporationLiquidCapital";
+  principal: number;
+  outstanding: number;
+  ratePercent: number;
+  originatedTurn: number;
+  termTurns: number;
+  status: string;
+};
+
 type HubPayload = {
   privateBankingEnabled: boolean;
   isAdmin: boolean;
@@ -68,7 +105,11 @@ type HubPayload = {
   centralBanks: HubCentralBank[];
   privateBanks: HubPrivateBank[];
   savings: HubSavingsRow[];
-  ceoCorporations: Array<{ id: string; name: string }>;
+  personalCash: Partial<Record<CurrencyCode, number>>;
+  personalIncomeByCurrency: Partial<Record<CurrencyCode, number>>;
+  currentTurn: number;
+  ceoCorporations: HubCeoCorporation[];
+  loans: HubLoan[];
   lendingBanks: HubPrivateBank[];
 };
 
@@ -226,11 +267,16 @@ export function BankingHubClient() {
             <GetLoanForm
               banks={data.lendingBanks}
               ceoCorporations={data.ceoCorporations}
+              personalCash={data.personalCash ?? {}}
+              personalIncomeByCurrency={data.personalIncomeByCurrency ?? {}}
+              currentTurn={data.currentTurn ?? 1}
+              loans={data.loans ?? []}
               hasCharacter={!!data.characterId}
               onChanged={load}
               showToast={showToast}
             />
           </div>
+          <YourLoansSection loans={data.loans ?? []} />
         </section>
       )}
 
@@ -654,12 +700,20 @@ function YourSavingsSection({
 function GetLoanForm({
   banks,
   ceoCorporations,
+  personalCash,
+  personalIncomeByCurrency,
+  currentTurn,
+  loans,
   hasCharacter,
   onChanged,
   showToast,
 }: {
   banks: HubPrivateBank[];
-  ceoCorporations: Array<{ id: string; name: string }>;
+  ceoCorporations: HubCeoCorporation[];
+  personalCash: Partial<Record<CurrencyCode, number>>;
+  personalIncomeByCurrency: Partial<Record<CurrencyCode, number>>;
+  currentTurn: number;
+  loans: HubLoan[];
   hasCharacter: boolean;
   onChanged: () => Promise<void>;
   showToast: (msg: string, type?: "success" | "error" | "info" | "warning") => void;
@@ -676,6 +730,55 @@ function GetLoanForm({
   }, [banks, bankId]);
 
   const selected = banks.find((b) => b.corporationId === bankId);
+  const selectedCorp = ceoCorporations.find((c) => c.id === corpId);
+  const term = parseInt(termTurns, 10);
+  const quotedRatePercent =
+    selected == null
+      ? 0
+      : borrowerType === "character"
+        ? selected.lendingRatePercent + CHARACTER_LOAN_SPREAD_PP
+        : selected.lendingRatePercent;
+  const incomePerTurn =
+    borrowerType === "corporation"
+      ? (selectedCorp?.incomePerTurn ?? 0)
+      : selected
+        ? (personalIncomeByCurrency[selected.currency] ?? 0)
+        : 0;
+  const committedPaymentPerTurn = loans
+    .filter((loan) => {
+      if (loan.status !== "current" && loan.status !== "arrears") return false;
+      if (borrowerType === "character") return loan.borrowerType === "character";
+      return loan.borrowerType === "corporation" && loan.borrowerId === selectedCorp?.id;
+    })
+    .reduce(
+      (sum, loan) =>
+        sum +
+        namedLoanPaymentDue(
+          loan.outstanding,
+          loan.ratePercent,
+          remainingLoanTurns(loan.originatedTurn, loan.termTurns, currentTurn)
+        ),
+      0
+    );
+  const incomeCap = maxPrincipalFromIncome({
+    incomePerTurn,
+    ratePercent: quotedRatePercent,
+    termTurns: Number.isFinite(term) ? term : 12,
+    committedPaymentPerTurn,
+  });
+  const capInput = {
+    bankCashReserves: selected?.cashReserves ?? 0,
+    lendableHeadroom: selected?.lendableHeadroom ?? 0,
+    incomeCap,
+  };
+  const maxPrincipal = namedLoanPrincipalCap(capInput);
+  const bind = bindingNamedLoanCap(capInput);
+  const bindLabel =
+    bind === "cashReserves"
+      ? "the bank's cash reserves"
+      : bind === "headroom"
+        ? "deposit headroom"
+        : `income (${Math.round(NAMED_LOAN_DTI_MAX_FRACTION * 100)}% of demonstrated per-turn income, after existing private-bank payments)`;
 
   const submit = async () => {
     const p = Number(principal);
@@ -686,6 +789,13 @@ function GetLoanForm({
     }
     if (!Number.isFinite(term) || term < 4 || term > 120) {
       showToast("Term must be between 4 and 120 turns", "error");
+      return;
+    }
+    if (selected && p > maxPrincipal) {
+      showToast(
+        `Principal exceeds the private-bank maximum (${formatBankMoney(maxPrincipal, selected.currency)}). That cap is not bond issuance headroom.`,
+        "error"
+      );
       return;
     }
     if (!bankId) {
@@ -712,12 +822,30 @@ function GetLoanForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        creditedTo?: {
+          kind: "character" | "corporation";
+          name: string;
+          destination: "personalCash" | "corporationLiquidCapital";
+        };
+      };
       if (!res.ok) {
         showToast(json.error ?? "Loan request failed", "error");
         return;
       }
-      showToast("Loan originated", "success");
+      const credited = json.creditedTo;
+      const amountLabel = selected ? formatBankMoney(p, selected.currency) : String(p);
+      if (credited?.destination === "corporationLiquidCapital") {
+        showToast(
+          `Loan originated. ${amountLabel} credited to ${credited.name} liquid capital.`,
+          "success"
+        );
+      } else if (credited?.destination === "personalCash") {
+        showToast(`Loan originated. ${amountLabel} credited to your personal cash.`, "success");
+      } else {
+        showToast("Loan originated", "success");
+      }
       setPrincipal("");
       await onChanged();
     } finally {
@@ -835,6 +963,33 @@ function GetLoanForm({
             </select>
           </label>
         )}
+        <p className="rounded-lg border border-card-border bg-background/45 px-3 py-2 text-xs leading-relaxed text-muted">
+          {borrowerType === "corporation"
+            ? selectedCorp
+              ? `Proceeds credit ${selectedCorp.name} liquid capital (currently ${formatBankMoney(selectedCorp.liquidCapital, selectedCorp.currency)}). They do not appear in your personal cash or savings.`
+              : "Proceeds credit that corporation's liquid capital, not your personal cash or savings."
+            : `Proceeds credit your personal cash${
+                selected
+                  ? ` (currently ${formatBankMoney(personalCash[selected.currency] ?? 0, selected.currency)})`
+                  : ""
+              }. They do not appear in savings or corporation liquid capital.`}
+        </p>
+        {selected && (
+          <div className="rounded-lg border border-card-border bg-background/45 px-3 py-2 text-xs leading-relaxed text-muted">
+            <p>
+              Private-bank maximum:{" "}
+              <span className="font-mono font-semibold text-foreground">
+                {formatBankMoney(maxPrincipal, selected.currency)}
+              </span>
+              {maxPrincipal > 0 ? ` (limited by ${bindLabel}).` : ` — ${bindLabel} is exhausted.`}
+            </p>
+            <p className="mt-1">
+              This is not bond issuance headroom. Named loans are capped by the bank&apos;s own cash
+              reserves, leftover deposit headroom, and{" "}
+              {Math.round(NAMED_LOAN_DTI_MAX_FRACTION * 100)}% of demonstrated income.
+            </p>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <label className="block space-y-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
             Principal
@@ -862,6 +1017,91 @@ function GetLoanForm({
           Request loan
         </Button>
       </div>
+    </div>
+  );
+}
+
+function YourLoansSection({ loans }: { loans: HubLoan[] }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-card-border bg-card shadow-card">
+      <AccountCardHeader
+        icon={HandCoins}
+        title="Your loans"
+        description="Private-bank credit already drawn. Character loans land in personal cash; corporation loans land in that company's liquid capital."
+      />
+      {loans.length === 0 ? (
+        <EmptyState
+          title="No open private-bank loans"
+          description="New credit appears here as soon as it is originated, including where the proceeds were credited."
+        />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead>
+              <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-widest text-muted">
+                <th className="px-5 py-3 font-semibold">Bank</th>
+                <th className="px-4 py-3 font-semibold">Borrower</th>
+                <th className="px-4 py-3 font-semibold">Credited to</th>
+                <th className="px-4 py-3 font-semibold text-right">Outstanding</th>
+                <th className="px-4 py-3 font-semibold text-right">Rate</th>
+                <th className="px-5 py-3 font-semibold">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-card-border">
+              {loans.map((loan) => (
+                <tr key={loan.id}>
+                  <td className="px-5 py-3">
+                    <Link
+                      href={
+                        loan.bankSequentialId != null
+                          ? `/corporation/${loan.bankSequentialId}?tab=bank`
+                          : `/corporation/${loan.bankCorporationId}?tab=bank`
+                      }
+                      className="font-medium text-primary hover:opacity-80"
+                    >
+                      {loan.bankName}
+                    </Link>
+                    <p className="font-mono text-[11px] text-muted">{loan.currency}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    {loan.borrowerName}
+                    <p className="text-[11px] text-muted">
+                      {loan.borrowerType === "character" ? "Personal" : "Corporation"}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3 text-muted">
+                    {loan.creditedTo === "personalCash"
+                      ? "Personal cash"
+                      : `${loan.borrowerName} liquid capital`}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono tabular-nums">
+                    {formatBankMoney(loan.outstanding, loan.currency)}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono tabular-nums">
+                    {formatRatePercent(loan.ratePercent)}
+                  </td>
+                  <td className="px-5 py-3">
+                    <Badge
+                      color={
+                        loan.status === "current"
+                          ? "success"
+                          : loan.status === "arrears"
+                            ? "warning"
+                            : loan.status === "defaulted"
+                              ? "error"
+                              : "default"
+                      }
+                      variant="subtle"
+                    >
+                      {loan.status}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

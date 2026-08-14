@@ -170,8 +170,8 @@ export function ArsenalTab({
           <h3 className="text-sm font-semibold text-foreground">Award a contract</h3>
           <p className="mt-0.5 text-[11px] text-muted">
             Only domestic defence plants paid in your own currency can hold an order. What each
-            builds comes from the production line its CEO has chosen — and they must accept the
-            offer before it starts.
+            builds comes from the production line its CEO has chosen. A private supplier must accept
+            the offer before it starts; a state-owned plant begins delivering immediately.
           </p>
         </div>
         {!canAct ? (
@@ -320,8 +320,8 @@ export function ArsenalTab({
           <h3 className="text-sm font-semibold text-foreground">Procurement contracts</h3>
           <p className="mt-0.5 text-[11px] text-muted">
             Standing orders with your own defence industry. Each pays per lot delivered, out of the
-            defence appropriation. A newly awarded contract waits on the supplier to accept before
-            anything is built.
+            defence appropriation. A private supplier must accept before anything is built; a
+            state-owned plant starts at once.
           </p>
         </div>
         {active.length === 0 ? (

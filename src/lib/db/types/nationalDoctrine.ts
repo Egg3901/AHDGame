@@ -7,4 +7,9 @@ export interface NationalDoctrine {
   countryId: CountryId;
   adopted: Record<string, number>;
   points: number;
+  /**
+   * Last game year for which yearly doctrine-point income has been booked.
+   * Absent on docs created before income existed — treated as the world start.
+   */
+  incomeThroughYear?: number;
 }
