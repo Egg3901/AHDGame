@@ -29,6 +29,33 @@ export const NPC_DEPOSIT_MAX_TOTAL_SHARE = 0.6;
  */
 export const NPC_DEPOSIT_APY_COMPARISON_FLOOR = 0.5;
 
+/**
+ * Leverage cap on the NPC deposit base: a bank may anchor at most this multiple
+ * of its book equity in NPC deposits. Capacity alone used to size the ceiling,
+ * so a bank with a large financial sector but little or no capital (equity) could
+ * anchor billions it did not stand behind — the deposit side of the same hole
+ * that let a zero-capital bank upstream depositor money. Book equity, not posted
+ * capital, is the metric: a bank whose capital is retained earnings rather than
+ * posted contributions is genuinely solvent and must not be squeezed. 12x sits
+ * comfortably above the live solvent banks (~3-5x) and drives a negative-equity
+ * bank's ceiling to zero, so the normal per-turn NPC outflow unwinds it.
+ */
+export const NPC_DEPOSIT_MAX_EQUITY_LEVERAGE = 12;
+
+/**
+ * Lower the capacity-derived NPC deposit ceiling to what the bank's equity can
+ * stand behind. Returns the capacity ceiling unchanged for a well-capitalized
+ * bank and 0 for a bank with non-positive equity.
+ */
+export function equityCappedDepositCeiling(capacityCeiling: number, bankEquity: number): number {
+  const capacity =
+    typeof capacityCeiling === "number" && Number.isFinite(capacityCeiling)
+      ? Math.max(0, capacityCeiling)
+      : 0;
+  const equity = typeof bankEquity === "number" && Number.isFinite(bankEquity) ? bankEquity : 0;
+  return Math.min(capacity, Math.max(0, equity) * NPC_DEPOSIT_MAX_EQUITY_LEVERAGE);
+}
+
 export type NpcDepositBankInput = {
   bankId: string;
   effectiveDepositRatePercent: number;

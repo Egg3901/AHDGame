@@ -70,7 +70,44 @@ export function requiredReserves(
 }
 
 /**
+ * Book equity: the shareholders' claim after depositors are made whole.
+ *
+ * Assets are the bank's cash plus the retail loans it is owed; deposits are the
+ * liability. What is left over is contributed capital plus retained earnings —
+ * the only money that is genuinely the owner's to take out. Reserves ABOVE the
+ * reserve requirement are still mostly depositor money, so the reserve-surplus
+ * figure alone is the wrong ceiling on an upstream: a bank handed a large
+ * (e.g. NPC) deposit base carries reserves it does not own, and letting the
+ * owner drain them to the reserve floor pays shareholders out of deposits.
+ */
+export function bankEquity(
+  charter: Pick<
+    BankCharter,
+    | "totalDeposits"
+    | "cashReserves"
+    | "totalLoans"
+    | "interbankDebt"
+    | "cbMarginDebt"
+    | "discountWindowDebt"
+  >
+): number {
+  const assets = getCashReserves(charter) + Math.max(0, charter.totalLoans ?? 0);
+  // Deposits are the depositor liability; the rest is borrowed cash that
+  // inflates reserves but must be repaid, so none of it is the owner's to take.
+  const liabilities =
+    Math.max(0, charter.totalDeposits ?? 0) +
+    Math.max(0, charter.interbankDebt ?? 0) +
+    Math.max(0, charter.cbMarginDebt ?? 0) +
+    Math.max(0, charter.discountWindowDebt ?? 0);
+  return assets - liabilities;
+}
+
+/**
  * How much the bank may pay up to its parent right now.
+ *
+ * Two ceilings, take the lower: the bank may not drop below its reserve
+ * requirement, and it may never pay the owner more than its book equity —
+ * distributing more than equity is paying shareholders with depositor money.
  *
  * Zero unless the supervisor calls the bank adequate: a stressed or
  * undercapitalized bank does not get to pay its owner while the depositors it
@@ -79,12 +116,21 @@ export function requiredReserves(
  * one other way money leaves a bank.
  */
 export function upstreamCapacity(
-  charter: Pick<BankCharter, "totalDeposits" | "cashReserves" | "capitalStanding">,
+  charter: Pick<
+    BankCharter,
+    | "totalDeposits"
+    | "cashReserves"
+    | "capitalStanding"
+    | "totalLoans"
+    | "interbankDebt"
+    | "cbMarginDebt"
+    | "discountWindowDebt"
+  >,
   reserveRatio: number
 ): number {
   if (charter.capitalStanding && !mayDistribute(charter.capitalStanding)) return 0;
-  const surplus = getCashReserves(charter) - requiredReserves(charter, reserveRatio);
-  return Math.max(0, surplus);
+  const reserveSurplus = getCashReserves(charter) - requiredReserves(charter, reserveRatio);
+  return Math.max(0, Math.min(reserveSurplus, bankEquity(charter)));
 }
 
 /**
@@ -176,22 +222,52 @@ export async function upstreamBankCash(
   if (move <= 0) {
     return {
       ok: false,
-      error: "The bank has no surplus reserves. Everything it holds is required against deposits.",
+      error:
+        "The bank has no distributable capital. Its reserves are required against deposits, or it holds no equity above its deposit liabilities to pay out.",
     };
   }
 
   const required = requiredReserves(charter, reserveRatio);
   const postedDown = Math.min(move, Math.max(0, charter.postedCapital ?? 0));
 
-  // Re-gate the reserve requirement inside the write. The read above can go
-  // stale against a concurrent injection or a banking turn moving deposits, and
-  // the one thing this must never do is leave the bank short.
+  // Re-gate both ceilings inside the write. The read above can go stale against
+  // a concurrent injection or a banking turn moving deposits/loans, and the one
+  // thing this must never do is leave the bank short of reserves OR pay the
+  // owner out of depositor money (post-move book equity must stay non-negative).
   const updated = await db.collection<Corporation>("corporations").findOneAndUpdate(
     {
       _id: corporationId,
       "bankCharter.status": "active",
       $expr: {
-        $gte: [{ $subtract: [{ $ifNull: ["$bankCharter.cashReserves", 0] }, move] }, required],
+        $and: [
+          {
+            $gte: [{ $subtract: [{ $ifNull: ["$bankCharter.cashReserves", 0] }, move] }, required],
+          },
+          {
+            $gte: [
+              {
+                $subtract: [
+                  {
+                    $add: [
+                      { $ifNull: ["$bankCharter.cashReserves", 0] },
+                      { $max: [0, { $ifNull: ["$bankCharter.totalLoans", 0] }] },
+                    ],
+                  },
+                  {
+                    $add: [
+                      { $max: [0, { $ifNull: ["$bankCharter.totalDeposits", 0] }] },
+                      { $max: [0, { $ifNull: ["$bankCharter.interbankDebt", 0] }] },
+                      { $max: [0, { $ifNull: ["$bankCharter.cbMarginDebt", 0] }] },
+                      { $max: [0, { $ifNull: ["$bankCharter.discountWindowDebt", 0] }] },
+                      move,
+                    ],
+                  },
+                ],
+              },
+              0,
+            ],
+          },
+        ],
       },
     },
     {
