@@ -24,7 +24,7 @@ import {
   computeEffectiveUpkeep,
 } from "@/lib/constants/military";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
-import { getNationalDoctrine } from "@/lib/db/collections/nationalDoctrine";
+import { getNationalDoctrine, settleDoctrineIncome } from "@/lib/db/collections/nationalDoctrine";
 import { getMilitaryCommands } from "@/lib/db/collections/militaryCommands";
 import { getMilitaryFormations } from "@/lib/db/collections/militaryFormations";
 import type { ConflictAssignment } from "@/lib/military/assignments";
@@ -366,7 +366,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
         militaryPriceAnchor(budget?.gdp, budget?.militaryPriceBaselineGdp)
       );
 
-      doctrine = await getNationalDoctrine(db, countryId);
+      const year = liveYear;
+      const startYear = gameState?.startingYear;
+      doctrine =
+        year != null && startYear != null
+          ? await settleDoctrineIncome(db, countryId, startYear, year)
+          : await getNationalDoctrine(db, countryId);
       doctrineEra = await resolveDoctrineEra(db);
       commands = await getMilitaryCommands(db, countryId);
       commanders = await listCountryGenerals(db, countryId);

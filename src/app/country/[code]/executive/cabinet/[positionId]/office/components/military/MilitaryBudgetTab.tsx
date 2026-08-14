@@ -2,6 +2,7 @@
 
 import type { MilitaryUnitView, ForceSummaryView } from "../../useCabinetOffice";
 import { getBranches } from "@/lib/constants/military";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { SectionCard, Meter } from "../dossier";
 import { fmtMoneyAbs } from "./militaryUi";
 
@@ -28,6 +29,8 @@ export function MilitaryBudgetTab({
   const use = income > 0 ? upkeep / income : upkeep > 0 ? 1 : 0;
   const over = income > 0 && upkeep > income;
   const remaining = income - upkeep;
+  const enactedLine = income > 0 ? income * TURNS_PER_YEAR : 0;
+  const countryCode = countryId.toLowerCase();
 
   // `effectiveUpkeep` and the category split are shares of the abstract upkeep aggregate;
   // this converts a share of it into the real money the appropriation is charged.
@@ -92,6 +95,32 @@ export function MilitaryBudgetTab({
           ) : (
             <span>Accrues {fmtMoneyAbs(currencySymbol, income)}/turn</span>
           )}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3 text-[12px]">
+          <div className="flex justify-between rounded-lg border border-card-border bg-card-muted px-3 py-2">
+            <span className="text-muted">Enacted line / year</span>
+            <span className="tabular text-foreground">
+              {fmtMoneyAbs(currencySymbol, enactedLine)}
+            </span>
+          </div>
+          <div className="flex justify-between rounded-lg border border-card-border bg-card-muted px-3 py-2">
+            <span className="text-muted">Appropriation balance</span>
+            <span className="tabular text-foreground">
+              {fmtMoneyAbs(currencySymbol, forceSummary.appropriation)}
+            </span>
+          </div>
+        </div>
+        <p className="mt-3 text-[11px] leading-relaxed text-muted">
+          This tab does not set the line. Raise or cut defence spending by proposing a defence bill
+          in the legislature; the national budget page shows the booked category.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-3 text-[12px] font-semibold">
+          <a href={`/country/${countryCode}/legislature`} className="text-gov-soft hover:underline">
+            Propose a defence bill
+          </a>
+          <a href={`/country/${countryCode}/budget`} className="text-gov-soft hover:underline">
+            National budget
+          </a>
         </div>
       </SectionCard>
 

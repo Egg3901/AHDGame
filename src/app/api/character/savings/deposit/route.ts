@@ -15,6 +15,7 @@ import {
   buildTransferToSavingsInc,
 } from "@/lib/currency/characterFunds";
 import { insertSavingsLedgerEntry } from "@/lib/savings/ledger";
+import { moveCharacterSavings } from "@/lib/banking/deposits";
 import { getGameState } from "@/lib/gameState";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { normalizeSavingsMutationAmount } from "@/lib/api/savings/savingsAmount";
@@ -24,6 +25,10 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 const depositSchema = z.object({
   currency: z.enum(ZOD_ACTIVE_CURRENCY_ENUM),
   amount: z.number(),
+  // Optional: route this currency's savings to a specific bank in the same
+  // action (a bank corp id hex, or "centralBank"). Lets a player deposit into a
+  // bank straight from its own page. Omitted = balance stays where it is.
+  holder: z.string().optional(),
 });
 
 // POST /api/character/savings/deposit — Move liquid cash into savings for a currency
@@ -45,7 +50,7 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
-    const { currency, amount: rawAmount } = parsed.data;
+    const { currency, amount: rawAmount, holder } = parsed.data;
     const c = currency as CurrencyCode;
 
     const normalized = normalizeSavingsMutationAmount(rawAmount, c);
@@ -108,6 +113,16 @@ export async function POST(request: Request) {
       }
     }
 
+    // Route the deposit to a chosen bank if requested. Pointer-only move of the
+    // whole currency balance; moveCharacterSavings validates the target charter,
+    // currency match, blacklist and deposit ceiling. A routing failure is
+    // surfaced but the deposit itself already succeeded, so we report it softly.
+    let holderMove: { ok: boolean; error?: string } | null = null;
+    if (holder && holder.trim()) {
+      const move = await moveCharacterSavings(db, character._id, c, holder.trim());
+      holderMove = move.ok ? { ok: true } : { ok: false, error: move.error };
+    }
+
     const gameState = await getGameState();
     const turn = gameState?.currentTurn ?? 0;
     const after = await db.collection<Character>("characters").findOne({ _id: character._id });
@@ -133,7 +148,12 @@ export async function POST(request: Request) {
       currencyCode: c,
     });
 
-    return NextResponse.json({ success: true, currency: c, amount: normalized });
+    return NextResponse.json({
+      success: true,
+      currency: c,
+      amount: normalized,
+      ...(holderMove ? { holderRouted: holderMove.ok, holderError: holderMove.error } : {}),
+    });
   } catch (error) {
     return handleRouteError(error);
   }

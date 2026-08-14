@@ -91,6 +91,12 @@ export interface BankCharter {
     indexFundIds?: string[];
   };
   /**
+   * Opt-in loan approval. When true, new named loans land `pending` and the CEO
+   * accepts or rejects each from the bank console instead of them auto-granting.
+   * Absent/false = the historical objective auto-approval. See `banking/loanApproval.ts`.
+   */
+  requireApproval?: boolean;
+  /**
    * Idempotency key for bankingTurn - standalone Mongo has no transactions.
    * Set to the processed turn at the END of that bank's pass.
    */
@@ -191,7 +197,19 @@ export interface BankLoan {
   originatedTurn: number;
   /** Contract length in turns (required for named player loans). */
   termTurns: number;
-  status: "current" | "arrears" | "defaulted" | "repaid";
+  /**
+   * `pending` = awaiting CEO decision on a bank whose charter has
+   * `requireApproval` set; principal is NOT disbursed and does NOT count against
+   * the loan book until accepted. `rejected` = CEO declined; terminal, no money
+   * moved. All other states are live/closed loans. See `banking/loanApproval.ts`.
+   */
+  status: "pending" | "current" | "arrears" | "defaulted" | "repaid" | "rejected";
+  /** Turn a `pending` loan was requested (for CEO queue ordering / staleness). */
+  requestedTurn?: number;
+  /** Turn a pending loan was accepted or rejected. */
+  decisionTurn?: number;
+  /** Optional CEO-supplied reason shown to the borrower on rejection. */
+  rejectedReason?: string;
   /** Consecutive shortfall turns while in arrears; defaults at ARREARS_DEFAULT_TURNS. */
   arrearsTurns?: number;
   /** Idempotency key for turn processing — standalone Mongo has no transactions. */

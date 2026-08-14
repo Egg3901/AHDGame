@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
 import {
   CORPORATION_TYPES,
@@ -16,6 +16,67 @@ import {
 } from "@/lib/indexFunds/sponsorship/constants";
 
 const fmt = (n: number) => "₳" + Math.round(n).toLocaleString("en-US");
+
+type SponsoredFund = {
+  id: string;
+  slug: string;
+  name: string;
+  ticker: string;
+  status: string;
+  scope: string;
+  kind: string;
+  countryId: string | null;
+};
+
+const sponsoredFundHref = (f: SponsoredFund) =>
+  `/stockmarket/${f.scope === "global" || !f.countryId ? "global" : f.countryId.toLowerCase()}/fund/${f.slug}`;
+
+/**
+ * Funds this corporation already sponsors. Before this, a chartered fund
+ * vanished from the owner's view once the charter session ended (ticket 1088):
+ * nothing listed a corp's own funds. `refreshKey` re-fetches after a new charter.
+ */
+function SponsoredFundList({ corpId, refreshKey }: { corpId: string; refreshKey: string | null }) {
+  const [funds, setFunds] = useState<SponsoredFund[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/corporations/${corpId}/funds`);
+        const json = (await res.json().catch(() => ({}))) as { funds?: SponsoredFund[] };
+        if (alive) setFunds(res.ok ? (json.funds ?? []) : []);
+      } catch {
+        if (alive) setFunds([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [corpId, refreshKey]);
+
+  if (!funds || funds.length === 0) return null;
+
+  return (
+    <div className="mb-4 rounded-lg border border-card-border bg-background p-3">
+      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+        Funds this corporation sponsors
+      </h4>
+      <ul className="space-y-1.5">
+        {funds.map((f) => (
+          <li key={f.id} className="flex items-center justify-between gap-3 text-sm">
+            <Link href={sponsoredFundHref(f)} className="font-medium text-primary hover:underline">
+              {f.name} <span className="font-mono text-xs text-muted">{f.ticker}</span>
+            </Link>
+            <span className="font-mono text-[10px] uppercase tracking-wide text-muted">
+              {f.status === "active" ? f.kind : f.status}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 /**
  * A5 charter surface: a finance corporation's CEO charters a sponsored index
@@ -101,6 +162,7 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
 
   return (
     <section className="rounded-lg border border-card-border bg-card p-4">
+      <SponsoredFundList corpId={corpId} refreshKey={chartered?.slug ?? null} />
       <h3 className="mb-2 text-sm font-semibold text-foreground">Charter a sponsored fund</h3>
       <p className="mb-3 text-xs text-muted">
         Launch an index fund your corporation runs. You choose the scope and the fee; the index

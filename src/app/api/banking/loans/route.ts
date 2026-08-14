@@ -81,6 +81,12 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       loan: result.loan,
+      pending: result.pending === true,
+      creditedTo: {
+        kind: borrowerType,
+        name: result.creditedTo.name,
+        destination: borrowerType === "character" ? "personalCash" : "corporationLiquidCapital",
+      },
     });
   } catch (error) {
     return handleRouteError(error);

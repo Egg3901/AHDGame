@@ -89,6 +89,7 @@ export type ConsolePayload = {
     warningBand: "green" | "amber" | "red" | null;
     panicTurns: number;
     branchCapacityShare: number;
+    requireApproval: boolean;
     depositCeiling: number;
     interbankDebt: number;
     cbMarginDebt: number;

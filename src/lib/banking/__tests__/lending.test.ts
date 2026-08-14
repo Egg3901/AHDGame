@@ -3,10 +3,9 @@ import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { BankCharter } from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types";
+import { estimatePerTurnCurrencyIncomeHomeFace } from "@/lib/lineOfCredit/currencyIncomeEstimate";
 import {
-  CHARACTER_BORROWER_CAP_FRACTION,
   CHARACTER_LOAN_SPREAD_PP,
-  CORP_BORROWER_CAP_FRACTION,
   NPC_LOAN_BOOK_DEFAULT_MAX_PERCENT,
   NPC_LOAN_BOOK_DEFAULT_MIN_PERCENT,
   NPC_LOAN_BOOK_VOLUME_FACTOR_MAX,
@@ -27,6 +26,9 @@ vi.mock("@/lib/financialTxLog/emit", () => ({
   emitTxBulk: vi.fn().mockResolvedValue(undefined),
   loadTxThresholds: vi.fn().mockResolvedValue({}),
 }));
+vi.mock("@/lib/lineOfCredit/currencyIncomeEstimate", () => ({
+  estimatePerTurnCurrencyIncomeHomeFace: vi.fn().mockResolvedValue(1_000_000),
+}));
 
 function makeActiveRetailCharter(overrides: Partial<BankCharter> = {}): BankCharter {
   return {
@@ -35,6 +37,7 @@ function makeActiveRetailCharter(overrides: Partial<BankCharter> = {}): BankChar
     currency: "USD",
     charteredTurn: 1,
     postedCapital: 10_000_000,
+    cashReserves: 10_000_000,
     depositOffset: 0,
     lendingOffset: 1,
     totalDeposits: 1_000_000,
@@ -76,6 +79,10 @@ describe("banking lending", () => {
     db.collection("characters");
     db.collection("bankLoans");
     db.collection("indexFunds");
+    db.collection("corporationHistory");
+    db.collection("exchangeRates");
+    db.collectionMocks.corporationHistory!.find().toArray.mockResolvedValue([{ income: 500_000 }]);
+    vi.mocked(estimatePerTurnCurrencyIncomeHomeFace).mockResolvedValue(1_000_000);
 
     db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
       _id: "default",
@@ -260,6 +267,7 @@ describe("banking lending", () => {
       );
       db.collectionMocks.characters!.findOne.mockResolvedValue({
         _id: characterId,
+        countryId: "US",
         currencyBalances: { personal: { USD: 10_000_000 } },
       });
       const { originateLoan } = await importLending();
@@ -270,30 +278,67 @@ describe("banking lending", () => {
         100_001,
         12
       );
-      expect(result).toEqual({ ok: false, error: "Principal exceeds lendable headroom" });
+      expect(result).toEqual({
+        ok: false,
+        error: "Principal exceeds lendable headroom (max 100000)",
+      });
     });
 
-    it("rejects principal over character borrower cap", async () => {
+    it("rejects principal over the bank's cash reserves, not the holding company's LC", async () => {
       const bankId = new ObjectId();
       const characterId = new ObjectId();
-      const personal = 100_000;
-      const cap = CHARACTER_BORROWER_CAP_FRACTION * personal;
       db.collectionMocks.corporations!.findOne.mockResolvedValue(
-        makeBankCorp(makeActiveRetailCharter({ totalDeposits: 10_000_000 }), { _id: bankId })
+        makeBankCorp(
+          makeActiveRetailCharter({
+            totalDeposits: 10_000_000,
+            cashReserves: 4_000,
+          }),
+          { _id: bankId, liquidCapital: 50_000_000 }
+        )
       );
       db.collectionMocks.characters!.findOne.mockResolvedValue({
         _id: characterId,
-        currencyBalances: { personal: { USD: personal } },
+        countryId: "US",
+        currencyBalances: { personal: { USD: 10 } },
       });
       const { originateLoan } = await importLending();
       const result = await originateLoan(
         db as unknown as Db,
         bankId,
         { type: "character", id: characterId },
-        cap + 1,
+        4_001,
         12
       );
-      expect(result).toEqual({ ok: false, error: "Principal exceeds borrower capacity cap" });
+      expect(result).toEqual({
+        ok: false,
+        error: "Principal exceeds the bank's cash reserves (max 4000)",
+      });
+    });
+
+    it("rejects principal over the borrower income limit", async () => {
+      const bankId = new ObjectId();
+      const characterId = new ObjectId();
+      vi.mocked(estimatePerTurnCurrencyIncomeHomeFace).mockResolvedValue(100);
+      db.collectionMocks.corporations!.findOne.mockResolvedValue(
+        makeBankCorp(makeActiveRetailCharter({ totalDeposits: 10_000_000 }), { _id: bankId })
+      );
+      db.collectionMocks.characters!.findOne.mockResolvedValue({
+        _id: characterId,
+        countryId: "US",
+        currencyBalances: { personal: { USD: 10 } },
+      });
+      const { originateLoan } = await importLending();
+      const result = await originateLoan(
+        db as unknown as Db,
+        bankId,
+        { type: "character", id: characterId },
+        50_000,
+        12
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toMatch(/Principal exceeds borrower income limit \(max \d+\)/);
+      }
     });
 
     it("rejects corporation borrower when treasury currency mismatches loan currency", async () => {
@@ -375,6 +420,7 @@ describe("banking lending", () => {
       expect(result.loan.outstanding).toBe(principal);
       expect(result.loan.status).toBe("current");
       expect(result.loan.termTurns).toBe(24);
+      expect(result.creditedTo).toEqual({ kind: "character", name: "Borrower" });
       // prime 5 + lendingOffset 1 + character spread 1.5
       expect(result.loan.ratePercent).toBe(5 + 1 + CHARACTER_LOAN_SPREAD_PP);
 
@@ -392,6 +438,50 @@ describe("banking lending", () => {
       expect(bankUpdate.$inc["bankCharter.totalLoans"]).toBe(
         charUpdate.$inc["currencyBalances.personal.USD"]
       );
+    });
+
+    it("parks a loan as pending with no money movement when the bank requires approval", async () => {
+      const bankId = new ObjectId();
+      const characterId = new ObjectId();
+      const principal = 25_000;
+      const charter = makeActiveRetailCharter({
+        totalDeposits: 1_000_000,
+        totalLoans: 0,
+        requireApproval: true,
+      });
+
+      db.collectionMocks.corporations!.findOne.mockResolvedValue(
+        makeBankCorp(charter, { _id: bankId })
+      );
+      db.collectionMocks.characters!.findOne.mockResolvedValue({
+        _id: characterId,
+        currencyBalances: { personal: { USD: 200_000 } },
+      });
+      db.collectionMocks.bankLoans!.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+
+      const { originateLoan } = await importLending();
+      const result = await originateLoan(
+        db as unknown as Db,
+        bankId,
+        { type: "character", id: characterId },
+        principal,
+        24
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.pending).toBe(true);
+      expect(result.loan.status).toBe("pending");
+      expect(result.loan.outstanding).toBe(principal);
+
+      const [loanDoc] = db.collectionMocks.bankLoans!.insertOne.mock.calls[0];
+      expect(loanDoc.status).toBe("pending");
+      expect(loanDoc.requestedTurn).toBe(42);
+
+      // No disbursement: the bank loan book is not incremented and the borrower
+      // is not credited until the CEO accepts.
+      expect(db.collectionMocks.corporations!.updateOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks.characters!.updateOne).not.toHaveBeenCalled();
     });
 
     it("ledgers the origination as a MINT, not as a transfer from the bank", async () => {
@@ -484,7 +574,8 @@ describe("banking lending", () => {
           }
           return {
             _id: borrowerCorpId,
-            liquidCapital: principal / CORP_BORROWER_CAP_FRACTION,
+            name: "Hunt Oil Company",
+            liquidCapital: 1_000,
             liquidCurrencyCode: "USD",
             countryId: "US",
           };
@@ -507,6 +598,7 @@ describe("banking lending", () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.loan.ratePercent).toBe(6); // prime 5 + offset 1, no character spread
+      expect(result.creditedTo).toEqual({ kind: "corporation", name: "Hunt Oil Company" });
 
       // First updateOne is bank totalLoans; second is borrower liquidCapital.
       const borrowerUpdate = db.collectionMocks.corporations!.updateOne.mock.calls[1][1];
@@ -587,6 +679,84 @@ describe("banking lending", () => {
           NPC_LOAN_BOOK_DEFAULT_MAX_PERCENT
         );
       }
+    });
+  });
+
+  describe("listBorrowerFacingLoans", () => {
+    it("returns open character and CEO-corp loans with the credit destination", async () => {
+      const characterId = new ObjectId();
+      const corpId = new ObjectId();
+      const bankId = new ObjectId();
+      const characterLoanId = new ObjectId();
+      const corpLoanId = new ObjectId();
+
+      db.collectionMocks.bankLoans!.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: characterLoanId,
+            bankCorporationId: bankId,
+            currency: "USD",
+            borrowerType: "character",
+            borrowerId: characterId,
+            principal: 10_000,
+            outstanding: 9_000,
+            ratePercent: 7.5,
+            originatedTurn: 110,
+            termTurns: 12,
+            status: "current",
+          },
+          {
+            _id: corpLoanId,
+            bankCorporationId: bankId,
+            currency: "USD",
+            borrowerType: "corporation",
+            borrowerId: corpId,
+            principal: 1_000_000,
+            outstanding: 988_000,
+            ratePercent: 6,
+            originatedTurn: 110,
+            termTurns: 12,
+            status: "current",
+          },
+        ]),
+      });
+      db.collectionMocks.corporations!.find.mockReturnValue({
+        project: vi.fn().mockReturnThis(),
+        toArray: vi
+          .fn()
+          .mockResolvedValue([{ _id: bankId, name: "Hagemeyer Holding", sequentialId: 559 }]),
+      });
+
+      const { listBorrowerFacingLoans } = await importLending();
+      const rows = await listBorrowerFacingLoans(db as unknown as Db, {
+        characterId,
+        characterName: "H. L. Hunt",
+        corporations: [{ id: corpId, name: "Hunt Oil Company" }],
+      });
+
+      const query = db.collectionMocks.bankLoans!.find.mock.calls[0][0];
+      expect(query.status).toEqual({ $in: ["current", "arrears", "defaulted"] });
+
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toMatchObject({
+        id: characterLoanId.toString(),
+        bankName: "Hagemeyer Holding",
+        borrowerType: "character",
+        borrowerId: characterId.toString(),
+        borrowerName: "H. L. Hunt",
+        creditedTo: "personalCash",
+        outstanding: 9_000,
+      });
+      expect(rows[1]).toMatchObject({
+        id: corpLoanId.toString(),
+        borrowerType: "corporation",
+        borrowerId: corpId.toString(),
+        borrowerName: "Hunt Oil Company",
+        creditedTo: "corporationLiquidCapital",
+        outstanding: 988_000,
+      });
     });
   });
 
