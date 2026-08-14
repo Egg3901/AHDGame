@@ -409,6 +409,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               warningBand: charter.warningBand ?? null,
               panicTurns: charter.panicTurns ?? 0,
               branchCapacityShare: getBranchCapacityShare(charter),
+              requireApproval: charter.requireApproval === true,
               depositCeiling: depositCeiling ?? 0,
               interbankDebt: charter.interbankDebt ?? 0,
               cbMarginDebt: charter.cbMarginDebt ?? 0,

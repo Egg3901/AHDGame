@@ -145,6 +145,17 @@ export async function checkCharterEligibility(
     reasons.push("Corporation already has an active bank charter");
   }
 
+  // Bank / fund separation: a corporation that sponsors an index fund may not
+  // also charter a bank. Creation-time only, so existing dual holders are
+  // grandfathered. The mirror check lives in
+  // `indexFunds/sponsorship/charterFund.ts`.
+  const sponsoredFundCount = await db
+    .collection("indexFunds")
+    .countDocuments({ sponsorCorporationId: corporation._id, status: { $ne: "delisted" } });
+  if (sponsoredFundCount > 0) {
+    reasons.push("Corporation sponsors an index fund; wind it down before chartering a bank");
+  }
+
   const legalTypes = await getLegalCharterTypes(db, getCountryIdForCurrency(currency));
   if (legalTypes.length === 0) {
     reasons.push("Private bank charters are not available in a command economy");
