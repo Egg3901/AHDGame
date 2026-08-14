@@ -14,6 +14,8 @@ export type FreightHaulLoadEntry = {
   total: number;
   /** Freight TEU supply in-state; 0 when unknown. */
   capacity?: number;
+  /** Unowned logistics market. This is an opportunity, not freight supply. */
+  openMarket?: number;
 };
 
 export const FREIGHT_HAUL_LOAD_MODE_DESCRIPTION =
@@ -52,11 +54,14 @@ export function freightHaulLoadTooltip(stateId: string, entry: FreightHaulLoadEn
         ? `Interstate haul: ${formatFreightTeu(haul)} TEU/turn (${util})`
         : `Interstate haul: ${formatFreightTeu(haul)} TEU/turn`
     );
-  } else {
+  } else if (entry.capacity === undefined) {
     lines.push(`Projected haul load: ${formatFreightTeu(haul)} TEU/turn`);
+  } else {
+    lines.push(`No operating freight capacity`);
   }
+  if ((entry.openMarket ?? 0) > 0) lines.push("Open logistics market available");
   lines.push(`Bulk: ${bulk} · Special: ${special}`);
-  lines.push("Haul counts as freight demand in the market turn");
+  lines.push("Haul counts as freight demand; open market is not operating capacity");
   return lines;
 }
 
@@ -65,9 +70,9 @@ export function freightHaulLoadCaption(hasData: boolean): string {
     return "No freight data yet — capacity fills from the market turn; haul load after the sourcing pass runs.";
   }
   return (
-    "Green intensity follows freight capacity (TEU logistics clear against). Tooltips also show " +
-    "interstate haul from the landed-price sourcing pass. Haul is booked as freight demand each " +
-    "market turn, so heavy-haul states lift freight prices and sold %."
+    "Green shows operating freight capacity. Amber shows an unowned logistics market waiting " +
+    "for an operator. Tooltips show interstate haul from the freight settlement ledger. Haul is " +
+    "booked as freight demand each market turn, so heavy-haul states lift freight prices and sold %."
   );
 }
 
@@ -80,5 +85,6 @@ export function freightHaulLoadLabel(entry: FreightHaulLoadEntry | number): stri
   if (capacity > 0) {
     return `${formatFreightTeu(capacity)} TEU`;
   }
+  if ((entry.openMarket ?? 0) > 0) return "Open market";
   return `${formatFreightTeu(entry.total)} TEU`;
 }

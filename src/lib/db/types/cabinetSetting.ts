@@ -16,6 +16,11 @@ export interface CabinetSetting {
   // ── Position-specific settings (each position uses relevant fields) ──
   /** 3-tier settings: "lenient"/"standard"/"strict", etc. */
   tierSetting?: string;
+  /**
+   * Per-key selections for seats holding extra policy levers
+   * (mechanics.tierSettings[]), e.g. HEW `{ education: "academic", welfare: "broad" }`.
+   */
+  tierSettings?: Record<string, string>;
   /** Regional focus: policing priority, base investment, etc. */
   targetRegionId?: string;
   /** Foreign secretary envoy target country */
@@ -27,8 +32,14 @@ export interface CabinetSetting {
   /** Chancellor/Health Sec: per-region percentage allocation */
   allocationPercents?: Record<string, number>;
 
-  /** Turn when tier/regional/foreign settings last changed (24-turn cooldown) */
+  /** Turn when the policy tier last changed (24-turn cooldown, this lever only) */
   lastChangedTurn?: number;
+  /** Turn when the regional target last changed (24-turn cooldown, this lever only) */
+  lastRegionChangedTurn?: number;
+  /** Turn when the foreign envoy target last changed (24-turn cooldown, this lever only) */
+  lastTargetCountryChangedTurn?: number;
+  /** Turn when the aid-priority setting last changed (24-turn cooldown, this lever only) */
+  lastAidPriorityChangedTurn?: number;
   /** Turn when allocation percents last changed (once-per-turn cooldown) */
   lastAllocationChangedTurn?: number;
   updatedAt: Date;

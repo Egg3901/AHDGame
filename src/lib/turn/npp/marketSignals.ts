@@ -1,0 +1,198 @@
+/**
+ * Market-signal and target-selection helpers for the NPP corporation brain.
+ *
+ * Split out of `nppCorporationBehavior` when the v5 strategy loop pushed that
+ * file past the 2000 LOC architecture cap. These belong together and apart from
+ * the decision sections: they answer "what does the market look like and where
+ * could this corp go", with no reference to the corp's budgets, cash rails or
+ * strategy. The decision sections consume them.
+ */
+
+import type { Corporation, CorporateSector } from "@/lib/db/types";
+import type { UnownedSector } from "@/lib/db/types/unownedSector";
+import type { CorporationType } from "@/lib/constants/corporations";
+import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
+import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
+import { SECTOR_SUPPLY, type CommodityType } from "@/lib/constants/commodities";
+import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
+
+// Macro-aware production policy (SP5). A +33% price premium saturates to the
+// +25 policy bound; sub-5% moves are ignored so the policy does not churn on
+// market noise.
+const PRODUCTION_POLICY_SENSITIVITY = 75;
+const PRODUCTION_POLICY_DEADBAND = 0.05;
+
+/** A function that returns currentPrice/basePrice for a commodity in a country,
+ *  or null when no price signal is available. */
+export type CommodityPriceRatioFn = (commodity: CommodityType, countryId: string) => number | null;
+
+/**
+ * Is there any bucket this corp could actually enter? The strategy loop needs
+ * to tell "healthy and boxed in" (defend) from "healthy with somewhere to go"
+ * (expand), and headroom is the difference. Reuses the same ranking the
+ * expansion path spends against, so the signal and the action agree.
+ */
+export function hasEnterableHeadroom(
+  corp: Corporation,
+  sectors: CorporateSector[],
+  unownedByCountry: Map<string, UnownedSector[]>,
+  stateControlled: ReadonlySet<string>,
+  plantsEnabled: boolean,
+  eraUnitScale: number
+): boolean {
+  return (
+    findBestUnownedSector(
+      corp.countryId,
+      corp.headquartersState,
+      corp.type,
+      corp.secondaryType,
+      new Set(sectors.map((sec) => sec.sectorType)),
+      unownedByCountry,
+      stateControlled,
+      () => null,
+      plantsEnabled,
+      eraUnitScale
+    ) !== null
+  );
+}
+
+/**
+ * Find the best unowned sector for expansion, prioritizing sectors that
+ * match the corp's primary type, then secondary type, then the open market.
+ *
+ * Within each tier candidates are ranked by revenue × shortage score
+ * (smarter-NPP, t879): revenue alone routed every expansion to the biggest
+ * bucket regardless of market condition, flooding gluts while shortage
+ * commodities went unserved. Weighting by the outputs' price-over-base ratio
+ * points new capacity at unmet demand — the price signal then decays as the
+ * shortage fills, so the herd self-disperses.
+ */
+export function findBestUnownedSector(
+  countryId: string,
+  hqState: string,
+  primaryType: string,
+  secondaryType: string | null | undefined,
+  existingTypes: Set<string>,
+  unownedByCountry: Map<string, UnownedSector[]>,
+  stateControlled: ReadonlySet<string>,
+  priceRatioOf: CommodityPriceRatioFn,
+  plantsEnabled: boolean = false,
+  eraUnitScale: number = 1
+): UnownedSector | null {
+  const countryUnowned = unownedByCountry.get(countryId);
+  if (!countryUnowned || countryUnowned.length === 0) return null;
+
+  // Under plants a market's size IS its headroom in capacity units, and that is
+  // also what the founding build is sized and priced off — so rank on the same
+  // quantity the decision spends against. Ranking on ₳ revenue there would sort
+  // markets by a nameplate the plants engine no longer treats as authoritative,
+  // and would mis-order two markets whose commodity mixes price differently.
+  const sizeOf = (us: UnownedSector) =>
+    plantsEnabled
+      ? unownedHeadroomUnitsOf(
+          us.sectorType as CorporationType,
+          us.headroomUnits,
+          us.revenue,
+          eraUnitScale
+        )
+      : us.revenue;
+
+  // Filter to non-overlapping types with a positive pool, excluding buckets a
+  // National Corporation controls (don't expand into a nationalized sector).
+  const candidates = countryUnowned.filter(
+    (us) =>
+      !existingTypes.has(us.sectorType) &&
+      sizeOf(us) > 0 &&
+      !stateControlled.has(bucketKey(us.stateId, us.sectorType))
+  );
+
+  if (candidates.length === 0) return null;
+
+  const score = (c: UnownedSector) =>
+    sizeOf(c) * sectorShortageScore(c.sectorType as CorporationType, countryId, priceRatioOf);
+  const best = (list: UnownedSector[]) => {
+    // Prefer HQ state, then highest market-weighted score.
+    const hq = list.find((c) => c.stateId === hqState);
+    return hq ?? list.sort((a, b) => score(b) - score(a))[0];
+  };
+
+  // Tier 1: primary type match
+  const primaryMatch = candidates.filter((c) => c.sectorType === primaryType);
+  if (primaryMatch.length > 0) return best(primaryMatch);
+
+  // Tier 2: secondary type match
+  if (secondaryType) {
+    const secondaryMatch = candidates.filter((c) => c.sectorType === secondaryType);
+    if (secondaryMatch.length > 0) return best(secondaryMatch);
+  }
+
+  // Tier 3: open market — market-weighted score across all types
+  return best(candidates);
+}
+
+/**
+ * Macro-aware production-policy target for a sector, derived from the
+ * price-vs-base ratio of the commodities its type SUPPLIES. Returns an integer
+ * in [0, 25], or null when the sector type produces no priced commodity (so
+ * the caller leaves the existing policy untouched).
+ *
+ * Elevated price (shortage/premium) → positive policy (ramp output to capture
+ * the premium and add supply). Depressed price (glut) → 0, not negative:
+ * productionPolicy's intentional lean-ops asymmetry cuts input demand (−15% at
+ * −25) harder than output (−10%), so economy-wide NPP contraction *worsens*
+ * gluts and permanently pins sectors at max contraction (1953-default audit,
+ * GH #3370). Glut capacity is reduced via targetGrowthRate instead (section 2a).
+ */
+export function computeMacroProductionPolicy(
+  sectorType: CorporationType,
+  countryId: string,
+  priceRatioOf: CommodityPriceRatioFn
+): number | null {
+  const supply = SECTOR_SUPPLY[sectorType];
+  if (!supply || supply.length === 0) return null;
+
+  let weightedDeviation = 0;
+  let totalWeight = 0;
+  for (const { commodity, rate } of supply) {
+    const ratio = priceRatioOf(commodity, countryId);
+    if (ratio == null || !Number.isFinite(ratio)) continue;
+    weightedDeviation += rate * (ratio - 1);
+    totalWeight += rate;
+  }
+  if (totalWeight === 0) return null;
+
+  const deviation = weightedDeviation / totalWeight;
+  if (Math.abs(deviation) < PRODUCTION_POLICY_DEADBAND) return 0;
+  // Floor at 0: never command lean-ops contraction from a glut price signal.
+  return Math.max(0, clampProductionPolicy(deviation * PRODUCTION_POLICY_SENSITIVITY));
+}
+
+/**
+ * Supply-weighted mean price-over-base ratio of a sector type's outputs —
+ * the market's "how badly is this wanted" signal. > 1 = shortage premium,
+ * < 1 = glut. Returns 1 (neutral) when no output is priced, so unpriced
+ * sector types rank neither up nor down.
+ *
+ * Smarter-NPP remediation (t879): expansion and growth were market-blind —
+ * capital flowed to whatever bucket had the highest revenue, flooding gluts
+ * while shortage commodities stayed unserved. Pricing the shortage into the
+ * decision routes NPP capital toward unmet demand, which grows aggregate
+ * cleared volume under BOTH ledger and clearing modes.
+ */
+export function sectorShortageScore(
+  sectorType: CorporationType,
+  countryId: string,
+  priceRatioOf: CommodityPriceRatioFn
+): number {
+  const supply = SECTOR_SUPPLY[sectorType];
+  if (!supply || supply.length === 0) return 1;
+  let weighted = 0;
+  let totalWeight = 0;
+  for (const { commodity, rate } of supply) {
+    const ratio = priceRatioOf(commodity, countryId);
+    if (ratio == null || !Number.isFinite(ratio)) continue;
+    weighted += rate * ratio;
+    totalWeight += rate;
+  }
+  return totalWeight > 0 ? weighted / totalWeight : 1;
+}

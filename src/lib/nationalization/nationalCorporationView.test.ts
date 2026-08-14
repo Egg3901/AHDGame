@@ -174,6 +174,34 @@ describe("buildNationalCorporationView", () => {
     expect(vm.mandates).toHaveLength(2);
   });
 
+  it("operatingProfit follows effectiveProfitMargin, not the stale seeded margin (ticket #1072)", async () => {
+    // A low seeded profitMargin that, minus the SOE efficiency penalty, floors to
+    // 0 under the old code — but the sector actually operated at 25% last turn.
+    db.collectionMocks.corporateSectors.find.mockReturnValue(
+      cursor([
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          stateId: "US-CA",
+          sectorType: "energy",
+          revenue: 1_000_000,
+          workers: 500,
+          profitMargin: 5,
+          effectiveProfitMargin: 25,
+          soeMandate: { priceControlled: true, employmentGuaranteed: true },
+        },
+      ])
+    );
+
+    const { buildNationalCorporationView } = await import("./nationalCorporationView");
+    const vm = await buildNationalCorporationView(db as unknown as Db, corp, new ObjectId());
+
+    const sector = vm.holdingsByRegion.find((r) => r.stateId === "US-CA")!.sectors[0];
+    // 1,000,000 × 25% = 250,000 — the operated margin, NOT max(0, 5 + penalty) = 0.
+    expect(sector.operatingProfit).toBe(250_000);
+    expect(vm.stats.treasuryRemittancePerTurn).toBeGreaterThan(0);
+  });
+
   it("exposes all country regions (alphabetical) for the IPO HQ selector", async () => {
     db.collection("states");
     // The states.find mock also serves the view-model's market-share path, so the

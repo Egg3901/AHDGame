@@ -337,7 +337,9 @@ async function evaluateOneBank(
   const { confidence, band } = computeConfidence({
     cashReserves,
     postedCapital,
-    totalDeposits: totalDepositsBefore,
+    // The cash-backed base. Player pointer deposits are excluded for the same
+    // reason they are excluded from the reserve requirement.
+    totalDeposits: Math.max(0, npcDeposits),
     totalLoans,
     reserveRatioRequired,
     arrearsOutstanding,
@@ -352,7 +354,7 @@ async function evaluateOneBank(
     const priorBand = charter.warningBand;
     if (priorBand === "amber" || priorBand === "red") {
       const rate = FLIGHT_RATE_BY_BAND[priorBand];
-      const outflow = npcDeposits * rate;
+      const outflow = Math.min(npcDeposits * rate, Math.max(0, cashReserves));
       if (outflow > 0) {
         const cbDocId = getBankId(getCountryIdForCurrency(currency));
         await db.collection<CentralBank>("centralBanks").updateOne(
@@ -363,6 +365,10 @@ async function evaluateOneBank(
           }
         );
         npcDeposits = Math.max(0, npcDeposits - outflow);
+        // Fleeing depositors take their money with them. Capped at what the
+        // bank actually holds: a run cannot withdraw cash that is not there,
+        // and what it cannot pay is what the failure test is for.
+        cashReserves = Math.max(0, cashReserves - outflow);
         await db.collection<Corporation>("corporations").updateOne(
           {
             _id: corp._id,
@@ -375,6 +381,7 @@ async function evaluateOneBank(
           {
             $set: {
               "bankCharter.npcDeposits": npcDeposits,
+              "bankCharter.cashReserves": cashReserves,
               updatedAt: new Date(),
             },
           }
@@ -390,7 +397,8 @@ async function evaluateOneBank(
 
   let fails = false;
   if (depositTaking) {
-    const requiredLiquidity = reserveRatioRequired * totalDeposits;
+    // Cash-backed base only, matching bankingTurn's reserve requirement.
+    const requiredLiquidity = reserveRatioRequired * npcDeposits;
     // Not `+ postedCapital`: posted capital is a memo of cash already inside the
     // reserve balance, so adding it counted the same money twice.
     const cover = cashReserves;

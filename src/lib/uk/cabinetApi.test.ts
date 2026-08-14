@@ -146,7 +146,15 @@ describe("appointCabinetMemberHandler", () => {
     expect(res.status).toBe(200);
     expect(db.collectionMocks.cabinetSettings.updateOne).toHaveBeenCalledWith(
       { _id: "CN_vice_premier" },
-      { $unset: { lastChangedTurn: "", lastAllocationChangedTurn: "" } }
+      {
+        $unset: {
+          lastChangedTurn: "",
+          lastAllocationChangedTurn: "",
+          lastRegionChangedTurn: "",
+          lastTargetCountryChangedTurn: "",
+          lastAidPriorityChangedTurn: "",
+        },
+      }
     );
   });
 

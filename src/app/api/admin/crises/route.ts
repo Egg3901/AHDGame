@@ -10,6 +10,7 @@ import { isCrisisInteractionEnabled } from "@/lib/crises/featureFlag";
 import { getGameState } from "@/lib/gameState";
 import { STARTING_YEAR } from "@/lib/constants/turnTime";
 import { createCrisisInteraction } from "@/lib/crises/interactionEngine";
+import { announceCrisisStart } from "@/lib/turn/crisisTurn";
 import { getAutoCrisisCatalog } from "@/lib/crises/autoCrisisSpawn";
 import { loadCooldownMap } from "@/lib/crises/autoCrisisCooldown";
 import { floorCrisisDuration } from "@/lib/crises/crisisDuration";
@@ -213,6 +214,12 @@ export async function POST(req: Request) {
     if (insertedCrisis.interactionDefinition && (await isCrisisInteractionEnabled())) {
       await createCrisisInteraction(db, insertedCrisis);
     }
+
+    // Announce to the wire + notify affected players now. The turn processor's
+    // `turn === startTurn` branch never runs for an admin crisis (its startTurn
+    // is the current turn, already processed), so without this an admin-created
+    // crisis would surface its decision UI but emit no news event.
+    await announceCrisisStart(db, insertedCrisis);
 
     return NextResponse.json({
       success: true,

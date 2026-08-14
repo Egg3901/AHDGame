@@ -475,6 +475,16 @@ export interface TurnLog {
       healed?: boolean;
     } | null;
 
+    /** Military branch year crossing: services stood up as their founding year arrives. */
+    militaryBranchYearCrossing?: {
+      ran: boolean;
+      /** Branches that received their authored order of battle this turn. */
+      branchesRaised: number;
+      posted: number;
+      /** Guard stamped + active-but-empty branches stood up silently (first run). */
+      healed?: boolean;
+    } | null;
+
     unemploymentDerivation?: {
       statesProcessed: number;
     } | null;

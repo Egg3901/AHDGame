@@ -50,7 +50,7 @@ const TONE_VAR: Record<ShortageTone, string> = {
   oversupplied: "var(--cshm-oversupplied)",
 };
 
-type ScopeLevel = "global" | "country" | "state";
+type ScopeLevel = "global" | "reachable" | "country" | "state";
 
 interface ScopeMeta {
   countryIds: string[];
@@ -74,18 +74,27 @@ function HeatRow({ row }: { row: ShortageRow }) {
     row.premiumPct >= 0
       ? `+${row.premiumPct.toFixed(0)}% vs base`
       : `${row.premiumPct.toFixed(0)}% vs base`;
+  // Name the supply this scope excluded rather than letting it vanish: a market
+  // walled off by embargo reads identically to an empty one otherwise, which is
+  // exactly the confusion ticket #1077 was filed about.
+  const walledOff = row.blockedSupply > 0 || row.untradedSupply > 0;
+  const walledOffText = walledOff
+    ? `\nNot available to you: ${fmt(row.blockedSupply + row.untradedSupply)} ${row.unit}` +
+      (row.blockedSupply > 0 ? `\n  embargoed ${fmt(row.blockedSupply)}` : "") +
+      (row.untradedSupply > 0 ? `\n  produced where no one trades ${fmt(row.untradedSupply)}` : "")
+    : "";
   const title = row.noSupply
     ? `${row.label}
 Demand ${fmt(row.demand)} ${row.unit}
 Supply 0 ${row.unit} (no local supply)
-Price ${premiumText}`
+Price ${premiumText}${walledOffText}`
     : row.dsRatio == null
-      ? `${row.label}: no supply/demand signal at this scope`
+      ? `${row.label}: no supply/demand signal at this scope${walledOffText}`
       : `${row.label}
 Demand ${fmt(row.demand)} ${row.unit}
 Supply ${fmt(row.supply)} ${row.unit}
 D/S ratio ${row.dsRatio.toFixed(2)}
-Price ${premiumText}`;
+Price ${premiumText}${walledOffText}`;
 
   return (
     <div className="flex items-center gap-2 py-1" title={title}>
@@ -107,6 +116,11 @@ Price ${premiumText}`;
       <div className="w-32 shrink-0 text-right text-[11px] tabular-nums text-muted sm:w-40">
         <span className="text-foreground">{ratioText}</span>
         <span className="ml-1">{premiumText}</span>
+        {walledOff && (
+          <span className="ml-1 whitespace-nowrap" aria-label="Some world supply is out of reach">
+            🚫 {fmt(row.blockedSupply + row.untradedSupply)}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -124,10 +138,19 @@ function Swatch({ tone, label }: { tone: ShortageTone; label: string }) {
   );
 }
 
-const LEVELS: { key: ScopeLevel; label: string }[] = [
-  { key: "global", label: "Global" },
-  { key: "country", label: "Country" },
-  { key: "state", label: "State" },
+const LEVELS: { key: ScopeLevel; label: string; hint: string }[] = [
+  { key: "global", label: "Global", hint: "Every market on Earth added together." },
+  {
+    key: "reachable",
+    label: "Reachable",
+    hint: "What this country's producers can actually sell into, after imports and exports. Use this one to decide what to build.",
+  },
+  {
+    key: "country",
+    label: "Country",
+    hint: "Production against consumption inside the borders. Ignores imports, so a country that buys what it needs abroad still reads short here.",
+  },
+  { key: "state", label: "State", hint: "One state's own production against its own consumption." },
 ];
 
 const selectClass =
@@ -184,21 +207,34 @@ export function ShortageHeatMap({ commodities }: { commodities: CommodityData[] 
   const effectiveStateId =
     stateId && stateOptions.includes(stateId) ? stateId : (stateOptions[0] ?? "");
 
+  // Reachable needs the books, which only exist once a world has run a turn on
+  // 1.1.2 or later. Without them the lens would render every market as empty,
+  // so it stays unavailable and the tab falls back to Global.
+  const reachableReady = useMemo(
+    () => data.some((c) => c.reachableBooks && Object.keys(c.reachableBooks).length > 0),
+    [data]
+  );
+
   const scope: ShortageScope = useMemo(() => {
+    if (level === "reachable" && effectiveCountryId && reachableReady)
+      return { level: "reachable", countryId: effectiveCountryId };
     if (level === "country" && effectiveCountryId)
       return { level: "country", countryId: effectiveCountryId };
     if (level === "state" && effectiveStateId) return { level: "state", stateId: effectiveStateId };
     return { level: "global" };
-  }, [level, effectiveCountryId, effectiveStateId]);
+  }, [level, effectiveCountryId, effectiveStateId, reachableReady]);
 
   const rows = useMemo(() => buildShortageRows(data, scope), [data, scope]);
 
+  const countryName = getCountryDisplayName(effectiveCountryId as CountryId);
   const heading =
-    scope.level === "country"
-      ? `What ${getCountryDisplayName(effectiveCountryId as CountryId)} is short on`
-      : scope.level === "state"
-        ? `What ${getStateDisplayName(effectiveCountryId as CountryId, effectiveStateId)} is short on`
-        : "What the world is short on";
+    scope.level === "reachable"
+      ? `What ${countryName} can sell into`
+      : scope.level === "country"
+        ? `What ${countryName} is short on`
+        : scope.level === "state"
+          ? `What ${getStateDisplayName(effectiveCountryId as CountryId, effectiveStateId)} is short on`
+          : "What the world is short on";
 
   return (
     <div className="cshm rounded-xl border border-card-border bg-card p-4 shadow-sm sm:p-5">
@@ -221,7 +257,9 @@ export function ShortageHeatMap({ commodities }: { commodities: CommodityData[] 
         >
           {LEVELS.map((l) => {
             const active = level === l.key;
-            const disabled = l.key !== "global" && !scopeReady;
+            const needsBooks = l.key === "reachable";
+            const disabled =
+              (l.key !== "global" && !scopeReady) || (needsBooks && scopeReady && !reachableReady);
             return (
               <button
                 key={l.key}
@@ -235,7 +273,13 @@ export function ShortageHeatMap({ commodities }: { commodities: CommodityData[] 
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                 }`}
-                title={disabled ? "Loading scope data" : undefined}
+                title={
+                  disabled
+                    ? needsBooks && scopeReady
+                      ? "Available after the next turn runs"
+                      : "Loading scope data"
+                    : l.hint
+                }
               >
                 {l.label}
               </button>
@@ -243,7 +287,7 @@ export function ShortageHeatMap({ commodities }: { commodities: CommodityData[] 
           })}
         </div>
 
-        {(level === "country" || level === "state") && scopeMeta && (
+        {(level === "reachable" || level === "country" || level === "state") && scopeMeta && (
           <select
             aria-label="Country"
             className={selectClass}
@@ -276,8 +320,35 @@ export function ShortageHeatMap({ commodities }: { commodities: CommodityData[] 
         )}
       </div>
 
+      {/* The caption is scope-specific on purpose. "Supply these" is only true
+          advice on the Reachable lens: the Country lens ignores imports, so it
+          reported the US short on food while imports were covering the gap in
+          full, and players built farms that could not sell (ticket #1077). */}
       <p className="mb-3 text-[11px] text-muted">
-        Longer and hotter means scarcer, which sells at a premium. Supply these.
+        {scope.level === "reachable" ? (
+          <>
+            Longer and hotter means buyers {countryName} can actually reach are going unserved.
+            These are the ones worth building.
+          </>
+        ) : scope.level === "country" ? (
+          <>
+            Production against consumption inside {countryName}. Imports are not counted, so a
+            shortage here can already be covered from abroad. Switch to{" "}
+            <span className="font-medium text-foreground">Reachable</span> before you build.
+          </>
+        ) : scope.level === "state" ? (
+          <>
+            One state&apos;s own production against its own consumption. Sales clear at the national
+            level, so use <span className="font-medium text-foreground">Reachable</span> to judge a
+            build.
+          </>
+        ) : (
+          <>
+            Every market on Earth added together, including ones behind embargoes that you cannot
+            trade with. Switch to <span className="font-medium text-foreground">Reachable</span> for
+            what you can actually sell into.
+          </>
+        )}
       </p>
 
       {rows.length === 0 ? (

@@ -38,19 +38,15 @@ import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 
 import type { Election, State, ElectedOfficial, GameState } from "@/lib/db/types";
-import {
-  SENATE_CLASSES,
-  STATE_SENATE_SEATS,
-  UK_COMMONS_SEATS,
-  UK_REGIONAL_COUNCIL_SEATS,
-} from "@/lib/constants";
-import { getHouseSeats } from "@/lib/constants/states";
+import { SENATE_CLASSES, STATE_SENATE_SEATS, UK_REGIONAL_COUNCIL_SEATS } from "@/lib/constants";
 import {
   JP_SHUGIIN_SEATS,
   JP_SANGIIN_SEATS,
   JP_GOVERNOR_SEATS,
   DE_WAHLKREIS_SEATS,
   DE_LANDTAG_SEATS,
+  getHouseSeats,
+  getUkCommonsSeats,
   getCnNpcSeats,
   getCnPeoplesCongressSeats,
 } from "@/lib/constants/states";
@@ -365,7 +361,7 @@ export async function POST() {
           state: regionId,
           cycle: 1,
           status: "active",
-          totalSeats: UK_COMMONS_SEATS[regionId] ?? 1,
+          totalSeats: getUkCommonsSeats(preset)[regionId] ?? 1,
           startTime: now,
           primaryEndTime: new Date(now.getTime() + commonsPrimaryEndH * MS_PER_TURN),
           endTime: new Date(now.getTime() + commonsEndTimeH * MS_PER_TURN),

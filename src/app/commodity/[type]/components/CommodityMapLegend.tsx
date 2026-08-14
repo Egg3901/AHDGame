@@ -1,6 +1,6 @@
 "use client";
 
-import { getLegendStops, getPriceLegendStops } from "@/lib/commodity-map";
+import { getLegendStops, getPriceLegendStops, getReachableLegendStops } from "@/lib/commodity-map";
 import type { MapMode } from "./CommodityMapModeToggle";
 
 interface CommodityMapLegendProps {
@@ -16,6 +16,30 @@ export default function CommodityMapLegend({
   unit,
   priceLabel = "Price",
 }: CommodityMapLegendProps) {
+  // Diverging legend: both poles AND the neutral midpoint are named, because a
+  // polarity scale is unreadable if the middle is not labelled. Colours come
+  // from the validated ramp itself rather than theme tokens, so the swatch and
+  // the map fill cannot drift apart.
+  if (mode === "reachable") {
+    const stops = getReachableLegendStops();
+    const gradient = `linear-gradient(to right, ${stops.map((s) => s.color).join(", ")})`;
+    return (
+      <div className="flex items-center gap-2 bg-card/90 backdrop-blur-md px-3 py-2 rounded-lg border border-card-border shadow-sm">
+        <span className="text-[10px] font-semibold text-muted uppercase tracking-wider whitespace-nowrap">
+          Reachable
+        </span>
+        <div className="flex items-center gap-1">
+          <span className="text-[9px] text-muted">{stops[0].label}</span>
+          <div className="h-2 w-16 rounded-full" style={{ background: gradient }} />
+          <span className="text-[9px] text-muted">{stops[4].label}</span>
+        </div>
+        <span className="hidden text-[9px] text-muted sm:inline">
+          ({stops[2].label} at demand = supply)
+        </span>
+      </div>
+    );
+  }
+
   const stops =
     mode === "price"
       ? getPriceLegendStops()

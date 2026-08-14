@@ -57,8 +57,13 @@ export function CharterIssueForm({
       <div>
         <h2 className="text-lg font-semibold text-foreground">Issue bank charter</h2>
         <p className="mt-1 text-sm text-muted">
-          Posts {formatBankMoney(data.capitalRequirement, data.currency)} from the corporation
-          treasury. Legal types follow this nation&apos;s banking separation law.
+          Posts{" "}
+          {formatBankMoney(
+            data.capitalRequirementByType?.[type] ?? data.capitalRequirement,
+            data.currency
+          )}{" "}
+          from the corporation treasury. Legal types follow this nation&apos;s banking separation
+          law.
         </p>
       </div>
       {data.eligibilityReasons.length > 0 && data.eligibleTypes.length === 0 && (

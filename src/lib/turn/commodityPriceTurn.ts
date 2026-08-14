@@ -32,6 +32,8 @@ import {
   MARKETING_ADVERTISING_DEMAND_RATE,
   GOVT_HEALTHCARE_DEMAND_RATE,
   GOVT_DEFENSE_ORDNANCE_DEMAND_RATE,
+  GOVT_SPEND_CATEGORY_ALIASES,
+  govtSpendForCategory,
   COMMODITY_PRICE_DRIFT_RATE,
   NATIONAL_COMMODITY_STABILIZER,
   COMMODITIES_NATIONAL_REGIONAL_PRICE_BLEND,
@@ -69,8 +71,8 @@ import {
   type HouseholdStateSignals,
 } from "@/lib/turn/householdConsumption";
 import { buildCommodityFlowDocs, COMMODITY_FLOW_RETENTION_TURNS } from "@/lib/market/flowLedger";
-import { runSourcingPass } from "@/lib/logistics/sourcing";
 import { applyFreightHaulDemand } from "@/lib/logistics/freightDemand";
+import { settleFreightNetwork, type FreightSettlement } from "@/lib/logistics/settlement";
 import { buildSourcingDocs, SOURCING_FLOW_RETENTION_TURNS } from "@/lib/logistics/sourcingLedger";
 import { stateHops } from "@/lib/logistics/stateDistance";
 import { importerTariffOnFlow } from "@/lib/trade/tariffDrag";
@@ -96,6 +98,7 @@ import { isPlannedEconomy, plannedShare } from "@/lib/constants/commandEconomy";
 import { administeredNationalPrice, dualTrackPrice } from "@/lib/economy/administeredPricing";
 import type { GameState } from "@/lib/db/types/gameState";
 import { clearAllCommodities, valueTradeSnapshot } from "@/lib/trade/snapshot";
+import { buildReachableBooks, serializeReachableBooks } from "@/lib/trade/reachableBook";
 import { applyTradeConvergence } from "@/lib/trade/convergence";
 import { buildTradeAffinity } from "@/lib/trade/tradeAffinity";
 import { TRADE_PRICE_CONVERGENCE_K } from "@/lib/trade/constants";
@@ -287,6 +290,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             "economic.medianIncome.value": 1,
             "economic.unemploymentRate.value": 1,
             "economic.consumerConfidence.value": 1,
+            "infrastructure.roadCondition.value": 1,
           },
         }
       )
@@ -325,7 +329,13 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       .toArray(),
     db
       .collection<FederalBudget>("federalBudget")
-      .find({}, { projection: { countryId: 1, "spending.byCategory.healthcare": 1 } })
+      // The WHOLE category map, not named paths. This projection pinned
+      // `healthcare` only, so when #3880 added the defense -> ordnance leg the
+      // amount it needed was stripped before the loop ever saw it and the
+      // feature has been inert ever since. It also hid the `health` spelling
+      // that UK/CN/IE use. Projecting the map means adding a leg to
+      // GOVT_SPEND_DEMAND cannot silently read zero again.
+      .find({}, { projection: { countryId: 1, "spending.byCategory": 1 } })
       .toArray(),
     db
       .collection<ExchangeRate>("exchangeRates")
@@ -427,11 +437,18 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const stateGdpMap = new Map<string, number>();
   // stateToCountry used by national aggregation block below
   const stateToCountry = new Map<string, string>();
+  const roadConditionByState = new Map<string, number>();
   for (const state of allStates) {
     if (NATIONAL_SCOPE_IDS.has(state._id)) continue;
     stateToCountry.set(state._id, state.countryId);
     if (state.gdp && state.gdp > 0) {
       stateGdpMap.set(state._id, state.gdp);
+    }
+  }
+  for (const metrics of allStateMetrics) {
+    const road = metrics.infrastructure?.roadCondition?.value;
+    if (typeof road === "number" && Number.isFinite(road)) {
+      roadConditionByState.set(String(metrics._id), road);
     }
   }
 
@@ -1056,8 +1073,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const turnsPerYear = 48;
   for (const { category, commodity, rate } of GOVT_SPEND_DEMAND) {
     const basePrice = LEDGER_BASE_PRICES[commodity];
+    const aliases = GOVT_SPEND_CATEGORY_ALIASES[category] ?? [category];
     for (const budget of federalBudgets) {
-      const annualSpendLocal = budget.spending?.byCategory?.[category] ?? 0;
+      const annualSpendLocal = govtSpendForCategory(budget.spending?.byCategory, aliases);
       if (annualSpendLocal <= 0) continue;
       const cid = budget.countryId;
       const annualSpendAnchor = annualSpendLocal / fxRateForCountry(cid);
@@ -1122,18 +1140,30 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     existingPrices.map((p) => [p.commodity, p])
   );
 
-  // ── Landed-price sourcing pass (RECORD-ONLY — interstate-logistics Rev 4) ──
-  // Runs on the PRE-clearing balances (the same real balances the aggregate
-  // clearing sees) and mutates nothing: it shadows which sellers each state
-  // would buy from at landed price (ask + per-hop freight + tariff), gated by
-  // per-state freight capacity, and persists the flow ledger for tuning before
-  // any money wiring reads it. Ordering constraint: must stay above
-  // clearAllCommodities/applyTradeConvergence, which relieve byCountry in place.
+  // Freight is a separately-soaked rollout.  The market ladder enables the
+  // ledger needed to observe routes, while this gate decides whether those
+  // deliveries constrain next turn's local plant inputs.
+  const freightSettlementConfig = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { freightSettlementMode: 1 } });
+  const freightSettlementActive =
+    freightSettlementConfig?.freightSettlementMode === "active" &&
+    marketAtLeast(marketSystemMode, "clearing");
+  let freightSettlement: FreightSettlement | null = null;
+
+  // ── Landed-price freight settlement (shadow or active) ──
+  // Runs on PRE-clearing balances, preserving those raw balances for aggregate
+  // clearing. It determines which sellers each state can buy from at landed
+  // price (ask + per-hop freight + tariff), bounded by origin freight capacity.
+  // Shadow persists routes only. Active additionally persists delivered input
+  // availability for the following corporation turn. Ordering constraint: stay
+  // above clearAllCommodities/applyTradeConvergence, which relieve byCountry
+  // in place.
   if (marketAtLeast(marketSystemMode, "ledger")) {
     const sourcingStates = allStates
       .filter((s) => !NATIONAL_SCOPE_IDS.has(s._id) && stateToCountry.has(s._id))
       .map((s) => ({ stateId: s._id, countryId: s.countryId as CountryId }));
-    const sourcingResult = runSourcingPass({
+    freightSettlement = settleFreightNetwork({
       states: sourcingStates,
       byState,
       byCountry,
@@ -1143,6 +1173,11 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       freightPrice: existingPriceMap.get("freight")?.globalPrice ?? LEDGER_BASE_PRICES.freight,
       eraUnitScale: ledgerEraUnitScale,
       hops: stateHops,
+      shippingCostMultiplier: (_country, from, to) => {
+        const average =
+          ((roadConditionByState.get(from) ?? 60) + (roadConditionByState.get(to) ?? 60)) / 2;
+        return Math.max(0.97, Math.min(1.03, 1 - ((average - 60) / 40) * 0.03));
+      },
       tariffRatePct: (commodity, exporter, importer) => {
         const sectorType = PRIMARY_SECTOR_BY_COMMODITY[commodity];
         return sectorType
@@ -1153,7 +1188,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       isBlocked: (commodity, exporter, importer) =>
         affinityFor(commodity, exporter, importer) === 0,
     });
-    const { commodityDocs, networkDoc } = buildSourcingDocs(sourcingResult, turn, now);
+    const { commodityDocs, networkDoc } = buildSourcingDocs(freightSettlement.sourcing, turn, now);
     if (commodityDocs.length > 0) {
       // Lazy index for the {commodity} + latest-turn read path, mirroring
       // commodityFlows. Fire-and-forget.
@@ -1185,7 +1220,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
 
     // Freight demand wiring (ticket #1039): haul TEU is booked as real freight
     // demand before clearing, so the Logistics map and sold % read one market.
-    applyFreightHaulDemand(sourcingResult.freightTeuByState, {
+    applyFreightHaulDemand(freightSettlement.sourcing.freightTeuByState, {
       global,
       byState,
       byCountry,
@@ -1194,6 +1229,20 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   }
 
   const tradeClearing = clearAllCommodities(COUNTRY_ORDER, byCountry, affinityFor, capUnitsFor);
+  // Reachable books, built from the SAME pre-convergence balances the clearing
+  // ran on. `applyTradeConvergence` mutates `byCountry` in place on the next
+  // line, so this cannot move below it: post-convergence an importer's demand
+  // has already been relieved by k x imports and every deficit reads short by
+  // that factor. Persisted with the flow snapshot so read surfaces quote the
+  // book the engine actually clears on rather than the global aggregate
+  // (ticket #1077).
+  const reachableBooks = buildReachableBooks({
+    countries: COUNTRY_ORDER,
+    balances: byCountry,
+    clearing: tradeClearing,
+    commodities: COMMODITY_TYPES,
+    isBlocked: (commodity, exporter, importer) => affinityFor(commodity, exporter, importer) === 0,
+  });
   applyTradeConvergence(COUNTRY_ORDER, byCountry, tradeClearing, TRADE_PRICE_CONVERGENCE_K);
 
   // Build nudge map from the parallel-fetched nudge docs
@@ -1379,9 +1428,13 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           countryId && nationalPrices[countryId] != null
             ? nationalPrices[countryId]
             : globalMktPrice;
+        const deliveredSupply = freightSettlementActive
+          ? (freightSettlement?.deliveredSupplyByCommodity.get(commodity)?.get(stateId) ??
+            stateBal.supply)
+          : stateBal.supply;
         const regionalLeg = isMacroPriceBlend
           ? nationalLeg
-          : computeMarketPrice(effBasePrice, stateBal.supply, stateBal.demand, priceKnee);
+          : computeMarketPrice(effBasePrice, deliveredSupply, stateBal.demand, priceKnee);
         const targetPrice = blendPrice(globalMktPrice, nationalLeg, regionalLeg);
         const previousPrice = existing?.statePrices?.[stateId] ?? targetPrice;
         statePrice =
@@ -1395,6 +1448,17 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       stateDemand[stateId] = Math.round(stateBal.demand * 100) / 100;
     }
 
+    const deliveredSupply = freightSettlementActive
+      ? Object.fromEntries(
+          freightSettlement?.deliveredSupplyByCommodity.get(commodity)?.entries() ?? []
+        )
+      : undefined;
+    const inputAvailability = freightSettlementActive
+      ? Object.fromEntries(
+          freightSettlement?.inputAvailabilityByCommodity.get(commodity)?.entries() ?? []
+        )
+      : undefined;
+
     ops.push({
       updateOne: {
         filter: { commodity },
@@ -1407,6 +1471,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             statePrices,
             stateSupply,
             stateDemand,
+            ...(deliveredSupply ? { stateDeliveredSupply: deliveredSupply } : {}),
+            ...(inputAvailability ? { stateInputAvailability: inputAvailability } : {}),
             nationalPrices,
             nationalSupply,
             nationalDemand,
@@ -1526,9 +1592,20 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     turn,
     now
   );
+  // Read path for the reachable books is "latest turn that has them", so the
+  // descending-turn index is what keeps it O(1) as the snapshot history grows.
+  // Fire-and-forget, mirroring commodityFlows/commoditySourcingFlows above.
+  void db
+    .collection("tradeFlowSnapshots")
+    .createIndex({ turn: -1 })
+    .catch(() => {});
   await db
     .collection("tradeFlowSnapshots")
-    .updateOne({ turn }, { $set: tradeSnapshot }, { upsert: true });
+    .updateOne(
+      { turn },
+      { $set: { ...tradeSnapshot, books: serializeReachableBooks(reachableBooks) } },
+      { upsert: true }
+    );
 
   return {
     commoditiesUpdated: COMMODITY_TYPES.length,
