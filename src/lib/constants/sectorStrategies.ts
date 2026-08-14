@@ -13,6 +13,7 @@
 
 import type { CorporationType } from "./corporations";
 import type { CommodityType } from "./commodities";
+import { COMMODITY_BASE_PRICES } from "./commodities";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -1225,4 +1226,59 @@ function blendRates(
     }
   }
   return result;
+}
+
+// ─── Planned-economy output remap ───────────────────────────────────────────
+
+/**
+ * What media produces in a command economy instead of `advertising`.
+ *
+ * Advertising is a market institution: it exists because rival brands bid for
+ * custom. A planned economy has no such contest, so its broadcasters, presses
+ * and cinemas are producing state information and culture, which households
+ * consume — not airtime sold to advertisers.
+ *
+ * The 1953 seed nonetheless gave every Warsaw Pact state a full commercial
+ * media sector on the standard strategy, so the bloc was pushing 3,343,618
+ * units/day of advertising — 54% of world supply — into economies whose
+ * combined advertising demand was 4,736 units/day. Measured on prod at turn
+ * 114: Hungary ran 1,181x oversupplied, Czechoslovakia and Bulgaria 786x,
+ * Poland 779x. That glut set the world price and pinned it to the deflation
+ * clamp at 0.32x base, so every media owner on Earth was selling ~2% of output
+ * at a 68% discount.
+ */
+export const PLANNED_ECONOMY_MEDIA_OUTPUT: CommodityType = "entertainment_services";
+
+/**
+ * Re-denominate a sector's OUTPUT mix for a planned economy.
+ *
+ * Pure and total: returns the input untouched for market economies, for
+ * non-media sectors, and for a mix that produces no advertising, so every
+ * existing call site is byte-identical unless the sector is bloc media.
+ *
+ * MUST be applied at every site that resolves output rates — the world supply
+ * ledger AND the clearing offer both — or the offered book and the ledger drift
+ * apart and clearing's lagged-supply reconciliation misfires. That is why this
+ * lives here rather than being inlined at either call site.
+ */
+export function applyPlannedEconomyOutputMix(
+  sectorType: CorporationType,
+  supply: Partial<Record<CommodityType, number>>,
+  plannedEconomy: boolean
+): Partial<Record<CommodityType, number>> {
+  if (!plannedEconomy || sectorType !== "media") return supply;
+  const advertising = supply.advertising ?? 0;
+  if (!(advertising > 0)) return supply;
+  const remapped: Partial<Record<CommodityType, number>> = { ...supply };
+  delete remapped.advertising;
+  // Conserve VALUE, not the rate. Supply rates are ₳-per-unit-revenue and the
+  // two commodities are priced differently (advertising 150, state broadcasting
+  // 600), so carrying the rate across unchanged would hand bloc media 4x the
+  // output value it had. The ratio is taken off the shared modern table and is
+  // therefore era-scale invariant: both sides divide by the same scale.
+  const valueRatio =
+    COMMODITY_BASE_PRICES.advertising / COMMODITY_BASE_PRICES[PLANNED_ECONOMY_MEDIA_OUTPUT];
+  remapped[PLANNED_ECONOMY_MEDIA_OUTPUT] =
+    (remapped[PLANNED_ECONOMY_MEDIA_OUTPUT] ?? 0) + advertising * valueRatio;
+  return remapped;
 }
