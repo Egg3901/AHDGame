@@ -51,11 +51,16 @@ describe("buildReachableBooks", () => {
     });
 
     const us = books.get("US" as CountryId)!.get("oil")!;
-    // 80 units imported, so domestic producers face demand 180 - 80 = 100,
-    // exactly their own supply. No room for another barrel.
+    // 80 units imported, so the CLEARING book pins demand at 180 - 80 = 100,
+    // exactly domestic supply. That is correct for what today's producers fill.
     expect(us.imports).toBeCloseTo(80, 6);
     expect(us.demand).toBeCloseTo(100, 6);
-    expect(reachableDemandGap(us)).toBeCloseTo(0, 6);
+    expect(us.domesticDemand).toBeCloseTo(180, 6);
+    // But those 80 imported units are room a domestic builder can TAKE:
+    // domestic output clears before imports, so new capacity displaces them.
+    // Reading the gap off the pinned clearing book returned 0 here and is what
+    // kept ticket #1077 reporting "room for 0 farms".
+    expect(reachableDemandGap(us)).toBeCloseTo(80, 6);
     expect(us.blockedSupply).toBe(0);
   });
 
@@ -111,5 +116,74 @@ describe("buildReachableBooks", () => {
 describe("reachableDemandGap", () => {
   it("treats a missing book as no room rather than infinite room", () => {
     expect(reachableDemandGap(undefined)).toBe(0);
+  });
+});
+
+describe("reachableDemandGap — import displacement (ticket #1077 follow-up)", () => {
+  const book = (o: Partial<import("./reachableBook").ReachableBookEntry>) => ({
+    supply: 0,
+    demand: 0,
+    domesticDemand: 0,
+    imports: 0,
+    exports: 0,
+    blockedSupply: 0,
+    untradedSupply: 0,
+    ...o,
+  });
+
+  it("reports the displaceable import volume for a net importer", () => {
+    // Live prod, turn 113, US food. The clearing book reads demand == supply
+    // exactly (imports are set to the residual), so a gap taken off it is
+    // identically zero and the player was told "room for 0 farms".
+    const us = book({
+      supply: 323_218.24676,
+      demand: 323_218.24676,
+      domesticDemand: 1_438_849.68,
+      imports: 1_115_631.43,
+    });
+    expect(us.demand - us.supply).toBeCloseTo(0, 6); // the old, broken basis
+    expect(reachableDemandGap(us)).toBeCloseTo(1_115_631.43, 2);
+  });
+
+  it("is zero for a country that genuinely produces more than it can place", () => {
+    // Poland: a real glut, so no room regardless of how the book is read.
+    const pl = book({
+      supply: 4_753_991.37,
+      demand: 3_423_124.34,
+      domesticDemand: 282_856.05,
+      exports: 3_140_268.29,
+    });
+    expect(reachableDemandGap(pl)).toBe(0);
+  });
+
+  it("is unchanged for a self-sufficient country with no imports", () => {
+    // US coal: imports 0, so the clearing book was never pinned and the new
+    // basis must not move it.
+    const coal = book({
+      supply: 306_503.02,
+      demand: 306_502.97,
+      domesticDemand: 175_701.92,
+      exports: 130_801.05,
+    });
+    expect(reachableDemandGap(coal)).toBeCloseTo(0, 0);
+  });
+
+  it("counts unmet demand on top of displaceable imports", () => {
+    // Imports only partly cover the deficit: room is the whole shortfall.
+    const partial = book({ supply: 100, demand: 150, domesticDemand: 400, imports: 250 });
+    expect(reachableDemandGap(partial)).toBe(300);
+  });
+
+  it("heals a book written before domesticDemand existed", () => {
+    // Turn 106-113 documents lack the field; invert demand = max(0, D - imports) + exports.
+    const legacy = {
+      supply: 323_218.24676,
+      demand: 323_218.24676,
+      imports: 1_115_631.43,
+      exports: 0,
+      blockedSupply: 0,
+      untradedSupply: 0,
+    } as unknown as import("./reachableBook").ReachableBookEntry;
+    expect(reachableDemandGap(legacy)).toBeCloseTo(1_115_631.43, 2);
   });
 });

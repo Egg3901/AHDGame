@@ -121,6 +121,32 @@ export function computeWeightedGrowthRate(
   return weightedGrowth / totalRevenue;
 }
 
+/**
+ * Σ owned-sector realized revenue in HOST-STATE currency (the unit
+ * `CorporateSector.revenue` / `realizedRevenue` are stored in).
+ *
+ * The plants cyclical signal MUST compare this sum turn-to-turn, not the
+ * ₳-normalized one. ₳ restatement uses each turn's FX, so a 0.2% GBP move
+ * annualizes to ~10pp of phantom GDP growth — the UK "jig every turn"
+ * (ticket #1084). Host/host cancels FX. Same per-sector realized-vs-nameplate
+ * preference as {@link sumRealizedRevenue} under plants.
+ */
+export function sumHostRealizedRevenue(
+  sectors: Array<{ hostRevenue: number; hostRealizedRevenue?: number }>
+): number {
+  let total = 0;
+  for (const s of sectors) {
+    if (typeof s.hostRealizedRevenue === "number" && Number.isFinite(s.hostRealizedRevenue)) {
+      total += s.hostRealizedRevenue;
+      continue;
+    }
+    if (typeof s.hostRevenue === "number" && Number.isFinite(s.hostRevenue)) {
+      total += s.hostRevenue;
+    }
+  }
+  return total;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
