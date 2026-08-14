@@ -34,6 +34,21 @@ export type CountryClearingBooks = Map<
   Map<CommodityType, { supply: number; demand: number }>
 >;
 
+/**
+ * The sellable demand a country's producers face, in units.
+ *
+ * ONE definition, shared by the engine's clearing books and by every
+ * player-facing surface that quotes market room (`lib/trade/reachableBook`).
+ * The build gates used to read `globalDemand - globalSupply` instead, which
+ * summed across embargo walls and across countries that trade with nobody, and
+ * told US players a market was oversupplied when the market they could reach
+ * ran a shortage (ticket #1077). If the quote and the clearing disagree the
+ * quote is worse than no quote, so neither side gets its own copy of this.
+ */
+export function reachableDemandUnits(demand: number, imports: number, exports: number): number {
+  return Math.max(0, demand - imports) + exports;
+}
+
 export function buildCountryClearingBooks(args: {
   countries: CountryId[];
   /** Lagged per-country balances (prior turn's ledger), in units. */
@@ -83,7 +98,7 @@ export function buildCountryClearingBooks(args: {
       const exports = pc?.exports ?? 0;
       books.get(c)!.set(commodity, {
         supply: s,
-        demand: Math.max(0, d - imports) + exports,
+        demand: reachableDemandUnits(d, imports, exports),
       });
     }
   }

@@ -198,3 +198,74 @@ describe("buildShortageRows scope lens", () => {
     expect(buildShortageRows([c])[0]!.dsRatio).toBeCloseTo(4, 5); // global, not US
   });
 });
+
+describe("buildShortageRows reachable lens (ticket #1077)", () => {
+  // The live turn-97 oil case: the world reads oversupplied, but the surplus is
+  // Soviet oil the US is embargoed from, so the market a US seller faces is short.
+  const oil = make({
+    commodity: "oil",
+    unit: "barrels",
+    basePrice: 80,
+    globalPrice: 80,
+    globalSupply: 435_642,
+    globalDemand: 357_532,
+    nationalPrices: { US: 80 },
+    reachableBooks: {
+      US: { supply: 30_658, demand: 55_804, blockedSupply: 164_002, untradedSupply: 0 },
+    },
+  });
+
+  it("reads a shortage where the global lens reads a glut", () => {
+    const [world] = buildShortageRows([oil], { level: "global" });
+    expect(world.tone).toBe("oversupplied");
+
+    const [us] = buildShortageRows([oil], { level: "reachable", countryId: "US" });
+    expect(us.dsRatio).toBeCloseTo(1.82, 2);
+    expect(us.tone).toBe("short-strong");
+  });
+
+  it("discloses walled-off supply without folding it into the ratio", () => {
+    const [us] = buildShortageRows([oil], { level: "reachable", countryId: "US" });
+    expect(us.blockedSupply).toBe(164_002);
+    expect(us.untradedSupply).toBe(0);
+    // The excluded supply must not move supply, demand or the ratio.
+    expect(us.supply).toBe(30_658);
+    expect(us.dsRatio).toBeCloseTo(55_804 / 30_658, 6);
+  });
+
+  it("keeps a walled-off row visible even with no signal of its own", () => {
+    // Nothing produced or demanded locally, but 5M units exist that this
+    // country cannot touch. Silently dropping the row hides exactly the fact
+    // the player needs.
+    const walled = make({
+      commodity: "steel",
+      basePrice: 100,
+      globalPrice: 100,
+      reachableBooks: {
+        US: { supply: 0, demand: 0, blockedSupply: 0, untradedSupply: 5_000_000 },
+      },
+    });
+    const rows = buildShortageRows([walled], { level: "reachable", countryId: "US" });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].untradedSupply).toBe(5_000_000);
+  });
+
+  it("drops a country with no book instead of inventing a market for it", () => {
+    // No book, no local price, nothing walled off: there is genuinely nothing
+    // to say, so the row is omitted rather than rendered as a dead 0/0 market.
+    const rows = buildShortageRows(
+      [make({ commodity: "food", basePrice: 100, globalPrice: 140 })],
+      {
+        level: "reachable",
+        countryId: "ZZ",
+      }
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("other scopes never report walled-off supply", () => {
+    const [row] = buildShortageRows([oil], { level: "global" });
+    expect(row.blockedSupply).toBe(0);
+    expect(row.untradedSupply).toBe(0);
+  });
+});
