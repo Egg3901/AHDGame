@@ -611,6 +611,51 @@ export const MARKETING_ADVERTISING_DEMAND_RATE = 0.4;
 export const GOVT_HEALTHCARE_DEMAND_RATE = 0.015;
 
 /**
+ * Budget category keys that all mean "government health spending", in priority
+ * order.
+ *
+ * The seed reference authors most countries with `healthcare` but UK, CN and IE
+ * with `health` (see `seeds/reference/budgets.ts`; `BASELINE_OVERRIDE_CATEGORIES`
+ * there already lists both spellings). The commodity demand leg read only
+ * `healthcare`, so those three countries produced ZERO healthcare_services
+ * demand — the UK's NHS line, authored at £570M/yr with the comment "NHS — new
+ * (1948) but growing fast", reached the market as nothing at all. Confirmed on
+ * prod: UK, CN and IE were the only budgets carrying a defense line and no
+ * healthcare line.
+ *
+ * Resolved by alias rather than renamed in the seed because live worlds already
+ * hold documents spelled `health`, and a rename would need a migration to reach
+ * them while this does not.
+ */
+export const GOVT_HEALTHCARE_BUDGET_CATEGORIES = ["healthcare", "health"] as const;
+
+/**
+ * Government budget category aliases per demand leg. Single-entry lists are the
+ * normal case; healthcare is the one with a spelling split.
+ */
+export const GOVT_SPEND_CATEGORY_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  healthcare: GOVT_HEALTHCARE_BUDGET_CATEGORIES,
+  defense: ["defense"],
+};
+
+/**
+ * First matching category amount from a budget's `byCategory` map, in alias
+ * priority order. First match rather than a sum: a document carries one
+ * spelling, and summing would double-count anything that somehow held both.
+ */
+export function govtSpendForCategory(
+  byCategory: Record<string, number> | undefined | null,
+  aliases: readonly string[]
+): number {
+  if (!byCategory) return 0;
+  for (const key of aliases) {
+    const amount = byCategory[key];
+    if (typeof amount === "number" && Number.isFinite(amount) && amount > 0) return amount;
+  }
+  return 0;
+}
+
+/**
  * Fraction of a government's annual defense budget that converts to `ordnance`
  * demand (procurement of weapons systems), the defense analogue of
  * {@link GOVT_HEALTHCARE_DEMAND_RATE}.

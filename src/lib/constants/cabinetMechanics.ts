@@ -73,6 +73,14 @@ export interface CabinetPositionDef {
   succeededBy?: string;
   /** Era display names. Resolution: last band with from <= year; fallback `name`. */
   namesByYear?: ReadonlyArray<CabinetNameBand>;
+  /**
+   * Legislation-driven rename: when the seat named in `whenSeatEnabled` has been
+   * brought into existence by a create_department bill (recorded in
+   * `gameState.manuallyEnabledSeats`), this seat is styled `name`. Used for
+   * HEW -> HHS when the Department of Education Act carves off Education.
+   * Takes precedence over `namesByYear`. See rosterEra.resolveSeatName.
+   */
+  renameOnDepartmentSplit?: { whenSeatEnabled: string; name: string };
 }
 
 const MECHANICS_BY_COUNTRY: Record<string, Record<string, CabinetPositionMechanics>> = {

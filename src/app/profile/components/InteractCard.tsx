@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useTranslations, useLocale } from "next-intl";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { MailComposerModal } from "@/components/MailComposerModal";
 
@@ -63,6 +64,7 @@ function ActionsTab({
   targetName: string;
   initialInfluence: number;
 }) {
+  const t = useTranslations("profile.interact");
   const { formatAmount } = useCurrency();
   const [info, setInfo] = useState<InfluenceInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -120,7 +122,7 @@ function ActionsTab({
         setFlash(data.attackFailed ? "failed" : action);
         setTimeout(() => setFlash(null), 1500);
       } else {
-        setActionError(data.error || "Action failed. Please try again.");
+        setActionError(data.error || t("actionFailed"));
       }
     } finally {
       setExecuting(false);
@@ -137,7 +139,7 @@ function ActionsTab({
     );
   }
 
-  if (!info) return <p className="text-xs text-muted">Could not load influence data.</p>;
+  if (!info) return <p className="text-xs text-muted">{t("loadError")}</p>;
 
   const canAction = info.myActions >= info.actionCost;
   const favorabilityMaxed = favorability >= 100;
@@ -148,10 +150,10 @@ function ActionsTab({
 
   const locationLabel =
     info.multiplier === 1.0
-      ? "Same state"
+      ? t("sameState")
       : info.multiplier === 1.25
-        ? "Neighboring state"
-        : "Distant state";
+        ? t("neighboringState")
+        : t("distantState");
 
   const btnBase =
     "rounded-lg px-3 py-2.5 text-xs font-semibold transition-all flex flex-col items-center gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed";
@@ -160,22 +162,22 @@ function ActionsTab({
     <div className="space-y-4">
       {/* Target stats */}
       <div className="space-y-2.5">
-        <StatBar label="Influence" value={influence} color="var(--primary)" />
-        <StatBar label="Favorability" value={favorability} color="var(--info)" />
+        <StatBar label={t("influence")} value={influence} color="var(--primary)" />
+        <StatBar label={t("favorability")} value={favorability} color="var(--info)" />
       </div>
 
       {/* Resources & location */}
       <div className="rounded-lg bg-card-elevated/40 border border-card-border/50 px-3 py-2 text-xs space-y-1">
         <div className="flex justify-between text-muted">
-          <span>Location</span>
+          <span>{t("location")}</span>
           <span className={info.multiplier > 1 ? "text-warning" : "text-success"}>
-            {locationLabel} · {info.actionCost} action{info.actionCost !== 1 ? "s" : ""}
+            {locationLabel} · {t("actionCost", { count: info.actionCost })}
           </span>
         </div>
         <div className="flex justify-between text-muted">
-          <span>Your resources</span>
+          <span>{t("yourResources")}</span>
           <span className="text-foreground tabular-nums">
-            {info.myActions} actions · {formatAmount(info.myFunds)}
+            {t("actionsCount", { count: info.myActions })} · {formatAmount(info.myFunds)}
           </span>
         </div>
       </div>
@@ -187,9 +189,9 @@ function ActionsTab({
           disabled={!canAction || favorabilityMaxed || executing || flash !== null}
           title={
             favorabilityMaxed && info.targetMediaSustainedAtCap
-              ? "This candidate's Media Spending is sustaining their favorability at the cap. Wait for them to reduce media spend or for their campaign to end."
+              ? t("supportTitleMediaCap")
               : favorabilityMaxed
-                ? "Their favorability is at 100%. Wait for it to decay before supporting again."
+                ? t("supportTitleMaxed")
                 : undefined
           }
           className={`${btnBase} ${
@@ -198,13 +200,13 @@ function ActionsTab({
               : "bg-success/10 border border-success/30 hover:bg-success/20 text-success"
           }`}
         >
-          <span>{flash === "raise" ? "✓ Supported" : "↑ Support"}</span>
+          <span>{flash === "raise" ? t("supported") : t("support")}</span>
           <span className="text-[10px] font-normal opacity-70">
             {favorabilityMaxed
               ? info.targetMediaSustainedAtCap
-                ? "Pinned by media spend"
-                : "Maxed (100%)"
-              : "+1% favorability"}
+                ? t("pinnedByMedia")
+                : t("maxed")
+              : t("plusFav")}
           </span>
         </button>
 
@@ -221,20 +223,18 @@ function ActionsTab({
         >
           {flash === "failed" ? (
             <>
-              <span>✕ Blocked</span>
-              <span className="text-[10px] font-normal opacity-70">infamy blocked it</span>
+              <span>{t("blocked")}</span>
+              <span className="text-[10px] font-normal opacity-70">{t("infamyBlocked")}</span>
             </>
           ) : (
             <>
-              <span>{flash === "lower" ? "✓ Attacked" : "↓ Attack"}</span>
+              <span>{flash === "lower" ? t("attacked") : t("attack")}</span>
               <span className="text-[10px] font-normal opacity-70">
                 {favorabilityFloored
-                  ? "At floor (0%)"
-                  : `-1% favorability${
-                      info.attackFailureChance > 0
-                        ? ` · ${Math.round(info.attackFailureChance)}% fail`
-                        : ""
-                    }`}
+                  ? t("atFloor")
+                  : info.attackFailureChance > 0
+                    ? t("attackEffectWithFail", { pct: Math.round(info.attackFailureChance) })
+                    : t("attackEffect")}
               </span>
             </>
           )}
@@ -251,15 +251,18 @@ function ActionsTab({
             : "bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary"
         }`}
       >
-        <span>{flash === "barnstorm" ? "✓ Barnstormed" : "Barnstorm"}</span>
+        <span>{flash === "barnstorm" ? t("barnstormed") : t("barnstorm")}</span>
         <span className="text-[10px] font-normal opacity-70">
           {influenceMaxed
-            ? "Influence maxed (100%)"
-            : `${sameState ? "+2%" : "+1%"} influence · 5 actions + ${formatAmount(100_000)}`}
+            ? t("influenceMaxed")
+            : t("barnstormEffect", {
+                gain: sameState ? "+2%" : "+1%",
+                amount: formatAmount(100_000),
+              })}
         </span>
       </button>
 
-      {!canAction && <p className="text-center text-[10px] text-error">Not enough actions</p>}
+      {!canAction && <p className="text-center text-[10px] text-error">{t("notEnoughActions")}</p>}
       {actionError && <p className="text-center text-[10px] text-error">{actionError}</p>}
     </div>
   );
@@ -278,6 +281,8 @@ function FundsTab({
   myFunds: number;
   myCash: number;
 }) {
+  const t = useTranslations("profile.interact");
+  const locale = useLocale();
   const { inputSymbol } = useCurrency();
   const [mode, setMode] = useState<"campaign" | "cash">("campaign");
   // Input value is in the sender's LOCAL home currency (matches the input symbol).
@@ -304,7 +309,7 @@ function FundsTab({
     // the sender's LOCAL home currency — pass the typed amount through unchanged.
     const amount = Math.round(displayAmount);
     if (!amount || amount <= 0) {
-      setError("Enter a valid amount.");
+      setError(t("enterValidAmount"));
       return;
     }
     setSubmitting(true);
@@ -320,16 +325,17 @@ function FundsTab({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Transfer failed.");
+        setError(data.error || t("transferFailed"));
         return;
       }
       // Both routes echo back the amount they applied, already in local units.
-      const successText = `Sent ${inputSymbol}${Number(data.amount ?? amount).toLocaleString(
-        "en-US"
-      )} to ${targetName}.`;
+      const successText = t("sent", {
+        amount: `${inputSymbol}${Number(data.amount ?? amount).toLocaleString(locale)}`,
+        name: targetName,
+      });
       setMessage(successText);
     } catch {
-      setError("Transfer failed.");
+      setError(t("transferFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -351,28 +357,28 @@ function FundsTab({
           className={modeBtn("campaign", "Campaign")}
           onClick={() => switchMode("campaign")}
         >
-          Campaign
+          {t("modeCampaign")}
         </button>
         <button
           type="button"
           className={modeBtn("cash", "Cash")}
           onClick={() => switchMode("cash")}
         >
-          Cash
+          {t("modeCash")}
         </button>
       </div>
 
       <div className="rounded-lg border border-card-border/50 bg-card-elevated/40 px-3 py-2 flex justify-between text-xs text-muted">
-        <span>Your {mode === "campaign" ? "campaign funds" : "cash on hand"}</span>
+        <span>{mode === "campaign" ? t("yourCampaignFunds") : t("yourCashOnHand")}</span>
         <span className="font-semibold text-foreground tabular-nums">
           {inputSymbol}
-          {Math.round(availableLocal).toLocaleString("en-US")}
+          {Math.round(availableLocal).toLocaleString(locale)}
         </span>
       </div>
 
       <div className="space-y-1.5">
         <label htmlFor="interact-transfer-amount" className="text-xs text-muted">
-          Amount ({inputSymbol})
+          {t("amountLabel", { symbol: inputSymbol })}
         </label>
         <input
           id="interact-transfer-amount"
@@ -393,8 +399,10 @@ function FundsTab({
         className="w-full rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-sm font-medium text-success transition-colors hover:bg-success/20 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {submitting
-          ? "Sending…"
-          : `Send ${inputSymbol}${Math.round(Math.max(0, displayAmount || 0)).toLocaleString("en-US")}`}
+          ? t("sending")
+          : t("send", {
+              amount: `${inputSymbol}${Math.round(Math.max(0, displayAmount || 0)).toLocaleString(locale)}`,
+            })}
       </button>
 
       {message && <p className="text-xs text-success">{message}</p>}
@@ -412,6 +420,7 @@ function MailTab({
   toCharacterId: string;
   toCharacterName: string;
 }) {
+  const t = useTranslations("profile.interact");
   const [open, setOpen] = useState(false);
 
   return (
@@ -420,7 +429,7 @@ function MailTab({
         onClick={() => setOpen(true)}
         className="w-full rounded-lg border border-info/40 bg-info/10 px-3 py-2.5 text-sm font-medium text-info transition-colors hover:bg-info/20"
       >
-        Compose mail to {toCharacterName} →
+        {t("composeMail", { name: toCharacterName })}
       </button>
 
       {open && (
@@ -443,6 +452,7 @@ export function InteractCard({
   myCash,
   canInfluence,
 }: InteractCardProps) {
+  const t = useTranslations("profile.interact");
   const [tab, setTab] = useState<Tab>("actions");
 
   const tabClass = (active: boolean) =>
@@ -453,11 +463,13 @@ export function InteractCard({
   return (
     <div className="rounded-2xl border border-card-border bg-card p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-[11px] font-semibold uppercase tracking-widest text-muted">Interact</h2>
+        <h2 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
+          {t("title")}
+        </h2>
         <div
           className="inline-flex rounded-lg border border-card-border bg-card-muted/40 p-0.5"
           role="tablist"
-          aria-label="Interaction options"
+          aria-label={t("tablistAria")}
         >
           {canInfluence && (
             <button
@@ -467,7 +479,7 @@ export function InteractCard({
               className={tabClass(tab === "actions")}
               onClick={() => setTab("actions")}
             >
-              Actions
+              {t("tabActions")}
             </button>
           )}
           <button
@@ -477,7 +489,7 @@ export function InteractCard({
             className={tabClass(tab === "funds")}
             onClick={() => setTab("funds")}
           >
-            Funds
+            {t("tabFunds")}
           </button>
           <button
             type="button"
@@ -486,7 +498,7 @@ export function InteractCard({
             className={tabClass(tab === "mail")}
             onClick={() => setTab("mail")}
           >
-            Mail
+            {t("tabMail")}
           </button>
         </div>
       </div>

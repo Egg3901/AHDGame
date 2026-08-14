@@ -184,10 +184,13 @@ describe("deposit insurance", () => {
 
     beforeEach(() => {
       bankId = new ObjectId();
-      liveCorp = makeCorp(makeCharter({ postedCapital: 200_000, npcDeposits: 50_000 }), {
-        _id: bankId,
-        liquidCapital: 100_000,
-      });
+      liveCorp = makeCorp(
+        makeCharter({ postedCapital: 200_000, npcDeposits: 50_000, cashReserves: 100_000 }),
+        {
+          _id: bankId,
+          liquidCapital: 100_000,
+        }
+      );
       fundState = {
         _id: "USD",
         balance: 0,
@@ -366,7 +369,7 @@ describe("deposit insurance", () => {
       // recoveryUsed + insurancePaid (fund+treasury) covers totalKept
       expect(result.recoveryUsed + result.insurancePaid).toBeCloseTo(totalKept, 6);
       expect(result.recoveryUsed).toBeLessThanOrEqual(recoveryPool);
-      expect(liveCorp.liquidCapital).toBe(0);
+      expect(liveCorp.bankCharter!.cashReserves).toBe(0);
       expect(liveCorp.bankCharter!.postedCapital).toBe(0);
       expect(liveCorp.bankCharter!.npcDeposits).toBe(0);
       expect(liveCorp.bankCharter!.depositorsResolvedTurn).toBe(77);
@@ -387,7 +390,7 @@ describe("deposit insurance", () => {
       // prove nothing.
       const cap = await getInsuredCap(db as unknown as Db, "USD");
       characters = [{ _id: new ObjectId(), savings: cap + 400_000, holder: bankId.toString() }];
-      liveCorp.liquidCapital = 0;
+      liveCorp.bankCharter!.cashReserves = 0;
       liveCorp.bankCharter!.postedCapital = 0;
       liveCorp.bankCharter!.npcDeposits = 0;
 
@@ -409,7 +412,7 @@ describe("deposit insurance", () => {
     it("cap boundary: balance exactly at cap takes no haircut", async () => {
       const cap = await getInsuredCap(db as unknown as Db, "USD");
       characters = [{ _id: new ObjectId(), savings: cap, holder: bankId.toString() }];
-      liveCorp.liquidCapital = 0;
+      liveCorp.bankCharter!.cashReserves = 0;
       liveCorp.bankCharter!.postedCapital = 0;
       liveCorp.bankCharter!.npcDeposits = 0;
       fundState.balance = cap;
@@ -422,7 +425,7 @@ describe("deposit insurance", () => {
 
     it("returns NPC deposits in full to externalBroadMoney", async () => {
       characters = [];
-      liveCorp.liquidCapital = 0;
+      liveCorp.bankCharter!.cashReserves = 0;
       liveCorp.bankCharter!.postedCapital = 0;
       liveCorp.bankCharter!.npcDeposits = 250_000;
       fundState.balance = 250_000;
@@ -437,7 +440,7 @@ describe("deposit insurance", () => {
     it("drained fund hits Treasury spending line and treasuryBalance", async () => {
       const cap = await getInsuredCap(db as unknown as Db, "USD");
       characters = [{ _id: new ObjectId(), savings: 100_000, holder: bankId.toString() }];
-      liveCorp.liquidCapital = 0;
+      liveCorp.bankCharter!.cashReserves = 0;
       liveCorp.bankCharter!.postedCapital = 0;
       liveCorp.bankCharter!.npcDeposits = 0;
       fundState.balance = 10_000;
@@ -455,7 +458,7 @@ describe("deposit insurance", () => {
 
     it("is idempotent: second resolution is a no-op", async () => {
       characters = [{ _id: new ObjectId(), savings: 10_000, holder: bankId.toString() }];
-      liveCorp.liquidCapital = 10_000;
+      liveCorp.bankCharter!.cashReserves = 10_000;
       liveCorp.bankCharter!.postedCapital = 0;
       liveCorp.bankCharter!.npcDeposits = 0;
       fundState.balance = 0;

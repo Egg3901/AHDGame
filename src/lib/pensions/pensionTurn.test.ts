@@ -16,9 +16,9 @@ describe("coveredWageBill", () => {
   });
 
   it("ignores a malformed or negative figure rather than crediting the employer", () => {
-    expect(coveredWageBill([{ laborCost: Number.NaN }, { laborCost: -50 }, { laborCost: 10 }])).toBe(
-      10
-    );
+    expect(
+      coveredWageBill([{ laborCost: Number.NaN }, { laborCost: -50 }, { laborCost: 10 }])
+    ).toBe(10);
   });
 
   it("is zero for an agreement covering nothing", () => {

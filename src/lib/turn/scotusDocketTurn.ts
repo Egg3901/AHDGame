@@ -30,7 +30,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
-import { onBillEnacted } from "@/lib/billEnactment";
+import { enactRulingBill } from "@/lib/scotus/enactRulingBill";
 import type { DocketCase, SupremeCourtSeat } from "@/lib/db/types/scotus";
 import type { PolicyProvision } from "@/lib/db/types/legislation";
 import { decideCaseOutcome, type SeatedJusticeLean } from "@/lib/scotus/divergence";
@@ -38,6 +38,8 @@ import { yearToTurn } from "@/lib/scotus/turnConversion";
 import { generateScotusRulingNews } from "@/lib/scotus/scotusNews";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { reverseNationalizationTaking } from "@/lib/nationalization/reverseNationalization";
+import { logWireEvent } from "@/lib/wireEvent";
 
 export interface ScotusDocketTurnResult {
   casesFired: number;
@@ -95,6 +97,37 @@ export async function processScotusDocketTurn(
       { historicalOutcomeLocked: docketCase.historicalOutcomeLocked === true }
     );
 
+    // A diverged case carrying a nationalization-reversal payload returns the
+    // seized sectors to private hands (a taking reversal cannot be expressed as a
+    // PolicyProvision `effect`). Best-effort: a throw here never wedges the turn,
+    // and a case with this payload authors no `effect`, so the synthetic-bill path
+    // below is skipped naturally. Affirm = the taking stands (do nothing).
+    if (decision.outcome === "diverged" && docketCase.nationalizationReversal) {
+      const reversal = docketCase.nationalizationReversal;
+      try {
+        const result = await reverseNationalizationTaking(database, {
+          countryId: reversal.countryId,
+          sectorIds: reversal.sectorIds,
+          turn: currentTurn,
+          label: reversal.label,
+        });
+        const returned = result.restoredToPriorOwner + result.spunOut;
+        if (returned > 0) {
+          await logWireEvent(
+            "corporation_nationalized",
+            `Supreme Court strikes down the emergency taking; ${returned} ${
+              returned === 1 ? "industry operation is" : "industry operations are"
+            } returned to private hands`
+          );
+        }
+      } catch (err) {
+        console.error(
+          `[scotusDocketTurn] nationalization reversal failed for ${docketCase.caseKey}:`,
+          err
+        );
+      }
+    }
+
     let enactedLawId: ObjectId | undefined;
     if (decision.outcome === "diverged" && docketCase.effect) {
       const provision: PolicyProvision = {
@@ -105,26 +138,19 @@ export async function processScotusDocketTurn(
         economic: docketCase.effect.economic,
         social: docketCase.effect.social,
       };
-      const syntheticBillId = new ObjectId();
-      await onBillEnacted(
-        database,
-        {
-          _id: syntheticBillId,
-          title: `${docketCase.title} (SCOTUS ruling)`,
-          legislationTypeId: docketCase.effect.legislationTypeId,
-          effectDirection: docketCase.effect.effectDirection,
-          provisions: [provision],
-          countryId: "US",
-          stateId: docketCase.effect.stateId ?? "federal",
-          source: "scotus_ruling",
-        },
-        currentTurn
-      );
-
-      const enactedLawRow = await database
-        .collection("enactedLaws")
-        .findOne({ billId: syntheticBillId }, { projection: { _id: 1 }, sort: { enactedAt: -1 } });
-      enactedLawId = enactedLawRow?._id as ObjectId | undefined;
+      ({ enactedLawId } = await enactRulingBill(database, {
+        title: `${docketCase.title} (SCOTUS ruling)`,
+        legislationTypeId: docketCase.effect.legislationTypeId,
+        effectDirection: docketCase.effect.effectDirection,
+        provision,
+        countryId: "US",
+        stateId: docketCase.effect.stateId ?? "federal",
+        source: "scotus_ruling",
+        votesFor: decision.positiveCount,
+        votesAgainst: decision.negativeCount,
+        currentTurn,
+        now,
+      }));
     }
 
     if (decision.outcome === "affirmed") casesAffirmed++;

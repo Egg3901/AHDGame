@@ -1,10 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  MergerReviewCard,
-  type MergerDecision,
-} from "@/components/mergerReview/MergerReviewCard";
+import { MergerReviewCard, type MergerDecision } from "@/components/mergerReview/MergerReviewCard";
 import type { MergerReviewQueueData } from "../useMergerReviewQueue";
 
 interface Props {

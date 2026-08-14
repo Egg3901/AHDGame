@@ -220,15 +220,16 @@ describe("loadOrgInfluence", () => {
     const yu = v.targets.find((t) => t.entityId === "YU")!;
     const se = v.targets.find((t) => t.entityId === "SE")!;
     // YU leads by 28, outside the band: it absorbs a push in full, so a point
-    // is the list price — 1% of $30bn, in the fund's currency (USD, rate 1.0).
+    // is the list price — a tenth of a percent of $30bn, in the fund's currency
+    // (USD, rate 1.0).
     expect(yu.resistsAtHalfStrength).toBe(false);
-    expect(yu.pointCostLocal).toBe(300_000_000);
-    expect(yu.turnCapCostLocal).toBe(300_000_000 * 5);
+    expect(yu.pointCostLocal).toBe(30_000_000);
+    expect(yu.turnCapCostLocal).toBe(30_000_000 * 5);
     // SE leads by exactly 20 — inside the band, so it resists at half strength.
     // Ten times the economy, and then doubled again for the resistance: this is
     // the DELIVERED price, which is the only one a player can budget against.
     expect(se.resistsAtHalfStrength).toBe(true);
-    expect(se.pointCostLocal).toBe(3_000_000_000 * 2);
+    expect(se.pointCostLocal).toBe(300_000_000 * 2);
   });
 
   it("quotes no price for a target whose economy is not on record", async () => {

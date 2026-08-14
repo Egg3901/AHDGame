@@ -147,6 +147,8 @@ describe("POST /api/corporations — forex enabled", () => {
     expect(inserted.liquidCurrencyCode).toBe("USD");
     // INITIAL_RATES.US = 1.0 → capital unchanged
     expect(inserted.liquidCapital).toBe(CORPORATION_STARTING_CAPITAL);
+    // ticket #1056 — onboarding hasCompany matches ceoType:"character"
+    expect(inserted.ceoType).toBe("character");
   });
 
   it("UK private founding stamps uk_ltd (not uk_plc) — ticket #1020", async () => {

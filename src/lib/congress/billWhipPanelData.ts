@@ -1,27 +1,13 @@
 import type { Db, ObjectId } from "mongodb";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { findPartyBySequentialId, getPartyIdString } from "@/lib/db/partyLookup";
-import type {
-  Bill,
-  BillWhip,
-  ElectedOfficial,
-  PoliticalParty,
-  WhipIssuerRole,
-} from "@/lib/db/types";
+import type { Bill, BillWhip, ElectedOfficial, PoliticalParty } from "@/lib/db/types";
 import { getPartyHex } from "@/lib/utils/politics";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { getChamberLeaderRole } from "@/lib/partyWhips/constraints";
+import { resolveWhipIssuerRole } from "@/lib/partyWhips/issuerRole";
 
-const WHIP_ISSUER_ROLE_LABELS: Record<WhipIssuerRole, string> = {
-  chair: "Chair",
-  viceChair: "Vice Chair",
-  admin: "Admin",
-  speaker: "Speaker",
-  majorityLeader: "Majority Leader",
-  minorityLeader: "Minority Leader",
-  majorityWhip: "Majority Whip",
-  minorityWhip: "Minority Whip",
-};
+export { resolveWhipIssuerRole };
 
 export interface BillWhipSummary {
   existingWhips: Array<{ direction: string; attemptNumber: number; issuedByRole?: string }>;
@@ -66,21 +52,6 @@ const ACTIONABLE_BILL_STATUSES = new Set([
   "veto_override",
   "override_shugiin",
 ]);
-
-export function resolveWhipIssuerRole(
-  whip: Pick<BillWhip, "issuedByCharacterId" | "issuedByRole">,
-  party: Pick<PoliticalParty, "chairId" | "viceChairId">
-): string | undefined {
-  // Prefer the role stamped on the whip when it was issued — this covers
-  // chamber leaders (Speaker / Floor Leader / Whip), not just the party chair.
-  // Fall back to party-office inference for legacy whips predating issuedByRole.
-  if (whip.issuedByRole) return WHIP_ISSUER_ROLE_LABELS[whip.issuedByRole];
-  const issuerId = whip.issuedByCharacterId;
-  if (!issuerId) return undefined;
-  if (party.chairId?.equals(issuerId)) return "Chair";
-  if (party.viceChairId?.equals(issuerId)) return "Vice Chair";
-  return "Admin";
-}
 
 function buildSummary(
   whips: BillWhip[],

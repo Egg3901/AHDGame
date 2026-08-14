@@ -472,17 +472,12 @@ export async function _enrichElection(
   const partyMap = new Map(parties.map((p) => [String(p.sequentialId), p]));
   let byParty = groupCandidatesByParty(enrichedWithYou, partyMap);
 
-  // Primary-winner cap for this race: US=1, UK=3, JP=3, US House=3 when
-  // redistricting is on; single-winner governor/president races are always 1.
-  // Threading the live redistricting flag is what keeps this display cap
-  // identical to the one `resolvePrimariesIfNeeded` actually enforced —
-  // omitting it silently showed one US House nominee per party. Resolved once
-  // here and returned as `primaryAdvanceCount` so client surfaces read it
-  // instead of recomputing it without access to gameState.
+  // Primary-winner cap for this race: US=1, UK=3, JP=3; single-winner
+  // governor/president races are always 1. Resolved once here and returned as
+  // `primaryAdvanceCount` so client surfaces read it instead of recomputing it.
   const primaryAdvanceCount = getPrimaryWinnersForElection(
     countryId as CountryId,
-    election.electionType,
-    isRedistrictingEnabled(gameState)
+    election.electionType
   );
 
   // Display candidates: post-primary dedup, keeping up to `primaryAdvanceCount`
@@ -571,6 +566,10 @@ export async function _enrichElection(
   // current tally), instead of the statewide proportional estimate above — so
   // the live "Projected Seats" panel matches how the race will actually resolve.
   // Falls back to the proportional estimate for states with no districts drawn.
+  // Read-only: `persist` is left off, so this projection cannot write holders.
+  // It used to, which meant opening a live House race rewrote that state's
+  // sitting members from an in-progress tally, and wrote `npps` ids into
+  // `holderCharacterId` because this path has no NPP id map.
   if (
     election.electionType === "house" &&
     (countryId ?? "US") === "US" &&

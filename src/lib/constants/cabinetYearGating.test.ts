@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getCabinetPositions, getCabinetCountryIds } from "./cabinetMechanics";
-import { resolveCabinetRoster, resolveSeatName } from "@/lib/cabinet/rosterEra";
+import { resolveCabinetRoster, resolveSeatName, isSeatActive } from "@/lib/cabinet/rosterEra";
 
 const PRESETS = [1953, 1979, 1991, 2019] as const;
 
@@ -8,10 +8,12 @@ describe("US cabinet year gating", () => {
   const us = getCabinetPositions("US");
 
   it("active seat counts per preset year", () => {
+    // Education no longer auto-enables by year (legislation-gated), so 1991/2019
+    // are one seat lighter than before until a Department of Education Act passes.
     expect(resolveCabinetRoster(us, 1953)).toHaveLength(9);
     expect(resolveCabinetRoster(us, 1979)).toHaveLength(12);
-    expect(resolveCabinetRoster(us, 1991)).toHaveLength(14);
-    expect(resolveCabinetRoster(us, 2019)).toHaveLength(15);
+    expect(resolveCabinetRoster(us, 1991)).toHaveLength(13);
+    expect(resolveCabinetRoster(us, 2019)).toHaveLength(14);
   });
 
   it("existence gates carry the researched years", () => {
@@ -19,18 +21,27 @@ describe("US cabinet year gating", () => {
     expect(byId.secretary_of_hud.yearEnabled).toBe(1965);
     expect(byId.secretary_of_transportation.yearEnabled).toBe(1967);
     expect(byId.secretary_of_energy.yearEnabled).toBe(1977);
-    expect(byId.secretary_of_education.yearEnabled).toBe(1980);
+    // Education is legislation-gated: never auto-enables by year.
+    expect(byId.secretary_of_education.yearEnabled).toBe(9999);
     expect(byId.secretary_of_veterans.yearEnabled).toBe(1989);
     expect(byId.secretary_of_homeland.yearEnabled).toBe(2002);
     expect(byId.secretary_of_health.yearEnabled).toBe(1953);
   });
 
-  it("HEW → HHS rename band", () => {
+  it("HEW stays HEW by year alone; splits to HHS only via legislation", () => {
     const health = us.find((p) => p.id === "secretary_of_health")!;
+    // No year auto-flips HEW to HHS anymore.
     expect(resolveSeatName(health, 1953)).toBe("Secretary of Health, Education, and Welfare");
-    expect(resolveSeatName(health, 1979)).toBe("Secretary of Health, Education, and Welfare");
-    expect(resolveSeatName(health, 1980)).toBe("Secretary of Health and Human Services");
-    expect(resolveSeatName(health, null)).toBe("Secretary of Health and Human Services");
+    expect(resolveSeatName(health, 1980)).toBe("Secretary of Health, Education, and Welfare");
+    expect(resolveSeatName(health, 2019)).toBe("Secretary of Health, Education, and Welfare");
+
+    // Department of Education Act passed → Education seat active + HEW renamed HHS.
+    const split = new Set(["secretary_of_education"]);
+    const education = us.find((p) => p.id === "secretary_of_education")!;
+    expect(isSeatActive(education, 1954, split)).toBe(true);
+    expect(isSeatActive(education, 1954)).toBe(false);
+    expect(resolveSeatName(health, 1954, split)).toBe("Secretary of Health and Human Services");
+    expect(resolveCabinetRoster(us, 1954, split)).toHaveLength(10);
   });
 
   it("active-set orders are unique at every preset year", () => {

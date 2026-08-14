@@ -16,6 +16,11 @@ export interface CabinetSetting {
   // ── Position-specific settings (each position uses relevant fields) ──
   /** 3-tier settings: "lenient"/"standard"/"strict", etc. */
   tierSetting?: string;
+  /**
+   * Per-key selections for seats holding extra policy levers
+   * (mechanics.tierSettings[]), e.g. HEW `{ education: "academic", welfare: "broad" }`.
+   */
+  tierSettings?: Record<string, string>;
   /** Regional focus: policing priority, base investment, etc. */
   targetRegionId?: string;
   /** Foreign secretary envoy target country */

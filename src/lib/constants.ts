@@ -359,8 +359,10 @@ export const PARTY_LOGOS: Record<string, string> = {
 export {
   HOUSE_SEATS,
   UK_COMMONS_SEATS,
+  UK_COMMONS_SEATS_1953,
   UK_REGIONAL_COUNCIL_SEATS,
   TOTAL_UK_COMMONS_SEATS,
+  TOTAL_UK_COMMONS_SEATS_1953,
   JP_SHUGIIN_SEATS,
   TOTAL_JP_SHUGIIN_SEATS,
   JP_SANGIIN_SEATS,
@@ -392,6 +394,8 @@ export {
   ELECTORAL_VOTES_1991,
   ELECTORAL_VOTE_UNITS_1991,
   getHouseSeats,
+  getUkCommonsSeats,
+  getTotalUkCommonsSeats,
   getElectoralVotes,
   getElectoralVoteUnits,
 } from "./constants/states";

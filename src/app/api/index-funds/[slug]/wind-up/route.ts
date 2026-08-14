@@ -45,8 +45,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       );
 
     const result = await beginWindUp(db, fund, await getCurrentTurn(db));
-    if (!result.ok)
-      return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
 
     return NextResponse.json({
       success: true,

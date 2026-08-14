@@ -10,7 +10,10 @@ import {
 } from "@/lib/currency/purchaseAffordability";
 import { FOREX_ACTIVE_CURRENCIES } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { quoteIndexFundSubscription, blendedRedeemFxRate } from "@/lib/indexFunds/unitAccounting";
+import {
+  quoteIndexFundSubscription,
+  legacyAdjustedDisplayUnits,
+} from "@/lib/indexFunds/unitAccounting";
 
 type Mode = "subscribe" | "redeem";
 
@@ -107,24 +110,24 @@ export function FundTradePanel({
     if (!parsedUnits || quotedNav <= 0) return null;
     // Grandfather (#857): a redemption drains legacy units first. Legacy units
     // (bought before the currency-scale fix) pay out rate-free (× 1); post-fix
-    // units pay at the fund's native rate. Reuse the SAME helper the server
-    // redeem debit uses (blendedRedeemFxRate) so this quote can never drift from
-    // the credited cash — NOT the marked-to-market NAV × rate, which
-    // over-promises ~rate× (≈100×) for legacy holders. Clamp legacy to units
-    // actually held so a stale/oversized count can't inflate the quote.
+    // units pay at the fund's native rate. `legacyAdjustedDisplayUnits` is the
+    // display counterpart of the server's blendedRedeemFxRate — proven equal in
+    // unitAccounting.test — so this quote cannot drift from credited cash, and
+    // the ₳ figure can go through formatFull/formatPrice (wallet preference)
+    // instead of stamping the fund's native symbol on a USD-scale face amount
+    // (ticket #1072: Subscribe showed Marks, Redeem showed dollars).
     const rate = forexEnabled ? (forexRates?.[fundCurrency] ?? 1) : 1;
     const legacyHeld = Math.min(myUnits, Math.max(0, myLegacyUnits));
     const legacyRedeemed = Math.min(parsedUnits, legacyHeld);
-    const blendedRate = blendedRedeemFxRate({
-      legacyUnitsRedeemed: legacyRedeemed,
-      totalUnits: parsedUnits,
+    const displayUnits = legacyAdjustedDisplayUnits({
+      units: parsedUnits,
+      legacyUnits: legacyRedeemed,
       fundFxRate: rate,
       forexEnabled,
     });
-    const payoutNative = parsedUnits * quotedNav * blendedRate;
     return {
       units: parsedUnits,
-      payoutNative,
+      payoutAnchor: displayUnits * quotedNav,
       legacyRedeemed,
       rate,
     };
@@ -489,18 +492,13 @@ export function FundTradePanel({
           <span className="text-muted">NAV / unit</span>
           <span className="font-mono font-semibold tabular-nums">
             {/*
-              Redeem mode shows the per-unit value at the SAME basis the payout
-              is credited (× blendedRate), so the panel can't self-contradict for
-              #857 grandfathered holders — whose legacy units pay ×1, not the
-              ×FX-rate NAV shown fund-wide. For non-legacy holders blendedRate ===
-              the fund rate, so this is identical to formatPrice(quotedNav).
-              Subscribe mode keeps the true fund NAV (new units are charged × rate).
+              Redeem mode shows the per-unit ₳ value at the SAME basis the
+              payout is credited (#857 grandfather: legacy units pay ×1).
+              formatPrice then converts that ₳ figure through the viewer's
+              wallet preference, matching Subscribe (ticket #1072).
             */}
             {mode === "redeem" && redeemEstimate && redeemEstimate.units > 0
-              ? formatCurrencyFaceAmount(
-                  redeemEstimate.payoutNative / redeemEstimate.units,
-                  fundCurrency
-                )
+              ? formatPrice(redeemEstimate.payoutAnchor / redeemEstimate.units, fundCurrency)
               : formatPrice(quotedNav, fundCurrency)}
           </span>
         </div>
@@ -549,7 +547,7 @@ export function FundTradePanel({
             <div className="flex justify-between gap-2">
               <span className="text-muted">Quoted payout</span>
               <span className="font-mono font-semibold tabular-nums">
-                {formatCurrencyFaceAmount(redeemEstimate.payoutNative, fundCurrency)}
+                {formatFull(redeemEstimate.payoutAnchor, fundCurrency)}
               </span>
             </div>
             {redeemEstimate.legacyRedeemed > 0 && redeemEstimate.rate !== 1 && (

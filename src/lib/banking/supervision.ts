@@ -11,17 +11,54 @@
 
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
-import type { BankCharter } from "@/lib/db/types/bank";
+import type { BankCharter, BankLoan } from "@/lib/db/types/bank";
 import { createNotification } from "@/lib/notifications";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { createSystemNewsPost } from "@/lib/news";
+import type { BookTranche } from "@/lib/banking/creditBands";
+import { getCashReserves } from "@/lib/banking/bankCash";
 import {
   RECAP_GRACE_TURNS,
   assessCapital,
+  borrowingsFromCharter,
   capitalShortfall,
   recapDeadlineExpired,
   type CapitalStanding,
 } from "./capitalAdequacy";
+
+/**
+ * Outstanding household tranches per bank, keyed by bank corp id hex.
+ *
+ * One query for the whole pass. Named player loans are excluded: the shock is a
+ * household-credit scenario, and a named borrower's risk is already carried by
+ * their own rating rather than by a band.
+ */
+async function loadBookTranches(db: Db, bankIds: ObjectId[]): Promise<Map<string, BookTranche[]>> {
+  const byBank = new Map<string, BookTranche[]>();
+  if (bankIds.length === 0) return byBank;
+
+  const loans = await db
+    .collection<BankLoan>("bankLoans")
+    .find({
+      bankCorporationId: { $in: bankIds },
+      borrowerType: "npcBulk",
+      status: { $in: ["current", "arrears"] },
+    })
+    .project<Pick<BankLoan, "bankCorporationId" | "creditBand" | "outstanding">>({
+      bankCorporationId: 1,
+      creditBand: 1,
+      outstanding: 1,
+    })
+    .toArray();
+
+  for (const loan of loans) {
+    const key = loan.bankCorporationId.toString();
+    const list = byBank.get(key) ?? [];
+    list.push({ creditBand: loan.creditBand, outstanding: loan.outstanding ?? 0 });
+    byBank.set(key, list);
+  }
+  return byBank;
+}
 
 export interface SupervisionSummary {
   banksAssessed: number;
@@ -39,10 +76,7 @@ const ZERO: SupervisionSummary = {
   errors: [],
 };
 
-export async function processBankSupervision(
-  db: Db,
-  turn: number
-): Promise<SupervisionSummary> {
+export async function processBankSupervision(db: Db, turn: number): Promise<SupervisionSummary> {
   const summary: SupervisionSummary = { ...ZERO, errors: [] };
 
   const corps = await db
@@ -56,6 +90,14 @@ export async function processBankSupervision(
     })
     .toArray();
 
+  // Book composition for the band-weighted stress scenario, loaded once for
+  // every bank rather than per bank inside the loop: this pass runs over every
+  // active charter every turn.
+  const tranchesByBank = await loadBookTranches(
+    db,
+    corps.map((corp) => corp._id)
+  );
+
   for (const corp of corps) {
     const charter = corp.bankCharter;
     if (!charter || charter.status !== "active") continue;
@@ -63,10 +105,11 @@ export async function processBankSupervision(
 
     try {
       const position = assessCapital({
-        postedCapital: charter.postedCapital ?? 0,
-        liquidCapital: corp.liquidCapital ?? 0,
+        cashReserves: getCashReserves(charter),
         totalLoans: charter.totalLoans ?? 0,
+        borrowings: borrowingsFromCharter(charter),
         propBookMarkValue: charter.propBookMarkValue ?? 0,
+        bookTranches: tranchesByBank.get(corp._id.toString()),
       });
       summary.banksAssessed += 1;
 
@@ -79,12 +122,9 @@ export async function processBankSupervision(
       // bank is back above the minimum, so a bank that cures and later breaches
       // again gets a fresh grace period rather than inheriting a stale one.
       const since =
-        standing === "undercapitalized"
-          ? (charter.undercapitalizedSinceTurn ?? turn)
-          : undefined;
+        standing === "undercapitalized" ? (charter.undercapitalizedSinceTurn ?? turn) : undefined;
 
-      const expired =
-        standing === "undercapitalized" && recapDeadlineExpired(since, turn);
+      const expired = standing === "undercapitalized" && recapDeadlineExpired(since, turn);
 
       if (expired) {
         await revokeForUndercapitalization(db, corp._id, corp.name, corp.userId, turn);
@@ -100,6 +140,10 @@ export async function processBankSupervision(
             "bankCharter.capitalRatio": Math.round(position.capitalRatio * 10_000) / 10_000,
             "bankCharter.stressedCapitalRatio":
               Math.round(position.stressedCapitalRatio * 10_000) / 10_000,
+            // Published so the console can show the shock the bank was actually
+            // measured against, rather than the flat number it used to be.
+            "bankCharter.appliedStressLossFraction":
+              Math.round(position.appliedStressLossFraction * 10_000) / 10_000,
             "bankCharter.lastSupervisionTurn": turn,
             ...(since !== undefined ? { "bankCharter.undercapitalizedSinceTurn": since } : {}),
             updatedAt: new Date(),
@@ -128,9 +172,7 @@ export async function processBankSupervision(
         });
       }
     } catch (err) {
-      summary.errors.push(
-        `${corp.name}: ${err instanceof Error ? err.message : String(err)}`
-      );
+      summary.errors.push(`${corp.name}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

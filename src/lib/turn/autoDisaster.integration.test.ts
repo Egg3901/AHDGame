@@ -188,6 +188,7 @@ function makeLookups(
     costOfLivingByState: new Map(),
     globalCommodityBalances: new Map(),
     priceRatioByCommodity: new Map(),
+    landedPremiumByState: new Map(),
     nationalCommodityBalancesByCountry: new Map(),
     countryClearingBooks: null,
     exportIntensityByCountry: new Map(),
@@ -214,6 +215,7 @@ function makeLookups(
     marketShareBySectorId: new Map(),
     stateSectorSpecializationByState: new Map(),
     activeDisasterEffectsByState: new Map([[STATE_ID, disasterEffects]]),
+    stateInputAvailabilityByState: new Map(),
   };
 }
 

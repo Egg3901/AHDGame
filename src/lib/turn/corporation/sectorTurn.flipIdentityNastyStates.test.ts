@@ -90,6 +90,7 @@ function makeLookups(opts: {
     activeSubsidies: [],
     priceRatioByCommodity: new Map(),
     globalCommodityBalances: new Map(),
+    stateInputAvailabilityByState: new Map(),
     nationalCommodityBalancesByCountry: new Map(),
     rawStateBalances: new Map(),
     extractionCapacityUtilBySector:

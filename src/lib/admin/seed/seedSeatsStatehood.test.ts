@@ -50,13 +50,18 @@ describe("seedSeats — statehood", () => {
     db.collection("seats");
   });
 
-  it("gives a 1953 world no Alaska or Hawaii seats", async () => {
+  it("gives a 1953 world territorial governor seats but no federal or legislative seats", async () => {
     withUsStates(db, []);
 
     await seedSeats(db as unknown as Db, false, () => {}, "1953-default");
 
-    expect(seatsFor(db, "AK")).toEqual([]);
-    expect(seatsFor(db, "HI")).toEqual([]);
+    for (const territory of ["AK", "HI"]) {
+      const seats = seatsFor(db, territory);
+      expect(seats.map((seat) => seat.electionType)).toEqual(["governor"]);
+      expect(seats[0]?.displayName).toBe(
+        `${territory === "AK" ? "Alaska" : "Hawaii"} Territorial Governor`
+      );
+    }
   });
 
   it("keeps the seats of a state admitted mid-game", async () => {
@@ -69,8 +74,8 @@ describe("seedSeats — statehood", () => {
       .map((s) => s.electionType)
       .sort();
     expect(types).toEqual(["governor", "house", "senate", "senate", "stateSenate"]);
-    // Hawaii was never admitted in this world, so it stays a territory.
-    expect(seatsFor(db, "HI")).toEqual([]);
+    // Hawaii was never admitted, so it retains only its territorial governor.
+    expect(seatsFor(db, "HI").map((seat) => seat.electionType)).toEqual(["governor"]);
   });
 
   it("uses the live delegation size for an admitted state, not the floor", async () => {

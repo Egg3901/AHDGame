@@ -14,12 +14,16 @@ export function StatePartyLinksTab({
   countryId,
   canManage = false,
   canSpendPs = false,
+  nationalPoliticalStrength = 0,
+  onNationalPsSpent,
 }: {
   partyId: string;
   partyColor: string;
   countryId: string;
   canManage?: boolean;
   canSpendPs?: boolean;
+  nationalPoliticalStrength?: number;
+  onNationalPsSpent?: () => void;
 }) {
   return (
     <StatePartyHQ
@@ -28,6 +32,8 @@ export function StatePartyLinksTab({
       partyColor={partyColor}
       canManage={canManage}
       canSpendPs={canSpendPs}
+      nationalPoliticalStrength={nationalPoliticalStrength}
+      onNationalPsSpent={onNationalPsSpent}
     />
   );
 }

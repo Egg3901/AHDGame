@@ -214,7 +214,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         existingWhips: whips.map((whip) => ({
           direction: whip.direction,
           attemptNumber: whip.attemptNumber,
-          issuedByRole: resolveWhipIssuerRole(whip, party),
+          issuedByRole: resolveWhipIssuerRole(whip, statePartyOrg),
           mode: whip.mode ?? "hard",
         })),
         canWhip: whips.length < 2,

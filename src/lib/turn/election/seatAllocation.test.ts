@@ -10,7 +10,7 @@ import {
   UK_COMMONS_FPTP_EXPONENT,
   type RankedCandidate,
 } from "./seatAllocation";
-import { HOUSE_SEATS_1991 } from "@/lib/constants/states";
+import { HOUSE_SEATS_1991, UK_COMMONS_SEATS_1953 } from "@/lib/constants/states";
 
 describe("allocateSeats — preset-aware house seats", () => {
   const ranked: RankedCandidate[] = [
@@ -269,12 +269,34 @@ describe("allocateSeats - commons (UK)", () => {
       { id: "Conservative", votes: 300 },
       { id: "LibDem", votes: 200 },
     ];
-    // totalSeats passed is irrelevant; HOUSE_SEATS["LON"] = 75 for commons
+    // totalSeats passed is irrelevant; UK_COMMONS_SEATS["LON"] = 75 for commons
     const result = allocateSeats("commons", "LON", 999, ranked, 1000);
     expect(result.authoritativeSeats).toBe(75);
     expect(result.isMultiSeat).toBe(true);
     const totalAllocated = Object.values(result.seatsEstimate).reduce((s, v) => s + v, 0);
     expect(totalAllocated).toBeLessThanOrEqual(75);
+  });
+
+  it("uses getUkCommonsSeats(1953) LON=91 when the era map is passed (ticket #1058)", () => {
+    const ranked: RankedCandidate[] = [
+      { id: "Labour", votes: 500 },
+      { id: "Conservative", votes: 300 },
+      { id: "LibDem", votes: 200 },
+    ];
+    const result = allocateSeats(
+      "commons",
+      "LON",
+      999,
+      ranked,
+      1000,
+      undefined,
+      undefined,
+      undefined,
+      UK_COMMONS_SEATS_1953
+    );
+    expect(result.authoritativeSeats).toBe(91);
+    const totalAllocated = Object.values(result.seatsEstimate).reduce((s, v) => s + v, 0);
+    expect(totalAllocated).toBe(91);
   });
 
   it("falls back to totalSeats for unknown UK region", () => {

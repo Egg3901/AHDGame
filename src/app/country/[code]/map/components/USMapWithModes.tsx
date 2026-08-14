@@ -215,7 +215,12 @@ export function USMapWithModes({
         const capacity = entry.capacity ?? 0;
         const intensity = capacity > 0 ? capacity : entry.total;
         stateData[stateId] = {
-          color: intensity === 0 ? "#374151" : interpolateGreen(intensity / maxCapacity),
+          color:
+            intensity > 0
+              ? interpolateGreen(intensity / maxCapacity)
+              : entry.openMarket > 0
+                ? "#c7842a"
+                : "#374151",
           label: freightHaulLoadLabel(entry),
           tooltip: freightHaulLoadTooltip(stateId, entry),
         };

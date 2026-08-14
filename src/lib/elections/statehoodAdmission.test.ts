@@ -9,6 +9,7 @@ import {
   buildAdmissionContent,
   decideAdmissions,
   isUsPoliticalState,
+  isUsResidentPoliticalRegion,
   type TerritoryAdmission,
 } from "./statehoodAdmission";
 
@@ -212,5 +213,13 @@ describe("isUsPoliticalState", () => {
   it("excludes DC in every era", () => {
     expect(isUsPoliticalState("DC", "1953-default")).toBe(false);
     expect(isUsPoliticalState("DC", "2019-default")).toBe(false);
+  });
+});
+
+describe("isUsResidentPoliticalRegion", () => {
+  it("keeps Alaska and Hawaii playable before admission without making DC playable", () => {
+    expect(isUsResidentPoliticalRegion("AK", "1953-default")).toBe(true);
+    expect(isUsResidentPoliticalRegion("HI", "1953-default")).toBe(true);
+    expect(isUsResidentPoliticalRegion("DC", "1953-default")).toBe(false);
   });
 });

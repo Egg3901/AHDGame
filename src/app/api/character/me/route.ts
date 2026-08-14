@@ -21,6 +21,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { reconcileUnionLeaderCache } from "@/lib/unions/unionReconciliation";
 import { TRACKED_ONBOARDING_STEP_IDS } from "@/lib/onboarding/checklist";
 import { isOnboardingChecklistEnabled } from "@/lib/onboarding/featureFlag";
+import { isBankPropTradingEnabled } from "@/lib/banking/featureFlag";
 
 // The current corporation is read here, so this endpoint must never serve a
 // stale body: a positive max-age let the browser return a pre-founding
@@ -37,6 +38,7 @@ const ME_CACHE_HEADERS = {
 export async function GET() {
   try {
     const db = await getDb();
+    const bankPropTradingEnabled = await isBankPropTradingEnabled();
 
     // Check for imperial mode first — requireAuthWithCharacter would 401
     const authUser = await getAuthUser();
@@ -64,6 +66,7 @@ export async function GET() {
                 countryOwnerId: 1,
                 liquidCapital: 1,
                 liquidCurrencyCode: 1,
+                bankCharter: 1,
               },
             }
           ),
@@ -103,6 +106,11 @@ export async function GET() {
                   isNationalCorp: !!corporation.countryOwnerId,
                   liquidCapital: corporation.liquidCapital ?? 0,
                   liquidCurrencyCode: corporation.liquidCurrencyCode,
+                  isInvestmentBank:
+                    bankPropTradingEnabled &&
+                    corporation.bankCharter?.status === "active" &&
+                    (corporation.bankCharter.type === "investment" ||
+                      corporation.bankCharter.type === "universal"),
                 }
               : null,
           },
@@ -130,6 +138,7 @@ export async function GET() {
               countryOwnerId: 1,
               liquidCapital: 1,
               liquidCurrencyCode: 1,
+              bankCharter: 1,
             },
           }
         ),
@@ -213,6 +222,11 @@ export async function GET() {
               isNationalCorp: !!corporation.countryOwnerId,
               liquidCapital: corporation.liquidCapital ?? 0,
               liquidCurrencyCode: corporation.liquidCurrencyCode,
+              isInvestmentBank:
+                bankPropTradingEnabled &&
+                corporation.bankCharter?.status === "active" &&
+                (corporation.bankCharter.type === "investment" ||
+                  corporation.bankCharter.type === "universal"),
             }
           : null,
       },

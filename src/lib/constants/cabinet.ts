@@ -72,10 +72,15 @@ export const CABINET_POSITIONS = [
     name: "Secretary of Health and Human Services",
     order: 9,
     yearEnabled: 1953,
-    namesByYear: [
-      { from: 1953, name: "Secretary of Health, Education, and Welfare" },
-      { from: 1980, name: "Secretary of Health and Human Services" },
-    ],
+    // Stays "Health, Education, and Welfare" (carrying education + welfare levers)
+    // until the Department of Education Act splits Education off — then it is
+    // styled HHS via renameOnDepartmentSplit. The old year-1980 auto-flip is gone
+    // (operator decision 2026-08-13: the split is legislation-gated, not automatic).
+    namesByYear: [{ from: 1953, name: "Secretary of Health, Education, and Welfare" }],
+    renameOnDepartmentSplit: {
+      whenSeatEnabled: "secretary_of_education",
+      name: "Secretary of Health and Human Services",
+    },
     description:
       "Oversees public health, medical research, and social services nationwide. Manages Medicare and Medicaid programs, the Centers for Disease Control and Prevention (CDC), Food and Drug Administration (FDA), and National Institutes of Health (NIH). Protects public health, regulates pharmaceuticals and medical devices, and administers health insurance programs.",
   },
@@ -105,7 +110,10 @@ export const CABINET_POSITIONS = [
   },
   {
     id: "secretary_of_education",
-    yearEnabled: 1980,
+    // Never auto-enables by year (was 1980). The Department of Education is carved
+    // out of HEW only when the Department of Education Act passes, which records
+    // this seat id in gameState.manuallyEnabledSeats (see rosterEra.isSeatActive).
+    yearEnabled: 9999,
     name: "Secretary of Education",
     order: 13,
     description:

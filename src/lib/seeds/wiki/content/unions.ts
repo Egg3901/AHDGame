@@ -59,7 +59,7 @@ The banked figure is your voice in everything below.
 
 ### Weighted leadership votes
 
-When the presidency is contested, votes are weighted by **banked organizing strength**, not one per head. Someone who ran fifty drives outvotes someone who ran one. Leadership follows organizing effort: the way to control a union is to build it.
+Organizers contest the presidency the same way shareholders contest a CEO seat: continuously, weighted by **banked organizing strength**, not one per head. Someone who ran fifty drives outvotes someone who ran one. Once the union reaches the strength threshold, the race stays open whether or not a president already sits — including against an NPP holder. The plurality leader is offered the seat and must accept; a tie keeps the sitting player president. Leadership follows organizing effort: the way to control a union is to build it.
 
 ### Ratification ballots
 

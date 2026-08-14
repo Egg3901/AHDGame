@@ -119,7 +119,10 @@ export default function CabinetOfficePage() {
     return <div className="p-8 text-center text-error">Unknown cabinet position</div>;
   }
 
-  if (loading) {
+  // Skeleton only on the first load. A refresh with data already in hand must
+  // keep the office mounted or roster state (branch tab, open Manage panel)
+  // resets to Ground after every assign.
+  if (loading && !data) {
     return (
       <div className="min-h-screen bg-background pb-16">
         <main className="mx-auto max-w-7xl space-y-4 px-4 py-8 sm:px-6">
@@ -248,6 +251,24 @@ export default function CabinetOfficePage() {
                     positionId={positionId}
                     onUpdate={refetch}
                   />
+                )}
+
+                {/* Extra portfolio levers (e.g. HEW education + welfare). */}
+                {mechanics.tierSettings?.map((tierCfg) =>
+                  tierCfg.key ? (
+                    <TierSettingPanel
+                      key={tierCfg.key}
+                      config={tierCfg}
+                      tierKey={tierCfg.key}
+                      currentValue={
+                        data.currentSettings?.tierSettings?.[tierCfg.key] ?? tierCfg.defaultTier
+                      }
+                      canAct={canAct}
+                      countryCode={countryCode}
+                      positionId={positionId}
+                      onUpdate={refetch}
+                    />
+                  ) : null
                 )}
 
                 {/* Non-finance seats with a discretionary pool surface allocation on Overview

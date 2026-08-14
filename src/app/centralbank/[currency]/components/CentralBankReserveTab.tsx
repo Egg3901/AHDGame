@@ -6,10 +6,7 @@ import { useToast } from "@/contexts/ToastContext";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 // From `reserveBounds`, NOT `reserves`: the latter reaches mongodb and the
 // turn engine, and importing it here put `sharp` in the browser bundle.
-import {
-  RESERVE_REQUIREMENT_MAX,
-  RESERVE_REQUIREMENT_MIN,
-} from "@/lib/banking/reserveBounds";
+import { RESERVE_REQUIREMENT_MAX, RESERVE_REQUIREMENT_MIN } from "@/lib/banking/reserveBounds";
 
 type CurrencyPayload = {
   privateBankingEnabled: boolean;

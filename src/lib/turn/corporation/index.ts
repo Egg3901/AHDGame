@@ -67,6 +67,9 @@ import { processSoeRemittance } from "@/lib/nationalization/soeRemittance";
 import { processPendingNationalizations } from "@/lib/nationalization/pendingNationalizations";
 import { processNationalizationAuctions } from "@/lib/nationalization/privatizationAuction";
 import { processNppCorporationDecisions } from "@/lib/turn/nppCorporationBehavior";
+import { processNppSupplyAgreements } from "@/lib/turn/npp/nppSupplyAgreements";
+import { processNppProspecting } from "@/lib/turn/npp/nppProspecting";
+import { processNppCorpTreasury } from "@/lib/turn/npp/nppCorpTreasury";
 import { createNotifications } from "@/lib/notifications";
 import { COMMODITY_LABELS } from "@/lib/constants/commodities";
 import { trackFinancialDistress } from "./financialDistressTracking";
@@ -163,8 +166,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           brandLoyaltySliceEnabled: 1,
           sectorQualityEnabled: 1,
           qualityPremiumPricingEnabled: 1,
+          supplyAgreementsEnabled: 1,
+          prospectingEnabled: 1,
           commandEconomyEnabled: 1,
           privateBankingEnabled: 1,
+          interstateMoneyWiringEnabled: 1,
+          freightSettlementMode: 1,
         },
       }
     ),
@@ -181,8 +188,16 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Market share (which drives the dominance growth-cost multiplier) switches
   // to the owned-capacity basis under the plants tier.
   const plantsEnabledForMarketShare = marketAtLeast(marketSystemMode, "plants");
+  const interstateMoneyWiringEnabled =
+    (marketGovernorConfig as { interstateMoneyWiringEnabled?: boolean } | null)
+      ?.interstateMoneyWiringEnabled === true;
+  const freightSettlementActive =
+    (marketGovernorConfig as { freightSettlementMode?: string } | null)?.freightSettlementMode ===
+      "active" && marketAtLeast(marketSystemMode, "clearing");
   const lookups = await buildCorporationLookups(db, {
     plantsEnabled: plantsEnabledForMarketShare,
+    freightSettlementActive,
+    moneyWiringEnabled: interstateMoneyWiringEnabled,
   });
   const currentYear = gameState?.currentYear;
   // Soft-budget gate for the turn path (see sectorTurn's affordability brake and
@@ -851,6 +866,19 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   }
   mark("sector+corp bulkWrites");
 
+  // Contracts and surveys read the post-bulkWrite snapshot so this turn's
+  // mothball / production-policy / cash writes are visible. Matching before
+  // the write would lock volume against a plant this pass just idled, and
+  // a survey debit would lose to the reinvestment `$set liquidCapital`.
+  await processNppSupplyAgreements(db, turn ?? 0, now, market.plantsEnabled);
+  mark("nppSupplyAgreements");
+
+  const nppProspects = await processNppProspecting(db, turn ?? 0, now);
+  if (nppProspects > 0) mark("nppProspecting");
+
+  const nppTreasury = await processNppCorpTreasury(db, turn ?? 0, now);
+  if (nppTreasury > 0) mark("nppCorpTreasury");
+
   // Persist per-commodity output quality for next turn's input pillar (quality
   // propagation). Upsert by commodity so the lagged read above stays one turn behind.
   if (newCommodityQuality && newCommodityQuality.size > 0) {
@@ -1146,9 +1174,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       // what the contract priced. Best-effort.
       if (settledPremiums.length > 0) {
         try {
-          const { applyTransferPricingAudit } = await import(
-            "@/lib/corporations/groups/applyTransferPricingAudit"
-          );
+          const { applyTransferPricingAudit } =
+            await import("@/lib/corporations/groups/applyTransferPricingAudit");
           const tp = await applyTransferPricingAudit(
             db,
             settledPremiums,

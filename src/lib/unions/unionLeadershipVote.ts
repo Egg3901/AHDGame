@@ -1,5 +1,5 @@
 import type { Db, ObjectId } from "mongodb";
-import type { UnionLeaderVote, UnionOrganizer } from "@/lib/db/types/union";
+import type { Union, UnionLeaderVote, UnionOrganizer } from "@/lib/db/types/union";
 
 /** Load every organizer's banked strength for one union, keyed by character id. */
 export async function loadUnionVoteWeights(db: Db, unionId: ObjectId): Promise<UnionVoteWeights> {
@@ -62,21 +62,48 @@ export function tallyUnionLeaderVoteWeights(
 }
 
 /**
- * Winner by total banked strength, or null when nothing is backing anyone.
- * `voteCount` is that winning strength total, not a headcount.
+ * Leading candidate by banked strength, or null when nothing is backing anyone.
+ * A tie goes to the sitting president (when that president is a character id in
+ * the tally): the challenger has to actually out-vote the incumbent, mirroring
+ * corporation CEO contests. NPP incumbents are not character candidates, so a
+ * tie among player candidates still picks one by insertion order among equals.
  */
-export function tallyUnionLeaderVotes(
-  votes: UnionLeaderVote[],
-  weights: UnionVoteWeights
-): { leaderId: string; voteCount: number } | null {
-  const counts = tallyUnionLeaderVoteWeights(votes, weights);
+export function leadingUnionCandidate(
+  counts: Map<string, number>,
+  incumbentId: string | null
+): string | null {
   let leaderId: string | null = null;
   let maxVotes = 0;
   for (const [cid, count] of counts) {
-    if (count > maxVotes) {
+    if (count > maxVotes || (count === maxVotes && incumbentId != null && cid === incumbentId)) {
       maxVotes = count;
       leaderId = cid;
     }
   }
-  return leaderId ? { leaderId, voteCount: maxVotes } : null;
+  return leaderId;
+}
+
+/**
+ * Winner by total banked strength, or null when nothing is backing anyone.
+ * `voteCount` is that winning strength total, not a headcount.
+ * Pass `incumbentId` (seated character president) so ties keep the incumbent.
+ */
+export function tallyUnionLeaderVotes(
+  votes: UnionLeaderVote[],
+  weights: UnionVoteWeights,
+  incumbentId: string | null = null
+): { leaderId: string; voteCount: number } | null {
+  const counts = tallyUnionLeaderVoteWeights(votes, weights);
+  const leaderId = leadingUnionCandidate(counts, incumbentId);
+  if (!leaderId) return null;
+  return { leaderId, voteCount: counts.get(leaderId) ?? 0 };
+}
+
+/** Sitting player president id, or null when vacant / NPP-held. */
+export function seatedPlayerPresidentId(
+  union: Pick<Union, "ownerId" | "ownerType">
+): string | null {
+  if (union.ownerId == null) return null;
+  if (union.ownerType === "npp") return null;
+  return union.ownerId.toString();
 }

@@ -33,7 +33,14 @@ import { useCountryContext } from "@/hooks/useCountryContext";
 import { useActiveCharters } from "@/hooks/useActiveCharters";
 import { useActiveReferendumCampaign } from "@/hooks/useActiveReferendumCampaign";
 import { UK_NATIONS, UK_REGIONS } from "@/lib/constants/uk";
-import { regionUrl, regionPartyUrl, regionLegislatureUrl, partyUrl, countryUrl } from "@/lib/urls";
+import {
+  regionUrl,
+  regionPartyUrl,
+  regionLegislatureUrl,
+  regionElectionsUrl,
+  partyUrl,
+  countryUrl,
+} from "@/lib/urls";
 import { visibleStaffNavItems } from "@/components/navbar/staffNavItems";
 import { visibleWorldNavItems } from "@/components/navbar/worldNavItems";
 import {
@@ -1047,6 +1054,13 @@ export const Navbar = React.memo(function Navbar({
                       className="flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 text-muted"
                     >
                       {t("state.economy")}
+                    </Link>
+                    <Link
+                      href={regionElectionsUrl(homeState.countryId, homeState.id)}
+                      onClick={closeMobileMenu}
+                      className="flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 text-muted"
+                    >
+                      {t("state.elections")}
                     </Link>
                     <Link
                       href={regionLegislatureUrl(homeState.countryId, homeState.id)}

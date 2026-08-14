@@ -136,7 +136,7 @@ describe("POST /api/corporations/[id]/shares/buy — buyAsCorporation", () => {
     // Deduction now goes through findOneAndUpdate with $gte gate.
     const expectedDebit = 1000;
     expect(db.collectionMocks["corporations"].findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: buyingCorpId, liquidCapital: { $gte: expectedDebit } },
+      expect.objectContaining({ _id: buyingCorpId, liquidCapital: { $gte: expectedDebit } }),
       expect.objectContaining({ $inc: expect.objectContaining({ liquidCapital: -expectedDebit }) }),
       expect.objectContaining({ returnDocument: "after" })
     );

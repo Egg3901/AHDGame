@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 export function NewPlayerBanner() {
+  const t = useTranslations("profile.onboarding");
   const [dismissed, setDismissed] = useState(false);
   const [dismissing, setDismissing] = useState(false);
 
@@ -29,19 +31,19 @@ export function NewPlayerBanner() {
     <div className="rounded-xl border border-primary/30 bg-card px-4 py-3 shadow-card flex items-center justify-between gap-4">
       <Link href="/actions/suggestions" className="flex-1 group min-w-0">
         <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-          New to A House Divided?
+          {t("newTitle")}
         </p>
         <p className="text-xs text-muted mt-0.5 group-hover:text-primary/70 transition-colors">
-          See personalized suggestions for what to do next →
+          {t("newSubtitle")}
         </p>
       </Link>
       <button
         onClick={handleDismiss}
         disabled={dismissing}
         className="shrink-0 text-xs text-muted hover:text-foreground transition-colors"
-        aria-label="Dismiss new player banner"
+        aria-label={t("newDismissAria")}
       >
-        Dismiss
+        {t("dismiss")}
       </button>
     </div>
   );

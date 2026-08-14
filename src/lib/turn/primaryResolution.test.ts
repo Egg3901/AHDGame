@@ -477,7 +477,11 @@ describe("resolvePrimariesIfNeeded", () => {
   // Democratic primary must still stamp primaryResults (both won:true) so the
   // districted resolver can split the party's district wins by primary share —
   // and must NOT eliminate either nominee.
-  it("stamps primaryResults for US House multi-advance without eliminating when under the cap", async () => {
+  // US House advances one nominee per party. The party's own filler NPP used to
+  // survive the primary alongside the player who beat it, then took a
+  // proportional slice of the state's delegation in the general — so the
+  // primary decided nothing. The NPP must be eliminated here.
+  it("advances one US House nominee per party, eliminating the party's NPP co-runner", async () => {
     const electionId = new ObjectId();
     const election = {
       _id: electionId,
@@ -559,14 +563,20 @@ describe("resolvePrimariesIfNeeded", () => {
     const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
     await resolvePrimariesIfNeeded(NOW, 100);
 
-    expect(db.collectionMocks["electionCandidates"].updateMany).not.toHaveBeenCalled();
+    // The NPP loses the primary and is withdrawn, so it cannot take districts.
+    expect(db.collectionMocks["electionCandidates"].updateMany).toHaveBeenCalled();
+    const withdrawnFilter = db.collectionMocks["electionCandidates"].updateMany.mock.calls[0][0];
+    expect(withdrawnFilter._id.$in.map(String)).toContain(nppId.toString());
+    expect(withdrawnFilter._id.$in.map(String)).not.toContain(playerId.toString());
+
     const { initElectionVoteTally } = await import("@/lib/electionEngine");
     expect(initElectionVoteTally).toHaveBeenCalled();
     const primaryResults = vi.mocked(initElectionVoteTally).mock.calls[0][3];
     const dem = primaryResults?.byParty?.["1"] ?? [];
     expect(dem).toHaveLength(2);
-    expect(dem.every((e: { won: boolean }) => e.won)).toBe(true);
     expect(dem[0].candidateId).toBe(playerId.toString());
+    expect(dem[0].won).toBe(true);
+    expect(dem[1].won).toBe(false);
   });
 
   it("still eliminates losers when a UK party has more candidates than maxAdvancing", async () => {

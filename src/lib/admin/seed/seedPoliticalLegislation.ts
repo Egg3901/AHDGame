@@ -25,10 +25,7 @@ import {
 import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
 import { countryFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
 import { budgetKeyForLaw } from "@/lib/politicalLegislation/budgetKeys";
-import {
-  REGIONAL_SUPPLEMENT_FACTOR,
-  lawTargets,
-} from "@/lib/politicalLegislation/dynamics";
+import { REGIONAL_SUPPLEMENT_FACTOR, lawTargets } from "@/lib/politicalLegislation/dynamics";
 import { projectLawToLegislationType } from "@/lib/politicalLegislation/project";
 import { LAW_COUNTRY_IDS, type LawCountryId } from "@/lib/politicalLegislation/types";
 import { DD_LAND_STATE_IDS } from "@/lib/politicalLegislation/laws/ddLandLaws";
@@ -168,8 +165,7 @@ export async function seedPoliticalLegislationBaseline(
     // Land id list so a drifted world cannot invent phantom Bezirke.
     const regionalLaws = getRegionalCatalog(countryId, year).filter((law) => law.kind !== "tax");
     if (regionalLaws.length > 0) {
-      const allowed =
-        countryId === "DD" ? new Set<string>(DD_LAND_STATE_IDS) : null;
+      const allowed = countryId === "DD" ? new Set<string>(DD_LAND_STATE_IDS) : null;
       const states = await db
         .collection<{ _id: string }>("states")
         .find({ countryId }, { projection: { _id: 1 } })

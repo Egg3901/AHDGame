@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { PoliticalCompass, type CompassMarker } from "@/components/PoliticalCompass";
 import { DetailedPolicyDisplay } from "@/components/DetailedPolicyDisplay";
 import type { CharacterDemographics } from "@/lib/db/types";
@@ -19,12 +20,20 @@ interface PolicyDemographicsCardProps {
   currentCountryId?: string | null;
 }
 
-function CompactStat({ label, value }: { label: string; value: string | null | undefined }) {
+function CompactStat({
+  label,
+  value,
+  undisclosedLabel,
+}: {
+  label: string;
+  value: string | null | undefined;
+  undisclosedLabel: string;
+}) {
   return (
     <div className="rounded-lg border border-card-border/60 bg-card-elevated/35 px-3.5 py-3">
       <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">{label}</p>
       <p className="mt-1 text-sm font-medium leading-snug text-foreground">
-        {value ?? "Undisclosed"}
+        {value ?? undisclosedLabel}
       </p>
     </div>
   );
@@ -39,6 +48,7 @@ export function PolicyDemographicsCard({
   startingCountryId,
   currentCountryId,
 }: PolicyDemographicsCardProps) {
+  const t = useTranslations("profile.positions");
   const [view, setView] = useState<PolicyView>("compass");
 
   const tabClass = (active: boolean) =>
@@ -54,11 +64,11 @@ export function PolicyDemographicsCard({
   return (
     <div className="rounded-2xl border border-card-border bg-card p-6 shadow-sm">
       <div className="mb-4 flex flex-col items-center gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-xs font-bold uppercase tracking-widest text-muted">Positions</h3>
+        <h3 className="text-xs font-bold uppercase tracking-widest text-muted">{t("title")}</h3>
         <div
           className="inline-flex rounded-lg border border-card-border bg-card-muted/40 p-0.5"
           role="tablist"
-          aria-label="Positions view"
+          aria-label={t("viewAria")}
         >
           <button
             type="button"
@@ -67,7 +77,7 @@ export function PolicyDemographicsCard({
             className={tabClass(view === "compass")}
             onClick={() => setView("compass")}
           >
-            Compass
+            {t("tabCompass")}
           </button>
           <button
             type="button"
@@ -76,7 +86,7 @@ export function PolicyDemographicsCard({
             className={tabClass(view === "detail")}
             onClick={() => setView("detail")}
           >
-            Detail
+            {t("tabDetail")}
           </button>
           <button
             type="button"
@@ -85,7 +95,7 @@ export function PolicyDemographicsCard({
             className={tabClass(view === "demographics")}
             onClick={() => setView("demographics")}
           >
-            Demographics
+            {t("tabDemographics")}
           </button>
         </div>
       </div>
@@ -114,31 +124,36 @@ export function PolicyDemographicsCard({
         <div className="space-y-2.5">
           <div className="grid gap-2 sm:grid-cols-2">
             {identityRows.map((row) => (
-              <CompactStat key={row.label} label={row.label} value={row.value} />
+              <CompactStat
+                key={row.label}
+                label={row.label}
+                value={row.value}
+                undisclosedLabel={t("undisclosed")}
+              />
             ))}
           </div>
 
           <div className="rounded-lg border border-card-border/60 bg-card-elevated/35 px-3.5 py-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
-              Nationality
+              {t("nationality")}
             </p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <div>
                 <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted/80">
-                  Starting
+                  {t("starting")}
                 </p>
                 <p className="mt-1 text-sm font-medium leading-snug text-foreground flex items-center gap-1.5">
                   {startingCountryId ? <CountryFlag country={startingCountryId} size="sm" /> : null}
-                  {startingNationality ?? "Unrecorded"}
+                  {startingNationality ?? t("unrecorded")}
                 </p>
               </div>
               <div className="sm:text-right">
                 <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted/80">
-                  Current
+                  {t("current")}
                 </p>
                 <p className="mt-1 text-sm font-medium leading-snug text-foreground flex items-center gap-1.5">
                   {currentCountryId ? <CountryFlag country={currentCountryId} size="sm" /> : null}
-                  {currentNationality ?? "Unrecorded"}
+                  {currentNationality ?? t("unrecorded")}
                 </p>
               </div>
             </div>

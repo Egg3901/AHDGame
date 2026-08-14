@@ -34,7 +34,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { getStartingYearForPreset, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
-import { onBillEnacted } from "@/lib/billEnactment";
+import { enactRulingBill } from "@/lib/scotus/enactRulingBill";
 import type { DocketCase, DocketCaseEffect, SupremeCourtSeat } from "@/lib/db/types/scotus";
 import type { PolicyProvision } from "@/lib/db/types/legislation";
 import { decideCaseOutcome, type SeatedJusticeLean } from "@/lib/scotus/divergence";
@@ -149,26 +149,19 @@ export async function processScotusSurpriseCaseTurn(
       economic: chosenEffect.economic,
       social: chosenEffect.social,
     };
-    const syntheticBillId = new ObjectId();
-    await onBillEnacted(
-      database,
-      {
-        _id: syntheticBillId,
-        title: `${template.title} (Surprise SCOTUS Ruling)`,
-        legislationTypeId: chosenEffect.legislationTypeId,
-        effectDirection: chosenEffect.effectDirection,
-        provisions: [provision],
-        countryId: "US",
-        stateId: chosenEffect.stateId ?? "federal",
-        source: "scotus_surprise_ruling",
-      },
-      currentTurn
-    );
-
-    const enactedLawRow = await database
-      .collection("enactedLaws")
-      .findOne({ billId: syntheticBillId }, { projection: { _id: 1 }, sort: { enactedAt: -1 } });
-    enactedLawId = enactedLawRow?._id as ObjectId | undefined;
+    ({ enactedLawId } = await enactRulingBill(database, {
+      title: `${template.title} (Surprise SCOTUS Ruling)`,
+      legislationTypeId: chosenEffect.legislationTypeId,
+      effectDirection: chosenEffect.effectDirection,
+      provision,
+      countryId: "US",
+      stateId: chosenEffect.stateId ?? "federal",
+      source: "scotus_surprise_ruling",
+      votesFor: decision.positiveCount,
+      votesAgainst: decision.negativeCount,
+      currentTurn,
+      now,
+    }));
   }
 
   await database.collection<DocketCase>("docketCases").insertOne({

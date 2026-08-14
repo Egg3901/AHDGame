@@ -1,6 +1,7 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
+import type { ReachableBooksDoc } from "@/lib/trade/reachableBook";
 
 /**
  * Per-turn snapshot of cleared inter-country trade. One document per turn,
@@ -18,6 +19,13 @@ export interface TradeFlowSnapshot {
   national: Partial<Record<CountryId, NationalTradeRollup>>;
   /** World totals (₳). */
   world: { grossVolume: number; clearedVolume: number; unclearedSurplus: number };
+  /**
+   * Per-country reachable market books in commodity UNITS (ticket #1077), for
+   * read surfaces that must quote the market a seller can actually reach rather
+   * than the global aggregate. Optional: documents written before 1.1.2 do not
+   * carry it, and callers fall back to the global figures.
+   */
+  books?: ReachableBooksDoc;
 }
 
 export interface CommodityTradeFlows {

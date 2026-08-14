@@ -254,6 +254,7 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
                 statePrices={marketScope.statePrices}
                 nationalSupply={data.nationalSupply}
                 nationalDemand={data.nationalDemand}
+                reachableBooks={data.reachableBooks}
                 stateCountryMap={marketScope.stateCountryMap}
                 capacityByState={marketScope.capacityByState}
                 mode={mapMode}

@@ -24,6 +24,17 @@ export interface DistrictedArgs {
   primaryShares: Record<string, number> | null;
   districtBoosts?: Record<string, Record<string, number>>;
   now: Date;
+  /**
+   * Stamp the computed holders onto the `congressionalDistricts` docs.
+   *
+   * OFF by default, and only the turn resolver may turn it on. This function
+   * doubles as the live "Projected Seats" projection in `enrichElection`, which
+   * runs on every House race page view: with persistence unconditional, opening
+   * a live race rewrote that state's sitting members from an in-progress tally.
+   * The projection path also has no NPP id map, so it wrote `npps` ids into
+   * `holderCharacterId` and every NPP-held seat rendered unheld (#2906 again).
+   */
+  persist?: boolean;
 }
 
 export interface SeatResult {
@@ -37,8 +48,8 @@ export interface SeatResult {
 /**
  * Resolve a US House election per-district by shifting the statewide tally by
  * each district's square lean. Returns null when the state's congressionalDistricts
- * docs are absent (caller falls back to legacy allocateSeats). Stamps per-district
- * holders onto the docs.
+ * docs are absent (caller falls back to legacy allocateSeats). Pure unless
+ * `persist` is set — see {@link DistrictedArgs.persist}.
  */
 export async function districtedHouseResolution(
   db: Db,
@@ -95,9 +106,9 @@ export async function districtedHouseResolution(
   );
   const assignment = assignDistrictsToNominees(districtWinners, nomineesByParty);
 
-  // Stamp holders onto the district docs.
+  // Stamp holders onto the district docs. Resolution only — see `persist`.
   const docByIndex = new Map(docs.map((d) => [d.index, d]));
-  for (const [index, candidateId] of assignment) {
+  for (const [index, candidateId] of args.persist ? assignment : []) {
     const d = docByIndex.get(index);
     if (!d) continue;
     const nppIdRaw = args.candidateNppId?.[candidateId] ?? null;

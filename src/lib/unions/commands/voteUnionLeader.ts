@@ -7,7 +7,11 @@ import { isSameCountry } from "@/lib/api/sameCountry";
 import { createNotification } from "@/lib/notifications";
 import { isUnionLeadershipElectionOpen } from "@/lib/unions/unionEconomy";
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
-import { loadUnionVoteWeights, tallyUnionLeaderVotes } from "@/lib/unions/unionLeadershipVote";
+import {
+  loadUnionVoteWeights,
+  seatedPlayerPresidentId,
+  tallyUnionLeaderVotes,
+} from "@/lib/unions/unionLeadershipVote";
 
 const DUPLICATE_KEY_ERROR_CODE = 11000;
 
@@ -16,8 +20,10 @@ export type VoteUnionLeaderResult =
   | { ok: false; status: number; error: string };
 
 /**
- * Cast an organizer's vote for union president. Updates `pendingLeaderCharacterId`
- * when the plurality leader changes, mirroring corporation CEO votes.
+ * Cast an organizer's vote for union president. Contests stay open once the
+ * union is strong enough — including while a president sits — mirroring
+ * corporation CEO votes. Updates `pendingLeaderCharacterId` when the plurality
+ * leader is someone other than the incumbent.
  */
 export async function voteUnionLeader(
   db: Db,
@@ -25,9 +31,6 @@ export async function voteUnionLeader(
   union: Union,
   candidateCharacterId: ObjectId
 ): Promise<VoteUnionLeaderResult> {
-  if (union.ownerId != null) {
-    return { ok: false, status: 409, error: "This union already has a president." };
-  }
   if (!isUnionLeadershipElectionOpen(union)) {
     return {
       ok: false,
@@ -58,6 +61,9 @@ export async function voteUnionLeader(
     };
   }
 
+  const incumbentId = seatedPlayerPresidentId(union);
+  const isIncumbentCandidate = incumbentId === candidateCharacterId.toString();
+
   const candidate = await db
     .collection<Character>("characters")
     .findOne(
@@ -67,7 +73,13 @@ export async function voteUnionLeader(
   if (!candidate) {
     return { ok: false, status: 404, error: "Candidate not found." };
   }
-  if (!isSameCountry(candidate, { countryId: union.countryId as CountryId })) {
+  // Sitting president stays votable even if they moved countries — otherwise
+  // shareholders of organizing strength could not reaffirm them and any
+  // challenger would run unopposed (CEO residency exemption parallel).
+  if (
+    !isIncumbentCandidate &&
+    !isSameCountry(candidate, { countryId: union.countryId as CountryId })
+  ) {
     return {
       ok: false,
       status: 403,
@@ -112,40 +124,50 @@ export async function voteUnionLeader(
     db.collection<UnionLeaderVote>("unionLeaderVotes").find({ unionId: union._id }).toArray(),
     loadUnionVoteWeights(db, union._id),
   ]);
-  const tally = tallyUnionLeaderVotes(allVotes, weights);
+  const tally = tallyUnionLeaderVotes(allVotes, weights, incumbentId);
   const leaderId = tally?.leaderId ?? null;
   const prevPending = union.pendingLeaderCharacterId?.toString() ?? null;
 
-  if (leaderId && leaderId !== prevPending) {
-    await db
-      .collection<Union>("unions")
-      .updateOne(
-        { _id: union._id, ownerId: null },
-        { $set: { pendingLeaderCharacterId: new ObjectId(leaderId), updatedAt: now } }
-      );
-
-    const leaderChar = await db
-      .collection<Character>("characters")
-      .findOne({ _id: new ObjectId(leaderId) }, { projection: { userId: 1, name: 1 } });
-    if (leaderChar?.userId) {
-      await createNotification({
-        userId: leaderChar.userId,
-        type: "union_leader_offer",
-        title: "Union presidency offered",
-        message: `Organizers of ${union.name} have voted you their top choice for president. Visit the union page to accept or decline.`,
-        metadata: {
-          unionId: union._id.toString(),
-          unionName: union.name,
-        },
-      });
+  // Incumbent (player) leading, or nobody leading: clear any stale offer.
+  // NPP incumbents are never character candidates, so any player plurality
+  // always differs from the seated NPP and should get an offer.
+  if (!leaderId || leaderId === incumbentId) {
+    if (prevPending) {
+      await db
+        .collection<Union>("unions")
+        .updateOne(
+          { _id: union._id },
+          { $set: { pendingLeaderCharacterId: null, updatedAt: now } }
+        );
     }
-  } else if (!leaderId && prevPending) {
-    await db
-      .collection<Union>("unions")
-      .updateOne(
-        { _id: union._id, ownerId: null },
-        { $set: { pendingLeaderCharacterId: null, updatedAt: now } }
-      );
+    return { ok: true, status: 200, pendingLeaderCharacterId: null };
+  }
+
+  if (leaderId === prevPending) {
+    return { ok: true, status: 200, pendingLeaderCharacterId: leaderId };
+  }
+
+  await db
+    .collection<Union>("unions")
+    .updateOne(
+      { _id: union._id },
+      { $set: { pendingLeaderCharacterId: new ObjectId(leaderId), updatedAt: now } }
+    );
+
+  const leaderChar = await db
+    .collection<Character>("characters")
+    .findOne({ _id: new ObjectId(leaderId) }, { projection: { userId: 1, name: 1 } });
+  if (leaderChar?.userId) {
+    await createNotification({
+      userId: leaderChar.userId,
+      type: "union_leader_offer",
+      title: "Union presidency offered",
+      message: `Organizers of ${union.name} have voted you their top choice for president. Visit the union page to accept or decline.`,
+      metadata: {
+        unionId: union._id.toString(),
+        unionName: union.name,
+      },
+    });
   }
 
   return { ok: true, status: 200, pendingLeaderCharacterId: leaderId };

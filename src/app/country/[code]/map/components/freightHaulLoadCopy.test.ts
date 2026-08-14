@@ -15,8 +15,8 @@ describe("freightHaulLoadCopy", () => {
     expect(formatFreightTeu(12.4)).toBe("12");
   });
 
-  it("surfaces capacity beside haul and never calls haul demand", () => {
-    expect(FREIGHT_HAUL_LOAD_MODE_DESCRIPTION.toLowerCase()).not.toContain("demand");
+  it("surfaces capacity beside haul and books haul as demand", () => {
+    expect(FREIGHT_HAUL_LOAD_MODE_DESCRIPTION.toLowerCase()).toContain("haul load");
     const tip = freightHaulLoadTooltip("NY", {
       bulk: 3.6,
       special: 0,
@@ -27,7 +27,7 @@ describe("freightHaulLoadCopy", () => {
     expect(tip[1]).toBe("Freight capacity: 65 TEU");
     expect(tip[2]).toBe("Interstate haul: 3.6 TEU/turn (5.5%)");
     expect(tip[3]).toBe("Bulk: 3.6 · Special: 0");
-    expect(tip[4]).toMatch(/not sold % demand/i);
+    expect(tip[4]).toMatch(/counts as freight demand/i);
     expect(freightHaulLoadLabel({ bulk: 3.6, special: 0, total: 3.6, capacity: 65 })).toBe(
       "65 TEU"
     );
@@ -39,11 +39,11 @@ describe("freightHaulLoadCopy", () => {
     expect(freightHaulLoadLabel(3.6)).toBe("3.6 TEU");
   });
 
-  it("warns that sold % follows the global freight market", () => {
+  it("explains that haul feeds freight prices and sold %", () => {
     expect(freightHaulLoadCaption(false)).toMatch(/No freight data yet/i);
     const caption = freightHaulLoadCaption(true);
     expect(caption.toLowerCase()).not.toContain("ready customers");
     expect(caption).toMatch(/freight capacity/i);
-    expect(caption).toMatch(/global freight market/i);
+    expect(caption).toMatch(/freight demand/i);
   });
 });
