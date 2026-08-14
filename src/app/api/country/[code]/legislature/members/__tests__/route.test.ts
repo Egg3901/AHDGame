@@ -149,4 +149,39 @@ describe("GET /api/country/[code]/legislature/members (UK)", () => {
     const data = await response.json();
     expect(data.members[0]).toHaveProperty("isNPP", true);
   });
+
+  it("returns the 1953 Commons size when the world preset is 1953-default (ticket #1078)", async () => {
+    const mockDb = {
+      collection: vi.fn((name: string) => {
+        if (name === "electedOfficials") {
+          return {
+            find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+          };
+        }
+        if (name === "politicalParties") {
+          return { find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }) };
+        }
+        if (name === "gameState") {
+          return { findOne: vi.fn().mockResolvedValue({ preset: "1953-default" }) };
+        }
+        return {
+          find: vi.fn().mockReturnValue({
+            project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+            toArray: vi.fn().mockResolvedValue([]),
+          }),
+          findOne: vi.fn().mockResolvedValue(null),
+        };
+      }),
+    };
+    vi.mocked(getDb).mockResolvedValue(mockDb as unknown as Db);
+
+    const { GET } = await import("@/app/api/country/[code]/legislature/members/route");
+    const response = await GET(
+      new Request("http://localhost/api/country/uk/legislature/members"),
+      ukParams
+    );
+    const data = await response.json();
+    expect(data.totalSeats).toBe(625);
+    expect(data.vacantSeats).toBe(625);
+  });
 });

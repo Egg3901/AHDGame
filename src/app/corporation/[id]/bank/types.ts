@@ -30,10 +30,31 @@ export type ConsolePayload = {
     ownsFinancial: boolean;
   };
   currency: CurrencyCode;
+  /** Current game turn, for the charter-switch cooldown countdown. */
+  currentTurn: number;
   legalCharterTypes: BankCharterType[];
   eligibleTypes: BankCharterType[];
   eligibilityReasons: string[];
   capitalRequirement: number;
+  capitalRequirementByType: Record<BankCharterType, number>;
+  risk: {
+    cashReserves: number;
+    requiredReserves: number;
+    runFailureThreshold: number;
+    reserveCoverRatio: number;
+    headroomToFailure: number;
+    oneBandFromFailure: boolean;
+    terms: Array<{
+      key: string;
+      label: string;
+      contribution: number;
+      max: number;
+      lever: string;
+    }>;
+    confidence: number;
+    band: "green" | "amber" | "red";
+    verdict: string;
+  } | null;
   corridors: { deposit: Corridor; lending: Corridor } | null;
   reserveRatio: number | null;
   depositCeiling: number | null;
@@ -52,7 +73,9 @@ export type ConsolePayload = {
     totalLoans: number;
     npcDeposits: number;
     reserves: number;
-    reserveFloor: number;
+    cashReserves: number;
+    requiredReserves: number;
+    upstreamCapacity: number;
     lendingProfile: LendingProfileId;
     discountWindowDebt: number;
     discountWindowArrears: number;

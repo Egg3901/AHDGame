@@ -12,7 +12,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
-import type { Corporation } from "@/lib/db/types/corporation";
+import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import type { DefenceContract } from "@/lib/db/types/defenceContract";
 import { respondToContract } from "@/lib/db/collections/defenceContracts";
 
@@ -33,20 +33,18 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
 
-    let corpObjectId: ObjectId;
-    let contractObjectId: ObjectId;
-    try {
-      corpObjectId = new ObjectId(id);
-      contractObjectId = new ObjectId(contractId);
-    } catch {
+    // Contract ids are Mongo ObjectIds. The corporation param is not — corp pages
+    // address /api/corporations/[id] by sequentialId (e.g. Lockheed is 453), and
+    // `new ObjectId("453")` is the "Invalid id" the Accept button was hitting.
+    if (!ObjectId.isValid(contractId) || contractId.length !== 24) {
       return NextResponse.json({ error: "Invalid id" }, { status: 400 });
     }
+    const contractObjectId = new ObjectId(contractId);
 
     const db = await getDb();
-    const corp = await db.collection<Corporation>("corporations").findOne({ _id: corpObjectId });
-    if (!corp) {
-      return NextResponse.json({ error: "No such corporation" }, { status: 404 });
-    }
+    const resolved = await resolveCorporation(db, id);
+    if (!resolved.ok) return resolved.response;
+    const corp = resolved.corporation;
 
     const isCeo = corp.userId && corp.userId.toString() === auth.user.userId.toString();
     if (!isCeo && !auth.user.isAdmin) {
@@ -60,7 +58,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // or decline another corporation's offer by pasting its id.
     const contract = await db
       .collection<DefenceContract>("defenceContracts")
-      .findOne({ _id: contractObjectId, corporationId: corpObjectId });
+      .findOne({ _id: contractObjectId, corporationId: corp._id });
     if (!contract) {
       return NextResponse.json({ error: "No such contract" }, { status: 404 });
     }

@@ -39,6 +39,13 @@ export interface TierOption {
 }
 
 export interface TierSettingConfig {
+  /**
+   * Stable identifier, required only when a seat carries more than one tier
+   * (see CabinetPositionMechanics.tierSettings). The primary `tierSetting`
+   * omits it and persists to the legacy `currentSettings.tierSetting` string;
+   * extra tiers persist to `currentSettings.tierSettings[key]`.
+   */
+  key?: string;
   name: string;
   description: string;
   options: TierOption[];
@@ -102,6 +109,14 @@ export interface CabinetPositionMechanics {
   nationalMetrics: MetricConfig[];
   regionalMetrics: MetricConfig[];
   tierSetting?: TierSettingConfig;
+  /**
+   * Additional policy levers beyond the primary `tierSetting`, for seats that
+   * hold more than one portfolio (e.g. HEW = health + education + welfare).
+   * Each entry MUST set a stable `key`; its selection persists to
+   * `currentSettings.tierSettings[key]` and its effects apply alongside the
+   * primary tier. Omit for single-portfolio seats.
+   */
+  tierSettings?: TierSettingConfig[];
   regionalTarget?: RegionalTargetConfig;
   allocation?: AllocationConfig;
   advocacy?: AdvocacyConfig;

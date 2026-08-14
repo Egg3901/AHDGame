@@ -20,11 +20,10 @@ import type {
 } from "@/lib/db/types";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
-import {
-  commodityMixWeight,
-  COMMODITY_BASE_PRICES,
-  type CommodityType,
-} from "@/lib/constants/commodities";
+import type { CommodityType } from "@/lib/constants/commodities";
+import { sectorDemandGapUnits } from "@/lib/market/sectorDemandGap";
+import { reachableDemandGap } from "@/lib/trade/reachableBook";
+import { bookFor, loadReachableBooks } from "@/lib/trade/queries/loadReachableBooks";
 import { getStrategy } from "@/lib/constants/sectorStrategies";
 import { CAPACITY_BUILD_TURNS, computeBuildCost } from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
@@ -114,13 +113,24 @@ export async function GET(request: Request, { params }: RouteParams) {
       );
     }
 
-    // World demand gap for this sector type's output mix (min over legs — the
-    // market stops absorbing when the first leg saturates; 0 in a glut). The
+    // Demand gap for this sector type's output mix, PER COUNTRY (min over legs —
+    // the market stops absorbing when the first leg saturates; 0 in a glut). The
     // unowned pool's headroom is claimable market SHARE, not buyers; ranking
     // and labelling it "untapped demand" steered players straight into gluts
     // (ticket #1027 follow-up).
-    let sectorDemandGapUnits = Number.POSITIVE_INFINITY;
-    if (plantsMode) {
+    //
+    // Scoped to each candidate market's own REACHABLE book rather than the world
+    // aggregate (ticket #1077). The aggregate summed supply behind embargo walls
+    // and supply from countries outside COUNTRY_ORDER that trade with nobody, so
+    // a market running a real shortage read as a glut and every state on Earth
+    // quoted "room for 0". A market a corporation cannot sell into must not
+    // suppress the quote for one it can.
+    const supplyMix = getStrategy(sectorType, "standard").supply ?? {};
+    const reachableBooks = plantsMode ? await loadReachableBooks(db) : null;
+    let globalGapFallbackUnits = Number.POSITIVE_INFINITY;
+    if (plantsMode && !reachableBooks) {
+      // No book persisted yet (world has not run a turn since 1.1.2). Fall back
+      // to the previous world-aggregate behaviour rather than reporting no room.
       const priceDocs = await db
         .collection<{ commodity: CommodityType; globalSupply?: number; globalDemand?: number }>(
           "commodityPrices"
@@ -128,21 +138,23 @@ export async function GET(request: Request, { params }: RouteParams) {
         .find({}, { projection: { commodity: 1, globalSupply: 1, globalDemand: 1 } })
         .toArray();
       const balances = new Map(priceDocs.map((p) => [p.commodity, p]));
-      const supplyMix = getStrategy(sectorType, "standard").supply ?? {};
-      let minUnits = Number.POSITIVE_INFINITY;
-      for (const [mixCommodity, mixRate] of Object.entries(supplyMix) as [
-        CommodityType,
-        number,
-      ][]) {
-        if (!(mixRate > 0)) continue;
-        const w = commodityMixWeight(supplyMix, COMMODITY_BASE_PRICES, mixCommodity);
-        if (!(w > 0)) continue;
+      globalGapFallbackUnits = sectorDemandGapUnits(supplyMix, (mixCommodity) => {
         const bal = balances.get(mixCommodity);
-        const gap = Math.max(0, (bal?.globalDemand ?? 0) - (bal?.globalSupply ?? 0));
-        minUnits = Math.min(minUnits, gap / w);
-      }
-      sectorDemandGapUnits = Number.isFinite(minUnits) ? minUnits : 0;
+        return (bal?.globalDemand ?? 0) - (bal?.globalSupply ?? 0);
+      });
     }
+    const demandGapUnitsByCountry = new Map<string, number>();
+    const demandGapUnitsFor = (countryId: string): number => {
+      if (!plantsMode) return Number.POSITIVE_INFINITY;
+      if (!reachableBooks) return globalGapFallbackUnits;
+      const cached = demandGapUnitsByCountry.get(countryId);
+      if (cached !== undefined) return cached;
+      const gap = sectorDemandGapUnits(supplyMix, (mixCommodity) =>
+        reachableDemandGap(bookFor(reachableBooks, countryId, mixCommodity))
+      );
+      demandGapUnitsByCountry.set(countryId, gap);
+      return gap;
+    };
 
     const { ObjectId } = await import("mongodb");
     const ms = corporation.marketingStrength ?? 0;
@@ -428,11 +440,11 @@ export async function GET(request: Request, { params }: RouteParams) {
             ? unownedDoc.headroomUnits
             : computeUnownedHeadroomUnits(sectorType, unownedRevenue, eraUnitScale)
           : null;
-        // Cap the pool share at what buyers can actually absorb — in a glut the
-        // pool reads huge while extra output simply goes unsold.
+        // Cap the pool share at what buyers in THIS market can actually absorb —
+        // in a glut the pool reads huge while extra output simply goes unsold.
         const headroomUnits =
           poolHeadroomUnits != null
-            ? Math.round(Math.min(poolHeadroomUnits, sectorDemandGapUnits))
+            ? Math.round(Math.min(poolHeadroomUnits, demandGapUnitsFor(state.countryId)))
             : null;
         const starterBuildCostAnchor = plantsMode
           ? (starterBuildCostByState.get(stateId) ?? 0)

@@ -40,6 +40,7 @@ describe("POST corporations/[id]/defence-contracts/[contractId]", () => {
     db.collection("corporations");
     db.collectionMocks.corporations.findOne.mockResolvedValue({
       _id: CORP_ID,
+      sequentialId: 453,
       userId: CEO_USER_ID,
       name: "Lockmartin",
     });
@@ -53,6 +54,20 @@ describe("POST corporations/[id]/defence-contracts/[contractId]", () => {
       matchedCount: 1,
       modifiedCount: 1,
     } as never);
+  });
+
+  // Corp pages address /api/corporations/[id] by sequentialId (Lockheed is 453).
+  // Parsing that param as ObjectId is what surfaces "Invalid id" on Accept.
+  it("accepts a pending offer when the corporation is addressed by sequentialId", async () => {
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ action: "accept" }), {
+      params: Promise.resolve({ id: "453", contractId: CONTRACT_ID.toString() }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ success: true, status: "active" });
+    const [filter] = db.collectionMocks.defenceContracts.findOne.mock.calls[0];
+    expect(filter).toMatchObject({ _id: CONTRACT_ID, corporationId: CORP_ID });
   });
 
   it("accepts a pending offer, making it active", async () => {

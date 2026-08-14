@@ -16,6 +16,7 @@ import { createNotification } from "@/lib/notifications";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { createSystemNewsPost } from "@/lib/news";
 import type { BookTranche } from "@/lib/banking/creditBands";
+import { getCashReserves } from "@/lib/banking/bankCash";
 import {
   RECAP_GRACE_TURNS,
   assessCapital,
@@ -104,8 +105,7 @@ export async function processBankSupervision(db: Db, turn: number): Promise<Supe
 
     try {
       const position = assessCapital({
-        postedCapital: charter.postedCapital ?? 0,
-        liquidCapital: corp.liquidCapital ?? 0,
+        cashReserves: getCashReserves(charter),
         totalLoans: charter.totalLoans ?? 0,
         borrowings: borrowingsFromCharter(charter),
         propBookMarkValue: charter.propBookMarkValue ?? 0,

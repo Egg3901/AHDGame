@@ -134,6 +134,8 @@ export interface SoeState {
   };
 }
 
+import type { NppStrategyState } from "@/lib/turn/npp/corpStrategy";
+
 export interface Corporation {
   _id: ObjectId;
   name: string;
@@ -160,6 +162,13 @@ export interface Corporation {
   ceoId: ObjectId;
   /** Whether the CEO is a regular character, imperial character, or NPP. Defaults to "character". */
   ceoType?: "character" | "imperial" | "npp";
+  /**
+   * v5 NPP strategy memory. Written only by the NPP corporation brain, and only
+   * for corps it operates. Absent means the loop has not seen this corp yet, in
+   * which case it adopts `expand`, whose levers are identical to the pre-v5
+   * behaviour. See `src/lib/turn/npp/corpStrategy.ts`.
+   */
+  nppStrategy?: NppStrategyState;
   /** User who owns this corporation (for quick auth lookups) */
   userId: ObjectId;
   /** Country where corporation is headquartered */
@@ -992,6 +1001,26 @@ export interface CorporateSector {
    * cooldown (spec §13.4); absent on seeded / split-off / private sectors.
    */
   absorbedAtTurn?: number;
+  /**
+   * Prior-owner provenance stamped at taking time so an executive/emergency
+   * nationalization can be UNDONE (e.g. a Supreme Court strike-down of the
+   * emergency taking). Records who held the sector and its pre-haircut economics
+   * before the state absorbed it. Absent on seeded / never-nationalized sectors,
+   * and on takings that predate this field. On a NatCorp merge this reflects the
+   * MOST RECENT taking folded into the surviving row.
+   */
+  nationalizationProvenance?: {
+    /** The corporation that held this sector immediately before the taking. */
+    formerCorporationId: ObjectId;
+    /** The sector's home country before the taking (usually the taking country). */
+    formerCountryId?: string;
+    /** Revenue (donor currency) before the transition haircut. */
+    formerRevenue?: number;
+    /** Capital stock before the transition haircut (plants mode). */
+    formerCapitalStock?: number;
+    /** Turn the taking occurred. */
+    takenAtTurn: number;
+  };
   /**
    * Turn this sector was nationalized — anchor for the transition productivity
    * shock (decays over NATIONALIZATION_TRANSITION_TURNS). Stamped at the moment of

@@ -91,6 +91,82 @@ export function capacityColor(value: number, maxValue: number): string {
 }
 
 /**
+ * Reachable-market diverging scale (ticket #1077).
+ *
+ * The data's job here is POLARITY, not magnitude: which side of a balanced
+ * market (demand/supply = 1) a country sits on. So it takes two hues and a
+ * NEUTRAL GRAY midpoint, never a rainbow and never a hue at the middle.
+ *
+ * Poles are the ones `ShortageHeatMap` already ships (#D64545 warm shortage,
+ * #3E7CB1 cool glut, #8A8F98 neutral) so the world map and the heat map read as
+ * one system. Each arm was solved for even OKLCH lightness spacing and checked
+ * with the dataviz `validateOrdinal` in BOTH light and dark mode: lightness
+ * monotone, adjacent dL >= 0.06, light end clears the surface, single hue per
+ * arm. The categorical validator FAILS a correct diverging ramp by design (it
+ * spans the lightness band and the gray midpoint sits under the chroma floor),
+ * so it is not the check that applies here.
+ *
+ * One validated mid-tone set serves every theme, matching the reasoning in
+ * ShortageHeatMap: the app ships 10+ named data-theme surfaces, so a per-theme
+ * override would mis-fire on the themes it does not name.
+ */
+const REACHABLE_SHORT_STEPS = ["#e68f8f", "#dd6363", "#c44040", "#973535"] as const;
+const REACHABLE_GLUT_STEPS = ["#8ab0d0", "#6294c0", "#3d79ad", "#325f85"] as const;
+const REACHABLE_NEUTRAL = "#8A8F98";
+/** Ratio band treated as balanced, matching ShortageHeatMap's tone thresholds. */
+const REACHABLE_BALANCED_LO = 0.85;
+const REACHABLE_BALANCED_HI = 1.15;
+
+/**
+ * Which arm and step a demand/supply ratio lands on. Exported for the legend
+ * and for tests, so the buckets cannot drift from the fill.
+ *
+ * `null` ratio means no signal at all (no book, or zero on both sides) and is
+ * deliberately NOT painted as balanced — an unknown market and a balanced one
+ * are different answers.
+ */
+export function reachableBucket(dsRatio: number | null): {
+  arm: "short" | "glut" | "balanced" | "unknown";
+  step: number;
+} {
+  if (dsRatio == null || !Number.isFinite(dsRatio) || dsRatio <= 0) {
+    return { arm: "unknown", step: 0 };
+  }
+  if (dsRatio >= REACHABLE_BALANCED_LO && dsRatio <= REACHABLE_BALANCED_HI) {
+    return { arm: "balanced", step: 0 };
+  }
+  // Steps at 1.15/1.5/2/3x on the short arm, mirrored on the glut arm, so each
+  // step is a doubling-ish of imbalance rather than a linear slice that puts
+  // every real market in one bucket.
+  if (dsRatio > REACHABLE_BALANCED_HI) {
+    const step = dsRatio >= 3 ? 3 : dsRatio >= 2 ? 2 : dsRatio >= 1.5 ? 1 : 0;
+    return { arm: "short", step };
+  }
+  const inv = 1 / dsRatio;
+  const step = inv >= 3 ? 3 : inv >= 2 ? 2 : inv >= 1.5 ? 1 : 0;
+  return { arm: "glut", step };
+}
+
+/** Fill for a country on the reachable lens. */
+export function reachableColor(dsRatio: number | null): string {
+  const { arm, step } = reachableBucket(dsRatio);
+  if (arm === "unknown") return "rgba(148, 163, 184, 0.10)";
+  if (arm === "balanced") return REACHABLE_NEUTRAL;
+  return arm === "short" ? REACHABLE_SHORT_STEPS[step] : REACHABLE_GLUT_STEPS[step];
+}
+
+/** Legend stops for the reachable lens, glut -> balanced -> shortage. */
+export function getReachableLegendStops(): { color: string; label: string }[] {
+  return [
+    { color: REACHABLE_GLUT_STEPS[3], label: "Glut" },
+    { color: REACHABLE_GLUT_STEPS[1], label: "" },
+    { color: REACHABLE_NEUTRAL, label: "Balanced" },
+    { color: REACHABLE_SHORT_STEPS[1], label: "" },
+    { color: REACHABLE_SHORT_STEPS[3], label: "Shortage" },
+  ];
+}
+
+/**
  * Generate legend stops for display.
  */
 export function getLegendStops(mode: "supply" | "demand"): { color: string; label: string }[] {

@@ -16,6 +16,7 @@ import type { Character } from "@/lib/db/types/character";
 import { bulkFetchCharacterNames } from "@/lib/db/characterLookup";
 import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { resolveCabinetRoster } from "@/lib/cabinet/rosterEra";
+import { getManuallyEnabledSeats } from "@/lib/cabinet/liveGameYear";
 import { getLiveGameYear } from "@/lib/cabinet/liveGameYear";
 import { getPartyHex } from "@/lib/utils/politics";
 import { resolvePresidentialCountry } from "@/lib/executive/presidentialCountry";
@@ -82,7 +83,8 @@ export async function GET(request: Request) {
 
     const positions = resolveCabinetRoster(
       getCabinetPositions(countryId),
-      await getLiveGameYear(db)
+      await getLiveGameYear(db),
+      await getManuallyEnabledSeats(db)
     ).map((pos) => {
       const member = memberByPosition.get(pos.id);
       const nomination = nominationByPosition.get(pos.id);

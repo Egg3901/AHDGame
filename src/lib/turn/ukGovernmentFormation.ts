@@ -17,15 +17,15 @@ import type { UKGovernment } from "@/lib/db/types/ukGovernment";
 import type { ParliamentaryGovernment } from "@/lib/db/types/parliamentaryGovernment";
 import type { PoliticalParty } from "@/lib/db/types/party";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
-import { TOTAL_UK_COMMONS_SEATS } from "@/lib/constants/states";
+import { getTotalUkCommonsSeats } from "@/lib/constants/states";
+import { getGameStatePreset } from "@/lib/db/collections/gameState";
+import { lowerChamberMajorityThreshold } from "./lowerChamberSeats";
 import {
   tallySeatsByParty,
   getLargestParty as sharedGetLargestParty,
   updateParliamentaryGovernmentSeats,
   resetParliamentaryGovernmentAfterElection,
 } from "./parliamentaryGovernment";
-
-const MAJORITY_THRESHOLD = 326;
 
 // ---------------------------------------------------------------------------
 // Exported helpers — delegate to shared system, maintain original signatures
@@ -78,6 +78,8 @@ async function seedGovernmentFormation(db: Db): Promise<void> {
   const govCol = getGovernmentFormationsCollection(db);
   const seatsByParty = await tallyCommonsSeatsByParty(db);
   const now = new Date();
+  const totalSeats = getTotalUkCommonsSeats(await getGameStatePreset(db));
+  const majorityThreshold = lowerChamberMajorityThreshold(totalSeats);
 
   const ukGov = await db.collection<UKGovernment>("ukGovernment").findOne({ _id: "current" });
   const parlGov = await db
@@ -101,7 +103,7 @@ async function seedGovernmentFormation(db: Db): Promise<void> {
 
     const governingPartyId = pmParty?.sequentialId?.toString() ?? null;
     const partySeats = governingPartyId ? (seatsByParty[governingPartyId] ?? 0) : 0;
-    const formationType = partySeats >= MAJORITY_THRESHOLD ? "majority" : "minority";
+    const formationType = partySeats >= majorityThreshold ? "majority" : "minority";
 
     await govCol.updateOne(
       { _id: "UK" },
@@ -119,9 +121,9 @@ async function seedGovernmentFormation(db: Db): Promise<void> {
           coalitionId: null,
           coalitionPartyIds: null,
           totalSeatsSupporting: partySeats,
-          majorityThreshold: MAJORITY_THRESHOLD,
+          majorityThreshold,
           seatsByParty,
-          totalSeats: TOTAL_UK_COMMONS_SEATS,
+          totalSeats,
           activeVoteId: null,
           noConfidenceCooldown: null,
           formedAt: now,
@@ -152,9 +154,9 @@ async function seedGovernmentFormation(db: Db): Promise<void> {
           coalitionId: null,
           coalitionPartyIds: null,
           totalSeatsSupporting: governingPartyId ? (seatsByParty[governingPartyId] ?? 0) : 0,
-          majorityThreshold: MAJORITY_THRESHOLD,
+          majorityThreshold,
           seatsByParty,
-          totalSeats: TOTAL_UK_COMMONS_SEATS,
+          totalSeats,
           activeVoteId: null,
           noConfidenceCooldown: null,
           formedAt: null,

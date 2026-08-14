@@ -5,6 +5,7 @@ import type { Corporation } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { getCashReserves } from "@/lib/banking/bankCash";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { isBankPropTradingEnabled, isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
@@ -27,7 +28,7 @@ export type RepayInterbankResult =
   { ok: true; repaid: number; outstanding: number } | { ok: false; error: string };
 
 export type CbMarginResult =
-  | { ok: true; amount: number; cbMarginDebt: number; liquidCapital: number }
+  | { ok: true; amount: number; cbMarginDebt: number; cashReserves: number }
   | { ok: false; error: string };
 
 function isPropBorrowerCharter(charter: BankCharter | undefined): charter is BankCharter {
@@ -60,7 +61,7 @@ async function sumLenderInterbankOutstanding(
 
 /**
  * Retail/universal bank lends cash to an investment/universal bank.
- * Cash moves lender → borrower liquidCapital. Interbank loans are NOT part of
+ * Cash moves lender → borrower bank reserves. Interbank loans are NOT part of
  * retail totalLoans; debt is tracked on InterbankLoan docs + borrower.interbankDebt.
  */
 export async function lendInterbank(
@@ -117,7 +118,7 @@ export async function lendInterbank(
     return { ok: false, error: "Amount exceeds interbank share of lendable headroom" };
   }
 
-  const lenderLiquid = Math.max(0, lender.liquidCapital ?? 0);
+  const lenderLiquid = getCashReserves(lender.bankCharter);
   if (amount > lenderLiquid + 1e-9) {
     return { ok: false, error: "Lender has insufficient liquid capital" };
   }
@@ -146,10 +147,10 @@ export async function lendInterbank(
     {
       _id: lenderCorpId,
       "bankCharter.status": "active",
-      liquidCapital: { $gte: amount },
+      "bankCharter.cashReserves": { $gte: amount },
     },
     {
-      $inc: { liquidCapital: -amount },
+      $inc: { "bankCharter.cashReserves": -amount },
       $set: { updatedAt: new Date() },
     }
   );
@@ -165,7 +166,7 @@ export async function lendInterbank(
     },
     {
       $inc: {
-        liquidCapital: amount,
+        "bankCharter.cashReserves": amount,
         "bankCharter.interbankDebt": amount,
       },
       $set: { updatedAt: new Date() },
@@ -176,7 +177,7 @@ export async function lendInterbank(
       .collection<Corporation>("corporations")
       .updateOne(
         { _id: lenderCorpId },
-        { $inc: { liquidCapital: amount }, $set: { updatedAt: new Date() } }
+        { $inc: { "bankCharter.cashReserves": amount }, $set: { updatedAt: new Date() } }
       );
     await db.collection<InterbankLoan>("interbankLoans").deleteOne({ _id: loanId });
     return { ok: false, error: "Failed to credit borrower" };
@@ -230,11 +231,11 @@ export async function repayInterbank(
   const borrowerDebit = await db.collection<Corporation>("corporations").updateOne(
     {
       _id: loan.borrowerCorporationId,
-      liquidCapital: { $gte: repay },
+      "bankCharter.cashReserves": { $gte: repay },
     },
     {
       $inc: {
-        liquidCapital: -repay,
+        "bankCharter.cashReserves": -repay,
         "bankCharter.interbankDebt": -repay,
       },
       $set: { updatedAt: new Date() },
@@ -247,7 +248,7 @@ export async function repayInterbank(
   const lenderCredit = await db.collection<Corporation>("corporations").updateOne(
     { _id: loan.lenderCorporationId },
     {
-      $inc: { liquidCapital: repay },
+      $inc: { "bankCharter.cashReserves": repay },
       $set: { updatedAt: new Date() },
     }
   );
@@ -258,7 +259,7 @@ export async function repayInterbank(
       { _id: loan.borrowerCorporationId },
       {
         $inc: {
-          liquidCapital: repay,
+          "bankCharter.cashReserves": repay,
           "bankCharter.interbankDebt": repay,
         },
         $set: { updatedAt: new Date() },
@@ -312,7 +313,7 @@ export function cbMarginRatePercent(primeRate: number): number {
 
 /**
  * Draw on the CB margin line against prop-book collateral.
- * Cash is CREATED into corp liquidCapital (LOC-style: originating a CB loan does
+ * Cash is CREATED into the bank's reserves (LOC-style: originating a CB loan does
  * not debit a CB pool; principal repayment later destroys cash symmetrically).
  */
 export async function drawCbMargin(
@@ -350,7 +351,7 @@ export async function drawCbMargin(
   }
 
   const nextDebt = debt + amount;
-  const nextLiquid = Math.max(0, (corp.liquidCapital ?? 0) + amount);
+  const nextLiquid = Math.max(0, getCashReserves(charter) + amount);
   const updated = await db.collection<Corporation>("corporations").updateOne(
     {
       _id: corpId,
@@ -358,7 +359,7 @@ export async function drawCbMargin(
     },
     {
       $inc: {
-        liquidCapital: amount,
+        "bankCharter.cashReserves": amount,
         "bankCharter.cbMarginDebt": amount,
       },
       $set: { updatedAt: new Date() },
@@ -390,11 +391,11 @@ export async function drawCbMargin(
     meta: { kind: "cb_margin_draw" },
   });
 
-  return { ok: true, amount, cbMarginDebt: nextDebt, liquidCapital: nextLiquid };
+  return { ok: true, amount, cbMarginDebt: nextDebt, cashReserves: nextLiquid };
 }
 
 /**
- * Repay CB margin principal: cash DESTROYED from liquidCapital (mirror of creation
+ * Repay CB margin principal: cash DESTROYED from bank reserves (mirror of creation
  * on draw; same symmetry as LOC principal repayment).
  */
 export async function repayCbMargin(
@@ -417,23 +418,23 @@ export async function repayCbMargin(
   }
 
   const debt = Math.max(0, charter.cbMarginDebt ?? 0);
-  const repay = Math.min(amount, debt, Math.max(0, corp.liquidCapital ?? 0));
+  const repay = Math.min(amount, debt, getCashReserves(corp.bankCharter));
   if (!(repay > 0)) {
     return { ok: false, error: "Nothing to repay or insufficient liquid capital" };
   }
 
   const nextDebt = Math.max(0, debt - repay);
-  const nextLiquid = Math.max(0, (corp.liquidCapital ?? 0) - repay);
+  const nextLiquid = Math.max(0, getCashReserves(corp.bankCharter) - repay);
   const updated = await db.collection<Corporation>("corporations").updateOne(
     {
       _id: corpId,
       "bankCharter.status": "active",
-      liquidCapital: { $gte: repay },
+      "bankCharter.cashReserves": { $gte: repay },
       "bankCharter.cbMarginDebt": { $gte: repay },
     },
     {
       $inc: {
-        liquidCapital: -repay,
+        "bankCharter.cashReserves": -repay,
         "bankCharter.cbMarginDebt": -repay,
       },
       $set: { updatedAt: new Date() },
@@ -465,7 +466,7 @@ export async function repayCbMargin(
     meta: { kind: "cb_margin_repay" },
   });
 
-  return { ok: true, amount: repay, cbMarginDebt: nextDebt, liquidCapital: nextLiquid };
+  return { ok: true, amount: repay, cbMarginDebt: nextDebt, cashReserves: nextLiquid };
 }
 
 /** Exposed for tests / solvency equity checks. */

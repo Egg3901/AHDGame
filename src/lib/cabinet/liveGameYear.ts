@@ -15,3 +15,15 @@ export async function getLiveGameYear(db: Db): Promise<number | null> {
     );
   return gs ? resolveGameYear(gs) : null;
 }
+
+/**
+ * Seat ids forced active by a create_department bill (gameState.manuallyEnabledSeats).
+ * Pass to rosterEra resolvers so a legislation-created department shows up and the
+ * parent seat picks up its post-split name. Empty set when none / no gameState.
+ */
+export async function getManuallyEnabledSeats(db: Db): Promise<ReadonlySet<string>> {
+  const gs = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { manuallyEnabledSeats: 1 } });
+  return new Set(gs?.manuallyEnabledSeats ?? []);
+}

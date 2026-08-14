@@ -24,6 +24,8 @@ import type {
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { getParliamentaryExecutiveSurface } from "@/lib/constants/parliamentaryExecutiveSurface";
 import { getLowerChamberOfficeType } from "@/lib/legislature/chamberOfficeType";
+import { getGameStatePreset } from "@/lib/db/collections/gameState";
+import { getLiveLowerChamberSeats } from "@/lib/turn/lowerChamberSeats";
 import { ParliamentaryGovernmentActions } from "./components/ParliamentaryGovernmentActions";
 import { ReferendumConsentSection } from "@/components/uk/ReferendumConsentSection";
 import { ExecutiveTabsClient } from "./ExecutiveTabsClient";
@@ -64,10 +66,11 @@ function characterHref(character: Character): string {
  */
 export async function ParliamentaryExecutiveHub({ countryId }: { countryId: CountryId }) {
   const surface = getParliamentaryExecutiveSurface(countryId);
-  const config = getCountryConfig(countryId);
   const user = await getAuthUserWithCharacter();
   const db = await getDb();
-  const lowerChamberKey = getLowerChamberOfficeType(countryId);
+  const preset = await getGameStatePreset(db);
+  const config = getCountryConfig(countryId, preset);
+  const lowerChamberKey = getLowerChamberOfficeType(countryId, preset);
 
   // Inline-resolve any expired parliamentary votes before reading state, so the
   // page never shows a "Voting ended" panel alongside a PM that should already
@@ -77,13 +80,17 @@ export async function ParliamentaryExecutiveHub({ countryId }: { countryId: Coun
   const executiveGameTime = await getGameTime();
   await processParliamentaryGovernmentVotes(db, countryId, executiveGameTime.effectiveNow);
 
-  const [parlGov, govFormation, imperialPossessive] = await Promise.all([
+  const [parlGov, govFormation, imperialPossessive, chamberSeats] = await Promise.all([
     // Legacy collection — only UK/JP ever wrote it; null elsewhere.
     db.collection<ParliamentaryGovernment>("parliamentaryGovernments").findOne({ _id: countryId }),
     getGovernmentFormationsCollection(db).findOne({ _id: countryId }),
     surface.heroTitleUsesImperialPossessive
       ? fetchImperialPossessive(db, countryId)
       : Promise.resolve(null),
+    // Live chamber size (era overlay + region sum) — not the modern-config
+    // default. Ticket #1078: 1953 UK showed "625 of 650" because this panel
+    // called getCountryConfig without the world preset.
+    getLiveLowerChamberSeats(db, countryId),
   ]);
 
   // governmentFormations is canonical. Only fall back to legacy parliamentaryGovernments
@@ -514,8 +521,7 @@ export async function ParliamentaryExecutiveHub({ countryId }: { countryId: Coun
           <div className="rounded-2xl border border-card-border bg-card p-6 shadow-card">
             <SectionLabel as="h3">{surface.seatsPanel.title}</SectionLabel>
             <p className="-mt-2 mb-4 text-body-sm text-muted">
-              {totalSeatsFilled} of {config.legislature.lowerChamber.seats} seats filled · sorted by
-              size
+              {totalSeatsFilled} of {chamberSeats} seats filled · sorted by size
             </p>
             {partyRows.length > 0 ? (
               <>

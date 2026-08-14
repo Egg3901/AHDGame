@@ -59,17 +59,15 @@ function bandMeaning(
 export function HealthCard({ data }: { data: ConsolePayload }) {
   const charter = data.charter!;
   const capital = assessCapital({
-    postedCapital: charter.postedCapital,
-    liquidCapital: data.corporation.liquidCapital,
+    cashReserves: charter.cashReserves,
     totalLoans: charter.totalLoans,
     borrowings: borrowingsFromCharter(charter),
     propBookMarkValue: charter.propBookMarkValue,
   });
   const shortfall = capitalShortfall(capital);
   const meaning = bandMeaning(charter.warningBand, charter.panicTurns);
-  const requiredReserves =
-    data.reserveRatio != null ? charter.totalDeposits * data.reserveRatio : null;
-  const reserveGap = requiredReserves != null ? charter.reserves - requiredReserves : null;
+  const requiredReserves = charter.requiredReserves;
+  const reserveGap = charter.cashReserves - requiredReserves;
   const arrears = data.loans.filter((l) => l.status === "arrears" || l.status === "defaulted");
   const arrearsValue = arrears.reduce((sum, l) => sum + l.outstanding, 0);
 

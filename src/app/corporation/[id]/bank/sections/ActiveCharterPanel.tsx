@@ -8,6 +8,7 @@ import type { BankTab, ConsolePayload, ShowToast } from "../types";
 import { charterLabel } from "../lib/helpers";
 import { StatCell } from "../components/StatCell";
 import { HealthCard } from "./HealthCard";
+import { RiskPanel } from "./RiskPanel";
 import { RateOffsetEditor } from "./RateOffsetEditor";
 import { LoanBookTable } from "./LoanBookTable";
 import { BlacklistEditor } from "./BlacklistEditor";
@@ -17,6 +18,7 @@ import { RecapitalizePanel } from "./RecapitalizePanel";
 import { PropBookPanel } from "./PropBookPanel";
 import { InterbankPanel } from "./InterbankPanel";
 import { RevokeCharterForm } from "./RevokeCharterForm";
+import { CharterSwitchForm } from "./CharterSwitchForm";
 
 export function ActiveCharterPanel({
   data,
@@ -47,6 +49,7 @@ export function ActiveCharterPanel({
   return (
     <div className="space-y-6">
       <HealthCard data={data} />
+      {data.risk && <RiskPanel risk={data.risk} currency={charter.currency} />}
 
       <div className="flex flex-wrap gap-1 border-b border-card-border">
         {tabs.map((t) => (
@@ -146,15 +149,17 @@ export function ActiveCharterPanel({
 
       {tab === "funding" && (
         <div className="space-y-6">
-          <CapacityAllocationEditor
-            corporationId={data.corporation.id}
-            currency={charter.currency}
-            branchCapacityShare={charter.branchCapacityShare}
-            depositCeiling={data.depositCeiling ?? charter.depositCeiling}
-            canMutate={canMutate}
-            onChanged={onChanged}
-            showToast={showToast}
-          />
+          {depositTaking && (
+            <CapacityAllocationEditor
+              corporationId={data.corporation.id}
+              currency={charter.currency}
+              branchCapacityShare={charter.branchCapacityShare}
+              depositCeiling={data.depositCeiling ?? charter.depositCeiling}
+              canMutate={canMutate}
+              onChanged={onChanged}
+              showToast={showToast}
+            />
+          )}
           {depositTaking && (
             <DiscountWindowPanel
               corporationId={data.corporation.id}
@@ -167,8 +172,9 @@ export function ActiveCharterPanel({
           <RecapitalizePanel
             corporationId={data.corporation.id}
             currency={charter.currency}
-            postedCapital={charter.postedCapital}
-            liquidCapital={data.corporation.liquidCapital}
+            cashReserves={charter.cashReserves}
+            requiredReservesAmount={charter.requiredReserves}
+            withdrawable={charter.upstreamCapacity}
             totalLoans={charter.totalLoans}
             propBookMarkValue={charter.propBookMarkValue}
             borrowings={borrowingsFromCharter(charter)}
@@ -223,6 +229,12 @@ export function ActiveCharterPanel({
               {formatBankMoney(charter.postedCapital, charter.currency)}.
             </p>
           </section>
+          <CharterSwitchForm
+            data={data}
+            canMutate={canMutate}
+            onChanged={onChanged}
+            showToast={showToast}
+          />
           {data.canRevoke ? (
             <RevokeCharterForm
               corporationId={data.corporation.id}

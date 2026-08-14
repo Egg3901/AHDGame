@@ -16,6 +16,7 @@ import {
   commodityColor,
   capacityColor,
   priceColor,
+  reachableColor,
   ISO_NUMERIC_TO_COUNTRY,
   type CountryCommodityData,
 } from "@/lib/commodity-map";
@@ -41,6 +42,15 @@ interface CommodityWorldMapViewProps {
   statePrices: Record<string, number>;
   nationalSupply?: Record<string, number>;
   nationalDemand?: Record<string, number>;
+  /**
+   * Per-country reachable book for THIS commodity (ticket #1077). Absent on a
+   * world that has not run a turn since 1.1.2, which hides the Reachable mode
+   * rather than painting every country as empty.
+   */
+  reachableBooks?: Record<
+    string,
+    { supply: number; demand: number; blockedSupply: number; untradedSupply: number }
+  >;
   stateCountryMap: Record<string, string>;
   capacityByState?: Record<string, number>;
   mode: MapMode;
@@ -61,6 +71,7 @@ export default function CommodityWorldMapView({
   statePrices,
   nationalSupply,
   nationalDemand,
+  reachableBooks,
   stateCountryMap,
   capacityByState,
   mode,
@@ -119,8 +130,25 @@ export default function CommodityWorldMapView({
       return getMaxPriceDeviation(countryData, basePrice) || 1;
     }
     if (mode === "capacity") return maxCapacity;
+    // Reachable is a POLARITY scale around a fixed midpoint of 1, so it has no
+    // data-driven max to normalise against.
+    if (mode === "reachable") return 1;
     return getMaxValue(countryData, mode);
   }, [countryData, mode, basePrice, maxCapacity]);
+
+  /**
+   * Reachable demand/supply per country. `null` where the country has no book
+   * or no activity on either side, which the scale paints as unknown rather
+   * than as balanced.
+   */
+  const reachableRatioByCountry = useMemo((): Record<string, number | null> => {
+    if (!reachableBooks) return {};
+    const out: Record<string, number | null> = {};
+    for (const [countryId, book] of Object.entries(reachableBooks)) {
+      out[countryId] = book.supply > 0 && book.demand > 0 ? book.demand / book.supply : null;
+    }
+    return out;
+  }, [reachableBooks]);
 
   // --- React state ---
   const [hovered, setHovered] = useState<string | null>(null);
@@ -172,6 +200,13 @@ export default function CommodityWorldMapView({
         if (cap <= 0) return null;
         return capacityColor(cap, maxVal);
       }
+      if (mode === "reachable") {
+        // A country absent from the books is unpainted; one present but with no
+        // activity on either side is painted "unknown", which is a different
+        // and deliberate answer from "balanced".
+        if (!(countryId in reachableRatioByCountry)) return null;
+        return reachableColor(reachableRatioByCountry[countryId]);
+      }
       const data = countryData[countryId];
       if (!data) return null;
       if (mode === "price") {
@@ -195,7 +230,16 @@ export default function CommodityWorldMapView({
       if (value <= 0) return null;
       return commodityColor(value, maxVal, mode);
     },
-    [countryData, countryCapacity, mode, maxVal, basePrice, forexEnabled, exchangeRates]
+    [
+      countryData,
+      countryCapacity,
+      reachableRatioByCountry,
+      mode,
+      maxVal,
+      basePrice,
+      forexEnabled,
+      exchangeRates,
+    ]
   );
 
   // --- Imperative path update ---
@@ -600,6 +644,7 @@ export default function CommodityWorldMapView({
             mode={mode}
             onModeChange={onModeChange}
             showCapacity={!!capacityByState}
+            showReachable={!!reachableBooks && Object.keys(reachableBooks).length > 0}
           />
         </div>
 

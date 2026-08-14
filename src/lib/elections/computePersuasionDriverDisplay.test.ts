@@ -114,8 +114,8 @@ describe("computePersuasionDriverDisplay", () => {
     expect(out.find((d) => d.label === "Candidate Support")?.contributionPct).toBe(0);
     expect(out.find((d) => d.label === "Money")?.contributionPct).toBe(0);
     expect(out.find((d) => d.label === "Incumbency")?.contributionPct).toBe(0);
-    // Presidential Coattails row is absent unless its input is supplied.
-    expect(out.find((d) => d.label === "Presidential Coattails")).toBeUndefined();
+    // Presidential Popularity row is absent unless its input is supplied.
+    expect(out.find((d) => d.label === "Presidential Popularity")).toBeUndefined();
   });
 
   it("Candidate Support row is non-zero when candidate.support deltas are present", () => {
@@ -180,8 +180,8 @@ describe("computePersuasionDriverDisplay", () => {
     expect(out.find((d) => d.label === "Policy alignment")?.contributionPct).toBeGreaterThan(0);
     expect(out.find((d) => d.label === "Money")?.contributionPct).toBeGreaterThan(0);
     expect(out.find((d) => d.label === "Incumbency")?.contributionPct).toBeGreaterThan(0);
-    // Presidential Coattails row is absent — its input is not supplied here.
-    expect(out.find((d) => d.label === "Presidential Coattails")).toBeUndefined();
+    // Presidential Popularity row is absent — its input is not supplied here.
+    expect(out.find((d) => d.label === "Presidential Popularity")).toBeUndefined();
   });
 
   it("Policy alignment shifts when medianVoter is supplied (M5)", () => {
@@ -288,7 +288,7 @@ describe("computePairwiseDriverDisplay", () => {
     expect(repFocus).toBeCloseTo(-demFocus);
   });
 
-  it("appends a %-unit Presidential Coattails row from presidentialCoattailPctByParty", () => {
+  it("appends a %-unit Presidential Popularity row from presidentialCoattailPctByParty", () => {
     const cands = [
       candidate({ party: "dem", id: "d1", sharePct: 55, partyColor: "#1976d2" }),
       candidate({ party: "rep", id: "r1", sharePct: 45 }),
@@ -296,25 +296,25 @@ describe("computePairwiseDriverDisplay", () => {
     const out = computePairwiseDriverDisplay(cands, "d1", "r1", {
       presidentialCoattailPctByParty: { dem: 9 },
     });
-    const pres = out.find((d) => d.label === "Presidential Coattails");
+    const pres = out.find((d) => d.label === "Presidential Popularity");
     expect(pres?.unit).toBe("%");
     expect(pres?.contributionPct).toBeCloseTo(9);
     // Swapping focus/opponent flips the sign (focus minus opponent tilt).
     const swapped = computePairwiseDriverDisplay(cands, "r1", "d1", {
       presidentialCoattailPctByParty: { dem: 9 },
     });
-    expect(swapped.find((d) => d.label === "Presidential Coattails")!.contributionPct).toBeCloseTo(
+    expect(swapped.find((d) => d.label === "Presidential Popularity")!.contributionPct).toBeCloseTo(
       -9
     );
   });
 
-  it("omits the Presidential Coattails row when no presidential input is supplied", () => {
+  it("omits the Presidential Popularity row when no presidential input is supplied", () => {
     const cands = [
       candidate({ party: "dem", id: "d1", sharePct: 55 }),
       candidate({ party: "rep", id: "r1", sharePct: 45 }),
     ];
     const out = computePairwiseDriverDisplay(cands, "d1", "r1");
-    expect(out.find((d) => d.label === "Presidential Coattails")).toBeUndefined();
+    expect(out.find((d) => d.label === "Presidential Popularity")).toBeUndefined();
   });
 
   it("appends a %-unit Gubernatorial Coattails row from gubernatorialCoattailPctByParty", () => {
