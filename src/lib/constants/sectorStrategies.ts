@@ -1271,14 +1271,55 @@ export function applyPlannedEconomyOutputMix(
   if (!(advertising > 0)) return supply;
   const remapped: Partial<Record<CommodityType, number>> = { ...supply };
   delete remapped.advertising;
-  // Conserve VALUE, not the rate. Supply rates are ₳-per-unit-revenue and the
-  // two commodities are priced differently (advertising 150, state broadcasting
-  // 600), so carrying the rate across unchanged would hand bloc media 4x the
-  // output value it had. The ratio is taken off the shared modern table and is
-  // therefore era-scale invariant: both sides divide by the same scale.
-  const valueRatio =
-    COMMODITY_BASE_PRICES.advertising / COMMODITY_BASE_PRICES[PLANNED_ECONOMY_MEDIA_OUTPUT];
+  // Preserve the CAPACITY UNIT YIELD k = Σ(rate / basePrice) — the quantity the
+  // engine actually uses (`capacityUnitYield` → `revenuePerCapacityUnit` → build
+  // cost and facility sizing). Holding k means the rate scales by
+  // base_new / base_old, so 0.5 advertising becomes 2.0 state broadcasting.
+  //
+  // The obvious-looking alternative, conserving Σ(rate × basePrice), is not an
+  // invariant of anything the engine computes: it moves k by the price ratio and
+  // `facilityQuantum.test.ts` fails on the resulting RPU shift.
+  //
+  // This does NOT hold output VALUE constant. Under plants a single-commodity
+  // mix has `commodityMixWeight` 1 whatever the rate, so the sector still makes
+  // the same `producedUnits`, now priced at 600 rather than 150. Capacity is the
+  // only lever for that, which is why the bloc media seed is right-sized in the
+  // same pass. See ops-knowledge `plants-output-mix-invariants`.
+  const rateScale =
+    COMMODITY_BASE_PRICES[PLANNED_ECONOMY_MEDIA_OUTPUT] / COMMODITY_BASE_PRICES.advertising;
   remapped[PLANNED_ECONOMY_MEDIA_OUTPUT] =
-    (remapped[PLANNED_ECONOMY_MEDIA_OUTPUT] ?? 0) + advertising * valueRatio;
+    (remapped[PLANNED_ECONOMY_MEDIA_OUTPUT] ?? 0) + advertising * rateScale;
   return remapped;
+}
+
+/**
+ * Share of a planned economy's media output that reaches the market.
+ *
+ * The 1953 seed sized every bloc state's media sector like a Western commercial
+ * broadcaster — 82,000 to 806,000 capitalStock each, one per state — so the bloc
+ * physically produces about 4x what a state media budget plausibly funds. Under
+ * plants the output mix cannot express that: `commodityMixWeight` is 1 for a
+ * single-commodity mix whatever the rate, so a re-pointed sector still makes the
+ * same `producedUnits`. Capacity is the only real lever, and derating the market
+ * contribution is the reversible, code-side form of it — no mutation of live
+ * state-owned sectors.
+ *
+ * 0.25 is chosen to be REVENUE-NEUTRAL: state broadcasting prices at 4x
+ * advertising, so a quarter of the units at four times the price is the same
+ * ₳/day the sector would earn selling its whole advertising output. Bloc media
+ * therefore neither gains free money from the re-pointing nor is broken by the
+ * derate — and in practice it is a large gain, because today those sectors clear
+ * 0.14% of output at a third of base price.
+ *
+ * Proper fix is to right-size the seed; see ops-knowledge
+ * `plants-output-mix-invariants`.
+ */
+export const PLANNED_ECONOMY_MEDIA_SUPPLY_FACTOR = 0.25;
+
+/** The derate for one sector: 1 for everything that is not planned-economy media. */
+export function plannedEconomyMediaSupplyFactor(
+  sectorType: CorporationType,
+  plannedEconomy: boolean
+): number {
+  return plannedEconomy && sectorType === "media" ? PLANNED_ECONOMY_MEDIA_SUPPLY_FACTOR : 1;
 }

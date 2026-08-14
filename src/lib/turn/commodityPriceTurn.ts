@@ -96,6 +96,7 @@ import type { State } from "@/lib/db/types/state";
 import { COUNTRY_ORDER } from "@/lib/constants/countries";
 import type { CountryId } from "@/lib/constants/countries";
 import { isPlannedEconomy, plannedShare } from "@/lib/constants/commandEconomy";
+import { plannedEconomyMediaSupplyFactor } from "@/lib/constants/sectorStrategies";
 import { administeredNationalPrice, dualTrackPrice } from "@/lib/economy/administeredPricing";
 import type { GameState } from "@/lib/db/types/gameState";
 import { clearAllCommodities, valueTradeSnapshot } from "@/lib/trade/snapshot";
@@ -493,7 +494,20 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     // Routed through the shared `embargoSupplyFactorFor` (constants/commodities)
     // rather than re-derived here — that helper is the single source of the
     // formula, and the clearing offer in turn/corporation/index.ts reads it too.
-    const embargoSupplyFactor = embargoSupplyFactorFor(s);
+    // Embargo haircut, and for planned-economy media the state-broadcasting
+    // derate: the bloc seed oversized those sectors ~4x versus what a state
+    // media budget funds, and the output mix cannot express that under plants.
+    // Mirrored on the clearing offer in turn/corporation/index.ts.
+    const embargoSupplyFactor =
+      embargoSupplyFactorFor(s) *
+      plannedEconomyMediaSupplyFactor(
+        s.sectorType as import("@/lib/constants/corporations").CorporationType,
+        isPlannedEconomy(
+          stateToCountry.get(s.stateId),
+          ledgerCurrentYear,
+          ledgerCommandEconomyEnabled
+        )
+      );
     return {
       sectorType: s.sectorType,
       // Anchor-normalize sector.revenue (LOCAL in corp currency post-Task-18A)

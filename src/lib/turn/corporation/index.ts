@@ -20,6 +20,7 @@ import { computeQualityUpdates } from "./brandQualityTurn";
 import {
   getEffectiveStrategyRates,
   applyPlannedEconomyOutputMix,
+  plannedEconomyMediaSupplyFactor,
 } from "@/lib/constants/sectorStrategies";
 import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import {
@@ -444,7 +445,18 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
             producedUnits: sector.producedUnits,
             isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
             productionPolicyLevel: sector.productionPolicyLevel,
-            embargoSupplyFactor: embargoSupplyFactorFor(sector),
+            // Mirrors the ledger (computeRawSupplyDemand): embargo haircut plus
+            // the planned-economy media derate. Offer and ledger must agree.
+            embargoSupplyFactor:
+              embargoSupplyFactorFor(sector) *
+              plannedEconomyMediaSupplyFactor(
+                sector.sectorType,
+                isPlannedEconomy(
+                  (sector as { countryId?: string }).countryId,
+                  currentYear,
+                  commandEconomyEnabled
+                )
+              ),
           });
           if (scaled !== null && scaled > 0) {
             const supplyRates = rates.supply ?? {};
@@ -521,7 +533,16 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
                   producedUnits: sector.producedUnits,
                   isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
                   productionPolicyLevel: sector.productionPolicyLevel,
-                  embargoSupplyFactor: embargoSupplyFactorFor(sector),
+                  embargoSupplyFactor:
+                    embargoSupplyFactorFor(sector) *
+                    plannedEconomyMediaSupplyFactor(
+                      sector.sectorType,
+                      isPlannedEconomy(
+                        (sector as { countryId?: string }).countryId,
+                        currentYear,
+                        commandEconomyEnabled
+                      )
+                    ),
                 })
               : undefined,
         });
