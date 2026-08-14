@@ -38,11 +38,7 @@ import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 
 import type { Election, State, ElectedOfficial, GameState } from "@/lib/db/types";
-import {
-  SENATE_CLASSES,
-  STATE_SENATE_SEATS,
-  UK_REGIONAL_COUNCIL_SEATS,
-} from "@/lib/constants";
+import { SENATE_CLASSES, STATE_SENATE_SEATS, UK_REGIONAL_COUNCIL_SEATS } from "@/lib/constants";
 import {
   JP_SHUGIIN_SEATS,
   JP_SANGIIN_SEATS,
