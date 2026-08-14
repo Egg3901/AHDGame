@@ -168,7 +168,14 @@ export function refitOrder<T extends Pick<MilitaryUnit, "equipment">>(units: T[]
  * therefore produce nothing, therefore deliver nothing, therefore earn again. Nameplate is
  * the plant's standing capability and the diversion leg does not touch it.
  */
-export function lotsFromSector(sector: Pick<CorporateSector, "strategyId" | "revenue">): number {
+/**
+ * A plant's materiel output as a fractional lot count, BEFORE flooring to whole lots.
+ *
+ * Delivery accumulates this remainder across turns (see `applyDefenceDeliveries`), so a small
+ * plant producing well under one lot per turn still fills an order eventually rather than
+ * having its sub-lot output silently discarded every turn.
+ */
+export function rawLotsFromSector(sector: Pick<CorporateSector, "strategyId" | "revenue">): number {
   const strategy = SECTOR_STRATEGIES.defense.find(
     (s) => s.id === (sector.strategyId ?? "standard")
   );
@@ -181,7 +188,11 @@ export function lotsFromSector(sector: Pick<CorporateSector, "strategyId" | "rev
     const base = COMMODITY_BASE_PRICES[commodity as CommodityType] ?? 1;
     total += (revenue * (rate as number)) / base;
   }
-  return Math.floor(total);
+  return total;
+}
+
+export function lotsFromSector(sector: Pick<CorporateSector, "strategyId" | "revenue">): number {
+  return Math.floor(rawLotsFromSector(sector));
 }
 
 /**

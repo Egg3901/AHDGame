@@ -2,9 +2,13 @@ import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { Corporation, CorporateSector } from "@/lib/db/types/corporation";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
-import { lotsFromSector, militaryDivertedShare } from "@/lib/military/arsenal";
+import { rawLotsFromSector, militaryDivertedShare } from "@/lib/military/arsenal";
 import { componentsForStrategy, gradeCeilingFor } from "@/lib/military/arsenalComponents";
-import { listActiveContracts, advanceContract } from "@/lib/db/collections/defenceContracts";
+import {
+  listActiveContracts,
+  advanceContract,
+  stampDeliveryCarry,
+} from "@/lib/db/collections/defenceContracts";
 import { depositLots, drawLots } from "@/lib/db/collections/nationalArsenal";
 import {
   debitAppropriation,
@@ -93,14 +97,31 @@ export async function applyDefenceDeliveries(
     }
 
     // A plant serving two domains splits its output rather than delivering in full to each.
-    const produced = Math.floor(lotsFromSector(sector) / Math.max(1, components.length));
+    // Accumulate the fractional remainder across turns: a plant producing under one lot per turn
+    // used to have that output floored to zero and discarded every turn, so its contract never
+    // advanced. The carry (always < 1) is what it has banked toward its next whole lot.
+    const rawShare = rawLotsFromSector(sector) / Math.max(1, components.length);
+    const carried = contract.deliveryCarry ?? 0;
+    const available = carried + rawShare;
+    const produced = Math.floor(available);
+    // Only the sub-lot remainder is banked. Whole lots produced but not delivered this turn
+    // (order nearly full, or the appropriation cannot pay) are dropped as before — the carry is
+    // not a warehouse, it exists solely to stop sub-lot output rounding to nothing.
+    const newCarry = available - produced;
+
     const remaining = Math.max(0, contract.lotsOrdered - contract.lotsDelivered);
     const { balance } = await getDefenseAppropriation(db, countryId);
     const affordable =
       contract.pricePerLot > 0 ? Math.floor(Math.max(0, balance) / contract.pricePerLot) : produced;
 
     const deliverable = Math.min(produced, remaining, affordable);
-    if (deliverable <= 0) continue;
+    if (deliverable <= 0) {
+      // Nothing ships this turn, but the fractional output must still be banked or the plant is
+      // right back where it started next turn.
+      if (newCarry !== carried) await stampDeliveryCarry(db, contract._id as ObjectId, newCarry);
+      continue;
+    }
+    await stampDeliveryCarry(db, contract._id as ObjectId, newCarry);
 
     const cost = deliverable * contract.pricePerLot;
     if (cost > 0 && !(await debitAppropriation(db, countryId, cost))) {
