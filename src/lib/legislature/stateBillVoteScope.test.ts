@@ -186,12 +186,14 @@ describe("resolveBillCardTally (ticket #1075)", () => {
         seatsHeld: 30,
       },
       {
+        characterId: null,
         nppId: nppDem,
         countryId: "US",
         officeType: "house",
         seatsHeld: 190,
       },
       {
+        characterId: null,
         nppId: nppFlp,
         countryId: "US",
         officeType: "house",

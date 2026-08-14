@@ -130,8 +130,8 @@ describe("nationalBillListTallies — ticket #1075", () => {
     } as unknown as Bill;
     const officials: ScopedVoteOfficial[] = [
       { characterId: player, countryId: "US", officeType: "house", seatsHeld: 30 },
-      { nppId: nppDem, countryId: "US", officeType: "house", seatsHeld: 190 },
-      { nppId: nppFlp, countryId: "US", officeType: "house", seatsHeld: 215 },
+      { characterId: null, nppId: nppDem, countryId: "US", officeType: "house", seatsHeld: 190 },
+      { characterId: null, nppId: nppFlp, countryId: "US", officeType: "house", seatsHeld: 215 },
     ];
 
     const { origin } = nationalBillListTallies(bill, officials, "US", "house", "senate");
@@ -189,8 +189,8 @@ describe("listNationalLegislatureBills — ticket #1075 live-scoped The Count", 
     db.collectionMocks["electedOfficials"]!.find.mockReturnValue({
       toArray: async () => [
         { characterId: player, countryId: "US", officeType: "house", seatsHeld: 30 },
-        { nppId: nppDem, countryId: "US", officeType: "house", seatsHeld: 190 },
-        { nppId: nppFlp, countryId: "US", officeType: "house", seatsHeld: 215 },
+        { characterId: null, nppId: nppDem, countryId: "US", officeType: "house", seatsHeld: 190 },
+        { characterId: null, nppId: nppFlp, countryId: "US", officeType: "house", seatsHeld: 215 },
       ],
     });
     db.collection("gameState");

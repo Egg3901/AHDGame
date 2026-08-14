@@ -521,8 +521,7 @@ export async function ParliamentaryExecutiveHub({ countryId }: { countryId: Coun
           <div className="rounded-2xl border border-card-border bg-card p-6 shadow-card">
             <SectionLabel as="h3">{surface.seatsPanel.title}</SectionLabel>
             <p className="-mt-2 mb-4 text-body-sm text-muted">
-              {totalSeatsFilled} of {chamberSeats} seats filled · sorted by
-              size
+              {totalSeatsFilled} of {chamberSeats} seats filled · sorted by size
             </p>
             {partyRows.length > 0 ? (
               <>
