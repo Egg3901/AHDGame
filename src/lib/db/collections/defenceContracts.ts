@@ -107,6 +107,22 @@ export async function advanceContract(db: Db, contractId: ObjectId, lots: number
 }
 
 /**
+ * Persist the sub-lot production a plant has accumulated toward its next whole deliverable lot.
+ * Kept separate from `advanceContract` because it must be stamped every turn, including the many
+ * turns a small plant delivers nothing — that is exactly the output that used to be discarded.
+ */
+export async function stampDeliveryCarry(
+  db: Db,
+  contractId: ObjectId,
+  carry: number
+): Promise<void> {
+  await contracts(db).updateOne(
+    { _id: contractId, status: "active" },
+    { $set: { deliveryCarry: carry } }
+  );
+}
+
+/**
  * Cancel a contract the buyer no longer wants — a live order or an offer the supplier has
  * not answered. Idempotent: cancelling a closed one is a no-op, not an error.
  */
