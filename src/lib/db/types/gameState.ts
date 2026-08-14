@@ -472,6 +472,12 @@ export interface GameState {
    */
   lastCabinetYearProcessed?: number;
   /**
+   * Guard year for the militaryBranchYearCrossing turn phase (standing up a service
+   * whose `establishedYear` the world has now reached, e.g. the NVA in 1956). First
+   * run quietly stands up every active-but-empty branch and stamps without posting.
+   */
+  lastMilitaryBranchYearProcessed?: number;
+  /**
    * Cabinet seat ids brought into existence early by a create_department bill,
    * regardless of their era `yearEnabled` (e.g. "secretary_of_education" after the
    * Department of Education Act). Read by rosterEra.isSeatActive / resolveSeatName.
