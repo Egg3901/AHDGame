@@ -123,10 +123,21 @@ describe("POST /api/admin/elections/resolve-primaries", () => {
     expect(withdrawnIds).not.toContain(candidates[2]._id.toString());
   });
 
-  // ticket-1041: this route omitted the redistricting flag, so US House
-  // force-resolution capped at 1 and withdrew the two co-nominees the turn
-  // resolver would have advanced. Data damage, not a display bug.
-  it("keeps top-3 US house candidates per party when redistricting is enabled", async () => {
+  // The invariant here is that this force-resolve route agrees with the TURN
+  // resolver, so an admin resolving early cannot produce a different field than
+  // letting the turn run. ticket-1041 established it: the route omitted the
+  // redistricting flag, capped at 1, and withdrew co-nominees the resolver would
+  // have advanced. Data damage, not a display bug.
+  //
+  // PR #89 then changed the resolver itself. US House advanced the top 3 per
+  // party whenever redistricting was on, which let a party's filler NPP survive
+  // alongside the player who beat it and take a proportional slice of the
+  // delegation, so winning a House primary decided nothing. The cap is now one
+  // nominee per party in both paths.
+  //
+  // So the invariant is unchanged and the expected number moved with it: of five
+  // candidates, one advances and four are withdrawn.
+  it("advances one US house nominee per party even when redistricting is enabled", async () => {
     const electionId = new ObjectId();
     const now = new Date();
     const election = {
@@ -186,14 +197,19 @@ describe("POST /api/admin/elections/resolve-primaries", () => {
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    // Top 3 advance; only the bottom 2 are withdrawn.
-    expect(data.eliminated).toBe(2);
+    // Only the top scorer advances; the other four are withdrawn.
+    expect(data.eliminated).toBe(4);
     const withdrawCall = db.collectionMocks["electionCandidates"].updateMany.mock.calls[0];
     const withdrawnIds = withdrawCall[0]._id.$in.map((id: ObjectId) => id.toString());
-    expect(withdrawnIds).toHaveLength(2);
+    expect(withdrawnIds).toHaveLength(4);
+    // calcPrimaryScore is mocked descending (100, 80, 60, 40, 20), so candidate
+    // 0 is the nominee and everyone below it goes, including the two that the
+    // superseded top-3 rule used to keep.
+    expect(withdrawnIds).not.toContain(candidates[0]._id.toString());
+    expect(withdrawnIds).toContain(candidates[1]._id.toString());
+    expect(withdrawnIds).toContain(candidates[2]._id.toString());
     expect(withdrawnIds).toContain(candidates[3]._id.toString());
     expect(withdrawnIds).toContain(candidates[4]._id.toString());
-    expect(withdrawnIds).not.toContain(candidates[2]._id.toString());
   });
 
   it("keeps top-1 US house candidate per party when redistricting is disabled", async () => {

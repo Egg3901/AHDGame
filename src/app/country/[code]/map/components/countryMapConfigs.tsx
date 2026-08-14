@@ -28,6 +28,8 @@ import {
   NATION_COLORS,
 } from "./mapShared";
 import { MapFallback } from "./MapFallback";
+import type { FreightDemandResponse } from "@/lib/logistics/types";
+import { freightHaulLoadLabel, freightHaulLoadTooltip } from "./freightHaulLoadCopy";
 
 /**
  * Countries that use the unified parliamentary map. US is intentionally
@@ -57,6 +59,36 @@ export interface BuildRegionDataArgs {
   leanAxis: LeanAxis;
   resourceData: Record<string, { capacity: number; contractedPct: number; openAccessPct: number }>;
   resourceToggle: "capacity" | "contractedPct" | "openAccessPct";
+  freightData: Pick<FreightDemandResponse, "states">;
+}
+
+function logisticsRegionData<R extends { id?: string; _id?: string; name: string }>(
+  regions: ReadonlyArray<R>,
+  freightData: BuildRegionDataArgs["freightData"]
+): Record<string, MapRegionCell> {
+  const result: Record<string, MapRegionCell> = {};
+  const maxCapacity = Math.max(
+    ...Object.values(freightData.states).map((entry) => entry.capacity || entry.total),
+    1
+  );
+  for (const region of regions) {
+    const id = (region.id ?? region._id)!;
+    const entry = freightData.states[id];
+    const intensity = entry?.capacity || entry?.total || 0;
+    result[id] = entry
+      ? {
+          color:
+            intensity > 0
+              ? interpolateGreen(intensity / maxCapacity)
+              : entry.openMarket > 0
+                ? "#c7842a"
+                : "#374151",
+          label: freightHaulLoadLabel(entry),
+          tooltip: freightHaulLoadTooltip(id, entry),
+        }
+      : { color: "#374151", label: region.name, tooltip: [region.name, "No freight data"] };
+  }
+  return result;
 }
 
 /**
@@ -203,10 +235,16 @@ const UK_MODES: MapModeConfig[] = [
     label: "Sector Bonus",
     description: "Primary sector profit margin bonus by region",
   },
+  {
+    id: "logistics",
+    label: "Logistics",
+    description: "Freight capacity and open logistics market",
+  },
 ];
 
 function buildUKRegionData(args: BuildRegionDataArgs): Record<string, MapRegionCell> {
   if (args.mode === "resources") return resourceRegionData(UK_REGIONS, args);
+  if (args.mode === "logistics") return logisticsRegionData(UK_REGIONS, args.freightData);
 
   const result: Record<string, MapRegionCell> = {};
   const partyOrg = args.mapData?.partyOrg ?? {};
@@ -266,6 +304,11 @@ const DE_MODES: MapModeConfig[] = [
     label: "Sector Bonus",
     description: "Primary sector profit margin bonus by Land",
   },
+  {
+    id: "logistics",
+    label: "Logistics",
+    description: "Freight capacity and open logistics market",
+  },
 ];
 
 function buildDERegionData(
@@ -273,6 +316,7 @@ function buildDERegionData(
   regions: typeof deRegions = deRegions
 ): Record<string, MapRegionCell> {
   if (args.mode === "resources") return resourceRegionData(regions, args);
+  if (args.mode === "logistics") return logisticsRegionData(regions, args.freightData);
 
   const result: Record<string, MapRegionCell> = {};
   const partyOrg = args.mapData?.partyOrg ?? {};
@@ -337,10 +381,16 @@ const JP_MODES: MapModeConfig[] = [
     label: "Sector Bonus",
     description: "Primary sector profit margin bonus by region",
   },
+  {
+    id: "logistics",
+    label: "Logistics",
+    description: "Freight capacity and open logistics market",
+  },
 ];
 
 function buildJPRegionData(args: BuildRegionDataArgs): Record<string, MapRegionCell> {
   if (args.mode === "resources") return resourceRegionData(JP_REGIONS, args);
+  if (args.mode === "logistics") return logisticsRegionData(JP_REGIONS, args.freightData);
 
   const result: Record<string, MapRegionCell> = {};
   const partyOrg = args.mapData?.partyOrg ?? {};
@@ -439,10 +489,16 @@ const CN_MODES: MapModeConfig[] = [
     label: "Sector Bonus",
     description: "Primary sector profit margin bonus by region",
   },
+  {
+    id: "logistics",
+    label: "Logistics",
+    description: "Freight capacity and open logistics market",
+  },
 ];
 
 function buildCNRegionData(args: BuildRegionDataArgs): Record<string, MapRegionCell> {
   if (args.mode === "resources") return resourceRegionData(cnRegions, args);
+  if (args.mode === "logistics") return logisticsRegionData(cnRegions, args.freightData);
 
   const result: Record<string, MapRegionCell> = {};
   const partyOrg = args.mapData?.partyOrg ?? {};
@@ -495,10 +551,16 @@ const BR_MODES: MapModeConfig[] = [
     label: "Sector Bonus",
     description: "Primary sector profit margin bonus by region",
   },
+  {
+    id: "logistics",
+    label: "Logistics",
+    description: "Freight capacity and open logistics market",
+  },
 ];
 
 function buildBRRegionData(args: BuildRegionDataArgs): Record<string, MapRegionCell> {
   if (args.mode === "resources") return resourceRegionData(brRegions, args);
+  if (args.mode === "logistics") return logisticsRegionData(brRegions, args.freightData);
 
   const result: Record<string, MapRegionCell> = {};
   const partyOrg = args.mapData?.partyOrg ?? {};
@@ -564,9 +626,15 @@ const NG_MODES: MapModeConfig[] = [
   { id: "approval", label: "Approval", description: "Government approval heatmap" },
   { id: "lean", label: "Lean", description: "Combined, economic, or social lean per zone" },
   { id: "sectorBonuses", label: "Sectors", description: "Sector specialization by zone" },
+  {
+    id: "logistics",
+    label: "Logistics",
+    description: "Freight capacity and open logistics market",
+  },
 ];
 
 function buildNGRegionData(args: BuildRegionDataArgs): Record<string, MapRegionCell> {
+  if (args.mode === "logistics") return logisticsRegionData(ngRegions, args.freightData);
   const result: Record<string, MapRegionCell> = {};
   const partyOrg = args.mapData?.partyOrg ?? {};
   const house = args.mapData?.house ?? {};

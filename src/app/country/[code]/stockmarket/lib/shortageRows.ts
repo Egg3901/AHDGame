@@ -18,6 +18,7 @@ export type ShortageTone = "short-strong" | "short-mild" | "balanced" | "oversup
 
 export type ShortageScope =
   | { level: "global" }
+  | { level: "reachable"; countryId: string }
   | { level: "country"; countryId: string }
   | { level: "state"; stateId: string };
 
@@ -44,6 +45,14 @@ export interface ShortageRow {
   demand: number;
   price: number;
   basePrice: number;
+  /**
+   * Disclosure for the Reachable lens: world supply this country cannot buy
+   * from, split into embargoed and untraded. Never folded into `supply` or the
+   * ratio — they exist so a 0 reads as "walled off" rather than "dead market"
+   * (ticket #1077). Zero at every other scope.
+   */
+  blockedSupply: number;
+  untradedSupply: number;
 }
 
 const SATURATION = Math.log2(4);
@@ -69,12 +78,35 @@ function intensityFor(dsRatio: number | null): number {
 function resolveScope(
   c: CommodityData,
   scope: ShortageScope
-): { supply: number; demand: number; price: number } {
+): { supply: number; demand: number; price: number; blocked: number; untraded: number } {
+  if (scope.level === "reachable") {
+    // The book the turn engine actually settles this country's sellers
+    // against: own production versus the demand it can reach after imports
+    // and exports. The Country lens below answers a DIFFERENT question and is
+    // not a substitute — see the note on its branch.
+    const book = c.reachableBooks?.[scope.countryId];
+    return {
+      supply: book?.supply ?? 0,
+      demand: book?.demand ?? 0,
+      price: c.nationalPrices?.[scope.countryId] ?? c.basePrice,
+      blocked: book?.blockedSupply ?? 0,
+      untraded: book?.untradedSupply ?? 0,
+    };
+  }
   if (scope.level === "country") {
+    // PRODUCTION versus CONSUMPTION inside the borders. It deliberately ignores
+    // imports, so it answers "does this country feed itself" and NOT "can I
+    // sell here" — the US ran 2.88 here on food while importing 1.13M units a
+    // day and clearing its deficit in full (ticket #1077). The stored balance
+    // is also only half-relieved of trade (TRADE_PRICE_CONVERGENCE_K = 0.5), so
+    // it is a price-formation input, not physical unmet demand. Use Reachable
+    // for a build decision.
     return {
       supply: c.nationalSupply?.[scope.countryId] ?? 0,
       demand: c.nationalDemand?.[scope.countryId] ?? 0,
       price: c.nationalPrices?.[scope.countryId] ?? c.basePrice,
+      blocked: 0,
+      untraded: 0,
     };
   }
   if (scope.level === "state") {
@@ -82,9 +114,17 @@ function resolveScope(
       supply: c.stateSupply?.[scope.stateId] ?? 0,
       demand: c.stateDemand?.[scope.stateId] ?? 0,
       price: c.statePrices?.[scope.stateId] ?? c.basePrice,
+      blocked: 0,
+      untraded: 0,
     };
   }
-  return { supply: c.globalSupply, demand: c.globalDemand, price: c.globalPrice };
+  return {
+    supply: c.globalSupply,
+    demand: c.globalDemand,
+    price: c.globalPrice,
+    blocked: 0,
+    untraded: 0,
+  };
 }
 
 /**
@@ -98,7 +138,7 @@ export function buildShortageRows(
 ): ShortageRow[] {
   const rows: ShortageRow[] = [];
   for (const c of commodities) {
-    const { supply, demand, price } = resolveScope(c, scope);
+    const { supply, demand, price, blocked, untraded } = resolveScope(c, scope);
     const dsRatio = supply > 0 && demand > 0 ? demand / supply : null;
     // Demand with zero supply = maximal shortage (the State-lens headline case).
     // dsRatio can't express it (division by zero), so flag it explicitly.
@@ -112,7 +152,10 @@ export function buildShortageRows(
       c.basePrice > 0 ? (priceRealizationFactor(price / c.basePrice) - 1) * 100 : 0;
     // No shortage signal and no meaningful premium -> nothing to say. A zero
     // supply / positive demand row always has something to say, so never drop it.
-    if (!noSupply && dsRatio == null && Math.abs(premiumPct) < 0.5) continue;
+    // On the Reachable lens a walled-off market also has something to say, even
+    // when it is otherwise silent: that is the whole point of the lens.
+    const hasDisclosure = blocked > 0 || untraded > 0;
+    if (!noSupply && !hasDisclosure && dsRatio == null && Math.abs(premiumPct) < 0.5) continue;
     rows.push({
       commodity: c.commodity,
       label: c.label,
@@ -126,6 +169,8 @@ export function buildShortageRows(
       demand,
       price,
       basePrice: c.basePrice,
+      blockedSupply: blocked,
+      untradedSupply: untraded,
     });
   }
   rows.sort((a, b) => {

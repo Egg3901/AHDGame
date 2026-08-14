@@ -2,7 +2,7 @@
  * Draw on and repay the discount window.
  *
  * Drawing CREATES money at the central bank, exactly as the CB margin line
- * does: the bank's cash rises and the central bank's balance sheet carries the
+ * does: the bank's ring-fenced cash rises and the central bank's balance sheet carries the
  * claim. Repayment destroys it symmetrically. Both legs are ledgered so the
  * money-supply reconciliation sees the same event the bank does.
  */
@@ -77,7 +77,7 @@ export async function drawDiscountWindow(
       },
     },
     {
-      $inc: { liquidCapital: draw, "bankCharter.discountWindowDebt": draw },
+      $inc: { "bankCharter.cashReserves": draw, "bankCharter.discountWindowDebt": draw },
       $set: { updatedAt: now },
     }
   );
@@ -146,11 +146,11 @@ export async function repayDiscountWindow(
   const claim = await db.collection<Corporation>("corporations").updateOne(
     {
       _id: corporationId,
-      liquidCapital: { $gte: repay },
+      "bankCharter.cashReserves": { $gte: repay },
       "bankCharter.discountWindowDebt": { $gte: repay },
     },
     {
-      $inc: { liquidCapital: -repay, "bankCharter.discountWindowDebt": -repay },
+      $inc: { "bankCharter.cashReserves": -repay, "bankCharter.discountWindowDebt": -repay },
       $set: { updatedAt: now },
     }
   );

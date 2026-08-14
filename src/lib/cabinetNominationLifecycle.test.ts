@@ -83,7 +83,15 @@ describe("processCabinetNominationLifecycle — holder seating", () => {
 
     expect(db.collectionMocks.cabinetSettings.updateOne).toHaveBeenCalledWith(
       { _id: "US_secretary_of_treasury" },
-      { $unset: { lastChangedTurn: "", lastAllocationChangedTurn: "" } }
+      {
+        $unset: {
+          lastChangedTurn: "",
+          lastAllocationChangedTurn: "",
+          lastRegionChangedTurn: "",
+          lastTargetCountryChangedTurn: "",
+          lastAidPriorityChangedTurn: "",
+        },
+      }
     );
   });
 

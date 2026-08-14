@@ -6,7 +6,7 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { onBillEnacted } from "@/lib/billEnactment";
+import { enactRulingBill } from "@/lib/scotus/enactRulingBill";
 import { createSystemNewsPost } from "@/lib/news";
 import type { PolicyProvision } from "@/lib/db/types/legislation";
 import type { PoliticalParty } from "@/lib/db/types";
@@ -119,21 +119,16 @@ export async function processUkJrSurpriseTurn(
       policyOptionId: chosenEffect.policyOptionId,
       effectDirection: chosenEffect.effectDirection,
     };
-    const syntheticBillId = new ObjectId();
-    await onBillEnacted(
-      database,
-      {
-        _id: syntheticBillId,
-        title: `${template.title} (Judicial Review)`,
-        legislationTypeId: chosenEffect.legislationTypeId,
-        effectDirection: chosenEffect.effectDirection,
-        provisions: [provision],
-        countryId: "UK",
-        stateId: "uk_national",
-        source: "uk_judicial_review_surprise",
-      },
-      currentTurn
-    );
+    await enactRulingBill(database, {
+      title: `${template.title} (Judicial Review)`,
+      legislationTypeId: chosenEffect.legislationTypeId,
+      effectDirection: chosenEffect.effectDirection,
+      provision,
+      countryId: "UK",
+      stateId: "uk_national",
+      source: "uk_judicial_review_surprise",
+      currentTurn,
+    });
   }
 
   const now = new Date();

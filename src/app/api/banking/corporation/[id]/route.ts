@@ -23,6 +23,10 @@ import {
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
+import { getCashReserves, requiredReserves, upstreamCapacity } from "@/lib/banking/bankCash";
+import { buildRiskReadout } from "@/lib/banking/riskReadout";
+import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
+import { getCurrentTurn } from "@/lib/currentTurn";
 import {
   CREDIT_BANDS,
   DEFAULT_LENDING_PROFILE,
@@ -181,7 +185,13 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       "USD") as CurrencyCode;
     const countryId = getCountryIdForCurrency(currency);
     const legalTypes = await getLegalCharterTypes(db, countryId);
-    const capitalRequirement = await getCharterCapitalRequirement(db, currency);
+    // Per type: an investment charter posts a fraction of the retail bar,
+    // because it has no depositors for that capital to stand in front of.
+    const [retailRequirement, investmentRequirement] = await Promise.all([
+      getCharterCapitalRequirement(db, currency, "retail"),
+      getCharterCapitalRequirement(db, currency, "investment"),
+    ]);
+    const capitalRequirement = retailRequirement;
     const corridors = await getRateCorridors(db, countryId);
     const reserveRatio = await getReserveRequirement(db, currency);
 
@@ -347,10 +357,17 @@ async function handleGET(_request: Request, { params }: RouteParams) {
         ownsFinancial,
       },
       currency,
+      // Drives the charter-switch cooldown countdown in the console.
+      currentTurn: await getCurrentTurn(db),
       legalCharterTypes: legalTypes,
       eligibleTypes,
       eligibilityReasons,
       capitalRequirement,
+      capitalRequirementByType: {
+        retail: retailRequirement,
+        universal: retailRequirement,
+        investment: investmentRequirement,
+      },
       corridors,
       reserveRatio,
       depositCeiling,
@@ -376,7 +393,9 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               totalLoans: charter.totalLoans ?? 0,
               npcDeposits: charter.npcDeposits ?? 0,
               reserves: charter.reserves ?? 0,
-              reserveFloor: charter.reserveFloor ?? 0,
+              cashReserves: getCashReserves(charter),
+              requiredReserves: requiredReserves(charter, reserveRatio ?? 0),
+              upstreamCapacity: upstreamCapacity(charter, reserveRatio ?? 0),
               lendingProfile: charter.lendingProfile ?? DEFAULT_LENDING_PROFILE,
               discountWindowDebt: charter.discountWindowDebt ?? 0,
               discountWindowArrears: charter.discountWindowArrears ?? 0,
@@ -422,6 +441,19 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       // console used to be unable to show: the book was one lump with one rate,
       // so "NPC bulk outstanding (implied)" was genuinely all there was to say.
       householdBook: buildHouseholdBook(loans, charter),
+      // What is about to kill this bank, and which lever moves it. Only
+      // meaningful for a charter that actually takes deposits.
+      risk:
+        hasActiveCharter && charter && isDepositTakingCharter(charter)
+          ? buildRiskReadout({
+              cashReserves: getCashReserves(charter),
+              cashBackedDeposits: charter.npcDeposits ?? 0,
+              totalLoans: charter.totalLoans ?? 0,
+              reserveRatioRequired: reserveRatio ?? 0,
+              confidence: charter.confidence ?? 1,
+              band: charter.warningBand ?? "green",
+            })
+          : null,
       interbankLoans: interbankLoans.map((loan) => ({
         id: loan._id.toString(),
         lenderCorporationId: loan.lenderCorporationId.toString(),

@@ -11,6 +11,11 @@ interface TierSettingPanelProps {
   positionId: string;
   countryCode: string;
   onUpdate: () => void;
+  /**
+   * When set, this panel drives an extra portfolio lever and persists to
+   * `tierSettings[tierKey]`. Omit for the seat's primary `tierSetting`.
+   */
+  tierKey?: string;
 }
 
 export function TierSettingPanel({
@@ -20,6 +25,7 @@ export function TierSettingPanel({
   positionId,
   countryCode,
   onUpdate,
+  tierKey,
 }: TierSettingPanelProps) {
   const [selected, setSelected] = useState(currentValue);
   const [saving, setSaving] = useState(false);
@@ -39,7 +45,9 @@ export function TierSettingPanel({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tierSetting: selected }),
+          body: JSON.stringify(
+            tierKey ? { tierSettings: { [tierKey]: selected } } : { tierSetting: selected }
+          ),
         }
       );
       if (!res.ok) {

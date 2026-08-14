@@ -17,6 +17,8 @@ import type {
   EndSubsidyProvision,
 } from "@/lib/db/types";
 import { isPolicyProvision } from "@/lib/db/types/legislation";
+import type { CreateDepartmentProvision } from "@/lib/db/types/legislation";
+import type { GameState } from "@/lib/db/types/gameState";
 import { getLegislationEffectDelta } from "@shared/constants/formulas";
 import { applyTariffProvision, fireTariffProvisionSentiment } from "@/lib/tariffs/tariffEffects";
 import { applySubsidyProvision, applyEndSubsidyProvision } from "@/lib/subsidies/subsidyEffects";
@@ -108,6 +110,20 @@ async function applyOneProvision(
  */
 function getBillCountryId(bill: Pick<Bill, "countryId">): CountryId | null {
   return (bill.countryId as CountryId) ?? null;
+}
+
+/**
+ * Structural act: record `positionId` in gameState.manuallyEnabledSeats so the
+ * roster resolver brings the seat into existence regardless of its era, and the
+ * parent seat picks up its post-split name (e.g. HEW -> HHS). Idempotent.
+ */
+async function applyCreateDepartmentProvision(db: Db, p: CreateDepartmentProvision): Promise<void> {
+  await db
+    .collection<GameState>("gameState")
+    .updateOne(
+      { _id: "current" as unknown as GameState["_id"] },
+      { $addToSet: { manuallyEnabledSeats: p.positionId }, $set: { updatedAt: new Date() } }
+    );
 }
 
 export async function applyLegislationEffect(
@@ -233,6 +249,10 @@ export async function applyLegislationEffect(
           // this provision (no `rate`/`scopeType`/tariff fields) would be cast
           // to TariffProvision and corrupt a real tariff record.
           await applyUnionLawProvision(db, countryId, p);
+        } else if (p.type === "create_department") {
+          // Structural act: bring a seat into existence regardless of its era.
+          // Must stay above the tariff catch-all (no tariff fields to cast).
+          await applyCreateDepartmentProvision(db, p);
         } else {
           // Real enactment path — apply the data write, then fire sentiment
           // pulses only if the tariff rate actually changed. The reconcile

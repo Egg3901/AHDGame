@@ -11,7 +11,6 @@ import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { Corporation } from "@/lib/db/types";
-import { atomicallyDebitCorpLiquidCapital } from "@/lib/financialTxLog/atomicCashGuard";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -22,6 +21,7 @@ import {
   capitalShortfall,
 } from "@/lib/banking/capitalAdequacy";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
+import { injectBankCapital } from "@/lib/banking/bankCash";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -62,23 +62,13 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     const amount = Math.round(parsed.data.amount);
 
-    // Capital moves from the corporation's operating cash into the bank's
-    // posted capital. Same balance sheet, different claim: posted capital
-    // absorbs losses before depositors do, and cannot be spent on anything else.
-    const debit = await atomicallyDebitCorpLiquidCapital(db, corp._id, amount);
-    if (!debit.ok)
-      return NextResponse.json(
-        { error: "The corporation does not have that much liquid capital." },
-        { status: 400 }
-      );
+    // Corporation → bank, across the ring-fence, in one atomic write. Capped
+    // only by what the corporation has: money going IN behind the depositors
+    // needs no permission, which is the whole asymmetry of the boundary.
+    const injected = await injectBankCapital(db, corp._id, amount);
+    if (!injected.ok) return NextResponse.json({ error: injected.error }, { status: 400 });
 
     const now = new Date();
-    await db
-      .collection<Corporation>("corporations")
-      .updateOne(
-        { _id: corp._id, "bankCharter.status": "active" },
-        { $inc: { "bankCharter.postedCapital": amount }, $set: { updatedAt: now } }
-      );
 
     await emitTx(db, {
       type: "corp_capital_injection",
@@ -95,14 +85,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       meta: { kind: "bank_recapitalization" },
     });
 
-    // Note the injection does NOT move the ratio on its own: posting capital
-    // shifts cash from `liquidCapital` into `postedCapital`, and equity counts
-    // both. What it changes is the CLAIM on that cash — posted capital is
-    // locked behind the charter and cannot be spent back out — which is what
-    // the reserve floor and the resolution waterfall care about.
+    // Unlike before the ring-fence, this genuinely moves the ratio: the cash
+    // crosses from the corporation into the bank, so the bank's equity rises by
+    // the full amount rather than being shuffled between two names for the same
+    // pot.
     const position = assessCapital({
-      postedCapital: (charter.postedCapital ?? 0) + amount,
-      liquidCapital: Math.max(0, (corp.liquidCapital ?? 0) - amount),
+      cashReserves: injected.cashReserves,
       totalLoans: charter.totalLoans ?? 0,
       borrowings: borrowingsFromCharter(charter),
       propBookMarkValue: charter.propBookMarkValue ?? 0,
@@ -110,7 +98,6 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({
       success: true,
-      postedCapital: (charter.postedCapital ?? 0) + amount,
       capitalRatio: Math.round(position.capitalRatio * 10_000) / 10_000,
       standing: position.standing,
       remainingShortfall: capitalShortfall(position),

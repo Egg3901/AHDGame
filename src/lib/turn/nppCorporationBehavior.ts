@@ -21,7 +21,31 @@ import type {
   GameConfig,
   GameState,
   ExchangeRate,
+  Bond,
 } from "@/lib/db/types";
+import type { CurrencyCode } from "@/lib/constants/currencies";
+import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
+import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
+import {
+  findBestUnownedSector,
+  hasEnterableHeadroom,
+  sectorShortageScore,
+  computeMacroProductionPolicy,
+  type CommodityPriceRatioFn,
+} from "@/lib/turn/npp/marketSignals";
+
+// Re-exported so existing importers (and their tests) keep one entry point.
+export {
+  sectorShortageScore,
+  computeMacroProductionPolicy,
+  type CommodityPriceRatioFn,
+} from "@/lib/turn/npp/marketSignals";
+import {
+  advanceStrategy,
+  strategyLevers,
+  type NppStrategyState,
+  type StrategySituation,
+} from "@/lib/turn/npp/corpStrategy";
 import type { NPP } from "@/lib/db/types/npp";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import {
@@ -312,77 +336,6 @@ export function glutStaggerEligible(corpId: string, turn: number): boolean {
   return (hash + turn) % GLUT_STATE_CHANGE_STAGGER === 0;
 }
 
-/** A function that returns currentPrice/basePrice for a commodity in a country,
- *  or null when no price signal is available. */
-export type CommodityPriceRatioFn = (commodity: CommodityType, countryId: string) => number | null;
-
-/**
- * Macro-aware production-policy target for a sector, derived from the
- * price-vs-base ratio of the commodities its type SUPPLIES. Returns an integer
- * in [0, 25], or null when the sector type produces no priced commodity (so
- * the caller leaves the existing policy untouched).
- *
- * Elevated price (shortage/premium) → positive policy (ramp output to capture
- * the premium and add supply). Depressed price (glut) → 0, not negative:
- * productionPolicy's intentional lean-ops asymmetry cuts input demand (−15% at
- * −25) harder than output (−10%), so economy-wide NPP contraction *worsens*
- * gluts and permanently pins sectors at max contraction (1953-default audit,
- * GH #3370). Glut capacity is reduced via targetGrowthRate instead (section 2a).
- */
-export function computeMacroProductionPolicy(
-  sectorType: CorporationType,
-  countryId: string,
-  priceRatioOf: CommodityPriceRatioFn
-): number | null {
-  const supply = SECTOR_SUPPLY[sectorType];
-  if (!supply || supply.length === 0) return null;
-
-  let weightedDeviation = 0;
-  let totalWeight = 0;
-  for (const { commodity, rate } of supply) {
-    const ratio = priceRatioOf(commodity, countryId);
-    if (ratio == null || !Number.isFinite(ratio)) continue;
-    weightedDeviation += rate * (ratio - 1);
-    totalWeight += rate;
-  }
-  if (totalWeight === 0) return null;
-
-  const deviation = weightedDeviation / totalWeight;
-  if (Math.abs(deviation) < PRODUCTION_POLICY_DEADBAND) return 0;
-  // Floor at 0: never command lean-ops contraction from a glut price signal.
-  return Math.max(0, clampProductionPolicy(deviation * PRODUCTION_POLICY_SENSITIVITY));
-}
-
-/**
- * Supply-weighted mean price-over-base ratio of a sector type's outputs —
- * the market's "how badly is this wanted" signal. > 1 = shortage premium,
- * < 1 = glut. Returns 1 (neutral) when no output is priced, so unpriced
- * sector types rank neither up nor down.
- *
- * Smarter-NPP remediation (t879): expansion and growth were market-blind —
- * capital flowed to whatever bucket had the highest revenue, flooding gluts
- * while shortage commodities stayed unserved. Pricing the shortage into the
- * decision routes NPP capital toward unmet demand, which grows aggregate
- * cleared volume under BOTH ledger and clearing modes.
- */
-export function sectorShortageScore(
-  sectorType: CorporationType,
-  countryId: string,
-  priceRatioOf: CommodityPriceRatioFn
-): number {
-  const supply = SECTOR_SUPPLY[sectorType];
-  if (!supply || supply.length === 0) return 1;
-  let weighted = 0;
-  let totalWeight = 0;
-  for (const { commodity, rate } of supply) {
-    const ratio = priceRatioOf(commodity, countryId);
-    if (ratio == null || !Number.isFinite(ratio)) continue;
-    weighted += rate * ratio;
-    totalWeight += rate;
-  }
-  return totalWeight > 0 ? weighted / totalWeight : 1;
-}
-
 interface NppCorpDecisionContext {
   corp: Corporation;
   sectors: CorporateSector[];
@@ -420,6 +373,52 @@ interface NppCorpDecisionContext {
    * Absent/false leaves wages untouched so pre-labour worlds stay byte-identical.
    */
   labourWagesEnabled?: boolean;
+  /**
+   * NET per-turn debt service in ₳: issuer interest paid out, less coupon
+   * collected on bonds the corp holds. Positive is a drag.
+   *
+   * WHY THIS EXISTS. Until this field the brain had no concept of debt at all
+   * (`grep -c bond` over this module returned 0), so its profitability signal
+   * measured operations and corporate overhead and nothing else. A corp whose
+   * bond interest exceeds its entire operating profit therefore read as
+   * healthy, and the AI running it kept the overhead, never deleveraged and
+   * never reacted, while the share price fell every turn.
+   *
+   * Measured on prod at turn 79, corp 446 (Meyer Logistics), the corp this was
+   * found on: revenue ₳30,463, total costs ₳25,123, operating profit ₳5,340,
+   * bond coupon income ₳386, bond interest expense ₳6,390. Net income −₳664.
+   * Six sectors at 21.9-37.6% margin, five of six selling out. The operations
+   * were never the problem. Share price 17.35 → 4.38 across turns 59-79.
+   *
+   * This is the same class of blindness the module has been fixed for twice
+   * already: it read seeded `profitMargin` instead of the effective margin, and
+   * nominal instead of realized revenue. Each time the signal was stable and
+   * wrong, so the AI confidently did the wrong thing. Debt service is the third
+   * instance.
+   *
+   * Absent (pre-wiring callers, and every test that does not set it) leaves the
+   * old signal exactly as it was.
+   */
+  debtServiceAnchor?: number;
+  /**
+   * Persisted strategy memory (v5). Absent on a corp the loop has not seen, in
+   * which case it adopts `expand`, which is byte-identical to the pre-v5 levers.
+   */
+  strategy?: NppStrategyState;
+  /**
+   * True on this corp's cohort stagger slot. Strategy switches are refused
+   * otherwise, for the same reason glut mothballing is staggered: a young world
+   * is wall-to-wall single-sector NPP corps, so an unstaggered switch is a
+   * cohort-wide cliff and then a cohort-wide swing back.
+   */
+  strategyEligible?: boolean;
+  /**
+   * `nppCorpStrategyEnabled`. DEFAULT ON: absent means enabled, so existing
+   * worlds keep the behaviour they were promoted with and only an explicit
+   * `false` disables. Disabled pins the corp to the `expand` levers, which are
+   * byte-identical to the pre-v5 brain, and stops persisting strategy memory.
+   */
+  strategyLoopEnabled?: boolean;
 }
 
 /**
@@ -474,6 +473,8 @@ interface NppCorpDecision {
    * list exists so the caller can emit the matching capex ledger legs (the cash
    * → CIP reclass), which need DB access.
    */
+  /** v5 strategy memory to persist for this corp. */
+  strategy?: NppStrategyState;
   reinvestments?: Array<{
     sectorId: ObjectId;
     sectorType: CorporationType;
@@ -729,6 +730,37 @@ export async function processNppCorporationDecisions(
     }
   }
 
+  // ─── Debt service, loaded once for the cohort ─────────────────────────────
+  // Same two maps `buildCorporationLookups` builds for the turn engine, and the
+  // same helpers it charges with, so the brain reads the number the engine
+  // actually bills rather than an approximation of it. Issuer side is corporate
+  // bonds only; holder side keeps sovereigns, because a corp parking cash in
+  // treasuries genuinely collects that coupon.
+  const activeBonds = await db.collection<Bond>("bonds").find({ matured: false }).toArray();
+  const issuerBondsByCorpId = new Map<string, Bond[]>();
+  const heldBondsByCorpId = new Map<string, { bond: Bond; units: number }[]>();
+  for (const b of activeBonds) {
+    if (isCorporateIssuerBond(b)) {
+      const cid = b.corporationId.toString();
+      const list = issuerBondsByCorpId.get(cid) ?? [];
+      list.push(b);
+      issuerBondsByCorpId.set(cid, list);
+    }
+    for (const h of b.holders ?? []) {
+      const holderCorpId = h.corporationId?.toString();
+      if (!holderCorpId) continue;
+      const held = heldBondsByCorpId.get(holderCorpId) ?? [];
+      held.push({ bond: b, units: h.units });
+      heldBondsByCorpId.set(holderCorpId, held);
+    }
+  }
+
+  // Cohort-wide kill switch, read once. Absent means ON.
+  const strategyGate = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { nppCorpStrategyEnabled: 1 } });
+  const strategyLoopEnabled = strategyGate?.nppCorpStrategyEnabled !== false;
+
   const labourCfg = await db
     .collection<GameConfig>("gameConfig")
     .findOne({ _id: "default" }, { projection: { labourSystemMode: 1 } });
@@ -748,6 +780,18 @@ export async function processNppCorporationDecisions(
         now,
         fxRate: (corpCurrency && fxByCurrency.get(corpCurrency)) || 1,
         fxByCurrency,
+        strategy: corp.nppStrategy,
+        // Same 1-in-8 cohort slot the glut mothball pass uses.
+        strategyEligible: glutStaggerEligible(corp._id.toString(), turn),
+        strategyLoopEnabled,
+        debtServiceAnchor: netPerTurnDebtServiceAnchor({
+          issuerBonds: issuerBondsByCorpId.get(corp._id.toString()),
+          heldPositions: heldBondsByCorpId.get(corp._id.toString()),
+          fxByCurrency: fxByCurrency as ReadonlyMap<CurrencyCode, number>,
+          // The government bond subsidy waives issuer interest for national
+          // enterprises, exactly as `perTurnBondDragOnNetIncome` does.
+          isNationalEnterprise: !!corp.countryOwnerId,
+        }),
         modifiers: ceoArchetypeModifiers(archetype),
         labourWagesEnabled,
       },
@@ -850,6 +894,13 @@ export async function processNppCorporationDecisions(
           update: { $set: techSet, $inc: techInc },
         });
       }
+    }
+
+    if (decision.strategy) {
+      corpUpdates.push({
+        filter: { _id: corp._id },
+        update: { $set: { nppStrategy: decision.strategy, updatedAt: now } },
+      });
     }
 
     allSectorUpdates.push(...decision.sectorUpdates);
@@ -1087,9 +1138,67 @@ export function makeNppCorpDecision(
     (corp.logisticsBudget ?? 0) +
     (corp.rdBudget ?? 0) +
     (corp.ceoSalary ?? 0);
-  const totalIncome = grossRealizedIncome - priorOverhead;
+  // (3) Blind to its own debt. `priorOverhead` covers what the corp CHOOSES to
+  //     spend; it says nothing about what the corp is CONTRACTED to pay. Bond
+  //     interest is not discretionary, is often the largest single line on a
+  //     levered corp's books, and was entirely absent from this signal, so a
+  //     corp could be comfortably operating-profitable and still losing money
+  //     every turn with the brain reading it as healthy. See
+  //     `NppCorpDecisionContext.debtServiceAnchor` for the measured case.
+  //
+  //     Charged in the corp's own currency, because `priorOverhead` and
+  //     `grossRealizedIncome` are already corp-local and `debtServiceAnchor` is
+  //     ₳, the same conversion every other money constant in this module takes.
+  const debtServiceLocal = toCorpLocal(ctx.debtServiceAnchor ?? 0);
+  const totalIncome = grossRealizedIncome - priorOverhead - debtServiceLocal;
   const corpMargin = totalRevenue > 0 ? (totalIncome / totalRevenue) * 100 : 0;
   const isProfitable = totalIncome > 0 && profitableSectors > 0;
+
+  // ── v5 strategy loop ───────────────────────────────────────────────────────
+  // The score is `corpMargin` itself: already currency-normalized, scale-free,
+  // and net of both overhead and debt service. One number, comparable across
+  // countries and eras, unlike every money constant in this module.
+  //
+  // Everything below only RE-WEIGHTS levers that already existed. `expand` is
+  // the identity, so a corp that is doing fine never changes behaviour.
+  const debtDominant = debtServiceLocal > 0 && debtServiceLocal >= grossRealizedIncome;
+  const lowFillSectors = sectorProfits.filter(
+    (sp) => sp.sector.soldFraction != null && sp.sector.soldFraction < CHRONIC_LOW_FILL_THRESHOLD
+  ).length;
+  const situation: StrategySituation = {
+    score: corpMargin,
+    debtDominant,
+    // "Mostly cannot sell what it makes": a majority of the corp's sectors.
+    chronicLowFill: sectorProfits.length > 0 && lowFillSectors * 2 > sectorProfits.length,
+    hasHeadroom: hasEnterableHeadroom(
+      corp,
+      sectors,
+      unownedByCountry,
+      stateControlled,
+      plants?.enabled === true,
+      plants?.eraUnitScale ?? 1
+    ),
+    // Derived from the corp, NOT passed in. An `isCaretaker` the caller had
+    // to remember to set is one more way to get this wrong, which is the
+    // exact bug class this module keeps producing: the seeded-margin read,
+    // the nominal-revenue read, the unconverted foreign revenue. The corp
+    // document already knows.
+    isCaretaker: !!corp.caretakerCeo,
+  };
+  // Absent reads as enabled: see `strategyLoopEnabled`. When off, the corp runs
+  // the `expand` levers and no strategy state is written, so an operator can
+  // kill the loop mid-world without a revert and without leaving stale memory
+  // that would resume the moment it is re-enabled.
+  const strategyLoopOn = ctx.strategyLoopEnabled !== false;
+  const strategyDecision = strategyLoopOn
+    ? advanceStrategy({
+        prior: ctx.strategy,
+        turn: ctx.turn,
+        situation,
+        eligible: ctx.strategyEligible === true,
+      })
+    : null;
+  const levers = strategyLevers(strategyDecision?.state.id ?? "expand");
 
   // ── 1. Divest losing sectors ──────────────────────────────────────────────
   // Divest a losing sector once its margin falls to/below the archetype's
@@ -1098,7 +1207,10 @@ export function makeNppCorpDecision(
   // the corp's primary type (core business).
   if (numSectors > 1) {
     for (const sp of sectorProfits) {
-      if (sp.income < 0 && sp.margin <= modifiers.divestMarginFloor) {
+      if (
+        sp.income < 0 &&
+        sp.margin <= modifiers.divestMarginFloor + levers.divestMarginFloorDelta
+      ) {
         // Protect the corp's primary sector type — that's its core business
         if (sp.sector.sectorType === corp.type) continue;
 
@@ -1168,9 +1280,9 @@ export function makeNppCorpDecision(
     } else if (sp.marginCategory === "loss") {
       targetGrowth = Math.max(0, targetGrowth - 2);
     } else if (sp.marginCategory === "strong") {
-      targetGrowth = Math.min(5, targetGrowth + 2 + modifiers.growthDelta);
+      targetGrowth = Math.min(5, targetGrowth + 2 + modifiers.growthDelta + levers.growthDelta);
     } else if (sp.marginCategory === "healthy") {
-      targetGrowth = Math.min(5, targetGrowth + 1 + modifiers.growthDelta);
+      targetGrowth = Math.min(5, targetGrowth + 1 + modifiers.growthDelta + levers.growthDelta);
     }
     // Thin margin → keep current target
 
@@ -1379,9 +1491,11 @@ export function makeNppCorpDecision(
     rdPct = 0.02;
   }
 
-  const marketingBudget = Math.round(totalRevenue * marketingPct * modifiers.marketingMult);
+  const marketingBudget = Math.round(
+    totalRevenue * marketingPct * modifiers.marketingMult * levers.marketingMult
+  );
   const logisticsBudget = Math.round(totalRevenue * logisticsPct);
-  const rdBudget = Math.round(totalRevenue * rdPct * modifiers.rdMult);
+  const rdBudget = Math.round(totalRevenue * rdPct * modifiers.rdMult * levers.rdMult);
   if (marketingBudget !== (corp.marketingBudget ?? 0)) updates.marketingBudget = marketingBudget;
   if (logisticsBudget !== (corp.logisticsBudget ?? 0)) updates.logisticsBudget = logisticsBudget;
   if (rdBudget !== (corp.rdBudget ?? 0)) updates.rdBudget = rdBudget;
@@ -1401,7 +1515,7 @@ export function makeNppCorpDecision(
     // Archetype tilts payout vs. reinvestment, clamped to a sane ceiling.
     targetDividendRate = Math.min(
       MAX_DIVIDEND_RATE,
-      Math.round(targetDividendRate * modifiers.dividendMult)
+      Math.round(targetDividendRate * modifiers.dividendMult * levers.dividendMult)
     );
   }
   if (targetDividendRate !== (corp.dividendRate ?? 0)) {
@@ -1414,6 +1528,7 @@ export function makeNppCorpDecision(
   // corpMargin are net of overhead — see profitability-analysis block above.
   const surplusCash = liquidCapital - effectiveCashFloor;
   if (
+    levers.allowExpansion &&
     effectiveSectors < MAX_SECTORS &&
     isProfitable &&
     corpMargin >= effectiveExpansionMinMargin &&
@@ -1698,7 +1813,7 @@ export function makeNppCorpDecision(
         fillScale *
         NPP_REINVEST_AGGRESSION;
       const growthWanted =
-        queueDepth >= NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH
+        !levers.allowGrowthCapex || queueDepth >= NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH
           ? 0
           : capitalStock * growthPerTurn * fillScale * NPP_REINVEST_AGGRESSION;
       // The pool clamp applies to the growth leg alone — it is the only leg that
@@ -1832,79 +1947,6 @@ export function makeNppCorpDecision(
     divestedSectorIds: divestedSectorIds.length > 0 ? divestedSectorIds : undefined,
     unownedDraws: unownedDraws.length > 0 ? unownedDraws : undefined,
     reinvestments: reinvestments.length > 0 ? reinvestments : undefined,
+    strategy: strategyDecision?.state,
   };
-}
-
-/**
- * Find the best unowned sector for expansion, prioritizing sectors that
- * match the corp's primary type, then secondary type, then the open market.
- *
- * Within each tier candidates are ranked by revenue × shortage score
- * (smarter-NPP, t879): revenue alone routed every expansion to the biggest
- * bucket regardless of market condition, flooding gluts while shortage
- * commodities went unserved. Weighting by the outputs' price-over-base ratio
- * points new capacity at unmet demand — the price signal then decays as the
- * shortage fills, so the herd self-disperses.
- */
-function findBestUnownedSector(
-  countryId: string,
-  hqState: string,
-  primaryType: string,
-  secondaryType: string | null | undefined,
-  existingTypes: Set<string>,
-  unownedByCountry: Map<string, UnownedSector[]>,
-  stateControlled: ReadonlySet<string>,
-  priceRatioOf: CommodityPriceRatioFn,
-  plantsEnabled: boolean = false,
-  eraUnitScale: number = 1
-): UnownedSector | null {
-  const countryUnowned = unownedByCountry.get(countryId);
-  if (!countryUnowned || countryUnowned.length === 0) return null;
-
-  // Under plants a market's size IS its headroom in capacity units, and that is
-  // also what the founding build is sized and priced off — so rank on the same
-  // quantity the decision spends against. Ranking on ₳ revenue there would sort
-  // markets by a nameplate the plants engine no longer treats as authoritative,
-  // and would mis-order two markets whose commodity mixes price differently.
-  const sizeOf = (us: UnownedSector) =>
-    plantsEnabled
-      ? unownedHeadroomUnitsOf(
-          us.sectorType as CorporationType,
-          us.headroomUnits,
-          us.revenue,
-          eraUnitScale
-        )
-      : us.revenue;
-
-  // Filter to non-overlapping types with a positive pool, excluding buckets a
-  // National Corporation controls (don't expand into a nationalized sector).
-  const candidates = countryUnowned.filter(
-    (us) =>
-      !existingTypes.has(us.sectorType) &&
-      sizeOf(us) > 0 &&
-      !stateControlled.has(bucketKey(us.stateId, us.sectorType))
-  );
-
-  if (candidates.length === 0) return null;
-
-  const score = (c: UnownedSector) =>
-    sizeOf(c) * sectorShortageScore(c.sectorType as CorporationType, countryId, priceRatioOf);
-  const best = (list: UnownedSector[]) => {
-    // Prefer HQ state, then highest market-weighted score.
-    const hq = list.find((c) => c.stateId === hqState);
-    return hq ?? list.sort((a, b) => score(b) - score(a))[0];
-  };
-
-  // Tier 1: primary type match
-  const primaryMatch = candidates.filter((c) => c.sectorType === primaryType);
-  if (primaryMatch.length > 0) return best(primaryMatch);
-
-  // Tier 2: secondary type match
-  if (secondaryType) {
-    const secondaryMatch = candidates.filter((c) => c.sectorType === secondaryType);
-    if (secondaryMatch.length > 0) return best(secondaryMatch);
-  }
-
-  // Tier 3: open market — market-weighted score across all types
-  return best(candidates);
 }

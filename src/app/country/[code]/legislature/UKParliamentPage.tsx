@@ -535,7 +535,7 @@ export function UKParliamentPage({ countryId }: { countryId: CountryId }) {
       color: majorityParty?.partyColor ?? "#888888",
       seats: majorityParty?.seats ?? 0,
     },
-    totalSeats: members?.totalSeats ?? 650,
+    totalSeats: members?.totalSeats ?? 0,
     leader: leaders?.primeMinister
       ? {
           label: "Prime Minister",
@@ -571,7 +571,11 @@ export function UKParliamentPage({ countryId }: { countryId: CountryId }) {
           <LegislatureHeader
             countryId={countryId}
             title="House of Commons"
-            subtitle="650 elected MPs · First Past the Post · United Kingdom"
+            subtitle={
+              headerStats.totalSeats > 0
+                ? `${headerStats.totalSeats} elected MPs · First Past the Post · United Kingdom`
+                : "First Past the Post · United Kingdom"
+            }
             heroImage={COMMONS_HERO.image}
             heroAlt={COMMONS_HERO.alt}
             stats={headerStats}

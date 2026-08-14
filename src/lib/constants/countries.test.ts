@@ -165,6 +165,20 @@ describe("France — era institutional overlay (Fourth vs Fifth Republic)", () =
   });
 });
 
+describe("UK — 1953 Commons size overlay (ticket #1078)", () => {
+  it("keeps the modern 650-seat Commons when no preset is given", () => {
+    const uk = getCountryConfig("UK");
+    expect(uk.legislature.lowerChamber.seats).toBe(650);
+    expect(uk.coalitionThreshold).toBe(326);
+  });
+
+  it("1953-default is a 625-seat Commons with majority 313", () => {
+    const uk = getCountryConfig("UK", "1953-default");
+    expect(uk.legislature.lowerChamber.seats).toBe(625);
+    expect(uk.coalitionThreshold).toBe(313);
+  });
+});
+
 describe("CN — 1953 central-transfer-pool era override (fiscal-scale audit, 2026-07-28)", () => {
   it("keeps the modern/1991 CNY-calibrated pool (35/capita) when no preset is given", () => {
     const cn = getCountryConfig("CN");

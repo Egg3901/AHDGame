@@ -231,6 +231,24 @@ export interface DocketCase {
     divergedSignal: string;
   };
 
+  /**
+   * Nationalization-reversal payload for a procedurally-spawned case that
+   * reviews an emergency EXECUTIVE taking (crisis system). When such a case
+   * DIVERGES (a pro-market bench strikes the taking down), `scotusDocketTurn.ts`
+   * returns these sectors to private hands via `reverseNationalizationTaking`
+   * INSTEAD of synthesizing a `PolicyProvision` from `effect` — a taking reversal
+   * cannot be expressed as a `DocketCaseEffect`. Absent on curated historical
+   * cases and on the standalone `scotusChallenge` option (which keeps the benign
+   * `effect` path). Mutually exclusive with `effect` in practice.
+   */
+  nationalizationReversal?: {
+    /** Surviving NatCorp sector rows taken by the executive order under review. */
+    sectorIds: ObjectId[];
+    countryId: string;
+    /** Human-readable label for wire/framing + any fallback spin-out naming. */
+    label: string;
+  };
+
   status: "pending" | "decided";
   outcome?: DocketCaseOutcome;
   decidedAtTurn?: number;

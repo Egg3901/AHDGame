@@ -14,12 +14,40 @@ import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { archiveCharter } from "@/lib/banking/charterHistory";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
+import { getCashReserves } from "@/lib/banking/bankCash";
 import { clampOffsets, getRateCorridors } from "@/lib/banking/regulationQ";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getCurrentTurn } from "@/lib/currentTurn";
 
-/** Modern-era USD reference: 10× corp founding cost. Era/FX scaled at call time. */
-const CHARTER_CAPITAL_REFERENCE_USD = CORPORATION_FOUNDING_COST * 10;
+/**
+ * Charter capital as a multiple of the corporation founding cost.
+ *
+ * Was 10x. Cut to 5x once the deposit fix landed, because the old number was
+ * doing two jobs and failing both. It was set high to keep a bank solvent, but
+ * solvency was never a capital problem: deposits arrived without their cash, so
+ * no amount of posted capital saved a bank and a simulated charter died on turn
+ * 8 at 1x and turn 47 at 5x. With deposits carrying their cash, the same
+ * simulation survives 60 turns at 1x, so capital no longer has to buy survival.
+ *
+ * What it should price is commitment, and 5x the cost of creating the
+ * corporation is a real commitment without being a wall. At 1953 US scale that
+ * is ~71,700 from the corporate treasury against a ~14,300 founding cost.
+ */
+export const CHARTER_CAPITAL_FOUNDING_MULTIPLE = 5;
+
+/** Modern-era USD reference. Era/FX scaled at call time. */
+const CHARTER_CAPITAL_REFERENCE_USD = CORPORATION_FOUNDING_COST * CHARTER_CAPITAL_FOUNDING_MULTIPLE;
+
+/**
+ * Share of the full requirement an INVESTMENT charter posts.
+ *
+ * Posted capital exists to stand between a bank failure and a depositor
+ * haircut. An investment bank has no depositors, so charging it the same as a
+ * retail bank was pricing a protection nobody receives. It still posts
+ * something, because the prop desk can lose money and the resolution waterfall
+ * needs a floor, but a third of the retail bar rather than all of it.
+ */
+export const INVESTMENT_CHARTER_CAPITAL_FRACTION = 1 / 3;
 
 /**
  * Turns a charter type is locked after a switch.
@@ -56,7 +84,8 @@ export type RevokeCharterResult =
  */
 export async function getCharterCapitalRequirement(
   db: Db,
-  currency: CurrencyCode
+  currency: CurrencyCode,
+  charterType?: BankCharterType
 ): Promise<number> {
   const [eraUnitScale, preset] = await Promise.all([
     loadWorldEraUnitScale(db),
@@ -66,7 +95,8 @@ export async function getCharterCapitalRequirement(
   const countryId = getCountryIdForCurrency(currency);
   const rate = getGdpAnchorRate(countryId, preset);
   const safeRate = rate > 0 && Number.isFinite(rate) ? rate : 1;
-  const anchor = CHARTER_CAPITAL_REFERENCE_USD / scale;
+  const typeFraction = charterType === "investment" ? INVESTMENT_CHARTER_CAPITAL_FRACTION : 1;
+  const anchor = (CHARTER_CAPITAL_REFERENCE_USD * typeFraction) / scale;
   return Math.max(1, Math.round(anchor / safeRate));
 }
 
@@ -131,7 +161,7 @@ export async function checkCharterEligibility(
     reasons.push(`Corporation treasury is denominated in ${corpCurrency}, not ${currency}`);
   }
 
-  const requirement = await getCharterCapitalRequirement(db, currency);
+  const requirement = await getCharterCapitalRequirement(db, currency, requestedType);
   if ((corporation.liquidCapital ?? 0) < requirement) {
     reasons.push(
       `Insufficient treasury: need ${requirement.toLocaleString()} ${currency} posted capital`
@@ -195,6 +225,9 @@ export async function issueCharter(
     currency,
     charteredTurn,
     postedCapital,
+    // Posted capital IS the bank's opening cash. It was debited from the
+    // corporation a line below; this is where it lands.
+    cashReserves: postedCapital,
     depositOffset: initialOffsets.depositOffset,
     lendingOffset: initialOffsets.lendingOffset,
     blacklist: {},
@@ -253,7 +286,12 @@ export async function revokeCharter(
 
   const charter = corporation.bankCharter;
   const deposits = charter.totalDeposits ?? 0;
-  const refund = deposits <= 0 ? charter.postedCapital : 0;
+  // The bank's whole cash balance returns to the shareholder, not just the
+  // capital they posted. Before the ring-fence these were the same pot, so
+  // refunding `postedCapital` and leaving retained earnings behind happened to
+  // be a no-op; now the earnings are on the other side of a boundary and
+  // stranding them would quietly destroy them.
+  const refund = deposits <= 0 ? getCashReserves(charter) : 0;
   const revokedTurn = await getCurrentTurn(db);
   const now = new Date();
 
@@ -277,6 +315,7 @@ export async function revokeCharter(
   };
   if (refund > 0) {
     update.$inc = { liquidCapital: refund };
+    update.$set["bankCharter.cashReserves"] = 0;
   }
 
   const result = await db

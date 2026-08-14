@@ -171,6 +171,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           commandEconomyEnabled: 1,
           privateBankingEnabled: 1,
           interstateMoneyWiringEnabled: 1,
+          freightSettlementMode: 1,
         },
       }
     ),
@@ -190,8 +191,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const interstateMoneyWiringEnabled =
     (marketGovernorConfig as { interstateMoneyWiringEnabled?: boolean } | null)
       ?.interstateMoneyWiringEnabled === true;
+  const freightSettlementActive =
+    (marketGovernorConfig as { freightSettlementMode?: string } | null)?.freightSettlementMode ===
+      "active" && marketAtLeast(marketSystemMode, "clearing");
   const lookups = await buildCorporationLookups(db, {
     plantsEnabled: plantsEnabledForMarketShare,
+    freightSettlementActive,
     moneyWiringEnabled: interstateMoneyWiringEnabled,
   });
   const currentYear = gameState?.currentYear;

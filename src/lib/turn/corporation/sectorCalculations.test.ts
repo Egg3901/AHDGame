@@ -174,6 +174,7 @@ function baseLookups(corporations: Corporation[], sectors: CorporateSector[]): C
     marketShareBySectorId: new Map(),
     stateSectorSpecializationByState: new Map(),
     activeDisasterEffectsByState: new Map(),
+    stateInputAvailabilityByState: new Map(),
   };
 }
 

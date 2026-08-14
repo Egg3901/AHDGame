@@ -4,6 +4,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Corporation } from "@/lib/db/types";
 import type { BankCharter } from "@/lib/db/types/bank";
 import { CORPORATION_FOUNDING_COST } from "@/lib/constants/corporations";
+import { CHARTER_CAPITAL_FOUNDING_MULTIPLE } from "../charter";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import { getGdpAnchorRate } from "@/lib/currency/gdpAnchorRate";
 
@@ -61,13 +62,16 @@ describe("banking charter", () => {
   }
 
   describe("getCharterCapitalRequirement", () => {
-    it("returns 10x founding cost / eraUnitScale / gdpAnchorRate (never a flat constant)", async () => {
+    it("returns the charter multiple of founding cost / eraUnitScale / gdpAnchorRate (never a flat constant)", async () => {
       const { getCharterCapitalRequirement } = await importCharter();
       const required = await getCharterCapitalRequirement(db as unknown as Db, "USD");
       const scale = getEraUnitScale("2019-default");
       const rate = getGdpAnchorRate("US", "2019-default");
       expect(required).toBe(
-        Math.max(1, Math.round((CORPORATION_FOUNDING_COST * 10) / scale / rate))
+        Math.max(
+          1,
+          Math.round((CORPORATION_FOUNDING_COST * CHARTER_CAPITAL_FOUNDING_MULTIPLE) / scale / rate)
+        )
       );
       expect(required).not.toBe(CORPORATION_FOUNDING_COST);
     });
@@ -82,8 +86,13 @@ describe("banking charter", () => {
       const required = await getCharterCapitalRequirement(db as unknown as Db, "USD");
       const scale = getEraUnitScale("1953-default");
       expect(scale).toBeGreaterThan(1);
-      expect(required).toBe(Math.max(1, Math.round((CORPORATION_FOUNDING_COST * 10) / scale)));
-      expect(required).toBeLessThan(CORPORATION_FOUNDING_COST * 10);
+      expect(required).toBe(
+        Math.max(
+          1,
+          Math.round((CORPORATION_FOUNDING_COST * CHARTER_CAPITAL_FOUNDING_MULTIPLE) / scale)
+        )
+      );
+      expect(required).toBeLessThan(CORPORATION_FOUNDING_COST * CHARTER_CAPITAL_FOUNDING_MULTIPLE);
     });
   });
 
@@ -234,6 +243,7 @@ describe("banking charter", () => {
             currency: "USD",
             charteredTurn: 1,
             postedCapital: 10_000_000,
+            cashReserves: 10_000_000,
             depositOffset: 0,
             lendingOffset: 0,
           },
@@ -310,6 +320,7 @@ describe("banking charter", () => {
         currency: "USD",
         charteredTurn: 10,
         postedCapital: 10_000_000,
+        cashReserves: 10_000_000,
         depositOffset: 0,
         lendingOffset: 0,
         revokedTurn: 20,
@@ -350,9 +361,12 @@ describe("banking charter", () => {
   });
 
   describe("revokeCharter", () => {
-    it("refunds posted capital when totalDeposits is zero or absent", async () => {
+    it("refunds the bank's whole cash balance when totalDeposits is zero or absent", async () => {
       db.collection("bankCharterHistory");
       const postedCapital = 10_000_000;
+      // Retained earnings on top of the posted capital, to pin that the refund
+      // is the bank's whole cash balance and not just what was posted.
+      const cashReserves = 12_000_000;
       const corp = makeCorp({
         liquidCapital: 5_000_000,
         bankCharter: {
@@ -361,6 +375,7 @@ describe("banking charter", () => {
           currency: "USD",
           charteredTurn: 10,
           postedCapital,
+          cashReserves,
           depositOffset: 0,
           lendingOffset: 0,
         },
@@ -375,12 +390,13 @@ describe("banking charter", () => {
       const result = await revokeCharter(db as unknown as Db, corp._id, "regulatory action");
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.refundedCapital).toBe(postedCapital);
+      expect(result.refundedCapital).toBe(cashReserves);
 
       const [, update] = db.collectionMocks.corporations!.updateOne.mock.calls[0];
       expect(update.$set["bankCharter.status"]).toBe("revoked");
       expect(update.$set["bankCharter.revokedReason"]).toBe("regulatory action");
-      expect(update.$inc.liquidCapital).toBe(postedCapital);
+      expect(update.$inc.liquidCapital).toBe(cashReserves);
+      expect(update.$set["bankCharter.cashReserves"]).toBe(0);
 
       expect(db.collectionMocks.bankCharterHistory!.insertOne).toHaveBeenCalledTimes(1);
       const archived = db.collectionMocks.bankCharterHistory!.insertOne.mock.calls[0][0];

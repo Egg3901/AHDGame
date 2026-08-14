@@ -42,6 +42,7 @@ export interface CabinetOfficeData {
   } | null;
   currentSettings: {
     tierSetting: string | null;
+    tierSettings: Record<string, string> | null;
     targetRegionId: string | null;
     targetCountryId: string | null;
     aidPriority: string | null;
