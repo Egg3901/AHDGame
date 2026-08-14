@@ -46,11 +46,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const ceoCheck = requireCeo(corporation, auth.user.userId);
     if (ceoCheck) return ceoCheck;
 
-    const result = await setLoanApprovalRequired(
-      db,
-      corporation._id,
-      parsed.data.requireApproval
-    );
+    const result = await setLoanApprovalRequired(db, corporation._id, parsed.data.requireApproval);
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
