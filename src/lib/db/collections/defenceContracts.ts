@@ -46,6 +46,11 @@ export async function awardContract(
     lotsOrdered: number;
     pricePerLot: number;
     awardedTurn: number;
+    /**
+     * State-owned suppliers have no player CEO to accept. Activate immediately so the
+     * order delivers rather than sitting pending forever (ticket #1087).
+     */
+    activateImmediately?: boolean;
   }
 ): Promise<DefenceContract> {
   const doc: DefenceContract = {
@@ -57,9 +62,10 @@ export async function awardContract(
     lotsOrdered: Math.max(1, Math.round(input.lotsOrdered)),
     lotsDelivered: 0,
     pricePerLot: Math.max(0, Math.round(input.pricePerLot)),
-    // An offer, not an order. The supplying CEO has to accept before anything is built or
-    // any money moves — see `respondToContract`.
-    status: "pending",
+    // An offer, not an order, unless the buyer is contracting its own state industry.
+    // A National Corporation has no player CEO to click Accept; leaving those pending
+    // meant the arsenal never filled.
+    status: input.activateImmediately ? "active" : "pending",
     awardedTurn: input.awardedTurn,
     updatedAt: new Date(),
   };

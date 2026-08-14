@@ -10,15 +10,15 @@ Adopt doctrine from the defence seat's office → **Doctrine** tab.
 
 Read this before anything else on the page.
 
-- Your nation has **12 doctrine points**.
+- Your nation starts with **12 doctrine points**.
 - The tree has **128 nodes**, costing **1 to 5 points each**.
-- **Nothing grants more points.** Doctrine points are not earned by fighting, by time, by research, or by legislation. There is no second source.
+- **You gain 1 additional doctrine point at the start of each game year.** Fighting, research, and legislation do not grant more.
 
-Adopting the whole tree would cost **369 points**. You have twelve.
+Adopting the whole tree would cost **369 points**. A long campaign adds a handful of extra points — enough to specialise as later decades unlock, not enough to clear the tree.
 
-So a nation adopts perhaps **three to six additional doctrines in its entire existence**, on top of what it starts with. This is not a tree you clear: it is a small number of permanent, irreversible commitments about the kind of military power your country intends to be.
+So a nation still adopts only a small number of additional doctrines on top of what it starts with. This is not a tree you clear: it is a small number of permanent, irreversible commitments about the kind of military power your country intends to be.
 
-**There is no refund and no respec.** Adopting is one-way. Spend the twelfth point badly and it is gone for the rest of the game.
+**There is no refund and no respec.** Adopting is one-way. Spend a point badly and it is gone.
 
 ## What you start with
 
@@ -105,13 +105,13 @@ Many **general trait nodes** are tied to a matching **national doctrine**. When 
 
 Every general's profile has a **Doctrine Fit** view listing which of their trained traits your nation currently amplifies, and which are running unsupported.
 
-The strategic consequence: **doctrine and officer training should be planned together.** A nation that adopts deep-strike doctrine and then trains all its generals as defensive tacticians has wasted both. Your Secretary of Defense's twelve points effectively decide which officer careers are worth pursuing, so the corps should know what has been adopted before spending their own points.
+The strategic consequence: **doctrine and officer training should be planned together.** A nation that adopts deep-strike doctrine and then trains all its generals as defensive tacticians has wasted both. Your defence minister's starting points effectively decide which officer careers are worth pursuing, so the corps should know what has been adopted before spending their own points.
 
 ## Who adopts
 
 Only the **defence seat holder**: Secretary of Defense, Defence Secretary, Minister of Defence, or equivalent. Not the head of government, not generals, not the legislature.
 
-Because doctrine is permanent and the budget tiny, **this is one of the most consequential powers in the game and one of the easiest to squander.** A minister who spends twelve points in their first week has locked in their country's military identity for every successor.
+Because doctrine is permanent and the budget tiny, **this is one of the most consequential powers in the game and one of the easiest to squander.** A minister who dumps the starting twelve points in their first week has locked in their country's military identity for every successor.
 
 The server re-validates every adoption independently: points, prerequisites, and era are all checked again server-side, so a crafted request cannot buy a doctrine you have not earned.
 

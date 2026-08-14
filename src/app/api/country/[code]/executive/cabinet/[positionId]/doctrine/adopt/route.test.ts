@@ -78,4 +78,19 @@ describe("POST doctrine/adopt", () => {
     const res = await POST(req({ key: "maneuver-0" }), call); // already in DEFAULT_ADOPTED
     expect(res.status).toBe(400);
   });
+
+  it("books yearly income before spending when the world has ticked past start", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      conflictsEnabled: true,
+      startingYear: 1953,
+      currentYear: 1954,
+    });
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ key: VALID_KEY }), call);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // firepower-2 costs 1; start 12 + 1 year = 13, remaining after spend = 12
+    expect(body.points).toBe(12);
+    expect(db.collectionMocks.nationalDoctrine.insertOne).toHaveBeenCalled();
+  });
 });
