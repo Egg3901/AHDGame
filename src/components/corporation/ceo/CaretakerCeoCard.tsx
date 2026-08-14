@@ -43,6 +43,12 @@ export function CaretakerCeoCard({
   // A caretaker (NPP) runs the corp when the seat is filled but by no character.
   const isCaretakerRun = !corporation.ceoVacant && !corporation.ceoCharacterId;
 
+  // Post-reclaim cooldown: a corp reclaimed recently can't hand off again yet.
+  const cooldownTurns = corporation.caretakerReappointCooldownTurnsRemaining ?? 0;
+  const onCooldown = !isCaretakerRun && cooldownTurns > 0;
+  // 1 turn = 1 real hour; surface the wait in whole hours (rounded up).
+  const cooldownHours = Math.ceil(cooldownTurns);
+
   async function appoint() {
     setBusy(true);
     setError("");
@@ -105,6 +111,12 @@ export function CaretakerCeoCard({
           {success}
         </div>
       )}
+      {onCooldown && (
+        <p className="text-sm text-muted mb-3">
+          You recently resumed control. You can hand this corporation to a caretaker again in{" "}
+          {cooldownHours} {cooldownHours === 1 ? "hour" : "hours"}.
+        </p>
+      )}
       {isCaretakerRun ? (
         <button
           onClick={dismiss}
@@ -116,7 +128,7 @@ export function CaretakerCeoCard({
       ) : (
         <button
           onClick={appoint}
-          disabled={busy}
+          disabled={busy || onCooldown}
           className="rounded-lg border border-card-border px-4 py-2 text-sm font-medium text-foreground hover:bg-card-elevated transition-colors disabled:opacity-50"
         >
           {busy ? "Appointing…" : "Hand to NPP Caretaker"}

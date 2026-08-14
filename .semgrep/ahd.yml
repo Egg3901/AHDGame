@@ -1,0 +1,18 @@
+# Project-specific Semgrep rules encoding AHD's recurring, expensive bugs.
+# These are guardrails: they may match nothing today, but each corresponds to a
+# real regression we have hit before. Keep them ERROR severity so they gate PRs.
+#
+# Validated: `ahd-gamestate-isactive-read` fires on `gameStateCol.findOne({ isActive: true })`
+# and ignores `{ _id: "current" }` reads and non-gameState collections.
+rules:
+  - id: ahd-gamestate-isactive-read
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: "gameState is a singleton keyed by _id (current/main) and its isActive field is often false, so querying it with isActive true silently returns nothing. Query by _id instead."
+    patterns:
+      - pattern-either:
+          - pattern: "$COL.findOne({ isActive: true, ... })"
+          - pattern: "$COL.find({ isActive: true, ... })"
+      - metavariable-regex:
+          metavariable: $COL
+          regex: (?i).*gamestate.*

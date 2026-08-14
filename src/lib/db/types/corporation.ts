@@ -338,6 +338,13 @@ export interface Corporation {
     /** Turn the caretaker was installed. */
     appointedTurn: number;
   };
+  /**
+   * Turn until which a new caretaker may NOT be installed, stamped when the owner
+   * reclaims control (dismisses a caretaker). Enforces a reappointment cooldown
+   * (CARETAKER_REAPPOINT_COOLDOWN_TURNS) so caretaker rule can't be flipped on and
+   * off turn-to-turn. Absent / in the past ⇒ no cooldown active.
+   */
+  caretakerCooldownUntilTurn?: number;
   /** Country owner for state-owned / nationalized corporations */
   countryOwnerId?: CountryId;
   /** Hide the corporation from stock-exchange style equity listings */

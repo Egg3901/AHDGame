@@ -46,15 +46,20 @@ describe("canSupply", () => {
     expect(canSupply({ countryId: "UK", liquidCurrencyCode: "GBP" }, "US")).toBe(false);
   });
 
-  // The trap this guard exists for: pre-forex corps have no currency code and are documented
-  // "treat as USD", so a UK corp without one would be paid dollars from a sterling
-  // appropriation with no conversion anywhere.
-  it("refuses a corp whose absent currency code defaults away from its country's", () => {
-    expect(canSupply({ countryId: "UK" }, "UK")).toBe(false);
+  // Missing liquidCurrencyCode is inferred from the corp's country (same as
+  // resolveCorpLiquidCurrencyCode), not treated as USD. Defaulting to USD hid every
+  // non-US domestic plant — including Soviet state industry — from the award picker.
+  it("accepts a domestic corp whose currency is inferred from its country", () => {
+    expect(canSupply({ countryId: "UK" }, "UK")).toBe(true);
+    expect(canSupply({ countryId: "RU" }, "RU")).toBe(true);
   });
 
-  it("accepts a pre-forex US corp, whose USD default is correct", () => {
+  it("accepts a pre-forex US corp, whose inferred currency is USD", () => {
     expect(canSupply({ countryId: "US" }, "US")).toBe(true);
+  });
+
+  it("still refuses an explicit currency that does not match the buyer", () => {
+    expect(canSupply({ countryId: "RU", liquidCurrencyCode: "USD" }, "RU")).toBe(false);
   });
 });
 

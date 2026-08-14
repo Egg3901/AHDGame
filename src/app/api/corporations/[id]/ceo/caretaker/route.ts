@@ -51,6 +51,14 @@ function appointmentErrorResponse(error: CaretakerAppointmentError): NextRespons
         { error: "Only a sitting CEO can hand the corporation to a caretaker." },
         { status: 400 }
       );
+    case "reclaim-cooldown":
+      return NextResponse.json(
+        {
+          error:
+            "You recently reclaimed this corporation. Wait until the caretaker cooldown ends before handing it off again.",
+        },
+        { status: 400 }
+      );
     case "no-eligible-npp":
       return NextResponse.json(
         { error: "No eligible caretaker is available in this country right now." },

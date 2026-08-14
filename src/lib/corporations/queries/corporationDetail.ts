@@ -31,6 +31,7 @@ import { buildMarketShareBySectorId } from "@/lib/corporations/marketShare";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
 import { getEraFounderShares } from "@/lib/constants/sectorSeedEra";
 import { ceoSelfAcquisitionWindow } from "@/lib/corporations/ceoShareAcquisitionCap";
+import { caretakerReappointCooldownRemaining } from "@/lib/corporations/caretakerCeo";
 import {
   CEO_SELF_ACQUISITION_CAP_FRACTION,
   CEO_SELF_ACQUISITION_WINDOW_TURNS,
@@ -2069,6 +2070,16 @@ export async function loadCorporationDetailView(args: {
         corporation.ceoType === "character" && corporation.ceoId
           ? corporation.ceoId.toString()
           : null,
+      // Underlying owner while a caretaker NPP runs the corp. Lets the front end
+      // keep the CEO Office tab (and the "Resume Control" button) reachable for
+      // the appointing owner even though the resolved `ceo` is now the NPP.
+      caretakerUnderlyingCharacterId:
+        corporation.caretakerCeo?.underlyingCharacterId?.toString() ?? null,
+      // Turns left on the post-reclaim cooldown before a new caretaker may be installed.
+      caretakerReappointCooldownTurnsRemaining: caretakerReappointCooldownRemaining(
+        corporation,
+        currentTurn
+      ),
       pendingCeoCharacterId: corporation.pendingCeoCharacterId?.toString() ?? null,
       lastRenameTurn: corporation.lastRenameTurn ?? null,
       countryOwnerId: corporation.countryOwnerId ?? null,
