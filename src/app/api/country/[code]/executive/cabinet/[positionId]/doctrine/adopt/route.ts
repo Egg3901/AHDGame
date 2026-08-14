@@ -14,8 +14,10 @@ import { getGameStateCollection } from "@/lib/db/collections/gameState";
 import {
   getNationalDoctrine,
   getNationalDoctrineCollection,
+  settleDoctrineIncome,
 } from "@/lib/db/collections/nationalDoctrine";
 import { resolveDoctrineEra } from "@/lib/military/currentDoctrineEra";
+import { resolveGameYear } from "@/lib/era/era";
 import { adoptNode } from "@/lib/military/doctrineTree";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 
@@ -46,7 +48,10 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const db = await getDb();
     const gsCol = await getGameStateCollection(db);
-    const gs = await gsCol.findOne({ _id: "current" }, { projection: { conflictsEnabled: 1 } });
+    const gs = await gsCol.findOne(
+      { _id: "current" },
+      { projection: { conflictsEnabled: 1, currentYear: 1, currentTurn: 1, startingYear: 1 } }
+    );
     if (!gs?.conflictsEnabled) {
       return NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 });
     }
@@ -65,7 +70,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const currentEra = await resolveDoctrineEra(db);
-    const current = await getNationalDoctrine(db, countryId);
+    const year = resolveGameYear(gs);
+    const current =
+      year != null && gs.startingYear != null
+        ? await settleDoctrineIncome(db, countryId, gs.startingYear, year)
+        : await getNationalDoctrine(db, countryId);
     const res = adoptNode(current, parsed.data.key, currentEra);
     if (!res.changed) {
       return NextResponse.json({ error: res.reason ?? "Cannot adopt" }, { status: 400 });
