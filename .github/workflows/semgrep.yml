@@ -1,0 +1,53 @@
+name: Semgrep
+
+on:
+  push:
+    branches: [main, staging, development]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 2" # Weekly Tuesday 6am UTC
+
+concurrency:
+  group: semgrep-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Hard gate on our own project rules. These are curated and validated, so a
+  # hit here is a real problem and should block the PR.
+  custom-rules:
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep (AHD project rules)
+        run: semgrep scan --config .semgrep/ --error --quiet
+
+  # Advisory scan against maintained community rulesets. Findings surface as
+  # code-scanning alerts, they do not block merges (the rulesets are broad and
+  # will have false positives until tuned).
+  registry:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    container:
+      image: returntocorp/semgrep:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep (community rulesets)
+        run: >
+          semgrep scan
+          --config p/typescript
+          --config p/react
+          --config p/nextjs
+          --config p/nodejs
+          --config p/secrets
+          --sarif --output semgrep.sarif
+        continue-on-error: true
+      - name: Upload SARIF to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
