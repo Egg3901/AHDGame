@@ -2,7 +2,7 @@ import { ObjectId, type Db } from "mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types/corporation";
 import type { UnitDomain } from "@/lib/db/types/militaryUnit";
 import { componentsForStrategy, gradeCeilingFor } from "@/lib/military/arsenalComponents";
-import { lotsFromSector } from "@/lib/military/arsenal";
+import { rawLotsFromSector } from "@/lib/military/arsenal";
 import { canSupply } from "@/lib/turn/defenceDeliveryTurn";
 import { listOpenContracts } from "@/lib/db/collections/defenceContracts";
 
@@ -80,7 +80,7 @@ export async function listDefenceSuppliers(
       strategyId: sector.strategyId ?? "standard",
       component: components[0],
       components,
-      projectedLotsPerTurn: Math.floor(lotsFromSector(sector) / Math.max(1, components.length)),
+      projectedLotsPerTurn: rawLotsFromSector(sector) / Math.max(1, components.length),
       gradeCeiling: gradeCeilingFor(corp, currentYear),
       alreadyContracted: contractedSectorIds.has(sector._id.toString()),
     });

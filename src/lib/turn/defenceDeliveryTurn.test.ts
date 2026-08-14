@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { canSupply, applyDefenceDeliveries } from "./defenceDeliveryTurn";
-import { lotsFromSector } from "@/lib/military/arsenal";
+import { lotsFromSector, rawLotsFromSector } from "@/lib/military/arsenal";
 
 describe("lotsFromSector", () => {
   it("produces nothing from a plant with no revenue", () => {
@@ -95,13 +95,17 @@ function stubDb(w: World): Db {
             if (f.status && c.status !== f.status) return null;
             return c;
           },
-          updateOne: async (_f: unknown, u: Record<string, unknown>) => {
+          updateOne: async (f: Record<string, unknown>, u: Record<string, unknown>) => {
             w.contractUpdates.push(u);
+            const target =
+              w.contracts.find((x) => String(x._id) === String(f._id)) ?? w.contracts[0];
+            if (!target) return { matchedCount: 0, modifiedCount: 0 };
             const inc = (u.$inc ?? {}) as Record<string, number>;
-            if (inc.lotsDelivered && w.contracts[0]) {
-              w.contracts[0].lotsDelivered =
-                (w.contracts[0].lotsDelivered as number) + inc.lotsDelivered;
+            if (inc.lotsDelivered) {
+              target.lotsDelivered = (target.lotsDelivered as number) + inc.lotsDelivered;
             }
+            const set = (u.$set ?? {}) as Record<string, unknown>;
+            for (const [k, v] of Object.entries(set)) target[k] = v;
             return { matchedCount: 1, modifiedCount: 1 };
           },
         };
@@ -242,6 +246,31 @@ describe("applyDefenceDeliveries", () => {
     w.contracts[0].lotsOrdered = 5;
     const r = await applyDefenceDeliveries(stubDb(w), "US", 1953);
     expect(r.lots).toBe(5);
+  });
+
+  it("accumulates sub-lot output across turns instead of discarding it", async () => {
+    // Revenue tuned so the plant produces well under one whole lot per turn — the exact case
+    // that used to floor to zero and deliver nothing forever.
+    const perUnit = rawLotsFromSector({ strategyId: "munitions", revenue: 1 });
+    const revenue = 0.3 / perUnit;
+    expect(lotsFromSector({ strategyId: "munitions", revenue })).toBe(0); // floors to nothing
+
+    const w = world({ sector: { _id: SECTOR_ID, strategyId: "munitions", revenue } });
+    w.contracts[0].lotsOrdered = 5;
+
+    // First turn ships nothing but banks the fractional output as carry.
+    const t1 = await applyDefenceDeliveries(stubDb(w), "US", 1953);
+    expect(t1.lots).toBe(0);
+    expect((w.contracts[0].deliveryCarry as number) > 0).toBe(true);
+
+    // Over enough turns the banked remainder crosses whole lots and the order advances, where
+    // the old floor-every-turn behaviour left it stuck at zero indefinitely.
+    let total = t1.lots;
+    for (let i = 0; i < 30; i++) {
+      total += (await applyDefenceDeliveries(stubDb(w), "US", 1953)).lots;
+    }
+    expect(total).toBeGreaterThan(0);
+    expect(w.contracts[0].lotsDelivered).toBe(total);
   });
 
   it("stalls a contract whose plant has been re-tooled off the component", async () => {

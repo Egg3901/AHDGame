@@ -1,7 +1,7 @@
 import { ObjectId, type Db } from "mongodb";
 import { listContractsForCorp } from "@/lib/db/collections/defenceContracts";
 import { componentsForStrategy, gradeCeilingFor } from "@/lib/military/arsenalComponents";
-import { lotsFromSector } from "@/lib/military/arsenal";
+import { rawLotsFromSector } from "@/lib/military/arsenal";
 import type { Corporation, CorporateSector } from "@/lib/db/types/corporation";
 
 /** One procurement contract as the supplying CEO sees it. */
@@ -73,9 +73,7 @@ export async function loadCorporationDefenceContracts(
       sector != null && componentsForStrategy(sector.strategyId).includes(c.component);
     const components = sector ? componentsForStrategy(sector.strategyId) : [];
     const projected =
-      stillCertified && sector
-        ? Math.floor(lotsFromSector(sector) / Math.max(1, components.length))
-        : 0;
+      stillCertified && sector ? rawLotsFromSector(sector) / Math.max(1, components.length) : 0;
 
     return {
       _id: c._id.toString(),
