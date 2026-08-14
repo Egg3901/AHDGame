@@ -147,7 +147,7 @@ describe("identity B (price): ₳ per unit/day of capacity", () => {
     }
   });
 
-  it("A and B stay mutually consistent: price ÷ labour = 3.0 × 2000 at the anchor", () => {
+  it("A and B stay mutually consistent: price ÷ labour = GROWTH_COST_MULTIPLIER × CAPACITY_REVENUE_PER_WORKER at the anchor", () => {
     for (const type of CORPORATION_TYPES) {
       const ratio =
         capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1) /
