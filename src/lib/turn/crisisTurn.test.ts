@@ -207,6 +207,22 @@ describe("processCrisisTurn", () => {
     );
   });
 
+  it("announceCrisisStart fires the wire event for an out-of-band (admin) crisis", async () => {
+    // Admin-created crises never hit the `turn === startTurn` branch, so the
+    // announcement has to run at creation via this exported helper.
+    const crisis = makeCrisis({ startTurn: 5, effects: [], wireMessageOnStart: "Admin crisis!" });
+
+    const { announceCrisisStart } = await import("./crisisTurn");
+    await announceCrisisStart(db as unknown as Db, crisis, ["state-1"]);
+
+    const { logWireEvent } = await import("@/lib/wireEvent");
+    expect(logWireEvent).toHaveBeenCalledWith(
+      "crisis_start",
+      "Admin crisis!",
+      expect.objectContaining({ href: expect.stringContaining("/world/crises/") })
+    );
+  });
+
   it("does not emit start wire event on turns after startTurn", async () => {
     const crisis = makeCrisis({ startTurn: 10, effects: [], wireMessageOnStart: "Crisis!" });
     db.collectionMocks.crises.find.mockReturnValue({ toArray: async () => [crisis] });
