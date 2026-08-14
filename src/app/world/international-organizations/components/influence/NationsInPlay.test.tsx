@@ -26,6 +26,7 @@ const target = (over: Partial<InfluenceTarget>): InfluenceTarget =>
     turnCapCostLocal: 500,
     costToGate: 3_000,
     resistsAtHalfStrength: false,
+    joinCountdown: null,
     ...over,
   }) as InfluenceTarget;
 
@@ -100,6 +101,56 @@ describe("NationsInPlay", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /^Closest to joining$/i }));
     expect(rows()[0]).toMatch(/eligible/);
+  });
+
+  it("shows the sustain countdown for a nation over the gate", () => {
+    // Over the gate but not yet a member: the share is settled, so what a
+    // player needs to see is how long until it actually applies.
+    render(
+      <NationsInPlay
+        view={
+          {
+            ...VIEW,
+            targets: [
+              target({
+                entityId: "ES",
+                name: "Spain",
+                ourShare: 62,
+                joinCountdown: { turnsHeld: 21, turnsToApply: 3 },
+              }),
+            ],
+          } as unknown as OrgInfluenceView
+        }
+        selectedEntityId={null}
+        onSelect={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Closest to joining$/i }));
+    expect(rows()[0]).toMatch(/applies in 3/);
+  });
+
+  it("says a nation whose run is complete is applying", () => {
+    render(
+      <NationsInPlay
+        view={
+          {
+            ...VIEW,
+            targets: [
+              target({
+                entityId: "ES",
+                name: "Spain",
+                ourShare: 62,
+                joinCountdown: { turnsHeld: 24, turnsToApply: 0 },
+              }),
+            ],
+          } as unknown as OrgInfluenceView
+        }
+        selectedEntityId={null}
+        onSelect={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Closest to joining$/i }));
+    expect(rows()[0]).toMatch(/applying to join/);
   });
 
   it("shows only nations under a flashpoint, soonest to settle first", () => {

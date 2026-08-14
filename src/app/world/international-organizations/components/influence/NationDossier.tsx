@@ -89,6 +89,33 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
             : ` — already past the ${view.joinShare} it takes to join.`}{" "}
           A member that falls to {view.leaveShare} and stays there leaves the bloc.
         </p>
+        {/* Over the gate is only the first step. The turn engine makes a nation
+            hold the gate for a sustained run before it even applies, then the
+            members vote — so a share past 60 that has not "joined" is working as
+            designed, not stuck. This line is where a player sees the clock. */}
+        {target.joinCountdown && (
+          <p className="text-body-xs text-muted">
+            {target.joinCountdown.turnsToApply > 0 ? (
+              <>
+                It has held above the {view.joinShare} for{" "}
+                <span className="font-mono tabular-nums text-foreground">
+                  {target.joinCountdown.turnsHeld}/{view.sustainTurns}
+                </span>{" "}
+                turns. If it holds, it applies to join in{" "}
+                <span className="font-mono tabular-nums text-foreground">
+                  {target.joinCountdown.turnsToApply}
+                </span>{" "}
+                more turn{target.joinCountdown.turnsToApply === 1 ? "" : "s"}, then the members vote
+                it in. Drop it back below the {view.joinShare} and the clock resets.
+              </>
+            ) : (
+              <>
+                It has held above the {view.joinShare} for the full {view.sustainTurns} turns and is
+                applying to join — the members&rsquo; vote now decides.
+              </>
+            )}
+          </p>
+        )}
       </div>
 
       {modifiers.length > 0 && (
