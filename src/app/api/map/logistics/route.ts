@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     const db = await getDb();
 
     // Latest ledger turn, country's state ids, and freight capacity by state.
-    const [latest, countryStates, freightPrice] = await Promise.all([
+    const [latest, countryStates, freightPrice, openLogistics] = await Promise.all([
       db
         .collection<SourcingNetworkDoc>("sourcingNetworkLoad")
         .find({})
@@ -41,19 +41,35 @@ export async function GET(request: Request) {
         .find({ countryId }, { projection: { _id: 1 } })
         .toArray(),
       db.collection<CommodityPrice>("commodityPrices").findOne({ commodity: "freight" }),
+      db
+        .collection<{ stateId: string; revenue: number }>("unownedSectors")
+        .aggregate<{ _id: string; revenue: number }>([
+          { $match: { countryId, sectorType: "logistics" } },
+          { $group: { _id: "$stateId", revenue: { $sum: "$revenue" } } },
+        ])
+        .toArray(),
     ]);
 
     const networkDoc = latest[0];
     const stateIds = new Set(countryStates.map((s) => s._id));
     const stateSupply = freightPrice?.stateSupply ?? {};
+    const openMarketByState = new Map(
+      openLogistics.map((row) => [row._id, Number(row.revenue) || 0])
+    );
 
     const states: Record<string, FreightDemandEntry> = {};
 
-    // Seed every country state that has freight capacity (even with 0 haul).
+    // Show every state.  A dark/amber state has open logistics market but no
+    // operating capacity; unowned market is opportunity, never fake supply.
     for (const stateId of stateIds) {
       const capacity = Number(stateSupply[stateId] ?? 0);
-      if (!(capacity > 0)) continue;
-      states[stateId] = { bulk: 0, special: 0, total: 0, capacity };
+      states[stateId] = {
+        bulk: 0,
+        special: 0,
+        total: 0,
+        capacity,
+        openMarket: openMarketByState.get(stateId) ?? 0,
+      };
     }
 
     if (networkDoc) {
@@ -68,6 +84,7 @@ export async function GET(request: Request) {
           special,
           total: bulk + special,
           capacity: prev?.capacity ?? capacity,
+          openMarket: prev?.openMarket ?? openMarketByState.get(stateId) ?? 0,
         };
       }
     }

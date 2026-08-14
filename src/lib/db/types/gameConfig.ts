@@ -189,6 +189,17 @@ export interface GameConfig {
    */
   marketSystemModeUpdatedTurn?: number;
   /**
+   * Geographic freight rollout. Shadow records routes for calibration; active
+   * also feeds delivered state inputs into next turn's plant throughput.
+   */
+  freightSettlementMode?: "shadow" | "active";
+  /** Username of the admin who last changed the freight-settlement rollout. */
+  freightSettlementModeUpdatedBy?: string;
+  /** When the freight-settlement rollout was last changed (ISO 8601). */
+  freightSettlementModeUpdatedAt?: string;
+  /** World turn at which the freight-settlement rollout was last changed. */
+  freightSettlementModeUpdatedTurn?: number;
+  /**
    * SIM-ONLY turn-phase profile (headless worldsim; never set in prod).
    * "elections-only" makes processTurn() skip the economy/finance/ledger
    * phases (see ELECTIONS_SKIP_PHASES in src/simulation/phases/simTurnProfiles.ts)
