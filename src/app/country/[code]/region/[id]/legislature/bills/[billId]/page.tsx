@@ -27,6 +27,7 @@ import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { VetoMessageModal } from "@/app/country/[code]/region/[id]/office/tabs/legislation/VetoMessageModal";
 import { VoteSeatingChart } from "@/components/legislature/dispatch/VoteSeatingChart";
 import { CardSkeleton, Skeleton } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 
 function StateBillDetailContent() {
   const params = useParams<{ code: string; id: string; billId: string }>();
@@ -241,7 +242,9 @@ function StateBillDetailContent() {
                 </span>
               )}
             </span>
-            <span>Introduced {new Date(bill.proposedAt).toLocaleDateString("en-US")}</span>
+            <span>
+              Introduced <LocalTime value={bill.proposedAt} options={{ dateStyle: "medium" }} />
+            </span>
           </div>
 
           {bill.provisions?.length > 0 && (

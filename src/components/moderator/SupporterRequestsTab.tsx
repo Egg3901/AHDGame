@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface SupporterRequestRow {
   _id: string;
@@ -115,7 +116,7 @@ export function SupporterRequestsTab() {
                       By {r.requesterName}
                       {r.requesterUsername ? ` (@${r.requesterUsername})` : ""} | Tier:{" "}
                       {tierLabel(r.requesterTier)} |{" "}
-                      {new Date(r.createdAt).toLocaleDateString("en-US")}
+                      <LocalTime value={r.createdAt} options={{ dateStyle: "medium" }} />
                     </p>
                     {r.kind === "npp-rename" && r.nppSequentialId != null && (
                       <p className="text-xs text-muted mt-1">Politician #{r.nppSequentialId}</p>

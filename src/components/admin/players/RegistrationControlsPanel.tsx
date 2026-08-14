@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface RegistrationStatus {
   enabled: boolean;
@@ -136,7 +137,7 @@ export function RegistrationControlsPanel() {
                 {" "}
                 at{" "}
                 <span className="font-medium text-foreground">
-                  {new Date(registration.disabledAt).toLocaleString("en-US")}
+                  <LocalTime value={registration.disabledAt} />
                 </span>
               </>
             )}
@@ -191,7 +192,7 @@ export function RegistrationControlsPanel() {
                 {" "}
                 at{" "}
                 <span className="font-medium text-foreground">
-                  {new Date(collision.enabledAt).toLocaleString("en-US")}
+                  <LocalTime value={collision.enabledAt} />
                 </span>
               </>
             )}

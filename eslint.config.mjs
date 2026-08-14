@@ -91,9 +91,14 @@ const eslintConfig = defineConfig([
       // the UI and GlitchTip. Warn (not error) because there is a large existing
       // backlog to migrate to fetchJson incrementally; the warnings are the backlog.
       "local/no-silent-fetch-catch": "warn",
-      // Surface implicit-locale date/time formatting in render (React #418 source).
-      // Warn for the same incremental-migration reason.
-      "local/no-implicit-locale-datetime": "warn",
+      // Every user-facing timestamp must render in the VIEWER's local timezone, not
+      // the server's UTC (feedback suggestion #280). Date/time formatting in a client
+      // component without a pinned timezone renders UTC on the server and local in the
+      // browser — hydration #418 AND a wrong-timezone display. Error, not warn: the
+      // whole existing surface was migrated to <LocalTime>/<RelativeTime>, so this now
+      // holds the line. The rare string-context exception (i18n interpolation, tooltip
+      // attribute) carries an inline disable with a documented reason.
+      "local/no-implicit-locale-datetime": "error",
       // Async auth/validation guards must be awaited. An un-awaited guard returns
       // a truthy Promise, so `if (requireAuth())` never blocks and the route runs
       // unauthenticated. Error, not warn: zero existing violations, and the

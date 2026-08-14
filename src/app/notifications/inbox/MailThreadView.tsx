@@ -5,6 +5,7 @@ import type { InboxItem } from "@/lib/inbox";
 import type { MailMessage } from "@/lib/inbox/mailThreads";
 import { Avatar } from "./Avatar";
 import { Button } from "@/components/ui/Button";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface MailThreadViewProps {
   item: InboxItem;
@@ -191,10 +192,7 @@ export function MailThreadView({ item, onArchive, onSent }: MailThreadViewProps)
                   <p
                     className={`mt-1 text-[10px] ${isYou ? "text-primary/60 text-right" : "text-muted"}`}
                   >
-                    {new Date(msg.time).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    <LocalTime value={msg.time} options={{ hour: "2-digit", minute: "2-digit" }} />
                   </p>
                 )}
               </div>

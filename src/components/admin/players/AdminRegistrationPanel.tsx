@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface AdminRegistrationStatus {
   enabled: boolean;
@@ -136,7 +137,7 @@ export function AdminRegistrationPanel() {
               {" "}
               at{" "}
               <span className="font-medium text-foreground">
-                {new Date(status.disabledAt).toLocaleString("en-US")}
+                <LocalTime value={status.disabledAt} />
               </span>
             </>
           )}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState, Skeleton } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 import { coalitionApiUrl } from "@/lib/urls";
 import type {
   CoalitionPrioritiesPayload,
@@ -255,7 +256,9 @@ export function CoalitionPrioritiesPanel({
               {priority.expiresAt && (
                 // wall-clock by design: coalition priorities use expiresOnTurn for resolution;
                 // expiresAt is a legacy display field being phased out
-                <span>Expires: {new Date(priority.expiresAt).toLocaleString("en-US")}</span>
+                <span>
+                  Expires: <LocalTime value={priority.expiresAt} />
+                </span>
               )}
               <span>Created by {priority.createdByName ?? "Unknown"}</span>
             </div>

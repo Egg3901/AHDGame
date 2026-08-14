@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface ActivityLogEvent {
   _id: string;
@@ -93,10 +94,6 @@ const TYPE_OPTIONS = [
 
 const INPUT_CLS =
   "min-h-[40px] rounded border border-card-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary";
-
-function formatTimestamp(ts: string) {
-  return new Date(ts).toLocaleString("en-US");
-}
 
 function EventSummary({ event, isMod }: { event: ActivityLogEvent; isMod: boolean }) {
   if (event.type === "turn_summary") {
@@ -476,7 +473,7 @@ export function ActivityLogTab({
                   onClick={() => toggleExpand(event._id)}
                 >
                   <td className="px-4 py-3 text-xs text-muted whitespace-nowrap">
-                    {formatTimestamp(event.timestamp)}
+                    <LocalTime value={event.timestamp} />
                   </td>
                   <td className="px-4 py-3">
                     <span

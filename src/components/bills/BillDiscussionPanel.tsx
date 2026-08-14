@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
 import { Skeleton } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
+import { LocalTime } from "@/components/time/LocalTime";
 import type {
   BillDiscussionListResult,
   BillDiscussionView,
@@ -252,7 +253,7 @@ export function BillDiscussionPanel({ apiBase, chamberLabel }: BillDiscussionPan
                     <span>{post.reactions.disagree}</span>
                   </button>
                   <span className="text-muted/60">
-                    {new Date(post.createdAt).toLocaleString("en-US")}
+                    <LocalTime value={post.createdAt} />
                   </span>
                 </div>
               </div>

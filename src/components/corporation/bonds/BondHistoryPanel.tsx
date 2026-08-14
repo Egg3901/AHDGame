@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui";
 import { countryUrl } from "@/lib/urls";
+import { LocalTime } from "@/components/time/LocalTime";
 import {
   useBondHistory,
   type BondHistoryDirection,
@@ -202,14 +203,14 @@ function TurnAccordion({ turn, entries }: { turn: number; entries: BondHistoryEn
                   : e.amount < 0
                     ? "text-error"
                     : "text-muted";
-                const time = new Date(e.createdAt).toLocaleTimeString("en-US", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                });
                 return (
                   <tr key={e.id} className="align-top">
-                    <td className="px-4 py-2 text-muted whitespace-nowrap">{time}</td>
+                    <td className="px-4 py-2 text-muted whitespace-nowrap">
+                      <LocalTime
+                        value={e.createdAt}
+                        options={{ hour: "2-digit", minute: "2-digit", second: "2-digit" }}
+                      />
+                    </td>
                     <td className="px-4 py-2">
                       <div className="font-medium text-foreground">{entryLabel(e)}</div>
                       {e.units != null && (

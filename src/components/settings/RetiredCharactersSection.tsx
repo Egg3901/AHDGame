@@ -6,6 +6,7 @@ import Image from "next/image";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 import { SeasonRecapStory } from "@/components/recap/SeasonRecapStory";
+import { LocalTime } from "@/components/time/LocalTime";
 import type { CharacterRecap } from "@/lib/recap/types";
 
 interface RetiredCharacterData {
@@ -42,12 +43,7 @@ const REASON_LABELS: Record<string, { label: string; color: string }> = {
   admin_action: { label: "Admin Action", color: "bg-error/15 text-error border-error/30" },
 };
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    year: "numeric",
-  });
-}
+const DATE_LABEL_OPTIONS = { month: "short", year: "numeric" } as const;
 
 export function RetiredCharactersSection() {
   const [retired, setRetired] = useState<RetiredCharacterData[]>([]);
@@ -151,7 +147,8 @@ export function RetiredCharactersSection() {
                   <p className="text-xs text-muted mt-0.5">Highest office: {snap.highestOffice}</p>
                 )}
                 <p className="text-xs text-muted mt-1">
-                  {formatDate(snap.createdAt)} &mdash; {formatDate(rc.retiredAt)}
+                  <LocalTime value={snap.createdAt} options={DATE_LABEL_OPTIONS} /> &mdash;{" "}
+                  <LocalTime value={rc.retiredAt} options={DATE_LABEL_OPTIONS} />
                 </p>
 
                 {/* Stats row */}

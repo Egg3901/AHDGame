@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface Migration {
   id: string;
@@ -258,7 +259,7 @@ export function MigrationsTab() {
                 <p className="mt-1 text-sm text-muted">{migration.description}</p>
                 {migration.completedAt && (
                   <p className="mt-2 text-xs text-muted">
-                    Completed: {new Date(migration.completedAt).toLocaleString("en-US")}
+                    Completed: <LocalTime value={migration.completedAt} />
                   </p>
                 )}
                 {migration.result && migration.status === "completed" && (
@@ -331,7 +332,7 @@ export function MigrationsTab() {
                 <div>
                   <p className="font-mono text-sm">{record.id}</p>
                   <p className="mt-1 text-xs text-muted">
-                    Completed: {new Date(record.completedAt).toLocaleString("en-US")}
+                    Completed: <LocalTime value={record.completedAt} />
                   </p>
                   {record.result && <p className="mt-1 text-xs text-muted">{record.result}</p>}
                 </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface ExtractionFlags {
   prospectingEnabled: boolean;
@@ -159,8 +160,7 @@ export function ExtractionAdminPanel() {
                 <p className="mt-0.5 text-xs text-muted">{toggle.description}</p>
                 {lastChange && (
                   <p className="mt-1 text-[11px] text-muted/70">
-                    Last changed by {lastChange.by} (
-                    {new Date(lastChange.at).toLocaleString("en-US")})
+                    Last changed by {lastChange.by} (<LocalTime value={lastChange.at} />)
                   </p>
                 )}
               </div>

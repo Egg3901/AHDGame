@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { formatDate } from "@/lib/utils/formatters";
 import { SubTabBar } from "@/components/admin/tabs/SubTabBar";
+import { LocalTime } from "@/components/time/LocalTime";
 
 type TurnPhaseStatus = "pending" | "running" | "completed" | "skipped" | "failed" | "notReached";
 
@@ -392,7 +393,9 @@ export function LogsTab() {
                           </div>
                           <div className="mt-0.5 flex items-center gap-3 text-xs text-muted">
                             <span>Duration: {log.durationMs}ms</span>
-                            <span>Game: {new Date(log.gameTime).toLocaleString("en-US")}</span>
+                            <span>
+                              Game: <LocalTime value={log.gameTime} />
+                            </span>
                           </div>
                         </div>
                       </div>

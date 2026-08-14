@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Skeleton } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 import type { OrderDisplay } from "@/app/country/[code]/forex/types";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -16,15 +17,12 @@ function formatAmount(n: number): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
-function formatDate(d: Date | string): string {
-  const date = new Date(d);
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const DATE_LABEL_OPTIONS = {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+} as const;
 
 export function TradeHistory() {
   const [orders, setOrders] = useState<OrderDisplay[]>([]);
@@ -121,7 +119,7 @@ export function TradeHistory() {
             {orders.map((order, idx) => (
               <tr key={order._id} className={idx % 2 === 0 ? "bg-card" : "bg-card-elevated/30"}>
                 <td className="px-4 py-3 text-xs text-muted whitespace-nowrap">
-                  {formatDate(order.createdAt)}
+                  <LocalTime value={order.createdAt} options={DATE_LABEL_OPTIONS} />
                 </td>
                 <td className="px-4 py-3">
                   <span className="text-xs font-medium text-foreground capitalize">

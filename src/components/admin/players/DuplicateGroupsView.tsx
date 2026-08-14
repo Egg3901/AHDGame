@@ -4,6 +4,7 @@ import { getPartyTextColor, getPartyLabel } from "@/lib/utils/politics";
 import { formatDate } from "@/lib/utils/formatters";
 import { Pagination } from "@/components/admin/Pagination";
 import { ACTION_BTN, getLatestNoteText, type DuplicateGroup, type UserData } from "./types";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface DuplicateGroupsViewProps {
   duplicateGroups: DuplicateGroup[];
@@ -279,7 +280,12 @@ export function DuplicateGroupsView({
                         <div className="font-medium text-foreground mb-1">
                           IP Intelligence{" "}
                           <span className="text-muted font-normal">
-                            ({new Date(user.ipDetails.checkedAt).toLocaleDateString("en-US")})
+                            (
+                            <LocalTime
+                              value={user.ipDetails.checkedAt}
+                              options={{ dateStyle: "medium" }}
+                            />
+                            )
                           </span>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1">

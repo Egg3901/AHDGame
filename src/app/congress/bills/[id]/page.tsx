@@ -19,6 +19,7 @@ import { StatusBadge } from "./components/StatusBadge";
 import { VoteBar } from "./components/VoteBar";
 import { VoteTallyTable } from "./components/VoteTallyTable";
 import { VoteListTable } from "./components/VoteListTable";
+import { LocalTime } from "@/components/time/LocalTime";
 import { TimelineStepper } from "./components/TimelineStepper";
 import { OverrideChamberBar } from "./components/OverrideChamberBar";
 import { DeadlineCountdown } from "./components/DeadlineCountdown";
@@ -286,7 +287,9 @@ function BillDetailContent() {
                 </span>
               )}
             </span>
-            <span>Introduced {new Date(bill.proposedAt).toLocaleDateString("en-US")}</span>
+            <span>
+              Introduced <LocalTime value={bill.proposedAt} options={{ dateStyle: "medium" }} />
+            </span>
           </div>
 
           {/* Nat/priv supermajority notice */}

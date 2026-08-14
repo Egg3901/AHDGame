@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Skeleton } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 interface TradeEntry {
@@ -24,14 +25,12 @@ function formatAmount(n: number): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
-function formatDate(d: string): string {
-  return new Date(d).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const DATE_LABEL_OPTIONS = {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+} as const;
 
 export function PublicTradeHistory() {
   const [trades, setTrades] = useState<TradeEntry[]>([]);
@@ -122,7 +121,7 @@ export function PublicTradeHistory() {
             {trades.map((trade, idx) => (
               <tr key={trade._id} className={idx % 2 === 0 ? "bg-card" : "bg-card-elevated/30"}>
                 <td className="px-4 py-3 text-xs text-muted whitespace-nowrap">
-                  {formatDate(trade.createdAt)}
+                  <LocalTime value={trade.createdAt} options={DATE_LABEL_OPTIONS} />
                 </td>
                 <td className="px-4 py-3">
                   <span className="font-mono text-xs font-medium text-foreground">

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import { useGameClock } from "@/contexts/useGameClock";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface NominationDisplay {
   _id: string;
@@ -141,7 +142,7 @@ export function NpcscChairPanel() {
       {isElectionActive && (
         <div className="space-y-2">
           <p className="text-xs text-muted">
-            Election open — closes {new Date(data.election!.endsAt).toLocaleString("en-US")}.{" "}
+            Election open — closes <LocalTime value={data.election!.endsAt} />.{" "}
             {data.eligibilityLabel.replace(/^./, (c) => c.toUpperCase())} may declare and vote.
           </p>
 

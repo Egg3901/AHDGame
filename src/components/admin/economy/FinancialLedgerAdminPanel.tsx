@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { ALL_TX_TYPES, TX_TYPE_LABELS } from "@/lib/financialTxLog/types-extended";
+import { LocalTime } from "@/components/time/LocalTime";
 import type { FinancialTxType } from "@/lib/db/types/financialTxLog";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -98,13 +99,19 @@ function fmtAmount(amount: number, currency: string) {
   return `${sign}${amount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${currency}`;
 }
 
+const LEDGER_TIME_OPTS: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+};
+
+// Only used inside `title=` tooltip attributes, where a <LocalTime> element cannot
+// render. The ledger loads client-side (no SSR value for these rows), so there is no
+// hydration mismatch and toLocaleString already resolves the viewer's local zone.
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  // eslint-disable-next-line local/no-implicit-locale-datetime -- tooltip attribute, client-only render; see LEDGER_TIME_OPTS for the visible column
+  return new Date(iso).toLocaleString("en-US", LEDGER_TIME_OPTS);
 }
 
 function getSuspectFlags(value: TxEntry["suspectFlags"] | unknown): SuspectFlag[] {
@@ -386,7 +393,7 @@ function TransactionTimeline({ apiBase, prefilterSubjectId, prefilterSubjectName
                   >
                     <td className="px-3 py-2 font-mono text-xs">{entry.turn}</td>
                     <td className="px-3 py-2 text-xs text-muted whitespace-nowrap">
-                      {fmtTime(entry.createdAt)}
+                      <LocalTime value={entry.createdAt} options={LEDGER_TIME_OPTS} />
                     </td>
                     <td className="px-3 py-2">
                       <div
@@ -702,10 +709,10 @@ function SuspectAlerts({ apiBase, onDrillIn }: AlertsProps) {
                   {group.flagCount} active flag{group.flagCount !== 1 ? "s" : ""}
                 </span>
                 <span>
-                  {new Date(group.mostRecentAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })}
+                  <LocalTime
+                    value={group.mostRecentAt}
+                    options={{ month: "short", day: "numeric" }}
+                  />
                 </span>
               </div>
               {canReconcile && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 type DiagnosticMode = "conformance" | "drift";
 type Severity = "ok" | "warn" | "critical";
@@ -179,7 +180,7 @@ export function SeedDiagnosticPanel() {
           <p>
             <span className="text-muted">
               {report.mode} · {report.preset} · turn {report.turn} (calendar {report.calendarTurn})
-              · {new Date(report.ranAt).toLocaleString()}
+              · <LocalTime value={report.ranAt} />
             </span>
           </p>
           <p>

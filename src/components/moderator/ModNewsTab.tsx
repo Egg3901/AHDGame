@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type { SerializedPost } from "../news/NewsPost";
+import { LocalTime } from "@/components/time/LocalTime";
 
 export function ModNewsTab() {
   const [posts, setPosts] = useState<SerializedPost[]>([]);
@@ -65,16 +66,6 @@ export function ModNewsTab() {
     } finally {
       setDeleting(null);
     }
-  }
-
-  function formatDate(isoString: string): string {
-    const date = new Date(isoString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   }
 
   function truncateText(text: string, maxLength: number): string {
@@ -149,7 +140,17 @@ export function ModNewsTab() {
                     </span>
                   </div>
                   <p className="text-sm text-muted mb-2">{truncateText(post.content, 200)}</p>
-                  <p className="text-xs text-muted/60">{formatDate(post.createdAt)}</p>
+                  <p className="text-xs text-muted/60">
+                    <LocalTime
+                      value={post.createdAt}
+                      options={{
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }}
+                    />
+                  </p>
                 </div>
 
                 <button

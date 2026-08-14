@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { WikiReviewActions } from "./WikiReviewActions";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface PendingPage {
   _id: string;
@@ -105,7 +106,8 @@ export function WikiReviewTab() {
           <div className="bg-card border border-card-border rounded-lg p-6">
             <h3 className="text-lg font-bold text-foreground mb-2">{selected.title}</h3>
             <p className="text-sm text-muted mb-4">
-              By {selected.authorName} • {new Date(selected.createdAt).toLocaleDateString("en-US")}
+              By {selected.authorName} •{" "}
+              <LocalTime value={selected.createdAt} options={{ dateStyle: "medium" }} />
             </p>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -157,7 +159,8 @@ export function WikiReviewTab() {
                   <h3 className="font-medium text-foreground">{page.title}</h3>
                   <p className="text-sm text-muted mt-1">{page.description}</p>
                   <p className="text-xs text-muted mt-2">
-                    By {page.authorName} • {new Date(page.createdAt).toLocaleDateString("en-US")}
+                    By {page.authorName} •{" "}
+                    <LocalTime value={page.createdAt} options={{ dateStyle: "medium" }} />
                   </p>
                 </div>
                 <span className="px-3 py-1 text-xs font-medium bg-warning/20 border border-warning/30 text-warning rounded-full">

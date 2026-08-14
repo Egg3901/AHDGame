@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { PlayerSelector } from "@/components/PlayerSelector";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface OutcomeEffect {
   type: string;
@@ -585,7 +586,7 @@ export function RandomEventsManager() {
                   <span className="font-semibold text-foreground">{activeInstance.title}</span>
                   <span className="text-xs text-muted">
                     offered turn {activeInstance.offeredAtTurn} · roll {activeInstance.roll} ·
-                    expires {new Date(activeInstance.expiresAtRealtimeMs).toLocaleString("en-US")}
+                    expires <LocalTime value={activeInstance.expiresAtRealtimeMs} />
                   </span>
                 </div>
               </div>
@@ -626,7 +627,7 @@ export function RandomEventsManager() {
                         <td className="py-2 pr-3 text-muted">{row.resolvedTierLabel ?? "—"}</td>
                         <td className="py-2 pr-3 text-muted">{row.roll}</td>
                         <td className="py-2 text-xs text-muted">
-                          {row.resolvedAt ? new Date(row.resolvedAt).toLocaleString("en-US") : "—"}
+                          {row.resolvedAt ? <LocalTime value={row.resolvedAt} /> : "—"}
                         </td>
                       </tr>
                     ))}

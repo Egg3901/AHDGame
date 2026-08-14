@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CardSkeleton, Skeleton } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -244,7 +245,7 @@ export function DiscussionTab({ apiBasePath, isModerator }: DiscussionTabProps) 
                     <span className="text-sm font-medium text-foreground">{post.authorName}</span>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted">
-                        {new Date(post.createdAt).toLocaleString("en-US")}
+                        <LocalTime value={post.createdAt} />
                       </span>
                       {isModerator && (
                         <button

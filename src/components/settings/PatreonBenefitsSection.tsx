@@ -10,6 +10,7 @@ import type {
   SupporterProvider,
 } from "@/lib/db/types";
 import { ProfileBorder } from "@/components/patreon/ProfileBorder";
+import { LocalTime } from "@/components/time/LocalTime";
 
 type PatreonAdPreference = "ad-free" | "player-only" | "all-ads";
 
@@ -325,12 +326,17 @@ export function PatreonBenefitsSection() {
               Status
             </p>
             <p className="mt-1 text-sm text-foreground">
-              {state?.patreonExpiresAt
-                ? // wall-clock by design: patreon subscription billing runs on real time
-                  `Benefits active until ${new Date(state.patreonExpiresAt).toLocaleDateString("en-US")}.`
-                : accessLevel === "supporter" || accessLevel === "supporter-plus"
-                  ? "Membership is currently active."
-                  : "Previewing locked supporter controls."}
+              {state?.patreonExpiresAt ? (
+                // wall-clock by design: patreon subscription billing runs on real time
+                <>
+                  Benefits active until{" "}
+                  <LocalTime value={state.patreonExpiresAt} options={{ dateStyle: "medium" }} />.
+                </>
+              ) : accessLevel === "supporter" || accessLevel === "supporter-plus" ? (
+                "Membership is currently active."
+              ) : (
+                "Previewing locked supporter controls."
+              )}
             </p>
           </div>
         </div>

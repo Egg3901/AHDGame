@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { EmptyState } from "@/components/ui";
 import { Pagination } from "../Pagination";
 import type { CountryId } from "@/lib/constants/countries";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface CabinetNominationRow {
   id: string;
@@ -125,8 +126,7 @@ export function AdminCabinetSection({ countryId }: AdminCabinetSectionProps) {
                     {nom.nomineeParty && ` (${nom.nomineeParty})`}
                   </p>
                   <p className="text-xs text-muted">
-                    Proposed by {nom.proposedByPresidentName} ·{" "}
-                    {new Date(nom.proposedAt).toLocaleString("en-US")}
+                    Proposed by {nom.proposedByPresidentName} · <LocalTime value={nom.proposedAt} />
                   </p>
                   <div className="text-xs text-muted mt-1 flex gap-4 flex-wrap">
                     <span>
@@ -134,7 +134,7 @@ export function AdminCabinetSection({ countryId }: AdminCabinetSectionProps) {
                     </span>
                     {nom.votingEndsAt && (
                       <span className="text-yellow-400">
-                        Closes {new Date(nom.votingEndsAt).toLocaleString("en-US")}
+                        Closes <LocalTime value={nom.votingEndsAt} />
                       </span>
                     )}
                   </div>

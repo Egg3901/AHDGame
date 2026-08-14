@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import type { Task, TaskStatus } from "@/lib/db/types";
 import type { TaskComment } from "@/lib/db/types/taskComment";
+import { LocalTime } from "@/components/time/LocalTime";
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
   { value: "pending", label: "Pending" },
@@ -181,7 +182,7 @@ export function TaskDetailModal({ task, onClose, onStatusChange, onDelete }: Tas
                       </span>
                     )}
                     <span className="text-[10px] text-muted ml-auto">
-                      {new Date(c.createdAt).toLocaleString("en-US")}
+                      <LocalTime value={c.createdAt} />
                     </span>
                   </div>
                   <p className="text-sm text-foreground leading-relaxed">{c.body}</p>
@@ -233,7 +234,7 @@ export function TaskDetailModal({ task, onClose, onStatusChange, onDelete }: Tas
               Delete task
             </button>
             <span className="text-xs text-muted">
-              Created {new Date(task.createdAt).toLocaleDateString("en-US")}
+              Created <LocalTime value={task.createdAt} options={{ dateStyle: "medium" }} />
             </span>
           </div>
         </div>
