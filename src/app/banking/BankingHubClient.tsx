@@ -19,6 +19,15 @@ import { formatBankMoney, formatRatePercent } from "@/components/banking/formatB
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import type { BankCharterType } from "@/lib/db/types/bank";
+import {
+  CHARACTER_LOAN_SPREAD_PP,
+  NAMED_LOAN_DTI_MAX_FRACTION,
+  bindingNamedLoanCap,
+  maxPrincipalFromIncome,
+  namedLoanPaymentDue,
+  namedLoanPrincipalCap,
+  remainingLoanTurns,
+} from "@/lib/banking/lendingMath";
 
 type HubCentralBank = {
   currency: CurrencyCode;
@@ -45,6 +54,8 @@ type HubPrivateBank = {
   warningBand: "green" | "amber" | "red" | null;
   confidence: number | null;
   totalDeposits: number;
+  cashReserves: number;
+  lendableHeadroom: number;
   href: string;
 };
 
@@ -63,6 +74,7 @@ type HubCeoCorporation = {
   id: string;
   name: string;
   liquidCapital: number;
+  incomePerTurn: number;
   currency: CurrencyCode;
 };
 
@@ -73,6 +85,7 @@ type HubLoan = {
   bankSequentialId: number | null;
   currency: CurrencyCode;
   borrowerType: "character" | "corporation";
+  borrowerId: string | null;
   borrowerName: string;
   creditedTo: "personalCash" | "corporationLiquidCapital";
   principal: number;
@@ -93,6 +106,8 @@ type HubPayload = {
   privateBanks: HubPrivateBank[];
   savings: HubSavingsRow[];
   personalCash: Partial<Record<CurrencyCode, number>>;
+  personalIncomeByCurrency: Partial<Record<CurrencyCode, number>>;
+  currentTurn: number;
   ceoCorporations: HubCeoCorporation[];
   loans: HubLoan[];
   lendingBanks: HubPrivateBank[];
@@ -253,6 +268,9 @@ export function BankingHubClient() {
               banks={data.lendingBanks}
               ceoCorporations={data.ceoCorporations}
               personalCash={data.personalCash ?? {}}
+              personalIncomeByCurrency={data.personalIncomeByCurrency ?? {}}
+              currentTurn={data.currentTurn ?? 1}
+              loans={data.loans ?? []}
               hasCharacter={!!data.characterId}
               onChanged={load}
               showToast={showToast}
@@ -683,6 +701,9 @@ function GetLoanForm({
   banks,
   ceoCorporations,
   personalCash,
+  personalIncomeByCurrency,
+  currentTurn,
+  loans,
   hasCharacter,
   onChanged,
   showToast,
@@ -690,6 +711,9 @@ function GetLoanForm({
   banks: HubPrivateBank[];
   ceoCorporations: HubCeoCorporation[];
   personalCash: Partial<Record<CurrencyCode, number>>;
+  personalIncomeByCurrency: Partial<Record<CurrencyCode, number>>;
+  currentTurn: number;
+  loans: HubLoan[];
   hasCharacter: boolean;
   onChanged: () => Promise<void>;
   showToast: (msg: string, type?: "success" | "error" | "info" | "warning") => void;
@@ -707,6 +731,54 @@ function GetLoanForm({
 
   const selected = banks.find((b) => b.corporationId === bankId);
   const selectedCorp = ceoCorporations.find((c) => c.id === corpId);
+  const term = parseInt(termTurns, 10);
+  const quotedRatePercent =
+    selected == null
+      ? 0
+      : borrowerType === "character"
+        ? selected.lendingRatePercent + CHARACTER_LOAN_SPREAD_PP
+        : selected.lendingRatePercent;
+  const incomePerTurn =
+    borrowerType === "corporation"
+      ? (selectedCorp?.incomePerTurn ?? 0)
+      : selected
+        ? (personalIncomeByCurrency[selected.currency] ?? 0)
+        : 0;
+  const committedPaymentPerTurn = loans
+    .filter((loan) => {
+      if (loan.status !== "current" && loan.status !== "arrears") return false;
+      if (borrowerType === "character") return loan.borrowerType === "character";
+      return loan.borrowerType === "corporation" && loan.borrowerId === selectedCorp?.id;
+    })
+    .reduce(
+      (sum, loan) =>
+        sum +
+        namedLoanPaymentDue(
+          loan.outstanding,
+          loan.ratePercent,
+          remainingLoanTurns(loan.originatedTurn, loan.termTurns, currentTurn)
+        ),
+      0
+    );
+  const incomeCap = maxPrincipalFromIncome({
+    incomePerTurn,
+    ratePercent: quotedRatePercent,
+    termTurns: Number.isFinite(term) ? term : 12,
+    committedPaymentPerTurn,
+  });
+  const capInput = {
+    bankCashReserves: selected?.cashReserves ?? 0,
+    lendableHeadroom: selected?.lendableHeadroom ?? 0,
+    incomeCap,
+  };
+  const maxPrincipal = namedLoanPrincipalCap(capInput);
+  const bind = bindingNamedLoanCap(capInput);
+  const bindLabel =
+    bind === "cashReserves"
+      ? "the bank's cash reserves"
+      : bind === "headroom"
+        ? "deposit headroom"
+        : `income (${Math.round(NAMED_LOAN_DTI_MAX_FRACTION * 100)}% of demonstrated per-turn income, after existing private-bank payments)`;
 
   const submit = async () => {
     const p = Number(principal);
@@ -717,6 +789,13 @@ function GetLoanForm({
     }
     if (!Number.isFinite(term) || term < 4 || term > 120) {
       showToast("Term must be between 4 and 120 turns", "error");
+      return;
+    }
+    if (selected && p > maxPrincipal) {
+      showToast(
+        `Principal exceeds the private-bank maximum (${formatBankMoney(maxPrincipal, selected.currency)}). That cap is not bond issuance headroom.`,
+        "error"
+      );
       return;
     }
     if (!bankId) {
@@ -895,6 +974,22 @@ function GetLoanForm({
                   : ""
               }. They do not appear in savings or corporation liquid capital.`}
         </p>
+        {selected && (
+          <div className="rounded-lg border border-card-border bg-background/45 px-3 py-2 text-xs leading-relaxed text-muted">
+            <p>
+              Private-bank maximum:{" "}
+              <span className="font-mono font-semibold text-foreground">
+                {formatBankMoney(maxPrincipal, selected.currency)}
+              </span>
+              {maxPrincipal > 0 ? ` (limited by ${bindLabel}).` : ` — ${bindLabel} is exhausted.`}
+            </p>
+            <p className="mt-1">
+              This is not bond issuance headroom. Named loans are capped by the bank&apos;s own cash
+              reserves, leftover deposit headroom, and{" "}
+              {Math.round(NAMED_LOAN_DTI_MAX_FRACTION * 100)}% of demonstrated income.
+            </p>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <label className="block space-y-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
             Principal

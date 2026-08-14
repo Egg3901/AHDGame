@@ -14,7 +14,13 @@ import { currencyCentralBankUrl } from "@/lib/urls";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { getEffectiveBankRates } from "@/lib/banking/rates";
-import { listBorrowerFacingLoans } from "@/lib/banking/lending";
+import { getCashReserves } from "@/lib/banking/bankCash";
+import { getLendableHeadroom, getReserveRequirement } from "@/lib/banking/reserves";
+import {
+  averageCorpIncomePerTurn,
+  characterIncomeInLoanCurrency,
+  listBorrowerFacingLoans,
+} from "@/lib/banking/lending";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { getGameState } from "@/lib/gameState";
 import { getCountryDisplayName } from "@/lib/constants/countries";
@@ -55,6 +61,8 @@ type HubPrivateBank = {
   warningBand: "green" | "amber" | "red" | null;
   confidence: number | null;
   totalDeposits: number;
+  cashReserves: number;
+  lendableHeadroom: number;
   href: string;
 };
 
@@ -153,10 +161,12 @@ async function handleGET() {
 
     let privateBanks: HubPrivateBank[] = [];
     const savings: HubSavingsRow[] = [];
+    let personalIncomeByCurrency: Partial<Record<CurrencyCode, number>> = {};
     let ceoCorporations: Array<{
       id: string;
       name: string;
       liquidCapital: number;
+      incomePerTurn: number;
       currency: CurrencyCode;
     }> = [];
     let loans: Awaited<ReturnType<typeof listBorrowerFacingLoans>> = [];
@@ -185,12 +195,18 @@ async function handleGET() {
         })
         .toArray()) as CharteredCorp[];
 
+      const reserveByCurrency = new Map<CurrencyCode, number>();
       privateBanks = await Promise.all(
         chartered.map(async (corp) => {
           const charter = corp.bankCharter!;
           const rates = await getEffectiveBankRates(db, charter);
           const countryId = (corp.countryId ??
             getCountryIdForCurrency(charter.currency)) as CountryId;
+          let reserveRatio = reserveByCurrency.get(charter.currency);
+          if (reserveRatio === undefined) {
+            reserveRatio = await getReserveRequirement(db, charter.currency);
+            reserveByCurrency.set(charter.currency, reserveRatio);
+          }
           return {
             corporationId: corp._id.toString(),
             sequentialId: corp.sequentialId ?? null,
@@ -205,6 +221,8 @@ async function handleGET() {
             warningBand: charter.warningBand ?? null,
             confidence: typeof charter.confidence === "number" ? charter.confidence : null,
             totalDeposits: charter.totalDeposits ?? 0,
+            cashReserves: getCashReserves(charter),
+            lendableHeadroom: getLendableHeadroom(charter, reserveRatio),
             href: `/corporation/${corporationPathIdFromDoc({
               _id: corp._id as ObjectId,
               sequentialId: corp.sequentialId,
@@ -267,17 +285,35 @@ async function handleGET() {
           countryId: 1,
         })
         .toArray();
-      ceoCorporations = owned.map((c) => ({
-        id: c._id.toString(),
-        name: c.name,
-        liquidCapital: c.liquidCapital ?? 0,
-        currency: (resolveCorpLiquidCurrencyCode(c) ?? "USD") as CurrencyCode,
-      }));
+      ceoCorporations = await Promise.all(
+        owned.map(async (c) => ({
+          id: c._id.toString(),
+          name: c.name,
+          liquidCapital: c.liquidCapital ?? 0,
+          incomePerTurn: await averageCorpIncomePerTurn(db, c._id, gameState?.currentTurn ?? 1),
+          currency: (resolveCorpLiquidCurrencyCode(c) ?? "USD") as CurrencyCode,
+        }))
+      );
       loans = await listBorrowerFacingLoans(db, {
         characterId: character._id,
         characterName: character.name ?? "You",
         corporations: owned.map((c) => ({ id: c._id, name: c.name })),
       });
+      const lendingCurrencies = [
+        ...new Set(
+          privateBanks
+            .filter((b) => b.charterType === "retail" || b.charterType === "universal")
+            .map((b) => b.currency)
+        ),
+      ];
+      personalIncomeByCurrency = Object.fromEntries(
+        await Promise.all(
+          lendingCurrencies.map(async (code) => [
+            code,
+            await characterIncomeInLoanCurrency(db, character, code),
+          ])
+        )
+      ) as Partial<Record<CurrencyCode, number>>;
     }
 
     return NextResponse.json({
@@ -290,6 +326,8 @@ async function handleGET() {
       privateBanks,
       savings,
       personalCash,
+      personalIncomeByCurrency,
+      currentTurn: gameState?.currentTurn ?? 1,
       ceoCorporations,
       loans,
       lendingBanks: privateBanks.filter(

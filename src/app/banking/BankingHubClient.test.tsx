@@ -58,6 +58,8 @@ const payload = {
       warningBand: "green",
       confidence: 0.91,
       totalDeposits: 2_400_000,
+      cashReserves: 1_200_000,
+      lendableHeadroom: 900_000,
       href: "/corporation/17?tab=bank",
     },
   ],
@@ -73,8 +75,16 @@ const payload = {
     },
   ],
   personalCash: { USD: 40_000 },
+  personalIncomeByCurrency: { USD: 50_000 },
+  currentTurn: 115,
   ceoCorporations: [
-    { id: "corp-1", name: "Acme Industrial", liquidCapital: 2_000_000, currency: "USD" },
+    {
+      id: "corp-1",
+      name: "Acme Industrial",
+      liquidCapital: 2_000_000,
+      incomePerTurn: 80_000,
+      currency: "USD",
+    },
   ],
   loans: [
     {
@@ -84,6 +94,7 @@ const payload = {
       bankSequentialId: 17,
       currency: "USD",
       borrowerType: "corporation",
+      borrowerId: "corp-1",
       borrowerName: "Acme Industrial",
       creditedTo: "corporationLiquidCapital",
       principal: 1_000_000,
@@ -94,7 +105,26 @@ const payload = {
       status: "current",
     },
   ],
-  lendingBanks: [],
+  lendingBanks: [
+    {
+      corporationId: "bank-1",
+      sequentialId: 17,
+      name: "Continental Trust",
+      countryId: "US",
+      countryName: "United States",
+      currency: "USD",
+      operatorType: "player",
+      charterType: "universal",
+      depositRatePercent: 3.1,
+      lendingRatePercent: 7.5,
+      warningBand: "green",
+      confidence: 0.91,
+      totalDeposits: 2_400_000,
+      cashReserves: 1_200_000,
+      lendableHeadroom: 900_000,
+      href: "/corporation/17?tab=bank",
+    },
+  ],
 };
 
 beforeEach(() => {
@@ -126,7 +156,9 @@ describe("BankingHubClient", () => {
     expect(screen.getByLabelText("Savings holder for USD")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Your loans" })).toBeTruthy();
     expect(screen.getByText("Acme Industrial liquid capital")).toBeTruthy();
-    expect(screen.getByText("Continental Trust")).toBeTruthy();
+    expect(screen.getAllByText("Continental Trust").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Private-bank maximum/)).toBeTruthy();
+    expect(screen.getByText(/not bond issuance headroom/i)).toBeTruthy();
 
     const primaryLink = screen.getByRole("link", { name: /Open policy desk/ });
     expect(primaryLink.getAttribute("href")).toBe("/centralbank/usd");
