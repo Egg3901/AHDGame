@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
 
 describe("sectorRevenueTaxProvider", () => {
   let db: MockDb;
   beforeEach(() => {
     vi.clearAllMocks();
+    resetCorpFxRateCacheForTests();
     db = createMockDb();
   });
 
@@ -31,7 +33,9 @@ describe("sectorRevenueTaxProvider", () => {
     const { sectorRevenueTaxProvider } = await import("./providers");
     const out = await sectorRevenueTaxProvider(db as unknown as Db);
 
-    expect(out.ownedByState.get("s1")).toEqual([{ revenue: 100, currentGrowthRate: 2 }]);
+    expect(out.ownedByState.get("s1")).toEqual([
+      { revenue: 100, currentGrowthRate: 2, hostRevenue: 100 },
+    ]);
     expect(out.unownedByState.get("s1")).toEqual([{ revenue: 50 }]);
     expect(out.federalSalesTaxByCountry.get("US")).toBe(7);
     expect(out.stateSalesTaxByState.get("s1")).toBe(6);
@@ -77,7 +81,9 @@ describe("sectorRevenueTaxProvider", () => {
 
     const { sectorRevenueTaxProvider } = await import("./providers");
     const out = await sectorRevenueTaxProvider(db as unknown as Db);
-    expect(out.ownedByState.get("s1")).toEqual([{ revenue: 100, currentGrowthRate: 3 }]);
+    expect(out.ownedByState.get("s1")).toEqual([
+      { revenue: 100, currentGrowthRate: 3, hostRevenue: 100 },
+    ]);
   });
 
   it("carries sectorType on owned and unowned rows (P3c — environment mix)", async () => {
@@ -102,6 +108,39 @@ describe("sectorRevenueTaxProvider", () => {
 
     expect(out.ownedByState.get("s1")![0]!.sectorType).toBe("energy");
     expect(out.unownedByState.get("s1")![0]!.sectorType).toBe("agriculture");
+  });
+
+  it("converts sector revenue with the HOST FX rate, not the owning corp's (ticket #1084)", async () => {
+    // UK-hosted sector owned by a USD corp: fields are GBP. Corp FX (USD=1)
+    // would leave 800 as 800 ₳; host FX (GBP 0.8) correctly yields 1000 ₳.
+    setupCollection("corporateSectors", [
+      {
+        _id: "sec1",
+        stateId: "LON",
+        countryId: "UK",
+        revenue: 800,
+        realizedRevenue: 800,
+        currentGrowthRate: 2,
+        corporationId: "corpUSD",
+      },
+    ]);
+    setupCollection("unownedSectors", []);
+    setupCollection("corporations", [
+      { _id: "corpUSD", countryId: "US", liquidCurrencyCode: "USD" },
+    ]);
+    setupCollection("exchangeRates", [
+      { currencyCode: "GBP", rate: 0.8 },
+      { currencyCode: "USD", rate: 1 },
+    ]);
+    setupCollection("federalBudget", []);
+    setupCollection("stateBudgets", []);
+
+    const { sectorRevenueTaxProvider } = await import("./providers");
+    const row = (await sectorRevenueTaxProvider(db as unknown as Db)).ownedByState.get("LON")![0]!;
+    expect(row.hostRevenue).toBe(800);
+    expect(row.hostRealizedRevenue).toBe(800);
+    expect(row.revenue).toBe(1000);
+    expect(row.realizedRevenue).toBe(1000);
   });
 
   it("governmentApprovalProvider maps countryId → approvalRating (P4)", async () => {
