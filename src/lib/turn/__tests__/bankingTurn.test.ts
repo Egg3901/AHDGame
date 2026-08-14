@@ -307,6 +307,25 @@ describe("processBankingTurn", () => {
       loans.push(doc);
       return { insertedId: doc._id };
     });
+    // The household book is written as ONE bulkWrite of per-band tranches. Without
+    // this the inserts vanished and every assertion about the book was vacuous.
+    db.collectionMocks.bankLoans!.bulkWrite.mockImplementation(async (ops: unknown[]) => {
+      for (const op of ops as Array<{
+        insertOne?: { document: BankLoan };
+        updateOne?: { filter: { _id?: ObjectId }; update: { $set?: Partial<BankLoan> } };
+      }>) {
+        if (op.insertOne) {
+          loans.push(op.insertOne.document);
+          continue;
+        }
+        if (op.updateOne) {
+          const id = op.updateOne.filter._id;
+          const idx = loans.findIndex((l) => id && l._id.equals(id));
+          if (idx >= 0) loans[idx] = { ...loans[idx], ...op.updateOne.update.$set };
+        }
+      }
+      return { insertedCount: 0, modifiedCount: 0 };
+    });
     db.collectionMocks.bankLoans!.updateOne.mockImplementation(async (filter, update) => {
       const f = filter as { _id?: ObjectId };
       const idx = loans.findIndex((l) => f._id && l._id.equals(f._id));
@@ -502,17 +521,28 @@ describe("processBankingTurn", () => {
     const broadAfter = cbState.externalBroadMoney;
     const npcAfter = liveCorp.bankCharter!.npcDeposits ?? 0;
 
-    // The pool funds the deposit migration AND pays NPC bulk loan interest
-    // (no player loans in this scenario, so loanInterestCollected is all bulk).
+    // Every leg between the bank and the household pool, in one identity:
+    //   pool pays  = deposit migration in + loan interest collected
+    //   pool receives = loan principal handed out to households
+    // Origination is the leg added when deposits started carrying their cash:
+    // lending is no longer an asset conjured from nothing, so the money it
+    // hands over has to leave the pool's counterparty and land back in it.
+    // Principal handed out = what is still outstanding + what defaulted, since
+    // the tranche is written down in the same pass it is originated.
+    // The household book is one tranche PER CREDIT BAND, so this has to sum
+    // them; reading the first band alone understates the principal lent.
+    const npcLoanOutstanding = loans
+      .filter((loan) => loan.borrowerType === "npcBulk")
+      .reduce((sum, loan) => sum + (loan.outstanding ?? 0), 0);
+    const principalLent = npcLoanOutstanding + summary.defaultsWrittenOff;
     expect(broadBefore - broadAfter).toBeCloseTo(
-      summary.npcDepositDelta + summary.loanInterestCollected,
+      summary.npcDepositDelta + summary.loanInterestCollected - principalLent,
       5
     );
     // npcDeposits also receives deposit interest after the flow, so final stock
     // is delta + interest, not delta alone.
     expect(npcAfter).toBeGreaterThanOrEqual(summary.npcDepositDelta);
-    const npcLoan = loans.find((loan) => loan.borrowerType === "npcBulk");
-    expect(npcLoan?.outstanding ?? 0).toBeLessThanOrEqual(npcAfter * 0.9 + 1e-6);
+    expect(npcLoanOutstanding).toBeLessThanOrEqual(npcAfter * 0.9 + 1e-6);
     expect(liveCorp.bankCharter!.reserves).toBeCloseTo(liveCorp.bankCharter!.cashReserves ?? 0, 8);
     expect(Math.abs(summary.npcDepositDelta)).toBeLessThanOrEqual(
       MAX_NPC_FLOW_PER_TURN_FRACTION * Math.max(summary.npcDepositDelta, broadBefore) + 1e-6

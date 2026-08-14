@@ -278,6 +278,15 @@ export interface GameState {
   /** Turn the extraction auto-strategy phase last acted. Guards its cadence. */
   lastExtractionAutoStrategyTurn?: number;
   /** Master gate for the US House districted-redistricting system. Default off. */
+  /**
+   * v5 NPP corporation strategy loop. DEFAULT ON: absent means enabled, so
+   * existing worlds keep the behaviour they were promoted with. Only an
+   * explicit `false` disables it, and disabling pins every corp to the `expand`
+   * levers, which are byte-identical to the pre-v5 brain.
+   */
+  nppCorpStrategyEnabled?: boolean;
+  nppCorpStrategyEnabledBy?: string;
+  nppCorpStrategyEnabledAt?: string;
   redistrictingEnabled?: boolean;
   redistrictingEnabledBy?: string;
   redistrictingEnabledAt?: string;
@@ -462,6 +471,12 @@ export interface GameState {
    * seats and stamps without posting news.
    */
   lastCabinetYearProcessed?: number;
+  /**
+   * Guard year for the militaryBranchYearCrossing turn phase (standing up a service
+   * whose `establishedYear` the world has now reached, e.g. the NVA in 1956). First
+   * run quietly stands up every active-but-empty branch and stamps without posting.
+   */
+  lastMilitaryBranchYearProcessed?: number;
   /**
    * Cabinet seat ids brought into existence early by a create_department bill,
    * regardless of their era `yearEnabled` (e.g. "secretary_of_education" after the

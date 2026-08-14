@@ -215,6 +215,7 @@ function makeLookups(
     marketShareBySectorId: new Map(),
     stateSectorSpecializationByState: new Map(),
     activeDisasterEffectsByState: new Map([[STATE_ID, disasterEffects]]),
+    stateInputAvailabilityByState: new Map(),
   };
 }
 

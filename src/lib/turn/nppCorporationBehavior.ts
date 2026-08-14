@@ -412,6 +412,13 @@ interface NppCorpDecisionContext {
    * cohort-wide cliff and then a cohort-wide swing back.
    */
   strategyEligible?: boolean;
+  /**
+   * `nppCorpStrategyEnabled`. DEFAULT ON: absent means enabled, so existing
+   * worlds keep the behaviour they were promoted with and only an explicit
+   * `false` disables. Disabled pins the corp to the `expand` levers, which are
+   * byte-identical to the pre-v5 brain, and stops persisting strategy memory.
+   */
+  strategyLoopEnabled?: boolean;
 }
 
 /**
@@ -748,6 +755,12 @@ export async function processNppCorporationDecisions(
     }
   }
 
+  // Cohort-wide kill switch, read once. Absent means ON.
+  const strategyGate = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { nppCorpStrategyEnabled: 1 } });
+  const strategyLoopEnabled = strategyGate?.nppCorpStrategyEnabled !== false;
+
   const labourCfg = await db
     .collection<GameConfig>("gameConfig")
     .findOne({ _id: "default" }, { projection: { labourSystemMode: 1 } });
@@ -770,6 +783,7 @@ export async function processNppCorporationDecisions(
         strategy: corp.nppStrategy,
         // Same 1-in-8 cohort slot the glut mothball pass uses.
         strategyEligible: glutStaggerEligible(corp._id.toString(), turn),
+        strategyLoopEnabled,
         debtServiceAnchor: netPerTurnDebtServiceAnchor({
           issuerBonds: issuerBondsByCorpId.get(corp._id.toString()),
           heldPositions: heldBondsByCorpId.get(corp._id.toString()),
@@ -1171,13 +1185,20 @@ export function makeNppCorpDecision(
     // document already knows.
     isCaretaker: !!corp.caretakerCeo,
   };
-  const strategyDecision = advanceStrategy({
-    prior: ctx.strategy,
-    turn: ctx.turn,
-    situation,
-    eligible: ctx.strategyEligible === true,
-  });
-  const levers = strategyLevers(strategyDecision.state.id);
+  // Absent reads as enabled: see `strategyLoopEnabled`. When off, the corp runs
+  // the `expand` levers and no strategy state is written, so an operator can
+  // kill the loop mid-world without a revert and without leaving stale memory
+  // that would resume the moment it is re-enabled.
+  const strategyLoopOn = ctx.strategyLoopEnabled !== false;
+  const strategyDecision = strategyLoopOn
+    ? advanceStrategy({
+        prior: ctx.strategy,
+        turn: ctx.turn,
+        situation,
+        eligible: ctx.strategyEligible === true,
+      })
+    : null;
+  const levers = strategyLevers(strategyDecision?.state.id ?? "expand");
 
   // ── 1. Divest losing sectors ──────────────────────────────────────────────
   // Divest a losing sector once its margin falls to/below the archetype's
@@ -1926,6 +1947,6 @@ export function makeNppCorpDecision(
     divestedSectorIds: divestedSectorIds.length > 0 ? divestedSectorIds : undefined,
     unownedDraws: unownedDraws.length > 0 ? unownedDraws : undefined,
     reinvestments: reinvestments.length > 0 ? reinvestments : undefined,
-    strategy: strategyDecision.state,
+    strategy: strategyDecision?.state,
   };
 }

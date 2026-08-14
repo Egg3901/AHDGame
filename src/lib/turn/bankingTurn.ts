@@ -325,6 +325,16 @@ async function processOneBank(
   const targetNpc = Math.min(uncappedTargetNpc, npcRoom);
   const delta = npcFlowDelta(npcDeposits, targetNpc);
   if (delta !== 0) {
+    // The money MOVES. It leaves the central bank's household pool and lands in
+    // the bank's cash, which is what a deposit is.
+    //
+    // Before this, the pool was debited and nothing was credited: the cash was
+    // destroyed and the charter kept a number. Every rule measured against that
+    // number then demanded cash the bank had never received, which is why a new
+    // bank failed on turn 8 no matter what its CEO did. Crediting the cash here
+    // closes a money-supply conservation hole and makes the reserve test
+    // satisfiable by the same stroke.
+    //
     // CB first, then corp npcDeposits. Writing npcDeposits immediately makes a
     // mid-crash retry compute a near-zero delta (lastBankingTurn is only stamped
     // at the end of the full bank pass).
@@ -336,6 +346,7 @@ async function processOneBank(
       }
     );
     npcDeposits = Math.max(0, npcDeposits + delta);
+    cashReserves = Math.max(0, cashReserves + delta);
     await db.collection<Corporation>("corporations").updateOne(
       {
         _id: corp._id,
@@ -348,6 +359,7 @@ async function processOneBank(
       {
         $set: {
           "bankCharter.npcDeposits": npcDeposits,
+          "bankCharter.cashReserves": cashReserves,
           updatedAt: new Date(),
         },
       }
@@ -434,7 +446,16 @@ async function processOneBank(
   const npcInterestPaid = roundSavingsAmount(npcInterestDue * interestScale, currency);
   const totalInterestPaid = playerInterestPaid + npcInterestPaid;
   if (totalInterestPaid > 0 || npcInterestPaid > 0) {
-    cashReserves = Math.max(0, cashReserves - totalInterestPaid);
+    // Only the PLAYER half leaves the building. A player's interest is credited
+    // to `currencyBalances.savings`, which is their own balance sheet, so the
+    // cash goes with it. An NPC household's interest is credited to the account
+    // it already holds AT this bank: the liability grows and the cash stays
+    // exactly where it is.
+    //
+    // Debiting cash for both was the old behaviour and it was double-counting
+    // an outflow that never happened, draining reserves every turn against a
+    // deposit the bank still held.
+    cashReserves = Math.max(0, cashReserves - playerInterestPaid);
     npcDeposits = Math.max(0, npcDeposits + npcInterestPaid);
     result.depositInterestPaid += totalInterestPaid;
   }
@@ -458,8 +479,12 @@ async function processOneBank(
   }
   const insuredCap = await getInsuredCap(db, currency);
   const insuredDeposits = sumInsuredPlayerDeposits(postInterestBalances, insuredCap) + npcDeposits;
-  const depositBaseForRatio =
-    postInterestBalances.reduce((s, b) => s + Math.max(0, b), 0) + npcDeposits;
+  // Reserves are held against deposits the bank actually RECEIVED in cash, which
+  // is the NPC household book. Player deposits are a pointer: the money never
+  // leaves `currencyBalances.savings`, so requiring the bank to hold reserves
+  // against it would demand cash for a balance it does not have and cannot get.
+  // Insurance still covers both, because a depositor's claim is a claim either way.
+  const depositBaseForRatio = npcDeposits;
   const reserveRatioActual = computeReserveRatioActual(cashReserves, depositBaseForRatio);
   const reserveRatioRequired = await getReserveRequirement(db, currency);
   const premiumDue = computeInsurancePremium(
@@ -523,8 +548,8 @@ async function processOneBank(
   // (e) NPC household loans. The book grows only from deposits actually held
   // by this bank after its reserve requirement. Rates set utilization, while
   // named loans consume the same capacity inside serviceNpcBulkBook.
-  const loanFundingCapacity =
-    (playerDeposits + playerInterestPaid + npcDeposits) * (1 - reserveRatioRequired);
+  // Only cash-backed deposits can fund a loan; you cannot lend a pointer.
+  const loanFundingCapacity = npcDeposits * (1 - reserveRatioRequired);
   const bulkResult = await serviceNpcBulkBook(
     db,
     turn,
@@ -538,6 +563,7 @@ async function processOneBank(
       cbDocId,
       cb,
       bankName: corp.name,
+      requiredReserves: npcDeposits * reserveRatioRequired,
       lendingProfile: live.bankCharter.lendingProfile,
     }
   );
@@ -800,6 +826,8 @@ type NpcBulkState = {
   cbDocId: string;
   cb?: Pick<CentralBank, "externalBroadMoney">;
   bankName: string;
+  /** Cash the bank must retain; origination may only spend above this. */
+  requiredReserves: number;
   /** CEO's stance: which credit bands this bank will originate into. */
   lendingProfile?: LendingProfileId;
 };
@@ -843,6 +871,9 @@ async function serviceNpcBulkBook(
   state: NpcBulkState
 ): Promise<NpcBulkResult> {
   let { cashReserves, totalLoans } = state;
+  // Net cash handed to (positive) or received from (negative) the household
+  // pool this pass. Flushed to the central bank once at the end.
+  let creditedToPool = 0;
   let interestCollected = 0;
   let writtenOff = 0;
   let shortfall = 0;
@@ -923,7 +954,28 @@ async function serviceNpcBulkBook(
 
   for (const tranche of work) {
     const current = Math.max(0, tranche.loan?.outstanding ?? 0);
-    const adjust = npcFlowDelta(current, tranche.target);
+    let adjust = npcFlowDelta(current, tranche.target);
+
+    // Originating a loan HANDS OVER CASH. The bank can only lend what it holds
+    // above its reserve requirement, so the ramp is clamped to that headroom
+    // rather than being free. Repayment brings the cash back.
+    //
+    // Without this the loan book was an asset conjured from nothing that paid
+    // real interest forever, which is the same money-from-nowhere problem as
+    // the deposit side and made the reserve ratio decorative.
+    if (adjust > 0) {
+      const lendable = Math.max(0, cashReserves - state.requiredReserves);
+      adjust = Math.min(adjust, lendable);
+      if (adjust > 0) {
+        cashReserves -= adjust;
+        creditedToPool += adjust; // cash goes out to the household pool
+      }
+    } else if (adjust < 0) {
+      // Principal repaid: cash returns from the household pool.
+      cashReserves += -adjust;
+      creditedToPool -= -adjust;
+    }
+
     const nextOutstandingBeforeYield = Math.max(0, current + adjust);
     if (nextOutstandingBeforeYield <= 0 && current <= 0) continue;
 
@@ -1002,6 +1054,23 @@ async function serviceNpcBulkBook(
 
   if (bulkOps.length > 0) {
     await db.collection<BankLoan>("bankLoans").bulkWrite(bulkOps);
+  }
+
+  // Settle the cash that moved between the bank and the household pool. One
+  // write for the whole book rather than one per band.
+  if (creditedToPool !== 0) {
+    await db
+      .collection<CentralBank>("centralBanks")
+      .updateOne(
+        { _id: state.cbDocId },
+        { $inc: { externalBroadMoney: creditedToPool }, $set: { updatedAt: now } }
+      );
+    if (state.cb) {
+      state.cb.externalBroadMoney = Math.max(
+        0,
+        (state.cb.externalBroadMoney ?? 0) + creditedToPool
+      );
+    }
   }
 
   // One interest row for the whole book rather than one per band: this fires

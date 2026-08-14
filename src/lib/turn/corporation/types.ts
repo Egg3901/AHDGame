@@ -121,6 +121,12 @@ export interface CorporationLookups {
   // Commodity supply/demand data for margin calculation
   globalCommodityBalances: Map<CommodityType, { supply: number; demand: number }>;
   /**
+   * Lagged state delivery availability from active freight settlement.  Only
+   * physical commodities with a resolved route are present; all others retain
+   * the global throughput fallback.
+   */
+  stateInputAvailabilityByState: Map<string, Map<CommodityType, number>>;
+  /**
    * Lagged global price / base price per commodity (prior turn's computed
    * price). Read by the price-realization multiplier when
    * marketSystemMode >= "realization"; always built (cheap), inert otherwise.

@@ -102,6 +102,7 @@ describe("NG map config", () => {
       leanAxis: "display",
       resourceData: {},
       resourceToggle: "capacity",
+      freightData: { states: {} },
 
       mapData: { partyOrg: { NORTH_WEST: { leadColor: "#abc", tooltip: ["APC"] } } } as any,
     });

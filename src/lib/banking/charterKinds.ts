@@ -31,10 +31,28 @@ export function isDepositTakingCharter(charter: BankCharter | undefined): charte
 }
 
 /**
- * Charters that originate loans. The same set as deposit-taking today, named
- * separately because the call sites are asking a different question and a
- * future charter type could answer them differently.
+ * Charters that originate the NPC HOUSEHOLD book.
+ *
+ * The same set as deposit-taking, and for a real reason rather than an alias:
+ * the household book is funded out of the deposit base, so a charter that takes
+ * no deposits has nothing to lend households.
  */
 export function isLendingCharter(charter: BankCharter | undefined): charter is BankCharter {
   return isDepositTakingCharter(charter);
+}
+
+/**
+ * Charters that may originate a NAMED loan to a corporation or character.
+ *
+ * Every active charter, investment included. Underwriting and lending to firms
+ * is what an investment bank is FOR, and excluding them was the single largest
+ * reason the charter had no viable business: `processOneBank` skips
+ * non-deposit-takers, so an investment bank earned nothing per turn while still
+ * paying margin interest. It could only ever lose money.
+ *
+ * Household lending stays closed to them (see {@link isLendingCharter}); a firm
+ * loan is funded from the bank's own capital, which they do have.
+ */
+export function isNamedLendingCharter(charter: BankCharter | undefined): charter is BankCharter {
+  return charter != null && charter.status === "active";
 }

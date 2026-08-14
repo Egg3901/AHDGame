@@ -13,6 +13,8 @@ import { regionUrl } from "@/lib/urls";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { type LeanAxis } from "./mapShared";
 import { useResourceMapData } from "./useResourceMapData";
+import { useFreightDemandData } from "./useFreightDemandData";
+import { freightHaulLoadCaption } from "./freightHaulLoadCopy";
 import type { CountryMapConfig, MapGameTime } from "./countryMapConfigs";
 
 interface UnifiedMapWithModesProps {
@@ -67,6 +69,7 @@ export function UnifiedMapWithModes({
   }, []);
 
   const resourceData = useResourceMapData(mode, config.id, resourceType);
+  const freightData = useFreightDemandData(mode, config.id);
 
   const regionData = useMemo(
     () =>
@@ -76,8 +79,9 @@ export function UnifiedMapWithModes({
         leanAxis,
         resourceData,
         resourceToggle,
+        freightData,
       }),
-    [countryConfig, mode, mapData, leanAxis, resourceData, resourceToggle]
+    [countryConfig, mode, mapData, leanAxis, resourceData, resourceToggle, freightData]
   );
 
   const modeConfig = countryConfig.modes.find((m) => m.id === mode);
@@ -191,6 +195,11 @@ export function UnifiedMapWithModes({
                 ))}
               </div>
             </div>
+          )}
+          {mode === "logistics" && (
+            <p className="mt-3 text-xs text-muted">
+              {freightHaulLoadCaption(Object.keys(freightData.states).length > 0)}
+            </p>
           )}
         </div>
 

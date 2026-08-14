@@ -113,6 +113,8 @@ export async function buildCorporationLookups(
      * `landedPremiumByState`. Omitted/false keeps that map empty.
      */
     moneyWiringEnabled?: boolean;
+    /** Use lagged freight-delivery availability as a local input constraint. */
+    freightSettlementActive?: boolean;
   }
 ): Promise<CorporationLookups> {
   await reconcileSignedTariffBills(db);
@@ -194,6 +196,7 @@ export async function buildCorporationLookups(
             basePrice: 1,
             stateSupply: 1,
             stateDemand: 1,
+            stateInputAvailability: 1,
             nationalSupply: 1,
             nationalDemand: 1,
           },
@@ -530,6 +533,7 @@ export async function buildCorporationLookups(
     string,
     Map<CommodityType, { supply: number; demand: number }>
   >();
+  const stateInputAvailabilityByState = new Map<string, Map<CommodityType, number>>();
   // Market rework (marketSystemMode >= "realization"): lagged price-over-base
   // ratio per commodity. commodityPrices docs hold the price computed by the
   // PRIOR commodity-price pass, so reading them here is the one-turn lag that
@@ -558,6 +562,18 @@ export async function buildCorporationLookups(
         supply: cp.stateSupply[stateId] ?? 0,
         demand: cp.stateDemand[stateId] ?? 0,
       });
+    }
+
+    if (options?.freightSettlementActive) {
+      for (const [stateId, availability] of Object.entries(cp.stateInputAvailability ?? {})) {
+        if (!Number.isFinite(availability)) continue;
+        if (!stateInputAvailabilityByState.has(stateId)) {
+          stateInputAvailabilityByState.set(stateId, new Map());
+        }
+        stateInputAvailabilityByState
+          .get(stateId)!
+          .set(cp.commodity, Math.max(0, Math.min(1, availability)));
+      }
     }
 
     const perCountry = buildNationalCommodityBalances(cp, stateCountryMap);
@@ -952,6 +968,7 @@ export async function buildCorporationLookups(
     carbonEmissionsByState,
     costOfLivingByState,
     globalCommodityBalances,
+    stateInputAvailabilityByState,
     priceRatioByCommodity,
     landedPremiumByState,
     nationalCommodityBalancesByCountry,

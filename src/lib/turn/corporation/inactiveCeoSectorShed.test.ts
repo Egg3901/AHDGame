@@ -82,6 +82,7 @@ function makeMinimalLookups(
     marketShareBySectorId: new Map(),
     stateSectorSpecializationByState: new Map(),
     activeDisasterEffectsByState: new Map(),
+    stateInputAvailabilityByState: new Map(),
   };
 }
 

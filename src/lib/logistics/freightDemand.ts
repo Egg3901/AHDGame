@@ -40,12 +40,6 @@ export function applyFreightHaulDemand(
   }
 }
 
-export type FreightDemandEntry = {
-  /** Origin-state interstate haul TEU (shadow ledger). */
-  bulk: number;
-  special: number;
-  /** bulk + special haul load. */
-  total: number;
-  /** Freight commodity supply in this state (TEU capacity logistics clear against). */
-  capacity: number;
-};
+// Kept as a compatibility import path for callers that predate the map API
+// contract moving into `types.ts`.
+export type { FreightDemandEntry } from "./types";

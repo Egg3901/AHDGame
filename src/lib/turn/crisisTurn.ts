@@ -131,11 +131,12 @@ export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
       );
     }
 
-    // Wire event on activation turn only
+    // Activation turn only: announce to the wire + inbox, and materialize the
+    // decision interaction. Admin-created crises run the same announcement at
+    // creation time (see announceCrisisStart) since they never pass through this
+    // `turn === startTurn` branch.
     if (turn === crisis.startTurn) {
-      await logWireEvent("crisis_start", crisis.wireMessageOnStart, {
-        href: `/world/crises/${crisis._id.toString()}`,
-      });
+      await announceCrisisStart(db, crisis, targetStateIds);
 
       // Create interaction document for interactive crises (only if enabled)
       if (crisis.interactionDefinition) {
@@ -144,9 +145,6 @@ export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
           await createCrisisInteraction(db, crisis);
         }
       }
-
-      // Notify affected players
-      await notifyAffectedPlayers(db, crisis, targetStateIds, "crisis_start");
     }
 
     // Expiry check: durationTurns null = indefinite; use effectiveDuration
@@ -254,6 +252,50 @@ function resolveScope(
     return crisis.countryIds.flatMap((cId) => statesByCountry.get(cId) ?? []);
   }
   return crisis.regionIds;
+}
+
+/**
+ * Resolve a crisis's affected state IDs on its own, for callers outside the turn
+ * loop (which already has the state map in hand). Region scope is stored as state
+ * IDs directly; country/global need the states collection.
+ */
+async function resolveCrisisTargetStateIds(db: Db, crisis: Crisis): Promise<string[]> {
+  if (crisis.scope === "region") return crisis.regionIds;
+  const states = await db
+    .collection<State>("states")
+    .find({}, { projection: { _id: 1, countryId: 1 } })
+    .toArray();
+  if (crisis.scope === "global") return states.map((s) => s._id);
+  const countries = new Set(crisis.countryIds);
+  return states.filter((s) => countries.has(s.countryId)).map((s) => s._id);
+}
+
+/**
+ * Announce a crisis at its start: emit the `crisis_start` wire event (which is
+ * what the news/wire feed reads) and notify players in the affected states.
+ *
+ * Shared by two callers so the announcement is identical no matter how a crisis
+ * begins:
+ *  - the turn processor, on `turn === startTurn` (auto-spawned crises), which
+ *    passes its already-resolved `targetStateIds`;
+ *  - the admin create route, at creation time, since an admin crisis's
+ *    `startTurn` is the current turn — already processed — so the turn loop's
+ *    start branch never runs for it and it would otherwise post no news event.
+ *
+ * Fires exactly once per crisis: the turn processor only reaches this on the
+ * start turn, and an admin crisis is announced once at creation, so the two
+ * paths do not double-announce.
+ */
+export async function announceCrisisStart(
+  db: Db,
+  crisis: Crisis,
+  targetStateIds?: string[]
+): Promise<void> {
+  const stateIds = targetStateIds ?? (await resolveCrisisTargetStateIds(db, crisis));
+  await logWireEvent("crisis_start", crisis.wireMessageOnStart, {
+    href: `/world/crises/${crisis._id.toString()}`,
+  });
+  await notifyAffectedPlayers(db, crisis, stateIds, "crisis_start");
 }
 
 async function notifyAffectedPlayers(

@@ -4,6 +4,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Corporation } from "@/lib/db/types";
 import type { BankCharter } from "@/lib/db/types/bank";
 import { CORPORATION_FOUNDING_COST } from "@/lib/constants/corporations";
+import { CHARTER_CAPITAL_FOUNDING_MULTIPLE } from "../charter";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import { getGdpAnchorRate } from "@/lib/currency/gdpAnchorRate";
 
@@ -61,13 +62,16 @@ describe("banking charter", () => {
   }
 
   describe("getCharterCapitalRequirement", () => {
-    it("returns 10x founding cost / eraUnitScale / gdpAnchorRate (never a flat constant)", async () => {
+    it("returns the charter multiple of founding cost / eraUnitScale / gdpAnchorRate (never a flat constant)", async () => {
       const { getCharterCapitalRequirement } = await importCharter();
       const required = await getCharterCapitalRequirement(db as unknown as Db, "USD");
       const scale = getEraUnitScale("2019-default");
       const rate = getGdpAnchorRate("US", "2019-default");
       expect(required).toBe(
-        Math.max(1, Math.round((CORPORATION_FOUNDING_COST * 10) / scale / rate))
+        Math.max(
+          1,
+          Math.round((CORPORATION_FOUNDING_COST * CHARTER_CAPITAL_FOUNDING_MULTIPLE) / scale / rate)
+        )
       );
       expect(required).not.toBe(CORPORATION_FOUNDING_COST);
     });
@@ -82,8 +86,13 @@ describe("banking charter", () => {
       const required = await getCharterCapitalRequirement(db as unknown as Db, "USD");
       const scale = getEraUnitScale("1953-default");
       expect(scale).toBeGreaterThan(1);
-      expect(required).toBe(Math.max(1, Math.round((CORPORATION_FOUNDING_COST * 10) / scale)));
-      expect(required).toBeLessThan(CORPORATION_FOUNDING_COST * 10);
+      expect(required).toBe(
+        Math.max(
+          1,
+          Math.round((CORPORATION_FOUNDING_COST * CHARTER_CAPITAL_FOUNDING_MULTIPLE) / scale)
+        )
+      );
+      expect(required).toBeLessThan(CORPORATION_FOUNDING_COST * CHARTER_CAPITAL_FOUNDING_MULTIPLE);
     });
   });
 

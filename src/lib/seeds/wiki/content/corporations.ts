@@ -388,5 +388,5 @@ Corporations connect to politics in several ways:
 - The national budget receives corporate tax revenue: profitable corps help state finances
 - The IMF facility and crisis systems can affect corporate borrowing costs and credit ratings
 
-See also: [Market System: A Player's Guide](/wiki/market-system-guide), [Brand Loyalty](/wiki/brand-loyalty), [Output Quality](/wiki/output-quality), [Corporate Bonds](/wiki/corporate-bonds), [Corporate R&D & Tech Trees](/wiki/corporate-r-and-d), [Labour & Wages](/wiki/labour-and-wages), [Unions](/wiki/unions), [Stock Market](/wiki/stock-market), [Commodities](/wiki/commodities), [National Budget](/wiki/national-budget)
+See also: [Running a Corporation under the Plants System](/wiki/plants-corp-guide), [Market System: A Player's Guide](/wiki/market-system-guide), [Private Banking](/wiki/private-banking), [Logistics: Freight, Sourcing, and Supply Chains](/wiki/logistics-guide), [Brand Loyalty](/wiki/brand-loyalty), [Output Quality](/wiki/output-quality), [Corporate Bonds](/wiki/corporate-bonds), [Corporate R&D & Tech Trees](/wiki/corporate-r-and-d), [Labour & Wages](/wiki/labour-and-wages), [Unions](/wiki/unions), [Stock Market](/wiki/stock-market), [Commodities](/wiki/commodities), [National Budget](/wiki/national-budget)
 `;
