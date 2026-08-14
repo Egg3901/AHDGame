@@ -586,9 +586,15 @@ export function getPriceSoftKnee(commodity: CommodityType): number {
  * Fraction of corporate marketing budgets that converts to advertising commodity demand.
  * E.g. at 0.40, a $1M/day total marketing budget adds 2,667 campaign-units/day of demand
  * (1,000,000 × 0.40 / $150 base price = 2,667 campaigns/day).
- * Reduced from 0.60 → 0.40 (33% cut) to ease critical advertising shortage (S/D ~0.38).
+ * History: 0.60 -> 0.40 to ease a critical advertising SHORTAGE (S/D ~0.38).
+ * That market has since inverted completely — prod at turn 114 read 44x
+ * OVERSUPPLIED with the price pinned to the 0.32x deflation clamp — so the cut
+ * is reversed and then some. Raised to 0.90 alongside buyer-side rates for the
+ * consumer-facing sectors that actually advertise; no single lever reaches a
+ * 21x gap, and the rate caps at 1.0 (a corp cannot spend more than its whole
+ * marketing budget).
  */
-export const MARKETING_ADVERTISING_DEMAND_RATE = 0.4;
+export const MARKETING_ADVERTISING_DEMAND_RATE = 0.9;
 
 /**
  * Fraction of annual national healthcare budget spending (normalized to ₳) that

@@ -471,7 +471,7 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       description:
         "Self-driving vehicle production with an onboard software layer. Heavy electronics and software demand.",
       supply: { vehicles: 0.5, software: 0.08 },
-      demand: { electronics: 0.2, steel: 0.1, energy: 0.15, software: 0.1 },
+      demand: { electronics: 0.2, steel: 0.1, energy: 0.15, software: 0.1, advertising: 0.04 },
     },
     {
       id: "standard",
@@ -515,7 +515,14 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       description:
         "Industrial vehicles, trucks, and construction equipment. Steel-intensive, robust margins.",
       supply: { vehicles: 0.55 },
-      demand: { steel: 0.35, iron: 0.15, energy: 0.15, freight: 0.1, plastics: 0.05 },
+      demand: {
+        steel: 0.35,
+        iron: 0.15,
+        energy: 0.15,
+        freight: 0.1,
+        plastics: 0.05,
+        advertising: 0.05,
+      },
     },
   ],
 
@@ -981,7 +988,7 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
         energy: 0.08,
         vehicles: 0.08,
         freight: 0.07,
-        advertising: 0.06,
+        advertising: 0.12,
         software: 0.06,
         chemicals: 0.03,
         pharmaceuticals: 0.03,
