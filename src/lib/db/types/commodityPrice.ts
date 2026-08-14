@@ -21,6 +21,17 @@ export interface CommodityPrice {
   stateSupply: Record<string, number>;
   /** Per-state demand: stateId -> units/day */
   stateDemand: Record<string, number>;
+  /**
+   * Physical goods delivered to buyers after the prior turn's freight
+   * settlement.  Omitted while settlement is in shadow mode.
+   */
+  stateDeliveredSupply?: Record<string, number>;
+  /**
+   * Fraction of each state's physical-input demand delivered by the prior
+   * freight settlement.  The corporation turn uses this as a lagged local
+   * throughput constraint when settlement is active.
+   */
+  stateInputAvailability?: Record<string, number>;
   /** Per-country aggregate prices: countryId -> price (computed with NATIONAL_COMMODITY_STABILIZER) */
   nationalPrices?: Record<string, number>;
   /** Per-country aggregate supply: countryId -> units/day (raw, before stabilizer) */

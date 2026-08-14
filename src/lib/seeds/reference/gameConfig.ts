@@ -82,6 +82,9 @@ export const gameConfig: GameConfig = {
   // fresh world has no legacy revenue to rebase, so it does not apply here.
   labourSystemMode: "full",
   marketSystemMode: "plants",
+  // Freight routes are observable from a fresh world, but the economic effect
+  // requires an explicit, separately-soaked rollout.
+  freightSettlementMode: "shadow",
   regionalConditionsOverviewEnabled: true,
 
   // Market launch guard: armed by default now that the market boots at the top
