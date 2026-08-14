@@ -139,7 +139,10 @@ export default function BondsTab({
               (() => {
                 // Slider operates in ₳ anchor units — no conversion needed.
                 const parsedFaceValue = bondIssueFaceValue;
-                const isValidInput = !isNaN(parsedFaceValue) && parsedFaceValue >= 100_000;
+                // Minimum is clamped server-side to the corp's own ceiling, so a
+                // small corp can issue below ₳100,000 (ticket #1083).
+                const isValidInput =
+                  !isNaN(parsedFaceValue) && parsedFaceValue >= (bondInfo.minIssuance ?? 100_000);
                 const couponRate =
                   bondInfo.creditRating.couponRatesByDuration?.[
                     bondIssueMaturity as 96 | 240 | 336
@@ -163,6 +166,11 @@ export default function BondsTab({
                   maxIssuableDebt !== null
                     ? Math.min(perIssuanceCap, maxIssuableDebt)
                     : perIssuanceCap;
+                // Minimum is clamped to the corp's own ceiling server-side, so a
+                // small corp can issue below ₳100,000 rather than being locked out
+                // (ticket #1083). `bondsAvailable` is false below the dust floor.
+                const effectiveMin = bondInfo.minIssuance ?? 100_000;
+                const bondsUnavailable = bondInfo.bondsAvailable === false;
                 // Launch-window freeze: issuance is paused server-side until this
                 // instant. Mirror it in the UI so the control reads as disabled
                 // rather than erroring on submit.
@@ -280,6 +288,7 @@ export default function BondsTab({
                           onChange={(e) => setBondIssueFaceValue(Number(e.target.value))}
                           disabled={
                             effectiveCap === 0 ||
+                            bondsUnavailable ||
                             bondInfo.cooldownTurnsRemaining > 0 ||
                             issuanceFrozen
                           }
@@ -294,7 +303,11 @@ export default function BondsTab({
                           </span>
                         </div>
                         <p className="text-[11px] text-muted">
-                          {parsedFaceValue >= 100_000 ? (
+                          {bondsUnavailable ? (
+                            <span className="text-error">
+                              Too small to issue bonds yet — build more equity headroom.
+                            </span>
+                          ) : parsedFaceValue >= effectiveMin ? (
                             <span className="text-foreground font-medium">
                               {nativeDisplay}
                               {showParens && (
@@ -305,8 +318,11 @@ export default function BondsTab({
                             </span>
                           ) : (
                             <>
-                              Min {liquidCode ? formatAmountIn(100_000, liquidCode) : "$100,000"} ·{" "}
-                              {liquidCode ? formatAmountIn(1_000, liquidCode) : "$1,000"} units
+                              Min{" "}
+                              {liquidCode
+                                ? formatAmountIn(effectiveMin, liquidCode)
+                                : `$${effectiveMin.toLocaleString("en-US")}`}{" "}
+                              · {liquidCode ? formatAmountIn(1_000, liquidCode) : "$1,000"} units
                             </>
                           )}
                         </p>

@@ -18,10 +18,11 @@ import {
   BOND_ISSUANCE_FREEZE_UNTIL,
   BOND_ISSUANCE_COOLDOWN_TURNS,
   BOND_ISSUANCE_COOLDOWN_TURNS_PRIVATE,
-  MIN_BOND_ISSUANCE,
+  BOND_ISSUANCE_MIN_HEADROOM,
   MAX_BOND_ISSUANCE_FRACTION,
   MAX_BOND_ISSUANCE_REVENUE_FRACTION,
   MIN_BOND_ISSUANCE_PER_ISSUE,
+  effectiveBondIssuanceWindow,
   calculateCreditScore,
   getBondCouponRate,
 } from "@/lib/constants/bonds";
@@ -293,6 +294,18 @@ export async function GET(request: Request, { params }: RouteParams) {
       MIN_BOND_ISSUANCE_PER_ISSUE,
       annualRevenueGet * MAX_BOND_ISSUANCE_REVENUE_FRACTION
     );
+    // Effective issuance window the POST handler enforces: the flat minimum is
+    // clamped to the corp's own 2x-equity headroom so min never exceeds max
+    // (ticket #1083). `bondsAvailable` is false below the dust floor.
+    const {
+      maxAllowed: maxAllowedIssuance,
+      effectiveMin: minIssuance,
+      available: bondsAvailable,
+    } = effectiveBondIssuanceWindow({
+      maxPerIssuance,
+      totalEquity,
+      existingDebt: totalDebt,
+    });
 
     const imfBailoutActive = corporation.imfBailoutActive === true;
     const imfFacility = imfBailoutActive
@@ -346,6 +359,9 @@ export async function GET(request: Request, { params }: RouteParams) {
       },
       totalDebt,
       maxPerIssuance: Math.round(maxPerIssuance),
+      maxAllowedIssuance: Math.round(maxAllowedIssuance),
+      minIssuance: Math.round(minIssuance),
+      bondsAvailable,
       isCeo,
       cooldownTurnsRemaining,
       currentTurn,
@@ -437,13 +453,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
     }
 
-    // Validate issuance amount
-    if (faceValue < MIN_BOND_ISSUANCE) {
-      return NextResponse.json(
-        { error: `Minimum issuance is ₳${MIN_BOND_ISSUANCE.toLocaleString()}` },
-        { status: 400 }
-      );
-    }
+    // The minimum-vs-maximum validation is deferred until after the corp's
+    // equity ceiling is known (below): the flat ₳100,000 minimum is clamped down
+    // to a small corp's own headroom so it is never larger than the maximum it
+    // can issue (ticket #1083).
 
     // Calculate existing debt (includes defaulted bonds — they still count toward
     // leverage). All inputs to `calculateCreditScore` normalized to ₳ so the
@@ -510,6 +523,34 @@ export async function POST(request: Request, { params }: RouteParams) {
         {
           error: `Issuance of ₳${faceValue.toLocaleString()} exceeds per-issuance cap of ₳${Math.round(maxPerIssuancePost).toLocaleString()} (25% of annual revenue, floor ₳${MIN_BOND_ISSUANCE_PER_ISSUE.toLocaleString()})`,
         },
+        { status: 400 }
+      );
+    }
+
+    // The flat ₳100,000 minimum is clamped to the corp's own ceiling (smaller of
+    // the per-issuance cap and remaining 2x-equity headroom), so a small corp is
+    // never locked out by min > max (ticket #1083). Below the dust floor, bonds
+    // are unavailable entirely.
+    const {
+      maxAllowed: maxAllowedIssuance,
+      effectiveMin: effectiveMinIssuance,
+      available: bondsAvailablePost,
+    } = effectiveBondIssuanceWindow({
+      maxPerIssuance: maxPerIssuancePost,
+      totalEquity,
+      existingDebt,
+    });
+    if (!bondsAvailablePost) {
+      return NextResponse.json(
+        {
+          error: `This corporation is too small to issue bonds yet. It needs more equity headroom (currently ₳${Math.round(maxAllowedIssuance).toLocaleString()}, minimum ₳${BOND_ISSUANCE_MIN_HEADROOM.toLocaleString()}).`,
+        },
+        { status: 400 }
+      );
+    }
+    if (faceValue < effectiveMinIssuance) {
+      return NextResponse.json(
+        { error: `Minimum issuance is ₳${Math.round(effectiveMinIssuance).toLocaleString()}` },
         { status: 400 }
       );
     }

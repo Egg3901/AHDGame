@@ -36,8 +36,37 @@ export const BOND_ISSUANCE_FREEZE_UNTIL: Date | null = new Date("2026-08-12T00:0
 /** Minimum face value for a bond issuance ($) */
 export const MIN_BOND_ISSUANCE = 100_000;
 
+/**
+ * Absolute floor on a corporation's issuance headroom (₳) below which bonds are
+ * unavailable at all. The `MIN_BOND_ISSUANCE` minimum is otherwise clamped down
+ * to a corp's own ceiling, so a small corp can issue below ₳100,000 rather than
+ * being locked out when its 2x-equity headroom sits under the flat minimum
+ * (ticket #1083). This floor keeps dust-sized issuances (with their coupon
+ * overhead) off the table.
+ */
+export const BOND_ISSUANCE_MIN_HEADROOM = 10_000;
+
 /** Maximum face value per issuance as fraction of liquid capital */
 export const MAX_BOND_ISSUANCE_FRACTION = 2.0;
+
+/**
+ * The issuance window a corporation may actually use, all in ₳. `maxAllowed` is
+ * the smaller of the per-issuance cap and the remaining 2x-equity leverage
+ * headroom. `effectiveMin` clamps the flat `MIN_BOND_ISSUANCE` down to that
+ * ceiling so a small corp is never locked out by min > max (ticket #1083).
+ * `available` is false below the dust floor, where bonds are offered at all.
+ */
+export function effectiveBondIssuanceWindow(args: {
+  maxPerIssuance: number;
+  totalEquity: number;
+  existingDebt: number;
+}): { maxAllowed: number; effectiveMin: number; available: boolean } {
+  const debtCeilingHeadroom = args.totalEquity * MAX_BOND_ISSUANCE_FRACTION - args.existingDebt;
+  const maxAllowed = Math.max(0, Math.min(args.maxPerIssuance, debtCeilingHeadroom));
+  const available = maxAllowed >= BOND_ISSUANCE_MIN_HEADROOM;
+  const effectiveMin = Math.min(MIN_BOND_ISSUANCE, maxAllowed);
+  return { maxAllowed, effectiveMin, available };
+}
 
 /** Per-issuance cap as a fraction of annual revenue (25%) */
 export const MAX_BOND_ISSUANCE_REVENUE_FRACTION = 0.25;
