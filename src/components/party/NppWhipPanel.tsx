@@ -519,7 +519,8 @@ export function NppWhipPanel({
                 <p className="text-sm text-muted italic">Select a state to view whippable bills</p>
               ) : bills.length === 0 ? (
                 <p className="text-sm text-muted italic">
-                  No active bills to whip in this chamber.
+                  No bills to whip here. This room lists a bill only while your party holds NPP
+                  (AI-controlled) legislators in this chamber and that bill is in an open vote.
                 </p>
               ) : (
                 bills.map((item) => {
