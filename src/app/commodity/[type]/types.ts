@@ -70,7 +70,15 @@ export interface CommodityDetail {
    */
   reachableBooks?: Record<
     string,
-    { supply: number; demand: number; blockedSupply: number; untradedSupply: number }
+    {
+      supply: number;
+      demand: number;
+      domesticDemand: number;
+      imports: number;
+      exports: number;
+      blockedSupply: number;
+      untradedSupply: number;
+    }
   >;
   /** Maps stateId → countryId for multi-country commodity views */
   stateCountryMap?: Record<string, string>;

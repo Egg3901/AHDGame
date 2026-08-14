@@ -15,6 +15,7 @@ import { getBankId } from "@/lib/centralBank/helpers";
 import {
   getNeutralFederalSalesTaxRate,
   getNeutralStateSalesTaxRate,
+  sumHostRealizedRevenue,
   sumRealizedRevenue,
 } from "@/lib/turn/gdpGrowth";
 import { evaluateRegistry } from "./evaluate";
@@ -335,7 +336,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
   // engine compounds state.gdp each turn by the region's freshly-computed
   // gdpGrowth, so the GDP LEVEL (not just the rate) moves over time.
   const stateOps: Array<{
-    updateOne: { filter: { _id: string }; update: { $set: Record<string, number> } };
+    updateOne: { filter: { _id: string }; update: { $set: Record<string, number | string> } };
   }> = [];
 
   // Active organization directives nudge a curated metric across every member
@@ -417,11 +418,18 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     const ownedForState = sectorTax.ownedByState.get(state._id) ?? [];
     // P2/D7: prior realized-revenue baseline + how many turns ago it was taken.
     // Only meaningful under plants; the node ignores both fields otherwise.
+    // Ticket #1084: once the snapshot is tagged `host`, compare host-currency
+    // sums so FX restatement cannot annualize into a per-turn GDP jig. Untagged
+    // (legacy ₳) snapshots keep the ₳ path for one turn, then we rewrite as host.
     const prevRealized = finite(state.sectorRealizedRevenue);
     const prevRealizedTurn = finite(state.sectorRealizedRevenueTurn);
+    const useHostRealized = state.sectorRealizedRevenueUnit === "host";
+    const nowHost = sumHostRealizedRevenue(ownedForState);
+    const nowAnchor = sumRealizedRevenue(ownedForState, sectorTax.plantsEnabled);
     const payload: SectorRevenueTaxPayload = {
       owned: ownedForState,
       plantsEnabled: sectorTax.plantsEnabled,
+      realizedRevenueNow: useHostRealized ? nowHost : nowAnchor,
       realizedRevenuePrev: prevRealized,
       turnsSincePrev: prevRealizedTurn !== undefined ? turn - prevRealizedTurn : undefined,
       unowned: sectorTax.unownedByState.get(state._id) ?? [],
@@ -751,8 +759,13 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
             // spend a turn on the legacy fallback. The BASIS is still plants-
             // gated: below plants this stays the nameplate sum it has always
             // been, so non-plants worlds see no level shift.
-            sectorRealizedRevenue: sumRealizedRevenue(ownedForState, sectorTax.plantsEnabled),
+            // Under plants the snapshot is HOST currency (ticket #1084) so the
+            // next turn's ratio is FX-invariant.
+            sectorRealizedRevenue: sectorTax.plantsEnabled
+              ? nowHost
+              : sumRealizedRevenue(ownedForState, false),
             sectorRealizedRevenueTurn: turn,
+            ...(sectorTax.plantsEnabled ? { sectorRealizedRevenueUnit: "host" as const } : {}),
           },
         },
       },

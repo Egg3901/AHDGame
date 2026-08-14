@@ -13,6 +13,7 @@
  */
 import type { CommodityData } from "../types";
 import { priceRealizationFactor } from "@/lib/market/priceRealization";
+import { reachableSellableDemand } from "@/lib/trade/reachableBook";
 
 export type ShortageTone = "short-strong" | "short-mild" | "balanced" | "oversupplied";
 
@@ -80,14 +81,19 @@ function resolveScope(
   scope: ShortageScope
 ): { supply: number; demand: number; price: number; blocked: number; untraded: number } {
   if (scope.level === "reachable") {
-    // The book the turn engine actually settles this country's sellers
-    // against: own production versus the demand it can reach after imports
-    // and exports. The Country lens below answers a DIFFERENT question and is
-    // not a substitute — see the note on its branch.
+    // What a SELLER here can win: domestic demand (domestic output clears
+    // before imports) plus what it can place abroad, against domestic supply.
+    //
+    // Deliberately not the book's clearing `demand`, which is pinned to
+    // `supply` for every net importer by construction and would render every
+    // importing market as exactly "balanced" — the same defect that made the
+    // build gate report zero room in ticket #1077. Imports are an opportunity
+    // to displace, not a wall.
     const book = c.reachableBooks?.[scope.countryId];
+    const domestic = book ? reachableSellableDemand(book) : 0;
     return {
       supply: book?.supply ?? 0,
-      demand: book?.demand ?? 0,
+      demand: domestic,
       price: c.nationalPrices?.[scope.countryId] ?? c.basePrice,
       blocked: book?.blockedSupply ?? 0,
       untraded: book?.untradedSupply ?? 0,

@@ -30,8 +30,18 @@ import { reachableDemandUnits } from "@/lib/market/tradePartition";
 export interface ReachableBookEntry {
   /** What this country's own producers collectively made (S_H). */
   supply: number;
-  /** Demand its producers can actually sell into. See `reachableDemandUnits`. */
+  /**
+   * CLEARING demand: what existing producers fill THIS turn, net of imports.
+   * See `reachableDemandUnits`. This is the engine's order-book quantity and is
+   * NOT the right basis for "can new capacity sell" — see `reachableDemandGap`.
+   */
   demand: number;
+  /**
+   * Domestic demand before any trade (D_H). Carried explicitly because the
+   * clearing `demand` above is pinned to `supply` for every net importer by
+   * construction, which destroys the information a build decision needs.
+   */
+  domesticDemand: number;
   /** Units imported, which is demand already served by someone else. */
   imports: number;
   /** Units exported, which is demand reached abroad. */
@@ -108,6 +118,7 @@ export function buildReachableBooks(args: BuildReachableBooksArgs): ReachableBoo
       books.get(home)!.set(commodity, {
         supply,
         demand: reachableDemandUnits(demand, imports, exports),
+        domesticDemand: demand,
         imports,
         exports,
         blockedSupply,
@@ -131,11 +142,57 @@ export function serializeReachableBooks(books: ReachableBooks): ReachableBooksDo
 }
 
 /**
- * Unmet demand in a country's reachable book, in units. Zero when the book is
- * saturated or in glut. This is the per-country replacement for the old
- * `max(0, globalDemand - globalSupply)`.
+ * Room for NEW capacity in a country, in units.
+ *
+ * Deliberately NOT `demand - supply` on the clearing book. `clearCommodity`
+ * trades only the NET residual, so `imports` is set to exactly `D - S`, and the
+ * clearing demand collapses to `max(0, D - imports) + exports = supply` for
+ * every net importer. Measured on prod at turn 113, food, to every decimal
+ * place: US 323,218.24676 / 323,218.24676, UK 161,664.3504 / 161,664.3504, JP
+ * 370,004.72352 / 370,004.72352, IT and CN likewise. A gap taken off that is
+ * identically zero for any commodity a country imports, forever — which is
+ * algebra, not a market condition, and is why ticket #1077 reported "room for 0
+ * farms" even after the market scope was fixed.
+ *
+ * The quantity a build decision needs is what new DOMESTIC output could sell.
+ * Domestic production clears before imports (the netting above happens first),
+ * so extra domestic capacity displaces imports one-for-one and the deficit
+ * shrinks to match. Room is therefore the deficit itself:
+ *
+ *     max(0, domesticDemand + exports - supply)
+ *
+ * For a net importer that equals its import volume (US food: 1,115,631/day of
+ * displaceable Warsaw Pact grain). For a self-sufficient or exporting country
+ * it is unchanged from the clearing-book figure, because `imports` is 0 there.
+ *
+ * `domesticDemand` is reconstructed for books persisted before this field
+ * existed, so the first turn after deploy is not a cliff.
  */
 export function reachableDemandGap(book: ReachableBookEntry | undefined): number {
   if (!book) return 0;
-  return Math.max(0, book.demand - book.supply);
+  const domestic = domesticDemandOf(book);
+  return Math.max(0, domestic + book.exports - book.supply);
+}
+
+/**
+ * `domesticDemand`, healing a book written before the field was added by
+ * inverting the clearing formula: `demand = max(0, D - imports) + exports`, so
+ * `D = demand - exports + imports` whenever imports did not zero it out. Books
+ * carrying the field use it directly.
+ */
+/**
+ * Demand a seller in this country can actually win: domestic buyers (domestic
+ * output clears before imports) plus placeable exports. The numerator the
+ * Reachable lens ranks on, and the basis {@link reachableDemandGap} nets supply
+ * out of, so the map, the panel and the build gate cannot disagree.
+ */
+export function reachableSellableDemand(book: ReachableBookEntry): number {
+  return domesticDemandOf(book) + book.exports;
+}
+
+export function domesticDemandOf(book: ReachableBookEntry): number {
+  if (typeof book.domesticDemand === "number" && Number.isFinite(book.domesticDemand)) {
+    return book.domesticDemand;
+  }
+  return Math.max(0, book.demand - book.exports + book.imports);
 }

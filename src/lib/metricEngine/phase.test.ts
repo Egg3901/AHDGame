@@ -543,7 +543,7 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
   }
 
   type Ops = Array<{
-    updateOne: { filter: { _id: string }; update: { $set: Record<string, number> } };
+    updateOne: { filter: { _id: string }; update: { $set: Record<string, number | string> } };
   }>;
 
   /**
@@ -556,19 +556,27 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
     currentGrowthRate: number;
     prevRealized?: number;
     prevRealizedTurn?: number;
+    prevRealizedUnit?: "host";
     prevMetrics?: unknown[];
+    realizedRevenue?: number;
+    countryId?: string;
+    corp?: { _id: string; countryId: string };
+    fx?: Array<{ currencyCode: string; rate: number }>;
   }) {
     setupCollection("states", [
       {
         _id: "s1",
         name: "s1",
-        countryId: "US",
+        countryId: opts.countryId ?? "US",
         population: 100,
         gdp: 1000,
         ...(opts.prevRealized !== undefined
           ? {
               sectorRealizedRevenue: opts.prevRealized,
               sectorRealizedRevenueTurn: opts.prevRealizedTurn ?? 9,
+              ...(opts.prevRealizedUnit
+                ? { sectorRealizedRevenueUnit: opts.prevRealizedUnit }
+                : {}),
             }
           : {}),
       },
@@ -577,20 +585,27 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
       {
         _id: "secA",
         stateId: "s1",
+        countryId: opts.countryId ?? "US",
         revenue: opts.revenue,
+        ...(opts.realizedRevenue !== undefined ? { realizedRevenue: opts.realizedRevenue } : {}),
         currentGrowthRate: opts.currentGrowthRate,
-        corporationId: undefined,
+        corporationId: opts.corp?._id,
       },
     ]);
     setupCollection("unownedSectors", [{ _id: "uA", stateId: "s1", revenue: 500 }]);
     setupCollection("stateMetrics", opts.prevMetrics ?? []);
     db.collectionMocks.macroMetrics = db.collectionMocks.stateMetrics!;
-    setupCollection("corporations", []);
-    setupCollection("exchangeRates", []);
+    setupCollection("corporations", opts.corp ? [opts.corp] : []);
+    setupCollection("exchangeRates", opts.fx ?? []);
+    const countryId = opts.countryId ?? "US";
     setupCollection("federalBudget", [
-      { _id: "federal", countryId: "US", taxRates: { salesTax: 0 } },
+      countryId === "UK"
+        ? { _id: "UK", countryId: "UK", taxRates: { salesTax: 20 } }
+        : { _id: "federal", countryId: "US", taxRates: { salesTax: 0 } },
     ]);
-    setupCollection("stateBudgets", [{ _id: "s1", taxRates: { salesTax: 6 } }]);
+    setupCollection("stateBudgets", [
+      { _id: "s1", taxRates: { salesTax: countryId === "UK" ? 0 : 6 } },
+    ]);
     if (opts.mode) {
       db.collection("gameConfig");
       db.collectionMocks.gameConfig!.findOne = vi
@@ -621,6 +636,7 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
     await runMetricEngine(db as unknown as Db, 10);
     expect(stateOps[0].updateOne.update.$set.sectorRealizedRevenue).toBe(1234);
     expect(stateOps[0].updateOne.update.$set.sectorRealizedRevenueTurn).toBe(10);
+    expect(stateOps[0].updateOne.update.$set.sectorRealizedRevenueUnit).toBeUndefined();
   });
 
   it("uses the annualized region realized-revenue delta under plants", async () => {
@@ -689,5 +705,40 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
     const value = metricOps[0].updateOne.update.$set["economic.sectorGrowth.value"];
     expect(value).toBeGreaterThan(2); // the boom is visible…
     expect(value).toBeLessThanOrEqual(15); // …but bounded by the node ceiling
+  });
+
+  it("persists the host-currency snapshot + unit tag under plants (ticket #1084)", async () => {
+    seedWorld({
+      mode: "plants",
+      revenue: 1010,
+      realizedRevenue: 900,
+      currentGrowthRate: 3,
+    });
+    const { stateOps } = captureOps();
+    await runMetricEngine(db as unknown as Db, 10);
+    expect(stateOps[0].updateOne.update.$set.sectorRealizedRevenue).toBe(900);
+    expect(stateOps[0].updateOne.update.$set.sectorRealizedRevenueUnit).toBe("host");
+  });
+
+  it("does not treat an FX-only restatement as GDP growth once the host unit is tagged", async () => {
+    // Same £1000 realized both turns. GBP/₳ moved 0.80 → 0.85; the ₳ path
+    // would annualize that into a ~28pp contraction. Host/host is 0.
+    seedWorld({
+      mode: "plants",
+      countryId: "UK",
+      revenue: 1000,
+      realizedRevenue: 1000,
+      currentGrowthRate: 3,
+      prevRealized: 1000,
+      prevRealizedTurn: 9,
+      prevRealizedUnit: "host",
+      corp: { _id: "corpUK", countryId: "UK" },
+      fx: [{ currencyCode: "GBP", rate: 0.85 }],
+    });
+    const { metricOps, stateOps } = captureOps();
+    await runMetricEngine(db as unknown as Db, 10);
+    expect(metricOps[0].updateOne.update.$set["economic.sectorGrowth.value"]).toBe(0);
+    expect(stateOps[0].updateOne.update.$set.sectorRealizedRevenue).toBe(1000);
+    expect(stateOps[0].updateOne.update.$set.sectorRealizedRevenueUnit).toBe("host");
   });
 });
