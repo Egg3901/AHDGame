@@ -13,6 +13,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { computeSoeEfficiencyPenalty } from "@/lib/nationalization/soeEfficiency";
+import { NATCORP_RD_FULL_FUND_REVENUE_FRACTION } from "@/lib/nationalization/constants";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import {
   readStateOwnershipConcentration,
@@ -190,11 +191,13 @@ export function estimateNationalizedOperatingIncome(
   const rate = fxRateForCorpFromMap(corporation, fxByCurrency);
 
   let sectorIncome = 0;
+  let totalRevenueAnchor = 0;
   for (const sector of sectors) {
     // Sector fields are in the sector's host-state currency, not the corp's.
     const sectorCode = resolveSectorHostCurrencyCode(sector, corporation);
     const sectorRate = fxRateForSectorHostFromMap(sector, corporation, fxByCurrency);
     const revenueAnchor = readCorpEconomicAnchor(sector.revenue, sectorCode, sectorRate);
+    totalRevenueAnchor += revenueAnchor;
     const growthCostAnchor = readCorpEconomicAnchor(
       sector.currentGrowthCost,
       sectorCode,
@@ -282,7 +285,20 @@ export function estimateNationalizedOperatingIncome(
   const logisticsAnchor = readCorpEconomicAnchor(corporation.logisticsBudget ?? 0, code, rate);
   const ceoSalaryAnchor = readCorpEconomicAnchor(corporation.ceoSalary ?? 0, code, rate);
 
-  return sectorIncome - marketingAnchor - logisticsAnchor - ceoSalaryAnchor;
+  // NatCorp R&D (modernization) is an operating cost, charged here so the same
+  // spend the turn processor applies to `rdScore` (see buildRdModernizationOps)
+  // lands on BOTH the treasury remittance and the budget's State Enterprises
+  // line — the treasury funds R&D by remitting less. Capped at the corp's own
+  // revenue (× the full-fund fraction), identical to the turn math. SOE-only:
+  // private corps model R&D through the separate `rdBudget` field elsewhere.
+  const rdSpendAnchor = isStateOwned(corporation)
+    ? Math.min(
+        readCorpEconomicAnchor(corporation.rdBudgetPerTurn ?? 0, code, rate),
+        totalRevenueAnchor * NATCORP_RD_FULL_FUND_REVENUE_FRACTION
+      )
+    : 0;
+
+  return sectorIncome - marketingAnchor - logisticsAnchor - ceoSalaryAnchor - rdSpendAnchor;
 }
 
 export async function calculateCountryOwnedBudgetRevenue(

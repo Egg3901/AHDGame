@@ -59,24 +59,38 @@ describe("buildRdModernizationOps", () => {
   const REVENUE = 100_000;
   const FULL_FUND = Math.round(REVENUE * NATCORP_RD_FULL_FUND_REVENUE_FRACTION);
 
-  it("at full funding (full-fund cost), climbs toward MAX at the ramp rate, debiting the spend", () => {
+  it("at full funding (full-fund cost), climbs toward MAX at the ramp rate", () => {
     const id = new ObjectId();
     // budget = full-fund cost ⇒ full intensity, target = MAX (ramp-capped this turn).
     const ops = buildRdModernizationOps(
-      [{ _id: id, rdScore: 0, liquidCapital: 100_000_000, rdBudgetPerTurn: FULL_FUND }],
+      [{ _id: id, rdScore: 0, rdBudgetPerTurn: FULL_FUND }],
       rev(id, REVENUE),
       NOW
     );
     expect(ops).toHaveLength(1);
     expect(ops[0].updateOne.update.$set.rdScore).toBeCloseTo(NATCORP_RD_RAMP_UP_PER_TURN, 5);
-    expect(ops[0].updateOne.update.$inc).toEqual({ liquidCapital: -FULL_FUND });
-    expect(ops[0].updateOne.filter).toEqual({ _id: id, liquidCapital: { $gte: FULL_FUND } });
+    expect(ops[0].updateOne.filter).toEqual({ _id: id });
+  });
+
+  it("funds from revenue regardless of liquidCapital — a swept SOE still modernizes (ticket #1072)", () => {
+    // The corp earns full revenue but its cash has been remitted to the treasury
+    // (liquidCapital ~0). Under the old liquid-affordability gate this pinned
+    // rdScore at 0 forever; now the spend is charged through operating income, so
+    // a funded SOE modernizes no matter its cash balance.
+    const id = new ObjectId();
+    const ops = buildRdModernizationOps(
+      [{ _id: id, rdScore: 0, rdBudgetPerTurn: FULL_FUND }],
+      rev(id, REVENUE),
+      NOW
+    );
+    expect(ops).toHaveLength(1);
+    expect(ops[0].updateOne.update.$set.rdScore).toBeCloseTo(NATCORP_RD_RAMP_UP_PER_TURN, 5);
   });
 
   it("decays at the flat rate when unfunded (MAX ⇒ 0 over one year)", () => {
     const id = new ObjectId();
     const ops = buildRdModernizationOps(
-      [{ _id: id, rdScore: NATCORP_RD_MOMENTUM_MAX, liquidCapital: 0, rdBudgetPerTurn: 0 }],
+      [{ _id: id, rdScore: NATCORP_RD_MOMENTUM_MAX, rdBudgetPerTurn: 0 }],
       rev(id, REVENUE),
       NOW
     );
@@ -84,7 +98,6 @@ describe("buildRdModernizationOps", () => {
       NATCORP_RD_MOMENTUM_MAX - NATCORP_RD_DECAY_PER_TURN,
       2
     );
-    expect(ops[0].updateOne.update.$inc).toBeUndefined();
     expect(ops[0].updateOne.filter).toEqual({ _id: id });
   });
 
@@ -92,7 +105,7 @@ describe("buildRdModernizationOps", () => {
     const id = new ObjectId();
     const budget = Math.round(FULL_FUND / 10); // 10% intensity ⇒ target = MAX/10 (< ramp cap)
     const ops = buildRdModernizationOps(
-      [{ _id: id, rdScore: 0, liquidCapital: 100_000_000, rdBudgetPerTurn: budget }],
+      [{ _id: id, rdScore: 0, rdBudgetPerTurn: budget }],
       rev(id, REVENUE),
       NOW
     );
@@ -102,41 +115,33 @@ describe("buildRdModernizationOps", () => {
       Math.min(target, NATCORP_RD_RAMP_UP_PER_TURN),
       4
     );
-    expect(ops[0].updateOne.update.$inc).toEqual({ liquidCapital: -budget });
   });
 
-  it("treats the budget as a ceiling — never spends past the full-fund cost", () => {
+  it("treats the budget as a ceiling — a budget past the full-fund cost is capped to it", () => {
     const id = new ObjectId();
+    // Huge budget ⇒ spend capped at full-fund ⇒ full intensity ⇒ ramp-capped climb.
     const ops = buildRdModernizationOps(
-      [{ _id: id, rdScore: 0, liquidCapital: 100_000_000, rdBudgetPerTurn: 9_999_999 }],
+      [{ _id: id, rdScore: 0, rdBudgetPerTurn: 9_999_999 }],
       rev(id, REVENUE),
       NOW
     );
-    expect(ops[0].updateOne.update.$inc).toEqual({ liquidCapital: -FULL_FUND });
+    expect(ops[0].updateOne.update.$set.rdScore).toBeCloseTo(NATCORP_RD_RAMP_UP_PER_TURN, 5);
   });
 
-  it("decays (no spend) when it cannot afford the desired spend", () => {
+  it("decays when revenue is zero — no revenue, no funding possible", () => {
     const id = new ObjectId();
     const ops = buildRdModernizationOps(
-      [
-        {
-          _id: id,
-          rdScore: 100,
-          liquidCapital: Math.floor(FULL_FUND / 2),
-          rdBudgetPerTurn: FULL_FUND,
-        },
-      ],
-      rev(id, REVENUE), // desired spend = full-fund > liquid (half) ⇒ unaffordable
+      [{ _id: id, rdScore: 100, rdBudgetPerTurn: FULL_FUND }],
+      rev(id, 0), // zero revenue ⇒ full-fund cost 0 ⇒ spend 0 ⇒ decays
       NOW
     );
-    expect(ops[0].updateOne.update.$inc).toBeUndefined();
     expect(ops[0].updateOne.update.$set.rdScore).toBeCloseTo(100 - NATCORP_RD_DECAY_PER_TURN, 2);
   });
 
   it("skips a corp at rest (zero momentum, zero budget)", () => {
     expect(
       buildRdModernizationOps(
-        [{ _id: new ObjectId(), rdScore: 0, liquidCapital: 0, rdBudgetPerTurn: 0 }],
+        [{ _id: new ObjectId(), rdScore: 0, rdBudgetPerTurn: 0 }],
         new Map(),
         NOW
       )
