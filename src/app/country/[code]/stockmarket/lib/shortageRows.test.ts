@@ -211,7 +211,16 @@ describe("buildShortageRows reachable lens (ticket #1077)", () => {
     globalDemand: 357_532,
     nationalPrices: { US: 80 },
     reachableBooks: {
-      US: { supply: 30_658, demand: 55_804, blockedSupply: 164_002, untradedSupply: 0 },
+      US: {
+        supply: 30_658,
+        // Clearing demand is pinned to supply because imports fill the residual.
+        demand: 30_658,
+        domesticDemand: 55_804,
+        imports: 25_146,
+        exports: 0,
+        blockedSupply: 164_002,
+        untradedSupply: 0,
+      },
     },
   });
 
@@ -222,6 +231,14 @@ describe("buildShortageRows reachable lens (ticket #1077)", () => {
     const [us] = buildShortageRows([oil], { level: "reachable", countryId: "US" });
     expect(us.dsRatio).toBeCloseTo(1.82, 2);
     expect(us.tone).toBe("short-strong");
+  });
+
+  it("ranks on displaceable demand, not the import-pinned clearing book", () => {
+    // The clearing book reads demand == supply for every net importer, which
+    // would render this market exactly "balanced" and hide the opportunity.
+    const [us] = buildShortageRows([oil], { level: "reachable", countryId: "US" });
+    expect(us.demand).toBe(55_804);
+    expect(us.tone).not.toBe("balanced");
   });
 
   it("discloses walled-off supply without folding it into the ratio", () => {
@@ -242,7 +259,15 @@ describe("buildShortageRows reachable lens (ticket #1077)", () => {
       basePrice: 100,
       globalPrice: 100,
       reachableBooks: {
-        US: { supply: 0, demand: 0, blockedSupply: 0, untradedSupply: 5_000_000 },
+        US: {
+          supply: 0,
+          demand: 0,
+          domesticDemand: 0,
+          imports: 0,
+          exports: 0,
+          blockedSupply: 0,
+          untradedSupply: 5_000_000,
+        },
       },
     });
     const rows = buildShortageRows([walled], { level: "reachable", countryId: "US" });
