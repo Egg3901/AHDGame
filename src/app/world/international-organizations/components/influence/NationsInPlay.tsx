@@ -133,9 +133,14 @@ export function NationsInPlay({
         return t.costToGate === null ? "unpriced" : fundAmount(t.costToGate);
       case "toJoin": {
         const toGate = roundToShareGrid(joinShare - t.ourShare);
-        return toGate <= 0
-          ? `ours ${formatShare(t.ourShare)} · eligible`
-          : `${formatShare(toGate)} to join`;
+        if (toGate > 0) return `${formatShare(toGate)} to join`;
+        // Over the gate: what matters now is the sustain clock, not the share.
+        if (t.joinCountdown) {
+          return t.joinCountdown.turnsToApply > 0
+            ? `applies in ${t.joinCountdown.turnsToApply}`
+            : "applying to join";
+        }
+        return `ours ${formatShare(t.ourShare)} · eligible`;
       }
       case "flashpoint":
         return t.crisis ? `${t.crisis.turnsRemaining} turns` : "—";

@@ -107,6 +107,15 @@ export interface InfluenceTarget {
    * the gate — nothing left to buy is not the same as free. Both sort last.
    */
   costToGate: number | null;
+  /**
+   * For a non-member nation sitting at or above the join gate: how long it has
+   * held there, and how many turns remain before it files a membership
+   * application. Null unless it qualifies — a nation below the gate has no run
+   * to count, and a player-run nation never auto-applies (players pick their own
+   * blocs), so neither shows a countdown. `turnsToApply === 0` means the run is
+   * complete and the application is due; the members' vote still decides after.
+   */
+  joinCountdown: { turnsHeld: number; turnsToApply: number } | null;
 }
 
 export interface InfluencePlayRow {
@@ -322,6 +331,12 @@ export async function loadOrgInfluence(
   const memberRows = await membershipsCol.find({ organizationId }).toArray();
   const memberIds = new Set<string>(memberRows.map((m) => String(m.countryId)));
 
+  // Loaded here rather than only for the members panel below: the targets loop
+  // needs it too, to decide whether a nation over the gate is actually on the
+  // path to apply. A player-run nation never auto-applies, so it must not be
+  // shown a countdown that will never fire.
+  const access = await getAllCountryAccess(db);
+
   const crisesCol = await getAlignmentCrisesCollection(db);
   const openCrises = await crisesCol.find({ status: "open" }).sort({ closesTurn: 1 }).toArray();
   const crisisByTarget = new Map(
@@ -385,6 +400,24 @@ export async function loadOrgInfluence(
     const previousOurShare = standing.previousShares?.[channelDef.poleId];
     const pointsToGate = Math.max(0, JOIN_SHARE - ourShare);
 
+    // The sustain clock the turn engine keeps in `joinReadySince`, surfaced.
+    // Only a non-member, non-player nation actually holding the gate is on the
+    // path to apply, so the countdown is null otherwise (see accession skips in
+    // alignmentPhase.ts). Reads the raw pole share, not `standing.eligible`,
+    // because the clock itself is stamped on the raw share crossing the gate.
+    const joinReadySince = row.joinReadySince?.[channelDef.poleId];
+    const isPlayerRun = access[row.entityId as CountryId]?.enabledForPlayers === true;
+    const joinCountdown =
+      !memberIds.has(standing.entityId) &&
+      !isPlayerRun &&
+      ourShare >= JOIN_SHARE &&
+      joinReadySince != null
+        ? {
+            turnsHeld: Math.max(0, currentTurn - joinReadySince),
+            turnsToApply: Math.max(0, SUSTAIN_TURNS - (currentTurn - joinReadySince)),
+          }
+        : null;
+
     targets.push({
       ...standing,
       ourShare,
@@ -402,6 +435,7 @@ export async function loadOrgInfluence(
       crisis: crisisByTarget.get(standing.entityId) ?? null,
       sanctionedBy: sanctionsByTarget.get(standing.entityId) ?? [],
       isMember: memberIds.has(standing.entityId),
+      joinCountdown,
     });
   }
 
@@ -463,7 +497,6 @@ export async function loadOrgInfluence(
   // country would read "player" and have its own defection risk hidden from it —
   // the opposite of a warning.
   const alignmentByEntity = new Map(rows.map((r) => [r.entityId as string, r]));
-  const access = await getAllCountryAccess(db);
 
   const members: InfluenceMemberRow[] = [];
   for (const m of memberRows) {
