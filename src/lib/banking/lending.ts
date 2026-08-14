@@ -6,6 +6,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { isBlockedBorrower, type ResolveFundConstituents } from "@/lib/banking/blacklist";
 import { getEffectiveBankRates } from "@/lib/banking/rates";
+import { getCapitalLendableHeadroom } from "@/lib/banking/capitalAdequacy";
 import { getLendableHeadroom, getReserveRequirement } from "@/lib/banking/reserves";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { emitTx } from "@/lib/financialTxLog/emit";
@@ -336,6 +337,36 @@ export function computeNpcLoanBook(regionalGdp: number, lendingRatePercent: numb
   );
 
   return { volume, expectedDefaultRatePercent };
+}
+
+/**
+ * Pure: GDP-sized NPC loan demand cannot exceed what this bank can reserve
+ * against or capitalize. `otherLoans` is the book excluding the NPC bulk
+ * being sized, so the cap is the room left for that bulk.
+ */
+export function capNpcLoanTarget(
+  demandVolume: number,
+  input: {
+    totalDeposits: number;
+    otherLoans: number;
+    reserveRatio: number;
+    postedCapital: number;
+    liquidCapital: number;
+    propBookMarkValue?: number;
+  }
+): number {
+  const demand = Number.isFinite(demandVolume) && demandVolume > 0 ? demandVolume : 0;
+  const reserveCap = getLendableHeadroom(
+    { totalDeposits: input.totalDeposits, totalLoans: input.otherLoans },
+    input.reserveRatio
+  );
+  const capitalCap = getCapitalLendableHeadroom({
+    postedCapital: input.postedCapital,
+    liquidCapital: input.liquidCapital,
+    totalLoans: input.otherLoans,
+    propBookMarkValue: input.propBookMarkValue,
+  });
+  return Math.max(0, Math.min(demand, reserveCap, capitalCap));
 }
 
 /**

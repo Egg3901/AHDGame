@@ -145,3 +145,21 @@ export function recapDeadlineExpired(
 export function mayDistribute(standing: CapitalStanding): boolean {
   return standing === "adequate";
 }
+
+/**
+ * Pure: additional risk assets (loans or prop) the bank can take on without
+ * falling below {@link MIN_CAPITAL_RATIO}. The engine uses this to cap
+ * auto-originated NPC books so a GDP-sized loan demand cannot undercapitalize
+ * a charter the CEO did not lever themselves.
+ */
+export function getCapitalLendableHeadroom(input: {
+  postedCapital: number;
+  liquidCapital: number;
+  totalLoans: number;
+  propBookMarkValue?: number;
+}): number {
+  const position = assessCapital(input);
+  if (position.capitalAnchor <= 0 || MIN_CAPITAL_RATIO <= 0) return 0;
+  const maxRiskAssets = position.capitalAnchor / MIN_CAPITAL_RATIO;
+  return Math.max(0, maxRiskAssets - position.riskAssetsAnchor);
+}

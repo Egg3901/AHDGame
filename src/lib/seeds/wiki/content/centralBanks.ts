@@ -271,6 +271,8 @@ headroom = max(0, totalDeposits × (1 − reserveRatio) − totalLoans)
 
 Raise the ratio and every bank in the currency has less room to lend against the same deposit base; banks already at the old limit are frozen out of new lending until deposits grow or loans run off. Lower it and headroom opens up at once. This makes the requirement the third monetary lever next to the prime rate and QE: the rate prices credit, QE moves the money stock, the reserve requirement caps how much private credit the deposit base can carry at all.
 
+The engine will not auto-accept deposits or auto-lend past what the bank's cash and posted capital can support. A rival parking savings at your bank, or a household inflow overnight, cannot push you through the reserve line and have the charter pulled for it.
+
 It also feeds insurance pricing: a bank holding thin reserves against the requirement pays a higher deposit-insurance premium (see below), so the ratio disciplines banks even before it binds them.
 
 ## The deposit insurance fund

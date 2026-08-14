@@ -105,3 +105,25 @@ export function getLendableHeadroom(
   const ratio = Number.isFinite(reserveRatio) ? reserveRatio : 0;
   return Math.max(0, deposits * (1 - ratio) - loans);
 }
+
+/**
+ * Pure: largest deposit book the bank's cash can reserve against.
+ *
+ * Player and NPC deposits do not credit `liquidCapital` (pointer / CB-pool
+ * moves), so an unsolicited inflow would otherwise raise required reserves
+ * overnight and look like a reserve breach. Capacity is cash / ratio; a
+ * zero-or-negative ratio means the requirement does not bind.
+ */
+export function getReservableDepositCapacity(
+  liquidCapital: number,
+  reserveRatio: number
+): number {
+  const cash =
+    typeof liquidCapital === "number" && Number.isFinite(liquidCapital)
+      ? Math.max(0, liquidCapital)
+      : 0;
+  const ratio =
+    typeof reserveRatio === "number" && Number.isFinite(reserveRatio) ? reserveRatio : 0;
+  if (ratio <= 0) return Number.POSITIVE_INFINITY;
+  return cash / ratio;
+}

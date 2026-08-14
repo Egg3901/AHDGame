@@ -301,7 +301,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               totalDeposits: charter.totalDeposits ?? 0,
               totalLoans: charter.totalLoans ?? 0,
               npcDeposits: charter.npcDeposits ?? 0,
-              reserves: charter.reserves ?? 0,
+              reserves: charter.reserves ?? corporation.liquidCapital ?? 0,
               confidence: charter.confidence ?? null,
               warningBand: charter.warningBand ?? null,
               panicTurns: charter.panicTurns ?? 0,

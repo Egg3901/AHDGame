@@ -12,6 +12,7 @@ import {
   NPC_LOAN_BOOK_VOLUME_FACTOR_MAX,
   NPC_LOAN_BOOK_VOLUME_FACTOR_MIN,
   applyLoanPayment,
+  capNpcLoanTarget,
   computeNpcLoanBook,
   markLoanDefaulted,
 } from "../lending";
@@ -19,6 +20,7 @@ import {
   RESERVE_REQUIREMENT_HISTORICAL_DEFAULT,
   RESERVE_REQUIREMENT_MODERN_DEFAULT,
   getLendableHeadroom,
+  getReservableDepositCapacity,
 } from "../reserves";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -107,6 +109,17 @@ describe("banking lending", () => {
       );
       expect(getLendableHeadroom({ totalDeposits: 100_000, totalLoans: 95_000 }, 0.2)).toBe(0);
       expect(getLendableHeadroom({}, 0.1)).toBe(0);
+    });
+  });
+
+  describe("getReservableDepositCapacity", () => {
+    it("is cash divided by the reserve ratio", () => {
+      expect(getReservableDepositCapacity(20_000, 0.2)).toBe(100_000);
+      expect(getReservableDepositCapacity(0, 0.1)).toBe(0);
+    });
+
+    it("does not bind when the ratio is zero", () => {
+      expect(getReservableDepositCapacity(1, 0)).toBe(Number.POSITIVE_INFINITY);
     });
   });
 
@@ -579,6 +592,34 @@ describe("banking lending", () => {
           NPC_LOAN_BOOK_DEFAULT_MAX_PERCENT
         );
       }
+    });
+  });
+
+  describe("capNpcLoanTarget", () => {
+    it("will not originate more than reserve headroom or the 8% capital book", () => {
+      const demand = 1_000_000_000;
+      const capped = capNpcLoanTarget(demand, {
+        totalDeposits: 100_000,
+        otherLoans: 0,
+        reserveRatio: 0.2,
+        postedCapital: 8_000,
+        liquidCapital: 0,
+        propBookMarkValue: 0,
+      });
+      // Reserve: 100_000 * 0.8 = 80_000. Capital: 8_000 / 0.08 = 100_000.
+      expect(capped).toBe(80_000);
+    });
+
+    it("is zero when the bank has no cash and no posted capital", () => {
+      expect(
+        capNpcLoanTarget(50_000, {
+          totalDeposits: 100_000,
+          otherLoans: 0,
+          reserveRatio: 0.1,
+          postedCapital: 0,
+          liquidCapital: 0,
+        })
+      ).toBe(0);
     });
   });
 

@@ -37,7 +37,7 @@ Effective rates are floored at small positive minima so a zero or negative quote
 
 Banks attract NPC household deposits from the central bank's external broad money pool, competing on deposit rate versus the central bank savings APY. Players can move their savings pointer to a private bank (one holder per currency).
 
-Total deposits (players + NPC) are capped by the bank's **deposit ceiling**, derived from financial-sector capacity allocated to branches. NPC inflow stops at the ceiling; outflow is always allowed. Player balances already above the ceiling are grandfathered, but the bank cannot accept new player deposits that would push further over.
+Total deposits (players + NPC) are capped by the bank's **deposit ceiling**, derived from financial-sector capacity allocated to branches, **and** by the cash the bank can actually hold as reserves. A deposit that would push required reserves above the corporation's free cash is refused; NPC inflow stops at the same line. Outflow is always allowed. Player balances already above either cap are grandfathered, but the bank cannot accept new player deposits that would push further over. The engine also will not auto-lend an NPC loan book larger than remaining reserve headroom or the 8% capital ratio, so a household deposit or a GDP-sized loan demand cannot revoke the charter overnight.
 
 Each currency has a deposit insurance fund with an insured cap (era and FX anchored). Balances up to the cap are protected on failure; amounts above the cap take a haircut.
 

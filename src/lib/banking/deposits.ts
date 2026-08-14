@@ -5,6 +5,7 @@ import type { SavingsHolder } from "@/lib/db/types/bank";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { isBlockedDepositor } from "@/lib/banking/blacklist";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
+import { getReservableDepositCapacity, getReserveRequirement } from "@/lib/banking/reserves";
 import { isDepositTakingCharter } from "./charterKinds";
 
 export type MoveCharacterSavingsResult =
@@ -180,6 +181,21 @@ export async function moveCharacterSavings(
         return {
           ok: false,
           error: "Bank deposit ceiling reached; cannot accept additional player deposits",
+        };
+      }
+
+      // Pointer deposits do not credit the bank's cash, so a dump that the
+      // bank cannot reserve against would read as a reserve breach next turn.
+      const reserveRatio = await getReserveRequirement(db, currency);
+      const reservable = getReservableDepositCapacity(
+        targetBank.liquidCapital ?? 0,
+        reserveRatio
+      );
+      const npcDeposits = Math.max(0, targetBank.bankCharter?.npcDeposits ?? 0);
+      if (peerSafe + myBalance + npcDeposits > reservable + 1e-9) {
+        return {
+          ok: false,
+          error: "Bank cannot cover the reserve requirement for additional deposits",
         };
       }
     }

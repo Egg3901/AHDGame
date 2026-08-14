@@ -40,6 +40,7 @@ describe("banking deposits", () => {
     db.collection("characters");
     db.collection("corporateSectors");
     db.collection("gameState");
+    db.collection("centralBanks");
 
     db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
       _id: "default",
@@ -57,6 +58,10 @@ describe("banking deposits", () => {
     db.collectionMocks.characters!.aggregate.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([{ total: 0 }]),
     });
+    db.collectionMocks.centralBanks!.findOne.mockResolvedValue({
+      _id: "US",
+      bankReserveRequirement: 0.1,
+    });
   });
 
   async function importDeposits() {
@@ -71,6 +76,7 @@ describe("banking deposits", () => {
 
       db.collectionMocks.corporations!.findOne.mockResolvedValue({
         _id: bankId,
+        liquidCapital: 10_000_000,
         bankCharter: makeActiveRetailCharter({ currency: "USD" }),
       });
       db.collectionMocks.characters!.findOne.mockResolvedValue({
@@ -153,6 +159,36 @@ describe("banking deposits", () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error).toMatch(/blacklist/i);
+    });
+
+    it("rejects a deposit the bank cannot reserve against", async () => {
+      const characterId = new ObjectId();
+      const bankId = new ObjectId();
+      db.collectionMocks.corporations!.findOne.mockResolvedValue({
+        _id: bankId,
+        liquidCapital: 1_000,
+        bankCharter: makeActiveRetailCharter({ currency: "USD", npcDeposits: 0 }),
+      });
+      db.collectionMocks.characters!.findOne.mockResolvedValue({
+        _id: characterId,
+        currencyBalances: {
+          campaign: 0,
+          personal: {},
+          savings: { USD: 50_000 },
+        },
+      });
+
+      const { moveCharacterSavings } = await importDeposits();
+      const result = await moveCharacterSavings(
+        db as unknown as Db,
+        characterId,
+        "USD",
+        bankId.toString()
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toMatch(/reserve requirement/i);
+      expect(db.collectionMocks.characters!.updateOne).not.toHaveBeenCalled();
     });
 
     it("allows moving to centralBank even with zero savings balance", async () => {

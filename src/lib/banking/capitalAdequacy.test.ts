@@ -6,6 +6,7 @@ import {
   STRESS_LOSS_FRACTION,
   assessCapital,
   capitalShortfall,
+  getCapitalLendableHeadroom,
   mayDistribute,
   recapDeadlineExpired,
 } from "./capitalAdequacy";
@@ -113,5 +114,28 @@ describe("mayDistribute", () => {
     expect(mayDistribute("adequate")).toBe(true);
     expect(mayDistribute("stressed")).toBe(false);
     expect(mayDistribute("undercapitalized")).toBe(false);
+  });
+});
+
+describe("getCapitalLendableHeadroom", () => {
+  it("is the loans that keep the book at exactly the 8% minimum", () => {
+    expect(
+      getCapitalLendableHeadroom({
+        postedCapital: 8_000,
+        liquidCapital: 0,
+        totalLoans: 0,
+      })
+    ).toBe(100_000);
+  });
+
+  it("shrinks as existing loans and the prop book consume the capacity", () => {
+    expect(
+      getCapitalLendableHeadroom({
+        postedCapital: 8_000,
+        liquidCapital: 0,
+        totalLoans: 40_000,
+        propBookMarkValue: 10_000,
+      })
+    ).toBe(50_000);
   });
 });

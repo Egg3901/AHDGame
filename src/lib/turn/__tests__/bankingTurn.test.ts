@@ -5,6 +5,8 @@ import type { BankCharter, BankLoan, DepositInsuranceFund } from "@/lib/db/types
 import type { Corporation } from "@/lib/db/types";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { MIN_DEPOSIT_RATE_PERCENT, MIN_LENDING_RATE_PERCENT } from "@/lib/banking/rates";
+import { assessCapital } from "@/lib/banking/capitalAdequacy";
+import { getLendableHeadroom, getReservableDepositCapacity } from "@/lib/banking/reserves";
 import {
   BASE_PREMIUM_ANNUAL,
   computeInsurancePremium,
@@ -211,6 +213,9 @@ describe("processBankingTurn", () => {
           }
           if (typeof u.$set["bankCharter.depositCeiling"] === "number") {
             liveCorp.bankCharter!.depositCeiling = u.$set["bankCharter.depositCeiling"] as number;
+          }
+          if (typeof u.$set["bankCharter.reserves"] === "number") {
+            liveCorp.bankCharter!.reserves = u.$set["bankCharter.reserves"] as number;
           }
         }
         if (u.$inc?.liquidCapital) {
@@ -720,5 +725,56 @@ describe("processBankingTurn", () => {
     expect(liveCorp.bankCharter!.npcDeposits!).toBeLessThan(before);
     expect(characterState.savings).toBeGreaterThanOrEqual(2_000_000);
     expect(liveCorp.bankCharter!.depositCeiling).toBe(600_000);
+  });
+
+  it("will not park NPC deposits the bank cannot reserve against", async () => {
+    liveCorp.liquidCapital = 10_000;
+    bankCorp.liquidCapital = 10_000;
+    liveCorp.bankCharter!.npcDeposits = 0;
+    bankCorp.bankCharter!.npcDeposits = 0;
+    characterState.savings = 0;
+    db.collectionMocks.characters!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ total: 0 }]),
+    });
+    db.collectionMocks.characters!.find.mockReturnValue(findCursor([]));
+    db.collectionMocks.states!.find.mockReturnValue(findCursor([{ _id: "CA", gdp: 0 }]));
+
+    await processBankingTurn(db as unknown as Db, TURN);
+
+    const cash = liveCorp.liquidCapital ?? 0;
+    const npc = liveCorp.bankCharter!.npcDeposits ?? 0;
+    expect(npc).toBeLessThanOrEqual(getReservableDepositCapacity(cash, 0.1) + 1e-6);
+    expect(liveCorp.bankCharter!.reserves).toBe(cash);
+  });
+
+  it("will not auto-lend an NPC book the bank cannot capitalize or reserve", async () => {
+    liveCorp.bankCharter!.npcDeposits = 50_000;
+    bankCorp.bankCharter!.npcDeposits = 50_000;
+    liveCorp.bankCharter!.totalLoans = 0;
+    bankCorp.bankCharter!.totalLoans = 0;
+    characterState.savings = 0;
+    db.collectionMocks.characters!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ total: 0 }]),
+    });
+    db.collectionMocks.characters!.find.mockReturnValue(findCursor([]));
+    // GDP-sized demand: 1_000_000 millions → $1T face at 15% share.
+    db.collectionMocks.states!.find.mockReturnValue(findCursor([{ _id: "CA", gdp: 1_000_000 }]));
+
+    await processBankingTurn(db as unknown as Db, TURN);
+
+    const loans = liveCorp.bankCharter!.totalLoans ?? 0;
+    const deposits = liveCorp.bankCharter!.totalDeposits ?? 0;
+    const headroom = getLendableHeadroom(
+      { totalDeposits: deposits, totalLoans: 0 },
+      0.1
+    );
+    expect(loans).toBeLessThanOrEqual(headroom + 1e-6);
+    const position = assessCapital({
+      postedCapital: liveCorp.bankCharter!.postedCapital,
+      liquidCapital: liveCorp.liquidCapital ?? 0,
+      totalLoans: loans,
+      propBookMarkValue: liveCorp.bankCharter!.propBookMarkValue,
+    });
+    expect(position.standing).not.toBe("undercapitalized");
   });
 });

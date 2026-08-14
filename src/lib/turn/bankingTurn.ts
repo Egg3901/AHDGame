@@ -22,10 +22,15 @@ import {
   getInsuredCap,
   sumInsuredPlayerDeposits,
 } from "@/lib/banking/insurance";
-import { applyLoanPayment, computeNpcLoanBook, markLoanDefaulted } from "@/lib/banking/lending";
+import {
+  applyLoanPayment,
+  capNpcLoanTarget,
+  computeNpcLoanBook,
+  markLoanDefaulted,
+} from "@/lib/banking/lending";
 import { cbMarginRatePercent } from "@/lib/banking/interbank";
 import { effectiveBankRatesFromPrime } from "@/lib/banking/rates";
-import { getReserveRequirement } from "@/lib/banking/reserves";
+import { getReservableDepositCapacity, getReserveRequirement } from "@/lib/banking/reserves";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
 import { roundSavingsAmount, savingsApyPercent } from "@/lib/currency/savingsInterest";
 import { discountWindowRatePercent } from "@/lib/banking/discountWindow";
@@ -324,7 +329,12 @@ async function processOneBank(
     bankCharter: live.bankCharter,
     liquidCapital: live.liquidCapital,
   });
-  const npcRoom = Math.max(0, depositCeiling - playerDeposits);
+  const reserveRatioRequired = await getReserveRequirement(db, currency);
+  // NPC inflow that the bank cannot reserve against would tank confidence
+  // and look like a run. Outflow is always allowed (target can sit below stock).
+  const reservable = getReservableDepositCapacity(liquidCapital, reserveRatioRequired);
+  const reserveRoom = Math.max(0, reservable - playerDeposits);
+  const npcRoom = Math.min(Math.max(0, depositCeiling - playerDeposits), reserveRoom);
 
   // (b) NPC deposit flow - CB update first, then corp npcDeposits
   const cbDocId = getBankId(getCountryIdForCurrency(currency));
@@ -474,7 +484,6 @@ async function processOneBank(
   const depositBaseForRatio =
     postInterestBalances.reduce((s, b) => s + Math.max(0, b), 0) + npcDeposits;
   const reserveRatioActual = computeReserveRatioActual(liquidCapital, depositBaseForRatio);
-  const reserveRatioRequired = await getReserveRequirement(db, currency);
   const premiumDue = computeInsurancePremium(
     insuredDeposits,
     reserveRatioActual,
@@ -539,6 +548,7 @@ async function processOneBank(
   }
   const regionalGdp = caches.gdpByCurrency.get(currency) ?? 0;
   const npcBook = computeNpcLoanBook(regionalGdp, rates.lendingRatePercent);
+  const depositsNow = playerDeposits + playerInterestPaid + npcDeposits;
   const bulkResult = await serviceNpcBulkBook(
     db,
     turn,
@@ -550,6 +560,10 @@ async function processOneBank(
       expectedDefaultRatePercent: npcBook.expectedDefaultRatePercent,
       liquidCapital,
       totalLoans,
+      totalDeposits: depositsNow,
+      reserveRatio: reserveRatioRequired,
+      postedCapital: live.bankCharter.postedCapital ?? 0,
+      propBookMarkValue: live.bankCharter.propBookMarkValue ?? 0,
       cbDocId,
       cb,
     }
@@ -579,6 +593,7 @@ async function processOneBank(
         "bankCharter.npcDeposits": npcDeposits,
         "bankCharter.totalDeposits": totalDeposits,
         "bankCharter.totalLoans": totalLoans,
+        "bankCharter.reserves": liquidCapital,
         "bankCharter.depositCeiling": depositCeiling,
         "bankCharter.lastBankingTurn": turn,
         updatedAt: new Date(),
@@ -809,6 +824,10 @@ type NpcBulkState = {
   expectedDefaultRatePercent: number;
   liquidCapital: number;
   totalLoans: number;
+  totalDeposits: number;
+  reserveRatio: number;
+  postedCapital: number;
+  propBookMarkValue: number;
   cbDocId: string;
   cb?: Pick<CentralBank, "externalBroadMoney">;
 };
@@ -841,9 +860,20 @@ async function serviceNpcBulkBook(
     status: { $in: ["current", "arrears"] },
   });
 
+  const currentBulk = Math.max(0, loan?.outstanding ?? 0);
+  const otherLoans = Math.max(0, totalLoans - currentBulk);
+  const target = capNpcLoanTarget(state.targetVolume, {
+    totalDeposits: state.totalDeposits,
+    otherLoans,
+    reserveRatio: state.reserveRatio,
+    postedCapital: state.postedCapital,
+    liquidCapital,
+    propBookMarkValue: state.propBookMarkValue,
+  });
+
   if (!loan) {
     // Ramp from zero - same 25% flow cap as deposit NPC migration.
-    const initial = Math.max(0, npcFlowDelta(0, state.targetVolume));
+    const initial = Math.max(0, npcFlowDelta(0, target));
     const doc: BankLoan = {
       _id: new ObjectId(),
       bankCorporationId,
@@ -865,7 +895,6 @@ async function serviceNpcBulkBook(
   }
 
   const current = Math.max(0, loan.outstanding ?? 0);
-  const target = Math.max(0, state.targetVolume);
   const adjust = createdThisPass ? 0 : npcFlowDelta(current, target);
   const nextOutstandingBeforeYield = Math.max(0, current + adjust);
   if (!createdThisPass) {
