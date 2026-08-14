@@ -111,8 +111,8 @@ export function MilitaryBudgetTab({
           </div>
         </div>
         <p className="mt-3 text-[11px] leading-relaxed text-muted">
-          This tab does not set the line. Raise or cut defence spending by proposing a defence
-          bill in the legislature; the national budget page shows the booked category.
+          This tab does not set the line. Raise or cut defence spending by proposing a defence bill
+          in the legislature; the national budget page shows the booked category.
         </p>
         <div className="mt-2 flex flex-wrap gap-3 text-[12px] font-semibold">
           <a href={`/country/${countryCode}/legislature`} className="text-gov-soft hover:underline">
