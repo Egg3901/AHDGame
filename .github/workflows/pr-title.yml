@@ -1,0 +1,33 @@
+name: PR Title
+
+# Feature PRs squash-merge into development, so the PR title becomes the commit
+# on a permanent branch. Husky commitlint only guards local commits, not the
+# squash title, so enforce Conventional Commits format on the title here.
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  lint-title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Mirror commitlint's @commitlint/config-conventional type list.
+          types: |
+            build
+            chore
+            ci
+            docs
+            feat
+            fix
+            perf
+            refactor
+            revert
+            style
+            test

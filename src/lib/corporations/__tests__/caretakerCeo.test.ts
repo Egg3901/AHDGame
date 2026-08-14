@@ -9,6 +9,7 @@ import {
   pickCaretakerNpp,
   appointCaretakerCeo,
   dismissCaretakerCeo,
+  CARETAKER_REAPPOINT_COOLDOWN_TURNS,
 } from "../caretakerCeo";
 
 const now = new Date("2026-06-24T12:00:00Z");
@@ -31,12 +32,12 @@ function corp(over: Partial<Corporation> = {}): Corporation {
 
 describe("validateCaretakerAppointment (pure)", () => {
   it("allows a sitting human CEO", () => {
-    expect(validateCaretakerAppointment(corp())).toBeNull();
-    expect(validateCaretakerAppointment(corp({ ceoType: undefined }))).toBeNull();
+    expect(validateCaretakerAppointment(corp(), 0)).toBeNull();
+    expect(validateCaretakerAppointment(corp({ ceoType: undefined }), 0)).toBeNull();
   });
 
   it("rejects a missing corp", () => {
-    expect(validateCaretakerAppointment(null)).toBe("corp-not-found");
+    expect(validateCaretakerAppointment(null, 0)).toBe("corp-not-found");
   });
 
   it("rejects a corp that already has a caretaker", () => {
@@ -47,16 +48,26 @@ describe("validateCaretakerAppointment (pure)", () => {
         appointedTurn: 1,
       },
     });
-    expect(validateCaretakerAppointment(c)).toBe("already-caretaker");
+    expect(validateCaretakerAppointment(c, 0)).toBe("already-caretaker");
   });
 
   it("rejects a vacant CEO seat", () => {
-    expect(validateCaretakerAppointment(corp({ ceoVacant: true }))).toBe("ceo-vacant");
+    expect(validateCaretakerAppointment(corp({ ceoVacant: true }), 0)).toBe("ceo-vacant");
   });
 
   it("rejects a non-character (npp/imperial) CEO", () => {
-    expect(validateCaretakerAppointment(corp({ ceoType: "npp" }))).toBe("ceo-not-character");
-    expect(validateCaretakerAppointment(corp({ ceoType: "imperial" }))).toBe("ceo-not-character");
+    expect(validateCaretakerAppointment(corp({ ceoType: "npp" }), 0)).toBe("ceo-not-character");
+    expect(validateCaretakerAppointment(corp({ ceoType: "imperial" }), 0)).toBe(
+      "ceo-not-character"
+    );
+  });
+
+  it("rejects reappointment while the post-reclaim cooldown is active", () => {
+    const c = corp({ caretakerCooldownUntilTurn: 100 });
+    expect(validateCaretakerAppointment(c, 99)).toBe("reclaim-cooldown");
+    // Boundary: at the cooldown turn it is allowed again.
+    expect(validateCaretakerAppointment(c, 100)).toBeNull();
+    expect(validateCaretakerAppointment(c, 120)).toBeNull();
   });
 });
 
@@ -189,6 +200,8 @@ describe("dismissCaretakerCeo (I/O)", () => {
     expect((call.$set.ceoId as ObjectId).equals(underlyingCharacterId)).toBe(true);
     expect((call.$set.userId as ObjectId).equals(underlyingUserId)).toBe(true);
     expect(call.$unset.caretakerCeo).toBe("");
+    // Reclaim stamps the reappointment cooldown (turn 20 + 72).
+    expect(call.$set.caretakerCooldownUntilTurn).toBe(20 + CARETAKER_REAPPOINT_COOLDOWN_TURNS);
   });
 
   it("returns an auto-installed caretaker (no underlying character) to a vacant seat", async () => {
@@ -213,6 +226,7 @@ describe("dismissCaretakerCeo (I/O)", () => {
     expect(call.$set).not.toHaveProperty("ceoId");
     expect(call.$unset.caretakerCeo).toBe("");
     expect(call.$unset.ceoId).toBe("");
+    expect(call.$set.caretakerCooldownUntilTurn).toBe(20 + CARETAKER_REAPPOINT_COOLDOWN_TURNS);
   });
 
   it("is a no-op error when there is no caretaker", async () => {
