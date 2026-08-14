@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 
 type LeaderRow = {
   userId: string;
@@ -180,14 +181,6 @@ export function ReferralLeaderboardPanel() {
     );
   }
 
-  const contestStartedLabel =
-    contestStartedAt != null
-      ? new Date(contestStartedAt).toLocaleString("en-US", {
-          dateStyle: "medium",
-          timeStyle: "short",
-        })
-      : null;
-
   const emptyMessage =
     viewMode === "allTime"
       ? "No referrals recorded yet."
@@ -201,10 +194,15 @@ export function ReferralLeaderboardPanel() {
           <p className="mt-1 text-body-sm text-muted">
             Rankings count completed referrals — when an invited player finishes character setup.
           </p>
-          {contestMode && contestStartedLabel && (
+          {contestMode && contestStartedAt != null && (
             <p className="mt-2 text-body-xs text-muted">
               Contest tracking since{" "}
-              <span className="font-medium text-foreground">{contestStartedLabel}</span>
+              <span className="font-medium text-foreground">
+                <LocalTime
+                  value={contestStartedAt}
+                  options={{ dateStyle: "medium", timeStyle: "short" }}
+                />
+              </span>
             </p>
           )}
         </div>

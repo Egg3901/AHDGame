@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { LocalTime } from "@/components/time/LocalTime";
 
 const ENDPOINT = "/api/admin/conflicts/general/toggle";
 
@@ -79,7 +80,15 @@ export function ConflictsGeneralToggle() {
           {on && enabledBy && (
             <p className="mt-2 text-xs text-muted">
               Enabled by <span className="font-medium text-foreground">{enabledBy}</span>
-              {enabledAt ? ` on ${new Date(enabledAt).toLocaleString("en-US")}` : ""}.
+              {enabledAt ? (
+                <>
+                  {" "}
+                  on <LocalTime value={enabledAt} />
+                </>
+              ) : (
+                ""
+              )}
+              .
             </p>
           )}
           {message && <p className="mt-2 text-sm text-muted">{message}</p>}

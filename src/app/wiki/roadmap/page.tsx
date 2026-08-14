@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface RoadmapItem {
   _id: string;
@@ -65,7 +66,7 @@ function ItemRow({ item }: { item: RoadmapItem }) {
         {item.description && <p className="mt-0.5 text-xs text-muted">{item.description}</p>}
         {item.completedAt && (
           <p className="mt-0.5 text-xs text-green-400/70">
-            Completed {new Date(item.completedAt).toLocaleDateString("en-US")}
+            Completed <LocalTime value={item.completedAt} options={{ dateStyle: "medium" }} />
           </p>
         )}
       </div>

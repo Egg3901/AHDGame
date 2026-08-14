@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import type { CorporationType } from "@/lib/constants/corporations";
+import { LocalTime } from "@/components/time/LocalTime";
 
 type TariffEntry = {
   id: string;
@@ -79,7 +80,7 @@ export function TariffsTab({ countryId }: { countryId: string }) {
               {t.rate === 0 ? "Nullified" : `${t.rate}%`}
             </p>
             <p className="text-xs text-muted-foreground">
-              {new Date(t.updatedAt).toLocaleDateString("en-US")}
+              <LocalTime value={t.updatedAt} options={{ dateStyle: "medium" }} />
             </p>
           </div>
         </div>

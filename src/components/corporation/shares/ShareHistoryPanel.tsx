@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import Link from "next/link";
 import { ListRowSkeleton, Skeleton } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 import {
   useShareHistory,
   type ShareHistoryEntry,
@@ -45,18 +46,6 @@ const KIND_BADGE_CLASS: Record<ShareHistoryEntry["kind"], string> = {
 
 function fmtAnchor(n: number): string {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function fmtDate(iso: string): string {
-  const d = new Date(iso);
-  // Date + time, compact. Respects locale for display order.
-  return d.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function fmtPercent(frac: number): string {
@@ -218,7 +207,18 @@ export default function ShareHistoryPanel({ corpId }: ShareHistoryPanelProps) {
                       title={e.note ?? undefined}
                     >
                       <td className="py-2 pr-3 whitespace-nowrap text-muted">
-                        <div>{fmtDate(e.createdAt)}</div>
+                        <div>
+                          <LocalTime
+                            value={e.createdAt}
+                            options={{
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }}
+                          />
+                        </div>
                         <div className="text-xs text-muted/70">Turn {e.turn}</div>
                       </td>
                       <td className="py-2 pr-3">

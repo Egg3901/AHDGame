@@ -18,6 +18,7 @@ import { classifyItem, parseAdminChangelog } from "./changelogUtils";
 import { HeroImage } from "@/components/HeroImage";
 import { HeroStatsStrip } from "@/components/ui";
 import { AdSenseUnit } from "@/components/AdSenseUnit";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface ChangelogClientProps {
   publicPosts: ChangelogPost[];
@@ -101,12 +102,11 @@ export function ChangelogClient({ publicPosts }: ChangelogClientProps) {
 
   const latestVersion = activePosts[0]?.version ?? "—";
   const oldestDate = activePosts.at(-1)?.date;
-  const sinceLabel = oldestDate
-    ? new Date(oldestDate + "T00:00:00").toLocaleDateString("en-US", {
-        month: "short",
-        year: "numeric",
-      })
-    : "—";
+  const sinceLabel = oldestDate ? (
+    <LocalTime value={oldestDate + "T00:00:00"} options={{ month: "short", year: "numeric" }} />
+  ) : (
+    "—"
+  );
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 pb-20">

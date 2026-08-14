@@ -10,6 +10,7 @@
  * isn't an outage, browsing still works.
  */
 import { useEffect, useState } from "react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface MaintenanceStatusResponse {
   mode?: "off" | "partial" | "full";
@@ -58,7 +59,7 @@ export function MaintenancePartialBanner() {
           {status.reason || DEFAULT_REASON}
           {status.expectedEnd ? (
             <span className="ml-1 text-warning/80">
-              (expected back to normal {new Date(status.expectedEnd).toLocaleString("en-US")})
+              (expected back to normal <LocalTime value={status.expectedEnd} />)
             </span>
           ) : null}
         </p>

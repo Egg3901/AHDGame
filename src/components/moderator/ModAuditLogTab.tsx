@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface AuditEntry {
   id: string;
@@ -130,7 +131,7 @@ export function ModAuditLogTab({ apiBase = "/api/admin/moderators" }: ModAuditLo
                     )}
                   </div>
                   <span className="text-xs text-muted">
-                    {new Date(entry.createdAt).toLocaleString("en-US")}
+                    <LocalTime value={entry.createdAt} />
                   </span>
                 </div>
                 {entry.details && <p className="mt-1 text-xs text-muted">{entry.details}</p>}

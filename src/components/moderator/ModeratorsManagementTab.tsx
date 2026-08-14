@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { PlayerSelector } from "@/components/PlayerSelector";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface Moderator {
   userId: string;
@@ -146,7 +147,7 @@ export function ModeratorsManagementTab() {
                     <span className="ml-2 text-sm text-muted">({mod.characterName})</span>
                   )}
                   <span className="ml-3 text-xs text-muted">
-                    Since {new Date(mod.moderatorSince).toLocaleDateString("en-US")}
+                    Since <LocalTime value={mod.moderatorSince} options={{ dateStyle: "medium" }} />
                   </span>
                 </div>
                 <button

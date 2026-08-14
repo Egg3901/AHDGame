@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 import type { MainTabId } from "@/components/admin/tabs/AdminTabsConfig";
 
 interface AuditRow {
@@ -64,15 +65,19 @@ export function RecentAdminActionsCard({ onNavigate }: RecentAdminActionsCardPro
         )}
         {rows?.map((row) => {
           const when = new Date(row.ts);
-          const time = Number.isNaN(when.getTime())
-            ? "—"
-            : when.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+          const validTime = !Number.isNaN(when.getTime());
           return (
             <div
               key={row._id}
               className="flex gap-2.5 border-b border-card-border/50 py-2 last:border-b-0"
             >
-              <span className="w-14 shrink-0 pt-px font-mono text-body-xs text-muted">{time}</span>
+              <span className="w-14 shrink-0 pt-px font-mono text-body-xs text-muted">
+                {validTime ? (
+                  <LocalTime value={when} options={{ hour: "2-digit", minute: "2-digit" }} />
+                ) : (
+                  "—"
+                )}
+              </span>
               <div className="min-w-0">
                 <div className="text-body-sm leading-snug">
                   <span className="font-semibold">{row.actor?.name ?? "System"}</span>{" "}

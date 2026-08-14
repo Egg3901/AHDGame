@@ -2,6 +2,7 @@
 
 import { useReducer, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface MailReport {
   _id: string;
@@ -85,15 +86,6 @@ export function MailReportsTab({ backHref }: { backHref?: string }) {
     fetchReports();
   }, [fetchReports]);
 
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
   const statusBadge = (s: MailReport["status"]) => {
     const cls =
       s === "pending"
@@ -148,7 +140,18 @@ export function MailReportsTab({ backHref }: { backHref?: string }) {
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2 flex-wrap">
                       {statusBadge(report.status)}
-                      <span className="text-xs text-muted">{formatDate(report.createdAt)}</span>
+                      <span className="text-xs text-muted">
+                        <LocalTime
+                          value={report.createdAt}
+                          options={{
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }}
+                        />
+                      </span>
                     </div>
                     {report.mail ? (
                       <>

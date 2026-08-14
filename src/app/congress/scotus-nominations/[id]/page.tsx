@@ -7,6 +7,7 @@ import { NominationPageErrorBoundary } from "@/components/NominationPageErrorBou
 import { NominationDetailSkeleton } from "@/app/congress/nominations/[id]/components/NominationDetailSkeleton";
 import { WhippedBadge } from "@/components/bills/WhippedBadge";
 import { useCountdown } from "@/hooks/useCountdown";
+import { LocalTime } from "@/components/time/LocalTime";
 import type { CountryId } from "@/lib/constants/countries";
 
 interface NominationDetail {
@@ -170,7 +171,12 @@ function ScotusNominationDetailContent() {
               <span className="font-medium">{nom.proposedByPresidentName ?? "President"}</span>
             </span>
             <span>
-              Proposed {nom.proposedAt ? new Date(nom.proposedAt).toLocaleDateString("en-US") : "—"}
+              Proposed{" "}
+              {nom.proposedAt ? (
+                <LocalTime value={nom.proposedAt} options={{ dateStyle: "medium" }} />
+              ) : (
+                "—"
+              )}
             </span>
             {nom.nomineeParty && <span className="capitalize">{nom.nomineeParty}</span>}
           </div>

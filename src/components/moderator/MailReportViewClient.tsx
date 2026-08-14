@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { LocalTime } from "@/components/time/LocalTime";
 
 type ReportStatus = "pending" | "dismissed" | "actioned";
 
@@ -41,15 +42,13 @@ interface MailReportViewClientProps {
   backHref?: string;
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const DATE_LABEL_OPTIONS = {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+} as const;
 
 export function MailReportViewClient({
   reportId,
@@ -137,7 +136,7 @@ export function MailReportViewClient({
             {subject ?? "Deleted message"}
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Reported {formatDate(report.createdAt)}
+            Reported <LocalTime value={report.createdAt} options={DATE_LABEL_OPTIONS} />
             {reporterUsername ? ` by @${reporterUsername}` : ""}
             {" · "}
             <span className={`font-medium uppercase ${statusTone}`}>{report.status}</span>
@@ -191,7 +190,9 @@ export function MailReportViewClient({
                       {msg.toCharacterName}
                     </Link>
                     <span>·</span>
-                    <span>{formatDate(msg.createdAt)}</span>
+                    <span>
+                      <LocalTime value={msg.createdAt} options={DATE_LABEL_OPTIONS} />
+                    </span>
                     {msg.isReported && (
                       <span className="rounded bg-error/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-error">
                         Reported

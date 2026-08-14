@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface RoadmapItem {
   _id: string;
@@ -467,7 +468,8 @@ export function RoadmapManager() {
                     {item.description && <p className="text-xs text-muted">{item.description}</p>}
                     {item.completedAt && (
                       <p className="text-xs text-green-400/70">
-                        Completed {new Date(item.completedAt).toLocaleDateString("en-US")}
+                        Completed{" "}
+                        <LocalTime value={item.completedAt} options={{ dateStyle: "medium" }} />
                       </p>
                     )}
                   </div>

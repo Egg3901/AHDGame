@@ -7,6 +7,7 @@ import { getRarityStyle, type RarityTier } from "@/lib/utils/achievementRarity";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { Avatar } from "@/components/Avatar";
 import { Modal } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface Progress {
   current: number;
@@ -256,7 +257,7 @@ export function AchievementsShowcaseClient({
                   >
                     <span className="text-foreground">{holder.name}</span>
                     <span className="text-muted">
-                      {new Date(holder.earnedAt).toLocaleDateString("en-US")}
+                      <LocalTime value={holder.earnedAt} options={{ dateStyle: "medium" }} />
                     </span>
                   </li>
                 ))}

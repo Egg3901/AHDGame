@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type { Task, TaskPriority } from "@/lib/db/types";
 import { TaskFormToast } from "./TaskFormToast";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface SummaryData {
   total: number;
@@ -199,7 +200,7 @@ export function TasksWidget() {
                   {task.title}
                 </span>
                 <span className="text-xs text-muted/60">
-                  {new Date(task.updatedAt).toLocaleDateString("en-US")}
+                  <LocalTime value={task.updatedAt} options={{ dateStyle: "medium" }} />
                 </span>
               </Link>
             ))}

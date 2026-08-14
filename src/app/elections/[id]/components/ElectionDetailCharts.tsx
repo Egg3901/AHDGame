@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { BarChart2, LayoutList, TrendingUp, Vote, ZoomIn } from "lucide-react";
 import { PartyLogo } from "@/components/PartyLogo";
+import { LocalTime } from "@/components/time/LocalTime";
 import { buildCandidateColorMap } from "@/lib/campaigns/candidateColor";
 import type { CandidateDetail, SnapshotPoint, VoteTurnSnapshot } from "./ElectionDetailTypes";
 import type { CountryId } from "@/lib/constants/countries";
@@ -178,10 +179,7 @@ export function PrimaryLineGraph({
 
   const timeLabels = [0, Math.floor((points.length - 1) / 2), points.length - 1].map((i) => ({
     x: xScale(i),
-    label: new Date(points[i].recordedAt).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
+    recordedAt: points[i].recordedAt,
   }));
 
   return (
@@ -208,9 +206,9 @@ export function PrimaryLineGraph({
             </text>
           </g>
         ))}
-        {timeLabels.map(({ x, label }, i) => (
+        {timeLabels.map(({ x, recordedAt }, i) => (
           <text key={i} x={x} y={H - 4} textAnchor="middle" fontSize={8} fill="var(--muted)">
-            {label}
+            <LocalTime value={recordedAt} options={{ hour: "2-digit", minute: "2-digit" }} />
           </text>
         ))}
         {series.map(({ color, coords }) => {

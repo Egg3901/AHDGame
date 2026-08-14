@@ -14,6 +14,7 @@ import { BillListItem, BillListStack } from "@/components/bills/BillListItem";
 import { ListRowSkeleton } from "@/components/ui";
 import { BillListControls, type BillVoteFilter } from "@/components/bills/BillListControls";
 import { VoteDonut } from "@/components/bills/VoteDonut";
+import { LocalTime } from "@/components/time/LocalTime";
 import {
   getCurrentCongressBillVote,
   matchesCongressBillStatusFilter,
@@ -88,7 +89,12 @@ function NominationCard({ nom }: { nom: NominationDisplay }) {
           <p className="text-xs text-muted leading-relaxed">{kindLabel}</p>
           <p className="text-[10px] text-muted/70">
             By {nom.proposedByPresidentName ?? "President"}
-            {nom.proposedAt && ` · ${new Date(nom.proposedAt).toLocaleDateString("en-US")}`}
+            {nom.proposedAt && (
+              <>
+                {" "}
+                · <LocalTime value={nom.proposedAt} options={{ dateStyle: "medium" }} />
+              </>
+            )}
           </p>
         </div>
         <div className="shrink-0">
@@ -104,10 +110,14 @@ function NominationCard({ nom }: { nom: NominationDisplay }) {
       {/* Footer */}
       <div className="px-5 py-3 border-t border-card-border/40">
         <div className="flex items-center justify-between text-[10px] text-muted">
-          <span>{nom.proposedAt ? new Date(nom.proposedAt).toLocaleDateString("en-US") : ""}</span>
+          <span>
+            {nom.proposedAt && (
+              <LocalTime value={nom.proposedAt} options={{ dateStyle: "medium" }} />
+            )}
+          </span>
           {nom.votingEndsAt && (
             <span className="text-yellow-400">
-              Closes {new Date(nom.votingEndsAt).toLocaleString("en-US")}
+              Closes <LocalTime value={nom.votingEndsAt} />
             </span>
           )}
         </div>

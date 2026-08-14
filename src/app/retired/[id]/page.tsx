@@ -11,6 +11,7 @@ import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimizatio
 import { Skeleton } from "@/components/ui";
 import { SeasonRecapStory } from "@/components/recap/SeasonRecapStory";
 import type { CharacterRecap } from "@/lib/recap/types";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface RetiredCharacterResponse {
   gameDateAnchor: GameDateAnchor | null;
@@ -79,20 +80,11 @@ const CAREER_EVENT_LABELS: Record<string, { label: string; color: string }> = {
   relocated: { label: "Relocated", color: "text-primary" },
 };
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatDateShort(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    year: "numeric",
-  });
-}
+const RETIRED_DATE_OPTS: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+};
 
 function getPolicyLabel(value: number): string {
   if (value <= -4) return "Far Left";
@@ -218,7 +210,10 @@ export default function RetiredCharacterProfilePage() {
                 {snap.homeState && ` · ${snap.homeState}, ${snap.countryId}`}
               </p>
               <p className="text-sm text-muted mt-1">
-                Active: {formatDateShort(snap.createdAt)} &mdash; {formatDateShort(data.retiredAt)}
+                Active:{" "}
+                <LocalTime value={snap.createdAt} options={{ month: "short", year: "numeric" }} />{" "}
+                &mdash;{" "}
+                <LocalTime value={data.retiredAt} options={{ month: "short", year: "numeric" }} />
               </p>
               {data.recap && (
                 <button
@@ -285,9 +280,14 @@ export default function RetiredCharacterProfilePage() {
                                 : event.officeLabel}
                           </p>
                           <p className="text-xs text-muted mt-0.5">
-                            {gameDateAnchor
-                              ? `${formatGameMonth(event.date, gameDateAnchor)} (${formatDate(event.date)})`
-                              : formatDate(event.date)}
+                            {gameDateAnchor ? (
+                              <>
+                                {formatGameMonth(event.date, gameDateAnchor)} (
+                                <LocalTime value={event.date} options={RETIRED_DATE_OPTS} />)
+                              </>
+                            ) : (
+                              <LocalTime value={event.date} options={RETIRED_DATE_OPTS} />
+                            )}
                           </p>
                         </div>
                       </div>

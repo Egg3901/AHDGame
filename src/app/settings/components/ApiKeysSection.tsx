@@ -139,7 +139,8 @@ export function ApiKeysSection() {
                   {t("apiKeys.requests", { count: k.requestCount ?? 0 })} ·{" "}
                   {t("apiKeys.lastUsed", {
                     when: k.lastUsedAt
-                      ? new Date(k.lastUsedAt).toLocaleString(locale)
+                      ? // eslint-disable-next-line local/no-implicit-locale-datetime -- t() interpolation needs a string, not a <LocalTime> element; keys load client-side so no SSR hydration mismatch and the runtime zone is already the viewer's
+                        new Date(k.lastUsedAt).toLocaleString(locale)
                       : t("apiKeys.never"),
                   })}
                 </div>

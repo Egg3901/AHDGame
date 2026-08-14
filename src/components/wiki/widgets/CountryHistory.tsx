@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface LeaderTimelineEntry {
   title: string;
@@ -57,15 +58,7 @@ const EVENT_LABEL: Record<string, string> = {
   other: "Event",
 };
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+const DATE_LABEL_OPTIONS = { year: "numeric", month: "short", day: "numeric" } as const;
 
 export function CountryHistory({ data: rawCountry }: { data?: string }) {
   const countryId = (rawCountry ?? "").trim().toUpperCase();
@@ -176,12 +169,23 @@ export function CountryHistory({ data: rawCountry }: { data?: string }) {
                       </td>
                       <td className="py-2 px-3 text-muted">{entry.party ?? "—"}</td>
                       <td className="py-2 px-3 text-right font-mono text-muted">
-                        T{entry.startTurn} · {formatDate(entry.startDate)}
+                        T{entry.startTurn} ·{" "}
+                        <LocalTime value={entry.startDate} options={DATE_LABEL_OPTIONS} />
                       </td>
                       <td className="py-2 pl-3 text-right font-mono text-muted">
-                        {entry.endTurn != null
-                          ? `T${entry.endTurn} · ${formatDate(entry.endDate ?? "")}`
-                          : "—"}
+                        {entry.endTurn != null ? (
+                          <>
+                            T{entry.endTurn}
+                            {entry.endDate && (
+                              <>
+                                {" "}
+                                · <LocalTime value={entry.endDate} options={DATE_LABEL_OPTIONS} />
+                              </>
+                            )}
+                          </>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                     </tr>
                   );
@@ -214,7 +218,7 @@ export function CountryHistory({ data: rawCountry }: { data?: string }) {
                 <div className="min-w-0 flex-1">
                   <p className="text-foreground">{e.title}</p>
                   <p className="text-xs text-muted">
-                    Turn {e.turn} · {formatDate(e.date)}
+                    Turn {e.turn} · <LocalTime value={e.date} options={DATE_LABEL_OPTIONS} />
                     {e.party ? ` · ${e.party}` : ""}
                   </p>
                 </div>

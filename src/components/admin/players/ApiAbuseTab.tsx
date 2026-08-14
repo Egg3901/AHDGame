@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface AbuseSignal {
   type: string;
@@ -101,7 +102,7 @@ export function ApiAbuseTab() {
           {view?.detectedAt ? (
             <>
               {view.source === "live" ? "Live scan" : "Last scan"}:{" "}
-              {new Date(view.detectedAt).toLocaleString("en-US")}
+              <LocalTime value={view.detectedAt} />
               {view.scannedRows != null ? ` · ${view.scannedRows} requests scanned` : ""}
             </>
           ) : (

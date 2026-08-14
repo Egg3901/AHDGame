@@ -6,6 +6,7 @@ import { getRarityStyle } from "@/lib/utils/achievementRarity";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { AchievementIcon } from "@/lib/utils/achievementIcons";
 import { Lock } from "lucide-react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface AchievementItem {
   id: string;
@@ -63,11 +64,10 @@ function AchievementTile({ achievement }: { achievement: AchievementItem }) {
             )}
             {achievement.earnedAt && (
               <p className="mt-0.5 text-[10px] text-muted/40">
-                {new Date(achievement.earnedAt).toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
+                <LocalTime
+                  value={achievement.earnedAt}
+                  options={{ month: "short", day: "numeric", year: "numeric" }}
+                />
               </p>
             )}
           </div>

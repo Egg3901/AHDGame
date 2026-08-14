@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { EmptyState } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface Candidate {
   id: string;
@@ -167,7 +168,7 @@ export function USLeadershipPanel() {
                     <p className="text-xs text-muted mt-1">
                       Ends:{" "}
                       <span className="text-yellow-400">
-                        {new Date(e.endsAt).toLocaleString("en-US")}
+                        <LocalTime value={e.endsAt} />
                       </span>
                     </p>
                   )}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import { useGameClock } from "@/contexts/useGameClock";
+import { LocalTime } from "@/components/time/LocalTime";
 import type { CountryId } from "@/lib/constants/countries";
 
 interface NominationDisplay {
@@ -147,7 +148,7 @@ export function NgChamberLeadershipPanel({ countryId }: { countryId: CountryId }
             {isElectionActive && (
               <div className="space-y-2">
                 <p className="text-xs text-muted">
-                  Election open — closes {new Date(r.election!.endsAt).toLocaleString("en-US")}.{" "}
+                  Election open — closes <LocalTime value={r.election!.endsAt} />.{" "}
                   {r.eligibilityLabel.replace(/^./, (c) => c.toUpperCase())} may declare and vote.
                 </p>
 
