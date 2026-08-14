@@ -724,6 +724,12 @@ export interface BondInfo {
   totalDebt: number;
   /** Per-issuance cap in ₳: 25% of annual revenue, floored at $100M */
   maxPerIssuance?: number;
+  /** Effective issuance ceiling in ₳: min(per-issuance cap, 2x-equity headroom). */
+  maxAllowedIssuance?: number;
+  /** Effective minimum issuance in ₳: the flat minimum clamped to the corp's ceiling. */
+  minIssuance?: number;
+  /** False when the corp's headroom is below the dust floor and bonds are unavailable. */
+  bondsAvailable?: boolean;
   isCeo: boolean;
   cooldownTurnsRemaining: number;
   /** ISO instant until which issuance is frozen for the launch window, else null. */
