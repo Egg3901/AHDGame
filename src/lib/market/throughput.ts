@@ -38,7 +38,9 @@ export function inputAvailability(balance: Balance | undefined): number {
  */
 export function computeThroughput(
   demandRates: Partial<Record<CommodityType, number>>,
-  balances: ReadonlyMap<CommodityType, Balance>
+  balances: ReadonlyMap<CommodityType, Balance>,
+  /** Optional local delivery result. Missing commodities retain global availability. */
+  localAvailability?: ReadonlyMap<CommodityType, number>
 ): { throughput: number; bindingInput: CommodityType | null } {
   if (!demandRates) return { throughput: 1, bindingInput: null };
   let min = 1;
@@ -46,7 +48,11 @@ export function computeThroughput(
   for (const commodity of Object.keys(demandRates) as CommodityType[]) {
     const rate = demandRates[commodity] ?? 0;
     if (rate <= 0) continue;
-    const avail = inputAvailability(balances.get(commodity));
+    const delivered = localAvailability?.get(commodity);
+    const avail =
+      typeof delivered === "number" && Number.isFinite(delivered)
+        ? Math.min(1, Math.max(0, delivered))
+        : inputAvailability(balances.get(commodity));
     if (avail < min) {
       min = avail;
       bindingInput = commodity;
