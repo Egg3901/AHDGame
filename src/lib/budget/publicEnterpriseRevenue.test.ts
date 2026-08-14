@@ -272,3 +272,49 @@ describe("estimateNationalizedOperatingIncome — plants idle upkeep", () => {
     expect(await income(s, { currentTurn: 500, rampTurns: 10 })).toBe(full);
   });
 });
+
+describe("estimateNationalizedOperatingIncome — R&D operating charge (ticket #1072)", () => {
+  const base = {
+    _id: new ObjectId(),
+    name: "SOE",
+    countryId: "US",
+    countryOwnerId: "US",
+    ownershipState: "stateOwned",
+    marketingBudget: 0,
+    logisticsBudget: 0,
+    ceoSalary: 0,
+  };
+  const sector = {
+    _id: new ObjectId(),
+    corporationId: base._id,
+    countryId: "US",
+    stateId: "CA",
+    sectorType: "manufacturing",
+    revenue: 1_000_000,
+    currentGrowthCost: 0,
+    profitMargin: 20,
+  };
+  // FULL_FUND cost = revenue × 0.03 = 30_000 (rate map empty ⇒ anchor = local).
+
+  async function income(corpExtra: Record<string, unknown>) {
+    const { estimateNationalizedOperatingIncome } = await import("./publicEnterpriseRevenue");
+    return estimateNationalizedOperatingIncome(
+      { ...base, ...corpExtra } as never,
+      [sector] as never,
+      new Map(),
+      new Map()
+    );
+  }
+
+  it("charges the R&D budget as an operating cost when below the full-fund cost", async () => {
+    const withRd = await income({ rdBudgetPerTurn: 10_000 });
+    const noRd = await income({ rdBudgetPerTurn: 0 });
+    expect(noRd - withRd).toBeCloseTo(10_000, 5);
+  });
+
+  it("caps the R&D charge at the full-fund cost (revenue × fraction)", async () => {
+    const huge = await income({ rdBudgetPerTurn: 9_999_999 });
+    const noRd = await income({ rdBudgetPerTurn: 0 });
+    expect(noRd - huge).toBeCloseTo(30_000, 5); // 1_000_000 × 0.03
+  });
+});
