@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import { CABINET_SETTING_COOLDOWN_UNSET } from "@/lib/cabinet/settingCooldowns";
 import type { CabinetSetting } from "@/lib/db/types/cabinetSetting";
 import type { MinisterialOrder } from "@/lib/db/types/ministerialOrder";
 
@@ -10,7 +11,7 @@ export function getCabinetSettingsCollection(db: Db) {
 /**
  * Clears the per-holder rate-limit cooldowns on a cabinet position's settings
  * document so a newly seated minister can change settings immediately instead of
- * inheriting their predecessor's 24-turn (tier) / once-per-turn (allocation)
+ * inheriting their predecessor's 24-turn (per lever) / once-per-turn (allocation)
  * cooldown. Policy values (tierSetting, allocationPercents, etc.) are preserved
  * for continuity of government. No-op when the position has no settings document
  * yet — deliberately not an upsert, so vacant positions stay clean.
@@ -25,7 +26,7 @@ export async function resetCabinetSettingCooldowns(
 ): Promise<void> {
   await getCabinetSettingsCollection(db).updateOne(
     { _id: `${countryId}_${positionId}` },
-    { $unset: { lastChangedTurn: "", lastAllocationChangedTurn: "" } }
+    { $unset: { ...CABINET_SETTING_COOLDOWN_UNSET } }
   );
 }
 
