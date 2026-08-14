@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import { scopeStateBillVotes, scopeStateBillVotesWithOfficials } from "./stateBillVoteScope";
+import {
+  resolveBillCardTally,
+  scopeStateBillVotes,
+  scopeStateBillVotesWithOfficials,
+} from "./stateBillVoteScope";
 import type { ScopedVoteOfficial } from "@/lib/congress/billVoting";
 
 function officialsCursor(docs: unknown[]) {
@@ -153,5 +157,84 @@ describe("scopeStateBillVotesWithOfficials (list-card path, #973)", () => {
     });
     expect(scoped.totals).toEqual({ for: 0, against: 0, abstain: 0 });
     expect(Object.keys(scoped.votes ?? {})).toHaveLength(0);
+  });
+});
+
+describe("resolveBillCardTally (ticket #1075)", () => {
+  const player = new ObjectId();
+  const nppOld = new ObjectId();
+  const nppDem = new ObjectId();
+  const nppFlp = new ObjectId();
+  const houseScope = { countryId: "US", officeType: "house" };
+
+  it("drops a de-seated NPP and counts the player who received those seats, so The Count stays within 435", () => {
+    // Founding-House repair moved 30 seats from nppOld onto the player. Both
+    // still have votes in the raw map; the stored aggregate double-counts them
+    // (250-215 = 465). Live-scope must show 220-215.
+    const votes = {
+      [`npp_${nppOld.toString()}`]: "for" as const,
+      [player.toString()]: "for" as const,
+      [`npp_${nppDem.toString()}`]: "for" as const,
+      [`npp_${nppFlp.toString()}`]: "against" as const,
+    };
+    const officials: ScopedVoteOfficial[] = [
+      {
+        characterId: player,
+        countryId: "US",
+        nppId: undefined,
+        officeType: "house",
+        seatsHeld: 30,
+      },
+      {
+        nppId: nppDem,
+        countryId: "US",
+        officeType: "house",
+        seatsHeld: 190,
+      },
+      {
+        nppId: nppFlp,
+        countryId: "US",
+        officeType: "house",
+        seatsHeld: 215,
+      },
+    ];
+
+    const tally = resolveBillCardTally(
+      votes,
+      { for: 250, against: 215, abstain: 0 },
+      undefined,
+      officials,
+      houseScope
+    );
+
+    expect(tally).toEqual({ for: 220, against: 215, abstain: 0 });
+    expect(tally.for + tally.against + tally.abstain).toBe(435);
+  });
+
+  it("uses a frozen snapshot instead of re-scoping a concluded bill (#0982)", () => {
+    const tally = resolveBillCardTally(
+      { [player.toString()]: "for" },
+      { for: 999, against: 0, abstain: 0 },
+      {
+        votes: { [player.toString()]: "for" },
+        weights: { [player.toString()]: 260 },
+        totals: { for: 260, against: 170, abstain: 5 },
+        resolvedAtTurn: 12,
+      },
+      [],
+      houseScope
+    );
+    expect(tally).toEqual({ for: 260, against: 170, abstain: 5 });
+  });
+
+  it("falls back to the stored aggregate when no current holder matches", () => {
+    const tally = resolveBillCardTally(
+      { [player.toString()]: "for" },
+      { for: 250, against: 215, abstain: 0 },
+      undefined,
+      [],
+      houseScope
+    );
+    expect(tally).toEqual({ for: 250, against: 215, abstain: 0 });
   });
 });

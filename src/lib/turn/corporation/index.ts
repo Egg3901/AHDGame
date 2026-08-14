@@ -194,9 +194,6 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const freightSettlementActive =
     (marketGovernorConfig as { freightSettlementMode?: string } | null)?.freightSettlementMode ===
       "active" && marketAtLeast(marketSystemMode, "clearing");
-  const interstateMoneyWiringEnabled =
-    (marketGovernorConfig as { interstateMoneyWiringEnabled?: boolean } | null)
-      ?.interstateMoneyWiringEnabled === true;
   const lookups = await buildCorporationLookups(db, {
     plantsEnabled: plantsEnabledForMarketShare,
     freightSettlementActive,

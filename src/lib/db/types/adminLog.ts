@@ -3,6 +3,8 @@ import type { ObjectId } from "mongodb";
 export type AdminLogCategory = "account" | "election" | "system";
 
 export type AdminLogAction =
+  | "freight_settlement_activated"
+  | "freight_settlement_shadowed"
   | "account_created"
   | "account_deleted_self"
   | "account_deleted_admin"

@@ -1,5 +1,6 @@
 import { ObjectId, type Db } from "mongodb";
 import type { ElectedOfficial } from "@/lib/db/types";
+import type { BillVoteSnapshot } from "@/lib/db/types/voteSnapshot";
 import {
   buildScopedVoteInputs,
   type BillVoteValue,
@@ -10,6 +11,30 @@ import {
 export interface ScopedStateVoteResult extends ScopedVoteInputs {
   /** Weighted for/against/abstain totals over the scoped (current-chamber) votes. */
   totals: { for: number; against: number; abstain: number };
+}
+
+export type BillCardTally = { for: number; against: number; abstain: number };
+
+/**
+ * Headline tally for a bill-list card. A concluded phase uses its frozen
+ * snapshot (#0982). An in-progress phase live-scopes to current seat holders
+ * so de-seated voters (and their old `seatsHeld`) cannot inflate the count
+ * past the chamber size (bug #0836 / ticket #973 on state lists; ticket #1075
+ * on the national Congress list). Falls back to the stored aggregate only
+ * when there are no current-holder votes to scope.
+ */
+export function resolveBillCardTally(
+  votes: Record<string, BillVoteValue> | undefined,
+  stored: BillCardTally,
+  snapshot: BillVoteSnapshot | undefined,
+  officials: ScopedVoteOfficial[],
+  scope: { countryId: string; officeType: string } | null
+): BillCardTally {
+  if (snapshot) return { ...snapshot.totals };
+  if (!scope) return stored;
+  const scoped = scopeStateBillVotesWithOfficials(votes, officials, scope);
+  if (Object.keys(scoped.votes ?? {}).length === 0) return stored;
+  return scoped.totals;
 }
 
 /**

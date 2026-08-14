@@ -21,11 +21,12 @@ import { generateAndSaveChamberChart } from "@/lib/charts/parliamentChart";
 import { ELECTION_TYPE_SHORT_LABEL } from "@/lib/utils/electionLabels";
 import {
   HOUSE_SEATS,
-  TOTAL_UK_COMMONS_SEATS,
   TOTAL_JP_SHUGIIN_SEATS,
   TOTAL_JP_SANGIIN_SEATS,
   TOTAL_DE_BUNDESTAG_SEATS,
 } from "@/lib/constants";
+import { getTotalUkCommonsSeats } from "@/lib/constants/states";
+import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { ZOD_COUNTRY_ENUM } from "@/lib/constants/countries";
 import { z } from "zod";
 import type {
@@ -223,10 +224,11 @@ export async function POST(request: Request) {
     const now = new Date();
 
     // Chart generation for national chambers only (no regionalCouncil)
+    const ukCommonsTotal = getTotalUkCommonsSeats(await getGameStatePreset(db));
     const chartSeatTotals: Record<string, number> = {
       house: HOUSE_SEATS ? Object.values(HOUSE_SEATS).reduce((a, b) => a + b, 0) : 435,
       senate: 100,
-      commons: TOTAL_UK_COMMONS_SEATS,
+      commons: ukCommonsTotal,
       shugiin: TOTAL_JP_SHUGIIN_SEATS,
       sangiin: TOTAL_JP_SANGIIN_SEATS,
       bundestag: TOTAL_DE_BUNDESTAG_SEATS,
