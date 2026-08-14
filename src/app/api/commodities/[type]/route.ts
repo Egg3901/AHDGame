@@ -30,6 +30,8 @@ import {
   SECTOR_DEMAND,
   MARKETING_ADVERTISING_DEMAND_RATE,
   GOVT_HEALTHCARE_DEMAND_RATE,
+  GOVT_HEALTHCARE_BUDGET_CATEGORIES,
+  govtSpendForCategory,
   NATCORP_COMMODITY_MULTIPLIER,
   dollarsToUnits,
   getCommodityStabilizer,
@@ -726,13 +728,19 @@ export async function getCommodityDetailData(
     if (commodity === "healthcare_services") {
       const federalBudgets = await db
         .collection<FederalBudget>("federalBudget")
-        .find({}, { projection: { "spending.byCategory.healthcare": 1 } })
+        // Whole category map, and alias-resolved below, so this panel reports
+        // the same number the turn books. UK/CN/IE spell the category `health`
+        // and were silently contributing nothing here too.
+        .find({}, { projection: { "spending.byCategory": 1 } })
         .toArray();
 
       let govtHealthcareUnits = 0;
       const turnsPerYear = 48;
       for (const budget of federalBudgets) {
-        const annualSpend = budget.spending?.byCategory?.healthcare ?? 0;
+        const annualSpend = govtSpendForCategory(
+          budget.spending?.byCategory,
+          GOVT_HEALTHCARE_BUDGET_CATEGORIES
+        );
         if (annualSpend <= 0) continue;
         govtHealthcareUnits +=
           (annualSpend / turnsPerYear / basePrice) * GOVT_HEALTHCARE_DEMAND_RATE;

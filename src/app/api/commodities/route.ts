@@ -19,6 +19,7 @@ import {
 } from "@/lib/constants/commodities";
 import { computeRollingAnnualizedPercentChange } from "@/lib/utils/rollingAnnualizedChange";
 import { conditionalJson } from "@/lib/api/conditionalJson";
+import { loadReachableBooks, reachableBooksFor } from "@/lib/trade/queries/loadReachableBooks";
 
 /**
  * GET /api/commodities?exchange=nyse|ftse
@@ -31,9 +32,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const exchange = searchParams.get("exchange")?.toLowerCase();
     // Opt-in enrichment for the shortage heat map's scope lens: adds full
-    // per-state and per-country supply/demand/price maps so the client can
-    // switch Global/Country/State without refetching. Default response shape is
-    // untouched (the table fetch stays byte-identical).
+    // per-state and per-country supply/demand/price maps, plus the per-country
+    // reachable books, so the client can switch Global/Reachable/Country/State
+    // without refetching. Default response shape is untouched (the table fetch
+    // stays byte-identical).
     const scopeFull = searchParams.get("scope") === "full";
 
     // Filter by country access: NYSE→US, FTSE→UK
@@ -48,6 +50,10 @@ export async function GET(request: Request) {
     }
 
     const currentTurn = (await getGameState())?.currentTurn ?? 1;
+    // Per-country reachable books (ticket #1077). Only the scope=full payload
+    // carries them; null on a world that has not run a turn since 1.1.2, which
+    // the client reads as "Reachable lens unavailable" rather than "no market".
+    const reachableBooks = scopeFull ? await loadReachableBooks(db) : null;
     const targetTurn = Math.max(1, currentTurn - TURNS_PER_YEAR);
     const target24hTurn = Math.max(1, currentTurn - 24);
 
@@ -194,6 +200,10 @@ export async function GET(request: Request) {
               nationalSupply: data.nationalSupply ?? {},
               nationalDemand: data.nationalDemand ?? {},
               nationalPrices: data.nationalPrices ?? {},
+              // Stored country -> commodity; the client's lens wants
+              // commodity -> country, so pivot it here rather than shipping the
+              // whole cube and re-indexing per render.
+              reachableBooks: reachableBooksFor(reachableBooks, commodity),
             }
           : {}),
       };
