@@ -74,6 +74,22 @@ describe("awardContract", () => {
     expect(capture.inserted).toHaveLength(1);
   });
 
+  it("can start active when the buyer is contracting its own state industry", async () => {
+    const capture: Capture = { inserted: [], updates: [] };
+    const c = await awardContract(stubDb(null, capture), {
+      countryId: "RU",
+      corporationId: new ObjectId(),
+      sectorId: new ObjectId(),
+      component: "ground",
+      lotsOrdered: 50,
+      pricePerLot: 1000,
+      awardedTurn: 7,
+      activateImmediately: true,
+    });
+    expect(c.status).toBe("active");
+    expect(capture.inserted[0].status).toBe("active");
+  });
+
   it("orders at least one lot and never a fractional price", async () => {
     const c = await awardContract(stubDb(null, { inserted: [], updates: [] }), {
       countryId: "US",
