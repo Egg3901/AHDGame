@@ -86,8 +86,8 @@ export function DoctrineTab({
         }
       >
         <p className="-mt-1 mb-3 text-[11px] leading-relaxed text-muted">
-          Your country starts with 12 doctrine points and gains 1 more at the start of each
-          game year. Adoption spends that pool; there is no refund.
+          Your country starts with 12 doctrine points and gains 1 more at the start of each game
+          year. Adoption spends that pool; there is no refund.
         </p>
         {/* category nav */}
         <div className="flex flex-wrap gap-2">
