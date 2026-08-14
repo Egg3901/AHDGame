@@ -17,7 +17,12 @@ import { buildMarketContext } from "@/lib/market/marketContext";
 import { computeClearingFactors, type SectorClearingInput } from "@/lib/market/clearing";
 import { computeBrandLoyaltyUpdates, type LoyaltySectorInput } from "./brandLoyaltyTurn";
 import { computeQualityUpdates } from "./brandQualityTurn";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import {
+  getEffectiveStrategyRates,
+  applyPlannedEconomyOutputMix,
+  plannedEconomyMediaSupplyFactor,
+} from "@/lib/constants/sectorStrategies";
+import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import {
   eraScaledBasePrices,
   commodityMixWeight,
@@ -379,13 +384,29 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     for (const [corpId, sectors] of lookups.sectorsByCorp) {
       const fx = fxByCorpId.get(corpId);
       for (const sector of sectors) {
-        const rates = getEffectiveStrategyRates(
+        const baseRates = getEffectiveStrategyRates(
           sector.sectorType,
           sector.strategyId ?? "standard",
           sector.transitionFromStrategyId,
           sector.transitionStartTurn,
           turn ?? 0
         );
+        // Same remap the world ledger applies (computeRawSupplyDemand): bloc
+        // media offers state broadcasting, not advertising. If the offer and
+        // the ledger disagree on the commodity, clearing's lagged-supply
+        // reconciliation misfires.
+        const rates = {
+          ...baseRates,
+          supply: applyPlannedEconomyOutputMix(
+            sector.sectorType,
+            baseRates.supply,
+            isPlannedEconomy(
+              (sector as { countryId?: string }).countryId,
+              currentYear,
+              commandEconomyEnabled
+            )
+          ),
+        };
         const sectorId = sector._id.toString();
         // countryId is backfilled onto every sector in buildLookups (from
         // stateCountryMap, "US" fallback), so the cast is total in practice.
@@ -424,7 +445,18 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
             producedUnits: sector.producedUnits,
             isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
             productionPolicyLevel: sector.productionPolicyLevel,
-            embargoSupplyFactor: embargoSupplyFactorFor(sector),
+            // Mirrors the ledger (computeRawSupplyDemand): embargo haircut plus
+            // the planned-economy media derate. Offer and ledger must agree.
+            embargoSupplyFactor:
+              embargoSupplyFactorFor(sector) *
+              plannedEconomyMediaSupplyFactor(
+                sector.sectorType,
+                isPlannedEconomy(
+                  (sector as { countryId?: string }).countryId,
+                  currentYear,
+                  commandEconomyEnabled
+                )
+              ),
           });
           if (scaled !== null && scaled > 0) {
             const supplyRates = rates.supply ?? {};
@@ -501,7 +533,16 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
                   producedUnits: sector.producedUnits,
                   isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
                   productionPolicyLevel: sector.productionPolicyLevel,
-                  embargoSupplyFactor: embargoSupplyFactorFor(sector),
+                  embargoSupplyFactor:
+                    embargoSupplyFactorFor(sector) *
+                    plannedEconomyMediaSupplyFactor(
+                      sector.sectorType,
+                      isPlannedEconomy(
+                        (sector as { countryId?: string }).countryId,
+                        currentYear,
+                        commandEconomyEnabled
+                      )
+                    ),
                 })
               : undefined,
         });

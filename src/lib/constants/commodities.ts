@@ -20,7 +20,7 @@
  */
 
 import type { CorporationType } from "./corporations";
-import { getEffectiveStrategyRates } from "./sectorStrategies";
+import { getEffectiveStrategyRates, applyPlannedEconomyOutputMix } from "./sectorStrategies";
 import { getOutputMultiplier, getInputMultiplier } from "@/lib/utils/productionPolicy";
 import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
 
@@ -627,6 +627,25 @@ export const GOVT_HEALTHCARE_DEMAND_RATE = 0.015;
  * hold documents spelled `health`, and a rename would need a migration to reach
  * them while this does not.
  */
+/**
+ * Share of a PLANNED economy's education budget that buys state broadcasting.
+ *
+ * A command economy funds its media directly rather than selling airtime, so
+ * this is the buyer that replaces the advertising market its broadcasters were
+ * pointed at (see `applyPlannedEconomyOutputMix`). Applies ONLY to planned
+ * economies — a market economy's education budget buys no such thing.
+ *
+ * Sized against prod at turn 114. Poland's media puts out 731,673 units/day of
+ * advertising, which value-conserves to 182,918 units/day of state
+ * broadcasting; its education line is 19.4bn zloty, ~₳810M/yr at the era rate,
+ * which is 1,962,000 units/turn of headroom at the era base price. 182,918 /
+ * 1,962,000 = 0.093. Bloc-wide that is roughly ₳345M/yr of state media
+ * spending, which is a real and visible slice of a propaganda state's budget
+ * rather than a rounding error, and it lands bloc entertainment services near
+ * balance instead of 700x oversupplied.
+ */
+export const STATE_MEDIA_DEMAND_RATE = 0.09;
+
 export const GOVT_HEALTHCARE_BUDGET_CATEGORIES = ["healthcare", "health"] as const;
 
 /**
@@ -1778,6 +1797,13 @@ export function computeRawSupplyDemand(
      *  unchanged when it's omitted. */
     countryId?: string;
     /**
+     * True when this sector sits in a command economy (caller resolves it via
+     * `isPlannedEconomy`). Remaps media output off `advertising`, which is a
+     * market institution a planned economy does not have.
+     */
+    plannedEconomy?: boolean;
+
+    /**
      * Plants tier (`plantsEnabled`): the units this sector ACTUALLY produced
      * last turn (`sector.producedUnits`, daily, currency-free). When present the
      * sector's supply contribution is this number split across its output mix,
@@ -1960,9 +1986,16 @@ export function computeRawSupplyDemand(
           )
         : null;
 
-    const supplyEntries = strategyRates
-      ? (Object.entries(strategyRates.supply) as [CommodityType, number][])
-      : (SECTOR_SUPPLY[st] ?? []).map((f) => [f.commodity, f.rate] as [CommodityType, number]);
+    // Planned economies produce state information, not sold airtime. Applied to
+    // BOTH the strategy path and the legacy SECTOR_SUPPLY fallback, and mirrored
+    // on the clearing offer in turn/corporation/index.ts — the ledger and the
+    // offered book must stay in the same commodities.
+    const rawSupplyMix: Partial<Record<CommodityType, number>> = strategyRates
+      ? strategyRates.supply
+      : Object.fromEntries((SECTOR_SUPPLY[st] ?? []).map((f) => [f.commodity, f.rate]));
+    const supplyEntries = Object.entries(
+      applyPlannedEconomyOutputMix(st, rawSupplyMix, sector.plannedEconomy === true)
+    ) as [CommodityType, number][];
 
     // ── Plants: real production replaces the revenue nameplate ────────────────
     // The nameplate derivation (revenue × rate / basePrice) is a PROXY for

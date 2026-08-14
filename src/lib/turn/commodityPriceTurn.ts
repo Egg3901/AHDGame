@@ -34,6 +34,7 @@ import {
   GOVT_DEFENSE_ORDNANCE_DEMAND_RATE,
   GOVT_SPEND_CATEGORY_ALIASES,
   govtSpendForCategory,
+  STATE_MEDIA_DEMAND_RATE,
   COMMODITY_PRICE_DRIFT_RATE,
   NATIONAL_COMMODITY_STABILIZER,
   COMMODITIES_NATIONAL_REGIONAL_PRICE_BLEND,
@@ -95,6 +96,7 @@ import type { State } from "@/lib/db/types/state";
 import { COUNTRY_ORDER } from "@/lib/constants/countries";
 import type { CountryId } from "@/lib/constants/countries";
 import { isPlannedEconomy, plannedShare } from "@/lib/constants/commandEconomy";
+import { plannedEconomyMediaSupplyFactor } from "@/lib/constants/sectorStrategies";
 import { administeredNationalPrice, dualTrackPrice } from "@/lib/economy/administeredPricing";
 import type { GameState } from "@/lib/db/types/gameState";
 import { clearAllCommodities, valueTradeSnapshot } from "@/lib/trade/snapshot";
@@ -400,15 +402,27 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // contribute. The authored era rate is the correct answer, so resolve it from
   // the preset's table before conceding to 1.0. INITIAL_RATES (2019) stays as
   // the last resort for an unknown preset, matching prior behaviour.
-  const activePreset =
+  const presetState = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      // `currentYear` rides along for the planned-economy output remap below —
+      // widening this projection rather than adding a read, so the positional
+      // fetch order the turn tests mock stays exactly as it is.
+      projection: { preset: 1, currentYear: 1 },
+    }
+  );
+  const activePreset = presetState?.preset ?? "";
+  const ledgerCurrentYear = presetState?.currentYear ?? null;
+  // Resolved here, above the supply ledger, because a command economy's media
+  // produces state information rather than sold advertising. Safe to add: every
+  // positional cursor the turn tests stub is already consumed by the parallel
+  // block above, so reads from here on fall through to the catch-all.
+  const ledgerCommandEconomyEnabled =
     (
-      await db.collection<GameState>("gameState").findOne(
-        { _id: "current" },
-        {
-          projection: { preset: 1 },
-        }
-      )
-    )?.preset ?? "";
+      await db
+        .collection<GameConfig>("gameConfig")
+        .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } })
+    )?.commandEconomyEnabled === true;
   const eraRates = getInitialRates(activePreset);
   /** ₳-normalizing FX rate for a country's budget, era-aware. */
   const fxRateForCountry = (countryId: string | undefined): number => {
@@ -480,7 +494,20 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     // Routed through the shared `embargoSupplyFactorFor` (constants/commodities)
     // rather than re-derived here — that helper is the single source of the
     // formula, and the clearing offer in turn/corporation/index.ts reads it too.
-    const embargoSupplyFactor = embargoSupplyFactorFor(s);
+    // Embargo haircut, and for planned-economy media the state-broadcasting
+    // derate: the bloc seed oversized those sectors ~4x versus what a state
+    // media budget funds, and the output mix cannot express that under plants.
+    // Mirrored on the clearing offer in turn/corporation/index.ts.
+    const embargoSupplyFactor =
+      embargoSupplyFactorFor(s) *
+      plannedEconomyMediaSupplyFactor(
+        s.sectorType as import("@/lib/constants/corporations").CorporationType,
+        isPlannedEconomy(
+          stateToCountry.get(s.stateId),
+          ledgerCurrentYear,
+          ledgerCommandEconomyEnabled
+        )
+      );
     return {
       sectorType: s.sectorType,
       // Anchor-normalize sector.revenue (LOCAL in corp currency post-Task-18A)
@@ -500,6 +527,13 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // sectorDemandModifier world-event effects (e.g. royal-event tourism
       // bump) to this sector's demand contribution.
       countryId: stateToCountry.get(s.stateId),
+      // Command economies have no advertising market: their media output is
+      // state information, re-denominated in the shared output remap.
+      plannedEconomy: isPlannedEconomy(
+        stateToCountry.get(s.stateId),
+        ledgerCurrentYear,
+        ledgerCommandEconomyEnabled
+      ),
       // Plants tier: real measured output, capacity, and cold/embargo state.
       // Null when the sector has never run a plants turn — the ledger then
       // falls back to the legacy revenue derivation for it.
@@ -1066,15 +1100,32 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     category: string;
     commodity: CommodityType;
     rate: number;
+    /** Planned economies only — see STATE_MEDIA_DEMAND_RATE. */
+    plannedOnly?: boolean;
   }> = [
     { category: "healthcare", commodity: "healthcare_services", rate: GOVT_HEALTHCARE_DEMAND_RATE },
     { category: "defense", commodity: "ordnance", rate: GOVT_DEFENSE_ORDNANCE_DEMAND_RATE },
+    // The buyer for state broadcasting. Bloc media was re-denominated off
+    // advertising (applyPlannedEconomyOutputMix); without this leg the glut
+    // simply moves into entertainment services instead of clearing.
+    {
+      category: "education",
+      commodity: "entertainment_services",
+      rate: STATE_MEDIA_DEMAND_RATE,
+      plannedOnly: true,
+    },
   ];
   const turnsPerYear = 48;
-  for (const { category, commodity, rate } of GOVT_SPEND_DEMAND) {
+  for (const { category, commodity, rate, plannedOnly } of GOVT_SPEND_DEMAND) {
     const basePrice = LEDGER_BASE_PRICES[commodity];
     const aliases = GOVT_SPEND_CATEGORY_ALIASES[category] ?? [category];
     for (const budget of federalBudgets) {
+      if (
+        plannedOnly &&
+        !isPlannedEconomy(budget.countryId, ledgerCurrentYear, ledgerCommandEconomyEnabled)
+      ) {
+        continue;
+      }
       const annualSpendLocal = govtSpendForCategory(budget.spending?.byCategory, aliases);
       if (annualSpendLocal <= 0) continue;
       const cid = budget.countryId;
