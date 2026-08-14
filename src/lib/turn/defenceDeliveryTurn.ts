@@ -2,6 +2,7 @@ import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { Corporation, CorporateSector } from "@/lib/db/types/corporation";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { lotsFromSector, militaryDivertedShare } from "@/lib/military/arsenal";
 import { componentsForStrategy, gradeCeilingFor } from "@/lib/military/arsenalComponents";
 import { listActiveContracts, advanceContract } from "@/lib/db/collections/defenceContracts";
@@ -24,12 +25,13 @@ export function canSupply(
   corp: Pick<Corporation, "countryId" | "liquidCurrencyCode">,
   countryId: string
 ): boolean {
-  // Domestic-only is a payment-safety constraint, not a simplification. `liquidCurrencyCode`
-  // is absent on pre-forex corps and documented "treat as USD", and six Eastern Bloc
-  // countries have no exchange-rate document at all — so paying a mismatched corp would move
-  // one currency into a balance denominated in another with no conversion anywhere.
+  // Domestic-only is a payment-safety constraint, not a simplification. Paying a mismatched
+  // corp would move one currency into a balance denominated in another with no conversion
+  // anywhere. Missing `liquidCurrencyCode` is inferred from the corp's country — the same
+  // rule `resolveCorpLiquidCurrencyCode` uses everywhere else — not treated as USD. The USD
+  // default hid every non-US domestic plant from the award picker (ticket #1087).
   if (corp.countryId !== countryId) return false;
-  const corpCurrency = corp.liquidCurrencyCode ?? "USD";
+  const corpCurrency = resolveCorpLiquidCurrencyCode(corp);
   return corpCurrency === COUNTRY_CURRENCY_MAP[countryId as CountryId];
 }
 

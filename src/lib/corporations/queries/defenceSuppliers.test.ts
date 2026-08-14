@@ -100,6 +100,33 @@ describe("listDefenceSuppliers", () => {
     expect(rows).toHaveLength(0);
   });
 
+  // Ticket #1087: a Soviet plant whose NatCorp never got liquidCurrencyCode used to vanish
+  // because canSupply treated the missing field as USD against a SUR appropriation.
+  it("offers a domestic plant whose currency is inferred from country", async () => {
+    const ruId = new ObjectId();
+    const rows = await listDefenceSuppliers(
+      stubDb({
+        sectors: [
+          {
+            _id: new ObjectId(),
+            corporationId: ruId,
+            countryId: "RU",
+            stateId: "MOS",
+            sectorType: "defense",
+            strategyId: "heavy_armor",
+            revenue: 10_000_000,
+          },
+        ],
+        corps: [{ _id: ruId, name: "Ministries of Defence Industry", countryId: "RU" }],
+        contracts: [],
+      }),
+      "RU",
+      1953
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].corporationName).toBe("Ministries of Defence Industry");
+  });
+
   it("omits a non-defence plant", async () => {
     const rows = await listDefenceSuppliers(
       stubDb(world({ sectors: [sector({ sectorType: "manufacturing" })] })),
