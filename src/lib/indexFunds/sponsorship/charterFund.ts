@@ -131,6 +131,19 @@ export async function charterFund(db: Db, input: CharterFundInput): Promise<Char
   );
   if (invalid) return { ok: false, error: invalid, status: 400 };
 
+  // Bank / fund separation: a corporation that runs a bank may not also sponsor
+  // an index fund. Enforced at creation only, so corporations that already hold
+  // both (pre-rule) are grandfathered. The mirror check lives in
+  // `banking/charter.ts` checkCharterEligibility.
+  if (sponsor.bankCharter?.status === "active") {
+    return {
+      ok: false,
+      status: 400,
+      error:
+        "A corporation that operates a bank cannot also sponsor an index fund. Wind down the bank charter first.",
+    };
+  }
+
   // Ticker must not collide with an existing fund OR an existing corporation:
   // the two share a namespace on every market surface in the game.
   const slug = sponsoredFundSlug(tickerSymbol);

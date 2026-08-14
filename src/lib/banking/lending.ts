@@ -53,7 +53,8 @@ export type LoanBorrower = {
   id: ObjectId;
 };
 
-export type OriginateLoanResult = { ok: true; loan: BankLoan } | { ok: false; error: string };
+export type OriginateLoanResult =
+  { ok: true; loan: BankLoan; pending?: boolean } | { ok: false; error: string };
 
 export type NpcLoanBook = {
   volume: number;
@@ -64,7 +65,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-async function buildFundConstituentResolver(
+export async function buildFundConstituentResolver(
   db: Db,
   fundIds: readonly string[] | undefined
 ): Promise<ResolveFundConstituents> {
@@ -198,6 +199,33 @@ export async function originateLoan(
 
   const loanId = new ObjectId();
   const originatedTurn = await getCurrentTurn(db);
+
+  // Opt-in approval: park the loan as `pending` with no money movement. The CEO
+  // accepts or rejects it from the console; acceptance runs the same disbursement
+  // path below via `disburseNamedLoan`. See `banking/loanApproval.ts`.
+  if (charter.requireApproval === true) {
+    const pendingLoan: BankLoan = {
+      _id: loanId,
+      bankCorporationId,
+      currency,
+      borrowerType: borrower.type,
+      borrowerId: borrower.id,
+      principal,
+      outstanding: principal,
+      ratePercent,
+      originatedTurn,
+      termTurns,
+      status: "pending",
+      requestedTurn: originatedTurn,
+    };
+    try {
+      await db.collection<BankLoan>("bankLoans").insertOne(pendingLoan);
+    } catch {
+      return { ok: false, error: "Failed to write loan document" };
+    }
+    return { ok: true, loan: pendingLoan, pending: true };
+  }
+
   const loan: BankLoan = {
     _id: loanId,
     bankCorporationId,
@@ -218,6 +246,44 @@ export async function originateLoan(
     return { ok: false, error: "Failed to write loan document" };
   }
 
+  const disbursed = await disburseNamedLoan(db, {
+    loan,
+    bankCorporationId,
+    bankName: bankCorp.name,
+    borrowerName,
+  });
+  if (!disbursed.ok) {
+    await db.collection<BankLoan>("bankLoans").deleteOne({ _id: loanId });
+    return disbursed;
+  }
+
+  return { ok: true, loan };
+}
+
+/**
+ * Move the money for a named loan whose doc is already inserted: $inc the bank's
+ * loan book, credit the borrower, and emit the origination ledger leg. On any
+ * failure it reverses whatever it did (bank $inc) and returns an error WITHOUT
+ * deleting the loan doc — the caller owns the doc lifecycle (auto-origination
+ * deletes it; approval reverts it to `pending`). Standalone Mongo, no txn.
+ */
+export async function disburseNamedLoan(
+  db: Db,
+  args: {
+    loan: Pick<
+      BankLoan,
+      "_id" | "currency" | "borrowerType" | "borrowerId" | "principal" | "ratePercent" | "termTurns"
+    >;
+    bankCorporationId: ObjectId;
+    bankName: string;
+    borrowerName: string;
+  }
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { loan, bankCorporationId, bankName, borrowerName } = args;
+  const { currency, principal } = loan;
+  const borrowerId = loan.borrowerId;
+  if (!borrowerId) return { ok: false, error: "Loan has no borrower" };
+
   const bankInc = await db.collection<Corporation>("corporations").updateOne(
     {
       _id: bankCorporationId,
@@ -231,14 +297,13 @@ export async function originateLoan(
   );
 
   if (bankInc.matchedCount !== 1) {
-    await db.collection<BankLoan>("bankLoans").deleteOne({ _id: loanId });
     return { ok: false, error: "Failed to update bank loan book" };
   }
 
   let creditOk = false;
-  if (borrower.type === "character") {
+  if (loan.borrowerType === "character") {
     const credit = await db.collection<Character>("characters").updateOne(
-      { _id: borrower.id },
+      { _id: borrowerId },
       {
         $inc: { [`currencyBalances.personal.${currency}`]: principal },
         $set: { updatedAt: new Date() },
@@ -247,7 +312,7 @@ export async function originateLoan(
     creditOk = credit.matchedCount === 1;
   } else {
     const credit = await db.collection<Corporation>("corporations").updateOne(
-      { _id: borrower.id },
+      { _id: borrowerId },
       {
         $inc: { liquidCapital: principal },
         $set: { updatedAt: new Date() },
@@ -257,7 +322,6 @@ export async function originateLoan(
   }
 
   if (!creditOk) {
-    await db.collection<BankLoan>("bankLoans").deleteOne({ _id: loanId });
     await db.collection<Corporation>("corporations").updateOne(
       { _id: bankCorporationId },
       {
@@ -268,6 +332,7 @@ export async function originateLoan(
     return { ok: false, error: "Failed to credit borrower" };
   }
 
+  const originatedTurn = await getCurrentTurn(db);
   // The release review's P1: origination moved money with zero ledger legs. On
   // transactionless Mongo the log IS the journal, so the compensating-write
   // strategy the rollback above implements had nothing to compensate against.
@@ -281,30 +346,30 @@ export async function originateLoan(
     type: "bank_loan_origination",
     turn: originatedTurn,
     createdAt: new Date(),
-    ...(borrower.type === "character"
+    ...(loan.borrowerType === "character"
       ? {
           subjectType: "character" as const,
-          subjectId: borrower.id,
+          subjectId: borrowerId,
           subjectName: borrowerName,
         }
       : {
           subjectType: "corporation" as const,
-          subjectId: borrower.id,
+          subjectId: borrowerId,
           subjectName: borrowerName,
         }),
     amount: principal,
     currencyCode: currency,
     counterpartyType: "system",
-    counterpartyName: bankCorp.name,
+    counterpartyName: bankName,
     meta: {
-      loanId: loanId.toString(),
+      loanId: loan._id.toString(),
       bankCorporationId: bankCorporationId.toString(),
-      ratePercent,
-      termTurns,
+      ratePercent: loan.ratePercent,
+      termTurns: loan.termTurns,
     },
   });
 
-  return { ok: true, loan };
+  return { ok: true };
 }
 
 /**

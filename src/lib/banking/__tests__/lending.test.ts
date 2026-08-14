@@ -394,6 +394,50 @@ describe("banking lending", () => {
       );
     });
 
+    it("parks a loan as pending with no money movement when the bank requires approval", async () => {
+      const bankId = new ObjectId();
+      const characterId = new ObjectId();
+      const principal = 25_000;
+      const charter = makeActiveRetailCharter({
+        totalDeposits: 1_000_000,
+        totalLoans: 0,
+        requireApproval: true,
+      });
+
+      db.collectionMocks.corporations!.findOne.mockResolvedValue(
+        makeBankCorp(charter, { _id: bankId })
+      );
+      db.collectionMocks.characters!.findOne.mockResolvedValue({
+        _id: characterId,
+        currencyBalances: { personal: { USD: 200_000 } },
+      });
+      db.collectionMocks.bankLoans!.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+
+      const { originateLoan } = await importLending();
+      const result = await originateLoan(
+        db as unknown as Db,
+        bankId,
+        { type: "character", id: characterId },
+        principal,
+        24
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.pending).toBe(true);
+      expect(result.loan.status).toBe("pending");
+      expect(result.loan.outstanding).toBe(principal);
+
+      const [loanDoc] = db.collectionMocks.bankLoans!.insertOne.mock.calls[0];
+      expect(loanDoc.status).toBe("pending");
+      expect(loanDoc.requestedTurn).toBe(42);
+
+      // No disbursement: the bank loan book is not incremented and the borrower
+      // is not credited until the CEO accepts.
+      expect(db.collectionMocks.corporations!.updateOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks.characters!.updateOne).not.toHaveBeenCalled();
+    });
+
     it("ledgers the origination as a MINT, not as a transfer from the bank", async () => {
       // Lending creates deposit money: the bank's own liquidCapital is untouched
       // and only its loan book moves. Naming the bank as counterparty would book

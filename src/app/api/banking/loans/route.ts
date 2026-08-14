@@ -81,6 +81,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       loan: result.loan,
+      pending: result.pending === true,
     });
   } catch (error) {
     return handleRouteError(error);
