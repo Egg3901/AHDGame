@@ -32,6 +32,8 @@ import {
   MARKETING_ADVERTISING_DEMAND_RATE,
   GOVT_HEALTHCARE_DEMAND_RATE,
   GOVT_DEFENSE_ORDNANCE_DEMAND_RATE,
+  GOVT_SPEND_CATEGORY_ALIASES,
+  govtSpendForCategory,
   COMMODITY_PRICE_DRIFT_RATE,
   NATIONAL_COMMODITY_STABILIZER,
   COMMODITIES_NATIONAL_REGIONAL_PRICE_BLEND,
@@ -96,6 +98,7 @@ import { isPlannedEconomy, plannedShare } from "@/lib/constants/commandEconomy";
 import { administeredNationalPrice, dualTrackPrice } from "@/lib/economy/administeredPricing";
 import type { GameState } from "@/lib/db/types/gameState";
 import { clearAllCommodities, valueTradeSnapshot } from "@/lib/trade/snapshot";
+import { buildReachableBooks, serializeReachableBooks } from "@/lib/trade/reachableBook";
 import { applyTradeConvergence } from "@/lib/trade/convergence";
 import { buildTradeAffinity } from "@/lib/trade/tradeAffinity";
 import { TRADE_PRICE_CONVERGENCE_K } from "@/lib/trade/constants";
@@ -326,7 +329,13 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       .toArray(),
     db
       .collection<FederalBudget>("federalBudget")
-      .find({}, { projection: { countryId: 1, "spending.byCategory.healthcare": 1 } })
+      // The WHOLE category map, not named paths. This projection pinned
+      // `healthcare` only, so when #3880 added the defense -> ordnance leg the
+      // amount it needed was stripped before the loop ever saw it and the
+      // feature has been inert ever since. It also hid the `health` spelling
+      // that UK/CN/IE use. Projecting the map means adding a leg to
+      // GOVT_SPEND_DEMAND cannot silently read zero again.
+      .find({}, { projection: { countryId: 1, "spending.byCategory": 1 } })
       .toArray(),
     db
       .collection<ExchangeRate>("exchangeRates")
@@ -1064,8 +1073,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const turnsPerYear = 48;
   for (const { category, commodity, rate } of GOVT_SPEND_DEMAND) {
     const basePrice = LEDGER_BASE_PRICES[commodity];
+    const aliases = GOVT_SPEND_CATEGORY_ALIASES[category] ?? [category];
     for (const budget of federalBudgets) {
-      const annualSpendLocal = budget.spending?.byCategory?.[category] ?? 0;
+      const annualSpendLocal = govtSpendForCategory(budget.spending?.byCategory, aliases);
       if (annualSpendLocal <= 0) continue;
       const cid = budget.countryId;
       const annualSpendAnchor = annualSpendLocal / fxRateForCountry(cid);
@@ -1219,6 +1229,20 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   }
 
   const tradeClearing = clearAllCommodities(COUNTRY_ORDER, byCountry, affinityFor, capUnitsFor);
+  // Reachable books, built from the SAME pre-convergence balances the clearing
+  // ran on. `applyTradeConvergence` mutates `byCountry` in place on the next
+  // line, so this cannot move below it: post-convergence an importer's demand
+  // has already been relieved by k x imports and every deficit reads short by
+  // that factor. Persisted with the flow snapshot so read surfaces quote the
+  // book the engine actually clears on rather than the global aggregate
+  // (ticket #1077).
+  const reachableBooks = buildReachableBooks({
+    countries: COUNTRY_ORDER,
+    balances: byCountry,
+    clearing: tradeClearing,
+    commodities: COMMODITY_TYPES,
+    isBlocked: (commodity, exporter, importer) => affinityFor(commodity, exporter, importer) === 0,
+  });
   applyTradeConvergence(COUNTRY_ORDER, byCountry, tradeClearing, TRADE_PRICE_CONVERGENCE_K);
 
   // Build nudge map from the parallel-fetched nudge docs
@@ -1568,9 +1592,20 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     turn,
     now
   );
+  // Read path for the reachable books is "latest turn that has them", so the
+  // descending-turn index is what keeps it O(1) as the snapshot history grows.
+  // Fire-and-forget, mirroring commodityFlows/commoditySourcingFlows above.
+  void db
+    .collection("tradeFlowSnapshots")
+    .createIndex({ turn: -1 })
+    .catch(() => {});
   await db
     .collection("tradeFlowSnapshots")
-    .updateOne({ turn }, { $set: tradeSnapshot }, { upsert: true });
+    .updateOne(
+      { turn },
+      { $set: { ...tradeSnapshot, books: serializeReachableBooks(reachableBooks) } },
+      { upsert: true }
+    );
 
   return {
     commoditiesUpdated: COMMODITY_TYPES.length,
