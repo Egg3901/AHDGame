@@ -12,6 +12,9 @@ export {
   priceColor,
   getLegendStops,
   getPriceLegendStops,
+  reachableColor,
+  reachableBucket,
+  getReachableLegendStops,
 } from "./commodityMapColorScale";
 export {
   COUNTRY_MAP_REGISTRY,
