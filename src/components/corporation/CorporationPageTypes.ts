@@ -189,6 +189,10 @@ export interface CorporationDetail {
   ceoVacant: boolean;
   /** Character ID of the current CEO (absent for NPC/NPP/imperial CEOs). Used for concentration-penalty tooltip. */
   ceoCharacterId?: string | null;
+  /** Underlying owner character while an NPP caretaker runs the corp (absent otherwise). Keeps the CEO tab reachable for reclaim. */
+  caretakerUnderlyingCharacterId?: string | null;
+  /** Turns left on the post-reclaim cooldown before a new caretaker may be installed (0 = none). */
+  caretakerReappointCooldownTurnsRemaining?: number;
   pendingCeoCharacterId: string | null;
   createdAt: string;
   /**

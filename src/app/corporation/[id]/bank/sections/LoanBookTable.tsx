@@ -214,6 +214,32 @@ export function LoanBookTable({
   showToast: (message: string, tone?: "success" | "error") => void;
 }) {
   const named = loans.filter((l) => l.borrowerType !== "npcBulk");
+  const hasPending = named.some((l) => l.status === "pending");
+  const showActions = canMutate && hasPending;
+  const [decidingId, setDecidingId] = useState<string | null>(null);
+
+  const decide = async (loanId: string, decision: "accept" | "reject") => {
+    if (decidingId) return;
+    setDecidingId(loanId);
+    try {
+      const res = await fetch(`/api/corporations/${corporationId}/bank/loans/${loanId}/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(json.error ?? "Could not update the loan", "error");
+        return;
+      }
+      showToast(decision === "accept" ? "Loan approved" : "Loan declined", "success");
+      onChanged();
+    } catch {
+      showToast("Could not update the loan", "error");
+    } finally {
+      setDecidingId(null);
+    }
+  };
 
   return (
     <section className="space-y-3">
@@ -244,6 +270,7 @@ export function LoanBookTable({
                 <th className="px-4 py-3 font-semibold text-right">Rate</th>
                 <th className="px-4 py-3 font-semibold">Term</th>
                 <th className="px-4 py-3 font-semibold">Status</th>
+                {showActions && <th className="px-4 py-3 font-semibold text-right">Decision</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-card-border">
@@ -284,17 +311,45 @@ export function LoanBookTable({
                       color={
                         loan.status === "current"
                           ? "success"
-                          : loan.status === "arrears"
-                            ? "warning"
-                            : loan.status === "defaulted"
-                              ? "error"
-                              : "default"
+                          : loan.status === "pending"
+                            ? "info"
+                            : loan.status === "arrears"
+                              ? "warning"
+                              : loan.status === "defaulted" || loan.status === "rejected"
+                                ? "error"
+                                : "default"
                       }
                       variant="subtle"
                     >
                       {loan.status}
                     </Badge>
                   </td>
+                  {showActions && (
+                    <td className="px-4 py-3 text-right">
+                      {loan.status === "pending" ? (
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            disabled={decidingId !== null}
+                            onClick={() => void decide(loan.id, "accept")}
+                            className="rounded-md border border-emerald-500/40 px-2.5 py-1 text-xs font-semibold text-emerald-600 transition-colors hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            disabled={decidingId !== null}
+                            onClick={() => void decide(loan.id, "reject")}
+                            className="rounded-md border border-rose-500/40 px-2.5 py-1 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

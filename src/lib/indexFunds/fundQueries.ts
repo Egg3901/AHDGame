@@ -99,6 +99,22 @@ export async function listActiveFunds(db: Db): Promise<IndexFund[]> {
   return listFunds(db, { status: "active" });
 }
 
+/**
+ * Funds a corporation sponsors, newest first, excluding delisted. Powers the
+ * owner-facing "funds this corp sponsors" surface — there was previously no way
+ * to list a corp's own funds after the session that chartered them (ticket 1088).
+ */
+export async function listFundsBySponsor(
+  db: Db,
+  sponsorCorporationId: ObjectId
+): Promise<IndexFund[]> {
+  return db
+    .collection<IndexFund>(FUND_COLLECTION)
+    .find({ sponsorCorporationId, status: { $ne: "delisted" } })
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+
 // ── Fund upsert / update ──────────────────────────────────────────────
 
 /** Insert a new fund definition. Returns the inserted _id. */

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  DOCTRINE_POINTS_PER_YEAR,
-  doctrineIncomeDue,
-} from "../doctrineIncome";
+import { DOCTRINE_POINTS_PER_YEAR, doctrineIncomeDue } from "../doctrineIncome";
 
 describe("doctrineIncomeDue", () => {
   it("grants nothing in the starting year", () => {

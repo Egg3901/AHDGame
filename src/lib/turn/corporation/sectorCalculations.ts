@@ -41,6 +41,7 @@ import {
   type AutomationIndexAccumulator,
 } from "@/lib/labour/laborCost";
 import { computeTechAssetValueAnchor } from "@/lib/corporations/techAssetValue";
+import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { indexFundOwnershipFraction } from "@/lib/corporations/indexOwnership";
 // getCountryConfig is needed for the prime rate fallback:
 //   primeRateByCountry.get(sectorCountryId) ?? getCountryConfig(sectorCountryId).centralBank.defaultPrimeRate
@@ -548,6 +549,21 @@ export function processSectors(
         corp.countryId,
         (taxPaidByCountryDomestic.get(corp.countryId) ?? 0) + bondCouponFedTax
       );
+    }
+
+    // State-owned enterprises pay no corporate income tax. A nationalized industry is
+    // owned by the state, and it already returns its profit to that same state through the
+    // per-turn remittance (processSoeRemittance). Levying corporate tax on top charged one
+    // profit twice to a single owner: it drained SOEs to zero and pushed the tax-driven ones
+    // (whose losses the operating-loss backstop deliberately does not cover) negative. Zero
+    // the accumulators AND the per-country maps so neither the corp's cash debit nor the
+    // government's tax-revenue credit records a charge — the remittance line is the return.
+    if (isStateOwned(corp)) {
+      totalFederalTax = 0;
+      totalStateTax = 0;
+      taxPaidByCountry.clear();
+      taxPaidByCountryDomestic.clear();
+      taxPaidByCountryForeign.clear();
     }
 
     const corporateTaxOwed = totalFederalTax + totalStateTax;

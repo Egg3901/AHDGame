@@ -19,6 +19,74 @@ import { PropBookPanel } from "./PropBookPanel";
 import { InterbankPanel } from "./InterbankPanel";
 import { RevokeCharterForm } from "./RevokeCharterForm";
 import { CharterSwitchForm } from "./CharterSwitchForm";
+import { CustomerBankPanel } from "./CustomerBankPanel";
+
+/** CEO toggle for opt-in loan approval. When on, new loans queue as pending. */
+function LoanApprovalToggle({
+  corporationId,
+  requireApproval,
+  canMutate,
+  onChanged,
+  showToast,
+}: {
+  corporationId: string;
+  requireApproval: boolean;
+  canMutate: boolean;
+  onChanged: () => Promise<void>;
+  showToast: ShowToast;
+}) {
+  const [busy, setBusy] = useState(false);
+  const toggle = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/corporations/${corporationId}/bank/approval`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requireApproval: !requireApproval }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(json.error ?? "Could not update approval mode", "error");
+        return;
+      }
+      showToast(
+        json.requireApproval ? "New loans now need your approval" : "Loans auto-approve again",
+        "success"
+      );
+      await onChanged();
+    } catch {
+      showToast("Could not update approval mode", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-card-border bg-card p-4">
+      <div>
+        <div className="text-sm font-semibold text-foreground">Loan approval</div>
+        <p className="mt-1 text-xs text-muted">
+          {requireApproval
+            ? "New loan requests wait for you to approve or decline them in the loan book."
+            : "Loan requests are granted automatically when the borrower qualifies."}
+        </p>
+      </div>
+      <button
+        type="button"
+        disabled={!canMutate || busy}
+        onClick={() => void toggle()}
+        aria-pressed={requireApproval}
+        className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+          requireApproval
+            ? "border-accent bg-accent/10 text-accent"
+            : "border-card-border text-muted hover:border-accent/50"
+        }`}
+      >
+        {requireApproval ? "Approval required" : "Auto-approve"}
+      </button>
+    </div>
+  );
+}
 
 export function ActiveCharterPanel({
   data,
@@ -50,6 +118,19 @@ export function ActiveCharterPanel({
     <div className="space-y-6">
       <HealthCard data={data} />
       {data.risk && <RiskPanel risk={data.risk} currency={charter.currency} />}
+
+      {/* Customer actions: a non-CEO viewer can deposit or borrow straight from
+          this bank's page. The CEO manages the bank through the panels below. */}
+      {!data.isCeo && data.privateBankingEnabled && charter.status === "active" && (
+        <CustomerBankPanel
+          corporationId={data.corporation.id}
+          bankName={data.corporation.name}
+          currency={charter.currency}
+          depositTaking={depositTaking}
+          onChanged={() => void onChanged()}
+          showToast={showToast}
+        />
+      )}
 
       <div className="flex flex-wrap gap-1 border-b border-card-border">
         {tabs.map((t) => (
@@ -125,6 +206,13 @@ export function ActiveCharterPanel({
               showToast={showToast}
             />
           )}
+          <LoanApprovalToggle
+            corporationId={data.corporation.id}
+            requireApproval={charter.requireApproval}
+            canMutate={canMutate}
+            onChanged={onChanged}
+            showToast={showToast}
+          />
           <LoanBookTable
             loans={data.loans}
             currency={charter.currency}

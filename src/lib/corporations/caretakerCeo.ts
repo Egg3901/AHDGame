@@ -21,6 +21,7 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Corporation, NPP } from "@/lib/db/types";
+import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import { openCeoTenure, closeCeoTenure } from "./ceoHistory";
 import {
   buildCeoAffiliations,
@@ -34,16 +35,30 @@ export type CaretakerAppointmentError =
   | "already-caretaker"
   | "ceo-vacant"
   | "ceo-not-character"
+  | "reclaim-cooldown"
   | "no-eligible-npp"
   | "npp-not-eligible";
+
+/**
+ * Cooldown, in turns (= real hours), that must elapse after an owner reclaims
+ * control before a new caretaker may be installed. 3 days × 24 turns/day = 72.
+ * Stops a corp from flipping between owner and caretaker turn-to-turn to game
+ * whichever operator is momentarily advantageous.
+ */
+export const CARETAKER_REAPPOINT_COOLDOWN_TURNS = 3 * TURNS_PER_DAY;
 
 /**
  * Validate (purely) that `corp` is in a state where its human CEO may install a
  * caretaker NPP. Returns the error code, or `null` when the appointment is
  * allowed. Kept side-effect-free so the branching is exhaustively unit-testable.
+ * `currentTurn` is needed to enforce the post-reclaim reappointment cooldown.
  */
 export function validateCaretakerAppointment(
-  corp: Pick<Corporation, "ceoType" | "ceoVacant" | "caretakerCeo" | "ceoId"> | null
+  corp: Pick<
+    Corporation,
+    "ceoType" | "ceoVacant" | "caretakerCeo" | "ceoId" | "caretakerCooldownUntilTurn"
+  > | null,
+  currentTurn: number
 ): CaretakerAppointmentError | null {
   if (!corp) return "corp-not-found";
   if (corp.caretakerCeo) return "already-caretaker";
@@ -51,7 +66,24 @@ export function validateCaretakerAppointment(
   // Only a sitting human CEO can hand operation to a caretaker. An imperial or
   // existing NPP CEO is not the player-owner case this feature serves.
   if (corp.ceoType && corp.ceoType !== "character") return "ceo-not-character";
+  // Post-reclaim cooldown: a recently-reclaimed corp must wait before handing off again.
+  if (corp.caretakerCooldownUntilTurn != null && currentTurn < corp.caretakerCooldownUntilTurn) {
+    return "reclaim-cooldown";
+  }
   return null;
+}
+
+/**
+ * Turns remaining on the post-reclaim caretaker cooldown, or 0 if none. Surfaced
+ * to the corp detail so the UI can disable the "hand to caretaker" affordance and
+ * explain why. Pure.
+ */
+export function caretakerReappointCooldownRemaining(
+  corp: Pick<Corporation, "caretakerCooldownUntilTurn">,
+  currentTurn: number
+): number {
+  if (corp.caretakerCooldownUntilTurn == null) return 0;
+  return Math.max(0, corp.caretakerCooldownUntilTurn - currentTurn);
 }
 
 /**
@@ -98,7 +130,7 @@ export async function appointCaretakerCeo(
 ): Promise<AppointCaretakerCeoResult> {
   const { corp, forcedNppId, turn, now } = args;
 
-  const invalid = validateCaretakerAppointment(corp);
+  const invalid = validateCaretakerAppointment(corp, turn);
   if (invalid) return { ok: false, error: invalid };
 
   const affiliations = await gatherCaretakerAffiliations(db, corp.countryId);
@@ -163,7 +195,13 @@ export async function dismissCaretakerCeo(
     await db.collection<Corporation>("corporations").updateOne(
       { _id: corp._id },
       {
-        $set: { ceoType: "character", userId: underlyingUserId, ceoVacant: true, updatedAt: now },
+        $set: {
+          ceoType: "character",
+          userId: underlyingUserId,
+          ceoVacant: true,
+          caretakerCooldownUntilTurn: turn + CARETAKER_REAPPOINT_COOLDOWN_TURNS,
+          updatedAt: now,
+        },
         $unset: { caretakerCeo: "", ceoId: "" },
       }
     );
@@ -180,6 +218,7 @@ export async function dismissCaretakerCeo(
         ceoType: "character",
         userId: underlyingUserId,
         ceoVacant: false,
+        caretakerCooldownUntilTurn: turn + CARETAKER_REAPPOINT_COOLDOWN_TURNS,
         updatedAt: now,
       },
       $unset: { caretakerCeo: "" },

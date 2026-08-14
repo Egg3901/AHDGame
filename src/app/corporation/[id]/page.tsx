@@ -360,7 +360,17 @@ export default function CorporationDetailPage() {
       return;
     }
 
-    setIsCeo(!corporation.ceoVacant && ceo?.characterId === myCharacterId);
+    // The appointing owner keeps CEO authority while an NPP caretaker runs the
+    // corp (server `requireCeo` still passes via retained `userId`). The resolved
+    // `ceo` is the NPP in that state, so also treat the caretaker's underlying
+    // owner as CEO — otherwise the CEO Office tab (and its "Resume Control"
+    // button) would vanish the moment a caretaker is installed, stranding the
+    // owner with no way to reclaim.
+    setIsCeo(
+      (!corporation.ceoVacant && ceo?.characterId === myCharacterId) ||
+        (corporation.caretakerUnderlyingCharacterId != null &&
+          corporation.caretakerUnderlyingCharacterId === myCharacterId)
+    );
     setIsPendingCeo(
       Boolean(
         corporation.pendingCeoCharacterId && corporation.pendingCeoCharacterId === myCharacterId

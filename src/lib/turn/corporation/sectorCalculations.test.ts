@@ -561,6 +561,44 @@ describe("corporate tax deduction", () => {
     expect(result.totalIncomeGenerated).toBeCloseTo(350, 1);
   });
 
+  it("exempts a state-owned enterprise from corporate income tax", () => {
+    // Same sector/rates as the private-corp case above, but state-owned: no tax is charged,
+    // because the SOE returns its profit to the state through the remittance instead.
+    const corp = makeCorp({
+      headquartersState: "US-CA",
+      countryId: "US",
+      countryOwnerId: "US",
+      ownershipState: "stateOwned",
+    });
+    const sector = makeSector(corp._id, {
+      stateId: "US-CA",
+      countryId: "US",
+      revenue: 24_000,
+      profitMargin: 50,
+      targetGrowthRate: 0,
+      currentGrowthRate: 0,
+    });
+    const lookups = baseLookups([corp], [sector]);
+    lookups.domesticCorpTaxRateByCountry.set("US", 20);
+    lookups.domesticStateCorpTaxRateByState.set("US-CA", 10);
+
+    const result = processSectors(lookups, 1, new Date());
+    const snapshot = result.corpSnapshots[0];
+    // No corporate income tax debited from the SOE...
+    expect(snapshot.federalTaxPaid).toBe(0);
+    expect(snapshot.stateTaxPaid).toBe(0);
+    // ...and the government books no SOE tax revenue (cleared per-country map).
+    expect(snapshot.taxPaidByCountry.size).toBe(0);
+
+    // The tax rates have no effect on an SOE's income at all: running the identical corp
+    // with the rates zeroed produces the same income (the only difference above would have
+    // been tax). This isolates the exemption from the SOE efficiency penalty, which lowers
+    // operating profit independently of tax.
+    const untaxed = baseLookups([corp], [sector]);
+    const control = processSectors(untaxed, 1, new Date());
+    expect(result.totalIncomeGenerated).toBeCloseTo(control.totalIncomeGenerated, 6);
+  });
+
   it("applies foreign rate when corp HQ country differs from sector country", () => {
     const corp = makeCorp({ headquartersState: "US-CA", countryId: "US" });
     const usSector = makeSector(corp._id, {
