@@ -43,6 +43,7 @@ import { migration as ratificationBallotIndexes } from "./entries/2026-08-11-rat
 import { migration as dropDeadPartyAxes } from "./entries/2026-08-11-drop-dead-party-axes";
 import { migration as heal1953SeedBalance } from "./entries/2026-08-09-heal-1953-seed-balance";
 import { migration as reconcileCommandEconomyUnowned } from "./entries/2026-08-09-reconcile-command-economy-unowned";
+import { migration as repointRuSoes } from "./entries/2026-08-13-repoint-ru-soes";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -96,6 +97,10 @@ export const MIGRATIONS: Migration[] = [
   // Ticket #1014 — command-economy unowned double-seed (~50% SOE ownership +
   // unreachable 0% remainder sectors). Also runs at end of seedUnownedSectors.
   reconcileCommandEconomyUnowned,
+  // The USSR came up on iteration 4 with no SOEs at all and every producing
+  // sector on the bare sovereign issuer, so 44 players had no seat to claim.
+  // RU-scoped and revenue-preserving, unlike the global reconcile above.
+  repointRuSoes,
   // Convert grandfathered (pre-smooth) in-flight plant build orders to
   // progressive per-turn delivery. Re-anchors startTurn to the live currentTurn
   // so full ordered capacity is delivered over the remaining window (flipping

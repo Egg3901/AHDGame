@@ -12,6 +12,11 @@ import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers
 import { getCabinetSettingsCollection } from "@/lib/db/collections/cabinetSettings";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import { getGameState } from "@/lib/gameState";
+import {
+  blockedSettingChange,
+  requestedSettingCooldownFields,
+  stampsForSettingChange,
+} from "@/lib/cabinet/settingCooldowns";
 import { z } from "zod";
 
 const settingSchema = z.object({
@@ -70,27 +75,18 @@ export async function POST(request: Request, { params }: RouteParams) {
     const settingsCol = getCabinetSettingsCollection(db);
     const existing = await settingsCol.findOne({ _id: `${countryId}_${positionId}` });
 
-    // Rate limit: non-toggle settings can only change once per 24 turns.
-    // Uses lastChangedTurn only — allocation changes track lastAllocationChangedTurn separately.
+    // Rate limit: each non-toggle lever has its own 24-turn cooldown. Allocation
+    // changes track lastAllocationChangedTurn on a separate route.
     const isToggleOnly =
       parsed.data.advocacyActive !== undefined && Object.keys(parsed.data).length === 1;
-    const lastSettingTurn = existing?.lastChangedTurn;
-    // Pre-fix allocation writes shared lastChangedTurn; unblock tier settings when
-    // no tier setting was ever saved and only allocation data is present.
-    const legacyAllocationOnlyLock =
-      existing?.lastAllocationChangedTurn === undefined &&
-      existing?.allocationPercents !== undefined &&
-      existing?.tierSetting === undefined;
-    if (
-      !isToggleOnly &&
-      lastSettingTurn !== undefined &&
-      currentTurn - lastSettingTurn < 24 &&
-      !legacyAllocationOnlyLock
-    ) {
-      const turnsRemaining = 24 - (currentTurn - lastSettingTurn);
+    const cooldownFields = requestedSettingCooldownFields(parsed.data);
+    const blocked = isToggleOnly
+      ? null
+      : blockedSettingChange(existing, cooldownFields, currentTurn);
+    if (blocked) {
       return NextResponse.json(
         {
-          error: `Settings can only be changed once per 24 turns. ${turnsRemaining} turns remaining.`,
+          error: `Settings can only be changed once per 24 turns. ${blocked.turnsRemaining} turns remaining.`,
         },
         { status: 400 }
       );
@@ -154,7 +150,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (parsed.data.aidPriority !== undefined) update.aidPriority = parsed.data.aidPriority;
     if (parsed.data.advocacyActive !== undefined)
       update.advocacyActive = parsed.data.advocacyActive;
-    if (!isToggleOnly) update.lastChangedTurn = currentTurn;
+    if (!isToggleOnly) Object.assign(update, stampsForSettingChange(cooldownFields, currentTurn));
 
     await settingsCol.updateOne(
       { _id: `${countryId}_${positionId}` },

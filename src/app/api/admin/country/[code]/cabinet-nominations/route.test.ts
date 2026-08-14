@@ -51,7 +51,15 @@ describe("POST /api/admin/country/[code]/cabinet-nominations — force_confirm",
     expect(res.status).toBe(200);
     expect(db.collectionMocks.cabinetSettings.updateOne).toHaveBeenCalledWith(
       { _id: "US_secretary_of_treasury" },
-      { $unset: { lastChangedTurn: "", lastAllocationChangedTurn: "" } }
+      {
+        $unset: {
+          lastChangedTurn: "",
+          lastAllocationChangedTurn: "",
+          lastRegionChangedTurn: "",
+          lastTargetCountryChangedTurn: "",
+          lastAidPriorityChangedTurn: "",
+        },
+      }
     );
   });
 });
