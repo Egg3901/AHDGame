@@ -56,7 +56,32 @@ export type LoanBorrower = {
   id: ObjectId;
 };
 
-export type OriginateLoanResult = { ok: true; loan: BankLoan } | { ok: false; error: string };
+export type LoanCreditDestination = "personalCash" | "corporationLiquidCapital";
+
+export type OriginateLoanResult =
+  | {
+      ok: true;
+      loan: BankLoan;
+      creditedTo: { kind: "character" | "corporation"; name: string };
+    }
+  | { ok: false; error: string };
+
+export type BorrowerFacingLoan = {
+  id: string;
+  bankCorporationId: string;
+  bankName: string;
+  bankSequentialId: number | null;
+  currency: CurrencyCode;
+  borrowerType: "character" | "corporation";
+  borrowerName: string;
+  creditedTo: LoanCreditDestination;
+  principal: number;
+  outstanding: number;
+  ratePercent: number;
+  originatedTurn: number;
+  termTurns: number;
+  status: BankLoan["status"];
+};
 
 export type NpcLoanBook = {
   volume: number;
@@ -66,7 +91,6 @@ export type NpcLoanBook = {
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
-
 
 async function buildFundConstituentResolver(
   db: Db,
@@ -307,7 +331,79 @@ export async function originateLoan(
     },
   });
 
-  return { ok: true, loan };
+  return {
+    ok: true,
+    loan,
+    creditedTo: { kind: borrower.type, name: borrowerName },
+  };
+}
+
+/**
+ * Open named loans where this character (or a corporation they lead) is the
+ * borrower. The lending bank's console is the only other loan list, so without
+ * this the borrower has no confirmation that proceeds landed.
+ */
+export async function listBorrowerFacingLoans(
+  db: Db,
+  params: {
+    characterId: ObjectId;
+    characterName: string;
+    corporations: ReadonlyArray<{ id: ObjectId; name: string }>;
+  }
+): Promise<BorrowerFacingLoan[]> {
+  const corpIds = params.corporations.map((c) => c.id);
+  const borrowerClause: Array<Record<string, unknown>> = [
+    { borrowerType: "character", borrowerId: params.characterId },
+  ];
+  if (corpIds.length > 0) {
+    borrowerClause.push({ borrowerType: "corporation", borrowerId: { $in: corpIds } });
+  }
+
+  const loans = await db
+    .collection<BankLoan>("bankLoans")
+    .find({
+      status: { $in: ["current", "arrears", "defaulted"] },
+      $or: borrowerClause,
+    })
+    .sort({ originatedTurn: -1 })
+    .limit(50)
+    .toArray();
+
+  if (loans.length === 0) return [];
+
+  const bankIds = [...new Set(loans.map((loan) => loan.bankCorporationId.toString()))].map(
+    (id) => new ObjectId(id)
+  );
+  const banks = await db
+    .collection<Pick<Corporation, "_id" | "name" | "sequentialId">>("corporations")
+    .find({ _id: { $in: bankIds } })
+    .project({ _id: 1, name: 1, sequentialId: 1 })
+    .toArray();
+  const bankById = new Map(banks.map((bank) => [bank._id.toString(), bank]));
+  const corpNameById = new Map(params.corporations.map((corp) => [corp.id.toString(), corp.name]));
+
+  return loans.map((loan) => {
+    const bank = bankById.get(loan.bankCorporationId.toString());
+    const isCharacter = loan.borrowerType === "character";
+    return {
+      id: loan._id.toString(),
+      bankCorporationId: loan.bankCorporationId.toString(),
+      bankName: bank?.name ?? "Private bank",
+      bankSequentialId: bank?.sequentialId ?? null,
+      currency: loan.currency,
+      borrowerType: isCharacter ? "character" : "corporation",
+      borrowerName: isCharacter
+        ? params.characterName
+        : (corpNameById.get(loan.borrowerId?.toString() ?? "") ?? "Corporation"),
+      creditedTo: isCharacter ? "personalCash" : "corporationLiquidCapital",
+      principal: loan.principal,
+      outstanding: loan.outstanding,
+      ratePercent: loan.ratePercent,
+      originatedTurn: loan.originatedTurn,
+      termTurns: loan.termTurns,
+      status: loan.status,
+    };
+  });
 }
 
 /**

@@ -14,6 +14,8 @@ import { currencyCentralBankUrl } from "@/lib/urls";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { getEffectiveBankRates } from "@/lib/banking/rates";
+import { listBorrowerFacingLoans } from "@/lib/banking/lending";
+import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { getGameState } from "@/lib/gameState";
 import { getCountryDisplayName } from "@/lib/constants/countries";
 import { corporationPathIdFromDoc } from "@/lib/api/corporations/resolveQuery";
@@ -151,7 +153,16 @@ async function handleGET() {
 
     let privateBanks: HubPrivateBank[] = [];
     const savings: HubSavingsRow[] = [];
-    let ceoCorporations: Array<{ id: string; name: string }> = [];
+    let ceoCorporations: Array<{
+      id: string;
+      name: string;
+      liquidCapital: number;
+      currency: CurrencyCode;
+    }> = [];
+    let loans: Awaited<ReturnType<typeof listBorrowerFacingLoans>> = [];
+    const personalCash: Partial<Record<CurrencyCode, number>> = {
+      ...(character?.currencyBalances?.personal ?? {}),
+    };
     const isAdmin = auth.user.isAdmin === true;
 
     // Always load active charters for the private-bank table (flag on) and for
@@ -247,12 +258,26 @@ async function handleGET() {
       const owned = await db
         .collection<Corporation>("corporations")
         .find({ userId: character.userId })
-        .project({ _id: 1, name: 1, sequentialId: 1 })
+        .project({
+          _id: 1,
+          name: 1,
+          sequentialId: 1,
+          liquidCapital: 1,
+          liquidCurrencyCode: 1,
+          countryId: 1,
+        })
         .toArray();
       ceoCorporations = owned.map((c) => ({
         id: c._id.toString(),
         name: c.name,
+        liquidCapital: c.liquidCapital ?? 0,
+        currency: (resolveCorpLiquidCurrencyCode(c) ?? "USD") as CurrencyCode,
       }));
+      loans = await listBorrowerFacingLoans(db, {
+        characterId: character._id,
+        characterName: character.name ?? "You",
+        corporations: owned.map((c) => ({ id: c._id, name: c.name })),
+      });
     }
 
     return NextResponse.json({
@@ -264,7 +289,9 @@ async function handleGET() {
       centralBanks,
       privateBanks,
       savings,
+      personalCash,
       ceoCorporations,
+      loans,
       lendingBanks: privateBanks.filter(
         (b) => b.charterType === "retail" || b.charterType === "universal"
       ),

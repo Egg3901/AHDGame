@@ -72,7 +72,28 @@ const payload = {
       ],
     },
   ],
-  ceoCorporations: [{ id: "corp-1", name: "Acme Industrial" }],
+  personalCash: { USD: 40_000 },
+  ceoCorporations: [
+    { id: "corp-1", name: "Acme Industrial", liquidCapital: 2_000_000, currency: "USD" },
+  ],
+  loans: [
+    {
+      id: "loan-1",
+      bankCorporationId: "bank-1",
+      bankName: "Continental Trust",
+      bankSequentialId: 17,
+      currency: "USD",
+      borrowerType: "corporation",
+      borrowerName: "Acme Industrial",
+      creditedTo: "corporationLiquidCapital",
+      principal: 1_000_000,
+      outstanding: 988_000,
+      ratePercent: 7.5,
+      originatedTurn: 110,
+      termTurns: 12,
+      status: "current",
+    },
+  ],
   lendingBanks: [],
 };
 
@@ -103,6 +124,9 @@ describe("BankingHubClient", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Your accounts" }));
     expect(screen.getByRole("heading", { name: "Your accounts" })).toBeTruthy();
     expect(screen.getByLabelText("Savings holder for USD")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Your loans" })).toBeTruthy();
+    expect(screen.getByText("Acme Industrial liquid capital")).toBeTruthy();
+    expect(screen.getByText("Continental Trust")).toBeTruthy();
 
     const primaryLink = screen.getByRole("link", { name: /Open policy desk/ });
     expect(primaryLink.getAttribute("href")).toBe("/centralbank/usd");
