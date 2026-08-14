@@ -17,6 +17,8 @@ import { checkRateLimit, CONGRESS_LIMITS, rateLimitResponse } from "@/lib/api/ra
 import { logRequest } from "@/lib/api/requestLog";
 import { proposeBillSchema } from "@/lib/api/schemas/congress";
 import { buildBillDisplays } from "./billDisplays";
+import { nationalBillListTallies } from "@/lib/legislature/queries/nationalBillQueries";
+import type { ScopedVoteOfficial } from "@/lib/congress/billVoting";
 import {
   checkDuplicateProvisions,
   checkDuplicateTariffProvisions,
@@ -109,7 +111,7 @@ export async function GET(request: Request) {
       db
         .collection<Bill>("bills")
         .find(query)
-        .project<Bill>({ votes: 0, otherChamberVotes: 0, fullText: 0 })
+        .project<Bill>({ fullText: 0 })
         .sort({ proposedAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -122,6 +124,40 @@ export async function GET(request: Request) {
 
     const partyMap = new Map(parties.map((p) => [String(p.sequentialId), p]));
     const legislationTypeMap = new Map(legislationTypesList.map((lt) => [lt._id, lt]));
+
+    const chamberOfficials: ScopedVoteOfficial[] = await db
+      .collection<ElectedOfficial>("electedOfficials")
+      .find(
+        {
+          countryId: "US",
+          officeType: { $in: ["house", "senate"] },
+        },
+        {
+          projection: {
+            characterId: 1,
+            countryId: 1,
+            nppId: 1,
+            officeType: 1,
+            seatsHeld: 1,
+          },
+        }
+      )
+      .toArray();
+    for (const bill of bills) {
+      const { origin, other } = nationalBillListTallies(
+        bill,
+        chamberOfficials,
+        "US",
+        "house",
+        "senate"
+      );
+      bill.votesFor = origin.for;
+      bill.votesAgainst = origin.against;
+      bill.votesAbstain = origin.abstain;
+      bill.otherChamberVotesFor = other.for;
+      bill.otherChamberVotesAgainst = other.against;
+      bill.otherChamberVotesAbstain = other.abstain;
+    }
 
     // Use shared terminal statuses constant
     const TERMINAL_STATUSES = NATIONAL_TERMINAL_STATUSES;
@@ -178,30 +214,13 @@ export async function GET(request: Request) {
       }
     }
 
-    // Votes were projected out of the main query for performance.
-    // Fetch just the user's vote keys for the page of bills.
+    // Votes stay on the list query so The Count can live-scope (ticket #1075).
     const myVoteMap = new Map<string, { origin: string | null; other: string | null }>();
-    if (myCharacterId && bills.length > 0) {
-      const billIds = bills.map((b) => b._id);
-      const voteRows = await db
-        .collection("bills")
-        .find(
-          { _id: { $in: billIds } },
-          {
-            projection: {
-              [`votes.${myCharacterId}`]: 1,
-              [`otherChamberVotes.${myCharacterId}`]: 1,
-            },
-          }
-        )
-        .toArray();
-      for (const row of voteRows) {
-        const votes = (row as Record<string, unknown>).votes as Record<string, string> | undefined;
-        const otherVotes = (row as Record<string, unknown>).otherChamberVotes as
-          Record<string, string> | undefined;
-        myVoteMap.set(row._id.toString(), {
-          origin: votes?.[myCharacterId] ?? null,
-          other: otherVotes?.[myCharacterId] ?? null,
+    if (myCharacterId) {
+      for (const b of bills) {
+        myVoteMap.set(b._id.toString(), {
+          origin: b.votes?.[myCharacterId] ?? null,
+          other: b.otherChamberVotes?.[myCharacterId] ?? null,
         });
       }
     }
