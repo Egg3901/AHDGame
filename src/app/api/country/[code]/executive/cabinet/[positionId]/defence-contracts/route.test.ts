@@ -79,6 +79,29 @@ describe("POST defence-contracts", () => {
     expect(body.contract.pricePerLot).toBeGreaterThan(0);
   });
 
+  // A National Corporation has no player CEO to click Accept. Leaving the offer pending
+  // meant Soviet (and every other command-economy) arsenal contracts never delivered.
+  it("activates a contract awarded to a state-owned supplier", async () => {
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: CORP_ID,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+      countryOwnerId: "US",
+      ownershipState: "stateOwned",
+    });
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 100 }), params);
+    expect(res.status).toBe(200);
+    expect((await res.json()).contract.status).toBe("active");
+  });
+
+  it("leaves a private supplier's contract pending the CEO's answer", async () => {
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 100 }), params);
+    expect(res.status).toBe(200);
+    expect((await res.json()).contract.status).toBe("pending");
+  });
+
   it("rejects a non-holder", async () => {
     vi.mocked(requireAuth).mockResolvedValue({
       ok: true,

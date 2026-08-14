@@ -27,6 +27,7 @@ describe("DoctrineTab (smoke render)", () => {
     renderTab();
     expect(screen.getByText("Doctrine Points")).toBeTruthy();
     expect(screen.getByText("National Doctrine")).toBeTruthy();
+    expect(screen.getByText(/gains 1 more at the start of each/)).toBeTruthy();
     // land category is selected by default; its firepower path is shown
     expect(screen.getByText("Firepower Warfare")).toBeTruthy();
   });

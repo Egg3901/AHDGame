@@ -366,7 +366,7 @@ And China, which lost the shooting and won the war, kept its army.
 | Turn | Decision | Why it mattered |
 | --- | --- | --- |
 | 1,000 | Recruited early | 4 actions/day + 6-turn builds means armies take real weeks |
-| 1,010 | Spent 12 doctrine points on one identity | It is all you ever get, and it is permanent |
+| 1,010 | Spent 12 doctrine points on one identity | Starting points are scarce, and adoption is permanent |
 | 1,015 | Commissioned generals 5 days early | Tenure points more than doubled their starting capability |
 | 1,020 | Left no Command commanderless | Avoided a flat 10% penalty |
 | 1,150 | Filed with the votes counted | Two-thirds is real, and refusal costs 10 AP and 120 turns |
