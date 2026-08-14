@@ -70,10 +70,14 @@ describe("applyPlannedEconomyOutputMix", () => {
 });
 
 describe("plannedEconomyMediaSupplyFactor", () => {
-  it("derates planned-economy media and nothing else", () => {
+  it("derates media in both economy types, and nothing but media", () => {
+    // Planned economies re-point to state broadcasting (4x price), so 0.25 is
+    // revenue-neutral there. Market economies keep selling advertising, so the
+    // derate is deeper — media nameplate is ~20x the advertising market.
     expect(plannedEconomyMediaSupplyFactor("media", true)).toBe(0.25);
-    expect(plannedEconomyMediaSupplyFactor("media", false)).toBe(1);
+    expect(plannedEconomyMediaSupplyFactor("media", false)).toBe(0.1);
     expect(plannedEconomyMediaSupplyFactor("agriculture", true)).toBe(1);
+    expect(plannedEconomyMediaSupplyFactor("agriculture", false)).toBe(1);
     expect(plannedEconomyMediaSupplyFactor("entertainment", true)).toBe(1);
   });
 
