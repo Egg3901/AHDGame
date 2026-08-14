@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface GameState {
   currentTurn: number;
@@ -137,7 +138,7 @@ export function TurnPausePanel() {
             <p>
               Paused at{" "}
               <span className="font-medium text-foreground">
-                {new Date(state.pausedAt).toLocaleString("en-US")}
+                <LocalTime value={state.pausedAt} />
               </span>
               {state.pauseKind === "auto-drift" && (
                 <span className="ml-2 rounded bg-error/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-error">
@@ -153,7 +154,7 @@ export function TurnPausePanel() {
             <p>
               Next scheduled turn:{" "}
               <span className="font-medium text-foreground">
-                {new Date(state.nextScheduledTurn).toLocaleString("en-US")}
+                <LocalTime value={state.nextScheduledTurn} />
               </span>
             </p>
           )}

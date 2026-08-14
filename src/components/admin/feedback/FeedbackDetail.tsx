@@ -6,6 +6,7 @@ import {
   priorityColor,
   type FeedbackDetail as FeedbackDetailType,
 } from "./types";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface FeedbackDetailProps {
   detail: FeedbackDetailType | null;
@@ -266,10 +267,13 @@ function DetailContent({
       </div>
 
       <p className="text-xs text-muted">
-        Created {new Date(detail.createdAt).toLocaleString("en-US")}
-        {!isMobile &&
-          detail.statusChangedAt &&
-          ` · Status changed ${new Date(detail.statusChangedAt).toLocaleString("en-US")}`}
+        Created <LocalTime value={detail.createdAt} />
+        {!isMobile && detail.statusChangedAt && (
+          <>
+            {" "}
+            · Status changed <LocalTime value={detail.statusChangedAt} />
+          </>
+        )}
       </p>
     </>
   );

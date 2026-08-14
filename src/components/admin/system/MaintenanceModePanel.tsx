@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 type MaintenanceMode = "off" | "partial" | "full";
 
@@ -180,7 +181,7 @@ export function MaintenanceModePanel() {
               {" "}
               at{" "}
               <span className="font-medium text-foreground">
-                {new Date(status.enabledAt).toLocaleString("en-US")}
+                <LocalTime value={status.enabledAt} />
               </span>
             </>
           )}

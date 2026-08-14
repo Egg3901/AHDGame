@@ -6,6 +6,7 @@ import { SectionLabel } from "@/components/ui";
 import { positionBucketHex } from "@/lib/utils/politics";
 import { policyUrl } from "@/lib/urls";
 import { AxisSpectrumBar } from "./AxisSpectrumBar";
+import { LocalTime } from "@/components/time/LocalTime";
 import type { EconomicModelView } from "@/lib/economicModels/present";
 
 const EUROPEAN_COLOUR_COUNTRIES = new Set(["UK", "DE"]);
@@ -41,10 +42,14 @@ export interface NationalAxesData {
   };
 }
 
-function formatEnactedStamp(enactedYear: number, enactedAt: string): string {
+function EnactedStamp({ enactedYear, enactedAt }: { enactedYear: number; enactedAt: string }) {
   const date = new Date(enactedAt);
-  if (Number.isNaN(date.getTime())) return String(enactedYear);
-  return `${enactedYear} · ${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  if (Number.isNaN(date.getTime())) return <>{enactedYear}</>;
+  return (
+    <>
+      {enactedYear} · <LocalTime value={date} options={{ month: "short", day: "numeric" }} />
+    </>
+  );
 }
 
 const formatAvg = (value: number | null) => (value === null ? "—" : value.toFixed(1));
@@ -177,7 +182,7 @@ export function NationalIdeologyBand({
                   className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 border-b border-card-border/50 py-2 text-sm last:border-b-0 sm:grid-cols-[110px_1fr_auto_auto] sm:gap-x-4"
                 >
                   <span className="order-2 font-mono text-[10px] text-muted sm:order-none">
-                    {formatEnactedStamp(mover.enactedYear, mover.enactedAt)}
+                    <EnactedStamp enactedYear={mover.enactedYear} enactedAt={mover.enactedAt} />
                   </span>
                   <span className="order-1 truncate text-foreground/90 sm:order-none">
                     {mover.title}

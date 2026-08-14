@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { LocalTime } from "@/components/time/LocalTime";
 import type { CorporationDetail } from "../CorporationPageTypes";
 
 interface ShareOfferData {
@@ -335,10 +336,10 @@ export default function PrivateSalePanel({
                         {fmtLocalPrice(listing.priceFloor)}–{fmtLocalPrice(listing.priceCeiling)}
                       </span>
                       {" · "}Expires{" "}
-                      {new Date(listing.expiresAt).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      <LocalTime
+                        value={listing.expiresAt}
+                        options={{ hour: "2-digit", minute: "2-digit" }}
+                      />
                     </div>
                   </div>
                   <button
@@ -458,10 +459,10 @@ export default function PrivateSalePanel({
                         {listing.offerCount} offer
                         {listing.offerCount !== 1 ? "s" : ""}
                         {" · "}Expires{" "}
-                        {new Date(listing.expiresAt).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        <LocalTime
+                          value={listing.expiresAt}
+                          options={{ hour: "2-digit", minute: "2-digit" }}
+                        />
                       </div>
                     </div>
                   </div>

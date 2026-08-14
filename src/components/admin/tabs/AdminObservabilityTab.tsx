@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Badge } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface GlitchTipIssue {
   id: string;
@@ -117,7 +118,9 @@ export function AdminObservabilityTab() {
                     <span>·</span>
                     <span>{issue.project?.name ?? "unknown"}</span>
                     <span>·</span>
-                    <span>{new Date(issue.lastSeen).toLocaleString("en-US")}</span>
+                    <span>
+                      <LocalTime value={issue.lastSeen} />
+                    </span>
                   </div>
                 </div>
                 <Badge

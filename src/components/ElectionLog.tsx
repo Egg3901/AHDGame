@@ -7,6 +7,7 @@ import { PartyLogo } from "@/components/PartyLogo";
 import { CardSkeleton, Skeleton } from "@/components/ui";
 import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
 import type { CountryId } from "@/lib/constants/countries";
+import { LocalTime } from "@/components/time/LocalTime";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -30,15 +31,12 @@ function fmtVotes(n: number) {
   return n.toLocaleString("en-US");
 }
 
-function fmtDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const DATE_LABEL_OPTIONS = {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+} as const;
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -329,8 +327,16 @@ function ElectionCard({ entry }: { entry: ElectionLogEntry }) {
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted">
             <span>Cycle {entry.cycle}</span>
-            {entry.startTime && <span>Started {fmtDate(entry.startTime)}</span>}
-            {entry.endTime && <span>Ends {fmtDate(entry.endTime)}</span>}
+            {entry.startTime && (
+              <span>
+                Started <LocalTime value={entry.startTime} options={DATE_LABEL_OPTIONS} />
+              </span>
+            )}
+            {entry.endTime && (
+              <span>
+                Ends <LocalTime value={entry.endTime} options={DATE_LABEL_OPTIONS} />
+              </span>
+            )}
           </div>
         </div>
         <Link

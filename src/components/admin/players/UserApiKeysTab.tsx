@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface UserApiKeyRow {
   _id: string;
@@ -241,10 +242,14 @@ export function UserApiKeysTab() {
                 <td className="px-3 py-2 font-mono text-xs text-muted">{key.prefix}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{key.requestCount}</td>
                 <td className="px-3 py-2 text-xs text-muted">
-                  {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString("en-US") : "—"}
+                  {key.lastUsedAt ? (
+                    <LocalTime value={key.lastUsedAt} options={{ dateStyle: "medium" }} />
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="px-3 py-2 text-xs text-muted">
-                  {new Date(key.createdAt).toLocaleDateString("en-US")}
+                  <LocalTime value={key.createdAt} options={{ dateStyle: "medium" }} />
                 </td>
                 <td className="px-3 py-2">
                   {key.revokedAt ? (

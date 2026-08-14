@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 
 /**
@@ -208,7 +209,9 @@ export function TreasuryTransactionLog({ countryCode, partyId }: Props) {
                 <div className="text-[11px] text-muted mt-0.5 flex flex-wrap items-center gap-2">
                   <span>turn {row.turn}</span>
                   <span>|</span>
-                  <span>{new Date(row.createdAt).toLocaleString("en-US")}</span>
+                  <span>
+                    <LocalTime value={row.createdAt} />
+                  </span>
                   {row.counterparty?.label && (
                     <>
                       <span>|</span>

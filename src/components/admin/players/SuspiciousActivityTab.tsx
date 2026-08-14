@@ -9,6 +9,7 @@ import {
   type SuspiciousFlag,
   type MatchGroup,
 } from "@/lib/admin/suspiciousGroups";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface Counts {
   high: number;
@@ -530,7 +531,7 @@ function FlagList({ flags, muted }: { flags: SuspiciousFlag[]; muted: boolean })
                 <ul className="mt-1 space-y-0.5 font-mono text-[11px] text-muted">
                   {events.map((ev, j) => (
                     <li key={j}>
-                      {new Date(ev.time).toLocaleString("en-US")} · {ev.actionType}
+                      <LocalTime value={ev.time} /> · {ev.actionType}
                       {ev.offsetSec != null ? ` · +${ev.offsetSec}s` : ""}
                     </li>
                   ))}
@@ -605,7 +606,7 @@ function SuspiciousEntryCard({
           </span>
         )}
         <span className="ml-auto text-xs text-muted">
-          Updated {new Date(entry.lastUpdated).toLocaleString("en-US")}
+          Updated <LocalTime value={entry.lastUpdated} />
         </span>
       </div>
 
@@ -714,7 +715,7 @@ function MatchGroupCard({
           ))}
         </div>
         <span className="ml-auto text-xs text-muted">
-          Updated {new Date(group.lastUpdated).toLocaleString("en-US")}
+          Updated <LocalTime value={group.lastUpdated} />
         </span>
       </div>
 

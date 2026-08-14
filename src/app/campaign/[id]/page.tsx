@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { resolveElectionYear } from "@/lib/utils/formatters";
 import { Modal, Skeleton } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 import type { CampaignData } from "@/lib/campaigns/dto/campaignView";
 import { ResourceOverview } from "./components/ResourceOverview";
 import { OperationsSection } from "./components/OperationsSection";
@@ -367,7 +368,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               {campaign.fogLastUpdated && (
                 <span className="text-muted/60">
                   {" "}
-                  Last updated: {new Date(campaign.fogLastUpdated).toLocaleString("en-US")}
+                  Last updated: <LocalTime value={campaign.fogLastUpdated} />
                 </span>
               )}
             </p>

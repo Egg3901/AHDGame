@@ -5,6 +5,7 @@ import Link from "next/link";
 import { EmptyState } from "@/components/ui";
 import { Pagination } from "../Pagination";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface AdminBillRow {
   id: string;
@@ -199,8 +200,7 @@ export function AdminBillsSection({ countryId }: AdminBillsSectionProps) {
                     )}
                   </div>
                   <p className="text-xs text-muted mt-1">
-                    Sponsor: {bill.sponsorName} · Proposed{" "}
-                    {new Date(bill.proposedAt).toLocaleString("en-US")}
+                    Sponsor: {bill.sponsorName} · Proposed <LocalTime value={bill.proposedAt} />
                   </p>
                   <div className="text-xs text-muted mt-1 flex gap-4 flex-wrap">
                     <span>
@@ -213,7 +213,7 @@ export function AdminBillsSection({ countryId }: AdminBillsSectionProps) {
                     )}
                     {bill.votingEndsAt && (
                       <span className="text-yellow-400">
-                        Closes {new Date(bill.votingEndsAt).toLocaleString("en-US")}
+                        Closes <LocalTime value={bill.votingEndsAt} />
                       </span>
                     )}
                   </div>

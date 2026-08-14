@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { CoalitionLogo } from "@/components/CoalitionLogo";
 import { DiscordInviteButton } from "@/components/DiscordInviteButton";
+import { LocalTime } from "@/components/time/LocalTime";
 import { PartyLogo } from "@/components/PartyLogo";
 import { PartyRegimeBadge } from "@/components/parties/PartyRegimeBadge";
 import { HeroStatsStrip, Skeleton, TabRowSkeleton } from "@/components/ui";
@@ -803,7 +804,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                       </div>
                       <div className="text-xs text-muted mt-0.5">
                         {member.memberCount} member{member.memberCount !== 1 ? "s" : ""} · Joined{" "}
-                        {new Date(member.joinedAt).toLocaleDateString("en-US")}
+                        <LocalTime value={member.joinedAt} options={{ dateStyle: "medium" }} />
                       </div>
                     </div>
                   </div>
@@ -915,7 +916,8 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                     >
                       <span className="text-sm font-medium">{inv.partyName}</span>
                       <span className="text-xs text-muted">
-                        Invited {new Date(inv.invitedAt).toLocaleDateString("en-US")}
+                        Invited{" "}
+                        <LocalTime value={inv.invitedAt} options={{ dateStyle: "medium" }} />
                       </span>
                     </div>
                   ))}
@@ -938,7 +940,8 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                       <div>
                         <span className="text-sm font-medium">{req.partyName}</span>
                         <div className="text-xs text-muted mt-0.5">
-                          Requested {new Date(req.requestedAt).toLocaleDateString("en-US")}
+                          Requested{" "}
+                          <LocalTime value={req.requestedAt} options={{ dateStyle: "medium" }} />
                         </div>
                       </div>
                       <div className="flex gap-2">

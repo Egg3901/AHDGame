@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface BannedIpRow {
   _id: string;
@@ -328,7 +329,7 @@ export function IpBansTab() {
                   <td className="px-3 py-2">{row.note}</td>
                   <td className="px-3 py-2">{row.bannedByAdminUsername}</td>
                   <td className="px-3 py-2 text-xs text-muted">
-                    {new Date(row.bannedAt).toLocaleString("en-US")}
+                    <LocalTime value={row.bannedAt} />
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-2">

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 
 /**
  * Recent activity feed - a single chronological view of treasury and slate
@@ -113,9 +114,11 @@ export function RecentActivityCard({ countryCode, partyId }: Props) {
                 <p className="text-foreground truncate">{item.summary}</p>
                 {item.detail && <p className="text-[10px] text-muted/80 truncate">{item.detail}</p>}
               </div>
-              <time className="shrink-0 text-[10px] text-muted">
-                {new Date(item.createdAt).toLocaleDateString("en-US")}
-              </time>
+              <LocalTime
+                value={item.createdAt}
+                options={{ dateStyle: "medium" }}
+                className="shrink-0 text-[10px] text-muted"
+              />
             </li>
           ))}
         </ul>

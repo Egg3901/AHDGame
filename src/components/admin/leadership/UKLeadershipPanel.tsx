@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { EmptyState } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface ConfidenceVoteRow {
   id: string;
@@ -48,16 +49,13 @@ const VOTE_TYPE_LABELS: Record<string, string> = {
   minority_attempt: "Minority Attempt",
 };
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "N/A";
-  return new Date(iso).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const UK_DATE_OPTS: Intl.DateTimeFormatOptions = {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+};
 
 function StatusBadge({ status }: { status: string }) {
   const color = STATUS_COLORS[status] ?? "bg-muted/20 text-muted";
@@ -233,13 +231,19 @@ function ConfidenceVoteList({
 
               {/* Date */}
               <p className="text-[11px] text-muted mt-1">
-                {v.status === "active" && v.closesAt
-                  ? `Deadline: ${formatDate(v.closesAt)}`
-                  : v.closedAt
-                    ? `Closed: ${formatDate(v.closedAt)}`
-                    : v.openedAt
-                      ? `Opened: ${formatDate(v.openedAt)}`
-                      : null}
+                {v.status === "active" && v.closesAt ? (
+                  <>
+                    Deadline: <LocalTime value={v.closesAt} options={UK_DATE_OPTS} />
+                  </>
+                ) : v.closedAt ? (
+                  <>
+                    Closed: <LocalTime value={v.closedAt} options={UK_DATE_OPTS} />
+                  </>
+                ) : v.openedAt ? (
+                  <>
+                    Opened: <LocalTime value={v.openedAt} options={UK_DATE_OPTS} />
+                  </>
+                ) : null}
               </p>
             </div>
 
@@ -289,13 +293,19 @@ function NoConfidenceVoteList({
 
               {/* Date */}
               <p className="text-[11px] text-muted mt-1">
-                {v.status === "active" && v.closesAt
-                  ? `Deadline: ${formatDate(v.closesAt)}`
-                  : v.closedAt
-                    ? `Closed: ${formatDate(v.closedAt)}`
-                    : v.openedAt
-                      ? `Opened: ${formatDate(v.openedAt)}`
-                      : null}
+                {v.status === "active" && v.closesAt ? (
+                  <>
+                    Deadline: <LocalTime value={v.closesAt} options={UK_DATE_OPTS} />
+                  </>
+                ) : v.closedAt ? (
+                  <>
+                    Closed: <LocalTime value={v.closedAt} options={UK_DATE_OPTS} />
+                  </>
+                ) : v.openedAt ? (
+                  <>
+                    Opened: <LocalTime value={v.openedAt} options={UK_DATE_OPTS} />
+                  </>
+                ) : null}
               </p>
             </div>
 

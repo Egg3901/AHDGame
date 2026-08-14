@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
 import { PlayerSelector } from "@/components/PlayerSelector";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface InviteRow {
   id: string;
@@ -298,7 +299,7 @@ export function ManagePrivateShareholdersPanel({
                   <p className="text-body-xs text-muted-foreground">
                     Issued by {inv.issuedByCharacterName} · expires{" "}
                     {/* wall-clock by design: private share invites have real-time validity */}
-                    {new Date(inv.expiresAt).toLocaleString("en-US")}
+                    <LocalTime value={inv.expiresAt} />
                   </p>
                 </div>
                 <div className="flex gap-2">

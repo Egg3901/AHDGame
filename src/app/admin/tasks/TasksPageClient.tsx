@@ -6,6 +6,7 @@ import type { TaskLesson, LessonCategory } from "@/lib/db/types/taskLesson";
 import { TaskFormToast } from "@/components/admin/tasks/TaskFormToast";
 import { TaskDetailModal } from "@/components/admin/tasks/TaskDetailModal";
 import { HealingTools } from "@/components/admin/tasks/HealingTools";
+import { LocalTime } from "@/components/time/LocalTime";
 import { useSearchParams, useRouter } from "next/navigation";
 
 function getPriorityBadge(priority: TaskPriority) {
@@ -365,7 +366,7 @@ function LessonCard({
         )}
         {lesson.taskTitle && <span className="text-xs text-muted">re: {lesson.taskTitle}</span>}
         <span className="ml-auto text-xs text-muted">
-          {new Date(lesson.createdAt).toLocaleDateString("en-US")}
+          <LocalTime value={lesson.createdAt} options={{ dateStyle: "medium" }} />
         </span>
       </div>
       <p className="text-sm leading-relaxed">{lesson.lesson}</p>
@@ -597,7 +598,9 @@ function TaskList({
               <div className="h-3 w-px bg-card-border" />
               {getPriorityBadge(task.priority)}
               <div className="h-3 w-px bg-card-border" />
-              <span>Created {new Date(task.createdAt).toLocaleDateString("en-US")}</span>
+              <span>
+                Created <LocalTime value={task.createdAt} options={{ dateStyle: "medium" }} />
+              </span>
             </div>
           </div>
         </div>

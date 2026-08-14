@@ -3,6 +3,7 @@
 import { useGameTurnStatus } from "@/hooks/useGameEvents";
 import { turnToLarpDate } from "@/lib/utils/formatters";
 import { formatBadge } from "@/components/admin/nav/useAdminBadgeCounts";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface AdminStatusBarProps {
   /** Sum of all pending queue counts (0 hides the chip). */
@@ -34,12 +35,7 @@ export function AdminStatusBar({
 
   const nextTurn =
     status?.isActive && status.nextScheduledTurn ? new Date(status.nextScheduledTurn) : null;
-  // Explicit locale: this renders client-side only (status starts null), but
-  // a fixed locale keeps SSR/CSR output identical if that ever changes.
-  const nextLabel =
-    nextTurn && !Number.isNaN(nextTurn.getTime())
-      ? nextTurn.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
-      : null;
+  const nextTurnValid = nextTurn && !Number.isNaN(nextTurn.getTime());
 
   // top-14 tucks the strip's first few px under the sticky global navbar
   // (h-14 + flair/border ≈ 61px, z-50) so no scroll seam shows between them.
@@ -62,8 +58,14 @@ export function AdminStatusBar({
                 <span className="flex shrink-0 items-center gap-1.5">
                   <span className={`h-1.5 w-1.5 rounded-full ${cron.dot}`} aria-hidden />
                   <span className={`font-semibold ${cron.cls}`}>{cron.label}</span>
-                  {nextLabel && (
-                    <span className="hidden text-muted md:inline">· next {nextLabel}</span>
+                  {nextTurnValid && (
+                    <span className="hidden text-muted md:inline">
+                      · next{" "}
+                      <LocalTime
+                        value={nextTurn}
+                        options={{ hour: "2-digit", minute: "2-digit" }}
+                      />
+                    </span>
                   )}
                 </span>
               )}
