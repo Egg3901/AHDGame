@@ -72,6 +72,8 @@ export interface CorporationLookups {
   /** Corp-to-corp equity stakes (holder → list of issuers). */
   crossCorpStockHoldingsByHolderCorpId: Map<string, CrossCorpStockHolding[]>;
   primeRateByCountry: Map<string, number>;
+  /** EMA of prime rate for the share-price discount only (see centralBank.ts COC_SMOOTHING_TURNS). */
+  primeRateSmoothedByCountry: Map<string, number>;
   // Macro modifiers derived from federal budgets
   macroInflationByCountry: Map<string, number>;
   /** Per-country investor confidence (spec §12.4 feed 1). Absent ⇒ baseline. */

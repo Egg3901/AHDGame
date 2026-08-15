@@ -26,6 +26,13 @@ export const AGGRESSIVE_CUT_SCRUTINY = 10;
 /** Number of turns a chair must wait between rate changes. */
 export const RATE_CHANGE_COOLDOWN_TURNS = 6;
 
+/**
+ * EMA window (turns) for `primeRateSmoothed`. ~6 turns puts the half-life
+ * around 4 turns: a 3pp policy swing reaches the market over several hours of
+ * real time instead of in one repricing pass.
+ */
+export const COC_SMOOTHING_TURNS = 6;
+
 export interface RateChangeRecord {
   previousRate: number;
   newRate: number;
@@ -233,6 +240,16 @@ export interface CentralBank {
    */
   chairAlignment?: "hawk" | "dove";
   primeRate: number;
+  /**
+   * EMA of primeRate (alpha 1/COC_SMOOTHING_TURNS, advanced once per turn by
+   * fomcMeetingTurn). The share-price formula discounts earnings by this
+   * rather than the spot rate: with hourly turns and an active FOMC the spot
+   * rate can move +-0.75pp every few turns, and full instant transmission
+   * whipsawed every listed corp's valuation with it. The exchange prices the
+   * policy TREND; every other prime-rate consumer (loans, coupons, growth
+   * cost) stays on spot, because those really do reprice immediately.
+   */
+  primeRateSmoothed?: number;
   rateHistory: RateChangeRecord[];
   /**
    * Fraction (0..1) of private-bank deposits that must be held unlent.

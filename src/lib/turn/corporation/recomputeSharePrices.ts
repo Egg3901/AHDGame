@@ -183,8 +183,15 @@ export async function recomputeSharePricesAfterBondTurn(
       );
       countryPrimeRate = FALLBACK_PRIME_RATE_PERCENT;
     }
+    // Discount by the SMOOTHED prime rate (EMA, fomcMeetingTurn): with hourly
+    // turns an active FOMC moves spot +-0.75pp every few turns, and instant
+    // full transmission whipsawed every corp's earnings component with it.
+    // Spot remains the basis everywhere money actually reprices immediately
+    // (loans, coupons, growth costs).
     const corpPrimeRate =
-      (lookups.primeRateByCountry.get(corp.countryId) ?? countryPrimeRate) / 100;
+      (lookups.primeRateSmoothedByCountry.get(corp.countryId) ??
+        lookups.primeRateByCountry.get(corp.countryId) ??
+        countryPrimeRate) / 100;
     const riskPremium = SECTOR_RISK_PREMIUM[corp.type as string] ?? SECTOR_RISK_PREMIUM.default;
 
     // hist.sectorNPV is stored in local currency (converted by marketCapSnapshot);
