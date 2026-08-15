@@ -81,6 +81,8 @@ export interface DriverDisplayInputs {
    * carries a value. Undefined → no gubernatorial row.
    */
   gubernatorialCoattailPctByParty?: Record<string, number>;
+  /** Per-party nominal-share boost for parties outside government at midterms. */
+  midtermOppositionBoostPctByParty?: Record<string, number>;
   /**
    * Single-winner executive own-race: the sitting executive's party and
    * approval (0..100). Switches the Incumbency row to the approval-scaled
@@ -247,6 +249,17 @@ export function computePairwiseDriverDisplay(
     const oppPct = inputs.gubernatorialCoattailPctByParty[opponent.party] ?? 0;
     rows.push({
       label: "Gubernatorial Coattails",
+      contributionPct: focusPct - oppPct,
+      color: focus.partyColor,
+      unit: "%",
+    });
+  }
+
+  if (inputs.midtermOppositionBoostPctByParty) {
+    const focusPct = inputs.midtermOppositionBoostPctByParty[focus.party] ?? 0;
+    const oppPct = inputs.midtermOppositionBoostPctByParty[opponent.party] ?? 0;
+    rows.push({
+      label: "Midterm Opposition",
       contributionPct: focusPct - oppPct,
       color: focus.partyColor,
       unit: "%",

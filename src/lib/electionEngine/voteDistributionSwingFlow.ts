@@ -195,6 +195,10 @@ function appealWeight(
   // nominal-share nudge nationwide. Same shape as govMod; they stack.
   const presMod = options?.presidentialModifierByParty?.get(ec.party) ?? 1;
 
+  // Off-cycle opposition counterweight. Eligible parties receive a fixed,
+  // modest nominal-share bump; governing and coalition parties stay neutral.
+  const midtermOppositionMod = options?.midtermOppositionModifierByParty?.get(ec.party) ?? 1;
+
   // Reg as a baseline nominal-share tilt (1.0–1.3×) — entrenched registration
   // helps a party hold its vote even without active persuasion pressure, on top
   // of the swing-layer's persuasion-resistance. Neutral 1.0× when Reg is absent.
@@ -245,6 +249,7 @@ function appealWeight(
       regimeMult *
       govMod *
       presMod *
+      midtermOppositionMod *
       regResist *
       regBaseline *
       stateOrgMult *

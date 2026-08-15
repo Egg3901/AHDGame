@@ -17,6 +17,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Election } from "@/lib/db/types";
 import { canonicalTurnsForCycle } from "@/lib/elections/canonicalCycle";
 import { DEFAULT_CYCLE_ANCHOR_CONTEXT } from "@/lib/elections/cycleAnchorContext";
+import { getUKRegionalCouncilCycle1EndTurn } from "@/lib/elections/ukRegionalCouncilStagger";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/discordWebhooks", () => ({
@@ -155,9 +156,13 @@ describe("next-cycle primaries open immediately (no 'Opens in X turns' dead zone
     expect(doc.endTurn).toBe(exp2.endTurn);
   });
 
-  it("ensureUKRegionalCouncilElections (no commons to mirror) spawns cycle 2 active now", async () => {
-    const exp1 = canon("regionalCouncil", 1);
-    const exp2 = canon("regionalCouncil", 2);
+  it("ensureUKRegionalCouncilElections spawns the region's cohort cycle active now", async () => {
+    const customCycle1EndTurn = getUKRegionalCouncilCycle1EndTurn(
+      "LON",
+      DEFAULT_CYCLE_ANCHOR_CONTEXT
+    );
+    const exp1 = canon("regionalCouncil", 1, { customCycle1EndTurn });
+    const exp2 = canon("regionalCouncil", 2, { customCycle1EndTurn });
     const currentTurn = exp2.startTurn - 30;
 
     const mock = makeMockDb({
@@ -171,7 +176,6 @@ describe("next-cycle primaries open immediately (no 'Opens in X turns' dead zone
           updatedAt: OLD,
         },
       ],
-      // No live commons election → independent canonical path.
       currentTurn,
     });
     await mount(mock);
@@ -187,6 +191,38 @@ describe("next-cycle primaries open immediately (no 'Opens in X turns' dead zone
     expect(new Date(doc.startTime!).getTime()).toBe(NOW.getTime());
     expect(doc.primaryEndTurn).toBe(exp2.primaryEndTurn);
     expect(doc.endTurn).toBe(exp2.endTurn);
+  });
+
+  it("moves a synchronized transition cycle 0 into cohort cycle 1", async () => {
+    const customCycle1EndTurn = getUKRegionalCouncilCycle1EndTurn(
+      "SCO",
+      DEFAULT_CYCLE_ANCHOR_CONTEXT
+    );
+    const exp1 = canon("regionalCouncil", 1, { customCycle1EndTurn });
+    const currentTurn = exp1.startTurn + 10;
+    const mock = makeMockDb({
+      states: [{ _id: "SCO" }],
+      completed: [
+        {
+          state: "SCO",
+          electionType: "regionalCouncil",
+          cycle: 0,
+          endTurn: exp1.startTurn,
+          updatedAt: OLD,
+        },
+      ],
+      currentTurn,
+    });
+    await mount(mock);
+
+    const { ensureUKRegionalCouncilElections } = await import("./perpetualElections");
+    await ensureUKRegionalCouncilElections(NOW);
+
+    const doc = mock.insertCalls.flat().find((d) => d.state === "SCO")!;
+    expect(doc.cycle).toBe(1);
+    expect(doc.status).toBe("active");
+    expect(doc.endTurn).toBe(exp1.endTurn);
+    expect(doc.electionYear).toBe(2025);
   });
 
   it("ensureJPCouncillorElections spawns cycle 2 sangiin active with the primary open now", async () => {

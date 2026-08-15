@@ -316,7 +316,8 @@ export const UK_REGION_NAMES: Record<string, string> = {
 
 /**
  * UK Regional Council seat counts by region.
- * Regional councils are elected on the same cycle as Commons.
+ * Each council retains a five-year term, with regions split across five
+ * annual cohorts. See elections/ukRegionalCouncilStagger.ts.
  */
 export const UK_REGIONAL_COUNCIL_SEATS: Record<string, number> = {
   LON: 32,

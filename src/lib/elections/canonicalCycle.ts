@@ -11,7 +11,7 @@
  * forward to the next LARP cycle whose remaining primary & general windows
  * each still clear a configurable floor (default 24h + 24h).
  *
- * Snap elections shift the LARP clock: commons / regionalCouncil / shugiin
+ * Snap elections shift the LARP clock: commons / shugiin
  * accept a `priorEndTurn` override that replaces the bootstrap anchor.
  */
 
@@ -195,7 +195,7 @@ export interface CanonicalCycleParams {
   chamberClass?: 1 | 2 | null;
   /**
    * Turn at which a prior snap or regular election of this race resolved.
-   * Used by commons / regionalCouncil / shugiin to shift the LARP anchor
+   * Used by commons / shugiin to shift the LARP anchor
    * forward after a snap election. Ignored by other types.
    */
   priorEndTurn?: number | null;
@@ -374,10 +374,9 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
         startTurn: cycle === 1 ? 1 : endTurn - dur.durationHours,
       };
     }
-    case "commons":
-    case "regionalCouncil": {
-      // UK Commons / Regional Council: 5-year cycle (240 turns). Cycle 1
-      // anchored to UK GE year (July, week 27). A snap shifts the anchor:
+    case "commons": {
+      // UK Commons: 5-year cycle (240 turns). Cycle 1 is anchored to the UK
+      // GE year (July, week 27). A snap shifts the anchor:
       // `priorEndTurn + 240` replaces the bootstrap formula.
       const endTurn =
         priorEndTurn != null
@@ -385,6 +384,18 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
           : cycle === 1
             ? anchors.ukCommons
             : anchors.ukCommons + (cycle - 1) * UK_COMMONS_CYCLE_PERIOD_HOURS;
+      return {
+        endTurn,
+        primaryEndTurn: endTurn - dur.generalDurationHours,
+        startTurn: cycle === 1 ? 1 : endTurn - dur.durationHours,
+      };
+    }
+    case "regionalCouncil": {
+      // UK Regional Council: five annual cohorts, each retaining a five-year
+      // term. The caller supplies that region's cycle-1 anchor. Callers for
+      // countries without UK cohorts retain the legacy Commons-aligned anchor.
+      const cycle1End = customCycle1EndTurn ?? anchors.ukCommons;
+      const endTurn = cycle1End + (cycle - 1) * UK_COMMONS_CYCLE_PERIOD_HOURS;
       return {
         endTurn,
         primaryEndTurn: endTurn - dur.generalDurationHours,

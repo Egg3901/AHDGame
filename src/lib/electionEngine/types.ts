@@ -211,6 +211,13 @@ export interface DistributeVotesOptions {
    */
   presidentialModifierByParty?: Map<string, number>;
   /**
+   * Per-party off-cycle opposition multiplier. Parties outside the national
+   * government receive 1.05× in eligible UK Regional Council midterms;
+   * governing and coalition parties remain neutral. Undefined outside those
+   * races. Applied on the nominal-share line beside executive coattails.
+   */
+  midtermOppositionModifierByParty?: Map<string, number>;
+  /**
    * Per-party campaign funds available in this race, in the country's
    * native local currency. Higher delta between P_j and P_i implies P_j
    * has more persuasion budget — feeds the money driver. Undefined or
@@ -374,4 +381,6 @@ export interface AccumulateVoteTurnPreload {
   demographicsMap: Map<string, StateDemographics>;
   statePartyOrgsByState: Map<string, StatePartyOrg[]>;
   turnoutByState: Map<string, StateDemographicTurnout>;
+  /** Current national governing/coalition party IDs, resolved once per country. */
+  governingPartyIdsByCountry?: Map<CountryId, Set<string>>;
 }

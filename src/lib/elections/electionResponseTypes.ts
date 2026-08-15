@@ -239,6 +239,9 @@ export interface ElectionResponse {
    */
   gubernatorialCoattailPctByParty?: Record<string, number>;
 
+  /** Per-party +5% nominal-share tilt for eligible UK regional midterms. */
+  midtermOppositionBoostPctByParty?: Record<string, number>;
+
   /**
    * Per-state registration-lean breakdown for the presidential
    * RegistrationInfluenceCard. Keyed by stateId → party shares (each
