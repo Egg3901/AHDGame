@@ -3,6 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import {
   resolveBillCardTally,
+  resolveStateBillHeadlineTallies,
   scopeStateBillVotes,
   scopeStateBillVotesWithOfficials,
 } from "./stateBillVoteScope";
@@ -238,5 +239,103 @@ describe("resolveBillCardTally (ticket #1075)", () => {
       houseScope
     );
     expect(tally).toEqual({ for: 250, against: 215, abstain: 0 });
+  });
+});
+
+describe("resolveStateBillHeadlineTallies (ticket #1107 governor office)", () => {
+  const charStaying = new ObjectId();
+  const charDeparted = new ObjectId();
+  const charAgainst = new ObjectId();
+  const scope = { countryId: "US", officeType: "stateSenate" };
+  const officials: ScopedVoteOfficial[] = [
+    {
+      characterId: charStaying,
+      countryId: "US",
+      nppId: undefined,
+      officeType: "stateSenate",
+      seatsHeld: 14,
+    },
+    {
+      characterId: charAgainst,
+      countryId: "US",
+      nppId: undefined,
+      officeType: "stateSenate",
+      seatsHeld: 17,
+    },
+  ];
+
+  it("live-scopes an in-flight origin tally after chamber turnover", () => {
+    const tallies = resolveStateBillHeadlineTallies(
+      {
+        votes: {
+          [charStaying.toString()]: "for",
+          [charDeparted.toString()]: "for",
+          [charAgainst.toString()]: "against",
+        },
+        votesFor: 27,
+        votesAgainst: 4,
+        votesAbstain: 0,
+      },
+      officials,
+      scope
+    );
+
+    expect(tallies).toEqual({
+      votesFor: 14,
+      votesAgainst: 17,
+      overrideVotesFor: 0,
+      overrideVotesAgainst: 0,
+    });
+  });
+
+  it("live-scopes an in-progress veto-override tally the same way", () => {
+    const tallies = resolveStateBillHeadlineTallies(
+      {
+        votes: { [charStaying.toString()]: "for" },
+        votesFor: 14,
+        votesAgainst: 17,
+        voteSnapshot: {
+          votes: { [charStaying.toString()]: "for", [charAgainst.toString()]: "against" },
+          weights: { [charStaying.toString()]: 14, [charAgainst.toString()]: 17 },
+          totals: { for: 14, against: 17, abstain: 0 },
+          resolvedAtTurn: 10,
+        },
+        overrideVotes: {
+          [charStaying.toString()]: "for",
+          [charDeparted.toString()]: "for",
+          [charAgainst.toString()]: "against",
+        },
+        overrideVotesFor: 27,
+        overrideVotesAgainst: 4,
+      },
+      officials,
+      scope
+    );
+
+    expect(tallies.votesFor).toBe(14);
+    expect(tallies.votesAgainst).toBe(17);
+    expect(tallies.overrideVotesFor).toBe(14);
+    expect(tallies.overrideVotesAgainst).toBe(17);
+  });
+
+  it("keeps a frozen origin snapshot for bills awaiting assent", () => {
+    const tallies = resolveStateBillHeadlineTallies(
+      {
+        votes: { [charStaying.toString()]: "for", [charDeparted.toString()]: "against" },
+        votesFor: 14,
+        votesAgainst: 17,
+        voteSnapshot: {
+          votes: { [charStaying.toString()]: "for", [charDeparted.toString()]: "against" },
+          weights: { [charStaying.toString()]: 14, [charDeparted.toString()]: 17 },
+          totals: { for: 14, against: 17, abstain: 0 },
+          resolvedAtTurn: 10,
+        },
+      },
+      officials,
+      scope
+    );
+
+    expect(tallies.votesFor).toBe(14);
+    expect(tallies.votesAgainst).toBe(17);
   });
 });
