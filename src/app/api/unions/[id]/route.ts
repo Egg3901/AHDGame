@@ -96,6 +96,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
               corporationId: 1,
               stateId: 1,
               wageLevel: 1,
+              workers: 1,
               unionization: 1,
               strikeStartedAtTurn: 1,
               strikeCooldownUntilTurn: 1,
@@ -273,6 +274,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         corporationName: corpNameById.get(s.corporationId.toString()) ?? "Unknown",
         stateId: s.stateId,
         wageLevel: s.wageLevel ?? 1,
+        workers: s.workers ?? 0,
         wageGap:
           union.demandedWageLevel == null
             ? null
@@ -282,6 +284,21 @@ export async function GET(_request: Request, { params }: RouteParams) {
         strikeCooldownUntilTurn: s.strikeCooldownUntilTurn ?? null,
         strikeBlockReason: unionStrikeBlockReason(s, currentTurn, protectedSectorIds),
       })),
+      // Union-wide membership: `unionization` is a percent (0-100) per sector, so
+      // the covered headcount is Σ(workers × unionization/100). `density` is that
+      // total over the whole workforce this union has standing in.
+      workforce: (() => {
+        const totalWorkers = sectors.reduce((sum, s) => sum + (s.workers ?? 0), 0);
+        const unionizedWorkers = sectors.reduce(
+          (sum, s) => sum + (s.workers ?? 0) * ((s.unionization ?? 0) / 100),
+          0
+        );
+        return {
+          totalWorkers: Math.round(totalWorkers),
+          unionizedWorkers: Math.round(unionizedWorkers),
+          density: totalWorkers > 0 ? unionizedWorkers / totalWorkers : 0,
+        };
+      })(),
       // No union-wide strike preview: unions no longer call strikes directly,
       // so the only live cost/eligibility figures are the campaign-scoped ones
       // in `bargainingCampaigns[].escalationPreview` below, which are built
