@@ -55,6 +55,8 @@ export interface SectorProfitBasisInput {
   revenue?: number | null;
   realizedRevenue?: number | null;
   profitMargin?: number | null;
+  /** Engine-applied margin from the last processed turn — preferred over the CEO-set base. */
+  effectiveProfitMargin?: number | null;
   currentGrowthRate?: number | null;
   currentGrowthCost?: number | null;
 }
@@ -136,7 +138,16 @@ export function sectorDailyProfitAnchor(
     code,
     rate
   );
-  const marginPct = sector.profitMargin ?? DEFAULT_SECTOR_PROFIT_MARGIN_PCT;
+  // Prefer the margin the engine actually applied last turn. Under plants the
+  // stored `effectiveProfitMargin` is derived from the physical P&L (labor,
+  // upkeep, inputs — sectorTurn.ts P3.5); below plants it is last turn's full
+  // modifier stack. The CEO-set base `profitMargin` (typically 35) knows about
+  // neither, and pricing collateral on it let corps borrow against loss-making
+  // sectors as if they earned 35% while under-crediting genuinely high-margin
+  // ones (ops-knowledge: ahd-corp-sector-npv-divergence). Base survives only
+  // as the fallback for sectors that have never processed a turn.
+  const marginPct =
+    sector.effectiveProfitMargin ?? sector.profitMargin ?? DEFAULT_SECTOR_PROFIT_MARGIN_PCT;
   const maintenanceAnchor = revenueAnchor * (1 - marginPct / 100);
 
   let growthCostAnchor = 0;
