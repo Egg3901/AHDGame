@@ -49,6 +49,11 @@ export default function FinancialsPanel({
     return formatAmount(anchor, liquidCode);
   };
   const fmtMoneyFull = fmtMoney;
+  // Figures are stored per financial day (TURNS_PER_DAY turns). Rows show the
+  // per-turn amount as the primary value with the daily figure as secondary.
+  const perTurn = (dailyAmount: number) => fmtMoneyFull(Math.round(dailyAmount / TURNS_PER_DAY));
+  const perTurnParen = (dailyAmount: number) => `(${perTurn(dailyAmount)})`;
+  const dailyParen = (dailyAmount: number) => `(${fmtMoney(dailyAmount)})`;
 
   // Realization gap, signed. Positive = earning above nameplate (price premium
   // or hot production policy); negative = capacity/clearing/throughput/embargo
@@ -62,14 +67,17 @@ export default function FinancialsPanel({
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
       <h2 className="mb-1 text-lg font-bold text-foreground">Sector Financials</h2>
-      <p className="mb-4 text-xs text-muted">{MONEY_PERIOD_HELP} All figures below are daily.</p>
+      <p className="mb-4 text-xs text-muted">
+        {MONEY_PERIOD_HELP} Figures below are per turn; each row&apos;s tooltip shows the daily
+        amount.
+      </p>
       <div className="space-y-3">
         <FinRow
           label="Revenue"
-          value={fmtMoney(financials.revenue)}
-          perHour={fmtMoneyFull(Math.round(financials.revenue / 24))}
+          value={perTurn(financials.revenue)}
+          daily={fmtMoney(financials.revenue)}
           valueClass="text-success"
-          tooltip="Headline income from this sector per day, based on the market share you hold. Net Profit below uses the amount you actually earned, not this figure."
+          tooltip="Headline income from this sector per turn, based on the market share you hold. Net Profit below uses the amount you actually earned, not this figure."
         />
         {/* Realized revenue. This used to render only when realization was
             UNFAVOURABLE (`realized < revenue * 0.995`), so a sector selling into
@@ -86,8 +94,8 @@ export default function FinancialsPanel({
                   ? "Realized revenue (premium)"
                   : "Realized revenue"
             }
-            value={fmtMoney(financials.realizedRevenue as number)}
-            perHour={fmtMoneyFull(Math.round((financials.realizedRevenue as number) / 24))}
+            value={perTurn(financials.realizedRevenue as number)}
+            daily={fmtMoney(financials.realizedRevenue as number)}
             valueClass={
               financials.embargoSuspended
                 ? "text-error"
@@ -118,8 +126,8 @@ export default function FinancialsPanel({
         )}
         <FinRow
           label="Maintenance"
-          value={fmtMoney(financials.maintenance)}
-          perHour={fmtMoneyFull(Math.round(financials.maintenance / 24))}
+          value={perTurn(financials.maintenance)}
+          daily={fmtMoney(financials.maintenance)}
           valueClass="text-error"
           indent
           tooltip={
@@ -131,8 +139,8 @@ export default function FinancialsPanel({
         {financials.laborCost > 0 && (
           <FinRow
             label="Wages"
-            value={fmtMoney(financials.laborCost)}
-            perHour={fmtMoneyFull(Math.round(financials.laborCost / 24))}
+            value={perTurn(financials.laborCost)}
+            daily={fmtMoney(financials.laborCost)}
             valueClass="text-error"
             indent
             tooltip="What this sector pays its workers. It moves with how many people you employ, local pay levels, and any union pay demand. It is split out of Maintenance, and the two together are the full running cost."
@@ -140,8 +148,8 @@ export default function FinancialsPanel({
         )}
         <FinRow
           label="Growth Cost"
-          value={fmtMoney(financials.growthCost)}
-          perHour={fmtMoneyFull(Math.round(financials.growthCost / 24))}
+          value={perTurn(financials.growthCost)}
+          daily={fmtMoney(financials.growthCost)}
           valueClass="text-error"
           indent
           tooltip="Cost of the currently active growth rate (not the target). Scales with revenue and the active growth rate; rises gradually as the active rate trends toward your target."
@@ -157,8 +165,8 @@ export default function FinancialsPanel({
         <div className="border-t border-card-border pt-2">
           <FinRow
             label="Net Profit"
-            value={fmtMoney(financials.profit)}
-            perHour={fmtMoneyFull(Math.round(financials.profit / 24))}
+            value={perTurn(financials.profit)}
+            daily={fmtMoney(financials.profit)}
             valueClass={financials.profit >= 0 ? "text-success" : "text-error"}
             bold
             tooltip={
@@ -173,16 +181,16 @@ export default function FinancialsPanel({
           <div className="space-y-2">
             <FinRow
               label="Corp overhead (this sector's share)"
-              value={`(${fmtMoney(financials.corpOverheadShare)})`}
-              perHour={`(${fmtMoneyFull(Math.round(financials.corpOverheadShare / 24))})`}
+              value={perTurnParen(financials.corpOverheadShare)}
+              daily={dailyParen(financials.corpOverheadShare)}
               valueClass="text-error"
               indent
               tooltip="This sector's slice of company-wide costs such as marketing, logistics, and CEO salary. Sectors that bring in more revenue carry more of them. It comes off Net Profit before tax."
             />
             <FinRow
               label="Taxable income"
-              value={fmtMoney(financials.taxableIncome)}
-              perHour={fmtMoneyFull(Math.round(financials.taxableIncome / 24))}
+              value={perTurn(financials.taxableIncome)}
+              daily={fmtMoney(financials.taxableIncome)}
               valueClass={financials.taxableIncome > 0 ? "text-foreground" : "text-muted"}
               tooltip="Net Profit minus this sector's share of company-wide costs, and never below zero. The tax below is charged on this figure. If the shared costs are bigger than the profit, the sector pays no tax even though Net Profit looks positive."
             />
@@ -197,8 +205,8 @@ export default function FinancialsPanel({
             {financials.federalTaxRate > 0 && (
               <FinRow
                 label={`Federal (${financials.federalTaxRate}%)`}
-                value={`(${fmtMoney(financials.federalTaxApprox)})`}
-                perHour={`(${fmtMoneyFull(Math.round(financials.federalTaxApprox / 24))})`}
+                value={perTurnParen(financials.federalTaxApprox)}
+                daily={dailyParen(financials.federalTaxApprox)}
                 valueClass="text-error"
                 indent
                 tooltip={`This sector's federal tax at ${financials.federalTaxRate}%. It is charged on the sector's slice of company profit, after its share of company-wide costs such as marketing, logistics, and CEO salary. Sectors that bring in more revenue take a bigger slice of both. This matches the federal tax shown for this sector on the corporation Financials tab.`}
@@ -207,8 +215,8 @@ export default function FinancialsPanel({
             {financials.stateTaxRate > 0 && (
               <FinRow
                 label={`State / Regional (${financials.stateTaxRate}%)`}
-                value={`(${fmtMoney(financials.stateTaxApprox)})`}
-                perHour={`(${fmtMoneyFull(Math.round(financials.stateTaxApprox / 24))})`}
+                value={perTurnParen(financials.stateTaxApprox)}
+                daily={dailyParen(financials.stateTaxApprox)}
                 valueClass="text-error"
                 indent
                 tooltip={`This sector's state or regional tax at ${financials.stateTaxRate}%, charged on the same slice of profit as the federal line above. Sectors in low-tax states pay less, no matter where the company is headquartered.`}
@@ -274,7 +282,7 @@ export default function FinancialsPanel({
                 </span>
                 <span
                   className="text-[10px] text-muted"
-                  title={`Growth rates are per game year (${GROWTH_RATE_TURNS_PER_YEAR} turns). Money figures are per day (${TURNS_PER_DAY} turns).`}
+                  title={`Growth rates are per game year (${GROWTH_RATE_TURNS_PER_YEAR} turns). Money figures are per turn.`}
                 >
                   /yr
                 </span>
@@ -292,14 +300,13 @@ export default function FinancialsPanel({
               <div className="text-[10px] uppercase tracking-wider text-muted">Current cost</div>
               <div className="mt-0.5 flex items-baseline gap-1">
                 <span className="text-sm font-semibold tabular-nums text-error">
-                  {fmtMoney(sector.currentGrowthCost)}
+                  {perTurn(sector.currentGrowthCost)}
                 </span>
-                <span className="text-[10px] text-muted">/day</span>
+                <span className="text-[10px] text-muted">/turn</span>
               </div>
               <p className="mt-1 text-[10px] leading-snug text-muted">
-                You pay this every day. Over one game year ({GROWTH_RATE_TURNS_PER_YEAR} turns ={" "}
-                {GROWTH_RATE_TURNS_PER_YEAR / TURNS_PER_DAY} days) that is {GROWTH_COST_MULTIPLIER}×
-                the revenue the growth adds.
+                You pay this every turn. Over one game year ({GROWTH_RATE_TURNS_PER_YEAR} turns) that
+                is {GROWTH_COST_MULTIPLIER}× the revenue the growth adds.
               </p>
             </div>
           </div>

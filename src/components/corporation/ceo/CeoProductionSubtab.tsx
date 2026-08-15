@@ -250,7 +250,7 @@ function BulkGroupCard({
           <div className="mt-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs">
             <p className="text-foreground">
               Set growth to {preview.target}% across {preview.matchedCount} holdings. Projected cost
-              ~{fmtMoney(preview.projected)}/day (currently ~{fmtMoney(preview.current)}/day,{" "}
+              ~{fmtMoney(Math.round(preview.projected / 24))}/turn (currently ~{fmtMoney(Math.round(preview.current / 24))}/turn,{" "}
               {preview.delta >= 0 ? "+" : ""}
               {fmtMoney(preview.delta)}). Projected once ramped.
             </p>
@@ -443,8 +443,8 @@ function SectorGrowthControl({
       {preview && (
         <div className="mt-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs">
           <p className="text-foreground">
-            Set growth to {preview.target}%. Projected cost ~{fmtMoney(preview.projected)}/day
-            (currently ~{fmtMoney(preview.current)}/day, {preview.delta >= 0 ? "+" : ""}
+            Set growth to {preview.target}%. Projected cost ~{fmtMoney(Math.round(preview.projected / 24))}/turn
+            (currently ~{fmtMoney(Math.round(preview.current / 24))}/turn, {preview.delta >= 0 ? "+" : ""}
             {fmtMoney(preview.delta)}). Projected once ramped.
           </p>
           <div className="mt-2 flex gap-2">
@@ -771,22 +771,22 @@ export default function CeoProductionSubtab({
                             <PolicyMetricBlock
                               label="Growth cost"
                               tooltip={
-                                <p className="text-muted">Daily cost of maintaining growth.</p>
+                                <p className="text-muted">Per-turn cost of maintaining growth.</p>
                               }
                               valueClassName="text-error"
                             >
-                              {fmtMoney(sector.currentGrowthCost)}
-                              <span className="text-xs font-normal text-muted"> /day</span>
+                              {fmtMoney(Math.round(sector.currentGrowthCost / 24))}
+                              <span className="text-xs font-normal text-muted"> /turn</span>
                             </PolicyMetricBlock>
                           </>
                         )}
                         <PolicyMetricBlock
                           label="Revenue"
-                          tooltip={<p className="text-muted">Daily gross revenue.</p>}
+                          tooltip={<p className="text-muted">Per-turn gross revenue.</p>}
                           valueClassName="text-success"
                         >
-                          {fmtMoney(sector.revenue)}
-                          <span className="text-xs font-normal text-muted"> /day</span>
+                          {fmtMoney(Math.round(sector.revenue / 24))}
+                          <span className="text-xs font-normal text-muted"> /turn</span>
                         </PolicyMetricBlock>
                         <PolicyMetricBlock
                           label="Margin"
@@ -797,11 +797,11 @@ export default function CeoProductionSubtab({
                         </PolicyMetricBlock>
                         <PolicyMetricBlock
                           label="Profit"
-                          tooltip={<p className="text-muted">Daily profit after costs.</p>}
+                          tooltip={<p className="text-muted">Per-turn profit after costs.</p>}
                           valueClassName={sector.profit >= 0 ? "text-success" : "text-error"}
                         >
-                          {fmtMoney(sector.profit)}
-                          <span className="text-xs font-normal text-muted"> /day</span>
+                          {fmtMoney(Math.round(sector.profit / 24))}
+                          <span className="text-xs font-normal text-muted"> /turn</span>
                         </PolicyMetricBlock>
                         <PolicyMetricBlock
                           label="Workers"

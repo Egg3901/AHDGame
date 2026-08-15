@@ -436,7 +436,7 @@ export default function BondsTab({
                                     <div
                                       className={`font-semibold tabular-nums ${retainedAnchor >= 0 ? "text-success" : "text-error"}`}
                                     >
-                                      {formatAmount(retainedAnchor)}/day
+                                      {formatAmount(Math.round(retainedAnchor / 24))}/turn
                                     </div>
                                   </div>
                                   <div>
@@ -446,7 +446,7 @@ export default function BondsTab({
                                     <div
                                       className={`font-semibold tabular-nums ${retainedAnchor - dailyCost >= 0 ? "text-success" : "text-error"}`}
                                     >
-                                      {formatAmount(Math.round(retainedAnchor - dailyCost))}/day
+                                      {formatAmount(Math.round((retainedAnchor - dailyCost) / 24))}/turn
                                     </div>
                                   </div>
                                 </>

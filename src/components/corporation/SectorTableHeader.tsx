@@ -218,7 +218,7 @@ function PlantsSectorTableHeader({ timeScale }: { timeScale: MoneyPeriod }) {
           is still under construction, with the turns until it comes online.
         </p>
         <p className="mt-1 text-muted">
-          Always shown per day. The hourly and yearly toggle rescales the money columns only, so
+          Always shown per day. The per-turn and yearly toggle rescales the money columns only, so
           capacity does not move when you switch it.
         </p>
       </InfoTooltip>
