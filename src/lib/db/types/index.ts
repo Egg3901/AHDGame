@@ -297,6 +297,7 @@ export type { AlignmentPlay } from "./alignmentPlay";
 export type { CountryAlignment } from "./countryAlignment";
 export type { ManualOfficeHistoryEntry, OfficeKind } from "./manualOfficeHistory";
 export type { ExtractionContract } from "./extractionContract";
+export type { DefenceContract, DefenceContractStatus } from "./defenceContract";
 export type { ProspectingSurvey } from "./prospectingSurvey";
 export type {
   FinancialTxLogEntry,
