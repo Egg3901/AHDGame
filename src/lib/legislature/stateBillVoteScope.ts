@@ -37,6 +37,62 @@ export function resolveBillCardTally(
   return scoped.totals;
 }
 
+export type StateBillHeadlineTallies = {
+  votesFor: number;
+  votesAgainst: number;
+  overrideVotesFor: number;
+  overrideVotesAgainst: number;
+};
+
+type StateBillTallySource = {
+  votes?: Record<string, BillVoteValue>;
+  votesFor: number;
+  votesAgainst: number;
+  votesAbstain?: number;
+  voteSnapshot?: BillVoteSnapshot;
+  overrideVotes?: Record<string, "for" | "against">;
+  overrideVotesFor?: number;
+  overrideVotesAgainst?: number;
+  overrideVoteSnapshot?: BillVoteSnapshot;
+};
+
+/**
+ * Origin + veto-override headlines for a state bill card that is not the
+ * legislature list/detail (ticket #1107: governor office). Same rules as
+ * {@link resolveBillCardTally}: freeze a concluded phase from its snapshot,
+ * live-scope an in-progress phase to current seat holders.
+ */
+export function resolveStateBillHeadlineTallies(
+  bill: StateBillTallySource,
+  officials: ScopedVoteOfficial[],
+  scope: { countryId: string; officeType: string } | null
+): StateBillHeadlineTallies {
+  const origin = resolveBillCardTally(
+    bill.votes,
+    { for: bill.votesFor, against: bill.votesAgainst, abstain: bill.votesAbstain ?? 0 },
+    bill.voteSnapshot,
+    officials,
+    scope
+  );
+  const override = resolveBillCardTally(
+    bill.overrideVotes,
+    {
+      for: bill.overrideVotesFor ?? 0,
+      against: bill.overrideVotesAgainst ?? 0,
+      abstain: 0,
+    },
+    bill.overrideVoteSnapshot,
+    officials,
+    scope
+  );
+  return {
+    votesFor: origin.for,
+    votesAgainst: origin.against,
+    overrideVotesFor: override.for,
+    overrideVotesAgainst: override.against,
+  };
+}
+
 /**
  * Pure variant of {@link scopeStateBillVotes} for callers that have already
  * loaded the chamber roster (e.g. the bills-list page, which scopes many bills
