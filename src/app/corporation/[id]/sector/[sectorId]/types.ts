@@ -34,8 +34,10 @@ export interface SectorData {
   bustingCooldownUntilTurn?: number | null;
   /** v3 Phase 8 (code-review fix #11): a wage demand from an owned union targeting this sector's industry, or null. */
   unionWageDemand?: number | null;
-  /** v3 Phase 8: id of the owned union making the wage demand, for linking to its dashboard. Null when no demand. */
+  /** v3 Phase 8: id of the union covering this country's industry, including a vacant union. */
   unionId?: string | null;
+  /** Seeded display name of the union covering this country's industry. */
+  unionName?: string | null;
   createdAt: string;
   /** Active for-sale listing, null when not on the secondary market */
   forSale?: {
