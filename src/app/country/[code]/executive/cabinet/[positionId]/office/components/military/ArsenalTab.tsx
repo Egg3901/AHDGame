@@ -24,9 +24,6 @@ const DOMAINS: Array<{ id: UnitDomain; label: string }> = [
   { id: "space", label: "Space" },
 ];
 
-/** The award route caps an order at this; the form refuses the same figure with a reason. */
-const MAX_LOTS_PER_CONTRACT = 1_000_000;
-
 const GRADE_LABEL = ["None", "Legacy", "Modernised", "Cutting-edge"];
 
 /**
@@ -89,13 +86,14 @@ export function ArsenalTab({
   const lotsWanted = Number(awardLots);
   const lotsPositive =
     Number.isFinite(lotsWanted) && lotsWanted > 0 && Number.isInteger(lotsWanted);
-  const lotsTooMany = lotsPositive && lotsWanted > MAX_LOTS_PER_CONTRACT;
+  const supplierAllowance = selected?.availableLots ?? 0;
+  const lotsTooMany = lotsPositive && lotsWanted > supplierAllowance;
   const lotsValid = lotsPositive && !lotsTooMany;
   // Priced off the same anchored GDP the award route uses, so the figure the minister
   // approves is the figure they are billed. A null GDP disables rather than quoting free kit.
   const priced = lotPricePerLot != null && lotPricePerLot > 0;
   const estimatedCost = priced && lotsValid ? lotsWanted * lotPricePerLot : 0;
-  const canSubmit = canAct && !busy && priced && !!selected && lotsValid;
+  const canSubmit = canAct && !busy && priced && !!selected && supplierAllowance > 0 && lotsValid;
   // Whole turns to fill the order at the plant’s current output — the one number that turns
   // "500 lots" from a figure into a decision.
   const turnsToFill =
@@ -225,6 +223,7 @@ export function ArsenalTab({
                     " · output is split across the domains it serves"}
                   {selected.alreadyContracted &&
                     " · this plant already has an order, and would split its output again"}
+                  {` · ${supplierAllowance.toLocaleString("en-US")} lots available through turn ${selected.allowanceWindowEndTurn ?? "?"}`}
                 </p>
               )}
             </div>
@@ -241,7 +240,7 @@ export function ArsenalTab({
                 type="number"
                 inputMode="numeric"
                 min={1}
-                max={MAX_LOTS_PER_CONTRACT}
+                max={Math.max(1, supplierAllowance)}
                 step={1}
                 value={awardLots}
                 onChange={(e) => setAwardLots(e.target.value)}
@@ -250,8 +249,8 @@ export function ArsenalTab({
               />
               {lotsTooMany && (
                 <p className="mt-1.5 text-[11px] text-[var(--error)]">
-                  A single contract cannot exceed {MAX_LOTS_PER_CONTRACT.toLocaleString("en-US")}{" "}
-                  lots. Award several if you need more.
+                  This supplier may receive at most {supplierAllowance.toLocaleString("en-US")} more
+                  lots in the current contracting window.
                 </p>
               )}
               <p className="mt-1.5 text-[11px] text-muted">

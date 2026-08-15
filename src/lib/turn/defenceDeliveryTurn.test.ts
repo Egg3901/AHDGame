@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { canSupply, applyDefenceDeliveries } from "./defenceDeliveryTurn";
 import { lotsFromSector, rawLotsFromSector } from "@/lib/military/arsenal";
+import { emitTx } from "@/lib/financialTxLog/emit";
+
+vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
 
 describe("lotsFromSector", () => {
   it("produces nothing from a plant with no revenue", () => {
@@ -220,10 +223,20 @@ describe("applyDefenceDeliveries", () => {
 
   it("delivers into the arsenal and pays the corporation", async () => {
     const w = world();
-    const r = await applyDefenceDeliveries(stubDb(w), "US", 1953);
+    const r = await applyDefenceDeliveries(stubDb(w), "US", 1953, 3, 42);
     expect(r.lots).toBeGreaterThan(0);
     expect(w.arsenalDeposits[0].domain).toBe("ground");
     expect(w.corpCredits[0]).toBe(r.paid);
+    expect(emitTx).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        type: "defence_contract_payment",
+        turn: 42,
+        subjectType: "corporation",
+        subjectId: CORP_ID,
+        amount: r.paid,
+      })
+    );
   });
 
   // Procurement has NO overdraft. A country that cannot pay takes fewer lots.

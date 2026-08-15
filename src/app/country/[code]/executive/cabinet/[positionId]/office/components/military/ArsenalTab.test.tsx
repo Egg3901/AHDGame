@@ -43,6 +43,8 @@ const supplier = (over: Partial<DefenceSupplierView> = {}): DefenceSupplierView 
   projectedLotsPerTurn: 20,
   gradeCeiling: 2,
   alreadyContracted: false,
+  availableLots: 6,
+  allowanceWindowEndTurn: 12,
   ...over,
 });
 
@@ -136,28 +138,27 @@ describe("ArsenalTab — awarding a contract", () => {
     setup({ onAwardContract });
 
     fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "250" } });
+    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "5" } });
     fireEvent.click(screen.getByText("Offer contract"));
 
-    expect(onAwardContract).toHaveBeenCalledWith("s1", 250);
+    expect(onAwardContract).toHaveBeenCalledWith("s1", 5);
   });
 
   // Quoting off a different price than the route bills would make the confirmation a lie.
   it("quotes lots x the going rate before the minister commits", () => {
     setup();
     fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "250" } });
+    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "5" } });
     expect(screen.getByText("Total if fully delivered")).toBeTruthy();
-    // 250 lots x $1,000.
-    expect(screen.getByText(/250,000/)).toBeTruthy();
+    // 5 lots x $1,000.
+    expect(screen.getByText(/5,000/)).toBeTruthy();
   });
 
   it("shows how many turns the plant needs to fill the order", () => {
     setup();
     fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "250" } });
-    // 250 lots at 20/turn rounds up to 13.
-    expect(screen.getByText(/about 13 turns to fill/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "5" } });
+    expect(screen.getByText(/about 1 turn to fill/)).toBeTruthy();
   });
 
   it("refuses to submit with no plant chosen or a non-positive order", () => {
@@ -204,31 +205,29 @@ describe("ArsenalTab — awarding a contract", () => {
   it("warns when the chosen plant is producing nothing", () => {
     setup({ suppliers: [supplier({ projectedLotsPerTurn: 0 })] });
     fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "5" } });
     expect(screen.getByText(/producing nothing right now/)).toBeTruthy();
   });
 });
 
-describe("ArsenalTab — order size cap", () => {
-  // Mirrors the award route's own max. Without it the minister gets a raw schema error
-  // from the server for a figure the form could have refused with a reason.
-  it("refuses an order past the per-contract cap", () => {
+describe("ArsenalTab — contracting allowance", () => {
+  it("refuses an order past the supplier's current allowance", () => {
     const onAwardContract = vi.fn(async () => true);
     setup({ onAwardContract });
     fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "1000001" } });
+    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "7" } });
 
-    expect(screen.getByText(/cannot exceed/)).toBeTruthy();
+    expect(screen.getByText(/at most 6 more lots/)).toBeTruthy();
     expect((screen.getByText("Offer contract") as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByText("Offer contract"));
     expect(onAwardContract).not.toHaveBeenCalled();
   });
 
-  it("accepts an order exactly at the cap", () => {
+  it("accepts an order exactly at the allowance", () => {
     setup();
     fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "1000000" } });
-    expect(screen.queryByText(/cannot exceed/)).toBeNull();
+    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "6" } });
+    expect(screen.queryByText(/at most 6 more lots/)).toBeNull();
     expect((screen.getByText("Offer contract") as HTMLButtonElement).disabled).toBe(false);
   });
 });

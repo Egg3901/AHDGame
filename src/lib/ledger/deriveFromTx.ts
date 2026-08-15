@@ -57,6 +57,9 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   corp_tax_paid: "taxation",
   gov_tax_revenue: "taxation",
   corp_revenue: "sector_revenue",
+  // The buyer is the defence appropriation sub-account, which the stock-check ledger does
+  // not yet model as a real account. Name the contra instead of reporting an unexplained mint.
+  defence_contract_payment: "defence_procurement",
   party_dues_received: "party_dues",
   // Genuine one-directional system mint: the new-player checklist completion
   // bonus has no in-world payer, so it is an attributed mint rather than
