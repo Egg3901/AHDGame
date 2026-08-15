@@ -45,6 +45,9 @@ describe("banking charter", () => {
     db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
       _id: "default",
       privateBankingEnabled: true,
+      // Default the advanced-charter gate open so the separation-law tests
+      // exercise the jurisdiction logic; the gate has its own tests below.
+      playerAdvancedBankChartersEnabled: true,
     });
     db.collectionMocks.gameState!.findOne.mockResolvedValue({
       _id: "current",
@@ -152,6 +155,23 @@ describe("banking charter", () => {
         "retail",
         "investment",
       ]);
+    });
+
+    it("offers only retail while the advanced-charter gate is off", async () => {
+      // Flag absent/false withholds investment + universal from players even
+      // where the jurisdiction would allow them.
+      db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+        _id: "default",
+        privateBankingEnabled: true,
+        playerAdvancedBankChartersEnabled: false,
+      });
+      db.collectionMocks.bankingLaws!.findOne.mockResolvedValue({
+        _id: "US",
+        separation: "universal",
+        enactedTurn: 5,
+      });
+      const { getLegalCharterTypes } = await importSeparationLaw();
+      await expect(getLegalCharterTypes(db as unknown as Db, "US")).resolves.toEqual(["retail"]);
     });
 
     it("offers no charters in a command economy", async () => {

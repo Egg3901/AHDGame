@@ -14,7 +14,7 @@
  */
 
 import { ObjectId, type Db } from "mongodb";
-import type { Corporation } from "@/lib/db/types";
+import type { Corporation, GameConfig } from "@/lib/db/types";
 import type {
   IndexFund,
   IndexFundKind,
@@ -119,6 +119,19 @@ export async function charterFund(db: Db, input: CharterFundInput): Promise<Char
   const { sponsor, currentTurn } = input;
   const tickerSymbol = input.tickerSymbol.trim().toUpperCase();
   const name = input.name.trim();
+
+  // Player fund sponsorship is gated until explicitly enabled: the default
+  // (system) funds trade normally, but corporations cannot charter their own.
+  const config = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { playerFundSponsorshipEnabled: 1 } });
+  if (!config?.playerFundSponsorshipEnabled) {
+    return {
+      ok: false,
+      error: "Player-sponsored index funds are not available yet.",
+      status: 403,
+    };
+  }
 
   const sectors = await db
     .collection<{ corporationId: ObjectId; sectorType: CorporationType }>("corporateSectors")

@@ -60,6 +60,9 @@ describe("switchCharterType", () => {
     db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
       _id: "default",
       privateBankingEnabled: true,
+      // Switching to an investment/universal charter is a player advanced-charter
+      // action; enable the gate so these switch tests can reach it.
+      playerAdvancedBankChartersEnabled: true,
     });
     db.collectionMocks.gameState!.findOne.mockResolvedValue({
       _id: "current",

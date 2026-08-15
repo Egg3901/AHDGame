@@ -160,10 +160,14 @@ export async function checkCharterEligibility(
   if (legalTypes.length === 0) {
     reasons.push("Private bank charters are not available in a command economy");
   } else if (!legalTypes.includes(requestedType)) {
+    // When only retail is on offer the withheld types are gated globally
+    // (playerAdvancedBankChartersEnabled), not by this nation's separation law.
     reasons.push(
-      requestedType === "universal"
-        ? "Universal charters are not legal under this nation's banking separation law"
-        : `Charter type "${requestedType}" is not legal in this jurisdiction`
+      legalTypes.length === 1 && legalTypes[0] === "retail"
+        ? "Only retail bank charters are available right now."
+        : requestedType === "universal"
+          ? "Universal charters are not legal under this nation's banking separation law"
+          : `Charter type "${requestedType}" is not legal in this jurisdiction`
     );
   }
 
