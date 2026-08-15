@@ -3,7 +3,7 @@ import {
   COMMODITY_BASE_PRICES,
   commodityMixWeight,
   embargoSupplyFactorFor,
-  plantsSupplyScaledUnits,
+  plantsCapacityScaledUnits,
   type CommodityType,
 } from "@/lib/constants/commodities";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
@@ -30,8 +30,11 @@ export type SupplyAgreementCapacitySector = {
  * the NPP matcher so the two cannot drift.
  *
  * Mothballed plants contribute nothing. Scaling goes through
- * `plantsSupplyScaledUnits` (natcorp, production policy, embargo) then the
- * canonical mix split, identical to clearing and the world supply ledger.
+ * `plantsCapacityScaledUnits` (production policy, natcorp, embargo) then the
+ * canonical mix split, identical to clearing and the world supply ledger. The
+ * capacity variant is required here because the input is NAMEPLATE capacity,
+ * which has never been through `sectorTurn` and so does not yet carry the
+ * production-policy output curve.
  */
 export function computeSupplierCommodityCapacityUnits(args: {
   sectors: readonly SupplyAgreementCapacitySector[];
@@ -52,8 +55,8 @@ export function computeSupplierCommodityCapacityUnits(args: {
       args.turn
     );
     const scaled =
-      plantsSupplyScaledUnits({
-        producedUnits: capacity,
+      plantsCapacityScaledUnits({
+        capacityUnits: capacity,
         isNatcorp: args.isNatcorp,
         productionPolicyLevel: s.productionPolicyLevel,
         embargoSupplyFactor: embargoSupplyFactorFor(s),

@@ -41,7 +41,6 @@ describe("plantsSupplyScaledUnits", () => {
       plantsSupplyScaledUnits({
         producedUnits: null,
         isNatcorp: false,
-        productionPolicyLevel: 0,
       })
     ).toBeNull();
   });
@@ -50,12 +49,10 @@ describe("plantsSupplyScaledUnits", () => {
     const open = plantsSupplyScaledUnits({
       producedUnits: 1000,
       isNatcorp: false,
-      productionPolicyLevel: 0,
     })!;
     const embargoed = plantsSupplyScaledUnits({
       producedUnits: 1000,
       isNatcorp: false,
-      productionPolicyLevel: 0,
       embargoSupplyFactor: 0.7,
     })!;
     expect(embargoed).toBeCloseTo(open * 0.7, 10);
@@ -94,7 +91,6 @@ describe("plantsSupplyScaledUnits", () => {
     const offer = plantsSupplyScaledUnits({
       producedUnits: 1000,
       isNatcorp: false,
-      productionPolicyLevel: 20,
       embargoSupplyFactor: 0.7,
     })!;
     expect(ledgerTotal(0.7)).toBeCloseTo(offer, 6);
@@ -102,7 +98,6 @@ describe("plantsSupplyScaledUnits", () => {
     const openOffer = plantsSupplyScaledUnits({
       producedUnits: 1000,
       isNatcorp: false,
-      productionPolicyLevel: 20,
     })!;
     expect(ledgerTotal(1)).toBeCloseTo(openOffer, 6);
   });

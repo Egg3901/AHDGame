@@ -41,6 +41,7 @@ import { COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
 import {
   trendProductionPolicy,
   getRevenueMultiplier,
+  getOutputMultiplier,
   getInputMultiplier,
 } from "@/lib/utils/productionPolicy";
 import {
@@ -883,9 +884,36 @@ export function processSector(
   const disasterPhysicalRamped = disasterPenalty.productionPenalty * plantsRampLambda;
   const disasterPhysicalDeferred = disasterPenalty.productionPenalty - disasterPhysicalRamped;
   const disasterOutputFactor = disasterProductionFactor(disasterPhysicalRamped);
+  // Ticket #1072: which production-policy curve throttles TONNAGE.
+  //
+  // The policy slider publishes two curves: an OUTPUT curve (−10%…+15%, what
+  // the UI labels as the units effect) and a REVENUE curve (−5%…+10%). Under
+  // plants, revenue is DERIVED from tonnage, so exactly one of them may gate
+  // `productionFactor` or the slider gets counted twice on the top line.
+  //
+  // It used to be the revenue curve, and the output curve was applied only
+  // where output LEFT the sector — the world-supply ledger and the clearing
+  // offer, both via `plantsSupplyScaledUnits`. Two things broke from that. The
+  // units on screen moved on the wrong curve (−4.4% at policy −22, against the
+  // −8.8% the panel promised), and, worse, the offer was the produced tonnage
+  // scaled AGAIN by the output curve, so ~9% of every throttled run was
+  // physically unsellable: built, paid for, never offered, piling up as unsold
+  // inventory the owner is charged to hold. With 100% market share no price
+  // move could clear it, because it was never on the book.
+  //
+  // So under plants the OUTPUT curve gates tonnage, the revenue curve steps
+  // aside, and `plantsSupplyScaledUnits` no longer re-applies output. The chain
+  // is applied exactly once and produced == offered.
+  //
+  // FLIP IDENTITY: at policy 0 both curves are 1.0, so nothing moves. Non-plants
+  // worlds are untouched — there `producedUnits` is the revenue nameplate and
+  // the ledger still owns the output curve on that path.
+  const policyTonnageMultiplier = plantsEnabled
+    ? getOutputMultiplier(newPolicyLevel)
+    : revenueMultiplier;
   const productionFactor =
     disasterOutputFactor *
-    revenueMultiplier *
+    policyTonnageMultiplier *
     nationalizationTransition *
     (plantsEnabled ? plantsExtractionHardMin : capacityHaircut) *
     throughputFactor *
@@ -1390,10 +1418,11 @@ export function processSector(
         liveMarginBasis: plantsUpkeepMarginBasisLive,
       })
     : 0;
-  // The production legs the owner did NOT choose. `revenueMultiplier` (the
-  // production-policy slider) and `plantsTechOutputMultiplier` are deliberately
-  // absent: those ARE owner decisions, so capacity idled by throttling the
-  // policy slider is still billed — the case the constant was written for.
+  // The production legs the owner did NOT choose. `policyTonnageMultiplier`
+  // (the production-policy slider) and `plantsTechOutputMultiplier` are
+  // deliberately absent: those ARE owner decisions, so capacity idled by
+  // throttling the policy slider is still billed — the case the constant was
+  // written for.
   const plantsInvoluntaryThrottle =
     disasterOutputFactor *
     nationalizationTransition *

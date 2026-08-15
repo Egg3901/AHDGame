@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { scaleToPeriod, netMarginPct, valuation, buildAllocation } from "./financialsModel";
+import {
+  scaleToPeriod,
+  netMarginPct,
+  valuation,
+  buildAllocation,
+  corpIncomeBasis,
+} from "./financialsModel";
 import type { Financials } from "../CorporationPageTypes";
 
 const baseFinancials: Financials = {
@@ -120,5 +126,61 @@ describe("buildAllocation", () => {
     const a = buildAllocation({ ...baseFinancials, totalRevenue: 0 }, "turn");
     expect(a.revenue).toBe(0);
     a.segments.forEach((s) => expect(s.pct).toBe(0));
+  });
+});
+
+describe("corpIncomeBasis (ticket #1098)", () => {
+  it("never subtracts the projected dividend from the realized income", () => {
+    // Corp 484's shape: a profitable corp mid-build whose PROJECTED income runs
+    // far ahead of what the engine actually booked. The old masthead computed
+    // realizedIncome - dividendDistribution = 132_456 - 154_546 and reported a
+    // loss while the Financials page reported a profit.
+    const f: Financials = {
+      ...baseFinancials,
+      income: 772_728,
+      realizedIncome: 132_456,
+      realizedDividendPaid: 65_904,
+      dividendDistribution: 154_546,
+      effectiveDividendRate: 20,
+      bondCouponIncome: 205_489,
+      bondInterestCost: 381_655,
+      dividendIncomeReceived: 648,
+    };
+    const basis = corpIncomeBasis(f);
+    expect(basis.isRealized).toBe(true);
+    // Retained is the realized figure as booked — already net of the payout.
+    expect(basis.retained).toBe(132_456);
+    expect(basis.retained).toBeGreaterThan(0);
+    // Headline adds the dividends actually paid back to reach pre-dividend net.
+    expect(basis.netIncome).toBe(132_456 + 65_904);
+    expect(basis.dividendPaid).toBe(65_904);
+  });
+
+  it("does not double-count bond coupons already folded into realized income", () => {
+    const f: Financials = {
+      ...baseFinancials,
+      income: 500,
+      realizedIncome: 1_000,
+      realizedDividendPaid: 0,
+      bondCouponIncome: 900,
+      dividendIncomeReceived: 100,
+    };
+    // The headline IS the realized figure; coupons are inside it, not on top.
+    expect(corpIncomeBasis(f).netIncome).toBe(1_000);
+  });
+
+  it("falls back to the projection and nets its dividend for corps with no history", () => {
+    const f: Financials = { ...baseFinancials, income: 1_200, dividendDistribution: 300 };
+    const basis = corpIncomeBasis(f);
+    expect(basis.isRealized).toBe(false);
+    expect(basis.netIncome).toBe(1_200);
+    expect(basis.retained).toBe(900);
+  });
+
+  it("treats a missing realizedDividendPaid as zero rather than NaN", () => {
+    const f: Financials = { ...baseFinancials, realizedIncome: -250, dividendDistribution: 400 };
+    const basis = corpIncomeBasis(f);
+    expect(basis.netIncome).toBe(-250);
+    expect(basis.retained).toBe(-250);
   });
 });

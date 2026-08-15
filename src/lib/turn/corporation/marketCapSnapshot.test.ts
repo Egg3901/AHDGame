@@ -1,6 +1,23 @@
 import { describe, it, expect } from "vitest";
-import { resolveSnapshotDenomination, foldDividendTaxIntoTaxMaps } from "./marketCapSnapshot";
+import {
+  resolveSnapshotDenomination,
+  foldDividendTaxIntoTaxMaps,
+  isStockMarketCorporation,
+} from "./marketCapSnapshot";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+
+describe("isStockMarketCorporation", () => {
+  it("excludes private and hidden corporations from stock-market capitalization", () => {
+    expect(isStockMarketCorporation({ isPrivate: true } as never)).toBe(false);
+    expect(isStockMarketCorporation({ hiddenFromExchange: true } as never)).toBe(false);
+  });
+
+  it("includes a visible public corporation", () => {
+    expect(isStockMarketCorporation({ isPrivate: false, hiddenFromExchange: false } as never)).toBe(
+      true
+    );
+  });
+});
 
 /**
  * #2973: a corp history row must only be stamped with a `currencyCode` when its

@@ -1295,6 +1295,7 @@ export async function loadCorporationDetailView(args: {
         dividendIncomeReceived?: number;
         perTurnBondCouponIncome?: number;
         perTurnBondDragOnNetIncome?: number;
+        dividendPaidPerTurn?: number;
       }>("corporationHistory")
       .findOne(
         { corporationId: corporation._id },
@@ -1306,6 +1307,7 @@ export async function loadCorporationDetailView(args: {
             dividendIncomeReceived: 1,
             perTurnBondCouponIncome: 1,
             perTurnBondDragOnNetIncome: 1,
+            dividendPaidPerTurn: 1,
           },
         }
       ),
@@ -1802,6 +1804,16 @@ export async function loadCorporationDetailView(args: {
               (latestCorpIncomeRow.perTurnBondDragOnNetIncome ?? 0) +
               (latestCorpIncomeRow.dividendIncomeReceived ?? 0)) *
               TURNS_PER_DAY
+          ),
+          // Dividends the engine ACTUALLY paid out of that same turn's income,
+          // in the same daily display units. `realizedIncome` above is already
+          // net of this (sectorCalculations.ts: `income = afterTaxOperating −
+          // hourlyDividendPayout`), so surfaces must NOT subtract
+          // `dividendDistribution` — the projection-derived estimate — from it
+          // again. Exposing the realized payout lets them reconstruct the
+          // pre-dividend headline instead (ticket #1098).
+          realizedDividendPaid: Math.round(
+            Math.max(0, latestCorpIncomeRow.dividendPaidPerTurn ?? 0) * TURNS_PER_DAY
           ),
           ...(typeof latestCorpIncomeRow.turn === "number"
             ? { realizedIncomeTurn: latestCorpIncomeRow.turn }

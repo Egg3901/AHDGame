@@ -25,6 +25,9 @@ export interface DefenceSupplierView {
   gradeCeiling: number;
   /** True when this plant already carries an active contract. */
   alreadyContracted: boolean;
+  /** Lots this supplier may still receive in the current budget window. */
+  availableLots?: number;
+  allowanceWindowEndTurn?: number;
 }
 
 /**

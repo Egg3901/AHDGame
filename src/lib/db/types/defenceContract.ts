@@ -45,6 +45,16 @@ export interface DefenceContract {
   deliveryCarry?: number;
   /** Struck at award, in the country's local currency. Does not drift with GDP afterwards. */
   pricePerLot: number;
+  /** Quarter-window allocation reserved when this contract was awarded. */
+  allocationWindowId?: string;
+  /** Lots charged to that allocation. Used to release undelivered quota on cancellation. */
+  allocatedLots?: number;
+  /** Delivered lots whose payment was administratively recovered after an invalid over-award. */
+  administrativeClawbackLots?: number;
+  /** Local-currency amount recovered for administrativeClawbackLots. */
+  administrativeClawbackAmount?: number;
+  administrativeClawbackAt?: Date;
+  administrativeClawbackRunId?: string;
   status: DefenceContractStatus;
   awardedTurn: number;
   updatedAt?: Date;

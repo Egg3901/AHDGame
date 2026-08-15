@@ -847,6 +847,71 @@ describe("onBillEnacted", () => {
       });
     });
 
+    // Ticket #1102 — a UK bill set VAT to 5% and customs duties to 2%, both
+    // through tax-SLIDER provisions (no options ladder, the rate lives only on
+    // `provision.proposedRate`). `onBillEnacted` rebuilt its provision list
+    // without `proposedRate`, so the slider branch never fired and the country
+    // collected nothing on either line for weeks.
+    it("enacting a tax-slider provision writes the slider rate to the national budget", async () => {
+      const { calculateFederalRevenue } = await import("@/lib/budget/revenue");
+      const bill = createBill({
+        provisions: [
+          {
+            legislationTypeId: "uk.tax.salesTax",
+            policyOptionId: "rate:5",
+            proposedRate: 5,
+            effectDirection: 1,
+            economic: -1,
+            social: 0,
+          },
+        ] as never,
+      });
+      const legType = {
+        _id: "uk.tax.salesTax",
+        policyDomain: "tax",
+        countryScope: "uk",
+        taxRateChange: { scope: "federal", taxType: "salesTax" },
+        taxSlider: {
+          scope: "federal",
+          taxType: "salesTax",
+          minRate: 0,
+          maxRate: 30,
+          step: 1,
+          baselineRate: 0,
+          waypoints: [],
+        },
+      };
+      const existingBudget = {
+        _id: "UK",
+        taxRates: {
+          incomeTax: 36,
+          domesticCorporateTax: 35,
+          foreignCorporateTax: 39,
+          payrollTax: 7.2,
+          tariffs: 0,
+          salesTax: 0,
+        },
+        spending: { total: 6_000_000_000 },
+      };
+
+      setupCollection("legislationTypes", [legType]);
+      setupCollection("gameState", [{ _id: "current", currentYear: 1954 } as any]);
+      db.collection("federalBudget");
+      db.collectionMocks["federalBudget"]!.findOne = vi.fn().mockResolvedValue(existingBudget);
+
+      await onBillEnacted(db as unknown as Db, bill as any, 10);
+
+      expect(calculateFederalRevenue).toHaveBeenCalled();
+      const updateCall = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
+      expect(updateCall[0]).toEqual({ _id: "UK" });
+      expect(updateCall[1].$set.taxRates).toMatchObject({
+        salesTax: 5,
+        // Unrelated lines are untouched.
+        incomeTax: 36,
+        tariffs: 0,
+      });
+    });
+
     it("enacting jp_foreign_corporation_tax writes foreignCorporateTax to JP national budget", async () => {
       const { calculateFederalRevenue } = await import("@/lib/budget/revenue");
       const bill = createBill({

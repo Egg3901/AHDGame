@@ -324,6 +324,8 @@ export interface DefenceSupplierView {
   projectedLotsPerTurn: number;
   gradeCeiling: number;
   alreadyContracted: boolean;
+  availableLots?: number;
+  allowanceWindowEndTurn?: number;
 }
 
 export interface DefenceContractView {

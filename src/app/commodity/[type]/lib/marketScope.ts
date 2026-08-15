@@ -56,7 +56,16 @@ export function buildCommodityMarketScope(
   const stateCountryMap = data.stateCountryMap ?? {};
 
   if (activeState) {
-    const stateCountry = (stateCountryMap[activeState] as CountryId | undefined) ?? activeCountry;
+    // stateCountryMap comes from the server as Record<string, string>. If a
+    // state maps to a country code the client no longer has a config for
+    // (removed/renamed country, stale seed data), treating it as a trusted
+    // CountryId crashes every COUNTRY_CONFIGS[stateCountry] lookup below and
+    // downstream (HeroPanel, drilldown view). Validate before trusting it.
+    const rawStateCountry = stateCountryMap[activeState];
+    const stateCountry =
+      (rawStateCountry && rawStateCountry in COUNTRY_CONFIGS
+        ? (rawStateCountry as CountryId)
+        : undefined) ?? activeCountry;
     const stateSupply = data.stateSupply?.[activeState] ?? 0;
     const stateDemand = data.stateDemand?.[activeState] ?? 0;
     const statePrice = data.statePrices?.[activeState] ?? data.basePrice;
@@ -150,16 +159,18 @@ export function buildCommodityMarketScope(
   // register is a listing venue for its enterprises, not a price-setting
   // exchange, so it falls back to the country name ("Russia Market", not
   // "GOSPLAN Market") — the same branch venue-less countries already took.
+  const activeCountryConfig = COUNTRY_CONFIGS[activeCountry] as
+    (typeof COUNTRY_CONFIGS)[CountryId] | undefined;
   const marketVenue = isStateRegister(activeCountry)
     ? undefined
-    : COUNTRY_CONFIGS[activeCountry].exchangeName;
-  const exchangeName = marketVenue ?? COUNTRY_CONFIGS[activeCountry].name;
+    : activeCountryConfig?.exchangeName;
+  const exchangeName = marketVenue ?? activeCountryConfig?.name ?? activeCountry;
 
   return {
     activeCountry,
     activeState: null,
     marketLabel: `${exchangeName} Market`,
-    marketCaption: `Filtered to ${COUNTRY_CONFIGS[activeCountry].name}.`,
+    marketCaption: `Filtered to ${activeCountryConfig?.name ?? activeCountry}.`,
     marketPrice,
     priceChange: percentChangeFromBase(marketPrice, data.basePrice),
     supply,

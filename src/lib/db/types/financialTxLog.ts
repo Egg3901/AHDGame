@@ -30,6 +30,7 @@ export type FinancialTxType =
   | "corp_sector_sale"
   | "corp_sector_purchase"
   | "corp_supply_agreement"
+  | "defence_contract_payment"
   | "corp_dissolution_distribution"
   | "corp_escrow_funding"
   | "corp_escrow_withdrawal"

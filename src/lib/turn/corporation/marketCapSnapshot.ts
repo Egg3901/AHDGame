@@ -38,6 +38,13 @@ export function resolveSnapshotDenomination(
   return { code: usable ? code : undefined, rate: usable ? rawRate : 1 };
 }
 
+/** The same universe the stock-exchange snapshot exposes as tradeable listings. */
+export function isStockMarketCorporation(
+  corp: Pick<Corporation, "isPrivate" | "hiddenFromExchange">
+): boolean {
+  return corp.isPrivate !== true && corp.hiddenFromExchange !== true;
+}
+
 function convertMapToLocalRecord(
   m: Map<string, number>,
   code: CurrencyCode | undefined,
@@ -136,28 +143,32 @@ export async function snapshotMarketCap(
     const fx = currencyByCorpId.get(corp._id.toString());
     const sharePriceAnchor = readCorpEconomicAnchor(sharePrice, fx?.code, fx?.rate ?? 1);
     const capAnchor = sharePriceAnchor * totalShares;
-    globalCap += capAnchor;
+    // Per-corp histories include every enterprise. Stock-market aggregates do not: private
+    // and hidden corporations have no tradeable listing and must not move the market chart.
+    if (isStockMarketCorporation(corp)) {
+      globalCap += capAnchor;
 
-    // Parallel sum at the model's fundamental price, so the launch guard can
-    // tell an honest repricing (price and value fall together, e.g. a prime-rate
-    // rise discounting sectorNPV) from a market break (price alone falls).
-    // Corps with no fundamental price are excluded and tracked as missing
-    // coverage rather than counted at zero, which would fake a collapse.
-    const fundamentalPrice = corp.fundamentalSharePrice;
-    if (typeof fundamentalPrice === "number" && fundamentalPrice > 0) {
-      fundamentalCap +=
-        readCorpEconomicAnchor(fundamentalPrice, fx?.code, fx?.rate ?? 1) * totalShares;
-      fundamentalCoveredCap += capAnchor;
+      // Parallel sum at the model's fundamental price, so the launch guard can
+      // tell an honest repricing (price and value fall together, e.g. a prime-rate
+      // rise discounting sectorNPV) from a market break (price alone falls).
+      // Corps with no fundamental price are excluded and tracked as missing
+      // coverage rather than counted at zero, which would fake a collapse.
+      const fundamentalPrice = corp.fundamentalSharePrice;
+      if (typeof fundamentalPrice === "number" && fundamentalPrice > 0) {
+        fundamentalCap +=
+          readCorpEconomicAnchor(fundamentalPrice, fx?.code, fx?.rate ?? 1) * totalShares;
+        fundamentalCoveredCap += capAnchor;
+      }
+
+      // No `?? "US"`: a corp with no countryId must not be counted toward NYSE's
+      // market cap.
+      const apiKey = corp.countryId ? getExchangeApiKey(corp.countryId) : undefined;
+      if (apiKey && exchangeCaps[apiKey] !== undefined) {
+        exchangeCaps[apiKey] += capAnchor;
+      }
+
+      bySector[corp.type] = (bySector[corp.type] ?? 0) + capAnchor;
     }
-
-    // No `?? "US"`: a corp with no countryId must not be counted toward NYSE's
-    // market cap.
-    const apiKey = corp.countryId ? getExchangeApiKey(corp.countryId) : undefined;
-    if (apiKey && exchangeCaps[apiKey] !== undefined) {
-      exchangeCaps[apiKey] += capAnchor;
-    }
-
-    bySector[corp.type] = (bySector[corp.type] ?? 0) + capAnchor;
   }
 
   // Launch guard: automated kill switch for the clearing/capital flip. Cheap
@@ -202,6 +213,7 @@ export async function snapshotMarketCap(
 
   const snapshot: Omit<MarketCapHistory, "_id"> = {
     turn,
+    listingUniverse: "public-only",
     globalMarketCap: Math.round(globalCap),
     globalHigh: globalSpread.high,
     globalLow: globalSpread.low,

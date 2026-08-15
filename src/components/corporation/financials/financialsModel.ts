@@ -28,6 +28,49 @@ export function netMarginPct(
   return (f.income / incomeBase) * 100;
 }
 
+/**
+ * The single net-income basis every corporation surface must read from.
+ *
+ * Ticket #1098: the masthead and Overview showed a NEGATIVE income per turn for
+ * a corp the Financials page reported as profitable. Two independent errors:
+ *
+ *  1. They subtracted `dividendDistribution` from `realizedIncome`. The engine
+ *     books `income = afterTaxOperating − dividendPayout`, so the realized
+ *     figure is ALREADY net of dividends — subtracting again double-counts.
+ *  2. `dividendDistribution` is derived from the PROJECTED income, which can be
+ *     several times the realized figure (the projection cannot reproduce
+ *     embargo/tariff/clearing haircuts). Netting a projection-sized dividend off
+ *     a realized-sized income flips the sign on a profitable corp.
+ *
+ * Symmetrically, the Financials headline added bond coupons + dividends received
+ * on top of `realizedIncome`, which has folded both in since #941 — so it
+ * overstated by the whole non-operating leg.
+ *
+ * `netIncome` is pre-dividend (the income-statement headline). `retained` is
+ * what stays with the corp after the payout, which is what the masthead and
+ * Overview report.
+ */
+export function corpIncomeBasis(
+  f: Pick<Financials, "income" | "realizedIncome" | "realizedDividendPaid" | "dividendDistribution">
+): { netIncome: number; retained: number; dividendPaid: number; isRealized: boolean } {
+  if (typeof f.realizedIncome === "number") {
+    const dividendPaid = Math.max(0, f.realizedDividendPaid ?? 0);
+    return {
+      netIncome: f.realizedIncome + dividendPaid,
+      retained: f.realizedIncome,
+      dividendPaid,
+      isRealized: true,
+    };
+  }
+  const dividendPaid = Math.max(0, f.dividendDistribution);
+  return {
+    netIncome: f.income,
+    retained: f.income - dividendPaid,
+    dividendPaid,
+    isRealized: false,
+  };
+}
+
 export type ValuationTone = "over" | "under" | "fair";
 
 export function valuation(
