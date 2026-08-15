@@ -31,10 +31,16 @@ import { COUNTRY_CONFIGS as COUNTRIES } from "@/lib/constants/countries";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
 import { getGameState } from "@/lib/gameState";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { resolveDefenseLineFrom } from "@/lib/turn/defenseEnvelope";
+import {
+  getDefenceContractAvailability,
+  releaseDefenceContractLots,
+  reserveDefenceContractLots,
+} from "@/lib/db/collections/defenceProcurementAllocations";
 
 const awardSchema = z.object({
   sectorId: z.string().min(1),
-  lotsOrdered: z.number().int().positive().max(1_000_000),
+  lotsOrdered: z.number().int().positive(),
 });
 
 interface RouteParams {
@@ -160,20 +166,75 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const stateOwned = isStateOwned(corp);
-    const contract = await awardContract(db, {
+    const currentTurn = gameState?.currentTurn ?? 1;
+    const defenseLine = resolveDefenseLineFrom(budget);
+    const availability = await getDefenceContractAvailability(db, {
       countryId,
-      corporationId: corp._id,
-      sectorId: sector._id,
-      // A plant serving two domains supplies the first; the CEO picks the other by
-      // re-tooling. Splitting one contract across components would make "lots delivered"
-      // ambiguous against a single ordered figure.
-      component: components[0],
-      lotsOrdered: parsed.data.lotsOrdered,
+      corporationId: corp._id.toString(),
+      currentTurn,
+      defenseLine,
       pricePerLot,
-      awardedTurn: gameState?.currentTurn ?? 1,
-      activateImmediately: stateOwned,
     });
+    if (parsed.data.lotsOrdered > availability.maxLots) {
+      return NextResponse.json(
+        {
+          error:
+            availability.maxLots > 0
+              ? `This supplier may receive at most ${availability.maxLots.toLocaleString("en-US")} more lots in the current contracting window.`
+              : "This supplier has no contracting allowance left in the current window.",
+          maximumLots: availability.maxLots,
+          windowEndTurn: availability.window.endTurn,
+        },
+        { status: 409 }
+      );
+    }
+
+    const reservation = await reserveDefenceContractLots(db, {
+      countryId,
+      corporationId: corp._id.toString(),
+      currentTurn,
+      defenseLine,
+      pricePerLot,
+      lots: parsed.data.lotsOrdered,
+    });
+    if (!reservation.reserved) {
+      return NextResponse.json(
+        {
+          error: "The contracting allowance changed. Refresh and try a smaller order.",
+          maximumLots: reservation.maxLots,
+          windowEndTurn: reservation.window.endTurn,
+        },
+        { status: 409 }
+      );
+    }
+
+    const stateOwned = isStateOwned(corp);
+    let contract;
+    try {
+      contract = await awardContract(db, {
+        countryId,
+        corporationId: corp._id,
+        sectorId: sector._id,
+        // A plant serving two domains supplies the first; the CEO picks the other by
+        // re-tooling. Splitting one contract across components would make "lots delivered"
+        // ambiguous against a single ordered figure.
+        component: components[0],
+        lotsOrdered: parsed.data.lotsOrdered,
+        pricePerLot,
+        awardedTurn: currentTurn,
+        allocationWindowId: reservation.window.id,
+        allocatedLots: parsed.data.lotsOrdered,
+        activateImmediately: stateOwned,
+      });
+    } catch (error) {
+      await releaseDefenceContractLots(
+        db,
+        reservation.window.id,
+        corp._id.toString(),
+        parsed.data.lotsOrdered * pricePerLot
+      );
+      throw error;
+    }
 
     // A private CEO must learn of the offer or it sits pending forever. A National
     // Corporation has no one to accept; the order is already active.

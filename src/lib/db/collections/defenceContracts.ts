@@ -2,6 +2,7 @@ import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { UnitDomain } from "@/lib/db/types/militaryUnit";
 import type { DefenceContract } from "@/lib/db/types/defenceContract";
+import { releaseDefenceContractLots } from "./defenceProcurementAllocations";
 
 function contracts(db: Db) {
   return db.collection<DefenceContract>("defenceContracts");
@@ -46,6 +47,8 @@ export async function awardContract(
     lotsOrdered: number;
     pricePerLot: number;
     awardedTurn: number;
+    allocationWindowId?: string;
+    allocatedLots?: number;
     /**
      * State-owned suppliers have no player CEO to accept. Activate immediately so the
      * order delivers rather than sitting pending forever (ticket #1087).
@@ -62,6 +65,8 @@ export async function awardContract(
     lotsOrdered: Math.max(1, Math.round(input.lotsOrdered)),
     lotsDelivered: 0,
     pricePerLot: Math.max(0, Math.round(input.pricePerLot)),
+    allocationWindowId: input.allocationWindowId,
+    allocatedLots: input.allocatedLots,
     // An offer, not an order, unless the buyer is contracting its own state industry.
     // A National Corporation has no player CEO to click Accept; leaving those pending
     // meant the arsenal never filled.
@@ -133,10 +138,21 @@ export async function stampDeliveryCarry(
  * not answered. Idempotent: cancelling a closed one is a no-op, not an error.
  */
 export async function cancelContract(db: Db, contractId: ObjectId): Promise<boolean> {
+  const contract = await contracts(db).findOne({ _id: contractId });
+  if (!contract || !["pending", "active"].includes(contract.status)) return false;
   const res = await contracts(db).updateOne(
     { _id: contractId, status: { $in: ["pending", "active"] } },
     { $set: { status: "cancelled", updatedAt: new Date() } }
   );
+  if (res.modifiedCount > 0 && contract.allocationWindowId && contract.allocatedLots) {
+    const undelivered = Math.max(0, contract.allocatedLots - contract.lotsDelivered);
+    await releaseDefenceContractLots(
+      db,
+      contract.allocationWindowId,
+      contract.corporationId.toString(),
+      undelivered * contract.pricePerLot
+    );
+  }
   return res.modifiedCount > 0;
 }
 
@@ -153,6 +169,8 @@ export async function respondToContract(
   contractId: ObjectId,
   accept: boolean
 ): Promise<boolean> {
+  const contract = await contracts(db).findOne({ _id: contractId, status: "pending" });
+  if (!contract) return false;
   const res = await contracts(db).updateOne(
     { _id: contractId, status: "pending" },
     {
@@ -162,5 +180,13 @@ export async function respondToContract(
       },
     }
   );
+  if (!accept && res.modifiedCount > 0 && contract.allocationWindowId && contract.allocatedLots) {
+    await releaseDefenceContractLots(
+      db,
+      contract.allocationWindowId,
+      contract.corporationId.toString(),
+      contract.allocatedLots * contract.pricePerLot
+    );
+  }
   return res.modifiedCount > 0;
 }

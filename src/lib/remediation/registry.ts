@@ -16,6 +16,8 @@
 
 import { defect as orphanNullPartySeats } from "./defects/AHD-951-orphan-null-party-seats";
 import { defect as duplicateSectors } from "./defects/AHD-duplicate-sectors";
+import { defect as defenceProcurementOveraward } from "./defects/AHD-defence-procurement-overaward";
+import { defect as privateMarketCapHistory } from "./defects/AHD-private-market-cap-history";
 import type { Defect } from "./types";
 
 export const DEFECTS: Defect[] = [
@@ -25,6 +27,8 @@ export const DEFECTS: Defect[] = [
   // Cross-border sectors stamped with the owner's HQ country; a later takeover
   // then created a parallel row for the same (corporation, state, type).
   duplicateSectors,
+  defenceProcurementOveraward,
+  privateMarketCapHistory,
 ];
 
 export function getDefect(id: string): Defect | undefined {

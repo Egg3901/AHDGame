@@ -16,6 +16,7 @@ import {
   creditAppropriation,
   getDefenseAppropriation,
 } from "@/lib/db/collections/defenseAppropriation";
+import { emitTx } from "@/lib/financialTxLog/emit";
 
 export interface DeliveryResult {
   lots: number;
@@ -159,6 +160,29 @@ export async function applyDefenceDeliveries(
       await db
         .collection<Corporation>("corporations")
         .updateOne({ _id: corp._id }, { $inc: { liquidCapital: actualCost } });
+      const currencyCode = resolveCorpLiquidCurrencyCode(corp);
+      if (currencyCode) {
+        await emitTx(db, {
+          type: "defence_contract_payment",
+          turn: currentTurn,
+          createdAt: new Date(),
+          subjectType: "corporation",
+          subjectId: corp._id,
+          subjectName: corp.name,
+          amount: actualCost,
+          currencyCode,
+          counterpartyType: "system",
+          counterpartyName: `${countryId} defence appropriation`,
+          meta: {
+            contractId: contract._id.toString(),
+            countryId,
+            sectorId: sector._id.toString(),
+            component: contract.component,
+            lots: recorded,
+            pricePerLot: contract.pricePerLot,
+          },
+        });
+      }
     } catch {
       // Pull back anything that landed before the failure. `drawLots` reports what it
       // actually took, so lots a concurrent order already consumed stay bought and paid for

@@ -71,12 +71,20 @@ describe("POST defence-contracts", () => {
 
   it("awards a contract against a domestic defence plant", async () => {
     const { POST } = await import(ROUTE);
-    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 100 }), params);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1 }), params);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.contract.component).toBe("ground");
-    expect(body.contract.lotsOrdered).toBe(100);
+    expect(body.contract.lotsOrdered).toBe(1);
     expect(body.contract.pricePerLot).toBeGreaterThan(0);
+  });
+
+  it("rejects an award larger than the supplier's budget-scaled contracting allowance", async () => {
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1_000 }), params);
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/at most|maximum|allowance|available/i);
+    expect(db.collectionMocks.defenceContracts.insertOne).not.toHaveBeenCalled();
   });
 
   // A National Corporation has no player CEO to click Accept. Leaving the offer pending
@@ -90,14 +98,14 @@ describe("POST defence-contracts", () => {
       ownershipState: "stateOwned",
     });
     const { POST } = await import(ROUTE);
-    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 100 }), params);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1 }), params);
     expect(res.status).toBe(200);
     expect((await res.json()).contract.status).toBe("active");
   });
 
   it("leaves a private supplier's contract pending the CEO's answer", async () => {
     const { POST } = await import(ROUTE);
-    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 100 }), params);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1 }), params);
     expect(res.status).toBe(200);
     expect((await res.json()).contract.status).toBe("pending");
   });
@@ -205,7 +213,7 @@ describe("POST defence-contracts", () => {
     });
     const { POST } = await import(ROUTE);
     const anchored = await (
-      await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 10 }), params)
+      await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1 }), params)
     ).json();
 
     db.collectionMocks.federalBudget.findOne.mockResolvedValue({
@@ -216,7 +224,7 @@ describe("POST defence-contracts", () => {
       debt: { principal: 0, ceiling: 0 },
     });
     const live = await (
-      await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 10 }), params)
+      await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1 }), params)
     ).json();
 
     // GDP quadrupled; the anchor only doubles it, so the anchored price is lower.
