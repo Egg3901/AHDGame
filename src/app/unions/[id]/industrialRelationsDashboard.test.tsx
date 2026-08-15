@@ -65,6 +65,7 @@ describe("union industrial-relations dashboard", () => {
               corporationName: "Ready Motors",
               stateId: "MI",
               wageLevel: 1.05,
+              workers: 12000,
               wageGap: 0.1,
               unionization: 45,
               strikeActive: false,
@@ -77,6 +78,7 @@ describe("union industrial-relations dashboard", () => {
               corporationName: "Weak Steel",
               stateId: "PA",
               wageLevel: 1.15,
+              workers: 8000,
               wageGap: 0,
               unionization: 20,
               strikeActive: false,
@@ -84,6 +86,8 @@ describe("union industrial-relations dashboard", () => {
               strikeBlockReason: "underorganized",
             },
           ],
+          // 12000×45% + 8000×20% = 5400 + 1600 = 7000 unionized of 20000 = 35%.
+          workforce: { totalWorkers: 20000, unionizedWorkers: 7000, density: 0.35 },
           actionableBills: [],
           endorsements: [],
         }),
@@ -93,6 +97,8 @@ describe("union industrial-relations dashboard", () => {
     render(<UnionPage params={PARAMS} />);
 
     await screen.findByText("Industrial Workers");
+    expect(screen.getByText("~7,000")).toBeTruthy();
+    expect(screen.getByText("35% of workforce")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Call Strike" })).toBeNull();
     // The public wage claim is back as a leader control: it is the only thing
     // that can make the gap column below say anything at all.
