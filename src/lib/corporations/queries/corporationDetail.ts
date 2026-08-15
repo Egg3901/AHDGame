@@ -1066,9 +1066,24 @@ export async function loadCorporationDetailView(args: {
         ? getSectorTechEffectsForYear(techCorpView, st, currentYear)
         : getSectorTechEffects(techCorpView, st);
     const techMarginBonus = techEffects.marginBonusPp;
-    const effectiveProfitMargin = softCapEffectiveMargin(
+    const stackMargin = softCapEffectiveMargin(
       mods.effective + soeEfficiency + expropriationRisk + techMarginBonus
     );
+    // The margin the engine ACTUALLY applied last turn. Under plants the stored
+    // field is an OUTPUT of the physical P&L (sectorTurn.ts P3.5:
+    // derivedMarginPct = 100 × (1 − operatingCost/revenue), with labor, upkeep
+    // and inputs all inside operatingCost), and this query is its documented
+    // reader. The stack recomputed above knows nothing about physical costs —
+    // on prod it overstated every corp-484 sector by 20-55pts, inflating the
+    // projected income ~2.6x over realized and the balance-sheet sector NPV
+    // 2.2x over the capital book the share price uses (ops-knowledge:
+    // ahd-corp-sector-npv-divergence). Money uses the engine figure; the stack
+    // survives only as the advisory modifier breakdown and as the fallback for
+    // legacy sectors that predate the stored field. Below plants the stored
+    // value IS last turn's stack, so this is a no-op there.
+    const engineMargin =
+      typeof sector.effectiveProfitMargin === "number" ? sector.effectiveProfitMargin : null;
+    const effectiveProfitMargin = engineMargin ?? stackMargin;
     const maintenance = financialRevenue * (1 - effectiveProfitMargin / 100);
     const profit = financialRevenue - maintenance - sectorGrowthCostLocal;
     // Local-cell share only: this query scopes to the corp's own buckets, so a
