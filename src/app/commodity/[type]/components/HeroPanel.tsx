@@ -47,7 +47,10 @@ export default function HeroPanel({
     () =>
       registered
         .filter((id) => !!COUNTRY_CONFIGS[id]?.exchangeName && !isStateRegister(id))
-        .map((id) => ({ countryId: id, label: (COUNTRY_CONFIGS[id]?.exchangeName ?? id).toUpperCase() })),
+        .map((id) => ({
+          countryId: id,
+          label: (COUNTRY_CONFIGS[id]?.exchangeName ?? id).toUpperCase(),
+        })),
     [registered]
   );
   const heroSlug = COMMODITY_HERO_SLUGS[data.commodity as CommodityType];
