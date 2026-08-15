@@ -43,10 +43,11 @@ export const createProposalSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("removeOfficeHolder"),
-    // Treasurer is NOT a removable target — chair-appointed slot. Chair,
-    // vice-chair, committee members, and committee-confirmed campaigners
-    // are subject to removal.
-    role: z.enum(["chair", "viceChair", "committeeMember", "campaigner"]),
+    // Chair, vice-chair, treasurer, committee members, and
+    // committee-confirmed campaigners are subject to committee removal.
+    // Treasurer removal (tickets #1100, #285) lets the committee dislodge
+    // an unopposed incumbent that the leadership election can't unseat.
+    role: z.enum(["chair", "viceChair", "treasurer", "committeeMember", "campaigner"]),
     targetCharacterId: schemas.objectId,
   }),
   z.object({
