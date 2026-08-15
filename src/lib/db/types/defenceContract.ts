@@ -53,6 +53,8 @@ export interface DefenceContract {
   administrativeClawbackLots?: number;
   /** Local-currency amount recovered for administrativeClawbackLots. */
   administrativeClawbackAmount?: number;
+  /** Invalid payment no longer held by the supplier and therefore not collectible there. */
+  administrativeClawbackUnrecoveredAmount?: number;
   administrativeClawbackAt?: Date;
   administrativeClawbackRunId?: string;
   status: DefenceContractStatus;
