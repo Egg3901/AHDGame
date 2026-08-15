@@ -18,6 +18,7 @@ const BASE: OrgInfluenceView = {
   targets: [
     {
       entityId: "SE",
+      joinCountdown: null,
       name: "Sweden",
       lead: 12,
       status: "non-aligned",
@@ -37,6 +38,7 @@ const BASE: OrgInfluenceView = {
     },
     {
       entityId: "YU",
+      joinCountdown: null,
       name: "Yugoslavia",
       lead: 28,
       status: "contested",

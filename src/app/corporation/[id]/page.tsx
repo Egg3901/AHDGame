@@ -476,7 +476,7 @@ export default function CorporationDetailPage() {
     }
   }
 
-  const [periodView, setPeriodView] = useState<MoneyPeriod>("daily");
+  const [periodView, setPeriodView] = useState<MoneyPeriod>("turn");
 
   const [strategyUpdatingSectorId, setStrategyUpdatingSectorId] = useState<string | null>(null);
 

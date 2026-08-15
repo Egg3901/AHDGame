@@ -137,7 +137,7 @@ import { eraLaborMultiplier } from "@/lib/labour/laborCost";
  * reads it from; `capacityEconomy.test.ts` pins it against the live behavior of
  * `calculateWorkers` so the two can never silently diverge.
  */
-export const CAPACITY_REVENUE_PER_WORKER = 2_000;
+export const CAPACITY_REVENUE_PER_WORKER = 20;
 
 /** The era whose anchors are the exact calibration point (era columns = 1.0). */
 export const CAPACITY_ANCHOR_YEAR = 1953;

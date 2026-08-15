@@ -206,7 +206,7 @@ export default function FinancialsTab({
                 label="Gross Revenue"
                 value={fmt(scaleMoney(financials.totalRevenue, periodView))}
                 valueClass="text-foreground"
-                tooltip="Total gross revenue from all owned sectors. Hourly view shows per-turn income; annual view projects 48 turns (1 game year)."
+                tooltip="Total gross revenue from all owned sectors. Per-turn view shows one turn of income; annual view projects 48 turns (1 game year)."
               />
               <FinRowTip
                 label="Average Growth Rate"
@@ -878,12 +878,12 @@ export default function FinancialsTab({
                   tooltip="Total face value of all outstanding bonds. This principal must be repaid at maturity."
                 />
                 <FinRowTip
-                  label="Daily Interest Cost"
-                  value={`(${fmt(balanceSheet.liabilities.dailyInterestCost)})`}
-                  perHour={fmt(balanceSheet.liabilities.dailyInterestCost / 24)}
+                  label="Interest Cost"
+                  value={`(${fmt(balanceSheet.liabilities.dailyInterestCost / 24)})`}
+                  daily={`(${fmt(balanceSheet.liabilities.dailyInterestCost)})`}
                   valueClass="text-error"
                   indent
-                  tooltip="Daily coupon payments owed to bondholders. Deducted from liquid capital each turn."
+                  tooltip="Coupon payments owed to bondholders, deducted from liquid capital each turn."
                 />
                 <div className="border-t border-card-border mt-2 pt-2">
                   <FinRowTip
