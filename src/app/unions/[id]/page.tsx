@@ -43,6 +43,14 @@ interface UnionDetail {
   currentTurn: number;
 }
 
+/** Union-wide membership rollup: covered headcount and density over the sectors this union stands in. */
+interface WorkforceSummary {
+  totalWorkers: number;
+  unionizedWorkers: number;
+  /** Fraction 0-1 of the total workforce that is unionized. */
+  density: number;
+}
+
 interface VoteTally {
   characterId: string;
   name: string;
@@ -72,6 +80,7 @@ interface SectorRow {
   corporationName: string;
   stateId: string;
   wageLevel: number;
+  workers: number;
   wageGap: number | null;
   unionization: number;
   strikeActive: boolean;
@@ -112,6 +121,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
   const { id } = usePromise(params);
   const [union, setUnion] = useState<UnionDetail | null>(null);
   const [sectors, setSectors] = useState<SectorRow[]>([]);
+  const [workforce, setWorkforce] = useState<WorkforceSummary | null>(null);
   const [endorsements, setEndorsements] = useState<EndorsementRow[]>([]);
   const [isLeader, setIsLeader] = useState(false);
   const [myCharacterId, setMyCharacterId] = useState<string | null>(null);
@@ -172,6 +182,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
             : String(unionData.union.demandedWageLevel)
         );
         setSectors(unionData.sectors ?? []);
+        setWorkforce(unionData.workforce ?? null);
         setEndorsements(unionData.endorsements ?? []);
         setActionableBills(unionData.actionableBills ?? []);
         setEmployerOptions(unionData.employerOptions ?? []);
@@ -437,6 +448,17 @@ export default function UnionDashboardPage({ params }: PageProps) {
             sub={organizingBand(union.membershipPressure)}
             hint={ORGANIZING_TOOLTIP}
           />
+          {workforce && (
+            <StatCell
+              label="Members"
+              value={`~${workforce.unionizedWorkers.toLocaleString("en-US")}`}
+              sub={{
+                label: `${Math.round(workforce.density * 100)}% of workforce`,
+                toneClass: "text-muted",
+              }}
+              hint="Estimated workers this union represents: the unionized headcount summed across every sector it stands in, and that count as a share of the whole workforce. Coverage, not bargaining power (see Strength)."
+            />
+          )}
           <StatCell
             label="Treasury"
             value={Math.round(union.treasury).toLocaleString("en-US")}
@@ -890,6 +912,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
                   <tr className="border-b border-card-border bg-card-elevated text-left text-[11px] uppercase tracking-wider text-muted">
                     <th className="px-4 py-3 font-medium">Corporation</th>
                     <th className="px-4 py-3 font-medium">State</th>
+                    <th className="px-4 py-3 text-right font-medium">Workers</th>
                     <th className="px-4 py-3 text-right font-medium">Wage</th>
                     <th className="px-4 py-3 text-right font-medium">Demand gap</th>
                     <th className="px-4 py-3 text-right font-medium">Unionization</th>
@@ -911,6 +934,9 @@ export default function UnionDashboardPage({ params }: PageProps) {
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-muted">{s.stateId}</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums">
+                        {(s.workers ?? 0).toLocaleString("en-US")}
+                      </td>
                       <td className="px-4 py-3 text-right font-mono tabular-nums">
                         {s.wageLevel.toFixed(2)}×
                       </td>
