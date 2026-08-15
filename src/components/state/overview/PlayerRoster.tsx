@@ -23,31 +23,37 @@ import type { StateRosterResult, StateRosterRow } from "@/lib/states/overview/ge
  */
 export function PlayerRoster({ countryId, stateId }: { countryId: CountryId; stateId: string }) {
   const [page, setPage] = useState(1);
-  const [data, setData] = useState<StateRosterResult | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [resolved, setResolved] = useState<{ key: string; result: StateRosterResult } | null>(null);
+  const [failedKey, setFailedKey] = useState<string | null>(null);
+
+  // Loading and error are derived from whether the in-flight request key
+  // matches the latest resolved (or failed) one. Deriving them, instead of
+  // calling setState synchronously in the effect, avoids a cascading render
+  // on every page change (the repo lint rule that forbids sync setState in
+  // an effect) while keeping the skeleton-on-page-change behaviour.
+  const requestKey = `${countryId}|${stateId}|${page}`;
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(false);
+    const key = `${countryId}|${stateId}|${page}`;
     fetchJson<StateRosterResult>(
       `${regionApiSubUrl(countryId, stateId, "players")}?page=${page}&pageSize=20`,
       { feature: "state-overview-player-roster" }
     )
       .then((result) => {
-        if (!cancelled) setData(result);
+        if (!cancelled) setResolved({ key, result });
       })
       .catch(() => {
-        if (!cancelled) setError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setFailedKey(key);
       });
     return () => {
       cancelled = true;
     };
   }, [countryId, stateId, page]);
+
+  const error = failedKey === requestKey;
+  const data = resolved && resolved.key === requestKey ? resolved.result : null;
+  const loading = !error && data === null;
 
   const columns: ResponsiveTableColumn<StateRosterRow>[] = [
     {
