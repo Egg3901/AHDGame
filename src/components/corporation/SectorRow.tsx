@@ -29,7 +29,8 @@ import {
   formatUnits,
   sectorBuildUrl,
 } from "./plantsPresentation";
-import { facilityPlural } from "@/lib/constants/facilityVocabulary";
+import { facilityPlural, facilitySingular } from "@/lib/constants/facilityVocabulary";
+import { facilitiesFromUnits } from "@/lib/constants/facilityQuantum";
 import { GROWTH_RATE_TURNS_PER_YEAR } from "@/lib/constants/corporations";
 import { SectorMarginDrilldown } from "./SectorMarginDrilldown";
 
@@ -150,6 +151,13 @@ export function SectorRow({
   // produced it moves into the tooltip.
   const isMothballed = plantsMode && sector.mothballed === true;
   const buildQueue = plantsMode ? (sector.buildQueueSummary ?? null) : null;
+  // How many discrete plants/stores/etc. make up this sector's capacity. Derived
+  // from capacity units, the same way the sector-detail Plant panel derives it.
+  const plantCount = plantsMode
+    ? facilitiesFromUnits(sector.sectorType as CorporationType, sector.capacityUnits ?? 0)
+    : 0;
+  const plantNoun =
+    plantCount === 1 ? facilitySingular(sector.sectorType) : facilityPlural(sector.sectorType);
   // Fill-adjusted margin (query layer): profit over the FULL cost bill, not
   // over sold revenue. Under plants this is the number the row leads with:
   // `effectiveProfitMargin` divides by sold revenue only, so at a low fill it
@@ -459,13 +467,19 @@ export function SectorRow({
           {/* Status */}
           <div className="min-w-0">{statusBadge}</div>
 
-          {/* Capacity + build queue */}
+          {/* Capacity + plant count + build queue */}
           <div className="text-right">
             <span
               className="text-sm tabular-nums font-medium text-foreground"
               title={`Capacity in ${CAPACITY_UNIT_LABEL}`}
             >
               {formatUnits(sector.capacityUnits)}
+            </span>
+            <span
+              className="block text-[10px] tabular-nums text-muted"
+              title={`Number of ${facilityPlural(sector.sectorType)} making up this capacity`}
+            >
+              {plantCount.toLocaleString("en-US")} {plantNoun}
             </span>
             <BuildQueueBadge queue={buildQueue} className="mt-0.5" />
           </div>
@@ -817,6 +831,9 @@ export function SectorRow({
                   {formatUnits(sector.capacityUnits)}
                 </div>
                 <div className="text-[10px] text-muted/70">{CAPACITY_UNIT_LABEL}</div>
+                <div className="text-[10px] tabular-nums text-muted">
+                  {plantCount.toLocaleString("en-US")} {plantNoun}
+                </div>
                 <BuildQueueBadge queue={buildQueue} className="mt-1" />
               </div>
               <div>

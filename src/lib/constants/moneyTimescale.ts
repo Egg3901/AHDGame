@@ -20,41 +20,41 @@ import { TURNS_PER_DAY, GROWTH_RATE_TURNS_PER_YEAR } from "@/lib/constants/corpo
  * (24) turns, so one game year is two financial days. Deriving it from the two
  * constants keeps it correct if either clock ever moves.
  */
-export type MoneyPeriod = "hourly" | "daily" | "annual";
+export type MoneyPeriod = "turn" | "daily" | "annual";
 
-export const MONEY_PERIODS: readonly MoneyPeriod[] = ["hourly", "daily", "annual"] as const;
+export const MONEY_PERIODS: readonly MoneyPeriod[] = ["turn", "daily", "annual"] as const;
 
 /** Multiply a stored (daily) figure by this to display it in the given period. */
 export const MONEY_PERIOD_FACTOR: Record<MoneyPeriod, number> = {
-  hourly: 1 / TURNS_PER_DAY,
+  turn: 1 / TURNS_PER_DAY,
   daily: 1,
   annual: GROWTH_RATE_TURNS_PER_YEAR / TURNS_PER_DAY,
 };
 
-/** Suffix appended to a formatted amount, e.g. "$1.2M/day". */
+/** Suffix appended to a formatted amount, e.g. "$1.2M/turn". */
 export const MONEY_PERIOD_SUFFIX: Record<MoneyPeriod, string> = {
-  hourly: "/hr",
+  turn: "/turn",
   daily: "/day",
   annual: "/yr",
 };
 
 /** Human label for headers and toggles. */
 export const MONEY_PERIOD_LABEL: Record<MoneyPeriod, string> = {
-  hourly: "Hourly",
+  turn: "Per turn",
   daily: "Daily",
   annual: "Annual",
 };
 
 /** Short toggle-button text. */
 export const MONEY_PERIOD_SHORT: Record<MoneyPeriod, string> = {
-  hourly: "Hour",
+  turn: "Turn",
   daily: "Day",
   annual: "Year",
 };
 
-/** Prose form for sentences, e.g. "budget per day". */
+/** Prose form for sentences, e.g. "budget per turn". */
 export const MONEY_PERIOD_PER_LABEL: Record<MoneyPeriod, string> = {
-  hourly: "per hour",
+  turn: "per turn",
   daily: "per day",
   annual: "per year",
 };

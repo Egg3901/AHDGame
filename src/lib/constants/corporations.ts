@@ -278,9 +278,16 @@ export const DEFAULT_SECTOR_STARTING_WORKERS = 500;
 
 /**
  * Revenue generated per worker (daily rate).
- * At $1M revenue → 500 workers. At $10M → 5,000.
+ * At $1M revenue → 50,000 workers. At $10M → 500,000.
+ *
+ * This anchor is purely a DISPLAY scale for the sector headcount: `workers` is
+ * consumed only as a ratio-weight in the wage/automation indices (scale-cancels)
+ * and proportionally in worker-shedding — actual labour cost is revenue-based,
+ * and nothing sums headcount into population or unemployment. Lowered from 2_000
+ * to 20 so a whole regional industry reads as tens of thousands of jobs instead
+ * of a few hundred. Kept in lockstep with `CAPACITY_REVENUE_PER_WORKER`.
  */
-const REVENUE_PER_WORKER = 2_000;
+const REVENUE_PER_WORKER = 20;
 
 /**
  * Maximum workforce skill adjustment to worker count (±30%).

@@ -103,7 +103,7 @@ export default function CeoBudgetSubtab({
   onSaveDividend,
 }: CeoBudgetSubtabProps) {
   const { formatAmount, toInternalFrom } = useCurrency();
-  const [periodView, setPeriodView] = useState<MoneyPeriod>("daily");
+  const [periodView, setPeriodView] = useState<MoneyPeriod>("turn");
   const [showFundCompanyModal, setShowFundCompanyModal] = useState(false);
   const [fundCooldownRemaining, setFundCooldownRemaining] = useState(0);
 
@@ -346,7 +346,7 @@ export default function CeoBudgetSubtab({
               liquidCode
             )}
             valueClass="text-foreground"
-            tooltip="Total gross revenue from all owned sectors. Hourly view shows per-turn income; annual view projects 48 turns (1 game year)."
+            tooltip="Total gross revenue from all owned sectors. Per-turn view shows one turn of income; annual view projects 48 turns (1 game year)."
           />
 
           {/* Cost of Revenue */}

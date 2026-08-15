@@ -214,11 +214,12 @@ function PlantsSectorTableHeader({ timeScale }: { timeScale: MoneyPeriod }) {
         <p className="font-semibold text-foreground mb-1">Capacity ({CAPACITY_UNIT_LABEL})</p>
         <p className="text-muted">
           What these plants can make in one financial day, in output units. This is what you buy
-          when you build. A blue badge under the number is capacity you have already paid for that
-          is still under construction, with the turns until it comes online.
+          when you build. The line under the number is how many plants that capacity is spread
+          across. A blue badge below is capacity you have already paid for that is still under
+          construction, with the turns until it comes online.
         </p>
         <p className="mt-1 text-muted">
-          Always shown per day. The hourly and yearly toggle rescales the money columns only, so
+          Always shown per day. The per-turn and yearly toggle rescales the money columns only, so
           capacity does not move when you switch it.
         </p>
       </InfoTooltip>
