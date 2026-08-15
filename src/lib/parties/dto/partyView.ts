@@ -336,7 +336,7 @@ export interface ProposalView {
   electionMethod?: { method: "party" | "committee" | "influence" };
   electionDuration?: { durationTurns: number };
   removeOfficeHolder?: {
-    role: "chair" | "viceChair" | "committeeMember" | "campaigner";
+    role: "chair" | "viceChair" | "treasurer" | "committeeMember" | "campaigner";
     targetCharacterId: string;
     targetCharacterName: string;
   };

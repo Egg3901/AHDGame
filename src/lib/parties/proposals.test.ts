@@ -463,6 +463,21 @@ describe("applyRemoveOfficeHolderEffect", () => {
     expect(setOp.viceChairId).toBeNull();
   });
 
+  it("clears treasurerId when role=treasurer and target matches (tickets #1100/#285)", async () => {
+    const partyId = makePartyId();
+    const targetId = new ObjectId();
+    const { db, updates } = makeDbStub({});
+    await applyRemoveOfficeHolderEffect(db, {
+      type: "removeOfficeHolder",
+      partyId,
+      removeOfficeHolder: { role: "treasurer", targetCharacterId: targetId },
+    } as unknown as CommitteeProposal);
+    const filter = updates[0]!.filter as { _id: ObjectId; treasurerId: ObjectId };
+    const setOp = (updates[0]!.update as { $set: Record<string, unknown> }).$set;
+    expect(filter.treasurerId).toBe(targetId);
+    expect(setOp.treasurerId).toBeNull();
+  });
+
   it("pulls from committeeIds array when role=committeeMember", async () => {
     const partyId = makePartyId();
     const targetId = new ObjectId();

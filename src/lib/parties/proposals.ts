@@ -321,6 +321,17 @@ export async function applyRemoveOfficeHolderEffect(
         { _id: proposal.partyId, viceChairId: targetCharacterId },
         { $set: { viceChairId: null, updatedAt: now } }
       );
+  } else if (role === "treasurer") {
+    // Vacate the treasurer seat. Unlike chair there is no coalition sync;
+    // treasurerId: null is already a handled state (leave-party, admin
+    // appointment, and banned-user cleanup all vacate it), and the chair
+    // can re-appoint or a fresh election can refill it.
+    await db
+      .collection<PoliticalParty>("politicalParties")
+      .updateOne(
+        { _id: proposal.partyId, treasurerId: targetCharacterId },
+        { $set: { treasurerId: null, updatedAt: now } }
+      );
   } else if (role === "campaigner") {
     await db.collection<PoliticalParty>("politicalParties").updateOne(
       { _id: proposal.partyId, campaignerIds: targetCharacterId },
