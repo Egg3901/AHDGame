@@ -773,7 +773,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       );
       const supplyRates = rates.supply ?? {};
       // Same legs the ledger applies on top of producedUnits (natcorpScale ×
-      // outputMultiplier × embargoSupplyFactor), taken from the shared
+      // embargoSupplyFactor; the production-policy output curve is already in
+      // `producedUnits` since ticket #1072), taken from the shared
       // `plantsSupplyScaledUnits` instead of re-derived here — that helper is
       // the single source of the chain and computeRawSupplyDemand plus the
       // clearing offer both call it. The chain is linear in `producedUnits`, so
@@ -781,7 +782,6 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // keeps produced and sold in identical units.
       const scaleArgs = {
         isNatcorp: sector.isNatcorp,
-        productionPolicyLevel: sector.productionPolicyLevel,
         embargoSupplyFactor: sector.embargoSupplyFactor,
       };
       const produced =

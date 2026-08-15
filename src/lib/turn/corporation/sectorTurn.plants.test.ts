@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
-import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
+import {
+  COMMODITY_BASE_PRICES,
+  plantsSupplyScaledUnits,
+  type CommodityType,
+} from "@/lib/constants/commodities";
+import { getOutputMultiplier } from "@/lib/utils/productionPolicy";
 import {
   CAPITAL_DEPRECIATION_PER_TURN,
   CAPITAL_SEED_HEADROOM,
@@ -491,5 +496,58 @@ describe("plants mode — D13 capital-mode restore point", () => {
       500_000 * (1 + GROWTH_RATE / GROWTH_RATE_TURNS_PER_YEAR / 100),
       6
     );
+  });
+});
+
+/**
+ * Ticket #1072 follow-up. A nationalized CEO set the production adjustment to
+ * −22% and nothing moved: the same tonnage came out, the surplus went unsold,
+ * and with the whole market to themselves no price move could clear it.
+ *
+ * Two bugs, one cause. Tonnage was gated by the REVENUE curve (−5% at −25)
+ * while the panel advertises the OUTPUT curve (−10% at −25), and the output
+ * curve was then applied a second time on the way out, to the world-supply
+ * ledger and the clearing offer only. So the plant built more than it could
+ * ever offer and paid to hold the difference.
+ */
+describe("plants mode — production policy throttles real tonnage (#1072)", () => {
+  const POLICY = -22;
+  const throttled = (level: number) =>
+    run(
+      "plants",
+      makeSector({
+        capitalStock: IMPLIED_UNITS * CAPITAL_SEED_HEADROOM,
+        plantsStartTurn: 900,
+        productionPolicy: level,
+        productionPolicyLevel: level,
+      }),
+      1000
+    ).update.producedUnits as number;
+
+  it("moves produced units by the OUTPUT curve the panel advertises", () => {
+    const open = throttled(0);
+    const cut = throttled(POLICY);
+    expect(open).toBeGreaterThan(0);
+    // −22 on a −10%-at−25 curve is −8.8%, not the −4.4% the revenue curve gave
+    // and emphatically not the 0% the player measured.
+    // 6dp, not exact: producedUnits is persisted rounded.
+    expect(cut / open).toBeCloseTo(getOutputMultiplier(POLICY), 6);
+    expect(cut).toBeLessThan(open);
+  });
+
+  it("offers every unit it produced, so a throttle creates no unsellable slice", () => {
+    const produced = throttled(POLICY);
+    const offered = plantsSupplyScaledUnits({
+      producedUnits: produced,
+      isNatcorp: false,
+    })!;
+    expect(offered).toBeCloseTo(produced, 10);
+  });
+
+  it("leaves an unthrottled sector exactly where it was", () => {
+    const stock = IMPLIED_UNITS * CAPITAL_SEED_HEADROOM;
+    const plain = run("plants", makeSector({ capitalStock: stock }), 1000);
+    const capital = run("capital", makeSector({ capitalStock: stock }), 1000);
+    expect(plain.result.hourlyRevenue).toBeCloseTo(capital.result.hourlyRevenue, 8);
   });
 });

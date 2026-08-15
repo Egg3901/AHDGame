@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computeSupplierCommodityCapacityUnits } from "./supplyAgreementCapacity";
 import {
-  plantsSupplyScaledUnits,
+  plantsCapacityScaledUnits,
   commodityMixWeight,
   COMMODITY_BASE_PRICES,
 } from "@/lib/constants/commodities";
@@ -26,11 +26,11 @@ describe("computeSupplierCommodityCapacityUnits", () => {
     ).toBe(0);
   });
 
-  it("matches plantsSupplyScaledUnits times the steel mix weight for a standard mill", () => {
+  it("matches plantsCapacityScaledUnits times the steel mix weight for a standard mill", () => {
     const capitalStock = 10_000;
     const scaled =
-      plantsSupplyScaledUnits({
-        producedUnits: capitalStock,
+      plantsCapacityScaledUnits({
+        capacityUnits: capitalStock,
         isNatcorp: false,
         productionPolicyLevel: 0,
       }) ?? 0;

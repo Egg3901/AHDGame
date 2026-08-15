@@ -803,9 +803,15 @@ export function embargoSupplyFactorFor(sector: {
  * measured `producedUnits` to get the units that actually reach the world
  * market.
  *
- * `producedUnits` is what the plant physically made. It does NOT carry the legs
- * `sectorTurn`'s `productionFactor` omits (natcorpScale, outputMultiplier) nor
- * the embargo write-off, so both the world-supply ledger below
+ * `producedUnits` is what the plant physically made. Ticket #1072: the
+ * production-policy output multiplier is NO LONGER applied here — it is a
+ * PHYSICAL throttle and now lives in `sectorTurn`'s `productionFactor`, so
+ * `producedUnits` already carries it. Applying it here as well made a throttled
+ * plant build full tonnage and offer less than it made, leaving the difference
+ * as permanently unsold inventory the owner still paid to produce.
+ *
+ * What `producedUnits` still does NOT carry is `natcorpScale` and the embargo
+ * write-off, so both the world-supply ledger below
  * (`computeRawSupplyDemand`) and the clearing OFFER (turn/corporation/index.ts)
  * have to apply them. They MUST apply the identical chain: the offer is flagged
  * `realUnits` and is therefore EXEMPT from clearing's lagged-supply
@@ -821,7 +827,6 @@ export function embargoSupplyFactorFor(sector: {
 export function plantsSupplyScaledUnits(args: {
   producedUnits: number | null | undefined;
   isNatcorp: boolean;
-  productionPolicyLevel: number | null | undefined;
   /**
    * 0 under the legacy total-mothball suspension, else
    * 1 − exportExposure × TRADE_EMBARGO_EXPORT_LOSS_SHARE. Non-finite/absent ⇒ 1.
@@ -833,11 +838,32 @@ export function plantsSupplyScaledUnits(args: {
     ? Math.max(0, Math.min(1, args.embargoSupplyFactor as number))
     : 1;
   return (
-    Math.max(0, args.producedUnits) *
-    (args.isNatcorp ? NATCORP_COMMODITY_MULTIPLIER : 1) *
-    getOutputMultiplier(args.productionPolicyLevel ?? 0) *
-    embargo
+    Math.max(0, args.producedUnits) * (args.isNatcorp ? NATCORP_COMMODITY_MULTIPLIER : 1) * embargo
   );
+}
+
+/**
+ * Same chain as `plantsSupplyScaledUnits`, but starting from NAMEPLATE CAPACITY
+ * rather than measured production. Capacity is what the plant could make at
+ * policy 0, so the production-policy output multiplier still has to be applied
+ * here — a capacity figure has never been through `sectorTurn`.
+ *
+ * Used by the supply-agreement capacity validator, which sizes a proposed
+ * contract against what the sector could deliver.
+ */
+export function plantsCapacityScaledUnits(args: {
+  capacityUnits: number | null | undefined;
+  isNatcorp: boolean;
+  productionPolicyLevel: number | null | undefined;
+  embargoSupplyFactor?: number | null;
+}): number | null {
+  if (typeof args.capacityUnits !== "number" || !Number.isFinite(args.capacityUnits)) return null;
+  return plantsSupplyScaledUnits({
+    producedUnits:
+      Math.max(0, args.capacityUnits) * getOutputMultiplier(args.productionPolicyLevel ?? 0),
+    isNatcorp: args.isNatcorp,
+    embargoSupplyFactor: args.embargoSupplyFactor,
+  });
 }
 
 /**
@@ -2009,9 +2035,10 @@ export function computeRawSupplyDemand(
     // ledger reads that instead — this is what makes a throttled, mothballed or
     // capacity-constrained plant actually disappear from world supply.
     //
-    // The scaling chain (natcorpScale × outputMultiplier × embargoSupplyFactor)
-    // is applied on top because `producedUnits` does not carry it (sectorTurn's
-    // productionFactor omits all of it). It lives in ONE place,
+    // The scaling chain (natcorpScale × embargoSupplyFactor) is applied on top
+    // because `producedUnits` does not carry those legs. The production-policy
+    // output curve is NOT in this chain — since ticket #1072 it gates tonnage in
+    // `sectorTurn`, so `producedUnits` already carries it. It lives in ONE place,
     // `plantsSupplyScaledUnits`, shared with the clearing offer in
     // turn/corporation/index.ts — the offered book and this ledger must stay in
     // the same units or clearing's lagged-supply reconciliation misfires (and
@@ -2038,7 +2065,6 @@ export function computeRawSupplyDemand(
         ? plantsSupplyScaledUnits({
             producedUnits: sector.producedUnits,
             isNatcorp: sector.isNatcorp === true,
-            productionPolicyLevel: sector.productionPolicyLevel,
             embargoSupplyFactor: sector.embargoSupplyFactor,
           })
         : null;
