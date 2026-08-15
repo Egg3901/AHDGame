@@ -78,6 +78,13 @@ interface CorporationHeroProps {
   sectorCount?: number;
   stateCount?: number;
   income?: number | null;
+  /**
+   * What the corp actually pays out: max(CEO-set rate, legal-structure floor,
+   * parent floor). Differs from `corporation.dividendRate` whenever a structure
+   * like a US LLC forces a minimum distribution, and the tile used to print the
+   * CEO-set rate while the income statement charged this one.
+   */
+  effectiveDividendRate?: number | null;
   periodView?: MoneyPeriod;
   financialFogOfWar?: FinancialFogMeta | null;
   ceoIsInactive?: boolean;
@@ -95,6 +102,7 @@ export function CorporationHero({
   sectorCount,
   stateCount,
   income,
+  effectiveDividendRate,
   periodView = "daily",
   financialFogOfWar,
   ceoIsInactive = false,
@@ -206,7 +214,11 @@ export function CorporationHero({
   // Fog-aware income tile (shared by both strip variants).
   const incomeTile = (() => {
     const code = corporation.liquidCurrencyCode as CurrencyCode | undefined;
-    const label = `Income ${MONEY_PERIOD_SUFFIX[periodView]}`;
+    // `income` is the RETAINED figure (net of the dividend the corp pays out),
+    // not net income. Labelling it "Income" put a number on the masthead that
+    // no other surface reported and that read as a loss for any corp with a
+    // dividend. Name the thing it actually is.
+    const label = `Retained ${MONEY_PERIOD_SUFFIX[periodView]}`;
     if (income == null) {
       return (
         <StatTile label={label}>
@@ -652,10 +664,20 @@ export function CorporationHero({
             </StatTile>
             <StatTile label="Dividend">
               <span className="block truncate text-lg font-bold tabular-nums leading-tight text-foreground">
-                {corporation.dividendRate != null ? `${corporation.dividendRate}%` : "—"}
+                {effectiveDividendRate != null
+                  ? `${effectiveDividendRate}%`
+                  : corporation.dividendRate != null
+                    ? `${corporation.dividendRate}%`
+                    : "—"}
               </span>
               <span className="text-[10px] text-muted">
-                {corporation.dividendRate != null ? "payout of income" : "not disclosed"}
+                {effectiveDividendRate != null &&
+                corporation.dividendRate != null &&
+                effectiveDividendRate > corporation.dividendRate
+                  ? `required minimum (you set ${corporation.dividendRate}%)`
+                  : corporation.dividendRate != null
+                    ? "payout of income"
+                    : "not disclosed"}
               </span>
             </StatTile>
             {incomeTile}

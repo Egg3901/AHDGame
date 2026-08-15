@@ -127,6 +127,50 @@ describe("buildAllocation", () => {
     expect(a.revenue).toBe(0);
     a.segments.forEach((s) => expect(s.pct).toBe(0));
   });
+
+  // Corp 484 (The Trump Organization) shipped a waterfall reading
+  // 72.6K − 14.9K − 0 − 42 − 7.3K = "32.4K". It did not add up, because
+  // `laborCosts` (17.9K — the single biggest cost line) had no row and
+  // `netIncome` was passed through from `f.income` rather than derived from
+  // the rows above it. A reader running down the column could not reproduce
+  // the total, which is the whole point of an income statement.
+  it("includes wages as a row", () => {
+    const a = buildAllocation({ ...baseFinancials, laborCosts: 600 }, "turn");
+    const labor = a.segments.find((s) => s.key === "labor");
+    expect(labor).toBeDefined();
+    expect(labor?.pct).toBe(25); // 600/2400
+  });
+
+  it("reconciles: revenue minus every row equals the reported net income", () => {
+    const withWages: Financials = {
+      ...baseFinancials,
+      laborCosts: 600,
+      regulatoryBurden: 90,
+      // income must reflect the full cost base for the identity to hold with a
+      // zero residual: 2400 − (480 + 600 + 240 + 120 + 90 + 360) = 510.
+      income: 510,
+    };
+    const a = buildAllocation(withWages, "turn");
+    const drawn = a.segments.reduce((sum, s) => sum + s.value, 0);
+    const received = a.inflows.reduce((sum, s) => sum + s.value, 0);
+    expect(a.revenue - drawn + received).toBeCloseTo(a.netIncome, 6);
+    expect(a.netIncome).toBeCloseTo(scaleToPeriod(510, "turn"), 6);
+    // Nothing unexplained when every cost is accounted for.
+    expect(a.segments.find((s) => s.key === "other")).toBeUndefined();
+  });
+
+  it("surfaces an Other row rather than silently failing to add up", () => {
+    // `income` is 300 lower than the rows explain. The bar must show the gap,
+    // not absorb it: a visible discrepancy is a bug report, a hidden one is a
+    // support ticket.
+    const mismatched: Financials = { ...baseFinancials, income: 900 };
+    const a = buildAllocation(mismatched, "turn");
+    const other = a.segments.find((s) => s.key === "other");
+    expect(other).toBeDefined();
+    expect(other?.value).toBeCloseTo(scaleToPeriod(300, "turn"), 6);
+    const drawn = a.segments.reduce((sum, s) => sum + s.value, 0);
+    expect(a.revenue - drawn).toBeCloseTo(a.netIncome, 6);
+  });
 });
 
 describe("corpIncomeBasis (ticket #1098)", () => {
