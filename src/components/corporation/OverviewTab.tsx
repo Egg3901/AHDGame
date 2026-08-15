@@ -9,6 +9,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { CorpEconomicModelBadge } from "@/components/economy/CorpEconomicModelBadge";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { formatMarketingStrength } from "@/lib/utils/formatters";
+import { corpIncomeBasis } from "./financials/financialsModel";
 import type {
   CorporationDetail,
   Financials,
@@ -161,14 +162,13 @@ export default function OverviewTab({
   const periodLabel = MONEY_PERIOD_SUFFIX[periodView];
 
   const totalRevenue = financials.totalRevenue * multiplier;
-  // Subtract mandatory dividend distribution so Overview matches what actually
-  // hits liquidCapital each turn (sectorCalculations.ts:782). Prefer the realized
-  // last-turn income (ground truth) over the projection, which can't reproduce
-  // embargo/tariff/clearing haircuts (ticket #935); fall back to the projection
-  // for corps with no history. Both are pre-dividend.
-  const income =
-    ((financials.realizedIncome ?? financials.income) - financials.dividendDistribution) *
-    multiplier;
+  // Retained income: what actually stays with the corp after the dividend
+  // payout. Prefer the realized last-turn figure (ground truth) over the
+  // projection, which can't reproduce embargo/tariff/clearing haircuts (ticket
+  // #935). The realized figure is already NET of dividends, so the shared basis
+  // must do the netting — subtracting the projection-derived
+  // `dividendDistribution` from it flipped profitable corps negative (#1098).
+  const income = corpIncomeBasis(financials).retained * multiplier;
   const incomeColor = income > 0 ? "text-success" : income < 0 ? "text-error" : "text-foreground";
 
   const stateCount = new Set(sectors.map((s) => s.stateId)).size;

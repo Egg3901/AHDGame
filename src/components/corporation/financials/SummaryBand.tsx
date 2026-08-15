@@ -7,7 +7,7 @@ import {
 } from "@/lib/constants/moneyTimescale";
 
 import { EstChip } from "../market/MarketPrimitives";
-import { netMarginPct, valuation } from "./financialsModel";
+import { corpIncomeBasis, netMarginPct, valuation } from "./financialsModel";
 import type { CorporationDetail, Financials, BalanceSheet } from "../CorporationPageTypes";
 
 type View = "income_statement" | "balance_sheet";
@@ -94,31 +94,28 @@ export function SummaryBand({
   // Headline net income is the REALIZED figure the engine booked last turn when
   // available (ground truth — reflects embargo/tariff/clearing effects the
   // projected income statement below can't fully reproduce, ticket #935), and
-  // falls back to the projection for brand-new corps with no history.
-  const hasRealized = typeof financials.realizedIncome === "number";
-  const netIncome = hasRealized ? (financials.realizedIncome as number) : financials.income;
-  // The realized figure the engine books EXCLUDES bond-coupon income (coupons
-  // settle in the bond phase, not the operating line). Report the coupon-inclusive
-  // TOTAL as the headline so it agrees with the income statement below, and keep
-  // the operating figure visible beneath it: a bond-funded corp can run an
-  // operating loss yet be enterprise-positive on coupons (ticket #943 / #2996).
+  // falls back to the projection for brand-new corps with no history. Both
+  // bases already fold in bond coupons, bond interest and dividends received
+  // (#941), so nothing non-operating may be added on top (ticket #1098).
+  const basis = corpIncomeBasis(financials);
+  const hasRealized = basis.isRealized;
+  const totalIncome = basis.netIncome;
+  // Non-operating income already INSIDE the headline: bond coupons and dividends
+  // received from holdings. Broken out beneath so a bond-funded corp can see it
+  // is enterprise-positive on coupons while operating negative (#943 / #2996).
   // Coupons show at FULL value here — the 0.75x interest-rate-risk discount lives
   // in the share-price economics only, never in the reported P&L.
-  const operatingIncome = netIncome;
-  // Non-operating income the realized operating figure excludes: bond coupons and
-  // dividends received from holdings (both settle outside the operating line).
   const nonOperatingIncome =
     (financials.bondCouponIncome ?? 0) + (financials.dividendIncomeReceived ?? 0);
-  const couponMaterial =
-    hasRealized && Math.abs(nonOperatingIncome) > Math.max(1, Math.abs(operatingIncome) * 0.05);
-  const totalIncome = couponMaterial ? operatingIncome + nonOperatingIncome : operatingIncome;
+  const operatingIncome = totalIncome - nonOperatingIncome;
+  const couponMaterial = Math.abs(nonOperatingIncome) > Math.max(1, Math.abs(totalIncome) * 0.05);
   // Surface a divergence hint when the projection disagrees with reality by a
   // material amount (or in sign) so the estimate below never reads as the truth.
   const projDiffers =
     hasRealized &&
     (Math.sign(totalIncome) !== Math.sign(financials.income) ||
       Math.abs(totalIncome - financials.income) > Math.max(1, Math.abs(totalIncome) * 0.1));
-  const retained = totalIncome - financials.dividendDistribution;
+  const retained = basis.retained;
 
   return (
     <div className="rounded-xl border border-card-border bg-background/60 p-4 space-y-4">

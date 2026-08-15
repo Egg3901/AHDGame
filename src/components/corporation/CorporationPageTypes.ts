@@ -470,6 +470,13 @@ export interface Financials {
   realizedIncome?: number;
   /** Turn the realized figure was booked on (for the "actual, last turn" chip). */
   realizedIncomeTurn?: number;
+  /**
+   * Dividends the engine actually paid out of last turn's income (daily display
+   * units, local currency). `realizedIncome` is ALREADY net of this. Present
+   * only alongside `realizedIncome`. Use it to rebuild the pre-dividend
+   * headline; never subtract `dividendDistribution` from `realizedIncome`.
+   */
+  realizedDividendPaid?: number;
   /** CEO-set dividend rate (raw). Use effectiveDividendRate for what's actually paid out. */
   dividendRate: number;
   /** max(corp.dividendRate clamped, legalStructure.minimumDividendRate × 100). 0 when income ≤ 0. */
