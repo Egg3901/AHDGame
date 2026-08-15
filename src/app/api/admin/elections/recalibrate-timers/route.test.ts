@@ -59,8 +59,8 @@ describe("canonicalTurns — snap-shifted anchors", () => {
     expect(canonicalTurns(e("commons", 4), 300)?.endTurn).toBe(540);
   });
 
-  it("regionalCouncil cycle 3 with priorEndTurn 250 → 250 + 240 = 490", () => {
-    expect(canonicalTurns(e("regionalCouncil", 3), 250)?.endTurn).toBe(490);
+  it("regionalCouncil cycle 3 ignores priorEndTurn and retains its cohort anchor", () => {
+    expect(canonicalTurns(e("regionalCouncil", 3, { state: "SCO" }), 250)?.endTurn).toBe(795);
   });
 
   it("shugiin cycle 3 with priorEndTurn 500 → 500 + 192 = 692", () => {

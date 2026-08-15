@@ -55,6 +55,11 @@ import { resolveTurnout } from "./resolvedTurnout";
 import { isPrimaryEnded } from "@/lib/elections/phases";
 import type { GameTimeContext } from "@/lib/time/gameTime";
 import { STARTING_YEAR } from "@/lib/constants/turnTime";
+import {
+  buildMidtermOppositionModifierByParty,
+  isMidtermOppositionBoostEligible,
+} from "./midtermOppositionBoost";
+import { resolveGoverningPartyIds } from "@/lib/government/governingPartyIds";
 
 // ─── Accumulate one turn of votes into a tally ───────────────────────────────
 
@@ -362,6 +367,8 @@ export async function accumulateVoteTurn(
   // a candidate without an org row (coattail wrongly suppressed).
   const partyIdsInRace = new Set(enriched.map((ec) => ec.party));
   const regionalExecOfficeType = getRegionalExecutiveOfficeKey(electionCountryId);
+  const wantsMidtermOppositionBoost =
+    isGeneralElection && isMidtermOppositionBoostEligible(election);
 
   // Every gate below is pure (derived from `election`, `candidates` and
   // `enriched`, all already resolved), so the five driver lookups they guard
@@ -394,41 +401,51 @@ export async function accumulateVoteTurn(
       .filter((id): id is string => Boolean(id))
   );
 
-  const [incumbentSeatShareByParty, fundsByParty, president, govExecutive, legInc] =
-    await Promise.all([
-      // A1 — share-weighted incumbency. Prior-cycle vote-share for this seat so
-      // the swing-flow engine's incumbency driver can scale lift / drag by how
-      // much each party was defending. Empty Map when no prior cycle exists
-      // (driver returns 0, matching open-seat semantics). General elections
-      // only — primaries don't route through the swing-flow engine. Single-seat
-      // legislative races (US Senate) use the dedicated flat-shield path below,
-      // not the raw-vote-share fallback (which would produce a meaningless
-      // margin-scaled value for a single winner).
-      isGeneralElection && !isSingleSeatLegislativeRace(election)
-        ? getIncumbentSeatShareByParty(election, db)
-        : undefined,
-      // A2 — money driver. Aggregate per-party spend-this-turn across all
-      // campaigns in the race. Per the design doc the driver reads "active
-      // pacing" rather than treasury balance; `spendThisTurn` is reset every
-      // turn-tick by the `campaignSpendReset` phase after this accumulator runs.
-      isGeneralElection ? getFundsByPartyForElection(electionId, db) : undefined,
-      isGeneralElection && !isOwnHeadOfGovernmentRace
-        ? resolvePresidentApproval(db, electionCountryId)
-        : undefined,
-      // Governor coattail (§7.3.2 govModifier) — the sitting regional
-      // executive's party gets a small nominal-share bonus in its own state's
-      // down-ballot generals, and the own-race path feeds the same approval
-      // into the incumbency driver.
-      wantsGovCoattail || wantsOwnExecIncumbency
-        ? resolveGovExecutiveApproval(db, electionCountryId, stateId)
-        : undefined,
-      // Single-seat legislative own-race (US Senate): flat incumbency shield
-      // keyed to the sitting senator, decaying with tenure to a +1 floor. Null
-      // (skipped) for open seats / incumbent not running / non-senate races.
-      isGeneralElection
-        ? resolveSingleSeatLegislativeIncumbent(election, runningIdentities, db)
-        : undefined,
-    ]);
+  const [
+    incumbentSeatShareByParty,
+    fundsByParty,
+    president,
+    govExecutive,
+    legInc,
+    governingPartyIds,
+  ] = await Promise.all([
+    // A1 — share-weighted incumbency. Prior-cycle vote-share for this seat so
+    // the swing-flow engine's incumbency driver can scale lift / drag by how
+    // much each party was defending. Empty Map when no prior cycle exists
+    // (driver returns 0, matching open-seat semantics). General elections
+    // only — primaries don't route through the swing-flow engine. Single-seat
+    // legislative races (US Senate) use the dedicated flat-shield path below,
+    // not the raw-vote-share fallback (which would produce a meaningless
+    // margin-scaled value for a single winner).
+    isGeneralElection && !isSingleSeatLegislativeRace(election)
+      ? getIncumbentSeatShareByParty(election, db)
+      : undefined,
+    // A2 — money driver. Aggregate per-party spend-this-turn across all
+    // campaigns in the race. Per the design doc the driver reads "active
+    // pacing" rather than treasury balance; `spendThisTurn` is reset every
+    // turn-tick by the `campaignSpendReset` phase after this accumulator runs.
+    isGeneralElection ? getFundsByPartyForElection(electionId, db) : undefined,
+    isGeneralElection && !isOwnHeadOfGovernmentRace
+      ? resolvePresidentApproval(db, electionCountryId)
+      : undefined,
+    // Governor coattail (§7.3.2 govModifier) — the sitting regional
+    // executive's party gets a small nominal-share bonus in its own state's
+    // down-ballot generals, and the own-race path feeds the same approval
+    // into the incumbency driver.
+    wantsGovCoattail || wantsOwnExecIncumbency
+      ? resolveGovExecutiveApproval(db, electionCountryId, stateId)
+      : undefined,
+    // Single-seat legislative own-race (US Senate): flat incumbency shield
+    // keyed to the sitting senator, decaying with tenure to a +1 floor. Null
+    // (skipped) for open seats / incumbent not running / non-senate races.
+    isGeneralElection
+      ? resolveSingleSeatLegislativeIncumbent(election, runningIdentities, db)
+      : undefined,
+    wantsMidtermOppositionBoost
+      ? (options?.preload?.governingPartyIdsByCountry?.get(electionCountryId) ??
+        resolveGoverningPartyIds(db, electionCountryId))
+      : undefined,
+  ]);
 
   const presidentialModifierByParty =
     isGeneralElection && !isOwnHeadOfGovernmentRace
@@ -439,6 +456,10 @@ export async function accumulateVoteTurn(
   // in the race silently no-ops (empty map → neutral 1.0×).
   const govModifierByParty = wantsGovCoattail
     ? buildGovModifierByParty(govExecutive ?? null, partyIdsInRace)
+    : undefined;
+
+  const midtermOppositionModifierByParty = wantsMidtermOppositionBoost
+    ? buildMidtermOppositionModifierByParty(governingPartyIds ?? new Set(), partyIdsInRace)
     : undefined;
 
   // Approval-modulated incumbency (own regional-executive race only). The
@@ -523,6 +544,7 @@ export async function accumulateVoteTurn(
       fundsByParty,
       // Presidential coattail — sitting President's nominal-share multiplier.
       presidentialModifierByParty,
+      midtermOppositionModifierByParty,
       // M3 — per-state median voter for the policy-distance driver.
       medianVoter,
       useSwingFlowModel,

@@ -555,7 +555,7 @@ export async function seedUKRegionalCouncil(db: Db, reset: boolean, log: (msg: s
   }
   log(`Updated stateSenateSeats on ${seatUpdates} UK regions`);
 
-  // ── Step 2: Spawn elections synced to Commons ───────────────────────────
+  // ── Step 2: Spawn the synchronized transition cycle ────────────────────
   let electionsCreated = 0;
   for (const regionId of Object.keys(UK_REGIONAL_COUNCIL_SEATS)) {
     // Check if a regionalCouncil election already exists for this region
@@ -591,7 +591,9 @@ export async function seedUKRegionalCouncil(db: Db, reset: boolean, log: (msg: s
         state: regionId,
       }),
       totalSeats: UK_REGIONAL_COUNCIL_SEATS[regionId],
-      cycle: commonsElection.cycle,
+      // The synchronized election is cycle 0. Once it resolves, the perpetual
+      // spawner opens cycle 1 on the region's annual cohort schedule.
+      cycle: 0,
       // Mirror the paired Commons election's baked year so both races label
       // identically; falls back to the Commons cycle if the field is missing
       // on the legacy Commons doc.
@@ -614,7 +616,7 @@ export async function seedUKRegionalCouncil(db: Db, reset: boolean, log: (msg: s
     await db.collection<Election>("elections").insertOne(rcElection);
     electionsCreated++;
   }
-  log(`Created ${electionsCreated} Regional Council elections (synced to Commons)`);
+  log(`Created ${electionsCreated} Regional Council transition elections (synced to Commons)`);
 
   // ── Step 3: Populate NPP officials ──────────────────────────────────────
   // Load all UK regions to get parentRegionId for party lookups
