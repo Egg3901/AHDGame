@@ -10,6 +10,7 @@ import { EconomySummary } from "./overview/EconomySummary";
 import { ContestedPrimariesCard } from "./overview/PrimaryContestCard";
 import { RaceWatchlist } from "./overview/RaceWatchlist";
 import { RegionalConditionsCard } from "./overview/RegionalConditionsCard";
+import { PlayerRoster } from "./overview/PlayerRoster";
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
 
 const INDEPENDENT_COLOR = "#9CA3AF";
@@ -116,6 +117,7 @@ export function OverviewTab({
           <RegistrationLegend vm={vm} />
         </div>
       </div>
+      <PlayerRoster countryId={overview.countryId} stateId={overview.stateId} />
       {regionalConditionsOverviewEnabled && (
         <RegionalConditionsCard
           countryId={overview.countryId}
