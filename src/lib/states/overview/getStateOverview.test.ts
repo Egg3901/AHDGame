@@ -679,6 +679,15 @@ describe("getStateOverview", () => {
     expect(result.hotRaces[0].electionType).toBe("senate");
     expect(result.hotRaces[0].senateClass).toBe(2);
     expect(result.hotRaces[0].topTwoMargin).toBeCloseTo(4, 0);
+    // A 4pp margin lands in the "tossup" tier (classifyMarginTier: <5pp) —
+    // status must reflect the real margin, not a hardcoded "hot" regardless
+    // of how close the race actually is.
+    expect(result.hotRaces[0].status).toBe("tossup");
+    expect(result.hotRaces[0].leader).toMatchObject({ name: "A", partyAbbr: "DEM" });
+    expect(result.hotRaces[0].leader.votePct).toBeCloseTo(52, 0);
+    expect(result.hotRaces[0].runnerUp).toMatchObject({ name: "B", partyAbbr: "GOP" });
+    expect(result.hotRaces[0].runnerUp.votePct).toBeCloseTo(48, 0);
+    expect(result.hotRaces[0].contenderCount).toBe(2);
     expect(result.kpis.competitiveRacesCount).toBe(1);
   });
 
@@ -738,6 +747,9 @@ describe("getStateOverview", () => {
     const result = await getStateOverview(db as never, { countryId: "US", stateId: "PA" });
     expect(result.hotRaces).toHaveLength(1);
     expect(result.hotRaces[0].topTwoMargin).toBeCloseTo(12, 0);
+    // 12pp lands in the "likely" tier (10-15pp), distinct from the 4pp
+    // "tossup" race above — confirms status actually varies by margin.
+    expect(result.hotRaces[0].status).toBe("likely");
   });
 
   it("excludes general races where top-2 vote share margin exceeds 15pp", async () => {
@@ -794,6 +806,138 @@ describe("getStateOverview", () => {
 
     const result = await getStateOverview(db as never, { countryId: "US", stateId: "PA" });
     expect(result.hotRaces).toEqual([]);
+  });
+
+  it("excludes a race just past the 15pp 'safe' tier floor (16pp)", async () => {
+    const electionId = new ObjectId();
+    const pastPrimaryEnd = new Date(Date.now() - 1000 * 60 * 60 * 24);
+    const candA = new ObjectId();
+    const candB = new ObjectId();
+    const db = makeStubDb({
+      statePartyOrg: [],
+      politicalParties: [
+        { _id: "dem-oid", sequentialId: "dem", countryId: "US", abbreviation: "DEM" },
+        { _id: "gop-oid", sequentialId: "gop", countryId: "US", abbreviation: "GOP" },
+      ],
+      states: [{ _id: "PA", countryId: "US", gdp: 1_000 }],
+      electedOfficials: [],
+      elections: [
+        {
+          _id: electionId,
+          countryId: "US",
+          electionType: "governor",
+          state: "PA",
+          status: "active",
+          primaryEndTime: pastPrimaryEnd,
+        },
+      ],
+      electionCandidates: [
+        {
+          _id: candA,
+          electionId,
+          characterId: new ObjectId(),
+          characterName: "A",
+          party: "dem",
+          status: "active",
+        },
+        {
+          _id: candB,
+          electionId,
+          characterId: new ObjectId(),
+          characterName: "B",
+          party: "gop",
+          status: "active",
+        },
+      ],
+      electionVoteTallies: [
+        {
+          _id: new ObjectId(),
+          electionId,
+          state: "PA",
+          // 58% vs 42% = 16pp margin, just past the "safe" tier floor
+          // (>=15pp) — a watchlist for "contested" races should not
+          // include a race that's already this wide.
+          totalVotes: { [candA.toString()]: 5800, [candB.toString()]: 4200 },
+        },
+      ],
+    });
+
+    const result = await getStateOverview(db as never, { countryId: "US", stateId: "PA" });
+    expect(result.hotRaces).toEqual([]);
+  });
+
+  it("reports contenderCount 3 for a three-way race with all candidates within margin", async () => {
+    const electionId = new ObjectId();
+    const pastPrimaryEnd = new Date(Date.now() - 1000 * 60 * 60 * 24);
+    const candA = new ObjectId();
+    const candB = new ObjectId();
+    const candC = new ObjectId();
+    const db = makeStubDb({
+      statePartyOrg: [],
+      politicalParties: [
+        { _id: "dem-oid", sequentialId: "dem", countryId: "US", abbreviation: "DEM" },
+        { _id: "gop-oid", sequentialId: "gop", countryId: "US", abbreviation: "GOP" },
+        { _id: "wfp-oid", sequentialId: "wfp", countryId: "US", abbreviation: "WFP" },
+      ],
+      states: [{ _id: "PA", countryId: "US", gdp: 1_000 }],
+      electedOfficials: [],
+      elections: [
+        {
+          _id: electionId,
+          countryId: "US",
+          electionType: "governor",
+          state: "PA",
+          status: "active",
+          primaryEndTime: pastPrimaryEnd,
+        },
+      ],
+      electionCandidates: [
+        {
+          _id: candA,
+          electionId,
+          characterId: new ObjectId(),
+          characterName: "A",
+          party: "dem",
+          status: "active",
+        },
+        {
+          _id: candB,
+          electionId,
+          characterId: new ObjectId(),
+          characterName: "B",
+          party: "gop",
+          status: "active",
+        },
+        {
+          _id: candC,
+          electionId,
+          characterId: new ObjectId(),
+          characterName: "C",
+          party: "wfp",
+          status: "active",
+        },
+      ],
+      electionVoteTallies: [
+        {
+          _id: new ObjectId(),
+          electionId,
+          state: "PA",
+          // 36% / 34% / 30% — top-2 margin 2pp, three viable contenders.
+          totalVotes: {
+            [candA.toString()]: 3600,
+            [candB.toString()]: 3400,
+            [candC.toString()]: 3000,
+          },
+        },
+      ],
+    });
+
+    const result = await getStateOverview(db as never, { countryId: "US", stateId: "PA" });
+    expect(result.hotRaces).toHaveLength(1);
+    expect(result.hotRaces[0].contenderCount).toBe(3);
+    expect(result.hotRaces[0].leader).toMatchObject({ name: "A", partyAbbr: "DEM" });
+    expect(result.hotRaces[0].runnerUp).toMatchObject({ name: "B", partyAbbr: "GOP" });
+    expect(result.hotRaces[0].topTwoMargin).toBeCloseTo(2, 0);
   });
 
   it("excludes races still in their primary (future primaryEndTime) from hotRaces", async () => {

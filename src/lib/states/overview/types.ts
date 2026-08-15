@@ -12,6 +12,16 @@
 
 import type { CountryId } from "@/lib/constants/countries";
 import type { RegionalExecutive } from "@/lib/states/regionalExecutive";
+import type { MarginTier } from "@/lib/elections/generalViewModel";
+
+/** One of the top-2 contenders in a Race Watchlist row. */
+export interface RaceContender {
+  name: string;
+  partyAbbr: string;
+  partyColor: string;
+  /** Share of counted votes, 0..100. */
+  votePct: number;
+}
 
 /** A single party's contribution to a state's Org / Reg pools. */
 export interface PartyOrgRow {
@@ -74,10 +84,22 @@ export interface HotRaceSummary {
   district?: string;
   /** US-senate only: senate class (I/II/III) — surfaces in the label. */
   senateClass?: number;
-  status: "hot" | "lean" | "safe";
+  /**
+   * Margin tier from the same `classifyMarginTier` band used by the
+   * presidential Battleground map (safe/likely/lean/tossup). The watchlist
+   * only ever surfaces "likely" and tighter (see `WATCHLIST_MARGIN_PP`).
+   */
+  status: MarginTier;
   incumbent?: { name: string; partyId: string };
   /** Top-two margin in percentage points of vote share (general-phase only). */
   topTwoMargin: number;
+  /** Vote-share leader (name, party, %). */
+  leader: RaceContender;
+  /** Second-place contender the leader is actually contesting against. */
+  runnerUp: RaceContender;
+  /** Count of active candidates with non-zero vote share — 2 for a
+   *  head-to-head, 3+ flags a multi-way race in the UI. */
+  contenderCount: number;
   url: string;
 }
 

@@ -29,7 +29,14 @@ import type {
   StateRegistrationPool,
 } from "@/lib/db/types";
 import { getRegionalExecutive } from "@/lib/states/regionalExecutive";
-import { classifyRace } from "./hotRaces";
+// Reuse the canonical margin-tier classifier already used by the
+// presidential Battleground map (`classifyMarginTier` — same 4-band
+// safe/likely/lean/tossup split, no separate ranking logic invented here).
+// `./hotRaces`'s `classifyRace` was the prior source for the watchlist's
+// status, but it gates on `hasIncumbent`, which this aggregator has never
+// resolved (always passed `false`) — that made every watchlist row read
+// "hot" regardless of its actual margin. See RaceWatchlist plan notes.
+import { classifyMarginTier } from "@/lib/elections/generalViewModel";
 import type {
   ContestedPrimarySummary,
   HotRaceSummary,
@@ -39,7 +46,12 @@ import type {
 
 const NEUTRAL_PARTY_COLOR = "#6b6b7a";
 
-/** Race Watchlist threshold — top-2 within this many percentage points. */
+/**
+ * Race Watchlist threshold — top-2 must be within this many percentage
+ * points to be "contested" enough to watch. Matches the `classifyMarginTier`
+ * "safe" boundary (>= 15pp) so nothing tagged "safe" ever shows up in a
+ * watchlist named for contested races.
+ */
 const WATCHLIST_MARGIN_PP = 15;
 
 /**
@@ -247,7 +259,10 @@ function buildTopSectors(
  *   - contestedPrimaries: one entry per (election × party) where the party
  *     fields 2+ active candidates in a primary-phase race
  *   - hotRaces: general-phase races where the top-2 candidates' actual
- *     vote share is within `WATCHLIST_MARGIN_PP` percentage points
+ *     vote share is within `WATCHLIST_MARGIN_PP` percentage points. Each row
+ *     carries the leader + runner-up (name, party, vote share) and a
+ *     margin tier from `classifyMarginTier` so the UI can show *why* a race
+ *     is contested, not just a bare margin number.
  *
  * General-phase classification is strict: an election only counts as
  * "general phase" when its `primaryEndTime` is set AND already past. A
@@ -355,32 +370,46 @@ async function buildElectionDerived(args: {
     const tally = tallyByElection.get(election._id.toString());
     if (!tally) continue; // No tally yet → skip rather than fake numbers.
 
-    const activeIds = new Set(list.map((c) => c._id.toString()));
+    const candidateById = new Map(list.map((c) => [c._id.toString(), c]));
     const activeVotes = Object.entries(tally.totalVotes)
-      .filter(([cid, votes]) => activeIds.has(cid) && votes > 0)
+      .filter(([cid, votes]) => candidateById.has(cid) && votes > 0)
       .map(([cid, votes]) => ({ cid, votes }));
-    if (activeVotes.length < 2) continue;
+    if (activeVotes.length < 2) continue; // Fewer than 2 viable candidates = walkover, not contested.
 
     const totalVotes = activeVotes.reduce((sum, v) => sum + v.votes, 0);
     if (totalVotes <= 0) continue;
 
-    const sharesPct = activeVotes.map((v) => (v.votes / totalVotes) * 100).sort((a, b) => b - a);
-    const topTwoMargin = Math.abs(sharesPct[0] - sharesPct[1]);
-    if (topTwoMargin > WATCHLIST_MARGIN_PP) continue;
+    // Keep the candidateId attached through the sort so the top-2 rows can
+    // carry real names + parties, not just a bare margin number.
+    const ranked = activeVotes
+      .map((v) => ({ cid: v.cid, pct: (v.votes / totalVotes) * 100 }))
+      .sort((a, b) => b.pct - a.pct);
+    const topTwoMargin = Math.abs(ranked[0].pct - ranked[1].pct);
+    // Nothing at/above the "safe" tier boundary belongs in a *contested*
+    // race watchlist — exclude rather than let a blowout sneak in.
+    if (topTwoMargin >= WATCHLIST_MARGIN_PP) continue;
 
-    const status = classifyRace({
-      topTwoMargin,
-      hasIncumbent: false,
-      phase: "general",
-    });
+    const toContender = (r: { cid: string; pct: number }) => {
+      const cand = candidateById.get(r.cid);
+      const party = cand ? partyBySequentialId.get(cand.party) : undefined;
+      return {
+        name: cand?.characterName ?? "?",
+        partyAbbr: party?.abbreviation ?? cand?.party ?? "?",
+        partyColor: party?.color ?? NEUTRAL_PARTY_COLOR,
+        votePct: r.pct,
+      };
+    };
 
     hotRaces.push({
       electionId: election._id.toString(),
       electionType: election.electionType,
       district: districtLabel,
       senateClass,
-      status,
+      status: classifyMarginTier(topTwoMargin),
       topTwoMargin,
+      leader: toContender(ranked[0]),
+      runnerUp: toContender(ranked[1]),
+      contenderCount: ranked.length,
       url: `/elections/${election.seatId ?? election._id.toString()}`,
     });
   }
