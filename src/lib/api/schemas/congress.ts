@@ -191,6 +191,7 @@ export const stateBillPolicyProvisionSchema = z.object({
   effectDirection: z.number(),
   economic: z.number().optional(),
   social: z.number().optional(),
+  proposedRate: z.number().optional(),
 });
 
 /**

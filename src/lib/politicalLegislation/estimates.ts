@@ -6,7 +6,7 @@
 
 import type { Db } from "mongodb";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
-import type { FederalBudget } from "@/lib/db/types/budget";
+import type { FederalBudget, StateBudget, StateTaxBases } from "@/lib/db/types/budget";
 import type { LegislationType } from "@/lib/db/types/legislation";
 import { computeLawCost, type FiscalBase } from "./costEngine";
 import { countryFiscalBase, regionFiscalBase } from "./fiscalBase";
@@ -41,6 +41,15 @@ export const TAX_BASE_KEY: Record<string, keyof NonNullable<FederalBudget["taxBa
   salesTax: "taxableSales",
 };
 
+/** State-budget taxBases keys for regional tax sliders (ticket #1106). */
+export const STATE_TAX_BASE_KEY: Record<string, keyof StateTaxBases> = {
+  incomeTax: "taxableIncome",
+  domesticCorporateTax: "domesticCorporateProfits",
+  foreignCorporateTax: "foreignCorporateProfits",
+  salesTax: "taxableSales",
+  propertyTax: "propertyValue",
+};
+
 import { POLITICAL_LEGISLATION_EXCLUDED_SCOPES as NEW_GENERATION_COUNTRIES } from "@/lib/politicalMetrics/pipelinePreset";
 
 /**
@@ -69,17 +78,42 @@ export async function attachPoliticalLegislationEstimates(
   const budget = await db
     .collection<FederalBudget>("federalBudget")
     .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { taxRates: 1, taxBases: 1 } });
+  const hasStateSlider = docs.some((d) => {
+    const lt = d as unknown as LegislationType;
+    return Boolean(lt.taxSlider && lt.taxSlider.scope === "state");
+  });
+  const regionKey = regionId?.trim() ? regionId.trim().toUpperCase() : null;
+  const stateBudget =
+    regionKey && hasStateSlider
+      ? await db
+          .collection<StateBudget>("stateBudgets")
+          .findOne(
+            { _id: regionKey, countryId: countryId as StateBudget["countryId"] },
+            { projection: { taxRates: 1, taxBases: 1 } }
+          )
+      : null;
 
   return docs.map((doc) => {
     const lt = doc as unknown as LegislationType;
     if (!isNewGenerationType(lt)) return doc;
 
     if (lt.taxSlider) {
-      const currentRate =
-        (budget?.taxRates as Record<string, number> | undefined)?.[lt.taxSlider.taxType] ??
-        lt.taxSlider.baselineRate;
-      const baseKey = TAX_BASE_KEY[lt.taxSlider.taxType];
-      const taxBase = baseKey ? (budget?.taxBases?.[baseKey] ?? 0) : 0;
+      const useStateBudget = lt.taxSlider.scope === "state" && stateBudget != null;
+      const currentRate = useStateBudget
+        ? ((stateBudget.taxRates as unknown as Record<string, number> | undefined)?.[
+            lt.taxSlider.taxType
+          ] ?? lt.taxSlider.baselineRate)
+        : ((budget?.taxRates as Record<string, number> | undefined)?.[lt.taxSlider.taxType] ??
+          lt.taxSlider.baselineRate);
+      const stateBaseKey = STATE_TAX_BASE_KEY[lt.taxSlider.taxType];
+      const federalBaseKey = TAX_BASE_KEY[lt.taxSlider.taxType];
+      const taxBase = useStateBudget
+        ? stateBaseKey
+          ? (stateBudget.taxBases?.[stateBaseKey] ?? 0)
+          : 0
+        : federalBaseKey
+          ? (budget?.taxBases?.[federalBaseKey] ?? 0)
+          : 0;
       const estimate: TaxSliderEstimate = {
         minRate: lt.taxSlider.minRate,
         maxRate: lt.taxSlider.maxRate,

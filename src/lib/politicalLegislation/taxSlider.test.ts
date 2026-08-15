@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import {
   resolveTaxSliderProvisionFields,
+  stampTaxSliderProvisions,
   taxSliderNotchRate,
   taxSliderNpcEconomic,
   taxSliderPolicyOptionId,
@@ -136,6 +137,77 @@ describe("resolveTaxSliderProvisionFields", () => {
       "US"
     );
     expect(resolved.ok).toBe(false);
+  });
+
+  it("reads stateBudgets.taxRates for state-scope sliders", async () => {
+    db.collection("stateBudgets");
+    db.collectionMocks.stateBudgets.findOne = vi
+      .fn()
+      .mockResolvedValue({ taxRates: { incomeTax: 5 } });
+    const stateDoc = {
+      taxSlider: { ...SLIDER, scope: "state" as const, maxRate: 25, baselineRate: 5 },
+    } as never;
+    const missing = await resolveTaxSliderProvisionFields(
+      db as unknown as Db,
+      stateDoc,
+      7,
+      undefined,
+      "US"
+    );
+    expect(missing.ok).toBe(false);
+    const hiked = await resolveTaxSliderProvisionFields(
+      db as unknown as Db,
+      stateDoc,
+      7,
+      undefined,
+      "US",
+      "NC"
+    );
+    expect(hiked.ok && hiked.fields.proposedRate).toBe(7);
+    expect(hiked.ok && hiked.fields.effectDirection).toBe(1);
+    expect(hiked.ok && hiked.fields.policyOptionId).toBe("rate:7");
+  });
+});
+
+describe("stampTaxSliderProvisions", () => {
+  let db: MockDb;
+  beforeEach(() => {
+    db = createMockDb();
+    db.collection("legislationTypes");
+    db.collection("stateBudgets");
+    db.collectionMocks.legislationTypes.findOne = vi.fn().mockResolvedValue({
+      taxSlider: { ...SLIDER, scope: "state", maxRate: 25, baselineRate: 5 },
+    });
+    db.collectionMocks.stateBudgets.findOne = vi.fn().mockResolvedValue({
+      taxRates: { incomeTax: 5 },
+    });
+  });
+
+  it("stamps slider fields on matching policy provisions", async () => {
+    const stamped = await stampTaxSliderProvisions(
+      db as unknown as Db,
+      [{ legislationTypeId: "us.tax.stateIncomeTax", effectDirection: 0, proposedRate: 7 }],
+      "US",
+      "NC"
+    );
+    expect(stamped.ok).toBe(true);
+    if (!stamped.ok) return;
+    expect(stamped.provisions[0]).toMatchObject({
+      legislationTypeId: "us.tax.stateIncomeTax",
+      proposedRate: 7,
+      policyOptionId: "rate:7",
+      effectDirection: 1,
+    });
+  });
+
+  it("rejects a no-move proposal against the live state rate", async () => {
+    const stamped = await stampTaxSliderProvisions(
+      db as unknown as Db,
+      [{ legislationTypeId: "us.tax.stateIncomeTax", proposedRate: 5 }],
+      "US",
+      "NC"
+    );
+    expect(stamped.ok).toBe(false);
   });
 });
 

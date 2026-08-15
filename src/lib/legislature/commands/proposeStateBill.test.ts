@@ -140,3 +140,88 @@ describe("proposeStateBill — custom (flavor) bills", () => {
     expect(inserted.proposalNpiCost).toBeUndefined();
   });
 });
+
+describe("proposeStateBill — US state tax sliders (ticket #1106)", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("legislationTypes");
+    db.collection("stateBudgets");
+    db.collection("politicalParties").findOne.mockResolvedValue({
+      sequentialId: 1,
+      countryId: "US",
+      _id: "d",
+    });
+    db.collection("electedOfficials").findOne.mockResolvedValue({
+      officeType: "stateSenate",
+      state: "NC",
+      characterId,
+      countryId: "US",
+    });
+    db.collection("stateBills").findOne.mockResolvedValue(null);
+    db.collection("characters").updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collection("stateBills").insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
+      _id: "us.tax.stateIncomeTax",
+      taxSlider: {
+        scope: "state",
+        taxType: "incomeTax",
+        minRate: 0,
+        maxRate: 25,
+        step: 0.5,
+        baselineRate: 5,
+        waypoints: [],
+      },
+    });
+    db.collectionMocks.stateBudgets.findOne.mockResolvedValue({
+      taxRates: { incomeTax: 5 },
+    });
+  });
+
+  it("stamps proposedRate and the rate-encoded option id on the stored provision", async () => {
+    const { proposeStateBill } = await import("./proposeStateBill");
+    const res = await proposeStateBill(db as unknown as Db, "US", "nc", authUser(), {
+      title: "North Carolina Income Tax Act",
+      summary: "Raise the state income tax.",
+      category: "tax",
+      provisions: [
+        {
+          legislationTypeId: "us.tax.stateIncomeTax",
+          effectDirection: 1,
+          proposedRate: 7,
+        },
+      ],
+    });
+
+    expect(res.status).toBe(200);
+    const inserted = db.collection("stateBills").insertOne.mock.calls[0]?.[0] as {
+      provisions: Array<Record<string, unknown>>;
+    };
+    expect(inserted.provisions[0]).toMatchObject({
+      legislationTypeId: "us.tax.stateIncomeTax",
+      proposedRate: 7,
+      policyOptionId: "rate:7",
+      effectDirection: 1,
+    });
+  });
+
+  it("rejects a tax slider that does not move the live rate", async () => {
+    const { proposeStateBill } = await import("./proposeStateBill");
+    const res = await proposeStateBill(db as unknown as Db, "US", "NC", authUser(), {
+      title: "No-op Tax Act",
+      summary: "Leave the rate alone.",
+      category: "tax",
+      provisions: [
+        {
+          legislationTypeId: "us.tax.stateIncomeTax",
+          proposedRate: 5,
+        },
+      ],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: expect.stringMatching(/at least/) });
+    expect(db.collection("stateBills").insertOne).not.toHaveBeenCalled();
+  });
+});
