@@ -128,6 +128,7 @@ function makeLookups(
     eraUnitScale: 1,
     corporations: [corp],
     sectorsByCorp,
+    primeRateSmoothedByCountry: new Map(),
     corpById: new Map([[corp._id.toString(), corp]]),
     ceoBusinessAcumenByCorpId: new Map(),
     bondsByCorpId: new Map(),
