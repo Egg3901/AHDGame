@@ -35,6 +35,17 @@ describe("stateBillProvisionSchema — strict governor-queue provisions (audit S
     expect(r.success).toBe(true);
   });
 
+  it("accepts a tax-slider policy provision with proposedRate", () => {
+    expect(
+      stateBillProvisionSchema.safeParse({
+        legislationTypeId: "us.tax.stateIncomeTax",
+        effectDirection: 1,
+        proposedRate: 7,
+        policyOptionId: "rate:7",
+      }).success
+    ).toBe(true);
+  });
+
   it("accepts subsidy and end_subsidy provisions", () => {
     expect(
       stateBillProvisionSchema.safeParse({

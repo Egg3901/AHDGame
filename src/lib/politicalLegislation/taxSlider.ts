@@ -9,7 +9,7 @@
 import type { Db } from "mongodb";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import type { CountryId } from "@/lib/constants/countries";
-import type { FederalBudget } from "@/lib/db/types/budget";
+import type { FederalBudget, StateBudget } from "@/lib/db/types/budget";
 import type { LegislationType } from "@/lib/db/types/legislation";
 
 const GRID_EPS = 1e-9;
@@ -108,27 +108,45 @@ export function taxSliderNotchRate(
 
 /**
  * Server-side slider resolution for both propose routes: reads the CURRENT
- * effective rate from federalBudget.taxRates (the source of truth), validates
- * the proposal, and returns the stamped provision fields — the delta-derived
- * NPC economic force (§5.1b) and a sign-of-move effectDirection.
+ * effective rate from federalBudget.taxRates (national sliders) or
+ * stateBudgets.taxRates (state sliders), validates the proposal, and returns
+ * the stamped provision fields — the delta-derived NPC economic force (§5.1b)
+ * and a sign-of-move effectDirection.
  */
 export async function resolveTaxSliderProvisionFields(
   db: Db,
   legislationType: LegislationType,
   proposedRate: number | undefined,
   policyOptionId: string | undefined,
-  countryId: string
+  countryId: string,
+  stateId?: string
 ): Promise<ResolvedTaxSliderFields> {
   const slider = legislationType.taxSlider;
   if (!slider) return { ok: false, error: "Not a tax-slider legislation type." };
 
-  const budgetId = getNationalBudgetId(countryId as CountryId);
-  const budget = await db
-    .collection<FederalBudget>("federalBudget")
-    .findOne({ _id: budgetId }, { projection: { taxRates: 1 } });
-  const currentRate =
-    (budget?.taxRates as Record<string, number> | undefined)?.[slider.taxType] ??
-    slider.baselineRate;
+  let currentRate = slider.baselineRate;
+  if (slider.scope === "state") {
+    if (!stateId) {
+      return { ok: false, error: "A state is required for state tax legislation." };
+    }
+    const stateBudget = await db
+      .collection<StateBudget>("stateBudgets")
+      .findOne(
+        { _id: stateId, countryId: countryId.toUpperCase() as CountryId },
+        { projection: { taxRates: 1 } }
+      );
+    currentRate =
+      (stateBudget?.taxRates as Record<string, number> | undefined)?.[slider.taxType] ??
+      slider.baselineRate;
+  } else {
+    const budgetId = getNationalBudgetId(countryId as CountryId);
+    const budget = await db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ _id: budgetId }, { projection: { taxRates: 1 } });
+    currentRate =
+      (budget?.taxRates as Record<string, number> | undefined)?.[slider.taxType] ??
+      slider.baselineRate;
+  }
 
   // Clients may omit the encoded option id; derive it before validating so the
   // stored provision always carries it (duplicate-direction guard, spec §10).
@@ -151,4 +169,51 @@ export async function resolveTaxSliderProvisionFields(
       currentPolicyOptionNameSnapshot: taxSliderRateLabel(currentRate),
     },
   };
+}
+
+type StampableProvision = {
+  type?: string;
+  legislationTypeId?: string;
+  policyOptionId?: string;
+  proposedRate?: number;
+};
+
+/**
+ * Walk policy provisions and stamp tax-slider fields (rate, encoded option id,
+ * delta force) against the live budget. Non-slider / subsidy rows pass through.
+ */
+export async function stampTaxSliderProvisions<T extends StampableProvision>(
+  db: Db,
+  provisions: T[],
+  countryId: string,
+  stateId?: string
+): Promise<{ ok: true; provisions: T[] } | { ok: false; error: string }> {
+  const out: T[] = [];
+  for (const p of provisions) {
+    if (p.type === "subsidy" || p.type === "end_subsidy") {
+      out.push(p);
+      continue;
+    }
+    const ltId = typeof p.legislationTypeId === "string" ? p.legislationTypeId.trim() : "";
+    if (!ltId) {
+      out.push(p);
+      continue;
+    }
+    const lt = await db.collection<LegislationType>("legislationTypes").findOne({ _id: ltId });
+    if (!lt?.taxSlider) {
+      out.push(p);
+      continue;
+    }
+    const resolved = await resolveTaxSliderProvisionFields(
+      db,
+      lt,
+      p.proposedRate,
+      typeof p.policyOptionId === "string" ? p.policyOptionId : undefined,
+      countryId,
+      lt.taxSlider.scope === "state" ? stateId : undefined
+    );
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    out.push({ ...p, ...resolved.fields });
+  }
+  return { ok: true, provisions: out };
 }

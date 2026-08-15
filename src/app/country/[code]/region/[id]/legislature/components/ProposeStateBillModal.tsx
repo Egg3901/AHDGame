@@ -23,6 +23,8 @@ import {
   getSocialLabel,
 } from "@/lib/legislature/dto/stateLegislature";
 import { SubsidySectorSelect } from "@/components/bills/SubsidySectorSelect";
+import { TaxRateSliderControl } from "@/components/legislation/TaxRateSliderControl";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 
 export function ProposeStateBillModal({
   stateId,
@@ -50,6 +52,7 @@ export function ProposeStateBillModal({
       effectDirection: number;
       economic: number;
       social: number;
+      proposedRate?: number;
     }[]
   >([{ legislationTypeId: "", policyOptionId: "", effectDirection: 0, economic: 0, social: 0 }]);
   const [subsidyProvisions, setSubsidyProvisions] = useState<
@@ -146,6 +149,10 @@ export function ProposeStateBillModal({
         next[index].economic = first.economic ?? 0;
         next[index].social = first.social ?? 0;
       }
+      if (patch.legislationTypeId != null && lt?.taxSliderEstimate) {
+        next[index].proposedRate = lt.taxSliderEstimate.currentRate;
+        next[index].policyOptionId = `rate:${lt.taxSliderEstimate.currentRate}`;
+      }
       return next;
     });
   }
@@ -208,12 +215,25 @@ export function ProposeStateBillModal({
           setLoading(false);
           return;
         }
+        for (const p of validProvisions) {
+          const slider = legislationTypes.find(
+            (t) => t._id === p.legislationTypeId
+          )?.taxSliderEstimate;
+          if (!slider) continue;
+          const proposed = p.proposedRate ?? slider.currentRate;
+          if (Math.abs(proposed - slider.currentRate) < slider.step - 1e-9) {
+            setError(`Tax proposals must change the rate by at least ${slider.step}.`);
+            setLoading(false);
+            return;
+          }
+        }
         bodyProvisions = validProvisions.map((p) => ({
           legislationTypeId: p.legislationTypeId.trim(),
           policyOptionId: p.policyOptionId || undefined,
           effectDirection: p.effectDirection,
           economic: p.economic,
           social: p.social,
+          ...(p.proposedRate !== undefined ? { proposedRate: p.proposedRate } : {}),
         }));
       }
 
@@ -504,7 +524,23 @@ export function ProposeStateBillModal({
                             </option>
                           ))}
                         </select>
+                        {p.legislationTypeId && type?.taxSliderEstimate && (
+                          <TaxRateSliderControl
+                            slider={type.taxSliderEstimate}
+                            proposedRate={p.proposedRate ?? type.taxSliderEstimate.currentRate}
+                            currencyCode={COUNTRY_CURRENCY_MAP[countryId as CountryId]}
+                            onChange={(rate) =>
+                              setProvision(i, {
+                                proposedRate: rate,
+                                policyOptionId: `rate:${rate}`,
+                                effectDirection:
+                                  rate > type.taxSliderEstimate!.currentRate ? 1 : -1,
+                              })
+                            }
+                          />
+                        )}
                         {p.legislationTypeId &&
+                          !type?.taxSliderEstimate &&
                           (options.length > 0 ? (
                             <select
                               value={p.policyOptionId}
@@ -591,7 +627,7 @@ export function ProposeStateBillModal({
                         </div>
                       )}
                       {/* New-gen laws: Current law → Proposed with fiscal + metric deltas. */}
-                      {p.legislationTypeId && type && (
+                      {p.legislationTypeId && type && !type.taxSliderEstimate && (
                         <div className="pt-2">
                           <LawProvisionComparison
                             countryId={countryId}
@@ -601,8 +637,7 @@ export function ProposeStateBillModal({
                           />
                         </div>
                       )}
-                      {/* Effect indicators (legacy weighted targets + archetype approvals) */}
-                      {p.legislationTypeId && (
+                      {p.legislationTypeId && !type?.taxSliderEstimate && (
                         <PolicyEffectIndicators
                           effectTargetsWeighted={type?.effectTargetsWeighted}
                           effectDirection={p.effectDirection}
