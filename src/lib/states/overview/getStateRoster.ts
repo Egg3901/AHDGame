@@ -147,7 +147,10 @@ export async function getStateRoster(
   }
 
   // Party names/colors: one bounded fetch (a handful of parties per country).
-  const parties = await db.collection<PoliticalParty>("politicalParties").find({ countryId }).toArray();
+  const parties = await db
+    .collection<PoliticalParty>("politicalParties")
+    .find({ countryId })
+    .toArray();
   const partyBySequentialId = new Map(parties.map((p) => [String(p.sequentialId), p]));
 
   // Active-candidacy lookup, scoped to just this page's characters that
@@ -178,7 +181,8 @@ export async function getStateRoster(
           district: parseDistrictLabel(election.seatId),
           senateClass: senateClassToNumber(election.senateClass),
         });
-        const scoped = election.state && election.state !== stateId ? `${label} (${election.state})` : label;
+        const scoped =
+          election.state && election.state !== stateId ? `${label} (${election.state})` : label;
         raceLabelByCharacterId.set(charKey, `Running: ${scoped}`);
       }
     }

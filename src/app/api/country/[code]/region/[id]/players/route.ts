@@ -43,7 +43,12 @@ export async function GET(request: Request, { params }: RouteParams) {
         STATE_ROSTER_DEFAULT_PAGE_SIZE
     );
 
-    const result: StateRosterResult = await getStateRoster(db, { countryId, stateId, page, pageSize });
+    const result: StateRosterResult = await getStateRoster(db, {
+      countryId,
+      stateId,
+      page,
+      pageSize,
+    });
 
     return NextResponse.json(result);
   } catch (error) {
