@@ -1001,7 +1001,19 @@ export function computeSectorMarginSection(args: {
   // here while the sector list (realized basis) showed a loss: the exact
   // list-vs-detail divergence in ticket 984. Both paths now agree.
   const economicRevenue = sectorEconomicRevenue(sector);
-  const effectiveMargin = softCapEffectiveMargin(mods.effective + additionalMarginModifier);
+  const stackMargin = softCapEffectiveMargin(mods.effective + additionalMarginModifier);
+  // Money uses the margin the engine ACTUALLY applied last turn, exactly as the
+  // corp page does post-#262 (see corporationDetail.ts). Under plants the
+  // stored field is derived from the physical P&L — inputs at live commodity
+  // prices, labor, upkeep — which the stack recomputed above knows nothing
+  // about. Observed on prod: a farm the engine paid −6.19% (input shortage x
+  // output glut) rendered here at +48%, so this page showed +238K/day profit
+  // on a sector losing money, directly contradicting the corp page one tap
+  // away. The stack remains the advisory modifier breakdown and the fallback
+  // for never-processed sectors; below plants stored == last turn's stack.
+  const engineMargin =
+    typeof sector.effectiveProfitMargin === "number" ? sector.effectiveProfitMargin : null;
+  const effectiveMargin = engineMargin ?? stackMargin;
   const effectiveMods = { ...mods, effective: effectiveMargin };
   const maintenance = economicRevenue * (1 - effectiveMargin / 100);
   const profit = economicRevenue - maintenance - sector.currentGrowthCost;
