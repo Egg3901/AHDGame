@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { sponsoredFundSlug, validateCharter } from "./charterFund";
+import { ObjectId, type Db } from "mongodb";
+import { createMockDb } from "@/lib/test-utils/mockDb";
+import { charterFund, sponsoredFundSlug, validateCharter } from "./charterFund";
 import {
   FUND_MIN_SEED_CAPITAL_ANCHOR,
   MAX_EXPENSE_RATIO_ANNUAL,
@@ -70,6 +72,38 @@ describe("validateCharter", () => {
     expect(validateCharter({ ...ok, tickerSymbol: "nit" }, financial)).toMatch(/ticker/i);
     expect(validateCharter({ ...ok, tickerSymbol: "TOOLONGTICKER" }, financial)).toMatch(/ticker/i);
     expect(validateCharter({ ...ok, tickerSymbol: "N1T" }, financial)).toMatch(/ticker/i);
+  });
+});
+
+describe("charterFund player-sponsorship gate", () => {
+  function dbWith(config: Record<string, unknown> | null) {
+    const db = createMockDb();
+    db.collection("gameConfig");
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue(config);
+    return db;
+  }
+  const input = {
+    sponsor: { _id: new ObjectId(), name: "Acme" },
+    currentTurn: 1,
+    ...ok,
+  } as never;
+
+  it("refuses to charter a sponsored fund when the flag is off", async () => {
+    const db = dbWith({ _id: "default" }); // flag absent
+    const res = await charterFund(db as unknown as Db, input);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.status).toBe(403);
+    // No sector lookup happens: the gate returns before touching corporateSectors.
+    expect(db.collectionMocks.corporateSectors).toBeUndefined();
+  });
+
+  it("refuses when the flag is explicitly false", async () => {
+    const res = await charterFund(
+      dbWith({ _id: "default", playerFundSponsorshipEnabled: false }) as unknown as Db,
+      input
+    );
+    expect(res.ok).toBe(false);
   });
 });
 
