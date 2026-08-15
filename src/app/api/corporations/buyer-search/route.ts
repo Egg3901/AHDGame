@@ -1,9 +1,10 @@
 // GET /api/corporations/buyer-search?q=...&exclude=<corpId>
-// Name search for supply-agreement counterparties: private, player-run
-// corporations across ALL countries (not just the supplier's own), so a CEO can
-// contract with a foreign player-owned corp (#106). Restricted to
-// `ceoType: "character"` so the buyer actually has a human CEO who can accept the
-// offer; excludes state-owned corps and the supplier itself.
+// Name search for supply-agreement counterparties and acquisition targets:
+// player-run corporations across ALL countries (not just the supplier's own),
+// so a CEO can contract with / offer to buy a foreign player-owned corp (#106).
+// Restricted to a player-held CEO seat so a human can accept the offer;
+// missing `ceoType` counts as character (founding historically omitted it).
+// Excludes state-owned corps and the caller itself.
 // Auth: public read. Errors: 400
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
@@ -12,6 +13,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import type { Corporation } from "@/lib/db/types";
 import { escapeRegex } from "@/lib/utils/escapeRegex";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
+import { PLAYER_RUN_CEO_FILTER } from "@/lib/corporations/playerRunCeo";
 
 export async function GET(request: Request) {
   try {
@@ -24,10 +26,10 @@ export async function GET(request: Request) {
     const rows = await db
       .collection<Corporation>("corporations")
       .find({
-        // Private (not state-owned) and player-run — a human CEO must be able to
-        // accept. Any country is eligible; that is the point of #106.
+        // Not state-owned and player-run — a human CEO must be able to accept.
+        // Any country is eligible; that is the point of #106.
         countryOwnerId: { $exists: false },
-        ceoType: "character",
+        ...PLAYER_RUN_CEO_FILTER,
         ...(excludeId && ObjectId.isValid(excludeId)
           ? { _id: { $ne: new ObjectId(excludeId) } }
           : {}),
