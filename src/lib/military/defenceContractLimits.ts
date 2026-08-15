@@ -7,9 +7,6 @@ export const DEFENCE_CONTRACT_WINDOW_TURNS = TURNS_PER_YEAR / 4;
 /** No supplier may control more than one third of a country's contracting tranche. */
 export const DEFENCE_CONTRACT_SUPPLIER_SHARE = 1 / 3;
 
-/** A country may add at most three materiel lots in one 12-turn window. */
-export const DEFENCE_CONTRACT_COUNTRY_LOT_CEILING = 3;
-
 export interface DefenceContractWindow {
   id: string;
   index: number;
@@ -51,12 +48,8 @@ export function defenceContractLotCaps(
     return { countryLots: 0, supplierLots: 0, procurementNotional: 0 };
   }
 
-  const budgetNotional =
+  const procurementNotional =
     defenseLine * (1 - SEED_UPKEEP_TARGET_SHARE) * (DEFENCE_CONTRACT_WINDOW_TURNS / TURNS_PER_YEAR);
-  const procurementNotional = Math.min(
-    budgetNotional,
-    pricePerLot * DEFENCE_CONTRACT_COUNTRY_LOT_CEILING
-  );
   const countryLots = Math.max(0, Math.floor(procurementNotional / pricePerLot));
   const supplierLots =
     countryLots > 0 ? Math.max(1, Math.floor(countryLots * DEFENCE_CONTRACT_SUPPLIER_SHARE)) : 0;

@@ -6,10 +6,13 @@ import {
 } from "./defenceContractLimits";
 
 describe("defence contract limits", () => {
-  it("caps the live US budget at three country lots and one lot per supplier", () => {
+  it("turns the live US budget into a 19-lot country tranche and 6-lot supplier cap (ticket 1108)", () => {
+    // A hard country ceiling of 3 lots collapses the 1/3 supplier share to 1 lot
+    // per company, which is what made DoD awards unusable. The window is budget-
+    // scaled; the supplier share is the anti-dumping cap.
     expect(defenceContractLotCaps(65_081_266_164.8, 372_025_176)).toMatchObject({
-      countryLots: 3,
-      supplierLots: 1,
+      countryLots: 19,
+      supplierLots: 6,
     });
   });
 
