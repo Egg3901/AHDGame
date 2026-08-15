@@ -19,7 +19,7 @@ describe("removeUnlistedCaps", () => {
         nyse: { marketCap: 18_000, high: 18_100, low: 17_900 },
         ftse: { marketCap: 2_000, high: 2_020, low: 1_980 },
       },
-      bySector: { defense: 16_000, finance: 4_000 },
+      bySector: { defense: 16_000, financial: 4_000 },
       createdAt: new Date(),
     };
 
@@ -35,6 +35,6 @@ describe("removeUnlistedCaps", () => {
     expect(repaired.globalLow).toBe(4_900);
     expect(repaired.exchangeCaps?.nyse).toEqual({ marketCap: 3_000, high: 3_100, low: 2_900 });
     expect(repaired.exchangeCaps?.ftse).toEqual({ marketCap: 2_000, high: 2_020, low: 1_980 });
-    expect(repaired.bySector).toEqual({ defense: 1_000, finance: 4_000 });
+    expect(repaired.bySector).toEqual({ defense: 1_000, financial: 4_000 });
   });
 });
