@@ -78,6 +78,7 @@ export async function POST(
       effectDirection: z.number().optional(),
       economic: z.number().optional(),
       social: z.number().optional(),
+      proposedRate: z.number().optional(),
     });
 
     const billSchema = z.object({

@@ -29,6 +29,10 @@ export interface StateBillPolicyProvision {
   effectDirection: number;
   economic?: number;
   social?: number;
+  /** Tax-slider laws: the slider-chosen rate. */
+  proposedRate?: number;
+  policyOptionNameSnapshot?: string;
+  currentPolicyOptionNameSnapshot?: string;
 }
 
 export interface StateBillSubsidyProvision {

@@ -73,6 +73,14 @@ describe("projectLawToLegislationType", () => {
     expect(doc.taxSlider).toMatchObject({ taxType: "salesTax", baselineRate: 31 });
     expect(doc.taxRateChange).toEqual({ scope: "federal", taxType: "salesTax" });
     expect(doc.budgetCategory).toBeUndefined();
+    expect(doc.allowedScope).toBe("national");
+  });
+
+  it("projects regional tax laws to pipeline allowedScope state", () => {
+    const federal = US_LAWS.find((l) => l.id === "us.tax.incomeTax")!;
+    expect(projectLawToLegislationType(federal).allowedScope).toBe("national");
+    const regional = { ...federal, allowedScope: "regional" as const };
+    expect(projectLawToLegislationType(regional).allowedScope).toBe("state");
   });
 
   it("never emits legacy flat cost fields or old-generation effect fields", () => {

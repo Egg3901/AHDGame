@@ -8,6 +8,7 @@ import { DD_LAND_LAWS } from "./laws/ddLandLaws";
 import { RU_LAWS } from "./laws/ruLaws";
 import { UK_LAWS } from "./laws/ukLaws";
 import { US_LAWS } from "./laws/usLaws";
+import { US_STATE_TAX_LAWS } from "./laws/usStateTaxLaws";
 import type { LawCountryId, PoliticalLaw } from "./types";
 
 /** Locked core catalogs (topology / RU↔DD cost parity). */
@@ -21,10 +22,11 @@ const CORE_CATALOGS: Record<LawCountryId, PoliticalLaw[]> = {
 /** Regional-only sidecars (not part of the 109-law core). */
 const REGIONAL_SIDECARS: Partial<Record<LawCountryId, PoliticalLaw[]>> = {
   DD: DD_LAND_LAWS,
+  US: US_STATE_TAX_LAWS,
 };
 
 const CATALOGS: Record<LawCountryId, PoliticalLaw[]> = {
-  US: CORE_CATALOGS.US,
+  US: [...CORE_CATALOGS.US, ...US_STATE_TAX_LAWS],
   UK: CORE_CATALOGS.UK,
   RU: CORE_CATALOGS.RU,
   DD: [...CORE_CATALOGS.DD, ...DD_LAND_LAWS],

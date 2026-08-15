@@ -13,6 +13,9 @@ import type { LegislationTypeOption } from "@/lib/legislature/dto/stateLegislatu
 import { PolicyEffectIndicators } from "@/components/legislation/PolicyEffectIndicators";
 import { LawProvisionComparison } from "@/components/bills/LawProvisionComparison";
 import { SubsidySectorSelect } from "@/components/bills/SubsidySectorSelect";
+import { TaxRateSliderControl } from "@/components/legislation/TaxRateSliderControl";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { type CountryId } from "@/lib/constants/countries";
 
 export interface EligibleNpp {
   _id: string;
@@ -49,6 +52,7 @@ export function QueueBillModal({
   const [legId, setLegId] = useState("");
   const [policyOptionId, setPolicyOptionId] = useState("");
   const [effectDirection, setEffectDirection] = useState<number>(0);
+  const [proposedRate, setProposedRate] = useState<number | undefined>();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actions, setActions] = useState<number | null>(null);
@@ -84,6 +88,7 @@ export function QueueBillModal({
         setLegId("");
         setPolicyOptionId("");
         setEffectDirection(0);
+        setProposedRate(undefined);
       })
       .catch(() => setLegislationTypes([]));
   }, [open, category, countryId, stateId]);
@@ -196,11 +201,21 @@ export function QueueBillModal({
         ...(p.type === "subsidy" ? { domesticOnly: p.domesticOnly } : {}),
       }));
     } else if (legId) {
+      const slider = selectedType?.taxSliderEstimate;
+      if (slider) {
+        const proposed = proposedRate ?? slider.currentRate;
+        if (Math.abs(proposed - slider.currentRate) < slider.step - 1e-9) {
+          setError(`Tax proposals must change the rate by at least ${slider.step}.`);
+          setSubmitting(false);
+          return;
+        }
+      }
       body.provisions = [
         {
           legislationTypeId: legId,
           ...(policyOptionId ? { policyOptionId } : {}),
           effectDirection,
+          ...(proposedRate !== undefined ? { proposedRate } : {}),
         },
       ];
       body.legislationTypeId = legId;
@@ -371,6 +386,13 @@ export function QueueBillModal({
               onChange={(e) => {
                 setLegId(e.target.value);
                 const t = legislationTypes.find((lt) => lt._id === e.target.value);
+                if (t?.taxSliderEstimate) {
+                  setProposedRate(t.taxSliderEstimate.currentRate);
+                  setPolicyOptionId(`rate:${t.taxSliderEstimate.currentRate}`);
+                  setEffectDirection(0);
+                  return;
+                }
+                setProposedRate(undefined);
                 const options = t?.policyOptions ?? [];
                 const currentIdx = currentPolicies[e.target.value];
                 const firstEligible = options.find((opt, idx) => {
@@ -395,7 +417,22 @@ export function QueueBillModal({
           </>
         )}
 
-        {!isSubsidyCat && legId && policyOptions.length > 0 && (
+        {!isSubsidyCat && legId && selectedType?.taxSliderEstimate && (
+          <div className="mb-3">
+            <TaxRateSliderControl
+              slider={selectedType.taxSliderEstimate}
+              proposedRate={proposedRate ?? selectedType.taxSliderEstimate.currentRate}
+              currencyCode={COUNTRY_CURRENCY_MAP[countryId.toUpperCase() as CountryId]}
+              onChange={(rate) => {
+                setProposedRate(rate);
+                setPolicyOptionId(`rate:${rate}`);
+                setEffectDirection(rate > selectedType.taxSliderEstimate!.currentRate ? 1 : -1);
+              }}
+            />
+          </div>
+        )}
+
+        {!isSubsidyCat && legId && !selectedType?.taxSliderEstimate && policyOptions.length > 0 && (
           <>
             <label className="block text-xs text-muted mb-1">Policy option</label>
             <select

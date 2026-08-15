@@ -31,6 +31,7 @@ import type { LegislatureCommandResult } from "@/lib/legislature/commands/types"
 import { getGameState } from "@/lib/gameState";
 import { getEraContext } from "@/lib/era/context";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
+import { stampTaxSliderProvisions } from "@/lib/politicalLegislation/taxSlider";
 
 const VOTING_DURATION_HOURS = 24;
 
@@ -184,11 +185,17 @@ export async function proposeStateBill(
           effectDirection?: number;
           economic?: number;
           social?: number;
+          proposedRate?: number;
         };
         const policyOptionId =
           typeof policyProvision.policyOptionId === "string" &&
           policyProvision.policyOptionId.trim()
             ? policyProvision.policyOptionId.trim()
+            : undefined;
+        const proposedRate =
+          typeof policyProvision.proposedRate === "number" &&
+          Number.isFinite(policyProvision.proposedRate)
+            ? policyProvision.proposedRate
             : undefined;
         return {
           legislationTypeId: String(policyProvision.legislationTypeId ?? "").trim(),
@@ -207,9 +214,19 @@ export async function proposeStateBill(
                 social: Math.max(-3, Math.min(3, Math.round(Number(policyProvision.social)))),
               }
             : {}),
+          ...(proposedRate !== undefined ? { proposedRate } : {}),
         };
       })
     : undefined;
+
+  if (sanitizedProvisions && sanitizedProvisions.length > 0) {
+    const stamped = await stampTaxSliderProvisions(db, sanitizedProvisions, countryId, stateId);
+    if (!stamped.ok) {
+      return { status: 400, body: { error: stamped.error } };
+    }
+    sanitizedProvisions.length = 0;
+    sanitizedProvisions.push(...stamped.provisions);
+  }
 
   const policyProvisionsForCheck = (sanitizedProvisions ?? [])
     .filter(

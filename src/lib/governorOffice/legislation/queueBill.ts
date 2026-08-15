@@ -22,6 +22,7 @@ import {
 } from "@shared/constants/legislation";
 import type { BillCategory } from "@shared/constants/legislation";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { stampTaxSliderProvisions } from "@/lib/politicalLegislation/taxSlider";
 
 export interface QueueBillInput {
   countryId: CountryId;
@@ -105,10 +106,19 @@ export async function queueBill(
     return { status: 400, body: { error: "NPP already has an active bill in flight." } };
   }
 
+  let stampedProvisions = provisions;
+  if (provisions && provisions.length > 0) {
+    const stamped = await stampTaxSliderProvisions(db, provisions, countryId, stateId);
+    if (!stamped.ok) {
+      return { status: 400, body: { error: stamped.error } };
+    }
+    stampedProvisions = stamped.provisions;
+  }
+
   // Policy-provision guards: refuse to queue a bill that proposes the current
   // policy level or duplicates a provision already in flight in this state.
   // Mirrors proposeStateBill so direct-propose and queued-via-NPP have parity.
-  const policyProvisionsForCheck = (provisions ?? [])
+  const policyProvisionsForCheck = (stampedProvisions ?? [])
     .filter(
       (p): p is { legislationTypeId: string; policyOptionId?: string; effectDirection: number } =>
         !("type" in p) || (p.type !== "subsidy" && p.type !== "end_subsidy")
@@ -131,10 +141,10 @@ export async function queueBill(
   }
 
   // Cost calculation mirrors proposeStateBill.
-  const policyCount = (provisions ?? []).filter(
+  const policyCount = (stampedProvisions ?? []).filter(
     (p) => !("type" in p) || (p.type !== "subsidy" && p.type !== "end_subsidy")
   ).length;
-  const subsidyCount = (provisions ?? []).filter(
+  const subsidyCount = (stampedProvisions ?? []).filter(
     (p) => "type" in p && (p.type === "subsidy" || p.type === "end_subsidy")
   ).length;
 
@@ -193,7 +203,7 @@ export async function queueBill(
     ...(category ? { category } : {}),
     ...(legislationTypeId ? { legislationTypeId } : {}),
     ...(effectDirection !== undefined ? { effectDirection } : {}),
-    ...(provisions ? { provisions } : {}),
+    ...(stampedProvisions ? { provisions: stampedProvisions } : {}),
     proposalActionCost: actionCost,
     proposalNpiCost: npiCost,
     queuedAtTurn: currentTurn,
