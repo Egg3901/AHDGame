@@ -37,7 +37,7 @@ const baseFinancials: Financials = {
 
 describe("scaleToPeriod", () => {
   it("divides by 24 for hourly", () => {
-    expect(scaleToPeriod(2400, "hourly")).toBe(100);
+    expect(scaleToPeriod(2400, "turn")).toBe(100);
   });
   it("multiplies by 2 for annual", () => {
     expect(scaleToPeriod(2400, "annual")).toBe(4800);
@@ -97,12 +97,12 @@ describe("valuation", () => {
 
 describe("buildAllocation", () => {
   it("scales revenue and net income to the period", () => {
-    const a = buildAllocation(baseFinancials, "hourly");
+    const a = buildAllocation(baseFinancials, "turn");
     expect(a.revenue).toBe(100);
     expect(a.netIncome).toBe(50);
   });
   it("emits one segment per non-zero cost, as a percent of gross revenue", () => {
-    const a = buildAllocation(baseFinancials, "hourly");
+    const a = buildAllocation(baseFinancials, "turn");
     const byKey = Object.fromEntries(a.segments.map((s) => [s.key, s]));
     expect(byKey.maintenance.pct).toBe(20); // 480/2400
     expect(byKey.growth.pct).toBe(10); // 240/2400
@@ -113,11 +113,11 @@ describe("buildAllocation", () => {
   });
   it("nets interest in/out and omits when non-positive", () => {
     const withCoupon = { ...baseFinancials, bondCouponIncome: 1000 };
-    const a = buildAllocation(withCoupon, "hourly");
+    const a = buildAllocation(withCoupon, "turn");
     expect(a.segments.find((s) => s.key === "interest")).toBeUndefined();
   });
   it("degrades gracefully on zero revenue", () => {
-    const a = buildAllocation({ ...baseFinancials, totalRevenue: 0 }, "hourly");
+    const a = buildAllocation({ ...baseFinancials, totalRevenue: 0 }, "turn");
     expect(a.revenue).toBe(0);
     a.segments.forEach((s) => expect(s.pct).toBe(0));
   });

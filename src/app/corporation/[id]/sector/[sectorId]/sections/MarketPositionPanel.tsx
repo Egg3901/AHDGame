@@ -59,6 +59,8 @@ export default function MarketPositionPanel({
   const fmtMarketChip = (v: number) => formatAmountChip(v, sectorCurrency);
   const fmtCorpSectorMoney = (v: number) =>
     formatAmount(toInternalFrom(v, corpCurrency), corpCurrency);
+  // Market figures are stored per financial day; show them per turn (÷24).
+  const perTurn = (v: number) => Math.round(v / 24);
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
@@ -88,7 +90,7 @@ export default function MarketPositionPanel({
               </span>
             </Tooltip>
             <span className="font-medium text-foreground">
-              {fmtMarketChip(market.totalMarket)}/day
+              {fmtMarketChip(perTurn(market.totalMarket))}/turn
             </span>
           </div>
           {/* This corporation */}
@@ -153,13 +155,13 @@ export default function MarketPositionPanel({
               </span>
             </Tooltip>
             <span className="tabular-nums font-medium text-foreground">
-              {fmtMarketChip(market.totalMarket)}/day
+              {fmtMarketChip(perTurn(market.totalMarket))}/turn
             </span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted">Unowned revenue</span>
             <span className="tabular-nums font-medium text-foreground">
-              {fmtMarket(market.unownedRevenue)}/day
+              {fmtMarket(perTurn(market.unownedRevenue))}/turn
             </span>
           </div>
         </div>
@@ -171,8 +173,8 @@ export default function MarketPositionPanel({
               Your Revenue
             </span>
             <span className="text-sm font-bold tabular-nums text-success">
-              {financials ? fmtCorpSectorMoney(financials.revenue) : "—"}
-              <span className="text-[10px] font-normal text-muted">/day</span>
+              {financials ? fmtCorpSectorMoney(perTurn(financials.revenue)) : "—"}
+              <span className="text-[10px] font-normal text-muted">/turn</span>
             </span>
           </div>
           <div>
@@ -196,8 +198,8 @@ export default function MarketPositionPanel({
               </span>
             </Tooltip>
             <span className="text-sm font-bold tabular-nums text-foreground">
-              {fmtMarket(market.unownedRevenue)}
-              <span className="text-[10px] font-normal text-muted">/day</span>
+              {fmtMarket(perTurn(market.unownedRevenue))}
+              <span className="text-[10px] font-normal text-muted">/turn</span>
             </span>
           </div>
         </div>

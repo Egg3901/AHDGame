@@ -860,10 +860,10 @@ export default function ExpandMarketModal({
                           </p>
                           <p className="text-sm font-bold text-foreground">
                             {activeSuggestion.unownedRevenue > 0
-                              ? formatMarketAmount(activeSuggestion.unownedRevenue)
+                              ? formatMarketAmount(Math.round(activeSuggestion.unownedRevenue / 24))
                               : "—"}
                           </p>
-                          <p className="text-[10px] text-muted">/day revenue</p>
+                          <p className="text-[10px] text-muted">/turn revenue</p>
                         </div>
                         <div className="rounded-lg bg-background/60 px-3 py-2 text-center">
                           <p
@@ -905,10 +905,10 @@ export default function ExpandMarketModal({
                             className={`text-sm font-bold ${activeSuggestion.unownedRevenue > 0 ? "text-success" : "text-muted"}`}
                           >
                             {activeSuggestion.unownedRevenue > 0
-                              ? formatMarketAmount(activeSuggestion.estimatedRevenueCapture)
+                              ? formatMarketAmount(Math.round(activeSuggestion.estimatedRevenueCapture / 24))
                               : "—"}
                           </p>
-                          <p className="text-[10px] text-muted">/day (pre-margin)</p>
+                          <p className="text-[10px] text-muted">/turn (pre-margin)</p>
                         </div>
                       </div>
 
@@ -923,7 +923,7 @@ export default function ExpandMarketModal({
                               Total competitor revenue
                             </span>
                             <span className="text-sm font-bold text-foreground">
-                              {formatMarketAmount(activeSuggestion.totalCompetitorRevenue)}/day
+                              {formatMarketAmount(Math.round(activeSuggestion.totalCompetitorRevenue / 24))}/turn
                             </span>
                           </div>
                         )}
@@ -931,7 +931,7 @@ export default function ExpandMarketModal({
                       {/* Revenue vs profit note */}
                       {!plantsMode && activeSuggestion.unownedRevenue > 0 && (
                         <p className="text-[11px] text-muted leading-snug">
-                          Capture estimate is new daily revenue before your effective margin is
+                          Capture estimate is new per-turn revenue before your effective margin is
                           applied. Actual profit depends on your margins in this state.
                         </p>
                       )}
@@ -968,7 +968,7 @@ export default function ExpandMarketModal({
                                   </Link>
                                 </div>
                                 <span className="text-xs text-muted shrink-0">
-                                  {formatMarketAmount(c.revenue)}/day
+                                  {formatMarketAmount(Math.round(c.revenue / 24))}/turn
                                 </span>
                               </div>
                             ))}
