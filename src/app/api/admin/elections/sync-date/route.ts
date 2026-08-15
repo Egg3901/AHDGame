@@ -15,7 +15,8 @@
  *   - State Senate: active now, ends turn 240 (LARP year 2024). Standard 48h general.
  *   - President: active now, ends turn 240 (LARP year 2024). Full primary + 24h general.
  *   - UK Commons: ACTIVE — starts now, cycle 1 ends turn 219 (July 2024 general election)
- *   - UK Regional Council: ACTIVE — starts now, cycle 1 ends turn 219 (synchronized with Commons)
+ *   - UK Regional Council: ACTIVE transition cycle 0 synchronized with Commons;
+ *     five annual cohorts begin after it resolves
  *   - JP Shugiin: ACTIVE — starts now, cycle 1 ends turn 240 (LARP year 2024)
  *   - JP Sangiin: ACTIVE — Class 1 ends turn 123 (Jul 2022), Class 2 ends turn 267 (Jul 2025)
  *   - JP Governor: ACTIVE — starts now, cycle 1 ends turn 240 (LARP year 2024)
@@ -375,7 +376,10 @@ export async function POST() {
         });
       }
 
-      // UK Regional Council — cycle 1 bootstrap, synchronized with Commons.
+      // UK Regional Council transition/founding cycle. It resolves with the
+      // bootstrap Commons race, then the perpetual spawner starts five annual
+      // cohorts at cycle 1. Keeping this synchronized transition avoids making
+      // a newly synced world wait years for some councils to become playable.
       const rcDur = DEFAULT_DURATIONS.regionalCouncil;
       const rcEndTimeH = anchors.ukCommons; // synchronized with Commons
       const rcPrimaryEndH = rcEndTimeH - rcDur.generalDurationHours;
@@ -385,7 +389,7 @@ export async function POST() {
           countryId: "UK",
           electionType: "regionalCouncil",
           state: regionId,
-          cycle: 1,
+          cycle: 0,
           status: "active",
           totalSeats: UK_REGIONAL_COUNCIL_SEATS[regionId] ?? 1,
           startTime: now,
@@ -841,7 +845,7 @@ export async function POST() {
         `Governor: ${counts.governor} [all states→2024, turn 240], ` +
         `State Senate: ${counts.stateSenate} [all states→2024, turn 240], ` +
         `UK Commons: ${counts.commons} [cycle 1 active now, ends 2024 (turn 219); cycle 2+ = 240 turns (5yr)], ` +
-        `UK Regional Council: ${counts.regionalCouncil} [cycle 1 active now, ends 2024 (turn 219)], ` +
+        `UK Regional Council: ${counts.regionalCouncil} [transition cycle 0 active now; annual cohorts follow], ` +
         `JP Shugiin: ${counts.shugiin} [cycle 1→2024 (turn 240)], ` +
         `JP Sangiin: ${counts.sangiin} [Class 1→2022 (turn 144); Class 2→2025 (turn 288)], ` +
         `JP Governor: ${counts.jpGovernor} [all regions→2024 (turn 240)], ` +

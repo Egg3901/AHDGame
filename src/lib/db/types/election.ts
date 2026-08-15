@@ -16,7 +16,7 @@ export type ElectionType = "senate" | "house" | "stateSenate" | "governor" | "pr
  * "primeMinister" — PM selection (coalition/confidence vote)
  * "holyrood" — Scottish Parliament (future)
  * "senedd"   — Welsh Parliament (future)
- * "regionalCouncil" — UK regional council elections (synchronized with Commons)
+ * "regionalCouncil" — UK regional council elections (five annual cohorts)
  */
 export type UKElectionType =
   "commons" | "primeMinister" | "holyrood" | "senedd" | "regionalCouncil";

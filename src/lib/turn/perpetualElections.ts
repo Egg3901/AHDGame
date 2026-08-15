@@ -58,6 +58,10 @@ import { getSeatIdFromElection } from "@/lib/seats";
 import type { GameTimeContext } from "@/lib/time/gameTime";
 import { hasElectionStarted, isElectionEnded } from "@/lib/elections/phases";
 import { generateLandeslistenForCycle } from "@/lib/elections/germanyLandesliste";
+import {
+  getUKRegionalCouncilCycle1EndTurn,
+  getUKRegionalCouncilElectionYear,
+} from "@/lib/elections/ukRegionalCouncilStagger";
 
 // Re-export so existing consumers (sync-date, snapElection, admin routes,
 // etc.) that import DEFAULT_DURATIONS from this module keep working.
@@ -1048,11 +1052,10 @@ export async function ensureUKElections(now: Date): Promise<void> {
 /**
  * Ensure every UK region has an active or upcoming regionalCouncil election.
  *
- * Synchronized with the Commons cycle — when a live Commons race exists for
- * the region, the regional council mirrors its timestamps exactly so both
- * races resolve together. Otherwise falls back to canonical LARP scheduling
- * via {@link pickNextCanonicalCycle} with the same 24h+24h gate as Commons.
- * Regional council has no snap mechanic, so no priorEndTurn is passed.
+ * Councils are split across five annual cohorts, each retaining a five-year
+ * term. The transition/founding cycle 0 is synchronized; every later cycle
+ * uses the region's cohort anchor. Cohort 5 lands with the next Commons
+ * election while cohorts 1-4 form the annual midterms.
  */
 export async function ensureUKRegionalCouncilElections(now: Date): Promise<void> {
   const db = await getDb();
@@ -1099,14 +1102,6 @@ export async function ensureUKRegionalCouncilElections(now: Date): Promise<void>
   const dur = DEFAULT_DURATIONS.regionalCouncil.durationHours;
   const genDur = getGeneralWindow("regionalCouncil");
 
-  // Regional Council elections synchronize with Commons — match the existing
-  // Commons election's timing for each region so they end on the same schedule.
-  const liveCommonsElections = await db
-    .collection<Election>("elections")
-    .find({ electionType: "commons", status: { $in: ["active", "upcoming"] } })
-    .toArray();
-  const commonsByRegion = new Map(liveCommonsElections.map((e) => [e.state, e]));
-
   const toInsert: Omit<Election, "_id">[] = [];
 
   for (const regionId of regionIds) {
@@ -1115,59 +1110,18 @@ export async function ensureUKRegionalCouncilElections(now: Date): Promise<void>
     const prev = lastCompleted(regionId);
     if (justResolvedInSameTurn(prev, now, currentTurn)) continue;
 
-    // Try to sync with the existing Commons election for this region
-    const commonsElection = commonsByRegion.get(regionId);
-    if (commonsElection?.startTime && commonsElection?.primaryEndTime && commonsElection?.endTime) {
-      // Mirror the Commons election's timestamps exactly. During a pre-iteration
-      // founding phase the mirrored Commons race is the cycle-0 founding race, so
-      // the council must also be cycle 0 (else it spawns a stray cycle-1 that
-      // never founds and blocks completion). Normal play: prev+1 as before.
-      const councilCycle = ctx.preIterationActive ? 0 : (prev?.cycle ?? 0) + 1;
-      toInsert.push({
-        countryId: "UK",
-        electionType: "regionalCouncil",
-        state: regionId,
-        seatId: getSeatIdFromElection({
-          countryId: "UK",
-          electionType: "regionalCouncil",
-          state: regionId,
-        }),
-        cycle: councilCycle,
-        electionYear: electionToLarpYear(
-          "regionalCouncil",
-          councilCycle,
-          undefined,
-          undefined,
-          ctx
-        ),
-        status: commonsElection.status as "active" | "upcoming",
-        totalSeats: prev?.totalSeats ?? UK_REGIONAL_COUNCIL_SEATS[regionId] ?? 1,
-        startTime: commonsElection.startTime,
-        primaryEndTime: commonsElection.primaryEndTime,
-        endTime: commonsElection.endTime,
-        startTurn: commonsElection.startTurn,
-        primaryEndTurn: commonsElection.primaryEndTurn,
-        endTurn: commonsElection.endTurn,
-        durationHours: dur,
-        primaryDurationHours: dur - genDur,
-        createdAt: now,
-        updatedAt: now,
-      });
-      continue;
-    }
-
-    // No Commons race to mirror — spawn independently on canonical LARP.
+    // Spawn independently on the region's annual-cohort anchor.
     const spawn = pickNextCanonicalCycle({
       electionType: "regionalCouncil",
       prevCycle: prev?.cycle ?? 0,
       currentTurn,
       ctx,
+      customCycle1EndTurn: getUKRegionalCouncilCycle1EndTurn(regionId, ctx),
     });
     if (!spawn) continue;
 
-    // Open the primary immediately (same rationale as Commons above) when there
-    // is no live Commons race to mirror. The mirror path inherits the fix from
-    // the Commons election it copies.
+    // Open the primary immediately. The general close remains on the cohort's
+    // canonical annual slot while filing uses the otherwise idle interval.
     const startTurn = currentTurn;
     const startTime = now;
     const primaryEndTime = turnToWallClock(spawn.primaryEndTurn, now, currentTurn);
@@ -1184,7 +1138,7 @@ export async function ensureUKRegionalCouncilElections(now: Date): Promise<void>
         state: regionId,
       }),
       cycle: spawn.cycle,
-      electionYear: electionToLarpYear("regionalCouncil", spawn.cycle, undefined, undefined, ctx),
+      electionYear: getUKRegionalCouncilElectionYear(regionId, spawn.cycle, ctx),
       status,
       totalSeats: prev?.totalSeats ?? UK_REGIONAL_COUNCIL_SEATS[regionId] ?? 1,
       startTime,

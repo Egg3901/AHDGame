@@ -124,6 +124,7 @@ export function GeneralPhaseView({
     medianVoter: election.medianVoter,
     presidentialCoattailPctByParty: election.presidentialCoattailPctByParty,
     gubernatorialCoattailPctByParty: election.gubernatorialCoattailPctByParty,
+    midtermOppositionBoostPctByParty: election.midtermOppositionBoostPctByParty,
     incumbentPartyId: election.incumbentPartyId,
     incumbentApproval: election.incumbentApproval,
     legislativeIncumbentPartyId: election.legislativeIncumbentPartyId,

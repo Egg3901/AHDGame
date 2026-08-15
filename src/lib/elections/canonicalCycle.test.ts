@@ -144,6 +144,36 @@ describe("canonicalTurnsForCycle", () => {
     });
   });
 
+  describe("UK regional council cohorts", () => {
+    it("uses a region-specific cycle-1 anchor and retains a five-year term", () => {
+      expect(
+        canonicalTurnsForCycle({
+          electionType: "regionalCouncil",
+          cycle: 1,
+          customCycle1EndTurn: 315,
+        })?.endTurn
+      ).toBe(315);
+      expect(
+        canonicalTurnsForCycle({
+          electionType: "regionalCouncil",
+          cycle: 2,
+          customCycle1EndTurn: 315,
+        })?.endTurn
+      ).toBe(555);
+    });
+
+    it("does not let a prior synchronized transition override the fixed cohort", () => {
+      expect(
+        canonicalTurnsForCycle({
+          electionType: "regionalCouncil",
+          cycle: 1,
+          customCycle1EndTurn: 315,
+          priorEndTurn: 267,
+        })?.endTurn
+      ).toBe(315);
+    });
+  });
+
   describe("cn npcDelegate + peoplesCongress", () => {
     it("cycle 1 = end of 2023 = turn 240 (14th NPC) under 2019-default", () => {
       expect(canonicalTurnsForCycle({ electionType: "npcDelegate", cycle: 1 })?.endTurn).toBe(240);
