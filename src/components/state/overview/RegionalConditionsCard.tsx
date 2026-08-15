@@ -1,6 +1,8 @@
 "use client";
 
+import { useId, useState } from "react";
 import Link from "next/link";
+import { ChevronDown } from "lucide-react";
 import type { CountryId } from "@/lib/constants/countries";
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { prioritizeModifiers } from "@/lib/utils/approvalModifiers";
@@ -197,6 +199,8 @@ export function RegionalConditionsCard({
   approval?: number | null;
   baseApproval?: number | null;
 }) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
   const netApproval = modifiers.reduce((sum, m) => sum + m.effect, 0);
   const netMargin = computeRegionalConditionMargin(modifiers);
   const href = regionApprovalUrl(countryId, stateId);
@@ -207,12 +211,40 @@ export function RegionalConditionsCard({
 
   return (
     <section className="rounded-xl border border-card-border bg-card p-4 shadow-panel">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted">Regional Conditions</div>
-          <p className="mt-0.5 max-w-prose text-xs text-muted">
-            The political weather — forces lifting or dragging government approval.
-          </p>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="flex w-full flex-wrap items-start justify-between gap-3 rounded-md text-left transition-colors hover:opacity-90 focus:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
+      >
+        <div className="flex items-start gap-2">
+          <ChevronDown
+            className={`mt-0.5 h-3.5 w-3.5 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
+            aria-hidden
+          />
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted">
+              Regional Conditions
+            </div>
+            {open ? (
+              <p className="mt-0.5 max-w-prose text-xs text-muted">
+                The political weather: forces lifting or dragging government approval.
+              </p>
+            ) : (
+              hasForces && (
+                <p className="mt-0.5 text-xs">
+                  <span className="font-semibold text-success">
+                    Tailwinds {signed(forces.boostTotal)}
+                  </span>
+                  <span className="text-muted"> / </span>
+                  <span className="font-semibold text-error">
+                    Headwinds {signed(forces.dragTotal)}
+                  </span>
+                </p>
+              )
+            )}
+          </div>
         </div>
         {hasForces && (
           <div className="flex gap-4 text-right text-xs">
@@ -232,57 +264,62 @@ export function RegionalConditionsCard({
             </div>
           </div>
         )}
-      </div>
+      </button>
 
-      {showScore && (
-        <div className="mt-4">
-          <ApprovalMeter approval={approval} baseApproval={baseApproval} />
-        </div>
-      )}
-
-      {!showScore && !hasForces && (
-        <p className="mt-3 text-xs text-muted">
-          Named metric states that adjust government approval and in-state sector profit margins.
-        </p>
-      )}
-
-      {hasForces ? (
-        <div className="mt-4 space-y-4">
-          <ForceBalanceBar boostTotal={forces.boostTotal} dragTotal={forces.dragTotal} />
-
-          <div>
-            <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">
-              Top drivers
-              {remainder.length > 0 && (
-                <span className="normal-case tracking-normal text-muted">
-                  {" "}
-                  · showing {headline.length} of {modifiers.length}
-                </span>
-              )}
+      {open && (
+        <div id={panelId} role="region">
+          {showScore && (
+            <div className="mt-4">
+              <ApprovalMeter approval={approval} baseApproval={baseApproval} />
             </div>
-            <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-              {headline.map((m) => (
-                <DriverRow key={m.id} modifier={m} />
-              ))}
-            </ul>
+          )}
+
+          {!showScore && !hasForces && (
+            <p className="mt-3 text-xs text-muted">
+              Named metric states that adjust government approval and in-state sector profit
+              margins.
+            </p>
+          )}
+
+          {hasForces ? (
+            <div className="mt-4 space-y-4">
+              <ForceBalanceBar boostTotal={forces.boostTotal} dragTotal={forces.dragTotal} />
+
+              <div>
+                <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">
+                  Top drivers
+                  {remainder.length > 0 && (
+                    <span className="normal-case tracking-normal text-muted">
+                      {" "}
+                      · showing {headline.length} of {modifiers.length}
+                    </span>
+                  )}
+                </div>
+                <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {headline.map((m) => (
+                    <DriverRow key={m.id} modifier={m} />
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : (
+            showScore && (
+              <p className="mt-3 text-sm italic text-muted">No active regional conditions.</p>
+            )
+          )}
+
+          <div className="mt-4 border-t border-card-border/60 pt-3">
+            <Link
+              href={href}
+              className="text-xs font-medium text-primary hover:underline underline-offset-2"
+            >
+              {remainder.length > 0
+                ? `View all ${modifiers.length} conditions & full breakdown →`
+                : "View full approval breakdown →"}
+            </Link>
           </div>
         </div>
-      ) : (
-        showScore && (
-          <p className="mt-3 text-sm italic text-muted">No active regional conditions.</p>
-        )
       )}
-
-      <div className="mt-4 border-t border-card-border/60 pt-3">
-        <Link
-          href={href}
-          className="text-xs font-medium text-primary hover:underline underline-offset-2"
-        >
-          {remainder.length > 0
-            ? `View all ${modifiers.length} conditions & full breakdown →`
-            : "View full approval breakdown →"}
-        </Link>
-      </div>
     </section>
   );
 }
