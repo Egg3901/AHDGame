@@ -250,8 +250,8 @@ function BulkGroupCard({
           <div className="mt-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs">
             <p className="text-foreground">
               Set growth to {preview.target}% across {preview.matchedCount} holdings. Projected cost
-              ~{fmtMoney(Math.round(preview.projected / 24))}/turn (currently ~{fmtMoney(Math.round(preview.current / 24))}/turn,{" "}
-              {preview.delta >= 0 ? "+" : ""}
+              ~{fmtMoney(Math.round(preview.projected / 24))}/turn (currently ~
+              {fmtMoney(Math.round(preview.current / 24))}/turn, {preview.delta >= 0 ? "+" : ""}
               {fmtMoney(preview.delta)}). Projected once ramped.
             </p>
             <div className="mt-2 flex gap-2">
@@ -443,8 +443,9 @@ function SectorGrowthControl({
       {preview && (
         <div className="mt-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs">
           <p className="text-foreground">
-            Set growth to {preview.target}%. Projected cost ~{fmtMoney(Math.round(preview.projected / 24))}/turn
-            (currently ~{fmtMoney(Math.round(preview.current / 24))}/turn, {preview.delta >= 0 ? "+" : ""}
+            Set growth to {preview.target}%. Projected cost ~
+            {fmtMoney(Math.round(preview.projected / 24))}/turn (currently ~
+            {fmtMoney(Math.round(preview.current / 24))}/turn, {preview.delta >= 0 ? "+" : ""}
             {fmtMoney(preview.delta)}). Projected once ramped.
           </p>
           <div className="mt-2 flex gap-2">

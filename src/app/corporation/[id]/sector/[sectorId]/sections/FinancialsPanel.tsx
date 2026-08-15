@@ -305,8 +305,8 @@ export default function FinancialsPanel({
                 <span className="text-[10px] text-muted">/turn</span>
               </div>
               <p className="mt-1 text-[10px] leading-snug text-muted">
-                You pay this every turn. Over one game year ({GROWTH_RATE_TURNS_PER_YEAR} turns) that
-                is {GROWTH_COST_MULTIPLIER}× the revenue the growth adds.
+                You pay this every turn. Over one game year ({GROWTH_RATE_TURNS_PER_YEAR} turns)
+                that is {GROWTH_COST_MULTIPLIER}× the revenue the growth adds.
               </p>
             </div>
           </div>
