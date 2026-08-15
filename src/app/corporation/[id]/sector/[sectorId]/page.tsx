@@ -719,6 +719,9 @@ export default function SectorDetailPage() {
                   <PlantPanel
                     plants={plants}
                     sectorType={sector.sectorType}
+                    unionId={sector.unionId}
+                    unionName={sector.unionName}
+                    averageWageLevel={sector.wageLevel ?? 1}
                     isCeo={isCeo}
                     busy={capacityBusy}
                     message={capacityMessage}
