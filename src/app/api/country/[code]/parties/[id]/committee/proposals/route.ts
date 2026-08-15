@@ -425,6 +425,8 @@ export async function POST(request: Request, { params }: RouteParams) {
         inRole = !!party.chairId && party.chairId.equals(targetOid);
       } else if (body.role === "viceChair") {
         inRole = !!party.viceChairId && party.viceChairId.equals(targetOid);
+      } else if (body.role === "treasurer") {
+        inRole = !!party.treasurerId && party.treasurerId.equals(targetOid);
       } else if (body.role === "campaigner") {
         inRole = (party.campaignerIds ?? []).some((id) => id.equals(targetOid));
       } else {
