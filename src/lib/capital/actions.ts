@@ -54,7 +54,7 @@ export const CAPITAL_ACTIONS: Record<CapitalActionType, CapitalActionConfig> = {
     actionCost: 5,
     fundCost: 10000,
     minRelationship: null,
-    effectBlurb: "+3 favorability - +2 relationship",
+    effectBlurb: "+3 favorability - +2 relationship (more with high charisma)",
   },
   reduce_favorability: {
     type: "reduce_favorability",
