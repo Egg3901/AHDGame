@@ -135,7 +135,7 @@ export default function SectorsTab({
     return () => window.clearTimeout(openTimer);
   }, [expandOnMount, isCeo, onExpandDeepLinkConsumed]);
 
-  const [localPeriodView, setLocalPeriodView] = useState<MoneyPeriod>("daily");
+  const [localPeriodView, setLocalPeriodView] = useState<MoneyPeriod>("turn");
   const timeScale = periodViewProp ?? localPeriodView;
   const setTimeScale = onPeriodViewChange ?? setLocalPeriodView;
 

@@ -266,7 +266,7 @@ export default function MarketMoneyPanel({
         <dl className="space-y-1.5 text-body-sm">
           <DetailRow
             label="Revenue per hour"
-            value={money(pnl.revenueAnchor * MONEY_PERIOD_FACTOR.hourly)}
+            value={money(pnl.revenueAnchor * MONEY_PERIOD_FACTOR.turn)}
           />
           <DetailRow
             label="Revenue per game year"

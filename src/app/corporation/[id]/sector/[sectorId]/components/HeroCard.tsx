@@ -155,8 +155,8 @@ export default function HeroCard({
           <span className="text-sm font-bold tabular-nums text-success">
             {financials ? (
               <>
-                {fmtMoney(financials.realizedRevenue ?? financials.revenue)}
-                <span className="text-[10px] font-normal text-muted">/day</span>
+                {fmtMoney(Math.round((financials.realizedRevenue ?? financials.revenue) / 24))}
+                <span className="text-[10px] font-normal text-muted">/turn</span>
               </>
             ) : (
               hiddenMarker
@@ -172,8 +172,8 @@ export default function HeroCard({
           >
             {financials ? (
               <>
-                {fmtMoney(financials.profit)}
-                <span className="text-[10px] font-normal text-muted">/day</span>
+                {fmtMoney(Math.round(financials.profit / 24))}
+                <span className="text-[10px] font-normal text-muted">/turn</span>
               </>
             ) : (
               hiddenMarker

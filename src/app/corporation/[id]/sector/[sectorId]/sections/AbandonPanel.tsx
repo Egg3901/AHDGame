@@ -58,7 +58,7 @@ export default function AbandonPanel({
         </p>
         <p className="text-xs text-muted">
           {financials
-            ? `${fmtMoney(financials.revenue)}/day in revenue will return to the unowned pool.`
+            ? `${fmtMoney(Math.round(financials.revenue / 24))}/turn in revenue will return to the unowned pool.`
             : "Are you sure? This cannot be undone."}
         </p>
         <div className="flex items-center gap-3">

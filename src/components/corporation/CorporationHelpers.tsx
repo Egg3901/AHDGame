@@ -30,15 +30,17 @@ export function getTypeColor(type: CorporationType): string {
 export function FinRowTip({
   label,
   value,
-  perHour,
+  daily,
   valueClass = "text-foreground",
   bold = false,
   indent = false,
   tooltip,
 }: {
   label: string;
+  /** Primary figure, shown per turn. */
   value: string;
-  perHour?: string;
+  /** Secondary figure, the same amount expressed per financial day. */
+  daily?: string;
   valueClass?: string;
   bold?: boolean;
   indent?: boolean;
@@ -58,16 +60,15 @@ export function FinRowTip({
       >
         <p className="font-semibold text-foreground mb-1">{label}</p>
         <p className="text-muted">{tooltip}</p>
-        {perHour && (
+        {daily && (
           <p className="text-muted mt-1 border-t border-card-border pt-1">
-            Per hour: <span className="font-medium text-foreground">{perHour}</span>
+            Per day: <span className="font-medium text-foreground">{daily}</span>
           </p>
         )}
       </InfoTooltip>
       <span className={`text-sm tabular-nums ${bold ? "font-bold" : "font-medium"} ${valueClass}`}>
         {value}
-        {perHour && !bold && <span className="text-xs font-normal text-muted ml-0.5">/day</span>}
-        {perHour && bold && <span className="text-xs font-normal text-muted ml-0.5">/day</span>}
+        {daily && <span className="text-xs font-normal text-muted ml-0.5">/turn</span>}
       </span>
     </div>
   );
