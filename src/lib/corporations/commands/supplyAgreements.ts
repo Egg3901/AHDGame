@@ -82,8 +82,9 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
     // Only under plants: in earlier modes capacity is not the production base,
     // so there is nothing meaningful to validate against.
     //
-    // The capacity figure is SCALED through `plantsSupplyScaledUnits`, the same
-    // shared helper the clearing offer and the world supply ledger apply, and
+    // The capacity figure is SCALED through `plantsCapacityScaledUnits`, the
+    // nameplate-input variant of the same shared helper the clearing offer and
+    // the world supply ledger apply, and
     // therefore the same quantity the shortfall penalty in
     // `settleSupplyAgreements` measures against. Validating RAW capacity was a
     // trap: a sector on a low production policy has an output multiplier well

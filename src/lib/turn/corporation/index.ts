@@ -444,7 +444,6 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           const scaled = plantsSupplyScaledUnits({
             producedUnits: sector.producedUnits,
             isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
-            productionPolicyLevel: sector.productionPolicyLevel,
             // Mirrors the ledger (computeRawSupplyDemand): embargo haircut plus
             // the planned-economy media derate. Offer and ledger must agree.
             embargoSupplyFactor:
@@ -532,7 +531,6 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
               ? plantsSupplyScaledUnits({
                   producedUnits: sector.producedUnits,
                   isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
-                  productionPolicyLevel: sector.productionPolicyLevel,
                   embargoSupplyFactor:
                     embargoSupplyFactorFor(sector) *
                     plannedEconomyMediaSupplyFactor(
