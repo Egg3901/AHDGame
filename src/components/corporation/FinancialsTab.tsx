@@ -306,6 +306,15 @@ export default function FinancialsTab({
                   tooltip="Investment in logistics infrastructure. Reduces the margin penalty from operational sprawl when managing many sectors."
                 />
               )}
+              {financials.regulatoryBurden > 0 && (
+                <FinRowTip
+                  label="Regulatory Compliance"
+                  value={`(${fmt(scaleMoney(financials.regulatoryBurden, periodView))})`}
+                  valueClass="text-error"
+                  indent
+                  tooltip="Cost of meeting the regulations in force where this company operates. It is charged against income every turn, and moves when governments change the rules for your sectors."
+                />
+              )}
               {financials.pensionContributionCost > 0 && (
                 <FinRowTip
                   label="Pension Contributions"
