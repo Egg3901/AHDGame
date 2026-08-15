@@ -227,6 +227,7 @@ describe("getCorporationSectorDetail", () => {
     const corporationId = new ObjectId();
     const ownerUserId = new ObjectId();
     const sectorId = new ObjectId();
+    const unionId = new ObjectId();
 
     vi.mocked(getAuthUser).mockResolvedValueOnce({
       userId: ownerUserId.toHexString(),
@@ -251,6 +252,13 @@ describe("getCorporationSectorDetail", () => {
       sectorType: "technology",
       revenue: 1_000_000,
     });
+    db.collection("unions");
+    db.collectionMocks.unions.findOne.mockResolvedValue({
+      _id: unionId,
+      name: "United Steelworkers",
+      ownerId: null,
+      demandedWageLevel: 1.3,
+    });
 
     const { getCorporationSectorDetail } = await import("./sectorDetail");
     const response = await getCorporationSectorDetail(
@@ -265,5 +273,10 @@ describe("getCorporationSectorDetail", () => {
     expect(data.sector.revenue).not.toBeNull();
     expect(data.financials).not.toBeNull();
     expect(data.financialVisibility).toEqual({ hidden: false, reason: "visible" });
+    // Workforce identity is present even before a president takes office, but
+    // a vacant union's dormant demand must not become an active CEO-facing one.
+    expect(data.sector.unionId).toBe(unionId.toHexString());
+    expect(data.sector.unionName).toBe("United Steelworkers");
+    expect(data.sector.unionWageDemand).toBeNull();
   });
 });
