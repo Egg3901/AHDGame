@@ -210,6 +210,14 @@ export async function recomputeSharePricesAfterBondTurn(
       bondCouponEarningsAnchor:
         Math.max(0, corpCapitalToAnchor(hist.perTurnBondCouponIncome ?? 0, homeCurrency, fxRate)) *
         TURNS_PER_YEAR,
+      // Issuer-side interest, same units and normalization: nets against
+      // coupons in the formula so leveraged operators are not priced as bond
+      // funds (see sharePriceFormula reliance block).
+      bondInterestExpenseAnchor:
+        Math.max(
+          0,
+          corpCapitalToAnchor(hist.perTurnBondDragOnNetIncome ?? 0, homeCurrency, fxRate)
+        ) * TURNS_PER_YEAR,
       sectorGrowthRate,
       constructionInProgressAnchor,
       costOfCapital: corpPrimeRate + riskPremium,

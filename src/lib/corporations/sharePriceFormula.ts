@@ -62,6 +62,14 @@ export interface SharePriceInput {
    */
   bondCouponEarningsAnchor: number;
   /**
+   * Annualised bond-interest expense this corp pays as an ISSUER (₳/year,
+   * >= 0). Nets against coupon income before the reliance machinery runs: a
+   * corp paying more interest than it receives is a net DEBTOR, not a bond
+   * fund, and must keep its operating earnings unclamped and unpenalized.
+   * Absent/0 keeps prior behaviour for pure holders.
+   */
+  bondInterestExpenseAnchor?: number;
+  /**
    * Revenue-weighted average sector growth rate for this corp (as a decimal,
    * e.g. 0.05 = 5% per year).
    */
@@ -109,13 +117,27 @@ export function computeSharePrices(
 
   for (const i of inputs) {
     // Bond-income interest-rate-risk adjustments.
-    // Split normalized earnings into operating vs bond-coupon-derived, discount
-    // the bond slice (0.75x), and measure reliance for the graduated penalty.
-    // bondPortion is clamped to total earnings so operating earnings never go
-    // negative when the (current-turn) coupon figure outruns the (rolling)
-    // earnings average.
+    // Split normalized earnings into operating vs bond-derived, discount the
+    // bond slice (0.75x), and measure reliance for the graduated penalty.
+    //
+    // The bond slice is the NET of coupons received over interest paid, floored
+    // at 0. Measuring reliance on gross coupons misfired on leveraged
+    // operators: a corp paying 763K/yr of interest against 371K of coupons had
+    // its entire (interest-shrunken) net earnings classified as bond income,
+    // its real operating earnings clamped to zero, and the maximum bond-fund
+    // penalty applied on top — the more indebted the operator, the more it was
+    // priced as a bond fund (corp 484, 2026-08-15). A net debtor has no bond
+    // RELIANCE at all; the penalty exists for corps living off coupons (#941),
+    // and for those bondInterestExpenseAnchor is ~0 so nothing moves.
+    // bondPortion stays clamped to total earnings so operating earnings never
+    // go negative when the (current-turn) net-coupon figure outruns the
+    // (rolling) earnings average.
     const totalEarnings = Math.max(0, i.normalizedEarningsAnchor);
-    const bondPortion = Math.min(Math.max(0, i.bondCouponEarningsAnchor), totalEarnings);
+    const netBondIncome = Math.max(
+      0,
+      Math.max(0, i.bondCouponEarningsAnchor) - Math.max(0, i.bondInterestExpenseAnchor ?? 0)
+    );
+    const bondPortion = Math.min(netBondIncome, totalEarnings);
     const operatingEarnings = totalEarnings - bondPortion;
     const riskAdjustedEarnings = operatingEarnings + BOND_INCOME_SHARE_PRICE_DISCOUNT * bondPortion;
     const bondReliance = totalEarnings > 0 ? bondPortion / totalEarnings : 0;
