@@ -103,4 +103,4 @@ export const TONE_FILL: Record<IdleCauseMeta["tone"] | "sold" | "unsold", string
  * game year is two financial days.
  */
 export const PLANTS_CLOCK_NOTE =
-  "All money below is per financial day. One game year is 2 financial days.";
+  "Totals cover one financial day (24 turns). Per-unit figures are averages across the same day's output. One game year is 48 turns.";

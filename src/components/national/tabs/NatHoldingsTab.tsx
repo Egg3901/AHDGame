@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, ExternalLink } from "lucide-react";
 import { EmptyState } from "@/components/ui";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import { formatCompactNumber } from "@/lib/utils/formatters";
@@ -44,22 +45,35 @@ export function NatHoldingsTab({ vm }: { vm: NationalCorporationViewModel }) {
       <div className="rounded-xl border border-card-border bg-card p-4">
         <h2 className="text-heading-sm font-semibold text-foreground">State holdings</h2>
         <p className="mt-1 text-body-xs text-muted">
-          Every nationalized sector is absorbed into this single National Corporation — no
-          proliferation of separate SOEs. Sectors merge by region; the original firms were
-          dissolved.
+          Every nationalized sector is absorbed into this single National Corporation. Money on each
+          holding is a total for one financial day (24 turns), not the amount remitted to the
+          treasury.
         </p>
       </div>
 
       <div className="space-y-2.5">
         {holdings.map((s) => (
-          <HoldingCard key={s.sectorId} s={s} currency={vm.currency} />
+          <HoldingCard
+            key={s.sectorId}
+            s={s}
+            currency={vm.currency}
+            corporationId={vm.corporationId}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function HoldingCard({ s, currency }: { s: NatViewSector; currency: string }) {
+function HoldingCard({
+  s,
+  currency,
+  corporationId,
+}: {
+  s: NatViewSector;
+  currency: string;
+  corporationId: string;
+}) {
   const [open, setOpen] = useState(false);
   const triggerTone = s.acquisitionTrigger
     ? (TRIGGER_TONE[s.acquisitionTrigger] ?? "border-card-border bg-card-muted text-muted")
@@ -68,102 +82,119 @@ function HoldingCard({ s, currency }: { s: NatViewSector; currency: string }) {
 
   return (
     <div className="overflow-hidden rounded-xl border border-card-border bg-card">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full p-4 text-left transition-colors hover:border-gold/30"
-      >
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-          {/* Identity + provenance */}
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
-              <SectorGlyph type={s.sectorType} className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-body-sm font-semibold text-foreground">
-                  {CORPORATION_TYPE_LABELS[s.sectorType]}
-                </span>
-                <Pill className="border-card-border bg-card-muted text-muted">{s.stateName}</Pill>
-                {triggerTone && <Pill className={triggerTone}>{s.acquisitionTrigger}</Pill>}
+      <div className="flex flex-col lg:flex-row lg:items-stretch">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="min-w-0 flex-1 p-4 text-left transition-colors hover:bg-card-muted/40"
+        >
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+            {/* Identity + provenance */}
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                <SectorGlyph type={s.sectorType} className="h-5 w-5" />
               </div>
-              <div className="mt-1 text-[11px] text-muted">
-                {s.acquisitionFrom ? (
-                  <>
-                    absorbed from <span className="text-foreground/80">{s.acquisitionFrom}</span>
-                  </>
-                ) : (
-                  "founding holding"
-                )}
-                {s.acquisitionTurn != null && s.acquisitionFrom && (
-                  <span> · turn {s.acquisitionTurn}</span>
-                )}
-              </div>
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {s.priceControlled && (
-                  <Pill className="border-gold/30 bg-gold/10 text-gold">Price-controlled</Pill>
-                )}
-                {s.employmentGuaranteed && (
-                  <Pill className="border-success/30 bg-success/10 text-success">
-                    Employment guaranteed
-                  </Pill>
-                )}
-                {noMandate && (
-                  <Pill className="border-card-border bg-card-muted text-muted">
-                    No active mandate
-                  </Pill>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Readout grid + region metric bar */}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4 lg:w-[440px] lg:shrink-0">
-            <Cell label="Revenue/turn" value={money(s.revenue, currency)} />
-            <Cell
-              label="Profit/turn"
-              value={money(s.operatingProfit, currency)}
-              tone={s.operatingProfit >= 0 ? "success" : "error"}
-            />
-            <Cell label="Workers" value={formatCompactNumber(s.workers)} />
-            <Cell label="Mkt share" value={`${Math.round(s.marketSharePercent)}%`} />
-            <Cell
-              label="Public value"
-              value={`+${s.publicValuePerTurn.toFixed(2)}/t`}
-              tone="gold"
-            />
-            <Cell
-              label="Efficiency"
-              value={`${pp(s.efficiency.total)}%`}
-              tone={s.efficiency.total >= -12 ? "muted" : "error"}
-            />
-            {s.mappedMetricLabels.length > 0 && (
-              <div className="col-span-2 flex flex-col justify-end">
-                <div className="text-[9px] uppercase tracking-wide text-muted">
-                  {s.mappedMetricLabels[0]} (region)
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-body-sm font-semibold text-foreground">
+                    {CORPORATION_TYPE_LABELS[s.sectorType]}
+                  </span>
+                  <Pill className="border-card-border bg-card-muted text-muted">{s.stateName}</Pill>
+                  {triggerTone && <Pill className={triggerTone}>{s.acquisitionTrigger}</Pill>}
                 </div>
-                <div className="mt-1">
-                  <Meter value={s.sectorMetricLevel ?? 0} />
+                <div className="mt-1 text-[11px] text-muted">
+                  {s.acquisitionFrom ? (
+                    <>
+                      absorbed from <span className="text-foreground/80">{s.acquisitionFrom}</span>
+                    </>
+                  ) : (
+                    "founding holding"
+                  )}
+                  {s.acquisitionTurn != null && s.acquisitionFrom && (
+                    <span> · turn {s.acquisitionTurn}</span>
+                  )}
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {s.priceControlled && (
+                    <Pill className="border-gold/30 bg-gold/10 text-gold">Price-controlled</Pill>
+                  )}
+                  {s.employmentGuaranteed && (
+                    <Pill className="border-success/30 bg-success/10 text-success">
+                      Employment guaranteed
+                    </Pill>
+                  )}
+                  {noMandate && (
+                    <Pill className="border-card-border bg-card-muted text-muted">
+                      No active mandate
+                    </Pill>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
+
+            {/* Readout grid + region metric bar */}
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4 lg:w-[440px] lg:shrink-0">
+              <Cell label="Revenue / financial day" value={money(s.revenue, currency)} />
+              <Cell
+                label="Operating profit / financial day"
+                value={money(s.operatingProfit, currency)}
+                tone={s.operatingProfit >= 0 ? "success" : "error"}
+              />
+              <Cell label="Workers" value={formatCompactNumber(s.workers)} />
+              <Cell label="Mkt share" value={`${Math.round(s.marketSharePercent)}%`} />
+              <Cell
+                label="Public value"
+                value={`+${s.publicValuePerTurn.toFixed(2)}/t`}
+                tone="gold"
+              />
+              <Cell
+                label="Efficiency"
+                value={`${pp(s.efficiency.total)}%`}
+                tone={s.efficiency.total >= -12 ? "muted" : "error"}
+              />
+              {s.mappedMetricLabels.length > 0 && (
+                <div className="col-span-2 flex flex-col justify-end">
+                  <div className="text-[9px] uppercase tracking-wide text-muted">
+                    {s.mappedMetricLabels[0]} (region)
+                  </div>
+                  <div className="mt-1">
+                    <Meter value={s.sectorMetricLevel ?? 0} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <ChevronDown
+              className={`hidden h-4 w-4 shrink-0 text-muted transition-transform lg:block ${
+                open ? "rotate-180" : ""
+              }`}
+            />
           </div>
+        </button>
+        <Link
+          href={`/corporation/${corporationId}/sector/${s.sectorId}`}
+          className="mx-4 mb-4 inline-flex items-center justify-center gap-1.5 rounded-lg border border-card-border bg-card-muted px-3 py-2 text-body-xs font-medium text-primary transition-colors hover:border-primary/40 hover:bg-primary/5 lg:my-4 lg:ml-0"
+        >
+          Open sector
+          <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+        </Link>
+      </div>
 
-          <ChevronDown
-            className={`hidden h-4 w-4 shrink-0 text-muted transition-transform lg:block ${
-              open ? "rotate-180" : ""
-            }`}
-          />
-        </div>
-      </button>
-
-      {open && <HoldingDetail s={s} currency={currency} />}
+      {open && <HoldingDetail s={s} currency={currency} corporationId={corporationId} />}
     </div>
   );
 }
 
 /** Drill-down: dynamic-efficiency formula + SOE-vs-private comparison. */
-function HoldingDetail({ s, currency }: { s: NatViewSector; currency: string }) {
+function HoldingDetail({
+  s,
+  currency,
+  corporationId,
+}: {
+  s: NatViewSector;
+  currency: string;
+  corporationId: string;
+}) {
   const e = s.efficiency;
   const privateMarginPct = s.profitMargin; // unconstrained private operator: no SOE penalty
   const privateProfit = Math.round(s.revenue * (privateMarginPct / 100));
@@ -242,9 +273,9 @@ function HoldingDetail({ s, currency }: { s: NatViewSector; currency: string }) 
             aBetter
           />
           <CompareRow
-            label="Profit / turn"
-            a={`${money(s.operatingProfit, currency)} → budget`}
-            b={`${money(privateProfit, currency)} → owners`}
+            label="Daily operating profit"
+            a={money(s.operatingProfit, currency)}
+            b={money(privateProfit, currency)}
           />
           <CompareRow label="Consumer prices" a="Regulated · low" b="Market · higher" aBetter />
           <CompareRow
@@ -253,13 +284,28 @@ function HoldingDetail({ s, currency }: { s: NatViewSector; currency: string }) 
             b="At-will"
           />
           <div className="mt-2.5 rounded-md border border-gold/30 bg-gold/5 px-3 py-2 text-[11px] leading-snug text-foreground/85">
-            The state trades{" "}
-            <span className="font-semibold text-error">{money(profitGap, currency)}/turn</span> of
-            forgone profit for{" "}
+            The state gives up{" "}
+            <span className="font-semibold text-error">
+              {money(profitGap, currency)} per financial day
+            </span>{" "}
+            of operating profit for{" "}
             <span className="font-semibold text-success">
               +{s.publicValuePerTurn.toFixed(2)}/turn
             </span>{" "}
             of public value and regulated prices. That trade is the whole point of holding it.
+          </div>
+          <div className="mt-2.5 text-[11px] leading-snug text-muted">
+            <span className="font-semibold text-foreground">
+              Sector totals are not treasury remittance.
+            </span>{" "}
+            Corporation-wide costs and the retained share are applied before money reaches the
+            budget.{" "}
+            <Link
+              href={`/corporation/${corporationId}?tab=overview`}
+              className="font-medium text-primary hover:underline"
+            >
+              See corporation budget flow
+            </Link>
           </div>
         </div>
       </div>
@@ -298,7 +344,9 @@ function Cell({
             : "text-foreground";
   return (
     <div>
-      <div className="whitespace-nowrap text-[9px] uppercase tracking-wide text-muted">{label}</div>
+      <div className="min-h-6 text-[9px] uppercase leading-tight tracking-wide text-muted">
+        {label}
+      </div>
       <div className={`mt-0.5 text-[13px] font-bold tabular-nums ${t}`}>{value}</div>
     </div>
   );

@@ -6,35 +6,8 @@ import type { State } from "@/lib/db/types";
 import { buildCharacterHref } from "@/lib/utils/profileUrls";
 import { Avatar } from "@/components/Avatar";
 import { PartyChip } from "@/app/congress/components/CongressShared";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { officeLabelFor } from "@/lib/utils/officeLabel";
 import type { SerializedPlayer, PartyOrgDisplay } from "../StatePageTabsTypes";
-
-/**
- * Resolve the human-readable office label for a player. Reads the country's
- * `officeTypes` config so each country surfaces its own labels
- * (US: "President" / "Representative"; CN: "Premier" / "NPC Delegate";
- * UK: "Member of Parliament"; etc.) instead of falling back to "Office
- * Holder" for non-US offices.
- *
- * Reflects per-country office tables in `src/lib/constants/countries.ts`.
- */
-function officeLabelFor(countryId: CountryId, currentOffice: SerializedPlayer["currentOffice"]) {
-  if (!currentOffice) return "Private Citizen";
-  const config = COUNTRY_CONFIGS[countryId];
-  const match = config?.officeTypes.find((o) => o.key === currentOffice.type);
-  if (!match) return "Office Holder";
-  // US House is the only office that surfaces seat-count in the label.
-  if (
-    countryId === COUNTRY_CONFIGS.US.id &&
-    currentOffice.type === "house" &&
-    "seatsHeld" in currentOffice &&
-    typeof currentOffice.seatsHeld === "number"
-  ) {
-    const seats = currentOffice.seatsHeld;
-    return `${match.label} (${seats} seat${seats === 1 ? "" : "s"})`;
-  }
-  return match.label;
-}
 
 export function PlayersList({
   state,

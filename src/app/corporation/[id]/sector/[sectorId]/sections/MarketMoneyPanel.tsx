@@ -3,6 +3,7 @@
 import { InfoTooltip } from "@/components/InfoTooltip";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { Coins } from "lucide-react";
+import Link from "next/link";
 import { MONEY_PERIOD_FACTOR } from "@/lib/constants/moneyTimescale";
 import type { PlantsData, Financials, CorporationRef } from "../types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -135,10 +136,10 @@ export default function MarketMoneyPanel({
             }
           />
           <UnitTile
-            label="Per unit made"
+            label="Average per unit produced"
             value={
               truth.receivedPerUnitAnchor != null && truth.costPerUnitAnchor != null
-                ? `earns ${unitMoney(truth.receivedPerUnitAnchor)}, costs ${unitMoney(truth.costPerUnitAnchor)}`
+                ? `revenue ${unitMoney(truth.receivedPerUnitAnchor)}, cost ${unitMoney(truth.costPerUnitAnchor)}`
                 : "—"
             }
             tone={
@@ -148,7 +149,7 @@ export default function MarketMoneyPanel({
                 ? "warning"
                 : "default"
             }
-            help="What a unit coming off the line brought in, counting unsold units as earning nothing, against what it cost to run the operation per unit made: materials, wages, upkeep on idle capacity and overheads."
+            help="The daily totals below divided across every unit produced. Unsold units count as zero revenue but still carry their share of materials, wages, idle-capacity upkeep and overheads."
           />
           <UnitTile
             label="Break even"
@@ -231,7 +232,7 @@ export default function MarketMoneyPanel({
       {/* Money chain ────────────────────────────────────────────────────────*/}
       <div className="mt-5 space-y-1.5">
         <Row
-          label="Revenue"
+          label="Total revenue / financial day"
           value={money(pnl.revenueAnchor)}
           tone="success"
           bold
@@ -253,7 +254,7 @@ export default function MarketMoneyPanel({
         </div>
         <div className="border-t border-card-border pt-2">
           <Row
-            label="Profit"
+            label="Sector operating profit / financial day"
             value={money(pnl.profitAnchor)}
             tone={pnl.profitAnchor >= 0 ? "success" : "error"}
             bold
@@ -262,18 +263,35 @@ export default function MarketMoneyPanel({
         </div>
       </div>
 
+      {corporation.isStateOwned && (
+        <div className="mt-4 rounded-lg border border-gold/30 bg-gold/5 px-3 py-2.5 text-body-sm">
+          <p className="font-semibold text-foreground">From sector profit to the national budget</p>
+          <p className="mt-1 text-muted">
+            This is one sector&apos;s daily operating result, not the treasury payment. The National
+            Corporation combines all sectors, applies corporation-wide costs and its retention
+            share, then remits what remains.
+          </p>
+          <Link
+            href={`/corporation/${corporation._id}?tab=overview`}
+            className="mt-1.5 inline-flex font-medium text-primary hover:underline"
+          >
+            See corporation budget flow
+          </Link>
+        </div>
+      )}
+
       <DetailsDisclosure className="mt-4">
         <dl className="space-y-1.5 text-body-sm">
           <DetailRow
-            label="Revenue per hour"
+            label="Total revenue / turn (1 hour)"
             value={money(pnl.revenueAnchor * MONEY_PERIOD_FACTOR.turn)}
           />
           <DetailRow
-            label="Revenue per game year"
+            label="Total revenue / game year (48 turns)"
             value={money(pnl.revenueAnchor * MONEY_PERIOD_FACTOR.annual)}
           />
           <DetailRow
-            label="Profit per unit made"
+            label="Operating profit / unit produced"
             value={pnl.profitPerUnitAnchor == null ? "—" : unitMoney(pnl.profitPerUnitAnchor)}
           />
           <DetailRow
