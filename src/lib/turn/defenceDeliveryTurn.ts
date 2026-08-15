@@ -106,10 +106,6 @@ export async function applyDefenceDeliveries(
     const carried = contract.deliveryCarry ?? 0;
     const available = carried + rawShare;
     const produced = Math.floor(available);
-    // Only the sub-lot remainder is banked. Whole lots produced but not delivered this turn
-    // (order nearly full, or the appropriation cannot pay) are dropped as before — the carry is
-    // not a warehouse, it exists solely to stop sub-lot output rounding to nothing.
-    const newCarry = available - produced;
 
     const remaining = Math.max(0, contract.lotsOrdered - contract.lotsDelivered);
     const { balance } = await getDefenseAppropriation(db, countryId);
@@ -117,9 +113,16 @@ export async function applyDefenceDeliveries(
       contract.pricePerLot > 0 ? Math.floor(Math.max(0, balance) / contract.pricePerLot) : produced;
 
     const deliverable = Math.min(produced, remaining, affordable);
+    // The carry banks everything the plant built and did NOT ship, whole lots included, capped
+    // at what the order still needs. Banking only the sub-lot remainder destroyed finished lots:
+    // a plant under one lot per turn spent ~10 turns accruing a lot, the appropriation could not
+    // afford it that turn, and the whole lot was thrown away while the contract sat at zero
+    // delivered forever (ticket #1099). Output already built waits in the yard for money; the
+    // cap stops a stalled order stockpiling past what it was billed for.
+    const bankFor = (shipped: number) =>
+      Math.max(0, Math.min(available - shipped, remaining - shipped));
+    const newCarry = bankFor(deliverable);
     if (deliverable <= 0) {
-      // Nothing ships this turn, but the fractional output must still be banked or the plant is
-      // right back where it started next turn.
       if (newCarry !== carried) await stampDeliveryCarry(db, contract._id as ObjectId, newCarry);
       continue;
     }
@@ -137,6 +140,9 @@ export async function applyDefenceDeliveries(
       // The contract clamped below what was paid for (a concurrent delivery took the
       // remainder). Refund the difference rather than keeping money for undelivered lots.
       await creditAppropriation(db, countryId, (deliverable - recorded) * contract.pricePerLot);
+      // Those lots were built but never shipped, so they go back into the bank rather than
+      // being destroyed by the carry stamped for the larger figure.
+      await stampDeliveryCarry(db, contract._id as ObjectId, bankFor(recorded));
     }
     if (recorded <= 0) continue;
 
