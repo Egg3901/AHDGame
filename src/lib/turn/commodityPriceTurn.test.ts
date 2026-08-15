@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { processCommodityPriceTurn, realizedOutputFraction } from "./commodityPriceTurn";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import { COMMODITY_TYPES } from "@/lib/constants/commodities";
+import { COMMODITY_TYPES, COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
 
 vi.mock("@/lib/market/featureFlag", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/market/featureFlag")>();
@@ -431,9 +431,13 @@ describe("commodityPriceTurn", () => {
     // ── Drift pricing tests ──
 
     it("applies drift from previous price toward supply/demand target", async () => {
+      // Steel starts far above target; every OTHER commodity starts at base so
+      // steel's producer inputs carry no cost pass-through and the assertion
+      // isolates the drift term. (Priors at a uniform 1000 would put every
+      // input ratio at the pass-through cap and lift the target itself.)
       const existingPrices = COMMODITY_TYPES.map((commodity) => ({
         commodity,
-        globalPrice: 1000,
+        globalPrice: commodity === "steel" ? 1000 : COMMODITY_BASE_PRICES[commodity],
         statePrices: {},
       }));
 

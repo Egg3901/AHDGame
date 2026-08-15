@@ -24,6 +24,7 @@ import {
   FOMC_VOTE_WINDOW_TURNS,
   RATE_CHANGE_COOLDOWN_TURNS,
   NPP_CHAIR_TARGET_GROWTH,
+  COC_SMOOTHING_TURNS,
 } from "@/lib/db/types/centralBank";
 import {
   proposeChairMotion,
@@ -322,6 +323,35 @@ export async function processFomcMeetings(
     .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
     .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } });
   const commandEconomyEnabled = gameConfig?.commandEconomyEnabled === true;
+
+  // Advance the cost-of-capital EMA for EVERY bank, every turn — including
+  // dormant/government-controlled ones the meeting loop below skips. The
+  // share-price formula reads primeRateSmoothed; leaving a bank out would pin
+  // its market's discount rate at whatever the EMA last was.
+  {
+    const allBanks = await db
+      .collection<CentralBank>("centralBanks")
+      .find({}, { projection: { primeRate: 1, primeRateSmoothed: 1 } })
+      .toArray();
+    const emaOps = allBanks
+      .filter((b) => typeof b.primeRate === "number" && Number.isFinite(b.primeRate))
+      .map((b) => {
+        const prev =
+          typeof b.primeRateSmoothed === "number" && Number.isFinite(b.primeRateSmoothed)
+            ? b.primeRateSmoothed
+            : b.primeRate;
+        const next = prev + (b.primeRate - prev) / COC_SMOOTHING_TURNS;
+        return {
+          updateOne: {
+            filter: { _id: b._id },
+            update: { $set: { primeRateSmoothed: Math.round(next * 1e6) / 1e6 } },
+          },
+        };
+      });
+    if (emaOps.length > 0) {
+      await db.collection<CentralBank>("centralBanks").bulkWrite(emaOps);
+    }
+  }
 
   const banks = await db
     .collection<CentralBank>("centralBanks")

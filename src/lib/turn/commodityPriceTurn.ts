@@ -24,6 +24,7 @@ import {
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
+import { costPassThroughMultiplier } from "@/lib/market/costPassThrough";
 import { eraForPreset } from "@/lib/seeds/presetSelector";
 import { commodityDemandCalibration } from "@/lib/constants/commodityDemandCalibration";
 import {
@@ -1367,6 +1368,19 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     }
   }
 
+  // Lagged price ratios for producer cost pass-through: PRIOR turn's global
+  // price over base — the same one-turn lag the input bill itself is priced
+  // with (buildLookups.priceRatioByCommodity), so there is no same-turn
+  // circularity between a commodity's price and its producers' costs.
+  const laggedRatios = new Map<CommodityType, number>();
+  for (const commodity of COMMODITY_TYPES) {
+    const base = LEDGER_BASE_PRICES[commodity];
+    const prior = existingPriceMap.get(commodity)?.globalPrice;
+    if (typeof prior === "number" && prior > 0 && base > 0) {
+      laggedRatios.set(commodity, prior / base);
+    }
+  }
+
   for (const commodity of COMMODITY_TYPES) {
     const basePrice = LEDGER_BASE_PRICES[commodity];
     const globalBal = global.get(commodity)!;
@@ -1380,7 +1394,13 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       ? updateScarcityMultiplier(existing?.scarcityMult, globalBal.supply, globalBal.demand)
       : 1;
     scarcityMultByCommodity.set(commodity, scarcityMult);
-    const effBasePrice = Math.round(basePrice * scarcityMult * 100) / 100;
+    // Producer cost pass-through (>= 1, capped): when the inputs to MAKE this
+    // commodity trade above base, part of that squeeze lifts the price floor
+    // so producers are not structurally forced below cost. See
+    // src/lib/market/costPassThrough.ts for the full rationale (the 62%-of-
+    // farms-negative incident).
+    const costMult = costPassThroughMultiplier(commodity, laggedRatios);
+    const effBasePrice = Math.round(basePrice * scarcityMult * costMult * 100) / 100;
     const priceKnee = getPriceSoftKnee(commodity);
 
     // ── Global price with drift + peg/nudge precedence ──
