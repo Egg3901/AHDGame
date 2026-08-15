@@ -984,6 +984,9 @@ export function processSectors(
       normalizedEarningsAnchor: adjustedEarningsMap.get(id) ?? 0,
       // Annualised bond-coupon income (snapshot value is per-turn ₳).
       bondCouponEarningsAnchor: Math.max(0, s.perTurnBondCouponIncome) * TURNS_PER_YEAR,
+      // Annualised issuer-side interest, same per-turn ₳ source: nets against
+      // coupons so leveraged operators are not priced as bond funds.
+      bondInterestExpenseAnchor: Math.max(0, s.perTurnBondDragOnNetIncome) * TURNS_PER_YEAR,
       sectorGrowthRate: growthDenom > 0 ? growthNumer / growthDenom : 0,
       costOfCapital: corpPrimeRate + riskPremium,
       totalShares: s.totalShares,
