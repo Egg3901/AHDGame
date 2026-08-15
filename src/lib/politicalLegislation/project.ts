@@ -65,7 +65,7 @@ export function projectLawToLegislationType(law: PoliticalLaw): LegislationType 
       subCategory: "tax",
       positions: [],
       countryScope,
-      allowedScope: "national",
+      allowedScope: law.allowedScope === "regional" ? "state" : law.allowedScope,
       politicalMetricTargets: [],
       taxSlider: { ...tp, waypoints: tp.waypoints.map((w) => ({ ...w })) },
       taxRateChange: {

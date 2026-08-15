@@ -19,13 +19,15 @@ vi.mock("@/lib/budget/revenue", () => ({
 describe("getProjectedPoliticalLegislationTypes", () => {
   it("projects all core + regional sidecar laws with unique ids", () => {
     const docs = getProjectedPoliticalLegislationTypes();
-    // 436 core + 6 DD Land regional sidecars
-    expect(docs.length).toBe(442);
-    expect(new Set(docs.map((d) => d._id)).size).toBe(442);
+    // 436 core + 6 DD Land regional sidecars + 5 US state tax sliders
+    expect(docs.length).toBe(447);
+    expect(new Set(docs.map((d) => d._id)).size).toBe(447);
     expect(docs.some((d) => d._id === "dd.sec.landPolytechnicEducation")).toBe(true);
     expect(docs.find((d) => d._id === "dd.sec.landPolytechnicEducation")?.allowedScope).toBe(
       "state"
     );
+    expect(docs.some((d) => d._id === "us.tax.stateIncomeTax")).toBe(true);
+    expect(docs.find((d) => d._id === "us.tax.stateIncomeTax")?.allowedScope).toBe("state");
   });
 });
 

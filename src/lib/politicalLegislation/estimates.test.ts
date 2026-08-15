@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { UK_LAWS } from "./laws/ukLaws";
+import { US_STATE_TAX_LAWS } from "./laws/usStateTaxLaws";
 import { attachPoliticalLegislationEstimates } from "./estimates";
 import { projectLawToLegislationType } from "./project";
 
@@ -53,6 +54,31 @@ describe("attachPoliticalLegislationEstimates", () => {
     const slider = doc.taxSliderEstimate as { currentRate: number; revenueDeltaPerPoint: number };
     expect(slider.currentRate).toBe(7.2);
     expect(slider.revenueDeltaPerPoint).toBe(72_000_000);
+  });
+
+  it("reads stateBudgets for regional tax sliders when regionId is set", async () => {
+    db.collection("stateBudgets");
+    db.collectionMocks.stateBudgets.findOne = vi.fn().mockResolvedValue({
+      taxRates: { incomeTax: 7 },
+      taxBases: { taxableIncome: 50_000_000 },
+    });
+    const income = projectLawToLegislationType(
+      US_STATE_TAX_LAWS.find((l) => l.id === "us.tax.stateIncomeTax")!
+    );
+    const [doc] = await attachPoliticalLegislationEstimates(
+      db as unknown as Db,
+      [income as unknown as Record<string, unknown>],
+      "us",
+      "nc",
+      null
+    );
+    const slider = doc.taxSliderEstimate as { currentRate: number; revenueDeltaPerPoint: number };
+    expect(slider.currentRate).toBe(7);
+    expect(slider.revenueDeltaPerPoint).toBe(500_000);
+    expect(db.collectionMocks.stateBudgets.findOne).toHaveBeenCalledWith(
+      { _id: "NC", countryId: "US" },
+      expect.anything()
+    );
   });
 
   it("passes legacy docs and legacy countries through untouched", async () => {

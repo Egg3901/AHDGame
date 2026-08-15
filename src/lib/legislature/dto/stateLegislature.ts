@@ -121,6 +121,16 @@ export interface LegislationTypeOption {
   politicalMetricTargets?: { metricId: string; weight: number }[];
   /** Per-level fiscal estimates attached by the legislation-types API for new-gen laws. */
   estimates?: Array<{ level: number; cost: number; revenue: number; net: number }>;
+  /** Tax-slider laws: live current rate + bounds from the legislation-types API. */
+  taxSliderEstimate?: {
+    minRate: number;
+    maxRate: number;
+    step: number;
+    baselineRate: number;
+    currentRate: number;
+    waypoints: Array<{ rate: number; label: string }>;
+    revenueDeltaPerPoint: number;
+  };
   /** GDP at the priced scope (national or regional), for %GDP annotations. */
   estimatesGdp?: number;
   /** Set by the era-gated legislation-types API for types unlocked this era. */
