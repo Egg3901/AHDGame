@@ -11,12 +11,14 @@
 
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
-import type { BankCharter, BankLoan } from "@/lib/db/types/bank";
+import type { BankLoan } from "@/lib/db/types/bank";
 import { createNotification } from "@/lib/notifications";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { createSystemNewsPost } from "@/lib/news";
 import type { BookTranche } from "@/lib/banking/creditBands";
 import { getCashReserves } from "@/lib/banking/bankCash";
+import { emitTx } from "@/lib/financialTxLog/emit";
+import { revokeCharter } from "./charter";
 import {
   RECAP_GRACE_TURNS,
   assessCapital,
@@ -127,8 +129,8 @@ export async function processBankSupervision(db: Db, turn: number): Promise<Supe
       const expired = standing === "undercapitalized" && recapDeadlineExpired(since, turn);
 
       if (expired) {
-        await revokeForUndercapitalization(db, corp._id, corp.name, corp.userId, turn);
-        summary.chartersRevoked += 1;
+        const revoked = await revokeForUndercapitalization(db, corp, turn);
+        if (revoked) summary.chartersRevoked += 1;
         continue;
       }
 
@@ -197,43 +199,37 @@ function supervisionMessage(
 
 async function revokeForUndercapitalization(
   db: Db,
-  corpId: ObjectId,
-  corpName: string,
-  userId: ObjectId | undefined,
+  corp: Pick<Corporation, "_id" | "name" | "userId" | "bankCharter">,
   turn: number
-): Promise<void> {
+): Promise<boolean> {
   const now = new Date();
   // Revoked, not "failed". The bank did not run out of money to pay depositors
   // — the supervisor pulled the licence of a bank that would not recapitalize.
-  // The existing revoke path returns posted capital and unwinds the book; the
-  // failure path haircuts depositors, and using it here would punish them for
-  // their bank's owner ignoring a deadline.
-  const claim = await db.collection<Corporation>("corporations").updateOne(
-    { _id: corpId, "bankCharter.status": "active" },
-    {
-      $set: {
-        "bankCharter.status": "revoked" as BankCharter["status"],
-        "bankCharter.revokedTurn": turn,
-        "bankCharter.revokedReason": "undercapitalized",
-        updatedAt: now,
-      },
-      $unset: { "bankCharter.undercapitalizedSinceTurn": "" },
-    }
-  );
-  if (claim.modifiedCount === 0) return;
+  //
+  // The old path just stamped `status = revoked`, which stranded the bank's
+  // whole balance sheet: an investment bank's value sits in its prop book and
+  // its cash reserves, and neither field is the corporation's `liquidCapital`.
+  // Flatten the marked prop book back into cash first, then use the existing
+  // revoke path, which refunds the full cash balance to the shareholder (once
+  // deposits are zero), zeroes the ring-fenced reserves, and archives. The
+  // failure path haircuts depositors; using it here would punish them for their
+  // bank's owner ignoring a deadline.
+  const unwoundPropBook = await unwindPropBookToCashReserves(db, corp, turn);
+  const revoked = await revokeCharter(db, corp._id, "undercapitalized");
+  if (!revoked.ok) return false;
 
-  if (userId) {
+  if (corp.userId) {
     void createNotification({
-      userId,
+      userId: corp.userId,
       type: "bank_supervision_breach",
       title: "Bank charter revoked",
-      message: `${corpName}'s banking charter has been revoked: it stayed below the minimum capital requirement past the recapitalization deadline.`,
-      metadata: { corporationId: corpId.toHexString() },
+      message: `${corp.name}'s banking charter has been revoked: it stayed below the minimum capital requirement past the recapitalization deadline.`,
+      metadata: { corporationId: corp._id.toHexString() },
     });
   }
 
   createSystemNewsPost(
-    `Regulators revoked ${corpName}'s banking charter after it failed to meet the minimum capital requirement.`,
+    `Regulators revoked ${corp.name}'s banking charter after it failed to meet the minimum capital requirement.`,
     "legislation"
   ).catch(() => {});
 
@@ -243,9 +239,66 @@ async function revokeForUndercapitalization(
     category: "money",
     turn,
     ts: now,
-    subject: { type: "corporation", id: corpId, name: corpName },
-    refs: { corporationId: corpId },
+    subject: { type: "corporation", id: corp._id, name: corp.name },
+    refs: { corporationId: corp._id },
     outcome: "ok",
-    meta: { reason: "undercapitalized", graceTurns: RECAP_GRACE_TURNS },
+    meta: {
+      reason: "undercapitalized",
+      graceTurns: RECAP_GRACE_TURNS,
+      refundedCapital: revoked.refundedCapital,
+      unwoundPropBook,
+    },
   });
+  return true;
+}
+
+/**
+ * Flatten a proprietary book back into the bank's cash at its last marked
+ * value, returning the amount credited.
+ *
+ * `bankSolvencyTurn` has already marked the book against this turn's prices, so
+ * the cached `propBookMarkValue` is the orderly close-out price — we do not
+ * re-hit the market position by position. Prop buys debit `cashReserves` and
+ * credit the mark (`propTrading.ts`); this reverses that so the value is on the
+ * cash side of the ring-fence when `revokeCharter` refunds it.
+ */
+async function unwindPropBookToCashReserves(
+  db: Db,
+  corp: Pick<Corporation, "_id" | "name" | "bankCharter">,
+  turn: number
+): Promise<number> {
+  const charter = corp.bankCharter;
+  if (!charter || charter.status !== "active") return 0;
+  const mark = Math.max(0, charter.propBookMarkValue ?? 0);
+  const hasPositions = (charter.propBook?.length ?? 0) > 0;
+  if (mark <= 0 && !hasPositions) return 0;
+
+  const result = await db.collection<Corporation>("corporations").updateOne(
+    { _id: corp._id, "bankCharter.status": "active" },
+    {
+      ...(mark > 0 ? { $inc: { "bankCharter.cashReserves": mark } } : {}),
+      $set: {
+        "bankCharter.propBook": [],
+        "bankCharter.propBookMarkValue": 0,
+        updatedAt: new Date(),
+      },
+    }
+  );
+  if (result.modifiedCount === 0) return 0;
+  if (mark <= 0) return 0;
+
+  await emitTx(db, {
+    type: "bank_prop_trade_sell",
+    turn,
+    createdAt: new Date(),
+    subjectType: "corporation",
+    subjectId: corp._id,
+    subjectName: corp.name,
+    amount: mark,
+    currencyCode: charter.currency,
+    counterpartyType: "system",
+    counterpartyName: "Prop book",
+    meta: { reason: "supervision_revoke_unwind" },
+  });
+  return mark;
 }
