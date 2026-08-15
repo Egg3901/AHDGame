@@ -15,6 +15,10 @@ import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import type { DefenceContract } from "@/lib/db/types/defenceContract";
 import { respondToContract } from "@/lib/db/collections/defenceContracts";
+import {
+  isDefenceProcurementPaused,
+  DEFENCE_PROCUREMENT_PAUSED_MESSAGE,
+} from "@/lib/military/procurementGate";
 
 const bodySchema = z.object({ action: z.enum(["accept", "decline"]) });
 
@@ -70,6 +74,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const accept = parsed.data.action === "accept";
+    // Accepting turns a pending offer into a live, billing order — a NEW obligation, so it is
+    // frozen with awards. Declining only closes an offer and stays open, so a CEO can still
+    // clear their board while procurement is paused.
+    if (accept && (await isDefenceProcurementPaused(db))) {
+      return NextResponse.json({ error: DEFENCE_PROCUREMENT_PAUSED_MESSAGE }, { status: 409 });
+    }
     // The write is guarded on `pending` too, so a double-click or an accept racing the
     // minister's cancel resolves to one winner rather than reviving a withdrawn order.
     const changed = await respondToContract(db, contractObjectId, accept);

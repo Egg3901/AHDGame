@@ -149,6 +149,38 @@ describe("POST corporations/[id]/defence-contracts/[contractId]", () => {
     expect(res.status).toBe(409);
   });
 
+  // Kill switch: accepting turns a pending offer into a billing order, so it is frozen. The
+  // pending offer is left untouched — the freeze does not withdraw it.
+  it("refuses to accept while defence procurement is frozen", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      defenceProcurementPaused: true,
+    });
+
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ action: "accept" }), params);
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/frozen/i);
+    expect(db.collectionMocks.defenceContracts.updateOne).not.toHaveBeenCalled();
+  });
+
+  // Declining only clears the board, so a CEO can still walk away from an offer while frozen.
+  it("still lets a CEO decline while defence procurement is frozen", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      defenceProcurementPaused: true,
+    });
+
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ action: "decline" }), params);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ status: "declined" });
+  });
+
   it("rejects an action that is neither accept nor decline", async () => {
     const { POST } = await import(ROUTE);
     const res = await POST(req({ action: "renegotiate" }), params);
