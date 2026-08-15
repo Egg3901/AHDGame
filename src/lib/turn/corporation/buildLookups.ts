@@ -207,7 +207,7 @@ export async function buildCorporationLookups(
     // buildCorporationLookups so downstream consumers are unaffected.
     db
       .collection<CentralBank>("centralBanks")
-      .find({}, { projection: { countryId: 1, primeRate: 1 } })
+      .find({}, { projection: { countryId: 1, primeRate: 1, primeRateSmoothed: 1 } })
       .toArray() as Promise<CentralBank[]>,
     // All active bonds — sovereigns included. Issuer-side filtering (corporate-only)
     // happens in the bondsByCorpId loop below; holder-side keeps everything so
@@ -429,6 +429,18 @@ export async function buildCorporationLookups(
   // Member-aware: the ECB doc carries countryId "DE"; keying by bank.countryId
   // would make IE sectors fall back to the configured default prime rate.
   const primeRateByCountry = buildPrimeRateByCountry(centralBanks);
+  // EMA of the prime rate (fomcMeetingTurn advances it each turn). Consumed by
+  // the share-price formula ONLY — loans/coupons/growth costs stay on spot.
+  const primeRateSmoothedByCountry = buildPrimeRateByCountry(
+    centralBanks.map((b) => ({
+      ...b,
+      primeRate:
+        typeof (b as CentralBank).primeRateSmoothed === "number" &&
+        Number.isFinite((b as CentralBank).primeRateSmoothed)
+          ? ((b as CentralBank).primeRateSmoothed as number)
+          : b.primeRate,
+    }))
+  );
 
   // Build per-country macroeconomic modifier lookups from federal budgets
   const macroInflationByCountry = new Map<string, number>();
@@ -947,6 +959,7 @@ export async function buildCorporationLookups(
     issuedBondDebtByCorpId,
     crossCorpStockHoldingsByHolderCorpId,
     primeRateByCountry,
+    primeRateSmoothedByCountry,
     macroInflationByCountry,
     investorConfidenceByCountry,
     stateOwnershipConcentrationByCountry,
