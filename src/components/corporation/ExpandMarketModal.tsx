@@ -905,7 +905,9 @@ export default function ExpandMarketModal({
                             className={`text-sm font-bold ${activeSuggestion.unownedRevenue > 0 ? "text-success" : "text-muted"}`}
                           >
                             {activeSuggestion.unownedRevenue > 0
-                              ? formatMarketAmount(Math.round(activeSuggestion.estimatedRevenueCapture / 24))
+                              ? formatMarketAmount(
+                                  Math.round(activeSuggestion.estimatedRevenueCapture / 24)
+                                )
                               : "—"}
                           </p>
                           <p className="text-[10px] text-muted">/turn (pre-margin)</p>
@@ -923,7 +925,10 @@ export default function ExpandMarketModal({
                               Total competitor revenue
                             </span>
                             <span className="text-sm font-bold text-foreground">
-                              {formatMarketAmount(Math.round(activeSuggestion.totalCompetitorRevenue / 24))}/turn
+                              {formatMarketAmount(
+                                Math.round(activeSuggestion.totalCompetitorRevenue / 24)
+                              )}
+                              /turn
                             </span>
                           </div>
                         )}
