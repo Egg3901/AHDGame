@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 import { describe, expect, it } from "vitest";
-import type { DefenceContract } from "@/lib/db/types";
+import type { DefenceContract } from "@/lib/db/types/defenceContract";
 import { findProcurementClawbacks } from "./AHD-defence-procurement-overaward";
 
 function contract(input: {

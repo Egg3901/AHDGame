@@ -1,5 +1,6 @@
 import { ObjectId, type Db } from "mongodb";
-import type { Corporation, DefenceContract, FederalBudget } from "@/lib/db/types";
+import type { Corporation, FederalBudget } from "@/lib/db/types";
+import type { DefenceContract } from "@/lib/db/types/defenceContract";
 import { DEFENCE_CONTRACT_SUPPLIER_SHARE } from "@/lib/military/defenceContractLimits";
 import {
   defenceContractLotCaps,
