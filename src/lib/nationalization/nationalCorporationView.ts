@@ -36,6 +36,7 @@ import {
   getMandateMetricPaths,
   getMandateContributions,
 } from "./soeMandates";
+import { cappedRemittanceLocal, remitFraction } from "./ceoFinance";
 import { getMetricDefinition, getMetricDisplayName } from "@/lib/constants/metricDefinitions";
 import type { MetricCategoryId } from "@/lib/db/types/stateMetrics";
 import { readInvestorConfidence } from "./investorConfidence";
@@ -196,7 +197,10 @@ export interface NationalCorporationViewModel {
   corpMandate: { priceControlled: boolean; employmentGuaranteed: boolean };
   currency: CurrencyCode;
   stats: {
-    treasuryRemittancePerTurn: number;
+    operatingProfitPerTurn: number; // Σ held-sector operating profit (net of margin drag) — NOT the remittance
+    retainedPerTurn: number; // share kept in the corp as working capital (retention split)
+    remittedPerTurn: number; // what actually reaches the budget: split share, capped at liquidCapital
+    remittanceCashCapped: boolean; // true when on-hand cash caps the remittance below the split share
     grossRevenuePerTurn: number; // sum of held-sector revenue, before margin
     mandateSubsidyPerTurn: number; // treasury cost of price-controlled margin drag (≥0)
     investorConfidence: number;
@@ -458,7 +462,14 @@ export async function buildNationalCorporationView(
     totalRevenue > 0
       ? viewSectors.reduce((acc, s) => acc + s.efficiency.total * s.revenue, 0) / totalRevenue
       : 0;
-  const treasuryRemittancePerTurn = viewSectors.reduce((acc, s) => acc + s.operatingProfit, 0);
+  // Operating profit across held sectors — already net of the SOE efficiency
+  // penalty and price-control margin drag (see `operatingProfit` per sector).
+  // This is NOT what reaches the budget: the CEO's retention split keeps a share
+  // in the corp, and the remittance is capped at on-hand working capital. Those
+  // two legs are applied below so the display reconciles with the turn's actual
+  // budget line (`cappedRemittanceLocal`, the single source of truth the turn
+  // uses) instead of overstating the remittance by the retained + uncashed share.
+  const operatingProfitPerTurn = viewSectors.reduce((acc, s) => acc + s.operatingProfit, 0);
   const citizensServed = viewSectors.reduce((acc, s) => acc + s.workers, 0);
   const jobsGuaranteed = viewSectors
     .filter((s) => s.employmentGuaranteed)
@@ -655,6 +666,30 @@ export async function buildNationalCorporationView(
           )
         : 0,
   };
+  // The two legs between operating profit and the budget, computed with the SAME
+  // helper the turn uses so the "Net to treasury" the player sees equals the
+  // State-Enterprise line on the budget page. Retained stays in the corp as
+  // working capital; remitted is the retained-split share CAPPED at on-hand
+  // liquidCapital — a cash-poor corp (the common swept-liquidCapital SOE) remits
+  // ~0 even when operating profit is positive, which is the reporter's "0 profit
+  // per turn while the sector earns" case, now shown as a cash cap rather than a
+  // bare, unexplained 0.
+  const retainedPerTurn =
+    operatingProfitPerTurn > 0
+      ? Math.round(operatingProfitPerTurn * (1 - remitFraction(finance.profitRetentionPercent)))
+      : 0;
+  const remittedPerTurn = cappedRemittanceLocal(
+    operatingProfitPerTurn,
+    finance.profitRetentionPercent,
+    finance.liquidCapital
+  );
+  // The cap bites when the uncapped remittance exceeds what the corp can actually
+  // move in cash — drives the explanatory note on the budget-flow strip.
+  const remittanceCashCapped =
+    operatingProfitPerTurn > 0 &&
+    Math.round(operatingProfitPerTurn * remitFraction(finance.profitRetentionPercent)) >
+      remittedPerTurn;
+
   const designatedStrategicSectorTypes = Array.from(
     await getDesignatedSectorTypes(db, countryId)
   ) as CorporationType[];
@@ -685,7 +720,10 @@ export async function buildNationalCorporationView(
     },
     currency,
     stats: {
-      treasuryRemittancePerTurn,
+      operatingProfitPerTurn,
+      retainedPerTurn,
+      remittedPerTurn,
+      remittanceCashCapped,
       grossRevenuePerTurn,
       mandateSubsidyPerTurn,
       investorConfidence,

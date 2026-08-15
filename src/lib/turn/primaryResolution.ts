@@ -66,6 +66,8 @@ import { resolvePartyFamily, getTotalDelegatesForFamily } from "@/lib/constants/
 import { logger } from "../observability/logger";
 import { isNationwideDirectExecutiveElection } from "@/lib/elections/nationwideExecutive";
 import { buildNationwideElectoratePreload } from "@/lib/electionEngine/nationwideElectorate";
+import { resolveGoverningPartyIds } from "@/lib/government/governingPartyIds";
+import { isMidtermOppositionBoostEligible } from "@/lib/electionEngine/midtermOppositionBoost";
 
 /**
  * For elections whose primaryEndTime just passed, eliminate losers per party.
@@ -1114,6 +1116,13 @@ export async function accumulateGeneralElectionVotes(now: Date, turn: number): P
     const uniqueCountries = [
       ...new Set(stateElections.map((e) => (e.countryId ?? "US") as CountryId)),
     ];
+    const midtermCountries = [
+      ...new Set(
+        stateElections
+          .filter(isMidtermOppositionBoostEligible)
+          .map((election) => (election.countryId ?? "US") as CountryId)
+      ),
+    ];
     const nationwideCountries = [
       ...new Set(
         stateElections
@@ -1145,6 +1154,7 @@ export async function accumulateGeneralElectionVotes(now: Date, turn: number): P
           turnoutDocs,
           gsPreset,
           demoDefaults,
+          governingPartyEntries,
         ] = await Promise.all([
           loadDemographicCategories(db),
           db.collection<State>("states").find(regionalScope).toArray(),
@@ -1190,6 +1200,12 @@ export async function accumulateGeneralElectionVotes(now: Date, turn: number): P
           // Seeded snapshots for the granular substrate's legislation
           // lean-drift fold (only consumed when the flag is on).
           db.collection<StateDemographics>("demographicDefaults").find(regionalScope).toArray(),
+          Promise.all(
+            midtermCountries.map(
+              async (countryId) =>
+                [countryId, await resolveGoverningPartyIds(db, countryId)] as const
+            )
+          ),
         ]);
         const stateMap = new Map(states.map((s) => [s._id as string, s]));
         const demographicsMap = new Map(demographics.map((d) => [d._id as string, d]));
@@ -1225,6 +1241,7 @@ export async function accumulateGeneralElectionVotes(now: Date, turn: number): P
           statePartyOrgsByState,
           turnoutByState,
           demographicDefaultsByState: new Map(demoDefaults.map((d) => [d._id as string, d])),
+          governingPartyIdsByCountry: new Map(governingPartyEntries),
         };
       })(),
     ]);

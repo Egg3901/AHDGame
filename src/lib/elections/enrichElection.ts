@@ -72,6 +72,12 @@ import {
   usesEvWeightedNationalMedian,
 } from "@/lib/electionEngine/medianVoter";
 import { loadApportionment } from "@/lib/elections/apportionment";
+import {
+  buildMidtermOppositionModifierByParty,
+  isMidtermOppositionBoostEligible,
+  midtermOppositionModifierToPct,
+} from "@/lib/electionEngine/midtermOppositionBoost";
+import { resolveGoverningPartyIds } from "@/lib/government/governingPartyIds";
 import type {
   ElectionResponse,
   ResolveElectionOptions,
@@ -870,6 +876,7 @@ export async function _enrichElection(
   let medianVoter: { ep: number; sp: number } | undefined;
   let presidentialCoattailPctByParty: Record<string, number> | undefined;
   let gubernatorialCoattailPctByParty: Record<string, number> | undefined;
+  let midtermOppositionBoostPctByParty: Record<string, number> | undefined;
   let incumbentApprovalForDisplay: number | undefined;
   let incumbentPartyIdForDisplay: string | undefined;
   let incumbentTenurePenaltyForDisplay: number | undefined;
@@ -956,12 +963,19 @@ export async function _enrichElection(
     // converted to a percentage tilt: presidential is the sitting President's
     // party nationwide; gubernatorial is the sitting governor's party in-state.
     const cid = countryId as CountryId;
+    const partyIdsInRace = new Set(enrichedWithYou.map((c) => c.party));
     const isPresidentialRace = isHeadOfGovernmentRace(election.electionType, cid);
     if (!isPresidentialRace) {
       const president = await resolvePresidentApproval(db, cid);
-      const partyIdsInRace = new Set(enrichedWithYou.map((c) => c.party));
       const presMod = buildPresidentialModifierByParty(president, partyIdsInRace);
       if (presMod.size > 0) presidentialCoattailPctByParty = presidentialModifierToPct(presMod);
+    }
+    if (isMidtermOppositionBoostEligible(election)) {
+      const governingPartyIds = await resolveGoverningPartyIds(db, cid);
+      const midtermMod = buildMidtermOppositionModifierByParty(governingPartyIds, partyIdsInRace);
+      if (midtermMod.size > 0) {
+        midtermOppositionBoostPctByParty = midtermOppositionModifierToPct(midtermMod);
+      }
     }
     if (
       election.state &&
@@ -1132,6 +1146,7 @@ export async function _enrichElection(
     ...(medianVoter ? { medianVoter } : {}),
     ...(presidentialCoattailPctByParty ? { presidentialCoattailPctByParty } : {}),
     ...(gubernatorialCoattailPctByParty ? { gubernatorialCoattailPctByParty } : {}),
+    ...(midtermOppositionBoostPctByParty ? { midtermOppositionBoostPctByParty } : {}),
     ...(incumbentApprovalForDisplay != null
       ? { incumbentApproval: incumbentApprovalForDisplay }
       : {}),

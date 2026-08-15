@@ -48,11 +48,16 @@ export function HeroStatsStrip({ stats, currency }: HeroStatsStripProps) {
     subTone?: Tone;
   }> = [
     {
-      label: "Treasury remittance / turn",
-      value: `${sym}${compact(stats.treasuryRemittancePerTurn)}`,
-      valueTone: stats.treasuryRemittancePerTurn > 0 ? "success" : "foreground",
-      sub: `subsidy −${sym}${compact(stats.mandateSubsidyPerTurn)}/turn`,
-      subTone: stats.mandateSubsidyPerTurn > 0 ? "error" : "muted",
+      // The number that actually reaches the budget — the retention-split share,
+      // capped at on-hand cash — NOT gross operating profit. Sub names the profit
+      // it came from so the two never read as the same figure again.
+      label: "Remitted to budget / turn",
+      value: `${sym}${compact(stats.remittedPerTurn)}`,
+      valueTone: stats.remittedPerTurn > 0 ? "success" : "foreground",
+      sub: stats.remittanceCashCapped
+        ? `capped by cash · of ${sym}${compact(stats.operatingProfitPerTurn)} profit`
+        : `of ${sym}${compact(stats.operatingProfitPerTurn)}/turn operating profit`,
+      subTone: stats.remittanceCashCapped ? "error" : "muted",
     },
     {
       label: "Public-value index",

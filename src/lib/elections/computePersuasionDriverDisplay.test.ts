@@ -344,6 +344,23 @@ describe("computePairwiseDriverDisplay", () => {
     const out = computePairwiseDriverDisplay(cands, "d1", "r1");
     expect(out.find((d) => d.label === "Gubernatorial Coattails")).toBeUndefined();
   });
+
+  it("shows the midterm opposition tilt from the focused party's perspective", () => {
+    const cands = [
+      candidate({ party: "gov", id: "g1", sharePct: 55 }),
+      candidate({ party: "opp", id: "o1", sharePct: 45, partyColor: "#1976d2" }),
+    ];
+    const opposition = computePairwiseDriverDisplay(cands, "o1", "g1", {
+      midtermOppositionBoostPctByParty: { opp: 5 },
+    }).find((driver) => driver.label === "Midterm Opposition");
+    expect(opposition?.unit).toBe("%");
+    expect(opposition?.contributionPct).toBeCloseTo(5);
+
+    const government = computePairwiseDriverDisplay(cands, "g1", "o1", {
+      midtermOppositionBoostPctByParty: { opp: 5 },
+    }).find((driver) => driver.label === "Midterm Opposition");
+    expect(government?.contributionPct).toBeCloseTo(-5);
+  });
 });
 
 describe("Incumbency row honors executive approval", () => {
