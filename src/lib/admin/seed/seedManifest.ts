@@ -646,6 +646,12 @@ const RUNTIME: CollectionEntry[] = [
       "Procurement contracts between a country's defence seat and one of its own defence sectors. RUNTIME: awarded by players, paid per delivered lot out of the defence appropriation. Wiped with the militaryUnits and corporateSectors they sit between.",
   },
   {
+    name: "defenceProcurementAllocations",
+    category: "runtime",
+    notes:
+      "Race-safe per-window contracting quotas. RUNTIME: derived from player-awarded defence contracts and must not survive a world reset.",
+  },
+  {
     name: "militaryCommands",
     category: "runtime",
     notes:

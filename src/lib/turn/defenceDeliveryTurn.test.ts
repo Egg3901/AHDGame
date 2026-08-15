@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { canSupply, applyDefenceDeliveries } from "./defenceDeliveryTurn";
 import { lotsFromSector, rawLotsFromSector } from "@/lib/military/arsenal";
+import { emitTx } from "@/lib/financialTxLog/emit";
+
+vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
 
 describe("lotsFromSector", () => {
   it("produces nothing from a plant with no revenue", () => {
@@ -220,10 +223,20 @@ describe("applyDefenceDeliveries", () => {
 
   it("delivers into the arsenal and pays the corporation", async () => {
     const w = world();
-    const r = await applyDefenceDeliveries(stubDb(w), "US", 1953);
+    const r = await applyDefenceDeliveries(stubDb(w), "US", 1953, 3, 42);
     expect(r.lots).toBeGreaterThan(0);
     expect(w.arsenalDeposits[0].domain).toBe("ground");
     expect(w.corpCredits[0]).toBe(r.paid);
+    expect(emitTx).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        type: "defence_contract_payment",
+        turn: 42,
+        subjectType: "corporation",
+        subjectId: CORP_ID,
+        amount: r.paid,
+      })
+    );
   });
 
   // Procurement has NO overdraft. A country that cannot pay takes fewer lots.
@@ -271,6 +284,41 @@ describe("applyDefenceDeliveries", () => {
     }
     expect(total).toBeGreaterThan(0);
     expect(w.contracts[0].lotsDelivered).toBe(total);
+  });
+
+  // Ticket #1099. A sub-lot plant spent ~10 turns accruing one whole lot, the appropriation
+  // could not afford it on the turn it completed, and the finished lot was thrown away because
+  // only the sub-lot remainder was banked. The contract sat at zero delivered forever while the
+  // plant kept producing. Built output must wait for money, not evaporate.
+  it("banks whole lots the appropriation cannot pay for instead of destroying them", async () => {
+    const perUnit = rawLotsFromSector({ strategyId: "munitions", revenue: 1 });
+    const revenue = 0.3 / perUnit; // well under one lot per turn
+    const w = world({
+      sector: { _id: SECTOR_ID, strategyId: "munitions", revenue },
+      appropriation: 0, // nothing can be paid for yet
+    });
+    w.contracts[0].lotsOrdered = 3;
+
+    for (let i = 0; i < 20; i++) {
+      const r = await applyDefenceDeliveries(stubDb(w), "US", 1953);
+      expect(r.lots).toBe(0);
+    }
+    // Six whole lots' worth of production, banked rather than binned, capped at the order.
+    expect(w.contracts[0].lotsDelivered).toBe(0);
+    expect(w.contracts[0].deliveryCarry as number).toBe(3);
+
+    // The money arrives and the yard ships everything it has been holding.
+    w.appropriation = 1_000_000;
+    const paid = await applyDefenceDeliveries(stubDb(w), "US", 1953);
+    expect(paid.lots).toBe(3);
+    expect(w.contracts[0].lotsDelivered).toBe(3);
+  });
+
+  it("never banks more than the order still needs", async () => {
+    const w = world({ appropriation: 0 });
+    w.contracts[0].lotsOrdered = 2;
+    for (let i = 0; i < 5; i++) await applyDefenceDeliveries(stubDb(w), "US", 1953);
+    expect(w.contracts[0].deliveryCarry as number).toBeLessThanOrEqual(2);
   });
 
   it("stalls a contract whose plant has been re-tooled off the component", async () => {

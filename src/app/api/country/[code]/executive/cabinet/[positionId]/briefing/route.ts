@@ -64,6 +64,7 @@ import type { DefenceContractView } from "@/app/country/[code]/executive/cabinet
 import { accrualPerTurn, upkeepPerTurn } from "@/lib/military/appropriation";
 import { seedRosterUpkeepFor } from "@/lib/military/seedRosterUpkeep";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { getDefenceContractAvailability } from "@/lib/db/collections/defenceProcurementAllocations";
 import {
   resolveEstatePortfolio,
   aggregateEstates,
@@ -365,6 +366,25 @@ export async function GET(_request: Request, { params }: RouteParams) {
         countryId,
         militaryPriceAnchor(budget?.gdp, budget?.militaryPriceBaselineGdp)
       );
+      if (lotPricePerLot != null && lotPricePerLot > 0) {
+        const defenseLine = resolveDefenseLineFrom(budget ?? null);
+        suppliers = await Promise.all(
+          suppliers.map(async (supplier) => {
+            const availability = await getDefenceContractAvailability(db, {
+              countryId,
+              corporationId: supplier.corporationId,
+              currentTurn,
+              defenseLine,
+              pricePerLot: lotPricePerLot as number,
+            });
+            return {
+              ...supplier,
+              availableLots: availability.maxLots,
+              allowanceWindowEndTurn: availability.window.endTurn,
+            };
+          })
+        );
+      }
 
       const year = liveYear;
       const startYear = gameState?.startingYear;

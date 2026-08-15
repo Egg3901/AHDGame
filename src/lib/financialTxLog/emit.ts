@@ -143,6 +143,7 @@ const TX_TYPE_TO_AUDIT_ACTION: Partial<Record<FinancialTxType, string>> = {
   corp_sector_sale: "corp.sector_sale",
   corp_sector_purchase: "corp.sector_purchase",
   corp_supply_agreement: "corp.supply_agreement",
+  defence_contract_payment: "corp.defence_contract_payment",
   corp_dissolution_distribution: "corp.dissolution_distribution",
   corp_escrow_funding: "corp.escrow_funding",
   corp_escrow_withdrawal: "corp.escrow_withdrawal",

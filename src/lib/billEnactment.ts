@@ -495,6 +495,14 @@ export async function onBillEnacted(
         effectDirection: p.effectDirection,
         economic: p.economic,
         social: p.social,
+        // Tax-slider laws (ruling #16): the chosen rate lives ONLY on the
+        // provision — there is no options ladder to recover it from. Dropping
+        // it here made every slider tax law inert: the statePolicy and
+        // enactedLaw rows were written, but `processProvisionEnactment`'s
+        // `provision.proposedRate !== undefined` guard never fired, so
+        // federalBudget.taxRates never moved and the duties/VAT the bill
+        // levied were never collected (ticket #1102).
+        proposedRate: p.proposedRate,
       });
     }
   } else if (bill.legislationTypeId && bill.effectDirection != null) {

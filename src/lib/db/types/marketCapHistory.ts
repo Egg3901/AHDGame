@@ -8,6 +8,8 @@ import type { CorporationType } from "../../constants/corporations";
  */
 export interface MarketCapHistory {
   turn: number;
+  /** Aggregate eligibility rule used for this row. Absent on legacy all-corporation rows. */
+  listingUniverse?: "public-only";
   /** Total market cap across all exchanges (close value for the turn) */
   globalMarketCap: number;
   /** Simulated intra-turn peak for candlestick charting */

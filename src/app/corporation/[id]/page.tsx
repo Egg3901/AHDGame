@@ -35,6 +35,7 @@ import {
   corpTabIdFor,
 } from "@/components/corporation/CorporationTabGroups";
 import FinancialsTab from "@/components/corporation/FinancialsTab";
+import { corpIncomeBasis } from "@/components/corporation/financials/financialsModel";
 import { NationalCorporationView } from "@/components/national/NationalCorporationView";
 import {
   TabFallback,
@@ -822,11 +823,10 @@ export default function CorporationDetailPage() {
           creditRating={corporation.creditRatingSnapshot ?? bondInfo?.creditRating?.rating}
           sectorCount={sectors.length}
           stateCount={new Set(sectors.map((s) => s.stateId)).size}
-          income={
-            financials != null
-              ? (financials.realizedIncome ?? financials.income) - financials.dividendDistribution
-              : null
-          }
+          // Retained income after dividends, from the shared basis. The realized
+          // figure is already net of the payout, so netting the projection-derived
+          // `dividendDistribution` off it read as a loss on a profitable corp (#1098).
+          income={financials != null ? corpIncomeBasis(financials).retained : null}
           periodView={periodView}
           financialFogOfWar={financialFogOfWar}
           ceoIsInactive={ceoIsInactive}
