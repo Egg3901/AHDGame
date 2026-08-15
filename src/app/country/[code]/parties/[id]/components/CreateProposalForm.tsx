@@ -15,7 +15,7 @@ type ProposalType =
 
 type TransactionApprovalMode = "single" | "double";
 
-type RemoveRole = "chair" | "viceChair" | "committeeMember" | "campaigner";
+type RemoveRole = "chair" | "viceChair" | "treasurer" | "committeeMember" | "campaigner";
 
 interface OfficerOption {
   id: string;
@@ -118,6 +118,7 @@ export function CreateProposalForm({
         const data = (await res.json()) as {
           chair?: LeaderInfo;
           viceChair?: LeaderInfo;
+          treasurer?: LeaderInfo;
           members?: Member[];
           campaigners?: { id: string; name: string }[];
         };
@@ -136,6 +137,14 @@ export function CreateProposalForm({
             name: data.viceChair.name,
             role: "viceChair",
             label: `${getPartyRoleLabel(countryCode, "viceChair")} — ${data.viceChair.name}`,
+          });
+        }
+        if (data.treasurer?.id) {
+          opts.push({
+            id: data.treasurer.id,
+            name: data.treasurer.name,
+            role: "treasurer",
+            label: `${getPartyRoleLabel(countryCode, "treasurer")} — ${data.treasurer.name}`,
           });
         }
         for (const m of data.members ?? []) {

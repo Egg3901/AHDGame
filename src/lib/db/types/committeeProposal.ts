@@ -69,9 +69,11 @@ export interface CommitteeProposal {
   /**
    * Populated for type === "removeOfficeHolder".
    *
-   * Vacates a specific elected seat on the party. Treasurer is NOT a
-   * removable role via this mechanism (treasurer is chair-appointed and
-   * removed via the existing appointment flow).
+   * Vacates a specific elected seat on the party. The chair-appointed
+   * `treasurer` slot is also removable here (tickets #1100, #285): a
+   * treasurer who wins their seat unopposed cannot otherwise be
+   * dislodged, so the committee can vacate it and force a re-appointment
+   * or fresh election.
    *
    * `campaigner` pulls the target from `campaignerIds`. Campaigners are
    * chair-nominated but committee-confirmed, so the committee can strip
@@ -86,7 +88,7 @@ export interface CommitteeProposal {
    * helper when chair is vacated.
    */
   removeOfficeHolder?: {
-    role: "chair" | "viceChair" | "committeeMember" | "campaigner";
+    role: "chair" | "viceChair" | "treasurer" | "committeeMember" | "campaigner";
     targetCharacterId: ObjectId;
   };
   /**
