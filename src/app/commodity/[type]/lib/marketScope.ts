@@ -79,7 +79,7 @@ export function buildCommodityMarketScope(
       activeState,
       marketLabel: `${stateName} Market`,
       marketCaption: stateCountry
-        ? `Filtered to ${stateName}, ${COUNTRY_CONFIGS[stateCountry].name}.`
+        ? `Filtered to ${stateName}, ${COUNTRY_CONFIGS[stateCountry]?.name ?? stateCountry}.`
         : `Filtered to ${stateName}.`,
       marketPrice: statePrice,
       priceChange: percentChangeFromBase(statePrice, data.basePrice),
