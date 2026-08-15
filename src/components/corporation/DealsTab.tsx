@@ -50,6 +50,7 @@ export default function DealsTab({
   // Propose form — smart name lookup for the target instead of a raw id.
   const [targetQuery, setTargetQuery] = useState("");
   const [targetResults, setTargetResults] = useState<CorpSearchResult[]>([]);
+  const [targetSearching, setTargetSearching] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<CorpSearchResult | null>(null);
   const [price, setPrice] = useState("");
   const [proposeBusy, setProposeBusy] = useState(false);
@@ -84,8 +85,10 @@ export default function DealsTab({
   useEffect(() => {
     if (selectedTarget || targetQuery.trim().length < 2) {
       setTargetResults([]);
+      setTargetSearching(false);
       return;
     }
+    setTargetSearching(true);
     const handle = setTimeout(async () => {
       try {
         const res = await fetch(
@@ -97,6 +100,8 @@ export default function DealsTab({
         }
       } catch {
         // ignore transient search errors
+      } finally {
+        setTargetSearching(false);
       }
     }, 300);
     return () => clearTimeout(handle);
@@ -176,9 +181,11 @@ export default function DealsTab({
           Offer to acquire a corporation
         </h3>
         <p className="mb-3 text-xs text-muted">
-          Buy another corporation outright. If its CEO accepts, its sectors and cash fold into yours
-          and its shareholders are paid the offer price. (Currently the target must have no
-          outstanding bonds and hold no shares in other corporations.)
+          Buy another player-run corporation outright. If its CEO accepts, its sectors and cash fold
+          into yours and its shareholders are paid the offer price. Only player-run private
+          companies can be targeted; state-owned and AI-run firms have no CEO who can accept an
+          offer. For now the target must also have no outstanding bonds and hold no shares in other
+          corporations.
         </p>
 
         <form onSubmit={propose} className="space-y-3">
@@ -230,6 +237,15 @@ export default function DealsTab({
                     ))}
                   </ul>
                 )}
+                {!targetSearching &&
+                  targetQuery.trim().length >= 2 &&
+                  targetResults.length === 0 && (
+                    <p className="mt-1 text-xs text-muted">
+                      No eligible corporations found. Only player-run private companies can be
+                      acquisition targets; state-owned and AI-run firms have no CEO who can accept
+                      an offer.
+                    </p>
+                  )}
               </>
             )}
           </div>
