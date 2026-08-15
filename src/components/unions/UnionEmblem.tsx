@@ -9,6 +9,7 @@ import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimizatio
 import { unionLogoUrl } from "@/lib/unions/unionLogos";
 
 const SIZES = {
+  xs: { box: "h-5 w-5", icon: "h-3 w-3", px: 20 },
   sm: { box: "h-8 w-8", icon: "h-4 w-4", px: 32 },
   md: { box: "h-10 w-10", icon: "h-5 w-5", px: 40 },
   lg: { box: "h-14 w-14", icon: "h-7 w-7", px: 56 },

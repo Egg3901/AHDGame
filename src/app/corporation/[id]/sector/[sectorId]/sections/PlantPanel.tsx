@@ -1,7 +1,10 @@
 "use client";
 
+import type { ReactNode } from "react";
+import Link from "next/link";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import { Button } from "@/components/ui";
+import { UnionEmblem } from "@/components/unions/UnionEmblem";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { Factory, Hammer, PauseCircle, PlayCircle, ShieldCheck, X } from "lucide-react";
 import type { PlantsData } from "../types";
@@ -21,6 +24,11 @@ interface PlantPanelProps {
   plants: PlantsData;
   /** Drives the facility noun. A retail sector says "stores", not "plants". */
   sectorType: CorporationType;
+  /** The national industry union covering this workforce, vacant or led. */
+  unionId?: string | null;
+  unionName?: string | null;
+  /** Worker-wide wage multiplier for this local, where 1.00 is baseline. */
+  averageWageLevel: number;
   isCeo: boolean;
   /** True while any capacity command is in flight. */
   busy: boolean;
@@ -49,6 +57,9 @@ interface PlantPanelProps {
 export default function PlantPanel({
   plants,
   sectorType,
+  unionId,
+  unionName,
+  averageWageLevel,
   isCeo,
   busy,
   message,
@@ -168,9 +179,26 @@ export default function PlantPanel({
           label="Workforce"
           value={fmtUnits(plants.workers)}
           sub={
-            plants.unionizationPct > 0
-              ? `${plants.unionizationPct.toFixed(0)}% in a union`
-              : "no union pressure"
+            <div className="space-y-1">
+              <span className="block">
+                {plants.unionizationPct > 0
+                  ? `${plants.unionizationPct.toFixed(0)}% in a union`
+                  : "No union pressure"}
+              </span>
+              {unionId && unionName && (
+                <Link
+                  href={`/unions/${unionId}`}
+                  title={unionName}
+                  className="flex min-w-0 items-center gap-1.5 font-medium text-foreground transition-colors hover:text-primary"
+                >
+                  <UnionEmblem name={unionName} sectorType={sectorType} size="xs" />
+                  <span className="line-clamp-2">{unionName}</span>
+                </Link>
+              )}
+              <span className="block tabular-nums">
+                Avg wage level {averageWageLevel.toFixed(2)}×
+              </span>
+            </div>
           }
           help={`Workers staffing this capacity. It takes about ${plants.laborIntensity.toFixed(2)} workers for each unit per day.`}
         />
@@ -322,7 +350,7 @@ function Stat({
 }: {
   label: string;
   value: string;
-  sub: string;
+  sub: ReactNode;
   help: string;
 }) {
   return (
@@ -339,7 +367,7 @@ function Stat({
         <p className="text-muted">{help}</p>
       </InfoTooltip>
       <p className="mt-1 text-body-lg font-bold tabular-nums text-foreground">{value}</p>
-      <p className="text-body-xs text-muted">{sub}</p>
+      <div className="text-body-xs text-muted">{sub}</div>
     </div>
   );
 }

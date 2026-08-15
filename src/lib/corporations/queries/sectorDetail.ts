@@ -21,7 +21,6 @@ import type {
   FederalBudget,
   StateBudget,
   State,
-  StateMetrics,
   Character,
   Tariff,
   UnownedSector,
@@ -280,7 +279,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       );
       siblingStateIds.add(s.stateId);
     }
-    const [federalBudget, allFederalBudgets, allSiblingStateBudgets, unionWageDemandDoc] =
+    const [federalBudget, allFederalBudgets, allSiblingStateBudgets, coveringIndustryUnionDoc] =
       await Promise.all([
         db.collection<FederalBudget>("federalBudget").findOne(
           { countryId: sectorCountryId },
@@ -321,14 +320,16 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
             }
           )
           .toArray(),
-        // Code-review fix #11: demandedWageLevel was previously invisible to
-        // every CEO/corp UI, only the union's own dashboard read it. Look up
-        // an OWNED union matching this sector's (countryId, sectorType).
+        // One union covers every local in a country's industry. Return its
+        // identity even while the presidency is vacant so a sector's workforce
+        // can always link to the institution organizing it. Wage demands still
+        // only count once that union has a leader, preserving the existing
+        // player-run-union rule.
         db
           .collection<Union>("unions")
           .findOne(
-            { countryId: sectorCountryId, sectorType: sector.sectorType, ownerId: { $ne: null } },
-            { projection: { demandedWageLevel: 1 } }
+            { countryId: sectorCountryId, sectorType: sector.sectorType },
+            { projection: { name: 1, ownerId: 1, demandedWageLevel: 1 } }
           ),
       ]);
     const macroEcon: MacroEconomicValues = {
@@ -812,10 +813,13 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         strikeActive: sector.strikeStartedAtTurn != null,
         // v3 Phase 7a: cooldown state for the union-busting UI panel.
         bustingCooldownUntilTurn: sector.bustingCooldownUntilTurn ?? null,
-        // v3 Phase 8 (code-review fix #11): a wage demand from an owned union
-        // matching this sector's (countryId, sectorType), or null if none.
-        unionWageDemand: unionWageDemandDoc?.demandedWageLevel ?? null,
-        unionId: unionWageDemandDoc?._id?.toString() ?? null,
+        // v3 Phase 8: identity of the union covering this country's industry,
+        // including a vacant union, plus any demand made by an owned union.
+        unionWageDemand: coveringIndustryUnionDoc?.ownerId
+          ? (coveringIndustryUnionDoc.demandedWageLevel ?? null)
+          : null,
+        unionId: coveringIndustryUnionDoc?._id?.toString() ?? null,
+        unionName: coveringIndustryUnionDoc?.name ?? null,
         createdAt: sector.createdAt,
         // For-sale listing, null when not listed. priceAnchor / npvAnchor are
         // ₳-denominated so the UI formatter routes through the viewer's wallet
