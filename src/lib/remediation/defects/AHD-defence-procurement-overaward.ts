@@ -16,11 +16,18 @@ interface Clawback {
   amount: number;
 }
 
+interface PlannedClawback extends Clawback {
+  recoverableAmount: number;
+  unrecoveredAmount: number;
+}
+
 interface Survey {
-  clawbacks: Clawback[];
+  clawbacks: PlannedClawback[];
   corporationIds: string[];
   budgetIds: string[];
   totalAmount: number;
+  recoverableAmount: number;
+  unrecoveredAmount: number;
   missing: string[];
 }
 
@@ -103,9 +110,9 @@ async function survey(db: Db): Promise<Survey> {
   const defenseLineByCountry = new Map(
     budgets.map((budget) => [budget.countryId, resolveDefenseLineFrom(budget)])
   );
-  const clawbacks = findProcurementClawbacks(contracts, defenseLineByCountry);
-  const corporationIds = [...new Set(clawbacks.map((row) => row.corporationId))];
-  const countries = [...new Set(clawbacks.map((row) => row.countryId))];
+  const rawClawbacks = findProcurementClawbacks(contracts, defenseLineByCountry);
+  const corporationIds = [...new Set(rawClawbacks.map((row) => row.corporationId))];
+  const countries = [...new Set(rawClawbacks.map((row) => row.countryId))];
   const corporations =
     corporationIds.length > 0
       ? await db
@@ -114,6 +121,19 @@ async function survey(db: Db): Promise<Survey> {
           .toArray()
       : [];
   const corporationIdSet = new Set(corporations.map((corp) => corp._id.toString()));
+  const cashRemaining = new Map(
+    corporations.map((corp) => [corp._id.toString(), Math.max(0, corp.liquidCapital)])
+  );
+  const clawbacks: PlannedClawback[] = rawClawbacks.map((row) => {
+    const available = cashRemaining.get(row.corporationId) ?? 0;
+    const recoverableAmount = Math.min(row.amount, available);
+    cashRemaining.set(row.corporationId, available - recoverableAmount);
+    return {
+      ...row,
+      recoverableAmount,
+      unrecoveredAmount: row.amount - recoverableAmount,
+    };
+  });
   const missing = [
     ...corporationIds
       .filter((id) => !corporationIdSet.has(id))
@@ -131,6 +151,8 @@ async function survey(db: Db): Promise<Survey> {
     corporationIds,
     budgetIds,
     totalAmount: clawbacks.reduce((sum, row) => sum + row.amount, 0),
+    recoverableAmount: clawbacks.reduce((sum, row) => sum + row.recoverableAmount, 0),
+    unrecoveredAmount: clawbacks.reduce((sum, row) => sum + row.unrecoveredAmount, 0),
     missing,
   };
 }
@@ -143,6 +165,7 @@ async function detect(db: Db): Promise<DetectResult> {
     notes: [
       `${result.clawbacks.length} contract(s) contain delivered lots beyond the budget and supplier limits`,
       `${result.totalAmount.toLocaleString("en-US")} local-currency units require recovery`,
+      `${result.recoverableAmount.toLocaleString("en-US")} remains collectible from suppliers`,
       ...result.missing,
     ],
   };
@@ -162,10 +185,11 @@ async function plan(db: Db): Promise<HealPlan> {
     ],
     moneyDelta: 0,
     summary:
-      `recover ${result.totalAmount.toLocaleString("en-US")} from ` +
+      `recover ${result.recoverableAmount.toLocaleString("en-US")} from ` +
       `${result.clawbacks.length} over-awarded defence contract(s) and return it to appropriations`,
     notes: [
       "Delivered materiel remains government property; this reverses only the invalid supplier payment.",
+      `${result.unrecoveredAmount.toLocaleString("en-US")} is no longer held by the supplier and is recorded as unrecovered rather than minted back into the appropriation.`,
       "Every changed document is snapshotted by the remediation runner before the first write.",
     ],
     payload: result,
@@ -181,11 +205,15 @@ async function apply(
   const byCorporation = new Map<string, number>();
   const byCountry = new Map<string, number>();
   for (const row of result.clawbacks) {
-    byCorporation.set(row.corporationId, (byCorporation.get(row.corporationId) ?? 0) + row.amount);
-    byCountry.set(row.countryId, (byCountry.get(row.countryId) ?? 0) + row.amount);
+    byCorporation.set(
+      row.corporationId,
+      (byCorporation.get(row.corporationId) ?? 0) + row.recoverableAmount
+    );
+    byCountry.set(row.countryId, (byCountry.get(row.countryId) ?? 0) + row.recoverableAmount);
   }
 
   for (const [corporationId, amount] of byCorporation) {
+    if (amount <= 0) continue;
     const update = await db
       .collection<Corporation>("corporations")
       .updateOne(
@@ -198,6 +226,7 @@ async function apply(
   }
 
   for (const [countryId, amount] of byCountry) {
+    if (amount <= 0) continue;
     const update = await db
       .collection<FederalBudget>("federalBudget")
       .updateOne(
@@ -215,7 +244,8 @@ async function apply(
       {
         $inc: {
           administrativeClawbackLots: row.excessLots,
-          administrativeClawbackAmount: row.amount,
+          administrativeClawbackAmount: row.recoverableAmount,
+          administrativeClawbackUnrecoveredAmount: row.unrecoveredAmount,
         },
         $set: {
           administrativeClawbackAt: ctx.now,
@@ -233,7 +263,8 @@ async function apply(
     documentsScanned: healPlan.affected,
     documentsUpdated: result.clawbacks.length + byCorporation.size + byCountry.size,
     notes: [
-      `recovered ${result.totalAmount.toLocaleString("en-US")} without changing total money`,
+      `recovered ${result.recoverableAmount.toLocaleString("en-US")} without changing total money`,
+      `recorded ${result.unrecoveredAmount.toLocaleString("en-US")} as uncollectible from the supplier`,
       `marked ${result.clawbacks.length} contract(s) with the recovery run`,
     ],
   };
