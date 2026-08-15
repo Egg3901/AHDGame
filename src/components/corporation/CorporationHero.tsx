@@ -297,7 +297,10 @@ export function CorporationHero({
 
   // Market-cap tile (public / not fogged).
   const marketCapTile = (
-    <StatTile label="Market cap">
+    <StatTile
+      label="Market cap"
+      title="Shares outstanding x share price. The share price is built from tangible book (cash + sector value + builds in progress + tech, MINUS issued bond debt) plus capitalised earnings power. Debt-funded expansion lands the bond on the book immediately while the new capacity only lifts sector value as it starts earning, so market cap can fall through a build-out even while revenue and profit rise."
+    >
       <span className="block truncate text-lg font-bold tabular-nums text-foreground">
         {(() => {
           const code = (corporation.liquidCurrencyCode as CurrencyCode | undefined) ?? undefined;
