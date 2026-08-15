@@ -164,7 +164,7 @@ describe("buildNationalCorporationView", () => {
     expect(vm.stats.jobsGuaranteed).toBe(500); // only the employment-guaranteed energy sector
     expect(vm.stats.investorConfidence).toBe(70);
     expect(vm.stats.publicValueIndex).toBeGreaterThanOrEqual(1);
-    expect(vm.stats.treasuryRemittancePerTurn).toBeGreaterThan(0);
+    expect(vm.stats.operatingProfitPerTurn).toBeGreaterThan(0);
     expect(vm.stats.regionsCovered).toBe(2); // US-CA + US-TX
     expect(vm.stats.confidenceBaseline).toBe(70);
     expect(vm.stats.confidenceTrendPerTurn).toBe(0); // confidence (70) == baseline → no heal
@@ -199,7 +199,82 @@ describe("buildNationalCorporationView", () => {
     const sector = vm.holdingsByRegion.find((r) => r.stateId === "US-CA")!.sectors[0];
     // 1,000,000 × 25% = 250,000 — the operated margin, NOT max(0, 5 + penalty) = 0.
     expect(sector.operatingProfit).toBe(250_000);
-    expect(vm.stats.treasuryRemittancePerTurn).toBeGreaterThan(0);
+    expect(vm.stats.operatingProfitPerTurn).toBeGreaterThan(0);
+  });
+
+  it("splits operating profit into retained + remitted, cash ample (ticket #1072)", async () => {
+    // A single sector operating at 250k profit, 40% retained by the CEO, with
+    // plenty of working capital so the cash cap does not bite. The overview must
+    // show retained + remitted, NOT gross profit under a "remittance" label.
+    db.collectionMocks.corporateSectors.find.mockReturnValue(
+      cursor([
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          stateId: "US-CA",
+          sectorType: "energy",
+          revenue: 1_000_000,
+          workers: 500,
+          profitMargin: 25,
+          effectiveProfitMargin: 25,
+          soeMandate: { priceControlled: false, employmentGuaranteed: false },
+        },
+      ])
+    );
+    const corpWithCash = {
+      ...corp,
+      profitRetentionPercent: 40,
+      liquidCapital: 10_000_000,
+    } as unknown as Corporation;
+
+    const { buildNationalCorporationView } = await import("./nationalCorporationView");
+    const vm = await buildNationalCorporationView(
+      db as unknown as Db,
+      corpWithCash,
+      new ObjectId()
+    );
+
+    expect(vm.stats.operatingProfitPerTurn).toBe(250_000);
+    expect(vm.stats.retainedPerTurn).toBe(100_000); // 40% kept in the corp
+    expect(vm.stats.remittedPerTurn).toBe(150_000); // 60% remitted, cash ample
+    expect(vm.stats.remittanceCashCapped).toBe(false);
+    // The reconciliation the player could never find: retained + remitted == profit.
+    expect(vm.stats.retainedPerTurn + vm.stats.remittedPerTurn).toBe(
+      vm.stats.operatingProfitPerTurn
+    );
+  });
+
+  it("caps the remittance at on-hand working capital, flagging it (ticket #1072)", async () => {
+    // Same 250k profit, but the corp holds only 40k cash. The remittance is the
+    // cash it can actually move — the reporter's "0/low profit per turn while the
+    // sector earns" case — and the cap is surfaced, not shown as a bare number.
+    db.collectionMocks.corporateSectors.find.mockReturnValue(
+      cursor([
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          stateId: "US-CA",
+          sectorType: "energy",
+          revenue: 1_000_000,
+          workers: 500,
+          profitMargin: 25,
+          effectiveProfitMargin: 25,
+          soeMandate: { priceControlled: false, employmentGuaranteed: false },
+        },
+      ])
+    );
+    const cashPoor = {
+      ...corp,
+      profitRetentionPercent: 0, // 100% would remit…
+      liquidCapital: 40_000, // …but only 40k of cash exists to move
+    } as unknown as Corporation;
+
+    const { buildNationalCorporationView } = await import("./nationalCorporationView");
+    const vm = await buildNationalCorporationView(db as unknown as Db, cashPoor, new ObjectId());
+
+    expect(vm.stats.operatingProfitPerTurn).toBe(250_000);
+    expect(vm.stats.remittedPerTurn).toBe(40_000); // capped at on-hand cash
+    expect(vm.stats.remittanceCashCapped).toBe(true);
   });
 
   it("exposes all country regions (alphabetical) for the IPO HQ selector", async () => {
