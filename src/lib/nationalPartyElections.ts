@@ -576,6 +576,16 @@ export async function processCompletedNationalElections(
     topVoteCount: number;
   };
   const winningResults: WinningResult[] = [];
+  /**
+   * Seats to vacate because the race produced no winner AND the incumbent did
+   * not stand for re-election (ticket #1100). See the else-branch comment below.
+   */
+  const unopposedVacancies: {
+    party: PoliticalParty;
+    position: NationalPartyElectionPosition;
+    holderId: ObjectId;
+    partyId: string;
+  }[] = [];
 
   for (const election of endedElections) {
     const { partyId, position } = election;
@@ -620,9 +630,33 @@ export async function processCompletedNationalElections(
         topVoteCount: voteCounts[0]?.count ?? 0,
       });
     } else {
-      console.log(
-        `[NationalPartyElections] ${partyId} ${position}: no candidates — position unchanged`
-      );
+      // No winner. A mandate is only renewed by standing: an incumbent who did
+      // NOT put their name forward loses the seat when the cycle closes, and the
+      // seat opens empty for the next cycle (created automatically by
+      // createMissingNationalElections). An incumbent who DID stand keeps the
+      // seat: an uncontested or unvoted race is not a repudiation.
+      //
+      // Before this, every no-winner race left the incumbent in place
+      // unconditionally, so an officer nobody challenged (and who never re-stood)
+      // held the office forever, with the party unable to remove them through the
+      // election mechanic (ticket #1100: a UK party treasurer). The chair seat has
+      // the vice-chair acting-chair fallback for a vacancy; vice-chair and
+      // treasurer simply open up.
+      const party = partyMap.get(`${election.countryId ?? "US"}:${partyId}`);
+      const holderId = party ? (party[POSITION_FIELD[position]] ?? null) : null;
+      const incumbentStood =
+        holderId != null && candidates.some((c) => c.characterId.equals(holderId));
+
+      if (party && holderId && !incumbentStood) {
+        unopposedVacancies.push({ party, position, holderId, partyId });
+        console.log(
+          `[NationalPartyElections] ${partyId} ${position}: no winner and the incumbent did not stand, seat vacated`
+        );
+      } else {
+        console.log(
+          `[NationalPartyElections] ${partyId} ${position}: no winner, position unchanged`
+        );
+      }
     }
   }
 
@@ -737,6 +771,39 @@ export async function processCompletedNationalElections(
         `[NationalPartyElections] ${partyId} ${position}: ${winnerName} elected (${topVoteCount} votes)`
       );
     }
+  }
+
+  // Apply the no-winner vacancies. Grouped per party so several seats collapse
+  // into one update. Skipped when the holder already won another office in this
+  // same batch, because the auto-vacate above already cleared and notified.
+  const vacanciesByParty = new Map<string, typeof unopposedVacancies>();
+  for (const v of unopposedVacancies) {
+    const winnerOfAnotherSeat = winningResults.some(
+      (r) =>
+        r.election.partyId === v.partyId &&
+        (r.election.countryId ?? "US") === (v.party.countryId ?? "US") &&
+        r.winnerId.equals(v.holderId)
+    );
+    if (winnerOfAnotherSeat) continue;
+    const key = v.party._id.toString();
+    const list = vacanciesByParty.get(key) ?? [];
+    list.push(v);
+    vacanciesByParty.set(key, list);
+  }
+  for (const list of vacanciesByParty.values()) {
+    const setUpdates: Record<string, unknown> = { updatedAt: now };
+    for (const { party, position, holderId, partyId } of list) {
+      setUpdates[POSITION_FIELD[position]] = null;
+      if (position === "chair") {
+        chairChanges.push({ partyOid: party._id as ObjectId, newChairId: null });
+      }
+      notifications.push(
+        notifyNationalLeadershipNotReStood(holderId, partyId, position, party.countryId)
+      );
+    }
+    partyOps.push({
+      updateOne: { filter: { _id: list[0].party._id }, update: { $set: setUpdates } },
+    });
   }
 
   await db.collection<NationalPartyElection>("nationalPartyElections").bulkWrite(electionOps);
@@ -1346,6 +1413,37 @@ async function notifyNationalLeadershipVacatedForNewRole(
       partyId,
       position: vacatedPosition,
       newPosition,
+      recipientCharacterId: char._id.toString(),
+    },
+  });
+}
+
+/**
+ * Sent when a leadership cycle closed with no winner and the incumbent had not
+ * entered the race, so the seat was vacated rather than rolled over (#1100).
+ */
+async function notifyNationalLeadershipNotReStood(
+  holderId: ObjectId,
+  partyId: string,
+  vacatedPosition: NationalPartyElectionPosition,
+  countryId: CountryId
+): Promise<void> {
+  const db = await getDb();
+  const char = await db.collection<Character>("characters").findOne({ _id: holderId });
+  if (!char) return;
+
+  const label = getPartyRoleLabel(countryId, vacatedPosition);
+  await createNotification({
+    userId: char.userId,
+    type: "national_leadership_removed",
+    title: `Term as ${label} ended`,
+    message:
+      `Your term as ${label} of the national party has ended. You did not stand in the ` +
+      `leadership election, so the seat is now vacant and open for the next election.`,
+    metadata: {
+      partyId,
+      position: vacatedPosition,
+      reason: "did_not_stand",
       recipientCharacterId: char._id.toString(),
     },
   });

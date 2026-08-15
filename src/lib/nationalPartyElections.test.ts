@@ -499,7 +499,7 @@ describe("processCompletedNationalElections", () => {
     expect(coalitionOp.updateMany.update.$set.chairCharacterId.equals(PERSON_Q_ID)).toBe(true);
   });
 
-  it("does not update any party when election has no candidates", async () => {
+  it("does not update any party when the seat is already vacant and no candidates stand", async () => {
     const election = makeElection(US_ELECTION_ID, "US");
 
     setMockCollection("nationalPartyElections", {
@@ -535,6 +535,98 @@ describe("processCompletedNationalElections", () => {
 
     // No party updates when there are no candidates
     expect(partyBulkWrite).not.toHaveBeenCalled();
+  });
+
+  // ─── Ticket #1100: zero-candidate officer races ──────────────────────────
+  //
+  // A cycle that closes with no winner used to leave the incumbent seated
+  // unconditionally, so an officer who never re-stood held the office forever.
+  // A mandate is now only renewed by standing.
+  describe("no-winner races (ticket #1100)", () => {
+    const INCUMBENT_ID = new ObjectId();
+
+    function setupNoWinnerRace(
+      party: Record<string, unknown>,
+      candidates: ReturnType<typeof makeCandidate>[],
+      position: "chair" | "viceChair" | "treasurer" = "treasurer"
+    ) {
+      setMockCollection("nationalPartyElections", {
+        find: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue([makeElection(UK_ELECTION_ID, "UK", position)]),
+        }),
+        bulkWrite: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+      });
+      setMockCollection("nationalPartyCandidates", {
+        find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(candidates) }),
+      });
+      setMockCollection("nationalPartyVotes", {
+        aggregate: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      });
+      const partyBulkWrite = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+      setMockCollection("politicalParties", {
+        find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([party]) }),
+        bulkWrite: partyBulkWrite,
+      });
+      setMockCollection("characters", {
+        findOne: vi.fn().mockResolvedValue({
+          _id: INCUMBENT_ID,
+          userId: new ObjectId(),
+          name: "Incumbent",
+        }),
+        find: vi.fn().mockReturnValue({
+          project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+        }),
+      });
+      return partyBulkWrite;
+    }
+
+    it("vacates the seat when nobody stands and the incumbent did not re-stand", async () => {
+      const partyBulkWrite = setupNoWinnerRace(
+        { ...ukParty, treasurerId: INCUMBENT_ID },
+        [] // zero candidates
+      );
+
+      const { processCompletedNationalElections } = await import("./nationalPartyElections");
+      await processCompletedNationalElections(10);
+
+      expect(partyBulkWrite).toHaveBeenCalledOnce();
+      const ops = partyBulkWrite.mock.calls[0][0];
+      expect(ops).toHaveLength(1);
+      expect(ops[0].updateOne.filter._id).toEqual(UK_PARTY_OID);
+      expect(ops[0].updateOne.update.$set.treasurerId).toBeNull();
+      // Only the contested office is touched.
+      expect(ops[0].updateOne.update.$set).not.toHaveProperty("chairId");
+      expect(ops[0].updateOne.update.$set).not.toHaveProperty("viceChairId");
+    });
+
+    it("keeps the incumbent when they stood but the race drew no votes", async () => {
+      const partyBulkWrite = setupNoWinnerRace({ ...ukParty, treasurerId: INCUMBENT_ID }, [
+        makeCandidate(UK_ELECTION_ID, INCUMBENT_ID, "Incumbent", "treasurer"),
+      ]);
+
+      const { processCompletedNationalElections } = await import("./nationalPartyElections");
+      await processCompletedNationalElections(10);
+
+      // An uncontested, unvoted race is not a repudiation, so no seat change.
+      expect(partyBulkWrite).not.toHaveBeenCalled();
+    });
+
+    it("vacates a chair seat and clears the led coalition's chair", async () => {
+      const partyBulkWrite = setupNoWinnerRace({ ...ukParty, chairId: INCUMBENT_ID }, [], "chair");
+      const coalitionBulkWrite = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+      setMockCollection("coalitions", { bulkWrite: coalitionBulkWrite });
+
+      const { processCompletedNationalElections } = await import("./nationalPartyElections");
+      await processCompletedNationalElections(10);
+
+      const ops = partyBulkWrite.mock.calls[0][0];
+      expect(ops[0].updateOne.update.$set.chairId).toBeNull();
+
+      expect(coalitionBulkWrite).toHaveBeenCalledOnce();
+      const coalitionOps = coalitionBulkWrite.mock.calls[0][0];
+      expect(coalitionOps[0].updateMany.filter.chairPartyId).toEqual(UK_PARTY_OID);
+      expect(coalitionOps[0].updateMany.update.$set.chairCharacterId).toBeNull();
+    });
   });
 
   it("clears an older national leadership seat when the same winner takes a new one", async () => {
