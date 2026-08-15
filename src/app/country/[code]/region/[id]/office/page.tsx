@@ -56,6 +56,8 @@ import {
 } from "@/lib/constants/countries";
 import { getOfficeState } from "@/lib/governorOffice/queries";
 import { resolveOfficeAccess } from "@/lib/governorOffice/access";
+import type { ScopedVoteOfficial } from "@/lib/congress/billVoting";
+import { resolveStateBillHeadlineTallies } from "@/lib/legislature/stateBillVoteScope";
 import { GovernorOfficeClient } from "./GovernorOfficeClient";
 import { ADDRESS_COOLDOWN_TURNS } from "@/lib/constants/governorOffice";
 import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
@@ -147,6 +149,8 @@ export default async function GovernorOfficePage({ params }: Props) {
   //    countryScope match, not a tax-rate change)
   //  - most-recent governor address (cooldown countdown + summary)
   const legTypeCountryScope = code.toLowerCase() as LegislationType["countryScope"];
+  const subNationalOffice = getSubNationalLegislatureKey(countryId);
+  const voteScope = subNationalOffice ? { countryId, officeType: subNationalOffice } : null;
   const [
     officeState,
     awaitingAssentBills,
@@ -155,6 +159,7 @@ export default async function GovernorOfficePage({ params }: Props) {
     gameStateDoc,
     legislationTypes,
     recentAddresses,
+    chamberOfficials,
   ] = await Promise.all([
     getOfficeState(db, countryId, stateId),
     db
@@ -170,6 +175,9 @@ export default async function GovernorOfficePage({ params }: Props) {
             sponsorParty: 1,
             votesFor: 1,
             votesAgainst: 1,
+            votesAbstain: 1,
+            votes: 1,
+            voteSnapshot: 1,
             passedAt: 1,
           },
         }
@@ -211,6 +219,21 @@ export default async function GovernorOfficePage({ params }: Props) {
       .find({ countryId, stateId })
       .sort({ deliveredAtTurn: -1 })
       .limit(1)
+      .toArray(),
+    db
+      .collection<ElectedOfficial>("electedOfficials")
+      .find({
+        state: stateId,
+        officeType: subNationalOffice,
+        countryId: countryId as ElectedOfficial["countryId"],
+      })
+      .project<ScopedVoteOfficial>({
+        characterId: 1,
+        countryId: 1,
+        nppId: 1,
+        officeType: 1,
+        seatsHeld: 1,
+      })
       .toArray(),
   ]);
   const currentTurn = gameStateDoc?.currentTurn ?? 0;
@@ -548,6 +571,10 @@ export default async function GovernorOfficePage({ params }: Props) {
       .map((n) => ({ _id: n._id.toString(), name: n.name }));
   }
 
+  const inFlightTally = inFlightGovernorBill
+    ? resolveStateBillHeadlineTallies(inFlightGovernorBill, chamberOfficials, voteScope)
+    : null;
+
   return (
     <Suspense fallback={<div className="min-h-screen bg-background" />}>
       <GovernorOfficeClient
@@ -566,16 +593,19 @@ export default async function GovernorOfficePage({ params }: Props) {
         viewerCanManage={viewerCanManage}
         gubernatorialActions={officeState?.gubernatorialActions ?? 0}
         lastActionGrantedTurn={officeState?.lastActionGrantedTurn ?? 0}
-        awaitingAssentBills={awaitingAssentBills.map((b) => ({
-          _id: b._id.toString(),
-          title: b.title,
-          summary: b.summary,
-          sponsorId: b.sponsorId?.toString() ?? null,
-          sponsorName: b.sponsorName,
-          sponsorParty: b.sponsorParty ?? null,
-          votesFor: b.votesFor,
-          votesAgainst: b.votesAgainst,
-        }))}
+        awaitingAssentBills={awaitingAssentBills.map((b) => {
+          const tally = resolveStateBillHeadlineTallies(b, chamberOfficials, voteScope);
+          return {
+            _id: b._id.toString(),
+            title: b.title,
+            summary: b.summary,
+            sponsorId: b.sponsorId?.toString() ?? null,
+            sponsorName: b.sponsorName,
+            sponsorParty: b.sponsorParty ?? null,
+            votesFor: tally.votesFor,
+            votesAgainst: tally.votesAgainst,
+          };
+        })}
         activeOrders={activeOrders.map((o) => {
           const type = legislationTypeById.get(o.legislationTypeId);
           return {
@@ -654,19 +684,19 @@ export default async function GovernorOfficePage({ params }: Props) {
         })}
         availableRaces={availableRaces}
         legislationActivity={
-          inFlightGovernorBill
+          inFlightGovernorBill && inFlightTally
             ? {
                 kind: "in_flight",
                 billId: inFlightGovernorBill._id.toString(),
                 title: inFlightGovernorBill.title,
                 status: inFlightGovernorBill.status as "active" | "passed" | "veto_override",
-                votesFor: inFlightGovernorBill.votesFor,
-                votesAgainst: inFlightGovernorBill.votesAgainst,
+                votesFor: inFlightTally.votesFor,
+                votesAgainst: inFlightTally.votesAgainst,
                 votingEndsAt: inFlightGovernorBill.votingEndsAt?.toISOString() ?? null,
                 overrideVotingEndsAt:
                   inFlightGovernorBill.overrideVotingEndsAt?.toISOString() ?? null,
-                overrideVotesFor: inFlightGovernorBill.overrideVotesFor ?? 0,
-                overrideVotesAgainst: inFlightGovernorBill.overrideVotesAgainst ?? 0,
+                overrideVotesFor: inFlightTally.overrideVotesFor,
+                overrideVotesAgainst: inFlightTally.overrideVotesAgainst,
                 sponsorName: inFlightGovernorBill.sponsorName,
                 targetNppName: inFlightGovernorBill.sponsorName,
               }
