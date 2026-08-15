@@ -90,20 +90,34 @@ function BudgetFlowStrip({
   stats,
   currency,
   debtService,
+  retentionPercent,
 }: {
   stats: NationalCorporationViewModel["stats"];
   currency: string;
   debtService: number;
+  retentionPercent: number;
 }) {
-  const grossOperatingProfit = stats.treasuryRemittancePerTurn + stats.mandateSubsidyPerTurn;
-  const netToTreasury = Math.max(0, stats.treasuryRemittancePerTurn - debtService);
+  // The real cash chain from operating profit to the budget. Two legs the old
+  // strip skipped — the retention split and the on-hand-cash cap — are why a
+  // player saw sector profit but "0" reaching the budget. `remittedPerTurn` is
+  // the same cash-capped figure the turn remits (view-model `cappedRemittanceLocal`),
+  // so this reconciles with the budget page's State-Enterprise line. Mandate
+  // subsidy is a notional attribution already baked into operating profit, not a
+  // second cash deduction, so it is NOT in the flow (it stays an info row below).
+  const netToTreasury = Math.max(0, stats.remittedPerTurn - debtService);
   const nodes: Array<{ title: string; value: number; tone?: Tone; sub: string }> = [
-    { title: "Operating profit", value: grossOperatingProfit, sub: "across held sectors" },
+    { title: "Operating profit", value: stats.operatingProfitPerTurn, sub: "across held sectors" },
     {
-      title: "− Mandate subsidy",
-      value: -stats.mandateSubsidyPerTurn,
+      title: "− Retained in corp",
+      value: -stats.retainedPerTurn,
       tone: "error",
-      sub: "covers price-controlled losses",
+      sub: `kept as working capital (${retentionPercent}%)`,
+    },
+    {
+      title: "Remitted",
+      value: stats.remittedPerTurn,
+      tone: "success",
+      sub: stats.remittanceCashCapped ? "capped by cash on hand" : "the remitted share",
     },
     {
       title: "− Assumed-debt service",
@@ -115,7 +129,7 @@ function BudgetFlowStrip({
       title: "Net to treasury",
       value: netToTreasury,
       tone: "success",
-      sub: "remitted to the budget",
+      sub: "into the people's budget",
     },
   ];
 
@@ -173,7 +187,6 @@ export function NatOverviewTab({
     0
   );
   const totalAssumedFace = vm.assumedBonds.reduce((acc, b) => acc + b.principal, 0);
-  const grossOperatingProfit = stats.treasuryRemittancePerTurn + stats.mandateSubsidyPerTurn;
   const confTone: Tone = stats.investorConfidence < stats.confidenceBaseline ? "error" : "success";
   const effTone: Tone =
     stats.sectorCount === 0 ? "foreground" : stats.soeEfficiencyPenalty > -12 ? "success" : "error";
@@ -203,7 +216,12 @@ export function NatOverviewTab({
         </p>
       </div>
 
-      <BudgetFlowStrip stats={stats} currency={currency} debtService={debtService} />
+      <BudgetFlowStrip
+        stats={stats}
+        currency={currency}
+        debtService={debtService}
+        retentionPercent={vm.finance.profitRetentionPercent}
+      />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {/* Treasury & budget */}
@@ -214,14 +232,23 @@ export function NatOverviewTab({
           icon={<Landmark className="h-4 w-4" />}
         >
           <StatRow
-            label="Net remittance / turn"
-            value={`${money(Math.max(0, stats.treasuryRemittancePerTurn - debtService), currency)}/turn`}
+            label="Operating profit / turn"
+            value={`${money(stats.operatingProfitPerTurn, currency)}/turn`}
+            tone={stats.operatingProfitPerTurn >= 0 ? "success" : "error"}
+          />
+          <StatRow
+            label="Retained in corp / turn"
+            value={`${money(stats.retainedPerTurn, currency)}/turn`}
+          />
+          <StatRow
+            label={stats.remittanceCashCapped ? "Remitted / turn (cash-capped)" : "Remitted / turn"}
+            value={`${money(stats.remittedPerTurn, currency)}/turn`}
             tone="success"
           />
           <StatRow
-            label="Operating profit / turn"
-            value={`${money(grossOperatingProfit, currency)}/turn`}
-            tone={grossOperatingProfit >= 0 ? "success" : "error"}
+            label="Net to budget / turn"
+            value={`${money(Math.max(0, stats.remittedPerTurn - debtService), currency)}/turn`}
+            tone="success"
           />
           <StatRow
             label="Mandate subsidy / turn"
