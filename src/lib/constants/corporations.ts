@@ -1938,4 +1938,4 @@ export const PRIVATIZATION_FAILED_COOLDOWN_TURNS = 96;
  * (current-decade) weight. Weight decays by 50% per decade: current = 1.0,
  * previous = 0.5, two decades back = 0.25, etc.
  */
-export const TECH_ASSET_VALUE_PER_RD_ANCHOR = 10_000;
+export const TECH_ASSET_VALUE_PER_RD_ANCHOR = 45_000;
