@@ -72,7 +72,7 @@ describe("processBankSupervision — revoke refunds capital (ticket 1093)", () =
     const corp = bankCorp({
       cashReserves,
       propBookMarkValue,
-      propBook: [{ asset: "corpEquity", ref: "abc", units: 1, costBasis: 9_000_000 }],
+      propBook: [{ asset: "equity", ref: "abc", units: 1, costBasis: 9_000_000 }],
       totalLoans: 0,
       totalDeposits: 0,
       undercapitalizedSinceTurn: BREACHED_SINCE,
