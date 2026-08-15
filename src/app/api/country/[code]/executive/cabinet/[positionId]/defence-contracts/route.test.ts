@@ -125,6 +125,21 @@ describe("POST defence-contracts", () => {
     expect((await res.json()).contract.status).toBe("pending");
   });
 
+  // Kill switch: a frozen world refuses new awards before touching the order book, and the
+  // supplier is never notified of an offer that was never made.
+  it("refuses to award while defence procurement is frozen", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      defenceProcurementPaused: true,
+    });
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1 }), params);
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/frozen/i);
+    expect(db.collectionMocks.defenceContracts.insertOne).not.toHaveBeenCalled();
+  });
+
   it("rejects a non-holder", async () => {
     vi.mocked(requireAuth).mockResolvedValue({
       ok: true,
