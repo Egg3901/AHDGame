@@ -163,7 +163,7 @@ export const LEGAL_STRUCTURES: LegalStructure[] = [
     taxTreatment: "standard",
     shareholderVoteThreshold: 0.6,
     description:
-      "Japan's standard joint-stock company. Most CEO-protective default structure in the game.",
+      "The UK's standard listed company. Most CEO-protective default structure in the game.",
   },
   {
     id: "jp_gk",

@@ -9,14 +9,17 @@ import type { AllocSegment, AllocTone } from "./financialsModel";
 // logistics segment two opacities of the same token were indistinguishable.
 const SEG_BG: Record<AllocTone, string> = {
   maintenance: "bg-error/70",
+  labor: "bg-error/40",
   growth: "bg-warning/80",
   marketing: "bg-info/70",
   logistics: "bg-accent/70",
   rd: "bg-secondary/70",
   salary: "bg-info/40",
   pension: "bg-gold-muted/70",
+  regulatory: "bg-warning/50",
   tax: "bg-muted/60",
   interest: "bg-primary/70",
+  other: "bg-muted/30",
 };
 
 /** Horizontal 100%-of-gross-revenue bar: cost segments + remaining net income. */
