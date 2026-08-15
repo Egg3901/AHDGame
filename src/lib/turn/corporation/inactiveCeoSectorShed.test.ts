@@ -29,6 +29,7 @@ function makeMinimalLookups(
     eraUnitScale: 1,
     corporations,
     sectorsByCorp,
+    primeRateSmoothedByCountry: new Map(),
     corpById,
     ceoBusinessAcumenByCorpId: new Map(),
     bondsByCorpId: new Map(),

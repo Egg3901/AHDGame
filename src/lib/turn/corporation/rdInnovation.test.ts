@@ -43,6 +43,7 @@ function baseLookups(
     eraUnitScale: 1,
     corporations,
     sectorsByCorp,
+    primeRateSmoothedByCountry: new Map(),
     corpById: new Map(corporations.map((c) => [c._id.toString(), c])),
     ceoBusinessAcumenByCorpId: new Map(),
     bondsByCorpId: new Map(),
