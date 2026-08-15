@@ -46,8 +46,11 @@ export default function HeroPanel({
   const exchangeTabs = useMemo<{ countryId: CountryId; label: string }[]>(
     () =>
       registered
-        .filter((id) => !!COUNTRY_CONFIGS[id].exchangeName && !isStateRegister(id))
-        .map((id) => ({ countryId: id, label: COUNTRY_CONFIGS[id].exchangeName!.toUpperCase() })),
+        .filter((id) => !!COUNTRY_CONFIGS[id]?.exchangeName && !isStateRegister(id))
+        .map((id) => ({
+          countryId: id,
+          label: (COUNTRY_CONFIGS[id]?.exchangeName ?? id).toUpperCase(),
+        })),
     [registered]
   );
   const heroSlug = COMMODITY_HERO_SLUGS[data.commodity as CommodityType];

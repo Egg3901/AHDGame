@@ -176,6 +176,23 @@ describe("buildCommodityMarketScope", () => {
     expect(scope.marketCaption).not.toContain("undefined");
   });
 
+  it("does not crash in a state view when the fallback active country is also stale", () => {
+    // Ticket #1101 follow-up: #234 guarded the country branch but left the state
+    // branch's `COUNTRY_CONFIGS[stateCountry].name` unguarded. When the state's
+    // mapping is stale AND activeCountry is itself stale, stateCountry falls back
+    // to the stale activeCountry and the caption lookup threw "reading 'name'".
+    const data = makeCommodityDetail({
+      stateCountryMap: { ZZ: "STALE_COUNTRY" },
+    });
+
+    expect(() =>
+      buildCommodityMarketScope(data, "STALE_COUNTRY" as unknown as never, "ZZ")
+    ).not.toThrow();
+
+    const scope = buildCommodityMarketScope(data, "STALE_COUNTRY" as unknown as never, "ZZ");
+    expect(scope.marketCaption).not.toContain("undefined");
+  });
+
   it("does not crash when activeCountry itself is missing from COUNTRY_CONFIGS", () => {
     const data = makeCommodityDetail();
 
