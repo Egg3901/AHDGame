@@ -85,14 +85,17 @@ export function valuation(
 
 export type AllocTone =
   | "maintenance"
+  | "labor"
   | "growth"
   | "marketing"
   | "logistics"
   | "rd"
   | "salary"
   | "pension"
+  | "regulatory"
   | "tax"
-  | "interest";
+  | "interest"
+  | "other";
 
 export interface AllocSegment {
   key: AllocTone;
@@ -107,7 +110,13 @@ export interface AllocSegment {
 export function buildAllocation(
   f: Financials,
   period: Period
-): { revenue: number; segments: AllocSegment[]; netIncome: number; netPct: number } {
+): {
+  revenue: number;
+  segments: AllocSegment[];
+  inflows: AllocSegment[];
+  netIncome: number;
+  netPct: number;
+} {
   const revenue = scaleToPeriod(f.totalRevenue, period);
   const pctOf = (raw: number) => (f.totalRevenue > 0 ? (raw / f.totalRevenue) * 100 : 0);
   const seg = (key: AllocTone, label: string, raw: number): AllocSegment => ({
@@ -119,32 +128,65 @@ export function buildAllocation(
   });
 
   const tax = f.federalTax + f.stateTax;
-  const netInterest = Math.max(
-    0,
+  // Net interest is a two-way flow: a corp whose coupons exceed its debt service
+  // is a net RECEIVER. Clamping the negative away (as this did before) silently
+  // dropped that inflow from the bar while `income` still carried it, so the
+  // segments could never sum to the total. Keep the signed value and let the
+  // reconciliation below place it on the correct side.
+  const netInterest =
     f.bondInterestCost +
-      f.imfFacilityPaymentDaily -
-      f.bondCouponIncome -
-      f.dividendIncomeReceived -
-      f.governmentBondSubsidy -
-      f.imfFacilityReceiptsDaily
-  );
+    f.imfFacilityPaymentDaily -
+    f.bondCouponIncome -
+    f.dividendIncomeReceived -
+    f.governmentBondSubsidy -
+    f.imfFacilityReceiptsDaily;
 
-  const segments = [
-    seg("maintenance", "Maintenance", f.maintenanceCosts),
-    seg("growth", "Growth", f.growthCosts),
-    seg("marketing", "Marketing", f.marketingCosts),
-    seg("logistics", "Logistics", f.logisticsCosts),
-    seg("rd", "R&D", f.rdCosts),
-    seg("salary", "CEO salary", f.ceoSalaryCost),
-    seg("pension", "Pensions", f.pensionContributionCost + f.pensionTopUpCost),
-    seg("tax", "Taxes", tax),
-    seg("interest", "Net interest", netInterest),
-  ].filter((s) => s.value > 0);
+  // Every cost the backend charges into `income` (see corporationDetail.ts
+  // `operatingCosts` / `income`) must appear here. `laborCosts` and
+  // `regulatoryBurden` were both absent, so a corp's wage bill — often its
+  // single largest line — vanished from the bar while remaining in the total.
+  const costRows: Array<[AllocTone, string, number]> = [
+    ["maintenance", "Maintenance", f.maintenanceCosts],
+    ["labor", "Wages", f.laborCosts],
+    ["growth", "Growth", f.growthCosts],
+    ["marketing", "Marketing", f.marketingCosts],
+    ["logistics", "Logistics", f.logisticsCosts],
+    ["rd", "R&D", f.rdCosts],
+    ["salary", "CEO salary", f.ceoSalaryCost],
+    ["pension", "Pensions", f.pensionContributionCost + f.pensionTopUpCost],
+    ["regulatory", "Regulatory", f.regulatoryBurden],
+    ["tax", "Taxes", tax],
+    ["interest", "Net interest", netInterest],
+  ];
+
+  const accountedCosts = costRows.reduce((sum, [, , raw]) => sum + raw, 0);
+  // Anything `income` reflects that the rows above don't explain. This should be
+  // ~0; when it isn't, show it rather than letting the column quietly fail to
+  // add up. A visible "Other" row is a bug report from the player; a silent
+  // mismatch is a support ticket.
+  const residual = f.totalRevenue - accountedCosts - f.income;
+
+  const allRows: Array<[AllocTone, string, number]> = [...costRows, ["other", "Other", residual]];
+
+  // Derived, never passed through: the bottom line is the arithmetic result of
+  // every row above it, so a missing cost line changes the total instead of
+  // hiding inside it. Summing the SIGNED rows (inflows included) is what makes
+  // `netIncome === f.income` an identity rather than a coincidence.
+  const netIncome =
+    revenue - allRows.reduce((sum, [, , raw]) => sum + scaleToPeriod(raw, period), 0);
+
+  // The bar allocates shares of gross revenue, so only outflows are drawn.
+  // Inflows are returned separately for the statement to render on their own
+  // side rather than being dropped.
+  const segments = allRows.map(([key, label, raw]) => seg(key, label, raw));
 
   return {
     revenue,
-    segments,
-    netIncome: scaleToPeriod(f.income, period),
-    netPct: f.totalRevenue > 0 ? (f.income / f.totalRevenue) * 100 : 0,
+    segments: segments.filter((s) => s.value > 0),
+    inflows: segments
+      .filter((s) => s.value < 0)
+      .map((s) => ({ ...s, value: -s.value, pct: -s.pct })),
+    netIncome,
+    netPct: revenue !== 0 ? (netIncome / revenue) * 100 : 0,
   };
 }
