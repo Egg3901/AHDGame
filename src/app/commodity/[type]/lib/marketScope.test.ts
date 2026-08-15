@@ -158,6 +158,36 @@ describe("buildCommodityMarketScope", () => {
     expect(scope.capacityByState).toBeUndefined();
   });
 
+  it("does not crash when a state maps to a country code missing from COUNTRY_CONFIGS", () => {
+    // Ticket #1101: a US player hit a client crash on the commodity page.
+    // stateCountryMap is server data and can point a state at a country id
+    // the client's COUNTRY_CONFIGS no longer has (removed/renamed country,
+    // stale seed data). Trusting it as a CountryId threw
+    // "Cannot read properties of undefined (reading 'name')" at
+    // COUNTRY_CONFIGS[stateCountry].name.
+    const data = makeCommodityDetail({
+      stateCountryMap: { CA: "US", TX: "US", BRE: "DE", BAY: "DE", ZZ: "STALE_COUNTRY" },
+    });
+
+    expect(() => buildCommodityMarketScope(data, "US", "ZZ")).not.toThrow();
+
+    const scope = buildCommodityMarketScope(data, "US", "ZZ");
+    expect(scope.activeCountry).toBe("US");
+    expect(scope.marketCaption).not.toContain("undefined");
+  });
+
+  it("does not crash when activeCountry itself is missing from COUNTRY_CONFIGS", () => {
+    const data = makeCommodityDetail();
+
+    expect(() =>
+      buildCommodityMarketScope(data, "STALE_COUNTRY" as unknown as never)
+    ).not.toThrow();
+
+    const scope = buildCommodityMarketScope(data, "STALE_COUNTRY" as unknown as never);
+    expect(scope.marketLabel).toBe("STALE_COUNTRY Market");
+    expect(scope.marketCaption).toBe("Filtered to STALE_COUNTRY.");
+  });
+
   it("names a command economy's commodity market after the country, not its state register", () => {
     // RU carries exchangeName "GOSPLAN" so its state enterprises have a listing
     // venue, but a planning committee does not set commodity prices — the label
