@@ -79,6 +79,21 @@ describe("POST defence-contracts", () => {
     expect(body.contract.pricePerLot).toBeGreaterThan(0);
   });
 
+  it("awards more than one lot to a single supplier in a US-scale window (ticket 1108)", async () => {
+    db.collectionMocks.federalBudget.findOne.mockResolvedValue({
+      _id: "federal",
+      countryId: "US",
+      gdp: 387_000_000_000,
+      spending: { byCategory: { defense: 65_081_266_164.8 } },
+      treasuryBalance: 0,
+      debt: { principal: 0, ceiling: 0 },
+    });
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 3 }), params);
+    expect(res.status).toBe(200);
+    expect((await res.json()).contract.lotsOrdered).toBe(3);
+  });
+
   it("rejects an award larger than the supplier's budget-scaled contracting allowance", async () => {
     const { POST } = await import(ROUTE);
     const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1_000 }), params);

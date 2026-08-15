@@ -38,14 +38,14 @@ describe("findProcurementClawbacks", () => {
 
     const rows = findProcurementClawbacks(contracts, new Map([["US", 65_081_000_000]]));
 
-    expect(rows.reduce((sum, row) => sum + row.excessLots, 0)).toBe(51);
-    expect(rows.reduce((sum, row) => sum + row.amount, 0)).toBe(18_973_283_976);
+    expect(rows.reduce((sum, row) => sum + row.excessLots, 0)).toBe(41);
+    expect(rows.reduce((sum, row) => sum + row.amount, 0)).toBe(15_253_032_216);
   });
 
   it("is a no-op after the excess lots have already been recovered", () => {
     const supplier = new ObjectId();
     const rows = findProcurementClawbacks(
-      [contract({ lots: 10, turn: 96, corporationId: supplier, clawedBack: 9 })],
+      [contract({ lots: 10, turn: 96, corporationId: supplier, clawedBack: 4 })],
       new Map([["US", 65_081_000_000]])
     );
     expect(rows).toEqual([]);
