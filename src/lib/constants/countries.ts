@@ -971,7 +971,8 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
       name: "Regional Council",
       shortName: "Regional Council",
       seats: 364,
-      description: "Elected regional councillors representing UK nations and regions.",
+      description:
+        "Elected regional councillors representing UK nations and regions on staggered five-year terms.",
       regionalModel: true,
     },
 

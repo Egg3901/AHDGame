@@ -736,6 +736,37 @@ describe("distributeVotesBySwingFlow — presidential coattail (presidentialModi
   });
 });
 
+describe("distributeVotesBySwingFlow — midterm opposition modifier", () => {
+  it("raises an opposition party's nominal share by the configured counterweight", () => {
+    const base = distributeVotesBySwingFlow(
+      fixtureCandidates(),
+      1_000_000,
+      1_000_000,
+      1_000_000,
+      fixtureDemographics(),
+      fixtureCategories(),
+      new Map(),
+      { isGeneralElection: true, countryId: "UK", votingSystem: "fptp" }
+    );
+    const withMidterm = distributeVotesBySwingFlow(
+      fixtureCandidates(),
+      1_000_000,
+      1_000_000,
+      1_000_000,
+      fixtureDemographics(),
+      fixtureCategories(),
+      new Map(),
+      {
+        isGeneralElection: true,
+        countryId: "UK",
+        votingSystem: "fptp",
+        midtermOppositionModifierByParty: new Map([["dem", 1.05]]),
+      }
+    );
+    expect(withMidterm.sharesPct.c1).toBeGreaterThan(base.sharesPct.c1);
+  });
+});
+
 describe("personal-reach org floor (#0671)", () => {
   it("a zero-org candidate with personal pull is no longer zeroed", () => {
     const enriched = fixtureCandidates();

@@ -25,7 +25,6 @@ import type {
 } from "@/lib/db/types";
 import type { Coalition } from "@/lib/db/types/coalition";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
-import type { ParliamentaryGovernment } from "@/lib/db/types/parliamentaryGovernment";
 import {
   getGovernmentFormationsCollection,
   getPMAppointmentVotesCollection,
@@ -60,6 +59,7 @@ import { installNewLeader, renewLeaderMandate } from "@/lib/turn/rulingPartyConf
 import { canFormGovernment, canCollapseGovernment } from "@/lib/turn/onePartyConstraints";
 import { getCountryState, updateCountryState } from "@/lib/countryState";
 import { logger } from "../observability/logger";
+export { resolveGoverningPartyIdsFromDocuments } from "@/lib/government/governingPartyIds";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -111,69 +111,6 @@ export function getLargestParty(seatsByParty: Record<string, number>): string | 
   const entries = Object.entries(seatsByParty);
   if (entries.length === 0) return null;
   return entries.reduce((best, cur) => (cur[1] > best[1] ? cur : best))[0];
-}
-
-/**
- * Party sequential IDs (or legacy slug keys) that are part of the current government:
- * the governing party plus coalition partners. Uses `governmentFormations` when present;
- * if `coalitionPartyIds` is missing but `coalitionId` is set, loads live coalition members
- * so opposition logic never treats a coalition partner as "opposition".
- *
- * Finally — for governments the formation doc records as a single party (e.g. a
- * "minority" formation with `coalitionId`/`coalitionPartyIds` null) — the
- * governing party may still lead a coalition recorded only in the `coalitions`
- * collection. Those partners back the government (their chairs commonly sit in
- * cabinet), so they must not be returned as opposition either. We union in the
- * members of the coalition whose lead member (`members[0]`) is the governing
- * party. Matching the lead member keeps this precise: a coalition led by the
- * governing party is the current government's bloc, never an opposition bloc.
- */
-export async function resolveGoverningPartyIdsFromDocuments(
-  db: Db,
-  countryId: CountryId,
-  govFormation: Pick<
-    GovernmentFormation,
-    "governingPartyId" | "coalitionPartyIds" | "coalitionId"
-  > | null,
-  parlGov: Pick<ParliamentaryGovernment, "governingPartyId"> | null
-): Promise<Set<string>> {
-  const governingPartyId = govFormation?.governingPartyId ?? parlGov?.governingPartyId ?? null;
-  if (!governingPartyId) {
-    return new Set();
-  }
-
-  const fromFormation = govFormation?.coalitionPartyIds;
-  if (fromFormation && fromFormation.length > 0) {
-    return new Set([governingPartyId, ...fromFormation]);
-  }
-
-  const coalitionId = govFormation?.coalitionId;
-  if (coalitionId != null) {
-    const coalition = await db
-      .collection<Coalition>("coalitions")
-      .findOne({ sequentialId: coalitionId, countryId });
-    if (coalition?.members?.length) {
-      const memberIds = coalition.members.map((m) => String(m.partySequentialId));
-      return new Set([governingPartyId, ...memberIds]);
-    }
-  }
-
-  // Formation records no coalition. Fold in the bloc the governing party leads,
-  // if any (covers coalition-backed governments formed as a single-party
-  // "minority"). Fetch-and-filter mirrors resolveOppositionLeader's coalition
-  // scan and is robust to how `partySequentialId` is typed in the documents.
-  const coalitions = await db.collection<Coalition>("coalitions").find({ countryId }).toArray();
-  const governingCoalition = coalitions.find(
-    (c) => c.members?.length > 0 && String(c.members[0]?.partySequentialId) === governingPartyId
-  );
-  if (governingCoalition) {
-    return new Set([
-      governingPartyId,
-      ...governingCoalition.members.map((m) => String(m.partySequentialId)),
-    ]);
-  }
-
-  return new Set([governingPartyId]);
 }
 
 /**

@@ -26,7 +26,7 @@
  *   UK Commons cycle N≥2 → if a snap_commons (or regular commons) has resolved for
  *                          the region, endTurn = priorEndTurn + 240; otherwise
  *                          219 + (N−1) × 240.
- *   UK RegionalCouncil   → same formula as UK Commons (synchronized cycles)
+ *   UK RegionalCouncil   → five annual cohorts; each region retains a 5-year term
  *   JP Shugiin cycle 1   → endTurn = 240  (bootstrap ends 2024)
  *   JP Shugiin cycle N≥2 → if a snap_shugiin (or regular shugiin) has resolved for
  *                          the region, endTurn = priorEndTurn + 192; otherwise
@@ -82,6 +82,7 @@ const IE_LOCAL_COUNCIL_CYCLE_PERIOD_HOURS = 240; // 5 game-years
 import { DEFAULT_DURATIONS } from "@/lib/turn/perpetualElections";
 import { electionToLarpYear } from "@/lib/utils/formatters";
 import { getLandtagAnchor } from "@/lib/seeds/de/deLandtag";
+import { getUKRegionalCouncilCycle1EndTurn } from "@/lib/elections/ukRegionalCouncilStagger";
 
 /**
  * Derive the canonical LARP end-turn, primary-end-turn, and start-turn for
@@ -103,7 +104,11 @@ export function canonicalTurns(
   if (cycle == null || !electionType) return null;
   const chamberClass = (election as { chamberClass?: number }).chamberClass;
   const customCycle1EndTurn =
-    electionType === "landtag" && state ? getLandtagAnchor(state, ctx.preset) : undefined;
+    electionType === "landtag" && state
+      ? getLandtagAnchor(state, ctx.preset)
+      : electionType === "regionalCouncil" && election.countryId === "UK" && state
+        ? getUKRegionalCouncilCycle1EndTurn(state, ctx)
+        : undefined;
   return canonicalTurnsForCycle({
     electionType,
     cycle,
@@ -437,7 +442,7 @@ export async function POST() {
 
     // Build a map of priorEndTurn for each region that has a resolved
     // lower-chamber or snap election. Used to shift the LARP cycle anchor
-    // for commons/regionalCouncil/shugiin post-snap.
+    // for commons/shugiin post-snap. Regional councils have fixed cohorts.
     //
     // Key: `${countryId}:${electionType}:${state}` where electionType is the
     // REGULAR type (e.g. "commons"). Value: the most-recent prior end turn
@@ -445,7 +450,6 @@ export async function POST() {
     const priorEndTurnByRace = new Map<string, number>();
     const lowerChamberTypeMap: Record<string, string[]> = {
       commons: ["commons", "snap_commons"],
-      regionalCouncil: ["regionalCouncil"],
       shugiin: ["shugiin", "snap_shugiin"],
     };
     for (const [regularType, candidateTypes] of Object.entries(lowerChamberTypeMap)) {
@@ -473,7 +477,7 @@ export async function POST() {
 
     function priorEndTurnFor(election: Election): number | null {
       const type = election.electionType;
-      if (!["commons", "regionalCouncil", "shugiin", "bundestag"].includes(type)) return null;
+      if (!["commons", "shugiin", "bundestag"].includes(type)) return null;
       if (!election.state || !election.countryId) return null;
       return priorEndTurnByRace.get(`${election.countryId}:${type}:${election.state}`) ?? null;
     }
