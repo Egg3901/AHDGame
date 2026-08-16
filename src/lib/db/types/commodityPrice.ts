@@ -57,5 +57,21 @@ export interface CommodityPrice {
    * src/lib/market/scarcityDrift.ts.
    */
   scarcityMult?: number;
+  /**
+   * Per-country scarcity-drift multipliers advanced on each country's
+   * REACHABLE book (ticket #1077 follow-up). A country behind an embargo wall
+   * integrates its own shortage instead of inheriting the planet's aggregate —
+   * the global `scarcityMult` above stays the world-aggregate integrator for
+   * the global price leg and charts. Empty/absent when drift is off or the
+   * world has never run the partitioned pass.
+   */
+  scarcityMultByCountry?: Record<string, number>;
+  /**
+   * Per-country reachable-market price (the wide leg of the state blend),
+   * persisted so lagged consumers — clearing's price-realization factor —
+   * can read the price of the market a seller actually clears in rather than
+   * the worldwide `globalPrice`. Pegs/nudges override to the pegged value.
+   */
+  reachablePrices?: Record<string, number>;
   updatedAt: Date;
 }

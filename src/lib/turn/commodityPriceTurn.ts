@@ -366,6 +366,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             stateHardPegs: 1,
             stateNudges: 1,
             scarcityMult: 1,
+            scarcityMultByCountry: 1,
             // Plants household re-anchor: prior global supply for the
             // PLANTS_HOUSEHOLD_SUPPLY_CAP clamp.
             globalSupply: 1,
@@ -1402,6 +1403,28 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       ? updateScarcityMultiplier(existing?.scarcityMult, globalBal.supply, globalBal.demand)
       : 1;
     scarcityMultByCommodity.set(commodity, scarcityMult);
+    // Per-country scarcity drift on the REACHABLE book (#1077 follow-up).
+    // The wide leg already prices the reachable market, but the base it
+    // scaled was `basePrice × world scarcityMult` — so a West that is 33%
+    // short of food still had its base CRUSHED by the Eastern bloc's
+    // unreachable surplus (world integrator 0.71 at t167 while the market
+    // bloc ran S/D 0.67). Each country now integrates its own reachable
+    // imbalance; the first partitioned turn seeds from the world multiplier
+    // so prices drift apart rather than stepping. Stabilizer matches the
+    // wide-leg pricing below so the integrator and the level formula read
+    // the same book.
+    const scarcityMultByCountry: Record<string, number> = {};
+    if (scarcityDriftEnabled) {
+      for (const countryId of COUNTRY_ORDER) {
+        const book = reachableBooks.get(countryId)?.get(commodity);
+        if (!book || (book.supply <= 0 && book.demand <= 0)) continue;
+        scarcityMultByCountry[countryId] = updateScarcityMultiplier(
+          existing?.scarcityMultByCountry?.[countryId] ?? existing?.scarcityMult,
+          book.supply + NATIONAL_COMMODITY_STABILIZER,
+          book.demand + NATIONAL_COMMODITY_STABILIZER
+        );
+      }
+    }
     // Producer cost pass-through (>= 1, capped): when the inputs to MAKE this
     // commodity trade above base, part of that squeeze lifts the price floor
     // so producers are not structurally forced below cost. See
@@ -1409,6 +1432,14 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     // farms-negative incident).
     const costMult = costPassThroughMultiplier(commodity, laggedRatios);
     const effBasePrice = Math.round(basePrice * scarcityMult * costMult * 100) / 100;
+    // Country-scoped effective base: the country's own reachable-scarcity
+    // multiplier when it has one, the world base otherwise. Every
+    // country-scoped leg (national, wide, regional, administered) reads this
+    // so a country's price level carries ITS market's scarcity memory.
+    const effBaseFor = (countryId: string | undefined): number => {
+      const m = countryId != null ? scarcityMultByCountry[countryId] : undefined;
+      return m != null ? Math.round(basePrice * m * costMult * 100) / 100 : effBasePrice;
+    };
     const priceKnee = getPriceSoftKnee(commodity);
 
     // ── Global price with drift + peg/nudge precedence ──
@@ -1444,7 +1475,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // NATIONAL_COMMODITY_STABILIZER floors both sides so countries with minimal
       // sector activity don't produce degenerate ratios (same role as STATE_COMMODITY_SUPPLY_DEMAND).
       const marketNationalPrice = computeMarketPrice(
-        effBasePrice,
+        effBaseFor(countryId),
         bal.supply + NATIONAL_COMMODITY_STABILIZER,
         bal.demand + NATIONAL_COMMODITY_STABILIZER,
         priceKnee
@@ -1457,7 +1488,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         commandEconomyEnabled &&
         isPlannedEconomy(countryId, priceCurrentYear, commandEconomyEnabled)
       ) {
-        const administered = administeredNationalPrice(effBasePrice);
+        const administered = administeredNationalPrice(effBaseFor(countryId));
         const share = plannedShare(countryId, priceCurrentYear, commandEconomyEnabled);
         nationalPrices[countryId] = dualTrackPrice(administered, marketNationalPrice, share);
       } else {
@@ -1472,9 +1503,28 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     // leg falls through to national, making the effective blend 50/50.
     const isMacroPriceBlend = COMMODITIES_NATIONAL_REGIONAL_PRICE_BLEND.has(commodity);
 
-    // Per-country reachable wide leg (memoized per commodity): the price of
-    // the market each country can actually reach. See the blend note below.
-    const reachableLegByCountry = new Map<string, number>();
+    // Per-country reachable wide leg: the price of the market each country can
+    // actually reach (see the blend note below). Computed for EVERY country up
+    // front — not lazily per state — because it is also PERSISTED as
+    // `reachablePrices` for lagged consumers (clearing's price-realization
+    // factor). A hard peg or nudge overrides every country to the pegged
+    // value, matching the precedence the state/global legs apply.
+    const reachablePrices: Record<string, number> = {};
+    {
+      const pegged = existing?.hardPeg ?? nudgeMap.get(commodity);
+      for (const countryId of COUNTRY_ORDER) {
+        const book = reachableBooks.get(countryId)?.get(commodity);
+        if (!book || (book.supply <= 0 && book.demand <= 0)) continue;
+        reachablePrices[countryId] =
+          pegged ??
+          computeMarketPrice(
+            effBaseFor(countryId),
+            book.supply + NATIONAL_COMMODITY_STABILIZER,
+            book.demand + NATIONAL_COMMODITY_STABILIZER,
+            priceKnee
+          );
+      }
+    }
 
     const statePrices: Record<string, number> = {};
     // Reference captured after loop populates it — stored for history snapshots
@@ -1528,25 +1578,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           : stateBal.supply;
         const regionalLeg = isMacroPriceBlend
           ? nationalLeg
-          : computeMarketPrice(effBasePrice, deliveredSupply, stateBal.demand, priceKnee);
-        let wideLeg = globalMktPrice;
-        if (countryId) {
-          const memo = reachableLegByCountry.get(countryId);
-          if (memo != null) {
-            wideLeg = memo;
-          } else {
-            const book = reachableBooks.get(countryId as CountryId)?.get(commodity);
-            if (book && (book.supply > 0 || book.demand > 0)) {
-              wideLeg = computeMarketPrice(
-                effBasePrice,
-                book.supply + NATIONAL_COMMODITY_STABILIZER,
-                book.demand + NATIONAL_COMMODITY_STABILIZER,
-                priceKnee
-              );
-            }
-            reachableLegByCountry.set(countryId, wideLeg);
-          }
-        }
+          : computeMarketPrice(effBaseFor(countryId), deliveredSupply, stateBal.demand, priceKnee);
+        const wideLeg =
+          (countryId != null ? reachablePrices[countryId] : undefined) ?? globalMktPrice;
         let targetPrice = blendPrice(wideLeg, nationalLeg, regionalLeg);
         // Autarky (P3, owner decision 2026-08-16): in a planned economy the
         // PLAN sets prices, not the market — for the whole state price, not
@@ -1563,7 +1597,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           isPlannedEconomy(countryId, priceCurrentYear, commandEconomyEnabled)
         ) {
           targetPrice = dualTrackPrice(
-            administeredNationalPrice(effBasePrice),
+            administeredNationalPrice(effBaseFor(countryId)),
             targetPrice,
             plannedShare(countryId, priceCurrentYear, commandEconomyEnabled)
           );
@@ -1614,6 +1648,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             nudgeTurn: null,
             stateNudges: {},
             scarcityMult,
+            scarcityMultByCountry,
+            reachablePrices,
             updatedAt: now,
           },
         },
