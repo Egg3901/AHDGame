@@ -488,6 +488,74 @@ describe("fileAcceptedSlateRows", () => {
     expect(candidateRow.filedAt).toBeInstanceOf(Date);
   });
 
+  it("skips filing a banned-party NPP in an RU one-party-state race", async () => {
+    const npp = makeNPP({
+      countryId: "RU",
+      homeState: "KAZ",
+      party: "2",
+    });
+    const slateId = new ObjectId();
+    const electionId = new ObjectId();
+
+    const election: Election = {
+      _id: electionId,
+      countryId: "RU",
+      electionType: "republicSupremeSoviet",
+      state: "KAZ",
+      cycle: 1,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Election;
+
+    const candidateRow: SlateCandidate = {
+      _id: new ObjectId(),
+      slateId,
+      electionId,
+      partyId: "2",
+      countryId: "RU",
+      candidateType: "npp",
+      candidateId: npp._id,
+      candidateName: npp.name,
+      homeState: npp.homeState,
+      status: "accepted",
+      fitScore: 90,
+      refusalReason: null,
+      autoFilled: false,
+      invitedAt: new Date(),
+      respondedAt: new Date(),
+      filedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const inserted: ElectionCandidate[] = [];
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: [candidateRow],
+      nppRelationships: [],
+      elections: [election],
+      electionCandidates: inserted,
+    });
+
+    const partyByCompositeKey = new Map([
+      [
+        "RU:2",
+        {
+          sequentialId: 2,
+          countryId: "RU",
+          regimeStatus: "banned" as const,
+          abbreviation: "MSPSU",
+        } as never,
+      ],
+    ]);
+    const summary = await fileAcceptedSlateRows(makeCtx(db, [npp], { partyByCompositeKey }));
+    expect(summary.filed).toBe(0);
+    expect(summary.skipped).toBe(1);
+    expect(inserted).toHaveLength(0);
+    expect(candidateRow.status).toBe("withdrawn");
+  });
+
   it("skips rows for elections that are no longer accepting candidates without clearing the slate assignment", async () => {
     const npp = makeNPP();
     const slateId = new ObjectId();

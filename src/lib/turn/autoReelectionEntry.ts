@@ -1,9 +1,21 @@
 import { ObjectId, type Db } from "mongodb";
-import type { Character, ElectedOfficial, Election, ElectionCandidate } from "@/lib/db/types";
+import type {
+  Character,
+  ElectedOfficial,
+  Election,
+  ElectionCandidate,
+  PoliticalParty,
+} from "@/lib/db/types";
 import { findBlockingActiveCandidacy } from "@/lib/elections/activeCandidacy";
 import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaFactors";
 import { officeKeyForElectionType } from "@/lib/utils/electionLabels";
 import { activeUserIds } from "@/lib/players/playerActivity";
+import type { CountryId } from "@/lib/constants/countries";
+import { getCountryState } from "@/lib/countryState";
+import {
+  canFieldExecutiveCandidate,
+  canFieldLegislativeCandidate,
+} from "@/lib/turn/onePartyConstraints";
 
 const EXCLUDED_TYPES = new Set(["president", "vicePresident"]);
 
@@ -140,6 +152,27 @@ export async function runAutoReelectionEntry(
 
   if (elections.length === 0) return;
 
+  const countryIds = [
+    ...new Set(elections.map((election) => (election.countryId ?? "US") as CountryId)),
+  ];
+  const opsConfigByCountry = new Map<CountryId, { governmentType: "onePartyState" }>();
+  for (const countryId of countryIds) {
+    const runtime = await getCountryState(db, countryId);
+    if (runtime.governmentType === "onePartyState") {
+      opsConfigByCountry.set(countryId, { governmentType: "onePartyState" });
+    }
+  }
+  const partyByKey = new Map<string, Pick<PoliticalParty, "regimeStatus">>();
+  if (opsConfigByCountry.size > 0) {
+    const parties = await db
+      .collection<PoliticalParty>("politicalParties")
+      .find({ countryId: { $in: [...opsConfigByCountry.keys()] } })
+      .toArray();
+    for (const party of parties) {
+      partyByKey.set(`${party.countryId ?? "US"}:${String(party.sequentialId)}`, party);
+    }
+  }
+
   for (const election of elections) {
     // Auto-reentry only applies while the primary is still open — skip races
     // whose primary has closed. Turn-first (drift-immune) with a Date fallback.
@@ -164,6 +197,21 @@ export async function runAutoReelectionEntry(
 
       const blocking = await findBlockingActiveCandidacy(db, character._id, election._id);
       if (blocking) continue;
+
+      const electionCountry = (election.countryId ?? character.countryId ?? "US") as CountryId;
+      const opsConfig = opsConfigByCountry.get(electionCountry);
+      if (opsConfig) {
+        const party =
+          character.party && character.party !== "independent"
+            ? (partyByKey.get(`${electionCountry}:${character.party}`) ?? null)
+            : null;
+        if (
+          !canFieldLegislativeCandidate(opsConfig, party) ||
+          !canFieldExecutiveCandidate(opsConfig, party, election.electionType)
+        ) {
+          continue;
+        }
+      }
 
       try {
         await db.collection("electionCandidates").insertOne({

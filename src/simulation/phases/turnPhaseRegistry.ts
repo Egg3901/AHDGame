@@ -975,6 +975,9 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         await runtime.runPhase("candidatePartySweep", async () => {
           const { sweepPartyMismatchedCandidates } = await import("@/lib/utils/electionCandidacy");
           await sweepPartyMismatchedCandidates();
+          const { withdrawOpsIneligibleCandidacies } =
+            await import("@/lib/onePartyState/withdrawOpsIneligibleCandidacies");
+          await withdrawOpsIneligibleCandidacies(db, gameNow);
         });
 
         await runtime.runPhase("primaryResolution", () =>
