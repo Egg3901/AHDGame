@@ -25,6 +25,7 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import type { CountryId } from "@/lib/constants/countries";
 import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
 import { buildPrimeRateByCountry } from "@/lib/centralBank/helpers";
+import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import { getActiveSubsidies } from "@/lib/subsidies/subsidyEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
 import { reconcileSignedTariffBills } from "@/lib/tariffs/reconcileTariffs";
@@ -710,11 +711,28 @@ export async function buildCorporationLookups(
       if (!blocsByCountry.has(m.countryId)) blocsByCountry.set(m.countryId, new Set());
       blocsByCountry.get(m.countryId)!.add(String(m.organizationId));
     }
+    // Iron curtain (mirrors commodityPriceTurn): planned economies trade only
+    // among themselves; membership from the engine's MARKETIZATION_SCHEDULE so
+    // the curtain lifts on the historical marketization dates.
+    const [curtainCfg, curtainState] = await Promise.all([
+      db
+        .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
+        .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
+      db
+        .collection<GameState>("gameState")
+        .findOne({ _id: "current" }, { projection: { currentYear: 1 } }),
+    ]);
+    const curtainEnabled = curtainCfg?.commandEconomyEnabled === true;
+    const curtainYear = curtainState?.currentYear ?? null;
+    const curtainedCountries = new Set<string>(
+      COUNTRY_ORDER.filter((c) => isPlannedEconomy(c, curtainYear, curtainEnabled))
+    );
     const { affinityFor, capUnitsFor } = buildTradeAffinity({
       ftaPairs: activeFtaPairs,
       blocsByCountry,
       tariffs: allTariffs,
       embargoes: activeEmbargoDocs,
+      curtainedCountries,
     });
     countryClearingBooks = buildCountryClearingBooks({
       countries: COUNTRY_ORDER,
