@@ -9,6 +9,7 @@ import type {
 import type { GameState } from "@/lib/db/types/gameState";
 import { EXTRACTABLE_RESOURCES, type ExtractableResource } from "@/lib/constants/commodities";
 import { SECTOR_STRATEGIES, STRATEGY_COOLDOWN_TURNS } from "@/lib/constants/sectorStrategies";
+import type { CorporationType } from "@/lib/constants/corporations";
 import {
   getExtractionStrategyResources,
   isExtractionStrategyZeroYield,
@@ -117,6 +118,9 @@ export interface ExtractionAutoStrategyResult {
   /** NPP expected-revenue re-strategizations (second pass), by target strategy. */
   restrategized?: number;
   restrategizedByStrategy?: Record<string, number>;
+  /** NPP generic-sector re-strategizations (third pass), by target strategy. */
+  genericRestrategized?: number;
+  genericByStrategy?: Record<string, number>;
   skippedReason?: string;
 }
 
@@ -416,7 +420,7 @@ export async function processExtractionAutoStrategy(
     const currentYear = gs?.currentYear ?? null;
     const genericTypes = Object.entries(SECTOR_STRATEGIES)
       .filter(([type, list]) => type !== "extraction" && (list?.length ?? 0) >= 2)
-      .map(([type]) => type);
+      .map(([type]) => type as CorporationType);
     const nppCorpDocs = await db
       .collection<Corporation>("corporations")
       .find({ ceoType: "npp", suspended: { $ne: true } })

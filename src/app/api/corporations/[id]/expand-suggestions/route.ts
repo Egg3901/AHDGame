@@ -106,12 +106,6 @@ export async function GET(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     const plantsMode = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
-    if (plantsMode && sectorType !== corporation.type && sectorType !== corporation.secondaryType) {
-      return NextResponse.json(
-        { error: "You can only build sectors in your primary or secondary industry" },
-        { status: 400 }
-      );
-    }
 
     // Demand gap for this sector type's output mix, PER COUNTRY (min over legs —
     // the market stops absorbing when the first leg saturates; 0 in a glut). The

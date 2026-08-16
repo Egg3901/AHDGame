@@ -196,16 +196,13 @@ describe("expandSector — founding build (plants)", () => {
     expect(doc.revenue).toBeLessThan(DEFAULT_SECTOR_STARTING_REVENUE / 10);
   });
 
-  it("rejects sector types outside the corporation's primary and secondary types", async () => {
+  it("builds sector types outside the corporation's primary and secondary types (any type is buildable)", async () => {
     await wireMocks(true);
     const { expandSector } = await import("./expandSector");
     const res = await expandSector(request("energy"), { params });
 
-    expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({
-      error: "You can only build sectors in your primary or secondary industry",
-    });
-    expect(db.collectionMocks.corporateSectors.insertOne).not.toHaveBeenCalled();
+    expect(res.status).toBe(201);
+    expect(insertedSector().sectorType).toBe("energy");
   });
 
   it("charges the entry fee PLUS a founding-discounted starter build", async () => {
