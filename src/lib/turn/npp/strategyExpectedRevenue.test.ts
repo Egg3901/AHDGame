@@ -161,3 +161,45 @@ describe("decideExtractionStrategySwitch", () => {
     expect(decision!.currentScore).toBe(0);
   });
 });
+
+describe("generic (non-extraction) strategy switching — the fertilizer valve", () => {
+  it("a chemicals sector on standard switches to fertilizers under the observed squeeze", () => {
+    // Prod shape, 2026-08-16: fertilizers 2.33x base, chemicals 0.83x. The
+    // decider must move a standard industrial-chemicals NPP sector onto the
+    // fertilizers strategy; headroom is 1 for every non-extractable.
+    const strategies = [
+      { id: "standard", supply: { chemicals: 0.5 } },
+      { id: "fertilizers", supply: { fertilizers: 0.5, chemicals: 0.1 } },
+      { id: "pharmaceuticals", supply: { pharmaceuticals: 0.45, chemicals: 0.1 } },
+    ];
+    const ratios: Record<string, number> = {
+      chemicals: 0.83,
+      fertilizers: 2.33,
+      pharmaceuticals: 0.9,
+    };
+    const decision = decideExtractionStrategySwitch({
+      currentStrategyId: "standard",
+      strategies,
+      priceRatioOf: (c) => ratios[c] ?? null,
+      headroomOf: () => 1,
+      soldFraction: 1,
+    });
+    expect(decision?.strategyId).toBe("fertilizers");
+    expect(decision!.bestScore).toBeGreaterThan(decision!.currentScore * 1.2);
+  });
+
+  it("does not churn when the current strategy already leads", () => {
+    const strategies = [
+      { id: "standard", supply: { chemicals: 0.5 } },
+      { id: "fertilizers", supply: { fertilizers: 0.5, chemicals: 0.1 } },
+    ];
+    const decision = decideExtractionStrategySwitch({
+      currentStrategyId: "fertilizers",
+      strategies,
+      priceRatioOf: (c) => (c === "fertilizers" ? 2.33 : 0.83),
+      headroomOf: () => 1,
+      soldFraction: 1,
+    });
+    expect(decision).toBeNull();
+  });
+});
