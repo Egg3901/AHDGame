@@ -54,7 +54,7 @@ export const COUNTRY_SECTOR_WEIGHTS_1953: Record<string, SectorWeightMap> = {
     chemical_industries: 5, // DuPont era; synthetic rubber/plastics postwar boom
     retail: 5, // downtown department stores; no national chains yet
     real_estate: 4, // FHA/VA mortgages; suburban lots; small by later standards
-    logistics: 4, // rail + truck regulated; pre-Interstate
+    logistics: 8, // world's largest freight system (rail + trucking) even pre-Interstate; must move a 26-weight manufacturing base + autos/agriculture. The prior 4 left US freight structurally short (~19% coverage observed) — freight is a single-source input (logistics only) feeding six sector classes.
     financial: 3, // Glass-Steagall; regulated deposit rates; small sector
     healthcare: 2, // mostly private cash-pay; tiny by modern standards
     media: 2, // newspapers + 3 TV networks (just launching); print dominant
