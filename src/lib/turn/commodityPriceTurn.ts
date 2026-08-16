@@ -1179,11 +1179,19 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     if (!blocsByCountry.has(m.countryId)) blocsByCountry.set(m.countryId, new Set());
     blocsByCountry.get(m.countryId)!.add(String(m.organizationId));
   }
+  // Iron curtain: planned economies trade only among themselves until real
+  // east-west trade mechanics exist (owner decision 2026-08-16). Membership is
+  // the engine's own MARKETIZATION_SCHEDULE via isPlannedEconomy, so the
+  // curtain lifts country-by-country on the historical marketization dates.
+  const curtainedCountries = new Set<string>(
+    COUNTRY_ORDER.filter((c) => isPlannedEconomy(c, ledgerCurrentYear, ledgerCommandEconomyEnabled))
+  );
   const { affinityFor, capUnitsFor } = buildTradeAffinity({
     ftaPairs,
     blocsByCountry,
     tariffs: tariffDocs,
     embargoes: embargoDocs,
+    curtainedCountries,
   });
 
   // Build existing price map early: the sourcing pass uses LAST turn's stored
@@ -1539,7 +1547,27 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             reachableLegByCountry.set(countryId, wideLeg);
           }
         }
-        const targetPrice = blendPrice(wideLeg, nationalLeg, regionalLeg);
+        let targetPrice = blendPrice(wideLeg, nationalLeg, regionalLeg);
+        // Autarky (P3, owner decision 2026-08-16): in a planned economy the
+        // PLAN sets prices, not the market — for the whole state price, not
+        // just the national leg. With the iron curtain closed the bloc's
+        // internal surpluses would otherwise crater its market legs and
+        // starve every state farm of revenue the plan is supposed to
+        // guarantee; administered pricing is what makes the bloc function in
+        // autarky (the state eats the imbalance, historically exactly right,
+        // and the overhang machinery accounts it). Dual-track economies blend
+        // by plannedShare; market economies are untouched.
+        if (
+          countryId &&
+          commandEconomyEnabled &&
+          isPlannedEconomy(countryId, priceCurrentYear, commandEconomyEnabled)
+        ) {
+          targetPrice = dualTrackPrice(
+            administeredNationalPrice(effBasePrice),
+            targetPrice,
+            plannedShare(countryId, priceCurrentYear, commandEconomyEnabled)
+          );
+        }
         const previousPrice = existing?.statePrices?.[stateId] ?? targetPrice;
         statePrice =
           Math.round(
