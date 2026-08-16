@@ -1,10 +1,11 @@
 /**
  * @vitest-environment happy-dom
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ExpandMarketModal from "./ExpandMarketModal";
+import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 
 const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
 
@@ -63,7 +64,7 @@ describe("ExpandMarketModal plants market finder", () => {
     vi.unstubAllGlobals();
   });
 
-  it("opens on ranked new markets and limits the sector choice to primary and secondary", async () => {
+  it("opens on ranked new markets and offers every sector type with primary/secondary first", async () => {
     const fetchMock = vi.fn(suggestionReply);
     vi.stubGlobal("fetch", fetchMock);
 
@@ -87,10 +88,14 @@ describe("ExpandMarketModal plants market finder", () => {
     );
     const sectorTypeSelect = screen.getByLabelText("Sector type") as HTMLSelectElement;
     expect(sectorTypeSelect.value).toBe("agriculture");
-    expect(sectorTypeSelect.options).toHaveLength(2);
-    expect(screen.getAllByRole("option").map((option) => option.textContent)).toContain(
-      "Retail (secondary)"
-    );
+    // #310 ("allow building in any sector type") made the plants picker list EVERY sector type
+    // (primary/secondary badged first, others tagged with their margin penalty), not just the
+    // two on-type ones. Query through testing-library (a real array) rather than touching
+    // `select.options` — happy-dom's live HTMLCollection proxy throws "Cannot convert a Symbol
+    // value to a number" on access under 20.10.2. (#310 left this assertion stale, past a red verify.)
+    const optionEls = within(sectorTypeSelect).getAllByRole("option");
+    expect(optionEls).toHaveLength(CORPORATION_TYPES.length);
+    expect(optionEls.map((option) => option.textContent)).toContain("Retail (secondary)");
     expect(screen.getByText("9,050")).toBeTruthy();
     expect(screen.getByText("farms")).toBeTruthy();
     expect(screen.getByText("Best fit")).toBeTruthy();
