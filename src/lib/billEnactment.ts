@@ -138,11 +138,19 @@ async function applyTaxRateChange(
   selectedOptionRate: number | undefined,
   stateId: string
 ): Promise<void> {
-  if (!legislationType.taxRateChange || selectedOptionRate === undefined) {
+  // Slider tax laws (ruling #16) carry scope+taxType on `taxSlider`, not the discrete
+  // `taxRateChange` schema — the two are projected side by side, but only for freshly
+  // seeded types. A stored `legislationTypes` doc written before that projection landed
+  // has `taxSlider` alone, and the slider enactment path (see the call site) hands us such
+  // a type. Requiring `taxRateChange` here is what made ticket 1102's Poon Choi Economic
+  // Act enact its VAT/customs sliders without ever writing federalBudget.taxRates. Resolve
+  // from whichever field the type carries so a slider provision always applies.
+  const change = legislationType.taxRateChange ?? legislationType.taxSlider;
+  if (!change || selectedOptionRate === undefined) {
     return;
   }
 
-  const { scope, taxType } = legislationType.taxRateChange;
+  const { scope, taxType } = change;
 
   if (scope === "federal") {
     const countryId = (
@@ -156,7 +164,7 @@ async function applyTaxRateChange(
 
     const newTaxRates: FederalTaxRates = {
       ...normalizedTaxRates,
-      [taxType]: selectedOptionRate,
+      [taxType as keyof FederalTaxRates]: selectedOptionRate,
     };
 
     // Money wiring (interstate-logistics plan step 5, phase B): a tax-rate
@@ -240,7 +248,7 @@ async function applyTaxRateChange(
 
     const newTaxRates: StateTaxRates = {
       ...normalizedTaxRates,
-      [taxType]: selectedOptionRate,
+      [taxType as keyof StateTaxRates]: selectedOptionRate,
     };
 
     const federalGrants = budget.revenue?.federalGrants ?? 0;
