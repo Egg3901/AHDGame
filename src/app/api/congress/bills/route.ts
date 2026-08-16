@@ -832,21 +832,22 @@ export async function POST(request: Request) {
         p?.effectDirection != null && typeof p.effectDirection === "number"
           ? Math.max(-1, Math.min(1, Math.round(p.effectDirection)))
           : 0;
+      // 0 means "no stance on this axis", not a centre target (ticket #1116).
       const economic =
         p?.economic != null && typeof p.economic === "number"
           ? Math.max(-3, Math.min(3, Math.round(p.economic)))
-          : 0;
+          : undefined;
       const social =
         p?.social != null && typeof p.social === "number"
           ? Math.max(-3, Math.min(3, Math.round(p.social)))
-          : 0;
+          : undefined;
       const policyOptionId = typeof p?.policyOptionId === "string" ? p.policyOptionId : undefined;
       validatedPolicyProvisions.push({
         legislationTypeId: lt._id,
         ...(policyOptionId && { policyOptionId }),
         effectDirection,
-        economic,
-        social,
+        ...(economic ? { economic } : {}),
+        ...(social ? { social } : {}),
       });
     }
 
