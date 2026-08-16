@@ -525,6 +525,29 @@ body {
     color 0.2s ease;
 }
 
+/*
+  Ticket #1114: iOS Safari zooms any focused text control whose computed
+  font-size is below 16px. That zoom desyncs the caret from the software
+  keyboard, so backspace often appears to do nothing until a long-press
+  key-repeat fires (and then deletes a run of characters). Search and
+  MobileSelect already used `text-base md:text-sm` for this; most other
+  fields still inherit text-sm / text-body-sm (12–14px). Force the iOS
+  threshold on coarse pointers for every text-entry control.
+*/
+@media (pointer: coarse) {
+  :is(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not(
+        [type="button"]
+      ):not([type="submit"]):not([type="reset"]):not([type="file"]):not([type="color"]):not(
+        [type="image"]
+      ),
+    textarea,
+    select
+  ) {
+    font-size: 16px !important;
+  }
+}
+
 /* The command theme treats the viewport as one aging tube. The 2px scan pitch is
    deliberately lighter than the overlays used on media below. */
 [data-theme="command-1953"] body {
