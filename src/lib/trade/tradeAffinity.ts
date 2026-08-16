@@ -16,6 +16,22 @@ export interface TradeAffinityContext {
   tariffs: readonly Tariff[];
   /** Active trade embargoes. */
   embargoes: readonly TradeEmbargo[];
+  /**
+   * Iron curtain: countries whose trade with the OUTSIDE world is closed —
+   * the planned-economy set (`isPlannedEconomy` over MARKETIZATION_SCHEDULE),
+   * resolved by the caller which owns year and flag context. Affinity between
+   * a curtained and a non-curtained country is 0 in both directions; trade
+   * WITHIN the curtain (Comecon) and within the open world is unaffected.
+   * Absent/empty = no curtain (pre-flag worlds, tests).
+   *
+   * This closes TRADE, deliberately not corporate presence: a comprehensive
+   * embargo would also suspend cross-curtain player sectors (buildLookups
+   * corporateEmbargoSuppression), and East Germany is playable. Until real
+   * east-west trade mechanics exist the curtain is absolute (observed before
+   * it: Poland exported 2.66M units of food into Western imports with zero
+   * embargoes in force, while Ukraine's 6.32M-unit surplus sat untraded).
+   */
+  curtainedCountries?: ReadonlySet<string>;
 }
 
 export interface TradeAffinityFns {
@@ -55,7 +71,12 @@ function embargoMatches(
  * (mode "cap" → capUnits) specific flows. Pure given its context.
  */
 export function buildTradeAffinity(ctx: TradeAffinityContext): TradeAffinityFns {
-  const { ftaPairs, blocsByCountry, tariffs, embargoes } = ctx;
+  const { ftaPairs, blocsByCountry, tariffs, embargoes, curtainedCountries } = ctx;
+
+  const curtained = (a: string, b: string): boolean => {
+    if (!curtainedCountries || curtainedCountries.size === 0) return false;
+    return curtainedCountries.has(a) !== curtainedCountries.has(b);
+  };
 
   const sharesBloc = (a: string, b: string): boolean => {
     const ba = blocsByCountry.get(a);
@@ -70,6 +91,7 @@ export function buildTradeAffinity(ctx: TradeAffinityContext): TradeAffinityFns 
 
   return {
     affinityFor: (commodity, exporter, importer) => {
+      if (curtained(exporter, importer)) return 0;
       const blocked = blocking.some((em) => embargoMatches(em, exporter, importer, commodity));
       if (blocked) return 0;
       const sectorType = PRIMARY_SECTOR_BY_COMMODITY[commodity];
