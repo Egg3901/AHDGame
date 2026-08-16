@@ -117,6 +117,9 @@ export interface ExtractionAutoStrategyResult {
   /** NPP expected-revenue re-strategizations (second pass), by target strategy. */
   restrategized?: number;
   restrategizedByStrategy?: Record<string, number>;
+  /** Generic-sector re-strategizations (#305: NPCs answer shortages everywhere). */
+  genericRestrategized?: number;
+  genericByStrategy?: Record<string, number>;
   skippedReason?: string;
 }
 
@@ -426,7 +429,7 @@ export async function processExtractionAutoStrategy(
       const genericSectors = await db
         .collection<CorporateSector>("corporateSectors")
         .find({
-          sectorType: { $in: genericTypes },
+          sectorType: { $in: genericTypes as CorporateSector["sectorType"][] },
           corporationId: { $in: nppCorpDocs.map((c) => c._id as ObjectId) },
           transitionFromStrategyId: { $in: [null, undefined] },
         })
