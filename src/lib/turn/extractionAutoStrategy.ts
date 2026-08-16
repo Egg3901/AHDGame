@@ -166,11 +166,26 @@ export async function processExtractionAutoStrategy(
   const priceRatioByResource = new Map<ExtractableResource, number>();
   const stateSupplyByResource = new Map<ExtractableResource, Record<string, number>>();
   // Full-commodity lagged ratios for the generic (non-extraction) pass 3.
+  // NOTE: `prices` above is filtered to EXTRACTABLE_RESOURCES for the extraction
+  // passes, so it does NOT carry fertilizers/chemicals/etc. Building the generic
+  // map from it left every strategy-produced commodity at a null ratio (neutral
+  // signal), so pass 3 could never see a shortage and never switched a chem
+  // sector to fertilizer despite fertilizer running 2.3x base (observed turn
+  // 168: valve fired, zero switches). Fetch ALL commodity ratios separately.
   const priceRatioByCommodity = new Map<string, number>();
-  for (const cp of prices) {
-    if (cp.basePrice && cp.globalPrice && Number.isFinite(cp.globalPrice / cp.basePrice)) {
-      priceRatioByCommodity.set(cp.commodity, cp.globalPrice / cp.basePrice);
+  {
+    const allPrices = await db
+      .collection<CommodityPrice>("commodityPrices")
+      .find({})
+      .project({ commodity: 1, globalPrice: 1, basePrice: 1 })
+      .toArray();
+    for (const cp of allPrices) {
+      if (cp.basePrice && cp.globalPrice && Number.isFinite(cp.globalPrice / cp.basePrice)) {
+        priceRatioByCommodity.set(cp.commodity, cp.globalPrice / cp.basePrice);
+      }
     }
+  }
+  for (const cp of prices) {
     const r = cp.commodity as ExtractableResource;
     if (!(EXTRACTABLE_RESOURCES as readonly string[]).includes(r)) continue;
     const sd = cp.globalDemand > 0 ? cp.globalSupply / cp.globalDemand : 1;
