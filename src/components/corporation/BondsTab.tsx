@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { bondIssueIncomePreview } from "@/lib/bonds/bondIssueIncomePreview";
 import type { BondInfo, CorporationDetail, Financials } from "./CorporationPageTypes";
 import BondHistoryPanel from "./bonds/BondHistoryPanel";
+import { corpIncomeBasis } from "./financials/financialsModel";
 
 interface BondsTabProps {
   bondInfo: BondInfo | null;
@@ -147,9 +149,6 @@ export default function BondsTab({
                   bondInfo.creditRating.couponRatesByDuration?.[
                     bondIssueMaturity as 96 | 240 | 336
                   ] ?? bondInfo.creditRating.effectiveCouponRate;
-                // Annual cost = rate% × face value; daily = annual / 2 (2 game-days per game-year)
-                const annualCost = isValidInput ? (couponRate / 100) * parsedFaceValue : 0;
-                const dailyCost = annualCost / 2;
                 // Max issuable (total debt headroom) = 2× equity − existing debt, rounded to $1,000 units
                 const maxIssuableDebt = bondInfo.creditDiagnostics
                   ? Math.max(
@@ -402,41 +401,47 @@ export default function BondsTab({
                       </button>
                     </div>
 
-                    {/* Live impact preview */}
-                    {isValidInput && (
-                      <div className="mt-4 rounded-lg border border-card-border bg-background/60 p-4">
-                        <div className="text-[11px] font-semibold text-muted uppercase tracking-wider mb-3">
-                          Projected Impact
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-                          <div>
-                            <div className="text-[11px] text-muted mb-0.5">Daily interest cost</div>
-                            <div className="font-semibold text-error tabular-nums">
-                              ({formatAmount(Math.round(dailyCost))})
+                    {/* Live impact preview (realized retained vs new coupon, ticket #1109). */}
+                    {isValidInput &&
+                      (() => {
+                        const retainedLocal = financials ? corpIncomeBasis(financials).retained : 0;
+                        const retainedAnchor = financials
+                          ? liquidCode
+                            ? toInternalFrom(retainedLocal, liquidCode)
+                            : retainedLocal
+                          : 0;
+                        const preview = bondIssueIncomePreview({
+                          retainedDaily: retainedAnchor,
+                          couponRatePercent: couponRate,
+                          faceValue: parsedFaceValue,
+                        });
+                        return (
+                          <div className="mt-4 rounded-lg border border-card-border bg-background/60 p-4">
+                            <div className="text-[11px] font-semibold text-muted uppercase tracking-wider mb-3">
+                              Projected Impact
                             </div>
-                            <div className="text-[10px] text-muted mt-0.5">
-                              {formatAmount(Math.round(annualCost))}/yr
-                            </div>
-                          </div>
-                          {financials &&
-                            (() => {
-                              // income/dividendDistribution are in local currency; normalise to ₳
-                              // so we can subtract dailyCost (which is in ₳ anchor).
-                              const retainedLocal =
-                                financials.income - financials.dividendDistribution;
-                              const retainedAnchor = liquidCode
-                                ? toInternalFrom(retainedLocal, liquidCode)
-                                : retainedLocal;
-                              return (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                              <div>
+                                <div className="text-[11px] text-muted mb-0.5">
+                                  Daily interest cost
+                                </div>
+                                <div className="font-semibold text-error tabular-nums">
+                                  ({formatAmount(Math.round(preview.dailyCost))})
+                                </div>
+                                <div className="text-[10px] text-muted mt-0.5">
+                                  {formatAmount(Math.round(preview.annualCost))}/yr
+                                </div>
+                              </div>
+                              {financials && (
                                 <>
                                   <div>
                                     <div className="text-[11px] text-muted mb-0.5">
                                       Income before
                                     </div>
                                     <div
-                                      className={`font-semibold tabular-nums ${retainedAnchor >= 0 ? "text-success" : "text-error"}`}
+                                      className={`font-semibold tabular-nums ${preview.incomeBeforePerTurn >= 0 ? "text-success" : "text-error"}`}
                                     >
-                                      {formatAmount(Math.round(retainedAnchor / 24))}/turn
+                                      {formatAmount(Math.round(preview.incomeBeforePerTurn))}/turn
                                     </div>
                                   </div>
                                   <div>
@@ -444,18 +449,17 @@ export default function BondsTab({
                                       Income after
                                     </div>
                                     <div
-                                      className={`font-semibold tabular-nums ${retainedAnchor - dailyCost >= 0 ? "text-success" : "text-error"}`}
+                                      className={`font-semibold tabular-nums ${preview.staysProfitable ? "text-success" : "text-error"}`}
                                     >
-                                      {formatAmount(Math.round((retainedAnchor - dailyCost) / 24))}
-                                      /turn
+                                      {formatAmount(Math.round(preview.incomeAfterPerTurn))}/turn
                                     </div>
                                   </div>
                                 </>
-                              );
-                            })()}
-                        </div>
-                      </div>
-                    )}
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                   </div>
                 );
               })()}
