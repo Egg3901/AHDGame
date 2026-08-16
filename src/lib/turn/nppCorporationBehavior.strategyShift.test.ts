@@ -119,14 +119,27 @@ describe("NPP input-squeeze strategy shift (section 2e)", () => {
     expect(strategySets(d)).toHaveLength(1);
   });
 
-  it("leaves profitable sectors, cooling-down sectors and mid-transition sectors alone", () => {
+  it("retools even a PROFITABLE sector when the advantage clears the profit-seek bar", () => {
+    // The fertilizer squeeze scores ~0.5+ advantage for chemicals — above the
+    // 0.25 profit-seek bar, so a +12% sector still switches.
+    const profitable = sector({ effectiveProfitMargin: 12 });
+    const d = decide(corp(), [profitable], fertilizerSqueeze);
+    const sets = strategySets(d);
+    expect(sets).toHaveLength(1);
+    expect((sets[0].update.$set as Record<string, unknown>).strategyId).toBe("fertilizers");
+  });
+
+  it("leaves profitable sectors below the profit-seek bar, cooling-down and mid-transition sectors alone", () => {
+    // Mild squeeze: advantage above the distress bar but below profit-seek.
+    const mildSqueeze: CommodityPriceRatioFn = (commodity: CommodityType) =>
+      commodity === "fertilizers" ? 1.25 : 1;
     const profitable = sector({ effectiveProfitMargin: 12 });
     const cooling = sector({ transitionCooldownUntilTurn: TURN + 5 });
     const transitioning = sector({
       transitionFromStrategyId: "standard",
       strategyId: "fertilizers",
     });
-    const d = decide(corp(), [profitable, cooling, transitioning], fertilizerSqueeze);
+    const d = decide(corp(), [profitable, cooling, transitioning], mildSqueeze);
     expect(strategySets(d)).toHaveLength(0);
   });
 
