@@ -18,6 +18,7 @@ import {
   type CapacityHeadroomFn,
   type LaggedPriceRatioFn,
 } from "@/lib/turn/npp/strategyExpectedRevenue";
+import { isDecadeReached } from "@/lib/constants/techTree/decades";
 import {
   capacityRescaleRatio,
   rescaleBuildQueueForStrategyChange,
@@ -160,7 +161,12 @@ export async function processExtractionAutoStrategy(
   // Lagged price ratio + per-state supply for the NPP expected-revenue pass.
   const priceRatioByResource = new Map<ExtractableResource, number>();
   const stateSupplyByResource = new Map<ExtractableResource, Record<string, number>>();
+  // Full-commodity lagged ratios for the generic (non-extraction) pass 3.
+  const priceRatioByCommodity = new Map<string, number>();
   for (const cp of prices) {
+    if (cp.basePrice && cp.globalPrice && Number.isFinite(cp.globalPrice / cp.basePrice)) {
+      priceRatioByCommodity.set(cp.commodity, cp.globalPrice / cp.basePrice);
+    }
     const r = cp.commodity as ExtractableResource;
     if (!(EXTRACTABLE_RESOURCES as readonly string[]).includes(r)) continue;
     const sd = cp.globalDemand > 0 ? cp.globalSupply / cp.globalDemand : 1;
@@ -389,13 +395,151 @@ export async function processExtractionAutoStrategy(
     }
   }
 
+  // ── Pass 3: NPP generic (non-extraction) re-strategize ────────────────────
+  // The corp-484 arc's last inert valve (ops-knowledge ahd-iron-curtain-
+  // autarky watchlist): strategy switching existed only for extraction, so no
+  // NPC could ever answer a shortage in a STRATEGY-produced commodity. With
+  // the curtain closed the West's fertilizer ran 2.3x base while 34 US
+  // chemical_industries sectors sat on pharma/standard strategies and nothing
+  // could move them. Same decider as pass 2 — the scorer already treats
+  // non-extractables at headroom 1 and the deposit veto self-skips — over
+  // every NPP-run sector whose type offers >= 2 era-available strategies.
+  // Tech-locked strategies are never auto-adopted; the 12-turn transition
+  // blend, -5% margin penalty and 24-turn cooldown all apply as ever. Player
+  // sectors are never touched.
+  let genericRestrategized = 0;
+  const genericByStrategy: Record<string, number> = {};
+  {
+    const gs = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { currentYear: 1 } });
+    const currentYear = gs?.currentYear ?? null;
+    const genericTypes = Object.entries(SECTOR_STRATEGIES)
+      .filter(([type, list]) => type !== "extraction" && (list?.length ?? 0) >= 2)
+      .map(([type]) => type);
+    const nppCorpDocs = await db
+      .collection<Corporation>("corporations")
+      .find({ ceoType: "npp", suspended: { $ne: true } })
+      .project({ _id: 1 })
+      .toArray();
+    if (genericTypes.length > 0 && nppCorpDocs.length > 0 && currentYear != null) {
+      const genericSectors = await db
+        .collection<CorporateSector>("corporateSectors")
+        .find({
+          sectorType: { $in: genericTypes },
+          corporationId: { $in: nppCorpDocs.map((c) => c._id as ObjectId) },
+          transitionFromStrategyId: { $in: [null, undefined] },
+        })
+        .project<
+          Pick<
+            CorporateSector,
+            | "_id"
+            | "sectorType"
+            | "strategyId"
+            | "soldFraction"
+            | "transitionCooldownUntilTurn"
+            | "capitalStock"
+            | "buildQueue"
+          >
+        >({
+          _id: 1,
+          sectorType: 1,
+          strategyId: 1,
+          soldFraction: 1,
+          transitionCooldownUntilTurn: 1,
+          capitalStock: 1,
+          buildQueue: 1,
+        })
+        .toArray();
+
+      const ratioOf: LaggedPriceRatioFn = (commodity) =>
+        priceRatioByCommodity.get(commodity) ?? null;
+      const noDeposits: CapacityHeadroomFn = () => 1;
+      const eligibleByType = new Map(
+        genericTypes.map((type) => [
+          type,
+          (SECTOR_STRATEGIES[type as keyof typeof SECTOR_STRATEGIES] ?? []).filter(
+            (s) =>
+              s.requiresTechUnlock !== true &&
+              (!s.minDecade || isDecadeReached(s.minDecade, currentYear))
+          ),
+        ])
+      );
+
+      type GenericSwitch = {
+        sector: (typeof genericSectors)[number];
+        strategyId: string;
+        improvement: number;
+      };
+      const genericSwitches: GenericSwitch[] = [];
+      for (const s of genericSectors) {
+        if (s.transitionCooldownUntilTurn != null && currentTurn < s.transitionCooldownUntilTurn)
+          continue;
+        const strategies = eligibleByType.get(s.sectorType) ?? [];
+        if (strategies.length < 2) continue;
+        const decision = decideExtractionStrategySwitch({
+          currentStrategyId: s.strategyId ?? "standard",
+          strategies,
+          priceRatioOf: ratioOf,
+          headroomOf: noDeposits,
+          soldFraction: s.soldFraction,
+        });
+        if (decision) {
+          genericSwitches.push({
+            sector: s,
+            strategyId: decision.strategyId,
+            improvement: decision.bestScore - decision.currentScore,
+          });
+        }
+      }
+
+      genericSwitches.sort((a, b) => b.improvement - a.improvement);
+      const chosenGeneric = genericSwitches.slice(0, NPP_RESTRATEGIZE_MAX_PER_RUN);
+      if (chosenGeneric.length > 0) {
+        const now = new Date();
+        await db.collection<CorporateSector>("corporateSectors").bulkWrite(
+          chosenGeneric.map((p) => ({
+            updateOne: {
+              filter: { _id: p.sector._id },
+              update: {
+                $set: {
+                  strategyId: p.strategyId,
+                  transitionFromStrategyId: p.sector.strategyId ?? "standard",
+                  transitionStartTurn: currentTurn,
+                  transitionCooldownUntilTurn: currentTurn + STRATEGY_COOLDOWN_TURNS,
+                  autoStrategyAdoptedAtTurn: currentTurn,
+                  ...capacityRescaleUpdate(
+                    p.sector,
+                    p.sector.strategyId ?? "standard",
+                    p.strategyId,
+                    plantsEnabled
+                  ),
+                  updatedAt: now,
+                },
+              },
+            },
+          }))
+        );
+        genericRestrategized = chosenGeneric.length;
+        for (const p of chosenGeneric) {
+          genericByStrategy[p.strategyId] = (genericByStrategy[p.strategyId] ?? 0) + 1;
+        }
+      }
+    }
+  }
+
   await stampRun(db, currentTurn);
   return {
     converted: chosen.length,
     byResource,
     restrategized,
     restrategizedByStrategy,
-    ...(shortage.size === 0 && chosen.length === 0 && restrategized === 0
+    genericRestrategized,
+    genericByStrategy,
+    ...(shortage.size === 0 &&
+    chosen.length === 0 &&
+    restrategized === 0 &&
+    genericRestrategized === 0
       ? { skippedReason: "no-shortage" }
       : {}),
   };
