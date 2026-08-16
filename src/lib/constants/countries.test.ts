@@ -3,8 +3,10 @@ import {
   ALL_COUNTRY_IDS,
   COUNTRY_CONFIGS,
   COUNTRY_ORDER,
+  type CountryId,
   ZOD_COUNTRY_ENUM,
   getCountryConfig,
+  getCountryDisplayName,
   getCountryLocale,
   getExecutiveOfficeKey,
   getHeadOfStateTitle,
@@ -796,5 +798,18 @@ describe("head-of-state office varies by era preset", () => {
       }
     }
     expect(broken, `Era-preset config invariants broken:\n${broken.join("\n")}`).toEqual([]);
+  });
+});
+
+describe("getCountryDisplayName", () => {
+  it("returns the configured name for a known country", () => {
+    expect(getCountryDisplayName("US")).toBe("United States");
+  });
+
+  it("does not throw when the id is missing from COUNTRY_CONFIGS (ticket #1115)", () => {
+    // ShortageHeatMap calls this with "" on first paint of /stockmarket/global.
+    expect(() => getCountryDisplayName("" as CountryId)).not.toThrow();
+    expect(getCountryDisplayName("" as CountryId)).toBe("");
+    expect(getCountryDisplayName("STALE" as CountryId)).toBe("STALE");
   });
 });
