@@ -517,6 +517,7 @@ export async function accumulateVoteTurn(
       votingSystem: state.votingSystem ?? "fptp",
       isGeneralElection,
       countryId: electionCountryId,
+      currentStateId: stateId,
       parentRegionId: state.parentRegionId,
       liveTurnouts: effLiveTurnouts, // Pass resolved turnout to vote distribution
       hasPlayerInRace,

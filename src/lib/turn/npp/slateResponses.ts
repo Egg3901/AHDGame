@@ -33,6 +33,7 @@ import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaF
 import { materializeSlateAssignmentsFromTemplate } from "@/lib/db/recruitmentSlateLookup";
 import { isElectionTypeEntryBlocked } from "@/lib/elections/nationwideExecutive";
 import { isPrimaryClosed } from "@/lib/elections/electionDeadlineFilters";
+import { canPartyContestState } from "@/lib/parties/regionalContest";
 
 interface SlateResponseSummary {
   rowsConsidered: number;
@@ -368,6 +369,17 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
         continue;
       }
       if (election.state && npp.homeState !== election.state) {
+        queueSkipped(row);
+        continue;
+      }
+      const slateParty = ctx.partyByCompositeKey.get(`${electionCountry}:${row.partyId}`);
+      if (
+        !canPartyContestState({
+          countryId: electionCountry,
+          abbreviation: slateParty?.abbreviation,
+          stateId: election.state,
+        })
+      ) {
         queueSkipped(row);
         continue;
       }

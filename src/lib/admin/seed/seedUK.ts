@@ -302,12 +302,12 @@ export async function ensureMissingUKStatePartyOrgRows(
   // The set of (region, partyId) keys we expect to exist; anything else
   // bearing a regional-party slug for a non-home region is stale.
   const expectedKeys = new Set(orgs.map((o) => o._id));
-  const regionalSlugs = ["uk_snp", "uk_plaid", "uk_dup", "uk_sf", "uk_uup"] as const;
+  const { UK_REGIONAL_PARTY_SLUGS } = await import("@/lib/parties/regionalContest");
   const { buildUKPartySlugToSeqId } = await import("@/lib/seeds/uk/ukStatePartyOrgCalculations");
   const slugToSeqId = await buildUKPartySlugToSeqId(db);
-  const regionalSeqIds = regionalSlugs
-    .map((slug) => slugToSeqId[slug])
-    .filter((seq): seq is string => seq != null);
+  const regionalSeqIds = UK_REGIONAL_PARTY_SLUGS.map((slug) => slugToSeqId[slug]).filter(
+    (seq): seq is string => seq != null
+  );
   if (regionalSeqIds.length > 0) {
     const allRegionalOrgs = await db
       .collection<StatePartyOrg>("statePartyOrg")

@@ -54,6 +54,8 @@ import {
   slateSuppressesAutoPick,
 } from "./slateOverride";
 import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
+import { canPartyContestState } from "@/lib/parties/regionalContest";
+import { removeWithdrawnCandidateFromTally } from "@/lib/electionEngine/tallyCleaner";
 import { isNppAutonomyActive, nppAutonomyAtLeast } from "@/lib/nppAutonomy/featureFlag";
 import { careerArchetypeModifiersContinuous } from "@/lib/nppAutonomy/v3/careerArchetype";
 import { ChallengerBudget } from "@/lib/nppAutonomy/playerImpactBudget";
@@ -87,6 +89,80 @@ interface EnterPrimaryOptions {
   allowChallenger?: boolean;
 }
 
+function nppCanContestElection(ctx: NPPContext, npp: NPP, election: Election): boolean {
+  const countryId = election.countryId ?? npp.countryId ?? "US";
+  const party = ctx.partyByCompositeKey.get(`${countryId}:${npp.party}`);
+  return canPartyContestState({
+    countryId,
+    abbreviation: party?.abbreviation,
+    stateId: election.state,
+  });
+}
+
+/**
+ * Pull SNP/Plaid/NI-party NPPs off ballots outside their home nation.
+ * Org-row gating only blocks NEW entry and skips incumbents, so a London-homed
+ * SNP NPP (or a stale org row) stayed on the live Commons ballot. Runs against
+ * every active/upcoming UK race, including generals already past the primary.
+ */
+async function withdrawOutOfRegionNppCandidacies(ctx: NPPContext): Promise<number> {
+  const { db, now, partyByCompositeKey, candidatesByElection } = ctx;
+  const elections = await db
+    .collection<Election>("elections")
+    .find({ countryId: "UK", status: { $in: ["active", "upcoming"] } })
+    .toArray();
+  if (elections.length === 0) return 0;
+
+  const electionById = new Map(elections.map((election) => [election._id.toString(), election]));
+  const candidates = await db
+    .collection<ElectionCandidate>("electionCandidates")
+    .find({
+      electionId: { $in: elections.map((election) => election._id) },
+      status: "active",
+      isNPP: true,
+    })
+    .toArray();
+
+  let withdrawn = 0;
+  for (const candidate of candidates) {
+    const election = electionById.get(candidate.electionId.toString());
+    if (!election?.state) continue;
+    const countryId = election.countryId ?? "UK";
+    const party = partyByCompositeKey.get(`${countryId}:${candidate.party}`);
+    if (
+      canPartyContestState({
+        countryId,
+        abbreviation: party?.abbreviation,
+        stateId: election.state,
+      })
+    ) {
+      continue;
+    }
+
+    await db.collection<ElectionCandidate>("electionCandidates").updateOne(
+      { _id: candidate._id },
+      {
+        $set: {
+          status: "withdrawn",
+          withdrawnAt: now,
+        },
+      }
+    );
+    await removeWithdrawnCandidateFromTally(db, candidate.electionId, candidate._id.toString());
+
+    const inMemory = candidatesByElection.get(candidate.electionId.toString());
+    const live = inMemory?.find((row) => row._id.toString() === candidate._id.toString());
+    if (live) {
+      live.status = "withdrawn";
+      live.withdrawnAt = now;
+    }
+    const nppKey = candidate.nppId?.toString() ?? candidate.characterId.toString();
+    ctx.nppCandidacies.delete(nppKey);
+    withdrawn += 1;
+  }
+  return withdrawn;
+}
+
 export async function processElectionEntry(ctx: NPPContext): Promise<number> {
   const { db, now, candidatesByElection } = ctx;
 
@@ -95,6 +171,8 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
   // applied by the standalone action / fund-generation phases — technocrats
   // never run for office.
   const allNPPs = ctx.allNPPs.filter((n) => !n.isTechnocrat);
+
+  await withdrawOutOfRegionNppCandidacies(ctx);
 
   // NPPs are normally barred from presidential races, and always from any race
   // type whose resolver isn't production-ready. SP3 lifts the presidential bar
@@ -208,6 +286,10 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
     // already-filled slot (defend / contest it) rather than compete for an
     // empty one, so both skip this short-circuit.
     if (filledThisTurn.has(key) && !incumbentDefense && !allowChallenger) return false;
+
+    // Hard regional-party geography (SNP/Plaid/NI): applies even to incumbent
+    // defense so a wrongly-seated London SNP MP cannot keep re-filing.
+    if (!nppCanContestElection(ctx, npp, primary)) return false;
 
     // Regional-presence gate — new candidacies only; incumbents may always
     // file their own defense primary regardless of current org rows.
