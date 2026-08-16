@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getRelocationCooldownStatus, RELOCATION_COOLDOWN_TURNS } from "./relocationCooldown";
+import {
+  getRelocationCooldownStatus,
+  relocationCooldownButtonLabel,
+  relocationCooldownWaitCopy,
+  RELOCATION_COOLDOWN_TURNS,
+} from "./relocationCooldown";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
 
 const realNow = new Date("2026-05-30T16:00:00Z").getTime();
@@ -61,5 +66,24 @@ describe("getRelocationCooldownStatus — Date fallback (legacy docs)", () => {
 
   it("exposes the 72-turn constant", () => {
     expect(RELOCATION_COOLDOWN_TURNS).toBe(72);
+  });
+});
+
+describe("relocation cooldown player copy", () => {
+  it("uses hours when less than a day remains", () => {
+    expect(relocationCooldownButtonLabel(5, 1)).toBe("Relocate in 5 hours");
+    expect(relocationCooldownWaitCopy(5, 1)).toBe("You can relocate again in 5 hours.");
+    expect(relocationCooldownButtonLabel(1, 1)).toBe("Relocate in 1 hour");
+    expect(relocationCooldownWaitCopy(1, 1)).toBe("You can relocate again in 1 hour.");
+  });
+
+  it("uses days right after a move (ticket #1117)", () => {
+    expect(relocationCooldownButtonLabel(72, 3)).toBe("Relocate in 3 days");
+    expect(relocationCooldownWaitCopy(72, 3)).toBe("You can relocate again in 3 days.");
+  });
+
+  it("falls back to days when remainingTurns is missing", () => {
+    expect(relocationCooldownButtonLabel(0, 3)).toBe("Relocate in 3 days");
+    expect(relocationCooldownWaitCopy(0, 3)).toBe("You can relocate again in 3 days.");
   });
 });
