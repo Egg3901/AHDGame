@@ -4,7 +4,13 @@
  */
 export function contrastTextColor(hex: string): string {
   const clean = hex.replace("#", "");
-  if (clean.length !== 6) return "#ffffff";
+  // Expand 3-digit shorthand (e.g. "fff" -> "ffffff") before parsing.
+  const expanded = clean.length === 3 ? clean.split("").map((c) => c + c).join("") : clean;
+  if (expanded.length !== 6) return "#ffffff";
+
+  const r = parseInt(expanded.slice(0, 2), 16) / 255;
+  const g = parseInt(expanded.slice(2, 4), 16) / 255;
+  const b = parseInt(expanded.slice(4, 6), 16) / 255;
 
   const r = parseInt(clean.slice(0, 2), 16) / 255;
   const g = parseInt(clean.slice(2, 4), 16) / 255;
