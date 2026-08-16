@@ -206,6 +206,13 @@ export function processSector(
 
   // Recalculate daily growth cost; legacy sectors fall back to the HQ country.
   const sectorCountryId = sector.countryId ?? corp.countryId;
+  // Partition worlds: the WIDE balance leg this sector reads (margin
+  // modifiers, throughput coupling) is its country's REACHABLE book — the
+  // same book clearing fills it from — so a sector behind an embargo wall is
+  // margin-priced and input-throttled against the market it actually trades
+  // in. Modern worlds build no books → the worldwide aggregate, unchanged.
+  const wideCommodityBalances =
+    lookups.countryClearingBooks?.get(sectorCountryId) ?? lookups.globalCommodityBalances;
   const primeRate =
     lookups.primeRateByCountry.get(sectorCountryId) ??
     getCountryConfig(sectorCountryId).centralBank.defaultPrimeRate;
@@ -356,7 +363,7 @@ export function processSector(
   const throughputRaw = market.throughputEnabled
     ? computeThroughput(
         strategyRates.demand,
-        lookups.globalCommodityBalances,
+        wideCommodityBalances,
         lookups.stateInputAvailabilityByState.get(sector.stateId)
       )
     : { throughput: 1, bindingInput: null };
@@ -1070,7 +1077,7 @@ export function processSector(
   const effectiveDemand = scaleCommodityRates(strategyRates.demand, techEffects.inputRateMult);
   const { inputMod: commodityMod, surplusMod } = computeBlendedMarginModifiers(
     sector.sectorType,
-    lookups.globalCommodityBalances,
+    wideCommodityBalances,
     nationalBalances,
     stateBalances,
     globalWeight,

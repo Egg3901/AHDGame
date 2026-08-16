@@ -398,6 +398,15 @@ export function computeClearingFactors(args: {
     string,
     ReadonlyMap<CommodityType, { supply: number; demand: number }>
   >;
+  /**
+   * Per-group lagged price-over-base ratios (group key → commodity → ratio).
+   * When partitioned, a seller's price-realization leg reads its own market's
+   * reachable price, not the worldwide `priceRatioByCommodity` — otherwise a
+   * seller in a locally-short, globally-glutted market realizes glut revenue
+   * on shortage volume. Groups/commodities absent here fall back to the
+   * worldwide ratio, so the map may be sparse.
+   */
+  priceRatioByGroup?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
 }): Map<string, SectorClearingResult> {
   const { sectors, balances, priceRatioByCommodity, basePrices, onBookDiagnostic } = args;
 
@@ -642,11 +651,15 @@ export function computeClearingFactors(args: {
         : 1;
     const effectivePremium = posture > 0 ? posture * premiumMult : posture;
     const soldByCommodity: Partial<Record<CommodityType, number>> = {};
+    const sectorGroup = args.groupBySector?.get(s.sectorId);
+    const groupRatios = sectorGroup != null ? args.priceRatioByGroup?.get(sectorGroup) : undefined;
     for (const commodity of Object.keys(s.supplyRates) as CommodityType[]) {
       const rate = s.supplyRates[commodity] ?? 0;
       if (rate <= 0) continue;
       const sold = soldByCommodityBySector.get(commodity)?.get(s.sectorId) ?? 1;
-      const priceLeg = priceRealizationFactor(priceRatioByCommodity.get(commodity));
+      const priceLeg = priceRealizationFactor(
+        groupRatios?.get(commodity) ?? priceRatioByCommodity.get(commodity)
+      );
       rateSum += rate;
       factorSum += rate * sold * (1 + effectivePremium) * priceLeg;
       soldSum += rate * sold;

@@ -135,6 +135,13 @@ export interface CorporationLookups {
    */
   priceRatioByCommodity: Map<CommodityType, number>;
   /**
+   * Lagged per-country reachable-market price ratios (price / base), from
+   * `commodityPrices.reachablePrices`. Partition worlds only; sparse. Feeds
+   * clearing's per-group price-realization leg — absent entries fall back to
+   * the worldwide `priceRatioByCommodity`.
+   */
+  reachablePriceRatioByCountry?: Map<string, Map<CommodityType, number>>;
+  /**
    * Money wiring (interstate-logistics plan step 5, phase A): per state, per
    * commodity, last turn's landed-price premium per unit (₳) for out-of-state
    * sourcing, read from the prior sourcingNetworkLoad doc. Empty when
