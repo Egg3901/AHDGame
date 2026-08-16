@@ -1464,6 +1464,10 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     // leg falls through to national, making the effective blend 50/50.
     const isMacroPriceBlend = COMMODITIES_NATIONAL_REGIONAL_PRICE_BLEND.has(commodity);
 
+    // Per-country reachable wide leg (memoized per commodity): the price of
+    // the market each country can actually reach. See the blend note below.
+    const reachableLegByCountry = new Map<string, number>();
+
     const statePrices: Record<string, number> = {};
     // Reference captured after loop populates it — stored for history snapshots
     appliedStatePrices.set(commodity, statePrices);
@@ -1492,8 +1496,19 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       } else if (nudgeMap.has(commodity)) {
         statePrice = nudgeMap.get(commodity)!;
       } else {
-        // Three-leg blend: 50% global + 25% national + 25% regional (state).
+        // Three-leg blend: 50% reachable-market + 25% national + 25% regional.
         // For macro-driven commodities the regional leg redirects to national.
+        //
+        // The wide leg is the price of the market this country can actually
+        // REACH — the same reachable book the clearing engine fills sellers
+        // from (#1077) — not the planet-wide aggregate. The planet-wide leg
+        // priced every open economy against supply that could never arrive:
+        // observed on prod, the Eastern bloc's command farms carried a 13.45M
+        // food surplus against 2.94M of bloc demand and the single global
+        // ledger crushed food to 0.58x base across a West that was itself
+        // 2.7M short. Partitioned clearing with unpartitioned pricing meant
+        // the iron curtain stopped the goods but not the glut. Countries
+        // outside COUNTRY_ORDER (no book) keep the world aggregate.
         const countryId = stateToCountry.get(stateId);
         const nationalLeg =
           countryId && nationalPrices[countryId] != null
@@ -1506,7 +1521,25 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         const regionalLeg = isMacroPriceBlend
           ? nationalLeg
           : computeMarketPrice(effBasePrice, deliveredSupply, stateBal.demand, priceKnee);
-        const targetPrice = blendPrice(globalMktPrice, nationalLeg, regionalLeg);
+        let wideLeg = globalMktPrice;
+        if (countryId) {
+          const memo = reachableLegByCountry.get(countryId);
+          if (memo != null) {
+            wideLeg = memo;
+          } else {
+            const book = reachableBooks.get(countryId as CountryId)?.get(commodity);
+            if (book && (book.supply > 0 || book.demand > 0)) {
+              wideLeg = computeMarketPrice(
+                effBasePrice,
+                book.supply + NATIONAL_COMMODITY_STABILIZER,
+                book.demand + NATIONAL_COMMODITY_STABILIZER,
+                priceKnee
+              );
+            }
+            reachableLegByCountry.set(countryId, wideLeg);
+          }
+        }
+        const targetPrice = blendPrice(wideLeg, nationalLeg, regionalLeg);
         const previousPrice = existing?.statePrices?.[stateId] ?? targetPrice;
         statePrice =
           Math.round(
