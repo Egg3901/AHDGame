@@ -79,7 +79,14 @@ import {
   techNodeCashCost,
   type TechTreeNode,
 } from "@/lib/constants/techTree";
-import { CAPACITY_BUILD_TURNS, computeBuildCost } from "@/lib/constants/capacityEconomy";
+import {
+  CAPACITY_BUILD_TURNS,
+  computeBuildCost,
+  capacityRescaleRatio,
+  rescaleBuildQueueForStrategyChange,
+} from "@/lib/constants/capacityEconomy";
+import { SECTOR_STRATEGIES, STRATEGY_COOLDOWN_TURNS } from "@/lib/constants/sectorStrategies";
+import { getStrategyAvailability } from "@/lib/constants/techTree/strategyAvailability";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
@@ -336,6 +343,56 @@ export function glutStaggerEligible(corpId: string, turn: number): boolean {
   return (hash + turn) % GLUT_STATE_CHANGE_STAGGER === 0;
 }
 
+// Input-squeeze strategy shift (section 2e). A sector can be unprofitable not
+// because its market is glutted (2c's case) but because its RECIPE is wrong
+// for the current price regime — CA farms on `standard` paying 1.9-2.3x for
+// fertilizers/vehicles/freight while low-input strategies exist, chemical
+// plants making glutted industrial chemicals while fertilizers run 2.3x.
+// Mothballing such a sector destroys good capacity; nothing repointed it
+// (the known gap flagged at COMMODITY_COMBINED_FLOOR). This pass re-scores
+// every era-available strategy for the sector's type against the corp
+// country's reachable price ratios and switches to the best when it beats the
+// current recipe by a real margin. Same cohort stagger, one shift per corp
+// per turn, player-set strategies untouched (NPP-run corps only).
+
+/** effectiveProfitMargin at/below which a sector is a shift candidate (pp). */
+export const STRATEGY_SHIFT_MARGIN_TRIGGER = -3;
+/** Required price-score advantage over the current strategy (revenue share). */
+export const STRATEGY_SHIFT_MIN_ADVANTAGE = 0.08;
+
+/**
+ * Price advantage of a strategy per ₳ of revenue: Σ supplyRate × (ratio − 1)
+ * − Σ demandRate × (ratio − 1). Positive means the recipe sells into
+ * expensive markets and buys from cheap ones. Null when no priced commodity
+ * on either side has a ratio (a market that has never priced).
+ */
+export function strategyPriceScore(
+  strategy: {
+    supply: Partial<Record<CommodityType, number>>;
+    demand: Partial<Record<CommodityType, number>>;
+  },
+  countryId: string,
+  priceRatioOf: CommodityPriceRatioFn
+): number | null {
+  let score = 0;
+  let priced = false;
+  for (const [commodity, rate] of Object.entries(strategy.supply)) {
+    if (!(typeof rate === "number" && rate > 0)) continue;
+    const ratio = priceRatioOf(commodity as CommodityType, countryId);
+    if (ratio == null) continue;
+    score += rate * (ratio - 1);
+    priced = true;
+  }
+  for (const [commodity, rate] of Object.entries(strategy.demand)) {
+    if (!(typeof rate === "number" && rate > 0)) continue;
+    const ratio = priceRatioOf(commodity as CommodityType, countryId);
+    if (ratio == null) continue;
+    score -= rate * (ratio - 1);
+    priced = true;
+  }
+  return priced ? score : null;
+}
+
 interface NppCorpDecisionContext {
   corp: Corporation;
   sectors: CorporateSector[];
@@ -373,6 +430,13 @@ interface NppCorpDecisionContext {
    * Absent/false leaves wages untouched so pre-labour worlds stay byte-identical.
    */
   labourWagesEnabled?: boolean;
+  /**
+   * World year + tech-tree flag for section 2e's strategy availability gating
+   * (mirrors the player setSectorStrategy path). Absent → gating treats the
+   * world as tech-disabled, exactly like getStrategyAvailability does.
+   */
+  currentYear?: number;
+  techTreesEnabled?: boolean;
   /**
    * NET per-turn debt service in ₳: issuer interest paid out, less coupon
    * collected on bonds the corp holds. Positive is a drag.
@@ -604,7 +668,11 @@ export async function processNppCorporationDecisions(
   const priceRatioOf: CommodityPriceRatioFn = (commodity, countryId) => {
     const doc = priceByCommodity.get(commodity);
     if (!doc || !doc.basePrice) return null;
-    const price = doc.nationalPrices?.[countryId] ?? doc.globalPrice;
+    // Reachable-market price first (partition worlds): the NPP brain should
+    // chase the market its sectors actually clear in, not the planet-wide
+    // aggregate — same rationale as the reachable price/margin legs.
+    const price =
+      doc.reachablePrices?.[countryId] ?? doc.nationalPrices?.[countryId] ?? doc.globalPrice;
     if (!price || !Number.isFinite(price)) return null;
     return price / doc.basePrice;
   };
@@ -794,6 +862,8 @@ export async function processNppCorporationDecisions(
         }),
         modifiers: ceoArchetypeModifiers(archetype),
         labourWagesEnabled,
+        currentYear: techCurrentYear > 0 ? techCurrentYear : undefined,
+        techTreesEnabled,
       },
       unownedByCountry,
       stateControlled,
@@ -1414,6 +1484,95 @@ export function makeNppCorpDecision(
           update: { $set: { mothballed: true, updatedAt: now } },
         });
       }
+    }
+  }
+
+  // ── 2e. Input-squeeze strategy shift ──────────────────────────────────────
+  // See the note at STRATEGY_SHIFT_MARGIN_TRIGGER. Runs on the SAME cohort
+  // stagger as 2c but independently of its budget: a mothball and a strategy
+  // shift never target the same sector (a shift candidate is running and
+  // selling; a mothball candidate is unfilled), and only one shift per corp
+  // per turn keeps the cohort gradual. SOEs are exempt for 2c's reason.
+  if (!corp.countryOwnerId && glutStaggerEligible(corp._id.toString(), ctx.turn)) {
+    let best: {
+      sp: SectorProfitInfo;
+      toStrategyId: string;
+      advantage: number;
+    } | null = null;
+    for (const sp of sectorProfits) {
+      const sector = sp.sector;
+      if (sector.mothballed === true) continue;
+      if (divestedSectorIds.includes(sector._id)) continue;
+      if (sector.sectorType === "extraction") continue; // own deposit-aware pass
+      if ((sector.effectiveProfitMargin ?? 0) > STRATEGY_SHIFT_MARGIN_TRIGGER) continue;
+      if (
+        typeof sector.transitionCooldownUntilTurn === "number" &&
+        sector.transitionCooldownUntilTurn > ctx.turn
+      ) {
+        continue;
+      }
+      // Mid-transition sectors keep their committed lane.
+      if (sector.transitionFromStrategyId) continue;
+      const strategies = SECTOR_STRATEGIES[sector.sectorType as CorporationType];
+      if (!strategies || strategies.length < 2) continue;
+      const sectorCountryId = sector.countryId ?? corp.countryId;
+      const currentId = sector.strategyId ?? "standard";
+      const current = strategies.find((s) => s.id === currentId);
+      if (!current) continue;
+      const currentScore = strategyPriceScore(current, sectorCountryId, priceRatioOf);
+      if (currentScore == null) continue;
+      for (const candidate of strategies) {
+        if (candidate.id === currentId) continue;
+        // Era/tech gating mirrors the player path exactly.
+        const availability = getStrategyAvailability(
+          corp,
+          candidate,
+          ctx.currentYear ?? 0,
+          ctx.techTreesEnabled ?? false
+        );
+        if (availability.locked) continue;
+        const score = strategyPriceScore(candidate, sectorCountryId, priceRatioOf);
+        if (score == null) continue;
+        const advantage = score - currentScore;
+        if (advantage < STRATEGY_SHIFT_MIN_ADVANTAGE) continue;
+        if (best == null || advantage > best.advantage) {
+          best = { sp, toStrategyId: candidate.id, advantage };
+        }
+      }
+    }
+    if (best) {
+      const sector = best.sp.sector;
+      const fromId = sector.strategyId ?? "standard";
+      // D9: renormalize capacity across the recipe change so the switch is
+      // never a free capacity windfall/confiscation (same rule as the player
+      // route and the extraction auto-pass).
+      const rescale: Record<string, unknown> = {};
+      const ratio = capacityRescaleRatio(
+        sector.sectorType as CorporationType,
+        fromId,
+        best.toStrategyId
+      );
+      if (ratio !== 1) {
+        if (typeof sector.capitalStock === "number" && Number.isFinite(sector.capitalStock)) {
+          rescale.capitalStock = sector.capitalStock * ratio;
+        }
+        if (Array.isArray(sector.buildQueue) && sector.buildQueue.length > 0) {
+          rescale.buildQueue = rescaleBuildQueueForStrategyChange(sector.buildQueue, ratio);
+        }
+      }
+      sectorUpdates.push({
+        filter: { _id: sector._id },
+        update: {
+          $set: {
+            strategyId: best.toStrategyId,
+            transitionFromStrategyId: fromId,
+            transitionStartTurn: ctx.turn,
+            transitionCooldownUntilTurn: ctx.turn + STRATEGY_COOLDOWN_TURNS,
+            ...rescale,
+            updatedAt: now,
+          },
+        },
+      });
     }
   }
 
