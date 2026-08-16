@@ -92,4 +92,32 @@ describe("computeClearingFactors market partition", () => {
     expect(res.get("a")!.soldFraction).toBeCloseTo(1, 5);
     expect(res.get("b")!.soldFraction).toBeCloseTo(1, 5);
   });
+
+  it("price realization reads the seller's own group ratio, falling back to worldwide", () => {
+    const run = (priceRatioByGroup?: Map<string, Map<CommodityType, number>>) =>
+      computeClearingFactors({
+        sectors: [seller("us1", 100 * steelBase), seller("ru1", 100 * steelBase)],
+        balances: balances(200, 200),
+        groupBySector: new Map([
+          ["us1", "US"],
+          ["ru1", "RU"],
+        ]),
+        balancesByGroup: new Map([
+          ["US", balances(100, 100)],
+          ["RU", balances(100, 100)],
+        ]),
+        // Worldwide ratio says glut (0.7x base)...
+        priceRatioByCommodity: new Map([["steel" as CommodityType, 0.7]]),
+        priceRatioByGroup,
+        basePrices: COMMODITY_BASE_PRICES,
+      });
+
+    // ...but the US market is short (1.4x). With group ratios the US seller
+    // realizes its own market's price; RU (absent from the map) keeps the
+    // worldwide fallback, so both books fill 1.0 and only the price leg moves.
+    const withGroups = run(new Map([["US", new Map([["steel" as CommodityType, 1.4]])]]));
+    const withoutGroups = run(undefined);
+    expect(withGroups.get("us1")!.factor).toBeGreaterThan(withoutGroups.get("us1")!.factor);
+    expect(withGroups.get("ru1")!.factor).toBeCloseTo(withoutGroups.get("ru1")!.factor, 10);
+  });
 });

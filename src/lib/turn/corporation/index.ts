@@ -573,6 +573,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       groupBySector: clearingGroupBySector,
       balancesByGroup: lookups.countryClearingBooks ?? undefined,
       priceRatioByCommodity: lookups.priceRatioByCommodity,
+      // Partitioned worlds: each seller's price-realization leg reads its home
+      // country's lagged reachable price. Sparse map; falls back to the
+      // worldwide ratio per commodity. Modern worlds: no groups, unused.
+      priceRatioByGroup: clearingGroupBySector ? lookups.reachablePriceRatioByCountry : undefined,
       // The era table: clearing compares sector offers (era-based units under
       // plants) against the ledger's balances, which run on the same basis.
       basePrices: eraScaledBasePrices(lookups.eraUnitScale),

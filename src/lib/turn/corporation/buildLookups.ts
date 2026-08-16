@@ -200,6 +200,7 @@ export async function buildCorporationLookups(
             stateInputAvailability: 1,
             nationalSupply: 1,
             nationalDemand: 1,
+            reachablePrices: 1,
           },
         }
       )
@@ -552,6 +553,7 @@ export async function buildCorporationLookups(
   // PRIOR commodity-price pass, so reading them here is the one-turn lag that
   // breaks the price->revenue->supply->price circularity.
   const priceRatioByCommodity = new Map<CommodityType, number>();
+  const reachablePriceRatioByCountry = new Map<string, Map<CommodityType, number>>();
   for (const cp of commodityPrices) {
     globalCommodityBalances.set(cp.commodity, {
       supply: cp.globalSupply,
@@ -565,6 +567,22 @@ export async function buildCorporationLookups(
       cp.basePrice > 0
     ) {
       priceRatioByCommodity.set(cp.commodity, cp.globalPrice / cp.basePrice);
+    }
+
+    // Lagged per-country reachable price ratios (partition worlds). Feeds
+    // clearing's price-realization leg so a partitioned seller realizes ITS
+    // market's price level, not the worldwide one. Sparse: absent countries
+    // fall back to `priceRatioByCommodity` inside computeClearingFactors.
+    if (typeof cp.basePrice === "number" && cp.basePrice > 0 && cp.reachablePrices) {
+      for (const [countryId, price] of Object.entries(cp.reachablePrices)) {
+        if (!(typeof price === "number" && price > 0)) continue;
+        let byCommodity = reachablePriceRatioByCountry.get(countryId);
+        if (!byCommodity) {
+          byCommodity = new Map<CommodityType, number>();
+          reachablePriceRatioByCountry.set(countryId, byCommodity);
+        }
+        byCommodity.set(cp.commodity, price / cp.basePrice);
+      }
     }
 
     for (const stateId of Object.keys(cp.stateSupply)) {
@@ -1001,6 +1019,7 @@ export async function buildCorporationLookups(
     globalCommodityBalances,
     stateInputAvailabilityByState,
     priceRatioByCommodity,
+    reachablePriceRatioByCountry,
     landedPremiumByState,
     nationalCommodityBalancesByCountry,
     countryClearingBooks,
