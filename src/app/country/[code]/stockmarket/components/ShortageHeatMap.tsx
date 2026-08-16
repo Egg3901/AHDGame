@@ -226,7 +226,9 @@ export function ShortageHeatMap({ commodities }: { commodities: CommodityData[] 
 
   const rows = useMemo(() => buildShortageRows(data, scope), [data, scope]);
 
-  const countryName = getCountryDisplayName(effectiveCountryId as CountryId);
+  const countryName = effectiveCountryId
+    ? getCountryDisplayName(effectiveCountryId as CountryId)
+    : "";
   const heading =
     scope.level === "reachable"
       ? `What ${countryName} can sell into`

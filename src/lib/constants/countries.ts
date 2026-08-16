@@ -6356,7 +6356,12 @@ export const ERA_COUNTRY_NAMES: Record<string, Partial<Record<CountryId, string>
 /** Country name for display, honoring per-era overrides when a preset is known. */
 export function getCountryDisplayName(id: CountryId, preset?: string): string {
   const override = preset ? ERA_COUNTRY_NAMES[preset]?.[id] : undefined;
-  return override ?? COUNTRY_CONFIGS[id].name;
+  // Callers (ShortageHeatMap, commodity scope) sometimes pass an empty or
+  // stale id via `as CountryId`. Indexing COUNTRY_CONFIGS blindly threw
+  // "Cannot read properties of undefined (reading 'name')" and crashed the
+  // commodities tab (ticket #1115; same class as #1101).
+  const config = Object.hasOwn(COUNTRY_CONFIGS, id) ? COUNTRY_CONFIGS[id] : undefined;
+  return override ?? config?.name ?? id;
 }
 
 /**
