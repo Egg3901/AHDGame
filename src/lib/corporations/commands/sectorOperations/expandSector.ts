@@ -88,17 +88,11 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
+    // Building is allowed in any sector type. The corp's primary and secondary
+    // types are highlighted in the UI and carry a margin bonus; off-type sectors
+    // are a soft economic penalty, not a hard gate. When no type is requested we
+    // default to the corp's primary type.
     const sectorType = plantsEnabled ? (requestedSectorType ?? corporation.type) : corporation.type;
-    if (
-      plantsEnabled &&
-      sectorType !== corporation.type &&
-      sectorType !== corporation.secondaryType
-    ) {
-      return NextResponse.json(
-        { error: "You can only build sectors in your primary or secondary industry" },
-        { status: 400 }
-      );
-    }
 
     // Check the state exists. NOT scoped to the corp's home country: founding
     // abroad is allowed, and the whole command downstream is built for it — the
