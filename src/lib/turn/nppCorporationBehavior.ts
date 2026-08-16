@@ -359,6 +359,17 @@ export function glutStaggerEligible(corpId: string, turn: number): boolean {
 export const STRATEGY_SHIFT_MARGIN_TRIGGER = -3;
 /** Required price-score advantage over the current strategy (revenue share). */
 export const STRATEGY_SHIFT_MIN_ADVANTAGE = 0.08;
+/**
+ * Advantage at which even a PROFITABLE sector retools (profit-seeking, not
+ * just distress-driven). Without this the shortage-relief channel barely
+ * fires: fertilizers ran 2.3x while chemical plants sat at +5% margin on
+ * industrial chemicals — comfortably profitable, never triggered, and the
+ * shortage persisted. A 0.42 revenue-share advantage measured live is the
+ * scale this exists for; the bar is high (3x the distress threshold) and the
+ * cooldown/stagger/one-per-corp limits bound churn exactly as for distress
+ * shifts.
+ */
+export const STRATEGY_SHIFT_PROFIT_SEEK_ADVANTAGE = 0.25;
 
 /**
  * Price advantage of a strategy per ₳ of revenue: Σ supplyRate × (ratio − 1)
@@ -1504,7 +1515,9 @@ export function makeNppCorpDecision(
       if (sector.mothballed === true) continue;
       if (divestedSectorIds.includes(sector._id)) continue;
       if (sector.sectorType === "extraction") continue; // own deposit-aware pass
-      if ((sector.effectiveProfitMargin ?? 0) > STRATEGY_SHIFT_MARGIN_TRIGGER) continue;
+      // Distressed sectors qualify at the low advantage bar; profitable ones
+      // only at the profit-seek bar (checked against `advantage` below).
+      const distressed = (sector.effectiveProfitMargin ?? 0) <= STRATEGY_SHIFT_MARGIN_TRIGGER;
       if (
         typeof sector.transitionCooldownUntilTurn === "number" &&
         sector.transitionCooldownUntilTurn > ctx.turn
@@ -1534,7 +1547,10 @@ export function makeNppCorpDecision(
         const score = strategyPriceScore(candidate, sectorCountryId, priceRatioOf);
         if (score == null) continue;
         const advantage = score - currentScore;
-        if (advantage < STRATEGY_SHIFT_MIN_ADVANTAGE) continue;
+        const requiredAdvantage = distressed
+          ? STRATEGY_SHIFT_MIN_ADVANTAGE
+          : STRATEGY_SHIFT_PROFIT_SEEK_ADVANTAGE;
+        if (advantage < requiredAdvantage) continue;
         if (best == null || advantage > best.advantage) {
           best = { sp, toStrategyId: candidate.id, advantage };
         }
