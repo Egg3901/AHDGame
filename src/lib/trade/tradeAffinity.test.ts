@@ -84,3 +84,28 @@ describe("buildTradeAffinity", () => {
     expect(capUnitsFor("oil", "US", "CN")).toBeUndefined(); // different commodity
   });
 });
+
+describe("iron curtain (curtainedCountries)", () => {
+  const curtain = new Set(["RU", "PL", "UKR"]);
+
+  it("zeroes affinity across the curtain, both directions", () => {
+    const { affinityFor } = buildTradeAffinity(ctx({ curtainedCountries: curtain }));
+    expect(affinityFor("food", "PL", "US")).toBe(0); // Polish grain cannot go west
+    expect(affinityFor("food", "US", "PL")).toBe(0); // and western goods cannot go east
+  });
+
+  it("leaves trade WITHIN the curtain (Comecon) untouched", () => {
+    const { affinityFor } = buildTradeAffinity(ctx({ curtainedCountries: curtain }));
+    expect(affinityFor("food", "UKR", "PL")).toBeCloseTo(getBaseAffinity("UKR", "PL"));
+  });
+
+  it("leaves trade within the open world untouched", () => {
+    const { affinityFor } = buildTradeAffinity(ctx({ curtainedCountries: curtain }));
+    expect(affinityFor("food", "US", "UK")).toBeCloseTo(getBaseAffinity("US", "UK"));
+  });
+
+  it("absent or empty set is a no-op", () => {
+    const { affinityFor } = buildTradeAffinity(ctx({ curtainedCountries: new Set() }));
+    expect(affinityFor("food", "PL", "US")).toBeCloseTo(getBaseAffinity("PL", "US"));
+  });
+});
