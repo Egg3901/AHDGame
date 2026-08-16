@@ -3,6 +3,7 @@ import { UK_REGION_POLLING_2020 } from "./ukRegionPolling2020";
 import { UK_REGION_POLLING_1992 } from "./ukRegionPolling1992";
 import { UK_REGION_POLLING_1951 } from "./ukRegionPolling1951";
 import type { StatePartyOrg, PoliticalParty } from "@/lib/db/types";
+import { canPartyContestState } from "@/lib/parties/regionalContest";
 
 /**
  * Calculate UK state party organization levels from era polling data
@@ -38,27 +39,8 @@ const UK_PARTY_SLUG_TO_NAME: Record<string, string> = {
   uk_uup: "Ulster Unionist Party",
 };
 
-/**
- * Regional parties — only stand candidates / operate in their listed home
- * region(s). Outside these regions they should NOT have a starting Org row,
- * matching the IRL geography (SNP doesn't contest English seats, DUP doesn't
- * contest Welsh seats, etc.). UK-wide parties (Labour, Conservative, Lib Dem,
- * Green, Reform UK) are omitted from this map and seed everywhere — they
- * have at least nominal presence in every region.
- */
-const UK_REGIONAL_PARTY_HOMES: Record<string, ReadonlySet<string>> = {
-  uk_snp: new Set(["SCO"]),
-  uk_plaid: new Set(["WAL"]),
-  uk_dup: new Set(["NIR"]),
-  uk_sf: new Set(["NIR"]),
-  uk_uup: new Set(["NIR"]),
-};
-
 function isPartyHomeRegion(partySlug: string, regionId: string): boolean {
-  const homes = UK_REGIONAL_PARTY_HOMES[partySlug];
-  // Not in the regional map → UK-wide party, present in every region.
-  if (!homes) return true;
-  return homes.has(regionId.toUpperCase());
+  return canPartyContestState({ countryId: "UK", slug: partySlug, stateId: regionId });
 }
 
 /**
