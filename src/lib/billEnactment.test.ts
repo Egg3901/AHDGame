@@ -277,6 +277,55 @@ describe("onBillEnacted", () => {
     expect(updateCall[1].$set.scope).toBe("state");
   });
 
+  // Ticket 1102: the Poon Choi Economic Act enacted VAT/customs sliders but never wrote
+  // federalBudget.taxRates, because its stored legislationType carried `taxSlider` alone
+  // (no `taxRateChange`) and the applier required the latter. A slider provision must apply
+  // its rate from `taxSlider` regardless.
+  it("applies a slider tax provision that has taxSlider but no taxRateChange", async () => {
+    const bill = createBill({
+      provisions: [
+        {
+          legislationTypeId: "uk.tax.salesTax",
+          effectDirection: 1,
+          proposedRate: 5,
+        } as any,
+      ],
+    });
+    const legType = {
+      _id: "uk.tax.salesTax",
+      policyDomain: "tax",
+      countryScope: "uk",
+      policyOptions: [],
+      // Deliberately NO taxRateChange — the exact shape that dropped the rate on prod.
+      taxSlider: {
+        scope: "federal",
+        taxType: "salesTax",
+        minRate: 0,
+        maxRate: 30,
+        step: 1,
+        baselineRate: 0,
+        waypoints: [],
+      },
+    };
+
+    setupCollection("legislationTypes", [legType]);
+    setupCollection("gameState", [{ _id: "current", currentYear: 1955 } as any]);
+    setupCollection("statePolicies", []);
+    db.collection("federalBudget");
+    db.collectionMocks["federalBudget"]!.findOne = vi.fn().mockResolvedValue({
+      _id: "UK",
+      countryId: "UK",
+      taxRates: { incomeTax: 36, salesTax: 0, tariffs: 0 },
+      spending: { total: 100 },
+    });
+
+    await onBillEnacted(db as unknown as Db, bill as any, 10);
+
+    const updateCall = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
+    expect(updateCall, "federalBudget.updateOne should have been called").toBeTruthy();
+    expect(updateCall[1].$set.taxRates.salesTax).toBe(5);
+  });
+
   it("uses policyOptionId for matching when provided", async () => {
     const bill = createBill({
       provisions: [

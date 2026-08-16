@@ -14,7 +14,7 @@ const us = (sectorType: string, stateId: string, revenue = 100_000): UnownedSect
     _id: new ObjectId(),
     stateId,
     countryId: "US" as CountryId,
-    sectorType: sectorType as never,
+    sectorType: sectorType as UnownedSector["sectorType"],
     revenue,
     headroomUnits: revenue,
   }) as UnownedSector;
