@@ -57,6 +57,7 @@ export async function fetchEnrichedCandidates(
       _id: unknown;
       sequentialId: number;
       countryId?: string;
+      abbreviation?: string;
       economicPosition: number;
       socialPosition: number;
       chairId?: ObjectId | null;
@@ -69,6 +70,12 @@ export async function fetchEnrichedCandidates(
   // country). Without countryId the query returned every party — later entries
   // overwrite earlier ones, which is the legacy (buggy) behavior preserved for
   // in-flight elections; see doc comment above.
+  const partyAbbrById = new Map(
+    parties
+      .filter((p) => typeof p.abbreviation === "string" && p.abbreviation.length > 0)
+      .map((p) => [String(p.sequentialId), p.abbreviation as string])
+  );
+
   const partyPositions = options?.includePartyPositions
     ? new Map(
         parties.map((p) => [
@@ -263,6 +270,7 @@ export async function fetchEnrichedCandidates(
       characterId: charIdStr,
       characterName: c.characterName,
       party: c.party,
+      ...(partyAbbrById.get(c.party) ? { partyAbbr: partyAbbrById.get(c.party) } : {}),
       isNPP: c.isNPP ?? false,
       charEP,
       charSP,

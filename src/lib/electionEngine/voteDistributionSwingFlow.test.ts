@@ -384,6 +384,98 @@ describe("distributeVotesBySwingFlow — Step 1 reproduces the appeal kernel", (
     expect(total).toBeLessThanOrEqual(1_000_000);
   });
 
+  it("gives SNP zero weight in a London general (ticket #1110)", () => {
+    const lab: EnrichedCandidate = {
+      ...fixtureCandidates()[0]!,
+      candidateId: "lab",
+      party: "1",
+      partyAbbr: "LAB",
+      charEP: -2,
+      charSP: -3,
+      partyEcon: -2,
+      partySocial: -3,
+    };
+    const con: EnrichedCandidate = {
+      ...fixtureCandidates()[1]!,
+      candidateId: "con",
+      party: "2",
+      partyAbbr: "CON",
+    };
+    const snp: EnrichedCandidate = {
+      ...fixtureCandidates()[0]!,
+      candidateId: "snp",
+      party: "3",
+      partyAbbr: "SNP",
+      isNPP: true,
+      charEP: -2,
+      charSP: -2,
+      partyEcon: -2,
+      partySocial: -2,
+    };
+    const out = distributeVotesBySwingFlow(
+      [lab, con, snp],
+      1_000_000,
+      1_000_000,
+      1_000_000,
+      fixtureDemographics(),
+      fixtureCategories(),
+      new Map([
+        ["1", 70],
+        ["2", 60],
+        ["3", 5],
+      ]),
+      {
+        isGeneralElection: true,
+        countryId: "UK",
+        currentStateId: "LON",
+        votingSystem: "fptp",
+      }
+    );
+    expect(out.votesPerCandidate.snp).toBe(0);
+    expect(out.votesPerCandidate.lab).toBeGreaterThan(0);
+    expect(out.votesPerCandidate.con).toBeGreaterThan(0);
+  });
+
+  it("still awards SNP votes in a Scotland general", () => {
+    const snp: EnrichedCandidate = {
+      ...fixtureCandidates()[0]!,
+      candidateId: "snp",
+      party: "3",
+      partyAbbr: "SNP",
+      isNPP: true,
+      charEP: -2,
+      charSP: -2,
+      partyEcon: -2,
+      partySocial: -2,
+    };
+    const lab: EnrichedCandidate = {
+      ...fixtureCandidates()[0]!,
+      candidateId: "lab",
+      party: "1",
+      partyAbbr: "LAB",
+    };
+    const out = distributeVotesBySwingFlow(
+      [lab, snp],
+      1_000_000,
+      1_000_000,
+      1_000_000,
+      fixtureDemographics(),
+      fixtureCategories(),
+      new Map([
+        ["1", 50],
+        ["3", 40],
+      ]),
+      {
+        isGeneralElection: true,
+        countryId: "UK",
+        currentStateId: "SCO",
+        votingSystem: "fptp",
+      }
+    );
+    expect(out.votesPerCandidate.snp).toBeGreaterThan(0);
+    expect(out.votesPerCandidate.lab).toBeGreaterThan(0);
+  });
+
   it("returns equal shares to symmetric candidates with neutral Reg + drivers", () => {
     const out = distributeVotesBySwingFlow(
       fixtureCandidates(),

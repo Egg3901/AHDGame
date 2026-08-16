@@ -779,3 +779,130 @@ describe("processElectionEntry — v3 ambitious challenger pass", () => {
     );
   });
 });
+
+describe("processElectionEntry — UK regional party geography", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    db = createMockDb();
+    db.collection("slateCandidates");
+    db.collectionMocks.slateCandidates.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+  });
+
+  it("does not field an SNP NPP in a London race (ticket #1110)", async () => {
+    const election = createTestElection({
+      countryId: "UK",
+      electionType: "commons",
+      state: "LON",
+    });
+    const npp = createTestNpp({
+      countryId: "UK",
+      homeState: "LON",
+      party: "3",
+      currentOffice: null,
+    });
+
+    db.collection("electionCandidates");
+    db.collectionMocks.electionCandidates.insertOne.mockResolvedValue({
+      insertedId: new ObjectId(),
+    });
+
+    const ctx = buildContext(db, election, [npp], []);
+    ctx.partyByCompositeKey.set("UK:3", {
+      abbreviation: "SNP",
+      sequentialId: 3,
+      name: "Scottish National Party",
+    } as never);
+    ctx.nppElectionEligiblePartyKeys = new Set(["UK:3"]);
+
+    const entered = await processElectionEntry(ctx);
+    expect(entered).toBe(0);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("still fields an SNP NPP in a Scotland race", async () => {
+    const election = createTestElection({
+      countryId: "UK",
+      electionType: "commons",
+      state: "SCO",
+    });
+    const npp = createTestNpp({
+      countryId: "UK",
+      homeState: "SCO",
+      party: "3",
+      currentOffice: null,
+    });
+
+    db.collection("electionCandidates");
+    db.collectionMocks.electionCandidates.insertOne.mockResolvedValue({
+      insertedId: new ObjectId(),
+    });
+
+    const ctx = buildContext(db, election, [npp], []);
+    ctx.partyByCompositeKey.set("UK:3", {
+      abbreviation: "SNP",
+      sequentialId: 3,
+      name: "Scottish National Party",
+    } as never);
+    ctx.nppElectionEligiblePartyKeys = new Set(["UK:3"]);
+
+    const entered = await processElectionEntry(ctx);
+    expect(entered).toBe(1);
+    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledTimes(1);
+  });
+
+  it("withdraws an already-filed SNP NPP from a London race (ticket #1110)", async () => {
+    const election = createTestElection({
+      countryId: "UK",
+      electionType: "commons",
+      state: "LON",
+    });
+    const npp = createTestNpp({
+      countryId: "UK",
+      homeState: "LON",
+      party: "3",
+      currentOffice: null,
+    });
+    const candidacy = {
+      _id: new ObjectId(),
+      electionId: election._id,
+      countryId: "UK",
+      characterId: npp._id,
+      characterName: npp.name,
+      party: "3",
+      status: "active",
+      support: 50,
+      enteredAt: new Date(),
+      isNPP: true,
+      nppId: npp._id,
+    } as ElectionCandidate;
+
+    db.collection("elections");
+    db.collection("electionCandidates");
+    db.collection("electionVoteTallies");
+    db.collectionMocks.elections.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([election]),
+    });
+    db.collectionMocks.electionCandidates.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([candidacy]),
+    });
+
+    const ctx = buildContext(db, election, [npp], [candidacy]);
+    ctx.nppCandidacies.add(npp._id.toString());
+    ctx.partyByCompositeKey.set("UK:3", {
+      abbreviation: "SNP",
+      sequentialId: 3,
+      name: "Scottish National Party",
+    } as never);
+
+    await processElectionEntry(ctx);
+
+    expect(db.collectionMocks.electionCandidates.updateOne).toHaveBeenCalledWith(
+      { _id: candidacy._id },
+      expect.objectContaining({ $set: expect.objectContaining({ status: "withdrawn" }) })
+    );
+    expect(ctx.nppCandidacies.has(npp._id.toString())).toBe(false);
+  });
+});

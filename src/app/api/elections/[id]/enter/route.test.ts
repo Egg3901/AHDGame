@@ -299,3 +299,59 @@ describe("POST /api/elections/[id]/enter — Senate class re-election restrictio
     }
   });
 });
+
+describe("POST /api/elections/[id]/enter — UK regional party geography", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns 403 when an SNP character files in London (ticket #1110)", async () => {
+    const db = setupScenario({
+      electionCountry: "US",
+      characterCountry: "US",
+      characterParty: "3",
+      partyDocReturn: { regimeStatus: null },
+    });
+    db.collectionMocks.politicalParties.findOne.mockResolvedValue({
+      sequentialId: 3,
+      name: "Scottish National Party",
+      abbreviation: "SNP",
+    });
+    vi.mocked(resolveElectionRouteParam).mockResolvedValue({
+      ok: true,
+      election: {
+        _id: electionOid,
+        countryId: "UK",
+        electionType: "commons",
+        state: "LON",
+        status: "active",
+        primaryEndTime: new Date(Date.now() + 86_400_000),
+        durationHours: 96,
+      },
+    } as never);
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: "u1",
+        character: {
+          _id: characterOid,
+          countryId: "UK",
+          homeState: "LON",
+          party: "3",
+          policies: { economic: -2, social: -2 },
+          favorability: 50,
+          politicalInfluence: 10,
+          careerHistory: [],
+          executiveTermsServed: 0,
+        },
+      },
+    } as never);
+
+    const res = await POST(makeReq(), {
+      params: Promise.resolve({ id: electionOid.toString() }),
+    });
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/home nation/i);
+  });
+});

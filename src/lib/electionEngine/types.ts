@@ -16,6 +16,12 @@ export interface EnrichedCandidate {
   characterId: string;
   characterName: string;
   party: string;
+  /**
+   * Party abbreviation (SNP, LAB, CON, …) when the enrichment pass loaded
+   * politicalParties. Used to hard-block UK regional parties outside their
+   * home nation (ticket #1110). Optional so hand-built fixtures stay valid.
+   */
+  partyAbbr?: string;
   isNPP: boolean;
   charEP: number;
   charSP: number;

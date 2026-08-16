@@ -26,6 +26,7 @@ import {
   isNationwideDirectExecutiveElection,
 } from "@/lib/elections/nationwideExecutive";
 import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
+import { canPartyContestState } from "@/lib/parties/regionalContest";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -216,6 +217,33 @@ export async function POST(request: Request, { params }: RouteParams) {
         },
         { status: 403 }
       );
+    }
+
+    // Regional parties (SNP, Plaid Cymru, DUP, Sinn Fein, UUP) only file in
+    // their home nation. Ticket #1110: SNP was contesting London.
+    if (election.state && character.party && character.party !== "independent") {
+      const partySeqId = Number.parseInt(character.party, 10);
+      const contestParty =
+        Number.isFinite(partySeqId) && partySeqId > 0
+          ? await db
+              .collection<PoliticalParty>("politicalParties")
+              .findOne({ countryId: electionCountry, sequentialId: partySeqId })
+          : null;
+      if (
+        !canPartyContestState({
+          countryId: electionCountry,
+          abbreviation: contestParty?.abbreviation,
+          stateId: election.state,
+        })
+      ) {
+        logRequest("POST", path, 403, Date.now() - start);
+        return NextResponse.json(
+          {
+            error: `${contestParty?.name ?? "This party"} only contests elections in its home nation.`,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     // A seated Senator may only run for re-election to the exact Senate class
