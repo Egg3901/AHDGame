@@ -22,6 +22,26 @@ import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
 const PRODUCTION_POLICY_SENSITIVITY = 75;
 const PRODUCTION_POLICY_DEADBAND = 0.05;
 
+/**
+ * Shortage score (weighted output price ratio) at or above which a commodity
+ * is treated as CRITICALLY short — its producer sector jumps the founding type
+ * cascade so any cash-healthy NPP can build it, regardless of the corp's own
+ * primary/secondary type.
+ *
+ * Why: a commodity produced by a SINGLE sector type has no builder pool unless
+ * an NPP happens to be that type. Freight ← logistics is the archetype: freight
+ * is a recipe input to six sector classes (the whole physical economy) yet only
+ * logistics makes it, so when logistics is seeded thin the shortage is
+ * structurally unanswerable — the type tiers below never surface logistics for
+ * an agriculture/manufacturing corp, no matter how far freight has spiked
+ * (observed on prod 2026-08-16: freight 2.0x base, 19% US coverage, and no NPP
+ * founding it). 1.6 clears genuine multi-turn shortages without firing on a
+ * mild 1.1x premium, and self-disarms: as capacity lands the ratio falls back
+ * under the bar. Paced by the same cadence / MIN_CASH / MAX_SECTORS gates as
+ * every other founding.
+ */
+export const ESSENTIAL_SHORTAGE_SCORE = 1.6;
+
 /** A function that returns currentPrice/basePrice for a commodity in a country,
  *  or null when no price signal is available. */
 export type CommodityPriceRatioFn = (commodity: CommodityType, countryId: string) => number | null;
@@ -108,13 +128,39 @@ export function findBestUnownedSector(
 
   if (candidates.length === 0) return null;
 
-  const score = (c: UnownedSector) =>
-    sizeOf(c) * sectorShortageScore(c.sectorType as CorporationType, countryId, priceRatioOf);
+  const shortageOf = (c: UnownedSector) =>
+    sectorShortageScore(c.sectorType as CorporationType, countryId, priceRatioOf);
+  const score = (c: UnownedSector) => sizeOf(c) * shortageOf(c);
+  // Peak shortage = the price ratio of this sector's SHORTEST single output.
+  // The blended `shortageOf` averages a short output against healthy ones
+  // (logistics makes freight 0.45 AND consulting 0.25), which would hide a
+  // genuine single-input crisis behind a co-product. The essential-shortage
+  // override gates on the peak so freight at 2.0x triggers logistics even
+  // though consulting is at base.
+  const peakShortageOf = (c: UnownedSector): number => {
+    const supply = SECTOR_SUPPLY[c.sectorType as CorporationType];
+    if (!supply || supply.length === 0) return 0;
+    let peak = 0;
+    for (const { commodity } of supply) {
+      const ratio = priceRatioOf(commodity, countryId);
+      if (ratio != null && Number.isFinite(ratio) && ratio > peak) peak = ratio;
+    }
+    return peak;
+  };
   const best = (list: UnownedSector[]) => {
     // Prefer HQ state, then highest market-weighted score.
     const hq = list.find((c) => c.stateId === hqState);
     return hq ?? list.sort((a, b) => score(b) - score(a))[0];
   };
+
+  // Tier 0 — essential-shortage override: a commodity whose producer sector is
+  // critically short jumps the type cascade, so a single-source input like
+  // freight (produced only by logistics) actually gets built by whichever
+  // cash-healthy NPP can, instead of waiting for a same-type corp that may not
+  // exist. Highest size×shortage wins; disarms once capacity pulls the ratio
+  // back under ESSENTIAL_SHORTAGE_SCORE. See the constant for the full rationale.
+  const critical = candidates.filter((c) => peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE);
+  if (critical.length > 0) return critical.sort((a, b) => score(b) - score(a))[0];
 
   // Tier 1: primary type match
   const primaryMatch = candidates.filter((c) => c.sectorType === primaryType);
