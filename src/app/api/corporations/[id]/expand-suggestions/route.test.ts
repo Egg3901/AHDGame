@@ -66,19 +66,39 @@ beforeEach(async () => {
 });
 
 describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
-  it("rejects plants suggestions outside the corporation's primary and secondary types", async () => {
+  it("serves plants suggestions for an off-type sector (any type is buildable)", async () => {
     db.collectionMocks.gameConfig.findOne.mockResolvedValue({
       _id: "default",
       marketSystemMode: "plants",
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 10,
+      currentYear: 1953,
+    });
+    db.collectionMocks.unownedSectors.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          { stateId: "CA", sectorType: "retail", revenue: 1000, headroomUnits: 1000 },
+        ]),
+    });
+    db.collectionMocks.states.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "CA", name: "California", countryId: "US" }]),
+    });
+    db.collectionMocks.corporateSectors.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.macroMetrics.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
     });
 
     const { GET } = await import("./route");
     const response = await GET(makeRequest("sectorType=retail&mode=unowned"), ctx());
 
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: "You can only build sectors in your primary or secondary industry",
-    });
+    expect(response.status).toBe(200);
   });
 
   it("returns foreign markets under plants — cross-border founding is buildable", async () => {

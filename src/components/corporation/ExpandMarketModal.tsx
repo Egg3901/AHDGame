@@ -95,16 +95,9 @@ export default function ExpandMarketModal({
 }: ExpandMarketModalProps) {
   const { formatAmount } = useCurrency();
   const router = useRouter();
-  const initialPlantsTypeAllowed =
-    initialSectorType != null &&
-    (initialSectorType === primaryType || initialSectorType === secondaryType);
-  const startType = plantsMode
-    ? initialPlantsTypeAllowed
-      ? initialSectorType
-      : primaryType
-    : (initialSectorType ?? primaryType);
-  // In plants mode the buildable types are already known from the corporation.
-  // Keep the choice beside the ranking when a secondary type exists.
+  // Any sector type is buildable, so honor an incoming type in either mode and
+  // fall back to the corp's primary type when none is supplied.
+  const startType = initialSectorType ?? primaryType;
   const [step, setStep] = useState<Step>(
     plantsMode || initialSectorType ? "suggestions" : "selectType"
   );
@@ -272,10 +265,8 @@ export default function ExpandMarketModal({
     formatAmount(amount, liquidCurrencyCode ?? undefined);
   const marketCurrencyTitle = `Forex-normalized market revenue. Local display mode shows ${activeMarketCurrency}, the target state's home currency; other display modes convert from the same underlying value.`;
 
-  const canFoundSelectedType = selectedType === primaryType || selectedType === secondaryType;
-
   async function handleFoundFirstPlant() {
-    if (!activeSuggestion || !activeSuggestion.canAfford || !canFoundSelectedType) return;
+    if (!activeSuggestion || !activeSuggestion.canAfford) return;
     setFoundingBusy(true);
     setFoundingError("");
     try {
@@ -307,13 +298,13 @@ export default function ExpandMarketModal({
     }
   }
 
-  const orderedTypes: CorporationType[] = plantsMode
-    ? [primaryType, ...(secondaryType ? [secondaryType] : [])]
-    : [
-        primaryType,
-        ...(secondaryType ? [secondaryType] : []),
-        ...CORPORATION_TYPES.filter((t) => t !== primaryType && t !== secondaryType),
-      ];
+  // Any sector type is buildable. Primary and secondary are listed first and
+  // badged; the rest carry the off-type margin penalty but are not gated out.
+  const orderedTypes: CorporationType[] = [
+    primaryType,
+    ...(secondaryType ? [secondaryType] : []),
+    ...CORPORATION_TYPES.filter((t) => t !== primaryType && t !== secondaryType),
+  ];
 
   return (
     <div
@@ -528,28 +519,34 @@ export default function ExpandMarketModal({
 
               {plantsMode && !confirming && (
                 <div className="grid grid-cols-2 gap-2 rounded-xl border border-card-border bg-card-elevated/25 p-3">
-                  {secondaryType && (
-                    <label className="col-span-2 space-y-1">
-                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted">
-                        Sector type
-                      </span>
-                      <select
-                        value={selectedType}
-                        disabled={loadingSuggestions}
-                        onChange={(event) =>
-                          selectPlantSectorType(event.target.value as CorporationType)
-                        }
-                        className="w-full rounded-md border border-card-border bg-card px-2 py-1.5 text-xs text-foreground disabled:opacity-50"
-                      >
-                        <option value={primaryType}>
-                          {CORPORATION_TYPE_LABELS[primaryType]} (primary)
-                        </option>
-                        <option value={secondaryType}>
-                          {CORPORATION_TYPE_LABELS[secondaryType]} (secondary)
-                        </option>
-                      </select>
-                    </label>
-                  )}
+                  <label className="col-span-2 space-y-1">
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted">
+                      Sector type
+                    </span>
+                    <select
+                      value={selectedType}
+                      disabled={loadingSuggestions}
+                      onChange={(event) =>
+                        selectPlantSectorType(event.target.value as CorporationType)
+                      }
+                      className="w-full rounded-md border border-card-border bg-card px-2 py-1.5 text-xs text-foreground disabled:opacity-50"
+                    >
+                      {orderedTypes.map((t) => {
+                        const suffix =
+                          t === primaryType
+                            ? " (primary)"
+                            : t === secondaryType
+                              ? " (secondary)"
+                              : " (-15% margin)";
+                        return (
+                          <option key={t} value={t}>
+                            {CORPORATION_TYPE_LABELS[t]}
+                            {suffix}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
                   <label className="space-y-1">
                     <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted">
                       Rank by
@@ -1099,13 +1096,9 @@ export default function ExpandMarketModal({
                                 <button
                                   type="button"
                                   onClick={() => void handleFoundFirstPlant()}
-                                  disabled={
-                                    foundingBusy ||
-                                    !activeSuggestion.canAfford ||
-                                    !canFoundSelectedType
-                                  }
+                                  disabled={foundingBusy || !activeSuggestion.canAfford}
                                   className={`flex-1 rounded-lg px-3 py-2 text-center text-xs font-semibold text-white transition-colors ${
-                                    activeSuggestion.canAfford && canFoundSelectedType
+                                    activeSuggestion.canAfford
                                       ? "bg-primary hover:bg-primary/90"
                                       : "bg-primary/40"
                                   } disabled:cursor-not-allowed`}
