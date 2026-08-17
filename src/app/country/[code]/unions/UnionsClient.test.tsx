@@ -144,8 +144,10 @@ describe('UnionsClient, labourSystemMode at "full"', () => {
 
     render(<UnionsClient />);
 
-    await waitFor(() => expect(screen.getByText("Total Membership")).toBeTruthy());
-    expect(screen.getByText("50,000")).toBeTruthy();
+    // The stats strip renders during loading with zeroed values, so waiting on
+    // the label races the fetch; wait on the computed total instead.
+    await waitFor(() => expect(screen.getByText("50,000")).toBeTruthy());
+    expect(screen.getByText("Total Membership")).toBeTruthy();
     expect(screen.getByText("Avg Approval")).toBeTruthy();
     expect(screen.getByText("50%")).toBeTruthy();
     expect(screen.getByText("Total Funds")).toBeTruthy();
