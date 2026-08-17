@@ -7,14 +7,19 @@ import { snapToPositionGrid } from "@/lib/utils/politics";
  *
  * - "for" vote → shift toward the provision's position (+0.25 or -0.25)
  * - "against" vote → shift away from the provision's position
- * - "abstain" or undefined provision → no shift (0)
+ * - "abstain", missing, or 0 provision → no shift
+ *
+ * `0` is the stamped default when a provision does not take a position on
+ * that axis (legacy bills wrote 0 for omitted fields; the bill UI already
+ * treats 0 as "no position" via formatBillPositionLabel). Treating it as a
+ * real centre target pulled every Aye vote toward Centrist / Moderate.
  */
 export function computePolicyShift(
   currentValue: number,
   provisionValue: number | undefined,
   vote: "for" | "against" | "abstain"
 ): number {
-  if (vote === "abstain" || provisionValue === undefined) return 0;
+  if (vote === "abstain" || provisionValue === undefined || provisionValue === 0) return 0;
   const diff = provisionValue - currentValue;
   if (diff === 0) return 0;
   const direction = vote === "for" ? Math.sign(diff) : -Math.sign(diff);

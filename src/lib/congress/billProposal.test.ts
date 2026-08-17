@@ -262,3 +262,50 @@ describe("declare-war provisions are refused on the legislator path", () => {
     expect(r.ok).toBe(false);
   });
 });
+
+describe("validateBillProvisions — policy axis zeros (ticket #1116)", () => {
+  it("omits economic and social when they are missing or zero", async () => {
+    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
+      _id: "uk_healthcare",
+      name: "Healthcare",
+      policyDomain: "healthcare",
+      policyOptions: [{ id: "a", name: "A", effectDirection: -1, economic: -2, social: 0 }],
+    });
+    const { validateBillProvisions } = await import("./billProposal");
+    const result = await validateBillProvisions(
+      db as unknown as Db,
+      [{ legislationTypeId: "uk_healthcare", effectDirection: -1, economic: 0, social: 0 }],
+      "healthcare"
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.policyProvisions[0]).toEqual({
+        legislationTypeId: "uk_healthcare",
+        effectDirection: -1,
+      });
+    }
+  });
+
+  it("keeps a non-zero axis and still omits a zero axis", async () => {
+    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
+      _id: "uk_healthcare",
+      name: "Healthcare",
+      policyDomain: "healthcare",
+      policyOptions: [{ id: "a", name: "A", effectDirection: -1, economic: -2, social: 0 }],
+    });
+    const { validateBillProvisions } = await import("./billProposal");
+    const result = await validateBillProvisions(
+      db as unknown as Db,
+      [{ legislationTypeId: "uk_healthcare", effectDirection: -1, economic: -2, social: 0 }],
+      "healthcare"
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.policyProvisions[0]).toEqual({
+        legislationTypeId: "uk_healthcare",
+        effectDirection: -1,
+        economic: -2,
+      });
+    }
+  });
+});

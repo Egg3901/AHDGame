@@ -56,8 +56,9 @@ export interface ValidatedPolicyProvision {
   currentPolicyOptionIdSnapshot?: string;
   currentPolicyOptionNameSnapshot?: string;
   effectDirection: number;
-  economic: number;
-  social: number;
+  /** Omitted when the provision does not take a stance on this axis (0 is not centre). */
+  economic?: number;
+  social?: number;
   /** Tax-slider laws (ruling #16): the validated slider-chosen rate. */
   proposedRate?: number;
 }
@@ -452,21 +453,24 @@ export async function validateBillProvisions(
       p?.effectDirection != null && typeof p.effectDirection === "number"
         ? Math.max(-1, Math.min(1, Math.round(p.effectDirection)))
         : 0;
+    // 0 means "no stance on this axis", not a centre target. Omitting the
+    // field stops vote-time policy shift from recentring the legislator
+    // (ticket #1116). Explicit non-zero values still stamp.
     const economic =
       p?.economic != null && typeof p.economic === "number"
         ? Math.max(-3, Math.min(3, Math.round(p.economic)))
-        : 0;
+        : undefined;
     const social =
       p?.social != null && typeof p.social === "number"
         ? Math.max(-3, Math.min(3, Math.round(p.social)))
-        : 0;
+        : undefined;
     const policyOptionId = typeof p?.policyOptionId === "string" ? p.policyOptionId : undefined;
     validatedPolicyProvisions.push({
       legislationTypeId: lt._id,
       ...(policyOptionId && { policyOptionId }),
       effectDirection,
-      economic,
-      social,
+      ...(economic ? { economic } : {}),
+      ...(social ? { social } : {}),
     });
   }
 
@@ -502,8 +506,13 @@ function resolveProvisionPolicyOption(
     if (exactOption) return exactOption;
   }
 
+  // Label resolution still treats a missing axis as 0 so legacy provisions
+  // (which stamped a literal 0) and new ones (which omit the field) resolve to
+  // the same option. Only the vote-time shift distinguishes the two.
   const explicitAxisMatch = lt.policyOptions.find(
-    (opt) => (opt.economic ?? 0) === provision.economic && (opt.social ?? 0) === provision.social
+    (opt) =>
+      (opt.economic ?? 0) === (provision.economic ?? 0) &&
+      (opt.social ?? 0) === (provision.social ?? 0)
   );
   if (explicitAxisMatch) return explicitAxisMatch;
 
