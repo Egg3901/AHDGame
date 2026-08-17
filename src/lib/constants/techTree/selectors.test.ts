@@ -188,7 +188,7 @@ describe("committed lane + effects", () => {
 describe("cash cost", () => {
   it("scales with daily gross revenue and the node fraction", () => {
     const node = TECH_TREE.energy.find((n) => n.id === corpNodeId("2019", 1))!;
-    expect(techNodeCashCost(node, 100_000)).toBe(25_000); // default 0.25
+    expect(techNodeCashCost(node, 100_000)).toBe(15_000); // default 0.15
     expect(techNodeCashCost(node, 0)).toBe(0);
   });
 });
