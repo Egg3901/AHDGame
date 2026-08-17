@@ -243,7 +243,7 @@ describe("P3.5 — input prices actually reach the P&L", () => {
       }
     );
 
-  it("raises cost by EXACTLY the input delta when a lagged input price rises 20%", () => {
+  it("raises cost by EXACTLY the realized input delta when a lagged input price rises 20%", () => {
     const flip = run("plants", makeSector({ capitalStock: STOCK }));
     const anchor = flip.update.otherOpexPerUnitAnchor as number;
     const basis = flip.update.otherOpexAnchorMarginBasis as number;
@@ -254,15 +254,19 @@ describe("P3.5 — input prices actually reach the P&L", () => {
     // Everything else is held: same capacity, same turn, same modifiers.
     expect(shocked.result.hourlyRevenue).toBeCloseTo(base.result.hourlyRevenue, 8);
 
-    // The expected delta is 20% of the ONE shocked commodity's bill, and the
-    // bill is (nameplate × rate / turnsPerDay) × utilization — units cancel the
-    // base price, so the delta is computable in closed form.
+    // The bill prices through the same realization function revenue does
+    // (buy-sell symmetry), so a 20% price rise raises the ONE shocked
+    // commodity's bill by (1.2^0.5 - 1), not by the raw 20%. The bill is
+    // (nameplate × rate / turnsPerDay) × utilization — units cancel the base
+    // price, so the delta is computable in closed form.
     const nameplate = (base.update.revenue as number) / 1; // ₳, daily
     const capacity = base.update.capitalStock as number;
     const produced = base.update.producedUnits as number;
     const utilization = Math.min(1, produced / capacity);
     const expectedDelta =
-      ((nameplate * (DEMAND[INPUT_COMMODITY] ?? 0)) / TURNS_PER_DAY) * utilization * 0.2;
+      ((nameplate * (DEMAND[INPUT_COMMODITY] ?? 0)) / TURNS_PER_DAY) *
+      utilization *
+      (Math.sqrt(1.2) - 1);
 
     expect(shocked.result.costs - base.result.costs).toBeCloseTo(expectedDelta, 4);
     expect(profitOf(base) - profitOf(shocked)).toBeCloseTo(expectedDelta, 4);
