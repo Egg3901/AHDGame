@@ -1511,7 +1511,14 @@ export function processSector(
         nominalDailyRevenue: plantsNameplateRevenue,
         rates: effectiveDemand,
         basePrices: COMMODITY_BASE_PRICES,
-        priceRatios: lookups.priceRatioByCommodity,
+        // Partition worlds: inputs are BOUGHT in the sector country's
+        // reachable market, so they are billed at its price level. The world
+        // map stays the fallback for countries/commodities without a book —
+        // `reachableInputPriceRatios` overlays reachable ratios on the world
+        // map per country, so absent entries fall back to world, not to base.
+        priceRatios:
+          lookups.reachableInputPriceRatiosByCountry?.get(sectorCountryId) ??
+          lookups.priceRatioByCommodity,
         utilization: plantsCapacity > 0 ? producedUnits / plantsCapacity : 1,
         inputMultiplier: getInputMultiplier(newPolicyLevel),
         turnsPerDay: TURNS_PER_DAY,

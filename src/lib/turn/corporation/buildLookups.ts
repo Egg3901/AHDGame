@@ -570,9 +570,12 @@ export async function buildCorporationLookups(
     }
 
     // Lagged per-country reachable price ratios (partition worlds). Feeds
-    // clearing's price-realization leg so a partitioned seller realizes ITS
-    // market's price level, not the worldwide one. Sparse: absent countries
-    // fall back to `priceRatioByCommodity` inside computeClearingFactors.
+    // clearing's price-realization leg AND the physical input bill so a
+    // partitioned buyer pays ITS market's price level, not the worldwide one
+    // — observed live (t174): US farms billed fertilizer at the world 2.38x
+    // while their own reachable market sold it at 1.08x, so margins FELL as
+    // the domestic shortage cleared. Sparse: absent countries fall back to
+    // `priceRatioByCommodity` at each consumer.
     if (typeof cp.basePrice === "number" && cp.basePrice > 0 && cp.reachablePrices) {
       for (const [countryId, price] of Object.entries(cp.reachablePrices)) {
         if (!(typeof price === "number" && price > 0)) continue;
@@ -614,6 +617,18 @@ export async function buildCorporationLookups(
       }
       nationalCommodityBalancesByCountry.get(countryId as CountryId)!.set(cp.commodity, balance);
     }
+  }
+
+  // Per-country INPUT price ratios: the world map overlaid with each
+  // country's reachable ratios, so the physical input bill (`computeInputsCost`)
+  // prices what a sector buys at its own market's level. World-map fallback
+  // per commodity, base-price fallback only where the world has no ratio
+  // either — never a silent base-price bill for a commodity the world prices.
+  const reachableInputPriceRatiosByCountry = new Map<string, Map<CommodityType, number>>();
+  for (const [countryId, byCommodity] of reachablePriceRatioByCountry) {
+    const merged = new Map(priceRatioByCommodity);
+    for (const [commodity, ratio] of byCommodity) merged.set(commodity, ratio);
+    reachableInputPriceRatiosByCountry.set(countryId, merged);
   }
 
   // Per-country export intensity from the latest trade snapshot: for each
@@ -1020,6 +1035,7 @@ export async function buildCorporationLookups(
     stateInputAvailabilityByState,
     priceRatioByCommodity,
     reachablePriceRatioByCountry,
+    reachableInputPriceRatiosByCountry,
     landedPremiumByState,
     nationalCommodityBalancesByCountry,
     countryClearingBooks,

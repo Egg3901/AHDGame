@@ -142,6 +142,13 @@ export interface CorporationLookups {
    */
   reachablePriceRatioByCountry?: Map<string, Map<CommodityType, number>>;
   /**
+   * World price ratios overlaid with each country's reachable ratios — the
+   * price level a buyer in that country actually pays. Consumed by the
+   * physical input bill (`computeInputsCost`); world map is the fallback for
+   * countries without a book.
+   */
+  reachableInputPriceRatiosByCountry?: Map<string, Map<CommodityType, number>>;
+  /**
    * Money wiring (interstate-logistics plan step 5, phase A): per state, per
    * commodity, last turn's landed-price premium per unit (₳) for out-of-state
    * sourcing, read from the prior sourcingNetworkLoad doc. Empty when
