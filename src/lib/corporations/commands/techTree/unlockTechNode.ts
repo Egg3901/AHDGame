@@ -1,8 +1,6 @@
 import type { Db } from "mongodb";
-import type { Corporation, CorporateSector } from "@/lib/db/types";
-import { sectorEconomicScale } from "@/lib/corporations/sectorProfitBasis";
-import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
-import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import type { Corporation } from "@/lib/db/types";
+import { corpDailyGrossRevenueLocal } from "@/lib/corporations/dailyGrossRevenue";
 import {
   canUnlock,
   getCommittedLane,
@@ -44,35 +42,6 @@ const REASON_MESSAGE: Record<UnlockBlockReason, string> = {
   "insufficient-cash": "Not enough cash to unlock this technology.",
 };
 
-/**
- * Sum the corp's daily gross revenue (local currency) from its sectors — the
- * base the tech-node cash cost is a fraction of.
- *
- * Under plants this uses `sectorEconomicScale`, i.e. `max(revenue, capacity
- * nameplate)` per sector, rather than raw `revenue`. Raw revenue is 0 for a
- * MOTHBALLED plant, so a corp could mothball its whole estate, unlock every
- * tech node for free (the rdScore leg still applies, but cash is the binding
- * constraint), and unmothball the next turn with the plant untouched. The
- * nameplate is the same quantity `sectorTurn` restates revenue from, so a
- * running corp's cost does not move.
- *
- * Below plants this is byte-identical to the previous `Σ revenue`.
- */
-async function dailyGrossRevenueLocal(db: Db, corporationId: Corporation["_id"]): Promise<number> {
-  const [sectors, plantsEnabled, eraUnitScale] = await Promise.all([
-    db
-      .collection<CorporateSector>("corporateSectors")
-      .find(
-        { corporationId },
-        { projection: { revenue: 1, capitalStock: 1, strategyId: 1, sectorType: 1 } }
-      )
-      .toArray(),
-    getMarketSystemModeForDb(db).then((m) => marketAtLeast(m, "plants")),
-    loadWorldEraUnitScale(db),
-  ]);
-  // sector.revenue is stored as daily revenue (not per-turn); sum directly.
-  return sectors.reduce((sum, s) => sum + sectorEconomicScale(s, plantsEnabled, eraUnitScale), 0);
-}
 
 /**
  * Core logic for unlocking a sector tech-tree node (v2).
@@ -111,7 +80,7 @@ export async function unlockTechNode(
   }
   const { node } = preCheck;
 
-  const cashCost = techNodeCashCost(node, await dailyGrossRevenueLocal(db, corporation._id));
+  const cashCost = techNodeCashCost(node, await corpDailyGrossRevenueLocal(db, corporation));
   const check: CanUnlockResult = canUnlock(corpView, nodeId, currentYear, {
     rdScore,
     cashAvailable,
