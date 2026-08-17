@@ -57,7 +57,7 @@ describe("seedUnions", () => {
     expect(ops).toHaveLength(34);
     expect(bulkWrite.mock.calls[0][1]).toEqual({ ordered: true });
     const { filter, update } = ops[0].updateOne;
-    expect(filter).toMatchObject({ foundedByCharacterId: { $exists: false } });
+    expect(filter).toMatchObject({ foundedByCharacterId: null });
     expect(update.$setOnInsert.ownerId).toBeNull();
     expect(update.$setOnInsert.name).toBeTruthy();
     expect(update.$setOnInsert.approval).toBe(BASE_APPROVAL);

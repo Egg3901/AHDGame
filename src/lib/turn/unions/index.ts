@@ -68,7 +68,8 @@ export async function adoptUnrepresentedSectors(db: Db): Promise<number> {
   const seededUnions = await db
     .collection<Union>("unions")
     .find(
-      { foundedByCharacterId: { $exists: false } },
+      // Matches an explicit null and an absent field alike.
+      { foundedByCharacterId: null },
       { projection: { _id: 1, countryId: 1, sectorType: 1 } }
     )
     .toArray();

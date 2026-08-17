@@ -557,10 +557,7 @@ describe("adoptUnrepresentedSectors", () => {
 
     await adoptUnrepresentedSectors(db);
 
-    expect(unionsFind).toHaveBeenCalledWith(
-      { foundedByCharacterId: { $exists: false } },
-      expect.anything()
-    );
+    expect(unionsFind).toHaveBeenCalledWith({ foundedByCharacterId: null }, expect.anything());
   });
 
   it("matches on country AND industry, never industry alone", async () => {

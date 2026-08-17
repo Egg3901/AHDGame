@@ -152,20 +152,20 @@ export const COUNTRY_BUCKET_LABELS: Record<string, CountryBucketLabels> = {
     },
   },
 
-  // East Germany: the DDR's own school vocabulary, not the Federal Republic's.
+  // East Germany: English UI labels aligned with region census cards (ticket #1121).
   DD: {
-    dims: DIMS_DE,
+    dims: DIMS_EN,
     buckets: {
-      ethnicity: { german: "Deutsche", other: "Andere Herkunft" },
-      age: AGE_DE,
+      ethnicity: { german: "German", other: "Other" },
+      age: AGE_EN,
       education: {
-        primary_or_below: "Volksschule",
-        secondary: "Polytechnische Oberschule",
-        vocational: "Facharbeiterabschluss",
-        university: "Hochschulabschluss",
+        primary_or_below: "Primary or below",
+        secondary: "Secondary",
+        vocational: "Vocational",
+        university: "University",
       },
-      income: INCOME_DE,
-      urbanization: { urban: "Großstadt", suburban: "Umland", rural: "Ländlicher Raum" },
+      income: INCOME_EN,
+      urbanization: URBAN_EN,
     },
   },
 
