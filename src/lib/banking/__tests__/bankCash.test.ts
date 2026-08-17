@@ -21,8 +21,11 @@ function charter(over: Partial<BankCharter> = {}): BankCharter {
     depositOffset: 0,
     lendingOffset: 0,
     totalDeposits: 1_000_000,
-    // 500k cash + 800k loans − 1M deposits = 200k equity: enough that the
-    // reserve requirement, not equity, is the binding ceiling on the default
+    // Cash-backed household book. Player pointer deposits live in totalDeposits
+    // but never credited cashReserves; equity and the reserve floor key off this.
+    npcDeposits: 1_000_000,
+    // 500k cash + 800k loans − 1M cash-backed deposits = 200k equity: enough that
+    // the reserve requirement, not equity, is the binding ceiling on the default
     // fixture. Equity-bound cases set their own numbers.
     totalLoans: 800_000,
     capitalStanding: "adequate",
@@ -37,9 +40,9 @@ describe("reserve arithmetic", () => {
     expect(getCashReserves(charter({ cashReserves: Number.NaN }))).toBe(0);
   });
 
-  it("requires the ratio against deposits", () => {
+  it("requires the ratio against cash-backed deposits", () => {
     expect(requiredReserves(charter(), 0.2)).toBe(200_000);
-    expect(requiredReserves(charter({ totalDeposits: 0 }), 0.2)).toBe(0);
+    expect(requiredReserves(charter({ npcDeposits: 0, totalDeposits: 0 }), 0.2)).toBe(0);
   });
 
   it("offers only the surplus over the requirement", () => {
@@ -86,10 +89,27 @@ describe("reserve arithmetic", () => {
     // millions, but book equity is negative — none of it is the owner's.
     const hagemeyer = charter({
       cashReserves: 1_020_159_685,
+      npcDeposits: 1_303_882_142,
       totalDeposits: 1_303_882_142,
       totalLoans: 124_295_401,
     });
     expect(upstreamCapacity(hagemeyer, 0.1)).toBe(0);
+  });
+
+  it("does not treat player pointer deposits as cash liabilities (ticket #1111)", () => {
+    // Hunt Oil: $20M vault, ~$27k NPC deposits, ~$55M player savings pointers,
+    // almost no loans. Pointers never credited cashReserves, so they must not
+    // inflate the reserve floor or wipe book equity. Live console showed
+    // "Held vs deposits $11.01M" / "Free to withdraw $0" / ceiling $0 while
+    // run-risk required only $5,475 against the cash-backed book.
+    const hunt = charter({
+      cashReserves: 20_000_000,
+      npcDeposits: 27_375,
+      totalDeposits: 55_050_000,
+      totalLoans: 17_100,
+    });
+    expect(requiredReserves(hunt, 0.2)).toBeCloseTo(5_475, 5);
+    expect(upstreamCapacity(hunt, 0.2)).toBeGreaterThan(19_000_000);
   });
 });
 
@@ -226,6 +246,7 @@ describe("upstreamBankCash", () => {
       liquidCapital: 0,
       bankCharter: charter({
         cashReserves: 1_020_159_685,
+        npcDeposits: 1_303_882_142,
         totalDeposits: 1_303_882_142,
         totalLoans: 124_295_401,
       }),

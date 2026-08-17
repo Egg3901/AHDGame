@@ -54,36 +54,56 @@ export function getCashReserves(
 }
 
 /**
- * Reserves the bank must retain: `deposits × reserveRatio`.
+ * Deposits that actually credited `cashReserves`.
  *
- * Note this is a floor on the BANK's cash, which it can actually satisfy,
- * rather than a floor on the corporation's cash, which is what made the earlier
- * version unshippable.
+ * NPC household deposits move cash (`bankingTurn` debits the CB pool and
+ * credits the vault). Player savings are a `savingsHolder` pointer: the
+ * balance stays on the character, so they must not count as a cash liability
+ * or a reserve-floor denominator. Ticket #1111: treating `totalDeposits` as
+ * cash-backed zeroed Hunt Oil's equity, withdrawable surplus, and ceiling.
  */
-export function requiredReserves(
-  charter: Pick<BankCharter, "totalDeposits">,
-  reserveRatio: number
+export function cashBackedDeposits(
+  charter: Pick<BankCharter, "npcDeposits"> | null | undefined
 ): number {
-  const deposits = Math.max(0, charter.totalDeposits ?? 0);
-  const ratio = Number.isFinite(reserveRatio) ? Math.max(0, reserveRatio) : 0;
-  return deposits * ratio;
+  const raw = charter?.npcDeposits;
+  return typeof raw === "number" && Number.isFinite(raw) ? Math.max(0, raw) : 0;
 }
 
 /**
- * Book equity: the shareholders' claim after depositors are made whole.
+ * Reserves the bank must retain: `cashBackedDeposits × reserveRatio`.
  *
- * Assets are the bank's cash plus the retail loans it is owed; deposits are the
- * liability. What is left over is contributed capital plus retained earnings —
- * the only money that is genuinely the owner's to take out. Reserves ABOVE the
- * reserve requirement are still mostly depositor money, so the reserve-surplus
- * figure alone is the wrong ceiling on an upstream: a bank handed a large
- * (e.g. NPC) deposit base carries reserves it does not own, and letting the
- * owner drain them to the reserve floor pays shareholders out of deposits.
+ * Note this is a floor on the BANK's cash, which it can actually satisfy,
+ * rather than a floor on the corporation's cash, which is what made the earlier
+ * version unshippable. Matches solvency / run-risk, which already exclude
+ * player pointer deposits.
+ */
+export function requiredReserves(
+  charter: Pick<BankCharter, "npcDeposits">,
+  reserveRatio: number
+): number {
+  const ratio = Number.isFinite(reserveRatio) ? Math.max(0, reserveRatio) : 0;
+  return cashBackedDeposits(charter) * ratio;
+}
+
+/**
+ * Book equity: the shareholders' claim after cash-backed depositors are made whole.
+ *
+ * Assets are the bank's cash plus the retail loans it is owed; cash-backed
+ * deposits are the liability. What is left over is contributed capital plus
+ * retained earnings — the only money that is genuinely the owner's to take out.
+ * Reserves ABOVE the reserve requirement are still mostly depositor money, so
+ * the reserve-surplus figure alone is the wrong ceiling on an upstream: a bank
+ * handed a large (e.g. NPC) deposit base carries reserves it does not own, and
+ * letting the owner drain them to the reserve floor pays shareholders out of
+ * deposits.
+ *
+ * Player pointer deposits are absent from this line for the same reason they
+ * are absent from {@link requiredReserves}: they never arrived as cash.
  */
 export function bankEquity(
   charter: Pick<
     BankCharter,
-    | "totalDeposits"
+    | "npcDeposits"
     | "cashReserves"
     | "totalLoans"
     | "interbankDebt"
@@ -92,10 +112,10 @@ export function bankEquity(
   >
 ): number {
   const assets = getCashReserves(charter) + Math.max(0, charter.totalLoans ?? 0);
-  // Deposits are the depositor liability; the rest is borrowed cash that
-  // inflates reserves but must be repaid, so none of it is the owner's to take.
+  // Cash-backed deposits are the depositor liability; the rest is borrowed cash
+  // that inflates reserves but must be repaid, so none of it is the owner's.
   const liabilities =
-    Math.max(0, charter.totalDeposits ?? 0) +
+    cashBackedDeposits(charter) +
     Math.max(0, charter.interbankDebt ?? 0) +
     Math.max(0, charter.cbMarginDebt ?? 0) +
     Math.max(0, charter.discountWindowDebt ?? 0);
@@ -118,7 +138,7 @@ export function bankEquity(
 export function upstreamCapacity(
   charter: Pick<
     BankCharter,
-    | "totalDeposits"
+    | "npcDeposits"
     | "cashReserves"
     | "capitalStanding"
     | "totalLoans"
@@ -255,7 +275,7 @@ export async function upstreamBankCash(
                   },
                   {
                     $add: [
-                      { $max: [0, { $ifNull: ["$bankCharter.totalDeposits", 0] }] },
+                      { $max: [0, { $ifNull: ["$bankCharter.npcDeposits", 0] }] },
                       { $max: [0, { $ifNull: ["$bankCharter.interbankDebt", 0] }] },
                       { $max: [0, { $ifNull: ["$bankCharter.cbMarginDebt", 0] }] },
                       { $max: [0, { $ifNull: ["$bankCharter.discountWindowDebt", 0] }] },
