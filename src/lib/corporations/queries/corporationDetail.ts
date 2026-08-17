@@ -135,7 +135,8 @@ import {
   STRATEGY_TRANSITION_MARGIN_PENALTY,
   STRATEGY_TRANSITION_TURNS,
 } from "@/lib/constants/sectorStrategies";
-import { getRevenueMultiplier } from "@/lib/utils/productionPolicy";
+import { getRevenueMultiplier, getInputMultiplier } from "@/lib/utils/productionPolicy";
+import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import { buildNationalCommodityBalances } from "@/lib/commodity-map";
 import { isLabourWagesEnabled } from "@/lib/labour/featureFlag";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
@@ -857,6 +858,22 @@ export async function loadCorporationDetailView(args: {
   let buildingSectorCount = 0;
   let totalUnitsOnOrder = 0;
 
+  // Lagged global price-over-base ratios, the same map the turn engine feeds
+  // computeInputsCost. Used to rebuild the physical input bill per sector so
+  // the margin drilldown can explain a physically-derived margin.
+  const globalPriceRatioByCommodity = new Map<CommodityType, number>();
+  for (const cp of commodityPrices) {
+    if (
+      typeof cp.globalPrice === "number" &&
+      typeof cp.basePrice === "number" &&
+      cp.globalPrice > 0 &&
+      cp.basePrice > 0 &&
+      Number.isFinite(cp.globalPrice / cp.basePrice)
+    ) {
+      globalPriceRatioByCommodity.set(cp.commodity, cp.globalPrice / cp.basePrice);
+    }
+  }
+
   const sectorDetails = sectors.map((sector) => {
     const st = sector.sectorType as CorporationType;
     const metrics = stateMetricsMap.get(sector.stateId) ?? getEmptyStateMetricValues();
@@ -1086,6 +1103,56 @@ export async function loadCorporationDetailView(args: {
     const effectiveProfitMargin = engineMargin ?? stackMargin;
     const maintenance = financialRevenue * (1 - effectiveProfitMargin / 100);
     const profit = financialRevenue - maintenance - sectorGrowthCostLocal;
+    // Physical cost decomposition for the margin drilldown (ticket 1072: the
+    // additive modifier list could not explain a physically-derived margin —
+    // base + modifiers summed 40pts above the engine figure with no line
+    // saying why). Percentage points of REALIZED revenue, mirroring the
+    // engine's own cost legs:
+    //  - inputs: recipe rates x realized unit prices (priceRealizationFactor,
+    //    the same damped/clamped function computeInputsCost bills through),
+    //    on the nameplate basis the recipe is expressed against.
+    //  - wages: the persisted labor bill.
+    //  - other: everything else the engine charged (upkeep, other opex,
+    //    financial legs, calibration residual) = the exact remainder, so the
+    //    three lines always reconcile to the engine margin.
+    // null below plants or when the engine margin / realized revenue are
+    // absent — the drilldown falls back to the additive view there.
+    const physicalCosts = (() => {
+      if (!plantsMode || engineMargin == null) return null;
+      const realized = sectorRealizedRevenueLocal;
+      if (realized == null || !(realized > 0)) return null;
+      const util =
+        Number.isFinite(sector.capitalStock) &&
+        (sector.capitalStock as number) > 0 &&
+        Number.isFinite(sector.producedUnits)
+          ? Math.max(
+              0,
+              Math.min(1, (sector.producedUnits as number) / (sector.capitalStock as number))
+            )
+          : 1;
+      const inputMult = getInputMultiplier(sector.productionPolicyLevel ?? 0);
+      let inputsBill = 0;
+      for (const [commodity, rate] of Object.entries(sectorEffectiveRates.demand) as [
+        CommodityType,
+        number,
+      ][]) {
+        if (!(rate > 0)) continue;
+        inputsBill +=
+          sectorRevenueLocal *
+          rate *
+          priceRealizationFactor(globalPriceRatioByCommodity.get(commodity)) *
+          util *
+          inputMult;
+      }
+      const inputsPp = Math.round((inputsBill / realized) * 1000) / 10;
+      const laborPp =
+        sectorLaborCostLocal != null && sectorLaborCostLocal > 0
+          ? Math.round((sectorLaborCostLocal / realized) * 1000) / 10
+          : null;
+      const otherPp =
+        Math.round((100 - effectiveProfitMargin - inputsPp - (laborPp ?? 0)) * 10) / 10;
+      return { inputsPp, laborPp, otherPp };
+    })();
     // Local-cell share only: this query scopes to the corp's own buckets, so a
     // correct NATIONAL share (which the turn charges the burden on — see
     // buildNationalDominanceShareBySectorId) isn't available here without a
@@ -1175,6 +1242,10 @@ export async function loadCorporationDetailView(args: {
         sectorRealizedRevenueLocal != null ? Math.round(sectorRealizedRevenueLocal) : null,
       profitMargin: sector.profitMargin,
       effectiveProfitMargin,
+      // "physical": effectiveProfitMargin is the engine's derived margin and
+      // `physicalCosts` explains it; "additive": legacy stack recompute.
+      marginBasis: physicalCosts != null ? ("physical" as const) : ("additive" as const),
+      physicalCosts,
       fillAdjustedMarginPct,
       techMarginBonus: techMarginBonus !== 0 ? techMarginBonus : null,
       marketSharePercent: sectorMarketSharePct,

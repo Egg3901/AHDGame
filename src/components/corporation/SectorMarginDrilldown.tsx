@@ -109,6 +109,13 @@ export function SectorMarginDrilldown({
   );
   const otherFactors = net != null ? net - sumShown : null;
 
+  // Physical basis (plants): the effective margin is DERIVED from what the
+  // sector actually pays (inputs, wages, upkeep), not from the additive
+  // modifier stack — summing base + modifiers cannot reconcile to it (ticket
+  // 1072: a 40pt unexplained gap). Render the cost build instead; the additive
+  // stack stays as the advisory view below plants / for legacy sectors.
+  const physical = sector.marginBasis === "physical" ? (sector.physicalCosts ?? null) : null;
+
   const policyLevel = sector.productionPolicyLevel ?? 0;
   const policyTarget = sector.productionPolicy ?? 0;
   const policyPct = ((policyLevel + 25) / 50) * 100;
@@ -138,56 +145,93 @@ export function SectorMarginDrilldown({
           </span>
         </div>
 
-        <div className="flex items-center justify-between border-b border-card-border py-1 text-[12px]">
-          <span className="text-foreground">Base sector margin</span>
-          <span className="font-semibold tabular-nums text-foreground">
-            {base != null ? `${base.toFixed(1)}%` : "—"}
-          </span>
-        </div>
-
-        <div className="space-y-2 pt-2">
-          <Group title="State conditions" rows={stateRows} />
-          {sector.regionalConditionModifiers && sector.regionalConditionModifiers.length > 0 && (
-            <div>
+        {physical ? (
+          <>
+            <div className="flex items-center justify-between border-b border-card-border py-1 text-[12px]">
+              <span className="text-foreground">Realized revenue</span>
+              <span className="font-semibold tabular-nums text-foreground">100.0%</span>
+            </div>
+            <div className="pt-2">
               <div className="mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
-                Regional conditions
+                What this sector pays
               </div>
-              {sector.regionalConditionModifiers.map((rc) => (
-                <div key={rc.label} className="flex items-center justify-between py-1 text-[12px]">
-                  <span className="text-muted">{rc.label}</span>
-                  <span
-                    className={`font-semibold tabular-nums ${rc.marginEffect > 0 ? "text-success" : rc.marginEffect < 0 ? "text-error" : "text-muted"}`}
+              <ModifierLine label="Inputs (at market prices)" value={-physical.inputsPp} />
+              {physical.laborPp != null && <ModifierLine label="Wages" value={-physical.laborPp} />}
+              <ModifierLine label="Upkeep, taxes & other operating" value={-physical.otherPp} />
+            </div>
+            <div className="mt-2 flex items-center justify-between border-t border-card-border pt-2 text-[12px]">
+              <span className="font-semibold text-foreground">Effective margin</span>
+              <span
+                className={`font-bold tabular-nums ${effective >= 0 ? "text-success" : "text-error"}`}
+              >
+                {effective.toFixed(1)}%
+              </span>
+            </div>
+            <p className="mt-2 text-[11px] leading-snug text-muted">
+              This margin is derived from real costs. State, tariff and national modifiers steer
+              those costs rather than adding to a base percentage, so the modifier list no longer
+              sums to the margin — the cost lines above do.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between border-b border-card-border py-1 text-[12px]">
+              <span className="text-foreground">Base sector margin</span>
+              <span className="font-semibold tabular-nums text-foreground">
+                {base != null ? `${base.toFixed(1)}%` : "—"}
+              </span>
+            </div>
+          </>
+        )}
+
+        {!physical && (
+          <div className="space-y-2 pt-2">
+            <Group title="State conditions" rows={stateRows} />
+            {sector.regionalConditionModifiers && sector.regionalConditionModifiers.length > 0 && (
+              <div>
+                <div className="mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+                  Regional conditions
+                </div>
+                {sector.regionalConditionModifiers.map((rc) => (
+                  <div
+                    key={rc.label}
+                    className="flex items-center justify-between py-1 text-[12px]"
                   >
-                    {rc.marginEffect > 0 ? "+" : ""}
-                    {rc.marginEffect.toFixed(1)}pp
+                    <span className="text-muted">{rc.label}</span>
+                    <span
+                      className={`font-semibold tabular-nums ${rc.marginEffect > 0 ? "text-success" : rc.marginEffect < 0 ? "text-error" : "text-muted"}`}
+                    >
+                      {rc.marginEffect > 0 ? "+" : ""}
+                      {rc.marginEffect.toFixed(1)}pp
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Group title="Corporate factors" rows={corporateRows} />
+            <Group title="National economy" rows={nationalRows} />
+            {otherFactors != null && Math.abs(otherFactors) >= 0.05 && (
+              <div>
+                <div className="mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+                  Other factors
+                </div>
+                <div className="flex items-center justify-between py-1 text-[12px]">
+                  <span className="text-muted">
+                    Sprawl, dominance, subsidies &amp; more — see full breakdown
+                  </span>
+                  <span
+                    className={`font-semibold tabular-nums ${otherFactors > 0 ? "text-success" : otherFactors < 0 ? "text-error" : "text-muted"}`}
+                  >
+                    {otherFactors > 0 ? "+" : ""}
+                    {otherFactors.toFixed(1)}
                   </span>
                 </div>
-              ))}
-            </div>
-          )}
-          <Group title="Corporate factors" rows={corporateRows} />
-          <Group title="National economy" rows={nationalRows} />
-          {otherFactors != null && Math.abs(otherFactors) >= 0.05 && (
-            <div>
-              <div className="mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
-                Other factors
               </div>
-              <div className="flex items-center justify-between py-1 text-[12px]">
-                <span className="text-muted">
-                  Sprawl, dominance, subsidies &amp; more — see full breakdown
-                </span>
-                <span
-                  className={`font-semibold tabular-nums ${otherFactors > 0 ? "text-success" : otherFactors < 0 ? "text-error" : "text-muted"}`}
-                >
-                  {otherFactors > 0 ? "+" : ""}
-                  {otherFactors.toFixed(1)}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
-        {net != null && (
+        {!physical && net != null && (
           <div className="mt-2 flex items-center justify-between border-t border-card-border pt-2 text-[12px]">
             <span className="font-semibold text-foreground">Net modifiers</span>
             <span className={`font-bold tabular-nums ${net >= 0 ? "text-success" : "text-error"}`}>
