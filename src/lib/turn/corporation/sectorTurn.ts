@@ -1479,8 +1479,16 @@ export function processSector(
   //  • tech `growthCostReduction` → already its own line.
   //  • tech `marginBonus` (+ strategy-transition penalty, subsidies, tariffs,
   //    macro, state metrics, home location, sprawl, SOE efficiency, …) → these
-  //    are not claims about physical consumption, so they keep driving cost
-  //    through ONE named channel: the drift factor on the calibrated residual.
+  //    are not claims about physical consumption, so they ride ONE named
+  //    channel: `policyCredit`, a revenue-proportional P&L line
+  //    (`hourlyRevenue × pp/100`, soft-capped with the same discipline as the
+  //    legacy margin). They previously rode the drift factor on the calibrated
+  //    residual, which INVERTED whenever the residual anchor was negative (a
+  //    bonus shrank the credit and raised cost — live on 82% of prod sectors
+  //    when found). A revenue leg is monotone in the modifier by construction.
+  //    The residual anchor is now held at its policy-NEUTRAL basis and no
+  //    longer responds to the modifier stack; legacy anchors are rebased onto
+  //    that basis through the drift ratio itself (see `otherOpexDriftFactor`).
   //  • dominance → already consolidated to the build price in P3a.
   //
   // KNOWN RESIDUALS (deliberate, documented, not silently dropped): the labor
@@ -1488,17 +1496,26 @@ export function processSector(
   // full margin-formula margin. Both are prior waves' lines and both are
   // second-order; moving them is a follow-up, not a flip-day change.
   const plantsPhysicalEnabled = plantsEnabled && !embargoLegacyMothball;
-  // The margin stack MINUS the modifiers the physical model now owns. Used only
-  // as the residual's drift channel — never to compute a cost directly.
-  const plantsResidualMarginBasis =
-    1 -
-    Math.min(
-      100,
-      sector.profitMargin +
-        (totalMarginMod - commodityMod - surplusMod - disasterMarginMod) +
-        nationalizedMarginPenalty
-    ) /
-      100;
+  // The margin stack MINUS the modifiers the physical model now owns
+  // (commodity input → `inputsCost`, surplus → deleted, disaster → financial
+  // leg). This is the POLICY stack: everything that is a claim about policy,
+  // tech or environment rather than physical consumption.
+  const plantsPolicyPpRaw =
+    totalMarginMod - commodityMod - surplusMod - disasterMarginMod + nationalizedMarginPenalty;
+  // Same cap discipline as the legacy margin path (`effectiveMargin` above):
+  // soft-capped against the base margin so a stacked pile asymptotes instead
+  // of pinning. The old residual basis used a hard `Math.min(100, …)` here —
+  // a second, different cap on the same stack; unified now.
+  const plantsPolicyPp =
+    softCapEffectiveMargin(sector.profitMargin + plantsPolicyPpRaw) - sector.profitMargin;
+  // The residual's basis with NO policy stack in it. Constant per sector (the
+  // base margin is a seed constant), so the anchor no longer responds to
+  // modifiers — the `policyCredit` line below is the only carrier.
+  const plantsPolicyNeutralBasis = 1 - sector.profitMargin / 100;
+  // The policy stack as money: ₳/turn credit (negative = charge). Enters the
+  // P&L as a named line, NOT via `hourlyRevenue` itself, so world ledgers,
+  // revenue-share taxes and the launch governor see unmodified revenue.
+  const plantsPolicyCredit = plantsPhysicalEnabled ? (hourlyRevenue * plantsPolicyPp) / 100 : 0;
   const inputsCostResult = plantsPhysicalEnabled
     ? computeInputsCost({
         // The recipe rates are expressed against the sector's NOMINAL nameplate,
@@ -1562,9 +1579,17 @@ export function processSector(
   });
   const otherOpexAnchorForPnl = healedOpex?.otherOpexPerUnitAnchor ?? storedOtherOpexAnchor;
   const otherOpexCalibrated = plantsPhysicalEnabled && storedOtherOpexAnchor == null;
+  // Calibration solves against the policy-NEUTRAL margin cost: `maintenance`
+  // includes the policy stack, and `policyCredit` re-applies that same stack on
+  // the revenue side, so the residual must exclude it or the calibration turn
+  // double-counts. `maintenance + policyCredit` is the margin formula's answer
+  // with the policy stack backed out (credit is revenue × pp/100 with the sign
+  // that removes it from cost). Total cost on the calibration turn is then
+  // `… + otherOpex − policyCredit = maintenance` — the flip identity holds
+  // exactly, as before.
   const solvedOtherOpexPerUnit = otherOpexCalibrated
     ? solveOtherOpexPerUnit({
-        marginFormulaCost: maintenance,
+        marginFormulaCost: maintenance + plantsPolicyCredit,
         laborCost: sectorLaborCost,
         inputsCost,
         financialLegs,
@@ -1576,11 +1601,14 @@ export function processSector(
     : otherOpexCalibrated
       ? // Exact by construction, whether or not the per-unit anchor could be
         // solved this turn.
-        maintenance - sectorLaborCost - inputsCost - financialLegs
+        maintenance + plantsPolicyCredit - sectorLaborCost - inputsCost - financialLegs
       : (otherOpexAnchorForPnl ?? 0) *
         producedUnits *
+        // One-time rebase of legacy anchors onto the neutral basis; 1 for
+        // anchors stamped after the policyCredit change. See the docblock on
+        // `otherOpexDriftFactor` for why this stopped tracking the live stack.
         otherOpexDriftFactor({
-          currentMarginBasis: plantsResidualMarginBasis,
+          currentMarginBasis: plantsPolicyNeutralBasis,
           anchorMarginBasis: sector.otherOpexAnchorMarginBasis,
         });
   const physicalPnl = plantsPhysicalEnabled
@@ -1594,6 +1622,7 @@ export function processSector(
         otherOpex,
         financialLegs,
         growthCost: hourlyGrowthCost,
+        policyCredit: plantsPolicyCredit,
       })
     : null;
   const hourlyProfit = physicalPnl
@@ -1885,7 +1914,7 @@ export function processSector(
   // hook.)
   if (solvedOtherOpexPerUnit != null) {
     sectorUpdate.otherOpexPerUnitAnchor = solvedOtherOpexPerUnit;
-    sectorUpdate.otherOpexAnchorMarginBasis = plantsResidualMarginBasis;
+    sectorUpdate.otherOpexAnchorMarginBasis = plantsPolicyNeutralBasis;
   } else if (healedOpex?.otherOpexPerUnitAnchor != null) {
     // Persist the rebasing this turn's P&L already used. Skip when this is
     // also the first calibration (branch above): that sector had no leftover
