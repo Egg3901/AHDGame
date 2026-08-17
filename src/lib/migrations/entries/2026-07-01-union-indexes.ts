@@ -36,13 +36,42 @@ const INDEXES: IndexPlan[] = [
       background: true,
       // Only documents with no founder participate, so the lazy-upsert race
       // stays guarded while founded rivals are free to pile into the pair.
-      partialFilterExpression: { foundedByCharacterId: { $exists: false } },
+      // `$type: "null"` rather than `$exists: false`: MongoDB REJECTS an
+      // absent-field test in a partial index ("Expression not supported in
+      // partial index: $not"), so the original form could never be built in any
+      // environment, and prod kept the old outright-unique index that blocks
+      // founding a rival. Seeded unions therefore carry an EXPLICIT null, which
+      // the backfill below guarantees before the index is created.
+      partialFilterExpression: { foundedByCharacterId: { $type: "null" } },
     },
   },
 ];
 
+/**
+ * Give every union nobody founded an explicit `foundedByCharacterId: null`.
+ *
+ * The partial index keys off `$type: "null"`, which matches an explicit null and
+ * NOT an absent field, so seeded documents must carry the field for the guard to
+ * cover them. Idempotent: only documents missing the field are touched.
+ */
+async function backfillSeededFounderNull(db: Db, dryRun: boolean): Promise<string> {
+  const filter = { foundedByCharacterId: { $exists: false } };
+  if (dryRun) {
+    const pending = await db.collection("unions").countDocuments(filter);
+    return `would set foundedByCharacterId: null on ${pending} seeded union(s)`;
+  }
+  const result = await db.collection("unions").updateMany(filter, {
+    $set: { foundedByCharacterId: null },
+  });
+  return `set foundedByCharacterId: null on ${result.modifiedCount} seeded union(s)`;
+}
+
 async function createPlannedIndexes(db: Db, dryRun: boolean): Promise<MigrationResult> {
   const notes: string[] = [];
+
+  // Must run BEFORE the index build: the partial filter only covers documents
+  // that actually carry the field.
+  notes.push(await backfillSeededFounderNull(db, dryRun));
 
   // Create BEFORE drop: the names differ, so the partial index can be built
   // while the legacy outright-unique one still stands. If the build fails

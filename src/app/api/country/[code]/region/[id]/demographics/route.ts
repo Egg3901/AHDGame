@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
+import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { DemographicCategory, StateDemographics, State } from "@/lib/db/types";
 import { calculateStateLean } from "@/lib/utils/demographics";
+import { REGION_DEMOGRAPHIC_CATEGORY_IDS } from "@/app/country/[code]/region/[id]/regionData";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string }>;
@@ -37,10 +39,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Demographics not found for this state" }, { status: 404 });
     }
 
-    const categories = await db
-      .collection<DemographicCategory>("demographicCategories")
-      .find({})
-      .toArray();
+    const categoryFilter = REGION_DEMOGRAPHIC_CATEGORY_IDS[countryId];
+    const categories = categoryFilter
+      ? await db
+          .collection<DemographicCategory>("demographicCategories")
+          .find({ _id: { $in: categoryFilter } })
+          .toArray()
+      : await loadDemographicCategories(db);
 
     const calculatedLean =
       state.cachedEconomicLean != null && state.cachedSocialLean != null

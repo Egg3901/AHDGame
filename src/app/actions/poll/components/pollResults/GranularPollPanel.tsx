@@ -557,6 +557,12 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
                     </div>
                   </div>
                   <div>
+                    <div className="text-xs text-muted">Turnout</div>
+                    <div className="text-lg font-bold tabular-nums">
+                      {formatTurnout(segmentAggregate.turnout)}
+                    </div>
+                  </div>
+                  <div>
                     <div className="text-xs text-muted">Your share vs. topline</div>
                     <div
                       className={`text-lg font-bold tabular-nums ${

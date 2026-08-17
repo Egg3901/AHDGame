@@ -34,6 +34,20 @@ export function toIsoStringOrNull(value: Date | string | null | undefined): stri
   return typeof value === "string" ? value : null;
 }
 
+/** Per-country voter-group category ids for region demographics (not US `find({})`). */
+export const REGION_DEMOGRAPHIC_CATEGORY_IDS: Partial<Record<CountryId, string[]>> = {
+  UK: ["uk_voterGroups"],
+  JP: ["jp_voterGroups"],
+  DE: ["de_voterGroups"],
+  IE: ["ie_voterGroups"],
+  CN: ["cn_voterGroups"],
+  BR: ["br_voterGroups"],
+  DD: ["dd_voterGroups"],
+  // Seceded nations share the UK archetype profile (uk_archetypes).
+  SCO: ["uk_voterGroups"],
+  WAL: ["uk_voterGroups"],
+};
+
 // ── Shared data-fetching helpers ──
 
 export async function getRegionState(stateId: string, countryId: CountryId): Promise<State | null> {
@@ -99,21 +113,7 @@ export async function getCurrentPartyNav(
 export async function getRegionDemographics(stateId: string, countryId: CountryId) {
   try {
     const db = await getDb();
-    // Each country has its own demographic category IDs
-    const COUNTRY_CATEGORY_IDS: Partial<Record<CountryId, string[]>> = {
-      UK: ["uk_voterGroups"],
-      JP: ["jp_voterGroups"],
-      DE: ["de_voterGroups"],
-      IE: ["ie_voterGroups"],
-      CN: ["cn_voterGroups"],
-      BR: ["br_voterGroups"],
-      // Seceded nations share the UK archetype profile (uk_archetypes), so their
-      // sub-region demographics are keyed by the uk_voterGroups category. Without
-      // this they fall through to find({}) and pick the wrong voterGroups doc.
-      SCO: ["uk_voterGroups"],
-      WAL: ["uk_voterGroups"],
-    };
-    const categoryFilter = COUNTRY_CATEGORY_IDS[countryId];
+    const categoryFilter = REGION_DEMOGRAPHIC_CATEGORY_IDS[countryId];
 
     const [demographics, categories] = await Promise.all([
       db

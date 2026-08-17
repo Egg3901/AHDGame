@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Slider } from "@/components/ui";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import {
+  COUNTRY_CURRENCY_MAP,
+  CURRENCY_SYMBOLS,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
 import {
   approvalTarget,
   duesIncomePerTurn,
@@ -48,13 +52,14 @@ interface UnionDuesPanelProps {
  * number readout hides the entire dues range. Show enough precision to tell two
  * rates apart, and drop it again once the figure is large.
  */
-function money(value: number): string {
+function money(value: number, currency: CurrencyCode): string {
+  const symbol = CURRENCY_SYMBOLS[currency] ?? "$";
   const abs = Math.abs(value);
   const decimals = abs === 0 ? 0 : abs < 10 ? 2 : 0;
-  return value.toLocaleString("en-US", {
+  return `${symbol}${value.toLocaleString("en-US", {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
-  });
+  })}`;
 }
 
 export function UnionDuesPanel({
@@ -76,8 +81,10 @@ export function UnionDuesPanel({
     setDraft(duesPerWorkerAnnual);
   }, [duesPerWorkerAnnual]);
 
-  const currency = COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "";
-  const currencySuffix = currency ? ` ${currency}` : "";
+  const currency = (COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ??
+    "USD") as CurrencyCode;
+  /** Money reads as money: currency symbol, with cents kept while the figure is small. */
+  const cash = (value: number) => money(value, currency);
   const wageKnown = annualWage > 0;
   const maxDues = maxDuesForWage(annualWage);
   const maxPercent = MAX_DUES_FRACTION_OF_WAGE * 100;
@@ -129,16 +136,14 @@ export function UnionDuesPanel({
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-sm font-semibold text-foreground">Dues</h3>
         <span className="text-xs text-muted tabular-nums">
-          {money(duesPerWorkerAnnual)}
-          {currencySuffix}/member/year
+          {cash(duesPerWorkerAnnual)}/member/year
         </span>
       </div>
 
       {!isHead ? (
         <p className="text-sm text-muted">
-          Members pay {money(duesPerWorkerAnnual)}
-          {currencySuffix} a year each, bringing in about {money(currentIncome)}
-          {currencySuffix} a turn.
+          Members pay {cash(duesPerWorkerAnnual)} a year each, bringing in about{" "}
+          {cash(currentIncome)} a turn.
         </p>
       ) : !wageKnown ? (
         <p className="text-sm text-muted">
@@ -178,17 +183,11 @@ export function UnionDuesPanel({
               <span className="font-semibold tabular-nums">
                 {draftPercent.toFixed(1)}% of wages
               </span>{" "}
-              <span className="text-muted tabular-nums">
-                ({money(draft)}
-                {currencySuffix}/member/year)
-              </span>
+              <span className="text-muted tabular-nums">({cash(draft)}/member/year)</span>
             </div>
             <div>
               <span className="text-muted">Income per turn at this rate:</span>{" "}
-              <span className="font-semibold tabular-nums">
-                {money(draftIncome)}
-                {currencySuffix}
-              </span>
+              <span className="font-semibold tabular-nums">{cash(draftIncome)}</span>
             </div>
             <div>
               <span className="text-muted">Approval effect:</span>{" "}

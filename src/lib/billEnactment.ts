@@ -38,6 +38,7 @@ import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
 import { countryFiscalBase, regionFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
 import type { LawCountryId } from "@/lib/politicalLegislation/types";
 import { recordAudit } from "@/lib/audit/recordAudit";
+import { needsPhaseIn, stepTaxRate } from "@/lib/budget/taxRatePhaseIn";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import type {
   FederalBudget,
@@ -162,9 +163,16 @@ async function applyTaxRateChange(
     const normalizedTaxRates = normalizeFederalTaxRates(budget.taxRates);
     if (!normalizedTaxRates) return;
 
+    // Ticket #1102: a big move ramps instead of landing whole. The rate starts
+    // moving this turn and the legislature's figure is still exactly the
+    // destination; only the speed changes. Anything within one step applies
+    // outright, so ordinary budget tweaks behave as before.
+    const currentRate = normalizedTaxRates[taxType as keyof FederalTaxRates];
+    const rampedRate = stepTaxRate(currentRate, selectedOptionRate);
+    const rampPending = needsPhaseIn(currentRate, selectedOptionRate);
     const newTaxRates: FederalTaxRates = {
       ...normalizedTaxRates,
-      [taxType as keyof FederalTaxRates]: selectedOptionRate,
+      [taxType as keyof FederalTaxRates]: rampedRate,
     };
 
     // Money wiring (interstate-logistics plan step 5, phase B): a tax-rate
@@ -208,7 +216,11 @@ async function applyTaxRateChange(
           revenue: newRevenue,
           surplus: newSurplus,
           updatedAt: new Date(),
+          ...(rampPending ? { [`taxRatePhaseIn.${taxType}`]: selectedOptionRate } : {}),
         },
+        // A fresh enactment on the same tax replaces any ramp still running,
+        // rather than leaving a stale target to drag the rate back later.
+        ...(rampPending ? {} : { $unset: { [`taxRatePhaseIn.${taxType}`]: "" } }),
       }
     );
     return;

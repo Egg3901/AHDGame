@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import { formatLocalAmountFull } from "@/lib/utils/formatters";
 
 interface UnionFundTreasuryPanelProps {
   unionId: string;
@@ -38,8 +39,10 @@ export function UnionFundTreasuryPanel({
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const currency = COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "";
-  const currencySuffix = currency ? ` ${currency}` : "";
+  const currency = (COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ??
+    "USD") as CurrencyCode;
+  /** Money reads as money: symbol and grouping, not a bare number with a code stuck on the end. */
+  const money = (value: number) => formatLocalAmountFull(value, currency);
   const amount = Number(amountDraft);
   const amountValid = Number.isFinite(amount) && amount >= 1;
 
@@ -56,7 +59,7 @@ export function UnionFundTreasuryPanel({
       setResult({
         ok: res.ok,
         text: res.ok
-          ? `Contributed ${Math.floor(amount).toLocaleString("en-US")}${currencySuffix} to the treasury.`
+          ? `Contributed ${money(Math.floor(amount))} to the treasury.`
           : (data.error ?? "The contribution failed."),
       });
       if (res.ok) {
@@ -74,10 +77,7 @@ export function UnionFundTreasuryPanel({
     <div className="space-y-3 border-t border-card-border pt-4">
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-sm font-semibold text-foreground">Treasury</h3>
-        <span className="text-xs text-muted tabular-nums">
-          {Math.round(treasury).toLocaleString("en-US")}
-          {currencySuffix}
-        </span>
+        <span className="text-xs text-muted tabular-nums">{money(treasury)}</span>
       </div>
 
       <p className="text-sm text-muted">

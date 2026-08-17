@@ -18,6 +18,7 @@ import { defect as orphanNullPartySeats } from "./defects/AHD-951-orphan-null-pa
 import { defect as duplicateSectors } from "./defects/AHD-duplicate-sectors";
 import { defect as defenceProcurementOveraward } from "./defects/AHD-defence-procurement-overaward";
 import { defect as privateMarketCapHistory } from "./defects/AHD-private-market-cap-history";
+import { defect as ukVatRevenueGap } from "./defects/AHD-1102-uk-vat-revenue-gap";
 import type { Defect } from "./types";
 
 export const DEFECTS: Defect[] = [
@@ -29,6 +30,9 @@ export const DEFECTS: Defect[] = [
   duplicateSectors,
   defenceProcurementOveraward,
   privateMarketCapHistory,
+  // Ticket #1102: the Poon Choi Act was law for 67 turns while a tax-slider
+  // enactment bug left UK sales tax and tariffs at 0.
+  ukVatRevenueGap,
 ];
 
 export function getDefect(id: string): Defect | undefined {

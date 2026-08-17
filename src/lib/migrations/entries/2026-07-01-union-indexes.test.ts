@@ -15,11 +15,30 @@ function mockDb(dropBehaviour: "ok" | "missing" | "fails" = "ok") {
             })
           )
         : vi.fn().mockRejectedValue(Object.assign(new Error("not authorized"), { code: 13 }));
-  const db = { collection: () => ({ createIndex, dropIndex }) } as unknown as Db;
-  return { db, createIndex, dropIndex };
+  const updateMany = vi.fn().mockResolvedValue({ modifiedCount: 3 });
+  const countDocuments = vi.fn().mockResolvedValue(3);
+  const db = {
+    collection: () => ({ createIndex, dropIndex, updateMany, countDocuments }),
+  } as unknown as Db;
+  return { db, createIndex, dropIndex, updateMany, countDocuments };
 }
 
 describe("2026-07-01-union-indexes migration", () => {
+  it("backfills an explicit founder null before building the partial index", async () => {
+    const { db, updateMany, createIndex } = mockDb();
+    await migration.execute(db, { dryRun: false });
+
+    // The partial filter only covers documents that carry the field, so the
+    // backfill has to land first or the guard silently covers nothing.
+    expect(updateMany).toHaveBeenCalledWith(
+      { foundedByCharacterId: { $exists: false } },
+      { $set: { foundedByCharacterId: null } }
+    );
+    expect(updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      createIndex.mock.invocationCallOrder[0]
+    );
+  });
+
   it("creates a PARTIAL unique index scoped to seeded unions", async () => {
     const { db, createIndex } = mockDb();
     await migration.execute(db, { dryRun: false });
@@ -32,7 +51,9 @@ describe("2026-07-01-union-indexes migration", () => {
       unique: true,
       // Founded rivals are excluded, so any number may share an industry while
       // the lazy-upsert race on seeded unions stays guarded.
-      partialFilterExpression: { foundedByCharacterId: { $exists: false } },
+      // A partial index cannot test for an absent field, so seeded unions carry
+      // an explicit null and the filter matches on its type.
+      partialFilterExpression: { foundedByCharacterId: { $type: "null" } },
     });
   });
 
@@ -66,12 +87,13 @@ describe("2026-07-01-union-indexes migration", () => {
   });
 
   it("does not touch the database in dry-run mode", async () => {
-    const { db, createIndex, dropIndex } = mockDb();
+    const { db, createIndex, dropIndex, updateMany } = mockDb();
     const result = await migration.execute(db, { dryRun: true });
 
     expect(createIndex).not.toHaveBeenCalled();
     expect(dropIndex).not.toHaveBeenCalled();
     expect(result.documentsUpdated).toBe(0);
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   it("is marked idempotent (create then drop-if-present is a safe re-run)", () => {

@@ -1,3 +1,4 @@
+import { advanceTaxRatePhaseIn } from "@/lib/budget/taxRatePhaseIn";
 import { getDb } from "@/lib/mongodb";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { CentralBank } from "@/lib/db/types/centralBank";
@@ -89,6 +90,25 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       sovereignRiskAnchor: b.sovereignRiskAnchor,
     });
 
+    // Ticket #1102: walk any enacted tax-rate change one step toward its
+    // target, so a large move arrives over several turns instead of shocking
+    // the economy in one. Reached targets drop out of the map on their own.
+    const ramp = advanceTaxRatePhaseIn(
+      // FederalTaxRates is a fixed-key shape with no string index signature,
+      // so widening needs the explicit two-step. The helper only reads keys it
+      // was handed in `pending`, all of which are real tax types.
+      (b.taxRates ?? {}) as unknown as Record<string, number | null | undefined>,
+      b.taxRatePhaseIn as Record<string, number> | undefined
+    );
+    const rampSet: Record<string, number> = {};
+    for (const [taxType, rate] of Object.entries(ramp.rates)) {
+      rampSet[`taxRates.${taxType}`] = rate;
+    }
+    const rampUnset: Record<string, ""> = {};
+    for (const taxType of Object.keys(b.taxRatePhaseIn ?? {})) {
+      if (!(taxType in ramp.pending)) rampUnset[`taxRatePhaseIn.${taxType}`] = "";
+    }
+
     await db.collection<FederalBudget>("federalBudget").updateOne(
       { _id: b._id },
       {
@@ -98,7 +118,9 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
           "debt.interestRate": derived.interestRate,
           debtToGdpRatio: derived.debtToGdpRatio,
           creditRating: derived.creditRating,
+          ...rampSet,
         },
+        ...(Object.keys(rampUnset).length > 0 ? { $unset: rampUnset } : {}),
       }
     );
     countriesProcessed += 1;
