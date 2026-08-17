@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import { Slider } from "@/components/ui";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
-import { approvalTarget, duesIncomePerTurn, maxDuesForWage } from "@/lib/unions/unionDues";
+import {
+  approvalTarget,
+  duesIncomePerTurn,
+  MAX_DUES_FRACTION_OF_WAGE,
+  maxDuesForWage,
+} from "@/lib/unions/unionDues";
 import type { UnionServiceId } from "@/lib/unions/unionServices";
 
 interface UnionDuesPanelProps {
@@ -22,12 +27,36 @@ interface UnionDuesPanelProps {
 }
 
 /**
- * Union dues v1's main lever: the annual charge per member the head sets.
- * Bounded by `maxDuesForWage`, the same 10%-of-wage ceiling the server
- * enforces, so a head can never drag the slider into a value the API will
- * reject. Shows the trade-off live: dues income per turn against what raising
- * the rate does to approval, rather than hiding either behind a tooltip.
+ * Union dues v1's main lever: what each member pays, set as a SHARE OF THEIR
+ * ANNUAL WAGE rather than as a cash figure.
+ *
+ * The cash slider it replaces was unusable in practice. A member's annual wage
+ * in this economy is single digits, so the 10% ceiling came out near 1, and the
+ * control rounded both its range and its readout to whole units: the whole
+ * usable band collapsed onto "0" or "1" and the head had no way to pick a rate
+ * (player ticket #1112). A percentage is also what the model itself reasons in,
+ * `duesBurdenRatio` divides the rate by the wage before approval ever sees it,
+ * so the same slider position means the same thing in every country and era,
+ * which is the property `unionServices.ts` documents as the whole reason costs
+ * are fractions there too.
+ *
+ * The cash equivalent is shown alongside, and the request still sends an
+ * absolute `duesPerWorkerAnnual`, so the API and its clamp are unchanged.
  */
+/**
+ * Money in this economy runs to single digits per member per year, so a whole
+ * number readout hides the entire dues range. Show enough precision to tell two
+ * rates apart, and drop it again once the figure is large.
+ */
+function money(value: number): string {
+  const abs = Math.abs(value);
+  const decimals = abs === 0 ? 0 : abs < 10 ? 2 : 0;
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
 export function UnionDuesPanel({
   unionId,
   countryId,
@@ -50,10 +79,13 @@ export function UnionDuesPanel({
   const currency = COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "";
   const currencySuffix = currency ? ` ${currency}` : "";
   const wageKnown = annualWage > 0;
-  const maxDues = Math.round(maxDuesForWage(annualWage));
-  // A persisted dues value can exceed today's ceiling (wages fell). Widen the
-  // slider range so it does not misrepresent the stored value.
-  const sliderMax = Math.max(maxDues, draft);
+  const maxDues = maxDuesForWage(annualWage);
+  const maxPercent = MAX_DUES_FRACTION_OF_WAGE * 100;
+  /** The draft rate as a share of annual wage, which is what the slider moves. */
+  const draftPercent = wageKnown ? (draft / annualWage) * 100 : 0;
+  // A persisted rate can exceed today's ceiling (wages fell after it was set),
+  // so the slider widens rather than misrepresenting the stored value.
+  const sliderMaxPercent = Math.max(maxPercent, draftPercent);
   const duesLocked = maxDues <= 0;
   const currentIncome = duesIncomePerTurn(members, duesPerWorkerAnnual);
   const draftIncome = duesIncomePerTurn(members, draft);
@@ -97,16 +129,15 @@ export function UnionDuesPanel({
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-sm font-semibold text-foreground">Dues</h3>
         <span className="text-xs text-muted tabular-nums">
-          {Math.round(duesPerWorkerAnnual).toLocaleString("en-US")}
+          {money(duesPerWorkerAnnual)}
           {currencySuffix}/member/year
         </span>
       </div>
 
       {!isHead ? (
         <p className="text-sm text-muted">
-          Members pay {Math.round(duesPerWorkerAnnual).toLocaleString("en-US")}
-          {currencySuffix} a year each, bringing in about{" "}
-          {Math.round(currentIncome).toLocaleString("en-US")}
+          Members pay {money(duesPerWorkerAnnual)}
+          {currencySuffix} a year each, bringing in about {money(currentIncome)}
           {currencySuffix} a turn.
         </p>
       ) : !wageKnown ? (
@@ -116,25 +147,24 @@ export function UnionDuesPanel({
       ) : (
         <>
           <p className="text-sm text-muted">
-            What each member pays a year. Raising it brings in more per turn, and costs approval:
-            members judge the bargain, not the number on its own.
+            What each member pays, as a share of their pay. Dues are the treasury&apos;s standing
+            income, and the treasury is what funds services, organizing drives and bargaining.
+            Raising the rate brings in more per turn and costs approval: members judge the bargain,
+            not the number on its own.
           </p>
           <div className="space-y-1.5">
             <Slider
               min={0}
-              max={sliderMax}
-              step={Math.max(1, Math.round(sliderMax / 200))}
-              value={draft}
-              onChange={(e) => setDraft(Number(e.target.value))}
+              max={sliderMaxPercent}
+              step={0.1}
+              value={draftPercent}
+              onChange={(e) => setDraft((Number(e.target.value) / 100) * annualWage)}
               disabled={saving || suspended || duesLocked}
-              aria-label="Annual dues per member"
+              aria-label="Annual dues as a percent of member wages"
             />
             <div className="flex justify-between text-[11px] text-muted">
-              <span>0</span>
-              <span>
-                Max {maxDues.toLocaleString("en-US")}
-                {currencySuffix}
-              </span>
+              <span>0%</span>
+              <span>Max {maxPercent}% of wages</span>
             </div>
             {duesLocked && (
               <p className="text-[11px] text-muted">
@@ -146,14 +176,17 @@ export function UnionDuesPanel({
             <div>
               <span className="text-muted">Dues rate:</span>{" "}
               <span className="font-semibold tabular-nums">
-                {Math.round(draft).toLocaleString("en-US")}
-                {currencySuffix}/year
+                {draftPercent.toFixed(1)}% of wages
+              </span>{" "}
+              <span className="text-muted tabular-nums">
+                ({money(draft)}
+                {currencySuffix}/member/year)
               </span>
             </div>
             <div>
               <span className="text-muted">Income per turn at this rate:</span>{" "}
               <span className="font-semibold tabular-nums">
-                {Math.round(draftIncome).toLocaleString("en-US")}
+                {money(draftIncome)}
                 {currencySuffix}
               </span>
             </div>

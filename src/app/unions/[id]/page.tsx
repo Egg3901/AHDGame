@@ -19,6 +19,7 @@ import {
 } from "@/components/unions/UnionPensionSchemePanel";
 import { UnionDuesPanel } from "@/components/unions/UnionDuesPanel";
 import { UnionServicesPanel } from "@/components/unions/UnionServicesPanel";
+import { UnionFundTreasuryPanel } from "@/components/unions/UnionFundTreasuryPanel";
 import { BASE_APPROVAL } from "@/lib/unions/unionDues";
 import { normalizeServiceIds, type UnionServiceId } from "@/lib/unions/unionServices";
 import { buildCharacterHref, buildNppHref } from "@/lib/utils/profileUrls";
@@ -620,6 +621,14 @@ export default function UnionDashboardPage({ params }: PageProps) {
           isHead={isLeader}
           suspended={suspended}
           onSaved={loadData}
+        />
+        <UnionFundTreasuryPanel
+          unionId={id}
+          countryId={union.countryId}
+          treasury={union.treasury}
+          isHead={isLeader}
+          suspended={suspended}
+          onFunded={loadData}
         />
         <UnionServicesPanel
           unionId={id}
