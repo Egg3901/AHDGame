@@ -47,13 +47,20 @@ describe("commodity demand calibration", () => {
   });
 
   it("brings each corrected commodity's measured supply/demand near balance", () => {
-    // supply/demand as measured at turn 401, before correction. Applying the
-    // multiplier to demand should land each in a sane band — short enough that
-    // scarcity still means something, not so short that price runs away.
+    // Raw (pre-correction) supply/demand for each entry, from the calibration
+    // basis in commodityDemandCalibration.ts. advertising / natural_gas /
+    // healthcare_services were re-measured on live prod flow at t185
+    // (2026-08-17): raw = live corrected S/D x live mult (11.2 x 0.035, etc.),
+    // because the original 400-turn soak understated live supply and the
+    // soak-sized cuts had overshot those three into 5-11x gluts. iron / oil /
+    // energy keep the soak measurements their unchanged multipliers were
+    // sized against. Applying the multiplier to demand should land each in a
+    // sane band — short enough that scarcity still means something, not so
+    // short that price runs away.
     const measuredSd: Record<string, number> = {
-      advertising: 0.03,
-      natural_gas: 0.11,
-      healthcare_services: 0.13,
+      advertising: 0.39,
+      natural_gas: 0.67,
+      healthcare_services: 0.83,
       iron: 0.4,
       oil: 0.5,
       energy: 0.5,
