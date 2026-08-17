@@ -25,7 +25,7 @@ import {
   unionPremium,
   unionizationDriftTarget,
 } from "@/lib/labour/unionization";
-import { unionLookupKey } from "@/lib/unions/unionLookups";
+import { servicesStrikeSoftening } from "@/lib/unions/unionServices";
 import type { SectorTurnEnv } from "./sectorTurnTypes";
 
 export interface SectorLabourProductionEffects {
@@ -121,8 +121,8 @@ export function resolveSectorLabourEconomics({
 
   // An active agreement is a floor UNDER the employer's own wage level for the
   // life of the agreement, not a rewrite of it. Persisting the floor into
-  // `sector.wageLevel` would make every settlement permanent — nothing lowers
-  // the field again when the agreement expires — so the term length would
+  // `sector.wageLevel` would make every settlement permanent, nothing lowers
+  // the field again when the agreement expires, so the term length would
   // carry no meaning and pay would only ever ratchet up.
   const negotiatedWageFloor =
     labour.collectiveAgreementWageFloorBySectorId?.get(sector._id.toString()) ?? WAGE_LEVEL_MIN;
@@ -168,11 +168,15 @@ export function resolveSectorLabourEconomics({
   const unionLawBias = labour.fullEnabled
     ? labour.unionLawBiasByCountry?.get(sectorCountryId)
     : undefined;
-  const membershipPressure = labour.fullEnabled
-    ? labour.ownedUnionMembershipPressureByKey?.get(
-        unionLookupKey(sectorCountryId, sector.sectorType)
-      )
-    : undefined;
+  // Union dues v1: resolve the representing union DIRECTLY off the sector's own
+  // `representingUnionId`, never by (countryId, sectorType), players can found
+  // rivals in the same industry, so the industry pair no longer identifies one
+  // union, and a sector with no `representingUnionId` must not inherit some
+  // other union's approval.
+  const representingUnion =
+    labour.fullEnabled && sector.representingUnionId
+      ? labour.unionsById?.get(sector.representingUnionId.toString())
+      : undefined;
   let newUnionization = unionsBanned
     ? decayUnionizationUnderBan(sector.unionization ?? 0)
     : trendUnionization(
@@ -183,11 +187,17 @@ export function resolveSectorLabourEconomics({
           unemploymentRate,
           minWageKaitzRatio: labour.minWageRatioByCountry?.get(sectorCountryId),
           unionLawBias,
-          membershipPressure,
+          representingUnionApproval: representingUnion?.approval,
         })
       );
   const realWage = realWageIndex(wageLevel, costOfLivingIndex);
   const newWorkerExpectationIndex = trendWorkerExpectation(sector.workerExpectationIndex, realWage);
+  // Union dues v1: service programmes damp the strike trigger's gap for
+  // sectors the running union represents. 0 when unrepresented or every
+  // service is off, so an unheld sector's strike math is unchanged.
+  const strikeSoftening = representingUnion
+    ? servicesStrikeSoftening(representingUnion.activeServices)
+    : 0;
   const strikeStep = stepStrike({
     unionization: newUnionization,
     realWage,
@@ -202,6 +212,7 @@ export function resolveSectorLabourEconomics({
     }),
     unionsBanned,
     noStrikeProtected: labour.noStrikeProtectedSectorIds?.has(sector._id.toString()) === true,
+    strikeSoftening,
   });
   if (strikeStep.unionizationBump > 0) {
     newUnionization = Math.min(100, newUnionization + strikeStep.unionizationBump);

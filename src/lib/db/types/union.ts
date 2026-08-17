@@ -1,26 +1,39 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { UnionServiceId } from "@/lib/unions/unionServices";
 
 /**
- * v3 Phase 8 (`labourSystemMode >= "full"`) — a player-run union.
+ * v3 Phase 8 (`labourSystemMode >= "full"`), a player-run union.
  *
- * One Union per (countryId, sectorType) pair — a union organizes an entire
+ * Dues v1 changed the scope rule. A union is still scoped to one industry in
+ * one country, but there may now be SEVERAL in that pair: players can found a
+ * rival in an industry that already has a union. Which sectors a union actually
+ * holds is no longer implied by the (countryId, sectorType) match, it is
+ * recorded on the sector as `CorporateSector.representingUnionId`, and a
+ * targeted organizing drive can take a sector off a rival. Same-industry only:
+ * a union never organizes outside its own `sectorType`.
+ *
+ * The original type-scoped note follows, and still describes how a union's
+ * CANDIDATE sectors are found (matching countryId+sectorType) before
+ * representation is checked:
+ *
+ * One Union per (countryId, sectorType) pair, a union organizes an entire
  * industry within a country (e.g. "US Manufacturing Workers"), not a
  * hand-picked list of sectors. Its scope (which `CorporateSector`s it
  * affects) is computed by querying for matching countryId+sectorType at
- * read/action time, not stored as a join table — this maps directly onto
+ * read/action time, not stored as a join table, this maps directly onto
  * the existing per-sector `unionization` stat with no new plumbing.
  *
  * Deliberately NOT a membership-roster social system: "membership" is the
  * abstract `unionization`/`membershipPressure` stat (an NPC worker
  * population), not a roster of player Characters who joined. Player leaders
- * Player leaders are contested continuously (CEO-style): organizers fund
+ * are contested continuously (CEO-style): organizers fund
  * drives until strength crosses a threshold, then vote weighted by banked
  * strength; the plurality winner must accept the offer and may displace a
  * sitting player or NPP president.
  *
- * `ownerId` is the source of truth for who leads this union — see the
+ * `ownerId` is the source of truth for who leads this union, see the
  * denormalized `Character.unionLeaderOf` cache in `src/lib/db/types/character.ts`.
  */
 export interface Union {
@@ -30,7 +43,7 @@ export interface Union {
   /** Era-appropriate seeded display name (historical where possible, generic fallback). */
   name: string;
   /**
-   * Whoever leads this union, or null (unmanned — Phase 5's drift model runs
+   * Whoever leads this union, or null (unmanned, Phase 5's drift model runs
    * unchanged). Read `ownerType` before resolving the id: it points at
    * `characters` for a player and `npps` for an NPP leader.
    */
@@ -41,9 +54,9 @@ export interface Union {
    * `Corporation.ceoId`/`ceoType` pairing.
    */
   ownerType?: "character" | "npp";
-  /** Top vote-getter awaiting acceptance — mirrors `Corporation.pendingCeoCharacterId`. */
+  /** Top vote-getter awaiting acceptance, mirrors `Corporation.pendingCeoCharacterId`. */
   pendingLeaderCharacterId?: ObjectId | null;
-  /** Spendable balance (home-country currency-equivalent, ₳-anchor) — funds recruit/strike actions. Trickles up per turn proportional to `membershipPressure` (the "dues" analog). */
+  /** Spendable balance (home-country currency-equivalent, ₳-anchor), funds recruit/strike actions. Trickles up per turn proportional to `membershipPressure` (the "dues" analog). */
   treasury: number;
   /**
    * Uncapped organizing power, the sum of every organize drive any character
@@ -56,22 +69,52 @@ export interface Union {
    */
   strength?: number;
   /**
-   * 0-100, player-adjustable bias feeding `unionizationDriftTarget()` (see
-   * `src/lib/labour/unionization.ts`) for sectors matching this union's
-   * (countryId, sectorType), ON TOP OF the existing NPC drift — only applied
-   * while `ownerId != null` (unowned unions leave Phase 5's drift untouched).
-   * Decays toward a baseline absent active recruitment.
+   * @deprecated Retired by union dues v1. This 0-100 organizing score was the
+   * dues base, the unionization drift bias, the strike-capacity gate and the
+   * leadership threshold all at once, and players read it as a headcount.
+   * Those jobs now belong to `approval` (drift anchor), derived membership
+   * (dues base, see `unionMembers()` in `src/lib/unions/unionDues.ts`) and
+   * `strength` (leadership). Left on the type only so existing documents
+   * deserialize; nothing reads it. A migration drops the field.
    */
-  membershipPressure: number;
-  /** Turn a strike was last force-called via this union's `/strike` action — a union-level rate limit, separate from each sector's own `strikeCooldownUntilTurn`. */
+  membershipPressure?: number;
+  /**
+   * 0-100, how the membership rates the bargain they are getting. Dues push it
+   * down, running services pushes it up (`approvalTarget()` in
+   * `src/lib/unions/unionDues.ts`). It anchors the unionization drift target in
+   * every sector this union represents, so it governs both whether density
+   * holds and whether the union can win new shops. Absent on documents written
+   * before dues v1, which reads as `BASE_APPROVAL`.
+   */
+  approval?: number;
+  /**
+   * Annual dues charged per member, in the union's home currency. Set by the
+   * union head. Stored in money because the player sets a money figure, but
+   * always read against the local annual wage before it touches approval, so
+   * the same rate means the same thing in Lagos and Detroit.
+   */
+  duesPerWorkerAnnual?: number;
+  /**
+   * Service programmes currently switched on, paid for out of the treasury
+   * every turn. Unknown ids are ignored on read (`normalizeServiceIds()`), so a
+   * stale document cannot widen the effect.
+   */
+  activeServices?: UnionServiceId[];
+  /**
+   * Set when a player founded this union rather than the world seeding it.
+   * Founded unions are how a rival appears in an industry that already has one,
+   * which is what makes raiding possible at all.
+   */
+  foundedByCharacterId?: ObjectId | null;
+  /** Turn a strike was last force-called via this union's `/strike` action, a union-level rate limit, separate from each sector's own `strikeCooldownUntilTurn`. */
   lastCalledStrikeTurn: number | null;
   /** Visible target wageLevel this union is demanding from CEOs in its scope, or null if none set. */
   demandedWageLevel: number | null;
   /**
    * Union ban (player suggestion #93): true while this union's country has
    * `FederalBudget.unionsBanned` set by an enacted ban. Suspended unions are
-   * frozen — `processUnionsTurn` skips dues/decay/inactivity-vacancy for them
-   * and player actions 403 — but the document (leadership, treasury,
+   * frozen: `processUnionsTurn` skips dues/decay/inactivity-vacancy for them
+   * and player actions 403, but the document (leadership, treasury,
    * membershipPressure) is deliberately NEVER deleted, so a repeal restores
    * the union exactly as it was. Set/cleared by `applyUnionLawProvision`
    * (`src/lib/labour/unionLaws.ts`).
@@ -82,7 +125,7 @@ export interface Union {
 }
 
 /**
- * v3 Phase 8: a union's recorded stance on a bill — visibility-only this
+ * v3 Phase 8: a union's recorded stance on a bill, visibility-only this
  * phase (no mechanical vote-swing effect yet), same "observe first, wire
  * consequences later" precedent Phase 5 set for the unionization metric
  * itself.

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
-import { RECRUIT_COST, UNION_STRENGTH_DECAY_PER_TURN } from "@/lib/unions/unionEconomy";
+import { UNION_STRENGTH_DECAY_PER_TURN } from "@/lib/unions/unionEconomy";
 import { WAGE_LEVEL_MAX, WAGE_LEVEL_MIN } from "@/lib/labour/laborCost";
 import { HeroImage } from "@/components/HeroImage";
 import BackButton from "@/components/BackButton";
@@ -17,7 +17,10 @@ import {
   UnionPensionSchemePanel,
   type UnionPensionScheme,
 } from "@/components/unions/UnionPensionSchemePanel";
-import { ORGANIZING_TOOLTIP, organizingBand, organizingValue } from "@/lib/unions/organizing";
+import { UnionDuesPanel } from "@/components/unions/UnionDuesPanel";
+import { UnionServicesPanel } from "@/components/unions/UnionServicesPanel";
+import { BASE_APPROVAL } from "@/lib/unions/unionDues";
+import { normalizeServiceIds, type UnionServiceId } from "@/lib/unions/unionServices";
 import { buildCharacterHref, buildNppHref } from "@/lib/utils/profileUrls";
 
 interface UnionDetail {
@@ -35,7 +38,20 @@ interface UnionDetail {
   organizeActionCost: number;
   organizeStrengthGain: number;
   treasury: number;
-  membershipPressure: number;
+  /** Real headcount: workers across this union's sectors, weighted by unionization. */
+  members: number;
+  /** 0-100, how the membership rates the bargain. Dues push it down, services push it up. */
+  approval: number;
+  /** Annual dues charged per member, in the union's home currency. */
+  duesPerWorkerAnnual: number;
+  /** Service programmes currently switched on. */
+  activeServices: UnionServiceId[];
+  /**
+   * Member-weighted average annual wage across this union's sectors, needed to
+   * price dues and services against local pay. 0 = not known yet (e.g. before
+   * the labour system has written sector wages).
+   */
+  annualWage: number;
   /** The union's standing public wage claim, or null when it has none. */
   demandedWageLevel: number | null;
   /** True while this union's country bans unions: every action 403s server-side. */
@@ -115,7 +131,7 @@ const HERO_IMAGE_URL =
 /**
  * v3 Phase 8 union leadership dashboard, restyled to match the stock market
  * page: hero banner + stats strip + tabbed content. Leadership is a rolling
- * contest (CEO-style) on its own tab — not a one-shot election that locks.
+ * contest (CEO-style) on its own tab, not a one-shot election that locks.
  */
 export default function UnionDashboardPage({ params }: PageProps) {
   const { id } = usePromise(params);
@@ -134,13 +150,13 @@ export default function UnionDashboardPage({ params }: PageProps) {
   const [leader, setLeader] = useState<CandidateOption | null>(null);
   const [candidateDraft, setCandidateDraft] = useState("");
   const [loading, setLoading] = useState(true);
-  // Distinguish a real load failure (network error, or a disabled feature — a
+  // Distinguish a real load failure (network error, or a disabled feature, a
   // 403) from a genuine 404, instead of rendering "Union not found" for both.
   const [loadError, setLoadError] = useState<string | null>(null);
   /** A side fetch failed while the union itself loaded. Shown as a banner, not a dead end. */
   const [partialError, setPartialError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  // Result of the last action, with its outcome — a failed action used to
+  // Result of the last action, with its outcome, a failed action used to
   // render as muted grey body text at the bottom of the panel, which reads as
   // "the button did nothing" rather than "you cannot afford this".
   const [actionResult, setActionResult] = useState<{ ok: boolean; text: string } | null>(null);
@@ -266,7 +282,16 @@ export default function UnionDashboardPage({ params }: PageProps) {
   // Every union command 403s while the country's ban holds, so the page has to
   // say so up front rather than letting the player spend a click to find out.
   const suspended = union?.suspended === true;
-  const canAffordRecruit = (union?.treasury ?? 0) >= RECRUIT_COST;
+  // Real headcount. Prefers the union's own persisted figure (what dues math
+  // actually uses); falls back to the live sector recompute so the page still
+  // reads correctly against a route that hasn't shipped `members` yet.
+  const members = union?.members ?? workforce?.unionizedWorkers ?? 0;
+  // Absent on documents written before dues v1, which reads as the same
+  // default the server uses (`BASE_APPROVAL`), not zero.
+  const approval = union?.approval ?? BASE_APPROVAL;
+  const duesPerWorkerAnnual = union?.duesPerWorkerAnnual ?? 0;
+  const activeServices = normalizeServiceIds(union?.activeServices);
+  const annualWage = union?.annualWage ?? 0;
   // Organize drives are paid in action points, so an empty action bar is the
   // single most common reason the button appears to do nothing.
   const organizeActionCost = union?.organizeActionCost ?? 0;
@@ -443,22 +468,28 @@ export default function UnionDashboardPage({ params }: PageProps) {
             {isLeader && <span className="text-[11px] text-muted">(you)</span>}
           </div>
           <StatCell
-            label="Organizing"
-            value={organizingValue(union.membershipPressure)}
-            sub={organizingBand(union.membershipPressure)}
-            hint={ORGANIZING_TOOLTIP}
+            label="Members"
+            value={members.toLocaleString("en-US")}
+            sub={
+              workforce
+                ? {
+                    label: `${Math.round(workforce.density * 100)}% of workforce`,
+                    toneClass: "text-muted",
+                  }
+                : undefined
+            }
+            hint="Real headcount: workers across this union's sectors, weighted by how unionized each one is. This is what dues are charged against."
           />
-          {workforce && (
-            <StatCell
-              label="Members"
-              value={`~${workforce.unionizedWorkers.toLocaleString("en-US")}`}
-              sub={{
-                label: `${Math.round(workforce.density * 100)}% of workforce`,
-                toneClass: "text-muted",
-              }}
-              hint="Estimated workers this union represents: the unionized headcount summed across every sector it stands in, and that count as a share of the whole workforce. Coverage, not bargaining power (see Strength)."
-            />
-          )}
+          <StatCell
+            label="Approval"
+            value={`${Math.round(approval)}%`}
+            sub={{
+              label: approval >= 50 ? "Members are satisfied" : "Members are unhappy",
+              toneClass:
+                approval >= 50 ? "text-success" : approval >= 30 ? "text-warning" : "text-error",
+            }}
+            hint="How the membership rates the bargain, 0-100. Dues push it down, running services pushes it up. It anchors whether the union grows into new shops or bleeds density."
+          />
           <StatCell
             label="Treasury"
             value={Math.round(union.treasury).toLocaleString("en-US")}
@@ -569,6 +600,41 @@ export default function UnionDashboardPage({ params }: PageProps) {
         <ActionResult result={organizeResult} />
       </section>
 
+      {/* Dues and services: the head's two levers over the union's finances
+          and approval. Everyone sees the current values; only the head can
+          move them. */}
+      <section className="space-y-5 rounded-xl border border-card-border bg-card p-5">
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
+            Dues &amp; Services
+          </h2>
+          <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+        </div>
+        <UnionDuesPanel
+          unionId={id}
+          countryId={union.countryId}
+          members={members}
+          duesPerWorkerAnnual={duesPerWorkerAnnual}
+          annualWage={annualWage}
+          activeServices={activeServices}
+          isHead={isLeader}
+          suspended={suspended}
+          onSaved={loadData}
+        />
+        <UnionServicesPanel
+          unionId={id}
+          countryId={union.countryId}
+          members={members}
+          annualWage={annualWage}
+          treasury={union.treasury}
+          duesPerWorkerAnnual={duesPerWorkerAnnual}
+          activeServices={activeServices}
+          isHead={isLeader}
+          suspended={suspended}
+          onSaved={loadData}
+        />
+      </section>
+
       {union.pendingLeaderCharacterId &&
         myCharacterId === union.pendingLeaderCharacterId &&
         !isLeader && (
@@ -609,30 +675,15 @@ export default function UnionDashboardPage({ params }: PageProps) {
             <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {/* Same shape as the organize control above: button, cost line,
-                then the reason it is refused. A `title` never fires on a
-                disabled button, so the blocker has to be visible text. */}
-            <div className="flex flex-col gap-1">
-              <button
-                type="button"
-                disabled={actionPending || suspended || !canAffordRecruit}
-                onClick={() => runAction("recruit")}
-                className="w-fit rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
-              >
-                Run Recruitment Drive
-              </button>
-              <span className="text-[11px] text-muted">
-                Costs {RECRUIT_COST.toLocaleString("en-US")} from the treasury · you have{" "}
-                {Math.round(union.treasury).toLocaleString("en-US")}
-              </span>
-              {!canAffordRecruit && (
-                <span className="text-[11px] font-medium text-error">
-                  Not enough in the treasury. Dues come in each turn.
-                </span>
-              )}
-            </div>
-          </div>
+          {/* The recruitment drive that used to live here is retired. It only
+              ever raised `membershipPressure`, which no longer exists: members
+              are now counted from the workers in the sectors this union
+              actually represents. Growing the union means organizing a
+              specific sector, which happens on that sector's own page. */}
+          <p className="text-[11px] text-muted">
+            To grow this union, organize a sector directly from its page. A drive raises that
+            sector&apos;s unionization, and if it is held by a rival, it is a raid.
+          </p>
 
           {/* Public wage claim: a pressure signal, not a contract. It shows up
               as the per-local gap column below and as a callout on the CEO's
@@ -1126,7 +1177,7 @@ function StanceBadge({ stance }: { stance: "endorse" | "oppose" }) {
   );
 }
 
-/** Outcome of the last union action — success or the server's reason for refusing. */
+/** Outcome of the last union action, success or the server's reason for refusing. */
 function ActionResult({ result }: { result: { ok: boolean; text: string } | null }) {
   if (!result) return null;
   return (

@@ -325,6 +325,12 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         // can always link to the institution organizing it. Wage demands still
         // only count once that union has a leader, preserving the existing
         // player-run-union rule.
+        //
+        // Union dues v1 note: since players can found rivals, this find-one no
+        // longer identifies THE union of the industry, only one of them. It is
+        // kept for the existing wage-demand display, which predates rivals.
+        // Which union actually represents THIS sector is a separate lookup
+        // below, keyed on the sector's own `representingUnionId`.
         db
           .collection<Union>("unions")
           .findOne(
@@ -332,6 +338,16 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
             { projection: { name: 1, ownerId: 1, demandedWageLevel: 1 } }
           ),
       ]);
+
+    // Union dues v1: the union that actually holds this sector, which may be a
+    // founded rival rather than the seeded industry union above, or nobody at
+    // all. The sector page needs it to say whether organizing here is a first
+    // claim or a raid.
+    const representingUnionDoc = sector.representingUnionId
+      ? await db
+          .collection<Union>("unions")
+          .findOne({ _id: sector.representingUnionId }, { projection: { name: 1 } })
+      : null;
     const macroEcon: MacroEconomicValues = {
       inflationRate: federalBudget?.economicFactors?.inflationRate ?? null,
       debtToGdpRatio: federalBudget?.debtToGdpRatio ?? null,
@@ -697,7 +713,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         0
       );
       // True buyers' room for THIS sector's outputs, in sector output units.
-      // `headroomUnits` (the unowned pool) measures claimable market SHARE —
+      // `headroomUnits` (the unowned pool) measures claimable market SHARE,
       // under a clearing glut it reads tens of thousands of "room" while every
       // leg goes unsold (ticket #1027 follow-up: player read it as demand).
       //
@@ -724,7 +740,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         governorRampTurns: marketCtx.governorRampTurns,
         marketSharePercent: marketShare,
         // Distinct RIVAL corps in this (state, type) cell. `siblingsSectors` is
-        // already scoped to exactly that cell, so this needs no extra read —
+        // already scoped to exactly that cell, so this needs no extra read,
         // but it must be distinct CORPS, not sectors, or a rival holding two
         // sectors here would read as two competitors. Same definition as
         // `fetchSectorCompetitorCount`, which the build command charges from.
@@ -820,6 +836,12 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           : null,
         unionId: coveringIndustryUnionDoc?._id?.toString() ?? null,
         unionName: coveringIndustryUnionDoc?.name ?? null,
+        // Union dues v1: who holds THIS sector, as opposed to who organizes the
+        // industry. Null means unrepresented, so a drive here is a first claim
+        // rather than a raid. A representingUnionId pointing at a union that no
+        // longer exists reads as unrepresented rather than as a phantom holder.
+        representingUnionId: representingUnionDoc ? sector.representingUnionId?.toString() : null,
+        representingUnionName: representingUnionDoc?.name ?? null,
         createdAt: sector.createdAt,
         // For-sale listing, null when not listed. priceAnchor / npvAnchor are
         // ₳-denominated so the UI formatter routes through the viewer's wallet

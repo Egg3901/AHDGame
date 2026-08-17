@@ -1,20 +1,28 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { Bill, Character, Union } from "@/lib/db/types";
-import { RECRUIT_COST, applyRecruit } from "@/lib/unions/unionEconomy";
+import type { Bill, Character, CorporateSector, Union } from "@/lib/db/types";
 import { clampWageLevel } from "@/lib/labour/laborCost";
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
 import { getGameState } from "@/lib/gameState";
 import { isTurnProcessingNow } from "@/lib/turn/processingLock";
 import { NATIONAL_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
 import { buildNationalBillCountryScopeFilter } from "@/lib/legislature/nationalBillScope";
+import {
+  averageAnnualWage,
+  duesIncomePerTurn,
+  maxDuesForWage,
+  servicesCostPerTurn,
+  unionMembers,
+  type UnionMemberSector,
+} from "@/lib/unions/unionDues";
+import { normalizeServiceIds } from "@/lib/unions/unionServices";
 
 export type UnionActionResult =
   { ok: true; status: 200; [key: string]: unknown } | { ok: false; status: number; error: string };
 
 /**
  * Resolves a union by id and checks `character` is its leader. Shared
- * precondition for every action below — including the union-ban gate
+ * precondition for every action below, including the union-ban gate
  * (player suggestion #93): while the union's country has an enacted ban,
  * every leader action 403s. The budget flag (not `union.suspended`) is
  * checked because it is the enactment-time source of truth.
@@ -34,7 +42,11 @@ export async function resolveOwnedUnion(
   if (!union.ownerId || union.ownerId.toString() !== character._id.toString()) {
     return { ok: false, status: 403, error: "You do not lead this union." };
   }
-  if (await isUnionsBanned(db, union.countryId)) {
+  // `suspended` is checked alongside the budget flag so leader actions agree
+  // with the read surfaces ([id]/route.ts, leaderboard), which both render
+  // `suspended || banned` as suspended: a union shown frozen must not still
+  // accept dues/services/organize commands.
+  if (union.suspended === true || (await isUnionsBanned(db, union.countryId))) {
     return { ok: false, status: 403, error: UNIONS_BANNED_MESSAGE };
   }
   return { ok: true, union };
@@ -44,7 +56,7 @@ export async function resolveOwnedUnion(
  * The corp turn's sectorOps bulk write (unionization/strike fields) and
  * `processUnionsTurn`'s union bulk write (treasury/membershipPressure) both
  * recompute from a pre-mutation snapshot with no optimistic-concurrency
- * filter — an action landing mid-turn would be silently clobbered (paid,
+ * filter: an action landing mid-turn would be silently clobbered (paid,
  * no effect, no error). Reject during the window instead of racing.
  */
 export async function rejectIfTurnProcessing(db: Db): Promise<UnionActionResult | null> {
@@ -53,49 +65,10 @@ export async function rejectIfTurnProcessing(db: Db): Promise<UnionActionResult 
     return {
       ok: false,
       status: 409,
-      error: "The game is processing this turn — try again shortly.",
+      error: "The game is processing this turn, try again shortly.",
     };
   }
   return null;
-}
-
-/** Recruitment drive: spend the union's treasury to push `membershipPressure` up (diminishing returns). */
-export async function recruitForUnion(
-  db: Db,
-  character: Character,
-  unionId: string
-): Promise<UnionActionResult> {
-  const turnBusy = await rejectIfTurnProcessing(db);
-  if (turnBusy) return turnBusy;
-
-  const resolved = await resolveOwnedUnion(db, character, unionId);
-  if (!resolved.ok) return resolved;
-  const { union } = resolved;
-
-  if (union.treasury < RECRUIT_COST) {
-    return {
-      ok: false,
-      status: 402,
-      error: "Not enough union treasury to run a recruitment drive.",
-    };
-  }
-  const newPressure = applyRecruit(union.membershipPressure);
-  const now = new Date();
-  const result = await db.collection<Union>("unions").updateOne(
-    {
-      _id: union._id,
-      treasury: { $gte: RECRUIT_COST },
-      membershipPressure: union.membershipPressure,
-    },
-    {
-      $inc: { treasury: -RECRUIT_COST },
-      $set: { membershipPressure: newPressure, updatedAt: now },
-    }
-  );
-  if (result.modifiedCount === 0) {
-    return { ok: false, status: 409, error: "Union state changed — please retry." };
-  }
-  return { ok: true, status: 200, membershipPressure: newPressure, cashSpent: RECRUIT_COST };
 }
 
 /**
@@ -125,7 +98,123 @@ export async function setUnionWageDemand(
 }
 
 /**
- * Record this union's public stance on a bill — visibility-only this phase
+ * Sectors this union actually represents, i.e. `CorporateSector.representingUnionId`
+ * points at it, the dues/services base under union dues v1. Distinct from the
+ * broader "every sector matching (countryId, sectorType)" candidate scope
+ * `[id]/route.ts` still uses for bargaining/employer listings: dues and
+ * services are only ever charged/valued against shops this union has actually
+ * won, never the whole industry it merely shares a type with.
+ */
+async function loadRepresentedSectors(db: Db, union: Union): Promise<UnionMemberSector[]> {
+  return db
+    .collection<CorporateSector>("corporateSectors")
+    .find(
+      { representingUnionId: union._id },
+      { projection: { workers: 1, unionization: 1, wagePerWorker: 1 } }
+    )
+    .toArray();
+}
+
+/**
+ * Set the union's annual per-member dues rate. Clamped to
+ * `[0, maxDuesForWage(averageAnnualWage)]` against the represented workforce's
+ * actual wages, so the same rate can never be interpreted differently across
+ * countries/eras (see `unionServices.ts` header) and a head can never charge
+ * above the hard ceiling by sending an oversized number.
+ */
+export async function setUnionDues(
+  db: Db,
+  character: Character,
+  unionId: string,
+  duesPerWorkerAnnual: number
+): Promise<UnionActionResult> {
+  const turnBusy = await rejectIfTurnProcessing(db);
+  if (turnBusy) return turnBusy;
+
+  const resolved = await resolveOwnedUnion(db, character, unionId);
+  if (!resolved.ok) return resolved;
+  const { union } = resolved;
+
+  if (!Number.isFinite(duesPerWorkerAnnual) || duesPerWorkerAnnual < 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: "duesPerWorkerAnnual must be a non-negative finite number.",
+    };
+  }
+
+  const sectors = await loadRepresentedSectors(db, union);
+  const annualWage = averageAnnualWage(sectors);
+  const maxDues = maxDuesForWage(annualWage);
+  // A union with no represented paid workforce has a 0 ceiling. Say so
+  // instead of silently storing 0 against a positive request.
+  if (maxDues <= 0 && duesPerWorkerAnnual > 0) {
+    return {
+      ok: false,
+      status: 400,
+      error:
+        "This union represents no paid workforce yet, so dues cannot be set. Organize a sector first.",
+    };
+  }
+  const clamped = Math.min(Math.max(0, duesPerWorkerAnnual), maxDues);
+  const members = unionMembers(sectors);
+
+  await db
+    .collection<Union>("unions")
+    .updateOne(
+      { _id: union._id },
+      { $set: { duesPerWorkerAnnual: clamped, updatedAt: new Date() } }
+    );
+
+  return {
+    ok: true,
+    status: 200,
+    duesPerWorkerAnnual: clamped,
+    maxDuesPerWorkerAnnual: maxDues,
+    members,
+    duesIncomePerTurn: duesIncomePerTurn(members, clamped),
+  };
+}
+
+/**
+ * Switch the union's service slate on/off. Unknown ids are dropped by
+ * `normalizeServiceIds` rather than stored, so a stale or hand-edited
+ * document can never widen the effect beyond the four defined tiers.
+ */
+export async function setUnionServices(
+  db: Db,
+  character: Character,
+  unionId: string,
+  activeServices: readonly string[]
+): Promise<UnionActionResult> {
+  const turnBusy = await rejectIfTurnProcessing(db);
+  if (turnBusy) return turnBusy;
+
+  const resolved = await resolveOwnedUnion(db, character, unionId);
+  if (!resolved.ok) return resolved;
+  const { union } = resolved;
+
+  const normalized = normalizeServiceIds(activeServices);
+
+  const sectors = await loadRepresentedSectors(db, union);
+  const annualWage = averageAnnualWage(sectors);
+  const members = unionMembers(sectors);
+
+  await db
+    .collection<Union>("unions")
+    .updateOne({ _id: union._id }, { $set: { activeServices: normalized, updatedAt: new Date() } });
+
+  return {
+    ok: true,
+    status: 200,
+    activeServices: normalized,
+    members,
+    servicesCostPerTurn: servicesCostPerTurn(members, annualWage, normalized),
+  };
+}
+
+/**
+ * Record this union's public stance on a bill, visibility-only this phase
  * (v3 Phase 8 deliberate scope cut), no mechanical vote-swing effect yet.
  */
 export async function endorseBill(

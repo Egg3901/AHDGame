@@ -1,8 +1,14 @@
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { BargainingCampaign, BargainingEscalationLevel, GameConfig } from "@/lib/db/types";
+import type {
+  BargainingCampaign,
+  BargainingEscalationLevel,
+  GameConfig,
+  Union,
+} from "@/lib/db/types";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
 import type { PoliticalMetricId } from "@/lib/politicalMetrics/types";
+import { normalizeServiceIds, servicesWorkerSecurityNudge } from "./unionServices";
 
 /** Political attention fades unless a dispute escalates again. */
 export const LABOUR_DISPUTE_DECAY = 0.9;
@@ -34,6 +40,9 @@ type LabourPoliticalCampaign = Pick<
   | "endedAtTurn"
 >;
 
+/** Union dues v1: the fields `buildLabourRelationsPoliticalNudges` needs to turn a running service slate into a `workerSecurity` nudge. */
+type LabourPoliticalUnion = Pick<Union, "countryId" | "activeServices" | "suspended">;
+
 type CountryPoliticalNudges = Map<CountryId, Map<PoliticalMetricId, number>>;
 
 function clamp(value: number, limit: number): number {
@@ -56,19 +65,39 @@ function add(
 }
 
 /**
- * Convert bargaining outcomes into small, temporary political-board nudges.
+ * Convert bargaining outcomes AND running union services into small, temporary
+ * political-board nudges.
  *
  * An unresolved dispute weakens the observed settlement and civic-institution
  * signals. Escalation raises the initial severity, while attention decays from
  * the latest escalation. A settlement reverses the sign and decays from the
  * settlement turn. Economic strike damage is deliberately absent here because
  * sector revenue, employment, profits, and GDP already carry that consequence.
+ *
+ * Union dues v1: `unions` feeds `servicesWorkerSecurityNudge()` into the SAME
+ * `economy.workerSecurity` channel the bargaining campaigns above already
+ * write, through the same `add()` + end-of-function `clamp(value,
+ * LABOUR_POLITICAL_CAPS[...])` pair, one capped total, not a second uncapped
+ * channel onto the same metric. There is no separate decay constant for this
+ * term: it is recomputed fresh from the union's CURRENT `activeServices` every
+ * call (nothing here persists an accumulator), so it rises and falls with the
+ * union's own service choices exactly as fast as the caller re-invokes this
+ * function each turn, the political board's own per-turn consumption of this
+ * map is what gives it the "existing decay," not a second bespoke one grafted
+ * on top of a value with no natural start turn to decay from.
  */
 export function buildLabourRelationsPoliticalNudges(
   campaigns: readonly LabourPoliticalCampaign[],
-  currentTurn: number
+  currentTurn: number,
+  unions: readonly LabourPoliticalUnion[] = []
 ): CountryPoliticalNudges {
   const nudges: CountryPoliticalNudges = new Map();
+
+  for (const union of unions) {
+    if (union.suspended) continue;
+    const nudge = servicesWorkerSecurityNudge(normalizeServiceIds(union.activeServices));
+    if (nudge !== 0) add(nudges, union.countryId, "economy.workerSecurity", nudge);
+  }
 
   for (const campaign of campaigns) {
     if (campaign.status === "dispute") {
@@ -112,31 +141,42 @@ export async function loadLabourRelationsPoliticalNudgesByCountry(
     .findOne({ _id: "default" }, { projection: { labourSystemMode: 1 } });
   if (!(await isLabourFullMode(config))) return new Map();
 
-  const campaigns = await db
-    .collection<BargainingCampaign>("bargainingCampaigns")
-    .find(
-      {
-        $or: [
-          { status: "dispute" },
-          {
-            status: "settled",
-            endedAtTurn: { $gte: currentTurn - LABOUR_SETTLEMENT_EFFECT_TURNS },
-          },
-        ],
-      },
-      {
-        projection: {
-          countryId: 1,
-          status: 1,
-          escalationLevel: 1,
-          "mandate.leverage": 1,
-          disputeStartedAtTurn: 1,
-          escalationStartedAtTurn: 1,
-          endedAtTurn: 1,
+  const [campaigns, unions] = await Promise.all([
+    db
+      .collection<BargainingCampaign>("bargainingCampaigns")
+      .find(
+        {
+          $or: [
+            { status: "dispute" },
+            {
+              status: "settled",
+              endedAtTurn: { $gte: currentTurn - LABOUR_SETTLEMENT_EFFECT_TURNS },
+            },
+          ],
         },
-      }
-    )
-    .toArray();
+        {
+          projection: {
+            countryId: 1,
+            status: 1,
+            escalationLevel: 1,
+            "mandate.leverage": 1,
+            disputeStartedAtTurn: 1,
+            escalationStartedAtTurn: 1,
+            endedAtTurn: 1,
+          },
+        }
+      )
+      .toArray(),
+    // Union dues v1: only unions actually running something can produce a
+    // nudge, skips the (common) idle-slate union at the query level.
+    db
+      .collection<Union>("unions")
+      .find(
+        { suspended: { $ne: true }, activeServices: { $exists: true, $not: { $size: 0 } } },
+        { projection: { countryId: 1, activeServices: 1, suspended: 1 } }
+      )
+      .toArray(),
+  ]);
 
-  return buildLabourRelationsPoliticalNudges(campaigns, currentTurn);
+  return buildLabourRelationsPoliticalNudges(campaigns, currentTurn, unions);
 }

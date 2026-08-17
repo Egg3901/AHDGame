@@ -27,6 +27,7 @@ import PricingPanel from "./sections/PricingPanel";
 import CapitalPanel from "./sections/CapitalPanel";
 import MarketRewardBanner from "./sections/MarketRewardBanner";
 import UnionBustingPanel from "./sections/UnionBustingPanel";
+import { OrganizeSectorAction } from "@/components/unions/OrganizeSectorAction";
 import ManagementPanel from "./sections/ManagementPanel";
 import AbandonPanel from "./sections/AbandonPanel";
 import ForSalePanel from "./sections/ForSalePanel";
@@ -351,7 +352,7 @@ export default function SectorDetailPage() {
 
     dispatch({ type: "SET_GROWTH_UPDATING", value: true });
     dispatch({ type: "SET_GROWTH_MESSAGE", value: "" });
-    // Optimistic update so the slider reads the new target immediately —
+    // Optimistic update so the slider reads the new target immediately,
     // otherwise rapid clicks feel like nothing is happening while the request
     // is in flight.
     dispatch({ type: "UPDATE_SECTOR_PARTIAL", patch: { targetGrowthRate: clamped } });
@@ -383,7 +384,7 @@ export default function SectorDetailPage() {
       dispatch({ type: "UPDATE_SECTOR_PARTIAL", patch: { targetGrowthRate: previousTarget } });
       dispatch({
         type: "SET_GROWTH_MESSAGE",
-        value: "Network error — growth target was not updated.",
+        value: "Network error, growth target was not updated.",
       });
     } finally {
       dispatch({ type: "SET_GROWTH_UPDATING", value: false });
@@ -548,7 +549,7 @@ export default function SectorDetailPage() {
       });
       const result = await res.json();
       if (res.ok) {
-        // Sector ownership changed — redirect to the buyer's corp page so the
+        // Sector ownership changed, redirect to the buyer's corp page so the
         // viewer lands on a page that still exists for them.
         router.push(`/corporation/${forSaleInfo.viewerCorporationId}?tab=sectors`);
       } else {
@@ -960,10 +961,20 @@ export default function SectorDetailPage() {
                 onBusted={fetchData}
               />
             )}
+            {labourFullEnabled && (
+              <OrganizeSectorAction
+                countryId={sectorCountryId}
+                sectorType={sector.sectorType}
+                sectorId={sectorId}
+                representingUnionId={sector.representingUnionId}
+                representingUnionName={sector.representingUnionName}
+                onOrganized={fetchData}
+              />
+            )}
           </div>
         )}
 
-        {/* Management section — CEO only, collapsible */}
+        {/* Management section, CEO only, collapsible */}
         {isCeo && activeTab === "management" && (
           <div className="mx-auto max-w-3xl" role="tabpanel">
             <ManagementPanel>

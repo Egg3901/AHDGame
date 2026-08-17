@@ -1,5 +1,5 @@
 /**
- * Unit tests for processSectors — the pure computation core of the corporation turn.
+ * Unit tests for processSectors, the pure computation core of the corporation turn.
  *
  * processSectors is a pure function (no DB calls) that accepts pre-built lookup
  * maps and returns bulkWrite ops + payment maps. This lets us test the financial
@@ -274,7 +274,7 @@ describe("expropriation-risk margin drag", () => {
     const lookups = baseLookups([soe], [sector]);
     lookups.investorConfidenceByCountry = new Map([["US", 0]]);
     // Should not throw and the SOE path applies the SOE efficiency penalty, not
-    // the expropriation drag — exercised here for coverage / no-crash.
+    // the expropriation drag, exercised here for coverage / no-crash.
     const result = processSectors(lookups, 1, new Date());
     expect(result.sectorsProcessed).toBe(1);
   });
@@ -300,7 +300,7 @@ describe("total-embargo corporate suppression", () => {
     const op = result.sectorOps.find((o) => o.updateOne.filter._id.equals(usSector._id));
     expect(op).toBeDefined();
     expect(op!.updateOne.update.$set!.embargoSuspended).toBe(true);
-    // Stored revenue is frozen, not wiped — resumes when the embargo lifts.
+    // Stored revenue is frozen, not wiped, resumes when the embargo lifts.
     expect(op!.updateOne.update.$set!.revenue).toBe(24_000);
   });
 
@@ -340,7 +340,7 @@ describe("total-embargo corporate suppression", () => {
     });
     const result = processSectors(embargoed, 1, new Date());
 
-    // Not fully mothballed — some revenue survives (contrast with the legacy
+    // Not fully mothballed, some revenue survives (contrast with the legacy
     // path above, which drives totalRevenueGenerated to exactly 0).
     expect(result.totalRevenueGenerated).toBeGreaterThan(0);
     // Roughly half lost (exposure 0.5): reduced vs the unembargoed baseline.
@@ -351,7 +351,7 @@ describe("total-embargo corporate suppression", () => {
     expect(op!.updateOne.update.$set!.embargoSuspended).toBe(true);
     expect(op!.updateOne.update.$set!.embargoExportExposure).toBeCloseTo(0.5, 5);
     // The sector still incurs operating cost (not mothballed): with income
-    // flowing, some tax/costs move — unlike the legacy path where costs are 0.
+    // flowing, some tax/costs move, unlike the legacy path where costs are 0.
     expect(result.sectorsProcessed).toBe(1);
   });
 });
@@ -410,7 +410,7 @@ describe("sector revenue and income calculation", () => {
       lookups.ceoBusinessAcumenByCorpId = new Map([[corp._id.toString(), acumen]]);
       return processSectors(lookups, 1, new Date()).totalRevenueGenerated;
     };
-    // Revenue is identical regardless of the CEO's Business Acumen — the stat no
+    // Revenue is identical regardless of the CEO's Business Acumen, the stat no
     // longer multiplies output; its effect moved to growth cost.
     expect(revenueFor(10)).toBeCloseTo(revenueFor(1), 6);
     expect(revenueFor(10)).toBeCloseTo(24_000 / TURNS_PER_DAY, 4);
@@ -621,8 +621,8 @@ describe("corporate tax deduction", () => {
     const lookups = baseLookups([corp], [usSector, ukSector]);
     // Domestic vs foreign rates differ per jurisdiction.
     lookups.domesticCorpTaxRateByCountry.set("US", 20);
-    lookups.foreignCorpTaxRateByCountry.set("US", 30); // US foreign rate (unused here — corp is US-HQ)
-    lookups.domesticCorpTaxRateByCountry.set("UK", 25); // UK domestic (unused — corp is foreign to UK)
+    lookups.foreignCorpTaxRateByCountry.set("US", 30); // US foreign rate (unused here, corp is US-HQ)
+    lookups.domesticCorpTaxRateByCountry.set("UK", 25); // UK domestic (unused, corp is foreign to UK)
     lookups.foreignCorpTaxRateByCountry.set("UK", 45); // UK foreign rate applies to the US-HQ corp
 
     const result = processSectors(lookups, 1, new Date());
@@ -770,7 +770,7 @@ describe("corporate tax deduction", () => {
     });
     const lookups = baseLookups([corp], [sector]);
     lookups.domesticCorpTaxRateByCountry.set("US", 21);
-    // domesticStateCorpTaxRateByState empty — NV not registered.
+    // domesticStateCorpTaxRateByState empty, NV not registered.
 
     const result = processSectors(lookups, 1, new Date());
     const snapshot = result.corpSnapshots[0];
@@ -864,7 +864,7 @@ describe("dividend payments to shareholders", () => {
       totalShares: 10_000_000,
       shareholders: [{ characterId: charId, shares: 10_000_000 }],
       // Large marketing budget drives incomePreDividends negative
-      marketingBudget: 240_000_000, // $10M/turn — vastly exceeds sector revenue
+      marketingBudget: 240_000_000, // $10M/turn, vastly exceeds sector revenue
     });
     const sector = makeSector(corp._id, {
       revenue: 24_000,
@@ -886,7 +886,7 @@ describe("dividend payments to shareholders", () => {
     // permanently overwrite the CEO's chosen dividendRate to 0 in corpOps, silently
     // disabling all future dividends even once the corp turned profitable again.
     // The turn-level skip (no payment this turn) is still correct and covered by
-    // the "pays no dividends when income is non-positive" test above — only the
+    // the "pays no dividends when income is non-positive" test above, only the
     // stored corp.dividendRate must survive.
     const corp = makeCorp({
       dividendRate: 30,
@@ -897,7 +897,7 @@ describe("dividend payments to shareholders", () => {
     });
     const sector = makeSector(corp._id, {
       revenue: 24_000,
-      profitMargin: 50, // $500/turn profit — dwarfed by marketing
+      profitMargin: 50, // $500/turn profit, dwarfed by marketing
     });
     const lookups = baseLookups([corp], [sector]);
 
@@ -938,7 +938,7 @@ describe("dividend payments to shareholders", () => {
     // Regression: a corp with an operating LOSS but bond coupon income large
     // enough to make net income positive must still distribute per its rate.
     // The payout cap uses netIncomeBeforeDividends (incl. coupons), not
-    // operating-only afterTaxOperating — otherwise the corp passes the
+    // operating-only afterTaxOperating, otherwise the corp passes the
     // eligibility gate yet is capped to $0, silently paying nothing.
     const charId = new ObjectId();
     const corp = makeCorp({
@@ -977,7 +977,7 @@ describe("dividend payments to shareholders", () => {
       totalShares: 10_000_000,
       shareholders: [
         { characterId: charId, shares: 5_000_000 }, // valid
-        { shares: 5_000_000 }, // no characterId — should be skipped
+        { shares: 5_000_000 }, // no characterId, should be skipped
       ],
     });
     const sector = makeSector(corp._id, {
@@ -1024,7 +1024,7 @@ describe("dividend payments to shareholders", () => {
     // JP corp with single 100% character shareholder: the ₳ dividend pool must be
     // multiplied by the JPY FX rate before being tagged under "JPY" in the payment
     // map. Without FX conversion, the raw ₳ value would land in the local-currency
-    // balance field — see docs/plans/archive/2026-04/2026-04-19-character-payment-fx-conversion.md.
+    // balance field, see docs/plans/archive/2026-04/2026-04-19-character-payment-fx-conversion.md.
     //
     // Sector storage: sector.revenue is in the sector's HOST-state currency. This
     // sector operates in Japan (countryId "JP" → JPY), matching the JP corp, so the
@@ -1076,7 +1076,7 @@ describe("CEO salary payments", () => {
       ceoSalary: 240_000, // $240k/day → $10k/turn
     });
     // Revenue high enough that the 1.25x-gross-revenue cap (Bug #0728) does not
-    // bind here — this test isolates the per-turn salary fraction, not the cap.
+    // bind here, this test isolates the per-turn salary fraction, not the cap.
     // 1.25 × (240_000 / 24) = 12_500 ≥ 10_000 requested.
     const sector = makeSector(corp._id, { revenue: 240_000, profitMargin: 100 });
     const lookups = baseLookups([corp], [sector]);
@@ -1255,7 +1255,7 @@ describe("share price calculation", () => {
     // Mirror of previous test, but corpB's debt is NOT in the lookup map (simulates
     // natcorp exclusion done in buildLookups). Result: corpB still shows inflated price
     // because the proceeds count without the offsetting debt. This guards the natcorp
-    // exemption — its share-price formula stays the legacy "cash-only" treatment.
+    // exemption, its share-price formula stays the legacy "cash-only" treatment.
     const corpA = makeCorp({
       name: "A",
       liquidCapital: 50_000_000,
@@ -1522,7 +1522,7 @@ describe("bulkWrite operation structure", () => {
 describe("income accumulation for tax base blending", () => {
   it("tracks domestic income only for profitable sectors (clamps at 0)", () => {
     // Sector-level operating income: only profitable sectors (sectorOpIncome > 0) contribute.
-    // Corp-level loss (heavy marketing) does not depress sector operating income — the
+    // Corp-level loss (heavy marketing) does not depress sector operating income, the
     // sectors' own profitability is what drives the tax base.
     const profitableCorp = makeCorp({ countryId: "US" });
     const lossyCorp = makeCorp({ countryId: "US", marketingBudget: 240_000_000 });
@@ -1712,7 +1712,7 @@ describe("local-currency storage (v0.2.6)", () => {
 // burden, and sustained-negative-production penalty all flow through to the
 // corp-level income (incomePreDividends) and not just sectorNPV.
 
-describe("processSectors — dominance regulatory burden flows to corp earnings", () => {
+describe("processSectors, dominance regulatory burden flows to corp earnings", () => {
   it("regulatoryBurden is deducted from incomePreDividends, not just sectorNPV", () => {
     // Without dominance, baseline income calculation:
     //   hourlyRevenue = 1000, profitMargin = 50% → maintenance = 500 → income = 500
@@ -1752,20 +1752,20 @@ describe("processSectors — dominance regulatory burden flows to corp earnings"
   });
 });
 
-// ── Growth-cost dominance multiplier — SOE exemption ──────────────────────────
+// ── Growth-cost dominance multiplier, SOE exemption ──────────────────────────
 // Bug: sandbox-world audit (657-turn run) found command-economy sectors'
 // revenue-weighted growth-cost share climbing from 7% to 31% of revenue,
-// continuously, for the whole run — the single largest driver behind the
+// continuously, for the whole run, the single largest driver behind the
 // corporate world's one-way market-cap decline. Root cause: an SOE is exempt
-// from the affordability brake (soft budget constraint — state firms don't go
+// from the affordability brake (soft budget constraint, state firms don't go
 // bankrupt) AND from the dominance MARGIN penalty / regulatory burden ("a
 // nationalized industry is a state monopoly by design", Bug #0775), but was
-// NOT exempt from the dominance GROWTH-COST multiplier — so a NatCorp (almost
+// NOT exempt from the dominance GROWTH-COST multiplier, so a NatCorp (almost
 // always the sole national producer, i.e. structurally dominant by design)
 // paid up to 3x growth cost for the very monopoly condition the game
 // otherwise treats as an intentional, unpenalised feature of state ownership,
 // with nothing ever pulling its growth rate back down in response.
-describe("processSectors — growth-cost dominance multiplier exempts SOEs", () => {
+describe("processSectors, growth-cost dominance multiplier exempts SOEs", () => {
   function growthCostFromResult(
     result: ReturnType<typeof processSectors>,
     sectorId: ObjectId
@@ -1802,7 +1802,7 @@ describe("processSectors — growth-cost dominance multiplier exempts SOEs", () 
     const dominantResult = processSectors(dominant, 1, new Date());
     const dominantCost = growthCostFromResult(dominantResult, dominantSector._id);
 
-    // Private (market-economy) firms keep paying the monopoly surcharge — the
+    // Private (market-economy) firms keep paying the monopoly surcharge, the
     // fix only narrows the SOE exemption gap, it does not remove the
     // mechanism for the corps it was designed to police.
     expect(dominantCost).toBeGreaterThan(baselineCost);
@@ -1834,7 +1834,7 @@ describe("processSectors — growth-cost dominance multiplier exempts SOEs", () 
     const highShareCost = growthCostFromResult(highShareResult, highShareSector._id);
 
     // A 100%-share NatCorp pays exactly the same growth cost as one at 0%
-    // share — the dominance multiplier is neutral (1x) for SOEs, matching the
+    // share, the dominance multiplier is neutral (1x) for SOEs, matching the
     // sibling exemption already applied to the margin penalty and the
     // regulatory burden above.
     expect(highShareCost).toBeCloseTo(lowShareCost, 6);
@@ -1848,7 +1848,7 @@ describe("processSectors — growth-cost dominance multiplier exempts SOEs", () 
 // processSector's own per-turn arithmetic should compound independently of an
 // external driver (growth rate, dominance share, macro/commodity mods) that
 // this test holds constant throughout.
-describe("processSectors — static-input horizon stability", () => {
+describe("processSectors, static-input horizon stability", () => {
   it("keeps the cost/revenue ratio flat across 50 turns of unchanging inputs", () => {
     const corp = makeCorp();
     let sector = makeSector(corp._id, {
@@ -1867,7 +1867,7 @@ describe("processSectors — static-input horizon stability", () => {
       const result = processSectors(lookups, turn, new Date());
 
       // Use the same revenue/totalCosts pair persisted to corporationHistory
-      // (the exact fields the sandbox-world audit compared) — pre-tax,
+      // (the exact fields the sandbox-world audit compared), pre-tax,
       // pre-dividend, so the ratio isolates the operating-cost mechanism
       // under test instead of unrelated tax/dividend drift.
       const snap = result.corpSnapshots[0];
@@ -1884,21 +1884,21 @@ describe("processSectors — static-input horizon stability", () => {
         ...sector,
         ...nextFields,
         // `effectiveProfitMargin` is telemetry-only (never read back into the
-        // economy — see sectorTurn.ts); the seeded `profitMargin` constant stays
+        // economy, see sectorTurn.ts); the seeded `profitMargin` constant stays
         // the baseline every turn, exactly as production does.
       } as CorporateSector;
     }
 
     const firstRatio = ratios[0];
     const lastRatio = ratios[ratios.length - 1];
-    // Flat within a tight tolerance — no silent multi-turn compounding.
+    // Flat within a tight tolerance, no silent multi-turn compounding.
     expect(lastRatio).toBeCloseTo(firstRatio, 2);
   });
 });
 
 // ── Per-turn escrow funding (escrow buyback mode) ─────────────────────────────
 
-describe("processSectors — per-turn escrow funding", () => {
+describe("processSectors, per-turn escrow funding", () => {
   type CorpInc = {
     updateOne: { update: { $inc: { liquidCapital: number; shareEscrowBalance?: number } } };
   };
@@ -1965,7 +1965,7 @@ describe("processSectors — per-turn escrow funding", () => {
   });
 });
 
-describe("processSectors — sustained-negative-production tracker", () => {
+describe("processSectors, sustained-negative-production tracker", () => {
   it("counter increments and persists to the sectorUpdate", () => {
     const corp = makeCorp();
     const sector = makeSector(corp._id, {
@@ -2031,7 +2031,7 @@ describe("sector tech-tree effects", () => {
   });
 });
 
-describe("v3 Phase 5 — NPC unionization metric (labourSystemMode ≥ 'unions')", () => {
+describe("v3 Phase 5, NPC unionization metric (labourSystemMode ≥ 'unions')", () => {
   function sectorOpSet(
     result: ReturnType<typeof processSectors>,
     sectorId: ObjectId
@@ -2130,7 +2130,7 @@ describe("v3 Phase 5 — NPC unionization metric (labourSystemMode ≥ 'unions')
   });
 });
 
-describe("v3 Phase 6 — strikes & unionPremium (labourSystemMode ≥ 'unions')", () => {
+describe("v3 Phase 6, strikes & unionPremium (labourSystemMode ≥ 'unions')", () => {
   function sectorOpSet(
     result: ReturnType<typeof processSectors>,
     sectorId: ObjectId
@@ -2265,7 +2265,7 @@ describe("v3 Phase 6 — strikes & unionPremium (labourSystemMode ≥ 'unions')"
       wageLevel: 1, // raised back to match expectation this turn
       unionization: 60,
       workerExpectationIndex: 1,
-      strikeStartedAtTurn: 9, // started 1 turn ago — well before STRIKE_DURATION_TURNS would elapse
+      strikeStartedAtTurn: 9, // started 1 turn ago, well before STRIKE_DURATION_TURNS would elapse
     });
     const result = processSectors(
       baseLookups([corp], [sector]),
@@ -2293,12 +2293,12 @@ describe("v3 Phase 6 — strikes & unionPremium (labourSystemMode ≥ 'unions')"
     const corpWaitout = makeCorp();
     const corpCounterfactual = makeCorp();
     // Identical conditions, except the counterfactual sector never went on
-    // strike (no strikeStartedAtTurn) — isolates the bump from the ordinary
+    // strike (no strikeStartedAtTurn), isolates the bump from the ordinary
     // unionization drift both sectors undergo this turn.
     const sectorWaitout = makeSector(corpWaitout._id, {
       wageLevel: 0.8,
       unionization: 60,
-      workerExpectationIndex: 1.2, // gap stays wide — no concession
+      workerExpectationIndex: 1.2, // gap stays wide, no concession
       strikeStartedAtTurn: startTurn,
     });
     const sectorCounterfactual = makeSector(corpCounterfactual._id, {
@@ -2344,7 +2344,7 @@ describe("v3 Phase 6 — strikes & unionPremium (labourSystemMode ≥ 'unions')"
   });
 });
 
-describe("v3 Phase 7b/8 — union-law bias & membership-pressure wiring (labourSystemMode ≥ 'full')", () => {
+describe("v3 Phase 7b/8, union-law bias & membership-pressure wiring (labourSystemMode ≥ 'full')", () => {
   function sectorOpSet(
     result: ReturnType<typeof processSectors>,
     sectorId: ObjectId
@@ -2360,7 +2360,7 @@ describe("v3 Phase 7b/8 — union-law bias & membership-pressure wiring (labourS
   /**
    * `trendUnionization` is step-limited (≤1.5pp/turn), so a single turn can't
    * distinguish "higher target" once both scenarios' targets are more than
-   * one step above the starting value — both simply take the same first
+   * one step above the starting value, both simply take the same first
    * step. Iterate until convergence to compare final settled values instead.
    */
   function runUnionizationToConvergence(
@@ -2448,23 +2448,83 @@ describe("v3 Phase 7b/8 — union-law bias & membership-pressure wiring (labourS
     );
   });
 
-  it("an owned union's membershipPressure raises trended unionization for matching sectors", () => {
+  it("a represented sector's high union approval raises trended unionization relative to an unrepresented one", () => {
     const corpBase = makeCorp();
     const corpUnion = makeCorp();
+    const unionId = new ObjectId();
     const sectorBase = makeSector(corpBase._id, { wageLevel: 1, unionization: 0 });
-    const sectorUnion = makeSector(corpUnion._id, { wageLevel: 1, unionization: 0 });
+    const sectorUnion = makeSector(corpUnion._id, {
+      wageLevel: 1,
+      unionization: 0,
+      representingUnionId: unionId,
+    });
 
     const noUnion: LabourContext = { wagesEnabled: true, unionsEnabled: true, fullEnabled: true };
+    // Union dues v1: resolved via CorporateSector.representingUnionId, never a
+    // (countryId, sectorType) match, players can found rivals, so the industry
+    // pair no longer identifies one union.
     const withUnion: LabourContext = {
       wagesEnabled: true,
       unionsEnabled: true,
       fullEnabled: true,
-      ownedUnionMembershipPressureByKey: new Map([["US|manufacturing", 60]]),
+      unionsById: new Map([[unionId.toString(), { approval: 90, activeServices: [] }]]),
     };
 
     const baseUnionization = runUnionizationToConvergence(corpBase, sectorBase, noUnion);
-    const pressureUnionization = runUnionizationToConvergence(corpUnion, sectorUnion, withUnion);
-    expect(pressureUnionization).toBeGreaterThan(baseUnionization);
+    const approvalUnionization = runUnionizationToConvergence(corpUnion, sectorUnion, withUnion);
+    expect(approvalUnionization).toBeGreaterThan(baseUnionization);
+  });
+
+  it("a represented sector's LOW union approval lowers trended unionization relative to an unrepresented one, a badly run union bleeds its own density", () => {
+    const corpBase = makeCorp();
+    const corpUnion = makeCorp();
+    const unionId = new ObjectId();
+    // Start both above 0 so the low-approval case has room to fall.
+    const sectorBase = makeSector(corpBase._id, { wageLevel: 1, unionization: 40 });
+    const sectorUnion = makeSector(corpUnion._id, {
+      wageLevel: 1,
+      unionization: 40,
+      representingUnionId: unionId,
+    });
+
+    const noUnion: LabourContext = { wagesEnabled: true, unionsEnabled: true, fullEnabled: true };
+    const withBadUnion: LabourContext = {
+      wagesEnabled: true,
+      unionsEnabled: true,
+      fullEnabled: true,
+      unionsById: new Map([[unionId.toString(), { approval: 10, activeServices: [] }]]),
+    };
+
+    const baseUnionization = runUnionizationToConvergence(corpBase, sectorBase, noUnion);
+    const badApprovalUnionization = runUnionizationToConvergence(
+      corpUnion,
+      sectorUnion,
+      withBadUnion
+    );
+    expect(badApprovalUnionization).toBeLessThan(baseUnionization);
+  });
+
+  it("an unrepresented sector (no representingUnionId) is unaffected even when unionsById is populated", () => {
+    const corp = makeCorp();
+    const unionId = new ObjectId();
+    // No representingUnionId on this sector, it must not inherit some other
+    // union's approval just because SOME entry exists in the map.
+    const sector = makeSector(corp._id, { wageLevel: 1, unionization: 0 });
+
+    const withUnrelatedUnion: LabourContext = {
+      wagesEnabled: true,
+      unionsEnabled: true,
+      fullEnabled: true,
+      unionsById: new Map([[unionId.toString(), { approval: 100, activeServices: [] }]]),
+    };
+    const noUnion: LabourContext = { wagesEnabled: true, unionsEnabled: true, fullEnabled: true };
+
+    const corpB = makeCorp();
+    const sectorB = makeSector(corpB._id, { wageLevel: 1, unionization: 0 });
+
+    const unaffected = runUnionizationToConvergence(corp, sector, withUnrelatedUnion);
+    const base = runUnionizationToConvergence(corpB, sectorB, noUnion);
+    expect(unaffected).toBe(base);
   });
 
   it("baseline invariance: fullEnabled with bias 0 and no owned union is a no-op vs unions-only", () => {
@@ -2483,7 +2543,7 @@ describe("v3 Phase 7b/8 — union-law bias & membership-pressure wiring (labourS
       unionsEnabled: true,
       fullEnabled: true,
       unionLawBiasByCountry: new Map(),
-      ownedUnionMembershipPressureByKey: new Map(),
+      unionsById: new Map(),
     };
 
     const off = processSectors(
@@ -2680,14 +2740,14 @@ describe("market clearing", () => {
       ]),
     });
 
-    // Launch-safety governor (clearing leg). C8: the cap WIDENS with the ramp —
+    // Launch-safety governor (clearing leg). C8: the cap WIDENS with the ramp,
     // capEffective(0.15, λ) = 0.15 / (1 − λ), which is 0.30 at λ = 120/240 = 0.5.
     // The effective market factor (0.72 after the posture leg) now sits INSIDE
     // that ±30% band, so it survives the clamp untouched and only the ramp
     // applies: 1 + 0.5 × (0.72 − 1) = 0.86.
     //
     // Under the old constant ±15% cap the same factor was clamped to 0.85
-    // before ramping, giving 0.925 — the clamp was doing the work the market
+    // before ramping, giving 0.925, the clamp was doing the work the market
     // signal was supposed to do, and it never released.
     expect(cleared.totalRevenueGenerated).toBeCloseTo(baseline.totalRevenueGenerated * 0.86, 6);
   });

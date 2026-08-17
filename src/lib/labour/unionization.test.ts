@@ -13,7 +13,8 @@ import {
   UNIONIZATION_UNEMPLOYMENT_WEIGHT,
   UNIONIZATION_MINWAGE_WEIGHT,
   UNIONIZATION_LAW_WEIGHT,
-  UNIONIZATION_MEMBERSHIP_PRESSURE_WEIGHT,
+  UNIONIZATION_APPROVAL_WEIGHT,
+  UNIONIZATION_APPROVAL_NEUTRAL,
   decayUnionizationUnderBan,
   UNIONIZATION_BAN_DECAY_STEP_PER_TURN,
 } from "./unionization";
@@ -25,7 +26,10 @@ const NEUTRAL = {
   unemploymentRate: UNIONIZATION_NEUTRAL_UNEMPLOYMENT,
   minWageKaitzRatio: UNIONIZATION_NEUTRAL_KAITZ,
   unionLawBias: 0,
-  membershipPressure: 0,
+  // Union dues v1: 50 (UNIONIZATION_APPROVAL_NEUTRAL) is the neutral point,
+  // not 0, a represented sector whose union sits exactly at neutral approval
+  // contributes nothing to the drift target, same as an unrepresented one.
+  representingUnionApproval: UNIONIZATION_APPROVAL_NEUTRAL,
 };
 
 describe("unionizationDriftTarget", () => {
@@ -40,7 +44,7 @@ describe("unionizationDriftTarget", () => {
       unemploymentRate: undefined,
       minWageKaitzRatio: undefined,
       unionLawBias: undefined,
-      membershipPressure: undefined,
+      representingUnionApproval: undefined,
     });
     expect(out).toBe(UNIONIZATION_BASELINE);
   });
@@ -104,7 +108,7 @@ describe("unionizationDriftTarget", () => {
       unemploymentRate: 0,
       minWageKaitzRatio: 0,
       unionLawBias: 50,
-      membershipPressure: 100,
+      representingUnionApproval: 100,
     });
     expect(stressed).toBeLessThanOrEqual(100);
     expect(stressed).toBeGreaterThanOrEqual(0);
@@ -115,7 +119,7 @@ describe("unionizationDriftTarget", () => {
       unemploymentRate: 15,
       minWageKaitzRatio: 1,
       unionLawBias: -50,
-      membershipPressure: 0,
+      representingUnionApproval: 0,
     });
     expect(generous).toBe(0);
   });
@@ -136,17 +140,31 @@ describe("unionizationDriftTarget", () => {
     expect(out).toBe(UNIONIZATION_BASELINE);
   });
 
-  it("v3 Phase 8: an owned union's membershipPressure raises the target (unidirectional)", () => {
-    const out = unionizationDriftTarget({ ...NEUTRAL, membershipPressure: 50 });
-    // 50 * UNIONIZATION_MEMBERSHIP_PRESSURE_WEIGHT(0.3) = 15
-    expect(out).toBeCloseTo(UNIONIZATION_BASELINE + 15, 9);
+  it("union dues v1: approval ABOVE neutral (50) raises the target", () => {
+    const out = unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: 80 });
+    // (80-50) * UNIONIZATION_APPROVAL_WEIGHT(0.6) = 18
+    expect(out).toBeCloseTo(UNIONIZATION_BASELINE + 18, 9);
   });
 
-  it("v3 Phase 8: absent/zero membershipPressure is neutral (unowned union or none at all)", () => {
-    expect(unionizationDriftTarget({ ...NEUTRAL, membershipPressure: undefined })).toBe(
-      UNIONIZATION_BASELINE
-    );
-    expect(unionizationDriftTarget({ ...NEUTRAL, membershipPressure: 0 })).toBe(
+  it("union dues v1: approval BELOW neutral (50) LOWERS the target, a badly run union bleeds its own density", () => {
+    const out = unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: 20 });
+    // (20-50) * UNIONIZATION_APPROVAL_WEIGHT(0.6) = -18
+    expect(out).toBeCloseTo(UNIONIZATION_BASELINE - 18, 9);
+    expect(out).toBeLessThan(UNIONIZATION_BASELINE);
+  });
+
+  it("union dues v1: approval AT neutral (50) contributes nothing, same as unrepresented", () => {
+    const atNeutral = unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: 50 });
+    const unrepresented = unionizationDriftTarget({
+      ...NEUTRAL,
+      representingUnionApproval: undefined,
+    });
+    expect(atNeutral).toBe(UNIONIZATION_BASELINE);
+    expect(atNeutral).toBe(unrepresented);
+  });
+
+  it("union dues v1: absent representingUnionApproval is neutral (sector unrepresented)", () => {
+    expect(unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: undefined })).toBe(
       UNIONIZATION_BASELINE
     );
   });
@@ -158,28 +176,31 @@ describe("unionizationDriftTarget", () => {
     expect(both).toBeCloseTo(wageOnly + unempOnly - UNIONIZATION_BASELINE, 9);
   });
 
-  describe("v3 Phase 7b/8 composed-ceiling invariant (code-review fix #7)", () => {
+  describe("v3 Phase 7b / union dues v1 composed-ceiling invariant (code-review fix #7)", () => {
     it("no single factor alone crosses STRIKE_UNIONIZATION_THRESHOLD", () => {
       const wageOnly = unionizationDriftTarget({ ...NEUTRAL, wageLevel: 0.8 });
       const unempOnly = unionizationDriftTarget({ ...NEUTRAL, unemploymentRate: 2 });
       const minWageOnly = unionizationDriftTarget({ ...NEUTRAL, minWageKaitzRatio: 0 });
       const lawOnly = unionizationDriftTarget({ ...NEUTRAL, unionLawBias: 50 });
-      const membershipOnly = unionizationDriftTarget({ ...NEUTRAL, membershipPressure: 100 });
-      for (const single of [wageOnly, unempOnly, minWageOnly, lawOnly, membershipOnly]) {
+      const approvalOnly = unionizationDriftTarget({
+        ...NEUTRAL,
+        representingUnionApproval: 100,
+      });
+      for (const single of [wageOnly, unempOnly, minWageOnly, lawOnly, approvalOnly]) {
         expect(single).toBeLessThan(STRIKE_UNIONIZATION_THRESHOLD);
       }
     });
 
-    it("union-law bias + membership pressure TOGETHER cross the threshold with every economic input neutral (documented as intended, not a bug)", () => {
+    it("union-law bias + union approval TOGETHER cross the threshold with every economic input neutral (documented as intended, not a bug)", () => {
       const target = unionizationDriftTarget({
         ...NEUTRAL,
         unionLawBias: 50,
-        membershipPressure: 100,
+        representingUnionApproval: 100,
       });
       expect(target).toBeCloseTo(
         UNIONIZATION_BASELINE +
           50 * UNIONIZATION_LAW_WEIGHT +
-          100 * UNIONIZATION_MEMBERSHIP_PRESSURE_WEIGHT,
+          (100 - UNIONIZATION_APPROVAL_NEUTRAL) * UNIONIZATION_APPROVAL_WEIGHT,
         9
       );
       expect(target).toBeGreaterThan(STRIKE_UNIONIZATION_THRESHOLD);
@@ -192,7 +213,7 @@ describe("unionizationDriftTarget", () => {
         unemploymentRate: 2,
         minWageKaitzRatio: 0,
         unionLawBias: 50,
-        membershipPressure: 100,
+        representingUnionApproval: 100,
       });
       expect(target).toBeGreaterThan(90);
       expect(target).toBeLessThanOrEqual(100);

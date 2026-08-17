@@ -1,13 +1,20 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { Character, State, Union, User } from "@/lib/db/types";
+import type { Character, CorporateSector, State, Union, User } from "@/lib/db/types";
 import type { UnionOrganizer } from "@/lib/db/types/union";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
+import { UNION_STRENGTH_DECAY_PER_TURN } from "@/lib/unions/unionEconomy";
 import {
-  duesTrickle,
-  decayMembershipPressure,
-  UNION_STRENGTH_DECAY_PER_TURN,
-} from "@/lib/unions/unionEconomy";
+  approvalTarget,
+  averageAnnualWage,
+  duesIncomePerTurn,
+  maxDuesForWage,
+  servicesCostPerTurn,
+  trendApproval,
+  unionApproval,
+  unionMembers,
+} from "@/lib/unions/unionDues";
+import { normalizeServiceIds } from "@/lib/unions/unionServices";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
 import { seedUnions } from "@/lib/admin/seed/seedUnions";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
@@ -25,38 +32,38 @@ export interface UnionsTurnResult {
 }
 
 /**
- * v3 Phase 8 turn-processing pass: per-turn treasury accrual ("dues",
- * proportional to `membershipPressure`) and `membershipPressure` decay
- * toward 0 for every OWNED union. Unowned unions are skipped entirely — no
- * treasury/pressure changes — so Phase 5's NPC drift stays untouched for
- * their sectors ("conversion not reinvention").
+ * Union dues v1 turn-processing pass, for every OWNED, non-suspended union:
+ * resolve the sectors it represents (`CorporateSector.representingUnionId`),
+ * derive real `members` and their member-weighted `averageAnnualWage` from
+ * those sectors, credit `duesIncomePerTurn`, debit `servicesCostPerTurn`, and
+ * trend `approval` toward `approvalTarget`. Unowned unions are skipped
+ * entirely: no treasury/approval changes, so Phase 5's NPC drift stays
+ * untouched for the sectors they represent ("conversion not reinvention").
+ *
+ * The service bill NEVER pushes the treasury negative: if this turn's dues
+ * income can't cover it, the services LAPSE (no charge, `servicesLapsed:
+ * true` into `approvalTarget` so the unfunded slate stops paying approval
+ * too: an unfunded promise earns nothing).
  *
  * Also auto-vacates leadership for leaders inactive beyond
- * `INACTIVE_CEO_TURN_THRESHOLD` turns — reuses the exact same constant and
+ * `INACTIVE_CEO_TURN_THRESHOLD` turns, reuses the exact same constant and
  * `User.lastActivity`/`createdAt` signal as `inactiveCeoSectorShed.ts`'s CEO
  * analog (code-review fix #5: unions previously had no vacancy mechanism at
  * all, unlike CEOs, so one inactive leader permanently locked an industry).
- * A vacated union is excluded from this turn's dues/decay (it's no longer
- * owned as of this turn).
+ * A vacated union is excluded from this turn's dues/services/approval (it's
+ * no longer owned as of this turn).
  *
- * Decay is a flat per-turn constant applied regardless of whether the
- * leader ran a recruitment drive that turn (a deliberate simplification —
- * tracking "did they recruit this turn" would need extra state for a small
- * behavioral difference; an active leader who recruits every turn still
- * nets upward since the recruit gain at low pressure is far larger than the
- * decay).
- *
- * Gated on `labourSystemMode >= "full"` (code-review fix #10) — previously
+ * Gated on `labourSystemMode >= "full"` (code-review fix #10), previously
  * this ran unconditionally, so disabling the feature after testing still
- * silently decayed every union's membershipPressure forever with no way for
- * a (now locked-out) leader to counteract it. Skipping while disabled
- * freezes state instead.
+ * silently moved every union's treasury/approval forever with no way for a
+ * (now locked-out) leader to counteract it. Skipping while disabled freezes
+ * state instead.
  *
  * Registered in `src/simulation/phases/turnPhaseRegistry.ts` immediately
- * after `"corporationTurn"` — reads sector `unionization` state that phase
- * writes this same turn (via `sectorCalculations.ts`'s `membershipPressure`
- * consumption in `unionizationDriftTarget`), though this pass itself only
- * touches `unions`/`characters` documents.
+ * after `"corporationTurn"`, reads sector `unionization`/`workers`/
+ * `wagePerWorker` state that phase writes this same turn, though this pass
+ * itself only touches `unions`/`characters` documents (and reads
+ * `corporateSectors`).
  */
 export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
   if (!(await isLabourFullMode())) {
@@ -71,17 +78,17 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
 
   const labourRelations = await processLabourRelationsTurn(db, await getCurrentTurn(db));
 
-  // Safety net: at "full" the roster must be COMPLETE — one union per
+  // Safety net: at "full" the roster must be COMPLETE, one union per
   // (country, sectorType) for every seeded country (unions are only ever
   // created by seedUnions: bootstrap, the admin seed target, or the
   // labour-config flip into "full"). A count below that expected total means
-  // the roster was never seeded OR was only partially seeded — e.g. a swallowed
+  // the roster was never seeded OR was only partially seeded, e.g. a swallowed
   // error in the labour-flip's auto-seed, or a lone stray doc from an early
   // partial seed (the exact state the 1953 sandbox was stuck in: 1 of 391).
   // Backfill with the idempotent reset:false upsert; `$setOnInsert` fills the
   // missing slots and preserves every existing (possibly claimed) union.
   // Comparing against the expected total, not just 0, is what heals a partial
-  // roster — a single stray doc must never permanently block the backfill.
+  // roster, a single stray doc must never permanently block the backfill.
   const unionCount = await db.collection<Union>("unions").countDocuments({});
   const seededCountryIds = await db
     .collection<State>("states")
@@ -89,7 +96,7 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
   const expectedUnionCount = seededCountryIds.length * CORPORATION_TYPES.length;
   if (unionCount < expectedUnionCount) {
     console.warn(
-      `[unionsTurn] labourSystemMode is 'full' but union roster is incomplete (${unionCount}/${expectedUnionCount}) — backfilling via seedUnions(reset:false)`
+      `[unionsTurn] labourSystemMode is 'full' but union roster is incomplete (${unionCount}/${expectedUnionCount}), backfilling via seedUnions(reset:false)`
     );
     await seedUnions(
       db,
@@ -129,10 +136,20 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
     .collection<Union>("unions")
     .find(
       // Union ban (player suggestion #93): suspended unions (country under an
-      // enacted ban) are frozen — no dues, no pressure decay, no inactivity
-      // vacancy — so a repeal restores them exactly as the ban found them.
+      // enacted ban) are frozen, no dues, no services, no approval trend, no
+      // inactivity vacancy, so a repeal restores them exactly as the ban found them.
       { ownerId: { $ne: null }, suspended: { $ne: true } },
-      { projection: { _id: 1, ownerId: 1, ownerType: 1, treasury: 1, membershipPressure: 1 } }
+      {
+        projection: {
+          _id: 1,
+          ownerId: 1,
+          ownerType: 1,
+          treasury: 1,
+          duesPerWorkerAnnual: 1,
+          activeServices: 1,
+          approval: 1,
+        },
+      }
     )
     .toArray();
 
@@ -142,7 +159,7 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
 
   const now = new Date();
 
-  // Inactivity auto-vacancy — mirrors isInactiveCeoPenaltyCandidate's
+  // Inactivity auto-vacancy, mirrors isInactiveCeoPenaltyCandidate's
   // lastActivity/createdAt lookup exactly.
   const ownerIds = owned.map((u) => u.ownerId).filter((id): id is ObjectId => id != null);
   const owners = ownerIds.length
@@ -174,7 +191,7 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
   const stillOwned: typeof owned = [];
   for (const union of owned) {
     // NPP leaders have no User behind them, so the lastActivity signal this
-    // sweep is built on does not apply — they are never "inactive". Without
+    // sweep is built on does not apply, they are never "inactive". Without
     // this they would survive only by accident (the characters lookup misses,
     // `reference` comes back undefined and the branch falls through), which is
     // too fragile to rely on.
@@ -207,18 +224,60 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
   }
 
   if (stillOwned.length > 0) {
-    const ops = stillOwned.map((u) => ({
-      updateOne: {
-        filter: { _id: u._id },
-        update: {
-          $inc: { treasury: duesTrickle(u.membershipPressure) },
-          $set: {
-            membershipPressure: decayMembershipPressure(u.membershipPressure),
-            updatedAt: now,
+    const stillOwnedIds = stillOwned.map((u) => u._id);
+    const representedSectors = await db
+      .collection<CorporateSector>("corporateSectors")
+      .find(
+        { representingUnionId: { $in: stillOwnedIds } },
+        { projection: { representingUnionId: 1, workers: 1, unionization: 1, wagePerWorker: 1 } }
+      )
+      .toArray();
+    const sectorsByUnionId = new Map<string, CorporateSector[]>();
+    for (const sector of representedSectors) {
+      const key = sector.representingUnionId!.toString();
+      const list = sectorsByUnionId.get(key);
+      if (list) list.push(sector);
+      else sectorsByUnionId.set(key, [sector]);
+    }
+
+    const ops = stillOwned.map((u) => {
+      const sectors = sectorsByUnionId.get(u._id.toString()) ?? [];
+      const members = unionMembers(sectors);
+      const annualWage = averageAnnualWage(sectors);
+      const activeServices = normalizeServiceIds(u.activeServices);
+      // Re-clamp the stored rate against TODAY's wages: setUnionDues clamps at
+      // write time, but wages can fall (or high-wage shops can be lost) after
+      // the rate was set, and the engine must never charge above the 10%
+      // ceiling the API and the display both enforce.
+      const duesRate = Math.min(
+        Math.max(0, u.duesPerWorkerAnnual ?? 0),
+        maxDuesForWage(annualWage)
+      );
+      const duesIncome = duesIncomePerTurn(members, duesRate);
+      const fullServicesCost = servicesCostPerTurn(members, annualWage, activeServices);
+      // The service bill never pushes the treasury negative: if this turn's
+      // dues income can't cover it, the whole slate lapses for the turn (no
+      // partial charge) and earns no approval bonus.
+      const affordableTreasury = u.treasury + duesIncome;
+      const servicesLapsed = fullServicesCost > affordableTreasury;
+      const servicesCost = servicesLapsed ? 0 : fullServicesCost;
+      const target = approvalTarget({
+        duesPerWorkerAnnual: duesRate,
+        annualWage,
+        activeServices,
+        servicesLapsed,
+      });
+      const newApproval = trendApproval(unionApproval(u), target);
+      return {
+        updateOne: {
+          filter: { _id: u._id },
+          update: {
+            $inc: { treasury: duesIncome - servicesCost },
+            $set: { approval: newApproval, updatedAt: now },
           },
         },
-      },
-    }));
+      };
+    });
     await db.collection<Union>("unions").bulkWrite(ops);
   }
 
