@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
+import type { Corporation } from "@/lib/db/types";
 
 vi.mock("@/lib/market/featureFlag", () => ({
   getMarketSystemModeForDb: vi.fn().mockResolvedValue("basic"),
@@ -29,7 +30,11 @@ vi.mock("@/lib/currency/corporationCapital", async (importOriginal) => {
 });
 
 const corpId = new ObjectId();
-const CORP = { _id: corpId, countryId: "US" as const, liquidCurrencyCode: "USD" };
+const CORP: Pick<Corporation, "_id" | "countryId" | "liquidCurrencyCode"> = {
+  _id: corpId,
+  countryId: "US",
+  liquidCurrencyCode: "USD",
+};
 
 function dbWithSectors(sectors: Record<string, unknown>[]): Db {
   return {
