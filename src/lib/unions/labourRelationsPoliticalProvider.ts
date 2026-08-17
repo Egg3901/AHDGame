@@ -77,12 +77,12 @@ function add(
  * Union dues v1: `unions` feeds `servicesWorkerSecurityNudge()` into the SAME
  * `economy.workerSecurity` channel the bargaining campaigns above already
  * write, through the same `add()` + end-of-function `clamp(value,
- * LABOUR_POLITICAL_CAPS[...])` pair — one capped total, not a second uncapped
+ * LABOUR_POLITICAL_CAPS[...])` pair, one capped total, not a second uncapped
  * channel onto the same metric. There is no separate decay constant for this
  * term: it is recomputed fresh from the union's CURRENT `activeServices` every
  * call (nothing here persists an accumulator), so it rises and falls with the
  * union's own service choices exactly as fast as the caller re-invokes this
- * function each turn — the political board's own per-turn consumption of this
+ * function each turn, the political board's own per-turn consumption of this
  * map is what gives it the "existing decay," not a second bespoke one grafted
  * on top of a value with no natural start turn to decay from.
  */
@@ -168,7 +168,7 @@ export async function loadLabourRelationsPoliticalNudgesByCountry(
       )
       .toArray(),
     // Union dues v1: only unions actually running something can produce a
-    // nudge — skips the (common) idle-slate union at the query level.
+    // nudge, skips the (common) idle-slate union at the query level.
     db
       .collection<Union>("unions")
       .find(

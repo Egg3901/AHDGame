@@ -131,7 +131,7 @@ const HERO_IMAGE_URL =
 /**
  * v3 Phase 8 union leadership dashboard, restyled to match the stock market
  * page: hero banner + stats strip + tabbed content. Leadership is a rolling
- * contest (CEO-style) on its own tab — not a one-shot election that locks.
+ * contest (CEO-style) on its own tab, not a one-shot election that locks.
  */
 export default function UnionDashboardPage({ params }: PageProps) {
   const { id } = usePromise(params);
@@ -150,13 +150,13 @@ export default function UnionDashboardPage({ params }: PageProps) {
   const [leader, setLeader] = useState<CandidateOption | null>(null);
   const [candidateDraft, setCandidateDraft] = useState("");
   const [loading, setLoading] = useState(true);
-  // Distinguish a real load failure (network error, or a disabled feature — a
+  // Distinguish a real load failure (network error, or a disabled feature, a
   // 403) from a genuine 404, instead of rendering "Union not found" for both.
   const [loadError, setLoadError] = useState<string | null>(null);
   /** A side fetch failed while the union itself loaded. Shown as a banner, not a dead end. */
   const [partialError, setPartialError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  // Result of the last action, with its outcome — a failed action used to
+  // Result of the last action, with its outcome, a failed action used to
   // render as muted grey body text at the bottom of the panel, which reads as
   // "the button did nothing" rather than "you cannot afford this".
   const [actionResult, setActionResult] = useState<{ ok: boolean; text: string } | null>(null);
@@ -1172,7 +1172,7 @@ function StanceBadge({ stance }: { stance: "endorse" | "oppose" }) {
   );
 }
 
-/** Outcome of the last union action — success or the server's reason for refusing. */
+/** Outcome of the last union action, success or the server's reason for refusing. */
 function ActionResult({ result }: { result: { ok: boolean; text: string } | null }) {
   if (!result) return null;
   return (

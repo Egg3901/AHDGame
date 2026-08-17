@@ -27,7 +27,7 @@ const NEUTRAL = {
   minWageKaitzRatio: UNIONIZATION_NEUTRAL_KAITZ,
   unionLawBias: 0,
   // Union dues v1: 50 (UNIONIZATION_APPROVAL_NEUTRAL) is the neutral point,
-  // not 0 — a represented sector whose union sits exactly at neutral approval
+  // not 0, a represented sector whose union sits exactly at neutral approval
   // contributes nothing to the drift target, same as an unrepresented one.
   representingUnionApproval: UNIONIZATION_APPROVAL_NEUTRAL,
 };
@@ -146,7 +146,7 @@ describe("unionizationDriftTarget", () => {
     expect(out).toBeCloseTo(UNIONIZATION_BASELINE + 18, 9);
   });
 
-  it("union dues v1: approval BELOW neutral (50) LOWERS the target — a badly run union bleeds its own density", () => {
+  it("union dues v1: approval BELOW neutral (50) LOWERS the target, a badly run union bleeds its own density", () => {
     const out = unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: 20 });
     // (20-50) * UNIONIZATION_APPROVAL_WEIGHT(0.6) = -18
     expect(out).toBeCloseTo(UNIONIZATION_BASELINE - 18, 9);

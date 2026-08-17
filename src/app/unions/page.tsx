@@ -31,7 +31,7 @@ interface BannedCountry {
   countryName: string;
 }
 
-/** A country that has unions — an option in the country switcher. */
+/** A country that has unions, an option in the country switcher. */
 interface CountryOption {
   countryId: string;
   countryName: string;
@@ -90,7 +90,7 @@ export default function UnionsPage() {
           country = me?.character?.countryId ?? me?.countryId ?? null;
         }
       } catch {
-        // no session / character — show all unions
+        // no session / character, show all unions
       }
       if (cancelled) return;
       setSelectedCountry(country);
@@ -116,7 +116,7 @@ export default function UnionsPage() {
   }, [selectedCountry, availableCountries]);
 
   // Single-federation countries (e.g. China, the Eastern bloc) name every
-  // sector union identically — disambiguate those with the sector so the list
+  // sector union identically, disambiguate those with the sector so the list
   // isn't a wall of the same name.
   const duplicateNames = useMemo(() => {
     const counts = new Map<string, number>();
@@ -214,7 +214,7 @@ export default function UnionsPage() {
       {!notEnabled && (
         <p className="text-sm text-muted">
           Every industry already has a union. Vacant unions need organizers to fund drives and elect
-          a president — open a union page to organize or vote.
+          a president, open a union page to organize or vote.
         </p>
       )}
 
@@ -254,7 +254,7 @@ export default function UnionsPage() {
           {loading ? (
             // Mirrors the loaded table: header strip + rank/name/leader/number
             // columns. Union count varies by world, so reserve the typical
-            // loaded height with min-h — rows inside only approximate.
+            // loaded height with min-h, rows inside only approximate.
             <div className="min-h-[520px]">
               <div className="flex items-center gap-4 border-b border-card-border bg-card-elevated px-4 py-3">
                 <Skeleton className="h-3 w-4" />
@@ -305,7 +305,7 @@ export default function UnionsPage() {
                   <th className="px-4 py-3 font-medium">Union</th>
                   <th className="px-4 py-3 font-medium">
                     Leader
-                    <Tooltip content="The union president. A vacant union has none — fund organize drives on its page, then vote one in." />
+                    <Tooltip content="The union president. A vacant union has none, fund organize drives on its page, then vote one in." />
                   </th>
                   <th className="px-4 py-3 text-right font-medium">
                     <span className="inline-flex items-center">

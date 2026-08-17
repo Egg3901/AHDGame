@@ -20,7 +20,7 @@ export interface RepresentingUnionEffects {
 
 /**
  * Fetch every union's approval + active services, keyed by union `_id` (string).
- * Every union is included regardless of ownership or suspension — an unowned or
+ * Every union is included regardless of ownership or suspension, an unowned or
  * suspended union still represents whatever sectors point at it, and its last
  * computed approval keeps anchoring their drift target even while its own turn
  * processing (`processUnionsTurn`) is frozen.

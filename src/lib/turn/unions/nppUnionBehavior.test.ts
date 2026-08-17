@@ -123,7 +123,7 @@ function mockDb({
         };
       }
       if (name === "npps") {
-        // Real query filters by countryId/retiredAt/_id — the backing array here
+        // Real query filters by countryId/retiredAt/_id, the backing array here
         // is small and entirely retiredAt: null, so returning it unfiltered is
         // equivalent for what this test exercises (union-side outcomes).
         return { find: () => ({ toArray: () => Promise.resolve(npps) }) };
@@ -163,7 +163,7 @@ describe("processNppUnionBehavior", () => {
     vi.mocked(persistUnionBargainingEscalation).mockResolvedValue({ ok: true, status: 200 });
   });
   it(
-    "elects NPP leaders into every vacant union — regression: without this phase every seeded " +
+    "elects NPP leaders into every vacant union, regression: without this phase every seeded " +
       "union stays permanently vacant (the turn-650 sandbox symptom, pre-dues-v1: 408 unions " +
       "stuck unowned forever with nobody to run them)",
     async () => {
@@ -187,10 +187,10 @@ describe("processNppUnionBehavior", () => {
 
       const result = await processNppUnionBehavior(db, 1);
 
-      // Every vacant union got an NPP leader — the precondition for anything
+      // Every vacant union got an NPP leader, the precondition for anything
       // downstream (demands, strikes) to ever happen at all. Union dues v1
       // retired the recruitment drive this test used to also assert
-      // (membershipPressure moving off its seed) — members are now a real
+      // (membershipPressure moving off its seed), members are now a real
       // headcount derived from represented-sector workers x unionization every
       // turn (`processUnionsTurn`), so there is nothing left here to recruit.
       expect(result.leadersElected).toBe(6);

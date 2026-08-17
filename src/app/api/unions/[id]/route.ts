@@ -1,9 +1,9 @@
 /**
- * GET /api/unions/[id] — union detail + the CorporateSectors currently
+ * GET /api/unions/[id]: union detail + the CorporateSectors currently
  * matching its (countryId, sectorType) scope (v3 Phase 8). Read-only, no
- * auth required — the dashboard UI decides what actions to show based on
+ * auth required, the dashboard UI decides what actions to show based on
  * whether the viewer leads this union. Gated on `labourSystemMode >= "full"`
- * (code-review fix #10/#13 — previously ungated, kept serving live union
+ * (code-review fix #10/#13, previously ungated, kept serving live union
  * data indefinitely even after the feature was disabled).
  */
 import { NextResponse } from "next/server";
@@ -301,7 +301,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         organizeSectorTreasuryCost: ORGANIZE_SECTOR_TREASURY_COST,
         raidApprovalEdgeRequired: RAID_APPROVAL_EDGE_REQUIRED,
         treasury: union.treasury,
-        // Union dues v1 — replaces `membershipPressure`. `members` is a real
+        // Union dues v1, replaces `membershipPressure`. `members` is a real
         // headcount (workers in represented sectors), `approval` is what
         // anchors unionization drift in those sectors.
         members,
@@ -333,7 +333,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
             ? null
             : Math.round(Math.max(0, union.demandedWageLevel - (s.wageLevel ?? 1)) * 1000) / 1000,
         unionization: s.unionization ?? 0,
-        // Union dues v1: which union (if any) currently holds this sector —
+        // Union dues v1: which union (if any) currently holds this sector, 
         // may be this union, a rival, or null (unrepresented, an
         // organize-sector target). See `POST .../organize-sector`.
         representingUnionId: s.representingUnionId?.toString() ?? null,

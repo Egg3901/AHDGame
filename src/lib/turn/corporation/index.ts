@@ -120,7 +120,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const db = await getDb();
   const now = new Date();
 
-  // Env-gated sub-step timing (SIM_CORP_TIMING=1). Zero-cost when off — used to
+  // Env-gated sub-step timing (SIM_CORP_TIMING=1). Zero-cost when off, used to
   // profile which of this phase's ~30 sequential steps actually dominate the
   // wall clock, so optimization targets real cost, not guesses. Emits one JSON
   // line per turn that a harness/analysis script can parse.
@@ -137,9 +137,9 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // The preamble reads are independent of each other, so they run as one
   // parallel round-trip instead of ~7 serial ones.
   //
-  // marketGovernorConfig: structural market rework (audit t806) — Fix 1 scales
+  // marketGovernorConfig: structural market rework (audit t806), Fix 1 scales
   // realized sector revenue by the lagged market price of its outputs. Inert
-  // when marketSystemMode is "off" (the default) — no economic change. Read
+  // when marketSystemMode is "off" (the default), no economic change. Read
   // HERE, before the lookup build, because the market-share basis below needs
   // the mode and the mode lives in this same document: two separate resolutions
   // per turn used to disagree in principle, so there is now exactly one read
@@ -184,7 +184,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     getLabourSystemMode(),
   ]);
   mark("preamble");
-  // SINGLE SOURCE OF TRUTH for this turn's market mode — both the market-share
+  // SINGLE SOURCE OF TRUTH for this turn's market mode, both the market-share
   // basis just below and `buildMarketContext` further down consume it. Do not
   // re-resolve it; a second `getMarketSystemMode()` call is how the two drifted.
   const marketSystemMode = await getMarketSystemMode(marketGovernorConfig);
@@ -207,7 +207,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const currentYear = gameState?.currentYear;
   // Soft-budget gate for the turn path (see sectorTurn's affordability brake and
   // nppInsolvencyDissolution, which already exempts planned economies). Read off
-  // the preamble's gameConfig projection — same document, no second round-trip.
+  // the preamble's gameConfig projection, same document, no second round-trip.
   const commandEconomyEnabled =
     (marketGovernorConfig as { commandEconomyEnabled?: boolean } | null)?.commandEconomyEnabled ===
     true;
@@ -222,7 +222,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Labour/Unions system: when labourSystemMode ≥ "wages", sector profit carves
   // an explicit, per-sector/per-era labor cost out of maintenance (resolved per
   // sector inside processSectors from sectorType + currentYear). Inert (no
-  // economic change) when the mode is off — the default.
+  // economic change) when the mode is off, the default.
   const fullEnabled = labourAtLeast(labourMode, "full");
   const [unionsById, collectiveAgreementEffects, industrialActionOutputFactorBySectorId] =
     fullEnabled
@@ -244,10 +244,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // tier the unionization/strike machinery runs at), unlike the bias map
     // above whose reads are gated at "full".
     unionsBannedByCountry: buildUnionsBannedByCountry(lookups.federalBudgets),
-    // Union dues v1: gated read — only fetched when fullEnabled, so a union
+    // Union dues v1: gated read, only fetched when fullEnabled, so a union
     // document's mere existence never has an effect at a lower tier. Resolved
     // per-sector via `CorporateSector.representingUnionId`, not by
-    // (countryId, sectorType) — see `sectorLabour.ts`.
+    // (countryId, sectorType), see `sectorLabour.ts`.
     unionsById,
     collectiveAgreementWageFloorBySectorId: collectiveAgreementEffects?.wageFloorBySectorId,
     noStrikeProtectedSectorIds: collectiveAgreementEffects?.noStrikeProtectedSectorIds,
@@ -274,7 +274,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const contractSettlementByCorp = new Map<string, Map<CommodityType, number>>();
   // Plants tier: supplier corpId → commodity → units actually produced this
   // turn (the offered book under plants IS real production). Drives the
-  // supply-agreement shortfall penalty — a contract is a promise about goods,
+  // supply-agreement shortfall penalty, a contract is a promise about goods,
   // so under-PRODUCING against it is the breach, not under-selling it.
   const producedByCorpCommodity = new Map<string, Map<CommodityType, number>>();
   if (supplyAgreementsEnabled) {
@@ -283,7 +283,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     settleableAgreements = [];
     // C6: a contract under NOTICE keeps delivering and settling until its
     // effective turn. Retire the ones whose notice has run out first, then load
-    // everything still live. Ordering matters — a contract that expires this
+    // everything still live. Ordering matters, a contract that expires this
     // turn must not settle again.
     await db
       .collection("supplyAgreements")
@@ -334,14 +334,14 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         // Shortfall damages only apply to contracts whose `volumeCap` was
         // checked against scaled plant capacity when it was signed. Contracts
         // predating that check carry no basis, so they settle their price
-        // premium as usual and are grandfathered out of the damages leg — see
+        // premium as usual and are grandfathered out of the damages leg, see
         // the stamp in corporations/commands/supplyAgreements.
         shortfallEligible: a.volumeCapBasis === "scaledCapacity",
       });
     }
   }
   // The slice (A2b) only bites when BOTH the master flag and the slice gate are
-  // on — accrual can run shadow (A1/A2) with the slice still off.
+  // on, accrual can run shadow (A1/A2) with the slice still off.
   const brandLoyaltySliceEnabled =
     brandLoyaltyEnabled && marketGovernorConfig?.brandLoyaltySliceEnabled === true;
   const market = buildMarketContext(marketSystemMode, {
@@ -425,8 +425,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         // clearing offer defeated the guard from the other side: EXTRACTION is
         // deliberately excluded from the `producedUnits` offer below (it stays
         // on the nameplate so the lagged-supply normalization can reconcile it),
-        // so extraction suppliers — the dominant commodity suppliers in the
-        // world — had their contract damages assessed off precisely that
+        // so extraction suppliers, the dominant commodity suppliers in the
+        // world, had their contract damages assessed off precisely that
         // nameplate while the sink looked plants-clean.
         //
         // Reading `sector.producedUnits` directly keeps the sink measured
@@ -437,7 +437,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         // sizes `volumeCap` against the same scaled quantity.
         //
         // A mothballed sector contributes nothing and gets no entry, which the
-        // settlement reads as zero produced (its documented meaning) — a cold
+        // settlement reads as zero produced (its documented meaning), a cold
         // plant owes damages on its whole contracted volume.
         if (supplyAgreementsEnabled && market.plantsEnabled && sector.mothballed !== true) {
           const scaled = plantsSupplyScaledUnits({
@@ -479,7 +479,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           revenue: revenueAnchor,
           supplyRates: rates.supply ?? {},
           posture: typeof sector.pricingPosture === "number" ? sector.pricingPosture : null,
-          // Lagged own fill for autoPosture's feedback loop (NPP/unowned only —
+          // Lagged own fill for autoPosture's feedback loop (NPP/unowned only, 
           // ignored when a player posture is posted).
           lastSoldFraction: typeof sector.soldFraction === "number" ? sector.soldFraction : null,
           // Owning corp's lagged loyalty for the slice pre-pass (A2b).
@@ -493,7 +493,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
             : undefined,
           // Plants tier: last turn's measured output is the offer (lagged, like
           // every other clearing input). Null for a sector that has never run a
-          // plants turn — the book falls back to the revenue nameplate.
+          // plants turn, the book falls back to the revenue nameplate.
           //
           // `producedUnits` carries the REVENUE-side production legs, so the
           // legs the supply ledger applies on top of the same units and
@@ -521,7 +521,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           // MOTHBALLED is checked EXPLICITLY, matching the ledger's
           // `plantsMothballed` guard in constants/commodities. It is not
           // redundant: without it this site depends on `producedUnits` having
-          // been persisted as 0 by a prior sectorTurn — a value written
+          // been persisted as 0 by a prior sectorTurn, a value written
           // elsewhere. If that ever stops holding, a cold plant would offer
           // units the ledger has already excluded, and `realUnits` offers are
           // exempt from the normalization that would otherwise catch it.
@@ -556,7 +556,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       }
     }
     // Book-sanity invariant: the diagnostic reports the RAW revenue/base nameplate.
-    // A modest excess over lagged supply is EXPECTED and benign — the supply ledger
+    // A modest excess over lagged supply is EXPECTED and benign, the supply ledger
     // applies scale/haircut factors the nameplate omits, and clearing now reconciles
     // the book down to supply (so fills are not depressed). Only a unit-SCALE
     // divergence (≥3×) signals a genuine bug like the t879 FX book (~100×). Warn
@@ -584,7 +584,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       sectorCorpId: supplyAgreementsEnabled ? sectorCorpId : undefined,
       exclusiveByCorpCommodity: supplyAgreementsEnabled ? exclusiveByCorpCommodity : undefined,
       contractSettlementOut: supplyAgreementsEnabled ? contractSettlementByCorp : undefined,
-      // The shortfall sink is no longer fed from the clearing offer — see the
+      // The shortfall sink is no longer fed from the clearing offer, see the
       // PRODUCTION SINK note in the input loop above. Clearing's `s.units` is
       // an offer, and for extraction it is the revenue nameplate, so it cannot
       // stand in for measured production.
@@ -601,12 +601,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     });
     if (bookViolations.length > 0) {
       console.warn(
-        `[clearing] order-book/ledger unit mismatch on ${bookViolations.length} commodit${bookViolations.length === 1 ? "y" : "ies"} — fills will be depressed: ${bookViolations.slice(0, 5).join("; ")}`
+        `[clearing] order-book/ledger unit mismatch on ${bookViolations.length} commodit${bookViolations.length === 1 ? "y" : "ies"}, fills will be depressed: ${bookViolations.slice(0, 5).join("; ")}`
       );
     }
 
     // Brand loyalty (A2): roll up per-corp posture/fill/contest from the clearing
-    // results and advance each corp's loyalty. Shadow-safe — the resulting
+    // results and advance each corp's loyalty. Shadow-safe, the resulting
     // brandLoyalty/brandPostureNorm are persisted, but nothing READS them until
     // the slice pre-pass (A2b, brandLoyaltySliceEnabled) is turned on.
     if (brandLoyaltyEnabled) {
@@ -722,7 +722,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // NOT-per-corp entries for this turn's silent auto-mutations (vacant/
   // inactive-CEO sector shedding, NPP caretaker installs, subsidiary
   // cleanup). Collected once and flushed via a single `recordAuditBulk` call
-  // near the end of this function — corporationTurn is the known turn-loop
+  // near the end of this function, corporationTurn is the known turn-loop
   // hotspot, so no per-corp writes here, just cheap counts already computed
   // by each sub-step.
   const corpAuditEntries: ActionAuditInput[] = [];
@@ -739,7 +739,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   }
 
   // Phase 1b: CEO-less player corps lose market footprint to unowned pools (same turn as step 2)
-  // MUTATES lookups.sectorsByCorp — adjusts revenue/workers so processSectors sees reduced values.
+  // MUTATES lookups.sectorsByCorp, adjusts revenue/workers so processSectors sees reduced values.
   // Order matters: vacant shed runs first, then inactive-CEO shed (which excludes vacant corps).
   const vacantShedResult = await shedVacantCeoSectorsToUnowned(
     db,
@@ -823,7 +823,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   );
   mark("processSectors(CPU)");
 
-  // Phase 2b: NPP corporation AI decisions — budgets, expansion, dividends
+  // Phase 2b: NPP corporation AI decisions, budgets, expansion, dividends
   // Run before bulk writes so NPP decisions are applied this turn.
   const {
     corpUpdates: nppCorpUpdates,
@@ -843,7 +843,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     });
   }
 
-  // Merge brand-loyalty updates (A2). Separate $set ops keyed by corp _id — they
+  // Merge brand-loyalty updates (A2). Separate $set ops keyed by corp _id, they
   // only touch brandLoyalty/brandPostureNorm, so they compose with the main
   // corp $set for the same doc (Mongo merges multiple bulk ops per document).
   for (const lu of brandLoyaltyUpdates) {
@@ -880,13 +880,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     });
   }
 
-  // Divest losing NPP sectors — remove from corporateSectors
+  // Divest losing NPP sectors, remove from corporateSectors
   if (nppDivestedSectorIds.length > 0) {
     await db.collection("corporateSectors").deleteMany({ _id: { $in: nppDivestedSectorIds } });
   }
 
   // v2: persist the per-state labour wage index (+ v2-3b: automation index) to
-  // stateMetrics — see persistLabourIndices for the prior-value delta capture.
+  // stateMetrics, see persistLabourIndices for the prior-value delta capture.
   // Only written when the labour system is on, so it's inert otherwise.
   await persistLabourIndices({
     db,
@@ -897,12 +897,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
 
   // Phase 3: Bulk write sector and corp updates
   if (sectorOps.length > 0) {
-    // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing — runtime shape is valid
+    // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await db.collection("corporateSectors").bulkWrite(sectorOps as any[]);
   }
   if (corpOps.length > 0) {
-    // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing — runtime shape is valid
+    // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await db.collection("corporations").bulkWrite(corpOps as any[]);
   }
@@ -954,7 +954,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   }
 
   // Notify player-owned extraction sectors that newly hit a capacity ceiling
-  // this turn — their realized resource revenue is now being throttled by the
+  // this turn, their realized resource revenue is now being throttled by the
   // capacity haircut, so the CEO should acquire capacity, adopt a focused
   // extraction strategy, or expand elsewhere. Skips NPP/natcorp-run sectors.
   if (capacityBindingEvents.length > 0) {
@@ -970,7 +970,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           message:
             `Your extraction operations in ${ev.stateId} are constrained to ` +
             `${Math.round(ev.utilization * 100)}% of potential output by ${resourceLabel} ` +
-            `capacity. Realized resource revenue is being throttled — acquire capacity, ` +
+            `capacity. Realized resource revenue is being throttled, acquire capacity, ` +
             `adopt a focused extraction strategy, or expand into states with headroom.`,
           metadata: {
             corporationId: ev.corporationId,
@@ -991,13 +991,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Insert any new NPP sectors.
   //
   // PLANTS-GATED: this is the WRITE half of the NPP founding insert whose
-  // document half lives in `nppCorporationBehavior.buildNppSectorDocs` — the
+  // document half lives in `nppCorporationBehavior.buildNppSectorDocs`, the
   // docs carry a `revenue` key, so this statement is a `corporateSectors.revenue`
   // writer and is registered as one. It stayed invisible to the writer-registry
   // guard for a while because the guard could only read an insert whose argument
   // was a literal `[` / `{`; this one passes a variable, so there was no document
   // text to scan. The guard now recognizes an indirect insert on the collection
-  // by name and demands registration for it — see `sectorRevenueWriters.guard.test.ts`.
+  // by name and demands registration for it, see `sectorRevenueWriters.guard.test.ts`.
   //
   // Under plants the `revenue` on each doc is the legacy NAMEPLATE only: the new
   // sector is born with `capitalStock: 0`, its founding order sitting in
@@ -1012,7 +1012,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Business Acumen use-growth: each turn, every active player CEO accrues
   // Business Acumen XP (flushed by the action-refresh phase). Mirrors how
   // legislative play trains Statecraft. The increment scales with the corp's
-  // realized profit margin this turn — a better-run corp teaches more — and a CEO
+  // realized profit margin this turn, a better-run corp teaches more, and a CEO
   // running several corps is credited for their most successful one.
   // NPP/imperial/vacant CEOs are excluded.
   const ceoBestMarginById = new Map<string, { id: ObjectId; margin: number }>();
@@ -1042,14 +1042,14 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     );
   }
 
-  // Phase 3a: SOE operations — apply public-service mandate metric contributions
+  // Phase 3a: SOE operations, apply public-service mandate metric contributions
   // and back operating losses from the treasury (spec §11.1/§11.2). Runs after
   // sector/corp writes so liquidCapital reflects this turn's result, and within
   // the corp turn so the metric writes precede the late state-metrics phase.
   mark("acumen+fxSpread+newSectors");
   await processSoeOperations(db, now, currentYear);
 
-  // Phase 3a': NatCorp profit remittance — split this turn's SOE operating profit
+  // Phase 3a': NatCorp profit remittance, split this turn's SOE operating profit
   // between CEO retention (stays in liquidCapital) and remittance to the treasury
   // reserve (spec P6g §5.1). Runs after loss-backing so it only acts on a positive
   // balance, and reuses the same estimate the budget revenue line scales by.
@@ -1057,7 +1057,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   await processSoeRemittance(db, now);
   mark("soeRemittance");
 
-  // Phase 3b: R&D innovation — every 6 turns, corps with accumulated R&D score
+  // Phase 3b: R&D innovation, every 6 turns, corps with accumulated R&D score
   // have a chance to boost a sector's revenue. Extraction corps also boost state
   // resource capacity. Runs after base sector writes so the $inc is additive.
   if (typeof turn === "number" && turn % 6 === 0) {
@@ -1069,7 +1069,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       market.plantsEnabled
     );
     if (sectorBoostOps.length > 0) {
-      // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing — runtime shape is valid
+      // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await db.collection("corporateSectors").bulkWrite(sectorBoostOps as any[]);
     }
@@ -1087,7 +1087,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Phase 3c-fund: Constituent corp dividends to index funds (75% reinvest / 25% pass-through).
   //
   // This was the single dominant cost of the whole corporationTurn phase (~4.5s
-  // of ~5s at 8 countries, measured via SIM_CORP_TIMING) — ~500 (fund,corp)
+  // of ~5s at 8 countries, measured via SIM_CORP_TIMING), ~500 (fund,corp)
   // accruals per turn, each `processIndexFundDividend` doing ~10 sequential DB
   // round-trips, run one-after-another = ~5,000 serial round-trips. It scales
   // with corp count, so at the 30-50-country target it would balloon.
@@ -1095,7 +1095,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Fixed two ways without changing behavior: (1) pass the turn we already hold
   // so each call skips a redundant getCurrentTurn findOne; (2) group accruals by
   // fund and run the fund groups CONCURRENTLY (bounded by the driver pool) while
-  // keeping each fund's own accruals sequential — same-fund accruals touch the
+  // keeping each fund's own accruals sequential, same-fund accruals touch the
   // same fund cash/positions, so serializing within a fund preserves exact
   // ordering + per-corporation tx-log granularity, while the ~32 independent
   // funds overlap. Per-corp dividend attribution is unchanged.
@@ -1105,7 +1105,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       // I/O batching (measured: this step is ~42% of corporationTurn and is
       // dominated by ~5k serial DB round-trips/turn on prod remote Mongo).
       // AHD_BATCH_FUND_DIVIDENDS=on collapses them into a handful of bulk ops via
-      // processIndexFundDividendsBatch — behaviourally identical (verified by an
+      // processIndexFundDividendsBatch, behaviourally identical (verified by an
       // equivalence test), off by default until a human-gated flip.
       if (process.env.AHD_BATCH_FUND_DIVIDENDS === "on") {
         const { processIndexFundDividendsBatch } =
@@ -1140,7 +1140,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         await Promise.all(
           [...accrualsByFund.values()].map(async ({ fundId, list }) => {
             // Read the fund + its unit-holder positions ONCE per fund, then reuse
-            // across all of this fund's accruals — they're constant during
+            // across all of this fund's accruals, they're constant during
             // dividend processing (see processIndexFundDividend's prefetch doc).
             let prefetch: FundDividendPrefetch | undefined;
             try {
@@ -1174,7 +1174,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   }
 
   mark("rd+fundDividends");
-  // Phase 3c: Credit dividends to corporate shareholders — see
+  // Phase 3c: Credit dividends to corporate shareholders, see
   // creditCorpDividends (FX spread skim, 50% dividend-received deduction tax,
   // corp_dividend ledger rows, same-turn corporationHistory tax record).
   // Returns the per-corp dividend-received tax so the ledger emission below
@@ -1265,7 +1265,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Phase 3e (C4): group loss relief. Runs AFTER tax has been charged and after
   // IMF remittances, so it reads the same per-corp figures the treasury
   // actually collected against. Implemented as a rebate rather than a
-  // consolidated recomputation — arithmetically identical for the turn, and
+  // consolidated recomputation, arithmetically identical for the turn, and
   // additive instead of unpicking the per-corp tax the whole snapshot is
   // derived from. Best-effort: a hiccup must not fail the turn.
   if (typeof turn === "number" && corpSnapshots.length > 0) {
@@ -1310,7 +1310,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   mark("groupLossRelief");
 
   // Phase 3f (C6): group operating synergies. A group's members converge toward
-  // its best marketing and logistics capability — upward only, so acquiring a
+  // its best marketing and logistics capability, upward only, so acquiring a
   // weak subsidiary never drags a strong parent down. Best-effort.
   if (typeof turn === "number") {
     try {
@@ -1331,7 +1331,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   mark("groupSynergies");
 
   // Phase 4 (+4b diagnostic): Update domestic/foreign corporate profits tax
-  // bases (75% GDP-derived floor + 25% actual annualised corp income) — see
+  // bases (75% GDP-derived floor + 25% actual annualised corp income), see
   // updateCorporateTaxBases for the currency convention (v0.2.6 locked
   // decision #3) and the per-turn income-split diagnostic log.
   await updateCorporateTaxBases({
@@ -1455,7 +1455,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   }
 
   // Phase 6b: Credit NPP CEO salaries and dividends to the NPP's PERSONAL wealth
-  // (currencyBalances.personal, per corp currency) — mirroring the player path in
+  // (currencyBalances.personal, per corp currency), mirroring the player path in
   // Phase 6. Dividend/CEO income is OWNERSHIP income and belongs to personal net
   // worth, which the balance metric measures; the campaign war chest (`funds`,
   // topped up by nppFundGeneration) is operating capital and is deliberately
@@ -1488,7 +1488,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   mark("imperial+nppPayments");
 
   // Phase 6a: Auto-convert dividend income back to each holder's home currency.
-  // One `executeMarketMakerTrade` per (character, foreign currency) — dividends paid
+  // One `executeMarketMakerTrade` per (character, foreign currency), dividends paid
   // this turn across all corps in that currency are aggregated into a single trade,
   // which contributes to forex volume/pressure for the involved currency pair.
   // Gated on forexEnabled; CEO salary is left in the paying corp's currency by design.
@@ -1530,7 +1530,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
 
   mark("marketMakerDividendConv");
   // Phase 7: Fill pending share orders based on updated share prices.
-  // `turn ?? 0` — turn is optional on this function's signature, but it's always
+  // `turn ?? 0`, turn is optional on this function's signature, but it's always
   // set by the hourly cron; the fallback keeps ad-hoc callers (tests) working.
   await fillPendingShareOrders(db, now, turn ?? 0);
 
@@ -1557,7 +1557,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   mark("snapshotMarketCap");
 
   // Emit corp_revenue / corp_tax_paid (per corp), corp_salary / corp_dividend
-  // (per character) and gov_tax_revenue (per country) ledger rows — see
+  // (per character) and gov_tax_revenue (per country) ledger rows, see
   // emitCorporationTurnTx for the Phase-3 split rationale and tax fold-in.
   await emitCorporationTurnTx({
     db,
@@ -1585,8 +1585,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     await processNationalizationAuctions(db, turn);
 
     // Financial-distress clock for the executive-nationalization grace window.
-    // Runs last — after pending takings may have removed seized corps and all
-    // liquidCapital writes have settled — so it reads each surviving player corp's
+    // Runs last, after pending takings may have removed seized corps and all
+    // liquidCapital writes have settled, so it reads each surviving player corp's
     // post-turn cash. Best-effort: a hiccup must not fail the turn.
     try {
       await trackFinancialDistress(db, turn);
@@ -1668,7 +1668,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   }
   mark("votes+nationalizations+distress");
 
-  // One bulk write for the whole turn's aggregate corp-audit entries — never
+  // One bulk write for the whole turn's aggregate corp-audit entries, never
   // per-corp (perf guard, see comment above `corpAuditEntries`).
   if (corpAuditEntries.length > 0) {
     recordAuditBulk(corpAuditEntries);

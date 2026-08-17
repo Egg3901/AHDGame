@@ -22,7 +22,7 @@ export type UnionActionResult =
 
 /**
  * Resolves a union by id and checks `character` is its leader. Shared
- * precondition for every action below — including the union-ban gate
+ * precondition for every action below, including the union-ban gate
  * (player suggestion #93): while the union's country has an enacted ban,
  * every leader action 403s. The budget flag (not `union.suspended`) is
  * checked because it is the enactment-time source of truth.
@@ -52,7 +52,7 @@ export async function resolveOwnedUnion(
  * The corp turn's sectorOps bulk write (unionization/strike fields) and
  * `processUnionsTurn`'s union bulk write (treasury/membershipPressure) both
  * recompute from a pre-mutation snapshot with no optimistic-concurrency
- * filter — an action landing mid-turn would be silently clobbered (paid,
+ * filter: an action landing mid-turn would be silently clobbered (paid,
  * no effect, no error). Reject during the window instead of racing.
  */
 export async function rejectIfTurnProcessing(db: Db): Promise<UnionActionResult | null> {
@@ -61,7 +61,7 @@ export async function rejectIfTurnProcessing(db: Db): Promise<UnionActionResult 
     return {
       ok: false,
       status: 409,
-      error: "The game is processing this turn — try again shortly.",
+      error: "The game is processing this turn, try again shortly.",
     };
   }
   return null;
@@ -95,7 +95,7 @@ export async function setUnionWageDemand(
 
 /**
  * Sectors this union actually represents, i.e. `CorporateSector.representingUnionId`
- * points at it — the dues/services base under union dues v1. Distinct from the
+ * points at it, the dues/services base under union dues v1. Distinct from the
  * broader "every sector matching (countryId, sectorType)" candidate scope
  * `[id]/route.ts` still uses for bargaining/employer listings: dues and
  * services are only ever charged/valued against shops this union has actually
@@ -191,7 +191,7 @@ export async function setUnionServices(
 }
 
 /**
- * Record this union's public stance on a bill — visibility-only this phase
+ * Record this union's public stance on a bill, visibility-only this phase
  * (v3 Phase 8 deliberate scope cut), no mechanical vote-swing effect yet.
  */
 export async function endorseBill(

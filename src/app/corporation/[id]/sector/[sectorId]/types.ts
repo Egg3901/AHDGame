@@ -529,7 +529,7 @@ export interface PlantBuildOrderView {
   startTurn: number;
   onlineTurn: number;
   turnsRemaining: number;
-  /** 0–1 share of capacity DELIVERED so far. */
+  /** 0, 1 share of capacity DELIVERED so far. */
   progress: number;
 }
 
@@ -560,7 +560,7 @@ export interface PlantsData {
   /**
    * True buyers' room in sector output units (unmet demand across the output
    * mix, min over legs; 0 in a glut). `headroomUnits` is claimable market
-   * share, NOT demand — optional because payloads predating the split omit it.
+   * share, NOT demand, optional because payloads predating the split omit it.
    */
   demandGapUnits?: number;
   currentTurn: number;

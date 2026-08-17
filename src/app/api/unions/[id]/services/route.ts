@@ -1,5 +1,5 @@
 /**
- * PATCH /api/unions/[id]/services — the union president switches the service
+ * PATCH /api/unions/[id]/services: the union president switches the service
  * slate on/off. Gated on `labourSystemMode >= "full"`.
  *
  * Unknown service ids are dropped, not stored (`normalizeServiceIds`), so a

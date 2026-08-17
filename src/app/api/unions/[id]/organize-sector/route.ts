@@ -1,5 +1,5 @@
 /**
- * POST /api/unions/[id]/organize-sector — targeted organizing drive / raid.
+ * POST /api/unions/[id]/organize-sector: targeted organizing drive / raid.
  * Gated on `labourSystemMode >= "full"`. See `organizeSector` in
  * `@/lib/unions/commands/organizeSector` for the full contest rule.
  */

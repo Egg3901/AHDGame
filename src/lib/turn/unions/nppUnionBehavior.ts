@@ -4,7 +4,7 @@
  * Leadership election remains NPP-specific. Every industrial-relations
  * decision after that uses the same campaign, offer, escalation, mediation,
  * settlement, and agreement services as player actions. Union dues v1
- * retired the recruitment drive this file used to run for NPP leaders — see
+ * retired the recruitment drive this file used to run for NPP leaders, see
  * the comment above the leadership loop below.
  */
 import type { Db, ObjectId } from "mongodb";
@@ -215,7 +215,7 @@ export async function processNppUnionBehavior(
   // straight from represented-sector workers x unionization every turn
   // (`processUnionsTurn`), so there is nothing left for an NPP leader to
   // "recruit" into. This loop now only clears `demandedWageLevel` and detects
-  // orphaned leadership — see NEEDS OTHER AGENTS in this branch's report for
+  // orphaned leadership, see NEEDS OTHER AGENTS in this branch's report for
   // the open question of whether NPP leaders should get a dues/services policy
   // lever to replace what recruiting used to be.
   const clearOps = [];
@@ -290,7 +290,7 @@ export async function processNppUnionBehavior(
       (sector) => sector.countryId === union.countryId && sector.sectorType === union.sectorType
     );
     if (scopeLocals.length === 0) continue;
-    // Union dues v1: membershipPressure retired — coverage within scope, read
+    // Union dues v1: membershipPressure retired, coverage within scope, read
     // directly off the same sectors' own `unionization`, is what "is this
     // industry organized enough to bother demanding" now means.
     const scopeAverageUnionization = weightedAverage(scopeLocals, (local) => local.unionization ?? 0);

@@ -249,7 +249,7 @@ export function UnionsClient() {
           {loading ? (
             // Mirrors the loaded table: header strip + rank/name/leader/number
             // columns. Union count varies by world, so reserve the typical
-            // loaded height with min-h — rows inside only approximate.
+            // loaded height with min-h, rows inside only approximate.
             <div className="min-h-[520px]">
               <div className="flex items-center gap-4 border-b border-card-border bg-card-elevated px-4 py-3">
                 <Skeleton className="h-3 w-4" />
@@ -301,7 +301,7 @@ export function UnionsClient() {
                   <th className="px-4 py-3 font-medium">
                     <span className="inline-flex items-center">
                       President
-                      <Tooltip content="The union president. A vacant union has none — fund organize drives on its page, then vote one in." />
+                      <Tooltip content="The union president. A vacant union has none, fund organize drives on its page, then vote one in." />
                     </span>
                   </th>
                   <th className="px-4 py-3 text-right font-medium">

@@ -187,7 +187,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         const { characters, config, gameNow, stateMap, gameState, newTurn, phaseResults } = context;
         // When an admin pauses corporation actions, the corporate turn phase
         // (sector revenue, operating income, dividends, market-cap/history
-        // snapshots) is skipped entirely — this is what makes the admin toggle's
+        // snapshots) is skipped entirely, this is what makes the admin toggle's
         // "corporate phases will be skipped during turn processing" promise true.
         // Bond servicing (processBondTurn) is intentionally NOT skipped here: it
         // settles existing contractual coupons/maturities, including sovereign
@@ -197,7 +197,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // corporation turn (which applies the onset margin penalty) is skipped
         // below, so spawning now would stamp lastDisasterTurn and waste the
         // full-strength onset turn on an inert economy. Deferring keeps the
-        // cadence honest — it fires on the next unpaused turn instead.
+        // cadence honest, it fires on the next unpaused turn instead.
         if (!corpActionsPaused) {
           await runtime.runPhase("autoDisasterTurn", () =>
             processAutoDisasterTurn(context.db, newTurn, gameState)
@@ -237,7 +237,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             "Skipped because an admin paused corporation actions."
           );
         } else {
-          // NPP Autonomy V2.2 — autonomous NPP corporate aggression. Runs after
+          // NPP Autonomy V2.2, autonomous NPP corporate aggression. Runs after
           // the corporation phase settles finances/MS so attacks see the turn's
           // up-to-date balances. Self-gates per attacker country on
           // nppAutonomyAtLeast(v2); a no-op below the comingle tier.
@@ -250,7 +250,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // cost, services lapsing rather than overdrawing) + approval trend
         // toward its target. Runs right after corporationTurn since
         // sectorCalculations.ts reads each represented union's approval THIS
-        // same turn (via unionizationDriftTarget) — sequencing after keeps the
+        // same turn (via unionizationDriftTarget), sequencing after keeps the
         // read using last turn's persisted value, consistent with the rest of
         // the labour system's one-turn lag.
         await runtime.runPhase("unionsTurn", () => processUnionsTurn(context.db));
@@ -393,7 +393,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           };
         }
 
-        // Resource prospecting resolution — runs AFTER corporationTurn (so this
+        // Resource prospecting resolution, runs AFTER corporationTurn (so this
         // turn's corp state/rdScore is settled) and BEFORE commodityPrices (so a
         // survey's new capacity is visible to this turn's extraction S/D). No-op
         // unless prospectingEnabled. Emits notifications only; the survey cost
@@ -401,7 +401,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         if (await isProspectingEnabled(config)) {
           // getEraContext, NOT gameState.currentYear: currentYear is set on every
           // world regardless of `eraSystemEnabled`, so passing it directly
-          // applied era scaling in worlds with the era clock OFF — and left
+          // applied era scaling in worlds with the era clock OFF, and left
           // duration (which DOES go through getEraContext at launch) gated
           // differently from success and yield.
           const prospectEraYear = (await getEraContext(context.db)).year;
@@ -419,7 +419,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           );
         }
 
-        // Tier-2 sphere-macro kernel — MUST run before commodityPrices so a
+        // Tier-2 sphere-macro kernel, MUST run before commodityPrices so a
         // same-turn refresh is visible in this turn's global market calculation.
         // Non-tick turns are a cheap no-op; held contributions persist.
         const macroCountryResult = await runtime.runPhase("macroCountryTurn", () =>
@@ -432,7 +432,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           };
         }
 
-        // NPP sphere sponsorship (#3718) — cadence-gated relationship drift
+        // NPP sphere sponsorship (#3718), cadence-gated relationship drift
         // before commodity/sphere routing so same-turn membership changes apply.
         const sphereSponsorResult = await runtime.runPhase("sphereSponsorTurn", async () => {
           const access = await getAllCountryAccess(context.db);
@@ -455,7 +455,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           runtime.runPhase("commodityPrices", () => processCommodityPriceTurn(newTurn)),
         ]);
 
-        // Extraction-contract settlement — runs AFTER commodityPrices because
+        // Extraction-contract settlement, runs AFTER commodityPrices because
         // the per-turn royalty is priced off this turn's market. No-op unless
         // contractIssuanceEnabled. Charges corps, credits issuers, lapses expired
         // offers/terms, and defaults on repeated non-payment.
@@ -606,7 +606,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           phaseResults.supportDecay = supportDecayResult;
         }
 
-        // Phase B (B1) — apply queued rally-accrual drips before
+        // Phase B (B1), apply queued rally-accrual drips before
         // vote-distribution reads Support this turn. Ordering matters:
         // accruals applied BEFORE supportDecay would have the just-
         // applied drip immediately partially decayed; running it AFTER
@@ -736,7 +736,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         });
 
         // File bench challengers directly into otherwise-uncontested single-seat
-        // primaries (governor/senate) BEFORE nppBehavior — governor is last in
+        // primaries (governor/senate) BEFORE nppBehavior, governor is last in
         // RACE_PRIORITY so nppBehavior's own Phase-2 starves it. Running first
         // means nppBehavior (which reloads context this same turn) sees the filed
         // candidate and won't double-fill the race.
@@ -768,18 +768,18 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           runtime.runPhase("cabinetNominations", () => processCabinetNominationLifecycle(realNow)),
           // SCOTUS (#3598): runs in the same parallel group as cabinetNominations
           // (a like-shaped Senate-confirmation lifecycle) and BEFORE
-          // socialAxisDrift below — a diverged case's synthesized enactment
+          // socialAxisDrift below, a diverged case's synthesized enactment
           // writes statePolicies this same turn, and socialAxisDrift reads
           // whatever statePolicies rows the bill phases just wrote.
           runtime.runPhase("scotusTurn", () =>
             processScotusTurn(gameState.currentTurn, realNow, db)
           ),
-          // UK JR surprise flavor — same parallel group as SCOTUS; UK-only
+          // UK JR surprise flavor, same parallel group as SCOTUS; UK-only
           // mild uk_* enactments tagged uk_judicial_review_surprise.
           runtime.runPhase("ukJrSurpriseTurn", () =>
             processUkJrSurpriseTurn(gameState.currentTurn, db)
           ),
-          // FOMC seat confirmations — a like-shaped Senate-confirmation lifecycle,
+          // FOMC seat confirmations, a like-shaped Senate-confirmation lifecycle,
           // appended last so the index math above is unchanged.
           runtime.runPhase("fomcNominations", () => processFomcNominationLifecycle(realNow)),
         ]);
@@ -836,7 +836,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           phaseResultsRecord[entry.phaseName] = result ?? entry.emptyResult;
         });
 
-        // Country social-axis drift — runs sequentially AFTER bill enactment so
+        // Country social-axis drift, runs sequentially AFTER bill enactment so
         // it reads the statePolicies rows the bill phases just wrote this turn.
         // Pass gameState.currentTurn (NOT newTurn): the bill phases stamp
         // enactedTurn with the pre-increment currentTurn, which the turn system
@@ -848,13 +848,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           phaseResults.socialAxisDrift = socialAxisDriftResult;
         }
 
-        // Governor's Office maintenance — runs sequentially AFTER bill enactment so
+        // Governor's Office maintenance, runs sequentially AFTER bill enactment so
         // supersession of executive orders by same-turn bills is deterministic.
         //
         // Ensure an office-state row exists for every current regional executive
         // + national seat BEFORE regen. `seedOfficeStates` only ever runs at
         // bootstrap/reset, so a region added later (e.g. the Ireland build-out)
-        // has no `governorOfficeState` row — its office AP reads `?? 0` and
+        // has no `governorOfficeState` row, its office AP reads `?? 0` and
         // `governorAPRegen` has nothing to increment, freezing AP at 0 forever.
         // The seed is idempotent (skips existing rows) and creates any missing
         // row at the action cap, so it self-heals here and the row is then
@@ -924,7 +924,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         }
 
         // World Events v1 Phase 0 substrate maintenance: expire temporary
-        // sectorDemandModifier docs. No scheduler yet (Phase 1) — this only
+        // sectorDemandModifier docs. No scheduler yet (Phase 1), this only
         // keeps countryModifiers from growing unbounded regardless of the
         // worldEventsEnabled flag (cheap no-op collection when nothing wrote to it).
         const worldEventsMaintenanceResult = await runtime.runPhase("worldEventsMaintenance", () =>
@@ -952,7 +952,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           processNppActions(db, newTurn)
         );
         // Log aggregate totals whenever the processing phase actually ran (every 4 turns
-        // with the economy gate on), even when zero actions fired — the count breakdown
+        // with the economy gate on), even when zero actions fired, the count breakdown
         // is the per-tick signal for diagnosing NPP-action throughput.
         if (nppActionResult && nppActionResult.nppsProcessed > 0) {
           phaseResults.nppActionProcessing = nppActionResult;
@@ -990,7 +990,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         );
         phaseResults.voteAccumulation = { electionsProcessed: 0 };
 
-        // A2 — clear `Campaign.spendThisTurn` after vote tallies have read
+        // A2, clear `Campaign.spendThisTurn` after vote tallies have read
         // it. This runs after voteAccumulation in the same turn-tick, so
         // the swing-flow engine's money driver saw the value during the
         // tally, and the field starts the next turn-tick interval at 0
@@ -1052,7 +1052,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         await runtime.runPhase("parliamentaryVacancyWatcher", () =>
           runParliamentaryVacancyWatcher(gameNow, newTurn)
         );
-        // NPP Autonomy V1 governing brain — runs after executives are seated so
+        // NPP Autonomy V1 governing brain, runs after executives are seated so
         // the agenda computation sees a formed government. Self-gates per
         // country on nppAutonomyAtLeast(v1); a cheap no-op below v1.
         await runtime.runPhase("nppGovernmentPhases", () =>
@@ -1115,7 +1115,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         ]);
         // After perpetual elections settle, fill any mid-term governor vacancy
         // with an off-calendar by-election (distinct electionType keeps it clear
-        // of the regular schedule). Suppressed during founding — every seat is
+        // of the regular schedule). Suppressed during founding, every seat is
         // being elected, so there are no "mid-term" vacancies to backfill.
         if (!foundingActive) {
           await runtime.runPhase("byElectionWatcher", () =>
@@ -1187,12 +1187,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         }
 
         const { runIndexFundCron } = await import("@/lib/indexFunds/fundCron");
-        // Was a bare await with no runtime.runPhase() wrapper — the ONLY phase in
+        // Was a bare await with no runtime.runPhase() wrapper, the ONLY phase in
         // the entire registry invisible to TurnPhaseTelemetryMap (confirmed: every
         // other adapter uses runPhase/markPhaseSkipped). Found via the headless sim
         // harness: turnLogs.phaseStatuses showed the last tracked phase
         // (gameHealthSnapshot, the entry right before this one) ending ~11s into a
-        // turn that took ~108s total — the missing ~97s was entirely this phase,
+        // turn that took ~108s total, the missing ~97s was entirely this phase,
         // with zero telemetry trace and zero Sentry slow-phase reporting in
         // production either. Wrapping it fixes both: visibility here, AND
         // production's existing >30s slow-phase alerting now covers this phase too.
@@ -1234,7 +1234,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
     // Snapshot the authoritative money balances AFTER every value-affecting
     // phase has run, then reconcile this turn's shadow ledger entries against
     // the snapshot diff. Shadow-only and flag-gated (`ledgerShadow`, off in prod
-    // seeds, on in the sim harness) — zero game-behavior impact. See
+    // seeds, on in the sim harness), zero game-behavior impact. See
     // docs/plans/2026-07-05-shadow-ledger-plan.md §2/§3.
     {
       key: "ledgerBalanceSnapshot",

@@ -1,5 +1,5 @@
 /**
- * POST /api/unions/found — found a rival union in an industry, seeding the
+ * POST /api/unions/found: found a rival union in an industry, seeding the
  * raid target `organizeSector` needs. Gated on `labourSystemMode >= "full"`.
  * See `foundUnion` in `@/lib/unions/commands/foundUnion` for cost/validation.
  */
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ success: true, ...result }, { status: 201 });
     // Note: 201 (Created) rather than `result.status` (200, the shared
-    // UnionActionResult convention for a mutation on an existing union) — this
+    // UnionActionResult convention for a mutation on an existing union), this
     // route is the one place under src/app/api/unions that creates a new
     // resource rather than mutating one.
   } catch (error) {

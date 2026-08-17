@@ -37,7 +37,7 @@ export function getProcessingLockState(snapshot: ProcessingLockSnapshot, now = n
  * not stale/abandoned)? Player-facing mutation routes whose fields are ALSO
  * written by the corp turn's own bulk write (unionization, strikeStartedAtTurn,
  * strikeCooldownUntilTurn on CorporateSector; treasury/approval on Union)
- * must reject during this window — the turn's write recomputes those
+ * must reject during this window, the turn's write recomputes those
  * fields from a pre-mutation snapshot and would otherwise silently clobber a
  * paid-for player action with no error surfaced. See
  * docs/plans/2026-06-30-labour-handoff.md's code-review section for the bug
@@ -54,14 +54,14 @@ export type CrashRecoverySnapshot = ProcessingLockSnapshot &
 
 /**
  * Turn-atomicity guard (issue #2815). A turn's ~20 phases each commit DB writes
- * directly, and `currentTurn` only advances after they all finish — no
- * transaction wraps the turn (turns run 36–67s over thousands of docs, past
+ * directly, and `currentTurn` only advances after they all finish, no
+ * transaction wraps the turn (turns run 36, 67s over thousands of docs, past
  * Mongo's per-transaction limits). If the process dies mid-turn (OOM, the
  * worker 5-min kill, a deploy, a host crash) the lock is left held; the 20-min
  * stale takeover would otherwise re-run the SAME turn from the start and
  * double-apply every additive-income phase that already committed (fund
  * generation, corp liquidity/dividends, savings interest, bond coupons, caucus
- * tax, treasury) — persistent, economy-wide money creation.
+ * tax, treasury), persistent, economy-wide money creation.
  *
  * Returns true when a stale lock belongs to a turn that had already progressed
  * past bootstrap (so phases may have committed). The caller then consumes the
@@ -70,7 +70,7 @@ export type CrashRecoverySnapshot = ProcessingLockSnapshot &
  * so this returns false and the turn is safely (and losslessly) re-run.
  *
  * `currentPhase` (the phase the runtime durably flushes as it runs) is the
- * progress signal. This is a pure decision — the caller re-checks the freshly
+ * progress signal. This is a pure decision, the caller re-checks the freshly
  * locked state before acting so a concurrent completion can't be double-counted.
  */
 export function shouldRecoverCrashedTurn(

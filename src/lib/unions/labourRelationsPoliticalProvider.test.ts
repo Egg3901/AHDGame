@@ -254,7 +254,7 @@ describe("union dues v1: running services nudge economy.workerSecurity", () => {
       101,
       [union({ countryId: "US", activeServices: ["healthFund"] })]
     ).get("US")!.get("economy.workerSecurity");
-    // Same slate, same result each call — nothing persists or compounds turn
+    // Same slate, same result each call, nothing persists or compounds turn
     // to turn inside this function.
     expect(second).toBe(first);
   });

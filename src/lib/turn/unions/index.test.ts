@@ -22,7 +22,7 @@ vi.mock("@/lib/labour/featureFlag", () => ({
   isLabourFullMode: vi.fn().mockImplementation(async () => labourFullModeEnabled),
 }));
 
-// Safety-net seeding (zero union docs at full mode) is asserted via this mock —
+// Safety-net seeding (zero union docs at full mode) is asserted via this mock, 
 // the real seedUnions hits states/unions collections this mock db doesn't model.
 vi.mock("@/lib/admin/seed/seedUnions", () => ({
   seedUnions: vi.fn().mockResolvedValue(0),
@@ -240,7 +240,7 @@ describe("processUnionsTurn", () => {
 
   it("lapses services (no charge, no approval bonus) when the treasury can't cover the bill", async () => {
     // A tiny treasury and zero dues means the full service slate is
-    // unaffordable — services must lapse rather than drive treasury negative.
+    // unaffordable, services must lapse rather than drive treasury negative.
     const union = makeUnion({
       treasury: 1,
       duesPerWorkerAnnual: 0,
@@ -386,7 +386,7 @@ describe("processUnionsTurn", () => {
   });
 });
 
-describe("processUnionsTurn — safety-net seeding + union-ban suspension", () => {
+describe("processUnionsTurn, safety-net seeding + union-ban suspension", () => {
   it("backfills via seedUnions(reset:false) when full mode is on but ZERO union docs exist", async () => {
     labourFullModeEnabled = true;
     vi.mocked(seedUnions).mockClear();
@@ -402,7 +402,7 @@ describe("processUnionsTurn — safety-net seeding + union-ban suspension", () =
 
   it("backfills when the roster is INCOMPLETE, not just empty (regression: 1953 sandbox stuck at 1 of 391)", async () => {
     // A lone stray union (e.g. an early partial seed) must NOT block the
-    // backfill — the old `=== 0` guard let exactly this state persist forever.
+    // backfill, the old `=== 0` guard let exactly this state persist forever.
     labourFullModeEnabled = true;
     vi.mocked(seedUnions).mockClear();
     const { db } = mockDb({

@@ -32,7 +32,7 @@ function makeUnion(ownerId: ObjectId | null, overrides: Partial<Union> = {}): Un
   } as unknown as Union;
 }
 
-/** gameState collection mock — not processing by default. */
+/** gameState collection mock, not processing by default. */
 function gameStateCollection(isProcessing = false) {
   return {
     findOne: vi

@@ -5,15 +5,15 @@ import type { CurrencyCode } from "../../constants/currencies";
 import type { ExtractableResource } from "../../constants/commodities";
 
 export interface Shareholder {
-  /** Character holder — present for character-owned positions */
+  /** Character holder, present for character-owned positions */
   characterId?: ObjectId;
-  /** Imperial character holder — present for imperial-owned positions */
+  /** Imperial character holder, present for imperial-owned positions */
   imperialCharacterId?: ObjectId;
-  /** Corporation holder — present for corp-owned positions */
+  /** Corporation holder, present for corp-owned positions */
   corporationId?: ObjectId;
-  /** Index fund holder — present for passive fund-owned positions */
+  /** Index fund holder, present for passive fund-owned positions */
   fundId?: ObjectId;
-  /** NPP holder — present for NPP CEO-owned positions */
+  /** NPP holder, present for NPP CEO-owned positions */
   nppId?: ObjectId;
   shares: number;
   /** Weighted average purchase price per share. Null for pre-tracking positions. */
@@ -21,7 +21,7 @@ export interface Shareholder {
   /**
    * Founder supershare count (dual-class structure). Stamped at adoption with
    * the founder's then-current share count; never increased afterwards. The
-   * votable amount is `min(superShares, shares)` — see lib/corporations/superShares.
+   * votable amount is `min(superShares, shares)`, see lib/corporations/superShares.
    */
   superShares?: number;
 }
@@ -88,7 +88,7 @@ export interface CeoTenure {
 }
 
 /**
- * Command Economy v2 (P0) — per-SOE planned-economy overlay carried on a
+ * Command Economy v2 (P0), per-SOE planned-economy overlay carried on a
  * state-owned enterprise corporation. One SOE is seeded per commanding-height
  * sector for a command country (RU, and CN in its command years). Reuses the
  * existing corp/sector plumbing; these are the extra fields the design names so
@@ -140,14 +140,14 @@ export interface Corporation {
   _id: ObjectId;
   name: string;
   /**
-   * Stock ticker symbol (1–5 uppercase letters). Globally unique among
+   * Stock ticker symbol (1, 5 uppercase letters). Globally unique among
    * corporations that have one. Required on corps founded after this
    * feature shipped; legacy corps may not have it.
    */
   tickerSymbol?: string;
   description?: string;
   type: CorporationType;
-  /** Optional secondary sector focus — halves sector match bonus, doubles base sprawl threshold */
+  /** Optional secondary sector focus, halves sector match bonus, doubles base sprawl threshold */
   secondaryType?: CorporationType | null;
   /** Turn when primary/secondary type was last switched (for penalty duration) */
   typeSwitchTurn?: number | null;
@@ -180,7 +180,7 @@ export interface Corporation {
   /**
    * Currency denomination of liquidCapital.
    * Set during forex migration to the corp's home currency.
-   * Absent on pre-forex corps — treat as USD.
+   * Absent on pre-forex corps, treat as USD.
    */
   liquidCurrencyCode?: CurrencyCode;
   /**
@@ -258,7 +258,7 @@ export interface Corporation {
   shareholders: Shareholder[];
   /** Shares available in the public float (universal market maker pool) */
   publicFloat?: number;
-  /** Dividend payout rate (0–100%). Income × this % is distributed to shareholders each turn. */
+  /** Dividend payout rate (0, 100%). Income × this % is distributed to shareholders each turn. */
   dividendRate?: number;
   /** When the dividend rate was last changed (enforces 24h cooldown) */
   lastDividendChange?: Date;
@@ -280,7 +280,7 @@ export interface Corporation {
   lastAutoAttackedTurn?: number;
   /** Game turn when shares last underwent a CEO stock split / reverse split (cooldown) */
   lastShareStructureTurn?: number | null;
-  /** Split escalation level — MS cost per split is 2^splitEscalation. Decays by 1 each turn. */
+  /** Split escalation level, MS cost per split is 2^splitEscalation. Decays by 1 each turn. */
   splitEscalation?: number;
   /** Whether the CEO position is currently vacant (resigned or no CEO accepted yet) */
   ceoVacant?: boolean;
@@ -298,7 +298,7 @@ export interface Corporation {
    * escrow, anchor-converted) first went negative, uncured. Stamped/cleared
    * each turn by processNppInsolventCorpDissolution; when it stays set for
    * PERSISTENT_INSOLVENCY_GRACE_TURNS the corp is wound down (#3237). Only
-   * ever set on ceoType "npp" corps — player corps use
+   * ever set on ceoType "npp" corps, player corps use
    * financialDistressSinceTurn + the nationalization grace window instead.
    */
   nppInsolventSinceTurn?: number;
@@ -311,7 +311,7 @@ export interface Corporation {
   ceoHistory?: CeoTenure[];
   /** Whether the corporation is suspended from turn processing */
   suspended?: boolean;
-  /** Turn after which suspension ends (informational — admin must manually resume) */
+  /** Turn after which suspension ends (informational, admin must manually resume) */
   suspendedUntilTurn?: number;
   /** Character being offered the CEO position (pending acceptance) */
   pendingCeoCharacterId?: ObjectId;
@@ -319,7 +319,7 @@ export interface Corporation {
    * Set while an NPP caretaker runs this player-owned corp (NPP-autonomy V2.1).
    * The autonomy brain operates the corp through `ceoType:"npp"` + `ceoId` (the
    * NPP), but `userId` deliberately stays the appointing owner so they keep CEO
-   * authorization (`requireCeo`) and private-data access — that retained control
+   * authorization (`requireCeo`) and private-data access, that retained control
    * is precisely what makes this a *caretaker* (player-appointed, player-revoked)
    * rather than a full handover to an autonomous NPP corp. Stores the displaced
    * human CEO so dismissal restores them. Absent ⇒ the corp is not caretaker-run.
@@ -329,7 +329,7 @@ export interface Corporation {
      * The human CEO restored as `ceoId` on dismissal. Present for a player-
      * appointed caretaker (the sitting CEO who handed off). Absent when the
      * caretaker was auto-installed onto a corp whose human CEO had already
-     * departed with no character left to restore (e.g. retirement) — dismissal
+     * departed with no character left to restore (e.g. retirement), dismissal
      * then returns the corp to `ceoVacant` rather than seating a ghost.
      */
     underlyingCharacterId?: ObjectId;
@@ -357,7 +357,7 @@ export interface Corporation {
   isNationalized?: boolean;
   /**
    * Ownership lifecycle state (nationalization subsystem). Absence ⇒ "private"
-   * for back-compat. `isStateOwned()` is the canonical reader — do not branch on
+   * for back-compat. `isStateOwned()` is the canonical reader, do not branch on
    * this field directly. Set "stateOwned" only on the per-country National
    * Corporation.
    */
@@ -367,11 +367,11 @@ export interface Corporation {
   /**
    * Turn this corp was spun out of a National Corporation (privatization). Powers
    * the re-nationalization cooldown (spec §13.4). Distinct from `lastPrivatizationTurn`
-   * (the CEO take-private buyout anchor) — do not conflate.
+   * (the CEO take-private buyout anchor), do not conflate.
    */
   privatizedAtTurn?: number;
   /**
-   * State-retained golden-share fraction (0–1) for a spun-out corp, held as a
+   * State-retained golden-share fraction (0, 1) for a spun-out corp, held as a
    * reserved block by the country's primary National Corporation (spec §13.4).
    */
   goldenSharePercent?: number;
@@ -388,7 +388,7 @@ export interface Corporation {
    * entry. (spec §24.1)
    */
   assignedSectorTypes?: CorporationType[];
-  /** CEO-set share of per-turn operating profit retained in the corp (0–75). Absent ⇒ 0. (spec P6g §5.1) */
+  /** CEO-set share of per-turn operating profit retained in the corp (0, 75). Absent ⇒ 0. (spec P6g §5.1) */
   profitRetentionPercent?: number;
   /** Finance-minister-set per-turn cap on the CEO's treasury draw (local). Absent ⇒ default; 0 ⇒ frozen. (P6g §5.2) */
   treasuryDrawCap?: number;
@@ -408,7 +408,7 @@ export interface Corporation {
    * `commandEconomyEnabled` is on (one SOE per commanding-height sector);
    * absent on every market corporation, so market worlds stay byte-identical.
    * The corp/sector plumbing (commodity supply, budgets, shadow ledger) is
-   * unchanged — this is an overlay the command-economy phase reads/writes.
+   * unchanged: this is an overlay the command-economy phase reads/writes.
    * See @/lib/economy/soe and the design doc
    * `command-economy-v2-playable-planned-economies`.
    */
@@ -444,20 +444,20 @@ export interface Corporation {
   creditRatingSnapshot?: string;
   creditSnapshotTurn?: number;
   /**
-   * Brand loyalty (Package A, `brandLoyaltyEnabled`): 0–100 reputation earned by
+   * Brand loyalty (Package A, `brandLoyaltyEnabled`): 0, 100 reputation earned by
    * consistent pricing + delivery, protecting a relative slice of demand in
    * clearing. Player-facing as a hidden 5-label scale (see loyaltyLabel);
    * the raw number is admin-only. Absent ⇒ 0. See src/lib/market/brandLoyalty.ts.
    */
   brandLoyalty?: number;
   /**
-   * EMA of the corp's own revenue-weighted posture — its established price
+   * EMA of the corp's own revenue-weighted posture, its established price
    * identity. Gouging/erratic penalties are judged against THIS, not the market.
    * Absent ⇒ seeded to the current posture on first processing.
    */
   brandPostureNorm?: number;
   /**
-   * Denormalized revenue-weighted mean of per-sector output quality (0–100,
+   * Denormalized revenue-weighted mean of per-sector output quality (0, 100,
    * `brandLoyaltyEnabled` + quality pillars). Display + charts; also snapshotted
    * into corporationHistory. Absent until quality pillars (Package B) are live.
    */
@@ -475,7 +475,7 @@ export interface Corporation {
   imfBailoutActive?: boolean;
   /** Canonical IMF institution corporation that receives equity and facility remittances. */
   imfBailoutImfCorporationId?: ObjectId;
-  /** Target IMF fully diluted ownership % set at bailout (0–100). */
+  /** Target IMF fully diluted ownership % set at bailout (0, 100). */
   imfBailoutTargetOwnershipPercent?: number;
   imfBailoutStartedAt?: Date;
   /** Remaining IMF facility principal (₳ anchor). Vanilla issuer bonds are removed on bailout. */
@@ -493,7 +493,7 @@ export interface Corporation {
   /**
    * When true, financial fields (treasury, income, dividends, share price, etc.) are
    * redacted for non-CEO viewers. Set at founding (private path or post-privatization)
-   * and cleared on IPO. Absent on legacy corps — treat as false (public).
+   * and cleared on IPO. Absent on legacy corps, treat as false (public).
    */
   isPrivate?: boolean;
   /**
@@ -520,7 +520,7 @@ export interface Corporation {
   superSharesAdoptedAtTurn?: number;
   /**
    * Sector tech-tree node ids the CEO has unlocked (see lib/constants/techTree).
-   * Effects are derived from this set each turn — never persisted as mutated
+   * Effects are derived from this set each turn, never persisted as mutated
    * margins. Includes free auto-granted corporate nodes for late-era corps.
    * Absent ⇒ none.
    */
@@ -543,7 +543,7 @@ export interface Corporation {
   /**
    * Subsidiary corporations (feature-gated). Set when the controlling parent
    * formalizes this holding into a managed subsidiary. Presence of this marker
-   * (NOT any stored parent id — the relationship is always derived from voting
+   * (NOT any stored parent id, the relationship is always derived from voting
    * control) enables subsidiary management UI/actions. Cleared automatically by
    * the turn processor if no corporation controls >50% voting power anymore.
    */
@@ -559,7 +559,7 @@ export interface Corporation {
    */
   spunOffAtTurn?: number;
   /**
-   * Parent-set dividend floor (percent 0–100), folded into the existing
+   * Parent-set dividend floor (percent 0, 100), folded into the existing
    * effective-dividend-rate `max(...)` rule. Only honored while
    * `parentDividendFloorSetByCorpId` still controls >50% voting of this corp;
    * otherwise ignored and cleared by the turn processor. Capped at
@@ -586,8 +586,8 @@ export interface Corporation {
  *
  * Capacity is bought, then BUILT: the cash leaves the corp when the order is
  * placed, the capacity arrives `CAPACITY_BUILD_TURNS(sectorType)` turns later.
- * Between those two moments the money is construction-in-progress — spent, not
- * yet productive — which is the whole reason the queue is a persisted object
+ * Between those two moments the money is construction-in-progress, spent, not
+ * yet productive, which is the whole reason the queue is a persisted object
  * rather than an immediate `capitalStock` increment.
  */
 export interface SectorBuildOrder {
@@ -604,7 +604,7 @@ export interface SectorBuildOrder {
   onlineTurn: number;
   /**
    * When true, the order delivers capacity LINEARLY across
-   * `[startTurn, onlineTurn]` — a slice per turn — instead of the whole
+   * `[startTurn, onlineTurn]`, a slice per turn, instead of the whole
    * `unitsOrdered` landing at once on `onlineTurn`. Absent on legacy orders and
    * on the flip-compensation credit, which keep all-at-once landing. See
    * `src/lib/corporations/buildDelivery.ts`.
@@ -621,7 +621,7 @@ export interface CorporateSector {
   sectorType: CorporationType;
   /** Optional CEO-defined display name for this specific sector instance */
   displayName?: string;
-  /** Player-set target growth rate (% per game year — 48 turns, e.g. 1.5) */
+  /** Player-set target growth rate (% per game year, 48 turns, e.g. 1.5) */
   targetGrowthRate: number;
   /** Actual growth rate applied per turn (trends toward targetGrowthRate) */
   currentGrowthRate: number;
@@ -650,14 +650,14 @@ export interface CorporateSector {
    * production-side realization legs (production policy, nationalization
    * transition, capacity haircut, throughput, capital utilization, strike).
    * Absent on sectors not reprocessed since this field shipped.
-   * Display/telemetry only — never read back into the economy.
+   * Display/telemetry only, never read back into the economy.
    */
   producedUnits?: number;
   /**
-   * Units telemetry: the share of `producedUnits` that cleared this turn —
+   * Units telemetry: the share of `producedUnits` that cleared this turn, 
    * `producedUnits × soldFraction` when market clearing ran, else equal to
    * `producedUnits`. Same DAILY, currency-free basis.
-   * Display/telemetry only — never read back into the economy.
+   * Display/telemetry only, never read back into the economy.
    */
   soldUnits?: number;
   /**
@@ -666,7 +666,7 @@ export interface CorporateSector {
    *
    * Output sold to the state does not also reach the commodity market. Without this
    * a contracted plant supplied its full output to the world AND was paid again per
-   * lot — one plant's production earning twice, scaling with however many contracts
+   * lot: one plant's production earning twice, scaling with however many contracts
    * a friendly minister chose to write.
    *
    * Read back into the economy in exactly two places, both gated on the turn being
@@ -679,7 +679,7 @@ export interface CorporateSector {
   /**
    * True when this (foreign-national) sector is suspended by a TOTAL embargo the
    * operating country has against the corp's nation: revenue is frozen and it
-   * earns/spends nothing this turn. Reversible — clears when the embargo lifts.
+   * earns/spends nothing this turn. Reversible, clears when the embargo lifts.
    */
   embargoSuspended?: boolean;
   /**
@@ -701,7 +701,7 @@ export interface CorporateSector {
    */
   wageLevel?: number;
   /**
-   * The margin this sector actually operated at last turn — seeded
+   * The margin this sector actually operated at last turn, seeded
    * `profitMargin` plus every modifier applied that turn (commodity markets,
    * SOE mandate, tech effects, strike penalty, nationalisation penalty).
    * Display/analytics only; never read back into the economy.
@@ -714,7 +714,7 @@ export interface CorporateSector {
   /**
    * Labour system telemetry: most recent per-turn labor cost written when
    * labourSystemMode ≥ "wages" (home currency, daily basis like `revenue`).
-   * Display/analytics only — not read back into the economy. Absent when the
+   * Display/analytics only, not read back into the economy. Absent when the
    * labour system is off.
    */
   laborCost?: number;
@@ -726,7 +726,7 @@ export interface CorporateSector {
   wagePerWorker?: number;
   /**
    * v3 Phase 5/6 (labourSystemMode ≥ "unions"): per-sector NPC unionization
-   * pressure, 0–100. Drifts toward a condition-driven target each turn (see
+   * pressure, 0, 100. Drifts toward a condition-driven target each turn (see
    * `src/lib/labour/unionization.ts`). Feeds a standing labor-cost surcharge
    * (`unionPremium()`) and the strike trigger threshold (`src/lib/labour/strikes.ts`).
    * Absent/undefined is treated as 0 (no ambient unionization before the
@@ -769,14 +769,14 @@ export interface CorporateSector {
   /**
    * v3 Phase 6: turn after which this sector may strike again, or null when
    * not in cooldown. Set on every strike resolution (concession or
-   * wait-it-out) — the cooldown is unconditional, not just a waitout
+   * wait-it-out), the cooldown is unconditional, not just a waitout
    * consequence (see `STRIKE_COOLDOWN_TURNS` in strikes.ts).
    */
   strikeCooldownUntilTurn?: number | null;
   /**
    * v3 Phase 7 (labourSystemMode ≥ "full"): turn after which this sector's
    * CEO may attempt another union-busting action, or null when not in
-   * cooldown. Set on every busting attempt (success or backfire) — see
+   * cooldown. Set on every busting attempt (success or backfire), see
    * `src/lib/labour/unionBusting.ts`.
    */
   bustingCooldownUntilTurn?: number | null;
@@ -786,7 +786,7 @@ export interface CorporateSector {
    * Price-realization multiplier applied to this sector's realized revenue
    * last turn (marketSystemMode >= "realization", audit t806 Fix 1). Weighted
    * lagged market-price/base ratio of the sector's output mix, clamped
-   * [0.7, 1.5]. Telemetry/display only — never read back into the economy.
+   * [0.7, 1.5]. Telemetry/display only, never read back into the economy.
    */
   priceRealization?: number;
   /**
@@ -845,7 +845,7 @@ export interface CorporateSector {
    */
   buildQueue?: SectorBuildOrder[];
   /**
-   * Plants tier (P3a): construction in progress, in ₳ (anchor) — the sum of
+   * Plants tier (P3a): construction in progress, in ₳ (anchor), the sum of
    * `costPaidAnchor` across the outstanding `buildQueue` orders (D10).
    *
    * Denormalized so balance-sheet / valuation readers do not have to sum the
@@ -855,11 +855,11 @@ export interface CorporateSector {
   constructionInProgressAnchor?: number;
   /**
    * Plants tier (P5): the PAID BASIS of the capacity in `capitalStock`, in ₳
-   * (anchor) — cumulative cash actually spent to acquire the units the sector
+   * (anchor), cumulative cash actually spent to acquire the units the sector
    * still owns, after depreciation.
    *
    * This exists because exits settle at BOOK, and book used to be
-   * `capitalStock × capacityPricePerUnit` — the RAW list price. Builds are
+   * `capitalStock × capacityPricePerUnit`, the RAW list price. Builds are
    * charged that list price times a stack of discounts (founding 0.1×, CEO
    * acumen down to 0.5×, tech 0.7×, a cheap host state 0.6×), so a founding
    * build cost 3M ₳ and booked at 30M ₳: restructuring at the 0.85 salvage
@@ -885,7 +885,7 @@ export interface CorporateSector {
   capacityBookAnchor?: number;
   /**
    * Plants tier (P3.5): the sector's OTHER operating cost, in ₳ (anchor) per
-   * output unit per TURN — overheads, distribution, insurance, rent: everything
+   * output unit per TURN, overheads, distribution, insurance, rent: everything
    * the physical cost model does not name explicitly.
    *
    * This is not a designed constant. It is SOLVED once, on the sector's first
@@ -902,7 +902,7 @@ export interface CorporateSector {
    * Plants tier (P3.5): `1 − margin/100` of the non-physical margin stack at
    * the turn `otherOpexPerUnitAnchor` was solved. The denominator of the drift
    * factor that lets subsidies, tariffs, macro drag and tech margin bonuses keep
-   * moving the held residual — 1 at calibration by construction.
+   * moving the held residual, 1 at calibration by construction.
    */
   otherOpexAnchorMarginBasis?: number;
   /**
@@ -939,12 +939,12 @@ export interface CorporateSector {
    *
    * This field is the shadow of the series we stopped writing: each turn under
    * plants it stores what the pre-plants compounding chain WOULD have written
-   * for `revenue` (`preFlipNameplateRevenue` — the exact figure capital mode
+   * for `revenue` (`preFlipNameplateRevenue`, the exact figure capital mode
    * would have produced, which is also what the launch-safety governor clamps
    * against). Same DAILY basis and same host currency as `revenue`.
    *
    * NOTHING READS THIS IN THE SIMULATION. It exists so a rollback is a data
-   * operation instead of an archaeology project — see
+   * operation instead of an archaeology project, see
    * `restoreCapitalModeFromShadow` and
    * `scripts/migrations/2026-08-01-restore-capital-mode-from-shadow.ts`.
    *
@@ -963,19 +963,19 @@ export interface CorporateSector {
    * the live values on the flip turn and then trended on their own, so the
    * shadow revenue series can compound at the rate capital mode would have
    * used rather than at the zeroed plants rate. A rollback restores the live
-   * growth fields from these — otherwise capital mode would resume compounding
+   * growth fields from these, otherwise capital mode would resume compounding
    * a correct nameplate at a growth rate of zero.
    *
    * NOTHING READS THESE IN THE SIMULATION.
    */
   legacyGrowthRateShadow?: number;
-  /** @see legacyGrowthRateShadow — the target leg of the same frozen chain. */
+  /** @see legacyGrowthRateShadow, the target leg of the same frozen chain. */
   legacyTargetGrowthRateShadow?: number;
   /**
-   * Capital book anchor (₳) — a depreciated high-water mark on the sector's
+   * Capital book anchor (₳), a depreciated high-water mark on the sector's
    * going-concern value (sectorNPV), used as a tangible-book floor under capital
    * mode. Seeded at the current NPV on first exposure (mode flip is a no-op),
-   * ratchets up with NPV, and decays slowly when NPV falls — so a corp that
+   * ratchets up with NPV, and decays slowly when NPV falls, so a corp that
    * invested in real capacity isn't valued as if it owns nothing during a
    * transient profit dip, without ever exceeding its own historical peak.
    */
@@ -992,7 +992,7 @@ export interface CorporateSector {
    * The rescale is plants-gated and each command resolves the gate at its own
    * call time, so a retool committed under capital mode and cancelled after a
    * flip to plants would apply the INVERSE ratio to a stock that was never
-   * scaled — a permanent mint or burn of the whole RPU ratio, which reaches
+   * scaled: a permanent mint or burn of the whole RPU ratio, which reaches
    * 327x for a coal to rare-earth pair. Persisting the decision makes the
    * inverse conditional on the forward step having happened, so the pair can
    * never come apart across a mode change. Absent on legacy rows, which
@@ -1013,7 +1013,7 @@ export interface CorporateSector {
    * Counter for the sustained-negative-production margin penalty. Increments
    * by 1 per turn while productionPolicyLevel < 0 and decrements by 1 (floored
    * at 0) per turn otherwise. Penalty schedule lives in
-   * `getSustainedNegativeProductionPenalty`. Absent on legacy sectors —
+   * `getSustainedNegativeProductionPenalty`. Absent on legacy sectors, 
    * treated as 0 by the turn loop until first computed.
    */
   negativeProductionSustainedTurns?: number;
@@ -1045,13 +1045,13 @@ export interface CorporateSector {
     takenAtTurn: number;
   };
   /**
-   * Turn this sector was nationalized — anchor for the transition productivity
+   * Turn this sector was nationalized, anchor for the transition productivity
    * shock (decays over NATIONALIZATION_TRANSITION_TURNS). Stamped at the moment of
    * a taking; absent on never-nationalized sectors (no shock).
    */
   nationalizedAtTurn?: number;
   /**
-   * Extraction capacity utilization ∈ [0,1] from the last turn — the
+   * Extraction capacity utilization ∈ [0,1] from the last turn, the
    * revenue-weighted fraction of this sector's resource output that its
    * operating state's capacity actually admits. 1 = unconstrained. Display +
    * the revenue haircut read this. Absent on non-extraction sectors.
@@ -1061,14 +1061,14 @@ export interface CorporateSector {
    *  multiplier), or absent when the sector is unconstrained. Display only. */
   capacityBindingResource?: ExtractableResource;
   /**
-   * Turn this sector first came under the capacity revenue haircut — anchor for
+   * Turn this sector first came under the capacity revenue haircut, anchor for
    * the transition ramp (fades none → full over EXTRACTION_CAPACITY_HAIRCUT_TURNS).
    * Stamped the first time an extraction sector is processed; absent otherwise.
    */
   capacityHaircutStartTurn?: number;
   /**
    * SOCI escalation multiplier (`sociMultiplier`) captured when this sector was
-   * nationalized — fixes the transition shock's depth/length to how concentrated
+   * nationalized: fixes the transition shock's depth/length to how concentrated
    * the state was THEN, so later takings can't retroactively deepen an
    * already-settled sector's digestion. Absent ⇒ 1 (base transition); the
    * grandfather migration backfills 1 for pre-rebalance sectors.

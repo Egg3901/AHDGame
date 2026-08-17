@@ -43,7 +43,7 @@ const NOT_STRIKING = { strikeStartedAtTurn: null, strikeCooldownUntilTurn: null 
 const HIGH_UNIONIZATION = STRIKE_UNIONIZATION_THRESHOLD + 5;
 const WIDE_GAP = STRIKE_EXPECTATION_GAP_THRESHOLD + 0.1; // workerExpectation - realWage
 
-describe("stepStrike — trigger", () => {
+describe("stepStrike, trigger", () => {
   it("triggers when unionization and gap both exceed their thresholds, out of cooldown", () => {
     const result = stepStrike({
       unionization: HIGH_UNIONIZATION,
@@ -104,7 +104,7 @@ describe("stepStrike — trigger", () => {
   });
 });
 
-describe("stepStrike — resolution", () => {
+describe("stepStrike, resolution", () => {
   it("resolves via concession when the gap closes to at or below the concession threshold", () => {
     const result = stepStrike({
       unionization: HIGH_UNIONIZATION,
@@ -137,7 +137,7 @@ describe("stepStrike — resolution", () => {
     const result = stepStrike({
       unionization: HIGH_UNIONIZATION,
       realWage: 0.8,
-      workerExpectation: 0.8 + WIDE_GAP, // gap still wide — no concession
+      workerExpectation: 0.8 + WIDE_GAP, // gap still wide, no concession
       turn: startTurn + STRIKE_DURATION_TURNS,
       prior: { strikeStartedAtTurn: startTurn, strikeCooldownUntilTurn: null },
     });
@@ -167,7 +167,7 @@ describe("stepStrike — resolution", () => {
     // Seed the gap just above the trigger threshold, then simulate
     // STRIKE_DURATION_TURNS turns of passive trendWorkerExpectation decay
     // with realWage held flat (no CEO wage action) and re-check stepStrike
-    // at each turn — it must never resolve via concession before duration expires.
+    // at each turn, it must never resolve via concession before duration expires.
     const realWage = 0.8;
     let workerExpectation = realWage + STRIKE_EXPECTATION_GAP_THRESHOLD + 0.001;
     const startTurn = 0;
@@ -195,7 +195,7 @@ describe("stepStrike — resolution", () => {
   });
 });
 
-describe("stepStrike — v3 Phase 7b threshold overrides", () => {
+describe("stepStrike, v3 Phase 7b threshold overrides", () => {
   it("defaults to the module constant when unionizationThreshold is omitted", () => {
     const result = stepStrike({
       unionization: STRIKE_UNIONIZATION_THRESHOLD - 1, // below the default threshold
@@ -273,7 +273,7 @@ describe("lawAdjustedUnionizationThreshold", () => {
   });
 });
 
-describe("stepStrike — union ban (player suggestion #93)", () => {
+describe("stepStrike, union ban (player suggestion #93)", () => {
   it("never triggers a strike while unions are banned, even at maximal trigger conditions", () => {
     const result = stepStrike({
       unionization: 100,
@@ -292,9 +292,9 @@ describe("stepStrike — union ban (player suggestion #93)", () => {
     const result = stepStrike({
       unionization: HIGH_UNIONIZATION,
       realWage: 0.8,
-      workerExpectation: 0.8 + WIDE_GAP, // gap wide open — would NOT resolve by concession
+      workerExpectation: 0.8 + WIDE_GAP, // gap wide open, would NOT resolve by concession
       turn: 12,
-      prior: { strikeStartedAtTurn: 11, strikeCooldownUntilTurn: null }, // 1 turn elapsed — would NOT resolve by waitout
+      prior: { strikeStartedAtTurn: 11, strikeCooldownUntilTurn: null }, // 1 turn elapsed, would NOT resolve by waitout
       unionsBanned: true,
     });
     expect(result.event).toBe("resolved_banned");
@@ -343,12 +343,12 @@ describe("stepStrike — union ban (player suggestion #93)", () => {
   });
 });
 
-describe("stepStrike — union dues v1: representing-union service softening", () => {
+describe("stepStrike, union dues v1: representing-union service softening", () => {
   it("a softened gap can keep a strike from triggering where an unsoftened one would fire", () => {
     const unsoftened = stepStrike({
       unionization: HIGH_UNIONIZATION,
       realWage: 0.8,
-      // Just over the trigger threshold — softening it down should drop it
+      // Just over the trigger threshold, softening it down should drop it
       // back under the threshold.
       workerExpectation: 0.8 + STRIKE_EXPECTATION_GAP_THRESHOLD + 0.01,
       turn: 10,
@@ -388,7 +388,7 @@ describe("stepStrike — union dues v1: representing-union service softening", (
     expect(concedes.event).toBe("resolved_concession");
   });
 
-  it("never fully zeroes the gap even at the maximum softening a service slate can reach — services must not make a sector strike-proof", () => {
+  it("never fully zeroes the gap even at the maximum softening a service slate can reach, services must not make a sector strike-proof", () => {
     const result = stepStrike({
       unionization: HIGH_UNIONIZATION,
       realWage: 0.8,

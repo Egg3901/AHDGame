@@ -1,9 +1,9 @@
 /**
- * PATCH /api/unions/[id]/dues — the union president sets the annual per-member
+ * PATCH /api/unions/[id]/dues: the union president sets the annual per-member
  * dues rate. Gated on `labourSystemMode >= "full"`.
  *
  * Server clamps the rate into `[0, maxDuesForWage(averageAnnualWage)]` against
- * the union's actually-represented workforce — see `setUnionDues` in
+ * the union's actually-represented workforce, see `setUnionDues` in
  * `@/lib/unions/commands/unionActions`. The response always echoes what was
  * actually stored (post-clamp), plus the member count and dues income per turn
  * so the UI can show the consequence immediately without a second round trip.

@@ -13,7 +13,7 @@ import { BASE_APPROVAL } from "@/lib/unions/unionDues";
  * wildly different things across 1953 Nigeria and 2019 America, let alone
  * across every era in between (the same fragility `unionServices.ts`'s
  * fraction-of-wage pricing exists to avoid). A seeded union hasn't had a
- * leader decide to charge anything yet, so it starts at 0 — the head who
+ * leader decide to charge anything yet, so it starts at 0, the head who
  * takes over sets the real rate against local wages.
  */
 export const SEED_DUES_PER_WORKER_ANNUAL = 0;
@@ -30,7 +30,7 @@ export const SEED_DUES_PER_WORKER_ANNUAL = 0;
  * approval, dues, services, leadership).
  *
  * The upsert filter matches on `foundedByCharacterId` being absent, not just
- * `(countryId, sectorType)` — union dues v1 lets a player found a RIVAL union
+ * `(countryId, sectorType)`, union dues v1 lets a player found a RIVAL union
  * in an industry that already has one, and a rival's document also has that
  * same `(countryId, sectorType)` pair. Without the extra clause, re-running
  * this seed could match and silently touch a player-founded union instead of
@@ -101,7 +101,7 @@ export async function seedUnions(
   }
 
   // Union dues v1: hand each world-seeded union the sectors it starts out
-  // holding — every sector matching its (countryId, sectorType) that no union
+  // holding, every sector matching its (countryId, sectorType) that no union
   // represents yet. Read back the resolved ids (an upsert's `$setOnInsert`
   // doesn't return one for a document that already existed) and only touch
   // sectors with no `representingUnionId`, so this never overwrites a rival's

@@ -1,8 +1,8 @@
 /**
- * Union dues v1 — targeted organizing drive / raid.
+ * Union dues v1, targeted organizing drive / raid.
  *
  * The headline new union-head action: spend treasury and action points to push
- * one sector's `unionization` up. Same industry only — a union may only ever
+ * one sector's `unionization` up. Same industry only, a union may only ever
  * touch a `CorporateSector` in its own `countryId` + `sectorType`.
  *
  *   - Sector unrepresented: a straight organizing push. Crossing
@@ -10,7 +10,7 @@
  *     union.
  *   - Sector already represented by THIS union: reinforcement. Pushes
  *     unionization up further, no ownership change.
- *   - Sector represented by a RIVAL union: a raid. Winner takes all — the
+ *   - Sector represented by a RIVAL union: a raid. Winner takes all, the
  *     contest in {@link raidSucceeds} decides whether representation flips.
  *     A raid that fails still costs the treasury/action spend (charged before
  *     the contest is even resolved), so raiding is never free.
@@ -26,7 +26,7 @@ import type { Character, CorporateSector, Union } from "@/lib/db/types";
 import { unionApproval } from "@/lib/unions/unionDues";
 import { resolveOwnedUnion, rejectIfTurnProcessing, type UnionActionResult } from "./unionActions";
 
-/** Action points a union head spends to run one targeted drive. 3x the rank-and-file `ORGANIZE_ACTION_COST` (5) — this is a leader action that moves a specific sector, not a contribution to the general strength pool. */
+/** Action points a union head spends to run one targeted drive. 3x the rank-and-file `ORGANIZE_ACTION_COST` (5), this is a leader action that moves a specific sector, not a contribution to the general strength pool. */
 export const ORGANIZE_SECTOR_ACTION_COST = 15;
 
 /** Treasury cost of one targeted drive. A drive aimed at a specific sector, potentially a rival shop, is a real commitment rather than a routine push. */
@@ -42,7 +42,7 @@ export const SECTOR_RECOGNITION_THRESHOLD = 50;
  * Approval-point edge the attacking union needs over the incumbent to win a
  * raid. A tie or worse goes to the incumbent: a union its own members rate at
  * least as well as the challenger's cannot be muscled out of a shop by money
- * and action points alone. Deliberately small (not a landslide requirement) —
+ * and action points alone. Deliberately small (not a landslide requirement), 
  * raiding a mismanaged incumbent should be realistically winnable.
  */
 export const RAID_APPROVAL_EDGE_REQUIRED = 5;
@@ -61,7 +61,7 @@ export interface RaidContestInputs {
 /**
  * Pure raid contest. Winner takes all, gated purely on the two unions'
  * approval: the attacker must out-poll the incumbent by at least
- * {@link RAID_APPROVAL_EDGE_REQUIRED} points. No randomness — a raid's outcome
+ * {@link RAID_APPROVAL_EDGE_REQUIRED} points. No randomness, a raid's outcome
  * is fully determined by how each side is actually running its union, which is
  * the whole point of connecting approval to representation risk.
  */
@@ -82,25 +82,25 @@ export interface OrganizeSectorContestInputs {
   /**
    * Approval of the union recorded in `currentRepresentingUnionId`, or null
    * when the sector is unrepresented OR that union no longer exists (a
-   * dangling reference — treated the same as unrepresented so the pointer
+   * dangling reference, treated the same as unrepresented so the pointer
    * gets cleaned up rather than left dead).
    */
   incumbentApproval: number | null;
 }
 
 export interface OrganizeSectorOutcome {
-  /** False only for a raid that lost its contest — the sector is untouched. */
+  /** False only for a raid that lost its contest, the sector is untouched. */
   applied: boolean;
   newUnionization: number;
   newRepresentingUnionId: string | null;
   /** True when this action put (or kept) the attacker as the representing union. */
   won: boolean;
-  /** True when a different union held the sector going in — a contested raid, whether won or lost. */
+  /** True when a different union held the sector going in, a contested raid, whether won or lost. */
   wasRaid: boolean;
 }
 
 /**
- * Resolve one organizing drive against one sector. Pure — no DB, no clamping
+ * Resolve one organizing drive against one sector. Pure, no DB, no clamping
  * surprises: every path clamps the resulting unionization to [0, 100].
  */
 export function resolveOrganizeSectorDrive(inputs: OrganizeSectorContestInputs): OrganizeSectorOutcome {
@@ -114,7 +114,7 @@ export function resolveOrganizeSectorDrive(inputs: OrganizeSectorContestInputs):
       incumbentApproval: inputs.incumbentApproval,
     });
     if (!won) {
-      // A failed raid leaves the sector exactly as it was — the cost already
+      // A failed raid leaves the sector exactly as it was, the cost already
       // charged by the caller is the whole penalty.
       return {
         applied: false,
@@ -140,12 +140,12 @@ export function resolveOrganizeSectorDrive(inputs: OrganizeSectorContestInputs):
     ? inputs.attackerUnionId
     : boosted >= SECTOR_RECOGNITION_THRESHOLD
       ? inputs.attackerUnionId
-      : null; // Not yet recognized — also how a dangling rival pointer gets cleaned to null instead of staying dead.
+      : null; // Not yet recognized, also how a dangling rival pointer gets cleaned to null instead of staying dead.
   return {
     applied: true,
     newUnionization: boosted,
     newRepresentingUnionId,
-    // True whenever the attacker ends up representing the sector — whether
+    // True whenever the attacker ends up representing the sector, whether
     // that's freshly won recognition or simply still holding its own shop.
     won: newRepresentingUnionId === inputs.attackerUnionId,
     wasRaid: false,
@@ -157,7 +157,7 @@ export type OrganizeSectorResult = UnionActionResult;
 /**
  * Run a targeted organizing drive. Union head only. Charges treasury + action
  * points up front (before the contest is resolved) so a failed raid still
- * costs the attacker — see the module doc.
+ * costs the attacker, see the module doc.
  */
 export async function organizeSector(
   db: Db,
@@ -260,7 +260,7 @@ export async function organizeSector(
     return {
       ok: false,
       status: 409,
-      error: "Union treasury changed — please retry.",
+      error: "Union treasury changed, please retry.",
     };
   }
 
@@ -297,7 +297,7 @@ export async function organizeSector(
     }
   );
   if (sectorUpdate.modifiedCount === 0) {
-    // Sector changed between our read and write — refund both spends rather
+    // Sector changed between our read and write, refund both spends rather
     // than silently apply the drive against stale data.
     await db
       .collection<Character>("characters")
@@ -305,7 +305,7 @@ export async function organizeSector(
     await db
       .collection<Union>("unions")
       .updateOne({ _id: union._id }, { $inc: { treasury: ORGANIZE_SECTOR_TREASURY_COST } });
-    return { ok: false, status: 409, error: "Sector state changed — please retry." };
+    return { ok: false, status: 409, error: "Sector state changed, please retry." };
   }
 
   return {

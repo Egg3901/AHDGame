@@ -1,7 +1,7 @@
 /**
- * Phase 8 — Player-run unions (`labourSystemMode >= "full"`), pure economy
+ * Phase 8, Player-run unions (`labourSystemMode >= "full"`), pure economy
  * logic. A union has ONE leader (`Union.ownerId`), a treasury, and (union dues
- * v1) real dues/services economics living in `src/lib/unions/unionDues.ts` —
+ * v1) real dues/services economics living in `src/lib/unions/unionDues.ts`, 
  * this file keeps the STRENGTH (leadership contest) and strike-preview logic,
  * which dues v1 left untouched. Unowned unions leave Phase 5's NPC drift
  * completely unchanged for sectors nobody represents ("conversion not
@@ -41,7 +41,7 @@ export function isUnionLeadershipElectionOpen(union: Pick<Union, "strength">): b
 }
 
 
-/** A union can only force a strike in a sector whose organic unionization is at least this — can't manufacture a strike out of nothing. */
+/** A union can only force a strike in a sector whose organic unionization is at least this, can't manufacture a strike out of nothing. */
 export const STRIKE_CALL_MIN_UNIONIZATION = 30;
 /** Treasury cost per matched sector when a union calls a strike. */
 /**
@@ -51,8 +51,8 @@ export const STRIKE_CALL_MIN_UNIONIZATION = 30;
  * unreachable, not merely expensive: under the pre-dues-v1 pressure-trickle
  * model, dues accrued at 2 x membershipPressure per turn (~160/turn at the
  * ~80 equilibrium) while recruiting spent 500 whenever affordable, so a
- * treasury oscillated in the low hundreds. Against a cost of 2000 PER SECTOR —
- * tens of thousands in any large country — the branch could never fire: across
+ * treasury oscillated in the low hundreds. Against a cost of 2000 PER SECTOR, 
+ * tens of thousands in any large country, the branch could never fire: across
  * a full 1000-turn run with 408 led unions and 144 standing wage demands,
  * ZERO strikes were called. The lever existed only on paper. Union dues v1
  * replaced that accrual with real per-member dues (`duesIncomePerTurn` in
@@ -61,7 +61,7 @@ export const STRIKE_CALL_MIN_UNIONIZATION = 30;
  * clear it over roughly a dozen turns, a real choice with a real cost.
  */
 export const STRIKE_CALL_COST_PER_SECTOR = 400;
-/** Union-level cooldown (turns) between force-called strikes — separate from each sector's own `strikeCooldownUntilTurn`, so a union can't spam every sector every turn. */
+/** Union-level cooldown (turns) between force-called strikes, separate from each sector's own `strikeCooldownUntilTurn`, so a union can't spam every sector every turn. */
 export const UNION_STRIKE_CALL_COOLDOWN_TURNS = 8;
 
 /** Total treasury cost to force-call a strike across `sectorCount` matched sectors. */

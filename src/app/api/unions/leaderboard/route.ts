@@ -1,5 +1,5 @@
 /**
- * GET /api/unions/leaderboard — player-run unions (vacant or led), ranked by
+ * GET /api/unions/leaderboard: player-run unions (vacant or led), ranked by
  * real membership then treasury (union dues v1). Read-only, no auth required
  * (mirrors other public leaderboards). Gated on `labourSystemMode >= "full"`
  * (code-review fix #10/#13).
@@ -27,20 +27,20 @@ export async function GET(req: NextRequest) {
 
     const db = await getDb();
     // Country ids are upper-case everywhere in the data ("UK"), but callers
-    // reach this route with whatever case their URL segment carried — the
+    // reach this route with whatever case their URL segment carried, the
     // /country/[code]/unions page passes a lower-cased code. An unmatched
     // param falls through to "no filter", so a lower-case code silently
     // returned every union in the world instead of that country's.
     const countryParam = req.nextUrl.searchParams.get("country")?.toUpperCase() ?? null;
 
-    // Countries that actually have unions — the switcher's options.
+    // Countries that actually have unions, the switcher's options.
     const availableCountries = (await db.collection<Union>("unions").distinct("countryId"))
       .map((cid) => ({ countryId: cid, countryName: COUNTRY_CONFIGS[cid]?.name ?? cid }))
       .sort((a, b) => a.countryName.localeCompare(b.countryName));
 
     // Union ban (player suggestion #93): countries with an enacted ban, so
     // the /unions page can render its banned-state banner and mark suspended
-    // rows. federalBudget is small (one doc per country) — a full scan with a
+    // rows. federalBudget is small (one doc per country), a full scan with a
     // tight projection is cheap.
     const bannedBudgets = await db
       .collection<FederalBudget>("federalBudget")
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     );
     const bannedCountries = [...bannedCountryIds].map((countryId) => ({
       countryId,
-      // FederalBudget.countryId is a plain string — the safe cast mirrors
+      // FederalBudget.countryId is a plain string, the safe cast mirrors
       // how COUNTRY_CONFIGS lookups handle it elsewhere (fallback = raw id).
       countryName: COUNTRY_CONFIGS[countryId as keyof typeof COUNTRY_CONFIGS]?.name ?? countryId,
     }));
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
       countryParam && countryParam in COUNTRY_CONFIGS
         ? { countryId: countryParam as CountryId }
         : {};
-    // Sort is applied in JS below, once `members` (real headcount) is known —
+    // Sort is applied in JS below, once `members` (real headcount) is known, 
     // it isn't a stored field, it's derived from represented sectors.
     const unions = await db.collection<Union>("unions").find(countryFilter).toArray();
 
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
           demandedWageLevel: u.demandedWageLevel,
           // A union seeded while a ban is already active carries no suspended
           // flag (the enactment updateMany only touched docs existing at ban
-          // time) — the budget flag is authoritative, so derive the badge from
+          // time), the budget flag is authoritative, so derive the badge from
           // either source.
           suspended: u.suspended === true || bannedCountryIds.has(u.countryId),
         };

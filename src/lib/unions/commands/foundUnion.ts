@@ -1,12 +1,12 @@
 /**
- * Union dues v1 — found a rival union.
+ * Union dues v1, found a rival union.
  *
  * Before dues v1 there was exactly one union per (countryId, sectorType) pair,
  * seeded by the world. This is what makes a SECOND one possible: any character
  * in the target country may found a new union in an industry that already has
  * one, which is what gives {@link organizeSector}'s raid path something to
- * raid. A founded union starts with nothing — zero treasury, no represented
- * sectors, no services — and must organize its way into the industry exactly
+ * raid. A founded union starts with nothing, zero treasury, no represented
+ * sectors, no services, and must organize its way into the industry exactly
  * like an NPP challenger would.
  */
 import type { Db } from "mongodb";
@@ -31,7 +31,7 @@ import type { UnionActionResult } from "./unionActions";
 /**
  * Modern (₳-anchor) founding fee, scaled into the world's era
  * (`getEraNominalAmount`) and the founder's home currency
- * (`getFoundingFxRate`) exactly like a corporation founding fee — the same
+ * (`getFoundingFxRate`) exactly like a corporation founding fee, the same
  * "flat currency figure is wrong in every era/country but one" problem
  * `unionServices.ts` documents applies here too.
  *
@@ -159,15 +159,15 @@ export async function foundUnion(
       currency: homeCurrency,
     };
   } catch (error) {
-    // The union document didn't land — refund rather than leave the founder
+    // The union document didn't land, refund rather than leave the founder
     // charged for nothing. Covers both genuine infra failures and a
     // duplicate-key race on a legacy (countryId, sectorType) unique index
     // some worlds may still carry from before rival unions existed.
     await refundCharacterCash(db, character._id, homeCurrency, costLocal, forexEnabled);
     const message =
       error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === 11000
-        ? "This country and industry already has a union blocking a second one at the database level — contact ops."
-        : "Failed to found the union — you have been refunded.";
+        ? "This country and industry already has a union blocking a second one at the database level, contact ops."
+        : "Failed to found the union, you have been refunded.";
     return { ok: false, status: 409, error: message };
   }
 }

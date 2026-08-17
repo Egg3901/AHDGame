@@ -121,8 +121,8 @@ export function resolveSectorLabourEconomics({
 
   // An active agreement is a floor UNDER the employer's own wage level for the
   // life of the agreement, not a rewrite of it. Persisting the floor into
-  // `sector.wageLevel` would make every settlement permanent — nothing lowers
-  // the field again when the agreement expires — so the term length would
+  // `sector.wageLevel` would make every settlement permanent, nothing lowers
+  // the field again when the agreement expires, so the term length would
   // carry no meaning and pay would only ever ratchet up.
   const negotiatedWageFloor =
     labour.collectiveAgreementWageFloorBySectorId?.get(sector._id.toString()) ?? WAGE_LEVEL_MIN;
@@ -169,7 +169,7 @@ export function resolveSectorLabourEconomics({
     ? labour.unionLawBiasByCountry?.get(sectorCountryId)
     : undefined;
   // Union dues v1: resolve the representing union DIRECTLY off the sector's own
-  // `representingUnionId`, never by (countryId, sectorType) — players can found
+  // `representingUnionId`, never by (countryId, sectorType), players can found
   // rivals in the same industry, so the industry pair no longer identifies one
   // union, and a sector with no `representingUnionId` must not inherit some
   // other union's approval.

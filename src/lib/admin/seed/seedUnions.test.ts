@@ -89,7 +89,7 @@ describe("seedUnions", () => {
     expect(sectorBulkWrite).toHaveBeenCalledTimes(1);
     const sectorOps = sectorBulkWrite.mock.calls[0][0];
     // One updateMany per (countryId, sectorType) pair that resolved to a
-    // world-seeded union — here, only the one the mock's find() returned.
+    // world-seeded union, here, only the one the mock's find() returned.
     expect(sectorOps).toHaveLength(1);
     const { filter, update } = sectorOps[0].updateMany;
     expect(filter).toMatchObject({
