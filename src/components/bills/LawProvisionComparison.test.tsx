@@ -79,6 +79,9 @@ describe("BillFiscalImpactStrip", () => {
     expect(screen.getByText("руб2.00B/yr")).toBeTruthy();
     expect(screen.getByText("руб9.00B/yr")).toBeTruthy();
     expect(screen.getByText(/\+руб7\.00B\/yr/)).toBeTruthy();
+    // Signed the same way as the cost move, so it cannot be read as the
+    // treasury delta the provision card shows (ticket #1107).
+    expect(screen.getByText("Net change in cost")).toBeTruthy();
   });
 
   it("renders nothing when no priced provisions are selected", () => {
