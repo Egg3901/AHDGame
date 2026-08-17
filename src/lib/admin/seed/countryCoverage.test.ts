@@ -277,6 +277,29 @@ describe("country coverage: RU (Soviet Union) seed surfaces", () => {
 });
 
 describe("country coverage: DD (East Germany) seed surfaces", () => {
+  it("DD: turnout rows cover every Land with the dd_voterGroups group ids (ticket #1121)", async () => {
+    const { ddDemographicTurnout } = await import("@/lib/seeds/dd/ddDemographicTurnout");
+    const { ddDemographicCategories } = await import("@/lib/seeds/dd/ddDemographicCategories");
+    const { ddRegions1953 } = await import("@/lib/seeds/dd/ddRegions1953");
+
+    expect(ddDemographicTurnout).toHaveLength(ddRegions1953.length);
+    const turnoutIds = new Set(ddDemographicTurnout.map((t) => t._id));
+    for (const region of ddRegions1953) {
+      expect(turnoutIds.has(region._id), `missing turnout for ${region._id}`).toBe(true);
+    }
+
+    const category = ddDemographicCategories.find((c) => c._id === "dd_voterGroups");
+    expect(category).toBeDefined();
+    const groupIds = new Set(category!.groups.map((g) => g.id));
+    for (const row of ddDemographicTurnout) {
+      expect(row.countryId).toBe("DD");
+      expect(row.modifiers.dd_voterGroups).toBeDefined();
+      for (const key of Object.keys(row.modifiers.dd_voterGroups)) {
+        expect(groupIds.has(key), `turnout key "${key}" not a dd_voterGroups group`).toBe(true);
+      }
+    }
+  });
+
   it("DD 1953: metrics + baselines cover every Land (BEO/MV/BB/ST/SN/TH)", async () => {
     const { ddStateMetrics1953 } = await import("@/lib/seeds/dd/ddStateMetrics1953");
     const { ddStateBaselines1953 } = await import("@/lib/seeds/dd/ddStateBaselines1953");
