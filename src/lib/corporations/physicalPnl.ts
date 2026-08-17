@@ -279,17 +279,19 @@ export function solveOtherOpexPerUnit(args: {
 /**
  * The drift factor applied to a held `otherOpexPerUnitAnchor`.
  *
- * The margin modifiers that are neither physical nor financial (subsidies,
- * tariffs, home-location, macro drag, state metrics, SOE efficiency, tech
- * margin bonuses, strategy-transition penalties …) still have to move cost —
- * deleting them along with the margin formula would silently switch off half
- * the game's policy levers. They are carried here as ONE ratio:
+ * HISTORY: this ratio originally carried the whole non-physical margin stack
+ * (subsidies, tariffs, tech margin bonuses, …) every turn. That inverted on
+ * any sector whose residual anchor was negative — the stack shrank a CREDIT,
+ * so a margin bonus raised cost. Those modifiers now ride `policyCredit` on
+ * the revenue side (see `PhysicalPnl.policyCredit`), and this factor is only
+ * a one-time REBASE of legacy anchors: callers pass the policy-neutral basis
+ * (`1 − baseMargin/100`) as `currentMarginBasis`, so anchors stamped under the
+ * old discipline (whose stored basis includes calibration-time modifiers) are
+ * scaled onto the neutral basis using the model's own proportionality
+ * assumption. Anchors stamped after the change store the neutral basis and
+ * the factor is 1.
  *
- *     drift = (1 − margin_now / 100) ÷ (1 − margin_at_calibration / 100)
- *
- * which is 1 by construction on the calibration turn, rises when the stack
- * turns against the sector, falls when a subsidy lands. `basis` is the stored
- * denominator (`1 − margin_at_calibration/100`).
+ *     drift = basis_neutral ÷ basis_at_calibration
  *
  * A degenerate basis (a sector calibrated at exactly 100% margin, i.e. zero
  * cost) leaves the anchor undriven at 1 rather than dividing by ~0.
@@ -470,6 +472,17 @@ export interface PhysicalPnl {
   financialLegs: number;
   growthCost: number;
   /**
+   * The policy/tech margin stack (subsidies, tariffs, home location, state
+   * metrics, SOE efficiency, tech marginBonus, …) as ₳ this turn:
+   * `hourlyRevenue × policyPp / 100`. Positive is a credit (reduces cost),
+   * negative a charge. This replaced the drift factor on `otherOpex` as the
+   * carrier for non-physical margin modifiers: the drift ratio INVERTED on any
+   * sector whose calibrated residual was negative (a margin bonus shrank the
+   * credit and raised cost — live on 82% of prod sectors when found), while a
+   * revenue-proportional line is monotone in the modifier by construction.
+   */
+  policyCredit: number;
+  /**
    * The like-for-like replacement of the old `grossMaintenance` line:
    * inputs + labor + otherOpex + financialLegs. Upkeep, compliance and growth
    * are NOT in it — they were separate lines before this wave too, and the
@@ -511,6 +524,7 @@ export function assemblePhysicalPnl(args: {
   otherOpex: number;
   financialLegs: number;
   growthCost: number;
+  policyCredit: number;
 }): PhysicalPnl {
   const {
     hourlyRevenue,
@@ -521,8 +535,12 @@ export function assemblePhysicalPnl(args: {
     otherOpex,
     financialLegs,
     growthCost,
+    policyCredit,
   } = args;
-  const operatingCost = inputsCost + laborCost + otherOpex + financialLegs;
+  // `policyCredit` sits inside operatingCost (as a credit) so the derived
+  // margin keeps the same scope the old `effectiveMargin` had — the modifier
+  // stack was part of that number, and margin readers expect it there.
+  const operatingCost = inputsCost + laborCost + otherOpex + financialLegs - policyCredit;
   const totalCost = operatingCost + upkeep + complianceCost + growthCost;
   const profit = hourlyRevenue - totalCost;
   const derivedMarginPct =
@@ -537,6 +555,7 @@ export function assemblePhysicalPnl(args: {
     otherOpex,
     financialLegs,
     growthCost,
+    policyCredit,
     operatingCost,
     totalCost,
     profit,

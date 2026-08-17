@@ -189,13 +189,12 @@ describe("P3.5 — calibration identity", () => {
     const anchor = flip.update.otherOpexPerUnitAnchor as number;
     expect(typeof anchor).toBe("number");
     expect(Number.isFinite(anchor)).toBe(true);
-    // The basis is `1 − margin/100` of the gated stack — 0.9 for this fixture
-    // (profitMargin 20 plus the default same-type/home-state bonuses).
-    const capitalFlip = run("capital", makeSector({ capitalStock: STOCK }));
-    expect(flip.update.otherOpexAnchorMarginBasis).toBeCloseTo(
-      1 - capitalFlip.result.effectiveMargin / 100,
-      8
-    );
+    // The basis is stamped policy-NEUTRAL: `1 − profitMargin/100`, with no
+    // modifier stack in it. The policy stack rides `policyCredit` on the
+    // revenue side instead, so the anchor must not respond to it — a basis
+    // that included calibration-time modifiers is exactly what made the old
+    // drift channel invert on negative-residual sectors.
+    expect(flip.update.otherOpexAnchorMarginBasis).toBeCloseTo(1 - 20 / 100, 8);
 
     // A sector already carrying an anchor is NOT recalibrated.
     const later = run(
@@ -221,6 +220,65 @@ describe("P3.5 — calibration identity", () => {
     const capital = run("capital", makeSector({ capitalStock: STOCK }), 1000, noRamp);
     const plants = run("plants", makeSector({ capitalStock: STOCK }), 1000, noRamp);
     expect(plants.result.costs).toBeCloseTo(capital.result.costs, 8);
+  });
+});
+
+describe("P3.5 — policy margin stack rides the revenue-side policyCredit line", () => {
+  /**
+   * A calibrated post-flip sector carrying a NEGATIVE residual anchor — the
+   * state 82% of live prod sectors were in when the inversion was found. Under
+   * the old drift channel a positive margin modifier SHRANK the negative
+   * residual (a credit) and so RAISED cost; these tests pin the fixed
+   * behavior: profit is monotone increasing in the modifier, at roughly
+   * `revenue × pp/100`.
+   */
+  const negativeAnchorRun = (regionalPp: number) =>
+    run(
+      "plants",
+      makeSector({
+        capitalStock: STOCK,
+        plantsStartTurn: 1000,
+        otherOpexPerUnitAnchor: -1.0,
+        otherOpexAnchorMarginBasis: 0.63,
+      }),
+      1050,
+      (env) => {
+        (env.lookups.regionalConditionMarginByState as Map<string, number>).set(
+          STATE_ID,
+          regionalPp
+        );
+      }
+    );
+
+  it("a positive modifier RAISES profit on a negative-anchor sector (was inverted)", () => {
+    const base = negativeAnchorRun(0);
+    const boosted = negativeAnchorRun(8);
+    const delta = profitOf(boosted) - profitOf(base);
+    expect(delta).toBeGreaterThan(0);
+    // Linear in pp at ~revenue × pp/100 (loose bound: the legacy labor clamp
+    // still reads the full-margin maintenance, which can shave the delta).
+    const expected = base.result.hourlyRevenue * 0.08;
+    expect(delta).toBeGreaterThan(expected * 0.5);
+    expect(delta).toBeLessThan(expected * 1.5);
+  });
+
+  it("a negative modifier LOWERS profit symmetrically", () => {
+    const base = negativeAnchorRun(0);
+    const penalized = negativeAnchorRun(-8);
+    expect(profitOf(penalized)).toBeLessThan(profitOf(base));
+  });
+
+  it("the anchor line itself no longer responds to the live modifier stack", () => {
+    // Two runs differing only in the modifier: identical anchors, identical
+    // neutral basis, so the residual contribution is identical — the whole
+    // profit delta must come through policyCredit. Verify by symmetry: the
+    // +8 and −8 deltas from base cancel to first order.
+    const base = negativeAnchorRun(0);
+    const up = negativeAnchorRun(8);
+    const down = negativeAnchorRun(-8);
+    const gain = profitOf(up) - profitOf(base);
+    const loss = profitOf(base) - profitOf(down);
+    expect(gain).toBeCloseTo(loss, 4);
   });
 });
 
