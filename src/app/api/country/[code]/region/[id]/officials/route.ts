@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
-import { COUNTRY_CONFIGS, isParliamentarySystem, type CountryId } from "@/lib/constants/countries";
+import {
+  COUNTRY_CONFIGS,
+  getRegionalExecutiveOfficeKey,
+  isParliamentarySystem,
+  type CountryId,
+} from "@/lib/constants/countries";
+import { getRegionOfficialBuckets } from "@/lib/legislature/chamberOfficeType";
 import type { ElectedOfficial, State, Character, User } from "@/lib/db/types";
 
 interface RouteParams {
@@ -73,23 +79,21 @@ export async function GET(_request: Request, { params }: RouteParams) {
       return official;
     });
 
-    // Separate by office type — parliamentary countries use their lower chamber key
+    // Bucket by stored officeType — chamber keys are not always the office key
+    // (DD volkskammer vs volkskammerDeputy, CN npc vs npcDelegate).
+    const { senatorTypes, houseRepTypes, stateSenatorTypes } = getRegionOfficialBuckets(countryId);
+    const regionalExecutiveOfficeKey = getRegionalExecutiveOfficeKey(countryId);
+
+    const senators = filteredOfficials.filter((o) => senatorTypes.has(o.officeType));
+    const houseReps = filteredOfficials.filter((o) => houseRepTypes.has(o.officeType));
+    const stateSenators = filteredOfficials.filter((o) => stateSenatorTypes.has(o.officeType));
+    const governor =
+      filteredOfficials.find((o) => o.officeType === regionalExecutiveOfficeKey) ?? null;
+
     const countryConfig = COUNTRY_CONFIGS[countryId];
     const isParliamentary = isParliamentarySystem(countryConfig);
-    const lowerChamberKey = countryConfig.legislature.lowerChamber.key;
-
-    const senators = isParliamentary
-      ? []
-      : filteredOfficials.filter((o) => o.officeType === "senate");
-    const governor = isParliamentary
-      ? null
-      : (filteredOfficials.find((o) => o.officeType === "governor") ?? null);
-    const houseReps = isParliamentary
-      ? []
-      : filteredOfficials.filter((o) => o.officeType === "house");
-    const mps = isParliamentary
-      ? filteredOfficials.filter((o) => o.officeType === lowerChamberKey)
-      : [];
+    // Parliamentary clients historically read `mps` for lower-chamber seats.
+    const mps = isParliamentary ? houseReps : [];
 
     return NextResponse.json({
       state: stateId,
@@ -99,6 +103,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         senators,
         governor,
         houseRepresentatives: houseReps,
+        stateSenators,
         mps,
       },
     });
