@@ -10,6 +10,8 @@ import {
   CROSS_COUNTRY_RELOCATION_MULTIPLIER,
 } from "@/lib/constants/corporations";
 import {
+  RELOCATION_COOLDOWN_DAYS,
+  RELOCATION_COOLDOWN_TURNS,
   relocationCooldownButtonLabel,
   relocationCooldownWaitCopy,
 } from "@/lib/character/relocationCooldown";
@@ -337,6 +339,10 @@ export function RelocateButton({
                     {corp!.corpName} will relocate with you at no cost.
                   </li>
                 )}
+                <li className="text-warning">
+                  You will not be able to relocate again for {RELOCATION_COOLDOWN_DAYS} days (
+                  {RELOCATION_COOLDOWN_TURNS} turns).
+                </li>
               </ul>
               <p className="pt-2 text-xs">
                 Campaign funds, personal cash, savings, actions, policies, and career history are

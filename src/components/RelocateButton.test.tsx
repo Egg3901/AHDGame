@@ -100,4 +100,18 @@ describe("RelocateButton", () => {
     expect(dialog.textContent).toMatch(/You can relocate again in 3 days/i);
     expect(screen.queryByRole("button", { name: /^Relocate$/ })).toBeNull();
   });
+
+  it("warns about the cooldown before you move (ticket #1117)", async () => {
+    render(
+      <RelocateButton
+        targetStateId="OR"
+        targetName="Oregon"
+        userHomeState="WA"
+        redirectPath="/country/us/region/OR"
+      />
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Relocate here" }));
+    const dialog = screen.getByRole("dialog", { name: "Relocate to another state" });
+    expect(dialog.textContent).toMatch(/not be able to relocate again for 3 days \(72 turns\)/i);
+  });
 });
