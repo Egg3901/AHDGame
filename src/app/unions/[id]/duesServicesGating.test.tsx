@@ -90,7 +90,7 @@ describe("dues and services controls, head-only gating", () => {
     expect(
       screen.getByText(
         (_, el) =>
-          el?.tagName === "P" && /members pay 200\b.*a year each/i.test(el.textContent ?? "")
+          el?.tagName === "P" && /members pay \$?200\b.*a year each/i.test(el.textContent ?? "")
       )
     ).toBeTruthy();
     expect(screen.queryByRole("slider", { name: /percent of member wages/i })).toBeNull();

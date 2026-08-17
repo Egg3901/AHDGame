@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import { formatLocalAmountFull } from "@/lib/utils/formatters";
 import { duesIncomePerTurn, servicesCostPerTurn } from "@/lib/unions/unionDues";
 import {
   UNION_SERVICES,
@@ -63,8 +64,13 @@ export function UnionServicesPanel({
   const activeSet = new Set(isHead ? draft : committed);
   const draftCostPerTurn = servicesCostPerTurn(members, annualWage, draft);
   const duesIncome = duesIncomePerTurn(members, duesPerWorkerAnnual);
-  const currency = COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "";
-  const currencySuffix = currency ? ` ${currency}` : "";
+  /** Money reads as money: currency symbol and grouping, not a bare number. */
+  const cash = (value: number) =>
+    formatLocalAmountFull(
+      value,
+      (COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ??
+        "USD") as CurrencyCode
+    );
   // Matches the engine's lapse check: a slate only lapses when the treasury
   // plus a turn's dues income cannot cover a turn's cost.
   const unfunded = draftCostPerTurn > treasury + duesIncome;
@@ -115,8 +121,7 @@ export function UnionServicesPanel({
                 <p className="text-sm font-medium text-foreground">{service.name}</p>
                 <p className="text-xs text-muted">{service.description}</p>
                 <p className="mt-1 text-[11px] text-muted">
-                  Costs {Math.round(costPerTurn).toLocaleString("en-US")}
-                  {currencySuffix}/turn · +{service.approvalBonus} approval while funded
+                  Costs {cash(costPerTurn)}/turn · +{service.approvalBonus} approval while funded
                 </p>
               </div>
               {isHead ? (
@@ -152,24 +157,15 @@ export function UnionServicesPanel({
       <div className="flex flex-wrap gap-4 text-sm">
         <div>
           <span className="text-muted">Combined cost per turn:</span>{" "}
-          <span className="font-semibold tabular-nums">
-            {Math.round(draftCostPerTurn).toLocaleString("en-US")}
-            {currencySuffix}
-          </span>
+          <span className="font-semibold tabular-nums">{cash(draftCostPerTurn)}</span>
         </div>
         <div>
           <span className="text-muted">Dues income per turn:</span>{" "}
-          <span className="font-semibold tabular-nums">
-            {Math.round(duesIncome).toLocaleString("en-US")}
-            {currencySuffix}
-          </span>
+          <span className="font-semibold tabular-nums">{cash(duesIncome)}</span>
         </div>
         <div>
           <span className="text-muted">Treasury:</span>{" "}
-          <span className="font-semibold tabular-nums">
-            {Math.round(treasury).toLocaleString("en-US")}
-            {currencySuffix}
-          </span>
+          <span className="font-semibold tabular-nums">{cash(treasury)}</span>
         </div>
       </div>
 

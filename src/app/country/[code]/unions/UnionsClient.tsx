@@ -9,6 +9,10 @@ import { CountryFlag } from "@/components/CountryFlag";
 import { EmptyState, Skeleton, Tooltip } from "@/components/ui";
 import { UnionEmblem } from "@/components/unions/UnionEmblem";
 import { FoundUnionModal } from "@/components/unions/FoundUnionModal";
+import { Avatar } from "@/components/Avatar";
+import { formatLocalAmountFull } from "@/lib/utils/formatters";
+import type { CurrencyCode } from "@/lib/constants/currencies";
+import { buildCharacterHref, buildNppHref } from "@/lib/utils/profileUrls";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { countryUrl } from "@/lib/urls";
@@ -21,6 +25,14 @@ interface LeaderboardRow {
   sectorType: string;
   sectorLabel: string;
   leaderName: string | null;
+  /** Identity of the president, for the avatar and profile link. Null when vacant or the doc is gone. */
+  leader: {
+    id: string;
+    name: string;
+    sequentialId: number | null;
+    avatarUrl: string | null;
+    isNPP: boolean;
+  } | null;
   isVacant: boolean;
   /** Real headcount: workers across this union's sectors, weighted by unionization. */
   members: number;
@@ -29,6 +41,8 @@ interface LeaderboardRow {
   treasury: number;
   demandedWageLevel: number | null;
   suspended?: boolean;
+  /** Home currency of the union's country, so funds render as money. */
+  currency?: string;
 }
 
 /** Union ban (player suggestion #93): a country whose unions are outlawed by an enacted ban. */
@@ -298,18 +312,18 @@ export function UnionsClient() {
               />
             </div>
           ) : (
-            <table className="w-full min-w-[560px] text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-card-border bg-card-elevated text-left text-[11px] uppercase tracking-wider text-muted">
-                  <th className="px-4 py-3 font-medium">#</th>
+                  <th className="hidden px-4 py-3 font-medium sm:table-cell">#</th>
                   <th className="px-4 py-3 font-medium">Union</th>
-                  <th className="px-4 py-3 font-medium">
+                  <th className="hidden px-4 py-3 font-medium md:table-cell">
                     <span className="inline-flex items-center">
                       President
                       <Tooltip content="The union president. A vacant union has none; fund organize drives on its page, then vote one in." />
                     </span>
                   </th>
-                  <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">
+                  <th className="px-4 py-3 text-right font-medium">
                     <span className="inline-flex items-center">
                       Membership
                       <Tooltip content="Real headcount: workers across this union's sectors, weighted by how unionized each one is." />
@@ -321,7 +335,7 @@ export function UnionsClient() {
                       <Tooltip content="How the membership rates the bargain, 0-100%. Dues push it down, running services pushes it up." />
                     </span>
                   </th>
-                  <th className="px-4 py-3 text-right font-medium">
+                  <th className="hidden px-4 py-3 text-right font-medium md:table-cell">
                     <span className="inline-flex items-center">
                       Funds
                       <Tooltip content="The union's treasury. Dues flow in each turn; services and recruitment drives are paid out of it." />
@@ -337,7 +351,7 @@ export function UnionsClient() {
                       key={r.unionId}
                       className="border-b border-card-border transition-colors last:border-0 hover:bg-card-elevated/60"
                     >
-                      <td className="px-4 py-3 text-xs font-semibold tabular-nums text-muted">
+                      <td className="hidden px-4 py-3 text-xs font-semibold tabular-nums text-muted sm:table-cell">
                         {i + 1}
                       </td>
                       <td className="px-4 py-3">
@@ -365,11 +379,29 @@ export function UnionsClient() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-muted">
+                      <td className="hidden px-4 py-3 text-muted md:table-cell">
                         {r.suspended ? (
                           <span className="text-xs font-medium uppercase tracking-wide text-error">
                             Suspended
                           </span>
+                        ) : r.leader ? (
+                          <Link
+                            href={
+                              r.leader.isNPP
+                                ? buildNppHref({
+                                    sequentialId: r.leader.sequentialId ?? undefined,
+                                    _id: r.leader.id,
+                                  })
+                                : buildCharacterHref({
+                                    sequentialId: r.leader.sequentialId ?? undefined,
+                                    _id: r.leader.id,
+                                  })
+                            }
+                            className="inline-flex items-center gap-2 text-foreground hover:underline"
+                          >
+                            <Avatar url={r.leader.avatarUrl} name={r.leader.name} size="h-6 w-6" />
+                            <span className="truncate">{r.leader.name}</span>
+                          </Link>
                         ) : (
                           (r.leaderName ?? (
                             <span className="text-xs font-medium uppercase tracking-wide text-amber-600 dark:text-amber-400">
@@ -378,7 +410,7 @@ export function UnionsClient() {
                           ))
                         )}
                       </td>
-                      <td className="hidden px-4 py-3 text-right font-mono tabular-nums sm:table-cell">
+                      <td className="px-4 py-3 text-right font-mono tabular-nums">
                         {Math.round(r.members).toLocaleString("en-US")}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -394,8 +426,8 @@ export function UnionsClient() {
                           {Math.round(r.approval)}%
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right font-mono tabular-nums">
-                        {Math.round(r.treasury).toLocaleString("en-US")}
+                      <td className="hidden px-4 py-3 text-right font-mono tabular-nums md:table-cell">
+                        {formatLocalAmountFull(r.treasury, (r.currency ?? "USD") as CurrencyCode)}
                       </td>
                     </tr>
                   );

@@ -14,6 +14,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import type { CorporateSector, FederalBudget, Union } from "@/lib/db/types";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
 import { genericUnionName } from "@/lib/unions/unionNames";
 import { resolveUnionOwners } from "@/lib/unions/unionOwnerDisplay";
@@ -70,7 +71,7 @@ export async function GET(req: NextRequest) {
     // NPP-run unions store `ownerId` against `npps`, not `characters`. Looking
     // only at characters left every NPP presidency labelled "Unknown".
     const [ownersById, memberSectors] = await Promise.all([
-      resolveUnionOwners(db, unions),
+      resolveUnionOwners(db, unions, { includeAvatar: true }),
       unions.length
         ? db
             .collection<CorporateSector>("corporateSectors")
@@ -93,6 +94,7 @@ export async function GET(req: NextRequest) {
     const rows = unions
       .map((u) => {
         const members = unionMembers(sectorsByUnionId.get(u._id.toString()) ?? []);
+        const owner = u.ownerId ? ownersById.get(u.ownerId.toString()) : undefined;
         return {
           unionId: u._id.toString(),
           name: u.name ?? genericUnionName(u.countryId, u.sectorType),
@@ -100,7 +102,19 @@ export async function GET(req: NextRequest) {
           countryName: COUNTRY_CONFIGS[u.countryId]?.name ?? u.countryId,
           sectorType: u.sectorType,
           sectorLabel: CORPORATION_TYPE_LABELS[u.sectorType] ?? u.sectorType,
-          leaderName: u.ownerId ? (ownersById.get(u.ownerId.toString())?.name ?? "Unknown") : null,
+          leaderName: owner?.name ?? (u.ownerId ? "Unknown" : null),
+          // Identity for the avatar and the profile link. Null for a vacant
+          // seat, and null for a leader whose doc has gone (retired NPP,
+          // deleted character), which the UI renders as plain "Unknown".
+          leader: owner
+            ? {
+                id: owner.id,
+                name: owner.name,
+                sequentialId: owner.sequentialId,
+                avatarUrl: owner.avatarUrl,
+                isNPP: owner.isNPP,
+              }
+            : null,
           isVacant: u.ownerId == null,
           members,
           approval: unionApproval(u),
@@ -111,6 +125,8 @@ export async function GET(req: NextRequest) {
           // time), the budget flag is authoritative, so derive the badge from
           // either source.
           suspended: u.suspended === true || bannedCountryIds.has(u.countryId),
+          /** Home currency of the union's country, so funds render as money rather than a bare number. */
+          currency: COUNTRY_CURRENCY_MAP[u.countryId] ?? "USD",
         };
       })
       .sort(
