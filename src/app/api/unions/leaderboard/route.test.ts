@@ -49,7 +49,11 @@ function mockDb(unions: Array<Record<string, unknown>> = []) {
           }),
         };
       }
-      return { find: () => emptyCursor };
+      // The route now quotes founding costs, which reads the world preset.
+      if (name === "gameState") {
+        return { findOne: async () => ({ preset: "1953-default" }) };
+      }
+      return { find: () => emptyCursor, findOne: async () => null };
     },
   };
 }

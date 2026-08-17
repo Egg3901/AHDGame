@@ -19,7 +19,7 @@ import { TariffRestrictions } from "./TariffRestrictions";
 import { SubsidyBenefits } from "./SubsidyBenefits";
 import { SubsidiariesOverviewCard } from "./SubsidiariesOverviewCard";
 import { GroupOverviewCard } from "./GroupOverviewCard";
-import { formatMarketingStrength } from "@/lib/utils/formatters";
+import { formatAccountingCost, formatMarketingStrength } from "@/lib/utils/formatters";
 import { SummaryBand } from "./financials/SummaryBand";
 import { GlanceRail } from "./financials/GlanceRail";
 import { Waterfall } from "./financials/FinancialsVisuals";
@@ -71,6 +71,7 @@ export default function FinancialsTab({
   // Accounting-style negatives: losses render as ($X) rather than -$X for
   // consistency with cost rows. Used for the income-statement subtotals.
   const fmtSigned = (val: number) => (val < 0 ? `(${fmt(Math.abs(val))})` : fmt(val));
+  const fmtCost = (val: number) => formatAccountingCost(val, fmt);
 
   const [financialView, setFinancialView] = useState<"income_statement" | "balance_sheet">(
     "income_statement"
@@ -223,19 +224,21 @@ export default function FinancialsTab({
               </div>
               <FinRowTip
                 label="Sector Maintenance"
-                value={`(${fmt(scaleMoney(financials.maintenanceCosts, periodView))})`}
-                valueClass="text-error"
+                value={fmtCost(scaleMoney(financials.maintenanceCosts, periodView))}
+                valueClass={financials.maintenanceCosts < 0 ? "text-success" : "text-error"}
                 indent
                 tooltip={
-                  financials.laborCosts > 0
-                    ? "Non-labour operating costs to keep sectors running (upkeep, inputs, overhead). Labour is broken out as Wages below."
-                    : "Operating costs to keep sectors running. Equals revenue × (1 - profit margin). Lower profit margins mean higher maintenance."
+                  financials.maintenanceCosts < 0
+                    ? "A credit: wages currently exceed the derived operating bill (inputs, residual upkeep). Gross Profit already nets this against Wages so the two lines together match the engine."
+                    : financials.laborCosts > 0
+                      ? "Non-labour operating costs to keep sectors running (upkeep, inputs, overhead). Labour is broken out as Wages below."
+                      : "Operating costs to keep sectors running. Equals revenue × (1 - profit margin). Lower profit margins mean higher maintenance."
                 }
               />
               {financials.laborCosts > 0 && (
                 <FinRowTip
                   label="Wages"
-                  value={`(${fmt(scaleMoney(financials.laborCosts, periodView))})`}
+                  value={fmtCost(scaleMoney(financials.laborCosts, periodView))}
                   valueClass="text-error"
                   indent
                   tooltip="What you pay workers across all sectors. It moves with how many people you employ, local pay levels, and union pay demands. It is split out of Sector Maintenance, and the two together are your total running cost."
@@ -252,7 +255,7 @@ export default function FinancialsTab({
               )}
               <FinRowTip
                 label="Growth Investment"
-                value={`(${fmt(scaleMoney(financials.growthCosts, periodView))})`}
+                value={fmtCost(scaleMoney(financials.growthCosts, periodView))}
                 valueClass="text-error"
                 indent
                 tooltip="Cost of growing sector revenue. Scales with both revenue size and growth rate. Set to 0% growth to eliminate this cost."

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db, ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { makeCharacter, makeCorporation } from "@/lib/test-utils/factories";
+import { isLabourWagesEnabled } from "@/lib/labour/featureFlag";
 import {
   DOMINANCE_MARGIN_PENALTY_AT_FULL,
   DOMINANCE_MARKET_SHARE_THRESHOLD,
@@ -382,6 +383,86 @@ describe("loadCorporationDetailView", () => {
     expect(byState.get("TX")!.financialRevenue).toBe(0);
     expect(byState.get("TX")!.embargoSuspended).toBe(true);
     expect(view.financials.totalRevenue).toBeCloseTo(900_000, -2);
+  });
+
+  it("keeps a plants residual credit as signed maintenance so Gross Profit still matches derived opex (ticket #1122)", async () => {
+    vi.mocked(isLabourWagesEnabled).mockResolvedValueOnce(true);
+
+    const ceo = makeCharacter({
+      _id: new ObjectId(),
+      userId: new ObjectId(),
+      name: "CEO",
+      sequentialId: 3,
+    });
+    const corporation = makeCorporation({
+      _id: new ObjectId(),
+      ceoId: ceo._id,
+      userId: ceo.userId,
+      countryId: "US",
+      headquartersState: "CA",
+      liquidCurrencyCode: "USD",
+      marketingBudget: 0,
+      logisticsBudget: 0,
+      rdBudget: 0,
+      ceoSalary: 0,
+      dividendRate: 0,
+      shareholders: [],
+      publicFloat: 0,
+    });
+    const sector = {
+      _id: new ObjectId(),
+      corporationId: corporation._id,
+      countryId: "US",
+      stateId: "CA",
+      sectorType: "retail",
+      profitMargin: 40,
+      revenue: 1_000_000,
+      workers: 100,
+      currentGrowthCost: 0,
+      currentGrowthRate: 0,
+      growthRate: 0,
+      targetGrowthRate: 0,
+      productionPolicyLevel: 0,
+      productionPolicy: 0,
+      negativeProductionSustainedTurns: 0,
+      strategyId: "standard",
+      laborCost: 50_000_000,
+    };
+
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue(ceo);
+    db.collectionMocks["corporateSectors"]!.find.mockReturnValue({
+      toArray: () => Promise.resolve([sector]),
+    } as never);
+    db.collection("unownedSectors");
+    db.collectionMocks["unownedSectors"]!.find.mockReturnValue({
+      toArray: () => Promise.resolve([]),
+    } as never);
+    db.collectionMocks["corporations"]!.find.mockReturnValue({
+      project: () => ({ toArray: () => Promise.resolve([]) }),
+      toArray: () => Promise.resolve([]),
+    } as never);
+    db.collectionMocks["bonds"]!.find.mockReturnValue({
+      toArray: () => Promise.resolve([]),
+    } as never);
+    db.collectionMocks["corporationHistory"]!.findOne.mockResolvedValue({
+      income: 0,
+    });
+
+    const { loadCorporationDetailView } = await import("./corporationDetail");
+    const view = await loadCorporationDetailView({
+      db: db as unknown as Db,
+      corporation,
+      currentTurn: 10,
+      viewerUserId: null,
+    });
+
+    expect(view.financials.laborCosts).toBe(50_000_000);
+    expect(view.financials.maintenanceCosts).toBeLessThan(0);
+    // Cost of revenue still equals reconstructed operating cost, not wages alone.
+    expect(view.financials.maintenanceCosts + view.financials.laborCosts).toBeLessThan(
+      view.financials.laborCosts
+    );
+    expect(view.financials.operatingCosts).toBeLessThan(view.financials.laborCosts);
   });
 });
 

@@ -3,9 +3,8 @@
 import { useState } from "react";
 import { Modal } from "@/components/ui";
 import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
-
-const MIN_NAME_LENGTH = 3;
-const MAX_NAME_LENGTH = 80;
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { MAX_UNION_NAME_LENGTH, MIN_UNION_NAME_LENGTH } from "@/lib/unions/unionFounding";
 
 interface FoundUnionModalProps {
   open: boolean;
@@ -13,6 +12,14 @@ interface FoundUnionModalProps {
   onFounded: () => void;
   countryId: string;
   countryName: string;
+  /**
+   * Registration fee in local currency and the action-point cost, both resolved
+   * by the server (see the `founding` block on the unions leaderboard) so the
+   * quote here cannot drift from what is actually charged. Undefined before the
+   * leaderboard has loaded, in which case the costs are simply not quoted yet.
+   */
+  foundingCostLocal?: number;
+  foundingActionCost?: number;
 }
 
 /**
@@ -27,23 +34,29 @@ export function FoundUnionModal({
   onFounded,
   countryId,
   countryName,
+  foundingCostLocal,
+  foundingActionCost,
 }: FoundUnionModalProps) {
   const [name, setName] = useState("");
   const [sectorType, setSectorType] = useState<CorporationType | "">("");
   const [founding, setFounding] = useState(false);
   const [error, setError] = useState("");
 
+  const currency = COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "";
   const trimmedName = name.trim();
+  // Bounds match the server's exactly. They did not before: this asked for 3 to
+  // 80 characters while the command enforces 2 to 60, so a long name passed the
+  // form and came back rejected.
   const nameError =
     trimmedName.length === 0
       ? null
-      : trimmedName.length < MIN_NAME_LENGTH
-        ? `Name must be at least ${MIN_NAME_LENGTH} characters.`
-        : trimmedName.length > MAX_NAME_LENGTH
-          ? `Name must be ${MAX_NAME_LENGTH} characters or fewer.`
+      : trimmedName.length < MIN_UNION_NAME_LENGTH
+        ? `Name must be at least ${MIN_UNION_NAME_LENGTH} characters.`
+        : trimmedName.length > MAX_UNION_NAME_LENGTH
+          ? `Name must be ${MAX_UNION_NAME_LENGTH} characters or fewer.`
           : null;
   const disabled =
-    founding || !sectorType || trimmedName.length < MIN_NAME_LENGTH || nameError != null;
+    founding || !sectorType || trimmedName.length < MIN_UNION_NAME_LENGTH || nameError != null;
 
   function handleClose() {
     setName("");
@@ -85,6 +98,28 @@ export function FoundUnionModal({
             your way into representation from there.
           </p>
 
+          {/* Both costs are quoted from the server so the figure here is the one
+              that will actually be charged. */}
+          {foundingActionCost != null && (
+            <p className="mb-4 rounded-lg border border-card-border bg-background px-3 py-2 text-xs text-muted">
+              Costs{" "}
+              <span className="font-semibold text-foreground tabular-nums">
+                {foundingActionCost} action points
+              </span>
+              {foundingCostLocal != null && (
+                <>
+                  {" and a "}
+                  <span className="font-semibold text-foreground tabular-nums">
+                    {Math.round(foundingCostLocal).toLocaleString("en-US")}
+                    {currency ? ` ${currency}` : ""}
+                  </span>
+                  {" registration fee"}
+                </>
+              )}
+              , both out of your campaign funds and actions rather than personal wealth.
+            </p>
+          )}
+
           {error && (
             <div
               role="alert"
@@ -109,7 +144,7 @@ export function FoundUnionModal({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Independent Steelworkers Alliance"
-                maxLength={MAX_NAME_LENGTH}
+                maxLength={MAX_UNION_NAME_LENGTH}
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none focus:ring-1 focus:ring-primary/20"
               />
               {nameError && <p className="mt-1.5 text-xs text-error">{nameError}</p>}

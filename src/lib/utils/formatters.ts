@@ -284,6 +284,20 @@ export function formatCurrencyCompactChip(amount: number, symbol = "$"): string 
 }
 
 /**
+ * Cost-of-revenue accounting wrapper. Expenses render in parentheses.
+ * A negative amount is a credit (plants residual when wages exceed derived
+ * operating cost) and must not render as `(-$X)` — that was ticket #1122.
+ */
+export function formatAccountingCost(
+  amount: number,
+  formatAbs: (absAmount: number) => string
+): string {
+  if (!Number.isFinite(amount) || amount === 0) return `(${formatAbs(0)})`;
+  if (amount < 0) return formatAbs(Math.abs(amount));
+  return `(${formatAbs(amount)})`;
+}
+
+/**
  * Compact currency with a FIXED single decimal place at every tier (e.g.
  * "¥49.6T", "¥620.0B", "¥31.0T"). Unlike {@link formatFundsCompact}, the
  * decimal is always shown — even ".0" — so a row of headline figures lines up

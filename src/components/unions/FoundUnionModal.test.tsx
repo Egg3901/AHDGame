@@ -23,10 +23,12 @@ describe("FoundUnionModal", () => {
     expect((foundBtn as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.change(screen.getByPlaceholderText(/independent steelworkers/i), {
-      target: { value: "AB" },
+      // One character is below the shared minimum, which the form and the
+      // command now agree on.
+      target: { value: "A" },
     });
     expect((foundBtn as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/at least 3 characters/i)).toBeTruthy();
+    expect(screen.getByText(/at least 2 characters/i)).toBeTruthy();
 
     fireEvent.change(screen.getByPlaceholderText(/independent steelworkers/i), {
       target: { value: "Independent Dockworkers" },
