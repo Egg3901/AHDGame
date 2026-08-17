@@ -11,6 +11,24 @@ import {
 import type { ConsolePayload } from "../types";
 import { charterLabel } from "../lib/helpers";
 
+/** English ordinal for the panic-turn copy ("3rd", not "3th"). */
+export function panicTurnOrdinal(turns: number): string {
+  if (turns === 1) return "first";
+  const n = Math.trunc(Math.abs(turns));
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
 /**
  * Plain-language read on the confidence band. The band alone is a colour with
  * no stated consequence, which is the thing a CEO actually needs to know.
@@ -23,7 +41,7 @@ function bandMeaning(
     return {
       tone: "error",
       headline: "Depositors are running",
-      detail: `A bank run is in its ${panicTurns === 1 ? "first" : `${panicTurns}th`} turn. Withdrawals are elevated and reserves drain fastest now. Raise the deposit rate, sell assets, or draw the discount window.`,
+      detail: `A bank run is in its ${panicTurnOrdinal(panicTurns)} turn. Withdrawals are elevated and reserves drain fastest now. Raise the deposit rate, sell assets, or draw the discount window.`,
     };
   }
   if (band === "red") {
