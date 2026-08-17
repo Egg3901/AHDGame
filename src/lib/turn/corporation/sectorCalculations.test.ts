@@ -2519,8 +2519,11 @@ describe("v3 Phase 7b/8, union-law bias & membership-pressure wiring (labourSyst
     };
     const noUnion: LabourContext = { wagesEnabled: true, unionsEnabled: true, fullEnabled: true };
 
+    const corpB = makeCorp();
+    const sectorB = makeSector(corpB._id, { wageLevel: 1, unionization: 0 });
+
     const unaffected = runUnionizationToConvergence(corp, sector, withUnrelatedUnion);
-    const base = runUnionizationToConvergence(makeCorp(), { ...sector }, noUnion);
+    const base = runUnionizationToConvergence(corpB, sectorB, noUnion);
     expect(unaffected).toBe(base);
   });
 
