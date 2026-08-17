@@ -203,7 +203,9 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
   for (const { election, candidates, partyCounts, maxAdvancing } of resolvingElections) {
     const electionId = election._id as ObjectId;
 
-    const enriched = await fetchEnrichedCandidates(candidates);
+    const enriched = await fetchEnrichedCandidates(candidates, {
+      countryId: (election.countryId ?? "US") as CountryId,
+    });
     const loserIds: string[] = [];
     const primaryResultsByParty: Record<string, PrimaryResultEntry[]> = {};
 
