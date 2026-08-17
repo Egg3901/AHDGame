@@ -57,6 +57,7 @@
  */
 
 import type { CommodityType } from "@/lib/constants/commodities";
+import { priceRealizationFactor } from "@/lib/market/priceRealization";
 
 /** One commodity's consumption line for a turn. */
 export interface InputLine {
@@ -116,14 +117,19 @@ export interface InputsCostResult {
  *     `plantsNameplateRevenue`. Identical for a sector whose capacity did not
  *     move, one turn stale while it is building.
  *
- * The PRICE is the lagged market price (`basePrice × priceRatio`, where the
- * ratio comes from the prior turn's commodity-price pass — the same one-turn lag
- * that breaks the price→revenue→supply→price loop). Absent ratio ⇒ 1 ⇒ base
- * price, which is the pre-market-rework behaviour.
+ * The PRICE is the lagged market price passed through the SAME realization
+ * function the revenue side uses: `basePrice × priceRealizationFactor(ratio)`,
+ * i.e. clamp(ratio^0.5, 0.7, 1.5). The ratio comes from the prior turn's
+ * commodity-price pass — the same one-turn lag that breaks the
+ * price→revenue→supply→price loop. Absent ratio ⇒ factor 1 ⇒ base price.
+ * Buy-sell symmetry is the invariant: a corp sells into a damped, clamped
+ * market and buys from the same one, so world inflation squeezes margins
+ * proportionally instead of unboundedly on the cost side only.
  *
  * Note the ratio is what makes the bill move: units cancel the base price, so
- * `cost_c = revenueBasis × rate_c × priceRatio_c`. At ratio 1 across the board
- * the bill is exactly the recipe's nominal input share of revenue.
+ * `cost_c = revenueBasis × rate_c × priceRealizationFactor(priceRatio_c)`. At
+ * ratio 1 across the board the bill is exactly the recipe's nominal input
+ * share of revenue.
  *
  * `rates` should already carry tech `inputCost` effects (they are input-rate
  * multipliers — see the tech disposition table in `sectorTurn`), so an
@@ -193,8 +199,16 @@ export function computeInputsCost(args: {
     if (!(units > 0)) continue;
     const ratio = priceRatios.get(key);
     const premium = statePremiums?.get(key);
+    // Buy-sell symmetry: the bill prices through the SAME realization function
+    // revenue does (clamp(ratio^0.5, 0.7, 1.5), priceRealization.ts). Before
+    // this, a seller realized at most 1.5x base on a shortage while paying raw
+    // linear ratios (2.5-3x) for the same shortage on the buy side, so any
+    // recipe with fat input rates went structurally negative the moment the
+    // world inflated — regardless of how well the corp was run (corp 445:
+    // recipe 0.72 of nameplate billed at ~1.33x nameplate while revenue
+    // realized ~1.5x, margin -19.8%). Same damping, same clamp, both legs.
     const unitPrice =
-      basePrice * (Number.isFinite(ratio) && (ratio as number) > 0 ? ratio! : 1) +
+      basePrice * priceRealizationFactor(Number.isFinite(ratio) ? (ratio as number) : null) +
       (Number.isFinite(premium) && (premium as number) > 0 ? premium! : 0);
     const cost = units * unitPrice;
     if (!Number.isFinite(cost)) continue;
