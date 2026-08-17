@@ -36,6 +36,7 @@ interface TechNode {
   autoGranted: boolean;
   laneLocked: boolean;
   prereqMet: boolean;
+  pathLocked: boolean;
   affordable: boolean;
   image: string;
 }
@@ -674,6 +675,12 @@ function LanePanel({
   const nodes = decade.lanes[lane];
   const bySlot = (s: number) => nodes.find((n) => n.slot === s);
   const [n1, n2, n3, n4, n5, n6, n7, n8, n9] = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(bySlot);
+  // v3 tier: three exclusive specialization entries (10–12), each with its
+  // capstone (13–15). Reachable after finishing either branch above.
+  const specEntries = [10, 11, 12].map(bySlot);
+  const specCapstones = [13, 14, 15].map(bySlot);
+  const hasSpecTier = specEntries.some(Boolean);
+  const chosenSpec = specEntries.find((n) => n?.owned);
   const dimmed = decade.committedLane != null && decade.committedLane !== lane;
   const accent =
     lane === "generic"
@@ -762,6 +769,30 @@ function LanePanel({
             )}
           </div>
         </div>
+        {hasSpecTier && (
+          <>
+            <VLine active={n8?.owned || n9?.owned} />
+            <div className="mb-1 mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+              {chosenSpec ? `Specialization: ${chosenSpec.name}` : "Specialization — pick one"}
+            </div>
+            <div className="grid w-full grid-cols-3 gap-1.5 sm:gap-2">
+              {specEntries.map((entry, i) => (
+                <div
+                  key={entry?.id ?? i}
+                  className={`flex flex-col items-center ${entry?.pathLocked ? "opacity-50" : ""}`}
+                >
+                  {card(entry)}
+                  {specCapstones[i] && (
+                    <>
+                      <VLine active={entry?.owned} />
+                      {card(specCapstones[i])}
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -801,10 +832,17 @@ function NodeCard({
           <IconCheck /> {node.autoGranted ? "Auto" : "Owned"}
         </span>
       );
-    if (!reached || node.laneLocked || !node.prereqMet)
+    if (!reached || node.laneLocked || node.pathLocked || !node.prereqMet)
       return (
         <span className="inline-flex items-center gap-1 text-[10px] text-gray-500">
-          <IconLock /> {node.laneLocked ? "Other track" : !reached ? "Locked" : "Needs previous"}
+          <IconLock />{" "}
+          {node.laneLocked
+            ? "Other track"
+            : node.pathLocked
+              ? "Other path"
+              : !reached
+                ? "Locked"
+                : "Needs previous"}
         </span>
       );
     if (!viewerIsCeo) return null;

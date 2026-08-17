@@ -25,17 +25,17 @@ describe("decades", () => {
   });
 });
 
-describe("tree shape (v2 lanes)", () => {
-  it("gives every sector 9 corporate nodes per decade", () => {
+describe("tree shape (v3 lanes)", () => {
+  it("gives every sector 15 corporate nodes per decade", () => {
     for (const decade of TECH_DECADES) {
       const count = getDecadeLaneNodes("retail", decade.id, "generic").length;
-      expect(count, `retail corporate ${decade.id}`).toBe(9);
+      expect(count, `retail corporate ${decade.id}`).toBe(15);
     }
   });
   it("authors a full sector lane for every decade", () => {
     for (const decade of TECH_DECADES) {
       const count = getDecadeLaneNodes("energy", decade.id, "sector").length;
-      expect(count, `energy sector ${decade.id}`).toBe(9);
+      expect(count, `energy sector ${decade.id}`).toBe(15);
     }
   });
   it("every sector now has an authored sector lane", () => {
@@ -43,7 +43,7 @@ describe("tree shape (v2 lanes)", () => {
   });
   it("early manufacturing sector keeps both fork sides (ticket-1016)", () => {
     const slots = getDecadeLaneNodes("manufacturing", "1950", "sector").map((n) => n.slot);
-    expect(slots).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(slots).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
   });
 });
 
@@ -190,5 +190,57 @@ describe("cash cost", () => {
     const node = TECH_TREE.energy.find((n) => n.id === corpNodeId("2019", 1))!;
     expect(techNodeCashCost(node, 100_000)).toBe(15_000); // default 0.15
     expect(techNodeCashCost(node, 0)).toBe(0);
+  });
+});
+
+describe("v3 specializations (selectors)", () => {
+  const type = "financial" as const;
+  const idOf = (s: number) => `${type}-1950-${s}`;
+  const baseline = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(idOf);
+  const funds = { rdScore: 10_000, cashAvailable: Infinity, cashCost: 0 };
+  const year = 1956;
+
+  it("finishing either branch opens all three entries; picking one path-locks the rest", () => {
+    const corp = {
+      type,
+      unlockedTechNodeIds: baseline,
+      techDecadeLane: { "1950": "sector" as const },
+    };
+    for (const slot of [10, 11, 12]) {
+      expect(canUnlock(corp, idOf(slot), year, funds).ok, `slot ${slot}`).toBe(true);
+    }
+    const chosen = { ...corp, unlockedTechNodeIds: [...baseline, idOf(10)] };
+    expect(canUnlock(chosen, idOf(11), year, funds)).toMatchObject({
+      ok: false,
+      reason: "path-locked",
+    });
+    expect(canUnlock(chosen, idOf(12), year, funds)).toMatchObject({
+      ok: false,
+      reason: "path-locked",
+    });
+    // The chosen path's capstone is open; rival capstones fail on prereq.
+    expect(canUnlock(chosen, idOf(13), year, funds).ok).toBe(true);
+    expect(canUnlock(chosen, idOf(14), year, funds)).toMatchObject({
+      ok: false,
+      reason: "prereq-missing",
+    });
+  });
+
+  it("one completed branch is enough (any-of prereq on entries)", () => {
+    const oneBranch = [1, 2, 4, 6, 8].map(idOf);
+    const corp = {
+      type,
+      unlockedTechNodeIds: oneBranch,
+      techDecadeLane: { "1950": "sector" as const },
+    };
+    expect(canUnlock(corp, idOf(10), year, funds).ok).toBe(true);
+  });
+
+  it("auto-granted past decades never include specializations or capstones", () => {
+    const ids = autoGrantedNodeIds(type, 2035);
+    expect(ids.length).toBeGreaterThan(0);
+    for (const id of ids) {
+      expect(Number(id.replace(/^.*-(\d+)$/, "$1")), id).toBeLessThanOrEqual(9);
+    }
   });
 });

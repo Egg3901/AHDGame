@@ -959,8 +959,17 @@ export function processSector(
   // flip, capacity == impliedOutputUnits(nameplate) and every leg is unchanged,
   // so this reproduces the old realized revenue EXACTLY — which is why the
   // migration above seeds capacity from implied units.
+  // Tech price-realization: multiplies realised revenue only, beside the
+  // clearing leg. Deliberately NOT on `plantsMixPrice` (which would inflate the
+  // nameplate, the world supply ledger and idle upkeep) and NOT on the
+  // clearing/priceRealization factor (which feeds the launch governor and
+  // would clamp the bonus during the ramp).
+  const plantsTechPriceLeg = 1 + techEffects.priceRealizationBonus;
   const plantsDerivedHourlyRevenue = plantsEnabled
-    ? ((producedUnits * plantsMixPrice) / TURNS_PER_DAY) * clearingRevenueLeg * embargoRevenueFactor
+    ? ((producedUnits * plantsMixPrice) / TURNS_PER_DAY) *
+      clearingRevenueLeg *
+      embargoRevenueFactor *
+      plantsTechPriceLeg
     : 0;
   // Launch-safety governor, same shape as the clearing leg: bound the derived
   // revenue to within ±capEffective(λ) of the pre-flip baseline and fade that

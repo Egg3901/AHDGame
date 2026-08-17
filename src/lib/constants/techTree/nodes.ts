@@ -22,6 +22,7 @@ import { CORPORATION_TYPES, type CorporationType } from "../corporations";
 import type { TechEffect } from "./effects";
 import { TECH_DECADES } from "./decades";
 import { SECTOR_EARLY_FILL } from "./earlySectorFill";
+import { CORPORATE_V3, SECTOR_V3 } from "./v3";
 
 export type TechLane = "generic" | "sector";
 
@@ -38,11 +39,22 @@ export interface TechTreeNode {
   cost: number;
   /** Per-node override of the cash cost fraction (of daily gross revenue). */
   cashRevenueFraction?: number;
+  /**
+   * Prerequisite node ids, ANY of which satisfies the requirement. Absent on
+   * slots 1–9 (derived from the fixed SLOT_PARENT topology for backward
+   * compatibility); always present on v3 slots 10+.
+   */
+  prereqIds?: string[];
+  /**
+   * Mutual-exclusion group: owning any node in the group locks the others in
+   * the same tree (v3 specializations). Absent = no exclusivity.
+   */
+  exclusiveGroup?: string;
   effects: TechEffect[];
 }
 
 /** Authoring shape for a single node (id/decade/lane/slot are derived). */
-interface NodeSpec {
+export interface NodeSpec {
   name: string;
   description: string;
   effects: TechEffect[];
@@ -62,6 +74,27 @@ const DECADE_COST: Record<string, number> = {
   "2019": 48,
   "2029": 60,
 };
+
+/**
+ * v3 (slots 10–15): rdScore cost multipliers over DECADE_COST. Specialization
+ * entries (10–12) cost double, capstones (13–15) triple — the deep tree is the
+ * pacing brake, not a repricing of the legacy 9 slots players already bought.
+ */
+export const SLOT_COST_MULT: Record<number, number> = {
+  10: 2,
+  11: 2,
+  12: 2,
+  13: 3,
+  14: 3,
+  15: 3,
+};
+
+/** First v3 slot: specialization entries begin here. */
+export const V3_SPEC_SLOTS = [10, 11, 12] as const;
+/** Capstone slots: one per specialization, prereq = its entry. */
+export const V3_CAPSTONE_SLOTS = [13, 14, 15] as const;
+/** Highest slot in a v3 lane. */
+export const MAX_SLOT = 15;
 
 export function corpNodeId(decadeId: string, slot: number): string {
   return `corp-${decadeId}-${slot}`;
@@ -7065,6 +7098,28 @@ function specToNode(
   };
 }
 
+/**
+ * v3 node (slots 10–15): derives prereqs, exclusivity and cost from the slot.
+ * Specialization entries (10–12) each require EITHER completed branch (slot 8
+ * or 9) and are mutually exclusive within the lane-decade; capstones (13–15)
+ * each require their own entry.
+ */
+function specToNodeV3(
+  spec: NodeSpec,
+  idOf: (slot: number) => string,
+  decadeId: string,
+  lane: TechLane,
+  slot: number,
+  baseCost: number
+): TechTreeNode {
+  const isSpec = slot >= 10 && slot <= 12;
+  return {
+    ...specToNode(spec, idOf(slot), decadeId, lane, slot, baseCost * (SLOT_COST_MULT[slot] ?? 1)),
+    prereqIds: isSpec ? [idOf(8), idOf(9)] : [idOf(slot - 3)],
+    exclusiveGroup: isSpec ? `${idOf(0).replace(/-0$/, "")}-spec` : undefined,
+  };
+}
+
 function buildTreeForSector(sectorType: CorporationType): TechTreeNode[] {
   const nodes: TechTreeNode[] = [];
   for (const decade of TECH_DECADES) {
@@ -7078,6 +7133,11 @@ function buildTreeForSector(sectorType: CorporationType): TechTreeNode[] {
     ];
     corpSpecs.forEach((spec, i) => {
       nodes.push(specToNode(spec, corpNodeId(decade.id, i + 1), decade.id, "generic", i + 1, cost));
+    });
+    (CORPORATE_V3[decade.id] ?? []).forEach((spec, i) => {
+      nodes.push(
+        specToNodeV3(spec, (s) => corpNodeId(decade.id, s), decade.id, "generic", 10 + i, cost)
+      );
     });
     const sectorSpecs = [
       ...(SECTOR[sectorType]?.[decade.id] ?? []),
@@ -7095,6 +7155,18 @@ function buildTreeForSector(sectorType: CorporationType): TechTreeNode[] {
           decade.id,
           "sector",
           i + 1,
+          cost
+        )
+      );
+    });
+    (SECTOR_V3[sectorType]?.[decade.id] ?? []).forEach((spec, i) => {
+      nodes.push(
+        specToNodeV3(
+          spec,
+          (s) => sectorNodeId(sectorType, decade.id, s),
+          decade.id,
+          "sector",
+          10 + i,
           cost
         )
       );
