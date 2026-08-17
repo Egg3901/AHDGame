@@ -71,6 +71,9 @@ export default function FinancialsTab({
   // Accounting-style negatives: losses render as ($X) rather than -$X for
   // consistency with cost rows. Used for the income-statement subtotals.
   const fmtSigned = (val: number) => (val < 0 ? `(${fmt(Math.abs(val))})` : fmt(val));
+  // Cost rows are always parenthesized. Take abs so a leftover negative cannot
+  // print as (-$X) the way Sector Maintenance did on ticket #1122.
+  const fmtCost = (val: number) => `(${fmt(Math.abs(val))})`;
 
   const [financialView, setFinancialView] = useState<"income_statement" | "balance_sheet">(
     "income_statement"
@@ -223,7 +226,7 @@ export default function FinancialsTab({
               </div>
               <FinRowTip
                 label="Sector Maintenance"
-                value={`(${fmt(scaleMoney(financials.maintenanceCosts, periodView))})`}
+                value={fmtCost(scaleMoney(financials.maintenanceCosts, periodView))}
                 valueClass="text-error"
                 indent
                 tooltip={
@@ -235,7 +238,7 @@ export default function FinancialsTab({
               {financials.laborCosts > 0 && (
                 <FinRowTip
                   label="Wages"
-                  value={`(${fmt(scaleMoney(financials.laborCosts, periodView))})`}
+                  value={fmtCost(scaleMoney(financials.laborCosts, periodView))}
                   valueClass="text-error"
                   indent
                   tooltip="What you pay workers across all sectors. It moves with how many people you employ, local pay levels, and union pay demands. It is split out of Sector Maintenance, and the two together are your total running cost."
@@ -252,7 +255,7 @@ export default function FinancialsTab({
               )}
               <FinRowTip
                 label="Growth Investment"
-                value={`(${fmt(scaleMoney(financials.growthCosts, periodView))})`}
+                value={fmtCost(scaleMoney(financials.growthCosts, periodView))}
                 valueClass="text-error"
                 indent
                 tooltip="Cost of growing sector revenue. Scales with both revenue size and growth rate. Set to 0% growth to eliminate this cost."

@@ -14,6 +14,7 @@ import {
   sectorWageLevel,
   MEDIAN_SECTOR_WAGE_LEVEL,
   minWageFloorMultiplier,
+  maintenanceNetOfLabor,
 } from "@/lib/labour/laborCost";
 import type {
   Corporation,
@@ -652,7 +653,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       labourWagesEnabled && typeof sector.laborCost === "number" && sector.laborCost > 0
         ? sector.laborCost
         : 0;
-    const maintenanceNet = maintenance - sectorLaborCost;
+    const maintenanceNet = maintenanceNetOfLabor(maintenance, sectorLaborCost);
 
     // Apportioned per-sector tax, matches the corp page formula (see
     // computeSectorTaxSection for the full derivation).

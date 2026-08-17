@@ -138,6 +138,7 @@ import {
 import { getRevenueMultiplier } from "@/lib/utils/productionPolicy";
 import { buildNationalCommodityBalances } from "@/lib/commodity-map";
 import { isLabourWagesEnabled } from "@/lib/labour/featureFlag";
+import { maintenanceNetOfLabor } from "@/lib/labour/laborCost";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { computeFillRate, fillRateBand } from "@/lib/corporations/financialFogOfWar";
 import { summarizeBuildQueue } from "@/lib/corporations/sectorBuildQueue";
@@ -1398,8 +1399,13 @@ export async function loadCorporationDetailView(args: {
     pageCorpRate
   );
 
+  // Sector running cost is gross maintenance, except when the wage bill
+  // exceeds it: extra wages are a real cost (engine `maintenance` rises),
+  // not a credit against upkeep. Using the raw gross here while the
+  // income-statement lines used `gross - labor` is what let Gross Profit
+  // absorb a negative Sector Maintenance (ticket #1122).
   const operatingCosts =
-    totalMaintenanceCosts +
+    Math.max(totalMaintenanceCosts, totalLaborCosts) +
     totalGrowthCosts +
     totalRegulatoryBurden +
     corporation.marketingBudget +
@@ -1779,7 +1785,8 @@ export async function loadCorporationDetailView(args: {
   const financials = {
     totalRevenue: Math.round(totalRevenue),
     // Maintenance shown net of labour; the wage slice is broken out as `laborCosts`.
-    maintenanceCosts: Math.round(totalMaintenanceCosts - totalLaborCosts),
+    // Clamp at 0: extra wages above gross must not credit this line negative.
+    maintenanceCosts: Math.round(maintenanceNetOfLabor(totalMaintenanceCosts, totalLaborCosts)),
     laborCosts: Math.round(totalLaborCosts),
     growthCosts: Math.round(totalGrowthCosts),
     regulatoryBurden: Math.round(totalRegulatoryBurden),

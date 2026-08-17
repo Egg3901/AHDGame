@@ -116,6 +116,8 @@ export default function CeoBudgetSubtab({
   const corpSymbol = liquidCode ? (CURRENCY_SYMBOLS[liquidCode] ?? "$") : "₳";
   const toAnchor = (localAmount: number) =>
     liquidCode ? toInternalFrom(localAmount, liquidCode) : localAmount;
+  const fmtCost = (dailyLocal: number) =>
+    `(${formatAmount(Math.round(scaleMoney(toAnchor(Math.abs(dailyLocal)), periodView)), liquidCode)})`;
 
   /** Raw text while focused — avoids rounding-on-keystroke corrupting digits. */
   const [marketingDraft, setMarketingDraft] = useState<string | null>(null);
@@ -356,7 +358,7 @@ export default function CeoBudgetSubtab({
           </div>
           <FinRowTip
             label="Sector Maintenance"
-            value={`(${formatAmount(Math.round(scaleMoney(toAnchor(financials.maintenanceCosts), periodView)), liquidCode)})`}
+            value={fmtCost(financials.maintenanceCosts)}
             valueClass="text-error"
             indent
             tooltip={
@@ -368,7 +370,7 @@ export default function CeoBudgetSubtab({
           {financials.laborCosts > 0 && (
             <FinRowTip
               label="Wages"
-              value={`(${formatAmount(Math.round(scaleMoney(toAnchor(financials.laborCosts), periodView)), liquidCode)})`}
+              value={fmtCost(financials.laborCosts)}
               valueClass="text-error"
               indent
               tooltip="Total labour cost across all sectors, driven by employment, prevailing wage levels, and union wage demands. Carved out of Sector Maintenance."
@@ -376,7 +378,7 @@ export default function CeoBudgetSubtab({
           )}
           <FinRowTip
             label="Growth Investment"
-            value={`(${formatAmount(Math.round(scaleMoney(toAnchor(financials.growthCosts), periodView)), liquidCode)})`}
+            value={fmtCost(financials.growthCosts)}
             valueClass="text-error"
             indent
             tooltip="Cost of growing sector revenue. Scales with revenue and growth rate."

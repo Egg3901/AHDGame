@@ -343,6 +343,20 @@ export function computeSectorLaborCost(params: {
 }
 
 /**
+ * Display helper: non-labor maintenance after carving the wage bill out of
+ * gross. Matches {@link computeSectorLaborCost}'s invariant that non-labor
+ * never goes negative. Extra wages above gross (slider / union / min-wage)
+ * raise total cost on the engine; they are not a credit against upkeep.
+ * Subtracting `laborCost` from gross without this clamp is what rendered
+ * Sector Maintenance as `(-$N)` on the income statement (ticket #1122).
+ */
+export function maintenanceNetOfLabor(grossMaintenance: number, laborCost: number): number {
+  const gross = Number.isFinite(grossMaintenance) ? grossMaintenance : 0;
+  const labor = Number.isFinite(laborCost) && laborCost > 0 ? laborCost : 0;
+  return Math.max(0, gross - labor);
+}
+
+/**
  * Per-state labour wage index (v2): the worker-weighted average of the labour
  * system's wage multiplier (wageLevel × minimum-wage floor) across a state's
  * sectors. The per-sector pay structure cancels, so the index isolates *what the
