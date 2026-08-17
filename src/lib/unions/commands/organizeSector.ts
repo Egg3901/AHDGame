@@ -42,13 +42,16 @@ export const SECTOR_RECOGNITION_THRESHOLD = 50;
  * Approval-point edge the attacking union needs over the incumbent to win a
  * raid. A tie or worse goes to the incumbent: a union its own members rate at
  * least as well as the challenger's cannot be muscled out of a shop by money
- * and action points alone. Deliberately small (not a landslide requirement), 
+ * and action points alone. Deliberately small (not a landslide requirement),
  * raiding a mismanaged incumbent should be realistically winnable.
  */
 export const RAID_APPROVAL_EDGE_REQUIRED = 5;
 
 function clamp0to100(value: number | undefined): number {
-  return Math.max(0, Math.min(100, typeof value === "number" && Number.isFinite(value) ? value : 0));
+  return Math.max(
+    0,
+    Math.min(100, typeof value === "number" && Number.isFinite(value) ? value : 0)
+  );
 }
 
 export interface RaidContestInputs {
@@ -103,7 +106,9 @@ export interface OrganizeSectorOutcome {
  * Resolve one organizing drive against one sector. Pure, no DB, no clamping
  * surprises: every path clamps the resulting unionization to [0, 100].
  */
-export function resolveOrganizeSectorDrive(inputs: OrganizeSectorContestInputs): OrganizeSectorOutcome {
+export function resolveOrganizeSectorDrive(
+  inputs: OrganizeSectorContestInputs
+): OrganizeSectorOutcome {
   const current = clamp0to100(inputs.currentUnionization);
   const isOwnSector = inputs.currentRepresentingUnionId === inputs.attackerUnionId;
   const isRival = inputs.currentRepresentingUnionId != null && !isOwnSector;
@@ -214,10 +219,7 @@ export async function organizeSector(
   if (currentRepresentingUnionId && currentRepresentingUnionId !== attackerId) {
     const incumbentUnion = await db
       .collection<Union>("unions")
-      .findOne(
-        { _id: sector.representingUnionId! },
-        { projection: { approval: 1 } }
-      );
+      .findOne({ _id: sector.representingUnionId! }, { projection: { approval: 1 } });
     incumbentApproval = incumbentUnion ? unionApproval(incumbentUnion) : null;
   }
 

@@ -12,7 +12,7 @@
  * Shape note (why this is safe without v2's Δ-not-level discipline): the
  * v2 metric-engine registry nodes (medianIncome, unemploymentRate in
  * laborCost.ts) are RECURSIVE series with no mean-reversion, so a constant
- * LEVEL term held there would march the series to its bound and pin there, 
+ * LEVEL term held there would march the series to its bound and pin there,
  * they needed Δ-based terms instead. Unionization is a different shape: the
  * TARGET is recomputed fresh from current conditions every turn (never
  * accumulated onto its own past value), and `trendUnionization` only steps
@@ -171,12 +171,7 @@ export function unionizationDriftTarget(inputs: UnionizationDriftInputs): number
         UNIONIZATION_APPROVAL_WEIGHT;
 
   const target =
-    UNIONIZATION_BASELINE +
-    realWageTerm +
-    unemploymentTerm +
-    minWageTerm +
-    lawTerm +
-    approvalTerm;
+    UNIONIZATION_BASELINE + realWageTerm + unemploymentTerm + minWageTerm + lawTerm + approvalTerm;
   return Math.max(0, Math.min(100, target));
 }
 
@@ -222,7 +217,7 @@ export function decayUnionizationUnderBan(current: number): number {
 export const UNION_PREMIUM_MAX_PCT = 15;
 
 /**
- * Phase 6: a standing labor-cost surcharge proportional to unionization, 
+ * Phase 6: a standing labor-cost surcharge proportional to unionization,
  * 0 at unionization 0 (baseline-invariant), linear up to `UNION_PREMIUM_MAX_PCT`
  * at unionization 100. Returns a percentage POINT value (0, 15), consumed at
  * the call site as `1 + unionPremium(...) / 100`. Independent of the strike

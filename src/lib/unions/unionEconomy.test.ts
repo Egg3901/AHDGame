@@ -12,7 +12,7 @@ import type { CorporateSector } from "@/lib/db/types";
 // dues (duesTrickle/decayMembershipPressure) coverage retired with union dues
 // v1, membershipPressure no longer exists. Dues income, service cost, and
 // approval trending are pure functions in `src/lib/unions/unionDues.ts`
-// (foundation, not owned by this change); their per-turn orchestration, 
+// (foundation, not owned by this change); their per-turn orchestration,
 // scaling with members, services lapsing on a short treasury, approval
 // trending toward target, is covered in `src/lib/turn/unions/index.test.ts`.
 // Strength/strike-preview logic below is unchanged by dues v1.

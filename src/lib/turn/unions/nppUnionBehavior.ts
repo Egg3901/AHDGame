@@ -293,7 +293,10 @@ export async function processNppUnionBehavior(
     // Union dues v1: membershipPressure retired, coverage within scope, read
     // directly off the same sectors' own `unionization`, is what "is this
     // industry organized enough to bother demanding" now means.
-    const scopeAverageUnionization = weightedAverage(scopeLocals, (local) => local.unionization ?? 0);
+    const scopeAverageUnionization = weightedAverage(
+      scopeLocals,
+      (local) => local.unionization ?? 0
+    );
     if (scopeAverageUnionization < NPP_DEMAND_MIN_UNIONIZATION) continue;
     const scopeAverageWage = weightedAverage(scopeLocals, (local) => local.wageLevel ?? 1);
     const claim = Math.min(

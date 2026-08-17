@@ -15,11 +15,14 @@ import {
 
 describe("raidSucceeds (contest rule)", () => {
   it("requires the attacker to out-poll the incumbent by RAID_APPROVAL_EDGE_REQUIRED", () => {
-    expect(raidSucceeds({ attackerApproval: 60, incumbentApproval: 60 - RAID_APPROVAL_EDGE_REQUIRED })).toBe(
-      true
-    );
     expect(
-      raidSucceeds({ attackerApproval: 60, incumbentApproval: 60 - RAID_APPROVAL_EDGE_REQUIRED + 1 })
+      raidSucceeds({ attackerApproval: 60, incumbentApproval: 60 - RAID_APPROVAL_EDGE_REQUIRED })
+    ).toBe(true);
+    expect(
+      raidSucceeds({
+        attackerApproval: 60,
+        incumbentApproval: 60 - RAID_APPROVAL_EDGE_REQUIRED + 1,
+      })
     ).toBe(false);
   });
 
@@ -134,7 +137,12 @@ describe("resolveOrganizeSectorDrive", () => {
 });
 
 function makeCharacter(overrides: Partial<Character> = {}): Character {
-  return { _id: new ObjectId(), name: "TestChar", actions: 100, ...overrides } as unknown as Character;
+  return {
+    _id: new ObjectId(),
+    name: "TestChar",
+    actions: 100,
+    ...overrides,
+  } as unknown as Character;
 }
 
 function makeUnion(ownerId: ObjectId, overrides: Partial<Union> = {}): Union {
@@ -180,7 +188,8 @@ describe("organizeSector (command)", () => {
         if (name === "gameState") return gameStateCollection();
         if (name === "unions") return { findOne: vi.fn().mockResolvedValue(union) };
         if (name === "corporateSectors") return { findOne: vi.fn().mockResolvedValue(sector) };
-        if (name === "federalBudget") return { findOne: vi.fn().mockResolvedValue({ unionsBanned: false }) };
+        if (name === "federalBudget")
+          return { findOne: vi.fn().mockResolvedValue({ unionsBanned: false }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -208,9 +217,11 @@ describe("organizeSector (command)", () => {
         if (name === "gameState") return gameStateCollection();
         if (name === "unions") {
           return {
-            findOne: vi.fn().mockImplementation(({ _id }: { _id: ObjectId }) =>
-              _id.equals(union._id) ? union : _id.equals(rivalUnion._id) ? rivalUnion : null
-            ),
+            findOne: vi
+              .fn()
+              .mockImplementation(({ _id }: { _id: ObjectId }) =>
+                _id.equals(union._id) ? union : _id.equals(rivalUnion._id) ? rivalUnion : null
+              ),
             updateOne: unionUpdate,
           };
         }
@@ -218,7 +229,8 @@ describe("organizeSector (command)", () => {
           return { findOne: vi.fn().mockResolvedValue(sector), updateOne: sectorUpdate };
         }
         if (name === "characters") return { updateOne: characterUpdate };
-        if (name === "federalBudget") return { findOne: vi.fn().mockResolvedValue({ unionsBanned: false }) };
+        if (name === "federalBudget")
+          return { findOne: vi.fn().mockResolvedValue({ unionsBanned: false }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;

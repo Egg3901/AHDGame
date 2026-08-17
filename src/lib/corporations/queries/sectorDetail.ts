@@ -713,7 +713,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         0
       );
       // True buyers' room for THIS sector's outputs, in sector output units.
-      // `headroomUnits` (the unowned pool) measures claimable market SHARE, 
+      // `headroomUnits` (the unowned pool) measures claimable market SHARE,
       // under a clearing glut it reads tens of thousands of "room" while every
       // leg goes unsold (ticket #1027 follow-up: player read it as demand).
       //
@@ -740,7 +740,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         governorRampTurns: marketCtx.governorRampTurns,
         marketSharePercent: marketShare,
         // Distinct RIVAL corps in this (state, type) cell. `siblingsSectors` is
-        // already scoped to exactly that cell, so this needs no extra read, 
+        // already scoped to exactly that cell, so this needs no extra read,
         // but it must be distinct CORPS, not sectors, or a rival holding two
         // sectors here would read as two competitors. Same definition as
         // `fetchSectorCompetitorCount`, which the build command charges from.

@@ -92,7 +92,7 @@ export const STRIKE_REVENUE_THROTTLE = 0.25;
 export const STRIKE_MARGIN_PENALTY_PP = -8;
 
 /**
- * Unionization bump applied only on wait-it-out resolution (not concession, 
+ * Unionization bump applied only on wait-it-out resolution (not concession,
  * a CEO who conceded already paid for it via a higher wageLevel; a sector
  * that waited it out without raising pay gets a "radicalization" bump
  * instead, since the workers won nothing).
@@ -207,7 +207,7 @@ export function stepStrike(inputs: StrikeStepInputs): StrikeStepResult {
   // the gap outright (softening is capped below 1 by unionServices.ts).
   const gap = (workerExpectation - realWage) * (1 - softening);
 
-  // Union ban (player suggestion #93): overrides the whole state machine, 
+  // Union ban (player suggestion #93): overrides the whole state machine,
   // an active strike is force-resolved (with cooldown, see StrikeStepInputs
   // docs) and the trigger below is unreachable while the ban holds.
   if (inputs.unionsBanned) {

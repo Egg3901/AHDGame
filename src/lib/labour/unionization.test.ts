@@ -164,9 +164,9 @@ describe("unionizationDriftTarget", () => {
   });
 
   it("union dues v1: absent representingUnionApproval is neutral (sector unrepresented)", () => {
-    expect(
-      unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: undefined })
-    ).toBe(UNIONIZATION_BASELINE);
+    expect(unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: undefined })).toBe(
+      UNIONIZATION_BASELINE
+    );
   });
 
   it("the terms are independent and additive (sum of single-deviation effects)", () => {

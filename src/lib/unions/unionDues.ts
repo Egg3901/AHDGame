@@ -163,5 +163,7 @@ export function trendApproval(current: number, target: number): number {
 /** Approval as stored, treating a missing field on pre-existing documents as the base. */
 export function unionApproval(union: { approval?: number }): number {
   const a = union.approval;
-  return typeof a === "number" && Number.isFinite(a) ? Math.max(0, Math.min(100, a)) : BASE_APPROVAL;
+  return typeof a === "number" && Number.isFinite(a)
+    ? Math.max(0, Math.min(100, a))
+    : BASE_APPROVAL;
 }

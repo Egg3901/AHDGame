@@ -2496,7 +2496,11 @@ describe("v3 Phase 7b/8, union-law bias & membership-pressure wiring (labourSyst
     };
 
     const baseUnionization = runUnionizationToConvergence(corpBase, sectorBase, noUnion);
-    const badApprovalUnionization = runUnionizationToConvergence(corpUnion, sectorUnion, withBadUnion);
+    const badApprovalUnionization = runUnionizationToConvergence(
+      corpUnion,
+      sectorUnion,
+      withBadUnion
+    );
     expect(badApprovalUnionization).toBeLessThan(baseUnionization);
   });
 
@@ -2733,7 +2737,7 @@ describe("market clearing", () => {
       ]),
     });
 
-    // Launch-safety governor (clearing leg). C8: the cap WIDENS with the ramp, 
+    // Launch-safety governor (clearing leg). C8: the cap WIDENS with the ramp,
     // capEffective(0.15, λ) = 0.15 / (1 − λ), which is 0.30 at λ = 120/240 = 0.5.
     // The effective market factor (0.72 after the posture leg) now sits INSIDE
     // that ±30% band, so it survives the clamp untouched and only the ramp

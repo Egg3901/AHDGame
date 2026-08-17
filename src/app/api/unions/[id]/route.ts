@@ -333,7 +333,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
             ? null
             : Math.round(Math.max(0, union.demandedWageLevel - (s.wageLevel ?? 1)) * 1000) / 1000,
         unionization: s.unionization ?? 0,
-        // Union dues v1: which union (if any) currently holds this sector, 
+        // Union dues v1: which union (if any) currently holds this sector,
         // may be this union, a rival, or null (unrepresented, an
         // organize-sector target). See `POST .../organize-sector`.
         representingUnionId: s.representingUnionId?.toString() ?? null,

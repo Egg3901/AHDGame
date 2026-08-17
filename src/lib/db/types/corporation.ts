@@ -654,7 +654,7 @@ export interface CorporateSector {
    */
   producedUnits?: number;
   /**
-   * Units telemetry: the share of `producedUnits` that cleared this turn, 
+   * Units telemetry: the share of `producedUnits` that cleared this turn,
    * `producedUnits × soldFraction` when market clearing ran, else equal to
    * `producedUnits`. Same DAILY, currency-free basis.
    * Display/telemetry only, never read back into the economy.
@@ -1013,7 +1013,7 @@ export interface CorporateSector {
    * Counter for the sustained-negative-production margin penalty. Increments
    * by 1 per turn while productionPolicyLevel < 0 and decrements by 1 (floored
    * at 0) per turn otherwise. Penalty schedule lives in
-   * `getSustainedNegativeProductionPenalty`. Absent on legacy sectors, 
+   * `getSustainedNegativeProductionPenalty`. Absent on legacy sectors,
    * treated as 0 by the turn loop until first computed.
    */
   negativeProductionSustainedTurns?: number;

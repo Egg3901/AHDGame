@@ -479,7 +479,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           revenue: revenueAnchor,
           supplyRates: rates.supply ?? {},
           posture: typeof sector.pricingPosture === "number" ? sector.pricingPosture : null,
-          // Lagged own fill for autoPosture's feedback loop (NPP/unowned only, 
+          // Lagged own fill for autoPosture's feedback loop (NPP/unowned only,
           // ignored when a player posture is posted).
           lastSoldFraction: typeof sector.soldFraction === "number" ? sector.soldFraction : null,
           // Owning corp's lagged loyalty for the slice pre-pass (A2b).

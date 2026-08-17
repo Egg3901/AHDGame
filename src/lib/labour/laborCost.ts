@@ -248,7 +248,7 @@ export function getSectorLaborShare(
  * sectors instead of merely the capital-intensive ones.
  *
  * Pay level drives (a) which sectors a minimum wage floors and (b) the displayed
- * wage-per-worker. It does NOT change a sector's total labor cost on its own, 
+ * wage-per-worker. It does NOT change a sector's total labor cost on its own,
  * cost is intensity × revenue (see getSectorLaborShare) and stays invariant.
  */
 export const SECTOR_WAGE_LEVEL: Record<CorporationType, number> = {

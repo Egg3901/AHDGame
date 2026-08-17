@@ -136,8 +136,8 @@ export function OrganizeSectorAction({
                 <span className="font-medium text-foreground">
                   {representingUnionName ?? "a rival union"}
                 </span>
-                . Organizing here is a raid: your union tries to take representation of this
-                sector away from theirs. A failed raid still costs the same.
+                . Organizing here is a raid: your union tries to take representation of this sector
+                away from theirs. A failed raid still costs the same.
               </>
             ) : (
               "This sector is currently unrepresented."

@@ -10,10 +10,9 @@ import {
   loadLabourRelationsPoliticalNudgesByCountry,
 } from "./labourRelationsPoliticalProvider";
 
-function union(over: Partial<Union> & Pick<Union, "countryId">): Pick<
-  Union,
-  "countryId" | "activeServices" | "suspended"
-> {
+function union(
+  over: Partial<Union> & Pick<Union, "countryId">
+): Pick<Union, "countryId" | "activeServices" | "suspended"> {
   return { activeServices: [], ...over };
 }
 
@@ -192,11 +191,9 @@ describe("labour relations political provider", () => {
 
 describe("union dues v1: running services nudge economy.workerSecurity", () => {
   it("shares the SAME capped channel as bargaining outcomes, not a second uncapped one", () => {
-    const withServiceOnly = buildLabourRelationsPoliticalNudges(
-      [],
-      100,
-      [union({ countryId: "US", activeServices: ["healthFund"] })]
-    ).get("US")!;
+    const withServiceOnly = buildLabourRelationsPoliticalNudges([], 100, [
+      union({ countryId: "US", activeServices: ["healthFund"] }),
+    ]).get("US")!;
     expect(withServiceOnly.get("economy.workerSecurity")).toBeGreaterThan(0);
     expect(withServiceOnly.get("economy.workerSecurity")!).toBeLessThanOrEqual(
       LABOUR_POLITICAL_CAPS["economy.workerSecurity"]
@@ -226,34 +223,30 @@ describe("union dues v1: running services nudge economy.workerSecurity", () => {
   });
 
   it("a suspended union contributes nothing even with services active", () => {
-    const nudges = buildLabourRelationsPoliticalNudges(
-      [],
-      100,
-      [union({ countryId: "US", activeServices: ["healthFund"], suspended: true })]
-    );
+    const nudges = buildLabourRelationsPoliticalNudges([], 100, [
+      union({ countryId: "US", activeServices: ["healthFund"], suspended: true }),
+    ]);
     expect(nudges.size).toBe(0);
   });
 
   it("a union with no active services contributes nothing", () => {
-    const nudges = buildLabourRelationsPoliticalNudges(
-      [],
-      100,
-      [union({ countryId: "US", activeServices: [] })]
-    );
+    const nudges = buildLabourRelationsPoliticalNudges([], 100, [
+      union({ countryId: "US", activeServices: [] }),
+    ]);
     expect(nudges.size).toBe(0);
   });
 
   it("is recomputed fresh from the CURRENT active slate, not accumulated across calls", () => {
-    const first = buildLabourRelationsPoliticalNudges(
-      [],
-      100,
-      [union({ countryId: "US", activeServices: ["healthFund"] })]
-    ).get("US")!.get("economy.workerSecurity");
-    const second = buildLabourRelationsPoliticalNudges(
-      [],
-      101,
-      [union({ countryId: "US", activeServices: ["healthFund"] })]
-    ).get("US")!.get("economy.workerSecurity");
+    const first = buildLabourRelationsPoliticalNudges([], 100, [
+      union({ countryId: "US", activeServices: ["healthFund"] }),
+    ])
+      .get("US")!
+      .get("economy.workerSecurity");
+    const second = buildLabourRelationsPoliticalNudges([], 101, [
+      union({ countryId: "US", activeServices: ["healthFund"] }),
+    ])
+      .get("US")!
+      .get("economy.workerSecurity");
     // Same slate, same result each call, nothing persists or compounds turn
     // to turn inside this function.
     expect(second).toBe(first);
