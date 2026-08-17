@@ -23,7 +23,13 @@ import {
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
-import { getCashReserves, requiredReserves, upstreamCapacity } from "@/lib/banking/bankCash";
+import {
+  bankEquity,
+  getCashReserves,
+  requiredReserves,
+  upstreamCapacity,
+} from "@/lib/banking/bankCash";
+import { equityCappedDepositCeiling } from "@/lib/banking/deposits";
 import { buildRiskReadout } from "@/lib/banking/riskReadout";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
 import { getCurrentTurn } from "@/lib/currentTurn";
@@ -249,9 +255,15 @@ async function handleGET(_request: Request, { params }: RouteParams) {
             .toArray()
         : [];
 
+    // Live capacity × equity cap, not the cached turn stamp. Pointer deposits
+    // used to zero book equity and pin the cached ceiling at $0 until the next
+    // bankingTurn; the console must show the number the next turn will use.
     const depositCeiling =
       hasActiveCharter && charter
-        ? (charter.depositCeiling ?? (await getBankDepositCeiling(db, corporation)))
+        ? equityCappedDepositCeiling(
+            await getBankDepositCeiling(db, corporation),
+            bankEquity(charter)
+          )
         : null;
 
     // The console used to ship raw ObjectId hex for every borrower and every
