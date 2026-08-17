@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { Bill, Character, Union } from "@/lib/db/types";
+import type { Bill, Character, CorporateSector, Union } from "@/lib/db/types";
 import { RECRUIT_COST, applyRecruit } from "@/lib/unions/unionEconomy";
 import { clampWageLevel } from "@/lib/labour/laborCost";
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
@@ -8,6 +8,15 @@ import { getGameState } from "@/lib/gameState";
 import { isTurnProcessingNow } from "@/lib/turn/processingLock";
 import { NATIONAL_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
 import { buildNationalBillCountryScopeFilter } from "@/lib/legislature/nationalBillScope";
+import {
+  averageAnnualWage,
+  duesIncomePerTurn,
+  maxDuesForWage,
+  servicesCostPerTurn,
+  unionMembers,
+  type UnionMemberSector,
+} from "@/lib/unions/unionDues";
+import { normalizeServiceIds } from "@/lib/unions/unionServices";
 
 export type UnionActionResult =
   { ok: true; status: 200; [key: string]: unknown } | { ok: false; status: number; error: string };
@@ -122,6 +131,103 @@ export async function setUnionWageDemand(
     .updateOne({ _id: union._id }, { $set: { demandedWageLevel: clamped, updatedAt: new Date() } });
 
   return { ok: true, status: 200, demandedWageLevel: clamped };
+}
+
+/**
+ * Sectors this union actually represents, i.e. `CorporateSector.representingUnionId`
+ * points at it — the dues/services base under union dues v1. Distinct from the
+ * broader "every sector matching (countryId, sectorType)" candidate scope
+ * `[id]/route.ts` still uses for bargaining/employer listings: dues and
+ * services are only ever charged/valued against shops this union has actually
+ * won, never the whole industry it merely shares a type with.
+ */
+async function loadRepresentedSectors(db: Db, union: Union): Promise<UnionMemberSector[]> {
+  return db
+    .collection<CorporateSector>("corporateSectors")
+    .find(
+      { representingUnionId: union._id },
+      { projection: { workers: 1, unionization: 1, wagePerWorker: 1 } }
+    )
+    .toArray();
+}
+
+/**
+ * Set the union's annual per-member dues rate. Clamped to
+ * `[0, maxDuesForWage(averageAnnualWage)]` against the represented workforce's
+ * actual wages, so the same rate can never be interpreted differently across
+ * countries/eras (see `unionServices.ts` header) and a head can never charge
+ * above the hard ceiling by sending an oversized number.
+ */
+export async function setUnionDues(
+  db: Db,
+  character: Character,
+  unionId: string,
+  duesPerWorkerAnnual: number
+): Promise<UnionActionResult> {
+  const resolved = await resolveOwnedUnion(db, character, unionId);
+  if (!resolved.ok) return resolved;
+  const { union } = resolved;
+
+  if (!Number.isFinite(duesPerWorkerAnnual) || duesPerWorkerAnnual < 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: "duesPerWorkerAnnual must be a non-negative finite number.",
+    };
+  }
+
+  const sectors = await loadRepresentedSectors(db, union);
+  const annualWage = averageAnnualWage(sectors);
+  const maxDues = maxDuesForWage(annualWage);
+  const clamped = Math.min(Math.max(0, duesPerWorkerAnnual), maxDues);
+  const members = unionMembers(sectors);
+
+  await db
+    .collection<Union>("unions")
+    .updateOne({ _id: union._id }, { $set: { duesPerWorkerAnnual: clamped, updatedAt: new Date() } });
+
+  return {
+    ok: true,
+    status: 200,
+    duesPerWorkerAnnual: clamped,
+    maxDuesPerWorkerAnnual: maxDues,
+    members,
+    duesIncomePerTurn: duesIncomePerTurn(members, clamped),
+  };
+}
+
+/**
+ * Switch the union's service slate on/off. Unknown ids are dropped by
+ * `normalizeServiceIds` rather than stored, so a stale or hand-edited
+ * document can never widen the effect beyond the four defined tiers.
+ */
+export async function setUnionServices(
+  db: Db,
+  character: Character,
+  unionId: string,
+  activeServices: readonly string[]
+): Promise<UnionActionResult> {
+  const resolved = await resolveOwnedUnion(db, character, unionId);
+  if (!resolved.ok) return resolved;
+  const { union } = resolved;
+
+  const normalized = normalizeServiceIds(activeServices);
+
+  const sectors = await loadRepresentedSectors(db, union);
+  const annualWage = averageAnnualWage(sectors);
+  const members = unionMembers(sectors);
+
+  await db
+    .collection<Union>("unions")
+    .updateOne({ _id: union._id }, { $set: { activeServices: normalized, updatedAt: new Date() } });
+
+  return {
+    ok: true,
+    status: 200,
+    activeServices: normalized,
+    members,
+    servicesCostPerTurn: servicesCostPerTurn(members, annualWage, normalized),
+  };
 }
 
 /**

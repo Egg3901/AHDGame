@@ -53,6 +53,15 @@ import {
   pensionFundingRatio,
   pensionSchemeAssetsAnchor,
 } from "@/lib/pensions/rules";
+import {
+  averageAnnualWage,
+  duesIncomePerTurn,
+  maxDuesForWage,
+  servicesCostPerTurn,
+  unionApproval,
+  unionMembers,
+} from "@/lib/unions/unionDues";
+import { normalizeServiceIds } from "@/lib/unions/unionServices";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -98,6 +107,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
               wageLevel: 1,
               workers: 1,
               unionization: 1,
+              wagePerWorker: 1,
+              representingUnionId: 1,
               strikeStartedAtTurn: 1,
               strikeCooldownUntilTurn: 1,
             },
@@ -247,6 +258,22 @@ export async function GET(_request: Request, { params }: RouteParams) {
       endorsements.map((endorsement) => [endorsement.billId.toString(), endorsement.stance])
     );
 
+    // Union dues v1: dues/services/approval are only ever priced against
+    // sectors this union actually REPRESENTS (`representingUnionId` on the
+    // sector), a strict subset of `sectors` above (which is every sector
+    // matching the industry, still needed for bargaining/employer listings).
+    const representedSectors = sectors.filter(
+      (s) => s.representingUnionId?.toString() === union._id.toString()
+    );
+    const members = unionMembers(representedSectors);
+    const annualWage = averageAnnualWage(representedSectors);
+    const maxDuesPerWorkerAnnual = maxDuesForWage(annualWage);
+    const duesPerWorkerAnnual = Math.min(
+      Math.max(0, union.duesPerWorkerAnnual ?? 0),
+      maxDuesPerWorkerAnnual
+    );
+    const activeServices = normalizeServiceIds(union.activeServices);
+
     return NextResponse.json({
       union: {
         id: union._id.toString(),
@@ -263,7 +290,17 @@ export async function GET(_request: Request, { params }: RouteParams) {
         organizeActionCost: ORGANIZE_ACTION_COST,
         organizeStrengthGain: ORGANIZE_STRENGTH_GAIN,
         treasury: union.treasury,
-        membershipPressure: union.membershipPressure,
+        // Union dues v1 — replaces `membershipPressure`. `members` is a real
+        // headcount (workers in represented sectors), `approval` is what
+        // anchors unionization drift in those sectors.
+        members,
+        approval: unionApproval(union),
+        duesPerWorkerAnnual,
+        maxDuesPerWorkerAnnual,
+        duesIncomePerTurn: duesIncomePerTurn(members, duesPerWorkerAnnual),
+        activeServices,
+        servicesCostPerTurn: servicesCostPerTurn(members, annualWage, activeServices),
+        foundedByCharacterId: union.foundedByCharacterId?.toString() ?? null,
         demandedWageLevel: union.demandedWageLevel,
         suspended,
         currentTurn,
@@ -280,6 +317,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
             ? null
             : Math.round(Math.max(0, union.demandedWageLevel - (s.wageLevel ?? 1)) * 1000) / 1000,
         unionization: s.unionization ?? 0,
+        // Union dues v1: which union (if any) currently holds this sector —
+        // may be this union, a rival, or null (unrepresented, an
+        // organize-sector target). See `POST .../organize-sector`.
+        representingUnionId: s.representingUnionId?.toString() ?? null,
         strikeActive: s.strikeStartedAtTurn != null,
         strikeCooldownUntilTurn: s.strikeCooldownUntilTurn ?? null,
         strikeBlockReason: unionStrikeBlockReason(s, currentTurn, protectedSectorIds),

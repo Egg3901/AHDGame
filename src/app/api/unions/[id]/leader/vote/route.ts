@@ -174,7 +174,6 @@ export async function GET(_request: Request, { params }: RouteParams) {
       electionOpen: isUnionLeadershipElectionOpen(union),
       minStrength: LEADERSHIP_ELECTION_MIN_STRENGTH,
       strength: unionStrength(union),
-      membershipPressure: union.membershipPressure,
       organizerCount,
       organizers,
       totalBankedStrength,
