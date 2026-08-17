@@ -53,7 +53,7 @@ export async function buildRegionTurnoutResponse(
 
   const turnout: Record<string, Record<string, RegionTurnoutCell>> = {};
 
-  // Voter-group countries (UK/JP/DE/IE/CN/BR) store turnout under a single
+  // Voter-group countries (UK/JP/DE/IE/CN/BR/DD) store turnout under a single
   // `<cc>_voterGroups` bucket; the SSOT supplies baselines + the bucket key.
   // US returns null here and falls to the Layer-1 branch below.
   const voterGroupBaselines = getVoterGroupBaselines(countryId);

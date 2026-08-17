@@ -4,8 +4,17 @@ import { Tooltip } from "@/components/Tooltip";
 import { formatNum, appealColor } from "../../pollHelpers";
 import type { StoredPoll } from "../../types";
 
+function weightedGranularTurnout(poll: StoredPoll): number | null {
+  const cells = poll.granular?.cells;
+  if (!cells?.length) return null;
+  const share = cells.reduce((s, c) => s + c.share, 0);
+  if (share <= 0) return null;
+  return cells.reduce((s, c) => s + c.share * c.turnout, 0) / share;
+}
+
 export function StatCards({ poll }: { poll: StoredPoll }) {
   const { overallAppeal, totalEstimatedVoters } = poll;
+  const turnoutPct = weightedGranularTurnout(poll);
 
   return (
     <div className="mb-4 grid gap-4 sm:grid-cols-2">
@@ -28,7 +37,11 @@ export function StatCards({ poll }: { poll: StoredPoll }) {
           </Tooltip>
         </div>
         <div className="text-2xl font-bold text-foreground">{formatNum(totalEstimatedVoters)}</div>
-        <div className="text-xs text-muted mt-0.5">Weighted turnout across groups</div>
+        <div className="text-xs text-muted mt-0.5">
+          {turnoutPct != null
+            ? `${turnoutPct.toFixed(1)}% weighted turnout across groups`
+            : "Weighted turnout across groups"}
+        </div>
       </div>
     </div>
   );

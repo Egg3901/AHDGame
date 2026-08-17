@@ -4,7 +4,7 @@ import { getVoterArchetypeCategoriesForCountry } from "./countryDemographics";
 /**
  * Census-category → voter-archetype derived turnout.
  *
- * Archetype countries (UK/JP/DE/IE/CN/BR) store turnout per voter archetype
+ * Archetype countries (UK/JP/DE/IE/CN/BR/DD) store turnout per voter archetype
  * (`<cc>_voterGroups`), but the region census tab displays real-world census
  * buckets (age/education/income/urbanization/ethnicity). To show a turnout
  * estimate per census bucket we average the turnout of the archetypes that
@@ -242,6 +242,27 @@ export const CENSUS_TO_ARCHETYPE: Partial<Record<CountryId, Record<string, strin
     suburban: ["working_class_pt", "evangelical_conservative"],
     rural: ["rural_agribusiness"],
     // ethnicity omitted (race↔archetype mapping too sensitive to fabricate)
+  },
+  DD: {
+    // age
+    young: ["youth"],
+    mid: ["industrial_worker", "intelligentsia"],
+    mature: ["party_nomenklatura", "collective_farmer"],
+    senior: ["christian_milieu"],
+    // education
+    primary_or_below: ["christian_milieu", "collective_farmer"],
+    secondary: ["industrial_worker", "youth"],
+    vocational: ["industrial_worker", "youth"],
+    university: ["intelligentsia", "party_nomenklatura"],
+    // income
+    low: ["industrial_worker", "collective_farmer"],
+    middle: ["intelligentsia", "youth", "christian_milieu"],
+    high: ["party_nomenklatura"],
+    // urbanization
+    urban: ["party_nomenklatura", "industrial_worker", "intelligentsia", "youth"],
+    suburban: ["intelligentsia", "industrial_worker"],
+    rural: ["collective_farmer", "christian_milieu"],
+    // ethnicity omitted (no ethnic archetypes; mapping would be fabricated)
   },
 };
 

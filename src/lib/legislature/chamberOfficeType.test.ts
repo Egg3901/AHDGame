@@ -5,6 +5,7 @@ import {
   getLowerChamberOfficeType,
   getUpperChamberOfficeType,
   getCabinetEligibleOfficeTypes,
+  getRegionOfficialBuckets,
 } from "./chamberOfficeType";
 
 describe("chamberOfficeType helpers", () => {
@@ -66,6 +67,10 @@ describe("chamberOfficeType helpers", () => {
     it("BR → chamber", () => {
       expect(getLowerChamberOfficeType("BR")).toBe("chamber");
     });
+
+    it("DD → volkskammerDeputy (chamber key is volkskammer)", () => {
+      expect(getLowerChamberOfficeType("DD")).toBe("volkskammerDeputy");
+    });
   });
 
   describe("getUpperChamberOfficeType", () => {
@@ -93,6 +98,26 @@ describe("chamberOfficeType helpers", () => {
 
     it("CN returns npcDelegate only", () => {
       expect(getCabinetEligibleOfficeTypes("CN")).toEqual(["npcDelegate"]);
+    });
+  });
+
+  describe("getRegionOfficialBuckets", () => {
+    it("maps DD Volkskammer seats by office type, not chamber key (ticket #1121)", () => {
+      const buckets = getRegionOfficialBuckets("DD");
+      expect(buckets.houseRepTypes.has("volkskammerDeputy")).toBe(true);
+      expect(buckets.stateSenatorTypes.has("landAssembly")).toBe(true);
+    });
+
+    it("maps CN NPC seats by npcDelegate (same chamber-key mismatch)", () => {
+      const buckets = getRegionOfficialBuckets("CN");
+      expect(buckets.houseRepTypes.has("npcDelegate")).toBe(true);
+    });
+
+    it("keeps US house/senate/stateSenate identity mapping", () => {
+      const buckets = getRegionOfficialBuckets("US");
+      expect(buckets.houseRepTypes.has("house")).toBe(true);
+      expect(buckets.senatorTypes.has("senate")).toBe(true);
+      expect(buckets.stateSenatorTypes.has("stateSenate")).toBe(true);
     });
   });
 });

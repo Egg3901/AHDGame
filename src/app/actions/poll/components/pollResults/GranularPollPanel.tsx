@@ -18,6 +18,7 @@ interface SortState {
 
 interface VoteShareAggregate {
   share: number;
+  turnout: number;
   you: number;
   totalOpponents: number;
   bestOpponent: number;
@@ -50,6 +51,7 @@ function aggregateVoteShares(
   if (share <= 0) {
     return {
       share: 0,
+      turnout: 0,
       you: 0,
       totalOpponents: 0,
       bestOpponent: 0,
@@ -57,6 +59,7 @@ function aggregateVoteShares(
       bestOpponentName: "",
     };
   }
+  const turnout = subset.reduce((s, c) => s + c.share * c.turnout, 0) / share;
 
   let you = 0;
   let undecided = 0;
@@ -84,6 +87,7 @@ function aggregateVoteShares(
 
   return {
     share,
+    turnout,
     you,
     totalOpponents,
     bestOpponent: best.share,
@@ -271,9 +275,16 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
       for (const cell of cells) {
         keys.add(cell.buckets[dim]);
       }
-      // Include every key declared in labels even if pruned, so empty buckets still render.
-      for (const key of Object.keys(DEMOGRAPHIC_LABELS[dim] ?? {})) {
-        keys.add(key);
+      // Restore US pruned buckets (under polling floor) only when this dim is
+      // actually US-shaped. DEMOGRAPHIC_LABELS.education is no_college/college/
+      // graduate — merging it into every country's `education` dim leaked those
+      // US keys onto DD/DE/JP polls (ticket #1121).
+      const usLabelKeys = Object.keys(DEMOGRAPHIC_LABELS[dim] ?? {});
+      const usLabelSet = new Set(usLabelKeys);
+      const cellKeys = Array.from(keys);
+      const usShaped = cellKeys.length > 0 && cellKeys.every((k) => usLabelSet.has(k));
+      if (usShaped) {
+        for (const key of usLabelKeys) keys.add(key);
       }
       map[dim] = Array.from(keys);
     }
@@ -448,7 +459,7 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
                     {empty ? (
                       <span className="text-muted/70">under polling floor</span>
                     ) : (
-                      `${formatPct(row.share)} of electorate`
+                      `${formatPct(row.share)} of electorate · ${formatTurnout(row.turnout)} turnout`
                     )}
                   </div>
                 </div>

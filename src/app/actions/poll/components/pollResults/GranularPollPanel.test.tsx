@@ -67,6 +67,32 @@ function buildUsMockPoll(): StoredPoll {
   };
 }
 
+function buildDdMockPoll(): StoredPoll {
+  const granular = buildGranularPollPayloadForState({
+    countryId: "DD",
+    stateId: "SN",
+    preset: "1953-default",
+    character: {
+      economicPosition: -1,
+      socialPosition: -1,
+      favorability: 50,
+      politicalInfluence: 30,
+    },
+    opponents: [],
+  });
+
+  return {
+    takenAt: new Date().toISOString(),
+    overallAppeal: 25,
+    totalEstimatedVoters: 3_310_000,
+    totalPotentialVoters: 3_500_000,
+    topGroups: [],
+    bottomGroups: [],
+    categories: [],
+    granular,
+  };
+}
+
 function buildDeMockPoll(): StoredPoll {
   const granular = buildGranularPollPayloadForState({
     countryId: "DE",
@@ -171,5 +197,22 @@ describe("GranularPollPanel", () => {
     expect(screen.getByRole("table")).toBeTruthy();
     expect(screen.getAllByText("Ethnicity").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("Income").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("does not inject US education levels onto a DD poll (ticket #1121)", () => {
+    const poll = buildDdMockPoll();
+    render(<GranularPollPanel poll={poll} pollData={mockPollData} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Education" }));
+    expect(screen.queryByText("College Degree")).toBeNull();
+    expect(screen.queryByText("No College")).toBeNull();
+    expect(screen.queryByText("Graduate Degree")).toBeNull();
+    expect(screen.getAllByText("Primary or below").length).toBeGreaterThan(0);
+  });
+
+  it("shows per-group turnout on DD education marginals (ticket #1121)", () => {
+    const poll = buildDdMockPoll();
+    render(<GranularPollPanel poll={poll} pollData={mockPollData} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Education" }));
+    expect(screen.getAllByText(/turnout/).length).toBeGreaterThan(0);
   });
 });
