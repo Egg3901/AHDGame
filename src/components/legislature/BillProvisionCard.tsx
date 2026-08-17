@@ -132,15 +132,13 @@ function ProvisionFiscalRow({ fiscal }: { fiscal: NonNullable<BillProvisionView[
         Fiscal impact
       </span>
       <span className="tabular-nums text-muted">
-        Proposed: {money(proposed.cost)}/yr cost
+        Cost {fiscal.current ? `${money(fiscal.current.cost)} → ` : ""}
+        {money(proposed.cost)}/yr
         {proposed.revenue > 0 ? ` · ${money(proposed.revenue)}/yr revenue` : ""}
       </span>
-      {fiscal.current && (
-        <span className="tabular-nums text-muted">Current: {money(fiscal.current.cost)}/yr</span>
-      )}
       <span className={`font-medium tabular-nums ${netDelta >= 0 ? "text-success" : "text-error"}`}>
         Net change {netDelta >= 0 ? "+" : "−"}
-        {money(Math.abs(netDelta))}/yr
+        {money(Math.abs(netDelta))}/yr to the treasury
       </span>
     </div>
   );

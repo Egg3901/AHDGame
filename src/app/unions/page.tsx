@@ -6,7 +6,7 @@ import { HeroImage } from "@/components/HeroImage";
 import BackButton from "@/components/BackButton";
 import { EmptyState, Skeleton, Tooltip } from "@/components/ui";
 import { UnionEmblem } from "@/components/unions/UnionEmblem";
-import { ORGANIZING_TOOLTIP, organizingBand } from "@/lib/unions/organizing";
+import { FoundUnionModal } from "@/components/unions/FoundUnionModal";
 
 interface LeaderboardRow {
   unionId: string;
@@ -16,7 +16,10 @@ interface LeaderboardRow {
   sectorLabel: string;
   leaderName: string | null;
   isVacant: boolean;
-  membershipPressure: number;
+  /** Real headcount: workers across this union's sectors, weighted by unionization. */
+  members: number;
+  /** 0-100, how the membership rates the bargain the union is offering. */
+  approval: number;
   treasury: number;
   demandedWageLevel: number | null;
   suspended?: boolean;
@@ -28,7 +31,7 @@ interface BannedCountry {
   countryName: string;
 }
 
-/** A country that has unions — an option in the country switcher. */
+/** A country that has unions, an option in the country switcher. */
 interface CountryOption {
   countryId: string;
   countryName: string;
@@ -46,6 +49,7 @@ export default function UnionsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notEnabled, setNotEnabled] = useState(false);
+  const [foundOpen, setFoundOpen] = useState(false);
 
   async function loadLeaderboard(country: string | null) {
     setLoading(true);
@@ -86,7 +90,7 @@ export default function UnionsPage() {
           country = me?.character?.countryId ?? me?.countryId ?? null;
         }
       } catch {
-        // no session / character — show all unions
+        // no session / character, show all unions
       }
       if (cancelled) return;
       setSelectedCountry(country);
@@ -112,7 +116,7 @@ export default function UnionsPage() {
   }, [selectedCountry, availableCountries]);
 
   // Single-federation countries (e.g. China, the Eastern bloc) name every
-  // sector union identically — disambiguate those with the sector so the list
+  // sector union identically, disambiguate those with the sector so the list
   // isn't a wall of the same name.
   const duplicateNames = useMemo(() => {
     const counts = new Map<string, number>();
@@ -122,13 +126,13 @@ export default function UnionsPage() {
 
   const stats = useMemo(() => {
     const led = rows.filter((r) => !r.isVacant);
-    const totalTreasury = led.reduce((sum, r) => sum + r.treasury, 0);
-    const avgMembership = led.length
-      ? led.reduce((sum, r) => sum + r.membershipPressure, 0) / led.length
+    const totalTreasury = rows.reduce((sum, r) => sum + r.treasury, 0);
+    const totalMembers = rows.reduce((sum, r) => sum + r.members, 0);
+    const avgApproval = rows.length
+      ? rows.reduce((sum, r) => sum + r.approval, 0) / rows.length
       : 0;
-    const demanding = led.filter((r) => r.demandedWageLevel != null).length;
     const vacant = rows.filter((r) => r.isVacant).length;
-    return { ledCount: led.length, vacant, totalTreasury, avgMembership, demanding };
+    return { ledCount: led.length, vacant, totalTreasury, totalMembers, avgApproval };
   }, [rows]);
 
   return (
@@ -169,15 +173,19 @@ export default function UnionsPage() {
             <StatCell label="Led Unions" value={String(stats.ledCount)} />
             <StatCell label="Vacant" value={String(stats.vacant)} />
             <StatCell
-              label="Total Treasury"
-              value={Math.round(stats.totalTreasury).toLocaleString("en-US")}
+              label="Total Membership"
+              value={Math.round(stats.totalMembers).toLocaleString("en-US")}
+              hint="Real headcount across every union shown: workers in the sectors each one represents, weighted by unionization."
             />
             <StatCell
-              label="Avg Organizing"
-              value={`${stats.avgMembership.toFixed(1)}`}
-              hint={ORGANIZING_TOOLTIP}
+              label="Avg Approval"
+              value={`${Math.round(stats.avgApproval)}%`}
+              hint="How the membership rates the bargain, averaged across every union shown. Dues push it down, running services pushes it up."
             />
-            <StatCell label="Demanding Wages" value={String(stats.demanding)} />
+            <StatCell
+              label="Total Funds"
+              value={Math.round(stats.totalTreasury).toLocaleString("en-US")}
+            />
           </div>
         )}
       </header>
@@ -208,7 +216,7 @@ export default function UnionsPage() {
       {!notEnabled && (
         <p className="text-sm text-muted">
           Every industry already has a union. Vacant unions need organizers to fund drives and elect
-          a president — open a union page to organize or vote.
+          a president; open a union page to organize or vote.
         </p>
       )}
 
@@ -233,13 +241,22 @@ export default function UnionsPage() {
             </select>
           )}
           <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+          {!notEnabled && selectedCountry && (
+            <button
+              type="button"
+              onClick={() => setFoundOpen(true)}
+              className="shrink-0 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+            >
+              Found a Union
+            </button>
+          )}
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-card-border bg-card">
           {loading ? (
             // Mirrors the loaded table: header strip + rank/name/leader/number
             // columns. Union count varies by world, so reserve the typical
-            // loaded height with min-h — rows inside only approximate.
+            // loaded height with min-h, rows inside only approximate.
             <div className="min-h-[520px]">
               <div className="flex items-center gap-4 border-b border-card-border bg-card-elevated px-4 py-3">
                 <Skeleton className="h-3 w-4" />
@@ -290,18 +307,24 @@ export default function UnionsPage() {
                   <th className="px-4 py-3 font-medium">Union</th>
                   <th className="px-4 py-3 font-medium">
                     Leader
-                    <Tooltip content="The union president. A vacant union has none — fund organize drives on its page, then vote one in." />
+                    <Tooltip content="The union president. A vacant union has none; fund organize drives on its page, then vote one in." />
                   </th>
                   <th className="px-4 py-3 text-right font-medium">
                     <span className="inline-flex items-center">
-                      Organizing
-                      <Tooltip content={ORGANIZING_TOOLTIP} />
+                      Membership
+                      <Tooltip content="Real headcount: workers across this union's sectors, weighted by how unionized each one is." />
                     </span>
                   </th>
                   <th className="px-4 py-3 text-right font-medium">
                     <span className="inline-flex items-center">
-                      Treasury
-                      <Tooltip content="The union's war chest. Dues flow in each turn based on how organized it is; recruitment drives and strikes are paid out of it." />
+                      Approval
+                      <Tooltip content="How the membership rates the bargain, 0-100%. Dues push it down, running services pushes it up." />
+                    </span>
+                  </th>
+                  <th className="px-4 py-3 text-right font-medium">
+                    <span className="inline-flex items-center">
+                      Funds
+                      <Tooltip content="The union's treasury. Dues flow in each turn; services and recruitment drives are paid out of it." />
                     </span>
                   </th>
                 </tr>
@@ -348,14 +371,20 @@ export default function UnionsPage() {
                         ))
                       )}
                     </td>
+                    <td className="px-4 py-3 text-right font-mono tabular-nums">
+                      {Math.round(r.members).toLocaleString("en-US")}
+                    </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="font-mono tabular-nums">
-                        {r.membershipPressure.toFixed(1)}
-                      </span>
                       <span
-                        className={`block text-[11px] ${organizingBand(r.membershipPressure).toneClass}`}
+                        className={`font-mono tabular-nums ${
+                          r.approval >= 50
+                            ? "text-success"
+                            : r.approval >= 30
+                              ? "text-warning"
+                              : "text-error"
+                        }`}
                       >
-                        {organizingBand(r.membershipPressure).label}
+                        {Math.round(r.approval)}%
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums">
@@ -368,6 +397,16 @@ export default function UnionsPage() {
           )}
         </div>
       </section>
+
+      {selectedCountry && (
+        <FoundUnionModal
+          open={foundOpen}
+          onClose={() => setFoundOpen(false)}
+          onFounded={() => loadLeaderboard(selectedCountry)}
+          countryId={selectedCountry}
+          countryName={selectedCountryName}
+        />
+      )}
     </main>
   );
 }

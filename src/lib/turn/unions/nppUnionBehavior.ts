@@ -1,9 +1,11 @@
 /**
  * Autonomous union and employer bargaining for NPP-run worlds.
  *
- * Leadership and recruiting remain NPP-specific. Every industrial-relations
+ * Leadership election remains NPP-specific. Every industrial-relations
  * decision after that uses the same campaign, offer, escalation, mediation,
- * settlement, and agreement services as player actions.
+ * settlement, and agreement services as player actions. Union dues v1
+ * retired the recruitment drive this file used to run for NPP leaders, see
+ * the comment above the leadership loop below.
  */
 import type { Db, ObjectId } from "mongodb";
 import type {
@@ -27,24 +29,25 @@ import {
   persistBargainingSettlement,
   persistUnionBargainingEscalation,
 } from "@/lib/unions/commands/bargaining";
-import {
-  applyRecruit,
-  RECRUIT_COST,
-  STRIKE_CALL_MIN_UNIONIZATION,
-} from "@/lib/unions/unionEconomy";
+import { STRIKE_CALL_MIN_UNIONIZATION } from "@/lib/unions/unionEconomy";
 import {
   calculateNppSettlementWage,
   decideNppBargainingAction,
   industrialActionPressure,
 } from "./nppBargainingPolicy";
 
-export const NPP_DEMAND_MIN_PRESSURE = 15;
+/**
+ * Minimum worker-weighted `unionization` (0-100) across an NPP union's scope
+ * before its leader bothers opening a wage claim. Union dues v1 renamed this
+ * from a `membershipPressure` proxy to the real coverage stat it always meant
+ * to gate on.
+ */
+export const NPP_DEMAND_MIN_UNIONIZATION = 15;
 export const NPP_DEMAND_PREMIUM = 0.12;
 export const NPP_DEMAND_CEILING = 1.5;
 export const NPP_CAMPAIGN_OPEN_LIMIT_PER_TURN = 24;
 export interface NppUnionBehaviorResult {
   leadersElected: number;
-  recruited: number;
   campaignsOpened: number;
   counteroffersMade: number;
   agreementsSettled: number;
@@ -55,7 +58,6 @@ export interface NppUnionBehaviorResult {
 
 const EMPTY: NppUnionBehaviorResult = {
   leadersElected: 0,
-  recruited: 0,
   campaignsOpened: 0,
   counteroffersMade: 0,
   agreementsSettled: 0,
@@ -208,32 +210,29 @@ export async function processNppUnionBehavior(
     .toArray();
   const leaderById = new Map(leaders.map((leader) => [leader._id.toHexString(), leader]));
   const orphaned: ObjectId[] = [];
-  const recruitOps = [];
+  // Union dues v1 retired the recruitment drive (spend treasury to raise
+  // membershipPressure): a union's members are now a real headcount derived
+  // straight from represented-sector workers x unionization every turn
+  // (`processUnionsTurn`), so there is nothing left for an NPP leader to
+  // "recruit" into. This loop now only clears `demandedWageLevel` and detects
+  // orphaned leadership, see NEEDS OTHER AGENTS in this branch's report for
+  // the open question of whether NPP leaders should get a dues/services policy
+  // lever to replace what recruiting used to be.
+  const clearOps = [];
   for (const union of led) {
     const leader = leaderById.get(union.ownerId.toHexString());
     if (!leader) {
       orphaned.push(union._id);
       continue;
     }
-    const set: Record<string, unknown> = {};
-    const update: Record<string, unknown> = {};
-    if (union.demandedWageLevel != null) set.demandedWageLevel = null;
-    if (
-      union.treasury >= RECRUIT_COST &&
-      union.membershipPressure < 85 &&
-      militancy(leader) > 0.35
-    ) {
-      union.membershipPressure = applyRecruit(union.membershipPressure);
-      union.treasury -= RECRUIT_COST;
-      set.membershipPressure = union.membershipPressure;
-      update.$inc = { treasury: -RECRUIT_COST };
-      result.recruited++;
-    }
-    union.demandedWageLevel = null;
-    if (Object.keys(set).length > 0 || update.$inc) {
-      set.updatedAt = now;
-      update.$set = set;
-      recruitOps.push({ updateOne: { filter: { _id: union._id }, update } });
+    if (union.demandedWageLevel != null) {
+      union.demandedWageLevel = null;
+      clearOps.push({
+        updateOne: {
+          filter: { _id: union._id },
+          update: { $set: { demandedWageLevel: null, updatedAt: now } },
+        },
+      });
     }
   }
   if (orphaned.length > 0) {
@@ -244,7 +243,7 @@ export async function processNppUnionBehavior(
         { $set: { ownerId: null, updatedAt: now }, $unset: { ownerType: "" } }
       );
   }
-  if (recruitOps.length > 0) await db.collection<Union>("unions").bulkWrite(recruitOps);
+  if (clearOps.length > 0) await db.collection<Union>("unions").bulkWrite(clearOps);
 
   const activeLed = led.filter((union) => !orphaned.some((id) => id.equals(union._id)));
   const [sectors, corporations, campaignSnapshot, activeAgreements] = await Promise.all([
@@ -285,13 +284,20 @@ export async function processNppUnionBehavior(
     a._id.toHexString().localeCompare(b._id.toHexString())
   )) {
     if (result.campaignsOpened >= NPP_CAMPAIGN_OPEN_LIMIT_PER_TURN) break;
-    if (union.membershipPressure < NPP_DEMAND_MIN_PRESSURE) continue;
     const leader = leaderById.get(union.ownerId.toHexString());
     if (!leader) continue;
     const scopeLocals = sectors.filter(
       (sector) => sector.countryId === union.countryId && sector.sectorType === union.sectorType
     );
     if (scopeLocals.length === 0) continue;
+    // Union dues v1: membershipPressure retired, coverage within scope, read
+    // directly off the same sectors' own `unionization`, is what "is this
+    // industry organized enough to bother demanding" now means.
+    const scopeAverageUnionization = weightedAverage(
+      scopeLocals,
+      (local) => local.unionization ?? 0
+    );
+    if (scopeAverageUnionization < NPP_DEMAND_MIN_UNIONIZATION) continue;
     const scopeAverageWage = weightedAverage(scopeLocals, (local) => local.wageLevel ?? 1);
     const claim = Math.min(
       NPP_DEMAND_CEILING,

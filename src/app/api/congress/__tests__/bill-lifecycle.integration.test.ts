@@ -202,8 +202,10 @@ describe("Bill Lifecycle Integration Tests", () => {
         currentPolicyOptionNameSnapshot: "Current Law: Existing tax policy",
         effectDirection: 1,
         economic: 2,
-        social: 0,
       });
+      // A tax bill takes no social stance. Stamping social: 0 made it read as
+      // a real centre target and dragged voters toward Moderate (ticket #1116).
+      expect(insertCall.provisions[0]).not.toHaveProperty("social");
     });
   });
 

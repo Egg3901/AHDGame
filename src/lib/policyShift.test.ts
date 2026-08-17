@@ -13,6 +13,13 @@ describe("computePolicyShift", () => {
     expect(computePolicyShift(0, undefined, "for")).toBe(0);
   });
 
+  it("returns 0 when provision value is 0 (axis not in play)", () => {
+    // Ticket #1116: 0 is the stamped default for "no stance", not a centre target.
+    expect(computePolicyShift(-1, 0, "for")).toBe(0);
+    expect(computePolicyShift(-1, 0, "against")).toBe(0);
+    expect(computePolicyShift(2, 0, "for")).toBe(0);
+  });
+
   it("returns 0 when character is already at provision value", () => {
     expect(computePolicyShift(2, 2, "for")).toBe(0);
     expect(computePolicyShift(2, 2, "against")).toBe(0);
@@ -75,6 +82,36 @@ describe("applyBillVotePolicyShift", () => {
       social: 1,
     });
     expect(characterCol.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("does not pull a centre-left character toward moderate on 0/0 provisions", async () => {
+    const { db, characterCol } = makeMockDb();
+    await applyBillVotePolicyShift(
+      db as any,
+      new ObjectId(),
+      [
+        { economic: 0, social: 0 },
+        { economic: 0, social: 0 },
+        { economic: 0, social: 0 },
+      ],
+      "for",
+      { economic: -1, social: 0 }
+    );
+    expect(characterCol.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("still shifts a non-zero axis when the other axis is 0", async () => {
+    const { db, characterCol } = makeMockDb();
+    await applyBillVotePolicyShift(
+      db as any,
+      new ObjectId(),
+      [{ economic: -2, social: 0 }],
+      "for",
+      { economic: -1, social: -1 }
+    );
+    const setArg = characterCol.updateOne.mock.calls[0][1].$set;
+    expect(setArg["policies.economic"]).toBeCloseTo(-1.25);
+    expect(setArg["policies.social"]).toBe(-1);
   });
 
   it("shifts economic axis toward bill on 'for' vote", async () => {

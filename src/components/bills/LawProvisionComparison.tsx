@@ -227,7 +227,7 @@ export function BillFiscalImpactStrip({
         {cell("Current laws", `${formatCurrencyCompactChip(currentCost, prefix)}/yr`)}
         {cell("If enacted", `${formatCurrencyCompactChip(enactedCost, prefix)}/yr`)}
         {cell(
-          "Net change",
+          "Net change in cost",
           `${netChange >= 0 ? "+" : "−"}${formatCurrencyCompactChip(Math.abs(netChange), prefix)}/yr`,
           netChange !== 0 && netPctGdp != null && netPctGdp >= 0.05 ? (
             <div className={`text-[11px] ${netChange > 0 ? "text-error" : "text-success"}`}>

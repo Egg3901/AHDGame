@@ -1,5 +1,5 @@
 /**
- * GET/POST /api/unions/[id]/leader/vote — leadership election tallies and ballot.
+ * GET/POST /api/unions/[id]/leader/vote, leadership election tallies and ballot.
  * Only organizers who funded a drive may vote once the union is organized enough.
  */
 import { NextResponse } from "next/server";
@@ -82,7 +82,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const tally = tallyUnionLeaderVotes(votesRaw, weights, incumbentId);
     const leaderCharacterId = union.ownerId?.toString() ?? null;
     // Organizers and vote tallies are always player characters. The sitting
-    // president may be an NPP — resolved separately above — so omit that id
+    // president may be an NPP, resolved separately above, so omit that id
     // from the character name batch when `ownerType` says so.
     const nameLookupIds = [
       ...new Set([
@@ -174,7 +174,6 @@ export async function GET(_request: Request, { params }: RouteParams) {
       electionOpen: isUnionLeadershipElectionOpen(union),
       minStrength: LEADERSHIP_ELECTION_MIN_STRENGTH,
       strength: unionStrength(union),
-      membershipPressure: union.membershipPressure,
       organizerCount,
       organizers,
       totalBankedStrength,
@@ -188,7 +187,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
           }
         : leaderCharacterId
           ? {
-              // Seat is filled but the owner doc is missing — keep the id so
+              // Seat is filled but the owner doc is missing, keep the id so
               // the UI still knows a presidency exists, and fall back to Unknown.
               characterId: leaderCharacterId,
               name: "Unknown",
