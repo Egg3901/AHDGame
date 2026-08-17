@@ -93,7 +93,7 @@ describe("dues and services controls, head-only gating", () => {
           el?.tagName === "P" && /members pay 200\b.*a year each/i.test(el.textContent ?? "")
       )
     ).toBeTruthy();
-    expect(screen.queryByRole("slider", { name: /annual dues per member/i })).toBeNull();
+    expect(screen.queryByRole("slider", { name: /percent of member wages/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /set dues/i })).toBeNull();
 
     // Read-only services list, no toggle switches and no save button.
@@ -108,7 +108,7 @@ describe("dues and services controls, head-only gating", () => {
 
     await waitFor(() => expect(screen.getByText("United Dockworkers")).toBeTruthy());
 
-    expect(await screen.findByRole("slider", { name: /annual dues per member/i })).toBeTruthy();
+    expect(await screen.findByRole("slider", { name: /percent of member wages/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /set dues/i })).toBeTruthy();
 
     const switches = screen.getAllByRole("switch");
