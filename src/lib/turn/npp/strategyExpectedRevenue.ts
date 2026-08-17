@@ -10,7 +10,8 @@
  *
  *   score = Σ_outputs( rate × laggedPriceRatio(commodity) × capacityHeadroom(resource) )
  *
- * where laggedPriceRatio = globalPrice/basePrice (last turn's prices) and
+ * where laggedPriceRatio is the host country's reachable book over basePrice
+ * (national, then global fallback; last turn's prices) and
  * capacityHeadroom ∈ [0, 1] is the state's remaining idle fraction of the
  * resource's capacity (1 for uncapped/legacy states and non-extractable
  * outputs). A strategy whose primary resource has no local headroom scores ~0
@@ -57,7 +58,7 @@ const SCORE_EPSILON = 1e-9;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-/** Last turn's globalPrice/basePrice for a commodity, or null when unpriced. */
+/** Last turn's reachable/national/global price over basePrice, or null when unpriced. */
 export type LaggedPriceRatioFn = (commodity: CommodityType) => number | null;
 
 /**

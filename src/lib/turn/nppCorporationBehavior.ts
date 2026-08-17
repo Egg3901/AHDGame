@@ -79,15 +79,11 @@ import {
   techNodeCashCost,
   type TechTreeNode,
 } from "@/lib/constants/techTree";
-import {
-  CAPACITY_BUILD_TURNS,
-  computeBuildCost,
-  capacityRescaleRatio,
-  rescaleBuildQueueForStrategyChange,
-} from "@/lib/constants/capacityEconomy";
+import { CAPACITY_BUILD_TURNS, computeBuildCost } from "@/lib/constants/capacityEconomy";
 import { SECTOR_STRATEGIES, STRATEGY_COOLDOWN_TURNS } from "@/lib/constants/sectorStrategies";
 import { getStrategyAvailability } from "@/lib/constants/techTree/strategyAvailability";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
+import { retoolRescaleFields } from "@/lib/corporations/retoolRescale";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
 import {
@@ -1559,23 +1555,8 @@ export function makeNppCorpDecision(
     if (best) {
       const sector = best.sp.sector;
       const fromId = sector.strategyId ?? "standard";
-      // D9: renormalize capacity across the recipe change so the switch is
-      // never a free capacity windfall/confiscation (same rule as the player
-      // route and the extraction auto-pass).
-      const rescale: Record<string, unknown> = {};
-      const ratio = capacityRescaleRatio(
-        sector.sectorType as CorporationType,
-        fromId,
-        best.toStrategyId
-      );
-      if (ratio !== 1) {
-        if (typeof sector.capitalStock === "number" && Number.isFinite(sector.capitalStock)) {
-          rescale.capitalStock = sector.capitalStock * ratio;
-        }
-        if (Array.isArray(sector.buildQueue) && sector.buildQueue.length > 0) {
-          rescale.buildQueue = rescaleBuildQueueForStrategyChange(sector.buildQueue, ratio);
-        }
-      }
+      // Same D9 helper as the player command and extraction auto-pass: nameplate
+      // stays put and `anchor × units` (physical opex) stays put.
       sectorUpdates.push({
         filter: { _id: sector._id },
         update: {
@@ -1584,7 +1565,15 @@ export function makeNppCorpDecision(
             transitionFromStrategyId: fromId,
             transitionStartTurn: ctx.turn,
             transitionCooldownUntilTurn: ctx.turn + STRATEGY_COOLDOWN_TURNS,
-            ...rescale,
+            ...retoolRescaleFields({
+              sectorType: sector.sectorType as CorporationType,
+              fromStrategyId: fromId,
+              toStrategyId: best.toStrategyId,
+              plantsEnabled: plants?.enabled === true,
+              capitalStock: sector.capitalStock,
+              buildQueue: sector.buildQueue,
+              otherOpexPerUnitAnchor: sector.otherOpexPerUnitAnchor,
+            }),
             updatedAt: now,
           },
         },

@@ -312,6 +312,157 @@ describe("processExtractionAutoStrategy", () => {
       expect(set.strategyId).toBe("rare_earth_mining");
       expect(set).not.toHaveProperty("capitalStock");
       expect(set).not.toHaveProperty("buildQueue");
+      expect(set.retoolRescaleApplied).toBe(false);
     });
+
+    it("holds total physical opex fixed when a calibrated plant is auto-retooled", async () => {
+      enablePlants();
+      const capitalStock = 4_000;
+      const otherOpexPerUnitAnchor = 12.5;
+      seed({
+        rareEarthSD: 0.2,
+        stateCap: 1000,
+        stateSupply: 50,
+        sectors: [
+          {
+            _id: new ObjectId(),
+            stateId: "HB",
+            revenue: 100,
+            strategyId: "standard",
+            capitalStock,
+            otherOpexPerUnitAnchor,
+          },
+        ],
+      });
+      await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+      const set = db.collectionMocks.corporateSectors.bulkWrite.mock.calls[0][0][0].updateOne.update
+        .$set as {
+        capitalStock: number;
+        otherOpexPerUnitAnchor: number;
+        retoolRescaleApplied: boolean;
+      };
+      expect(RATIO).not.toBe(1);
+      expect(set.retoolRescaleApplied).toBe(true);
+      expect(set.capitalStock).toBeCloseTo(capitalStock * RATIO, 6);
+      expect(set.otherOpexPerUnitAnchor).toBeCloseTo(otherOpexPerUnitAnchor / RATIO, 8);
+      expect(set.otherOpexPerUnitAnchor * set.capitalStock).toBeCloseTo(
+        otherOpexPerUnitAnchor * capitalStock,
+        6
+      );
+    });
+  });
+
+  it("scores pass 2 on host reachable prices, not the global book", async () => {
+    // Global book screams timber; the US reachable book screams iron. A miner
+    // in NC with headroom on both must follow the market it can actually sell
+    // into. S/D is 1.0 so pass 1's shortage map is empty (the mock find does
+    // not apply Mongo filters).
+    const sectorId = new ObjectId();
+    const corpId = new ObjectId();
+    db.collectionMocks.commodityPrices.find.mockReturnValue(
+      cursor([
+        {
+          commodity: "timber",
+          globalSupply: 1000,
+          globalDemand: 1000,
+          stateSupply: { NC: 100 },
+          globalPrice: 300,
+          basePrice: 100,
+          nationalPrices: { US: 100 },
+          reachablePrices: { US: 100 },
+        },
+        {
+          commodity: "iron",
+          globalSupply: 1000,
+          globalDemand: 1000,
+          stateSupply: { NC: 100 },
+          globalPrice: 100,
+          basePrice: 100,
+          nationalPrices: { US: 300 },
+          reachablePrices: { US: 300 },
+        },
+      ])
+    );
+    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
+      cursor([{ stateId: "NC", resources: { timber: 10_000, iron: 10_000 } }])
+    );
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursor([{ _id: corpId, countryId: "US" }])
+    );
+    db.collectionMocks.corporateSectors.find.mockReturnValueOnce(cursor([])).mockReturnValueOnce(
+      cursor([
+        {
+          _id: sectorId,
+          corporationId: corpId,
+          countryId: "US",
+          stateId: "NC",
+          strategyId: "timber_logging",
+          soldFraction: 0.9,
+          capitalStock: 4_000,
+          otherOpexPerUnitAnchor: 12.5,
+        },
+      ])
+    );
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+    expect(res.restrategized).toBe(1);
+    expect(res.restrategizedByStrategy).toEqual({ iron_mining: 1 });
+    const set = db.collectionMocks.corporateSectors.bulkWrite.mock.calls[0][0][0].updateOne.update
+      .$set as Record<string, unknown>;
+    expect(set.strategyId).toBe("iron_mining");
+    expect(set.transitionFromStrategyId).toBe("timber_logging");
+  });
+
+  it("does not retool a chemical sector (generic pass removed)", async () => {
+    const corpId = new ObjectId();
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentYear: 2019 });
+    db.collectionMocks.commodityPrices.find.mockReturnValue(
+      cursor([
+        {
+          commodity: "iron",
+          globalSupply: 1000,
+          globalDemand: 1000,
+          stateSupply: {},
+          globalPrice: 100,
+          basePrice: 100,
+        },
+        {
+          commodity: "fertilizers",
+          globalSupply: 1000,
+          globalDemand: 1000,
+          globalPrice: 230,
+          basePrice: 100,
+        },
+        {
+          commodity: "chemicals",
+          globalSupply: 1000,
+          globalDemand: 1000,
+          globalPrice: 80,
+          basePrice: 100,
+        },
+      ])
+    );
+    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(cursor([]));
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursor([{ _id: corpId, countryId: "US" }])
+    );
+    db.collectionMocks.corporateSectors.find
+      .mockReturnValueOnce(cursor([])) // pass 1
+      .mockReturnValueOnce(cursor([])) // pass 2 extraction
+      .mockReturnValueOnce(
+        cursor([
+          {
+            _id: new ObjectId(),
+            corporationId: corpId,
+            countryId: "US",
+            sectorType: "chemical_industries",
+            strategyId: "standard",
+            soldFraction: 0.9,
+          },
+        ])
+      ); // would have been pass 3
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+    expect(res.genericRestrategized).toBe(0);
+    expect(res.restrategized).toBe(0);
+    expect(db.collectionMocks.corporateSectors.bulkWrite).not.toHaveBeenCalled();
   });
 });
