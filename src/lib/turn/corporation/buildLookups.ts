@@ -620,14 +620,23 @@ export async function buildCorporationLookups(
   }
 
   // Per-country INPUT price ratios: the world map overlaid with each
-  // country's reachable ratios, so the physical input bill (`computeInputsCost`)
-  // prices what a sector buys at its own market's level. World-map fallback
-  // per commodity, base-price fallback only where the world has no ratio
-  // either — never a silent base-price bill for a commodity the world prices.
+  // country's reachable ratios, CAPPED AT THE WORLD RATIO per commodity.
+  // The input bill is linear and unclamped while revenue realization is
+  // damped (ratio^0.5, max 1.5x), so billing inputs above the world level
+  // hands every buyer a cost no seller-side leg can capture back. Observed
+  // live (t175): pinned bloc reachable ratios (steel FR 4.1x vs world 2.0x)
+  // fed straight into the bill and put ~70% of all corps at negative income
+  // in one turn. min(world, reachable) keeps the t174 fix (buyers in cheap
+  // reachable markets stop paying world) without the blowup. World-map
+  // fallback per commodity; base-price fallback only where the world has no
+  // ratio either.
   const reachableInputPriceRatiosByCountry = new Map<string, Map<CommodityType, number>>();
   for (const [countryId, byCommodity] of reachablePriceRatioByCountry) {
     const merged = new Map(priceRatioByCommodity);
-    for (const [commodity, ratio] of byCommodity) merged.set(commodity, ratio);
+    for (const [commodity, ratio] of byCommodity) {
+      const world = priceRatioByCommodity.get(commodity);
+      merged.set(commodity, typeof world === "number" ? Math.min(world, ratio) : ratio);
+    }
     reachableInputPriceRatiosByCountry.set(countryId, merged);
   }
 
