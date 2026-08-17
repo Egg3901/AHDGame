@@ -351,4 +351,46 @@ describe("runAutoReelectionEntry", () => {
 
     expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
   });
+
+  it("does not auto-enter a banned-party character in an RU one-party-state race", async () => {
+    const characterId = new ObjectId();
+    const electionId = new ObjectId();
+
+    const character = {
+      _id: characterId,
+      userId: new ObjectId(),
+      countryId: "RU",
+      name: "Luka az Koyotlya",
+      homeState: "KAZ",
+      party: "2",
+      autoRunForReelection: true,
+    } as Character;
+
+    const heldSeat = {
+      _id: new ObjectId(),
+      characterId,
+      officeType: "governor",
+      state: "KAZ",
+    } as ElectedOfficial;
+
+    const election = {
+      _id: electionId,
+      countryId: "RU",
+      electionType: "governor",
+      state: "KAZ",
+      status: "active",
+    } as Election;
+
+    db.collectionMocks.characters.find.mockReturnValue(makeCursor([character]));
+    db.collectionMocks.electedOfficials.find.mockReturnValue(makeCursor([heldSeat]));
+    db.collectionMocks.elections.find.mockReturnValue(makeCursor([election]));
+    db.collection("politicalParties");
+    db.collectionMocks.politicalParties.find.mockReturnValue(
+      makeCursor([{ sequentialId: 2, countryId: "RU", regimeStatus: "banned" }])
+    );
+
+    await runAutoReelectionEntry(db as unknown as Db, now, 1);
+
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+  });
 });
