@@ -39,7 +39,7 @@ import {
   buildUnionsBannedByCountry,
   type LabourContext,
 } from "@/lib/labour/laborCost";
-import { buildOwnedUnionMembershipPressureByKey } from "@/lib/unions/unionLookups";
+import { buildUnionEffectsById } from "@/lib/unions/unionLookups";
 import { loadCollectiveAgreementEffects } from "@/lib/unions/collectiveAgreementEffects";
 import { loadIndustrialActionOutputFactors } from "@/lib/unions/industrialActionEffects";
 import {
@@ -224,17 +224,14 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // sector inside processSectors from sectorType + currentYear). Inert (no
   // economic change) when the mode is off — the default.
   const fullEnabled = labourAtLeast(labourMode, "full");
-  const [
-    ownedUnionMembershipPressureByKey,
-    collectiveAgreementEffects,
-    industrialActionOutputFactorBySectorId,
-  ] = fullEnabled
-    ? await Promise.all([
-        buildOwnedUnionMembershipPressureByKey(db),
-        loadCollectiveAgreementEffects(db, turn ?? gameState?.currentTurn ?? 0),
-        loadIndustrialActionOutputFactors(db),
-      ])
-    : [undefined, undefined, undefined];
+  const [unionsById, collectiveAgreementEffects, industrialActionOutputFactorBySectorId] =
+    fullEnabled
+      ? await Promise.all([
+          buildUnionEffectsById(db),
+          loadCollectiveAgreementEffects(db, turn ?? gameState?.currentTurn ?? 0),
+          loadIndustrialActionOutputFactors(db),
+        ])
+      : [undefined, undefined, undefined];
   const labour: LabourContext = {
     wagesEnabled: labourAtLeast(labourMode, "wages"),
     minWageRatioByCountry: buildMinWageRatioByCountry(lookups.federalBudgets),
@@ -247,9 +244,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // tier the unionization/strike machinery runs at), unlike the bias map
     // above whose reads are gated at "full".
     unionsBannedByCountry: buildUnionsBannedByCountry(lookups.federalBudgets),
-    // v3 Phase 8: gated read — only fetched when fullEnabled, so a union
-    // document's mere existence never has an effect at a lower tier.
-    ownedUnionMembershipPressureByKey,
+    // Union dues v1: gated read — only fetched when fullEnabled, so a union
+    // document's mere existence never has an effect at a lower tier. Resolved
+    // per-sector via `CorporateSector.representingUnionId`, not by
+    // (countryId, sectorType) — see `sectorLabour.ts`.
+    unionsById,
     collectiveAgreementWageFloorBySectorId: collectiveAgreementEffects?.wageFloorBySectorId,
     noStrikeProtectedSectorIds: collectiveAgreementEffects?.noStrikeProtectedSectorIds,
     industrialActionOutputFactorBySectorId,

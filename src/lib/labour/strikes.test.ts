@@ -12,6 +12,7 @@ import {
   STRIKE_WAITOUT_UNIONIZATION_BUMP,
   STRIKE_LAW_THRESHOLD_WEIGHT,
 } from "./strikes";
+import { MAX_STRIKE_SOFTENING } from "@/lib/unions/unionServices";
 
 describe("trendWorkerExpectation", () => {
   it("initializes at realWage with no prior value (no first-turn gap)", () => {
@@ -339,5 +340,113 @@ describe("stepStrike — union ban (player suggestion #93)", () => {
     expect(resolved.next.strikeStartedAtTurn).toBeNull();
     expect(resolved.next.strikeCooldownUntilTurn).toBe(12 + STRIKE_COOLDOWN_TURNS);
     expect(resolved.unionizationBump).toBe(0);
+  });
+});
+
+describe("stepStrike — union dues v1: representing-union service softening", () => {
+  it("a softened gap can keep a strike from triggering where an unsoftened one would fire", () => {
+    const unsoftened = stepStrike({
+      unionization: HIGH_UNIONIZATION,
+      realWage: 0.8,
+      // Just over the trigger threshold — softening it down should drop it
+      // back under the threshold.
+      workerExpectation: 0.8 + STRIKE_EXPECTATION_GAP_THRESHOLD + 0.01,
+      turn: 10,
+      prior: NOT_STRIKING,
+    });
+    expect(unsoftened.event).toBe("started");
+
+    const softened = stepStrike({
+      unionization: HIGH_UNIONIZATION,
+      realWage: 0.8,
+      workerExpectation: 0.8 + STRIKE_EXPECTATION_GAP_THRESHOLD + 0.01,
+      turn: 10,
+      prior: NOT_STRIKING,
+      strikeSoftening: 0.5,
+    });
+    expect(softened.event).toBeNull();
+  });
+
+  it("softening also helps an active strike reach concession sooner", () => {
+    const stillActive = stepStrike({
+      unionization: HIGH_UNIONIZATION,
+      realWage: 1.0,
+      workerExpectation: 1.0 + STRIKE_CONCESSION_GAP_THRESHOLD + 0.01,
+      turn: 5,
+      prior: { strikeStartedAtTurn: 2, strikeCooldownUntilTurn: null },
+    });
+    expect(stillActive.event).toBeNull(); // gap not yet closed enough to concede
+
+    const concedes = stepStrike({
+      unionization: HIGH_UNIONIZATION,
+      realWage: 1.0,
+      workerExpectation: 1.0 + STRIKE_CONCESSION_GAP_THRESHOLD + 0.01,
+      turn: 5,
+      prior: { strikeStartedAtTurn: 2, strikeCooldownUntilTurn: null },
+      strikeSoftening: 0.5,
+    });
+    expect(concedes.event).toBe("resolved_concession");
+  });
+
+  it("never fully zeroes the gap even at the maximum softening a service slate can reach — services must not make a sector strike-proof", () => {
+    const result = stepStrike({
+      unionization: HIGH_UNIONIZATION,
+      realWage: 0.8,
+      // A gap so wide that even damping it by MAX_STRIKE_SOFTENING (0.6)
+      // still clears the trigger threshold.
+      workerExpectation: 0.8 + STRIKE_EXPECTATION_GAP_THRESHOLD * 10,
+      turn: 10,
+      prior: NOT_STRIKING,
+      strikeSoftening: MAX_STRIKE_SOFTENING,
+    });
+    expect(result.event).toBe("started");
+  });
+
+  it("absent/non-finite strikeSoftening behaves exactly like 0 (no softening)", () => {
+    const omitted = stepStrike({
+      unionization: HIGH_UNIONIZATION,
+      realWage: 0.8,
+      workerExpectation: 0.8 + WIDE_GAP,
+      turn: 10,
+      prior: NOT_STRIKING,
+    });
+    const explicitZero = stepStrike({
+      unionization: HIGH_UNIONIZATION,
+      realWage: 0.8,
+      workerExpectation: 0.8 + WIDE_GAP,
+      turn: 10,
+      prior: NOT_STRIKING,
+      strikeSoftening: 0,
+    });
+    const nonFinite = stepStrike({
+      unionization: HIGH_UNIONIZATION,
+      realWage: 0.8,
+      workerExpectation: 0.8 + WIDE_GAP,
+      turn: 10,
+      prior: NOT_STRIKING,
+      strikeSoftening: Number.NaN,
+    });
+    expect(omitted).toEqual(explicitZero);
+    expect(nonFinite).toEqual(explicitZero);
+  });
+
+  it("clamps an out-of-range strikeSoftening into [0,1]", () => {
+    const over = stepStrike({
+      unionization: HIGH_UNIONIZATION,
+      realWage: 0.8,
+      workerExpectation: 0.8 + WIDE_GAP,
+      turn: 10,
+      prior: NOT_STRIKING,
+      strikeSoftening: 5,
+    });
+    const atOne = stepStrike({
+      unionization: HIGH_UNIONIZATION,
+      realWage: 0.8,
+      workerExpectation: 0.8 + WIDE_GAP,
+      turn: 10,
+      prior: NOT_STRIKING,
+      strikeSoftening: 1,
+    });
+    expect(over).toEqual(atOne);
   });
 });

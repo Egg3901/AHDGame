@@ -1,51 +1,53 @@
 /**
- * Plain-language reading of `Union.membershipPressure`.
+ * Plain-language reading of `Union.approval`.
  *
- * The stored number is a 0-100 organizing-intensity score, not a headcount:
- * recruitment drives raise it (with diminishing returns near 100), it decays
- * each turn without active organizing, and it drives dues income, unionization
- * drift and strike capacity. Players read the bare number as a member count —
- * "Membership 17.0" looks like a broken stat rather than "barely organized" —
- * so every surface labels it "Organizing" and pairs it with a band word.
+ * Union dues v1 retired `membershipPressure` (an 0-100 organizing-intensity
+ * score that was simultaneously the dues base, the unionization drift bias,
+ * the strike-capacity gate, and the leadership threshold). This file used to
+ * band that number under the "Organizing" label. Members are now a real
+ * headcount (`unionMembers()` in `unionDues.ts`), dues are money, and the
+ * number every union surface bands here is `approval`: how the membership
+ * rates the bargain it is getting, 0-100, SIGNED about a neutral midpoint —
+ * dues push it down, running services push it up. It is what anchors each
+ * represented sector's unionization drift target, so it is also the honest
+ * answer to "is this union doing well."
+ *
+ * Exported names are unchanged (`organizingBand`, `organizingValue`,
+ * `ORGANIZING_TOOLTIP`) — every call site just passes `approval` now instead
+ * of the retired `membershipPressure`.
  */
 
-import { LEADERSHIP_ELECTION_MIN_PRESSURE } from "./unionEconomy";
-
 export interface OrganizingBand {
-  /** One-word strength, shown next to the number. */
+  /** One-word read on membership sentiment, shown next to the number. */
   label: string;
   /** Semantic text colour token for the band word. */
   toneClass: string;
 }
 
 /**
- * The first cut is the leadership-election threshold, not a round number:
- * below it a union cannot elect a president at all, so "Unorganized" doubles
- * as the reason nothing is happening yet. Bands above it split the remaining
- * range evenly.
+ * Five even 20-point bands centered on the neutral midpoint (50) that
+ * `unionizationDriftTarget()` (`src/lib/labour/unionization.ts`) and
+ * `approvalTarget()` (`src/lib/unions/unionDues.ts`) both treat as "neither
+ * helps nor hurts": a union that charges nothing and runs nothing starts at
+ * `BASE_APPROVAL` (55), inside "Content" — not disliked, merely untested.
  */
-export function organizingBand(pressure: number): OrganizingBand {
-  const p = Number.isFinite(pressure) ? pressure : 0;
-  const step = (100 - LEADERSHIP_ELECTION_MIN_PRESSURE) / 4;
-  if (p < LEADERSHIP_ELECTION_MIN_PRESSURE)
-    return { label: "Unorganized", toneClass: "text-muted" };
-  if (p < LEADERSHIP_ELECTION_MIN_PRESSURE + step)
-    return { label: "Building", toneClass: "text-warning" };
-  if (p < LEADERSHIP_ELECTION_MIN_PRESSURE + step * 2)
-    return { label: "Established", toneClass: "text-foreground" };
-  if (p < LEADERSHIP_ELECTION_MIN_PRESSURE + step * 3)
-    return { label: "Strong", toneClass: "text-success" };
-  return { label: "Dominant", toneClass: "text-success" };
+export function organizingBand(approval: number): OrganizingBand {
+  const a = Number.isFinite(approval) ? approval : 0;
+  if (a < 20) return { label: "Hostile", toneClass: "text-error" };
+  if (a < 40) return { label: "Discontent", toneClass: "text-warning" };
+  if (a < 60) return { label: "Neutral", toneClass: "text-foreground" };
+  if (a < 80) return { label: "Content", toneClass: "text-success" };
+  return { label: "Loyal", toneClass: "text-success" };
 }
 
-/** "17 / 100" — the number as every union surface prints it. */
-export function organizingValue(pressure: number): string {
-  const p = Number.isFinite(pressure) ? pressure : 0;
-  return `${p.toFixed(1)} / 100`;
+/** "62.0 / 100" — the number as every union surface prints it. */
+export function organizingValue(approval: number): string {
+  const a = Number.isFinite(approval) ? approval : 0;
+  return `${a.toFixed(1)} / 100`;
 }
 
 /** Shared copy for the "what is this number?" tooltip. */
 export const ORGANIZING_TOOLTIP =
-  "How well organized this union is across its industry, scored 0-100. It is not a member count. " +
-  "Recruitment drives push it up, and it decays slowly when nobody organizes. Higher means more dues " +
-  "income, more unionized workers, and more power behind a strike.";
+  "How the membership feels about the bargain it is getting, scored 0-100. Dues push it down, " +
+  "running services push it up. It drives how far this union's density grows or shrinks in every " +
+  "sector it represents — a union that charges heavily and gives nothing back loses its own shops.";

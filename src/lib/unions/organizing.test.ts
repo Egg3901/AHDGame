@@ -1,29 +1,34 @@
 import { describe, expect, it } from "vitest";
 import { organizingBand, organizingValue } from "./organizing";
-import { LEADERSHIP_ELECTION_MIN_PRESSURE } from "./unionEconomy";
 
 describe("organizingBand", () => {
-  it("calls anything below the leadership threshold unorganized", () => {
-    expect(organizingBand(0).label).toBe("Unorganized");
-    expect(organizingBand(LEADERSHIP_ELECTION_MIN_PRESSURE - 0.1).label).toBe("Unorganized");
+  it("calls low approval Hostile", () => {
+    expect(organizingBand(0).label).toBe("Hostile");
+    expect(organizingBand(19.9).label).toBe("Hostile");
   });
 
-  it("flips to Building exactly at the threshold that unlocks a leadership vote", () => {
-    expect(organizingBand(LEADERSHIP_ELECTION_MIN_PRESSURE).label).toBe("Building");
+  it("crosses into Discontent, Neutral and Content at each 20-point band", () => {
+    expect(organizingBand(20).label).toBe("Discontent");
+    expect(organizingBand(40).label).toBe("Neutral");
+    expect(organizingBand(60).label).toBe("Content");
   });
 
-  it("tops out at Dominant", () => {
-    expect(organizingBand(100).label).toBe("Dominant");
+  it("reads BASE_APPROVAL (55, a union that charges and gives nothing) as Content, not disliked", () => {
+    expect(organizingBand(55).label).toBe("Content");
+  });
+
+  it("tops out at Loyal", () => {
+    expect(organizingBand(100).label).toBe("Loyal");
   });
 
   it("covers the whole range with no gaps", () => {
-    for (let p = 0; p <= 100; p += 0.5) {
-      expect(organizingBand(p).label).toBeTruthy();
+    for (let a = 0; a <= 100; a += 0.5) {
+      expect(organizingBand(a).label).toBeTruthy();
     }
   });
 
   it("treats a non-finite score as zero rather than throwing", () => {
-    expect(organizingBand(Number.NaN).label).toBe("Unorganized");
+    expect(organizingBand(Number.NaN).label).toBe("Hostile");
     expect(organizingValue(Number.NaN)).toBe("0.0 / 100");
   });
 });

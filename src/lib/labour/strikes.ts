@@ -163,6 +163,16 @@ export interface StrikeStepInputs {
   unionsBanned?: boolean;
   /** Active collective agreement prevents a new strike in this local. */
   noStrikeProtected?: boolean;
+  /**
+   * Union dues v1: `servicesStrikeSoftening()` of the representing union's
+   * active service slate, 0-`MAX_STRIKE_SOFTENING` (0.6) — see
+   * `src/lib/unions/unionServices.ts`. Damps the worker-expectation-vs-real-wage
+   * gap that drives both the trigger and the concession threshold, so a union
+   * running services makes its own sectors less strike-prone (harder to trigger,
+   * easier to settle) without ever reaching 0: a fully-serviced sector is still
+   * strikeable if the gap is big enough, on purpose. Absent/non-finite ⇒ 0.
+   */
+  strikeSoftening?: number;
 }
 
 export interface StrikeStepResult {
@@ -188,7 +198,14 @@ export function stepStrike(inputs: StrikeStepInputs): StrikeStepResult {
   const unionizationThreshold = inputs.unionizationThreshold ?? STRIKE_UNIONIZATION_THRESHOLD;
   const expectationGapThreshold =
     inputs.expectationGapThreshold ?? STRIKE_EXPECTATION_GAP_THRESHOLD;
-  const gap = workerExpectation - realWage;
+  const softening = Math.max(
+    0,
+    Math.min(1, Number.isFinite(inputs.strikeSoftening) ? (inputs.strikeSoftening as number) : 0)
+  );
+  // Softening damps the raw gap before either threshold sees it, so services
+  // both raise the bar to trigger and lower the bar to concede — never zeroing
+  // the gap outright (softening is capped below 1 by unionServices.ts).
+  const gap = (workerExpectation - realWage) * (1 - softening);
 
   // Union ban (player suggestion #93): overrides the whole state machine —
   // an active strike is force-resolved (with cooldown, see StrikeStepInputs

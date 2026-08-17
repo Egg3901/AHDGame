@@ -10,7 +10,6 @@ import type {
 } from "@/lib/db/types";
 import type { NPP } from "@/lib/db/types/npp";
 import { processNppUnionBehavior } from "./nppUnionBehavior";
-import { SEED_MEMBERSHIP_PRESSURE } from "@/lib/admin/seed/seedUnions";
 import {
   openBargainingCampaignFromLiveConditions,
   persistBargainingCounter,
@@ -53,7 +52,6 @@ function makeUnion(countryId: string, overrides: Partial<Union> = {}): Union {
     name: "Test Union",
     ownerId: null,
     treasury: 0,
-    membershipPressure: SEED_MEMBERSHIP_PRESSURE,
     lastCalledStrikeTurn: null,
     demandedWageLevel: null,
     createdAt: new Date(),
@@ -78,8 +76,9 @@ function makeMilitantNpp(countryId: string): NPP {
 /**
  * Minimal fake `unions`/`npps`/`corporateSectors`/`corporations` collections.
  * `bulkWrite` actually applies $set/$unset back onto the backing arrays, like
- * a real DB would, so multi-call sequencing (election then recruit) composes
- * the same way it does in production instead of only inspecting the raw ops.
+ * a real DB would, so multi-call sequencing (election, then demand-clearing)
+ * composes the same way it does in production instead of only inspecting the
+ * raw ops.
  */
 function mockDb({
   unions,
@@ -164,9 +163,9 @@ describe("processNppUnionBehavior", () => {
     vi.mocked(persistUnionBargainingEscalation).mockResolvedValue({ ok: true, status: 200 });
   });
   it(
-    "elects NPP leaders into every vacant union and recruits — regression: without this phase " +
-      "membershipPressure is uniformly stuck across every row forever (the turn-650 sandbox " +
-      "symptom: all 408 unions read exactly 0 against the ADR-5 seed of 20)",
+    "elects NPP leaders into every vacant union — regression: without this phase every seeded " +
+      "union stays permanently vacant (the turn-650 sandbox symptom, pre-dues-v1: 408 unions " +
+      "stuck unowned forever with nobody to run them)",
     async () => {
       const unions = [
         makeUnion("PL", { treasury: 1000 }),
@@ -189,33 +188,20 @@ describe("processNppUnionBehavior", () => {
       const result = await processNppUnionBehavior(db, 1);
 
       // Every vacant union got an NPP leader — the precondition for anything
-      // downstream (recruiting, demands, strikes) to ever happen at all.
+      // downstream (demands, strikes) to ever happen at all. Union dues v1
+      // retired the recruitment drive this test used to also assert
+      // (membershipPressure moving off its seed) — members are now a real
+      // headcount derived from represented-sector workers x unionization every
+      // turn (`processUnionsTurn`), so there is nothing left here to recruit.
       expect(result.leadersElected).toBe(6);
       for (const union of unions) {
         expect(union.ownerId).not.toBeNull();
         expect(union.ownerType).toBe("npp");
       }
-
-      // A militant leader with treasury >= RECRUIT_COST recruits every union —
-      // membershipPressure moves OFF the seed value this same turn.
-      expect(result.recruited).toBe(6);
-      const pressures = unions.map((u) => u.membershipPressure);
-      for (const p of pressures) {
-        expect(p).toBeGreaterThan(SEED_MEMBERSHIP_PRESSURE);
-      }
-
-      // The exact shape the audit caught: "every row reads the same frozen
-      // value". Assert it is false here — this is what would fail if the
-      // phase were reverted/disabled/unregistered (leadersElected would stay
-      // 0 and every union would stay at its seeded, never-changing pressure).
-      const allUnchanged = pressures.every((p) => p === SEED_MEMBERSHIP_PRESSURE);
-      expect(allUnchanged).toBe(false);
-      const allZero = pressures.every((p) => p === 0);
-      expect(allZero).toBe(false);
     }
   );
 
-  it("is a no-op when labourSystemMode is below 'unions' (never touches membershipPressure)", async () => {
+  it("is a no-op when labourSystemMode is below 'unions'", async () => {
     labourSystemMode = "off";
     const unions = [makeUnion("PL")];
     const npps = [makeMilitantNpp("PL")];
@@ -225,7 +211,6 @@ describe("processNppUnionBehavior", () => {
 
     expect(result.leadersElected).toBe(0);
     expect(unionsBulkWrite).not.toHaveBeenCalled();
-    expect(unions[0].membershipPressure).toBe(SEED_MEMBERSHIP_PRESSURE);
     labourSystemMode = "full"; // reset for subsequent tests
   });
 
@@ -247,7 +232,6 @@ describe("processNppUnionBehavior", () => {
     const ledUnion = makeUnion("US", {
       ownerId: leader._id,
       ownerType: "npp",
-      membershipPressure: 60,
     });
     const corporationId = new ObjectId();
     const sector = {
@@ -295,7 +279,6 @@ describe("processNppUnionBehavior", () => {
     const playerUnion = makeUnion("US", {
       ownerId: new ObjectId(),
       ownerType: "character",
-      membershipPressure: 60,
     });
     const employerId = new ObjectId();
     const sectorId = new ObjectId();
@@ -377,7 +360,6 @@ describe("processNppUnionBehavior", () => {
     const ledUnion = makeUnion("US", {
       ownerId: leader._id,
       ownerType: "npp",
-      membershipPressure: 60,
     });
     const employerId = new ObjectId();
     const sectorId = new ObjectId();
@@ -459,7 +441,6 @@ describe("processNppUnionBehavior", () => {
     const ledUnion = makeUnion("US", {
       ownerId: leader._id,
       ownerType: "npp",
-      membershipPressure: 60,
     });
     const employerId = new ObjectId();
     const sectorId = new ObjectId();
@@ -498,7 +479,6 @@ describe("processNppUnionBehavior", () => {
     const ledUnion = makeUnion("US", {
       ownerId: leader._id,
       ownerType: "npp",
-      membershipPressure: 60,
       treasury: 10_000,
     });
     const employerId = new ObjectId();

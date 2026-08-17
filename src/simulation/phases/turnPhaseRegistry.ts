@@ -246,18 +246,20 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           );
         }
 
-        // v3 Phase 8: union treasury accrual + membershipPressure decay.
-        // Runs right after corporationTurn since sectorCalculations.ts reads
-        // membershipPressure THIS same turn (via unionizationDriftTarget) —
-        // sequencing after keeps the read using last turn's persisted value,
-        // consistent with the rest of the labour system's one-turn lag.
+        // Union dues v1: union treasury accrual (dues income minus service
+        // cost, services lapsing rather than overdrawing) + approval trend
+        // toward its target. Runs right after corporationTurn since
+        // sectorCalculations.ts reads each represented union's approval THIS
+        // same turn (via unionizationDriftTarget) — sequencing after keeps the
+        // read using last turn's persisted value, consistent with the rest of
+        // the labour system's one-turn lag.
         await runtime.runPhase("unionsTurn", () => processUnionsTurn(context.db));
 
-        // NPP industrial-relations parity. This elects NPP union leaders, has
-        // them recruit and open employer-scoped campaigns, and lets autonomous
-        // unions and CEOs use the shared offer, mediation, escalation, and
-        // agreement lifecycle. Runs after unionsTurn so deadline transitions,
-        // dues, and membership decay are already visible.
+        // NPP industrial-relations parity. This elects NPP union leaders and
+        // opens employer-scoped campaigns for them, and lets autonomous unions
+        // and CEOs use the shared offer, mediation, escalation, and agreement
+        // lifecycle. Runs after unionsTurn so deadline transitions and dues
+        // are already visible.
         await runtime.runPhase("nppUnionBehavior", () =>
           processNppUnionBehavior(context.db, newTurn)
         );

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
-import type { BargainingCampaign } from "@/lib/db/types";
+import type { BargainingCampaign, Union } from "@/lib/db/types";
 import {
   LABOUR_DISPUTE_DECAY,
   LABOUR_POLITICAL_CAPS,
@@ -9,6 +9,13 @@ import {
   buildLabourRelationsPoliticalNudges,
   loadLabourRelationsPoliticalNudgesByCountry,
 } from "./labourRelationsPoliticalProvider";
+
+function union(over: Partial<Union> & Pick<Union, "countryId">): Pick<
+  Union,
+  "countryId" | "activeServices" | "suspended"
+> {
+  return { activeServices: [], ...over };
+}
 
 function campaign(
   over: Partial<BargainingCampaign> &
@@ -134,7 +141,7 @@ describe("labour relations political provider", () => {
     );
   });
 
-  it("loads only live disputes and recent settlements", async () => {
+  it("loads only live disputes and recent settlements, and unions with a non-empty active slate", async () => {
     const toArray = vi.fn().mockResolvedValue([]);
     const find = vi.fn().mockReturnValue({ toArray });
     const collection = vi
@@ -148,6 +155,7 @@ describe("labour relations political provider", () => {
     await loadLabourRelationsPoliticalNudgesByCountry({ collection } as unknown as Db, 300);
 
     expect(collection).toHaveBeenCalledWith("bargainingCampaigns");
+    expect(collection).toHaveBeenCalledWith("unions");
     expect(find).toHaveBeenCalledWith(
       {
         $or: [
@@ -159,6 +167,10 @@ describe("labour relations political provider", () => {
         ],
       },
       expect.objectContaining({ projection: expect.objectContaining({ countryId: 1 }) })
+    );
+    expect(find).toHaveBeenCalledWith(
+      { suspended: { $ne: true }, activeServices: { $exists: true, $not: { $size: 0 } } },
+      expect.objectContaining({ projection: expect.objectContaining({ activeServices: 1 }) })
     );
   });
 
@@ -175,5 +187,75 @@ describe("labour relations political provider", () => {
 
     expect(nudges.size).toBe(0);
     expect(campaignFind).not.toHaveBeenCalled();
+  });
+});
+
+describe("union dues v1: running services nudge economy.workerSecurity", () => {
+  it("shares the SAME capped channel as bargaining outcomes, not a second uncapped one", () => {
+    const withServiceOnly = buildLabourRelationsPoliticalNudges(
+      [],
+      100,
+      [union({ countryId: "US", activeServices: ["healthFund"] })]
+    ).get("US")!;
+    expect(withServiceOnly.get("economy.workerSecurity")).toBeGreaterThan(0);
+    expect(withServiceOnly.get("economy.workerSecurity")!).toBeLessThanOrEqual(
+      LABOUR_POLITICAL_CAPS["economy.workerSecurity"]
+    );
+
+    // Three settled campaigns (1.875 raw each, per the settlement test above)
+    // already sum past the cap on their own (5.625 > 5). Adding a service's
+    // positive contribution on top raises the RAW sum further (6.825), but if
+    // this were a second, separately-capped channel the combined total could
+    // read as high as cap + serviceNudge (6.2). It must not: both channels
+    // land in the same map entry and get clamped ONCE, together.
+    const settlement = campaign({
+      countryId: "US",
+      status: "settled",
+      escalationLevel: "none",
+      endedAtTurn: 100,
+      mandate: { leverage: 100 } as BargainingCampaign["mandate"],
+    });
+    const withBoth = buildLabourRelationsPoliticalNudges(
+      [settlement, settlement, settlement],
+      100,
+      [union({ countryId: "US", activeServices: ["healthFund"] })]
+    ).get("US")!;
+    expect(withBoth.get("economy.workerSecurity")).toBe(
+      LABOUR_POLITICAL_CAPS["economy.workerSecurity"]
+    );
+  });
+
+  it("a suspended union contributes nothing even with services active", () => {
+    const nudges = buildLabourRelationsPoliticalNudges(
+      [],
+      100,
+      [union({ countryId: "US", activeServices: ["healthFund"], suspended: true })]
+    );
+    expect(nudges.size).toBe(0);
+  });
+
+  it("a union with no active services contributes nothing", () => {
+    const nudges = buildLabourRelationsPoliticalNudges(
+      [],
+      100,
+      [union({ countryId: "US", activeServices: [] })]
+    );
+    expect(nudges.size).toBe(0);
+  });
+
+  it("is recomputed fresh from the CURRENT active slate, not accumulated across calls", () => {
+    const first = buildLabourRelationsPoliticalNudges(
+      [],
+      100,
+      [union({ countryId: "US", activeServices: ["healthFund"] })]
+    ).get("US")!.get("economy.workerSecurity");
+    const second = buildLabourRelationsPoliticalNudges(
+      [],
+      101,
+      [union({ countryId: "US", activeServices: ["healthFund"] })]
+    ).get("US")!.get("economy.workerSecurity");
+    // Same slate, same result each call — nothing persists or compounds turn
+    // to turn inside this function.
+    expect(second).toBe(first);
   });
 });

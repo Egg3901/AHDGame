@@ -36,8 +36,8 @@ export function getProcessingLockState(snapshot: ProcessingLockSnapshot, now = n
  * v3 Phase 7/8 fix: is a turn actively being processed right now (lock held,
  * not stale/abandoned)? Player-facing mutation routes whose fields are ALSO
  * written by the corp turn's own bulk write (unionization, strikeStartedAtTurn,
- * strikeCooldownUntilTurn on CorporateSector; treasury/membershipPressure on
- * Union) must reject during this window — the turn's write recomputes those
+ * strikeCooldownUntilTurn on CorporateSector; treasury/approval on Union)
+ * must reject during this window — the turn's write recomputes those
  * fields from a pre-mutation snapshot and would otherwise silently clobber a
  * paid-for player action with no error surfaced. See
  * docs/plans/2026-06-30-labour-handoff.md's code-review section for the bug

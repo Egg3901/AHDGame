@@ -1,65 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
 import {
-  recruitPressureGain,
-  applyRecruit,
-  decayMembershipPressure,
-  MEMBERSHIP_PRESSURE_DECAY_PER_TURN,
-  duesTrickle,
-  DUES_TRICKLE_RATE_PER_PRESSURE_POINT,
   strikeCallCost,
   STRIKE_CALL_COST_PER_SECTOR,
-  RECRUIT_PRESSURE_GAIN_AT_ZERO,
   buildUnionStrikePreview,
   unionStrikeBlockReason,
 } from "./unionEconomy";
 import type { CorporateSector } from "@/lib/db/types";
 
-describe("recruitPressureGain", () => {
-  it("is at its maximum at pressure 0", () => {
-    expect(recruitPressureGain(0)).toBe(RECRUIT_PRESSURE_GAIN_AT_ZERO);
-  });
-
-  it("tapers to 0 at pressure 100 (diminishing returns)", () => {
-    expect(recruitPressureGain(100)).toBe(0);
-  });
-
-  it("is monotonically decreasing in pressure", () => {
-    expect(recruitPressureGain(80)).toBeLessThan(recruitPressureGain(20));
-  });
-});
-
-describe("applyRecruit", () => {
-  it("increases membershipPressure", () => {
-    expect(applyRecruit(0)).toBeGreaterThan(0);
-  });
-
-  it("clamps at 100", () => {
-    expect(applyRecruit(99)).toBeLessThanOrEqual(100);
-    expect(applyRecruit(100)).toBe(100);
-  });
-});
-
-describe("decayMembershipPressure", () => {
-  it("steps down by MEMBERSHIP_PRESSURE_DECAY_PER_TURN", () => {
-    expect(decayMembershipPressure(10)).toBe(10 - MEMBERSHIP_PRESSURE_DECAY_PER_TURN);
-  });
-
-  it("floors at 0", () => {
-    expect(decayMembershipPressure(0)).toBe(0);
-    expect(decayMembershipPressure(0.1)).toBe(0);
-  });
-});
-
-describe("duesTrickle", () => {
-  it("is proportional to membershipPressure", () => {
-    expect(duesTrickle(50)).toBe(50 * DUES_TRICKLE_RATE_PER_PRESSURE_POINT);
-  });
-
-  it("is 0 at 0 pressure", () => {
-    expect(duesTrickle(0)).toBe(0);
-  });
-});
+// Recruitment-drive (recruitPressureGain/applyRecruit) and pressure-trickle
+// dues (duesTrickle/decayMembershipPressure) coverage retired with union dues
+// v1 — membershipPressure no longer exists. Dues income, service cost, and
+// approval trending are pure functions in `src/lib/unions/unionDues.ts`
+// (foundation, not owned by this change); their per-turn orchestration —
+// scaling with members, services lapsing on a short treasury, approval
+// trending toward target — is covered in `src/lib/turn/unions/index.test.ts`.
+// Strength/strike-preview logic below is unchanged by dues v1.
 
 describe("strikeCallCost", () => {
   it("scales linearly with matched sector count", () => {

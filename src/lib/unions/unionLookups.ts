@@ -1,31 +1,43 @@
 import type { Db } from "mongodb";
 import type { Union } from "@/lib/db/types";
+import { unionApproval } from "./unionDues";
+import { normalizeServiceIds, type UnionServiceId } from "./unionServices";
 
-/** Composite key for `LabourContext.ownedUnionMembershipPressureByKey` and the per-turn owned-unions map. */
-export function unionLookupKey(countryId: string, sectorType: string): string {
-  return `${countryId}|${sectorType}`;
+/**
+ * Per-union approval + active service slate, everything `unionizationDriftTarget`
+ * and the strike trigger need from the union that represents a sector.
+ *
+ * Union dues v1 resolves representation from `CorporateSector.representingUnionId`,
+ * a direct pointer to ONE union, not a (countryId, sectorType) match: players can
+ * found rivals in an industry that already has a union, so the industry pair no
+ * longer identifies a single union, and an unheld sector must not inherit some
+ * other union's approval. Callers look up this map by `representingUnionId`.
+ */
+export interface RepresentingUnionEffects {
+  approval: number;
+  activeServices: UnionServiceId[];
 }
 
 /**
- * v3 Phase 8: fetch every OWNED union's `membershipPressure`, keyed by
- * (countryId, sectorType), for threading into `LabourContext`. Unowned
- * unions are excluded — Phase 5's NPC drift is unaffected for their sectors.
- * A dedicated query (not folded into `buildCorporationLookups`) mirrors how
- * `LabourContext` itself is built as its own per-turn object in
- * `src/lib/turn/corporation/index.ts`, rather than growing the already-large
- * `CorporationLookups`.
+ * Fetch every union's approval + active services, keyed by union `_id` (string).
+ * Every union is included regardless of ownership or suspension — an unowned or
+ * suspended union still represents whatever sectors point at it, and its last
+ * computed approval keeps anchoring their drift target even while its own turn
+ * processing (`processUnionsTurn`) is frozen.
  */
-export async function buildOwnedUnionMembershipPressureByKey(db: Db): Promise<Map<string, number>> {
-  const owned = await db
+export async function buildUnionEffectsById(
+  db: Db
+): Promise<Map<string, RepresentingUnionEffects>> {
+  const unions = await db
     .collection<Union>("unions")
-    .find(
-      { ownerId: { $ne: null } },
-      { projection: { countryId: 1, sectorType: 1, membershipPressure: 1 } }
-    )
+    .find({}, { projection: { _id: 1, approval: 1, activeServices: 1 } })
     .toArray();
-  const out = new Map<string, number>();
-  for (const u of owned) {
-    out.set(unionLookupKey(u.countryId, u.sectorType), u.membershipPressure ?? 0);
+  const out = new Map<string, RepresentingUnionEffects>();
+  for (const u of unions) {
+    out.set(u._id.toString(), {
+      approval: unionApproval(u),
+      activeServices: normalizeServiceIds(u.activeServices),
+    });
   }
   return out;
 }

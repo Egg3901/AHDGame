@@ -1,4 +1,5 @@
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { RepresentingUnionEffects } from "@/lib/unions/unionLookups";
 
 /**
  * Phase 1–2 of the Labour/Unions system: make labor an explicit cost that can
@@ -53,13 +54,16 @@ export interface LabourContext {
    */
   unionLawBiasByCountry?: ReadonlyMap<string, number>;
   /**
-   * v3 Phase 8: `membershipPressure` of OWNED player-run unions, keyed by
-   * `${countryId}|${sectorType}` (see `unionLookupKey` in
-   * `src/lib/unions/unionLookups.ts`). Only owned unions are included —
-   * unowned ones are absent, so Phase 5's NPC drift is unaffected for their
-   * sectors. Feeds `unionizationDriftTarget()` alongside `unionLawBiasByCountry`.
+   * Union dues v1: every union's approval + active services, keyed by union
+   * `_id` (string) — see `buildUnionEffectsById` in
+   * `src/lib/unions/unionLookups.ts`. The caller resolves a sector's
+   * representing union via `CorporateSector.representingUnionId` and looks it
+   * up here; a sector with no representing union gets nothing from this map,
+   * so Phase 5's NPC drift is unaffected for it. Feeds
+   * `unionizationDriftTarget()`'s `representingUnionApproval` input alongside
+   * `unionLawBiasByCountry`, and the strike trigger's softening term.
    */
-  ownedUnionMembershipPressureByKey?: ReadonlyMap<string, number>;
+  unionsById?: ReadonlyMap<string, RepresentingUnionEffects>;
   /**
    * Release 1.1 collective agreements, keyed by CorporateSector id. The turn
    * uses the highest active floor when defensive legacy data overlaps.

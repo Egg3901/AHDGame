@@ -2448,23 +2448,76 @@ describe("v3 Phase 7b/8 — union-law bias & membership-pressure wiring (labourS
     );
   });
 
-  it("an owned union's membershipPressure raises trended unionization for matching sectors", () => {
+  it("a represented sector's high union approval raises trended unionization relative to an unrepresented one", () => {
     const corpBase = makeCorp();
     const corpUnion = makeCorp();
+    const unionId = new ObjectId();
     const sectorBase = makeSector(corpBase._id, { wageLevel: 1, unionization: 0 });
-    const sectorUnion = makeSector(corpUnion._id, { wageLevel: 1, unionization: 0 });
+    const sectorUnion = makeSector(corpUnion._id, {
+      wageLevel: 1,
+      unionization: 0,
+      representingUnionId: unionId,
+    });
 
     const noUnion: LabourContext = { wagesEnabled: true, unionsEnabled: true, fullEnabled: true };
+    // Union dues v1: resolved via CorporateSector.representingUnionId, never a
+    // (countryId, sectorType) match — players can found rivals, so the industry
+    // pair no longer identifies one union.
     const withUnion: LabourContext = {
       wagesEnabled: true,
       unionsEnabled: true,
       fullEnabled: true,
-      ownedUnionMembershipPressureByKey: new Map([["US|manufacturing", 60]]),
+      unionsById: new Map([[unionId.toString(), { approval: 90, activeServices: [] }]]),
     };
 
     const baseUnionization = runUnionizationToConvergence(corpBase, sectorBase, noUnion);
-    const pressureUnionization = runUnionizationToConvergence(corpUnion, sectorUnion, withUnion);
-    expect(pressureUnionization).toBeGreaterThan(baseUnionization);
+    const approvalUnionization = runUnionizationToConvergence(corpUnion, sectorUnion, withUnion);
+    expect(approvalUnionization).toBeGreaterThan(baseUnionization);
+  });
+
+  it("a represented sector's LOW union approval lowers trended unionization relative to an unrepresented one — a badly run union bleeds its own density", () => {
+    const corpBase = makeCorp();
+    const corpUnion = makeCorp();
+    const unionId = new ObjectId();
+    // Start both above 0 so the low-approval case has room to fall.
+    const sectorBase = makeSector(corpBase._id, { wageLevel: 1, unionization: 40 });
+    const sectorUnion = makeSector(corpUnion._id, {
+      wageLevel: 1,
+      unionization: 40,
+      representingUnionId: unionId,
+    });
+
+    const noUnion: LabourContext = { wagesEnabled: true, unionsEnabled: true, fullEnabled: true };
+    const withBadUnion: LabourContext = {
+      wagesEnabled: true,
+      unionsEnabled: true,
+      fullEnabled: true,
+      unionsById: new Map([[unionId.toString(), { approval: 10, activeServices: [] }]]),
+    };
+
+    const baseUnionization = runUnionizationToConvergence(corpBase, sectorBase, noUnion);
+    const badApprovalUnionization = runUnionizationToConvergence(corpUnion, sectorUnion, withBadUnion);
+    expect(badApprovalUnionization).toBeLessThan(baseUnionization);
+  });
+
+  it("an unrepresented sector (no representingUnionId) is unaffected even when unionsById is populated", () => {
+    const corp = makeCorp();
+    const unionId = new ObjectId();
+    // No representingUnionId on this sector — it must not inherit some other
+    // union's approval just because SOME entry exists in the map.
+    const sector = makeSector(corp._id, { wageLevel: 1, unionization: 0 });
+
+    const withUnrelatedUnion: LabourContext = {
+      wagesEnabled: true,
+      unionsEnabled: true,
+      fullEnabled: true,
+      unionsById: new Map([[unionId.toString(), { approval: 100, activeServices: [] }]]),
+    };
+    const noUnion: LabourContext = { wagesEnabled: true, unionsEnabled: true, fullEnabled: true };
+
+    const unaffected = runUnionizationToConvergence(corp, sector, withUnrelatedUnion);
+    const base = runUnionizationToConvergence(makeCorp(), { ...sector }, noUnion);
+    expect(unaffected).toBe(base);
   });
 
   it("baseline invariance: fullEnabled with bias 0 and no owned union is a no-op vs unions-only", () => {
@@ -2483,7 +2536,7 @@ describe("v3 Phase 7b/8 — union-law bias & membership-pressure wiring (labourS
       unionsEnabled: true,
       fullEnabled: true,
       unionLawBiasByCountry: new Map(),
-      ownedUnionMembershipPressureByKey: new Map(),
+      unionsById: new Map(),
     };
 
     const off = processSectors(
