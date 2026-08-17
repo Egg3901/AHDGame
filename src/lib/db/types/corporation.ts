@@ -734,6 +734,22 @@ export interface CorporateSector {
    */
   unionization?: number;
   /**
+   * Union dues v1: which union represents this sector's workers, or absent when
+   * nobody does. One union per sector, winner takes all.
+   *
+   * Before this, a union implicitly covered every sector matching its
+   * (countryId, sectorType) and nothing could be held or contested. Now a union
+   * head runs a targeted organizing drive at a specific sector, and if it lands
+   * against an incumbent it takes representation outright: the sector's workers
+   * become the raider's members and its dues follow. Raids are same-industry
+   * only, so this always points at a union whose `sectorType` matches.
+   *
+   * The representing union's `approval` anchors this sector's unionization
+   * drift target, which is why losing a sector costs the loser density as well
+   * as headcount.
+   */
+  representingUnionId?: ObjectId | null;
+  /**
    * v3 Phase 6 (labourSystemMode ≥ "unions"): a slow-moving index of what
    * workers expect to be paid in real terms, trended toward the sector's
    * current real-wage index (`realWageIndex()` in unionization.ts) at most
