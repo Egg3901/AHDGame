@@ -9,7 +9,6 @@ import type {
 import type { GameState } from "@/lib/db/types/gameState";
 import { EXTRACTABLE_RESOURCES, type ExtractableResource } from "@/lib/constants/commodities";
 import { SECTOR_STRATEGIES, STRATEGY_COOLDOWN_TURNS } from "@/lib/constants/sectorStrategies";
-import type { CorporationType } from "@/lib/constants/corporations";
 import {
   getExtractionStrategyResources,
   isExtractionStrategyZeroYield,
@@ -19,49 +18,61 @@ import {
   type CapacityHeadroomFn,
   type LaggedPriceRatioFn,
 } from "@/lib/turn/npp/strategyExpectedRevenue";
-import { isDecadeReached } from "@/lib/constants/techTree/decades";
-import {
-  capacityRescaleRatio,
-  rescaleBuildQueueForStrategyChange,
-} from "@/lib/constants/capacityEconomy";
+import { retoolRescaleFields } from "@/lib/corporations/retoolRescale";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 
 /**
- * D9 — RPU normalization for the AUTOMATIC retool paths.
- *
- * Both passes below switch a sector's strategy without going through
- * `setSectorStrategy`, so they must apply the same capacity renormalization it
- * does. Extraction is the WORST case for this: the strategy table's mixes run
- * from a coal/gas basket priced in the tens of ₳ per unit to a rare-earth
- * basket priced in the tens of thousands, so an un-normalized system nudge would
- * hand a miner a 100×+ capacity windfall (or confiscation) for free — and unlike
- * the player route there is not even a retool fee attached.
- *
- * Returns the `$set` fragment to merge into the sector update; empty when there
- * is nothing to rescale (no capitalStock, no queue, or a no-op ratio).
- *
- * PLANTS-GATED. `capitalStock` only carries the RPU meaning this normalizes
- * under plants; below it the sector turn writes a production-gating stock, so an
- * auto-retool must leave it exactly where it was. `plantsEnabled` is resolved
- * once per run by the caller, not per sector.
+ * Lagged price ratio for auto-strategy scoring: host reachable book, then
+ * national, then global. Unpriced commodities return null and the scorer
+ * treats that as a neutral 1.
  */
+type ExtractionPriceDoc = Pick<
+  CommodityPrice,
+  | "commodity"
+  | "globalSupply"
+  | "globalDemand"
+  | "stateSupply"
+  | "globalPrice"
+  | "basePrice"
+  | "nationalPrices"
+  | "reachablePrices"
+>;
+
+function laggedPriceRatioForCountry(
+  doc: ExtractionPriceDoc | undefined,
+  countryId: string | undefined
+): number | null {
+  if (!doc || !doc.basePrice) return null;
+  const price =
+    (countryId ? doc.reachablePrices?.[countryId] : undefined) ??
+    (countryId ? doc.nationalPrices?.[countryId] : undefined) ??
+    doc.globalPrice;
+  if (!price || !Number.isFinite(price)) return null;
+  const ratio = price / doc.basePrice;
+  return Number.isFinite(ratio) ? ratio : null;
+}
+
 function capacityRescaleUpdate(
-  sector: { capitalStock?: number; buildQueue?: SectorBuildOrder[] },
+  sector: {
+    capitalStock?: number;
+    buildQueue?: SectorBuildOrder[];
+    otherOpexPerUnitAnchor?: number;
+  },
   fromStrategyId: string | null | undefined,
   toStrategyId: string | null | undefined,
   plantsEnabled: boolean
-): Partial<{ capitalStock: number; buildQueue: SectorBuildOrder[] }> {
-  if (!plantsEnabled) return {};
-  const ratio = capacityRescaleRatio("extraction", fromStrategyId, toStrategyId);
-  if (ratio === 1) return {};
-  const out: Partial<{ capitalStock: number; buildQueue: SectorBuildOrder[] }> = {};
-  if (typeof sector.capitalStock === "number" && Number.isFinite(sector.capitalStock)) {
-    out.capitalStock = sector.capitalStock * ratio;
-  }
-  if (Array.isArray(sector.buildQueue) && sector.buildQueue.length > 0) {
-    out.buildQueue = rescaleBuildQueueForStrategyChange(sector.buildQueue, ratio);
-  }
-  return out;
+): ReturnType<typeof retoolRescaleFields> {
+  // Same helper the player command uses, so `anchor × units` is invariant
+  // across the mix change (D9 RPU normalization plus physical opex).
+  return retoolRescaleFields({
+    sectorType: "extraction",
+    fromStrategyId,
+    toStrategyId,
+    plantsEnabled,
+    capitalStock: sector.capitalStock,
+    buildQueue: sector.buildQueue,
+    otherOpexPerUnitAnchor: sector.otherOpexPerUnitAnchor,
+  });
 }
 
 /**
@@ -83,8 +94,15 @@ function capacityRescaleUpdate(
  * re-scored every run by EXPECTED REALIZED REVENUE — rate × lagged price ratio
  * × state capacity headroom (see lib/turn/npp/strategyExpectedRevenue) — and
  * switched when a meaningfully better strategy exists, including OUT of a
- * focused strategy whose deposit the state can't physically support. Player-CEO
- * sectors are never touched by pass 2. Same flag/cadence as pass 1.
+ * focused strategy whose deposit the state can't physically support. Price
+ * ratios are the sector host country's reachable book (national, then global
+ * fallback). Player-CEO sectors are never touched by pass 2. Same flag/cadence
+ * as pass 1.
+ *
+ * There is no generic (non-extraction) pass here. That used to start a
+ * transition + 24-turn cooldown on global prices before `nppCorporationBehavior`
+ * section 2e could re-score the same sector on reachable prices. Generic
+ * retools belong to 2e.
  */
 export const EXTRACTION_AUTO_STRATEGY_CADENCE_TURNS = 4; // act at most this often
 export const EXTRACTION_AUTO_STRATEGY_MAX_PER_RUN = 3; // conversions per run (gradual)
@@ -118,7 +136,7 @@ export interface ExtractionAutoStrategyResult {
   /** NPP expected-revenue re-strategizations (second pass), by target strategy. */
   restrategized?: number;
   restrategizedByStrategy?: Record<string, number>;
-  /** NPP generic-sector re-strategizations (third pass), by target strategy. */
+  /** Always 0. The generic pass was removed; 2e owns non-extraction retools. */
   genericRestrategized?: number;
   genericByStrategy?: Record<string, number>;
   skippedReason?: string;
@@ -147,13 +165,15 @@ export async function processExtractionAutoStrategy(
   const prices = await db
     .collection<CommodityPrice>("commodityPrices")
     .find({ commodity: { $in: [...EXTRACTABLE_RESOURCES] } })
-    .project({
+    .project<ExtractionPriceDoc>({
       commodity: 1,
       globalSupply: 1,
       globalDemand: 1,
       stateSupply: 1,
       globalPrice: 1,
       basePrice: 1,
+      nationalPrices: 1,
+      reachablePrices: 1,
     })
     .toArray();
 
@@ -162,29 +182,11 @@ export async function processExtractionAutoStrategy(
     ExtractableResource,
     { sd: number; stateSupply: Record<string, number> }
   >();
-  // Lagged price ratio + per-state supply for the NPP expected-revenue pass.
-  const priceRatioByResource = new Map<ExtractableResource, number>();
+  // Per-commodity docs for the NPP expected-revenue pass. Scoring reads the
+  // sector host country's reachable book (national, then global fallback) so a
+  // partitioned miner is not steered by unreachable-bloc prices.
+  const priceByCommodity = new Map<string, ExtractionPriceDoc>();
   const stateSupplyByResource = new Map<ExtractableResource, Record<string, number>>();
-  // Full-commodity lagged ratios for the generic (non-extraction) pass 3.
-  // NOTE: `prices` above is filtered to EXTRACTABLE_RESOURCES for the extraction
-  // passes, so it does NOT carry fertilizers/chemicals/etc. Building the generic
-  // map from it left every strategy-produced commodity at a null ratio (neutral
-  // signal), so pass 3 could never see a shortage and never switched a chem
-  // sector to fertilizer despite fertilizer running 2.3x base (observed turn
-  // 168: valve fired, zero switches). Fetch ALL commodity ratios separately.
-  const priceRatioByCommodity = new Map<string, number>();
-  {
-    const allPrices = await db
-      .collection<CommodityPrice>("commodityPrices")
-      .find({})
-      .project({ commodity: 1, globalPrice: 1, basePrice: 1 })
-      .toArray();
-    for (const cp of allPrices) {
-      if (cp.basePrice && cp.globalPrice && Number.isFinite(cp.globalPrice / cp.basePrice)) {
-        priceRatioByCommodity.set(cp.commodity, cp.globalPrice / cp.basePrice);
-      }
-    }
-  }
   for (const cp of prices) {
     const r = cp.commodity as ExtractableResource;
     if (!(EXTRACTABLE_RESOURCES as readonly string[]).includes(r)) continue;
@@ -192,9 +194,7 @@ export async function processExtractionAutoStrategy(
     if (sd < EXTRACTION_AUTO_STRATEGY_SHORTAGE_SD) {
       shortage.set(r, { sd, stateSupply: cp.stateSupply ?? {} });
     }
-    if (cp.basePrice && cp.globalPrice && Number.isFinite(cp.globalPrice / cp.basePrice)) {
-      priceRatioByResource.set(r, cp.globalPrice / cp.basePrice);
-    }
+    priceByCommodity.set(cp.commodity, cp);
     stateSupplyByResource.set(r, cp.stateSupply ?? {});
   }
 
@@ -210,7 +210,13 @@ export async function processExtractionAutoStrategy(
   // Candidate = standard-strategy extraction sector, not mid-transition, not on cooldown.
   type CandidateSector = Pick<
     CorporateSector,
-    "_id" | "stateId" | "revenue" | "transitionCooldownUntilTurn" | "capitalStock" | "buildQueue"
+    | "_id"
+    | "stateId"
+    | "revenue"
+    | "transitionCooldownUntilTurn"
+    | "capitalStock"
+    | "buildQueue"
+    | "otherOpexPerUnitAnchor"
   >;
   const candidates = await db
     .collection<CorporateSector>("corporateSectors")
@@ -232,6 +238,7 @@ export async function processExtractionAutoStrategy(
       transitionCooldownUntilTurn: 1,
       capitalStock: 1,
       buildQueue: 1,
+      otherOpexPerUnitAnchor: 1,
     })
     .toArray();
 
@@ -308,19 +315,23 @@ export async function processExtractionAutoStrategy(
   const nppCorps = await db
     .collection<Corporation>("corporations")
     .find({ ceoType: "npp", suspended: { $ne: true } })
-    .project({ _id: 1 })
+    .project({ _id: 1, countryId: 1 })
     .toArray();
+  const nppCountryById = new Map(nppCorps.map((c) => [c._id.toString(), c.countryId]));
   if (nppCorps.length > 0) {
     const alreadyChosen = new Set(chosen.map((p) => p.sector._id.toString()));
     type NppSector = Pick<
       CorporateSector,
       | "_id"
+      | "corporationId"
+      | "countryId"
       | "stateId"
       | "strategyId"
       | "soldFraction"
       | "transitionCooldownUntilTurn"
       | "capitalStock"
       | "buildQueue"
+      | "otherOpexPerUnitAnchor"
     >;
     const nppSectors = await db
       .collection<CorporateSector>("corporateSectors")
@@ -331,17 +342,18 @@ export async function processExtractionAutoStrategy(
       })
       .project<NppSector>({
         _id: 1,
+        corporationId: 1,
+        countryId: 1,
         stateId: 1,
         strategyId: 1,
         soldFraction: 1,
         transitionCooldownUntilTurn: 1,
         capitalStock: 1,
         buildQueue: 1,
+        otherOpexPerUnitAnchor: 1,
       })
       .toArray();
 
-    const priceRatioOf: LaggedPriceRatioFn = (commodity) =>
-      priceRatioByResource.get(commodity as ExtractableResource) ?? null;
     const headroomForState = (stateId: string): CapacityHeadroomFn => {
       const stateRes = capByState.get(stateId);
       return (resource) => {
@@ -359,6 +371,9 @@ export async function processExtractionAutoStrategy(
       if (alreadyChosen.has(s._id.toString())) continue;
       if (s.transitionCooldownUntilTurn != null && currentTurn < s.transitionCooldownUntilTurn)
         continue;
+      const countryId = s.countryId ?? nppCountryById.get(s.corporationId?.toString() ?? "");
+      const priceRatioOf: LaggedPriceRatioFn = (commodity) =>
+        laggedPriceRatioForCountry(priceByCommodity.get(commodity), countryId);
       const decision = decideExtractionStrategySwitch({
         currentStrategyId: s.strategyId ?? "standard",
         strategies: SECTOR_STRATEGIES.extraction ?? [],
@@ -414,151 +429,15 @@ export async function processExtractionAutoStrategy(
     }
   }
 
-  // ── Pass 3: NPP generic (non-extraction) re-strategize ────────────────────
-  // The corp-484 arc's last inert valve (ops-knowledge ahd-iron-curtain-
-  // autarky watchlist): strategy switching existed only for extraction, so no
-  // NPC could ever answer a shortage in a STRATEGY-produced commodity. With
-  // the curtain closed the West's fertilizer ran 2.3x base while 34 US
-  // chemical_industries sectors sat on pharma/standard strategies and nothing
-  // could move them. Same decider as pass 2 — the scorer already treats
-  // non-extractables at headroom 1 and the deposit veto self-skips — over
-  // every NPP-run sector whose type offers >= 2 era-available strategies.
-  // Tech-locked strategies are never auto-adopted; the 12-turn transition
-  // blend, -5% margin penalty and 24-turn cooldown all apply as ever. Player
-  // sectors are never touched.
-  let genericRestrategized = 0;
-  const genericByStrategy: Record<string, number> = {};
-  {
-    const gs = await db
-      .collection<GameState>("gameState")
-      .findOne({ _id: "current" }, { projection: { currentYear: 1 } });
-    const currentYear = gs?.currentYear ?? null;
-    const genericTypes = Object.entries(SECTOR_STRATEGIES)
-      .filter(([type, list]) => type !== "extraction" && (list?.length ?? 0) >= 2)
-      .map(([type]) => type as CorporationType);
-    const nppCorpDocs = await db
-      .collection<Corporation>("corporations")
-      .find({ ceoType: "npp", suspended: { $ne: true } })
-      .project({ _id: 1 })
-      .toArray();
-    if (genericTypes.length > 0 && nppCorpDocs.length > 0 && currentYear != null) {
-      const genericSectors = await db
-        .collection<CorporateSector>("corporateSectors")
-        .find({
-          sectorType: { $in: genericTypes },
-          corporationId: { $in: nppCorpDocs.map((c) => c._id as ObjectId) },
-          transitionFromStrategyId: { $in: [null, undefined] },
-        })
-        .project<
-          Pick<
-            CorporateSector,
-            | "_id"
-            | "sectorType"
-            | "strategyId"
-            | "soldFraction"
-            | "transitionCooldownUntilTurn"
-            | "capitalStock"
-            | "buildQueue"
-          >
-        >({
-          _id: 1,
-          sectorType: 1,
-          strategyId: 1,
-          soldFraction: 1,
-          transitionCooldownUntilTurn: 1,
-          capitalStock: 1,
-          buildQueue: 1,
-        })
-        .toArray();
-
-      const ratioOf: LaggedPriceRatioFn = (commodity) =>
-        priceRatioByCommodity.get(commodity) ?? null;
-      const noDeposits: CapacityHeadroomFn = () => 1;
-      const eligibleByType = new Map(
-        genericTypes.map((type) => [
-          type,
-          (SECTOR_STRATEGIES[type as keyof typeof SECTOR_STRATEGIES] ?? []).filter(
-            (s) =>
-              s.requiresTechUnlock !== true &&
-              (!s.minDecade || isDecadeReached(s.minDecade, currentYear))
-          ),
-        ])
-      );
-
-      type GenericSwitch = {
-        sector: (typeof genericSectors)[number];
-        strategyId: string;
-        improvement: number;
-      };
-      const genericSwitches: GenericSwitch[] = [];
-      for (const s of genericSectors) {
-        if (s.transitionCooldownUntilTurn != null && currentTurn < s.transitionCooldownUntilTurn)
-          continue;
-        const strategies = eligibleByType.get(s.sectorType) ?? [];
-        if (strategies.length < 2) continue;
-        const decision = decideExtractionStrategySwitch({
-          currentStrategyId: s.strategyId ?? "standard",
-          strategies,
-          priceRatioOf: ratioOf,
-          headroomOf: noDeposits,
-          soldFraction: s.soldFraction,
-        });
-        if (decision) {
-          genericSwitches.push({
-            sector: s,
-            strategyId: decision.strategyId,
-            improvement: decision.bestScore - decision.currentScore,
-          });
-        }
-      }
-
-      genericSwitches.sort((a, b) => b.improvement - a.improvement);
-      const chosenGeneric = genericSwitches.slice(0, NPP_RESTRATEGIZE_MAX_PER_RUN);
-      if (chosenGeneric.length > 0) {
-        const now = new Date();
-        await db.collection<CorporateSector>("corporateSectors").bulkWrite(
-          chosenGeneric.map((p) => ({
-            updateOne: {
-              filter: { _id: p.sector._id },
-              update: {
-                $set: {
-                  strategyId: p.strategyId,
-                  transitionFromStrategyId: p.sector.strategyId ?? "standard",
-                  transitionStartTurn: currentTurn,
-                  transitionCooldownUntilTurn: currentTurn + STRATEGY_COOLDOWN_TURNS,
-                  autoStrategyAdoptedAtTurn: currentTurn,
-                  ...capacityRescaleUpdate(
-                    p.sector,
-                    p.sector.strategyId ?? "standard",
-                    p.strategyId,
-                    plantsEnabled
-                  ),
-                  updatedAt: now,
-                },
-              },
-            },
-          }))
-        );
-        genericRestrategized = chosenGeneric.length;
-        for (const p of chosenGeneric) {
-          genericByStrategy[p.strategyId] = (genericByStrategy[p.strategyId] ?? 0) + 1;
-        }
-      }
-    }
-  }
-
   await stampRun(db, currentTurn);
   return {
     converted: chosen.length,
     byResource,
     restrategized,
     restrategizedByStrategy,
-    genericRestrategized,
-    genericByStrategy,
-    ...(shortage.size === 0 &&
-    chosen.length === 0 &&
-    restrategized === 0 &&
-    genericRestrategized === 0
+    genericRestrategized: 0,
+    genericByStrategy: {},
+    ...(shortage.size === 0 && chosen.length === 0 && restrategized === 0
       ? { skippedReason: "no-shortage" }
       : {}),
   };

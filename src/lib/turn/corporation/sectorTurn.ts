@@ -53,6 +53,7 @@ import {
   ownerIdleUnits,
   solveOtherOpexPerUnit,
 } from "@/lib/corporations/physicalPnl";
+import { healAutoRetoolOpexAnchor } from "@/lib/corporations/retoolRescale";
 import { trendGrowthRate } from "@/lib/utils/sectorGrowth";
 import {
   calculateDailyGrowthCost,
@@ -1546,6 +1547,19 @@ export function processSector(
     Number.isFinite(sector.otherOpexPerUnitAnchor)
       ? sector.otherOpexPerUnitAnchor
       : null;
+  // In-flight auto-retoools historically rescaled capitalStock but left this
+  // per-unit residual on the old unit basis. Heal on the next sector-turn
+  // write while transitionFromStrategyId evidence remains; no mongo script.
+  const healedOpex = healAutoRetoolOpexAnchor({
+    plantsEnabled: plantsPhysicalEnabled,
+    isAutoRetool: corp.ceoType === "npp" || sector.autoStrategyAdoptedAtTurn != null,
+    transitionFromStrategyId: sector.transitionFromStrategyId,
+    strategyId: sector.strategyId,
+    sectorType: sector.sectorType as CorporationType,
+    retoolRescaleApplied: sector.retoolRescaleApplied,
+    otherOpexPerUnitAnchor: storedOtherOpexAnchor ?? undefined,
+  });
+  const otherOpexAnchorForPnl = healedOpex?.otherOpexPerUnitAnchor ?? storedOtherOpexAnchor;
   const otherOpexCalibrated = plantsPhysicalEnabled && storedOtherOpexAnchor == null;
   const solvedOtherOpexPerUnit = otherOpexCalibrated
     ? solveOtherOpexPerUnit({
@@ -1562,7 +1576,7 @@ export function processSector(
       ? // Exact by construction, whether or not the per-unit anchor could be
         // solved this turn.
         maintenance - sectorLaborCost - inputsCost - financialLegs
-      : (storedOtherOpexAnchor ?? 0) *
+      : (otherOpexAnchorForPnl ?? 0) *
         producedUnits *
         otherOpexDriftFactor({
           currentMarginBasis: plantsResidualMarginBasis,
@@ -1871,6 +1885,14 @@ export function processSector(
   if (solvedOtherOpexPerUnit != null) {
     sectorUpdate.otherOpexPerUnitAnchor = solvedOtherOpexPerUnit;
     sectorUpdate.otherOpexAnchorMarginBasis = plantsResidualMarginBasis;
+  } else if (healedOpex?.otherOpexPerUnitAnchor != null) {
+    // Persist the rebasing this turn's P&L already used. Skip when this is
+    // also the first calibration (branch above): that sector had no leftover
+    // residual to rebase.
+    sectorUpdate.otherOpexPerUnitAnchor = healedOpex.otherOpexPerUnitAnchor;
+  }
+  if (healedOpex) {
+    sectorUpdate.retoolRescaleApplied = true;
   }
 
   // v3 Phase 5: persist the trended unionization level. Only written when
