@@ -44,10 +44,7 @@ import {
   type TechLane,
 } from "@/lib/constants/techTree";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
-import type { CorporateSector } from "@/lib/db/types";
-import { sectorEconomicScale } from "@/lib/corporations/sectorProfitBasis";
-import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
-import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { corpDailyGrossRevenueLocal } from "@/lib/corporations/dailyGrossRevenue";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -97,25 +94,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // Daily gross revenue → per-node cash cost. Null when redacted.
     let dailyGrossRevenue: number | null = null;
     if (!redact) {
-      const sectors = await db
-        .collection<CorporateSector>("corporateSectors")
-        .find(
-          { corporationId: corporation._id },
-          { projection: { revenue: 1, capitalStock: 1, strategyId: 1, sectorType: 1 } }
-        )
-        .toArray();
-      // sector.revenue is stored as daily revenue; sum directly (no ×TURNS_PER_DAY).
-      // `sectorEconomicScale` is the SAME base `unlockTechNode` charges against —
-      // under plants that is max(revenue, capacity nameplate), so a mothballed
-      // estate does not quote a 0 cash cost here and then get charged one there
-      // (or vice versa). The displayed price and the executor's price must never
-      // disagree; that is the whole reason this reads the same helper.
-      const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
-      const eraUnitScale = await loadWorldEraUnitScale(db);
-      dailyGrossRevenue = sectors.reduce(
-        (sum, s) => sum + sectorEconomicScale(s, plantsEnabled, eraUnitScale),
-        0
-      );
+      // Ticket #1118: one helper for both the quoted price and the charged
+      // price, and it converts each sector out of its host currency before
+      // summing. The old inline reduce added yen straight into dollars.
+      dailyGrossRevenue = await corpDailyGrossRevenueLocal(db, corporation);
     }
     const rdScore = redact ? null : Math.floor(corporation.rdScore ?? 0);
     const liquidCapital = redact ? null : Math.floor(corporation.liquidCapital ?? 0);

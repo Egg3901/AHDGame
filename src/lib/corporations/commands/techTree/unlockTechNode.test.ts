@@ -43,6 +43,11 @@ function mockDb({ revenues = [24_000], modifiedCount = 1 } = {}) {
       if (name === "gameConfig") {
         return { findOne: () => Promise.resolve(null) };
       }
+      if (name === "exchangeRates") {
+        // Empty rate book: every currency falls back to 1.0, so the cash base
+        // stays the plain sum these assertions were written against.
+        return { find: () => ({ toArray: () => Promise.resolve([]) }) };
+      }
       return { updateOne, findOne: () => Promise.resolve(null) };
     },
   } as unknown as Db;
@@ -55,16 +60,16 @@ describe("unlockTechNode (v2 dual cost + lane)", () => {
 
   it("spends rdScore + cash and commits the lane on first unlock", async () => {
     const corp = makeCorp();
-    const { db, updateOne } = mockDb({ revenues: [24_000] }); // daily gross = 24k → cash 6k
+    const { db, updateOne } = mockDb({ revenues: [24_000] }); // daily gross 24k, 15% => 3.6k
     const nodeId = corpNodeId("2019", 1); // cost 17
 
     const res = await unlockTechNode(db, corp, nodeId, YEAR, TURN);
 
-    expect(res).toMatchObject({ ok: true, status: 200, nodeId, cashSpent: 6_000 });
+    expect(res).toMatchObject({ ok: true, status: 200, nodeId, cashSpent: 3_600 });
     const [filter, update] = updateOne.mock.calls[0];
     expect(filter.rdScore).toEqual({ $gte: 48 }); // 2019 decade cost
-    expect(filter.liquidCapital).toEqual({ $gte: 6_000 });
-    expect(update.$inc).toMatchObject({ rdScore: -48, liquidCapital: -6_000 });
+    expect(filter.liquidCapital).toEqual({ $gte: 3_600 });
+    expect(update.$inc).toMatchObject({ rdScore: -48, liquidCapital: -3_600 });
     expect(update.$push).toEqual({ unlockedTechNodeIds: nodeId });
     expect(update.$set["techDecadeLane.2019"]).toBe("generic");
   });
