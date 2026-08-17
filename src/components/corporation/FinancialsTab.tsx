@@ -23,7 +23,7 @@ import { formatAccountingCost, formatMarketingStrength } from "@/lib/utils/forma
 import { SummaryBand } from "./financials/SummaryBand";
 import { GlanceRail } from "./financials/GlanceRail";
 import { Waterfall } from "./financials/FinancialsVisuals";
-import { buildAllocation } from "./financials/financialsModel";
+import { buildAllocation, corpIncomeBasis } from "./financials/financialsModel";
 import {
   MONEY_PERIOD_FACTOR,
   MONEY_PERIOD_PER_LABEL,
@@ -473,16 +473,27 @@ export default function FinancialsTab({
                 </>
               )}
 
-              {/* Net Income */}
-              <div className="border-t-2 border-foreground/20 mt-3 pt-2">
-                <FinRowTip
-                  label="Net Income"
-                  value={fmtSigned(scaleMoney(financials.income, periodView))}
-                  valueClass={financials.income >= 0 ? "text-success" : "text-error"}
-                  bold
-                  tooltip="Operating income after taxes, bond interest or coupon income, and IMF facility cash flows where applicable, before dividend distributions."
-                />
-              </div>
+              {/* Net Income — realized basis when the engine has booked a turn
+                  (same basis as the SummaryBand headline); the itemized lines
+                  above are the projection, so they may not sum to it exactly. */}
+              {(() => {
+                const basis = corpIncomeBasis(financials);
+                return (
+                  <div className="border-t-2 border-foreground/20 mt-3 pt-2">
+                    <FinRowTip
+                      label={basis.isRealized ? "Net Income (last turn)" : "Net Income"}
+                      value={fmtSigned(scaleMoney(basis.netIncome, periodView))}
+                      valueClass={basis.netIncome >= 0 ? "text-success" : "text-error"}
+                      bold
+                      tooltip={
+                        basis.isRealized
+                          ? "Income the engine actually booked last turn, after taxes, bond interest or coupon income, and IMF facility cash flows, before dividend distributions. The lines above are the current projection and can differ from this."
+                          : "Operating income after taxes, bond interest or coupon income, and IMF facility cash flows where applicable, before dividend distributions."
+                      }
+                    />
+                  </div>
+                );
+              })()}
 
               {/* Dividend Distribution */}
               {financials.effectiveDividendRate > 0 && (
@@ -492,14 +503,12 @@ export default function FinancialsTab({
                     Distributions
                   </div>
                   {(() => {
-                    const netBeforeDividends = financials.income;
-                    const dailyDividend = financials.dividendDistribution;
-                    const dailyRetained = netBeforeDividends - dailyDividend;
+                    const basis = corpIncomeBasis(financials);
                     return (
                       <>
                         <FinRowTip
                           label={`Dividends (${financials.effectiveDividendRate}%)`}
-                          value={`(${fmt(Math.round(scaleMoney(dailyDividend, periodView)))})`}
+                          value={`(${fmt(Math.round(scaleMoney(basis.dividendPaid, periodView)))})`}
                           valueClass="text-warning"
                           indent
                           tooltip={`${financials.effectiveDividendRate}% of net income (after tax and bond interest or coupon income) paid to shareholders each turn.`}
@@ -507,8 +516,8 @@ export default function FinancialsTab({
                         <div className="border-t border-card-border mt-2 pt-2">
                           <FinRowTip
                             label="Retained Earnings"
-                            value={fmtSigned(Math.round(scaleMoney(dailyRetained, periodView)))}
-                            valueClass={dailyRetained >= 0 ? "text-foreground" : "text-error"}
+                            value={fmtSigned(Math.round(scaleMoney(basis.retained, periodView)))}
+                            valueClass={basis.retained >= 0 ? "text-foreground" : "text-error"}
                             bold
                             tooltip="Net income minus dividends. Bond coupon and interest cash flows are applied in the bond processing phase."
                           />

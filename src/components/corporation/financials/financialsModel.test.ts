@@ -55,16 +55,34 @@ describe("netMarginPct", () => {
     expect(
       netMarginPct({
         income: 1200,
+        dividendDistribution: 0,
         totalRevenue: 2400,
         bondCouponIncome: 0,
         imfFacilityReceiptsDaily: 0,
       })
     ).toBe(50);
   });
+  it("uses the realized income basis when the engine has booked a turn", () => {
+    // Ticket: corp 445 showed 13.4% margin from a +18.5K projection while the
+    // engine booked a 15.8K realized LOSS every turn. The margin must sit on
+    // the same basis as the headline tile.
+    expect(
+      netMarginPct({
+        income: 18_500,
+        realizedIncome: -15_800,
+        realizedDividendPaid: 0,
+        dividendDistribution: 0,
+        totalRevenue: 138_000,
+        bondCouponIncome: 0,
+        imfFacilityReceiptsDaily: 0,
+      })
+    ).toBeCloseTo(-11.45, 1);
+  });
   it("returns 0 when the total income base is non-positive", () => {
     expect(
       netMarginPct({
         income: 100,
+        dividendDistribution: 0,
         totalRevenue: 0,
         bondCouponIncome: 0,
         imfFacilityReceiptsDaily: 0,
@@ -78,6 +96,7 @@ describe("netMarginPct", () => {
     expect(
       netMarginPct({
         income: 3_300_000,
+        dividendDistribution: 0,
         totalRevenue: 1_700_000,
         bondCouponIncome: 3_100_000,
         imfFacilityReceiptsDaily: 0,

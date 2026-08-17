@@ -18,14 +18,28 @@ export function scaleToPeriod(value: number, period: Period): number {
  * #942 showed 194% and 121%). Broaden the denominator to the same non-operating
  * inflows that feed net income so the ratio reads as "profit per dollar of total
  * income", which stays within a sane range and is what a reader expects.
+ *
+ * The numerator is the same realized-when-available basis as the headline tile
+ * (`corpIncomeBasis`). Using the projected `income` here let a corp booking a
+ * realized loss every turn display a positive margin two tiles away from a red
+ * "Net income (last turn)".
  */
 export function netMarginPct(
-  f: Pick<Financials, "income" | "totalRevenue" | "bondCouponIncome" | "imfFacilityReceiptsDaily">
+  f: Pick<
+    Financials,
+    | "income"
+    | "realizedIncome"
+    | "realizedDividendPaid"
+    | "dividendDistribution"
+    | "totalRevenue"
+    | "bondCouponIncome"
+    | "imfFacilityReceiptsDaily"
+  >
 ): number {
   const incomeBase =
     f.totalRevenue + Math.max(0, f.bondCouponIncome) + Math.max(0, f.imfFacilityReceiptsDaily);
   if (incomeBase <= 0) return 0;
-  return (f.income / incomeBase) * 100;
+  return (corpIncomeBasis(f).netIncome / incomeBase) * 100;
 }
 
 /**
