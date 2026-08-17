@@ -29,7 +29,7 @@ export const SEED_DUES_PER_WORKER_ANNUAL = 0;
  * `$setOnInsert` preserves any claimed union's runtime state (treasury,
  * approval, dues, services, leadership).
  *
- * The upsert filter matches on `foundedByCharacterId` being absent, not just
+ * The upsert filter matches on `foundedByCharacterId` being null or absent, not just
  * `(countryId, sectorType)`, union dues v1 lets a player found a RIVAL union
  * in an industry that already has one, and a rival's document also has that
  * same `(countryId, sectorType)` pair. Without the extra clause, re-running
@@ -67,7 +67,9 @@ export async function seedUnions(
       const name = getUnionName(countryId, sectorType, preset);
       unionOps.push({
         updateOne: {
-          filter: { countryId, sectorType, foundedByCharacterId: { $exists: false } },
+          // `null` matches an explicit null AND an absent field, so this is correct
+          // both before and after the founder-null backfill.
+          filter: { countryId, sectorType, foundedByCharacterId: null },
           update: {
             $setOnInsert: {
               countryId,
@@ -75,6 +77,10 @@ export async function seedUnions(
               name,
               ownerId: null,
               pendingLeaderCharacterId: null,
+              // Explicit null, not an absent field: the partial unique index on
+              // (countryId, sectorType) keys off `$type: "null"`, because a
+              // partial index cannot test for an absent field.
+              foundedByCharacterId: null,
               treasury: 0,
               // Union dues v1: approval starts at the neutral-but-untested
               // baseline (a union that charges nothing and runs nothing is not
@@ -110,10 +116,7 @@ export async function seedUnions(
   if (pairs.length > 0) {
     const worldUnions = await db
       .collection<Union>("unions")
-      .find(
-        { foundedByCharacterId: { $exists: false } },
-        { projection: { _id: 1, countryId: 1, sectorType: 1 } }
-      )
+      .find({ foundedByCharacterId: null }, { projection: { _id: 1, countryId: 1, sectorType: 1 } })
       .toArray();
     const worldUnionIdByPair = new Map(
       worldUnions.map((u) => [`${u.countryId}|${u.sectorType}`, u._id])
