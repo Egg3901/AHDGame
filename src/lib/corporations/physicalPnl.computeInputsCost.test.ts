@@ -63,3 +63,33 @@ describe("computeInputsCost — money wiring statePremiums", () => {
     expect(withUnrelatedPremium).toEqual(base);
   });
 });
+
+describe("computeInputsCost — buy-sell realization symmetry", () => {
+  it("prices a shortage input through priceRealizationFactor, not the raw ratio", () => {
+    // ratio 2.75 (the live freight shortage that helped sink corp 445) must
+    // bill at the same clamp(sqrt(ratio), 0.7, 1.5) the revenue side realizes
+    // at — i.e. the 1.5 cap — never the raw 2.75.
+    const shocked = computeInputsCost({
+      ...baseArgs(),
+      priceRatios: new Map<CommodityType, number>([["coal", 2.75]]),
+    });
+    expect(shocked.lines[0].unitPrice).toBeCloseTo(100 * 1.5);
+    expect(shocked.total).toBeCloseTo(computeInputsCost(baseArgs()).total * 1.5);
+  });
+
+  it("floors a deep-glut input at the same 0.7 the revenue side floors at", () => {
+    const glutted = computeInputsCost({
+      ...baseArgs(),
+      priceRatios: new Map<CommodityType, number>([["coal", 0.2]]),
+    });
+    expect(glutted.lines[0].unitPrice).toBeCloseTo(100 * 0.7);
+  });
+
+  it("dampens an in-band ratio by the square root", () => {
+    const shocked = computeInputsCost({
+      ...baseArgs(),
+      priceRatios: new Map<CommodityType, number>([["coal", 1.44]]),
+    });
+    expect(shocked.lines[0].unitPrice).toBeCloseTo(100 * 1.2);
+  });
+});
