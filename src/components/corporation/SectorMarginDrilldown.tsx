@@ -86,8 +86,16 @@ export function SectorMarginDrilldown({
     { label: "Metric effects", value: sector.stateMetricsModifier },
     { label: "Regional conditions", value: sector.regionalConditionsModifier },
   ];
+  // Physical basis keeps every modifier visible, but commodity pressure is the
+  // one influence the physical model prices DIRECTLY (it is the inputs line and
+  // the sale price), so its row is relabeled to say where it went instead of
+  // implying it still adds percentage points.
+  const physicalBasis = sector.marginBasis === "physical" && sector.physicalCosts != null;
   const corporateRows: ModRow[] = [
-    { label: "Commodity markets", value: sector.commodityModifier },
+    {
+      label: physicalBasis ? "Commodity markets (priced into inputs & sales)" : "Commodity markets",
+      value: sector.commodityModifier,
+    },
     { label: "Home location", value: sector.homeLocationModifier },
     { label: "Foreign tariff", value: sector.foreignTariffModifier },
     { label: "Tariff friction", value: sector.domesticTariffMalus },
@@ -111,10 +119,11 @@ export function SectorMarginDrilldown({
 
   // Physical basis (plants): the effective margin is DERIVED from what the
   // sector actually pays (inputs, wages, upkeep), not from the additive
-  // modifier stack — summing base + modifiers cannot reconcile to it (ticket
-  // 1072: a 40pt unexplained gap). Render the cost build instead; the additive
-  // stack stays as the advisory view below plants / for legacy sectors.
-  const physical = sector.marginBasis === "physical" ? (sector.physicalCosts ?? null) : null;
+  // modifier stack (ticket 1072: a 40pt unexplained gap). The cost build is the
+  // headline and reconciles exactly; every modifier stays visible below it,
+  // reframed as the influences that steer those costs rather than percentage
+  // points that sum to the margin.
+  const physical = physicalBasis ? sector.physicalCosts! : null;
 
   const policyLevel = sector.productionPolicyLevel ?? 0;
   const policyTarget = sector.productionPolicy ?? 0;
@@ -168,9 +177,9 @@ export function SectorMarginDrilldown({
               </span>
             </div>
             <p className="mt-2 text-[11px] leading-snug text-muted">
-              This margin is derived from real costs. State, tariff and national modifiers steer
-              those costs rather than adding to a base percentage, so the modifier list no longer
-              sums to the margin — the cost lines above do.
+              This margin comes from real costs, so the cost lines above always add up to it. The
+              influences listed below steer those costs and your prices instead of adding percentage
+              points directly.
             </p>
           </>
         ) : (
@@ -184,52 +193,52 @@ export function SectorMarginDrilldown({
           </>
         )}
 
-        {!physical && (
-          <div className="space-y-2 pt-2">
-            <Group title="State conditions" rows={stateRows} />
-            {sector.regionalConditionModifiers && sector.regionalConditionModifiers.length > 0 && (
-              <div>
-                <div className="mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
-                  Regional conditions
-                </div>
-                {sector.regionalConditionModifiers.map((rc) => (
-                  <div
-                    key={rc.label}
-                    className="flex items-center justify-between py-1 text-[12px]"
-                  >
-                    <span className="text-muted">{rc.label}</span>
-                    <span
-                      className={`font-semibold tabular-nums ${rc.marginEffect > 0 ? "text-success" : rc.marginEffect < 0 ? "text-error" : "text-muted"}`}
-                    >
-                      {rc.marginEffect > 0 ? "+" : ""}
-                      {rc.marginEffect.toFixed(1)}pp
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <Group title="Corporate factors" rows={corporateRows} />
-            <Group title="National economy" rows={nationalRows} />
-            {otherFactors != null && Math.abs(otherFactors) >= 0.05 && (
-              <div>
-                <div className="mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
-                  Other factors
-                </div>
-                <div className="flex items-center justify-between py-1 text-[12px]">
-                  <span className="text-muted">
-                    Sprawl, dominance, subsidies &amp; more — see full breakdown
-                  </span>
-                  <span
-                    className={`font-semibold tabular-nums ${otherFactors > 0 ? "text-success" : otherFactors < 0 ? "text-error" : "text-muted"}`}
-                  >
-                    {otherFactors > 0 ? "+" : ""}
-                    {otherFactors.toFixed(1)}
-                  </span>
-                </div>
-              </div>
-            )}
+        {physical && (
+          <div className="mt-3 mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+            What shapes those costs
           </div>
         )}
+        <div className="space-y-2 pt-2">
+          <Group title="State conditions" rows={stateRows} />
+          {sector.regionalConditionModifiers && sector.regionalConditionModifiers.length > 0 && (
+            <div>
+              <div className="mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+                Regional conditions
+              </div>
+              {sector.regionalConditionModifiers.map((rc) => (
+                <div key={rc.label} className="flex items-center justify-between py-1 text-[12px]">
+                  <span className="text-muted">{rc.label}</span>
+                  <span
+                    className={`font-semibold tabular-nums ${rc.marginEffect > 0 ? "text-success" : rc.marginEffect < 0 ? "text-error" : "text-muted"}`}
+                  >
+                    {rc.marginEffect > 0 ? "+" : ""}
+                    {rc.marginEffect.toFixed(1)}pp
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <Group title="Corporate factors" rows={corporateRows} />
+          <Group title="National economy" rows={nationalRows} />
+          {!physical && otherFactors != null && Math.abs(otherFactors) >= 0.05 && (
+            <div>
+              <div className="mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+                Other factors
+              </div>
+              <div className="flex items-center justify-between py-1 text-[12px]">
+                <span className="text-muted">
+                  Sprawl, dominance, subsidies &amp; more — see full breakdown
+                </span>
+                <span
+                  className={`font-semibold tabular-nums ${otherFactors > 0 ? "text-success" : otherFactors < 0 ? "text-error" : "text-muted"}`}
+                >
+                  {otherFactors > 0 ? "+" : ""}
+                  {otherFactors.toFixed(1)}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
 
         {!physical && net != null && (
           <div className="mt-2 flex items-center justify-between border-t border-card-border pt-2 text-[12px]">

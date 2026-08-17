@@ -65,9 +65,15 @@ describe("SectorMarginDrilldown", () => {
     expect(screen.getByText("Wages")).toBeTruthy();
     // The lines reconcile: 100 − 89.4 − 15.0 − 15.4 = −19.8, the shown margin.
     expect(screen.getAllByText("-19.8%").length).toBeGreaterThan(0);
-    // The additive stack must NOT render — it cannot explain a derived margin.
-    expect(screen.queryByText("Commodity markets")).toBeNull();
+    // Every modifier stays visible, reframed as a cost influence; the commodity
+    // row says where it went (it IS the inputs line under the physical model).
+    expect(screen.getByText("What shapes those costs")).toBeTruthy();
+    expect(screen.getByText("Commodity markets (priced into inputs & sales)")).toBeTruthy();
+    expect(screen.getByText("Inflation")).toBeTruthy();
+    // The additive reconciliation devices must not render: they cannot
+    // reconcile a physically-derived margin.
     expect(screen.queryByText("Net modifiers")).toBeNull();
+    expect(screen.queryByText(/Sprawl, dominance/)).toBeNull();
   });
 
   it("keeps the additive modifier view when no physical basis is present", () => {
@@ -75,5 +81,6 @@ describe("SectorMarginDrilldown", () => {
     expect(screen.getByText("Base sector margin")).toBeTruthy();
     expect(screen.getByText("Commodity markets")).toBeTruthy();
     expect(screen.queryByText("What this sector pays")).toBeNull();
+    expect(screen.queryByText("What shapes those costs")).toBeNull();
   });
 });
