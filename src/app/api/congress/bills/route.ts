@@ -512,8 +512,9 @@ export async function POST(request: Request) {
       legislationTypeId: string;
       policyOptionId?: string;
       effectDirection: number;
-      economic: number;
-      social: number;
+      /** Omitted when the provision takes no stance on this axis (0 is not centre, ticket #1116). */
+      economic?: number;
+      social?: number;
       /** Tax-slider laws (ruling #16): validated rate + rate-labeled snapshots. */
       proposedRate?: number;
       policyOptionNameSnapshot?: string;

@@ -506,8 +506,13 @@ function resolveProvisionPolicyOption(
     if (exactOption) return exactOption;
   }
 
+  // Label resolution still treats a missing axis as 0 so legacy provisions
+  // (which stamped a literal 0) and new ones (which omit the field) resolve to
+  // the same option. Only the vote-time shift distinguishes the two.
   const explicitAxisMatch = lt.policyOptions.find(
-    (opt) => (opt.economic ?? 0) === provision.economic && (opt.social ?? 0) === provision.social
+    (opt) =>
+      (opt.economic ?? 0) === (provision.economic ?? 0) &&
+      (opt.social ?? 0) === (provision.social ?? 0)
   );
   if (explicitAxisMatch) return explicitAxisMatch;
 
