@@ -17,33 +17,18 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import { BASE_APPROVAL } from "@/lib/unions/unionDues";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
-import { getFoundingFxRate } from "@/lib/corporations/foundingCosts";
-import { getEraNominalAmount } from "@/lib/constants/sectorSeedEra";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import {
-  atomicallyDebitCharacterCash,
-  refundCharacterCash,
-} from "@/lib/financialTxLog/atomicCashGuard";
+  MAX_UNION_NAME_LENGTH,
+  MIN_UNION_NAME_LENGTH,
+  UNION_FOUNDING_ACTION_COST,
+  unionFoundingCostLocal,
+} from "@/lib/unions/unionFounding";
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
 import { rejectIfTurnProcessing } from "./unionActions";
 import type { UnionActionResult } from "./unionActions";
 
-/**
- * Modern (₳-anchor) founding fee, scaled into the world's era
- * (`getEraNominalAmount`) and the founder's home currency
- * (`getFoundingFxRate`) exactly like a corporation founding fee, the same
- * "flat currency figure is wrong in every era/country but one" problem
- * `unionServices.ts` documents applies here too.
- *
- * Set well below `CORPORATION_FOUNDING_COST` (1,000,000): a union isn't
- * capitalizing a company (a founded union's treasury starts at 0, see
- * below), it's a registration/organizing fee for the right to contest an
- * industry.
- */
-export const UNION_FOUNDING_COST_ANCHOR = 20_000;
-
-export const MIN_UNION_NAME_LENGTH = 2;
-export const MAX_UNION_NAME_LENGTH = 60;
+export { MAX_UNION_NAME_LENGTH, MIN_UNION_NAME_LENGTH, UNION_FOUNDING_ACTION_COST };
 
 export interface FoundUnionInput {
   countryId: CountryId;
@@ -53,9 +38,14 @@ export interface FoundUnionInput {
 
 /**
  * Found a new union. The founding character must be present in the target
- * country, pays `UNION_FOUNDING_COST_ANCHOR` (era/FX scaled) out of personal
- * cash, and cannot reuse a name already taken by another union in the same
- * (countryId, sectorType) pair.
+ * country, pays `UNION_FOUNDING_COST_ANCHOR` (era/FX scaled) out of CAMPAIGN
+ * FUNDS plus `UNION_FOUNDING_ACTION_COST` action points, and cannot reuse a
+ * name already taken by another union in the same (countryId, sectorType) pair.
+ *
+ * Both costs come out of ONE conditional `findOneAndUpdate` guarded on both
+ * balances, the same shape `npps/commands/directAction` uses, so a founder can
+ * never pay the funds and keep the action points (or the reverse) and two
+ * concurrent foundings cannot both pass on a stale balance.
  */
 export async function foundUnion(
   db: Db,
@@ -117,25 +107,76 @@ export async function foundUnion(
   const forexEnabled = await isForexEnabled();
   const preset = await getGameStatePresetOrDefault(db);
   const homeCurrency = getHomeCurrency(character);
-  const foundingRate = getFoundingFxRate(input.countryId, forexEnabled);
-  const costLocal = Math.round(
-    getEraNominalAmount(UNION_FOUNDING_COST_ANCHOR, preset) * foundingRate
-  );
+  const costLocal = unionFoundingCostLocal({
+    preset,
+    countryId: input.countryId,
+    forexEnabled,
+  });
 
-  const debit = await atomicallyDebitCharacterCash(
-    db,
-    character._id,
-    homeCurrency,
-    costLocal,
-    forexEnabled
-  );
-  if (!debit.ok) {
+  // Campaign funds live in `currencyBalances.campaign` post-forex and on the
+  // legacy `funds` field before it, the same resolution `directAction` does.
+  const useForexCampaignBalance =
+    forexEnabled && typeof character.currencyBalances?.campaign === "number";
+  const campaignFundsField = useForexCampaignBalance ? "currencyBalances.campaign" : "funds";
+  const availableFunds = useForexCampaignBalance
+    ? (character.currencyBalances?.campaign ?? 0)
+    : (character.funds ?? 0);
+  const availableActions = character.actions ?? 0;
+
+  // Reported up front rather than as a bare rejection, so the founder can see
+  // which of the two costs they are short on before anything is spent.
+  if (availableFunds < costLocal) {
     return {
       ok: false,
       status: 402,
-      error: `Founding a union costs ${costLocal.toLocaleString()} ${homeCurrency} (you don't have enough).`,
+      error: `Founding a union costs ${costLocal.toLocaleString()} ${homeCurrency} in campaign funds (you have ${Math.floor(availableFunds).toLocaleString()}).`,
     };
   }
+  if (availableActions < UNION_FOUNDING_ACTION_COST) {
+    return {
+      ok: false,
+      status: 402,
+      error: `Founding a union costs ${UNION_FOUNDING_ACTION_COST} action points (you have ${availableActions}).`,
+    };
+  }
+
+  // ONE guarded write for both costs: partial payment is unrepresentable, and
+  // a concurrent spend that drains either balance loses the race outright.
+  const spend = await db.collection<Character>("characters").findOneAndUpdate(
+    {
+      _id: character._id,
+      actions: { $gte: UNION_FOUNDING_ACTION_COST },
+      [campaignFundsField]: { $gte: costLocal },
+    },
+    {
+      $inc: {
+        actions: -UNION_FOUNDING_ACTION_COST,
+        [campaignFundsField]: -costLocal,
+      },
+      $set: { updatedAt: new Date() },
+    },
+    { returnDocument: "after" }
+  );
+  if (!spend) {
+    return {
+      ok: false,
+      status: 409,
+      error: "Your campaign funds or action points changed, reload and try again.",
+    };
+  }
+
+  /** Undo the combined spend when a later step fails, so nothing is charged for nothing. */
+  const refundFoundingCost = async () => {
+    await db.collection<Character>("characters").updateOne(
+      { _id: character._id },
+      {
+        $inc: {
+          actions: UNION_FOUNDING_ACTION_COST,
+          [campaignFundsField]: costLocal,
+        },
+      }
+    );
+  };
 
   const now = new Date();
   try {
@@ -171,7 +212,7 @@ export async function foundUnion(
     );
     if (claim.modifiedCount === 0) {
       await db.collection<Union>("unions").deleteOne({ _id: insertResult.insertedId });
-      await refundCharacterCash(db, character._id, homeCurrency, costLocal, forexEnabled);
+      await refundFoundingCost();
       return {
         ok: false,
         status: 409,
@@ -186,7 +227,8 @@ export async function foundUnion(
       name,
       countryId: input.countryId,
       sectorType: input.sectorType,
-      cashSpent: costLocal,
+      campaignFundsSpent: costLocal,
+      actionsSpent: UNION_FOUNDING_ACTION_COST,
       currency: homeCurrency,
     };
   } catch (error) {
@@ -194,7 +236,7 @@ export async function foundUnion(
     // charged for nothing. Covers both genuine infra failures and a
     // duplicate-key race on a legacy (countryId, sectorType) unique index
     // some worlds may still carry from before rival unions existed.
-    await refundCharacterCash(db, character._id, homeCurrency, costLocal, forexEnabled);
+    await refundFoundingCost();
     const message =
       error &&
       typeof error === "object" &&

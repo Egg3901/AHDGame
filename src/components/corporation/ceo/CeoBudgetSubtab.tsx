@@ -34,6 +34,7 @@ import { Meter } from "@/components/corporation/market/MarketPrimitives";
 import { Slider } from "@/components/ui";
 import type { CorporationDetail, Financials } from "../CorporationPageTypes";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
+import { formatAccountingCost } from "@/lib/utils/formatters";
 import { CapitalInjectionPanel } from "./CapitalInjectionPanel";
 import { ShareBuybackEscrowPanel } from "./ShareBuybackEscrowPanel";
 import ShareIssuanceModal from "../shares/ShareIssuanceModal";
@@ -116,6 +117,10 @@ export default function CeoBudgetSubtab({
   const corpSymbol = liquidCode ? (CURRENCY_SYMBOLS[liquidCode] ?? "$") : "₳";
   const toAnchor = (localAmount: number) =>
     liquidCode ? toInternalFrom(localAmount, liquidCode) : localAmount;
+  const fmtCost = (dailyLocal: number) =>
+    formatAccountingCost(Math.round(scaleMoney(toAnchor(dailyLocal), periodView)), (n) =>
+      formatAmount(n, liquidCode)
+    );
 
   /** Raw text while focused — avoids rounding-on-keystroke corrupting digits. */
   const [marketingDraft, setMarketingDraft] = useState<string | null>(null);
@@ -356,19 +361,21 @@ export default function CeoBudgetSubtab({
           </div>
           <FinRowTip
             label="Sector Maintenance"
-            value={`(${formatAmount(Math.round(scaleMoney(toAnchor(financials.maintenanceCosts), periodView)), liquidCode)})`}
-            valueClass="text-error"
+            value={fmtCost(financials.maintenanceCosts)}
+            valueClass={financials.maintenanceCosts < 0 ? "text-success" : "text-error"}
             indent
             tooltip={
-              financials.laborCosts > 0
-                ? "Non-labour operating costs to keep sectors running. Labour is broken out as Wages below."
-                : "Operating costs to keep sectors running. Equals revenue × (1 - profit margin)."
+              financials.maintenanceCosts < 0
+                ? "A credit: wages currently exceed the derived operating bill. Gross Profit already nets this against Wages."
+                : financials.laborCosts > 0
+                  ? "Non-labour operating costs to keep sectors running. Labour is broken out as Wages below."
+                  : "Operating costs to keep sectors running. Equals revenue × (1 - profit margin)."
             }
           />
           {financials.laborCosts > 0 && (
             <FinRowTip
               label="Wages"
-              value={`(${formatAmount(Math.round(scaleMoney(toAnchor(financials.laborCosts), periodView)), liquidCode)})`}
+              value={fmtCost(financials.laborCosts)}
               valueClass="text-error"
               indent
               tooltip="Total labour cost across all sectors, driven by employment, prevailing wage levels, and union wage demands. Carved out of Sector Maintenance."
@@ -376,7 +383,7 @@ export default function CeoBudgetSubtab({
           )}
           <FinRowTip
             label="Growth Investment"
-            value={`(${formatAmount(Math.round(scaleMoney(toAnchor(financials.growthCosts), periodView)), liquidCode)})`}
+            value={fmtCost(financials.growthCosts)}
             valueClass="text-error"
             indent
             tooltip="Cost of growing sector revenue. Scales with revenue and growth rate."

@@ -44,6 +44,8 @@ export default function UnionsPage() {
   const [rows, setRows] = useState<LeaderboardRow[]>([]);
   const [bannedCountries, setBannedCountries] = useState<BannedCountry[]>([]);
   const [availableCountries, setAvailableCountries] = useState<CountryOption[]>([]);
+  /** Founding costs as the server prices them, so the modal cannot quote a stale figure. */
+  const [founding, setFounding] = useState<{ costLocal: number; actionCost: number } | null>(null);
   // null = "All countries". Defaults to the viewer's country on load.
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,6 +72,7 @@ export default function UnionsPage() {
       setRows(data.unions ?? []);
       setBannedCountries(data.bannedCountries ?? []);
       setAvailableCountries(data.availableCountries ?? []);
+      setFounding(data.founding ?? null);
     } catch {
       setLoadError("Network error loading unions.");
     } finally {
@@ -405,6 +408,8 @@ export default function UnionsPage() {
           onFounded={() => loadLeaderboard(selectedCountry)}
           countryId={selectedCountry}
           countryName={selectedCountryName}
+          foundingCostLocal={founding?.costLocal}
+          foundingActionCost={founding?.actionCost}
         />
       )}
     </main>

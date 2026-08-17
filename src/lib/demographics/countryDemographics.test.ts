@@ -27,6 +27,7 @@ describe("countryDemographics SSOT", () => {
       ["IE", "ie_voterGroups"],
       ["CN", "cn_voterGroups"],
       ["BR", "br_voterGroups"],
+      ["DD", "dd_voterGroups"],
     ] as const) {
       const cats = getDemographicCategoriesForCountry(country);
       expect(cats).toHaveLength(1);
@@ -76,6 +77,7 @@ describe("countryDemographics SSOT", () => {
     expect(jp).not.toBeNull();
     expect(jp!.komeito_faithful).toBe(72);
     expect(getVoterGroupBaselines("US")).toBeNull();
+    expect(getVoterGroupBaselines("DD")!.party_nomenklatura).toBe(96);
   });
 });
 
@@ -136,6 +138,7 @@ describe("getAllDemographicCategoryKeys", () => {
       "ie_voterGroups",
       "cn_voterGroups",
       "br_voterGroups",
+      "dd_voterGroups",
     ]) {
       expect(keys, `missing category key "${expected}"`).toContain(expected);
     }

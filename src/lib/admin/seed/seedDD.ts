@@ -4,6 +4,7 @@ import type {
   PoliticalParty,
   DemographicCategory,
   StateDemographics,
+  StateDemographicTurnout,
   StateMetrics,
 } from "@/lib/db/types";
 import type { StateMetricBaseline } from "@/lib/db/types/statePolicy";
@@ -168,8 +169,21 @@ export async function seedDDDemographics(
   // read as "lean not yet derived" and drop out of policy-distance scoring.
   const { persistRegionLeans } = await import("./persistRegionLeans");
   const leanCount = await persistRegionLeans(db, regionDemographics, ddDemographicCategories);
+
+  // Turnout modifier rows — one per Land, all modifiers 0. The reset branch
+  // above already clears them; without this insert they were deleted and
+  // never re-seeded (ticket #1121), so Combined-tab turnout and GOTV had no
+  // `dd_voterGroups` document to read.
+  const { ddDemographicTurnout } = await import("@/lib/seeds/dd/ddDemographicTurnout");
+  for (const turnout of ddDemographicTurnout) {
+    const { _id, ...turnoutData } = turnout;
+    await db
+      .collection<StateDemographicTurnout>("stateDemographicTurnout")
+      .updateOne({ _id: _id as never }, { $set: turnoutData }, { upsert: true });
+  }
+
   log(
-    `[DD] Seeded ${regionDemographics.length} region demographics + ${leanCount} region leans (era ${era})`
+    `[DD] Seeded ${regionDemographics.length} region demographics + ${ddDemographicTurnout.length} turnout rows + ${leanCount} region leans (era ${era})`
   );
 }
 

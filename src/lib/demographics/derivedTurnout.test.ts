@@ -3,7 +3,7 @@ import { CENSUS_TO_ARCHETYPE, calculateDerivedTurnout } from "./derivedTurnout";
 import { getVoterArchetypeCategoriesForCountry } from "./countryDemographics";
 import { REGION_CENSUS_LABELS } from "@/lib/constants/regionCensusLabels";
 
-const ARCHETYPE_COUNTRIES = ["UK", "JP", "DE", "IE", "CN", "BR"] as const;
+const ARCHETYPE_COUNTRIES = ["UK", "JP", "DE", "IE", "CN", "BR", "DD"] as const;
 
 describe("derivedTurnout maps — structural integrity", () => {
   it("every archetype id in every map exists in that country's seed archetypes", () => {
@@ -39,8 +39,8 @@ describe("derivedTurnout maps — structural integrity", () => {
     }
   });
 
-  it("omits ethnicity for JP/CN/BR (no fabricated ethnic→archetype mapping)", () => {
-    for (const cc of ["JP", "CN", "BR"] as const) {
+  it("omits ethnicity for JP/CN/BR/DD (no fabricated ethnic→archetype mapping)", () => {
+    for (const cc of ["JP", "CN", "BR", "DD"] as const) {
       const map = CENSUS_TO_ARCHETYPE[cc]!;
       for (const ethKey of Object.keys(REGION_CENSUS_LABELS[cc]!.ethnicity)) {
         expect(map[ethKey], `${cc} should not map ethnicity key "${ethKey}"`).toBeUndefined();
@@ -83,6 +83,24 @@ describe("calculateDerivedTurnout", () => {
 
   it("returns undefined when none of the mapped archetypes are present in the bucket", () => {
     expect(calculateDerivedTurnout("JP", "young", { jp_voterGroups: {} })).toBeUndefined();
+  });
+
+  it("derives DD census turnout from dd_voterGroups (ticket #1121)", () => {
+    const turnout = {
+      dd_voterGroups: {
+        youth: { baseline: 90, modifier: 0, actual: 90 },
+        industrial_worker: { baseline: 95, modifier: 0, actual: 95 },
+        intelligentsia: { baseline: 95, modifier: 0, actual: 95 },
+        party_nomenklatura: { baseline: 96, modifier: 0, actual: 96 },
+        collective_farmer: { baseline: 94, modifier: 0, actual: 94 },
+        christian_milieu: { baseline: 92, modifier: 0, actual: 92 },
+      },
+    };
+    expect(calculateDerivedTurnout("DD", "young", turnout)?.baseline).toBe(90);
+    expect(calculateDerivedTurnout("DD", "university", turnout)?.baseline).toBeCloseTo(
+      (95 + 96) / 2
+    );
+    expect(calculateDerivedTurnout("DD", "german", turnout)).toBeUndefined();
   });
 
   it("derives census turnout for the seceded nations off the shared UK archetype bucket", () => {

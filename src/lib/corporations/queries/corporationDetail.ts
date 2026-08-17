@@ -1779,6 +1779,11 @@ export async function loadCorporationDetailView(args: {
   const financials = {
     totalRevenue: Math.round(totalRevenue),
     // Maintenance shown net of labour; the wage slice is broken out as `laborCosts`.
+    // Under plants this residual CAN be negative: derived operating cost already
+    // includes labour, and a negative other-opex residual is a real credit that
+    // Gross Profit must keep (clamping it double-counts wages; ticket #1122 is
+    // a display bug, not a sign error). The Cost of Revenue renderer formats a
+    // credit without wrapping a minus inside parentheses.
     maintenanceCosts: Math.round(totalMaintenanceCosts - totalLaborCosts),
     laborCosts: Math.round(totalLaborCosts),
     growthCosts: Math.round(totalGrowthCosts),

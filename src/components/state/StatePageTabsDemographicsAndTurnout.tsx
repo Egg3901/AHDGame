@@ -771,14 +771,14 @@ export function DemographicsAndTurnoutTab({
       color: colors[i % colors.length],
       // Direct turnout when the census dimension IS a stored bucket (US); otherwise
       // derive per-census-bucket turnout from the country's voter archetypes
-      // (UK/JP/DE/IE/CN/BR) via the shared SSOT helper. US returns undefined here.
+      // (UK/JP/DE/IE/CN/BR/DD) via the shared SSOT helper. US returns undefined here.
       turnout: turnoutCategory
         ? turnoutData?.turnout[turnoutCategory]?.[key]
         : calculateDerivedTurnout(countryId, key, turnoutData?.turnout),
     }));
   };
 
-  // Archetype-based census cards (UK, JP, DE, IE, CN, BR) — labels resolved
+  // Archetype-based census cards (UK, JP, DE, IE, CN, BR, DD) — labels resolved
   // per country from REGION_CENSUS_LABELS.
   if (isArchetypeBased && censusData && "ethnicity" in censusData) {
     const data = censusData as unknown as Record<string, Record<string, number>>;

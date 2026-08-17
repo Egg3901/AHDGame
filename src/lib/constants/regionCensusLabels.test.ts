@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { REGION_CENSUS_LABELS } from "./regionCensusLabels";
 
-const ARCHETYPE_COUNTRIES = ["UK", "JP", "DE", "IE", "CN", "BR"] as const;
+const ARCHETYPE_COUNTRIES = ["UK", "JP", "DE", "IE", "CN", "BR", "DD"] as const;
 
 describe("REGION_CENSUS_LABELS", () => {
   it("has a complete label set for every archetype country", () => {

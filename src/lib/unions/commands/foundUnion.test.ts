@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { Character, Union } from "@/lib/db/types";
 import { foundUnion } from "./foundUnion";
+import { UNION_FOUNDING_ACTION_COST } from "@/lib/unions/unionFounding";
 
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn().mockResolvedValue(false) }));
 vi.mock("@/lib/db/collections/gameState", () => ({
@@ -19,7 +20,8 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     _id: new ObjectId(),
     name: "Founder",
     countryId: "US",
-    cashOnHand: 1_000_000,
+    funds: 1_000_000,
+    actions: 50,
     ...overrides,
   } as unknown as Character;
 }
@@ -34,7 +36,7 @@ function baseDb(options: {
   insertOne?: ReturnType<typeof vi.fn>;
 }) {
   const insertOne = options.insertOne ?? vi.fn().mockResolvedValue({ insertedId: new ObjectId() });
-  const characterFindOneAndUpdate = vi.fn().mockResolvedValue({ cashOnHand: 900_000 });
+  const characterFindOneAndUpdate = vi.fn().mockResolvedValue({ funds: 900_000, actions: 40 });
   const characterUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
   const unionsDeleteOne = vi.fn().mockResolvedValue({ deletedCount: 1 });
   const unionsFind = vi.fn().mockImplementation(() => ({
@@ -45,6 +47,7 @@ function baseDb(options: {
     insertOne,
     unionsFind,
     characterUpdateOne,
+    characterFindOneAndUpdate,
     unionsDeleteOne,
     db: {
       collection: (name: string) => {
@@ -195,6 +198,70 @@ describe("foundUnion", () => {
     expect(raceResult.ok).toBe(false);
     if (!raceResult.ok) expect(raceResult.status).toBe(409);
     expect(raceDb.unionsDeleteOne).toHaveBeenCalledWith({ _id: insertedId2 });
+  });
+
+  it("charges campaign funds and action points together in one guarded write", async () => {
+    const character = makeCharacter();
+    const { db, characterFindOneAndUpdate } = baseDb({});
+
+    const result = await foundUnion(db, character, {
+      countryId: "US",
+      sectorType: "manufacturing",
+      name: "Rival Steelworkers",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.actionsSpent).toBe(UNION_FOUNDING_ACTION_COST);
+    expect(result.campaignFundsSpent).toBeGreaterThan(0);
+
+    // Personal wealth is never touched: the fee is political spending.
+    const [filter, update] = characterFindOneAndUpdate.mock.calls[0];
+    expect(filter).toMatchObject({
+      _id: character._id,
+      actions: { $gte: UNION_FOUNDING_ACTION_COST },
+      funds: { $gte: result.campaignFundsSpent },
+    });
+    expect(update.$inc.actions).toBe(-UNION_FOUNDING_ACTION_COST);
+    expect(update.$inc.funds).toBe(-(result.campaignFundsSpent as number));
+    expect(update.$inc).not.toHaveProperty("cashOnHand");
+  });
+
+  it("refuses when campaign funds are short, before spending any action points", async () => {
+    const character = makeCharacter({ funds: 1 } as Partial<Character>);
+    const { db, insertOne, characterFindOneAndUpdate } = baseDb({});
+
+    const result = await foundUnion(db, character, {
+      countryId: "US",
+      sectorType: "manufacturing",
+      name: "Broke Union",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(402);
+      expect(result.error).toMatch(/campaign funds/i);
+    }
+    expect(characterFindOneAndUpdate).not.toHaveBeenCalled();
+    expect(insertOne).not.toHaveBeenCalled();
+  });
+
+  it("refuses when action points are short", async () => {
+    const character = makeCharacter({
+      actions: UNION_FOUNDING_ACTION_COST - 1,
+    } as Partial<Character>);
+    const { db, insertOne, characterFindOneAndUpdate } = baseDb({});
+
+    const result = await foundUnion(db, character, {
+      countryId: "US",
+      sectorType: "manufacturing",
+      name: "Tired Union",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(402);
+      expect(result.error).toMatch(/action points/i);
+    }
+    expect(characterFindOneAndUpdate).not.toHaveBeenCalled();
+    expect(insertOne).not.toHaveBeenCalled();
   });
 
   it("is blocked while the country has an enacted union ban", async () => {

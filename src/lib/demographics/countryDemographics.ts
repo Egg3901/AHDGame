@@ -29,6 +29,10 @@ import {
   brDemographicCategories,
   BR_VOTER_GROUP_BASELINES,
 } from "@/lib/seeds/br/brDemographicCategories";
+import {
+  ddDemographicCategories,
+  DD_VOTER_GROUP_BASELINES,
+} from "@/lib/seeds/dd/ddDemographicCategories";
 
 export interface CanvassGroup {
   id: string;
@@ -125,6 +129,10 @@ const PROFILE_REGISTRY: Record<string, () => ProfileEntry> = {
     categories: fromSeed(brDemographicCategories),
     baselines: BR_VOTER_GROUP_BASELINES,
   }),
+  dd_archetypes: () => ({
+    categories: fromSeed(ddDemographicCategories),
+    baselines: DD_VOTER_GROUP_BASELINES,
+  }),
 };
 
 function resolveProfile(countryId: string | undefined): ProfileEntry {
@@ -171,12 +179,12 @@ export function getVoterGroupBaselines(
 // country the archetypes are the same seed voter groups the canvassing layer
 // returns, so only the US branch differs.
 
-/** All countries that have a voter-archetype scheme (US + the six seeded countries). */
-const ARCHETYPE_COUNTRY_IDS = ["US", "UK", "JP", "DE", "IE", "CN", "BR"] as const;
+/** All countries that have a voter-archetype scheme (US + seeded international). */
+const ARCHETYPE_COUNTRY_IDS = ["US", "UK", "JP", "DE", "IE", "CN", "BR", "DD"] as const;
 
 /**
  * Voter-archetype categories for a country. US → the 12 `voterGroups` archetypes;
- * UK/JP/DE/IE/CN/BR → their seed voter groups; unknown/NG → US archetypes.
+ * UK/JP/DE/IE/CN/BR/DD → their seed voter groups; unknown/NG → US archetypes.
  */
 export function getVoterArchetypeCategoriesForCountry(
   countryId: string | undefined
