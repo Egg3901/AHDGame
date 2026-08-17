@@ -26,9 +26,71 @@ import { processLabourRelationsTurn } from "./labourRelationsTurn";
 export interface UnionsTurnResult {
   unionsProcessed: number;
   vacatedForInactivity: number;
+  /** Sectors handed to their industry's seeded union this turn (see `adoptUnrepresentedSectors`). */
+  sectorsAdopted: number;
   campaignsMovedToDispute: number;
   agreementsExpired: number;
   mediationsExpired: number;
+}
+
+/**
+ * Give every sector that nobody represents to the seeded union for its
+ * (countryId, sectorType), and report how many were adopted.
+ *
+ * Union dues v1 replaced implicit coverage (a union covered every sector
+ * matching its country and industry) with an explicit
+ * `CorporateSector.representingUnionId` pointer, but nothing ever populated
+ * that pointer for the sectors that already existed. The result on a live world
+ * was that NO sector pointed at any union, so every union had 0 members, 0
+ * average wage, no dues base, and an approval target stuck at the 55 base: the
+ * union pages showed no workers, approval was identical everywhere, and
+ * switching services on changed nothing because there were no represented
+ * sectors to change.
+ *
+ * Doing this in the turn rather than as a one-shot migration is deliberate.
+ * Sectors are created in several places (world seeding, NPP founding, player
+ * expansion), and none of them know about unions, so a migration would fix
+ * today's world and silently leak new unrepresented sectors forever. This is
+ * the same "conversion not reinvention" shape as the roster backfill above.
+ *
+ * Only SEEDED unions adopt (no `foundedByCharacterId`), which is the one union
+ * per industry the partial unique index still guarantees. A sector already
+ * pointing somewhere is never touched, so a rival that won a shop keeps it, and
+ * losing a raid does not hand the shop back on the next turn.
+ */
+export async function adoptUnrepresentedSectors(db: Db): Promise<number> {
+  const unrepresented = await db
+    .collection<CorporateSector>("corporateSectors")
+    .find({ representingUnionId: null }, { projection: { _id: 1, countryId: 1, sectorType: 1 } })
+    .toArray();
+  if (unrepresented.length === 0) return 0;
+
+  const seededUnions = await db
+    .collection<Union>("unions")
+    .find(
+      { foundedByCharacterId: { $exists: false } },
+      { projection: { _id: 1, countryId: 1, sectorType: 1 } }
+    )
+    .toArray();
+  const seededByKey = new Map(seededUnions.map((u) => [`${u.countryId}|${u.sectorType}`, u._id]));
+
+  const now = new Date();
+  const ops = [];
+  for (const sector of unrepresented) {
+    const unionId = seededByKey.get(`${sector.countryId}|${sector.sectorType}`);
+    // No seeded union for this industry (a country the roster never covered)
+    // leaves the sector unrepresented rather than inventing a union for it.
+    if (!unionId) continue;
+    ops.push({
+      updateOne: {
+        filter: { _id: sector._id, representingUnionId: null },
+        update: { $set: { representingUnionId: unionId, updatedAt: now } },
+      },
+    });
+  }
+  if (ops.length === 0) return 0;
+  const result = await db.collection<CorporateSector>("corporateSectors").bulkWrite(ops);
+  return result.modifiedCount ?? 0;
 }
 
 /**
@@ -65,11 +127,13 @@ export interface UnionsTurnResult {
  * itself only touches `unions`/`characters` documents (and reads
  * `corporateSectors`).
  */
+
 export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
   if (!(await isLabourFullMode())) {
     return {
       unionsProcessed: 0,
       vacatedForInactivity: 0,
+      sectorsAdopted: 0,
       campaignsMovedToDispute: 0,
       agreementsExpired: 0,
       mediationsExpired: 0,
@@ -132,6 +196,13 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
       ),
   ]);
 
+  const sectorsAdopted = await adoptUnrepresentedSectors(db);
+  if (sectorsAdopted > 0) {
+    console.warn(
+      `[unionsTurn] adopted ${sectorsAdopted} unrepresented sector(s) into their industry's seeded union`
+    );
+  }
+
   const owned = await db
     .collection<Union>("unions")
     .find(
@@ -154,7 +225,7 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
     .toArray();
 
   if (owned.length === 0) {
-    return { unionsProcessed: 0, vacatedForInactivity: 0, ...labourRelations };
+    return { unionsProcessed: 0, vacatedForInactivity: 0, sectorsAdopted, ...labourRelations };
   }
 
   const now = new Date();
@@ -283,6 +354,7 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
 
   return {
     unionsProcessed: stillOwned.length,
+    sectorsAdopted,
     vacatedForInactivity: vacatedUnionIds.length,
     ...labourRelations,
   };

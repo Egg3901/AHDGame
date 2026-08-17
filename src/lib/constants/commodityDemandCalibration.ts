@@ -37,14 +37,21 @@ export const COMMODITY_DEMAND_CALIBRATION: Record<
   Partial<Record<CommodityType, number>>
 > = {
   "1953": {
-    // measured S/D 0.03 — the worst miscalibration in the economy by an order
-    // of magnitude, and the one the era/base-price interaction explains.
-    advertising: 0.035,
-    // measured 0.11 / 0.13. Both are money-scaled generators (household health
-    // spending, industrial gas draw) against unit-scaled supply.
-    natural_gas: 0.13,
-    healthcare_services: 0.15,
-    // measured 0.40 / 0.50 / 0.50 — same shape, milder.
+    // RECALIBRATED against live prod flow (t185, 2026-08-17). The original
+    // values came from a 400-turn ledger-tier soak that measured deep
+    // SHORTAGES; the live plants-tier world grew supply, and the soak-sized
+    // cuts overshot the three biggest ones into 5-11x GLUTS (advertising S/D
+    // 11.2, healthcare 5.5, natural_gas 5.2 measured live), pinning their
+    // prices at the floor (0.40 / 0.47 / 0.59 of base) and bleeding every
+    // producer of them. New values back-solve the same ~0.9 supply/demand
+    // target from the live figures: mult_new = mult_old * (supply / 0.9) /
+    // demand.
+    advertising: 0.44,
+    natural_gas: 0.74,
+    healthcare_services: 0.92,
+    // Live S/D 1.47 / 1.20 / 0.99 — inside the healthy band, left at the
+    // soak-derived values. Iron is a mild glut (price 0.77); revisit if it
+    // drifts further down.
     iron: 0.45,
     oil: 0.55,
     energy: 0.55,

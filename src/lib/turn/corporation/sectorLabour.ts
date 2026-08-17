@@ -26,6 +26,7 @@ import {
   unionizationDriftTarget,
 } from "@/lib/labour/unionization";
 import { servicesStrikeSoftening } from "@/lib/unions/unionServices";
+import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import type { SectorTurnEnv } from "./sectorTurnTypes";
 
 export interface SectorLabourProductionEffects {
@@ -88,6 +89,27 @@ export interface SectorLabourEconomicsInput {
 export interface SectorLabourEconomicsResult {
   maintenance: number;
   sectorLaborCost: number;
+  /**
+   * Pay for ONE worker in this sector, per real day, which is what union dues
+   * and services are priced against (`annualWageFromDaily` in
+   * `src/lib/unions/unionServices.ts`).
+   *
+   * This exists because the dues model had no producer at all: `wagePerWorker`
+   * was read by `unionDues`/`unionActions`/`processUnionsTurn` and written by
+   * nothing, so every union's `averageAnnualWage` was 0. That made the dues
+   * ceiling 0 (dues could not be set at all), the approval dues penalty 0 (so
+   * approval sat at the 55 base for every union in the world), and the service
+   * bill 0 (services ran free and never lapsed).
+   *
+   * Derivation: `sectorLaborCost` is this sector's whole labour bill for one
+   * turn, so the per-worker per-turn figure is that over the headcount, and a
+   * day is {@link TURNS_PER_DAY} turns. Read back as an annual figure this is
+   * `perTurn × TURNS_PER_YEAR`, which is the same basis the labour bill itself
+   * is charged on, so dues are a true share of pay rather than a scale
+   * mismatch. Undefined when the sector has no workers, so a headcount-less
+   * sector contributes no wage rather than an Infinity.
+   */
+  wagePerWorker?: number;
   newUnionization?: number;
   newWorkerExpectationIndex?: number;
   newStrikeStartedAtTurn?: number | null;
@@ -161,6 +183,12 @@ export function resolveSectorLabourEconomics({
   const result: SectorLabourEconomicsResult = {
     maintenance: split.maintenance,
     sectorLaborCost: split.laborCost,
+    // Per-worker daily pay, the basis union dues and services are priced
+    // against. See the field docs on SectorLabourEconomicsResult.
+    wagePerWorker:
+      computedWorkers > 0 && Number.isFinite(split.laborCost)
+        ? (split.laborCost / computedWorkers) * TURNS_PER_DAY
+        : undefined,
   };
 
   if (!labour.unionsEnabled) return result;
