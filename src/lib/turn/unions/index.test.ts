@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { CorporateSector, Union } from "@/lib/db/types";
-import { processUnionsTurn } from "./index";
+import { adoptUnrepresentedSectors, processUnionsTurn } from "./index";
 import { UNION_STRENGTH_DECAY_PER_TURN } from "@/lib/unions/unionEconomy";
 import {
   approvalTarget,
@@ -492,5 +492,112 @@ describe("processUnionsTurn, safety-net seeding + union-ban suspension", () => {
     expect(unionsFind).toHaveBeenCalledTimes(1);
     const [filter] = unionsFind.mock.calls[0];
     expect(filter).toMatchObject({ ownerId: { $ne: null }, suspended: { $ne: true } });
+  });
+});
+
+describe("adoptUnrepresentedSectors", () => {
+  /**
+   * Mock db for the adoption step alone: corporateSectors.find returns the
+   * unrepresented sectors, unions.find returns the candidate adopters.
+   */
+  function adoptionDb(
+    sectors: { _id: ObjectId; countryId: string; sectorType: string }[],
+    unions: { _id: ObjectId; countryId: string; sectorType: string }[]
+  ) {
+    const bulkWrite = vi.fn().mockImplementation(async (ops: unknown[]) => ({
+      modifiedCount: ops.length,
+    }));
+    const sectorsFind = vi.fn().mockReturnValue({ toArray: async () => sectors });
+    const unionsFind = vi.fn().mockReturnValue({ toArray: async () => unions });
+    const db = {
+      collection: (name: string) => {
+        if (name === "corporateSectors") return { find: sectorsFind, bulkWrite };
+        if (name === "unions") return { find: unionsFind };
+        throw new Error(`unexpected collection ${name}`);
+      },
+    } as unknown as Db;
+    return { db, bulkWrite, sectorsFind, unionsFind };
+  }
+
+  it("hands an unrepresented sector to the seeded union for its country and industry", async () => {
+    const seeded = { _id: new ObjectId(), countryId: "US", sectorType: "manufacturing" };
+    const sectorId = new ObjectId();
+    const { db, bulkWrite } = adoptionDb(
+      [{ _id: sectorId, countryId: "US", sectorType: "manufacturing" }],
+      [seeded]
+    );
+
+    const adopted = await adoptUnrepresentedSectors(db);
+
+    expect(adopted).toBe(1);
+    const [ops] = bulkWrite.mock.calls[0];
+    expect(ops).toHaveLength(1);
+    expect(ops[0].updateOne.update.$set.representingUnionId).toEqual(seeded._id);
+    // Compare-and-swap on the same field, so a concurrent organize drive that
+    // claimed the sector first is not overwritten.
+    expect(ops[0].updateOne.filter).toMatchObject({
+      _id: sectorId,
+      representingUnionId: null,
+    });
+  });
+
+  it("only queries sectors nobody represents, so a won shop is never reassigned", async () => {
+    const { db, sectorsFind } = adoptionDb([], []);
+
+    await adoptUnrepresentedSectors(db);
+
+    expect(sectorsFind).toHaveBeenCalledWith({ representingUnionId: null }, expect.anything());
+  });
+
+  it("never lets a player-founded union adopt: only the seeded one per industry does", async () => {
+    const { db, unionsFind } = adoptionDb(
+      [{ _id: new ObjectId(), countryId: "US", sectorType: "manufacturing" }],
+      []
+    );
+
+    await adoptUnrepresentedSectors(db);
+
+    expect(unionsFind).toHaveBeenCalledWith(
+      { foundedByCharacterId: { $exists: false } },
+      expect.anything()
+    );
+  });
+
+  it("matches on country AND industry, never industry alone", async () => {
+    const usUnion = { _id: new ObjectId(), countryId: "US", sectorType: "manufacturing" };
+    const { db, bulkWrite } = adoptionDb(
+      [
+        { _id: new ObjectId(), countryId: "US", sectorType: "manufacturing" },
+        // Same industry, different country: must NOT inherit the US union.
+        { _id: new ObjectId(), countryId: "UK", sectorType: "manufacturing" },
+        // Same country, different industry: no union seeded for it here.
+        { _id: new ObjectId(), countryId: "US", sectorType: "agriculture" },
+      ],
+      [usUnion]
+    );
+
+    const adopted = await adoptUnrepresentedSectors(db);
+
+    expect(adopted).toBe(1);
+    const [ops] = bulkWrite.mock.calls[0];
+    expect(ops).toHaveLength(1);
+    expect(ops[0].updateOne.update.$set.representingUnionId).toEqual(usUnion._id);
+  });
+
+  it("writes nothing when there is no seeded union for any unrepresented sector", async () => {
+    const { db, bulkWrite } = adoptionDb(
+      [{ _id: new ObjectId(), countryId: "ZZ", sectorType: "manufacturing" }],
+      [{ _id: new ObjectId(), countryId: "US", sectorType: "manufacturing" }]
+    );
+
+    expect(await adoptUnrepresentedSectors(db)).toBe(0);
+    expect(bulkWrite).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing when every sector is already represented", async () => {
+    const { db, bulkWrite } = adoptionDb([], []);
+
+    expect(await adoptUnrepresentedSectors(db)).toBe(0);
+    expect(bulkWrite).not.toHaveBeenCalled();
   });
 });

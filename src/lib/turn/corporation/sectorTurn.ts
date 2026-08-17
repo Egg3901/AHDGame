@@ -1304,6 +1304,7 @@ export function processSector(
   const {
     maintenance,
     sectorLaborCost,
+    wagePerWorker,
     newUnionization,
     newWorkerExpectationIndex,
     newStrikeStartedAtTurn,
@@ -1899,6 +1900,13 @@ export function processSector(
   // unions are enabled, so it's inert (and absent → 0 fallback elsewhere) otherwise.
   if (newUnionization !== undefined) {
     sectorUpdate.unionization = newUnionization;
+  }
+  // Per-worker daily pay: union dues and services are priced as a share of it,
+  // and nothing wrote it before, so every union's average annual wage was 0
+  // (dues ceiling 0, no dues approval penalty, free services). Written whenever
+  // the wage leg ran and the sector has a headcount.
+  if (wagePerWorker !== undefined) {
+    sectorUpdate.wagePerWorker = wagePerWorker;
   }
   // v3 Phase 6: persist the worker-expectation trend + strike state. Only
   // written when the strike computation actually ran above (requires both
