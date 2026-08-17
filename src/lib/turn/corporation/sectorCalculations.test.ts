@@ -673,7 +673,12 @@ describe("corporate tax deduction", () => {
     expect(snapshot.stateTaxPaid).toBeCloseTo(0, 2);
   });
 
-  it("profitable sector pays tax even when corp has net loss (nexus-based mixed margin)", () => {
+  it("consolidated loss offset zeroes tax when the corp runs a net loss (owner decision 2026-08-17)", () => {
+    // REVERSES the previous nexus-based rule ("profitable sector pays tax even
+    // when corp has net loss"). Observed live t176: per-sector taxation with no
+    // loss offset had one diversified corp paying 8x its consolidated revenue
+    // in tax. Losses now net against profits across the group; per-sector
+    // attribution scales proportionally (see lossOffsetScale).
     // CA sector profitable (margin 50% on 1000/turn → opIncome 500)
     // TX sector low margin (margin 10% on 1000/turn → opIncome 100)
     // Heavy marketing pushes corp-total into loss but CA sector stays net-positive.
@@ -707,14 +712,50 @@ describe("corporate tax deduction", () => {
 
     // corpRevenue = 2000, sectorOperatingTotal = 600, corpLevelCosts = 700
     // Revenue share each 0.5 → each sector allocated 350
-    // CA net = 500 - 350 = 150 (pays); TX net = 100 - 350 = -250 (zero)
-    // US fed tax: 150 × 0.20 = 30
-    // CA state tax: 150 × 0.10 = 15
+    // CA net = 500 - 350 = 150; TX net = 100 - 350 = -250
+    // Consolidated net = -100 → lossOffsetScale = 0 → no tax anywhere.
     const snapshot = result.corpSnapshots[0];
-    expect(snapshot.federalTaxPaid).toBeCloseTo(30, 1);
-    expect(snapshot.stateTaxPaid).toBeCloseTo(15, 1);
+    expect(snapshot.federalTaxPaid).toBeCloseTo(0, 5);
+    expect(snapshot.stateTaxPaid).toBeCloseTo(0, 5);
     // Corp overall: incomePreDividends = 600 - 700 = -100 (net loss)
     expect(snapshot.incomePreDividends).toBeLessThan(0);
+  });
+
+  it("partial loss offset scales profitable sectors' tax pro-rata", () => {
+    const corp = makeCorp({
+      headquartersState: "US-CA",
+      countryId: "US",
+      marketingBudget: 300 * 24, // daily budget → 300/turn corp-level cost
+    });
+    const caSector = makeSector(corp._id, {
+      stateId: "US-CA",
+      countryId: "US",
+      revenue: 24_000, // 1000/turn
+      profitMargin: 50, // opIncome 500
+      targetGrowthRate: 0,
+      currentGrowthRate: 0,
+    });
+    const txSector = makeSector(corp._id, {
+      stateId: "US-TX",
+      countryId: "US",
+      revenue: 24_000, // 1000/turn
+      profitMargin: 10, // opIncome 100
+      targetGrowthRate: 0,
+      currentGrowthRate: 0,
+    });
+    const lookups = baseLookups([corp], [caSector, txSector]);
+    lookups.domesticCorpTaxRateByCountry.set("US", 20);
+    lookups.domesticStateCorpTaxRateByState.set("US-CA", 10);
+    lookups.domesticStateCorpTaxRateByState.set("US-TX", 0);
+
+    const result = processSectors(lookups, 1, new Date());
+
+    // Each sector allocated 150 of corp costs: CA net = 350, TX net = -50.
+    // Consolidated = 300, gross positive = 350 → scale = 6/7.
+    // CA taxable = 350 × 6/7 = 300 → fed 60, CA state 30.
+    const snapshot = result.corpSnapshots[0];
+    expect(snapshot.federalTaxPaid).toBeCloseTo(60, 1);
+    expect(snapshot.stateTaxPaid).toBeCloseTo(30, 1);
   });
 
   it("uses 0% when a sector's state/country rate is missing (fail-open)", () => {

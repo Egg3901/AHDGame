@@ -475,11 +475,35 @@ export function processSectors(
           ? (corpLegalStructure.taxMultiplier ?? 1)
           : 1;
 
+    // Consolidated loss offset. Taxing each sector's positive income in
+    // isolation (`max(0, sectorNetIncome)`) meant a diversified corp's losses
+    // offset NOTHING: live t176, Lockheed Chemicals owed 944k/turn of tax on
+    // 122k/turn of consolidated revenue — its chemical plants taxed gross
+    // while its farming losses were invisible to the base, ~80% of all US
+    // corporate tax from one structurally loss-making company. Standard
+    // consolidated filing nets losses against profits within the group, so:
+    // scale every sector's taxable income by consolidated ÷ gross-positive.
+    // Per-sector state/country ATTRIBUTION is preserved proportionally; a
+    // corp with no losing sectors has scale = 1 and is byte-identical.
+    let grossPositiveTaxable = 0;
+    let consolidatedNet = 0;
+    for (const s of sectorResults) {
+      const revenueShare = corpRevenue > 0 ? s.hourlyRevenue / corpRevenue : 0;
+      const sectorNetIncome =
+        s.hourlyRevenue * (s.effectiveMargin / 100) - corpLevelCosts * revenueShare;
+      consolidatedNet += sectorNetIncome;
+      if (sectorNetIncome > 0) grossPositiveTaxable += sectorNetIncome;
+    }
+    const lossOffsetScale =
+      grossPositiveTaxable > 0
+        ? Math.max(0, Math.min(1, consolidatedNet / grossPositiveTaxable))
+        : 0;
+
     for (const s of sectorResults) {
       const revenueShare = corpRevenue > 0 ? s.hourlyRevenue / corpRevenue : 0;
       const sectorOpIncome = s.hourlyRevenue * (s.effectiveMargin / 100);
       const sectorNetIncome = sectorOpIncome - corpLevelCosts * revenueShare;
-      const sectorTaxable = Math.max(0, sectorNetIncome);
+      const sectorTaxable = Math.max(0, sectorNetIncome) * lossOffsetScale;
       if (sectorTaxable <= 0) continue;
       // Domestic = corp HQ'd in the same country as this sector.
       // Foreign = corp HQ'd elsewhere; pays the host country's foreign rate.
