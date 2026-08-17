@@ -19,14 +19,12 @@ vi.mock("@/lib/currency/corporationCapital", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/currency/corporationCapital")>();
   return {
     ...actual,
-    loadFxRatesByCurrency: vi
-      .fn()
-      .mockResolvedValue(
-        new Map([
-          ["USD", USD_PER_ANCHOR],
-          ["JPY", JPY_PER_ANCHOR],
-        ])
-      ),
+    loadFxRatesByCurrency: vi.fn().mockResolvedValue(
+      new Map([
+        ["USD", USD_PER_ANCHOR],
+        ["JPY", JPY_PER_ANCHOR],
+      ])
+    ),
   };
 });
 

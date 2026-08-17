@@ -42,7 +42,6 @@ const REASON_MESSAGE: Record<UnlockBlockReason, string> = {
   "insufficient-cash": "Not enough cash to unlock this technology.",
 };
 
-
 /**
  * Core logic for unlocking a sector tech-tree node (v2).
  *
