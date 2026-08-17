@@ -323,7 +323,11 @@ describe("onBillEnacted", () => {
 
     const updateCall = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
     expect(updateCall, "federalBudget.updateOne should have been called").toBeTruthy();
-    expect(updateCall[1].$set.taxRates.salesTax).toBe(5);
+    // Ramped: 0 to 5 is a large move, so it steps one point this turn and
+    // records 5 as the destination. The regression this guards is that the
+    // provision applies AT ALL, which it now demonstrably does.
+    expect(updateCall[1].$set.taxRates.salesTax).toBe(1);
+    expect(updateCall[1].$set["taxRatePhaseIn.salesTax"]).toBe(5);
   });
 
   it("uses policyOptionId for matching when provided", async () => {
@@ -762,11 +766,12 @@ describe("onBillEnacted", () => {
       expect(calculateFederalRevenue).toHaveBeenCalled();
       expect(calculateStateRevenue).not.toHaveBeenCalled();
       const updateCall = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
-      // Domestic rate moved; foreign stays at 21.
+      // Domestic rate moved (21 toward 15, one point this turn); foreign stays at 21.
       expect(updateCall[1].$set.taxRates).toMatchObject({
-        domesticCorporateTax: 15,
+        domesticCorporateTax: 20,
         foreignCorporateTax: 21,
       });
+      expect(updateCall[1].$set["taxRatePhaseIn.domesticCorporateTax"]).toBe(15);
     });
 
     it("enacting a federal foreign corp tax bill moves only the foreign rate", async () => {
@@ -811,7 +816,7 @@ describe("onBillEnacted", () => {
       const updateCall = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
       expect(updateCall[1].$set.taxRates).toMatchObject({
         domesticCorporateTax: 21,
-        foreignCorporateTax: 40,
+        foreignCorporateTax: 22, // 21 toward 40, one point per turn
       });
     });
 
@@ -892,7 +897,7 @@ describe("onBillEnacted", () => {
       expect(updateCall[0]).toEqual({ _id: "UK" });
       expect(updateCall[1].$set.taxRates).toMatchObject({
         domesticCorporateTax: 19,
-        foreignCorporateTax: 45,
+        foreignCorporateTax: 20, // 19 toward 45, one point per turn
       });
     });
 
@@ -954,7 +959,7 @@ describe("onBillEnacted", () => {
       const updateCall = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
       expect(updateCall[0]).toEqual({ _id: "UK" });
       expect(updateCall[1].$set.taxRates).toMatchObject({
-        salesTax: 5,
+        salesTax: 1, // 0 toward 5, one point per turn
         // Unrelated lines are untouched.
         incomeTax: 36,
         tariffs: 0,
@@ -1004,7 +1009,7 @@ describe("onBillEnacted", () => {
       expect(updateCall[0]).toEqual({ _id: "JP" });
       expect(updateCall[1].$set.taxRates).toMatchObject({
         domesticCorporateTax: 23,
-        foreignCorporateTax: 52,
+        foreignCorporateTax: 24, // 23 toward 52, one point per turn
       });
     });
 
@@ -1051,7 +1056,7 @@ describe("onBillEnacted", () => {
       const updateCall = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
       expect(updateCall[0]).toEqual({ _id: "DE" });
       expect(updateCall[1].$set.taxRates).toMatchObject({
-        incomeTax: 48,
+        incomeTax: 43, // 42 toward 48, one point per turn
         domesticCorporateTax: 15,
         foreignCorporateTax: 15,
       });

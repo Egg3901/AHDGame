@@ -345,6 +345,18 @@ export interface FederalBudget {
   fiscalYear: number;
   revenue: FederalRevenue;
   taxRates: FederalTaxRates;
+  /**
+   * Ticket #1102: rates an enacted bill is still ramping toward, keyed by tax
+   * type. `taxRates` holds what is being charged right now and remains the only
+   * figure anything else reads; this is purely the destination.
+   *
+   * A large enacted change moves at most a point per turn (see
+   * `advanceTaxRatePhaseIn` in `@/lib/budget/taxRatePhaseIn`) so a correction
+   * cannot shock an economy the way the Poon Choi Act's belated five-point jump
+   * did. Entries delete themselves once the target is reached, so an absent or
+   * empty map means nothing is in flight.
+   */
+  taxRatePhaseIn?: Partial<Record<keyof FederalTaxRates, number>>;
   taxBases: FederalTaxBases;
   economicFactors: EconomicGrowthFactors;
   spending: FederalSpending;
