@@ -86,8 +86,16 @@ export function SectorMarginDrilldown({
     { label: "Metric effects", value: sector.stateMetricsModifier },
     { label: "Regional conditions", value: sector.regionalConditionsModifier },
   ];
+  // Physical basis keeps every modifier visible, but commodity pressure is the
+  // one influence the physical model prices DIRECTLY (it is the inputs line and
+  // the sale price), so its row is relabeled to say where it went instead of
+  // implying it still adds percentage points.
+  const physicalBasis = sector.marginBasis === "physical" && sector.physicalCosts != null;
   const corporateRows: ModRow[] = [
-    { label: "Commodity markets", value: sector.commodityModifier },
+    {
+      label: physicalBasis ? "Commodity markets (priced into inputs & sales)" : "Commodity markets",
+      value: sector.commodityModifier,
+    },
     { label: "Home location", value: sector.homeLocationModifier },
     { label: "Foreign tariff", value: sector.foreignTariffModifier },
     { label: "Tariff friction", value: sector.domesticTariffMalus },
@@ -108,6 +116,14 @@ export function SectorMarginDrilldown({
     0
   );
   const otherFactors = net != null ? net - sumShown : null;
+
+  // Physical basis (plants): the effective margin is DERIVED from what the
+  // sector actually pays (inputs, wages, upkeep), not from the additive
+  // modifier stack (ticket 1072: a 40pt unexplained gap). The cost build is the
+  // headline and reconciles exactly; every modifier stays visible below it,
+  // reframed as the influences that steer those costs rather than percentage
+  // points that sum to the margin.
+  const physical = physicalBasis ? sector.physicalCosts! : null;
 
   const policyLevel = sector.productionPolicyLevel ?? 0;
   const policyTarget = sector.productionPolicy ?? 0;
@@ -138,13 +154,50 @@ export function SectorMarginDrilldown({
           </span>
         </div>
 
-        <div className="flex items-center justify-between border-b border-card-border py-1 text-[12px]">
-          <span className="text-foreground">Base sector margin</span>
-          <span className="font-semibold tabular-nums text-foreground">
-            {base != null ? `${base.toFixed(1)}%` : "—"}
-          </span>
-        </div>
+        {physical ? (
+          <>
+            <div className="flex items-center justify-between border-b border-card-border py-1 text-[12px]">
+              <span className="text-foreground">Realized revenue</span>
+              <span className="font-semibold tabular-nums text-foreground">100.0%</span>
+            </div>
+            <div className="pt-2">
+              <div className="mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+                What this sector pays
+              </div>
+              <ModifierLine label="Inputs (at market prices)" value={-physical.inputsPp} />
+              {physical.laborPp != null && <ModifierLine label="Wages" value={-physical.laborPp} />}
+              <ModifierLine label="Upkeep, taxes & other operating" value={-physical.otherPp} />
+            </div>
+            <div className="mt-2 flex items-center justify-between border-t border-card-border pt-2 text-[12px]">
+              <span className="font-semibold text-foreground">Effective margin</span>
+              <span
+                className={`font-bold tabular-nums ${effective >= 0 ? "text-success" : "text-error"}`}
+              >
+                {effective.toFixed(1)}%
+              </span>
+            </div>
+            <p className="mt-2 text-[11px] leading-snug text-muted">
+              This margin comes from real costs, so the cost lines above always add up to it. The
+              influences listed below steer those costs and your prices instead of adding percentage
+              points directly.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between border-b border-card-border py-1 text-[12px]">
+              <span className="text-foreground">Base sector margin</span>
+              <span className="font-semibold tabular-nums text-foreground">
+                {base != null ? `${base.toFixed(1)}%` : "—"}
+              </span>
+            </div>
+          </>
+        )}
 
+        {physical && (
+          <div className="mt-3 mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+            What shapes those costs
+          </div>
+        )}
         <div className="space-y-2 pt-2">
           <Group title="State conditions" rows={stateRows} />
           {sector.regionalConditionModifiers && sector.regionalConditionModifiers.length > 0 && (
@@ -167,7 +220,7 @@ export function SectorMarginDrilldown({
           )}
           <Group title="Corporate factors" rows={corporateRows} />
           <Group title="National economy" rows={nationalRows} />
-          {otherFactors != null && Math.abs(otherFactors) >= 0.05 && (
+          {!physical && otherFactors != null && Math.abs(otherFactors) >= 0.05 && (
             <div>
               <div className="mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
                 Other factors
@@ -187,7 +240,7 @@ export function SectorMarginDrilldown({
           )}
         </div>
 
-        {net != null && (
+        {!physical && net != null && (
           <div className="mt-2 flex items-center justify-between border-t border-card-border pt-2 text-[12px]">
             <span className="font-semibold text-foreground">Net modifiers</span>
             <span className={`font-bold tabular-nums ${net >= 0 ? "text-success" : "text-error"}`}>
