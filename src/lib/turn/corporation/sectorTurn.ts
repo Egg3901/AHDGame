@@ -1547,7 +1547,7 @@ export function processSector(
     Number.isFinite(sector.otherOpexPerUnitAnchor)
       ? sector.otherOpexPerUnitAnchor
       : null;
-  // In-flight auto-retoools historically rescaled capitalStock but left this
+  // In-flight auto-retools historically rescaled capitalStock but left this
   // per-unit residual on the old unit basis. Heal on the next sector-turn
   // write while transitionFromStrategyId evidence remains; no mongo script.
   const healedOpex = healAutoRetoolOpexAnchor({

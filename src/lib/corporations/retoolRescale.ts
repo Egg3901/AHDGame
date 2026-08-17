@@ -59,7 +59,7 @@ export function retoolRescaleFields(input: RetoolRescaleInput): RetoolRescaleSet
 }
 
 /**
- * One-shot correction for in-flight auto-retoools that rescaled `capitalStock`
+ * One-shot correction for in-flight auto-retools that rescaled `capitalStock`
  * but left `otherOpexPerUnitAnchor` on the old unit basis.
  *
  * Discriminator: player `setSectorStrategy` always writes `retoolRescaleApplied`
