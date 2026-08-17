@@ -9,6 +9,12 @@ import {
   RELOCATION_COST_FRACTION,
   CROSS_COUNTRY_RELOCATION_MULTIPLIER,
 } from "@/lib/constants/corporations";
+import {
+  RELOCATION_COOLDOWN_DAYS,
+  RELOCATION_COOLDOWN_TURNS,
+  relocationCooldownButtonLabel,
+  relocationCooldownWaitCopy,
+} from "@/lib/character/relocationCooldown";
 
 interface CorpRelocation {
   corpId: string;
@@ -24,6 +30,7 @@ interface CorpRelocation {
 
 interface RelocationStatus {
   canRelocate: boolean;
+  remainingTurns: number;
   cooldownRemainingDays: number | null;
   hasOffice: boolean;
   /** State/region-bound office — resigned on any move. National offices only resign on country change. */
@@ -94,6 +101,7 @@ export function RelocateButton({
       .then((data) => {
         setStatus({
           canRelocate: data.canRelocate ?? false,
+          remainingTurns: data.remainingTurns ?? 0,
           cooldownRemainingDays: data.cooldownRemainingDays ?? null,
           hasOffice: data.hasOffice ?? false,
           officeRequiresStateResidency: data.officeRequiresStateResidency ?? false,
@@ -131,11 +139,14 @@ export function RelocateButton({
   const canMoveCorp =
     !!corp && !corp.isImperialCeo && (payment === "cash" ? canPayCash : canIssueBond);
 
-  const cooldownActive = status?.cooldownRemainingDays != null;
-  const disabled = !status?.canRelocate || cooldownActive;
-  const tooltip = cooldownActive
-    ? `Cooldown: ${status!.cooldownRemainingDays} day(s) remaining`
-    : undefined;
+  const remainingTurns = status?.remainingTurns ?? 0;
+  const cooldownActive = remainingTurns > 0 || status?.cooldownRemainingDays != null;
+  const cooldownLabel = cooldownActive
+    ? relocationCooldownButtonLabel(remainingTurns, status?.cooldownRemainingDays ?? null)
+    : "Relocate here";
+  const cooldownWaitCopy = cooldownActive
+    ? relocationCooldownWaitCopy(remainingTurns, status?.cooldownRemainingDays ?? null)
+    : "";
 
   const { generalElections, statePartyElections } = status?.activeCandidacies ?? {
     generalElections: 0,
@@ -231,14 +242,38 @@ export function RelocateButton({
           setCorpChoice(null);
           setConfirming(true);
         }}
-        disabled={disabled}
-        title={tooltip}
+        aria-label={cooldownActive ? `${cooldownLabel}. ${cooldownWaitCopy}` : "Relocate here"}
         className="h-9 min-w-0 shrink-0 border-card-border/80 bg-card/80 text-foreground shadow-panel backdrop-blur-sm hover:bg-card-elevated"
       >
-        Relocate here
+        {cooldownLabel}
       </Button>
 
-      {confirming && (
+      {confirming && cooldownActive && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => !loading && resetConfirmState()}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-card-border bg-card p-6 shadow-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Relocation cooldown"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-foreground">Relocation cooldown</h3>
+            <p className="mt-3 text-sm text-muted">
+              Relocation has a 3-day cooldown after each move. {cooldownWaitCopy}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={resetConfirmState}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirming && !cooldownActive && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onClick={() => !loading && resetConfirmState()}
@@ -304,6 +339,10 @@ export function RelocateButton({
                     {corp!.corpName} will relocate with you at no cost.
                   </li>
                 )}
+                <li className="text-warning">
+                  You will not be able to relocate again for {RELOCATION_COOLDOWN_DAYS} days (
+                  {RELOCATION_COOLDOWN_TURNS} turns).
+                </li>
               </ul>
               <p className="pt-2 text-xs">
                 Campaign funds, personal cash, savings, actions, policies, and career history are

@@ -30,6 +30,38 @@ const NOT_ON_COOLDOWN: RelocationCooldownStatus = {
   cooldownUntil: null,
 };
 
+/** Compact control label while a relocation cooldown is active. */
+export function relocationCooldownButtonLabel(
+  remainingTurns: number,
+  cooldownRemainingDays: number | null
+): string {
+  if (remainingTurns > 0 && remainingTurns < TURNS_PER_DAY) {
+    return remainingTurns === 1 ? "Relocate in 1 hour" : `Relocate in ${remainingTurns} hours`;
+  }
+  const days =
+    cooldownRemainingDays ?? (remainingTurns > 0 ? Math.ceil(remainingTurns / TURNS_PER_DAY) : 0);
+  if (days <= 0) return "Relocate here";
+  return days === 1 ? "Relocate in 1 day" : `Relocate in ${days} days`;
+}
+
+/** Dialog / helper copy explaining why relocate is blocked. */
+export function relocationCooldownWaitCopy(
+  remainingTurns: number,
+  cooldownRemainingDays: number | null
+): string {
+  if (remainingTurns > 0 && remainingTurns < TURNS_PER_DAY) {
+    return remainingTurns === 1
+      ? "You can relocate again in 1 hour."
+      : `You can relocate again in ${remainingTurns} hours.`;
+  }
+  const days =
+    cooldownRemainingDays ?? (remainingTurns > 0 ? Math.ceil(remainingTurns / TURNS_PER_DAY) : 0);
+  if (days <= 0) return "";
+  return days === 1
+    ? "You can relocate again in 1 day."
+    : `You can relocate again in ${days} days.`;
+}
+
 /**
  * Relocation cooldown status. Turn-first (`lastRelocatedTurn` + 72 turns); falls
  * back to the legacy `lastRelocatedAt` Date only when the turn field is absent.
