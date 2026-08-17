@@ -58,6 +58,7 @@ import {
   serializePartyOrg,
 } from "./regionData";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { getRegionOfficialBuckets } from "@/lib/legislature/chamberOfficeType";
 
 interface Props {
   params: Promise<{ code: string; id: string }>;
@@ -418,9 +419,9 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
     : false;
 
   // Map country-specific office types to the generic officials buckets.
-  // US: senate → senators, house → houseReps, stateSenate → stateSenators
-  // JP: sangiin → senators, shugiin → houseReps (no stateSenate equivalent)
-  // Other parliamentary: lowerChamber → houseReps, upperChamber → senators
+  // Chamber keys are not always the stored officeType (DD volkskammer vs
+  // volkskammerDeputy, CN npc vs npcDelegate) — getRegionOfficialBuckets
+  // unions both so seated deputies actually appear (ticket #1121).
   const countryConfig = getCountryConfig(countryId);
 
   // Region major parties (with positions) for the Demographics dossier's
@@ -455,14 +456,7 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
     socialPosition: p.socialPosition ?? 0,
   }));
 
-  const upperChamberKey = countryConfig.legislature?.upperChamber?.key;
-  const lowerChamberKey = countryConfig.legislature?.lowerChamber?.key;
-
-  const subNationalChamberKey = countryConfig.subNationalChamber?.key;
-
-  const senatorTypes = new Set(["senate", upperChamberKey].filter(Boolean));
-  const houseRepTypes = new Set(["house", lowerChamberKey].filter(Boolean));
-  const stateSenatorTypes = new Set(["stateSenate", subNationalChamberKey].filter(Boolean));
+  const { senatorTypes, houseRepTypes, stateSenatorTypes } = getRegionOfficialBuckets(countryId);
 
   const serializeOfficial = (o: (typeof officials)[number]) => ({
     ...o,

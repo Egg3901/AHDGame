@@ -198,4 +198,26 @@ export const REGION_CENSUS_LABELS: Partial<Record<CountryId, CensusLabelSet>> = 
     income: { ...INCOME_TIERS },
     urbanization: { urban: "Urban", suburban: "Peri-urban", rural: "Rural" },
   },
+  DD: {
+    cardTitles: {
+      ethnicity: "Ethnicity",
+      age: "Age Distribution",
+      education: "Education (Highest)",
+      income: "Household Income",
+      urbanization: "Urbanization",
+    },
+    ethnicity: {
+      german: "German",
+      other: "Other",
+    },
+    age: { ...AGE_LABELS },
+    education: {
+      primary_or_below: "Primary or below",
+      secondary: "Secondary",
+      vocational: "Vocational",
+      university: "University",
+    },
+    income: { ...INCOME_TIERS },
+    urbanization: { ...URBAN_3 },
+  },
 };
