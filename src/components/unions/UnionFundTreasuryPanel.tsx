@@ -83,7 +83,7 @@ export function UnionFundTreasuryPanel({
       <p className="text-sm text-muted">
         The treasury is the union&apos;s own money. It comes in from dues every turn, and it pays
         for services, organizing drives and bargaining campaigns. A union with an empty treasury
-        cannot act, so the president can put their own money in to get it started.
+        cannot act, so the president can back it out of their campaign funds to get it started.
       </p>
 
       {isHead && (
@@ -93,7 +93,7 @@ export function UnionFundTreasuryPanel({
               htmlFor="union-fund-amount"
               className="text-[11px] uppercase tracking-wider text-muted"
             >
-              Contribute from personal cash
+              Contribute from campaign funds
             </label>
             <input
               id="union-fund-amount"

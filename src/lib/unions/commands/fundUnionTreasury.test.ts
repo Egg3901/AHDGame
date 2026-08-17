@@ -11,7 +11,7 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     _id: new ObjectId(),
     name: "President",
     countryId: "US",
-    cashOnHand: 50_000,
+    funds: 50_000,
     ...overrides,
   } as unknown as Character;
 }
@@ -31,7 +31,7 @@ function makeUnion(ownerId: ObjectId | null, overrides: Partial<Union> = {}): Un
 function fundDb(
   union: Union,
   options: {
-    /** Character cash balance is enforced by the $gte filter in the real helper. */
+    /** Campaign-funds balance is enforced by the $gte filter on the debit. */
     funded?: boolean;
     creditModified?: number;
     isProcessing?: boolean;
@@ -39,7 +39,7 @@ function fundDb(
 ) {
   const characterUpdate = vi
     .fn()
-    .mockResolvedValue(options.funded === false ? null : { cashOnHand: 40_000 });
+    .mockResolvedValue(options.funded === false ? null : { funds: 40_000 });
   const characterRefund = vi.fn().mockResolvedValue({});
   const unionUpdate = vi.fn().mockResolvedValue({ modifiedCount: options.creditModified ?? 1 });
   const db = {
@@ -71,7 +71,7 @@ function fundDb(
 }
 
 describe("fundUnionTreasury", () => {
-  it("moves personal cash into the treasury of the union the caller leads", async () => {
+  it("moves campaign funds into the treasury of the union the caller leads", async () => {
     const character = makeCharacter();
     const union = makeUnion(character._id, { treasury: 250 });
     const { db, unionUpdate } = fundDb(union);
@@ -84,7 +84,7 @@ describe("fundUnionTreasury", () => {
     expect(update.$inc).toEqual({ treasury: 1_000 });
   });
 
-  it("debits the character before crediting the union, so the money is never created", async () => {
+  it("debits campaign funds before crediting the union, so the money is never created", async () => {
     const character = makeCharacter();
     const union = makeUnion(character._id);
     const { db, characterUpdate, unionUpdate } = fundDb(union);
@@ -97,7 +97,7 @@ describe("fundUnionTreasury", () => {
     // The debit is the conditional single-document guard, so two concurrent
     // contributions cannot both pass on a stale balance.
     const [debitFilter] = characterUpdate.mock.calls[0];
-    expect(debitFilter).toMatchObject({ _id: character._id, cashOnHand: { $gte: 500 } });
+    expect(debitFilter).toMatchObject({ _id: character._id, funds: { $gte: 500 } });
   });
 
   it("refuses and spends nothing when the caller cannot afford it", async () => {
@@ -121,7 +121,7 @@ describe("fundUnionTreasury", () => {
     expect(result).toMatchObject({ ok: false, status: 500 });
     expect(characterRefund).toHaveBeenCalledTimes(1);
     const [, refund] = characterRefund.mock.calls[0];
-    expect(refund.$inc).toEqual({ cashOnHand: 750 });
+    expect(refund.$inc).toEqual({ funds: 750 });
   });
 
   it("rejects a character who does not lead this union", async () => {

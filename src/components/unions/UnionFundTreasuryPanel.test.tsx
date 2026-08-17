@@ -35,7 +35,7 @@ describe("UnionFundTreasuryPanel", () => {
     const onFunded = vi.fn();
     render(panel({ onFunded }));
 
-    fireEvent.change(screen.getByLabelText(/contribute from personal cash/i), {
+    fireEvent.change(screen.getByLabelText(/contribute from campaign funds/i), {
       target: { value: "5000" },
     });
     fireEvent.click(screen.getByRole("button", { name: /fund treasury/i }));
@@ -51,7 +51,7 @@ describe("UnionFundTreasuryPanel", () => {
     render(panel({ isHead: false }));
 
     expect(screen.queryByRole("button", { name: /fund treasury/i })).toBeNull();
-    expect(screen.queryByLabelText(/contribute from personal cash/i)).toBeNull();
+    expect(screen.queryByLabelText(/contribute from campaign funds/i)).toBeNull();
   });
 
   it("keeps the button disabled until the amount is a usable number", () => {
@@ -60,12 +60,12 @@ describe("UnionFundTreasuryPanel", () => {
     const button = screen.getByRole("button", { name: /fund treasury/i }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
 
-    fireEvent.change(screen.getByLabelText(/contribute from personal cash/i), {
+    fireEvent.change(screen.getByLabelText(/contribute from campaign funds/i), {
       target: { value: "0" },
     });
     expect(button.disabled).toBe(true);
 
-    fireEvent.change(screen.getByLabelText(/contribute from personal cash/i), {
+    fireEvent.change(screen.getByLabelText(/contribute from campaign funds/i), {
       target: { value: "10" },
     });
     expect(button.disabled).toBe(false);
@@ -83,7 +83,7 @@ describe("UnionFundTreasuryPanel", () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
     render(panel());
 
-    fireEvent.change(screen.getByLabelText(/contribute from personal cash/i), {
+    fireEvent.change(screen.getByLabelText(/contribute from campaign funds/i), {
       target: { value: "100" },
     });
     fireEvent.click(screen.getByRole("button", { name: /fund treasury/i }));

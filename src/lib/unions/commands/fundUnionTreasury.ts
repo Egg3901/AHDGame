@@ -1,5 +1,5 @@
 /**
- * Put personal money into the treasury of a union you lead.
+ * Move CAMPAIGN FUNDS into the treasury of a union you lead.
  *
  * Player ticket #1121 asked "how do I send money to a union", while still
  * building one, and the honest answer was that there was no way at all. Dues
@@ -9,20 +9,21 @@
  * to act with it. Ticket #1112 ("what is the treasury and how do I get more of
  * it") is the same gap read from the other side.
  *
- * Head-only on purpose. Letting any character push cash into any union would be
- * a clean channel for moving money between players with no trace of why, which
- * is exactly the shape of the alt-funding rings the forensics work exists to
- * catch. A head funding their own union is a leader spending their own money on
- * their own project, and it is already visible as a treasury movement.
+ * Campaign funds rather than personal wealth, matching what founding costs.
+ * Backing a union is political spending, so it comes out of the same war chest
+ * that pays for campaigning and direct action. Personal wealth is deliberately
+ * not a route in: it would let a rich character bankroll an industry's labour
+ * movement out of pocket, and it would make the treasury a laundering path
+ * between a character's own balances.
+ *
+ * Head-only on purpose. Letting any character push money into any union would be
+ * a clean channel for moving funds between players with no trace of why, which is
+ * exactly the shape of the alt-funding rings the forensics work exists to catch.
  */
 import type { Db } from "mongodb";
 import type { Character, Union } from "@/lib/db/types";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
-import {
-  atomicallyDebitCharacterCash,
-  refundCharacterCash,
-} from "@/lib/financialTxLog/atomicCashGuard";
 import { rejectIfTurnProcessing, resolveOwnedUnion } from "./unionActions";
 import type { UnionActionResult } from "./unionActions";
 
@@ -67,18 +68,29 @@ export async function fundUnionTreasury(
 
   const forexEnabled = await isForexEnabled();
   const homeCurrency = getHomeCurrency(character);
-  const debit = await atomicallyDebitCharacterCash(
-    db,
-    character._id,
-    homeCurrency,
-    contribution,
-    forexEnabled
-  );
-  if (!debit.ok) {
+  // Campaign funds live in `currencyBalances.campaign` post-forex and on the
+  // legacy `funds` field before it, the same resolution `directAction` does.
+  const useForexCampaignBalance =
+    forexEnabled && typeof character.currencyBalances?.campaign === "number";
+  const campaignFundsField = useForexCampaignBalance ? "currencyBalances.campaign" : "funds";
+
+  // Conditional single-document debit: two concurrent contributions can never
+  // both pass on a stale balance, and the balance can never go negative.
+  const debited = await db
+    .collection<Character>("characters")
+    .findOneAndUpdate(
+      { _id: character._id, [campaignFundsField]: { $gte: contribution } },
+      { $inc: { [campaignFundsField]: -contribution }, $set: { updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+  if (!debited) {
+    const available = useForexCampaignBalance
+      ? (character.currencyBalances?.campaign ?? 0)
+      : (character.funds ?? 0);
     return {
       ok: false,
       status: 402,
-      error: `You do not have ${contribution.toLocaleString()} ${homeCurrency} on hand.`,
+      error: `You do not have ${contribution.toLocaleString()} ${homeCurrency} in campaign funds (you have ${Math.floor(available).toLocaleString()}).`,
     };
   }
 
@@ -93,7 +105,11 @@ export async function fundUnionTreasury(
       throw new Error("union treasury credit matched no document");
     }
   } catch {
-    await refundCharacterCash(db, character._id, homeCurrency, contribution, forexEnabled);
+    // Pure $inc back, never gated on balance, so the refund cannot itself fail
+    // the way the guarded debit can.
+    await db
+      .collection<Character>("characters")
+      .updateOne({ _id: character._id }, { $inc: { [campaignFundsField]: contribution } });
     return {
       ok: false,
       status: 500,

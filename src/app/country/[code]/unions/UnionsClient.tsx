@@ -86,6 +86,8 @@ export function UnionsClient() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notEnabled, setNotEnabled] = useState(false);
   const [foundOpen, setFoundOpen] = useState(false);
+  /** Founding costs as the server prices them, so the modal cannot quote a stale figure. */
+  const [founding, setFounding] = useState<{ costLocal: number; actionCost: number } | null>(null);
 
   // Also callable on demand (not just on mount/country change) so a newly
   // founded union appears in the list without a full page reload.
@@ -107,6 +109,7 @@ export function UnionsClient() {
       }
       setRows(data.unions ?? []);
       setBannedCountries(data.bannedCountries ?? []);
+      setFounding(data.founding ?? null);
     } catch {
       if (!signal?.cancelled) setLoadError("Network error loading unions.");
     } finally {
@@ -409,6 +412,8 @@ export function UnionsClient() {
         onFounded={loadLeaderboard}
         countryId={countryId}
         countryName={countryName}
+        foundingCostLocal={founding?.costLocal}
+        foundingActionCost={founding?.actionCost}
       />
     </main>
   );

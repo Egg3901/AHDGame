@@ -18,6 +18,9 @@ import { isLabourFullMode } from "@/lib/labour/featureFlag";
 import { genericUnionName } from "@/lib/unions/unionNames";
 import { resolveUnionOwners } from "@/lib/unions/unionOwnerDisplay";
 import { unionApproval, unionMembers } from "@/lib/unions/unionDues";
+import { UNION_FOUNDING_ACTION_COST, unionFoundingCostLocal } from "@/lib/unions/unionFounding";
+import { isForexEnabled } from "@/lib/currency/featureFlag";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 
 export async function GET(req: NextRequest) {
   try {
@@ -114,7 +117,24 @@ export async function GET(req: NextRequest) {
         (a, b) => b.members - a.members || b.treasury - a.treasury || a.name.localeCompare(b.name)
       );
 
-    return NextResponse.json({ unions: rows, bannedCountries, availableCountries });
+    // What founding costs, resolved server-side so the modal quotes the same
+    // era-scaled and FX-scaled figure the command will actually charge. Scoped
+    // to the requested country when there is one, since the fee is per country.
+    const [forexEnabled, preset] = await Promise.all([
+      isForexEnabled(),
+      getGameStatePresetOrDefault(db),
+    ]);
+    const founding = {
+      actionCost: UNION_FOUNDING_ACTION_COST,
+      costLocal: unionFoundingCostLocal({
+        preset,
+        countryId:
+          countryParam && countryParam in COUNTRY_CONFIGS ? (countryParam as CountryId) : "US",
+        forexEnabled,
+      }),
+    };
+
+    return NextResponse.json({ unions: rows, bannedCountries, availableCountries, founding });
   } catch (error) {
     return handleRouteError(error);
   }
