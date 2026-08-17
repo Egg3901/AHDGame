@@ -1,10 +1,14 @@
-import { MS_PER_TURN, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { MS_PER_TURN, STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 
 export interface GameDateAnchor {
   currentTurn: number;
   lastTurnProcessed: Date | string;
   /** Game-calendar starting year (e.g. 2019 for 2019-default, 1991 for 1991-default). */
   startingYear: number;
+  /** `GameState.preIteration?.active` — calendar pinned to the era start while true. */
+  preIterationActive?: boolean;
+  /** `GameState.preIterationTurns` — additive offset once the founding phase ends. */
+  preIterationTurns?: number;
 }
 
 const MONTH_NAMES = [
@@ -70,7 +74,31 @@ export function calendarTurn(rawTurn: number, clock?: CalendarClock): number {
 }
 
 export function formatGameMonth(eventDate: Date | string, anchor: GameDateAnchor): string {
-  const turn = realDateToTurn(eventDate, anchor);
+  const rawTurn = realDateToTurn(eventDate, anchor);
+  // Display only: election scheduling and freeze stamps keep using the raw turn
+  // from `realDateToTurn`. Career history / profile dates must match the status
+  // bar, which already routes through `calendarTurn`.
+  const turn = calendarTurn(rawTurn, {
+    preIterationActive: anchor.preIterationActive,
+    preIterationTurns: anchor.preIterationTurns,
+  });
   const { year, month } = turnToGameMonth(turn, anchor.startingYear);
   return `${MONTH_NAMES[month]} ${year}`;
+}
+
+/** Build the client display anchor from a GameState row (or a test double). */
+export function gameDateAnchorFromState(gameState: {
+  currentTurn: number;
+  lastTurnProcessed: Date | string;
+  startingYear?: number;
+  preIterationTurns?: number;
+  preIteration?: { active?: boolean };
+}): GameDateAnchor {
+  return {
+    currentTurn: gameState.currentTurn,
+    lastTurnProcessed: gameState.lastTurnProcessed,
+    startingYear: gameState.startingYear ?? STARTING_YEAR,
+    preIterationTurns: gameState.preIterationTurns,
+    preIterationActive: gameState.preIteration?.active,
+  };
 }
