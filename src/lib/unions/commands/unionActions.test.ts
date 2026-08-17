@@ -3,13 +3,11 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { Character, CorporateSector, Union } from "@/lib/db/types";
 import {
-  recruitForUnion,
   endorseBill,
   setUnionDues,
   setUnionServices,
   setUnionWageDemand,
 } from "./unionActions";
-import { RECRUIT_COST, applyRecruit } from "@/lib/unions/unionEconomy";
 import { MAX_DUES_FRACTION_OF_WAGE, maxDuesForWage } from "@/lib/unions/unionDues";
 import { annualWageFromDaily } from "@/lib/unions/unionServices";
 
@@ -46,75 +44,6 @@ function gameStateCollection(isProcessing = false) {
       ),
   };
 }
-
-describe("recruitForUnion", () => {
-  it("rejects a character who does not lead this union", async () => {
-    const character = makeCharacter();
-    const union = makeUnion(new ObjectId()); // different owner
-    const db = {
-      collection: (name: string) =>
-        name === "gameState"
-          ? gameStateCollection()
-          : { findOne: vi.fn().mockResolvedValue(union) },
-    } as unknown as Db;
-
-    const result = await recruitForUnion(db, character, union._id.toString());
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.status).toBe(403);
-  });
-
-  it("rejects when the union treasury can't afford the recruit cost", async () => {
-    const character = makeCharacter();
-    const union = makeUnion(character._id, { treasury: RECRUIT_COST - 1 });
-    const db = {
-      collection: (name: string) =>
-        name === "gameState"
-          ? gameStateCollection()
-          : { findOne: vi.fn().mockResolvedValue(union) },
-    } as unknown as Db;
-
-    const result = await recruitForUnion(db, character, union._id.toString());
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.status).toBe(402);
-  });
-
-  it("rejects while a turn is actively processing", async () => {
-    const character = makeCharacter();
-    const union = makeUnion(character._id);
-    const db = {
-      collection: (name: string) =>
-        name === "gameState"
-          ? gameStateCollection(true)
-          : { findOne: vi.fn().mockResolvedValue(union) },
-    } as unknown as Db;
-
-    const result = await recruitForUnion(db, character, union._id.toString());
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.status).toBe(409);
-  });
-
-  it("succeeds: deducts RECRUIT_COST and raises membershipPressure with diminishing returns", async () => {
-    const character = makeCharacter();
-    const union = makeUnion(character._id, { treasury: 10_000, membershipPressure: 20 });
-    const updateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
-    const db = {
-      collection: (name: string) =>
-        name === "gameState"
-          ? gameStateCollection()
-          : { findOne: vi.fn().mockResolvedValue(union), updateOne },
-    } as unknown as Db;
-
-    const result = await recruitForUnion(db, character, union._id.toString());
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.cashSpent).toBe(RECRUIT_COST);
-    expect(result.membershipPressure).toBe(applyRecruit(20));
-
-    const [filter, update] = updateOne.mock.calls[0];
-    expect(filter).toMatchObject({ _id: union._id, treasury: { $gte: RECRUIT_COST } });
-    expect(update.$inc.treasury).toBe(-RECRUIT_COST);
-  });
-});
 
 describe("setUnionWageDemand", () => {
   it("clamps the demanded wage level into the standard wage bounds", async () => {
@@ -217,11 +146,11 @@ describe("union ban gate (player suggestion #93)", () => {
     } as unknown as Db;
   }
 
-  it("recruitForUnion returns 403 with the banned message while the union's country has unionsBanned", async () => {
+  it("setUnionDues returns 403 with the banned message while the union's country has unionsBanned", async () => {
     const character = makeCharacter();
     const union = makeUnion(character._id);
 
-    const result = await recruitForUnion(bannedDb(union, true), character, union._id.toString());
+    const result = await setUnionDues(bannedDb(union, true), character, union._id.toString(), 10);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.status).toBe(403);
@@ -258,7 +187,7 @@ describe("union ban gate (player suggestion #93)", () => {
               },
     } as unknown as Db;
 
-    const result = await recruitForUnion(db, character, union._id.toString());
+    const result = await setUnionWageDemand(db, character, union._id.toString(), 1.2);
     expect(result.ok).toBe(true);
   });
 });

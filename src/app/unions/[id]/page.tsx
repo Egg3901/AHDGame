@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
-import { RECRUIT_COST, UNION_STRENGTH_DECAY_PER_TURN } from "@/lib/unions/unionEconomy";
+import { UNION_STRENGTH_DECAY_PER_TURN } from "@/lib/unions/unionEconomy";
 import { WAGE_LEVEL_MAX, WAGE_LEVEL_MIN } from "@/lib/labour/laborCost";
 import { HeroImage } from "@/components/HeroImage";
 import BackButton from "@/components/BackButton";
@@ -282,7 +282,6 @@ export default function UnionDashboardPage({ params }: PageProps) {
   // Every union command 403s while the country's ban holds, so the page has to
   // say so up front rather than letting the player spend a click to find out.
   const suspended = union?.suspended === true;
-  const canAffordRecruit = (union?.treasury ?? 0) >= RECRUIT_COST;
   // Real headcount. Prefers the union's own persisted figure (what dues math
   // actually uses); falls back to the live sector recompute so the page still
   // reads correctly against a route that hasn't shipped `members` yet.
@@ -670,30 +669,16 @@ export default function UnionDashboardPage({ params }: PageProps) {
             <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {/* Same shape as the organize control above: button, cost line,
-                then the reason it is refused. A `title` never fires on a
-                disabled button, so the blocker has to be visible text. */}
-            <div className="flex flex-col gap-1">
-              <button
-                type="button"
-                disabled={actionPending || suspended || !canAffordRecruit}
-                onClick={() => runAction("recruit")}
-                className="w-fit rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
-              >
-                Run Recruitment Drive
-              </button>
-              <span className="text-[11px] text-muted">
-                Costs {RECRUIT_COST.toLocaleString("en-US")} from the treasury · you have{" "}
-                {Math.round(union.treasury).toLocaleString("en-US")}
-              </span>
-              {!canAffordRecruit && (
-                <span className="text-[11px] font-medium text-error">
-                  Not enough in the treasury. Dues come in each turn.
-                </span>
-              )}
-            </div>
-          </div>
+          {/* The recruitment drive that used to live here is retired. It only
+              ever raised `membershipPressure`, which no longer exists: members
+              are now counted from the workers in the sectors this union
+              actually represents. Growing the union means organizing a
+              specific sector, which happens on that sector's own page. */}
+          <p className="text-[11px] text-muted">
+            To grow this union, organize a sector directly from its page. A drive
+            raises that sector\'s unionization, and if it is held by a rival, it
+            is a raid.
+          </p>
 
           {/* Public wage claim: a pressure signal, not a contract. It shows up
               as the per-local gap column below and as a callout on the CEO's

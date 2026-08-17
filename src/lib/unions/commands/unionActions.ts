@@ -1,7 +1,6 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Bill, Character, CorporateSector, Union } from "@/lib/db/types";
-import { RECRUIT_COST, applyRecruit } from "@/lib/unions/unionEconomy";
 import { clampWageLevel } from "@/lib/labour/laborCost";
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
 import { getGameState } from "@/lib/gameState";
@@ -66,45 +65,6 @@ export async function rejectIfTurnProcessing(db: Db): Promise<UnionActionResult 
     };
   }
   return null;
-}
-
-/** Recruitment drive: spend the union's treasury to push `membershipPressure` up (diminishing returns). */
-export async function recruitForUnion(
-  db: Db,
-  character: Character,
-  unionId: string
-): Promise<UnionActionResult> {
-  const turnBusy = await rejectIfTurnProcessing(db);
-  if (turnBusy) return turnBusy;
-
-  const resolved = await resolveOwnedUnion(db, character, unionId);
-  if (!resolved.ok) return resolved;
-  const { union } = resolved;
-
-  if (union.treasury < RECRUIT_COST) {
-    return {
-      ok: false,
-      status: 402,
-      error: "Not enough union treasury to run a recruitment drive.",
-    };
-  }
-  const newPressure = applyRecruit(union.membershipPressure);
-  const now = new Date();
-  const result = await db.collection<Union>("unions").updateOne(
-    {
-      _id: union._id,
-      treasury: { $gte: RECRUIT_COST },
-      membershipPressure: union.membershipPressure,
-    },
-    {
-      $inc: { treasury: -RECRUIT_COST },
-      $set: { membershipPressure: newPressure, updatedAt: now },
-    }
-  );
-  if (result.modifiedCount === 0) {
-    return { ok: false, status: 409, error: "Union state changed — please retry." };
-  }
-  return { ok: true, status: 200, membershipPressure: newPressure, cashSpent: RECRUIT_COST };
 }
 
 /**

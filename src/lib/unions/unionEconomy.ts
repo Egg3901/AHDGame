@@ -40,18 +40,6 @@ export function isUnionLeadershipElectionOpen(union: Pick<Union, "strength">): b
   return unionStrength(union) >= LEADERSHIP_ELECTION_MIN_STRENGTH;
 }
 
-/**
- * Treasury cost of one recruitment-drive action.
- *
- * @deprecated Retired by union dues v1's membershipPressure removal — the
- * `applyRecruit`/`recruitPressureGain` pair this priced is gone, so nothing in
- * this file spends it anymore. Left exported (not deleted) because
- * `src/lib/unions/commands/unionActions.ts` (out of this change's ownership)
- * still imports it alongside the now-missing `applyRecruit` — see this
- * branch's final report for the cross-file break that needs the commands
- * owner's attention.
- */
-export const RECRUIT_COST = 500;
 
 /** A union can only force a strike in a sector whose organic unionization is at least this — can't manufacture a strike out of nothing. */
 export const STRIKE_CALL_MIN_UNIONIZATION = 30;

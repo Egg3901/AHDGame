@@ -29,7 +29,7 @@ import { resolveOwnedUnion, rejectIfTurnProcessing, type UnionActionResult } fro
 /** Action points a union head spends to run one targeted drive. 3x the rank-and-file `ORGANIZE_ACTION_COST` (5) — this is a leader action that moves a specific sector, not a contribution to the general strength pool. */
 export const ORGANIZE_SECTOR_ACTION_COST = 15;
 
-/** Treasury cost of one targeted drive. 2x `RECRUIT_COST` (500) — a drive aimed at one sector (and potentially a rival's shop) is a bigger commitment than an untargeted recruitment push. */
+/** Treasury cost of one targeted drive. A drive aimed at a specific sector, potentially a rival shop, is a real commitment rather than a routine push. */
 export const ORGANIZE_SECTOR_TREASURY_COST = 1000;
 
 /** Unionization points one drive adds to the targeted sector, before clamping to [0, 100]. Three drives from zero clears the recognition threshold below. */
