@@ -9,7 +9,7 @@ import { eraForPreset } from "@/lib/seeds/presetSelector";
 import { getDemographicCategoriesForCountry } from "./countryDemographics";
 import type { CountryId } from "@/lib/constants/countries";
 
-const INTL = ["UK", "DE", "JP", "IE", "CN", "BR"];
+const INTL = ["UK", "DE", "JP", "IE", "CN", "BR", "DD"];
 
 function realBuckets(cc: string): Set<string> {
   const model = getCountryLayer1Model(cc, eraForPreset("1953-default"))!;

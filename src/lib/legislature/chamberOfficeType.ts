@@ -109,3 +109,45 @@ export function getCabinetEligibleOfficeTypes(countryId: CountryId, preset?: str
 
   return types;
 }
+
+/**
+ * Office-type keys the region Politics → Officials tab buckets into Senate /
+ * House / State Senate sections.
+ *
+ * Chamber *keys* (e.g. DD `volkskammer`, CN `npc`) are not always the stored
+ * `electedOfficials.officeType` (DD `volkskammerDeputy`, CN `npcDelegate`).
+ * Matching only the chamber key left those countries' lower-chamber seats
+ * looking vacant even when deputies were seated (ticket #1121).
+ */
+export function getRegionOfficialBuckets(
+  countryId: CountryId,
+  preset?: string
+): {
+  senatorTypes: Set<string>;
+  houseRepTypes: Set<string>;
+  stateSenatorTypes: Set<string>;
+} {
+  const config = getCountryConfig(countryId, preset);
+  const upperChamberKey = config.legislature.upperChamber?.key;
+  const lowerChamberKey = config.legislature.lowerChamber.key;
+  const subNationalChamberKey = config.subNationalChamber?.key;
+  const keep = (k: string | undefined): k is string => Boolean(k);
+
+  return {
+    senatorTypes: new Set(
+      ["senate", upperChamberKey, getUpperChamberOfficeType(countryId, preset)].filter(keep)
+    ),
+    houseRepTypes: new Set(
+      ["house", lowerChamberKey, getLowerChamberOfficeType(countryId, preset)].filter(keep)
+    ),
+    stateSenatorTypes: new Set(
+      [
+        "stateSenate",
+        subNationalChamberKey,
+        subNationalChamberKey
+          ? getOfficeTypeForChamber(countryId, subNationalChamberKey, preset)
+          : undefined,
+      ].filter(keep)
+    ),
+  };
+}
