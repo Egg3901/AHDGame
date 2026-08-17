@@ -93,7 +93,6 @@ describe("GET /api/unions/leaderboard NPP presidents", () => {
         sectorType: "manufacturing",
         ownerId: nppId,
         ownerType: "npp",
-        membershipPressure: 40,
         treasury: 100,
         demandedWageLevel: null,
       },

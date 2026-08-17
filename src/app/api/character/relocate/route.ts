@@ -12,7 +12,7 @@
  *
  * Blocking conditions:
  *   - target must exist and differ from current homeState
- *   - 24-hour cooldown since lastRelocatedAt
+ *   - 72-turn (3 real day) cooldown since lastRelocatedTurn / lastRelocatedAt
  *   - destination country must be enabledForPlayers (admins bypass)
  */
 
@@ -238,6 +238,7 @@ export async function GET() {
 
     return NextResponse.json({
       canRelocate: !onCooldown,
+      remainingTurns: cooldown.remainingTurns,
       cooldownRemainingDays,
       cooldownUntil,
       cooldownDays: RELOCATION_COOLDOWN_DAYS,

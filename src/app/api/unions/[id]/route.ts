@@ -1,9 +1,9 @@
 /**
- * GET /api/unions/[id] — union detail + the CorporateSectors currently
+ * GET /api/unions/[id]: union detail + the CorporateSectors currently
  * matching its (countryId, sectorType) scope (v3 Phase 8). Read-only, no
- * auth required — the dashboard UI decides what actions to show based on
+ * auth required, the dashboard UI decides what actions to show based on
  * whether the viewer leads this union. Gated on `labourSystemMode >= "full"`
- * (code-review fix #10/#13 — previously ungated, kept serving live union
+ * (code-review fix #10/#13, previously ungated, kept serving live union
  * data indefinitely even after the feature was disabled).
  */
 import { NextResponse } from "next/server";
@@ -30,6 +30,11 @@ import {
   ORGANIZE_STRENGTH_GAIN,
   unionStrength,
 } from "@/lib/unions/unionEconomy";
+import {
+  ORGANIZE_SECTOR_ACTION_COST,
+  ORGANIZE_SECTOR_TREASURY_COST,
+  RAID_APPROVAL_EDGE_REQUIRED,
+} from "@/lib/unions/commands/organizeSector";
 import { genericUnionName } from "@/lib/unions/unionNames";
 import { getGameState } from "@/lib/gameState";
 import { unionStrikeBlockReason } from "@/lib/unions/unionEconomy";
@@ -53,6 +58,15 @@ import {
   pensionFundingRatio,
   pensionSchemeAssetsAnchor,
 } from "@/lib/pensions/rules";
+import {
+  averageAnnualWage,
+  duesIncomePerTurn,
+  maxDuesForWage,
+  servicesCostPerTurn,
+  unionApproval,
+  unionMembers,
+} from "@/lib/unions/unionDues";
+import { normalizeServiceIds } from "@/lib/unions/unionServices";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -98,6 +112,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
               wageLevel: 1,
               workers: 1,
               unionization: 1,
+              wagePerWorker: 1,
+              representingUnionId: 1,
               strikeStartedAtTurn: 1,
               strikeCooldownUntilTurn: 1,
             },
@@ -247,6 +263,22 @@ export async function GET(_request: Request, { params }: RouteParams) {
       endorsements.map((endorsement) => [endorsement.billId.toString(), endorsement.stance])
     );
 
+    // Union dues v1: dues/services/approval are only ever priced against
+    // sectors this union actually REPRESENTS (`representingUnionId` on the
+    // sector), a strict subset of `sectors` above (which is every sector
+    // matching the industry, still needed for bargaining/employer listings).
+    const representedSectors = sectors.filter(
+      (s) => s.representingUnionId?.toString() === union._id.toString()
+    );
+    const members = unionMembers(representedSectors);
+    const annualWage = averageAnnualWage(representedSectors);
+    const maxDuesPerWorkerAnnual = maxDuesForWage(annualWage);
+    const duesPerWorkerAnnual = Math.min(
+      Math.max(0, union.duesPerWorkerAnnual ?? 0),
+      maxDuesPerWorkerAnnual
+    );
+    const activeServices = normalizeServiceIds(union.activeServices);
+
     return NextResponse.json({
       union: {
         id: union._id.toString(),
@@ -262,8 +294,29 @@ export async function GET(_request: Request, { params }: RouteParams) {
         strength: unionStrength(union),
         organizeActionCost: ORGANIZE_ACTION_COST,
         organizeStrengthGain: ORGANIZE_STRENGTH_GAIN,
+        // Targeted sector drives are a different, dearer action than the
+        // rank-and-file organize drive above, and the UI must quote the real
+        // price before a head spends it, raid or not.
+        organizeSectorActionCost: ORGANIZE_SECTOR_ACTION_COST,
+        organizeSectorTreasuryCost: ORGANIZE_SECTOR_TREASURY_COST,
+        raidApprovalEdgeRequired: RAID_APPROVAL_EDGE_REQUIRED,
         treasury: union.treasury,
-        membershipPressure: union.membershipPressure,
+        // Union dues v1, replaces `membershipPressure`. `members` is a real
+        // headcount (workers in represented sectors), `approval` is what
+        // anchors unionization drift in those sectors.
+        members,
+        approval: unionApproval(union),
+        duesPerWorkerAnnual,
+        // The dues and services panels price everything as a fraction of the
+        // member-weighted annual wage, so they need the wage itself, not just
+        // the ceiling derived from it. Without this the dues slider has no
+        // scale to render against and disables itself.
+        annualWage,
+        maxDuesPerWorkerAnnual,
+        duesIncomePerTurn: duesIncomePerTurn(members, duesPerWorkerAnnual),
+        activeServices,
+        servicesCostPerTurn: servicesCostPerTurn(members, annualWage, activeServices),
+        foundedByCharacterId: union.foundedByCharacterId?.toString() ?? null,
         demandedWageLevel: union.demandedWageLevel,
         suspended,
         currentTurn,
@@ -280,6 +333,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
             ? null
             : Math.round(Math.max(0, union.demandedWageLevel - (s.wageLevel ?? 1)) * 1000) / 1000,
         unionization: s.unionization ?? 0,
+        // Union dues v1: which union (if any) currently holds this sector,
+        // may be this union, a rival, or null (unrepresented, an
+        // organize-sector target). See `POST .../organize-sector`.
+        representingUnionId: s.representingUnionId?.toString() ?? null,
         strikeActive: s.strikeStartedAtTurn != null,
         strikeCooldownUntilTurn: s.strikeCooldownUntilTurn ?? null,
         strikeBlockReason: unionStrikeBlockReason(s, currentTurn, protectedSectorIds),

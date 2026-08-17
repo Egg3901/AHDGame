@@ -38,6 +38,15 @@ export interface SectorData {
   unionId?: string | null;
   /** Seeded display name of the union covering this country's industry. */
   unionName?: string | null;
+  /**
+   * Dues v1: the union that actually holds THIS sector's representation, or
+   * null when unrepresented. Distinct from `unionId` above, which is the
+   * (countryId, sectorType) industry union even when it holds nothing: dues
+   * v1 lets several unions exist in one industry, so representation is now a
+   * per-sector fact, not implied by the industry match.
+   */
+  representingUnionId?: string | null;
+  representingUnionName?: string | null;
   createdAt: string;
   /** Active for-sale listing, null when not on the secondary market */
   forSale?: {
@@ -520,7 +529,7 @@ export interface PlantBuildOrderView {
   startTurn: number;
   onlineTurn: number;
   turnsRemaining: number;
-  /** 0–1 share of capacity DELIVERED so far. */
+  /** 0 to 1 share of capacity delivered so far. */
   progress: number;
 }
 
@@ -551,7 +560,7 @@ export interface PlantsData {
   /**
    * True buyers' room in sector output units (unmet demand across the output
    * mix, min over legs; 0 in a glut). `headroomUnits` is claimable market
-   * share, NOT demand — optional because payloads predating the split omit it.
+   * share, NOT demand, optional because payloads predating the split omit it.
    */
   demandGapUnits?: number;
   currentTurn: number;

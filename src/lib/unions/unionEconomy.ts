@@ -1,10 +1,11 @@
 /**
- * Phase 8 — Player-run unions (`labourSystemMode >= "full"`), pure economy
- * logic. A union has ONE leader (`Union.ownerId`), a treasury, and a
- * `membershipPressure` (0-100) that biases `unionizationDriftTarget()` for
- * every `CorporateSector` matching its (countryId, sectorType) — see
- * `src/lib/labour/unionization.ts`. Unowned unions leave Phase 5's NPC drift
- * completely unchanged ("conversion not reinvention," per the design doc).
+ * Phase 8, Player-run unions (`labourSystemMode >= "full"`), pure economy
+ * logic. A union has ONE leader (`Union.ownerId`), a treasury, and (union dues
+ * v1) real dues/services economics living in `src/lib/unions/unionDues.ts`,
+ * this file keeps the STRENGTH (leadership contest) and strike-preview logic,
+ * which dues v1 left untouched. Unowned unions leave Phase 5's NPC drift
+ * completely unchanged for sectors nobody represents ("conversion not
+ * reinvention," per the design doc).
  */
 
 import type { CorporateSector, Union } from "@/lib/db/types";
@@ -29,9 +30,6 @@ export function unionStrength(union: Pick<Union, "strength">): number {
   return typeof s === "number" && Number.isFinite(s) && s > 0 ? s : 0;
 }
 
-/** Membership pressure required before organizers can vote for a president. */
-export const LEADERSHIP_ELECTION_MIN_PRESSURE = 25;
-
 /**
  * True when organizers can contest the presidency. Mirrors corporation CEO
  * votes: the race stays open once the union is strong enough, whether or not
@@ -42,67 +40,27 @@ export function isUnionLeadershipElectionOpen(union: Pick<Union, "strength">): b
   return unionStrength(union) >= LEADERSHIP_ELECTION_MIN_STRENGTH;
 }
 
-/** Treasury cost of one recruitment-drive action. */
-export const RECRUIT_COST = 500;
-/** Membership-pressure gain at pressure=0 from one recruitment-drive action. */
-export const RECRUIT_PRESSURE_GAIN_AT_ZERO = 8;
-
-/**
- * Diminishing-returns gain from a recruitment drive: full gain at
- * membershipPressure=0, tapering to 0 at membershipPressure=100 — organizing
- * an unorganized industry is easy, squeezing out the last few points isn't.
- */
-export function recruitPressureGain(currentPressure: number): number {
-  const p = Math.max(0, Math.min(100, Number.isFinite(currentPressure) ? currentPressure : 0));
-  return RECRUIT_PRESSURE_GAIN_AT_ZERO * (1 - p / 100);
-}
-
-/** New membershipPressure after a recruitment drive (clamped 0-100). */
-export function applyRecruit(currentPressure: number): number {
-  const p = Math.max(0, Math.min(100, Number.isFinite(currentPressure) ? currentPressure : 0));
-  return Math.min(100, p + recruitPressureGain(p));
-}
-
-/** Per-turn membershipPressure decay toward 0 (baseline "no active organizing") absent a recruitment drive that turn. */
-export const MEMBERSHIP_PRESSURE_DECAY_PER_TURN = 0.5;
-
-/** Steps membershipPressure down toward 0 by at most `MEMBERSHIP_PRESSURE_DECAY_PER_TURN`, clamped ≥0. */
-export function decayMembershipPressure(currentPressure: number): number {
-  const p = Math.max(0, Math.min(100, Number.isFinite(currentPressure) ? currentPressure : 0));
-  return Math.max(0, p - MEMBERSHIP_PRESSURE_DECAY_PER_TURN);
-}
-
-/** Treasury trickle per turn per point of membershipPressure — the "dues" analog (no per-member accounting). */
-export const DUES_TRICKLE_RATE_PER_PRESSURE_POINT = 2;
-
-/** Treasury gained this turn from dues, given the current membershipPressure. */
-export function duesTrickle(membershipPressure: number): number {
-  const p = Math.max(
-    0,
-    Math.min(100, Number.isFinite(membershipPressure) ? membershipPressure : 0)
-  );
-  return p * DUES_TRICKLE_RATE_PER_PRESSURE_POINT;
-}
-
-/** A union can only force a strike in a sector whose organic unionization is at least this — can't manufacture a strike out of nothing. */
+/** A union can only force a strike in a sector whose organic unionization is at least this, can't manufacture a strike out of nothing. */
 export const STRIKE_CALL_MIN_UNIONIZATION = 30;
 /** Treasury cost per matched sector when a union calls a strike. */
 /**
  * Treasury cost per matched sector when a union calls a strike.
  *
  * Lowered from 2000 to 400 because the old figure made striking arithmetically
- * unreachable, not merely expensive. Dues accrue at 2 x membershipPressure per
- * turn (~160/turn at the ~80 equilibrium) while recruiting spends 500 whenever
- * affordable, so a treasury oscillates in the low hundreds. Against a cost of
- * 2000 PER SECTOR — tens of thousands in any large country — the branch could
- * never fire: across a full 1000-turn run with 408 led unions and 144 standing
- * wage demands, ZERO strikes were called. The lever existed only on paper.
- *
- * At 400 a determined union that stops recruiting can save for a strike over
- * roughly a dozen turns, which makes it a real choice with a real cost.
+ * unreachable, not merely expensive: under the pre-dues-v1 pressure-trickle
+ * model, dues accrued at 2 x membershipPressure per turn (~160/turn at the
+ * ~80 equilibrium) while recruiting spent 500 whenever affordable, so a
+ * treasury oscillated in the low hundreds. Against a cost of 2000 PER SECTOR,
+ * tens of thousands in any large country, the branch could never fire: across
+ * a full 1000-turn run with 408 led unions and 144 standing wage demands,
+ * ZERO strikes were called. The lever existed only on paper. Union dues v1
+ * replaced that accrual with real per-member dues (`duesIncomePerTurn` in
+ * `unionDues.ts`), which changes the absolute numbers but not this constant's
+ * calibration target: a determined union saving toward a strike should still
+ * clear it over roughly a dozen turns, a real choice with a real cost.
  */
 export const STRIKE_CALL_COST_PER_SECTOR = 400;
-/** Union-level cooldown (turns) between force-called strikes — separate from each sector's own `strikeCooldownUntilTurn`, so a union can't spam every sector every turn. */
+/** Union-level cooldown (turns) between force-called strikes, separate from each sector's own `strikeCooldownUntilTurn`, so a union can't spam every sector every turn. */
 export const UNION_STRIKE_CALL_COOLDOWN_TURNS = 8;
 
 /** Total treasury cost to force-call a strike across `sectorCount` matched sectors. */

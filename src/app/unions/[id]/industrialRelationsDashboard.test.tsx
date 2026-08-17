@@ -28,7 +28,11 @@ const BASE_UNION = {
   electionOpen: false,
   leadershipElectionMinPressure: 25,
   treasury: 500,
-  membershipPressure: 40,
+  members: 7000,
+  approval: 60,
+  duesPerWorkerAnnual: 0,
+  activeServices: [] as string[],
+  annualWage: 0,
   demandedWageLevel: 1.15,
   suspended: false,
   currentTurn: 10,
@@ -97,7 +101,7 @@ describe("union industrial-relations dashboard", () => {
     render(<UnionPage params={PARAMS} />);
 
     await screen.findByText("Industrial Workers");
-    expect(screen.getByText("~7,000")).toBeTruthy();
+    expect(screen.getByText("7,000")).toBeTruthy();
     expect(screen.getByText("35% of workforce")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Call Strike" })).toBeNull();
     // The public wage claim is back as a leader control: it is the only thing
@@ -284,9 +288,9 @@ describe("union industrial-relations dashboard", () => {
     expect(
       (screen.getByRole("button", { name: "Run Organize Drive" }) as HTMLButtonElement).disabled
     ).toBe(true);
-    expect(
-      (screen.getByRole("button", { name: "Run Recruitment Drive" }) as HTMLButtonElement).disabled
-    ).toBe(true);
+    // The recruitment drive is retired under union dues v1: growth happens by
+    // organizing a sector from that sector's page, so there is no button here.
+    expect(screen.queryByRole("button", { name: "Run Recruitment Drive" })).toBeNull();
     expect((screen.getByRole("button", { name: "Set Demand" }) as HTMLButtonElement).disabled).toBe(
       true
     );

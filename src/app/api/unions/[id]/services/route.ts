@@ -1,21 +1,32 @@
 /**
- * POST /api/unions/[id]/recruit — the union leader spends treasury to run a
- * recruitment drive (v3 Phase 8). Gated on `labourSystemMode >= "full"`.
+ * PATCH /api/unions/[id]/services: the union president switches the service
+ * slate on/off. Gated on `labourSystemMode >= "full"`.
+ *
+ * Unknown service ids are dropped, not stored (`normalizeServiceIds`), so a
+ * stale or hand-edited request body can never widen the effect beyond the
+ * four defined tiers. The response echoes the normalized slate and its
+ * projected treasury cost per turn.
  */
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
+import { parseJsonBody } from "@/lib/api/validate";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
-import { recruitForUnion } from "@/lib/unions/commands/unionActions";
+import { setUnionServices } from "@/lib/unions/commands/unionActions";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-export async function POST(request: Request, { params }: RouteParams) {
+const servicesSchema = z.object({
+  activeServices: z.array(z.string()).max(32, "Too many service ids."),
+});
+
+export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -27,6 +38,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const rateLimit = checkRateLimit(auth.user.userId, 20, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
+    const parsed = await parseJsonBody(request, servicesSchema);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    }
+
     const { id } = await params;
     const db = await getDb();
     const character = await getCharacterByUserId(db, auth.user.userId);
@@ -34,11 +50,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Character not found" }, { status: 404 });
     }
 
-    const result = await recruitForUnion(db, character, id);
+    const result = await setUnionServices(db, character, id, parsed.data.activeServices);
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-    return NextResponse.json({ success: true, ...result });
+    const { ok: _ok, status: _status, ...payload } = result;
+    return NextResponse.json({ success: true, ...payload });
   } catch (error) {
     return handleRouteError(error);
   }
