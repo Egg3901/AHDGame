@@ -5,6 +5,7 @@ import {
   formatCurrency,
   formatPartyCountryMoney,
   formatCurrencyCompactChip,
+  formatAccountingCost,
   formatFundsCompact,
   formatFundsCompact1dp,
   formatIndex100,
@@ -142,6 +143,21 @@ describe("formatCurrencyCompactChip", () => {
 
   it("preserves sign", () => {
     expect(formatCurrencyCompactChip(-1_500_000)).toBe("-$1.50M");
+  });
+});
+
+describe("formatAccountingCost", () => {
+  const chip = (n: number) => formatCurrencyCompactChip(n);
+
+  it("wraps expenses in parentheses without a minus", () => {
+    expect(formatAccountingCost(72_000, chip)).toBe("($72K)");
+    expect(formatAccountingCost(0, chip)).toBe("($0)");
+  });
+
+  // Ticket #1122: wrapping formatCurrencyCompactChip(-6800) in parens printed (-$6.8K).
+  it("renders a cost credit without a minus inside parentheses", () => {
+    expect(formatAccountingCost(-6_800, chip)).toBe("$6.8K");
+    expect(formatAccountingCost(-6_800, chip)).not.toMatch(/^\(-/);
   });
 });
 

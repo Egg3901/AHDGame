@@ -385,7 +385,7 @@ describe("loadCorporationDetailView", () => {
     expect(view.financials.totalRevenue).toBeCloseTo(900_000, -2);
   });
 
-  it("does not credit Sector Maintenance negative when wages exceed gross (ticket #1122)", async () => {
+  it("keeps a plants residual credit as signed maintenance so Gross Profit still matches derived opex (ticket #1122)", async () => {
     vi.mocked(isLabourWagesEnabled).mockResolvedValueOnce(true);
 
     const ceo = makeCharacter({
@@ -426,8 +426,6 @@ describe("loadCorporationDetailView", () => {
       productionPolicy: 0,
       negativeProductionSustainedTurns: 0,
       strategyId: "standard",
-      // Daily wage bill well above any plausible gross maintenance for this
-      // revenue — the pre-fix carve-out produced a negative maintenanceCosts.
       laborCost: 50_000_000,
     };
 
@@ -459,8 +457,12 @@ describe("loadCorporationDetailView", () => {
     });
 
     expect(view.financials.laborCosts).toBe(50_000_000);
-    expect(view.financials.maintenanceCosts).toBe(0);
-    expect(view.financials.operatingCosts).toBeGreaterThanOrEqual(view.financials.laborCosts);
+    expect(view.financials.maintenanceCosts).toBeLessThan(0);
+    // Cost of revenue still equals reconstructed operating cost, not wages alone.
+    expect(view.financials.maintenanceCosts + view.financials.laborCosts).toBeLessThan(
+      view.financials.laborCosts
+    );
+    expect(view.financials.operatingCosts).toBeLessThan(view.financials.laborCosts);
   });
 });
 

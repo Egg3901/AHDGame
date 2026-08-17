@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   computeSectorLaborCost,
-  maintenanceNetOfLabor,
   getSectorLaborShare,
   eraLaborMultiplier,
   clampWageLevel,
@@ -85,25 +84,6 @@ describe("computeSectorLaborCost", () => {
     expect(r.baselineLaborCost).toBeCloseTo(100, 9);
     expect(r.maintenanceNonLabor).toBeCloseTo(0, 9);
     expect(r.maintenance).toBeCloseTo(100, 9);
-  });
-});
-
-describe("maintenanceNetOfLabor", () => {
-  it("returns gross minus wages when wages sit inside maintenance", () => {
-    expect(maintenanceNetOfLabor(650, 200)).toBe(450);
-  });
-
-  // Ticket #1122: Lockheed Commerce showed Sector Maintenance as (-$6.8K)
-  // because the Financials tab subtracted the actual wage bill from gross
-  // maintenance. Extra wages above gross are a cost, not a credit.
-  it("does not let extra wages credit maintenance into the negative", () => {
-    expect(maintenanceNetOfLabor(65_200, 72_000)).toBe(0);
-  });
-
-  it("treats missing or non-finite wages as zero", () => {
-    expect(maintenanceNetOfLabor(100, 0)).toBe(100);
-    expect(maintenanceNetOfLabor(100, Number.NaN)).toBe(100);
-    expect(maintenanceNetOfLabor(Number.NaN, 50)).toBe(0);
   });
 });
 
