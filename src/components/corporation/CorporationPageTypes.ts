@@ -521,6 +521,15 @@ export interface SectorDetail {
   embargoSuspended?: boolean;
   profitMargin: number;
   effectiveProfitMargin: number;
+  /** How `effectiveProfitMargin` was produced. "physical": the engine's
+   *  physically-derived margin, explained by `physicalCosts`; "additive":
+   *  the legacy modifier-stack recompute (below plants / legacy sectors). */
+  marginBasis?: "physical" | "additive";
+  /** Physical cost legs as percentage points of realized revenue, present only
+   *  when marginBasis is "physical". `otherPp` is the exact remainder (upkeep,
+   *  other opex, financial legs, residual), so
+   *  100 − inputsPp − laborPp − otherPp === effectiveProfitMargin. */
+  physicalCosts?: { inputsPp: number; laborPp: number | null; otherPp: number } | null;
   /** Plants tier: realized profit over the full cost bill, percent. The honest
    *  counterpart to `effectiveProfitMargin`, which divides by sold revenue only
    *  and overstates a low-fill sector. Null below plants and when redacted. */
