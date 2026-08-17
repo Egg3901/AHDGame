@@ -18,8 +18,10 @@ import {
 } from "./nppCorporationBehavior";
 import { ceoArchetypeModifiers } from "./ceoArchetype";
 import { SECTOR_STRATEGIES, STRATEGY_COOLDOWN_TURNS } from "@/lib/constants/sectorStrategies";
+import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { Corporation, CorporateSector, UnownedSector } from "@/lib/db/types";
+import type { NppPlantsContext } from "./nppCorporationBehavior";
 
 const noState = new Set<string>();
 const TURN = 100;
@@ -64,7 +66,12 @@ function sector(over: Partial<CorporateSector> = {}): CorporateSector {
   } as unknown as CorporateSector;
 }
 
-function decide(c: Corporation, sectors: CorporateSector[], ratios: CommodityPriceRatioFn) {
+function decide(
+  c: Corporation,
+  sectors: CorporateSector[],
+  ratios: CommodityPriceRatioFn,
+  plants?: NppPlantsContext
+) {
   return makeNppCorpDecision(
     {
       corp: c,
@@ -75,7 +82,8 @@ function decide(c: Corporation, sectors: CorporateSector[], ratios: CommodityPri
     },
     new Map<string, UnownedSector[]>(),
     noState,
-    ratios
+    ratios,
+    plants
   );
 }
 
@@ -154,5 +162,37 @@ describe("NPP input-squeeze strategy shift (section 2e)", () => {
     expect(strategySets(decide(soe, [sector()], fertilizerSqueeze))).toHaveLength(0);
     const offSlot = corp({ _id: idWithEligibility(false) });
     expect(strategySets(decide(offSlot, [sector()], fertilizerSqueeze))).toHaveLength(0);
+  });
+
+  it("holds total physical opex fixed when a calibrated plant is auto-retooled", () => {
+    const plants: NppPlantsContext = {
+      enabled: true,
+      year: 2019,
+      eraUnitScale: 1,
+      preset: "2019-default",
+      primeRateOf: () => 5,
+      costOfLivingOf: () => 100,
+    };
+    const capitalStock = 4_000;
+    const otherOpexPerUnitAnchor = 12.5;
+    const s = sector({ capitalStock, otherOpexPerUnitAnchor });
+    const d = decide(corp(), [s], fertilizerSqueeze, plants);
+    const sets = strategySets(d);
+    expect(sets).toHaveLength(1);
+    const $set = sets[0].update.$set as {
+      strategyId: string;
+      capitalStock: number;
+      otherOpexPerUnitAnchor: number;
+      retoolRescaleApplied: boolean;
+    };
+    const ratio = capacityRescaleRatio("chemical_industries", "standard", $set.strategyId);
+    expect(ratio).not.toBe(1);
+    expect($set.retoolRescaleApplied).toBe(true);
+    expect($set.capitalStock).toBeCloseTo(capitalStock * ratio, 6);
+    expect($set.otherOpexPerUnitAnchor).toBeCloseTo(otherOpexPerUnitAnchor / ratio, 8);
+    expect($set.otherOpexPerUnitAnchor * $set.capitalStock).toBeCloseTo(
+      otherOpexPerUnitAnchor * capitalStock,
+      6
+    );
   });
 });

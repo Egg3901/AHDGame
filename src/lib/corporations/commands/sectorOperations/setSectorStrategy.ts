@@ -40,12 +40,7 @@ import {
 import type { CommodityPrice } from "@/lib/db/types";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { getStrategyAvailability } from "@/lib/constants/techTree";
-import {
-  capacityRescaleRatio,
-  rescaleBuildQueueForStrategyChange,
-} from "@/lib/constants/capacityEconomy";
-import type { SectorBuildOrder } from "@/lib/db/types";
-import { rescaleOtherOpexAnchorForRetool } from "@/lib/corporations/physicalPnl";
+import { retoolRescaleFields } from "@/lib/corporations/retoolRescale";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 
@@ -255,41 +250,23 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
 
     // ─── D9: RPU normalization at the retool boundary ────────────────────────
     // `capitalStock` counts output units/day, and those units are NOT
-    // commensurable across production methods — the same physical plant is worth
-    // 1/Σ(rate/basePrice) ₳ of output per unit, which differs by orders of
-    // magnitude between (say) a coal mix and a rare-earth mix. Left alone, a
-    // retool would silently re-price the plant by that ratio: capacity nobody
-    // built, granted by a retool fee. Re-scale the stock so the NAMEPLATE
-    // (capacity × mixPrice) is invariant across the change. Build orders in
-    // flight move by the same ratio (their paid cash does not — see
-    // `rescaleBuildQueueForStrategyChange`).
-    // PLANTS-GATED. Under CAPITAL mode the sector turn already writes a non-zero
-    // `capitalStock` and gates production off it, so rescaling there would move
-    // live production by the mix ratio — orders of magnitude for some strategy
-    // pairs. The RPU basis this normalizes is a plants-tier concept, so only
-    // plants worlds rescale; below it the stock keeps its existing meaning.
-    // Rescaled ONCE, here, against the FINAL rates — the 12-turn blend window
-    // misprices slightly and decays to exact; see the function's docs.
+    // commensurable across production methods. The shared helper rescales
+    // stock, in-flight queue, and the calibrated physical-opex anchor so
+    // nameplate and `anchor × units` both stay put. Plants-gated: below that
+    // tier the stock is production-gating state, not an RPU capacity.
+    // Rescaled ONCE, here, against the FINAL rates. The 12-turn blend window
+    // misprices slightly and decays to exact; see the helper's docs.
     const marketMode = await getMarketSystemModeForDb(db);
     const plantsEnabled = marketAtLeast(marketMode, "plants");
-    const rescaleRatio = capacityRescaleRatio(sectorType, currentStrategyId, strategyId);
-    const rescaledCapitalStock =
-      plantsEnabled &&
-      typeof sector.capitalStock === "number" &&
-      Number.isFinite(sector.capitalStock)
-        ? sector.capitalStock * rescaleRatio
-        : null;
-    const rescaledBuildQueue: SectorBuildOrder[] | null =
-      plantsEnabled && Array.isArray(sector.buildQueue) && sector.buildQueue.length > 0
-        ? rescaleBuildQueueForStrategyChange(sector.buildQueue, rescaleRatio)
-        : null;
-    // P3.5: the calibrated other-opex residual is ₳ per OUTPUT UNIT, and this
-    // retool changes what a unit is. Move it by the inverse ratio so the ₳ it
-    // actually charges is invariant across the retool — same rule, same gate and
-    // same invertibility as `capitalStock` above.
-    const rescaledOtherOpexAnchor = plantsEnabled
-      ? rescaleOtherOpexAnchorForRetool(sector.otherOpexPerUnitAnchor, rescaleRatio)
-      : null;
+    const rescale = retoolRescaleFields({
+      sectorType,
+      fromStrategyId: currentStrategyId,
+      toStrategyId: strategyId,
+      plantsEnabled,
+      capitalStock: sector.capitalStock,
+      buildQueue: sector.buildQueue,
+      otherOpexPerUnitAnchor: sector.otherOpexPerUnitAnchor,
+    });
 
     // Apply changes atomically
     await Promise.all([
@@ -315,22 +292,9 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
               : currentTurn,
             transitionCooldownUntilTurn: currentTurn + STRATEGY_COOLDOWN_TURNS,
             // Persist whether the forward rescale actually ran, so a cancel can
-            // decide whether to invert it. `plantsEnabled` is resolved
-            // independently by each command at ITS call time: a retool committed
-            // under capital mode and cancelled after a flip to plants would
-            // otherwise apply the inverse ratio to a stock nothing ever scaled,
-            // minting or burning the full RPU ratio (up to 327x). The flag, not
-            // the mode, is the authority on the cancel side.
-            // Records the GATE, not whether a particular leg found something to
-            // scale: an empty build queue or an absent `capitalStock` is still a
-            // retool that happened under the plants rule, and a later cancel of
-            // it must invert on the same rule.
-            retoolRescaleApplied: plantsEnabled,
-            ...(rescaledCapitalStock != null ? { capitalStock: rescaledCapitalStock } : {}),
-            ...(rescaledBuildQueue != null ? { buildQueue: rescaledBuildQueue } : {}),
-            ...(rescaledOtherOpexAnchor != null
-              ? { otherOpexPerUnitAnchor: rescaledOtherOpexAnchor }
-              : {}),
+            // decide whether to invert it. The helper records the GATE, not
+            // whether a particular leg found something to scale.
+            ...rescale,
             updatedAt: new Date(),
           },
         }

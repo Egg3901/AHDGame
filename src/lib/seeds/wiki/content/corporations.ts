@@ -296,6 +296,8 @@ Each sector type has **2 to 7 operating strategies** that change which commoditi
 
 During the transition, commodity flows blend from the old strategy toward the new one. The penalty represents retooling disruption. You can see a before/after comparison of estimated margin impact in the sector detail panel before confirming a switch.
 
+Computer-run corporations may automatically retool a sector onto a better strategy when prices squeeze the current recipe. A strategy you set yourself is never changed by that pass.
+
 ### Strategy overview by sector type
 
 | Sector | Strategies |
