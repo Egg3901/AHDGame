@@ -516,7 +516,7 @@ describe("processElectionEntry — OPS regime gating", () => {
     election: Election,
     npp: NPP,
     nppPartyRegimeStatus: "ruling" | "approved" | "banned" | null | undefined,
-    countryId: "CN" | "US" = "CN"
+    countryId: "CN" | "US" | "RU" = "CN"
   ) {
     const ctx = buildContext(db, election, [npp], []);
     // partyByCompositeKey only carries an entry when the NPP has a recognised
@@ -543,6 +543,25 @@ describe("processElectionEntry — OPS regime gating", () => {
       currentOffice: null,
     });
     const ctx = buildOpsContext(db, election, npp, "banned");
+
+    const entered = await processElectionEntry(ctx);
+    expect(entered).toBe(0);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("skips a banned-party NPP in an RU republicSupremeSoviet primary", async () => {
+    const election = createTestElection({
+      countryId: "RU",
+      electionType: "republicSupremeSoviet",
+      state: "KAZ",
+    });
+    const npp = createTestNpp({
+      countryId: "RU",
+      homeState: "KAZ",
+      party: "2",
+      currentOffice: null,
+    });
+    const ctx = buildOpsContext(db, election, npp, "banned", "RU");
 
     const entered = await processElectionEntry(ctx);
     expect(entered).toBe(0);

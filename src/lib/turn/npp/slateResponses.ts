@@ -34,6 +34,11 @@ import { materializeSlateAssignmentsFromTemplate } from "@/lib/db/recruitmentSla
 import { isElectionTypeEntryBlocked } from "@/lib/elections/nationwideExecutive";
 import { isPrimaryClosed } from "@/lib/elections/electionDeadlineFilters";
 import { canPartyContestState } from "@/lib/parties/regionalContest";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import {
+  canFieldExecutiveCandidate,
+  canFieldLegislativeCandidate,
+} from "@/lib/turn/onePartyConstraints";
 
 interface SlateResponseSummary {
   rowsConsidered: number;
@@ -373,6 +378,17 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
         continue;
       }
       const slateParty = ctx.partyByCompositeKey.get(`${electionCountry}:${row.partyId}`);
+      const opsConfig = COUNTRY_CONFIGS[electionCountry as CountryId];
+      if (opsConfig?.governmentType === "onePartyState") {
+        if (!canFieldLegislativeCandidate(opsConfig, slateParty ?? null)) {
+          queueSkipped(row);
+          continue;
+        }
+        if (!canFieldExecutiveCandidate(opsConfig, slateParty ?? null, election.electionType)) {
+          queueSkipped(row);
+          continue;
+        }
+      }
       if (
         !canPartyContestState({
           countryId: electionCountry,

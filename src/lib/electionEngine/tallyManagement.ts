@@ -237,7 +237,7 @@ export async function accumulateVoteTurn(
   const preloadedApproval = options?.approvalMap?.get(election.state.toUpperCase());
   const [approvalPct, enriched, partyGroupFavorabilityByKey] = await Promise.all([
     preloadedApproval ?? getStateApprovalForElection(election.state),
-    fetchEnrichedCandidates(candidates),
+    fetchEnrichedCandidates(candidates, { countryId: electionCountryId }),
     loadPartyGroupFavorability(db, electionCountryId, turnNumber),
   ]);
   const approvalDecimal = approvalPct / 100;

@@ -481,6 +481,27 @@ describe("accumulateVoteTurn — vote accumulation", () => {
     expect(pushed.recordedAt).toBe(now);
   });
 
+  it("passes election.countryId into candidate enrichment so OPS banned-party weights apply", async () => {
+    const { accumulateVoteTurn } = await import("./tallyManagement");
+    const { fetchEnrichedCandidates } = await import("./candidateEnrichment");
+
+    const electionId = new ObjectId();
+    const candidate = makeCandidate({ electionId, party: "2" });
+    const election = makeElection({
+      _id: electionId,
+      countryId: "RU",
+      electionType: "republicSupremeSoviet",
+      state: "KAZ",
+    });
+
+    await setupHappyPath({ electionId, candidates: [candidate], election });
+    await accumulateVoteTurn(electionId, 7, new Date("2024-01-01T12:00:00Z"));
+
+    expect(fetchEnrichedCandidates).toHaveBeenCalledWith(expect.any(Array), {
+      countryId: "RU",
+    });
+  });
+
   it("turn-first: a final-4-turn surges the vote pool even when the game clock has drifted", async () => {
     // Regression for fix/election-last-4: the 25% closing surge must key off
     // turn numbers, not the frozen `endTime` projection. Here `now` is held
