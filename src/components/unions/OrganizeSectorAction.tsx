@@ -7,8 +7,10 @@ interface MyUnion {
   countryId: string;
   sectorType: string;
   name: string;
-  /** Action points the general organize drive costs. See the CONCERNS note below. */
+  /** Action points a targeted sector drive costs, quoted by the union route. */
   organizeActionCost: number;
+  /** Treasury a targeted sector drive costs. Charged whether or not a raid lands. */
+  organizeSectorTreasuryCost: number;
 }
 
 interface OrganizeSectorActionProps {
@@ -29,11 +31,11 @@ interface OrganizeSectorActionProps {
  * self-checks whether the viewing character heads a union matching this
  * sector's country and industry before rendering anything.
  *
- * The exact cost/mechanics of a per-sector organize drive are not nailed down
- * in the API contract this was built against, so this reuses the general
- * organize drive's action-point cost (`GET /api/unions/[id]` already returns
- * `organizeActionCost`) as the best available estimate. See CONCERNS in the
- * implementing agent's report.
+ * Costs are quoted from `GET /api/unions/[id]`, which returns the targeted
+ * drive's own action-point and treasury price rather than the cheaper
+ * rank-and-file organize drive's. The treasury charge is stated up front and
+ * called out as payable win or lose on a raid, because a failed raid still
+ * bills the attacker and finding that out afterwards would feel like a bug.
  */
 export function OrganizeSectorAction({
   countryId,
@@ -66,7 +68,9 @@ export function OrganizeSectorAction({
           countryId: unionData.union.countryId,
           sectorType: unionData.union.sectorType,
           name: unionData.union.name,
-          organizeActionCost: unionData.union.organizeActionCost ?? 0,
+          organizeActionCost:
+            unionData.union.organizeSectorActionCost ?? unionData.union.organizeActionCost ?? 0,
+          organizeSectorTreasuryCost: unionData.union.organizeSectorTreasuryCost ?? 0,
         });
       } catch {
         // Silent: this is a self-gating affordance, not a data surface that
@@ -150,7 +154,9 @@ export function OrganizeSectorAction({
             {pending ? "Working…" : isRaid ? "Raid This Sector" : "Organize This Sector"}
           </button>
           <span className="ml-2 text-[11px] text-muted">
-            Costs {myUnion.organizeActionCost} action points
+            Costs {myUnion.organizeActionCost} action points and{" "}
+            {myUnion.organizeSectorTreasuryCost.toLocaleString("en-US")} from the treasury
+            {isRaid ? ", win or lose" : ""}
           </span>
         </>
       )}
