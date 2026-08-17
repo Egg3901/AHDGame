@@ -434,6 +434,20 @@ export async function buildSectorCommoditySections(args: {
       weight: totalDemandRate > 0 ? Math.round((f.rate / totalDemandRate) * 1000) / 10 : 0,
       priceImpact: Math.round(rawImpact * 100) / 100,
       ...buildPriceFields(f.commodity),
+      // What the engine actually bills per unit (physicalPnl.computeInputsCost):
+      // base price through the same damped/clamped realization function revenue
+      // uses, on the GLOBAL ratio. The raw regional `marketPrice` stays for
+      // market context, but any P&L line must sum THIS price or the page
+      // disagrees with the booked bill.
+      billedUnitPrice: (() => {
+        const cpData = commodityPrices.find((p) => p.commodity === f.commodity);
+        const base = COMMODITY_BASE_PRICES[f.commodity];
+        const ratio =
+          typeof cpData?.globalPrice === "number" && cpData.globalPrice > 0 && base > 0
+            ? cpData.globalPrice / base
+            : 1;
+        return Math.round(base * priceRealizationFactor(ratio) * 100) / 100;
+      })(),
       ...(market.throughputEnabled
         ? { inputAvailability: Math.round(inputAvailability(gBal) * 1000) / 1000 }
         : {}),

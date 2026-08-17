@@ -707,9 +707,11 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         ? getSectorTechEffects(techCorpView, corporation.type).growthCostMultiplier
         : 1;
       // The physical input bill: the same demand rows the Inputs panel renders,
-      // priced at the same market prices, so the two surfaces cannot disagree.
+      // priced at the BILLED unit price (base x realization factor, the price
+      // computeInputsCost actually charges), so the panel and the engine's
+      // booked bill cannot disagree. Raw `marketPrice` is context, not the bill.
       const inputsAnchor = demandsWithShortage.reduce(
-        (sum, d) => sum + (d.units > 0 ? d.units * d.marketPrice : 0),
+        (sum, d) => sum + (d.units > 0 ? d.units * (d.billedUnitPrice ?? d.marketPrice) : 0),
         0
       );
       // True buyers' room for THIS sector's outputs, in sector output units.

@@ -97,6 +97,13 @@ export interface CommodityFlow {
   nationalPrice: number;
   regionalPrice: number;
   marketPrice: number;
+  /**
+   * Demand rows only: the per-unit price the engine actually bills for this
+   * input (base price through the revenue realization function,
+   * clamp(globalRatio^0.5, 0.7, 1.5)). The physical P&L inputs line sums
+   * units x this. Absent on supply rows.
+   */
+  billedUnitPrice?: number;
   /** Weight of this commodity as % of total supply or demand rate */
   weight: number;
   /** This commodity's individual contribution to the margin modifier (in %) */

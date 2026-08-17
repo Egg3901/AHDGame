@@ -95,7 +95,7 @@ export default function InputsOutputsPanel({
                   key={f.commodity}
                   flow={f}
                   countryId={countryId}
-                  priceText={price(f.marketPrice)}
+                  priceText={price(f.billedUnitPrice ?? f.marketPrice)}
                   right={
                     f.inputAvailability != null && f.inputAvailability < 0.999 ? (
                       <InfoTooltip
