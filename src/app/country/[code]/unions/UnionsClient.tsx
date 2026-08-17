@@ -8,7 +8,7 @@ import BackButton from "@/components/BackButton";
 import { CountryFlag } from "@/components/CountryFlag";
 import { EmptyState, Skeleton, Tooltip } from "@/components/ui";
 import { UnionEmblem } from "@/components/unions/UnionEmblem";
-import { ORGANIZING_TOOLTIP, organizingBand } from "@/lib/unions/organizing";
+import { FoundUnionModal } from "@/components/unions/FoundUnionModal";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { countryUrl } from "@/lib/urls";
@@ -22,7 +22,10 @@ interface LeaderboardRow {
   sectorLabel: string;
   leaderName: string | null;
   isVacant: boolean;
-  membershipPressure: number;
+  /** Real headcount: workers across this union's sectors, weighted by unionization. */
+  members: number;
+  /** 0-100, how the membership rates the bargain the union is offering. */
+  approval: number;
   treasury: number;
   demandedWageLevel: number | null;
   suspended?: boolean;
@@ -82,48 +85,51 @@ export function UnionsClient() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notEnabled, setNotEnabled] = useState(false);
+  const [foundOpen, setFoundOpen] = useState(false);
+
+  // Also callable on demand (not just on mount/country change) so a newly
+  // founded union appears in the list without a full page reload.
+  async function loadLeaderboard(signal?: { cancelled: boolean }) {
+    setLoading(true);
+    setLoadError(null);
+    setNotEnabled(false);
+    try {
+      const res = await fetch(`/api/unions/leaderboard?country=${countryId.toUpperCase()}`);
+      const data = await res.json();
+      if (signal?.cancelled) return;
+      if (!res.ok) {
+        if (res.status === 403) {
+          setNotEnabled(true);
+        } else {
+          setLoadError(data.error ?? "Failed to load unions.");
+        }
+        return;
+      }
+      setRows(data.unions ?? []);
+      setBannedCountries(data.bannedCountries ?? []);
+    } catch {
+      if (!signal?.cancelled) setLoadError("Network error loading unions.");
+    } finally {
+      if (!signal?.cancelled) setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    let cancelled = false;
-    async function loadLeaderboard() {
-      setLoading(true);
-      setLoadError(null);
-      setNotEnabled(false);
-      try {
-        const res = await fetch(`/api/unions/leaderboard?country=${countryId.toUpperCase()}`);
-        const data = await res.json();
-        if (cancelled) return;
-        if (!res.ok) {
-          if (res.status === 403) {
-            setNotEnabled(true);
-          } else {
-            setLoadError(data.error ?? "Failed to load unions.");
-          }
-          return;
-        }
-        setRows(data.unions ?? []);
-        setBannedCountries(data.bannedCountries ?? []);
-      } catch {
-        if (!cancelled) setLoadError("Network error loading unions.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    loadLeaderboard();
+    const signal = { cancelled: false };
+    loadLeaderboard(signal);
     return () => {
-      cancelled = true;
+      signal.cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countryId]);
 
   const stats = useMemo(() => {
     const led = rows.filter((r) => !r.isVacant);
-    const totalTreasury = led.reduce((sum, r) => sum + r.treasury, 0);
-    const avgMembership = rows.length
-      ? rows.reduce((sum, r) => sum + r.membershipPressure, 0) / rows.length
-      : 0;
-    const demanding = led.filter((r) => r.demandedWageLevel != null).length;
+    const totalTreasury = rows.reduce((sum, r) => sum + r.treasury, 0);
+    const totalMembers = rows.reduce((sum, r) => sum + r.members, 0);
+    const avgApproval = rows.length ? rows.reduce((sum, r) => sum + r.approval, 0) / rows.length : 0;
     const vacant = rows.filter((r) => r.isVacant).length;
-    return { ledCount: led.length, vacant, totalTreasury, avgMembership, demanding };
+    return { ledCount: led.length, vacant, totalTreasury, totalMembers, avgApproval };
   }, [rows]);
 
   const isBannedHere = bannedCountries.some((c) => c.countryId === countryId);
@@ -176,15 +182,19 @@ export function UnionsClient() {
             <StatCell label="Led" value={String(stats.ledCount)} />
             <StatCell label="Vacant" value={String(stats.vacant)} />
             <StatCell
-              label="Total Treasury"
-              value={Math.round(stats.totalTreasury).toLocaleString("en-US")}
+              label="Total Membership"
+              value={Math.round(stats.totalMembers).toLocaleString("en-US")}
+              hint="Real headcount across every union in this country: workers in the sectors each one represents, weighted by unionization."
             />
             <StatCell
-              label="Avg Organizing"
-              value={`${stats.avgMembership.toFixed(1)}`}
-              hint={ORGANIZING_TOOLTIP}
+              label="Avg Approval"
+              value={`${Math.round(stats.avgApproval)}%`}
+              hint="How the membership rates the bargain, averaged across every union here. Dues push it down, running services pushes it up."
             />
-            <StatCell label="Demanding Wages" value={String(stats.demanding)} />
+            <StatCell
+              label="Total Funds"
+              value={Math.round(stats.totalTreasury).toLocaleString("en-US")}
+            />
           </div>
         )}
       </header>
@@ -224,6 +234,15 @@ export function UnionsClient() {
             All Unions in {countryName}
           </h2>
           <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+          {!notEnabled && !isBannedHere && (
+            <button
+              type="button"
+              onClick={() => setFoundOpen(true)}
+              className="shrink-0 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+            >
+              Found a Union
+            </button>
+          )}
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-card-border bg-card">
@@ -285,22 +304,22 @@ export function UnionsClient() {
                       <Tooltip content="The union president. A vacant union has none — fund organize drives on its page, then vote one in." />
                     </span>
                   </th>
-                  <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">
+                  <th className="px-4 py-3 text-right font-medium">
                     <span className="inline-flex items-center">
-                      Wage Demand
-                      <Tooltip content="The wage level, as a multiple of baseline, this union is publicly demanding. Sectors paying below it face heightened strike pressure." />
+                      Membership
+                      <Tooltip content="Real headcount: workers across this union's sectors, weighted by how unionized each one is." />
                     </span>
                   </th>
                   <th className="px-4 py-3 text-right font-medium">
                     <span className="inline-flex items-center">
-                      Organizing
-                      <Tooltip content={ORGANIZING_TOOLTIP} />
+                      Approval
+                      <Tooltip content="How the membership rates the bargain, 0-100%. Dues push it down, running services pushes it up." />
                     </span>
                   </th>
                   <th className="px-4 py-3 text-right font-medium">
                     <span className="inline-flex items-center">
-                      Treasury
-                      <Tooltip content="The union's war chest. Dues flow in each turn based on how organized it is; recruitment drives and strikes are paid out of it." />
+                      Funds
+                      <Tooltip content="The union's treasury. Dues flow in each turn; services and recruitment drives are paid out of it." />
                     </span>
                   </th>
                 </tr>
@@ -354,21 +373,20 @@ export function UnionsClient() {
                           ))
                         )}
                       </td>
-                      <td className="hidden px-4 py-3 text-right font-mono tabular-nums sm:table-cell">
-                        {r.demandedWageLevel != null ? (
-                          `${r.demandedWageLevel.toFixed(2)}×`
-                        ) : (
-                          <span className="text-xs text-muted">None</span>
-                        )}
+                      <td className="px-4 py-3 text-right font-mono tabular-nums">
+                        {Math.round(r.members).toLocaleString("en-US")}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className="font-mono tabular-nums">
-                          {r.membershipPressure.toFixed(1)}
-                        </span>
                         <span
-                          className={`block text-[11px] ${organizingBand(r.membershipPressure).toneClass}`}
+                          className={`font-mono tabular-nums ${
+                            r.approval >= 50
+                              ? "text-success"
+                              : r.approval >= 30
+                                ? "text-warning"
+                                : "text-error"
+                          }`}
                         >
-                          {organizingBand(r.membershipPressure).label}
+                          {Math.round(r.approval)}%
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right font-mono tabular-nums">
@@ -382,6 +400,14 @@ export function UnionsClient() {
           )}
         </div>
       </section>
+
+      <FoundUnionModal
+        open={foundOpen}
+        onClose={() => setFoundOpen(false)}
+        onFounded={loadLeaderboard}
+        countryId={countryId}
+        countryName={countryName}
+      />
     </main>
   );
 }

@@ -29,7 +29,11 @@ const UNION = {
   organizeActionCost: 5,
   organizeStrengthGain: 10,
   treasury: 164,
-  membershipPressure: 13.9,
+  members: 890,
+  approval: 48,
+  duesPerWorkerAnnual: 0,
+  activeServices: [] as string[],
+  annualWage: 0,
   demandedWageLevel: null,
   suspended: false,
 };

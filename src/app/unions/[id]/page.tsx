@@ -17,7 +17,10 @@ import {
   UnionPensionSchemePanel,
   type UnionPensionScheme,
 } from "@/components/unions/UnionPensionSchemePanel";
-import { ORGANIZING_TOOLTIP, organizingBand, organizingValue } from "@/lib/unions/organizing";
+import { UnionDuesPanel } from "@/components/unions/UnionDuesPanel";
+import { UnionServicesPanel } from "@/components/unions/UnionServicesPanel";
+import { BASE_APPROVAL } from "@/lib/unions/unionDues";
+import { normalizeServiceIds, type UnionServiceId } from "@/lib/unions/unionServices";
 import { buildCharacterHref, buildNppHref } from "@/lib/utils/profileUrls";
 
 interface UnionDetail {
@@ -35,7 +38,20 @@ interface UnionDetail {
   organizeActionCost: number;
   organizeStrengthGain: number;
   treasury: number;
-  membershipPressure: number;
+  /** Real headcount: workers across this union's sectors, weighted by unionization. */
+  members: number;
+  /** 0-100, how the membership rates the bargain. Dues push it down, services push it up. */
+  approval: number;
+  /** Annual dues charged per member, in the union's home currency. */
+  duesPerWorkerAnnual: number;
+  /** Service programmes currently switched on. */
+  activeServices: UnionServiceId[];
+  /**
+   * Member-weighted average annual wage across this union's sectors, needed to
+   * price dues and services against local pay. 0 = not known yet (e.g. before
+   * the labour system has written sector wages).
+   */
+  annualWage: number;
   /** The union's standing public wage claim, or null when it has none. */
   demandedWageLevel: number | null;
   /** True while this union's country bans unions: every action 403s server-side. */
@@ -267,6 +283,16 @@ export default function UnionDashboardPage({ params }: PageProps) {
   // say so up front rather than letting the player spend a click to find out.
   const suspended = union?.suspended === true;
   const canAffordRecruit = (union?.treasury ?? 0) >= RECRUIT_COST;
+  // Real headcount. Prefers the union's own persisted figure (what dues math
+  // actually uses); falls back to the live sector recompute so the page still
+  // reads correctly against a route that hasn't shipped `members` yet.
+  const members = union?.members ?? workforce?.unionizedWorkers ?? 0;
+  // Absent on documents written before dues v1, which reads as the same
+  // default the server uses (`BASE_APPROVAL`), not zero.
+  const approval = union?.approval ?? BASE_APPROVAL;
+  const duesPerWorkerAnnual = union?.duesPerWorkerAnnual ?? 0;
+  const activeServices = normalizeServiceIds(union?.activeServices);
+  const annualWage = union?.annualWage ?? 0;
   // Organize drives are paid in action points, so an empty action bar is the
   // single most common reason the button appears to do nothing.
   const organizeActionCost = union?.organizeActionCost ?? 0;
@@ -443,22 +469,24 @@ export default function UnionDashboardPage({ params }: PageProps) {
             {isLeader && <span className="text-[11px] text-muted">(you)</span>}
           </div>
           <StatCell
-            label="Organizing"
-            value={organizingValue(union.membershipPressure)}
-            sub={organizingBand(union.membershipPressure)}
-            hint={ORGANIZING_TOOLTIP}
+            label="Members"
+            value={members.toLocaleString("en-US")}
+            sub={
+              workforce
+                ? { label: `${Math.round(workforce.density * 100)}% of workforce`, toneClass: "text-muted" }
+                : undefined
+            }
+            hint="Real headcount: workers across this union's sectors, weighted by how unionized each one is. This is what dues are charged against."
           />
-          {workforce && (
-            <StatCell
-              label="Members"
-              value={`~${workforce.unionizedWorkers.toLocaleString("en-US")}`}
-              sub={{
-                label: `${Math.round(workforce.density * 100)}% of workforce`,
-                toneClass: "text-muted",
-              }}
-              hint="Estimated workers this union represents: the unionized headcount summed across every sector it stands in, and that count as a share of the whole workforce. Coverage, not bargaining power (see Strength)."
-            />
-          )}
+          <StatCell
+            label="Approval"
+            value={`${Math.round(approval)}%`}
+            sub={{
+              label: approval >= 50 ? "Members are satisfied" : "Members are unhappy",
+              toneClass: approval >= 50 ? "text-success" : approval >= 30 ? "text-warning" : "text-error",
+            }}
+            hint="How the membership rates the bargain, 0-100. Dues push it down, running services pushes it up. It anchors whether the union grows into new shops or bleeds density."
+          />
           <StatCell
             label="Treasury"
             value={Math.round(union.treasury).toLocaleString("en-US")}
@@ -567,6 +595,39 @@ export default function UnionDashboardPage({ params }: PageProps) {
         </div>
 
         <ActionResult result={organizeResult} />
+      </section>
+
+      {/* Dues and services: the head's two levers over the union's finances
+          and approval. Everyone sees the current values; only the head can
+          move them. */}
+      <section className="space-y-5 rounded-xl border border-card-border bg-card p-5">
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
+            Dues &amp; Services
+          </h2>
+          <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+        </div>
+        <UnionDuesPanel
+          unionId={id}
+          members={members}
+          duesPerWorkerAnnual={duesPerWorkerAnnual}
+          annualWage={annualWage}
+          activeServices={activeServices}
+          isHead={isLeader}
+          suspended={suspended}
+          onSaved={loadData}
+        />
+        <UnionServicesPanel
+          unionId={id}
+          members={members}
+          annualWage={annualWage}
+          treasury={union.treasury}
+          duesPerWorkerAnnual={duesPerWorkerAnnual}
+          activeServices={activeServices}
+          isHead={isLeader}
+          suspended={suspended}
+          onSaved={loadData}
+        />
       </section>
 
       {union.pendingLeaderCharacterId &&

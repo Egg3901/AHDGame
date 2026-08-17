@@ -79,7 +79,8 @@ describe('UnionsClient — labourSystemMode at "full"', () => {
               sectorLabel: "Automobiles",
               leaderName: "Walter Reuther",
               isVacant: false,
-              membershipPressure: 42.5,
+              members: 42500,
+              approval: 61,
               treasury: 1250,
               demandedWageLevel: 1.25,
             },
@@ -96,6 +97,57 @@ describe('UnionsClient — labourSystemMode at "full"', () => {
     expect(screen.getByText("Automobiles")).toBeTruthy();
     expect(screen.getByText("UAW")).toBeTruthy();
     expect(screen.getByText("Walter Reuther")).toBeTruthy();
-    expect(screen.getByText("1.25×")).toBeTruthy();
+    // Membership, Approval, and Funds columns: thousands separator and %.
+    expect(screen.getByText("42,500")).toBeTruthy();
+    expect(screen.getByText("61%")).toBeTruthy();
+    expect(screen.getByText("1,250")).toBeTruthy();
+  });
+
+  it("shows total membership, average approval, and total funds in the header strip", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          unions: [
+            {
+              unionId: "u1",
+              name: "United Auto Workers",
+              countryId: "US",
+              countryName: "United States",
+              sectorLabel: "Automobiles",
+              leaderName: "Walter Reuther",
+              isVacant: false,
+              members: 40000,
+              approval: 60,
+              treasury: 1000,
+              demandedWageLevel: null,
+            },
+            {
+              unionId: "u2",
+              name: "Steelworkers Guild",
+              countryId: "US",
+              countryName: "United States",
+              sectorLabel: "Manufacturing",
+              leaderName: null,
+              isVacant: true,
+              members: 10000,
+              approval: 40,
+              treasury: 500,
+              demandedWageLevel: null,
+            },
+          ],
+          bannedCountries: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    ) as unknown as typeof fetch;
+
+    render(<UnionsClient />);
+
+    await waitFor(() => expect(screen.getByText("Total Membership")).toBeTruthy());
+    expect(screen.getByText("50,000")).toBeTruthy();
+    expect(screen.getByText("Avg Approval")).toBeTruthy();
+    expect(screen.getByText("50%")).toBeTruthy();
+    expect(screen.getByText("Total Funds")).toBeTruthy();
+    expect(screen.getByText("1,500")).toBeTruthy();
   });
 });

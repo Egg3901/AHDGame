@@ -4,7 +4,8 @@
 /**
  * Guards the union leaderboard's emblem contract: a union with a verified free
  * logo renders it, a union without one falls back to the sector emblem rather
- * than borrowing someone else's mark, and the score reads as Organizing.
+ * than borrowing someone else's mark. Also pins that membership (a real
+ * headcount) and approval have replaced the retired Organizing score here.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -24,7 +25,8 @@ const ROWS = [
     sectorLabel: "Telecommunications",
     leaderName: null,
     isVacant: true,
-    membershipPressure: 16.5,
+    members: 1650,
+    approval: 35,
     treasury: 259,
     demandedWageLevel: null,
   },
@@ -36,7 +38,8 @@ const ROWS = [
     sectorLabel: "Manufacturing",
     leaderName: "Someone",
     isVacant: false,
-    membershipPressure: 72,
+    members: 7200,
+    approval: 72,
     treasury: 900,
     demandedWageLevel: null,
   },
@@ -55,7 +58,7 @@ beforeEach(() => {
 });
 
 describe("unions leaderboard render", () => {
-  it("shows the real FDGB emblem, no borrowed logo for the AEU, and Organizing bands", async () => {
+  it("shows the real FDGB emblem, no borrowed logo for the AEU, and real membership/approval", async () => {
     const { container } = render(<UnionsPage />);
     await waitFor(() => expect(screen.getByText("Amalgamated Engineering Union")).toBeTruthy());
 
@@ -66,9 +69,13 @@ describe("unions leaderboard render", () => {
     // Australian union's logo), so exactly one emblem image renders.
     expect(imgs.filter((s) => s.includes("Special:FilePath")).length).toBe(1);
 
-    expect(screen.getByText("Organizing")).toBeTruthy();
-    expect(screen.queryByText("Membership")).toBeNull();
-    expect(screen.getByText("Unorganized")).toBeTruthy();
-    expect(screen.getByText("Strong")).toBeTruthy();
+    // Organizing is retired; Membership (headcount) and Approval (%) replace it.
+    expect(screen.getByText("Membership")).toBeTruthy();
+    expect(screen.getByText("Approval")).toBeTruthy();
+    expect(screen.queryByText("Organizing")).toBeNull();
+    expect(screen.getByText("1,650")).toBeTruthy();
+    expect(screen.getByText("35%")).toBeTruthy();
+    expect(screen.getByText("7,200")).toBeTruthy();
+    expect(screen.getByText("72%")).toBeTruthy();
   });
 });

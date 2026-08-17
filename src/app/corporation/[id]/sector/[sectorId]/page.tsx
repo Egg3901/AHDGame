@@ -27,6 +27,7 @@ import PricingPanel from "./sections/PricingPanel";
 import CapitalPanel from "./sections/CapitalPanel";
 import MarketRewardBanner from "./sections/MarketRewardBanner";
 import UnionBustingPanel from "./sections/UnionBustingPanel";
+import { OrganizeSectorAction } from "@/components/unions/OrganizeSectorAction";
 import ManagementPanel from "./sections/ManagementPanel";
 import AbandonPanel from "./sections/AbandonPanel";
 import ForSalePanel from "./sections/ForSalePanel";
@@ -958,6 +959,16 @@ export default function SectorDetailPage() {
                 corpId={corpId}
                 sectorId={sectorId}
                 onBusted={fetchData}
+              />
+            )}
+            {labourFullEnabled && (
+              <OrganizeSectorAction
+                countryId={sectorCountryId}
+                sectorType={sector.sectorType}
+                sectorId={sectorId}
+                representingUnionId={sector.representingUnionId}
+                representingUnionName={sector.representingUnionName}
+                onOrganized={fetchData}
               />
             )}
           </div>
