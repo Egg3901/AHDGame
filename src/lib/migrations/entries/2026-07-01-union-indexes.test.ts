@@ -2,12 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { migration } from "./2026-07-01-union-indexes";
 
-function mockDb(dropBehaviour: "ok" | "missing" = "ok") {
+function mockDb(dropBehaviour: "ok" | "missing" | "fails" = "ok") {
   const createIndex = vi.fn().mockResolvedValue("unions_country_sectorType_seeded_unique");
   const dropIndex =
     dropBehaviour === "ok"
       ? vi.fn().mockResolvedValue(undefined)
-      : vi.fn().mockRejectedValue(new Error("index not found with name [x]"));
+      : dropBehaviour === "missing"
+        ? vi.fn().mockRejectedValue(
+            Object.assign(new Error("index not found with name [x]"), {
+              code: 27,
+              codeName: "IndexNotFound",
+            })
+          )
+        : vi.fn().mockRejectedValue(Object.assign(new Error("not authorized"), { code: 13 }));
   const db = { collection: () => ({ createIndex, dropIndex }) } as unknown as Db;
   return { db, createIndex, dropIndex };
 }
@@ -29,15 +36,16 @@ describe("2026-07-01-union-indexes migration", () => {
     });
   });
 
-  it("drops the old outright-unique index first, so a rival union can be founded", async () => {
+  it("drops the old outright-unique index, so a rival union can be founded", async () => {
     const { db, createIndex, dropIndex } = mockDb();
     await migration.execute(db, { dryRun: false });
 
     expect(dropIndex).toHaveBeenCalledWith("unions_country_sectorType_unique");
-    // Order matters: creating the partial index while the outright unique one
-    // still exists would leave founding broken.
-    expect(dropIndex.mock.invocationCallOrder[0]).toBeLessThan(
-      createIndex.mock.invocationCallOrder[0]
+    // Order matters: the new partial index is built BEFORE the legacy guard is
+    // dropped, so a failed build (e.g. E11000 on a world with duplicate seeded
+    // docs) aborts with the old protection still standing.
+    expect(createIndex.mock.invocationCallOrder[0]).toBeLessThan(
+      dropIndex.mock.invocationCallOrder[0]
     );
   });
 
@@ -46,7 +54,15 @@ describe("2026-07-01-union-indexes migration", () => {
     const result = await migration.execute(db, { dryRun: false });
 
     expect(createIndex).toHaveBeenCalledTimes(1);
-    expect(result.notes.some((n) => n.includes("not present"))).toBe(true);
+    expect(result.notes?.some((n) => n.includes("not present"))).toBe(true);
+  });
+
+  it("fails loudly when the drop fails for any reason other than IndexNotFound", async () => {
+    // Swallowing e.g. a permissions error would leave the legacy outright
+    // unique index in place, silently blocking founding while the migration
+    // reported success.
+    const { db } = mockDb("fails");
+    await expect(migration.execute(db, { dryRun: false })).rejects.toThrow("not authorized");
   });
 
   it("does not touch the database in dry-run mode", async () => {
@@ -58,7 +74,7 @@ describe("2026-07-01-union-indexes migration", () => {
     expect(result.documentsUpdated).toBe(0);
   });
 
-  it("is marked idempotent (drop-if-present then createIndex is a safe re-run)", () => {
+  it("is marked idempotent (create then drop-if-present is a safe re-run)", () => {
     expect(migration.idempotent).toBe(true);
   });
 });

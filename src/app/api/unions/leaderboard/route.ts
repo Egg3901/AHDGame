@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
       countryParam && countryParam in COUNTRY_CONFIGS
         ? { countryId: countryParam as CountryId }
         : {};
-    // Sort is applied in JS below, once `members` (real headcount) is known, 
+    // Sort is applied in JS below, once `members` (real headcount) is known,
     // it isn't a stored field, it's derived from represented sectors.
     const unions = await db.collection<Union>("unions").find(countryFilter).toArray();
 
@@ -110,7 +110,9 @@ export async function GET(req: NextRequest) {
           suspended: u.suspended === true || bannedCountryIds.has(u.countryId),
         };
       })
-      .sort((a, b) => b.members - a.members || b.treasury - a.treasury || a.name.localeCompare(b.name));
+      .sort(
+        (a, b) => b.members - a.members || b.treasury - a.treasury || a.name.localeCompare(b.name)
+      );
 
     return NextResponse.json({ unions: rows, bannedCountries, availableCountries });
   } catch (error) {

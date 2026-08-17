@@ -2,12 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { Character, CorporateSector, Union } from "@/lib/db/types";
-import {
-  endorseBill,
-  setUnionDues,
-  setUnionServices,
-  setUnionWageDemand,
-} from "./unionActions";
+import { endorseBill, setUnionDues, setUnionServices, setUnionWageDemand } from "./unionActions";
 import { MAX_DUES_FRACTION_OF_WAGE, maxDuesForWage } from "@/lib/unions/unionDues";
 import { annualWageFromDaily } from "@/lib/unions/unionServices";
 
@@ -203,11 +198,17 @@ function makeSector(overrides: Partial<CorporateSector> = {}): CorporateSector {
   } as unknown as CorporateSector;
 }
 
-function duesDb(union: Union, sectors: CorporateSector[], updateOne = vi.fn().mockResolvedValue({})) {
+function duesDb(
+  union: Union,
+  sectors: CorporateSector[],
+  updateOne = vi.fn().mockResolvedValue({}),
+  isProcessing = false
+) {
   return {
     updateOne,
     db: {
       collection: (name: string) => {
+        if (name === "gameState") return gameStateCollection(isProcessing);
         if (name === "unions") return { findOne: vi.fn().mockResolvedValue(union), updateOne };
         if (name === "federalBudget") {
           return { findOne: vi.fn().mockResolvedValue({ unionsBanned: false }) };
@@ -249,7 +250,12 @@ describe("setUnionDues", () => {
     expect(negative.ok).toBe(false);
     if (!negative.ok) expect(negative.status).toBe(400);
 
-    const nonFinite = await setUnionDues(db, character, union._id.toString(), Number.POSITIVE_INFINITY);
+    const nonFinite = await setUnionDues(
+      db,
+      character,
+      union._id.toString(),
+      Number.POSITIVE_INFINITY
+    );
     expect(nonFinite.ok).toBe(false);
   });
 
@@ -270,9 +276,46 @@ describe("setUnionDues", () => {
   it("rejects a character who does not lead this union", async () => {
     const character = makeCharacter();
     const union = makeUnion(new ObjectId());
-    const { db } = duesDb(union, []);
+    const { db } = duesDb(union, [makeSector()]);
 
     const result = await setUnionDues(db, character, union._id.toString(), 100);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(403);
+  });
+
+  it("explains a zero ceiling instead of silently storing 0 against a positive rate", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id);
+    // No represented sectors: annualWage 0, so maxDues 0.
+    const { db, updateOne } = duesDb(union, []);
+
+    const result = await setUnionDues(db, character, union._id.toString(), 100);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(400);
+      expect(result.error).toMatch(/no paid workforce/i);
+    }
+    expect(updateOne).not.toHaveBeenCalled();
+  });
+
+  it("is rejected while the turn is processing, so a mid-turn change cannot race the snapshot", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id);
+    const { db } = duesDb(union, [makeSector()], vi.fn().mockResolvedValue({}), true);
+
+    const result = await setUnionDues(db, character, union._id.toString(), 10);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(409);
+  });
+});
+
+describe("resolveOwnedUnion suspension gate", () => {
+  it("a suspended union rejects leader actions, matching the read surfaces", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id, { suspended: true });
+    const { db } = duesDb(union, [makeSector()]);
+
+    const result = await setUnionDues(db, character, union._id.toString(), 10);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(403);
   });

@@ -8,6 +8,7 @@ import {
   approvalTarget,
   averageAnnualWage,
   duesIncomePerTurn,
+  maxDuesForWage,
   servicesCostPerTurn,
   trendApproval,
   unionMembers,
@@ -22,7 +23,7 @@ vi.mock("@/lib/labour/featureFlag", () => ({
   isLabourFullMode: vi.fn().mockImplementation(async () => labourFullModeEnabled),
 }));
 
-// Safety-net seeding (zero union docs at full mode) is asserted via this mock, 
+// Safety-net seeding (zero union docs at full mode) is asserted via this mock,
 // the real seedUnions hits states/unions collections this mock db doesn't model.
 vi.mock("@/lib/admin/seed/seedUnions", () => ({
   seedUnions: vi.fn().mockResolvedValue(0),
@@ -190,8 +191,16 @@ describe("processUnionsTurn", () => {
   });
 
   it("credits dues income scaled by real represented-sector members, with no services running", async () => {
-    const union = makeUnion({ treasury: 1000, duesPerWorkerAnnual: 200, activeServices: [] });
-    const sector = makeSector(union._id, { workers: 100, unionization: 50, wagePerWorker: 10 });
+    // Rate within the wage ceiling (maxDuesForWage of a 10/day wage), so the
+    // engine's re-clamp leaves it untouched.
+    const sectorTemplate = { workers: 100, unionization: 50, wagePerWorker: 10 };
+    const withinCeiling = maxDuesForWage(averageAnnualWage([sectorTemplate])) / 2;
+    const union = makeUnion({
+      treasury: 1000,
+      duesPerWorkerAnnual: withinCeiling,
+      activeServices: [],
+    });
+    const sector = makeSector(union._id, sectorTemplate);
     const { db, unionsBulkWrite } = mockDb({
       unions: [union],
       sectors: [sector],
@@ -209,8 +218,31 @@ describe("processUnionsTurn", () => {
 
     const members = unionMembers([sector]);
     expect(members).toBe(50);
-    const expectedDues = duesIncomePerTurn(members, 200);
+    const expectedDues = duesIncomePerTurn(members, withinCeiling);
     expect(update.$inc.treasury).toBeCloseTo(expectedDues, 6);
+  });
+
+  it("re-clamps a stored rate above today's wage ceiling before charging", async () => {
+    // A rate legal when set can exceed 10% of wages after wages fall or a
+    // high-wage shop is lost; the engine must charge the ceiling, not the rate.
+    const sectorTemplate = { workers: 100, unionization: 50, wagePerWorker: 10 };
+    const ceiling = maxDuesForWage(averageAnnualWage([sectorTemplate]));
+    const union = makeUnion({
+      treasury: 1000,
+      duesPerWorkerAnnual: ceiling * 100,
+      activeServices: [],
+    });
+    const sector = makeSector(union._id, sectorTemplate);
+    const { db, unionsBulkWrite } = mockDb({
+      unions: [union],
+      sectors: [sector],
+      activeCharacterIds: [union.ownerId!.toString()],
+    });
+
+    await processUnionsTurn(db);
+    const ops = unionsBulkWrite.mock.calls[0][0];
+    const { update } = ops[0].updateOne;
+    expect(update.$inc.treasury).toBeCloseTo(duesIncomePerTurn(unionMembers([sector]), ceiling), 6);
   });
 
   it("dues income scales with member count: doubling represented workers doubles it", async () => {
@@ -306,7 +338,11 @@ describe("processUnionsTurn", () => {
     expect(moved).toBeGreaterThan(target - 10);
 
     // Already at target: approval must not overshoot or drift once there.
-    const settledUnion = makeUnion({ treasury: 1_000_000, duesPerWorkerAnnual: 0, approval: target });
+    const settledUnion = makeUnion({
+      treasury: 1_000_000,
+      duesPerWorkerAnnual: 0,
+      approval: target,
+    });
     const settledSector = makeSector(settledUnion._id, {
       workers: 100,
       unionization: 50,

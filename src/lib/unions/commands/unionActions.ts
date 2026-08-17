@@ -42,7 +42,11 @@ export async function resolveOwnedUnion(
   if (!union.ownerId || union.ownerId.toString() !== character._id.toString()) {
     return { ok: false, status: 403, error: "You do not lead this union." };
   }
-  if (await isUnionsBanned(db, union.countryId)) {
+  // `suspended` is checked alongside the budget flag so leader actions agree
+  // with the read surfaces ([id]/route.ts, leaderboard), which both render
+  // `suspended || banned` as suspended: a union shown frozen must not still
+  // accept dues/services/organize commands.
+  if (union.suspended === true || (await isUnionsBanned(db, union.countryId))) {
     return { ok: false, status: 403, error: UNIONS_BANNED_MESSAGE };
   }
   return { ok: true, union };
@@ -124,6 +128,9 @@ export async function setUnionDues(
   unionId: string,
   duesPerWorkerAnnual: number
 ): Promise<UnionActionResult> {
+  const turnBusy = await rejectIfTurnProcessing(db);
+  if (turnBusy) return turnBusy;
+
   const resolved = await resolveOwnedUnion(db, character, unionId);
   if (!resolved.ok) return resolved;
   const { union } = resolved;
@@ -139,12 +146,25 @@ export async function setUnionDues(
   const sectors = await loadRepresentedSectors(db, union);
   const annualWage = averageAnnualWage(sectors);
   const maxDues = maxDuesForWage(annualWage);
+  // A union with no represented paid workforce has a 0 ceiling. Say so
+  // instead of silently storing 0 against a positive request.
+  if (maxDues <= 0 && duesPerWorkerAnnual > 0) {
+    return {
+      ok: false,
+      status: 400,
+      error:
+        "This union represents no paid workforce yet, so dues cannot be set. Organize a sector first.",
+    };
+  }
   const clamped = Math.min(Math.max(0, duesPerWorkerAnnual), maxDues);
   const members = unionMembers(sectors);
 
   await db
     .collection<Union>("unions")
-    .updateOne({ _id: union._id }, { $set: { duesPerWorkerAnnual: clamped, updatedAt: new Date() } });
+    .updateOne(
+      { _id: union._id },
+      { $set: { duesPerWorkerAnnual: clamped, updatedAt: new Date() } }
+    );
 
   return {
     ok: true,
@@ -167,6 +187,9 @@ export async function setUnionServices(
   unionId: string,
   activeServices: readonly string[]
 ): Promise<UnionActionResult> {
+  const turnBusy = await rejectIfTurnProcessing(db);
+  if (turnBusy) return turnBusy;
+
   const resolved = await resolveOwnedUnion(db, character, unionId);
   if (!resolved.ok) return resolved;
   const { union } = resolved;

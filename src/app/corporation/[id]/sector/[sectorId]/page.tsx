@@ -352,7 +352,7 @@ export default function SectorDetailPage() {
 
     dispatch({ type: "SET_GROWTH_UPDATING", value: true });
     dispatch({ type: "SET_GROWTH_MESSAGE", value: "" });
-    // Optimistic update so the slider reads the new target immediately, 
+    // Optimistic update so the slider reads the new target immediately,
     // otherwise rapid clicks feel like nothing is happening while the request
     // is in flight.
     dispatch({ type: "UPDATE_SECTOR_PARTIAL", patch: { targetGrowthRate: clamped } });

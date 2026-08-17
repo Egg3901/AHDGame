@@ -529,7 +529,7 @@ export interface PlantBuildOrderView {
   startTurn: number;
   onlineTurn: number;
   turnsRemaining: number;
-  /** 0, 1 share of capacity DELIVERED so far. */
+  /** 0 to 1 share of capacity delivered so far. */
   progress: number;
 }
 

@@ -7,6 +7,11 @@ import { foundUnion } from "./foundUnion";
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn().mockResolvedValue(false) }));
 vi.mock("@/lib/db/collections/gameState", () => ({
   getGameStatePresetOrDefault: vi.fn().mockResolvedValue("modern"),
+  // rejectIfTurnProcessing reaches getGameState -> getGameStateCollection;
+  // without this the module mock silently deletes it and every call throws.
+  getGameStateCollection: vi.fn().mockResolvedValue({
+    findOne: vi.fn().mockResolvedValue({ isProcessing: false }),
+  }),
 }));
 
 function makeCharacter(overrides: Partial<Character> = {}): Character {
@@ -30,6 +35,8 @@ function baseDb(options: {
 }) {
   const insertOne = options.insertOne ?? vi.fn().mockResolvedValue({ insertedId: new ObjectId() });
   const characterFindOneAndUpdate = vi.fn().mockResolvedValue({ cashOnHand: 900_000 });
+  const characterUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+  const unionsDeleteOne = vi.fn().mockResolvedValue({ deletedCount: 1 });
   const unionsFind = vi.fn().mockImplementation(() => ({
     toArray: async () => (options.existingNames ?? []).map((name) => ({ name })),
   }));
@@ -37,6 +44,8 @@ function baseDb(options: {
   return {
     insertOne,
     unionsFind,
+    characterUpdateOne,
+    unionsDeleteOne,
     db: {
       collection: (name: string) => {
         if (name === "gameState") return gameStateCollection();
@@ -44,12 +53,12 @@ function baseDb(options: {
           return { findOne: vi.fn().mockResolvedValue({ unionsBanned: options.banned ?? false }) };
         }
         if (name === "unions") {
-          return { find: unionsFind, insertOne };
+          return { find: unionsFind, insertOne, deleteOne: unionsDeleteOne };
         }
         if (name === "characters") {
           return {
             findOneAndUpdate: characterFindOneAndUpdate,
-            updateOne: vi.fn().mockResolvedValue({}),
+            updateOne: characterUpdateOne,
           };
         }
         throw new Error(`unexpected collection ${name}`);
@@ -138,6 +147,54 @@ describe("foundUnion", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(400);
+  });
+
+  it("rejects a founder who already leads a union", async () => {
+    const character = makeCharacter({ unionLeaderOf: new ObjectId() } as Partial<Character>);
+    const { db, insertOne } = baseDb({});
+
+    const result = await foundUnion(db, character, {
+      countryId: "US",
+      sectorType: "manufacturing",
+      name: "Second Hat Union",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(409);
+    expect(insertOne).not.toHaveBeenCalled();
+  });
+
+  it("claims unionLeaderOf on the founder, guarded, and unwinds a lost race", async () => {
+    const insertedId = new ObjectId();
+    const insertOne = vi.fn().mockResolvedValue({ insertedId });
+    const { db, characterUpdateOne } = baseDb({ insertOne });
+    const character = makeCharacter();
+
+    const result = await foundUnion(db, character, {
+      countryId: "US",
+      sectorType: "manufacturing",
+      name: "Rival Steelworkers",
+    });
+    expect(result.ok).toBe(true);
+    const claimCall = characterUpdateOne.mock.calls.find(
+      ([, update]) => update?.$set?.unionLeaderOf != null
+    );
+    expect(claimCall).toBeDefined();
+    expect(claimCall![1].$set.unionLeaderOf).toEqual(insertedId);
+
+    // Lost race: the guarded claim matches nothing, the union is deleted and
+    // the founder refunded.
+    const insertedId2 = new ObjectId();
+    const insertOne2 = vi.fn().mockResolvedValue({ insertedId: insertedId2 });
+    const raceDb = baseDb({ insertOne: insertOne2 });
+    raceDb.characterUpdateOne.mockResolvedValue({ modifiedCount: 0 });
+    const raceResult = await foundUnion(raceDb.db, makeCharacter(), {
+      countryId: "US",
+      sectorType: "manufacturing",
+      name: "Racing Union",
+    });
+    expect(raceResult.ok).toBe(false);
+    if (!raceResult.ok) expect(raceResult.status).toBe(409);
+    expect(raceDb.unionsDeleteOne).toHaveBeenCalledWith({ _id: insertedId2 });
   });
 
   it("is blocked while the country has an enacted union ban", async () => {

@@ -1,11 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { duesIncomePerTurn, servicesCostPerTurn } from "@/lib/unions/unionDues";
-import { UNION_SERVICES, normalizeServiceIds, type UnionServiceId } from "@/lib/unions/unionServices";
+import {
+  UNION_SERVICES,
+  normalizeServiceIds,
+  type UnionServiceId,
+} from "@/lib/unions/unionServices";
 
 interface UnionServicesPanelProps {
   unionId: string;
+  /** Country the union operates in; used to label money figures with the local currency. */
+  countryId: string;
   members: number;
   /** Member-weighted average annual wage across this union's sectors. 0 = not known yet. */
   annualWage: number;
@@ -30,6 +37,7 @@ function sortedIds(ids: readonly UnionServiceId[]): string {
  */
 export function UnionServicesPanel({
   unionId,
+  countryId,
   members,
   annualWage,
   treasury,
@@ -55,7 +63,11 @@ export function UnionServicesPanel({
   const activeSet = new Set(isHead ? draft : committed);
   const draftCostPerTurn = servicesCostPerTurn(members, annualWage, draft);
   const duesIncome = duesIncomePerTurn(members, duesPerWorkerAnnual);
-  const unfunded = draftCostPerTurn > duesIncome;
+  const currency = COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "";
+  const currencySuffix = currency ? ` ${currency}` : "";
+  // Matches the engine's lapse check: a slate only lapses when the treasury
+  // plus a turn's dues income cannot cover a turn's cost.
+  const unfunded = draftCostPerTurn > treasury + duesIncome;
   const dirty = sortedIds(draft) !== sortedIds(committed);
 
   async function handleSave() {
@@ -89,9 +101,8 @@ export function UnionServicesPanel({
         </span>
       </div>
       <p className="text-sm text-muted">
-        Programmes the union runs out of its treasury every turn. Each one raises approval while
-        it is funded; if the treasury can&apos;t cover the bill, it lapses and stops paying
-        approval.
+        Programmes the union runs out of its treasury every turn. Each one raises approval while it
+        is funded; if the treasury can&apos;t cover the bill, it lapses and stops paying approval.
       </p>
 
       <ul className="divide-y divide-card-border rounded-lg border border-card-border">
@@ -104,8 +115,8 @@ export function UnionServicesPanel({
                 <p className="text-sm font-medium text-foreground">{service.name}</p>
                 <p className="text-xs text-muted">{service.description}</p>
                 <p className="mt-1 text-[11px] text-muted">
-                  Costs {Math.round(costPerTurn).toLocaleString("en-US")}/turn · +
-                  {service.approvalBonus} approval while funded
+                  Costs {Math.round(costPerTurn).toLocaleString("en-US")}
+                  {currencySuffix}/turn · +{service.approvalBonus} approval while funded
                 </p>
               </div>
               {isHead ? (
@@ -143,26 +154,29 @@ export function UnionServicesPanel({
           <span className="text-muted">Combined cost per turn:</span>{" "}
           <span className="font-semibold tabular-nums">
             {Math.round(draftCostPerTurn).toLocaleString("en-US")}
+            {currencySuffix}
           </span>
         </div>
         <div>
           <span className="text-muted">Dues income per turn:</span>{" "}
           <span className="font-semibold tabular-nums">
             {Math.round(duesIncome).toLocaleString("en-US")}
+            {currencySuffix}
           </span>
         </div>
         <div>
           <span className="text-muted">Treasury:</span>{" "}
           <span className="font-semibold tabular-nums">
             {Math.round(treasury).toLocaleString("en-US")}
+            {currencySuffix}
           </span>
         </div>
       </div>
 
       {unfunded && (
         <p className="text-xs font-medium text-warning">
-          This slate costs more per turn than dues bring in. Unfunded services lapse and stop
-          paying approval.
+          This slate costs more per turn than the treasury and dues income can cover. Unfunded
+          services lapse and stop paying approval.
         </p>
       )}
 

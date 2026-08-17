@@ -77,6 +77,18 @@ export async function foundUnion(
     return { ok: false, status: 403, error: UNIONS_BANNED_MESSAGE };
   }
 
+  // One union per leader, the same invariant acceptUnionLeadership and
+  // voteUnionLeader enforce. Without this a founder could lead every union
+  // they could pay for, and reconcileUnionOwnerCache would flap the
+  // `unionLeaderOf` cache between them on every page view.
+  if (character.unionLeaderOf != null) {
+    return {
+      ok: false,
+      status: 409,
+      error: "You already lead a union. Step down before founding another.",
+    };
+  }
+
   const name = input.name.trim();
   if (name.length < MIN_UNION_NAME_LENGTH || name.length > MAX_UNION_NAME_LENGTH) {
     return {
@@ -91,10 +103,7 @@ export async function foundUnion(
   // unions organizing the same industry in the same country cannot share one.
   const existingNames = await db
     .collection<Union>("unions")
-    .find(
-      { countryId: input.countryId, sectorType: input.sectorType },
-      { projection: { name: 1 } }
-    )
+    .find({ countryId: input.countryId, sectorType: input.sectorType }, { projection: { name: 1 } })
     .toArray();
   const nameLower = name.toLowerCase();
   if (existingNames.some((u) => (u.name ?? "").trim().toLowerCase() === nameLower)) {
@@ -109,7 +118,9 @@ export async function foundUnion(
   const preset = await getGameStatePresetOrDefault(db);
   const homeCurrency = getHomeCurrency(character);
   const foundingRate = getFoundingFxRate(input.countryId, forexEnabled);
-  const costLocal = Math.round(getEraNominalAmount(UNION_FOUNDING_COST_ANCHOR, preset) * foundingRate);
+  const costLocal = Math.round(
+    getEraNominalAmount(UNION_FOUNDING_COST_ANCHOR, preset) * foundingRate
+  );
 
   const debit = await atomicallyDebitCharacterCash(
     db,
@@ -148,6 +159,26 @@ export async function foundUnion(
       updatedAt: now,
     } as Union);
 
+    // Claim leadership under the same guarded filter acceptUnionLeadership
+    // uses, so a concurrent leadership win elsewhere cannot leave one
+    // character heading two unions. A lost race unwinds the founding.
+    const claim = await db.collection<Character>("characters").updateOne(
+      {
+        _id: character._id,
+        $or: [{ unionLeaderOf: null }, { unionLeaderOf: { $exists: false } }],
+      },
+      { $set: { unionLeaderOf: insertResult.insertedId, updatedAt: now } }
+    );
+    if (claim.modifiedCount === 0) {
+      await db.collection<Union>("unions").deleteOne({ _id: insertResult.insertedId });
+      await refundCharacterCash(db, character._id, homeCurrency, costLocal, forexEnabled);
+      return {
+        ok: false,
+        status: 409,
+        error: "You already lead a union. Step down before founding another.",
+      };
+    }
+
     return {
       ok: true,
       status: 200,
@@ -165,7 +196,10 @@ export async function foundUnion(
     // some worlds may still carry from before rival unions existed.
     await refundCharacterCash(db, character._id, homeCurrency, costLocal, forexEnabled);
     const message =
-      error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === 11000
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code: unknown }).code === 11000
         ? "This country and industry already has a union blocking a second one at the database level, contact ops."
         : "Failed to found the union, you have been refunded.";
     return { ok: false, status: 409, error: message };

@@ -128,7 +128,9 @@ export default function UnionsPage() {
     const led = rows.filter((r) => !r.isVacant);
     const totalTreasury = rows.reduce((sum, r) => sum + r.treasury, 0);
     const totalMembers = rows.reduce((sum, r) => sum + r.members, 0);
-    const avgApproval = rows.length ? rows.reduce((sum, r) => sum + r.approval, 0) / rows.length : 0;
+    const avgApproval = rows.length
+      ? rows.reduce((sum, r) => sum + r.approval, 0) / rows.length
+      : 0;
     const vacant = rows.filter((r) => r.isVacant).length;
     return { ledCount: led.length, vacant, totalTreasury, totalMembers, avgApproval };
   }, [rows]);
@@ -214,7 +216,7 @@ export default function UnionsPage() {
       {!notEnabled && (
         <p className="text-sm text-muted">
           Every industry already has a union. Vacant unions need organizers to fund drives and elect
-          a president, open a union page to organize or vote.
+          a president; open a union page to organize or vote.
         </p>
       )}
 
@@ -305,7 +307,7 @@ export default function UnionsPage() {
                   <th className="px-4 py-3 font-medium">Union</th>
                   <th className="px-4 py-3 font-medium">
                     Leader
-                    <Tooltip content="The union president. A vacant union has none, fund organize drives on its page, then vote one in." />
+                    <Tooltip content="The union president. A vacant union has none; fund organize drives on its page, then vote one in." />
                   </th>
                   <th className="px-4 py-3 text-right font-medium">
                     <span className="inline-flex items-center">

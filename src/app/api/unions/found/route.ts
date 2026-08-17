@@ -61,7 +61,8 @@ export async function POST(request: Request) {
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-    return NextResponse.json({ success: true, ...result }, { status: 201 });
+    const { ok: _ok, status: _status, ...payload } = result;
+    return NextResponse.json({ success: true, ...payload }, { status: 201 });
     // Note: 201 (Created) rather than `result.status` (200, the shared
     // UnionActionResult convention for a mutation on an existing union), this
     // route is the one place under src/app/api/unions that creates a new

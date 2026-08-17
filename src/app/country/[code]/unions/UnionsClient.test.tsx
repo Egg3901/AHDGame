@@ -98,9 +98,10 @@ describe('UnionsClient, labourSystemMode at "full"', () => {
     expect(screen.getByText("UAW")).toBeTruthy();
     expect(screen.getByText("Walter Reuther")).toBeTruthy();
     // Membership, Approval, and Funds columns: thousands separator and %.
-    expect(screen.getByText("42,500")).toBeTruthy();
-    expect(screen.getByText("61%")).toBeTruthy();
-    expect(screen.getByText("1,250")).toBeTruthy();
+    // Appears in both the members stat tile and the table cell.
+    expect(screen.getAllByText("42,500").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("61%").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("1,250").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows total membership, average approval, and total funds in the header strip", async () => {

@@ -85,7 +85,14 @@ describe("dues and services controls, head-only gating", () => {
     await waitFor(() => expect(screen.getByText("United Dockworkers")).toBeTruthy());
 
     // Read-only dues line, no slider and no save button.
-    expect(screen.getByText(/members pay 200 a year each/i)).toBeTruthy();
+    // The figure carries a currency suffix and spans nested text nodes, so
+    // match on the paragraph's whole text content.
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.tagName === "P" && /members pay 200\b.*a year each/i.test(el.textContent ?? "")
+      )
+    ).toBeTruthy();
     expect(screen.queryByRole("slider", { name: /annual dues per member/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /set dues/i })).toBeNull();
 

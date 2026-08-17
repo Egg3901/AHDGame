@@ -54,7 +54,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-    return NextResponse.json({ success: true, ...result });
+    const { ok: _ok, status: _status, ...payload } = result;
+    return NextResponse.json({ success: true, ...payload });
   } catch (error) {
     return handleRouteError(error);
   }

@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { Slider } from "@/components/ui";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { approvalTarget, duesIncomePerTurn, maxDuesForWage } from "@/lib/unions/unionDues";
 import type { UnionServiceId } from "@/lib/unions/unionServices";
 
 interface UnionDuesPanelProps {
   unionId: string;
+  /** Country the union operates in; used to label money figures with the local currency. */
+  countryId: string;
   members: number;
   duesPerWorkerAnnual: number;
   /** Member-weighted average annual wage across this union's sectors. 0 = not known yet. */
@@ -27,6 +30,7 @@ interface UnionDuesPanelProps {
  */
 export function UnionDuesPanel({
   unionId,
+  countryId,
   members,
   duesPerWorkerAnnual,
   annualWage,
@@ -43,8 +47,14 @@ export function UnionDuesPanel({
     setDraft(duesPerWorkerAnnual);
   }, [duesPerWorkerAnnual]);
 
+  const currency = COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "";
+  const currencySuffix = currency ? ` ${currency}` : "";
   const wageKnown = annualWage > 0;
   const maxDues = Math.round(maxDuesForWage(annualWage));
+  // A persisted dues value can exceed today's ceiling (wages fell). Widen the
+  // slider range so it does not misrepresent the stored value.
+  const sliderMax = Math.max(maxDues, draft);
+  const duesLocked = maxDues <= 0;
   const currentIncome = duesIncomePerTurn(members, duesPerWorkerAnnual);
   const draftIncome = duesIncomePerTurn(members, draft);
   const currentApprovalTarget = approvalTarget({
@@ -87,14 +97,17 @@ export function UnionDuesPanel({
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-sm font-semibold text-foreground">Dues</h3>
         <span className="text-xs text-muted tabular-nums">
-          {Math.round(duesPerWorkerAnnual).toLocaleString("en-US")}/member/year
+          {Math.round(duesPerWorkerAnnual).toLocaleString("en-US")}
+          {currencySuffix}/member/year
         </span>
       </div>
 
       {!isHead ? (
         <p className="text-sm text-muted">
-          Members pay {Math.round(duesPerWorkerAnnual).toLocaleString("en-US")} a year each,
-          bringing in about {Math.round(currentIncome).toLocaleString("en-US")} a turn.
+          Members pay {Math.round(duesPerWorkerAnnual).toLocaleString("en-US")}
+          {currencySuffix} a year each, bringing in about{" "}
+          {Math.round(currentIncome).toLocaleString("en-US")}
+          {currencySuffix} a turn.
         </p>
       ) : !wageKnown ? (
         <p className="text-sm text-muted">
@@ -109,29 +122,39 @@ export function UnionDuesPanel({
           <div className="space-y-1.5">
             <Slider
               min={0}
-              max={maxDues}
-              step={Math.max(1, Math.round(maxDues / 200))}
+              max={sliderMax}
+              step={Math.max(1, Math.round(sliderMax / 200))}
               value={draft}
               onChange={(e) => setDraft(Number(e.target.value))}
-              disabled={saving || suspended}
+              disabled={saving || suspended || duesLocked}
               aria-label="Annual dues per member"
             />
             <div className="flex justify-between text-[11px] text-muted">
               <span>0</span>
-              <span>Max {maxDues.toLocaleString("en-US")}</span>
+              <span>
+                Max {maxDues.toLocaleString("en-US")}
+                {currencySuffix}
+              </span>
             </div>
+            {duesLocked && (
+              <p className="text-[11px] text-muted">
+                Dues cannot be set until the union represents a paid workforce.
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap gap-4 text-sm">
             <div>
               <span className="text-muted">Dues rate:</span>{" "}
               <span className="font-semibold tabular-nums">
-                {Math.round(draft).toLocaleString("en-US")}/year
+                {Math.round(draft).toLocaleString("en-US")}
+                {currencySuffix}/year
               </span>
             </div>
             <div>
               <span className="text-muted">Income per turn at this rate:</span>{" "}
               <span className="font-semibold tabular-nums">
                 {Math.round(draftIncome).toLocaleString("en-US")}
+                {currencySuffix}
               </span>
             </div>
             <div>

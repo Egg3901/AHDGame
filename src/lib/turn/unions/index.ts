@@ -8,6 +8,7 @@ import {
   approvalTarget,
   averageAnnualWage,
   duesIncomePerTurn,
+  maxDuesForWage,
   servicesCostPerTurn,
   trendApproval,
   unionApproval,
@@ -244,7 +245,15 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
       const members = unionMembers(sectors);
       const annualWage = averageAnnualWage(sectors);
       const activeServices = normalizeServiceIds(u.activeServices);
-      const duesIncome = duesIncomePerTurn(members, u.duesPerWorkerAnnual ?? 0);
+      // Re-clamp the stored rate against TODAY's wages: setUnionDues clamps at
+      // write time, but wages can fall (or high-wage shops can be lost) after
+      // the rate was set, and the engine must never charge above the 10%
+      // ceiling the API and the display both enforce.
+      const duesRate = Math.min(
+        Math.max(0, u.duesPerWorkerAnnual ?? 0),
+        maxDuesForWage(annualWage)
+      );
+      const duesIncome = duesIncomePerTurn(members, duesRate);
       const fullServicesCost = servicesCostPerTurn(members, annualWage, activeServices);
       // The service bill never pushes the treasury negative: if this turn's
       // dues income can't cover it, the whole slate lapses for the turn (no
@@ -253,7 +262,7 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
       const servicesLapsed = fullServicesCost > affordableTreasury;
       const servicesCost = servicesLapsed ? 0 : fullServicesCost;
       const target = approvalTarget({
-        duesPerWorkerAnnual: u.duesPerWorkerAnnual ?? 0,
+        duesPerWorkerAnnual: duesRate,
         annualWage,
         activeServices,
         servicesLapsed,

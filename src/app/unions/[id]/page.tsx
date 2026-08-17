@@ -472,7 +472,10 @@ export default function UnionDashboardPage({ params }: PageProps) {
             value={members.toLocaleString("en-US")}
             sub={
               workforce
-                ? { label: `${Math.round(workforce.density * 100)}% of workforce`, toneClass: "text-muted" }
+                ? {
+                    label: `${Math.round(workforce.density * 100)}% of workforce`,
+                    toneClass: "text-muted",
+                  }
                 : undefined
             }
             hint="Real headcount: workers across this union's sectors, weighted by how unionized each one is. This is what dues are charged against."
@@ -482,7 +485,8 @@ export default function UnionDashboardPage({ params }: PageProps) {
             value={`${Math.round(approval)}%`}
             sub={{
               label: approval >= 50 ? "Members are satisfied" : "Members are unhappy",
-              toneClass: approval >= 50 ? "text-success" : approval >= 30 ? "text-warning" : "text-error",
+              toneClass:
+                approval >= 50 ? "text-success" : approval >= 30 ? "text-warning" : "text-error",
             }}
             hint="How the membership rates the bargain, 0-100. Dues push it down, running services pushes it up. It anchors whether the union grows into new shops or bleeds density."
           />
@@ -608,6 +612,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
         </div>
         <UnionDuesPanel
           unionId={id}
+          countryId={union.countryId}
           members={members}
           duesPerWorkerAnnual={duesPerWorkerAnnual}
           annualWage={annualWage}
@@ -618,6 +623,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
         />
         <UnionServicesPanel
           unionId={id}
+          countryId={union.countryId}
           members={members}
           annualWage={annualWage}
           treasury={union.treasury}
@@ -675,9 +681,8 @@ export default function UnionDashboardPage({ params }: PageProps) {
               actually represents. Growing the union means organizing a
               specific sector, which happens on that sector's own page. */}
           <p className="text-[11px] text-muted">
-            To grow this union, organize a sector directly from its page. A drive
-            raises that sector\'s unionization, and if it is held by a rival, it
-            is a raid.
+            To grow this union, organize a sector directly from its page. A drive raises that
+            sector&apos;s unionization, and if it is held by a rival, it is a raid.
           </p>
 
           {/* Public wage claim: a pressure signal, not a contract. It shows up

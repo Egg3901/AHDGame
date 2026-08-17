@@ -127,7 +127,9 @@ export function UnionsClient() {
     const led = rows.filter((r) => !r.isVacant);
     const totalTreasury = rows.reduce((sum, r) => sum + r.treasury, 0);
     const totalMembers = rows.reduce((sum, r) => sum + r.members, 0);
-    const avgApproval = rows.length ? rows.reduce((sum, r) => sum + r.approval, 0) / rows.length : 0;
+    const avgApproval = rows.length
+      ? rows.reduce((sum, r) => sum + r.approval, 0) / rows.length
+      : 0;
     const vacant = rows.filter((r) => r.isVacant).length;
     return { ledCount: led.length, vacant, totalTreasury, totalMembers, avgApproval };
   }, [rows]);
@@ -301,10 +303,10 @@ export function UnionsClient() {
                   <th className="px-4 py-3 font-medium">
                     <span className="inline-flex items-center">
                       President
-                      <Tooltip content="The union president. A vacant union has none, fund organize drives on its page, then vote one in." />
+                      <Tooltip content="The union president. A vacant union has none; fund organize drives on its page, then vote one in." />
                     </span>
                   </th>
-                  <th className="px-4 py-3 text-right font-medium">
+                  <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">
                     <span className="inline-flex items-center">
                       Membership
                       <Tooltip content="Real headcount: workers across this union's sectors, weighted by how unionized each one is." />
@@ -373,7 +375,7 @@ export function UnionsClient() {
                           ))
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono tabular-nums">
+                      <td className="hidden px-4 py-3 text-right font-mono tabular-nums sm:table-cell">
                         {Math.round(r.members).toLocaleString("en-US")}
                       </td>
                       <td className="px-4 py-3 text-right">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Modal } from "@/components/ui";
 import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 
 const MIN_NAME_LENGTH = 3;
@@ -31,8 +32,6 @@ export function FoundUnionModal({
   const [sectorType, setSectorType] = useState<CorporationType | "">("");
   const [founding, setFounding] = useState(false);
   const [error, setError] = useState("");
-
-  if (!open) return null;
 
   const trimmedName = name.trim();
   const nameError =
@@ -78,35 +77,35 @@ export function FoundUnionModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="found-union-title"
-    >
-      <div className="flex w-full max-w-sm flex-col overflow-hidden rounded-xl border border-card-border bg-card shadow-modal">
-        <div className="p-6">
-          <h2 id="found-union-title" className="mb-1 text-xl font-bold text-foreground">
-            Found a Union
-          </h2>
+    <Modal open={open} onClose={handleClose} title="Found a Union" maxWidthClass="max-w-sm">
+      <div className="flex flex-col">
+        <div>
           <p className="mb-4 text-sm text-muted">
-            Starts a new union in {countryName} with no sectors and no treasury. Organize (or
-            raid) your way into representation from there.
+            Starts a new union in {countryName} with no sectors and no treasury. Organize (or raid)
+            your way into representation from there.
           </p>
 
           {error && (
-            <div className="mb-4 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+            <div
+              role="alert"
+              className="mb-4 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error"
+            >
               {error}
             </div>
           )}
 
           <div className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted">
+              <label
+                htmlFor="found-union-name"
+                className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted"
+              >
                 Union Name
               </label>
               <input
+                id="found-union-name"
                 type="text"
+                autoFocus
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Independent Steelworkers Alliance"
@@ -117,10 +116,14 @@ export function FoundUnionModal({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted">
+              <label
+                htmlFor="found-union-industry"
+                className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted"
+              >
                 Industry
               </label>
               <select
+                id="found-union-industry"
                 value={sectorType}
                 onChange={(e) => setSectorType(e.target.value as CorporationType | "")}
                 className="w-full cursor-pointer rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none"
@@ -138,7 +141,7 @@ export function FoundUnionModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-card-border px-6 py-4">
+        <div className="mt-4 flex items-center justify-end gap-3 border-t border-card-border pt-4">
           <button
             type="button"
             onClick={handleClose}
@@ -156,6 +159,6 @@ export function FoundUnionModal({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

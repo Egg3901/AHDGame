@@ -288,9 +288,9 @@ describe("union industrial-relations dashboard", () => {
     expect(
       (screen.getByRole("button", { name: "Run Organize Drive" }) as HTMLButtonElement).disabled
     ).toBe(true);
-    expect(
-      (screen.getByRole("button", { name: "Run Recruitment Drive" }) as HTMLButtonElement).disabled
-    ).toBe(true);
+    // The recruitment drive is retired under union dues v1: growth happens by
+    // organizing a sector from that sector's page, so there is no button here.
+    expect(screen.queryByRole("button", { name: "Run Recruitment Drive" })).toBeNull();
     expect((screen.getByRole("button", { name: "Set Demand" }) as HTMLButtonElement).disabled).toBe(
       true
     );

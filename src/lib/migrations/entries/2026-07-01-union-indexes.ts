@@ -44,8 +44,23 @@ const INDEXES: IndexPlan[] = [
 async function createPlannedIndexes(db: Db, dryRun: boolean): Promise<MigrationResult> {
   const notes: string[] = [];
 
-  // Drop before create: an environment that already ran the original version of
-  // this migration carries the outright unique index, which would reject the
+  // Create BEFORE drop: the names differ, so the partial index can be built
+  // while the legacy outright-unique one still stands. If the build fails
+  // (e.g. a world already carrying duplicate seeded docs in one pair throws
+  // E11000), the migration aborts with the old guard still in place, rather
+  // than having dropped it first and left the collection unprotected.
+  for (const plan of INDEXES) {
+    const label = `${plan.collection}.${plan.options.name}`;
+    if (dryRun) {
+      notes.push(`would create ${label}`);
+      continue;
+    }
+    await db.collection(plan.collection).createIndex(plan.keys, plan.options);
+    notes.push(`created/verified ${label}`);
+  }
+
+  // Drop the legacy outright-unique index: an environment that already ran the
+  // original version of this migration carries it, and it would reject the
   // second union in an industry no matter what the new partial index says.
   for (const dropped of DROPPED_INDEXES) {
     const label = `${dropped.collection}.${dropped.name}`;
@@ -56,22 +71,18 @@ async function createPlannedIndexes(db: Db, dryRun: boolean): Promise<MigrationR
     try {
       await db.collection(dropped.collection).dropIndex(dropped.name);
       notes.push(`dropped ${label}`);
-    } catch {
-      // IndexNotFound is the normal path: most environments never ran the
-      // original. Anything else here is not worth failing the migration over,
-      // because the create below is what actually matters.
-      notes.push(`${label} not present`);
+    } catch (error) {
+      // IndexNotFound (code 27) is the normal path: most environments never
+      // ran the original. Anything else (permissions, in-progress build) means
+      // the legacy index may still exist and would block founding at the DB
+      // level while the migration reported success, so fail loudly instead.
+      const code = (error as { code?: unknown; codeName?: unknown }) ?? {};
+      if (code.code === 27 || code.codeName === "IndexNotFound") {
+        notes.push(`${label} not present`);
+      } else {
+        throw error;
+      }
     }
-  }
-
-  for (const plan of INDEXES) {
-    const label = `${plan.collection}.${plan.options.name}`;
-    if (dryRun) {
-      notes.push(`would create ${label}`);
-      continue;
-    }
-    await db.collection(plan.collection).createIndex(plan.keys, plan.options);
-    notes.push(`created/verified ${label}`);
   }
 
   return {
