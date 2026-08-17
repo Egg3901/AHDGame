@@ -284,9 +284,11 @@ function CensusCard({ title, rows, viewMode }: CensusCardProps) {
               <tr>
                 <th className="px-4 py-2">Group</th>
                 <th className="px-4 py-2 text-right">Share</th>
-                <th className="px-4 py-2 text-right">Turnout</th>
-                <th className="px-4 py-2 text-right" title="Baseline + Modifier">
-                  Actual
+                <th className="px-4 py-2 text-right" title="Party GOTV / canvassing modifier">
+                  GOTV ±
+                </th>
+                <th className="px-4 py-2 text-right" title="Baseline + modifier">
+                  Turnout %
                 </th>
               </tr>
             </thead>
@@ -504,8 +506,12 @@ function VoterGroupsSection({
                   <th className="px-4 py-2 text-right">Share</th>
                   {hasTurnout && (
                     <>
-                      <th className="px-4 py-2 text-right">Turnout</th>
-                      <th className="px-4 py-2 text-right">Actual</th>
+                      <th className="px-4 py-2 text-right" title="Party GOTV / canvassing modifier">
+                        GOTV ±
+                      </th>
+                      <th className="px-4 py-2 text-right" title="Baseline + modifier">
+                        Turnout %
+                      </th>
                     </>
                   )}
                 </tr>
@@ -925,7 +931,11 @@ export function DemographicsAndTurnoutTab({
               </p>
               <ul className="text-xs text-muted/80 space-y-1">
                 <li>
-                  <strong>Actual</strong> = Baseline + Modifier (expected turnout for this group)
+                  <strong>Turnout %</strong> = Baseline + GOTV modifier (expected turnout for this
+                  group)
+                </li>
+                <li>
+                  <strong>GOTV ±</strong> = party boost or suppression vs baseline
                 </li>
                 <li>
                   <span className="text-success">Green</span> = Higher than baseline
@@ -1104,8 +1114,11 @@ export function DemographicsAndTurnoutTab({
               </p>
               <ul className="text-xs text-muted/80 space-y-1">
                 <li>
-                  <strong>Actual</strong> = Baseline + Modifier (expected turnout for this
+                  <strong>Turnout %</strong> = Baseline + GOTV modifier (expected turnout for this
                   demographic)
+                </li>
+                <li>
+                  <strong>GOTV ±</strong> = party boost or suppression vs baseline
                 </li>
                 <li>
                   <span className="text-success">Green</span> = Higher than baseline
@@ -1147,7 +1160,11 @@ export function DemographicsAndTurnoutTab({
               </p>
               <ul className="text-xs text-muted/80 space-y-1">
                 <li>
-                  <strong>Actual</strong> = Baseline + Modifier (expected turnout for this group)
+                  <strong>Turnout %</strong> = Baseline + GOTV modifier (expected turnout for this
+                  group)
+                </li>
+                <li>
+                  <strong>GOTV ±</strong> = party boost or suppression vs baseline
                 </li>
                 <li>
                   <span className="text-success">Green</span> = Higher than baseline
