@@ -164,4 +164,40 @@ describe("SuspectNameButton peek", () => {
     );
     expect(screen.getByRole("button", { name: "Ban" })).toBeTruthy();
   });
+
+  it("still shows field values when opened from a transformed ring-graph node", () => {
+    const member: AltMemberIdentity = {
+      userId: "aaaaaaaaaaaaaaaaaaaaaaaa",
+      name: "acct",
+      banned: false,
+      characterName: "John Johnson",
+      characterId: "bbbbbbbbbbbbbbbbbbbbbbbb",
+      sequentialId: 7,
+      avatarUrl: null,
+      discordId: "175928847299117063",
+      discordUsername: "jjohn",
+      discordAvatar: null,
+      discordCreatedAt: "2016-04-30T11:18:25.796Z",
+      email: "acct@example.com",
+      lastKnownIp: "198.51.100.42",
+      registrationIp: "203.0.113.9",
+      trackingId: "cookie-abc",
+    };
+
+    render(
+      <div style={{ transform: "translate(-50%, -50%)", width: 96, overflow: "hidden" }}>
+        <SuspectPeekProvider context="admin" onMemberBanned={vi.fn()} notify={vi.fn()}>
+          <SuspectNameButton member={member} />
+        </SuspectPeekProvider>
+      </div>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "John Johnson" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("John Johnson");
+    expect(dialog.textContent).toContain("acct@example.com");
+    expect(dialog.textContent).toContain("198.51.100.42");
+    expect(dialog.textContent).toContain("cookie-abc");
+    expect(dialog.textContent).toContain("@jjohn");
+  });
 });
