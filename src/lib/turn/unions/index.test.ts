@@ -515,27 +515,29 @@ describe("adoptUnrepresentedSectors", () => {
       modifiedCount: ops.length,
     }));
     const sectorsFind = vi.fn().mockReturnValue({ toArray: async () => sectors });
-    const unionsFind = vi.fn().mockImplementation(
-      (filter: {
-        foundedByCharacterId?: unknown;
-        ownerId?: unknown;
-        $or?: Array<{ ownerId?: unknown; ownerType?: unknown }>;
-      }) => ({
-        toArray: async () =>
-          unions.filter((union) => {
-            if (filter.foundedByCharacterId === null && union.foundedByCharacterId != null) {
-              return false;
-            }
-            if (filter.ownerId === null && union.ownerId != null) return false;
-            if (!filter.$or) return true;
-            return filter.$or.some((clause) => {
-              if (clause.ownerId === null) return union.ownerId == null;
-              if (clause.ownerType === "npp") return union.ownerType === "npp";
-              return false;
-            });
-          }),
-      })
-    );
+    const unionsFind = vi
+      .fn()
+      .mockImplementation(
+        (filter: {
+          foundedByCharacterId?: unknown;
+          ownerId?: unknown;
+          $or?: Array<{ ownerId?: unknown; ownerType?: unknown }>;
+        }) => ({
+          toArray: async () =>
+            unions.filter((union) => {
+              if (filter.foundedByCharacterId === null && union.foundedByCharacterId != null) {
+                return false;
+              }
+              if (filter.ownerId === null && union.ownerId != null) return false;
+              if (!filter.$or) return true;
+              return filter.$or.some((clause) => {
+                if (clause.ownerId === null) return union.ownerId == null;
+                if (clause.ownerType === "npp") return union.ownerType === "npp";
+                return false;
+              });
+            }),
+        })
+      );
     const db = {
       collection: (name: string) => {
         if (name === "corporateSectors") return { find: sectorsFind, bulkWrite };
