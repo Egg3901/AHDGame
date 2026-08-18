@@ -6,6 +6,8 @@ import {
   BUYER_TOLERANCE_SLACK,
   FREIGHT_TEU_PER_UNIT_HOP,
   FREIGHT_CLASS_CAPACITY_SHARE,
+  FREIGHT_CLASS_SHARE_FLOOR,
+  adaptiveClassShares,
   SEA_FREIGHT_HOP_EQUIV,
   type SourcingInputs,
 } from "./sourcing";
@@ -260,5 +262,112 @@ describe("runSourcingPass", () => {
   it("importAggregatesByCountry: no entry for a buyer country with no import flows", () => {
     const r = runSourcingPass(makeInputs());
     expect(r.importAggregatesByCountry.has("US")).toBe(false);
+  });
+});
+
+describe("adaptiveClassShares", () => {
+  it("falls back to the static split with no prior load", () => {
+    expect(adaptiveClassShares(undefined)).toEqual(FREIGHT_CLASS_CAPACITY_SHARE);
+    expect(adaptiveClassShares({ bulk: 0, special: 0 })).toEqual(FREIGHT_CLASS_CAPACITY_SHARE);
+  });
+
+  it("follows the measured mix (NY t202: ~90% special demand got 30% capacity)", () => {
+    const shares = adaptiveClassShares({ bulk: 328, special: 2958 });
+    expect(shares.special).toBeCloseTo(1 - FREIGHT_CLASS_SHARE_FLOOR, 5);
+    expect(shares.bulk).toBeCloseTo(FREIGHT_CLASS_SHARE_FLOOR, 5);
+  });
+
+  it("floors both classes so neither is starved by a one-turn skew", () => {
+    const allBulk = adaptiveClassShares({ bulk: 1000, special: 0 });
+    expect(allBulk.special).toBeCloseTo(FREIGHT_CLASS_SHARE_FLOOR, 5);
+    const even = adaptiveClassShares({ bulk: 500, special: 500 });
+    expect(even.bulk).toBeCloseTo(0.5, 5);
+    expect(even.special).toBeCloseTo(0.5, 5);
+  });
+
+  it("the pass sizes per-state capacity from the prior loads", () => {
+    // A2 hauled special-heavy last turn; with the static 30% share its special
+    // capacity would be 300 TEU, adaptive gives it 80% of 1000.
+    const heavy = new Map([["A2", { bulk: 100, special: 900 }]]);
+    const withPrior = runSourcingPass(
+      makeInputs({
+        freightPrice: 10,
+        priorClassLoads: heavy,
+        byState: new Map([
+          [
+            "A1",
+            (() => {
+              const m = new Map();
+              m.set("rare_earth", { supply: 0, demand: 5000 });
+              return m;
+            })(),
+          ],
+          [
+            "A2",
+            (() => {
+              const m = new Map();
+              m.set("rare_earth", { supply: 6000, demand: 0 });
+              m.set("freight", { supply: 1000, demand: 0 });
+              return m;
+            })(),
+          ],
+          ["B1", new Map()],
+        ]),
+        byCountry: new Map([
+          [
+            "US",
+            (() => {
+              const m = new Map();
+              m.set("rare_earth", { supply: 6000, demand: 5000 });
+              return m;
+            })(),
+          ],
+          ["UK", new Map()],
+        ]),
+      })
+    );
+    const noPrior = runSourcingPass(
+      makeInputs({
+        freightPrice: 10,
+        byState: new Map([
+          [
+            "A1",
+            (() => {
+              const m = new Map();
+              m.set("rare_earth", { supply: 0, demand: 5000 });
+              return m;
+            })(),
+          ],
+          [
+            "A2",
+            (() => {
+              const m = new Map();
+              m.set("rare_earth", { supply: 6000, demand: 0 });
+              m.set("freight", { supply: 1000, demand: 0 });
+              return m;
+            })(),
+          ],
+          ["B1", new Map()],
+        ]),
+        byCountry: new Map([
+          [
+            "US",
+            (() => {
+              const m = new Map();
+              m.set("rare_earth", { supply: 6000, demand: 5000 });
+              return m;
+            })(),
+          ],
+          ["UK", new Map()],
+        ]),
+      })
+    );
+    const shipped = (r: ReturnType<typeof runSourcingPass>) =>
+      r.flows
+        .filter((f) => f.commodity === "rare_earth" && f.originId === "A2")
+        .reduce((s, f) => s + f.units, 0);
+    // rare_earth is special class: adaptive split moves more of A2's fleet to
+    // special trailers, so more units reach A1 before capacity binds.
+    expect(shipped(withPrior)).toBeGreaterThan(shipped(noPrior));
   });
 });

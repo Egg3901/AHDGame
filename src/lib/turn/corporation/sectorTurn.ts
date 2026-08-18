@@ -117,6 +117,7 @@ import { resolveSectorGrowthPolicy } from "./sectorGrowthPolicy";
 import { resolveSectorLabourEconomics, resolveSectorLabourProductionEffects } from "./sectorLabour";
 import { computeSectorOutputUnits } from "./sectorOutputUnits";
 import { STRANDED_LOW_FILL_THRESHOLD } from "@/lib/corporations/strandedPlant";
+import { advanceSectorInventory } from "@/lib/corporations/sectorInventory";
 import type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
 
 export { computeSectorOutputUnits } from "./sectorOutputUnits";
@@ -1652,6 +1653,30 @@ export function processSector(
     : 0;
 
   // Build sector update — include transition advancement if applicable.
+  // ── Inventory of unsold storable output (design-realization-legs §6 v1) ────
+  // Plants + clearing only: soldFraction is the accrual signal and mixPrice the
+  // valuation basis, neither exists below those tiers. The drained revenue and
+  // carrying cost ride the sector's normal rails below: revenue into
+  // `realizedRevenue` and the result's `hourlyRevenue` (taxed and aggregated
+  // like operating income), carry into the result's `costs`.
+  const inventoryTurn =
+    plantsEnabled && market.clearingEnabled && clearing && plantsMixPrice > 0
+      ? advanceSectorInventory({
+          inventory: (sector.inventoryUnits ?? {}) as Partial<Record<CommodityType, number>>,
+          stockpileEnabled: sector.stockpileUnsold === true,
+          producedUnits,
+          soldUnits,
+          soldFraction: clearing.soldFraction,
+          soldByCommodity: clearing.soldByCommodity ?? {},
+          supplyRates: (strategyRates.supply ?? {}) as Partial<Record<CommodityType, number>>,
+          mixPriceAnchor: plantsMixPrice,
+        })
+      : null;
+  const hourlyInventoryRevenue = inventoryTurn
+    ? inventoryTurn.drainedRevenueAnchor / TURNS_PER_DAY
+    : 0;
+  const hourlyInventoryCarry = inventoryTurn ? inventoryTurn.carryCostAnchor / TURNS_PER_DAY : 0;
+
   // Persist countryId so API endpoints don't need to re-derive it from the state.
   // newRevenue / newGrowthCost are ₳ (computed from anchor inputs); convert
   // back to the sector's HOST-state functional currency for storage (the market
@@ -1671,7 +1696,7 @@ export function processSector(
     // corp-wide ratio across heterogeneous sectors (a $0 embargoed sector now
     // reads $0, not corp-average). Never read back into the economy.
     realizedRevenue: writeCorpEconomicLocal(
-      hourlyRevenue * TURNS_PER_DAY,
+      (hourlyRevenue + hourlyInventoryRevenue) * TURNS_PER_DAY,
       sectorCurrencyCode,
       sectorFxRate
     ),
@@ -1869,6 +1894,18 @@ export function processSector(
     sectorUpdate.effectivePosture = Math.round(clearing.effectivePosture * 1000) / 1000;
     sectorUpdate.clearingStartTurn = clearingStartTurn ?? null;
   }
+  // Inventory pile + telemetry (only meaningful when the inventory pass ran;
+  // omitted entirely otherwise so pre-plants worlds carry no dead fields).
+  if (inventoryTurn) {
+    const rounded: Record<string, number> = {};
+    for (const [commodity, held] of Object.entries(inventoryTurn.nextInventory)) {
+      if (typeof held === "number" && held > 0) rounded[commodity] = Math.round(held * 100) / 100;
+    }
+    sectorUpdate.inventoryUnits = rounded;
+    sectorUpdate.inventoryValueAnchor = Math.round(inventoryTurn.heldValueAnchor);
+    sectorUpdate.inventoryDrainedUnits = Math.round(inventoryTurn.drainedUnits * 100) / 100;
+    sectorUpdate.inventorySpoiledUnits = Math.round(inventoryTurn.spoiledUnits * 100) / 100;
+  }
   // Throughput telemetry + ramp anchor (display + next turn's fade-in).
   if (market.throughputEnabled) {
     sectorUpdate.throughputFactor = Math.round(throughputFactor * 1000) / 1000;
@@ -2023,7 +2060,9 @@ export function processSector(
   }
 
   return {
-    hourlyRevenue,
+    // Inventory sell-down earns beside operating revenue and rides the same
+    // aggregation/tax rails; carry cost lands in `costs` below.
+    hourlyRevenue: hourlyRevenue + hourlyInventoryRevenue,
     newCurrentGrowthRate,
     // P3.5: under plants this is the DERIVED margin (profit ÷ revenue), not the
     // modifier stack — see `reportedEffectiveMargin`.
@@ -2040,7 +2079,8 @@ export function processSector(
     costs: embargoLegacyMothball
       ? 0
       : (physicalPnl?.totalCost ??
-        maintenance + plantsUpkeepCost + hourlyGrowthCost + regulatoryBurden),
+          maintenance + plantsUpkeepCost + hourlyGrowthCost + regulatoryBurden) +
+        hourlyInventoryCarry,
     /** P3a: idle-capacity (or mothball) upkeep charged this turn, ₳/turn. */
     plantsUpkeepCost,
     /** P3a: ₳ of paid-but-not-yet-delivered build orders after this turn. */

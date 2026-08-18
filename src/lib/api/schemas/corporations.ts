@@ -210,6 +210,11 @@ export const setSectorPolicySchema = z.object({
   productionPolicy: z.number().min(-25).max(25),
 });
 
+// Sell-all vs build-inventory toggle (design-realization-legs §6).
+export const setSectorStockpileSchema = z.object({
+  stockpileUnsold: z.boolean(),
+});
+
 // Posted-price market clearing (marketSystemMode >= "clearing"): posture is
 // the CEO's price relative to market, -20%..+20%; null reverts to auto.
 export const setSectorPricingSchema = z.object({
