@@ -122,12 +122,38 @@ const WAGE_COEFF_DOWN = 0.08;
 
 /**
  * Commodity cost-push coefficients.
- * Signal is avg(P_national / P_base - 1) — a level signal relative to base.
- * 0.1 means national prices are 10% above base; with COEFF_UP=3.0 that adds 0.3 pp.
- * Asymmetric: supply gluts (negative pressure) deflate more slowly than shortages inflate.
+ *
+ * Signal is the median ANNUALIZED CHANGE in the country's national commodity
+ * prices (see inflationRecalc.ts) — 0.10 means the basket is rising 10%/yr. The
+ * coefficient is therefore a basket weight: at COEFF_UP=30 a basket rising
+ * 10%/yr contributes 3.0pp of CPI, i.e. 0.30pp per 1pp of commodity inflation.
+ *
+ * The weight is deliberately well under 1. Commodity prices ARE most prices, so
+ * this channel feeds back on itself: CPI settles near
+ * (target + other terms) / (1 - weight), a bounded 1.43x amplification at 0.30
+ * that would run away as the weight approached 1.
+ *
+ * It used to be 3.0 against a price LEVEL (`P_national / P_base - 1`) rather
+ * than a rate. `basePrice` is a frozen seed constant, so that term grew without
+ * bound and no policy could ever return CPI to target — on prod at turn 221 it
+ * was worth +4.1pp (US) to +8.4pp (FR) permanently, with those countries' prices
+ * actually flat over the preceding game year. See the block comment in
+ * inflationRecalc.ts, and HOUSING_PRESSURE_COEFF below, which retired the
+ * identical error in the cost-of-living channel.
+ *
+ * Asymmetric: falling commodity prices pass through at half the rate of rising
+ * ones (downward price stickiness), matching the forex arm.
  */
-const COMMODITY_PRESSURE_COEFF_UP = 3.0;
-const COMMODITY_PRESSURE_COEFF_DOWN = 1.5;
+const COMMODITY_PRESSURE_COEFF_UP = 30.0;
+const COMMODITY_PRESSURE_COEFF_DOWN = 15.0;
+/**
+ * Bounds on the annualized commodity signal before the coefficient, so a country
+ * in an acute supply crisis contributes at most +9pp (and a collapsing basket at
+ * most -2.25pp) rather than an unbounded shock. FR on prod runs ~+36%/yr and
+ * clamps here.
+ */
+const COMMODITY_PRESSURE_CLAMP_UP = 0.3;
+const COMMODITY_PRESSURE_CLAMP_DOWN = -0.15;
 
 /**
  * Forex depreciation cost-push coefficients.
@@ -429,10 +455,14 @@ export function calculateInflationWithBreakdown(inputs: InflationInputs): {
   const wageGap = wageGrowthInput - WAGE_GROWTH_BASELINE;
   const wage = wageGap >= 0 ? wageGap * WAGE_COEFF_UP : wageGap * WAGE_COEFF_DOWN;
 
+  const clampedCommodity = Math.max(
+    COMMODITY_PRESSURE_CLAMP_DOWN,
+    Math.min(COMMODITY_PRESSURE_CLAMP_UP, commodityPressureInput)
+  );
   const commodity =
-    commodityPressureInput >= 0
-      ? commodityPressureInput * COMMODITY_PRESSURE_COEFF_UP
-      : commodityPressureInput * COMMODITY_PRESSURE_COEFF_DOWN;
+    clampedCommodity >= 0
+      ? clampedCommodity * COMMODITY_PRESSURE_COEFF_UP
+      : clampedCommodity * COMMODITY_PRESSURE_COEFF_DOWN;
 
   const clampedForex = Math.max(
     -FOREX_PRESSURE_CLAMP,

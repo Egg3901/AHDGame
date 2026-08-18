@@ -115,15 +115,22 @@ function setupCommodityPriceHistory(
   db: MockDb,
   docs: { commodity: string; turn: number; nationalPrices: Record<string, number> }[]
 ) {
-  const cursor = {
-    toArray: vi.fn().mockResolvedValue(docs),
-    sort: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    skip: vi.fn().mockReturnThis(),
-    project: vi.fn().mockReturnThis(),
-  };
+  // The recalc reads this collection at three different turns (current, one game
+  // year back, one quarter back), so the mock has to honour the filter's `turn`
+  // rather than handing every query the same rows.
   db.collection("commodityPriceHistory");
-  db.collectionMocks["commodityPriceHistory"]!.find = vi.fn().mockReturnValue(cursor);
+  db.collectionMocks["commodityPriceHistory"]!.find = vi
+    .fn()
+    .mockImplementation((filter?: { turn?: number }) => {
+      const matched = filter?.turn == null ? docs : docs.filter((d) => d.turn === filter.turn);
+      return {
+        toArray: vi.fn().mockResolvedValue(matched),
+        sort: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        skip: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+      };
+    });
 }
 
 function setupExchangeRates(
@@ -403,60 +410,117 @@ describe("recalculateInflationPerTurn", () => {
     );
   });
 
-  // ── Commodity pressure clamp ───────────────────────────────────────────────
+  // ── Commodity pressure signal (annualized change, median) ─────────────────
 
-  it("clamps per-commodity pressure so a single corrupt row can't detonate the average", async () => {
-    // Two commodities: one normal (ratio ~1.0), one runaway corrupt row
-    // (nationalPrice 34000 / basePrice 60 = 566x). Without clamping, the
-    // average pressure is ~283 and every coefficient downstream saturates
-    // at MAX_INFLATION. With the clamp ([-0.9, 10]) the corrupt row caps
-    // at +10, the normal row sits at +1, and the average is ~5.5.
+  it("reports the median annualized change in national prices, not the level vs basePrice", async () => {
+    // basePrice is deliberately far from both snapshots: it must not enter the
+    // signal at all. Both commodities rise 10% over the 24-turn window, which
+    // annualizes (squared) to +21%/yr.
     setupCommodityPrices(db, [
-      { commodity: "steel", basePrice: 800, nationalPrices: { US: 1600 } },
-      { commodity: "rare_earth", basePrice: 60, nationalPrices: { US: 34000 } },
+      { commodity: "steel", basePrice: 5, nationalPrices: { US: 999 } },
+      { commodity: "oil", basePrice: 5, nationalPrices: { US: 999 } },
+    ]);
+    setupCommodityPriceHistory(db, [
+      { commodity: "steel", turn: 100, nationalPrices: { US: 110 } },
+      { commodity: "oil", turn: 100, nationalPrices: { US: 110 } },
+      { commodity: "steel", turn: 76, nationalPrices: { US: 100 } },
+      { commodity: "oil", turn: 76, nationalPrices: { US: 100 } },
     ]);
 
-    const bank = makeCentralBank("US");
-    const budget = makeBudget("federal");
-    setupBanks(db, [bank]);
-    setupBudget(db, budget, "federal");
+    setupBanks(db, [makeCentralBank("US")]);
+    setupBudget(db, makeBudget("federal"), "federal");
 
     const { recalculateInflationPerTurn } = await import("./inflationRecalc");
     await recalculateInflationPerTurn(db as unknown as Db, 100);
 
     // 4th positional arg to calculateCountryInflation is commodityPressure.
-    const call = mockCalculateCountryInflation.mock.calls[0];
-    const commodityPressure = call[3] as number;
-
-    // Normal row contributes +1 (1600/800-1); corrupt row clamps to +10.
-    // Expected average: (1 + 10) / 2 = 5.5.
-    expect(commodityPressure).toBeCloseTo(5.5, 3);
-    // Sanity: clamp floor is -0.9, ceiling is 10 — average can't exceed ceiling.
-    expect(commodityPressure).toBeLessThanOrEqual(10);
+    const commodityPressure = mockCalculateCountryInflation.mock.calls[0][3] as number;
+    expect(commodityPressure).toBeCloseTo(0.21, 4);
   });
 
-  it("passes pressures through unchanged when they are within the clamp range", async () => {
+  it("is flat when prices are flat, however far above basePrice they sit", async () => {
+    // The regression this whole change exists for: prices 40x base but unchanged
+    // over the year must read as ZERO cost-push, not a permanent +100pp.
     setupCommodityPrices(db, [
-      { commodity: "steel", basePrice: 800, nationalPrices: { US: 1600 } }, // ratio 1.0
-      { commodity: "oil", basePrice: 80, nationalPrices: { US: 160 } }, // ratio 1.0
+      { commodity: "steel", basePrice: 5, nationalPrices: { US: 200 } },
+      { commodity: "oil", basePrice: 5, nationalPrices: { US: 200 } },
+    ]);
+    setupCommodityPriceHistory(db, [
+      { commodity: "steel", turn: 100, nationalPrices: { US: 200 } },
+      { commodity: "oil", turn: 100, nationalPrices: { US: 200 } },
+      { commodity: "steel", turn: 76, nationalPrices: { US: 200 } },
+      { commodity: "oil", turn: 76, nationalPrices: { US: 200 } },
     ]);
 
-    const bank = makeCentralBank("US");
-    const budget = makeBudget("federal");
-    setupBanks(db, [bank]);
-    setupBudget(db, budget, "federal");
+    setupBanks(db, [makeCentralBank("US")]);
+    setupBudget(db, makeBudget("federal"), "federal");
 
     const { recalculateInflationPerTurn } = await import("./inflationRecalc");
     await recalculateInflationPerTurn(db as unknown as Db, 100);
 
-    const call = mockCalculateCountryInflation.mock.calls[0];
-    const commodityPressure = call[3] as number;
-
-    // Both rows at +1 → average +1. No clamping applied.
-    expect(commodityPressure).toBeCloseTo(1.0, 3);
+    expect(mockCalculateCountryInflation.mock.calls[0][3] as number).toBeCloseTo(0, 6);
   });
 
-  // ── Interest rate history pass-through ────────────────────────────────────
+  it("takes the median so one runaway commodity cannot detonate the basket", async () => {
+    setupCommodityPrices(db, [
+      { commodity: "steel", basePrice: 5, nationalPrices: { US: 150 } },
+      { commodity: "oil", basePrice: 5, nationalPrices: { US: 110 } },
+      { commodity: "rare_earth", basePrice: 5, nationalPrices: { US: 40000 } },
+    ]);
+    setupCommodityPriceHistory(db, [
+      { commodity: "steel", turn: 100, nationalPrices: { US: 150 } },
+      { commodity: "oil", turn: 100, nationalPrices: { US: 110 } },
+      { commodity: "rare_earth", turn: 100, nationalPrices: { US: 40000 } },
+      { commodity: "steel", turn: 76, nationalPrices: { US: 100 } },
+      { commodity: "oil", turn: 76, nationalPrices: { US: 100 } },
+      { commodity: "rare_earth", turn: 76, nationalPrices: { US: 100 } },
+    ]);
+
+    setupBanks(db, [makeCentralBank("US")]);
+    setupBudget(db, makeBudget("federal"), "federal");
+
+    const { recalculateInflationPerTurn } = await import("./inflationRecalc");
+    await recalculateInflationPerTurn(db as unknown as Db, 100);
+
+    // Over the 24-turn window the rows are +50%, +10% and +39900%, which
+    // annualize (squared) to +125%, +21% and a value clamped at the +200% row
+    // ceiling. The median is the middle row, so the runaway never reaches the
+    // output — under the old mean it would have dragged the whole basket.
+    expect(mockCalculateCountryInflation.mock.calls[0][3] as number).toBeCloseTo(1.25, 3);
+  });
+
+  it("annualizes a short window when the world is younger than a game year", async () => {
+    // No row at turn 52; the 12-turn window is scaled up by ^4.
+    setupCommodityPrices(db, [{ commodity: "steel", basePrice: 5, nationalPrices: { US: 110 } }]);
+    setupCommodityPriceHistory(db, [
+      { commodity: "steel", turn: 100, nationalPrices: { US: 110 } },
+      { commodity: "steel", turn: 88, nationalPrices: { US: 100 } },
+    ]);
+
+    setupBanks(db, [makeCentralBank("US")]);
+    setupBudget(db, makeBudget("federal"), "federal");
+
+    const { recalculateInflationPerTurn } = await import("./inflationRecalc");
+    await recalculateInflationPerTurn(db as unknown as Db, 100);
+
+    // 1.1 ^ (48/12) - 1 = 0.4641
+    expect(mockCalculateCountryInflation.mock.calls[0][3] as number).toBeCloseTo(0.4641, 4);
+  });
+
+  it("reports zero pressure when no lookback window exists at all", async () => {
+    setupCommodityPrices(db, [{ commodity: "steel", basePrice: 5, nationalPrices: { US: 200 } }]);
+    setupCommodityPriceHistory(db, [
+      { commodity: "steel", turn: 100, nationalPrices: { US: 200 } },
+    ]);
+
+    setupBanks(db, [makeCentralBank("US")]);
+    setupBudget(db, makeBudget("federal"), "federal");
+
+    const { recalculateInflationPerTurn } = await import("./inflationRecalc");
+    await recalculateInflationPerTurn(db as unknown as Db, 100);
+
+    expect(mockCalculateCountryInflation.mock.calls[0][3] as number).toBe(0);
+  });
 
   it("prefers current-turn commodity history snapshots over mutable live commodity docs", async () => {
     setupCommodityPrices(db, [
@@ -464,23 +528,24 @@ describe("recalculateInflationPerTurn", () => {
       { commodity: "oil", basePrice: 100, nationalPrices: { US: 10 } },
     ]);
     setupCommodityPriceHistory(db, [
-      { commodity: "steel", turn: 100, nationalPrices: { US: 200 } },
-      { commodity: "oil", turn: 100, nationalPrices: { US: 200 } },
+      { commodity: "steel", turn: 100, nationalPrices: { US: 110 } },
+      { commodity: "oil", turn: 100, nationalPrices: { US: 110 } },
+      { commodity: "steel", turn: 76, nationalPrices: { US: 100 } },
+      { commodity: "oil", turn: 76, nationalPrices: { US: 100 } },
     ]);
 
-    const bank = makeCentralBank("US");
-    const budget = makeBudget("federal");
-    setupBanks(db, [bank]);
-    setupBudget(db, budget, "federal");
+    setupBanks(db, [makeCentralBank("US")]);
+    setupBudget(db, makeBudget("federal"), "federal");
 
     const { recalculateInflationPerTurn } = await import("./inflationRecalc");
     await recalculateInflationPerTurn(db as unknown as Db, 100);
 
-    const call = mockCalculateCountryInflation.mock.calls[0];
-    const commodityPressure = call[3] as number;
-
-    expect(commodityPressure).toBeCloseTo(1.0, 3);
+    // History (110) over the prior window (100) annualizes to +21%. Reading the
+    // mutable live doc (10) instead would give a deep negative.
+    expect(mockCalculateCountryInflation.mock.calls[0][3] as number).toBeCloseTo(0.21, 4);
   });
+
+  // ── Interest rate history pass-through ────────────────────────────────────
 
   it("uses the last settled FX history point rather than a mutable current rate field", async () => {
     setupExchangeRates(db, [
