@@ -63,7 +63,7 @@ export type ConsolePayload = {
     key: string;
     label: string;
     formula: string;
-    inputs: Array<{ label: string; value: number }>;
+    inputs: Array<{ label: string; value: number; unit?: "money" | "percent" }>;
     value: number;
     lever: string;
   }> | null;
