@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if there's an active election in this state
-    const isActiveCampaign = await checkActiveCampaignSeason(stateId);
+    const isActiveCampaign = await checkActiveCampaignSeason(stateId, user.character.countryId);
 
     // Apply canvassing effect immediately (simplified - no action queue)
     const turnoutCollection = await getStateDemographicTurnoutCollection();
@@ -217,7 +217,7 @@ export async function POST(req: NextRequest) {
  * Check if there's an active election in the state (within 4 turns of election day).
  * Campaign season provides 2x effectiveness for canvassing.
  */
-async function checkActiveCampaignSeason(stateId: string): Promise<boolean> {
+async function checkActiveCampaignSeason(stateId: string, countryId?: string): Promise<boolean> {
   try {
     const db = await getDb();
     const { currentTurn, effectiveNow: now } = await getGameTime();
@@ -226,14 +226,25 @@ async function checkActiveCampaignSeason(stateId: string): Promise<boolean> {
     // (drift-immune, freezes on pause) with a Date fallback for un-backfilled
     // docs. 1 turn = 1 game-hour.
     const fourTurnsAhead = new Date(now.getTime() + 4 * 60 * 60 * 1000);
-
-    const activeElection = await db.collection<Election>("elections").findOne({
-      state: stateId,
-      status: "active",
+    const endingSoon = {
       $or: [
         { endTurn: { $gte: currentTurn, $lte: currentTurn + 4 } },
         { endTurn: { $exists: false }, endTime: { $gte: now, $lte: fourTurnsAhead } },
       ],
+    };
+
+    // In-season when a state-level race in this state is near its finish OR a
+    // NATIONAL presidential race for this state's country is near — the latter
+    // fixes the old miss where a presidential contest (stored `state:"US"`,
+    // never `state:"CA"`) never counted its states as in campaign season.
+    const location: Record<string, unknown>[] = [{ state: stateId }];
+    if (countryId) {
+      location.push({ electionType: "president", countryId });
+    }
+
+    const activeElection = await db.collection<Election>("elections").findOne({
+      status: "active",
+      $and: [endingSoon, { $or: location }],
     });
 
     return activeElection !== null;

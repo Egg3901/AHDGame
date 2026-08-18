@@ -42,6 +42,7 @@ import {
 import { initPresidentVoteTally } from "@/lib/presidentialElectionEngine";
 import { fetchEnrichedCandidates } from "@/lib/electionEngine/candidateEnrichment";
 import { distributeVotesByGroupLevelAllocation } from "@/lib/electionEngine/voteDistribution";
+import { supportMoodMultiplier } from "@/lib/electionEngine/electionFormulaFactors";
 import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
 import { eraYearContextFromGameState } from "@/lib/era/context";
@@ -311,6 +312,7 @@ export async function runPrimaryStaggerWaveIfDue(
       homeState,
       primaryCampaignState: raw?.primaryCampaignState ?? null,
       primaryCampaignTicks: raw?.primaryCampaignTicks ?? 0,
+      support: raw?.support,
     };
   });
 
@@ -604,6 +606,21 @@ export async function runPrimaryStaggerWaveIfDue(
           const multiplier = 1 + ticks * PRIMARY_CAMPAIGN_STAGGER_TICK_RATE;
           votesPerCandidate[ec.candidateId] = Math.round(
             (votesPerCandidate[ec.candidateId] ?? 0) * multiplier
+          );
+        }
+      }
+
+      // Rally support now counts in the primary too. Previously only the
+      // general election read supportMoodMultiplier (voteDistribution.ts), so a
+      // whole primary season of rallies / rally-tour moved zero votes. Mirror
+      // the general's mood application here: support 50 → 1.0×, ranging
+      // 0.6×–1.4× at the extremes. Undefined support degrades to 1.0×.
+      for (const ec of partyCandidates) {
+        const rawCandidate = candidates.find((c) => c._id.toString() === ec.candidateId);
+        const mood = supportMoodMultiplier(rawCandidate?.support);
+        if (mood !== 1) {
+          votesPerCandidate[ec.candidateId] = Math.round(
+            (votesPerCandidate[ec.candidateId] ?? 0) * mood
           );
         }
       }

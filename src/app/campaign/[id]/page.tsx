@@ -35,6 +35,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [myFundsCurrency, setMyFundsCurrency] = useState<CurrencyCode | null>(null);
   const [myActions, setMyActions] = useState<number | null>(null);
   const [myNationalInfluence, setMyNationalInfluence] = useState<number | null>(null);
+  const [myCountryId, setMyCountryId] = useState<string | null>(null);
   const [resetOppoOpen, setResetOppoOpen] = useState(false);
   const [resetOppoBusy, setResetOppoBusy] = useState(false);
   const [resetOppoError, setResetOppoError] = useState("");
@@ -71,6 +72,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       setMyFundsCurrency((meCharacter?.homeCurrency as CurrencyCode | undefined) ?? null);
       setMyActions(meCharacter?.actions ?? null);
       setMyNationalInfluence(meCharacter?.nationalInfluence ?? null);
+      setMyCountryId((meCharacter?.countryId as string | undefined) ?? null);
     } catch {
       // non-critical: contribute card just shows "—" for available balance
     }
@@ -470,7 +472,12 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         {/* Owner: Canvassing Panel */}
         {canManage && campaign.electionInfo && !campaign.electionInfo.isEnded && (
           <div className="mb-6">
-            <CanvassingPanel />
+            <CanvassingPanel
+              countryId={myCountryId ?? undefined}
+              characterActions={myActions ?? undefined}
+              characterFunds={myFunds ?? undefined}
+              onResourcesSpent={fetchMe}
+            />
           </div>
         )}
 
