@@ -53,10 +53,13 @@ export interface UnionsTurnResult {
  * today's world and silently leak new unrepresented sectors forever. This is
  * the same "conversion not reinvention" shape as the roster backfill above.
  *
- * Only SEEDED unions adopt (no `foundedByCharacterId`), which is the one union
- * per industry the partial unique index still guarantees. A sector already
- * pointing somewhere is never touched, so a rival that won a shop keeps it, and
- * losing a raid does not hand the shop back on the next turn.
+ * Only NPC SEEDED unions adopt: `foundedByCharacterId` is null (the one
+ * roster union per industry) AND the union is not player-led. Vacant and
+ * NPP-led seeded unions still cover new shops so the world does not leak
+ * unrepresented sectors. A player who claimed the Newspaper Guild must
+ * organize new shops, not inherit every NPP expansion for free.
+ * A sector already pointing somewhere is never touched, so a rival that won a
+ * shop keeps it, and losing a raid does not hand the shop back on the next turn.
  */
 export async function adoptUnrepresentedSectors(db: Db): Promise<number> {
   const unrepresented = await db
@@ -68,8 +71,12 @@ export async function adoptUnrepresentedSectors(db: Db): Promise<number> {
   const seededUnions = await db
     .collection<Union>("unions")
     .find(
-      // Matches an explicit null and an absent field alike.
-      { foundedByCharacterId: null },
+      // Seeded roster only. Vacant (`ownerId: null`) and NPP-led still adopt;
+      // a player-claimed seeded union must organize new shops itself.
+      {
+        foundedByCharacterId: null,
+        $or: [{ ownerId: null }, { ownerType: "npp" }],
+      },
       { projection: { _id: 1, countryId: 1, sectorType: 1 } }
     )
     .toArray();

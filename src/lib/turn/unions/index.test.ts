@@ -502,13 +502,40 @@ describe("adoptUnrepresentedSectors", () => {
    */
   function adoptionDb(
     sectors: { _id: ObjectId; countryId: string; sectorType: string }[],
-    unions: { _id: ObjectId; countryId: string; sectorType: string }[]
+    unions: {
+      _id: ObjectId;
+      countryId: string;
+      sectorType: string;
+      ownerId?: ObjectId | null;
+      ownerType?: "character" | "npp";
+      foundedByCharacterId?: ObjectId | null;
+    }[]
   ) {
     const bulkWrite = vi.fn().mockImplementation(async (ops: unknown[]) => ({
       modifiedCount: ops.length,
     }));
     const sectorsFind = vi.fn().mockReturnValue({ toArray: async () => sectors });
-    const unionsFind = vi.fn().mockReturnValue({ toArray: async () => unions });
+    const unionsFind = vi.fn().mockImplementation(
+      (filter: {
+        foundedByCharacterId?: unknown;
+        ownerId?: unknown;
+        $or?: Array<{ ownerId?: unknown; ownerType?: unknown }>;
+      }) => ({
+        toArray: async () =>
+          unions.filter((union) => {
+            if (filter.foundedByCharacterId === null && union.foundedByCharacterId != null) {
+              return false;
+            }
+            if (filter.ownerId === null && union.ownerId != null) return false;
+            if (!filter.$or) return true;
+            return filter.$or.some((clause) => {
+              if (clause.ownerId === null) return union.ownerId == null;
+              if (clause.ownerType === "npp") return union.ownerType === "npp";
+              return false;
+            });
+          }),
+      })
+    );
     const db = {
       collection: (name: string) => {
         if (name === "corporateSectors") return { find: sectorsFind, bulkWrite };
@@ -557,7 +584,49 @@ describe("adoptUnrepresentedSectors", () => {
 
     await adoptUnrepresentedSectors(db);
 
-    expect(unionsFind).toHaveBeenCalledWith({ foundedByCharacterId: null }, expect.anything());
+    expect(unionsFind).toHaveBeenCalledWith(
+      {
+        foundedByCharacterId: null,
+        $or: [{ ownerId: null }, { ownerType: "npp" }],
+      },
+      expect.anything()
+    );
+  });
+
+  it("never lets a player-led seeded union adopt, so claiming the guild does not vacuum every new shop", async () => {
+    const claimed = {
+      _id: new ObjectId(),
+      countryId: "US",
+      sectorType: "media",
+      ownerId: new ObjectId(),
+      ownerType: "character" as const,
+    };
+    const { db, bulkWrite } = adoptionDb(
+      [{ _id: new ObjectId(), countryId: "US", sectorType: "media" }],
+      [claimed]
+    );
+
+    expect(await adoptUnrepresentedSectors(db)).toBe(0);
+    expect(bulkWrite).not.toHaveBeenCalled();
+  });
+
+  it("still lets an NPP-led seeded union adopt, so the world does not leak unrepresented shops", async () => {
+    const nppLed = {
+      _id: new ObjectId(),
+      countryId: "US",
+      sectorType: "media",
+      ownerId: new ObjectId(),
+      ownerType: "npp" as const,
+    };
+    const sectorId = new ObjectId();
+    const { db, bulkWrite } = adoptionDb(
+      [{ _id: sectorId, countryId: "US", sectorType: "media" }],
+      [nppLed]
+    );
+
+    expect(await adoptUnrepresentedSectors(db)).toBe(1);
+    const [ops] = bulkWrite.mock.calls[0];
+    expect(ops[0].updateOne.update.$set.representingUnionId).toEqual(nppLed._id);
   });
 
   it("matches on country AND industry, never industry alone", async () => {
