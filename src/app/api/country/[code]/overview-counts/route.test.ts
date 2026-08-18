@@ -61,7 +61,27 @@ describe("GET /api/country/[code]/overview-counts", () => {
       primeRate: 4.25,
       // US is a market economy, so the command-economy dashboard link is off.
       commandEconomy: false,
+      unions: 0,
+      activeReferendums: 0,
+      totalReferendums: 0,
+      // No budget document in this fixture, so the fiscal figures stay absent
+      // rather than reading as a balanced budget on a zero economy.
+      gdpMillions: null,
+      budgetBalancePctGdp: null,
+      // Conflicts is off in this fixture, so no Cold War row is offered.
+      coldWarDefcon: null,
     });
+  });
+
+  it("serves a DEFCON only for a principal in a conflicts-enabled world", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ conflictsEnabled: true });
+    const { body } = await call();
+    // Vietnam has not started in this fixture, so the ladder is at peacetime.
+    expect(body.coldWarDefcon).toBe(5);
+
+    const uk = await call("uk");
+    expect(uk.body.coldWarDefcon).toBeNull();
   });
 
   it("excludes defunct parties and resolved bills from the counts", async () => {
