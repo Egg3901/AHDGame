@@ -10,6 +10,7 @@ import { getPartyHex } from "@/lib/utils/politics";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { legislatureUrl, executiveUrl, scotusJusticeOfficeUrl } from "@/lib/urls";
 import { SCOTUS_HERO_IMAGE_URL } from "@/lib/scotus/justiceImages";
+import { formatDeathChancePercent } from "@/lib/scotus/tenure";
 import { ScotusSeatCard, type SeatCardData } from "./components/ScotusSeatCard";
 import {
   ScotusNominateModal,
@@ -337,7 +338,9 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
                         the Senate confirms by majority vote.
                       </li>
                       <li>
-                        Justices serve until their tenure ends. Seats then open for a new pick.
+                        Historical justices leave on their real dates. Divergent justices have a{" "}
+                        {formatDeathChancePercent()} death chance each turn after about two years,
+                        which opens the seat.
                       </li>
                       <li>
                         The court&apos;s ideological balance decides whether landmark historical
@@ -352,8 +355,9 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
                 </InfoTooltip>
               </div>
               <p className="mt-1 max-w-2xl text-sm text-muted">
-                Nine seats, filled for life. The President nominates; the Senate confirms by simple
-                majority, the same lifecycle as a cabinet confirmation.
+                Nine seats. Historical justices follow real departure dates. Divergent justices have
+                a {formatDeathChancePercent()} death chance each turn after their first two years.
+                The President nominates; the Senate confirms by simple majority.
               </p>
               <div className="mt-4 flex items-center gap-6 border-t border-card-border pt-4">
                 <div>

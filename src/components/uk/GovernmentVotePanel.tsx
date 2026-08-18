@@ -18,6 +18,7 @@ interface PMAppointmentVoteData {
   status: string;
   closesAt: string;
   closesOnTurn?: number | null;
+  isConfidenceMotion?: boolean;
 }
 
 interface NoConfidenceVoteData {
@@ -111,14 +112,23 @@ export default function GovernmentVotePanel({
     }
   };
 
-  const headerLabel = vote.type === "pmAppointment" ? appointmentLabel : "No-Confidence Motion";
+  const headerLabel =
+    vote.type === "pmAppointment"
+      ? vote.isConfidenceMotion
+        ? "Confidence Motion"
+        : appointmentLabel
+      : "No-Confidence Motion";
 
   const subjectLine =
     vote.type === "pmAppointment" ? (
       <p className="text-sm text-foreground">
         <span className="font-semibold">{vote.nomineeName}</span>
         {" — "}
-        <span className="capitalize text-muted">{vote.formationType} government</span>
+        <span className="capitalize text-muted">
+          {vote.isConfidenceMotion
+            ? "post-election confidence motion"
+            : `${vote.formationType} government`}
+        </span>
       </p>
     ) : (
       <p className="text-sm text-foreground">

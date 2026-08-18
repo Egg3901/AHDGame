@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { JusticeActionDef } from "@/lib/constants/justiceActions";
+import type { DivergentDeathChance } from "@/lib/scotus/tenure";
 
 export interface JusticeOfficeSeat {
   seatNumber: number;
@@ -10,6 +11,7 @@ export interface JusticeOfficeSeat {
   economicLean: number | null;
   socialLean: number | null;
   isDivergent: boolean;
+  deathChance: DivergentDeathChance | null;
 }
 
 export interface JusticeOfficeData {

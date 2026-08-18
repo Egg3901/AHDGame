@@ -415,6 +415,21 @@ export async function runPostElectionGovernmentPhases(
 
       if (!recentElection) continue;
 
+      // Lower-chamber generals are per-region (UK Commons, JP Shūgiin, …). A
+      // single region resolving must not dissolve legislation or open a
+      // confidence motion while other regions of the same cycle are still
+      // voting. Next-cycle races already staged as upcoming have a different
+      // `cycle` and do not block.
+      if (typeof recentElection.cycle === "number") {
+        const slateStillLive = await db.collection<Election>("elections").findOne({
+          countryId,
+          electionType: recentElection.electionType,
+          cycle: recentElection.cycle,
+          status: { $in: ["active", "upcoming"] },
+        });
+        if (slateStillLive) continue;
+      }
+
       // Dissolution slate-clearing (Goal 4): runs for every country with a
       // lower chamber. VONC cancel is idempotent / safe no-op for countries
       // without VONC (e.g., US).

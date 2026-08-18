@@ -126,44 +126,44 @@ export async function ParliamentaryExecutiveHub({ countryId }: { countryId: Coun
   const viewerVotes: Record<string, "aye" | "nay"> = {};
   const viewerWhippedFrom: Record<string, string> = {};
 
-  // Fetch all active appointment votes (multiple may exist concurrently)
-  if (govFormation?.status === "pending") {
-    const apptVotes = await getPMAppointmentVotesCollection(db)
-      .find({ countryId, status: "active" })
-      .toArray();
-    activeAppointmentVotes = await Promise.all(
-      apptVotes.map(async (v) => {
-        const tally = await computeParliamentaryGovernmentTally(
-          db,
-          countryId,
-          lowerChamberKey,
-          v.votes
-        );
-        return {
-          type: "pmAppointment" as const,
-          _id: v._id.toString(),
-          nomineeName: v.nomineeName,
-          nomineePartyId: v.nomineePartyId,
-          formationType: v.formationType,
-          coalitionId: v.coalitionId,
-          votesFor: tally.votesFor,
-          votesAgainst: tally.votesAgainst,
-          voteByParty: tally.voteByParty,
-          status: v.status,
-          closesAt: v.closesAt.toISOString(),
-          closesOnTurn: v.closesOnTurn ?? null,
-        };
-      })
-    );
+  // Fetch all active appointment votes. Confidence motions stay on a formed
+  // government (S#17); VONC-parallel nominations may also be active while formed.
+  const apptVotes = await getPMAppointmentVotesCollection(db)
+    .find({ countryId, status: "active" })
+    .toArray();
+  activeAppointmentVotes = await Promise.all(
+    apptVotes.map(async (v) => {
+      const tally = await computeParliamentaryGovernmentTally(
+        db,
+        countryId,
+        lowerChamberKey,
+        v.votes
+      );
+      return {
+        type: "pmAppointment" as const,
+        _id: v._id.toString(),
+        nomineeName: v.nomineeName,
+        nomineePartyId: v.nomineePartyId,
+        formationType: v.formationType,
+        coalitionId: v.coalitionId,
+        votesFor: tally.votesFor,
+        votesAgainst: tally.votesAgainst,
+        voteByParty: tally.voteByParty,
+        status: v.status,
+        closesAt: v.closesAt.toISOString(),
+        closesOnTurn: v.closesOnTurn ?? null,
+        isConfidenceMotion: v.isConfidenceMotion === true,
+      };
+    })
+  );
 
-    if (user?.character) {
-      for (const v of apptVotes) {
-        const key = user.character._id.toString();
-        const charVote = v.votes[key];
-        if (charVote) viewerVotes[v._id.toString()] = charVote;
-        const wf = v.whippedFromVote?.[key];
-        if (wf) viewerWhippedFrom[v._id.toString()] = wf;
-      }
+  if (user?.character) {
+    for (const v of apptVotes) {
+      const key = user.character._id.toString();
+      const charVote = v.votes[key];
+      if (charVote) viewerVotes[v._id.toString()] = charVote;
+      const wf = v.whippedFromVote?.[key];
+      if (wf) viewerWhippedFrom[v._id.toString()] = wf;
     }
   }
 
