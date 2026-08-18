@@ -52,7 +52,7 @@ export function CapsPanel({ data }: { data: ConsolePayload }) {
                 <div key={input.label} className="flex justify-between gap-2 text-[11px]">
                   <dt className="text-muted">{input.label}</dt>
                   <dd className="font-mono text-foreground/80">
-                    {input.label.toLowerCase().includes("ratio")
+                    {input.unit === "percent"
                       ? `${(input.value * 100).toFixed(1)}%`
                       : formatBankMoney(input.value, currency)}
                   </dd>

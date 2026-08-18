@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { COMMODITY_LABELS } from "@/lib/constants/commodities";
 import type { CommodityType } from "@/lib/constants/commodities";
 
@@ -41,6 +41,13 @@ export default function InventoryPanel({
   const [enabled, setEnabled] = useState(inventory.stockpileUnsold);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Resync when the parent refetches: another officer may have flipped the
+  // toggle, and a stale useState initial value would show the opposite state
+  // until a full remount.
+  useEffect(() => {
+    setEnabled(inventory.stockpileUnsold);
+  }, [inventory.stockpileUnsold]);
 
   const toggle = async () => {
     const nextValue = !enabled;

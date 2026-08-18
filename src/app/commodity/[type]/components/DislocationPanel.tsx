@@ -29,6 +29,13 @@ interface DislocationPanelProps {
  * scarce on one map because moving it costs freight and freight has limits —
  * this panel turns that confusing picture into a build/ship to-do list.
  */
+// A missing or non-positive state price is a data gap, not a price of zero: a
+// zero ratio would classify the state as a glut ("cannot sell locally") when
+// nothing was measured. Mask both to the base price (ratio 1, never listed).
+function statePriceOr(price: number | undefined, basePrice: number): number {
+  return typeof price === "number" && price > 0 ? price : basePrice;
+}
+
 export default function DislocationPanel({
   statePrices,
   stateSupply,
@@ -42,7 +49,7 @@ export default function DislocationPanel({
   const stateIds = Object.keys(stateCountryMap);
 
   const short = stateIds
-    .map((id) => ({ id, ratio: (statePrices[id] ?? basePrice) / basePrice }))
+    .map((id) => ({ id, ratio: statePriceOr(statePrices[id], basePrice) / basePrice }))
     .filter((s) => s.ratio >= SHORT_RATIO)
     .sort((a, b) => b.ratio - a.ratio)
     .slice(0, MAX_ROWS);
@@ -50,7 +57,7 @@ export default function DislocationPanel({
   const stranded = stateIds
     .map((id) => ({
       id,
-      ratio: (statePrices[id] ?? basePrice) / basePrice,
+      ratio: statePriceOr(statePrices[id], basePrice) / basePrice,
       surplus: (stateSupply[id] ?? 0) - (stateDemand[id] ?? 0),
     }))
     .filter((s) => s.ratio <= GLUT_RATIO && s.surplus > 0)

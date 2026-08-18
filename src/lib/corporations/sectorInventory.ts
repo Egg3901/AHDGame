@@ -147,18 +147,30 @@ export function advanceSectorInventory(input: InventoryTurnInput): InventoryTurn
   // 2. Accrue this turn's unsold storable output (toggle on, clearing ran).
   const unsoldTotal = Math.max(0, producedUnits - soldUnits);
   if (stockpileEnabled && soldFraction != null && unsoldTotal > 0) {
+    // Per-commodity unsold when clearing itemized it; blended fallback. The
+    // itemized path is unit-weighted (`share`) against a revenue-weighted
+    // blend, so its sum can overshoot the sector's actual unsold remainder;
+    // everything is scaled back so accrual can never exceed unsoldTotal —
+    // stockpiling stores unsold goods, it does not conjure them.
+    const raw: Array<[CommodityType, number]> = [];
+    let rawTotal = 0;
     for (const { commodity, share } of unitShares(supplyRates)) {
       if (!isStorable(commodity)) continue;
-      // Per-commodity unsold when clearing itemized it; blended fallback.
       const commoditySold = soldByCommodity[commodity];
       const unsold =
         typeof commoditySold === "number"
           ? producedUnits * share * Math.max(0, 1 - commoditySold)
           : unsoldTotal * share;
       if (unsold > 0) {
-        accruedUnits += unsold;
-        next[commodity] = (next[commodity] ?? 0) + unsold;
+        raw.push([commodity, unsold]);
+        rawTotal += unsold;
       }
+    }
+    const scale = rawTotal > unsoldTotal ? unsoldTotal / rawTotal : 1;
+    for (const [commodity, unsold] of raw) {
+      const scaled = unsold * scale;
+      accruedUnits += scaled;
+      next[commodity] = (next[commodity] ?? 0) + scaled;
     }
   }
 
