@@ -153,7 +153,7 @@
     "prettier": "^3.9.6",
     "tailwindcss": "^4",
     "topojson-server": "^3.0.1",
-    "tsx": "^4.23.5",
+    "tsx": "^4.23.12",
     "typescript": "6.0.2",
     "vitest": "^4.1.10"
   },
