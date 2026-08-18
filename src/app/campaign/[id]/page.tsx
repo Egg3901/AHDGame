@@ -86,14 +86,19 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     return () => clearInterval(t);
   }, [fetchCampaign]);
 
-  async function handleUpgrade(category: string, targetId?: string) {
+  async function handleUpgrade(
+    category: string,
+    branch?: "a" | "b" | "c" | null,
+    targetId?: string
+  ) {
     if (!campaign) return;
-    setUpgrading(category);
+    // Composite key so only the exact node being bought shows its spinner.
+    setUpgrading(branch ? `${category}:${branch}` : category);
     try {
       const res = await fetch(`/api/campaigns/${campaign.id}/upgrade`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category, targetId }),
+        body: JSON.stringify({ category, branch: branch ?? null, targetId }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -103,6 +108,28 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       await fetchCampaign();
     } catch {
       alert("Upgrade failed");
+    } finally {
+      setUpgrading(null);
+    }
+  }
+
+  async function handleRetarget(targetId: string) {
+    if (!campaign) return;
+    setUpgrading("oppositionResearch:retarget");
+    try {
+      const res = await fetch(`/api/campaigns/${campaign.id}/retarget`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Retarget failed");
+        return;
+      }
+      await fetchCampaign();
+    } catch {
+      alert("Retarget failed");
     } finally {
       setUpgrading(null);
     }
@@ -384,6 +411,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           isOwner={canManage}
           upgrading={upgrading}
           onUpgrade={handleUpgrade}
+          onRetarget={canManage ? handleRetarget : undefined}
           onResetOppositionResearch={canManage ? openResetOpposition : undefined}
           resettingOppositionResearch={resetOppoBusy}
         />

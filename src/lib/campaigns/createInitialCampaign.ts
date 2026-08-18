@@ -64,6 +64,11 @@ export async function createInitialCampaign({
     oppositionResearchLevel: 0,
     groundGameLevel: 0,
     mediaSpendingLevel: 0,
+    // Strategic Operations v2 — fresh campaigns start with un-unlocked trees.
+    fundraisingTree: { starter: false, a: 0, b: 0, c: 0 },
+    oppositionResearchTree: { starter: false, a: 0, b: 0, c: 0 },
+    groundGameTree: { starter: false, a: 0, b: 0, c: 0 },
+    mediaSpendingTree: { starter: false, a: 0, b: 0, c: 0 },
     oppositionTargetId: null,
     oppositionTargetName: null,
     oppositionResearchCooldownUntil: null,

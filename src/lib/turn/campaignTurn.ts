@@ -6,7 +6,8 @@ import type { Campaign, ElectionCandidate } from "@/lib/db/types";
 import { calculateCampaignIncome } from "@/lib/campaigns/income";
 import { calculateCampaignActions } from "@/lib/campaigns/actions";
 import { calculateMaintenanceCosts } from "@/lib/campaigns/maintenance";
-import { getCampaignFamilyScalar } from "@/lib/campaigns/upgradeCosts";
+import { getCampaignFamilyScalar, getOpsBranchMagnitude } from "@/lib/campaigns/upgradeCosts";
+import { getMediaFavPerTurn, getOppoDrainPerTurn } from "@/lib/campaigns/opsEffects";
 import {
   SUPPORT_RALLY_FULL_VALUE,
   SUPPORT_RALLY_TOUR_TICK_ACTION_COST,
@@ -127,6 +128,21 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
           .collection<Campaign>("campaigns")
           .find({ electionId: { $in: activeElectionIds } })
           .toArray();
+
+        // Strategic Operations v2 — incoming opposition-research shield.
+        // A candidate defended by a campaign whose Media > Rapid Response
+        // branch (mediaSpendingTree.c, effectType oppoShieldPct) is unlocked
+        // takes reduced opposition-research favorability damage. Keyed by the
+        // defended candidateId so the oppo-debuff step (below) can look it up
+        // cross-campaign. Highest shield wins if a character somehow has two.
+        const oppoShieldByCharacterId = new Map<string, number>();
+        for (const c of campaigns) {
+          const tree = c.mediaSpendingTree;
+          if (!tree?.starter || tree.c <= 0) continue;
+          const shield = getOpsBranchMagnitude("mediaSpending", "c", tree.c);
+          const key = c.candidateId.toString();
+          oppoShieldByCharacterId.set(key, Math.max(oppoShieldByCharacterId.get(key) ?? 0, shield));
+        }
 
         // Batch-fetch travel + primary-campaign state from ElectionCandidate for all campaigns.
         // travelState is used during general-phase travel presence bonus; primaryCampaignState
@@ -498,11 +514,10 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
              * prevents the silent unbounded bleed that previously let campaigns
              * drain tens of millions into the red via raw $inc with no floor.
              */
-            const downgrade = computeAutoDowngrade({
+            const downgrade = computeAutoDowngrade(campaign, {
               funds: fundsAnchorForCalc,
               income,
-              groundGameLevel: campaign.groundGameLevel,
-              mediaSpendingLevel: campaign.mediaSpendingLevel,
+              electionType: electionTypeForScalar,
             });
             const effectiveMaintenance =
               downgrade.downgrades.length > 0 ? downgrade.newMaintenance : preDowngradeMaintenance;
@@ -513,8 +528,9 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
 
             const campaignSet: Record<string, unknown> = { updatedAt: now };
             if (downgrade.downgrades.length > 0) {
-              campaignSet.groundGameLevel = downgrade.newGroundGameLevel;
-              campaignSet.mediaSpendingLevel = downgrade.newMediaSpendingLevel;
+              // setFields encodes branch demotions (`groundGameTree.a`) or legacy
+              // level demotions (`mediaSpendingLevel`) — merge them verbatim.
+              Object.assign(campaignSet, downgrade.setFields);
               campaignsAutoDowngraded++;
             }
 
@@ -643,8 +659,11 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
             // Media Spending: +0.5% favorability per level per turn (2× during final 4 hours).
             // Phase 5.5: applies to all Campaign-Manager-eligible races (president +
             // US senate / governor / house / stateSenate).
-            if (applyCampaignPassives && campaign.mediaSpendingLevel > 0) {
-              const favorabilityBoost = campaign.mediaSpendingLevel * 0.5 * seasonMultiplier;
+            // Strategic Operations v2: read favorability/turn from the media tree
+            // (starter + Broadcast + Digital Ads), with legacy-level fallback.
+            const mediaFavPerTurn = getMediaFavPerTurn(campaign);
+            if (applyCampaignPassives && mediaFavPerTurn > 0) {
+              const favorabilityBoost = mediaFavPerTurn * seasonMultiplier;
               const key = campaign.candidateId.toString();
               favorabilityChanges.set(key, {
                 collection: candidateCollection,
@@ -656,13 +675,14 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
             // (2× during final 4 hours). Phase 5.5: applies to all Campaign-Manager-
             // eligible races. Targeting still requires opposition research level > 0
             // and an oppositionTargetId — both are race-family-agnostic.
-            if (
-              applyCampaignPassives &&
-              campaign.oppositionResearchLevel > 0 &&
-              campaign.oppositionTargetId
-            ) {
-              const favorabilityDebuff = campaign.oppositionResearchLevel * -0.5 * seasonMultiplier;
+            // Strategic Operations v2: recurring drain from the oppo tree
+            // (starter + Dossier, amplified by Counter-Intel), reduced by the
+            // target's Rapid Response shield (cross-campaign, precomputed above).
+            const oppoDrainPerTurn = getOppoDrainPerTurn(campaign);
+            if (applyCampaignPassives && oppoDrainPerTurn > 0 && campaign.oppositionTargetId) {
               const key = campaign.oppositionTargetId.toString();
+              const shield = oppoShieldByCharacterId.get(key) ?? 0;
+              const favorabilityDebuff = -oppoDrainPerTurn * (1 - shield) * seasonMultiplier;
               favorabilityChanges.set(key, {
                 collection: "unknown", // Will be determined when applying
                 amount: favorabilityDebuff,
