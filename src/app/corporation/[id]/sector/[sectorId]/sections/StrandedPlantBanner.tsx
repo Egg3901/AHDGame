@@ -28,7 +28,11 @@ export default function StrandedPlantBanner({
   const soldPct = soldFraction != null ? Math.round(soldFraction * 100) : null;
 
   return (
-    <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+    <div
+      role="status"
+      aria-label="Stranded plant warning"
+      className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4"
+    >
       <div className="flex items-start gap-2">
         <span aria-hidden className="text-base leading-none">
           ⚠️
@@ -38,14 +42,16 @@ export default function StrandedPlantBanner({
           <p className="mt-0.5 text-xs text-muted">
             For {lowFillTurns} turns in a row this sector has sold less than half of what it makes
             {soldPct != null ? ` (last turn: ${soldPct}%)` : ""}. The local market is oversupplied
-            for its goods, so extra output goes unsold and the money spent making it is lost. Its
-            margin still looks healthy because margin only counts the units that do sell.
+            for its goods, so extra output earns no revenue this turn while its production costs
+            still land. Its margin still looks healthy because margin only counts the units that do
+            sell.
           </p>
           {isCeo && (
             <p className="mt-1.5 text-xs text-muted">
-              Options: set growth to zero and let the plant shrink, mothball it in the Plant panel,
-              list it for sale, or abandon it in the panels below. Building capacity in a state
-              where the goods are scarce will sell far better.
+              Options: stockpile storable goods for a temporary glut, set growth to zero and let the
+              plant shrink, mothball it in the Plant panel, list it for sale, or abandon it in the
+              panels below. Building capacity in a state where the goods are scarce will sell far
+              better.
             </p>
           )}
         </div>
