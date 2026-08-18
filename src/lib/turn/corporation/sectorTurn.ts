@@ -54,10 +54,8 @@ import {
   solveOtherOpexPerUnit,
 } from "@/lib/corporations/physicalPnl";
 import { healAutoRetoolOpexAnchor } from "@/lib/corporations/retoolRescale";
-import { trendGrowthRate } from "@/lib/utils/sectorGrowth";
 import {
   calculateDailyGrowthCost,
-  GROWTH_RATE_TURNS_PER_YEAR,
   TURNS_PER_DAY,
   NPV_ANNUAL_DISCOUNT_RATE,
   getHomeLocationMarginBonus,
@@ -116,9 +114,9 @@ import {
 import { resolveSectorGrowthPolicy } from "./sectorGrowthPolicy";
 import { resolveSectorLabourEconomics, resolveSectorLabourProductionEffects } from "./sectorLabour";
 import { computeSectorOutputUnits } from "./sectorOutputUnits";
-import { STRANDED_LOW_FILL_THRESHOLD } from "@/lib/corporations/strandedPlant";
 import { advanceSectorInventory } from "@/lib/corporations/sectorInventory";
 import type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
+import { legacyRevenueShadowTelemetry, marketTelemetry } from "./sectorTelemetry";
 
 export { computeSectorOutputUnits } from "./sectorOutputUnits";
 export type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
@@ -1786,76 +1784,21 @@ export function processSector(
     // P3a/C4: `buildQueue` and `constructionInProgressAnchor` are deliberately
     // NOT in this `$set`. They are written as a `$pull`/`$inc` delta on the
     // bulkWrite op below — see the C4 note at `cipAnchorDelta`.
-    // D13 ROLLBACK SAFETY: capital-mode restore point. Remove after the
-    // rollback drill passes.
-    //
-    // `revenue` above is RESTATED from plant output under plants, which
-    // destroys the compounding series capital mode would have kept. Persist
-    // that series in parallel so a mode rollback can restore each sector's
-    // nameplate instead of resuming compounding from a plants-derived number.
-    //
-    // The series must be INDEPENDENT of `sector.revenue`. Seeding it from
-    // `preFlipNameplateRevenue` every turn does not do that:
-    // `preFlipNameplateRevenue` is `sectorRevenueAnchor × (1 + g)` and
-    // `sectorRevenueAnchor` is read straight off `sector.revenue`, which under
-    // plants was already restated from plant output LAST turn. So after the
-    // flip turn the shadow just tracked plants revenue — and because plants
-    // zeroes `targetGrowthRate` (below), g decayed to 0 and the shadow
-    // converged exactly onto it. Restoring from it would have restored what
-    // plants produced: precisely the silent permanent rebase this field exists
-    // to prevent.
-    //
-    // So: seed on the FLIP turn from the pre-flip nameplate (which is what
-    // capital mode would have written that turn, keeping the flip a no-op),
-    // then compound each later turn off the shadow's OWN previous value at the
-    // LEGACY growth rate. A sector whose shadow is missing or corrupt on a
-    // non-flip turn is re-seeded from the pre-flip nameplate; that reintroduces
-    // one turn of plants contamination, but the alternative is no restore point
-    // at all.
-    const prevShadowLocal = sector.legacyRevenueShadow;
-    const prevShadow =
-      typeof prevShadowLocal === "number" &&
-      Number.isFinite(prevShadowLocal) &&
-      prevShadowLocal >= 0
-        ? readCorpEconomicAnchor(prevShadowLocal, sectorCurrencyCode, sectorFxRate)
-        : null;
-    // The legacy growth chain. `brakedTargetRate` / `newCurrentGrowthRate` are
-    // the values computed BEFORE the plants zeroing a few lines down, so the
-    // flip turn captures the real pre-plants rates. Afterwards the chain trends
-    // on its own stored values — the live fields are on their way to zero and
-    // the affordability brake reads a plants-derived margin, so re-running the
-    // brake here would feed plants state back into the counterfactual.
-    const legacyTargetRate =
-      !isFlipTurn &&
-      typeof sector.legacyTargetGrowthRateShadow === "number" &&
-      Number.isFinite(sector.legacyTargetGrowthRateShadow)
-        ? sector.legacyTargetGrowthRateShadow
-        : brakedTargetRate;
-    const legacyCurrentRate =
-      !isFlipTurn &&
-      typeof sector.legacyGrowthRateShadow === "number" &&
-      Number.isFinite(sector.legacyGrowthRateShadow)
-        ? trendGrowthRate(sector.legacyGrowthRateShadow, legacyTargetRate)
-        : newCurrentGrowthRate;
-    // Legacy mothball froze the nameplate under capital mode; the shadow has to
-    // freeze with it or the counterfactual drifts above what a rollback should
-    // return to.
-    const legacyPerTurnRate = embargoLegacyMothball
-      ? 0
-      : legacyCurrentRate / GROWTH_RATE_TURNS_PER_YEAR;
-    const nextShadowAnchor =
-      isFlipTurn || prevShadow === null
-        ? preFlipNameplateRevenue
-        : prevShadow * (1 + legacyPerTurnRate / 100);
-    // Written in the same host currency and on the same daily basis as
-    // `revenue`; read by nothing in the simulation.
-    sectorUpdate.legacyRevenueShadow = writeCorpEconomicLocal(
-      nextShadowAnchor,
-      sectorCurrencyCode,
-      sectorFxRate
+    // Keep an independent capital-mode counterfactual so a plants rollback
+    // restores the old compounding series instead of a plants-derived value.
+    Object.assign(
+      sectorUpdate,
+      legacyRevenueShadowTelemetry({
+        sector,
+        isFlipTurn,
+        preFlipNameplateRevenue,
+        brakedTargetRate,
+        newCurrentGrowthRate,
+        embargoLegacyMothball,
+        sectorCurrencyCode,
+        sectorFxRate,
+      })
     );
-    sectorUpdate.legacyGrowthRateShadow = legacyCurrentRate;
-    sectorUpdate.legacyTargetGrowthRateShadow = legacyTargetRate;
     // Legacy growth fields are vestigial under plants: capacity is the only
     // thing that moves output, and the flip credit above compensates any
     // in-flight paid ramp. Zeroing the target lets `currentGrowthRate` trend to
@@ -1869,43 +1812,18 @@ export function processSector(
     // while the turn is running would have the toggle silently reverted. The
     // flag is owned by the build command alone.
   }
-  // Clearing telemetry + ramp anchor.
-  if (market.clearingEnabled && clearing) {
-    sectorUpdate.clearingFactor = Math.round(clearingFactor * 1000) / 1000;
-    sectorUpdate.soldFraction = Math.round(clearing.soldFraction * 1000) / 1000;
-    // Chronic-stranding counter: consecutive turns the sector cleared less
-    // than half its output. soldFraction alone is one turn of signal, which
-    // flickers on market noise; the counter is what the stranded-plant player
-    // warning and the NPP stranded-divest gate on. Mothballed plants hold the
-    // count (deliberately idle is not evidence either way).
-    if (!mothballed) {
-      sectorUpdate.lowFillTurns =
-        clearing.soldFraction < STRANDED_LOW_FILL_THRESHOLD ? (sector.lowFillTurns ?? 0) + 1 : 0;
-    }
-    // Per-output detail behind the weighted headline, so the sector page can
-    // show WHICH output failed to clear instead of one blended number.
-    const soldByCommodity: Record<string, number> = {};
-    for (const [commodity, sold] of Object.entries(clearing.soldByCommodity ?? {})) {
-      if (typeof sold === "number" && Number.isFinite(sold)) {
-        soldByCommodity[commodity] = Math.round(sold * 1000) / 1000;
-      }
-    }
-    sectorUpdate.soldByCommodity = soldByCommodity;
-    sectorUpdate.effectivePosture = Math.round(clearing.effectivePosture * 1000) / 1000;
-    sectorUpdate.clearingStartTurn = clearingStartTurn ?? null;
-  }
-  // Inventory pile + telemetry (only meaningful when the inventory pass ran;
-  // omitted entirely otherwise so pre-plants worlds carry no dead fields).
-  if (inventoryTurn) {
-    const rounded: Record<string, number> = {};
-    for (const [commodity, held] of Object.entries(inventoryTurn.nextInventory)) {
-      if (typeof held === "number" && held > 0) rounded[commodity] = Math.round(held * 100) / 100;
-    }
-    sectorUpdate.inventoryUnits = rounded;
-    sectorUpdate.inventoryValueAnchor = Math.round(inventoryTurn.heldValueAnchor);
-    sectorUpdate.inventoryDrainedUnits = Math.round(inventoryTurn.drainedUnits * 100) / 100;
-    sectorUpdate.inventorySpoiledUnits = Math.round(inventoryTurn.spoiledUnits * 100) / 100;
-  }
+  Object.assign(
+    sectorUpdate,
+    marketTelemetry({
+      clearingEnabled: market.clearingEnabled,
+      clearing,
+      clearingFactor,
+      clearingStartTurn,
+      mothballed,
+      sector,
+      inventoryTurn: inventoryTurn ?? undefined,
+    })
+  );
   // Throughput telemetry + ramp anchor (display + next turn's fade-in).
   if (market.throughputEnabled) {
     sectorUpdate.throughputFactor = Math.round(throughputFactor * 1000) / 1000;
@@ -1924,38 +1842,9 @@ export function processSector(
       sectorFxRate
     );
   }
-  // Persist the EFFECTIVE margin for this turn — telemetry only, never read
-  // back into the economy (same contract as laborCost above).
-  //
-  // `sector.profitMargin` is a seeded constant that nothing ever writes to, so
-  // every modifier computed above (commodity markets, SOE mandates, tech,
-  // nationalisation penalty) was applied for the turn and then discarded. The
-  // stored field therefore showed exactly two values across the whole world —
-  // 35 for market economies and 12 for state enterprises, min == max, for the
-  // entire run — which made every margin readout decorative and hid the fact
-  // that margins were in fact moving.
-  //
-  // P3.5 — UNDER PLANTS THIS FIELD IS AN OUTPUT, NOT AN INPUT.
-  //
-  // Below plants it is the modifier stack, and the stack DERIVES the cost.
-  // Under plants the causality reverses: physical lines derive the cost, the
-  // cost derives the profit, and the margin is read back off the profit as
-  // `100 × (1 − operatingCost / revenue)`. On the calibration turn the derived
-  // value equals the stack value exactly, by construction, so the flip shows no
-  // step.
-  //
-  // WHO READS IT (audited 2026-08, the "telemetry-only" claim above is about
-  // the COST path, not about readers in general — three exist):
-  //  • `corporationDetail.ts` — display. Sees real costs instead of an
-  //    assertion, which is the point.
-  //  • `nppCorporationBehavior.ts` — the NPP profitability instrument
-  //    (`marginCategory`, estimated income). It WANTS the derived number: the
-  //    bug that field exists to fix is NPPs reading a frozen seed constant.
-  //  • `publicEnterpriseRevenue.ts` — does NOT read it; it recomputes from
-  //    `profitMargin + soePenalty`, so SOE remittance estimates are untouched
-  //    by this wave and there is no double-deduction against the re-based
-  //    subsidy bill.
-  //
+  // Persist effective margin for display and NPP profitability decisions.
+  // Below plants it is the modifier stack; under plants it is derived from the
+  // physical P&L. Public-enterprise remittance recomputes its own value.
   // A sector with NO revenue this turn (mothballed, fully embargoed) has no
   // ratio to derive from — profit ÷ 0 is not "0% margin", it is undefined. Such
   // a sector keeps reporting the modifier stack, which is what its margin WOULD
