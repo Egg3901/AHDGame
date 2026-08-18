@@ -72,26 +72,31 @@ export default async function ConflictRecordPage({
   // Accepted deals only. A pending or rejected offer is a private negotiation; an
   // accepted one is part of how the war went and belongs on the public record.
   // All independent given the conflict doc — one round instead of five.
-  const [settlements, { startingYear, currentTurn }, record, reports, declarationHistory] =
-    await Promise.all([
-      getPeaceOffersCollection(db)
-        .find({ conflictId: doc._id, status: "accepted" })
-        .sort({ resolvedTurn: 1 })
-        .toArray(),
-      getGameTime(),
-      // Aggregated over the WHOLE history, not the newest-50 window below: a long
-      // war's casualty figure and engagement count must not stop climbing once the
-      // rendered list fills.
-      theaterRecord(db, doc._id),
-      getBattleReportsCollection(db)
-        .find({ theaterId: doc._id })
-        .sort({ turn: -1 })
-        .limit(BATTLE_LIMIT)
-        .toArray(),
-      listDeclarationHistory(db, doc._id, 3),
-    ]);
+  const [
+    settlements,
+    { startingYear, currentTurn, preIterationTurns },
+    record,
+    reports,
+    declarationHistory,
+  ] = await Promise.all([
+    getPeaceOffersCollection(db)
+      .find({ conflictId: doc._id, status: "accepted" })
+      .sort({ resolvedTurn: 1 })
+      .toArray(),
+    getGameTime(),
+    // Aggregated over the WHOLE history, not the newest-50 window below: a long
+    // war's casualty figure and engagement count must not stop climbing once the
+    // rendered list fills.
+    theaterRecord(db, doc._id),
+    getBattleReportsCollection(db)
+      .find({ theaterId: doc._id })
+      .sort({ turn: -1 })
+      .limit(BATTLE_LIMIT)
+      .toArray(),
+    listDeclarationHistory(db, doc._id, 3),
+  ]);
   const casualties = Object.values(record.casualtiesByCountry).reduce((a, b) => a + b, 0);
-  const view = toConflictView(doc, { startingYear, casualties });
+  const view = toConflictView(doc, { startingYear, casualties, preIterationTurns });
 
   // --- who is asking, and how much they may see ---------------------------------
   // Roles only count for a country actually in the war (belligerentSideOf uses
@@ -354,7 +359,7 @@ export default async function ConflictRecordPage({
   const controlStart = doc.controlStart ?? 50;
   const hostIsBelligerent =
     sideACountries.includes(doc.hostCountry) || sideBCountries.includes(doc.hostCountry);
-  const startYear = yearOfTurn(doc.startTurn, startingYear);
+  const startYear = yearOfTurn(doc.startTurn, startingYear, { preIterationTurns });
   // Prose names the country; chips and labels keep the code. "Warsaw Pact is
   // well ahead in DE" is a database row read aloud, not a sentence.
   //
@@ -479,6 +484,8 @@ export default async function ConflictRecordPage({
     sideBLabel: doc.sideB.label,
     sideACountries,
     sideBCountries,
+    sideAFaction: doc.sideA.factionEntity,
+    sideBFaction: doc.sideB.factionEntity,
     control: doc.control,
     controlStart,
     hostRegionCodes,

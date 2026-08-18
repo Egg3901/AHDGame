@@ -1,6 +1,6 @@
 /**
  * The two Vietnams, split at the 17th parallel by
- * `scripts/maps/build-vietnam-geo.mjs`.
+ * `scripts/geo/build-vietnam-geo.mjs`.
  *
  * NOT a region shard, and deliberately outside `REGION_SHARDS`. Every entry
  * there is drawn by unioning regions whose OWNER is read from `states`, and

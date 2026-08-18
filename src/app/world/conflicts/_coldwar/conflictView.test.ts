@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toConflictView } from "./conflictView";
+import { toConflictView, yearOfTurn } from "./conflictView";
 import type { ConflictDoc, ConflictSide } from "@/lib/db/types/conflict";
 
 const west: ConflictSide = { label: "NATO", countries: ["US"], kind: "coalition", backer: "west" };
@@ -50,6 +50,15 @@ describe("toConflictView", () => {
     expect(toConflictView(doc({ startTurn: 1 }), opts).years).toBe("1953 – present");
     // 48 turns per year: turn 97 is two years in.
     expect(toConflictView(doc({ startTurn: 97 }), opts).years).toBe("1955 – present");
+  });
+
+  it("honors the founding-phase calendar offset", () => {
+    // Live 1953 world: raw turn 214, preIterationTurns 48, status bar is 1956.
+    // Without the clock this dates as 1957.
+    const offset = { ...opts, preIterationTurns: 48 };
+    expect(toConflictView(doc({ startTurn: 214 }), offset).years).toBe("1956 – present");
+    expect(yearOfTurn(214, 1953, { preIterationTurns: 48 })).toBe(1956);
+    expect(yearOfTurn(214, 1953)).toBe(1957);
   });
 
   it("closes the range for a resolved conflict", () => {
