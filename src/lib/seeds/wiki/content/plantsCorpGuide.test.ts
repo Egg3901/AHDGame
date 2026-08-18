@@ -10,6 +10,12 @@ import {
   DOMINANCE_MARKET_SHARE_THRESHOLD,
   DOMINANCE_NATIONAL_SHARE_THRESHOLD,
 } from "@/lib/constants/corporations";
+import {
+  INVENTORY_CARRY_COST_RATE_PER_TURN,
+  INVENTORY_DRAIN_RATE_PER_TURN,
+  INVENTORY_SELL_DOWN_MIN_FILL,
+} from "@/lib/corporations/sectorInventory";
+import { STRANDED_WARN_TURNS } from "@/lib/corporations/strandedPlant";
 import { economyPages } from "../pages/economy";
 
 describe("plants-corp-guide wiki content", () => {
@@ -35,6 +41,16 @@ describe("plants-corp-guide wiki content", () => {
     expect(plantsCorpGuideContent).toContain(
       `${DOMINANCE_NATIONAL_SHARE_THRESHOLD}% of the national`
     );
+    expect(plantsCorpGuideContent).toContain(
+      `${Math.round(INVENTORY_CARRY_COST_RATE_PER_TURN * 100)}% of its current value`
+    );
+    expect(plantsCorpGuideContent).toContain(
+      `${Math.round(INVENTORY_SELL_DOWN_MIN_FILL * 100)}% of fresh output`
+    );
+    expect(plantsCorpGuideContent).toContain(
+      `${Math.round(INVENTORY_DRAIN_RATE_PER_TURN * 100)}% of the stored pile`
+    );
+    expect(plantsCorpGuideContent).toContain(`After ${STRANDED_WARN_TURNS} consecutive turns`);
     // Build-time table includes the slowest (energy) and fastest (retail) rows.
     expect(plantsCorpGuideContent).toContain(`| ${CAPACITY_BUILD_TURNS("energy")} |`);
     expect(plantsCorpGuideContent).toContain(`| ${CAPACITY_BUILD_TURNS("retail")} |`);
