@@ -195,17 +195,46 @@ export function previewRefinanceIssuance(params: {
 
   const nonDefaultedPool = allNonMaturedBonds.filter((b) => !b.defaulted);
   const nonDefaultedDebt = sumBondPrincipalAnchor(nonDefaultedPool, fxByCurrency);
-  const annualInterest = sumBondAnnualInterestAnchor(nonDefaultedPool, fxByCurrency);
+  // Interest must cover the SAME pool the debt figure does. Summing only the
+  // non-defaulted pool while adding `actualFaceAnchor` to debt below meant a
+  // corp whose only bond was the defaulted one being rolled reported zero
+  // interest, which trips calculateCreditScore's "no debt = good coverage"
+  // fallback and scores interest coverage a perfect 100. That corp then prices
+  // as investment grade on a roll it can service none of. The post-default CCC
+  // floor used to hide this by flooring the result anyway.
+  //
+  // The rolled principal survives the roll, so its obligation belongs in the
+  // ratio. Its existing coupon is the non-circular proxy for the replacement's.
+  const annualInterest = sumBondAnnualInterestAnchor(allNonMaturedBonds, fxByCurrency);
   const totalEquity = totalEquityForBonds(liquidCapitalAnchor, sectorNpv);
-  const penaltyActive = isBondDefaultCreditPenaltyActive(corporation, currentTurn);
 
+  // The post-default CCC floor is deliberately NOT applied here. This preview
+  // prices a like-for-like roll of debt that has already defaulted, and the
+  // default that set the floor is the very event this roll exists to cure —
+  // pricing off it is circular, and the result is a cure that is worse than the
+  // disease. Ticket #1130: a roll repriced 6.34% → 17.42%, tripling per-turn
+  // debt service on a corp that had defaulted for want of cash, while adding no
+  // cash at all (executeCorporationBondRefinance deliberately credits nothing,
+  // since no new investor is buying). A corp four turns from covering its coupon
+  // was pushed roughly twenty-one turns away, guaranteeing the next default.
+  //
+  // The penalty exists to make NEW borrowing expensive after a default, and it
+  // still does: every other issuance path passes the flag from
+  // isBondDefaultCreditPenaltyActive. Only the forced roll of existing principal
+  // is priced on the corp's actual fundamentals.
+  // Cash is NOT credited with the new face. A refinance rolls existing holders
+  // into a replacement bond at par and hands the corp nothing — see
+  // executeCorporationBondRefinance, which explicitly declines to credit it.
+  // Adding the face here (correct for a new issuance, where proceeds do arrive)
+  // scored the liquidity component as though a broke corp had just been handed
+  // its own principal in cash.
   const creditRating = calculateCreditScore(
-    liquidCapitalAnchor + actualFaceAnchor,
+    liquidCapitalAnchor,
     nonDefaultedDebt + actualFaceAnchor,
     annualIncome,
     annualInterest,
     totalEquity,
-    { bondDefaultCreditPenaltyActive: penaltyActive }
+    { bondDefaultCreditPenaltyActive: false }
   );
   const couponRate = getBondCouponRate(primeRate, creditRating.rating, maturityTurns);
 

@@ -25,26 +25,13 @@
  * STRIKE_UNIONIZATION_THRESHOLD is calibrated against the real ceiling of
  * `unionizationDriftTarget()` (unionization.ts), not picked in isolation.
  *
- * **Updated for v3 Phase 7b/8 (code-review fix, 2026-07-01):** the original
- * Phase 6 comment claimed a ~63 ceiling under "wage/unemployment/min-wage"
- * stress alone and said 55 "requires 2+ stress factors." That's now
- * incomplete, not wrong, Phase 7b (union-law bias, ±30pp) and Phase 8
- * (union membership pressure, +30pp) added two MORE additive terms to the
- * same target, raising the real ceiling to ~100 (clamped). The "2+ factors"
- * invariant still holds in the sense that matters: NO single factor alone
- *, wage (~24), unemployment (~9), min-wage (~10), union-law (~30), or
- * membership pressure (~30), crosses 55 by itself. What changed is that
- * the set of qualifying "stress factors" now includes two political/
- * organizational levers that require ZERO real wage or employment stress:
- * a country with a maximal pro-labor union law AND an actively-recruiting
- * union can cross 55 (20 baseline + 30 + 30 = 80) with every economic
- * input sitting at neutral. This is treated as INTENDED, not a bug, Phase
- * 7b/8 exist specifically to give political organizing real teeth
- * independent of provable economic distress (the "labour is political"
- * design thesis), not to be strictly subordinate to it. See
- * `unionization.test.ts`'s composed-ceiling test, which pins this
- * combination as an executable invariant instead of relying on this prose.
- */
+ * Represented shops now track the representing union's approval directly, so
+ * a well-run union (approval ≥ 55) can cross the strike threshold on its
+ * own shops with no economic distress. Unrepresented shops still need two
+ * or more economic/law stress factors. That split is intended: once a union
+ * actually holds a shop, membership density is a function of how the union
+ * is run, not of a wage-unemployment blend that would walk a 30% drive back
+ * down to ~6%.
 
 /**
  * v3 Phase 7b: weight applied to a country's union-law bias (-50..+50) when

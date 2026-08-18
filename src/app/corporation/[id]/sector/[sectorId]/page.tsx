@@ -985,6 +985,8 @@ export default function SectorDetailPage() {
                 countryId={sectorCountryId}
                 sectorType={sector.sectorType}
                 sectorId={sectorId}
+                workers={sector.workers}
+                unionization={sector.unionization}
                 representingUnionId={sector.representingUnionId}
                 representingUnionName={sector.representingUnionName}
                 onOrganized={fetchData}

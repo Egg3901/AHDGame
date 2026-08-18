@@ -278,6 +278,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       maxDuesPerWorkerAnnual
     );
     const activeServices = normalizeServiceIds(union.activeServices);
+    const representedHeadcount = representedSectors.reduce((sum, s) => sum + (s.workers ?? 0), 0);
 
     return NextResponse.json({
       union: {
@@ -340,21 +341,14 @@ export async function GET(_request: Request, { params }: RouteParams) {
         strikeCooldownUntilTurn: s.strikeCooldownUntilTurn ?? null,
         strikeBlockReason: unionStrikeBlockReason(s, currentTurn, protectedSectorIds),
       })),
-      // Union-wide membership: `unionization` is a percent (0-100) per sector, so
-      // the covered headcount is Σ(workers × unionization/100). `density` is that
-      // total over the whole workforce this union has standing in.
-      workforce: (() => {
-        const totalWorkers = sectors.reduce((sum, s) => sum + (s.workers ?? 0), 0);
-        const unionizedWorkers = sectors.reduce(
-          (sum, s) => sum + (s.workers ?? 0) * ((s.unionization ?? 0) / 100),
-          0
-        );
-        return {
-          totalWorkers: Math.round(totalWorkers),
-          unionizedWorkers: Math.round(unionizedWorkers),
-          density: totalWorkers > 0 ? unionizedWorkers / totalWorkers : 0,
-        };
-      })(),
+      // Union-wide membership: covered headcount over shops this union
+      // actually represents, not every shop in the industry. Density is
+      // members / that represented workforce.
+      workforce: {
+        totalWorkers: Math.round(representedHeadcount),
+        unionizedWorkers: members,
+        density: representedHeadcount > 0 ? members / representedHeadcount : 0,
+      },
       // No union-wide strike preview: unions no longer call strikes directly,
       // so the only live cost/eligibility figures are the campaign-scoped ones
       // in `bargainingCampaigns[].escalationPreview` below, which are built
