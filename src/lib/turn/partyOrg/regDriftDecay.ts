@@ -44,15 +44,21 @@ import {
  *   1. Read all StatePartyOrg rows for the state and the StateRegistrationPool row.
  *      If the pool row is missing (bootstrap from Phase 1.5 not yet landed for
  *      this state), skip — the processor is a no-op until bootstrap runs.
- *   2. Drift: for each party, move regPct toward orgPct by
+ *   2. Conservation: clamp negative pool buckets and, if the visible sum
+ *      (parties + max(0, pool)) is not 100, renormalize so the invariant
+ *      holds. Without this, an exhausted pool that went negative is hidden
+ *      by the UI (`value > 0` filter) and the legend totals above 100%.
+ *   3. Drift: for each party, move regPct toward orgPct by
  *      `min(PASSIVE_REG_DRIFT_RATE, |orgPct - regPct|)`.
- *      Compute the gross net party-Reg change; the residual goes to non-party
- *      buckets to maintain pool sum.
- *   3. Decay: for each party with regPct > 0, lose `PASSIVE_REG_DECAY_RATE`.
+ *      Cap the gross party-Reg gain by remaining Independent+Unregistered
+ *      capacity (same bound as registrationDrive) so drift cannot mint Reg
+ *      out of an empty pool. Residual is drawn from non-party buckets
+ *      without driving either bucket negative.
+ *   4. Decay: for each party with regPct > 0, lose `PASSIVE_REG_DECAY_RATE`.
  *      Distribute the lost amount via sqrt(orgPct) weights to parties with
  *      `orgPct >= REG_DRIFT_CATCH_ELIGIBILITY_ORG_PCT`. If no eligible party,
  *      route to non-party buckets with bias toward Independent.
- *   4. Apply all writes in one bulkWrite, plus ledger rows.
+ *   5. Apply all writes in one bulkWrite, plus ledger rows.
  *
  * Bootstrap dependency: this processor produces no work until Phase 1.5 /
  * Phase 2 prerequisite seeds `StatePartyOrg.registration` and creates
@@ -221,6 +227,110 @@ function combineDeltas(
   return { combined, driftOnly: drift, decayOnly: decay };
 }
 
+/** Visible overage large enough to show as >100.0% on a one-decimal legend. */
+const OVERAGE_REPAIR_EPSILON = 0.01;
+
+function availablePoolCapacity(independent: number, unregistered: number): number {
+  return Math.max(0, independent) + Math.max(0, unregistered);
+}
+
+/**
+ * Scale positive party deltas so their combined gain does not exceed `capacity`.
+ * Mutates `deltas` in place. Returns the (possibly reduced) amount taken from
+ * the pool — always <= capacity, always >= 0.
+ */
+function capPositiveDeltas(deltas: PartyDelta[], capacity: number): number {
+  const wanted = deltas.reduce((sum, d) => sum + Math.max(0, d.delta), 0);
+  const cap = Math.max(0, capacity);
+  if (wanted <= cap) return wanted;
+  if (wanted <= 0) return 0;
+  const factor = cap / wanted;
+  for (const d of deltas) {
+    if (d.delta <= 0) continue;
+    const scaled = d.delta * factor;
+    d.newReg = d.newReg - d.delta + scaled;
+    d.delta = scaled;
+  }
+  return cap;
+}
+
+/**
+ * Apply a pool residual without driving either bucket negative.
+ * `residual` < 0 takes from the pool (parties gained); `residual` > 0 adds
+ * to the pool split by Independent bias. When taking, leftover demand after
+ * one bucket empties overflows to the other instead of going negative.
+ */
+function applyPoolResidual(
+  residual: number,
+  independent: number,
+  unregistered: number,
+  independentBias: number
+): PoolDelta {
+  if (residual === 0) return { independent: 0, unregistered: 0 };
+  const indWeight = independentBias;
+  const unregWeight = 1;
+  const denom = indWeight + unregWeight;
+
+  if (residual > 0) {
+    return {
+      independent: (residual * indWeight) / denom,
+      unregistered: (residual * unregWeight) / denom,
+    };
+  }
+
+  const want = -residual;
+  const availInd = Math.max(0, independent);
+  const availUnreg = Math.max(0, unregistered);
+  const draw = Math.min(want, availInd + availUnreg);
+  if (draw <= 0) return { independent: 0, unregistered: 0 };
+
+  let fromInd = Math.min(availInd, (draw * indWeight) / denom);
+  let fromUnreg = Math.min(availUnreg, (draw * unregWeight) / denom);
+  let shortfall = draw - fromInd - fromUnreg;
+  if (shortfall > 0) {
+    const extraInd = Math.min(shortfall, availInd - fromInd);
+    fromInd += extraInd;
+    shortfall -= extraInd;
+    fromUnreg += Math.min(shortfall, availUnreg - fromUnreg);
+  }
+  return { independent: -fromInd, unregistered: -fromUnreg };
+}
+
+/**
+ * Restore the 100% pool invariant when the *visible* total (party Reg +
+ * non-negative pool buckets) exceeds 100. Negative buckets are treated as 0
+ * — they are an accounting artifact of prior overdraw, and the UI hides them
+ * (`value > 0`), which is how the legend was able to total above 100%.
+ *
+ * Deficits (sum < 100) are left alone: some countries seed without a full
+ * remainder pool, and existing tests assert conservation of the starting
+ * total rather than a force-to-100 rewrite.
+ */
+function repairOverage(
+  parties: PartyView[],
+  independent: number,
+  unregistered: number
+): { partyDeltas: PartyDelta[]; independent: number; unregistered: number } {
+  const clampedInd = Math.max(0, independent);
+  const clampedUnreg = Math.max(0, unregistered);
+  const partySum = parties.reduce((sum, p) => sum + p.regPct, 0);
+  const poolSum = clampedInd + clampedUnreg;
+  const visible = partySum + poolSum;
+  const partyDeltas: PartyDelta[] = [];
+  if (visible <= 100 + OVERAGE_REPAIR_EPSILON || partySum <= 0) {
+    return { partyDeltas, independent: clampedInd, unregistered: clampedUnreg };
+  }
+  const targetPartySum = Math.max(0, 100 - poolSum);
+  const scale = targetPartySum / partySum;
+  for (const p of parties) {
+    const newReg = p.regPct * scale;
+    const delta = newReg - p.regPct;
+    if (delta === 0) continue;
+    partyDeltas.push({ partyId: p.partyId, rowId: p.rowId, delta, newReg });
+  }
+  return { partyDeltas, independent: clampedInd, unregistered: clampedUnreg };
+}
+
 interface ProcessStateInput {
   countryId: StatePartyOrg["countryId"];
   stateId: string;
@@ -286,12 +396,21 @@ export function planStateRegDriftDecay(input: ProcessStateInput): ProcessStateOu
   const driftRate = PASSIVE_REG_DRIFT_RATE * registrationDriftMultiplier(accessBias);
   const decayRate = PASSIVE_REG_DECAY_RATE * registrationDecayMultiplier(accessBias);
 
-  const { partyDeltas: drift, poolResidual } = computeDriftDeltas(partyViews, driftRate, regLag);
+  // Clamp negative buckets and scale party Reg down when the visible total
+  // (what the legend shows after hiding non-positive slices) exceeds 100.
+  const repaired = repairOverage(partyViews, input.pool.independent, input.pool.unregistered);
+  const viewsAfterRepair: PartyView[] = partyViews.map((p) => {
+    const d = repaired.partyDeltas.find((x) => x.partyId === p.partyId);
+    return d ? { ...p, regPct: d.newReg } : p;
+  });
+  const independent = repaired.independent;
+  const unregistered = repaired.unregistered;
+
+  const { partyDeltas: drift } = computeDriftDeltas(viewsAfterRepair, driftRate, regLag);
 
   // Governor home-field: an extra upward Reg drift for the executive's party,
-  // capped via `govHomeFieldNudge`. The displaced share is absorbed by the pool
-  // (residual) exactly like base drift, so the 100% invariant is preserved.
-  let govDriftResidual = poolResidual;
+  // capped via `govHomeFieldNudge`. Combined with base drift, the draw is then
+  // bounded by remaining pool capacity so the 100% invariant is preserved.
   const gov = input.governor ?? null;
   if (gov) {
     const govDrift = drift.find((d) => d.partyId === gov.partyId);
@@ -300,14 +419,18 @@ export function planStateRegDriftDecay(input: ProcessStateInput): ProcessStateOu
       if (nudge > 0) {
         govDrift.delta += nudge;
         govDrift.newReg += nudge;
-        govDriftResidual -= nudge; // pool loses what the gov party gained
       }
     }
   }
 
+  // Drift (including home-field) cannot mint registration once Independent
+  // and Unregistered are exhausted — the same bound registrationDrive uses.
+  const taken = capPositiveDeltas(drift, availablePoolCapacity(independent, unregistered));
+  const driftPoolResidual = -taken;
+
   // Apply drift to in-memory views before computing decay so decay reads
   // post-drift regPct (matches §8.4 invariant: drift before decay).
-  const postDriftViews: PartyView[] = partyViews.map((p) => {
+  const postDriftViews: PartyView[] = viewsAfterRepair.map((p) => {
     const d = drift.find((x) => x.partyId === p.partyId);
     return d ? { ...p, regPct: d.newReg } : p;
   });
@@ -323,28 +446,35 @@ export function planStateRegDriftDecay(input: ProcessStateInput): ProcessStateOu
     decayRelief
   );
 
-  // Drift residual splits between Independent and Unregistered with the
-  // same country-specific bias as decay routing.
-  const indWeight = independentBias;
-  const unregWeight = 1;
-  const totalWeight = indWeight + unregWeight;
-  const driftPoolDelta: PoolDelta = {
-    independent: (govDriftResidual * indWeight) / totalWeight,
-    unregistered: (govDriftResidual * unregWeight) / totalWeight,
-  };
+  const driftPoolDelta = applyPoolResidual(
+    driftPoolResidual,
+    independent,
+    unregistered,
+    independentBias
+  );
 
-  const newIndependent =
-    input.pool.independent + driftPoolDelta.independent + decayPoolDelta.independent;
-  const newUnregistered =
-    input.pool.unregistered + driftPoolDelta.unregistered + decayPoolDelta.unregistered;
+  const newIndependent = Math.max(
+    0,
+    independent + driftPoolDelta.independent + decayPoolDelta.independent
+  );
+  const newUnregistered = Math.max(
+    0,
+    unregistered + driftPoolDelta.unregistered + decayPoolDelta.unregistered
+  );
 
-  const { combined } = combineDeltas(drift, decay);
+  const { combined: afterDrift } = combineDeltas(repaired.partyDeltas, drift);
+  const { combined } = combineDeltas(Array.from(afterDrift.values()), decay);
   const partyUpdates = Array.from(combined.values())
     .filter((d) => d.delta !== 0)
     .map((d) => ({ rowId: d.rowId, newReg: d.newReg }));
 
-  // Build ledger rows. One per non-zero delta per source.
+  // Build ledger rows. One per non-zero delta per source. Renormalize first
+  // so a later drift/decay row's `value` is the post-repair running total.
   const ledgerRows: Omit<OrgRegLedger, "_id">[] = [];
+  for (const d of repaired.partyDeltas) {
+    if (d.delta === 0) continue;
+    ledgerRows.push(makeLedgerRow(input, d.partyId, "reg", d.delta, d.newReg, "renormalize"));
+  }
   for (const d of drift) {
     if (d.delta === 0) continue;
     ledgerRows.push(makeLedgerRow(input, d.partyId, "reg", d.delta, d.newReg, "drift"));
@@ -356,7 +486,7 @@ export function planStateRegDriftDecay(input: ProcessStateInput): ProcessStateOu
         POOL_SENTINEL_PARTY_ID,
         "independent",
         driftPoolDelta.independent,
-        input.pool.independent + driftPoolDelta.independent,
+        independent + driftPoolDelta.independent,
         "drift"
       )
     );
@@ -368,7 +498,7 @@ export function planStateRegDriftDecay(input: ProcessStateInput): ProcessStateOu
         POOL_SENTINEL_PARTY_ID,
         "unregistered",
         driftPoolDelta.unregistered,
-        input.pool.unregistered + driftPoolDelta.unregistered,
+        unregistered + driftPoolDelta.unregistered,
         "drift"
       )
     );
@@ -384,7 +514,7 @@ export function planStateRegDriftDecay(input: ProcessStateInput): ProcessStateOu
         POOL_SENTINEL_PARTY_ID,
         "independent",
         decayPoolDelta.independent,
-        input.pool.independent + driftPoolDelta.independent + decayPoolDelta.independent,
+        independent + driftPoolDelta.independent + decayPoolDelta.independent,
         "decay"
       )
     );
@@ -396,7 +526,7 @@ export function planStateRegDriftDecay(input: ProcessStateInput): ProcessStateOu
         POOL_SENTINEL_PARTY_ID,
         "unregistered",
         decayPoolDelta.unregistered,
-        input.pool.unregistered + driftPoolDelta.unregistered + decayPoolDelta.unregistered,
+        unregistered + driftPoolDelta.unregistered + decayPoolDelta.unregistered,
         "decay"
       )
     );

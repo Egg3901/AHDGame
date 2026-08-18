@@ -393,6 +393,117 @@ describe("planStateRegDriftDecay", () => {
     // by itself, net zero. No party update emitted.
     expect(planned.partyUpdates.length).toBe(0);
   });
+
+  it("does not overdraw an exhausted non-party pool (ticket #1133)", () => {
+    // Iowa-shaped: one party still climbing toward Org, another holding durable
+    // seed registration above Org, and the Independent/Unregistered buckets
+    // already empty. Uncapped drift used to mint Reg out of nothing and push
+    // the pool sum above 100.
+    const parties = [makeRow("dem", 77.5, 60), makeRow("flp", 7.3, 40)];
+    const pool = makePool(0, 0);
+    const planned = planStateRegDriftDecay({
+      countryId: "US",
+      stateId: "IA",
+      parties,
+      pool,
+      turn: 211,
+      now: new Date(),
+    });
+    if (!planned) throw new Error("expected plan");
+
+    const regs = new Map(parties.map((p) => [p._id, p.registration ?? 0]));
+    for (const u of planned.partyUpdates) regs.set(u.rowId, u.newReg);
+    const total =
+      [...regs.values()].reduce((s, v) => s + v, 0) +
+      planned.poolUpdate.newIndependent +
+      planned.poolUpdate.newUnregistered;
+    expect(total).toBeCloseTo(100, 6);
+    expect(planned.poolUpdate.newIndependent).toBeGreaterThanOrEqual(0);
+    expect(planned.poolUpdate.newUnregistered).toBeGreaterThanOrEqual(0);
+    // Empty pool → the climbing party cannot mint the 0.06 pp drift. A decay
+    // catch from the rival (0.004) is still allowed — that is zero-sum.
+    expect(regs.get("state_dem")!).toBeLessThan(60.03);
+  });
+
+  it("caps upward drift to remaining pool capacity", () => {
+    // DEM wants the full 0.06 pp drift but only 0.02 pp is left in the pool.
+    const parties = [makeRow("dem", 80, 50), makeRow("gop", 40, 49.98)];
+    const pool = makePool(0.02, 0);
+    const planned = planStateRegDriftDecay({
+      countryId: "US",
+      stateId: "IA",
+      parties,
+      pool,
+      turn: 100,
+      now: new Date(),
+    });
+    if (!planned) throw new Error("expected plan");
+
+    const regs = new Map(parties.map((p) => [p._id, p.registration ?? 0]));
+    for (const u of planned.partyUpdates) regs.set(u.rowId, u.newReg);
+    const total =
+      [...regs.values()].reduce((s, v) => s + v, 0) +
+      planned.poolUpdate.newIndependent +
+      planned.poolUpdate.newUnregistered;
+    expect(total).toBeCloseTo(100, 6);
+    expect(planned.poolUpdate.newIndependent).toBeGreaterThanOrEqual(0);
+    expect(planned.poolUpdate.newUnregistered).toBeGreaterThanOrEqual(0);
+    // Uncapped DEM would sit near 50.06; capped DEM cannot take more than the
+    // 0.02 pool plus a decay-catch sliver.
+    expect(regs.get("state_dem")!).toBeLessThan(50.05);
+  });
+
+  it("does not drive one pool bucket negative when the other still has capacity", () => {
+    // US bias pulls ~70% of a 0.06 draw from Independent (0.042) even when
+    // Independent only has 0.01 left. The leftover must come from Unregistered
+    // rather than going negative.
+    const parties = [makeRow("dem", 80, 50), makeRow("gop", 40, 44.99)];
+    const pool = makePool(0.01, 5);
+    const planned = planStateRegDriftDecay({
+      countryId: "US",
+      stateId: "IA",
+      parties,
+      pool,
+      turn: 100,
+      now: new Date(),
+    });
+    if (!planned) throw new Error("expected plan");
+    expect(planned.poolUpdate.newIndependent).toBeGreaterThanOrEqual(0);
+    expect(planned.poolUpdate.newUnregistered).toBeGreaterThanOrEqual(0);
+    const regs = new Map(parties.map((p) => [p._id, p.registration ?? 0]));
+    for (const u of planned.partyUpdates) regs.set(u.rowId, u.newReg);
+    const total =
+      [...regs.values()].reduce((s, v) => s + v, 0) +
+      planned.poolUpdate.newIndependent +
+      planned.poolUpdate.newUnregistered;
+    expect(total).toBeCloseTo(100, 6);
+  });
+
+  it("renormalizes an existing over-100% pool (ticket #1133 Iowa)", () => {
+    // Live Iowa at report time: DEM 52.9 + FLP 55.6 = 108.5, pool empty.
+    const parties = [makeRow("dem", 77.5, 52.9), makeRow("flp", 7.3, 55.6)];
+    const pool = makePool(0, 0);
+    const planned = planStateRegDriftDecay({
+      countryId: "US",
+      stateId: "IA",
+      parties,
+      pool,
+      turn: 211,
+      now: new Date(),
+    });
+    if (!planned) throw new Error("expected plan");
+
+    const regs = new Map(parties.map((p) => [p._id, p.registration ?? 0]));
+    for (const u of planned.partyUpdates) regs.set(u.rowId, u.newReg);
+    const total =
+      [...regs.values()].reduce((s, v) => s + v, 0) +
+      planned.poolUpdate.newIndependent +
+      planned.poolUpdate.newUnregistered;
+    expect(total).toBeCloseTo(100, 6);
+    expect(planned.poolUpdate.newIndependent).toBeGreaterThanOrEqual(0);
+    expect(planned.poolUpdate.newUnregistered).toBeGreaterThanOrEqual(0);
+    expect(planned.ledgerRows.some((r) => r.source === "renormalize")).toBe(true);
+  });
 });
 
 describe("govHomeFieldNudge", () => {
