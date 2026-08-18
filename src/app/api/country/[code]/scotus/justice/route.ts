@@ -20,6 +20,8 @@ import {
   JUSTICE_ACTION_CAP,
   JUSTICE_ACTION_RESET_HINT,
 } from "@/lib/constants/justiceActions";
+import { getGameState } from "@/lib/gameState";
+import { divergentDeathChance } from "@/lib/scotus/tenure";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
@@ -50,12 +52,20 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
           .findOne({ userId: new ObjectId(authUser.userId) })
       : null;
 
-    const seat = myCharacter
-      ? await db.collection<SupremeCourtSeat>("supremeCourtSeats").findOne({
-          countryId,
-          justiceCharacterId: myCharacter._id,
-        })
-      : null;
+    const [seat, gameState] = await Promise.all([
+      myCharacter
+        ? db.collection<SupremeCourtSeat>("supremeCourtSeats").findOne({
+            countryId,
+            justiceCharacterId: myCharacter._id,
+          })
+        : Promise.resolve(null),
+      getGameState(db),
+    ]);
+    const currentTurn = gameState?.currentTurn;
+    const deathChance =
+      seat?.isDivergent && currentTurn != null
+        ? divergentDeathChance(currentTurn, seat.divergentHazardStartsTurn)
+        : null;
 
     return NextResponse.json({
       countryId,
@@ -69,6 +79,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
             economicLean: seat.economicLean,
             socialLean: seat.socialLean,
             isDivergent: seat.isDivergent,
+            deathChance,
           }
         : null,
       justiceActionsRemaining: seat?.justiceActionsRemaining ?? JUSTICE_ACTION_CAP,
