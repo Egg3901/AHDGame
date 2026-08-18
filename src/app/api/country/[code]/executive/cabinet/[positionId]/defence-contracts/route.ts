@@ -29,6 +29,7 @@ import {
   defaultFactoryAllocation,
   DEFENCE_FACTORY_SLOTS_PER_PLANT,
 } from "@/lib/military/defenceLotEconomics";
+import { loadDefencePriceRatios } from "@/lib/military/defencePriceRatios";
 import {
   resolveSelfDealing,
   selfDealingFavorabilityPenalty,
@@ -205,7 +206,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       Math.round(fill.gradeCeiling)
     );
 
-    const productionCost = lotProductionCost(sector.strategyId);
+    // LIVE input prices, not the recipe's nominal share. The band a minister negotiates inside
+    // has to track the commodity market, or the floor is a constant dressed up as a cost and a
+    // supplier can be held to a price struck in a market that no longer exists.
+    const priceRatios = await loadDefencePriceRatios(db);
+    const productionCost = lotProductionCost(sector.strategyId, priceRatios);
     if (productionCost == null) {
       return NextResponse.json({ error: FILL_REASON_TEXT.no_materiel_line }, { status: 400 });
     }

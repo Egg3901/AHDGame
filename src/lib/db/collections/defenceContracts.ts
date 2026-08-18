@@ -139,13 +139,49 @@ export async function advanceContract(db: Db, contractId: ObjectId, lots: number
 }
 
 /**
+ * Undo a lot record whose payment did not land.
+ *
+ * The delivery sweep records lots BEFORE it moves money now, because the money primitive
+ * guards its own debit and reports a refused move without having touched a balance. That makes
+ * an un-paid lot record the only thing left to unwind, and it has to be exact: the contract is
+ * reopened if the reversal takes it back below its ordered count, or a fully-delivered order
+ * would stay closed holding lots nobody paid for.
+ *
+ * Guarded on `lotsDelivered` so a reversal racing a concurrent delivery cannot take back lots
+ * that delivery legitimately recorded.
+ */
+export async function reverseContractDelivery(
+  db: Db,
+  contractId: ObjectId,
+  lots: number
+): Promise<boolean> {
+  const back = Math.max(0, Math.round(lots));
+  if (back <= 0) return true;
+  const contract = await contracts(db).findOne({ _id: contractId });
+  if (!contract) return false;
+  const remainingAfter = contract.lotsDelivered - back;
+  if (remainingAfter < 0) return false;
+  const res = await contracts(db).updateOne(
+    { _id: contractId, lotsDelivered: contract.lotsDelivered },
+    {
+      $inc: { lotsDelivered: -back },
+      $set: {
+        updatedAt: new Date(),
+        ...(remainingAfter < contract.lotsOrdered ? { status: "active" as const } : {}),
+      },
+    }
+  );
+  return res.modifiedCount > 0;
+}
+
+/**
  * Book what a delivery cost the buyer and the supplier, and draw the encumbrance down by the
  * same amount.
  *
  * Separate from `advanceContract` because lots and money are separate facts here: the sweep
- * pays first and records second (see `applyDefenceDeliveries`), so the lot count can clamp
- * below what was paid for and the two must be reconcilable afterwards rather than assumed
- * equal.
+ * records the lots and then pays (see `applyDefenceDeliveries`), and `advanceContract` clamps,
+ * so the lot count can differ from what was planned and the two must be reconcilable
+ * afterwards rather than assumed equal.
  */
 export async function recordContractPayment(
   db: Db,

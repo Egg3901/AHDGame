@@ -125,6 +125,7 @@ export type DefenceCarryReason =
   | "order_remainder"
   | "supplier_ineligible"
   | "no_output"
+  | "supplier_cannot_fund_loss"
   | "already_settled_this_turn";
 
 /** One line of plain text per reason, shared by the ministerial and corporate order books. */
@@ -141,5 +142,8 @@ export const DEFENCE_CARRY_REASON_TEXT: Record<DefenceCarryReason, string> = {
   supplier_ineligible:
     "The supplier cannot currently be paid from this appropriation, so nothing shipped.",
   no_output: "The plant produced nothing this turn, so nothing shipped.",
+  supplier_cannot_fund_loss:
+    "Input prices have risen above the price this order was struck at, and the supplier does " +
+    "not have the cash to deliver at a loss. Nothing shipped.",
   already_settled_this_turn: "This contract has already been settled for this turn.",
 };

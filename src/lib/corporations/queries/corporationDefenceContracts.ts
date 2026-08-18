@@ -8,6 +8,7 @@ import {
   lotProductionCost,
   DEFENCE_FACTORY_SLOTS_PER_PLANT,
 } from "@/lib/military/defenceLotEconomics";
+import { loadDefencePriceRatios } from "@/lib/military/defencePriceRatios";
 import { DEFENCE_CARRY_REASON_TEXT, type DefenceCarryReason } from "@/lib/db/types/defenceContract";
 import type { Corporation, CorporateSector } from "@/lib/db/types/corporation";
 
@@ -108,6 +109,9 @@ export async function loadCorporationDefenceContracts(
     .find({ _id: { $in: sectorIds.map((id) => new ObjectId(id)) } })
     .toArray();
   const sectorById = new Map(sectors.map((s) => [s._id.toString(), s]));
+  // One read of the price book, so every row on the order book quotes its break-even against
+  // the same market. A CEO comparing two contracts is comparing prices, not read timings.
+  const priceRatios = await loadDefencePriceRatios(db);
 
   const rows: CorporationContractView[] = contracts.map((c) => {
     const sector = sectorById.get(c.sectorId.toString());
@@ -142,7 +146,7 @@ export async function loadCorporationDefenceContracts(
       partialLot: carry - Math.floor(carry),
       amountPaid: c.amountPaid ?? c.lotsDelivered * c.pricePerLot,
       productionCostPaid: c.productionCostPaid ?? 0,
-      unitProductionCost: sector ? (lotProductionCost(sector.strategyId) ?? 0) : 0,
+      unitProductionCost: sector ? (lotProductionCost(sector.strategyId, priceRatios) ?? 0) : 0,
       encumberedAmount: c.encumberedAmount ?? 0,
       ...(c.carryReason
         ? {

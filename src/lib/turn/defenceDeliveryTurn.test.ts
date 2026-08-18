@@ -3,6 +3,8 @@ import { ObjectId, type Db } from "mongodb";
 import { canSupply, applyDefenceDeliveries } from "./defenceDeliveryTurn";
 import { lotsFromSector, rawLotsFromSector } from "@/lib/military/arsenal";
 import { emitTx } from "@/lib/financialTxLog/emit";
+import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
+import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 
 vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
 
@@ -75,6 +77,8 @@ interface World {
   encumbered: number;
   /** Idempotency keys already taken, so a re-run turn cannot pay twice. */
   claims: Set<string>;
+  /** Live commodity book. Empty leaves every recipe at its nominal input share. */
+  commodityPrices?: CommodityPrice[];
   arsenalDeposits: { domain: string; lots: number; grade: number }[];
   corpCredits: number[];
   contractUpdates: Record<string, unknown>[];
@@ -162,10 +166,18 @@ function stubDb(w: World): Db {
           },
         };
       }
-      if (name === "defenceMoneyClaims") {
-        // A unique `_id` insert is the only atomic primitive the real store relies on, so the
-        // stub models exactly that: the second claim on a key raises Mongo's 11000.
+      if (name === "commodityPrices") {
+        // Live commodity ratios now drive the build cost. An empty book leaves every recipe at
+        // its nominal share, which is the pre-wiring behaviour and the right default here.
         return {
+          find: () => ({ toArray: async () => w.commodityPrices ?? [] }),
+        };
+      }
+      if (name === MONEY_MOVE_COLLECTION) {
+        // The shared money primitive's claim record. A unique `_id` insert is the only atomic
+        // guarantee it relies on, so the stub models exactly that and nothing else.
+        return {
+          findOne: async (f: { _id: string }) => (w.claims.has(f._id) ? { _id: f._id } : null),
           insertOne: async (doc: { _id: string }) => {
             if (w.claims.has(doc._id)) {
               throw Object.assign(new Error("duplicate key"), { code: 11000 });
@@ -173,6 +185,7 @@ function stubDb(w: World): Db {
             w.claims.add(doc._id);
             return { insertedId: doc._id };
           },
+          updateOne: async () => ({ matchedCount: 1, modifiedCount: 1 }),
           deleteOne: async (f: { _id: string }) => {
             w.claims.delete(f._id);
             return { deletedCount: 1 };
@@ -250,7 +263,17 @@ function world(over: Partial<World> = {}): World {
       },
     ],
     sector: { _id: SECTOR_ID, strategyId: "munitions", revenue: 10_000_000 },
-    corp: { _id: CORP_ID, countryId: "US", liquidCurrencyCode: "USD", unlockedTechNodeIds: [] },
+    // Deep pockets on purpose. These cases pin LOT accounting - carry, clamping, the arsenal -
+    // and the fixture's nominal price sits below what a munitions lot costs to build, so
+    // without this every one of them would stall on the (separately tested) rule that a
+    // supplier must be able to fund a loss before it delivers into one.
+    corp: {
+      _id: CORP_ID,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+      unlockedTechNodeIds: [],
+      liquidCapital: 1e15,
+    },
     appropriation: 1_000_000_000,
     encumbered: 0,
     claims: new Set<string>(),
@@ -421,6 +444,10 @@ describe("applyDefenceDeliveries", () => {
 // The buyer's money leaves the pot BEFORE the materiel and the supplier's payment land.
 // Every failure past that point has to unwind, or the appropriation is simply destroyed.
 describe("applyDefenceDeliveries — unwind after a successful debit", () => {
+  // The money now moves BEFORE the arsenal deposit, because the shared primitive guards its own
+  // debit and reports a refused move having touched nothing. So the supplier IS paid and then
+  // refunded through a paired reversing move, rather than never being paid at all. What must
+  // still hold is that both books come back to where they started.
   it("refunds the whole cost when the arsenal deposit fails", async () => {
     const w = world({ failDeposit: true });
     const opening = w.appropriation;
@@ -431,21 +458,25 @@ describe("applyDefenceDeliveries — unwind after a successful debit", () => {
     expect(res.stalled).toBe(1);
     expect(w.appropriation).toBe(opening);
     expect(w.arsenalDeposits).toHaveLength(0);
-    expect(w.corpCredits).toHaveLength(0);
+    // Paid, then reversed: the supplier nets exactly zero.
+    expect(w.corpCredits.reduce((a, b) => a + b, 0)).toBe(0);
   });
 
-  it("reclaims the lots and refunds them when the supplier's payment fails", async () => {
+  // A supplier write that throws now fails INSIDE the money move, before the arsenal is
+  // touched. Nothing is delivered, the contract keeps its lots banked, and the half-applied
+  // move is left in the repair queue rather than being silently swallowed - which is the whole
+  // reason the shared primitive owns this instead of a hand-rolled unwind ladder.
+  it("stalls without delivering when the supplier's payment leg throws", async () => {
     const w = world({ failCorpCredit: true });
-    const opening = w.appropriation;
 
     const res = await applyDefenceDeliveries(stubDb(w), "US", 1953);
 
     expect(res.lots).toBe(0);
     expect(res.stalled).toBe(1);
-    // Lots deposited, then drawn straight back out, and the buyer made whole.
-    expect(w.arsenalDeposits.length).toBeGreaterThan(0);
+    expect(w.arsenalDeposits).toHaveLength(0);
     expect(w.stock.ground ?? 0).toBe(0);
-    expect(w.appropriation).toBe(opening);
+    // The lot record is reversed, so the contract does not claim materiel nobody received.
+    expect(w.contracts[0].lotsDelivered).toBe(0);
   });
 
   it("keeps the sweep alive for later contracts when one fails", async () => {
