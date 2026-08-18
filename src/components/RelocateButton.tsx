@@ -33,7 +33,7 @@ interface RelocationStatus {
   remainingTurns: number;
   cooldownRemainingDays: number | null;
   hasOffice: boolean;
-  /** State/region-bound office — resigned on any move. National offices only resign on country change. */
+  /** State/region-bound office, resigned on any move. National offices only resign on country change. */
   officeRequiresStateResidency: boolean;
   isCeo: boolean;
   ceoCorpName: string | null;
@@ -330,7 +330,7 @@ export function RelocateButton({
                 )}
                 {status!.hasOffice && !isCountryChange && !status!.officeRequiresStateResidency && (
                   <li>
-                    Your national office (President, VP, cabinet, etc.) is kept — only state/region
+                    Your national office (President, VP, cabinet, etc.) is kept. Only state/region
                     seats resign on an in-country move.
                   </li>
                 )}
