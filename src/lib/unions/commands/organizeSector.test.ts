@@ -4,10 +4,9 @@ import type { Db } from "mongodb";
 import type { Character, CorporateSector, Union } from "@/lib/db/types";
 import {
   ORGANIZE_SECTOR_ACTION_COST,
-  ORGANIZE_SECTOR_TREASURY_COST,
   RAID_APPROVAL_EDGE_REQUIRED,
-  SECTOR_RECOGNITION_THRESHOLD,
   organizeSector,
+  organizeSectorTreasuryCost,
   raidSucceeds,
   resolveOrganizeSectorDrive,
   sectorUnionizationGain,
@@ -48,7 +47,7 @@ describe("sectorUnionizationGain", () => {
 });
 
 describe("resolveOrganizeSectorDrive", () => {
-  it("organizes an unrepresented sector without granting recognition below threshold", () => {
+  it("claims an unrepresented sector on the first drive so its workers count as members", () => {
     const outcome = resolveOrganizeSectorDrive({
       currentUnionization: 10,
       currentRepresentingUnionId: null,
@@ -58,22 +57,9 @@ describe("resolveOrganizeSectorDrive", () => {
     });
     expect(outcome.applied).toBe(true);
     expect(outcome.newUnionization).toBe(13);
-    expect(outcome.newRepresentingUnionId).toBeNull();
-    expect(outcome.won).toBe(false);
-    expect(outcome.wasRaid).toBe(false);
-  });
-
-  it("grants recognition once the drive crosses SECTOR_RECOGNITION_THRESHOLD", () => {
-    const outcome = resolveOrganizeSectorDrive({
-      currentUnionization: 45,
-      currentRepresentingUnionId: null,
-      attackerUnionId: "attacker",
-      attackerApproval: 100,
-      incumbentApproval: null,
-    });
-    expect(outcome.newUnionization).toBe(SECTOR_RECOGNITION_THRESHOLD);
     expect(outcome.newRepresentingUnionId).toBe("attacker");
     expect(outcome.won).toBe(true);
+    expect(outcome.wasRaid).toBe(false);
   });
 
   it("clamps unionization at 100", () => {
@@ -139,8 +125,8 @@ describe("resolveOrganizeSectorDrive", () => {
     });
     expect(outcome.applied).toBe(true);
     expect(outcome.wasRaid).toBe(false);
-    // Below recognition threshold: cleaned to null, not left pointing at the ghost.
-    expect(outcome.newRepresentingUnionId).toBeNull();
+    expect(outcome.newRepresentingUnionId).toBe("attacker");
+    expect(outcome.won).toBe(true);
   });
 });
 
@@ -176,6 +162,7 @@ function makeSector(overrides: Partial<CorporateSector> = {}): CorporateSector {
     countryId: "US",
     sectorType: "manufacturing",
     unionization: 10,
+    workers: 500,
     representingUnionId: null,
     ...overrides,
   } as unknown as CorporateSector;
@@ -248,7 +235,13 @@ describe("organizeSector (command)", () => {
     if (!result.ok) return;
     expect(result.won).toBe(false);
     expect(result.wasRaid).toBe(true);
-    expect(result.cashSpent).toBe(ORGANIZE_SECTOR_TREASURY_COST);
+    expect(result.cashSpent).toBe(
+      organizeSectorTreasuryCost({
+        workers: sector.workers,
+        unionization: sector.unionization,
+        isOwnSector: false,
+      })
+    );
     expect(result.actionsSpent).toBe(ORGANIZE_SECTOR_ACTION_COST);
     // The sector document is never touched on a losing raid.
     expect(sectorUpdate).not.toHaveBeenCalled();

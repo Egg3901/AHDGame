@@ -12,9 +12,6 @@ import {
   UNIONIZATION_REAL_WAGE_WEIGHT,
   UNIONIZATION_UNEMPLOYMENT_WEIGHT,
   UNIONIZATION_MINWAGE_WEIGHT,
-  UNIONIZATION_LAW_WEIGHT,
-  UNIONIZATION_APPROVAL_WEIGHT,
-  UNIONIZATION_APPROVAL_NEUTRAL,
   decayUnionizationUnderBan,
   UNIONIZATION_BAN_DECAY_STEP_PER_TURN,
 } from "./unionization";
@@ -26,10 +23,9 @@ const NEUTRAL = {
   unemploymentRate: UNIONIZATION_NEUTRAL_UNEMPLOYMENT,
   minWageKaitzRatio: UNIONIZATION_NEUTRAL_KAITZ,
   unionLawBias: 0,
-  // Union dues v1: 50 (UNIONIZATION_APPROVAL_NEUTRAL) is the neutral point,
-  // not 0, a represented sector whose union sits exactly at neutral approval
-  // contributes nothing to the drift target, same as an unrepresented one.
-  representingUnionApproval: UNIONIZATION_APPROVAL_NEUTRAL,
+  // Unrepresented: economic NPC target. Represented shops track approval
+  // directly and are tested separately below.
+  representingUnionApproval: undefined,
 };
 
 describe("unionizationDriftTarget", () => {
@@ -140,30 +136,46 @@ describe("unionizationDriftTarget", () => {
     expect(out).toBe(UNIONIZATION_BASELINE);
   });
 
-  it("union dues v1: approval ABOVE neutral (50) raises the target", () => {
-    const out = unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: 80 });
-    // (80-50) * UNIONIZATION_APPROVAL_WEIGHT(0.6) = 18
-    expect(out).toBeCloseTo(UNIONIZATION_BASELINE + 18, 9);
-  });
-
-  it("union dues v1: approval BELOW neutral (50) LOWERS the target, a badly run union bleeds its own density", () => {
-    const out = unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: 20 });
-    // (20-50) * UNIONIZATION_APPROVAL_WEIGHT(0.6) = -18
-    expect(out).toBeCloseTo(UNIONIZATION_BASELINE - 18, 9);
-    expect(out).toBeLessThan(UNIONIZATION_BASELINE);
-  });
-
-  it("union dues v1: approval AT neutral (50) contributes nothing, same as unrepresented", () => {
-    const atNeutral = unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: 50 });
+  it("represented shops track approval, not the economic blend, so a 30% drive does not crash to ~6%", () => {
+    const out = unionizationDriftTarget({
+      wageLevel: 1.5,
+      costOfLivingIndex: 100,
+      unemploymentRate: 10,
+      minWageKaitzRatio: 0.9,
+      unionLawBias: 0,
+      representingUnionApproval: 55,
+    });
+    expect(out).toBe(55);
     const unrepresented = unionizationDriftTarget({
-      ...NEUTRAL,
+      wageLevel: 1.5,
+      costOfLivingIndex: 100,
+      unemploymentRate: 10,
+      minWageKaitzRatio: 0.9,
+      unionLawBias: 0,
       representingUnionApproval: undefined,
     });
-    expect(atNeutral).toBe(UNIONIZATION_BASELINE);
-    expect(atNeutral).toBe(unrepresented);
+    expect(unrepresented).toBeLessThan(20);
+    expect(out).toBeGreaterThan(unrepresented);
   });
 
-  it("union dues v1: absent representingUnionApproval is neutral (sector unrepresented)", () => {
+  it("represented shops at 80 approval settle at 80, wages do not drag them back to baseline", () => {
+    expect(unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: 80 })).toBe(80);
+  });
+
+  it("a badly run union (20 approval) pulls its own shops down to 20", () => {
+    expect(unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: 20 })).toBe(20);
+  });
+
+  it("unrepresented shops ignore approval and keep the economic NPC target", () => {
+    expect(unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: undefined })).toBe(
+      UNIONIZATION_BASELINE
+    );
+    expect(unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: 50 })).not.toBe(
+      UNIONIZATION_BASELINE
+    );
+  });
+
+  it("union dues v1: absent representingUnionApproval is the economic baseline (sector unrepresented)", () => {
     expect(unionizationDriftTarget({ ...NEUTRAL, representingUnionApproval: undefined })).toBe(
       UNIONIZATION_BASELINE
     );
@@ -176,37 +188,27 @@ describe("unionizationDriftTarget", () => {
     expect(both).toBeCloseTo(wageOnly + unempOnly - UNIONIZATION_BASELINE, 9);
   });
 
-  describe("v3 Phase 7b / union dues v1 composed-ceiling invariant (code-review fix #7)", () => {
-    it("no single factor alone crosses STRIKE_UNIONIZATION_THRESHOLD", () => {
+  describe("v3 Phase 7b composed-ceiling invariant (code-review fix #7)", () => {
+    it("no single economic or law factor alone crosses STRIKE_UNIONIZATION_THRESHOLD on an unrepresented shop", () => {
       const wageOnly = unionizationDriftTarget({ ...NEUTRAL, wageLevel: 0.8 });
       const unempOnly = unionizationDriftTarget({ ...NEUTRAL, unemploymentRate: 2 });
       const minWageOnly = unionizationDriftTarget({ ...NEUTRAL, minWageKaitzRatio: 0 });
       const lawOnly = unionizationDriftTarget({ ...NEUTRAL, unionLawBias: 50 });
-      const approvalOnly = unionizationDriftTarget({
-        ...NEUTRAL,
-        representingUnionApproval: 100,
-      });
-      for (const single of [wageOnly, unempOnly, minWageOnly, lawOnly, approvalOnly]) {
+      for (const single of [wageOnly, unempOnly, minWageOnly, lawOnly]) {
         expect(single).toBeLessThan(STRIKE_UNIONIZATION_THRESHOLD);
       }
     });
 
-    it("union-law bias + union approval TOGETHER cross the threshold with every economic input neutral (documented as intended, not a bug)", () => {
-      const target = unionizationDriftTarget({
+    it("a well-run union's approval alone can cross the strike threshold on a shop it represents", () => {
+      const approvalOnly = unionizationDriftTarget({
         ...NEUTRAL,
-        unionLawBias: 50,
         representingUnionApproval: 100,
       });
-      expect(target).toBeCloseTo(
-        UNIONIZATION_BASELINE +
-          50 * UNIONIZATION_LAW_WEIGHT +
-          (100 - UNIONIZATION_APPROVAL_NEUTRAL) * UNIONIZATION_APPROVAL_WEIGHT,
-        9
-      );
-      expect(target).toBeGreaterThan(STRIKE_UNIONIZATION_THRESHOLD);
+      expect(approvalOnly).toBe(100);
+      expect(approvalOnly).toBeGreaterThan(STRIKE_UNIONIZATION_THRESHOLD);
     });
 
-    it("the real ceiling (all five factors maxed) is far above the stale ~63 figure, not equal to it", () => {
+    it("the real ceiling on a represented shop is the union's approval, clamped to 100", () => {
       const target = unionizationDriftTarget({
         wageLevel: 0.8,
         costOfLivingIndex: 100,
@@ -215,8 +217,7 @@ describe("unionizationDriftTarget", () => {
         unionLawBias: 50,
         representingUnionApproval: 100,
       });
-      expect(target).toBeGreaterThan(90);
-      expect(target).toBeLessThanOrEqual(100);
+      expect(target).toBe(100);
     });
   });
 });

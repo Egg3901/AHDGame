@@ -5,7 +5,7 @@ import Link from "next/link";
 import { UNION_STRENGTH_DECAY_PER_TURN } from "@/lib/unions/unionEconomy";
 import {
   ORGANIZE_SECTOR_ACTION_COST,
-  ORGANIZE_SECTOR_TREASURY_COST,
+  organizeSectorTreasuryCost,
   sectorUnionizationGain,
 } from "@/lib/unions/organizeSectorEconomy";
 import { WAGE_LEVEL_MAX, WAGE_LEVEL_MIN } from "@/lib/labour/laborCost";
@@ -25,7 +25,7 @@ import {
 import { UnionDuesPanel } from "@/components/unions/UnionDuesPanel";
 import { UnionServicesPanel } from "@/components/unions/UnionServicesPanel";
 import { UnionFundTreasuryPanel } from "@/components/unions/UnionFundTreasuryPanel";
-import { BASE_APPROVAL } from "@/lib/unions/unionDues";
+import { BASE_APPROVAL, unionMembers } from "@/lib/unions/unionDues";
 import { normalizeServiceIds, type UnionServiceId } from "@/lib/unions/unionServices";
 import { buildCharacterHref, buildNppHref } from "@/lib/utils/profileUrls";
 
@@ -400,12 +400,8 @@ export default function UnionDashboardPage({ params }: PageProps) {
   ];
 
   const organizeSectorActionCost = union.organizeSectorActionCost ?? ORGANIZE_SECTOR_ACTION_COST;
-  const organizeSectorTreasuryCost =
-    union.organizeSectorTreasuryCost ?? ORGANIZE_SECTOR_TREASURY_COST;
   const organizeSectorGain = sectorUnionizationGain(approval);
-  const cannotAffordSectorOrganize =
-    (myActions != null && myActions < organizeSectorActionCost) ||
-    union.treasury < organizeSectorTreasuryCost;
+  const cannotAffordSectorOrganizeAp = myActions != null && myActions < organizeSectorActionCost;
 
   const presidentHref = leader
     ? leader.isNPP
@@ -707,8 +703,9 @@ export default function UnionDashboardPage({ params }: PageProps) {
               specific sector, which happens on that sector's own page. */}
           <p className="text-[11px] text-muted">
             To grow this union, open the Sectors tab and organize a local. A drive costs treasury
-            plus one action and raises that shop&apos;s unionization. If a rival holds it, it is a
-            raid.
+            plus one action and raises that shop&apos;s unionization. Cost scales with the
+            shop&apos;s size, or with how unionized it already is if you hold it. If a rival holds
+            it, it is a raid.
           </p>
 
           {/* Public wage claim: a pressure signal, not a contract. It shows up
@@ -1016,7 +1013,19 @@ export default function UnionDashboardPage({ params }: PageProps) {
                         </td>
                         <td className="px-4 py-3 text-muted">{s.stateId}</td>
                         <td className="px-4 py-3 text-right font-mono tabular-nums">
-                          {(s.workers ?? 0).toLocaleString("en-US")}
+                          {(() => {
+                            const unionized = unionMembers([
+                              { workers: s.workers, unionization: s.unionization },
+                            ]);
+                            return (
+                              <>
+                                <div>{unionized.toLocaleString("en-US")}</div>
+                                <div className="text-[10px] text-muted">
+                                  of {(s.workers ?? 0).toLocaleString("en-US")}
+                                </div>
+                              </>
+                            );
+                          })()}
                         </td>
                         <td className="px-4 py-3 text-right font-mono tabular-nums">
                           {s.wageLevel.toFixed(2)}×
@@ -1062,21 +1071,36 @@ export default function UnionDashboardPage({ params }: PageProps) {
                         </td>
                         {isLeader && !suspended && (
                           <td className="px-4 py-3">
-                            <button
-                              type="button"
-                              disabled={actionPending || cannotAffordSectorOrganize}
-                              onClick={() => runAction("organize-sector", { sectorId: s.sectorId })}
-                              className="rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-                            >
-                              {s.representingUnionId && s.representingUnionId !== union.id
-                                ? "Raid"
-                                : "Organize"}
-                            </button>
-                            <div className="mt-0.5 text-[10px] tabular-nums text-muted">
-                              {organizeSectorActionCost} AP ·{" "}
-                              {organizeSectorTreasuryCost.toLocaleString("en-US")} · +
-                              {organizeSectorGain.toFixed(1)}%
-                            </div>
+                            {(() => {
+                              const rowCost = organizeSectorTreasuryCost({
+                                workers: s.workers,
+                                unionization: s.unionization,
+                                isOwnSector: s.representingUnionId === union.id,
+                              });
+                              const cannotAfford =
+                                cannotAffordSectorOrganizeAp || union.treasury < rowCost;
+                              return (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={actionPending || cannotAfford}
+                                    onClick={() =>
+                                      runAction("organize-sector", { sectorId: s.sectorId })
+                                    }
+                                    className="rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                                  >
+                                    {s.representingUnionId && s.representingUnionId !== union.id
+                                      ? "Raid"
+                                      : "Organize"}
+                                  </button>
+                                  <div className="mt-0.5 text-[10px] tabular-nums text-muted">
+                                    {organizeSectorActionCost} AP ·{" "}
+                                    {rowCost.toLocaleString("en-US")} · +
+                                    {organizeSectorGain.toFixed(1)}%
+                                  </div>
+                                </>
+                              );
+                            })()}
                           </td>
                         )}
                       </tr>
