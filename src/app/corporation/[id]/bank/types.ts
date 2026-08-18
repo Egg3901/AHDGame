@@ -84,7 +84,6 @@ export type ConsolePayload = {
     totalDeposits: number;
     totalLoans: number;
     npcDeposits: number;
-    reserves: number;
     cashReserves: number;
     requiredReserves: number;
     upstreamCapacity: number;

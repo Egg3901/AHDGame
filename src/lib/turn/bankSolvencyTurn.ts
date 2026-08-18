@@ -420,7 +420,7 @@ async function evaluateOneBank(
       lastSolvencyTurn: turn,
     };
     await archiveCharter(db, corp._id, failedCharter, turn, "failed");
-    await writeOffInterbankAndMarginOnFailure(db, corp._id, charter, turn);
+    await writeOffLenderSideInterbankOnFailure(db, corp._id, turn);
     await db.collection<Corporation>("corporations").updateOne(
       {
         _id: corp._id,
@@ -438,8 +438,12 @@ async function evaluateOneBank(
           "bankCharter.warningBand": band,
           "bankCharter.npcDeposits": npcDeposits,
           "bankCharter.totalDeposits": totalDeposits,
-          "bankCharter.interbankDebt": 0,
-          "bankCharter.cbMarginDebt": 0,
+          // Interbank and central bank claims are NOT cleared here any more.
+          // Clearing them at failure meant the resolution waterfall, which runs
+          // in a later sweep this same turn, found nothing to pay: the lenders
+          // and the central bank were written off before anyone checked whether
+          // the estate could cover them. They are settled, in priority order,
+          // by `returnDepositBook`.
           "bankCharter.propBook": [],
           "bankCharter.propBookMarkValue": 0,
           "bankCharter.lastSolvencyTurn": turn,
@@ -467,38 +471,23 @@ async function evaluateOneBank(
 }
 
 /**
- * On failure: interbank lenders write off outstanding (loss; no cash), CB margin
- * debt is written off against the CB (LOC-style: clear the claim, no further
- * cash movement since principal was created into the corp).
+ * On failure, the loans this bank made AS A LENDER die with it.
+ *
+ * Its borrowers keep the cash and the asset is written off, which is a real
+ * loss the estate cannot recover: chasing an interbank borrower for early
+ * repayment because its lender failed is a second failure, not a recovery.
+ *
+ * What this deliberately no longer touches is the claims AGAINST this bank.
+ * Those used to be written off here, before anyone had asked whether the estate
+ * could pay them, so a bank that failed holding enough cash to repay its
+ * lenders repaid nobody. They are settled in priority order by
+ * `returnDepositBook`, which runs in the resolution sweep later this turn.
  */
-async function writeOffInterbankAndMarginOnFailure(
+async function writeOffLenderSideInterbankOnFailure(
   db: Db,
   failedCorpId: ObjectId,
-  charter: BankCharter,
   turn: number
 ): Promise<void> {
-  const owedAsBorrower = await db
-    .collection<InterbankLoan>("interbankLoans")
-    .find({
-      borrowerCorporationId: failedCorpId,
-      status: "current",
-    })
-    .toArray();
-
-  for (const loan of owedAsBorrower) {
-    await db.collection<InterbankLoan>("interbankLoans").updateOne(
-      { _id: loan._id },
-      {
-        $set: {
-          status: "defaulted",
-          lastProcessedTurn: turn,
-        },
-      }
-    );
-  }
-
-  // Loans this bank originated as interbank lender: borrowers keep the cash;
-  // the asset is written off (status defaulted) so confidence can see the loss.
   await db.collection<InterbankLoan>("interbankLoans").updateMany(
     {
       lenderCorporationId: failedCorpId,
@@ -511,20 +500,6 @@ async function writeOffInterbankAndMarginOnFailure(
       },
     }
   );
-
-  // Clear borrower-side debt counters on counterparties who lent to the failed bank.
-  for (const loan of owedAsBorrower) {
-    const out = Math.max(0, loan.outstanding ?? 0);
-    if (out <= 0) continue;
-    // Lender absorbs the loss (no cash recovery). Debt already marked defaulted.
-    void charter;
-  }
-
-  // CB margin: write off the claim (principal was created on draw; clearing debt
-  // does not destroy residual cash still on the failed corp).
-  if ((charter.cbMarginDebt ?? 0) > 0) {
-    // No CB pool debit - mirror LOC writeoff (claim extinguished).
-  }
 }
 
 async function sumLoanOutstanding(

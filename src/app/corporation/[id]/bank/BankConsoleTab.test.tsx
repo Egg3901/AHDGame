@@ -49,7 +49,6 @@ const payload = {
     totalDeposits: 2_000_000,
     totalLoans: 1_000_000,
     npcDeposits: 500_000,
-    reserves: 300_000,
     confidence: 80,
     warningBand: "green",
     panicTurns: 0,

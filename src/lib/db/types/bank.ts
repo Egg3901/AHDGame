@@ -34,6 +34,13 @@ export interface BankCharter {
    */
   totalDeposits?: number;
   totalLoans?: number;
+  /**
+   * @deprecated Legacy mirror of `cashReserves`, written once per banking turn
+   * and therefore stale between turns. Nothing writes it any more: cash moves
+   * only through the money primitive, and a second copy of a balance is a
+   * second answer waiting to disagree. Kept on the type so old documents
+   * deserialize; read `cashReserves`.
+   */
   reserves?: number;
   /**
    * The bank's own cash, ring-fenced from `corporation.liquidCapital`.
