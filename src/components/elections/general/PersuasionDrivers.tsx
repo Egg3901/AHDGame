@@ -20,6 +20,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   computePairwiseDriverDisplay,
+  computePersuadableSliceReadout,
   pickDefaultDriverPair,
   type DriverDisplayInputs,
 } from "@/lib/elections/computePersuasionDriverDisplay";
@@ -169,6 +170,15 @@ export function PersuasionDrivers({
   const driverRows = drivers.filter((d) => d.unit !== "%");
   const coattailRows = drivers.filter((d) => d.unit === "%");
 
+  // Ceiling readout (ticket #1131) — how much of each side's vote the drivers
+  // can actually reach this cycle. A big registration lean is not a vote-share
+  // floor, and positive drivers only move the persuadable slice, so the card
+  // states both numbers instead of leaving the player to infer them.
+  const slice = useMemo(() => {
+    if (!focus || !opponent) return null;
+    return computePersuadableSliceReadout(drivers, focus.party, opponent.party, inputs);
+  }, [drivers, focus, opponent, inputs]);
+
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
       <div className="mb-2 flex items-baseline justify-between">
@@ -219,6 +229,17 @@ export function PersuasionDrivers({
           {driverRows.map((d) => (
             <DriverBarRow key={d.label} driver={d} maxAbs={maxAbs} />
           ))}
+          {slice && focus && opponent ? (
+            <p className="mt-1 rounded border border-card-border bg-background px-2 py-1.5 text-[11px] leading-snug text-muted">
+              {t("persuasion.ceiling", {
+                opponent: opponent.name,
+                opponentSlice: slice.opponentSlicePct.toFixed(1),
+                focus: focus.name,
+                focusSlice: slice.focusSlicePct.toFixed(1),
+                net: slice.netDriverPts.toFixed(1),
+              })}
+            </p>
+          ) : null}
           {coattailRows.length > 0 ? (
             <>
               <div className="mt-1 border-t border-card-border pt-2 text-[10px] uppercase tracking-wider text-muted">
