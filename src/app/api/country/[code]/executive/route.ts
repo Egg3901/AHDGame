@@ -396,49 +396,49 @@ async function handleParliamentary(countryId: CountryId) {
   const viewerVotes: Record<string, "aye" | "nay"> = {};
   const viewerWhippedFrom: Record<string, string> = {};
 
-  // Fetch all active appointment votes for this country
-  if (govFormation?.status === "pending") {
-    const apptVotes = await getPMAppointmentVotesCollection(db)
-      .find({ countryId, status: "active" })
-      .toArray();
+  // Fetch all active appointment votes. Confidence motions stay on a formed
+  // government; VONC-parallel nominations may also be active while formed.
+  const apptVotes = await getPMAppointmentVotesCollection(db)
+    .find({ countryId, status: "active" })
+    .toArray();
 
-    activeAppointmentVotes = await Promise.all(
-      apptVotes.map(async (v) => {
-        // Headline tally and per-party breakdown both come from one
-        // seat-weighted recompute of the votes map against current seats — the
-        // single source of truth, so the header and breakdown can never
-        // diverge and de-seated / cross-country voters are excluded.
-        const tally = await computeParliamentaryGovernmentTally(
-          db,
-          countryId,
-          lowerChamberKey,
-          v.votes
-        );
-        return {
-          type: "pmAppointment" as const,
-          _id: v._id.toString(),
-          nomineeName: v.nomineeName,
-          nomineePartyId: v.nomineePartyId,
-          formationType: v.formationType,
-          coalitionId: v.coalitionId,
-          votesFor: tally.votesFor,
-          votesAgainst: tally.votesAgainst,
-          voteByParty: tally.voteByParty,
-          status: v.status,
-          closesAt: v.closesAt.toISOString(),
-          closesOnTurn: v.closesOnTurn ?? null,
-        };
-      })
-    );
+  activeAppointmentVotes = await Promise.all(
+    apptVotes.map(async (v) => {
+      // Headline tally and per-party breakdown both come from one
+      // seat-weighted recompute of the votes map against current seats — the
+      // single source of truth, so the header and breakdown can never
+      // diverge and de-seated / cross-country voters are excluded.
+      const tally = await computeParliamentaryGovernmentTally(
+        db,
+        countryId,
+        lowerChamberKey,
+        v.votes
+      );
+      return {
+        type: "pmAppointment" as const,
+        _id: v._id.toString(),
+        nomineeName: v.nomineeName,
+        nomineePartyId: v.nomineePartyId,
+        formationType: v.formationType,
+        coalitionId: v.coalitionId,
+        votesFor: tally.votesFor,
+        votesAgainst: tally.votesAgainst,
+        voteByParty: tally.voteByParty,
+        status: v.status,
+        closesAt: v.closesAt.toISOString(),
+        closesOnTurn: v.closesOnTurn ?? null,
+        isConfidenceMotion: v.isConfidenceMotion === true,
+      };
+    })
+  );
 
-    if (myCharacter) {
-      for (const v of apptVotes) {
-        const key = myCharacter._id.toString();
-        const charVote = v.votes[key];
-        if (charVote) viewerVotes[v._id.toString()] = charVote;
-        const wf = v.whippedFromVote?.[key];
-        if (wf) viewerWhippedFrom[v._id.toString()] = wf;
-      }
+  if (myCharacter) {
+    for (const v of apptVotes) {
+      const key = myCharacter._id.toString();
+      const charVote = v.votes[key];
+      if (charVote) viewerVotes[v._id.toString()] = charVote;
+      const wf = v.whippedFromVote?.[key];
+      if (wf) viewerWhippedFrom[v._id.toString()] = wf;
     }
   }
 
