@@ -83,12 +83,20 @@ export function CampaignManagerTab({ electionId }: CampaignManagerTabProps) {
             {partyLabel ? ` - ${partyLabel}` : ""}
           </p>
         </div>
-        <Link
-          href={`/campaign/${campaign.id}`}
-          className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
-        >
-          Manage Campaign
-        </Link>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Link
+            href="#state-org"
+            className="inline-flex items-center justify-center rounded-lg border border-primary/40 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+          >
+            State Organization
+          </Link>
+          <Link
+            href={`/campaign/${campaign.id}`}
+            className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
+          >
+            Manage Campaign
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">

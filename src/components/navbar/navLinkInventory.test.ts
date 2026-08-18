@@ -68,6 +68,7 @@ describe("nav link inventory parity", () => {
     const labels = buildElectionsSubNavItems("US").map((i) => i.label);
     expect(labels).toContain("Primaries");
     expect(labels).toContain("Candidate directory");
+    expect(labels).toContain("Political Operations");
   });
 
   it("every builder labelKey/titleKey resolves in the en and de catalogs", () => {
