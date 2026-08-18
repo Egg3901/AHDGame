@@ -72,14 +72,17 @@ export interface CapRejection {
  */
 export async function assertCeoAcquisitionWithinCap(
   db: Db,
-  corp: Pick<Corporation, "_id" | "name" | "totalShares" | "ceoId" | "ceoVacant">,
+  corp: Pick<Corporation, "_id" | "name" | "totalShares" | "ceoId" | "ceoVacant" | "isPrivate">,
   buyerId: ObjectId,
   holderField: CeoHolderField,
   requestedShares: number,
   currentTurn: number
 ): Promise<CapRejection | null> {
-  // Scope: only the corp's own sitting CEO is capped.
+  // Scope: only the corp's own sitting CEO is capped. Private corps have no
+  // public float to pump; the cap exists to throttle public-market self-dealing,
+  // and would otherwise block a friendly transfer of a private subsidiary.
   if (!corp.ceoId || corp.ceoVacant === true || !corp.ceoId.equals(buyerId)) return null;
+  if (corp.isPrivate === true) return null;
 
   const window = await ceoSelfAcquisitionWindow(db, corp, buyerId, holderField, currentTurn);
 

@@ -1,6 +1,6 @@
 import type { Db, ObjectId } from "mongodb";
 import type { Character, Corporation } from "@/lib/db/types";
-import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
+import { resolveControllingCorporateParent } from "@/lib/corporations/reservedCorporateHoldings";
 import { appointCaretakerCeo } from "@/lib/corporations/caretakerCeo";
 import { openCeoTenure, closeCeoTenure } from "@/lib/corporations/ceoHistory";
 import { canActOnCorporationAsParent } from "../authorization";
@@ -33,7 +33,7 @@ export async function appointSubsidiaryCeo(
     return fail("You are not authorized to manage this subsidiary.", 403);
   }
 
-  const controllingParent = getControllingCorporateParent(sub);
+  const controllingParent = await resolveControllingCorporateParent(db, sub);
   if (!controllingParent) return fail("This corporation is no longer a subsidiary.", 409);
   const parent = await db
     .collection<Corporation>("corporations")

@@ -1,7 +1,7 @@
 import type { Db, ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import { MAX_DIVIDEND_RATE } from "@/lib/constants/corporations";
-import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
+import { resolveControllingCorporateParent } from "@/lib/corporations/reservedCorporateHoldings";
 import { canActOnCorporationAsParent } from "../authorization";
 import { fail, type SubsidiaryCommandResult } from "../commandTypes";
 
@@ -28,7 +28,7 @@ export async function setParentDividendFloor(
     return fail("You are not authorized to manage this subsidiary.", 403);
   }
 
-  const controllingParent = getControllingCorporateParent(sub);
+  const controllingParent = await resolveControllingCorporateParent(db, sub);
   if (!controllingParent) return fail("This corporation is no longer a subsidiary.", 409);
 
   if (!Number.isFinite(floorPct)) return fail("Invalid dividend floor.");

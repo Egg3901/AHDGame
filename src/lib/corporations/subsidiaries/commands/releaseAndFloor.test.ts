@@ -31,7 +31,15 @@ function sub(overrides: Partial<Corporation> = {}): Corporation {
 function makeDb() {
   const updateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
   return {
-    db: { collection: vi.fn(() => ({ updateOne })) } as unknown as Db,
+    db: {
+      collection: vi.fn(() => ({
+        updateOne,
+        find: vi.fn().mockReturnValue({ toArray: async () => [] }),
+        findOne: vi
+          .fn()
+          .mockResolvedValue({ _id: parentId, userId: callerUserId, ceoVacant: false }),
+      })),
+    } as unknown as Db,
     updateOne,
   };
 }

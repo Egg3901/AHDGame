@@ -37,6 +37,11 @@ import {
   CEO_SELF_ACQUISITION_WINDOW_TURNS,
 } from "@/lib/constants/corporations";
 import { computeAccountedShares } from "@/lib/corporations/shareInvariant";
+import {
+  corporationWithReservedHoldings,
+  loadReservedPositionsPlacedBy,
+  reservedCorporatePositions,
+} from "@/lib/corporations/reservedCorporateHoldings";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -449,6 +454,12 @@ export async function loadCorporationDetailView(args: {
       })
       .toArray(),
   ]);
+  const reservedHoldings = reservedCorporatePositions(
+    openSellOrdersForInvariant,
+    openListingsForInvariant,
+    corporation._id
+  );
+  const corporationForControl = corporationWithReservedHoldings(corporation, reservedHoldings);
 
   const {
     isImperialCeo,
@@ -459,7 +470,7 @@ export async function loadCorporationDetailView(args: {
     nppShareholderNameMap,
     fundShareholderNameMap,
     corpBorderMap,
-  } = await loadShareholderContext(db, corporation);
+  } = await loadShareholderContext(db, corporationForControl);
 
   // CEO self-acquisition window — surfaced to the CEO's own user so the buy
   // modal can show used/remaining/countdown before they attempt a capped buy.
@@ -1689,47 +1700,54 @@ export async function loadCorporationDetailView(args: {
     },
   };
 
-  const controllingParent = getControllingCorporateParent(corporation);
+  const controllingParent = getControllingCorporateParent(corporationForControl);
   // The parent-corp lookup, the subsidiary-candidates query, and the hostile-
   // takeover eligibility build are independent — fan them out in one round
   // trip instead of three sequential awaits.
-  const [pDoc, subsidiaryCandidates, hostileTakeoverEligibility] = await Promise.all([
-    controllingParent
-      ? db
-          .collection<Corporation>("corporations")
-          .findOne(
-            { _id: controllingParent.corporationId },
-            { projection: { _id: 1, name: 1, sequentialId: 1 } }
-          )
-      : Promise.resolve(null),
-    db
-      .collection<Corporation>("corporations")
-      .find({
-        shareholders: {
-          $elemMatch: {
-            corporationId: corporation._id,
-            shares: { $gt: 0 },
+  const [pDoc, subsidiaryCandidates, hostileTakeoverEligibility, reservedPlacedByThisCorp] =
+    await Promise.all([
+      controllingParent
+        ? db
+            .collection<Corporation>("corporations")
+            .findOne(
+              { _id: controllingParent.corporationId },
+              { projection: { _id: 1, name: 1, sequentialId: 1 } }
+            )
+        : Promise.resolve(null),
+      db
+        .collection<Corporation>("corporations")
+        .find({
+          shareholders: {
+            $elemMatch: {
+              corporationId: corporation._id,
+              shares: { $gt: 0 },
+            },
           },
-        },
-      })
-      // superShareMultiplier is required: control is voting power, and a
-      // dual-class corp's voting total differs from its share total.
-      .project<
-        Pick<
-          Corporation,
-          "_id" | "name" | "sequentialId" | "totalShares" | "shareholders" | "superShareMultiplier"
-        >
-      >({
-        _id: 1,
-        name: 1,
-        sequentialId: 1,
-        totalShares: 1,
-        shareholders: 1,
-        superShareMultiplier: 1,
-      })
-      .toArray(),
-    buildHostileTakeoverEligibility(db, corporation, viewerUserId),
-  ]);
+        })
+        // superShareMultiplier is required: control is voting power, and a
+        // dual-class corp's voting total differs from its share total.
+        .project<
+          Pick<
+            Corporation,
+            | "_id"
+            | "name"
+            | "sequentialId"
+            | "totalShares"
+            | "shareholders"
+            | "superShareMultiplier"
+          >
+        >({
+          _id: 1,
+          name: 1,
+          sequentialId: 1,
+          totalShares: 1,
+          shareholders: 1,
+          superShareMultiplier: 1,
+        })
+        .toArray(),
+      buildHostileTakeoverEligibility(db, corporation, viewerUserId),
+      loadReservedPositionsPlacedBy(db, corporation._id),
+    ]);
 
   let parentCorporationPayload: {
     _id: string;
@@ -1752,19 +1770,46 @@ export async function loadCorporationDetailView(args: {
     name: string;
     ownershipPct: number;
   }> = [];
+  const reservedSharesByTarget = new Map(
+    reservedPlacedByThisCorp.map((r) => [r.targetCorpId.toString(), r.shares])
+  );
+  const candidateIds = new Set(subsidiaryCandidates.map((s) => s._id.toString()));
+  const missingReservedIds = reservedPlacedByThisCorp
+    .map((r) => r.targetCorpId)
+    .filter((id) => !candidateIds.has(id.toString()));
+  if (missingReservedIds.length > 0) {
+    const extraSubs = await db
+      .collection<Corporation>("corporations")
+      .find({ _id: { $in: missingReservedIds } })
+      .project<
+        Pick<
+          Corporation,
+          "_id" | "name" | "sequentialId" | "totalShares" | "shareholders" | "superShareMultiplier"
+        >
+      >({
+        _id: 1,
+        name: 1,
+        sequentialId: 1,
+        totalShares: 1,
+        shareholders: 1,
+        superShareMultiplier: 1,
+      })
+      .toArray();
+    subsidiaryCandidates.push(...extraSubs);
+  }
   for (const sub of subsidiaryCandidates) {
-    const row = sub.shareholders?.find((s: Shareholder) =>
-      s.corporationId?.equals(corporation._id)
-    );
-    if (!row) continue;
-    const total = sub.totalShares ?? 0;
+    const reservedShares = reservedSharesByTarget.get(sub._id.toString()) ?? 0;
+    const subForControl = corporationWithReservedHoldings(sub as Corporation, [
+      { corporationId: corporation._id, shares: reservedShares },
+    ]);
+    const total = subForControl.totalShares ?? 0;
     if (total <= 0) continue;
     // Control is VOTING power everywhere else in the subsidiary model
     // (getControllingCorporateParent, the formalize guard, the hostile
     // threshold). Listing by raw share percent made a dual-class corp appear
     // in, or vanish from, the parent's subsidiary list while the actions on it
     // disagreed. Same helper the takeover path uses.
-    const pct = acquirerOwnershipPercent(corporation._id, sub as Corporation);
+    const pct = acquirerOwnershipPercent(corporation._id, subForControl);
     if (pct > SUBSIDIARY_OWNERSHIP_THRESHOLD_PERCENT) {
       subsidiariesPayload.push({
         _id: sub._id.toString(),
@@ -1943,7 +1988,7 @@ export async function loadCorporationDetailView(args: {
       fundCountryId?: string;
     };
 
-    const existing: ShareholderResponse[] = (corporation.shareholders ?? [])
+    const existing: ShareholderResponse[] = (corporationForControl.shareholders ?? [])
       .filter(
         (sh) =>
           sh.characterId != null ||

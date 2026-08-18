@@ -1,6 +1,10 @@
 import type { AnyBulkWriteOperation, Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
+import {
+  corporationWithReservedHoldings,
+  loadReservedCorporatePositionsByTarget,
+} from "@/lib/corporations/reservedCorporateHoldings";
 
 /**
  * Derived-model equivalent of "auto-dissolution": for any corp formalized as a
@@ -17,12 +21,16 @@ export async function cleanupZombieSubsidiaries(
   now: Date
 ): Promise<number> {
   const ops: AnyBulkWriteOperation<Corporation>[] = [];
+  const reservedByTarget = await loadReservedCorporatePositionsByTarget(db);
   for (const corp of corps) {
     const isFormalized = corp.subsidiaryFormalizedAtTurn != null;
     const hasFloor = corp.parentDividendFloorSetByCorpId != null;
     if (!isFormalized && !hasFloor) continue;
 
-    const controller = getControllingCorporateParent(corp);
+    const reserved = reservedByTarget.get(corp._id.toString()) ?? [];
+    const controller = getControllingCorporateParent(
+      corporationWithReservedHoldings(corp, reserved)
+    );
 
     if (isFormalized && !controller) {
       // Nobody controls >50% — dissolve the managed relationship entirely.

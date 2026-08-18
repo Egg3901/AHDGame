@@ -71,6 +71,24 @@ describe("cleanupZombieSubsidiaries", () => {
     expect(db.collection("corporations").bulkWrite).not.toHaveBeenCalled();
   });
 
+  it("does not dissolve a subsidiary whose controlling block is reserved in an open sell", async () => {
+    const listed = corp({ formalized: true, parentPct: 0, floorSetter: controllerId });
+    db.collection("shareOrders").find = vi.fn().mockReturnValue({
+      toArray: async () => [
+        {
+          type: "sell",
+          status: "open",
+          corporationId: listed._id,
+          placerCorporationId: controllerId,
+          sharesRemaining: 6_000_000,
+        },
+      ],
+    });
+    const cleared = await cleanupZombieSubsidiaries(db as unknown as Db, [listed], new Date());
+    expect(cleared).toBe(0);
+    expect(db.collection("corporations").bulkWrite).not.toHaveBeenCalled();
+  });
+
   it("skips corps with neither a marker nor a floor", async () => {
     const plain = corp({ parentPct: 60 });
     const cleared = await cleanupZombieSubsidiaries(db as unknown as Db, [plain], new Date());

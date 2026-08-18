@@ -3,10 +3,13 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
-import type { Character, ShareOrder, User } from "@/lib/db/types";
+import type { Character, Corporation, ShareOrder, User } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { cancelShareOrderAndRefund } from "@/lib/corporations/cancelShareOrder";
+import {
+  actorMayCancelShareOrder,
+  cancelShareOrderAndRefund,
+} from "@/lib/corporations/cancelShareOrder";
 
 interface RouteParams {
   params: Promise<{ id: string; orderId: string }>;
@@ -15,8 +18,9 @@ interface RouteParams {
 /**
  * DELETE /api/corporations/[id]/shares/orders/[orderId]
  * Cancel an open share order.
- * Buy orders: escrow returned to cashOnHand.
- * Sell orders: shares were never debited (only reserved), so no share adjustment needed.
+ * Buy orders: escrow returned to the placer (character wallet or corp treasury).
+ * Sell orders: reserved shares are restored when they were debited at creation.
+ * The authorizing character, or the sitting CEO of a corp-placed order, may cancel.
  */
 export async function DELETE(_request: Request, { params }: RouteParams) {
   try {
@@ -74,7 +78,13 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       charId = character._id;
     }
 
-    if (order.characterId?.toString() !== charId.toString()) {
+    let placerCorp: Pick<Corporation, "ceoId" | "ceoVacant"> | null = null;
+    if (order.placerCorporationId && order.characterId?.toString() !== charId.toString()) {
+      placerCorp = await db
+        .collection<Corporation>("corporations")
+        .findOne({ _id: order.placerCorporationId }, { projection: { ceoId: 1, ceoVacant: 1 } });
+    }
+    if (!actorMayCancelShareOrder(order, charId, placerCorp)) {
       return NextResponse.json({ error: "Not your order" }, { status: 403 });
     }
 
