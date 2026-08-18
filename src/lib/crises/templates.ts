@@ -4586,6 +4586,170 @@ export const VIETNAM_FULL_WAR_TEMPLATE: CrisisTemplate = vietnamRungTemplate({
   marginPressure: -7,
 });
 
+// ── VIETNAM: THE COMMITMENT DECISION ─────────────────────────────────────────
+//
+// The launch event. When the chain starts, each superpower's administration gets
+// its OWN crisis rather than sharing a node: Washington is asked whether to get
+// into Vietnam, Moscow is asked the mirror question, and the two read completely
+// differently because the two governments are completely different. Both carry a
+// 24 hour real-time response window.
+//
+// The option order is load-bearing. `autoResolveCrisisInteraction` takes the
+// option named "decline" or, failing that, the FIRST option, so the cautious
+// choice sits first: a leader who never logs in holds the advisory mission
+// rather than stalling the chain or being pushed into a war by a timer.
+
+/** 24 hours, in the wall-clock minutes the interaction engine already speaks. */
+export const VIETNAM_DECISION_WINDOW_MINUTES = 24 * 60;
+
+interface VietnamCommitmentSpec {
+  countryId: string;
+  name: string;
+  description: string;
+  prompt: string;
+  holdLabel: string;
+  holdDescription: string;
+  commitLabel: string;
+  commitDescription: string;
+  disengageLabel: string;
+  disengageDescription: string;
+  wireStart: string;
+  wireEnd: string;
+  heroImage: string;
+}
+
+function vietnamCommitmentTemplate(spec: VietnamCommitmentSpec): CrisisTemplate {
+  return {
+    name: spec.name,
+    heroImage: spec.heroImage,
+    description: spec.description,
+    scope: "country",
+    countryIds: [spec.countryId],
+    regionIds: [],
+    durationTurns: 4,
+    fromYear: 1955,
+    untilYear: 1975,
+    // No `chain`: this is the question that precedes the ladder moving, not a
+    // rung of it. The chain machinery must not try to follow it.
+    effects: [
+      fx(
+        "tick",
+        "metric",
+        "economy",
+        "consumerConfidence",
+        -0.004,
+        "The public reads the Vietnam cables"
+      ),
+    ],
+    wireMessageOnStart: spec.wireStart,
+    wireMessageOnEnd: spec.wireEnd,
+    interactionDefinition: {
+      autoResolveOnExpiry: true,
+      decisionTree: [
+        {
+          nodeId: "vietnam_commitment",
+          type: "choice",
+          title: spec.name,
+          description: spec.prompt,
+          requiredRoles: ["headOfState"],
+          timeLimitMinutes: VIETNAM_DECISION_WINDOW_MINUTES,
+          options: [
+            {
+              // FIRST, and therefore the no-response default. Holding the line
+              // moves nothing on the ladder, so the war simmers at its current
+              // rung and its crisis comes back around rather than the chain
+              // stopping dead because nobody was at their desk.
+              optionId: "vietnam_hold_advisory",
+              label: spec.holdLabel,
+              description: spec.holdDescription,
+              effects: [
+                fx(
+                  "flat",
+                  "approval",
+                  "government",
+                  "overall",
+                  -0.004,
+                  "Neither the hawks nor the doves are satisfied"
+                ),
+              ],
+              nextNodeId: "vietnam_commitment_done",
+            },
+            {
+              optionId: "vietnam_commit",
+              label: spec.commitLabel,
+              description: spec.commitDescription,
+              effects: [],
+              nextNodeId: "vietnam_commitment_done",
+              action: { kind: "vietnamSupport" },
+            },
+            {
+              optionId: "vietnam_disengage",
+              label: spec.disengageLabel,
+              description: spec.disengageDescription,
+              effects: [],
+              nextNodeId: "vietnam_commitment_done",
+              action: { kind: "vietnamDeescalate" },
+            },
+          ],
+        },
+        {
+          nodeId: "vietnam_commitment_done",
+          type: "terminal",
+          title: "The decision is made",
+          description: "The government has settled its position on Vietnam.",
+          outcomeEffects: [],
+          outcomeMessage: "A position on Vietnam has been settled.",
+          requiredRoles: ["any"],
+          timeLimitMinutes: null,
+        },
+      ],
+    },
+  };
+}
+
+export const VIETNAM_US_COMMITMENT_TEMPLATE: CrisisTemplate = vietnamCommitmentTemplate({
+  countryId: "US",
+  name: "Vietnam: The American Question",
+  heroImage: VIETNAM_HERO[0],
+  description:
+    "Saigon cannot hold the countryside on its own and everyone in the room knows it. The Joint Chiefs want a decision. The State Department wants a smaller one. Nobody wants to be the administration that lost Vietnam.",
+  prompt:
+    "You have twenty four hours before the press has this. Do you commit the United States to Vietnam, hold to the advisory mission you inherited, or start getting out?",
+  holdLabel: "Hold to the advisory mission",
+  holdDescription:
+    "No new commitment, no withdrawal. The advisers stay, the problem stays, and you decide again later.",
+  commitLabel: "Commit the United States",
+  commitDescription:
+    "Money, materiel and men, at a scale Saigon cannot match on its own. It buys you ground and it buys you the war.",
+  disengageLabel: "Begin getting out",
+  disengageDescription:
+    "Wind the commitment down and let Saigon stand on its own. You will be asked about it in every election you fight.",
+  wireStart:
+    "The administration is weighing a decision on Vietnam. A statement is expected within the day.",
+  wireEnd: "Washington has settled its position on Vietnam.",
+});
+
+export const VIETNAM_USSR_COMMITMENT_TEMPLATE: CrisisTemplate = vietnamCommitmentTemplate({
+  countryId: "RU",
+  name: "Vietnam: The Question Before the Politburo",
+  heroImage: VIETNAM_HERO[1],
+  description:
+    "Hanoi has asked Moscow for weapons, money and men, and has asked Peking the same question. Whatever the Politburo decides, it decides in front of a rival that is watching for hesitation.",
+  prompt:
+    "You have a day before the answer has to go back to Hanoi. Do you commit the Soviet Union to the north, hold the present level of assistance, or step back and let Peking carry it?",
+  holdLabel: "Hold the present assistance",
+  holdDescription:
+    "The specialists and the shipments continue at their current level. No promise is made and none is withdrawn.",
+  commitLabel: "Commit the Soviet Union",
+  commitDescription:
+    "Full assistance to Hanoi: equipment, advisers and hard currency. The Americans will read it correctly, which is partly the point.",
+  disengageLabel: "Step back and let Peking carry it",
+  disengageDescription:
+    "Reduce what goes south and let the rival claim the credit and the cost. Hardliners will call it a retreat.",
+  wireStart: "The Politburo is meeting on Vietnam. Hanoi is waiting on the answer.",
+  wireEnd: "Moscow has settled its position on Vietnam.",
+});
+
 export const ALL_CRISIS_TEMPLATES: Record<
   string,
   Omit<
@@ -4642,6 +4806,9 @@ export const ALL_CRISIS_TEMPLATES: Record<
   vietnam_air_campaign: VIETNAM_AIR_CAMPAIGN_TEMPLATE,
   vietnam_ground_commitment: VIETNAM_GROUND_COMMITMENT_TEMPLATE,
   vietnam_full_war: VIETNAM_FULL_WAR_TEMPLATE,
+  // The launch decision, one per superpower. Not rungs: see the block above.
+  vietnam_us_commitment: VIETNAM_US_COMMITMENT_TEMPLATE,
+  vietnam_ussr_commitment: VIETNAM_USSR_COMMITMENT_TEMPLATE,
   prague_spring_reform: PRAGUE_SPRING_TEMPLATE,
   hardliner_backlash: HARDLINER_BACKLASH_TEMPLATE,
   civil_rights_marches: CIVIL_RIGHTS_MARCHES_TEMPLATE,

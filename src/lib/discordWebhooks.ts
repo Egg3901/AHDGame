@@ -39,6 +39,7 @@ export const DISCORD_COLORS = {
   suggestion: 0x9b59b6, // Purple — player suggestion / feedback
   worldMilestone: 0x00b8d4, // Cyan   — world-development milestone (metric era activation)
   scotusRuling: 0x4b2e83, // Deep purple — Supreme Court Docket ruling (historical or diverged)
+  warEscalation: 0xb03a2e, // Brick red - a war escalating (Vietnam ladder rungs and decisions)
 } as const;
 
 function truncateDiscordText(text: string, maxLen: number): string {
