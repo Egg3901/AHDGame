@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
-import { formatFundsCompact } from "@/lib/utils/formatters";
+import { formatFundsCompact, formatCompactNumber } from "@/lib/utils/formatters";
 import { formatVotes } from "./ElectionDetailHelpers";
 import type { CandidateDetail } from "./ElectionDetailTypes";
 import { CsInfoIcon } from "./CsInfoIcon";
@@ -93,7 +93,7 @@ export function PresidentialCandidateTable({
               <th className="px-3 py-3 text-right">Vote %</th>
               <th className="px-3 py-3 text-right">Votes</th>
               <th className="hidden px-3 py-3 text-right lg:table-cell">Fav</th>
-              <th className="hidden px-3 py-3 text-right lg:table-cell">Influence</th>
+              <th className="hidden px-3 py-3 text-right lg:table-cell">NPI</th>
               <th className="hidden px-3 py-3 text-right lg:table-cell">Cash</th>
               {showCampaignStrength && (
                 <th className="hidden px-3 py-3 text-right lg:table-cell">CS</th>
@@ -208,7 +208,7 @@ export function PresidentialCandidateTable({
 
                   <td className="hidden px-3 py-3 text-right lg:table-cell">
                     <span className="font-semibold tabular-nums text-xs text-blue-400">
-                      {c.politicalInfluence.toFixed(0)}%
+                      {formatCompactNumber(c.nationalInfluence)}
                     </span>
                   </td>
 
@@ -242,7 +242,8 @@ export function PresidentialCandidateTable({
                               : c.campaignStrength;
                           return cs != null ? (
                             <>
-                              {cs.toFixed(0)} <CsInfoIcon campaignId={c.campaignId} />
+                              {formatCompactNumber(cs).toLowerCase()}{" "}
+                              <CsInfoIcon campaignId={c.campaignId} />
                             </>
                           ) : (
                             "—"
