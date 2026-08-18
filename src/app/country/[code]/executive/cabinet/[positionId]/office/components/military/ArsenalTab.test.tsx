@@ -46,6 +46,7 @@ const supplier = (over: Partial<DefenceSupplierView> = {}): DefenceSupplierView 
   unitProductionCost: 400,
   freeFactories: 4,
   totalFactories: 4,
+  stateOwned: false,
   availableLots: 6,
   allowanceWindowEndTurn: 12,
   ...over,
@@ -205,6 +206,19 @@ describe("ArsenalTab — awarding a contract", () => {
     setup({ suppliers: [supplier({ alreadyContracted: true })] });
     fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
     expect(screen.getByText(/already has an order/)).toBeTruthy();
+  });
+
+  it("lets a minister pick air on a two-domain plant (ticket 1134)", async () => {
+    const onAwardContract = vi.fn(async () => true);
+    setup({
+      onAwardContract,
+      suppliers: [supplier({ strategyId: "standard", components: ["ground", "air"] })],
+    });
+    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
+    fireEvent.change(screen.getByLabelText("Domain"), { target: { value: "air" } });
+    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "5" } });
+    fireEvent.click(screen.getByText("Offer contract"));
+    expect(onAwardContract).toHaveBeenCalledWith("s1", 5, { component: "air" });
   });
 
   it("warns when the chosen plant is producing nothing", () => {

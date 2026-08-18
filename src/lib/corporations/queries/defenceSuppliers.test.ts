@@ -127,6 +127,51 @@ describe("listDefenceSuppliers", () => {
     expect(rows[0].corporationName).toBe("Ministries of Defence Industry");
   });
 
+  // Ticket #1134: a vacant NatCorp CEO cannot re-allocate lines, so the picker must
+  // project the full remaining plant, not the private even-split default.
+  it("projects a state-owned two-domain plant at full remaining output", async () => {
+    const ruId = new ObjectId();
+    const soeSector = {
+      _id: new ObjectId(),
+      corporationId: ruId,
+      countryId: "RU",
+      stateId: "MOS",
+      sectorType: "defense",
+      strategyId: "standard",
+      revenue: 10_000_000,
+    };
+    const rows = await listDefenceSuppliers(
+      stubDb({
+        sectors: [soeSector],
+        corps: [
+          {
+            _id: ruId,
+            name: "Ministries of Defence Industry",
+            countryId: "RU",
+            countryOwnerId: "RU",
+            ownershipState: "stateOwned",
+          },
+        ],
+        contracts: [],
+      }),
+      "RU",
+      1953
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].stateOwned).toBe(true);
+    expect(rows[0].projectedLotsPerTurn).toBeGreaterThan(0);
+    const privateRows = await listDefenceSuppliers(
+      stubDb(
+        world({
+          sectors: [sector({ strategyId: "standard", revenue: 10_000_000 })],
+        })
+      ),
+      "US",
+      1953
+    );
+    expect(rows[0].projectedLotsPerTurn).toBeCloseTo(privateRows[0].projectedLotsPerTurn * 2, 6);
+  });
+
   it("omits a non-defence plant", async () => {
     const rows = await listDefenceSuppliers(
       stubDb(world({ sectors: [sector({ sectorType: "manufacturing" })] })),

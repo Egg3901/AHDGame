@@ -68,7 +68,7 @@ export function MilitaryFlagship({
     lotsOrdered: number,
     // Suggestion #291/#292. Both optional: omitting them reproduces the old behaviour exactly,
     // a fair computed price at the supplier's own grade ceiling.
-    options?: { pricePerLot?: number; gradeCeiling?: number }
+    options?: { pricePerLot?: number; gradeCeiling?: number; component?: string }
   ) {
     setBusy(true);
     setContractError(null);
@@ -83,6 +83,7 @@ export function MilitaryFlagship({
             lotsOrdered,
             ...(options?.pricePerLot != null ? { pricePerLot: options.pricePerLot } : {}),
             ...(options?.gradeCeiling != null ? { gradeCeiling: options.gradeCeiling } : {}),
+            ...(options?.component != null ? { component: options.component } : {}),
           }),
         }
       );

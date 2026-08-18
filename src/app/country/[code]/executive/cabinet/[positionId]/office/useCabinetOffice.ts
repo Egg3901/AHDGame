@@ -331,6 +331,7 @@ export interface DefenceSupplierView {
   /** Production lines free at this plant, out of its total (suggestion #281). */
   freeFactories: number;
   totalFactories: number;
+  stateOwned: boolean;
 }
 
 export interface DefenceContractView {

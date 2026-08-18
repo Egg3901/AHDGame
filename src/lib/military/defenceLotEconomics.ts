@@ -194,6 +194,23 @@ export function defaultFactoryAllocation(componentCount: number, freeSlots: numb
 }
 
 /**
+ * Lines a newly awarded contract should open on.
+ *
+ * Private suppliers keep the even-split default: the CEO can re-allocate afterwards.
+ * A National Corporation has no player CEO (ticket #1087), so that lever is dead and a
+ * two-domain plant would stay at half throughput forever. State industry therefore
+ * takes every free line at award (ticket #1134).
+ */
+export function awardFactoryAllocation(input: {
+  componentCount: number;
+  freeSlots: number;
+  stateOwned: boolean;
+}): number {
+  if (input.stateOwned) return Math.max(0, input.freeSlots);
+  return defaultFactoryAllocation(input.componentCount, input.freeSlots);
+}
+
+/**
  * Lots a contract's assigned lines produce this turn.
  *
  * `rawLots` is the whole plant's fractional output (`rawLotsFromSector`). Splitting by SLOTS
