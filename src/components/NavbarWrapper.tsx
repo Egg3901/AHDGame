@@ -70,6 +70,7 @@ interface NavbarWrapperState {
   activePresidentElectionSeatId: string | null;
   unreadCount: number;
   myCorporationId: number | null;
+  myUnionId: string | null;
   isLoading: boolean;
   adminCharacters: AdminCharacter[] | null;
   imperialCharacter: ImperialCharacterNav | null;
@@ -86,6 +87,7 @@ type NavbarWrapperAction =
       hasCharacter: boolean;
       unreadCount: number;
       myCorporationId: number | null;
+      myUnionId: string | null;
       homeState: NavbarWrapperState["homeState"];
       currentParty: NavbarWrapperState["currentParty"];
       adminCharacters: NavbarWrapperState["adminCharacters"];
@@ -122,6 +124,7 @@ const initialState: NavbarWrapperState = {
   activePresidentElectionSeatId: null,
   unreadCount: 0,
   myCorporationId: null,
+  myUnionId: null,
   isLoading: true,
   adminCharacters: null,
   imperialCharacter: null,
@@ -143,6 +146,7 @@ function navbarWrapperReducer(
         hasCharacter: action.hasCharacter,
         unreadCount: action.unreadCount,
         myCorporationId: action.myCorporationId,
+        myUnionId: action.myUnionId,
         homeState: action.homeState,
         currentParty: action.currentParty,
         adminCharacters: action.adminCharacters,
@@ -181,6 +185,7 @@ function navbarWrapperReducer(
         activePresidentElectionSeatId: null,
         unreadCount: 0,
         myCorporationId: null,
+        myUnionId: null,
         adminCharacters: null,
         imperialCharacter: null,
         isImperialMode: false,
@@ -341,6 +346,7 @@ export function NavbarWrapper({
         hasCharacter: navData.hasCharacter,
         unreadCount: navData.unreadCount ?? 0,
         myCorporationId: navData.myCorporationId ?? null,
+        myUnionId: navData.myUnionId ?? null,
         homeState: navData.homeState ?? null,
         currentParty: navData.currentParty ?? null,
         adminCharacters: (navData.adminCharacters as AdminCharacter[] | null) ?? null,
@@ -519,6 +525,7 @@ export function NavbarWrapper({
               isImperialMode={state.isImperialMode}
               wikiDisabled={state.wikiDisabled}
               myCorporationId={state.myCorporationId ?? undefined}
+              myUnionId={state.myUnionId ?? undefined}
               adminCharacters={state.adminCharacters ?? undefined}
               imperialCharacter={state.imperialCharacter ?? undefined}
               conflictsEnabled={state.conflictsEnabled}
