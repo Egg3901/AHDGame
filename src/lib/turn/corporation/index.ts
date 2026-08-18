@@ -985,10 +985,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     }
   }
 
-  // Insert any new NPP sectors. Write half of the founding insert whose
-  // document half lives in `nppCorporationBehavior.buildNppSectorDocs`.
-  // Docs carry `revenue`, so this is a registered `corporateSectors.revenue`
-  // writer. Under plants that figure is the legacy nameplate only; `sectorTurn`
+  // Insert any new NPP sectors.
+  //
+  // PLANTS-GATED: write half of the founding insert whose document half lives
+  // in `nppCorporationBehavior.buildNppSectorDocs`. Docs carry `revenue`, so
+  // this is a registered `corporateSectors.revenue` writer, see
+  // `sectorRevenueWriters.guard.test.ts`. Under plants that figure is the legacy nameplate only; `sectorTurn`
   // restates `revenue` from capacity next tick. Below plants the nameplate is
   // the operative figure. The quantity that matters is written by the builder,
   // not here.
