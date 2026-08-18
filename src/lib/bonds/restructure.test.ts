@@ -40,16 +40,62 @@ describe("previewRestructure", () => {
 
   it("treats a negative cash balance as part of the hole sectors must fill", () => {
     // liquidCapital -500, owe 1000 → needFromSectors = 1500.
+    // Two sectors so the last-sector guard does not apply; `big` alone covers it.
     const p = previewRestructure({
       defaultedPrincipalAnchor: 1000,
       liquidCapitalAnchor: -500,
-      sectorNpvByIdAnchor: [{ sectorId: "big", npvAnchor: 10000 }], // salvage 8500
+      sectorNpvByIdAnchor: [
+        { sectorId: "big", npvAnchor: 10000 }, // salvage 8500
+        { sectorId: "small", npvAnchor: 100 },
+      ],
     });
     expect(p.needFromSectors).toBe(1500);
     expect(p.feasible).toBe(true);
     expect(p.sectorsToLiquidate.map((s) => s.sectorId)).toEqual(["big"]);
     // residual = -500 + 8500 - 1000 = 7000
     expect(p.residualLiquidCapital).toBeCloseTo(7000, 6);
+  });
+
+  it("refuses to liquidate a single-sector corporation's only sector", () => {
+    // Ticket #1130: COSTCO owned exactly one sector worth far more than the
+    // debt. The greedy pass selects it, which ends the business entirely while
+    // telling the player "the corporation survives with its remaining sectors".
+    const p = previewRestructure({
+      defaultedPrincipalAnchor: 167010,
+      liquidCapitalAnchor: -597,
+      sectorNpvByIdAnchor: [{ sectorId: "only", npvAnchor: 232407 }],
+    });
+    expect(p.feasible).toBe(false);
+    expect(p.sectorsToLiquidate).toEqual([]);
+    expect(p.proceeds).toBe(0);
+  });
+
+  it("refuses when covering the debt would take every sector a corp owns", () => {
+    // need = 2000. Both sectors together salvage to exactly 1700 + 850 = 2550,
+    // and the greedy pass needs both — that is a dissolution, not a restructure.
+    const p = previewRestructure({
+      defaultedPrincipalAnchor: 2000,
+      liquidCapitalAnchor: 0,
+      sectorNpvByIdAnchor: [
+        { sectorId: "a", npvAnchor: 2000 }, // salvage 1700
+        { sectorId: "b", npvAnchor: 1000 }, // salvage 850
+      ],
+    });
+    expect(p.feasible).toBe(false);
+    expect(p.sectorsToLiquidate).toEqual([]);
+  });
+
+  it("still restructures when a strict subset of sectors covers the debt", () => {
+    const p = previewRestructure({
+      defaultedPrincipalAnchor: 1000,
+      liquidCapitalAnchor: 0,
+      sectorNpvByIdAnchor: [
+        { sectorId: "a", npvAnchor: 2000 }, // salvage 1700 ≥ 1000 on its own
+        { sectorId: "b", npvAnchor: 1000 },
+      ],
+    });
+    expect(p.feasible).toBe(true);
+    expect(p.sectorsToLiquidate.map((s) => s.sectorId)).toEqual(["a"]);
   });
 
   it("is infeasible when total salvage cannot cover the shortfall", () => {
