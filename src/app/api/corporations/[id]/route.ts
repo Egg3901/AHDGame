@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
@@ -121,12 +122,33 @@ export async function GET(request: Request, { params }: RouteParams) {
     (detail.corporation as Record<string, unknown>).contractIssuanceEnabled =
       contractIssuanceEnabled;
 
-    const redact = shouldRedactCorporation(
+    let redact = shouldRedactCorporation(
       corporation,
       authUser?.userId ?? undefined,
       authUser?.isAdmin === true,
       modViewEnabled
     );
+
+    if (redact && authUser?.userId) {
+      // Controlling parent CEO is an insider of a private subsidiary.
+      const parentInfo = (detail.corporation as Record<string, unknown>).parentCorporation as
+        { _id: string } | null | undefined;
+      if (parentInfo?._id && ObjectId.isValid(parentInfo._id)) {
+        const parentCorp = await db
+          .collection<Corporation>("corporations")
+          .findOne(
+            { _id: new ObjectId(parentInfo._id) },
+            { projection: { userId: 1, ceoVacant: 1 } }
+          );
+        if (
+          parentCorp &&
+          parentCorp.ceoVacant !== true &&
+          parentCorp.userId?.toString() === authUser.userId
+        ) {
+          redact = false;
+        }
+      }
+    }
 
     if (redact) {
       // Sensitive financial fields live nested under `corporation`, `financials`,
@@ -175,8 +197,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         if (!isInsider) {
           const corpDetail = detail.corporation as Record<string, unknown>;
           const parentInfo = corpDetail?.parentCorporation as { _id: string } | null | undefined;
-          if (parentInfo?._id) {
-            const { ObjectId } = await import("mongodb");
+          if (parentInfo?._id && ObjectId.isValid(parentInfo._id)) {
             const parentCorp = await db
               .collection<Corporation>("corporations")
               .findOne(

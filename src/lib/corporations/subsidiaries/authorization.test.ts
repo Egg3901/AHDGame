@@ -69,4 +69,22 @@ describe("canActOnCorporationAsParent", () => {
       await canActOnCorporationAsParent(db as unknown as Db, callerUserId, sub(60, true))
     ).toBe(false);
   });
+
+  it("keeps parent powers when the controlling block is reserved in an open sell", async () => {
+    const emptyCapTable = sub(0, true);
+    db.collection("shareOrders").find = vi.fn().mockReturnValue({
+      toArray: async () => [
+        {
+          type: "sell",
+          status: "open",
+          corporationId: emptyCapTable._id,
+          placerCorporationId: parentId,
+          sharesRemaining: 6_000_000,
+        },
+      ],
+    });
+    expect(
+      await canActOnCorporationAsParent(db as unknown as Db, callerUserId, emptyCapTable)
+    ).toBe(true);
+  });
 });
