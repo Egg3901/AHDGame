@@ -38,12 +38,15 @@ export function MobileNationalDetails({
           <CollapsibleNavSection
             key={section.title}
             title={t(section.titleKey)}
-            // Every section is collapsible on mobile (regardless of
-            // `section.collapsible`, which only Economy sets on desktop).
-            // Default open: the drawer is viewport-capped and scrolls, so
-            // hiding every group behind a click just buries the links.
+            // Every section collapses by default on mobile (regardless of
+            // `section.collapsible`, which only Economy sets — that flag
+            // still gates the desktop dropdowns, left untouched here). A
+            // user can't tell a section is collapsible at all unless it
+            // reads as a button, so all four get the same chevron affordance.
             collapsible
-            defaultOpen
+            // A collapsed group would hide the active-page highlight this list
+            // exists to show, so open the group holding the current route.
+            defaultOpen={section.items.some((item) => isActive(pathname, item.href))}
             className="mt-2"
             labelClassName="px-3 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted/70"
           >

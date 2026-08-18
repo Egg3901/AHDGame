@@ -15,11 +15,6 @@ export interface ProfileNavOpts {
   unionsEnabled?: boolean;
 }
 
-/**
- * Pure builder for the Profile dropdown (desktop tab + mobile collapsible).
- * Order is the contract: Profile, then Actions, then corp if the viewer is
- * CEO, then union if they lead or organize one.
- */
 export function buildProfileNavItems({
   myCorporationId = null,
   myUnionId = null,
@@ -59,4 +54,14 @@ export function buildProfileNavItems({
 
 export function visibleProfileNavItems(opts: ProfileNavOpts = {}): ProfileNavItem[] {
   return buildProfileNavItems(opts).filter((i) => i.show);
+}
+
+/**
+ * Corp and union rows for the avatar profile card. Profile / Actions / wallet
+ * already live on that card; these are the extras when the viewer has them.
+ */
+export function visibleProfileOrgItems(opts: ProfileNavOpts = {}): ProfileNavItem[] {
+  return visibleProfileNavItems(opts).filter(
+    (item) => item.id === "corporation" || item.id === "union"
+  );
 }
