@@ -32,6 +32,7 @@ import {
   sectorShortageScore,
   computeMacroProductionPolicy,
   type CommodityPriceRatioFn,
+  type PlacementSignals,
 } from "@/lib/turn/npp/marketSignals";
 
 // Re-exported so existing importers (and their tests) keep one entry point.
@@ -57,8 +58,13 @@ import {
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
-import { SECTOR_SUPPLY, type CommodityType } from "@/lib/constants/commodities";
-import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
+import {
+  EXTRACTABLE_RESOURCES,
+  COMMODITY_BASE_PRICES,
+  type CommodityType,
+  type ExtractableResource,
+} from "@/lib/constants/commodities";
+import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
 import { clampWageLevel } from "@/lib/labour/laborCost";
 import { labourAtLeast, isLabourSystemMode } from "@/lib/labour/modes";
 import { CHRONIC_LOW_FILL_THRESHOLD } from "@/lib/turn/npp/strategyExpectedRevenue";
@@ -292,15 +298,6 @@ const MAX_DIVIDEND_RATE = 12; // cap any archetype-boosted payout
 
 /** Default archetype for corps whose CEO NPP can't be resolved (legacy / mid-migration). */
 const DEFAULT_ARCHETYPE: CeoArchetype = "cautious";
-
-// Macro-aware production policy (SP5): translate a commodity's price-vs-base
-// deviation into a production-policy target so NPP corps ramp output of scarce/
-// premium commodities. A +33% price premium saturates to the +25 policy bound.
-// Glut response deliberately does NOT drive productionPolicy negative — see
-// computeMacroProductionPolicy. Growth-rate cuts (section 2a) handle gluts.
-const PRODUCTION_POLICY_SENSITIVITY = 75;
-// Ignore sub-5% price moves so the policy doesn't churn on market noise.
-const PRODUCTION_POLICY_DEADBAND = 0.05;
 
 // Glut mothballing (section 2c, plants only). The knee-compressed price curve
 // barely separates a 3x glut from a 300x one (both read ~0.55-0.6 of base), so
@@ -692,6 +689,60 @@ export async function processNppCorporationDecisions(
     return price / doc.basePrice;
   };
 
+  // ── Placement signals (supply-dislocation remediation, t202) ──────────────
+  // State-resolution price ratios plus deposit headroom, so foundings route to
+  // the state that is actually starved / has room, not just the corp's HQ.
+  const statePriceRatioOf = (commodity: CommodityType, stateId: string): number | null => {
+    const doc = priceByCommodity.get(commodity);
+    if (!doc || !doc.basePrice) return null;
+    const price = doc.statePrices?.[stateId];
+    if (price == null || !Number.isFinite(price)) return null;
+    return price / doc.basePrice;
+  };
+
+  // Value-weighted unclaimed deposit headroom per state, in [0, 1]. Desired
+  // output per state mirrors computeResourceOpportunities / the sector deposit
+  // view (revenue-based), so this ranks states by the same numbers players see.
+  const capDocs = await db
+    .collection<StateResourceCapacity>("stateResourceCapacity")
+    .find({}, { projection: { stateId: 1, resources: 1 } })
+    .toArray();
+  const desiredByState = new Map<string, Partial<Record<ExtractableResource, number>>>();
+  for (const sector of allSectors) {
+    if (sector.sectorType !== "extraction") continue;
+    const strat =
+      SECTOR_STRATEGIES["extraction"]?.find((st) => st.id === (sector.strategyId ?? "standard")) ??
+      SECTOR_STRATEGIES["extraction"]?.[0];
+    const supplyRates = (strat?.supply ?? {}) as Partial<Record<string, number>>;
+    const forState = desiredByState.get(sector.stateId) ?? {};
+    for (const resource of EXTRACTABLE_RESOURCES) {
+      const rate = supplyRates[resource] ?? 0;
+      if (rate <= 0) continue;
+      const basePrice = COMMODITY_BASE_PRICES[resource as keyof typeof COMMODITY_BASE_PRICES] ?? 1;
+      forState[resource] = (forState[resource] ?? 0) + (sector.revenue * rate) / basePrice;
+    }
+    desiredByState.set(sector.stateId, forState);
+  }
+  const extractionHeadroomByState = new Map<string, number>();
+  for (const capDoc of capDocs) {
+    let capValue = 0;
+    let headroomValue = 0;
+    for (const resource of EXTRACTABLE_RESOURCES) {
+      const capacity = capDoc.resources?.[resource] ?? 0;
+      if (capacity <= 0) continue;
+      const basePrice = COMMODITY_BASE_PRICES[resource as keyof typeof COMMODITY_BASE_PRICES] ?? 1;
+      const desired = desiredByState.get(capDoc.stateId)?.[resource] ?? 0;
+      capValue += capacity * basePrice;
+      headroomValue += Math.max(0, capacity - desired) * basePrice;
+    }
+    extractionHeadroomByState.set(capDoc.stateId, capValue > 0 ? headroomValue / capValue : 0);
+  }
+  const placementSignals: PlacementSignals = {
+    statePriceRatioOf,
+    // A state with no capacity doc has no deposits — headroom 0, never found there.
+    extractionHeadroomOf: (stateId) => extractionHeadroomByState.get(stateId) ?? 0,
+  };
+
   // Fetch unowned sectors in bulk for expansion decisions
   const unownedSectors = await db.collection<UnownedSector>("unownedSectors").find({}).toArray();
 
@@ -883,7 +934,8 @@ export async function processNppCorporationDecisions(
       unownedByCountry,
       stateControlled,
       priceRatioOf,
-      plants
+      plants,
+      placementSignals
     );
 
     if (decision.reinvestments && corpCurrency) {
@@ -1128,7 +1180,8 @@ export function makeNppCorpDecision(
   unownedByCountry: Map<string, UnownedSector[]>,
   stateControlled: ReadonlySet<string>,
   priceRatioOf: CommodityPriceRatioFn,
-  plants?: NppPlantsContext
+  plants?: NppPlantsContext,
+  placementSignals?: PlacementSignals
 ): NppCorpDecision {
   const { corp, sectors, now, modifiers } = ctx;
   const updates: Record<string, unknown> = { updatedAt: now };
@@ -1721,7 +1774,8 @@ export function makeNppCorpDecision(
       stateControlled,
       priceRatioOf,
       plants?.enabled === true,
-      plants?.eraUnitScale ?? 1
+      plants?.eraUnitScale ?? 1,
+      placementSignals
     );
 
     if (expansion && plants?.enabled) {
