@@ -70,6 +70,40 @@ export const FREIGHT_CLASS_CAPACITY_SHARE: Record<FreightClass, number> = {
 };
 
 /**
+ * Floor on either class's share under the adaptive split, so one class can
+ * never be starved to zero by a single turn's demand skew (the mix must be
+ * able to swing back).
+ */
+export const FREIGHT_CLASS_SHARE_FLOOR = 0.2;
+
+/**
+ * Per-state capacity split from LAST turn's measured class loads, floored at
+ * FREIGHT_CLASS_SHARE_FLOOR each; the static 70/30 when there is no prior
+ * signal (first turn, or a state that shipped nothing).
+ *
+ * Why adaptive: the fixed 70/30 wastes capacity wherever a state's real mix
+ * differs — measured on prod t202, NY hauled 2958 special vs 328 bulk TEU
+ * (wants ~90% special, got 30%) while CA hauled 1703 bulk vs 432 special. The
+ * unusable remainder showed up as UNREACHABLE_HOP landed premiums on every
+ * special-class commodity into the northeast. The single `freight` commodity
+ * is one physical fleet; which trailers it runs should follow what the state
+ * actually ships. Lagged one turn, so it converges instead of oscillating.
+ */
+export function adaptiveClassShares(
+  priorLoad: Readonly<Record<FreightClass, number>> | undefined
+): Record<FreightClass, number> {
+  const bulk = priorLoad?.bulk ?? 0;
+  const special = priorLoad?.special ?? 0;
+  const total = bulk + special;
+  if (!(total > 0)) return { ...FREIGHT_CLASS_CAPACITY_SHARE };
+  const specialShare = Math.min(
+    1 - FREIGHT_CLASS_SHARE_FLOOR,
+    Math.max(FREIGHT_CLASS_SHARE_FLOOR, special / total)
+  );
+  return { bulk: 1 - specialShare, special: specialShare };
+}
+
+/**
  * Overseas legs are priced and capacity-free as a flat hop-equivalent
  * (plan open question 3: flat sea freight first; no origin-state network is
  * modeled for foreign sellers, so imports consume no domestic capacity).
@@ -188,6 +222,12 @@ export interface SourcingInputs {
   tariffRatePct: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => number;
   /** True when an embargo blocks the directed flow exporter→importer. */
   isBlocked: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => boolean;
+  /**
+   * LAST turn's per-state class loads (`freightTeuByState` from the previous
+   * sourcingNetworkLoad doc). Drives the adaptive bulk/special capacity split;
+   * absent → the static FREIGHT_CLASS_CAPACITY_SHARE for every state.
+   */
+  priorClassLoads?: ReadonlyMap<string, Readonly<Record<FreightClass, number>>>;
 }
 
 // ── Pass ─────────────────────────────────────────────────────────────────────
@@ -219,9 +259,10 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
   const freightUsedByState = new Map<string, Record<FreightClass, number>>();
   for (const { stateId } of sortedStates) {
     const freightSupply = byState.get(stateId)?.get("freight")?.supply ?? 0;
+    const shares = adaptiveClassShares(inputs.priorClassLoads?.get(stateId));
     freightCapByState.set(stateId, {
-      bulk: freightSupply * FREIGHT_CLASS_CAPACITY_SHARE.bulk,
-      special: freightSupply * FREIGHT_CLASS_CAPACITY_SHARE.special,
+      bulk: freightSupply * shares.bulk,
+      special: freightSupply * shares.special,
     });
     freightUsedByState.set(stateId, { bulk: 0, special: 0 });
   }

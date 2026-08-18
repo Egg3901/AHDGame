@@ -27,6 +27,7 @@ import PricingPanel from "./sections/PricingPanel";
 import CapitalPanel from "./sections/CapitalPanel";
 import MarketRewardBanner from "./sections/MarketRewardBanner";
 import StrandedPlantBanner from "./sections/StrandedPlantBanner";
+import InventoryPanel from "./sections/InventoryPanel";
 import UnionBustingPanel from "./sections/UnionBustingPanel";
 import { OrganizeSectorAction } from "@/components/unions/OrganizeSectorAction";
 import ManagementPanel from "./sections/ManagementPanel";
@@ -871,6 +872,15 @@ export default function SectorDetailPage() {
                 lowFillTurns={plants.truth.lowFillTurns ?? 0}
                 soldFraction={plants.truth.soldFraction}
                 isCeo={isCeo}
+              />
+            )}
+
+            {plants?.truth?.inventory && (
+              <InventoryPanel
+                corporationId={corpId}
+                sectorId={sectorId}
+                isCeo={isCeo}
+                inventory={plants.truth.inventory}
               />
             )}
 

@@ -608,6 +608,15 @@ export interface PlantsData {
     soldByCommodity: { commodity: string; fraction: number }[];
     /** Consecutive turns under half fill; optional for payloads predating it. */
     lowFillTurns?: number;
+    /** Unsold-output inventory (§6); optional for payloads predating it. */
+    inventory?: {
+      stockpileUnsold: boolean;
+      heldUnits: number;
+      heldValueAnchor: number;
+      byCommodity: { commodity: string; units: number }[];
+      drainedUnits: number;
+      spoiledUnits: number;
+    };
     /** Realized revenue per unit PRODUCED, unsold units included at zero. */
     receivedPerUnitAnchor: number | null;
     /** Full operating cost spread over every unit produced. */
