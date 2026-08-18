@@ -5,11 +5,13 @@ import { resolveFillEligibility } from "@/lib/military/defenceFillEligibility";
 import {
   lotProductionCost,
   defaultFactoryAllocation,
+  awardFactoryAllocation,
   DEFENCE_FACTORY_SLOTS_PER_PLANT,
 } from "@/lib/military/defenceLotEconomics";
 import { componentsForStrategy } from "@/lib/military/arsenalComponents";
 import { loadDefencePriceRatios } from "@/lib/military/defencePriceRatios";
 import { listOpenContracts } from "@/lib/db/collections/defenceContracts";
+import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 
 /** One plant the defence minister could award a contract to. */
 export interface DefenceSupplierView {
@@ -41,6 +43,8 @@ export interface DefenceSupplierView {
   /** Production lines this plant has free, out of its total (suggestion #281). */
   freeFactories: number;
   totalFactories: number;
+  /** True when this is a National Corporation. The ministerial window then has no private cap. */
+  stateOwned: boolean;
 }
 
 /**
@@ -100,16 +104,29 @@ export async function listDefenceSuppliers(
     const corp = corpById.get(sector.corporationId.toString());
     if (!corp) continue;
 
+    const committed = committedSlots.get(sector._id.toString()) ?? 0;
+    const freeFactories = Math.max(0, DEFENCE_FACTORY_SLOTS_PER_PLANT - committed);
+    const stateOwned = isStateOwned(corp);
+    // Ticket #1134: project what the award will actually assign. A vacant NatCorp CEO
+    // cannot re-allocate, so the picker must not advertise a half-plant rate the order
+    // will then double.
+    const assignedForProjection = awardFactoryAllocation({
+      componentCount: componentsForStrategy(sector.strategyId).length,
+      freeSlots: freeFactories > 0 ? freeFactories : DEFENCE_FACTORY_SLOTS_PER_PLANT,
+      stateOwned,
+    });
+
     // The SAME resolver the award route and the delivery sweep use. A picker that offered a
     // plant the route would refuse turned every clear 400 into a dead option the minister
     // could not diagnose, and every divergence between these checks has shipped as a ticket.
-    const fill = resolveFillEligibility({ corp, sector, countryId, currentYear });
+    const fill = resolveFillEligibility({
+      corp,
+      sector,
+      countryId,
+      currentYear,
+      assignedFactories: assignedForProjection,
+    });
     if (!fill.eligible) continue;
-
-    const freeFactories = Math.max(
-      0,
-      DEFENCE_FACTORY_SLOTS_PER_PLANT - (committedSlots.get(sector._id.toString()) ?? 0)
-    );
 
     rows.push({
       sectorId: sector._id.toString(),
@@ -125,6 +142,7 @@ export async function listDefenceSuppliers(
       unitProductionCost: lotProductionCost(sector.strategyId, priceRatios) ?? 0,
       freeFactories,
       totalFactories: DEFENCE_FACTORY_SLOTS_PER_PLANT,
+      stateOwned,
     });
   }
 

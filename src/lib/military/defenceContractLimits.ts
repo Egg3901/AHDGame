@@ -4,8 +4,21 @@ import { SEED_UPKEEP_TARGET_SHARE } from "@/lib/military/appropriation";
 /** Contracts are budgeted in quarter-year tranches, not against an unlimited future stream. */
 export const DEFENCE_CONTRACT_WINDOW_TURNS = TURNS_PER_YEAR / 4;
 
-/** No supplier may control more than one third of a country's contracting tranche. */
+/** No private supplier may control more than one third of a country's contracting tranche. */
 export const DEFENCE_CONTRACT_SUPPLIER_SHARE = 1 / 3;
+
+/**
+ * Share of the national window one supplier may take.
+ *
+ * Private industry stays at one third so a minister cannot dump the tranche into one
+ * corporation's cash (the Lockheed over-award). State-owned industry is the buying
+ * country: command economies seed one National Corporation per sector, so applying the
+ * private cap there leaves two thirds of the window unspendable and every other plant
+ * on that SOE unused (ticket #1134).
+ */
+export function defenceSupplierCapShare(stateOwned: boolean): number {
+  return stateOwned ? 1 : DEFENCE_CONTRACT_SUPPLIER_SHARE;
+}
 
 export interface DefenceContractWindow {
   id: string;

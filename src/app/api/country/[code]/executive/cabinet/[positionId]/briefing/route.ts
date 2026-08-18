@@ -396,6 +396,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
               currentTurn,
               defenseLine,
               pricePerLot: lotPricePerLot as number,
+              stateOwned: supplier.stateOwned,
             });
             return {
               ...supplier,
