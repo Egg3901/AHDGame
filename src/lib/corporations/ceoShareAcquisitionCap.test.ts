@@ -109,4 +109,24 @@ describe("assertCeoAcquisitionWithinCap", () => {
     );
     expect(res).not.toBeNull();
   });
+
+  it("does not cap the CEO of a private corporation", async () => {
+    historyReturns([]);
+    const privateCorp = {
+      _id: new ObjectId(),
+      name: "PrivateCo",
+      totalShares: 1_000_000,
+      ceoId,
+      isPrivate: true,
+    } as never;
+    const res = await assertCeoAcquisitionWithinCap(
+      db as never,
+      privateCorp,
+      ceoId,
+      "characterId",
+      999_999,
+      200
+    );
+    expect(res).toBeNull();
+  });
 });

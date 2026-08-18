@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
-import { cancelShareOrderAndRefund } from "./cancelShareOrder";
+import { actorMayCancelShareOrder, cancelShareOrderAndRefund } from "./cancelShareOrder";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/currency/featureFlag", () => ({
@@ -388,5 +388,46 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
     expect(db.collectionMocks["shareOrders"].updateOne.mock.calls[1]?.[1]).toMatchObject({
       $set: { status: "open" },
     });
+  });
+});
+
+describe("actorMayCancelShareOrder", () => {
+  const actorId = new ObjectId();
+  const placerId = new ObjectId();
+
+  it("allows the authorizing character", () => {
+    expect(
+      actorMayCancelShareOrder({ characterId: actorId, placerCorporationId: placerId }, actorId, {
+        ceoId: new ObjectId(),
+        ceoVacant: false,
+      })
+    ).toBe(true);
+  });
+
+  it("allows the sitting CEO of the placing corporation", () => {
+    expect(
+      actorMayCancelShareOrder(
+        { characterId: new ObjectId(), placerCorporationId: placerId },
+        actorId,
+        { ceoId: actorId, ceoVacant: false }
+      )
+    ).toBe(true);
+  });
+
+  it("rejects a vacant placer CEO and a bystander", () => {
+    expect(
+      actorMayCancelShareOrder(
+        { characterId: new ObjectId(), placerCorporationId: placerId },
+        actorId,
+        { ceoId: actorId, ceoVacant: true }
+      )
+    ).toBe(false);
+    expect(
+      actorMayCancelShareOrder(
+        { characterId: new ObjectId(), placerCorporationId: placerId },
+        actorId,
+        { ceoId: new ObjectId(), ceoVacant: false }
+      )
+    ).toBe(false);
   });
 });

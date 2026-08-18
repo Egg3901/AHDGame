@@ -1,6 +1,10 @@
 import type { Db, ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import { acquirerOwnershipPercent } from "@/lib/corporations/corporateOwnership";
+import {
+  corporationWithReservedHoldings,
+  loadReservedCorporatePositions,
+} from "@/lib/corporations/reservedCorporateHoldings";
 import { SUBSIDIARY_FORMALIZATION_THRESHOLD_PERCENT } from "../constants";
 import {
   isEligibleAsSubsidiary,
@@ -48,7 +52,13 @@ export async function formalizeSubsidiary(
   }
 
   // Must control >50% VOTING power (super-shares aware), not raw shares.
-  const votingPct = acquirerOwnershipPercent(parent._id, target);
+  // Count unsold shares still reserved on a corp sell/listing so listing a
+  // controlling block does not block re-formalization before the trade fills.
+  const reserved = await loadReservedCorporatePositions(db, target._id);
+  const votingPct = acquirerOwnershipPercent(
+    parent._id,
+    corporationWithReservedHoldings(target, reserved)
+  );
   if (votingPct <= SUBSIDIARY_FORMALIZATION_THRESHOLD_PERCENT) {
     return fail(
       `The parent must control more than ${SUBSIDIARY_FORMALIZATION_THRESHOLD_PERCENT}% of the target's voting power to formalize a subsidiary (currently ${
