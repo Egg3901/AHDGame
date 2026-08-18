@@ -24,18 +24,15 @@ describe("MobileNationalDetails", () => {
     }
   });
 
-  it("collapses every section except the one containing the current route", () => {
-    // Mocked pathname is an Economy route — only Economy should start open.
+  it("starts every section collapsed", () => {
     renderWithIntl(<MobileNationalDetails countryId="UK" onNavigate={() => {}} />);
-    expect(
-      screen.getByRole("button", { name: /^Government$/i }).getAttribute("aria-expanded")
-    ).toBe("false");
-    expect(screen.getByRole("button", { name: /^Politics$/i }).getAttribute("aria-expanded")).toBe(
-      "false"
-    );
-    expect(screen.getByRole("button", { name: /^Economy$/i }).getAttribute("aria-expanded")).toBe(
-      "true"
-    );
+    for (const title of ["Government", "Politics", "Economy", "Other"]) {
+      expect(
+        screen
+          .getByRole("button", { name: new RegExp(`^${title}$`, "i") })
+          .getAttribute("aria-expanded")
+      ).toBe("false");
+    }
   });
 
   it("expands a collapsed section on click and reveals its links", () => {
@@ -55,8 +52,8 @@ describe("MobileNationalDetails", () => {
   });
 
   it("marks the link for the current path as the active page", () => {
-    // usePathname is mocked to "/country/uk/economy" — Economy starts open.
     renderWithIntl(<MobileNationalDetails countryId="UK" onNavigate={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Economy$/i }));
     expect(screen.getByRole("link", { name: /^Economy$/i }).getAttribute("aria-current")).toBe(
       "page"
     );
