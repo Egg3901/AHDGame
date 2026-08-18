@@ -195,9 +195,10 @@ export async function OnePartyExecutiveHub({ countryId }: { countryId: CountryId
   const viewerVotes: Record<string, "aye" | "nay"> = {};
   const viewerWhippedFrom: Record<string, string> = {};
 
-  if (govFormation?.status === "pending") {
+  if (govFormation) {
     // PM votes only — head-of-state votes share the collection (office:
     // "headOfState") and render through their own joint-sitting block below.
+    // Include formed-government confidence motions, not just pending formation.
     const apptVotes = await getPMAppointmentVotesCollection(db)
       .find({ countryId, status: "active", office: { $exists: false } })
       .toArray();
@@ -223,6 +224,7 @@ export async function OnePartyExecutiveHub({ countryId }: { countryId: CountryId
           status: vote.status,
           closesAt: vote.closesAt.toISOString(),
           closesOnTurn: vote.closesOnTurn ?? null,
+          isConfidenceMotion: vote.isConfidenceMotion === true,
         };
       })
     );

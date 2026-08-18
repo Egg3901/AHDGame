@@ -3,8 +3,14 @@
 import { useState } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui";
+import { InfoTooltip } from "@/components/InfoTooltip";
 import { PartyChip } from "@/app/congress/components/CongressShared";
 import { getJusticePortrait, DEFAULT_JUSTICE_AVATAR } from "@/lib/scotus/justiceImages";
+import {
+  formatDeathChancePercent,
+  formatDivergentDeathChance,
+  type DivergentDeathChance,
+} from "@/lib/scotus/tenure";
 
 export interface SeatCardData {
   seatNumber: number;
@@ -15,6 +21,7 @@ export interface SeatCardData {
   economicLean: number | null;
   socialLean: number | null;
   isDivergent: boolean;
+  deathChance: DivergentDeathChance | null;
 }
 
 /** [-5, +5] lean scale (shared by characters/parties/justices) → a 0-100% bar position. */
@@ -137,6 +144,22 @@ export function ScotusSeatCard({
               )}
             </div>
           </div>
+          {seat.deathChance && (
+            <InfoTooltip
+              width={260}
+              trigger={
+                <p className="cursor-help text-[11px] font-medium text-warning">
+                  {formatDivergentDeathChance(seat.deathChance, "compact")}
+                </p>
+              }
+            >
+              <p className="text-left text-sm text-muted">
+                After about two years on the bench, a Divergent Justice has a{" "}
+                {formatDeathChancePercent()} chance each turn of dying in office. The seat then goes
+                vacant for a new nomination.
+              </p>
+            </InfoTooltip>
+          )}
           <div className="space-y-1.5">
             <LeanBar label="Econ" value={seat.economicLean} />
             <LeanBar label="Social" value={seat.socialLean} />

@@ -10,6 +10,13 @@ vi.mock("@/lib/discordWebhooks", () => ({
 vi.mock("@/lib/notifications", () => ({
   createNotifications: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/congress/governmentVoteBreakdown", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/congress/governmentVoteBreakdown")>();
+  return {
+    ...actual,
+    computeParliamentaryGovernmentTally: vi.fn(actual.computeParliamentaryGovernmentTally),
+  };
+});
 
 let db: MockDb;
 
@@ -595,9 +602,20 @@ describe("openConfidenceMotionForIncumbent", () => {
     } as MockDb["collectionMocks"][string];
     db.collectionMocks["pmAppointmentVotes"] = {
       ...db.collection("pmAppointmentVotes"),
+      findOne: vi.fn().mockResolvedValue(null),
       insertOne: vi.fn().mockImplementation(async (doc) => ({
         insertedId: doc._id ?? new ObjectId(),
       })),
+    } as MockDb["collectionMocks"][string];
+    db.collectionMocks["characters"] = {
+      ...db.collection("characters"),
+      findOne: vi
+        .fn()
+        .mockResolvedValue(
+          opts.govDoc?.pmCharacterId
+            ? { _id: opts.govDoc.pmCharacterId, userId: new ObjectId() }
+            : null
+        ),
     } as MockDb["collectionMocks"][string];
   }
 
@@ -618,10 +636,15 @@ describe("openConfidenceMotionForIncumbent", () => {
     });
 
     const now = new Date("2026-04-22T12:00:00Z");
+    const { createNotifications } = await import("@/lib/notifications");
+    vi.mocked(createNotifications).mockClear();
     const result = await openConfidenceMotionForIncumbent(db as unknown as Db, "UK", now);
 
     expect(result.opened).toBe(true);
     expect(result.voteId).toBeDefined();
+    expect(createNotifications).toHaveBeenCalled();
+    const notif = vi.mocked(createNotifications).mock.calls[0][0][0];
+    expect(notif.title).toBe("Prime Minister Confidence Motion");
 
     const insertedDoc = (
       db.collectionMocks["pmAppointmentVotes"].insertOne as ReturnType<typeof vi.fn>
@@ -692,6 +715,30 @@ describe("openConfidenceMotionForIncumbent", () => {
     const result = await openConfidenceMotionForIncumbent(db as unknown as Db, "US", new Date());
     expect(result.opened).toBe(false);
     expect(result.reason).toBe("no-incumbent");
+  });
+
+  it("returns opened:false when a confidence motion is already active", async () => {
+    const pmId = new ObjectId();
+    setupConfidenceMocks({
+      govDoc: {
+        _id: "UK",
+        status: "formed",
+        pmCharacterId: pmId,
+        pmName: "Sitting PM",
+        formationType: "majority",
+        governingPartyId: "1",
+      },
+      pmStillHoldsSeat: true,
+    });
+    db.collectionMocks["pmAppointmentVotes"] = {
+      ...db.collectionMocks["pmAppointmentVotes"],
+      findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), isConfidenceMotion: true }),
+    } as MockDb["collectionMocks"][string];
+
+    const result = await openConfidenceMotionForIncumbent(db as unknown as Db, "UK", new Date());
+    expect(result.opened).toBe(false);
+    expect(result.reason).toBe("already-active");
+    expect(db.collectionMocks["pmAppointmentVotes"].insertOne).not.toHaveBeenCalled();
   });
 });
 
@@ -775,7 +822,33 @@ describe("resolveParliamentaryAppointmentVote — confidence motion failure", ()
     } as MockDb["collectionMocks"][string];
   }
 
-  it("fails confidence motion with no alternative passed → vacates PM", async () => {
+  it("empty confidence motion (0-0) does not vacate the incumbent", async () => {
+    const { computeParliamentaryGovernmentTally } =
+      await import("@/lib/congress/governmentVoteBreakdown");
+    vi.mocked(computeParliamentaryGovernmentTally).mockResolvedValueOnce({
+      votesFor: 0,
+      votesAgainst: 0,
+      voteByParty: [],
+    });
+    setupMotionFailureMocks({ alternativePassed: false });
+
+    await resolveParliamentaryAppointmentVote(db as unknown as Db, "UK", voteId, new Date());
+
+    const govUpdateCalls = (
+      db.collectionMocks["governmentFormations"].updateOne as ReturnType<typeof vi.fn>
+    ).mock.calls;
+    const unformCall = govUpdateCalls.find((c) => c[1].$set?.status === "pending");
+    expect(unformCall).toBeUndefined();
+  });
+
+  it("fails confidence motion with a nay majority and no alternative passed → vacates PM", async () => {
+    const { computeParliamentaryGovernmentTally } =
+      await import("@/lib/congress/governmentVoteBreakdown");
+    vi.mocked(computeParliamentaryGovernmentTally).mockResolvedValueOnce({
+      votesFor: 200,
+      votesAgainst: 300,
+      voteByParty: [],
+    });
     setupMotionFailureMocks({ alternativePassed: false });
 
     const now = new Date("2026-04-22T12:00:00Z");
@@ -796,6 +869,13 @@ describe("resolveParliamentaryAppointmentVote — confidence motion failure", ()
   });
 
   it("fails confidence motion but an alternative already passed → does NOT vacate", async () => {
+    const { computeParliamentaryGovernmentTally } =
+      await import("@/lib/congress/governmentVoteBreakdown");
+    vi.mocked(computeParliamentaryGovernmentTally).mockResolvedValueOnce({
+      votesFor: 200,
+      votesAgainst: 300,
+      voteByParty: [],
+    });
     setupMotionFailureMocks({ alternativePassed: true });
 
     await resolveParliamentaryAppointmentVote(db as unknown as Db, "UK", voteId, new Date());
