@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  NPP_LEAN_PULL,
-  NPP_STANCE_SPREAD,
-  nppIdiosyncrasy,
-  nppStanceTarget,
-} from "./stanceTarget";
+import { NPP_LEAN_PULL, NPP_STANCE_SPREAD, nppIdiosyncrasy, nppStanceTarget } from "./stanceTarget";
 
 describe("nppIdiosyncrasy", () => {
   it("is deterministic for the same id + axis", () => {
