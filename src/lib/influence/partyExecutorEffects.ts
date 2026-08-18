@@ -12,10 +12,12 @@ import {
   nppCanPlausiblyEndorseElection,
   upsertNppEndorsement,
 } from "@/lib/nppEndorsements";
+import { advertiseFavorabilityGain, campaignInfluenceGain } from "@/lib/actions";
 
+// Loyalty and stubbornness have no per-turn decay, so their boosts stay flat.
+// Influence and favorability DO decay every turn (see actionRefresh), so their
+// boosts use the diminishing curves below instead of a flat amount.
 const STAT_CHANGE_AMOUNTS: Record<string, { min: number; max: number }> = {
-  boost_favorability: { min: 1, max: 3 },
-  boost_influence: { min: 1, max: 1 },
   boost_loyalty: { min: 1, max: 3 },
   reduce_stubbornness: { min: 1, max: 3 },
 };
@@ -24,6 +26,11 @@ function calculateStatChange(influenceType: InfluenceType): number {
   const range = STAT_CHANGE_AMOUNTS[influenceType];
   if (!range) return 0;
   return Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
+}
+
+/** Round a stat delta to the 0.1 grid so boost messages/values stay clean. */
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
 }
 
 export interface ApplyPartyInfluenceEffectsResult {
@@ -42,16 +49,21 @@ export async function applyPartyInfluenceEffects(
 
   switch (input.influenceType) {
     case "boost_favorability": {
-      const change = calculateStatChange("boost_favorability");
-      const newValue = Math.min(100, npp.favorability + change);
+      // Diminishing toward the cap, same curve as an NPP's own advertise, so a
+      // chair boost cannot out-run the favorability decay and pin an NPP at 100
+      // (favorability decays by (fav-60)*0.05/turn in actionRefresh).
+      const change = round1(advertiseFavorabilityGain(npp.favorability ?? 0));
+      const newValue = Math.min(100, (npp.favorability ?? 0) + change);
       await db
         .collection<NPP>("npps")
         .updateOne({ _id: npp._id }, { $set: { favorability: newValue, updatedAt: now } });
       return { statChange: change };
     }
     case "boost_influence": {
-      const change = calculateStatChange("boost_influence");
-      const newValue = Math.min(100, npp.politicalInfluence + change);
+      // Diminishing toward the cap, same curve as an NPP's own campaign, so a
+      // chair boost cannot out-run the 0.75%/turn PI decay and pin an NPP at 100.
+      const change = round1(campaignInfluenceGain(npp.politicalInfluence ?? 0));
+      const newValue = Math.min(100, (npp.politicalInfluence ?? 0) + change);
       await db
         .collection<NPP>("npps")
         .updateOne({ _id: npp._id }, { $set: { politicalInfluence: newValue, updatedAt: now } });
