@@ -4,7 +4,14 @@ import { useId, useMemo } from "react";
 import { useRegionGeometry } from "@/lib/maps/useRegionGeometry";
 import { useStaticHostGeometry } from "@/lib/maps/proxyHostGeometry";
 import { projectRegions, type ProjectedRegion } from "@/lib/maps/projectRegions";
-import { frontLine, sampleLand, type FrontBox, type PxPoint } from "@/lib/maps/frontLine";
+import {
+  axisWords,
+  fallbackAdvanceAnchor,
+  frontLine,
+  sampleLand,
+  type FrontBox,
+  type PxPoint,
+} from "@/lib/maps/frontLine";
 import { anchorOf } from "@/lib/maps/countryAnchors";
 import { MIL_COLOR, MIL_FONT } from "../../military/theme";
 
@@ -43,6 +50,12 @@ export interface FrontLineMapProps {
   sideACountries: string[];
   /** Side B's belligerents, the fallback orientation when side A has no anchor. */
   sideBCountries: string[];
+  /**
+   * Faction entity ids (SVN / NVN on a proxy war). Belligerent rosters stay
+   * empty on purpose; these still place the axis of advance.
+   */
+  sideAFaction?: string;
+  sideBFaction?: string;
   sideALabel: string;
   sideBLabel: string;
 }
@@ -54,18 +67,6 @@ function firstAnchor(countries: string[]): [number, number] | null {
     if (a) return a;
   }
   return null;
-}
-
-/**
- * Compass words for a px direction — "west → east" and so on.
- *
- * Only the dominant component is named. A front does not need a bearing; it needs
- * the two words a player would use for it.
- */
-function axisWords(u: PxPoint): string {
-  const [x, y] = u;
-  if (Math.abs(x) >= Math.abs(y)) return x >= 0 ? "west → east" : "east → west";
-  return y >= 0 ? "north → south" : "south → north";
 }
 
 interface FrontGeometry {
@@ -102,6 +103,8 @@ export function FrontLineMap({
   control,
   sideACountries,
   sideBCountries,
+  sideAFaction,
+  sideBFaction,
   sideALabel,
   sideBLabel,
 }: FrontLineMapProps) {
@@ -123,8 +126,8 @@ export function FrontLineMap({
   // Keyed on the sorted roster + control so the projection and the (comparatively
   // expensive) land sample are recomputed only when the war actually moves.
   const codeKey = [...hostRegionCodes, ...staticHost.codes].sort().join(",");
-  const aKey = sideACountries.join(",");
-  const bKey = sideBCountries.join(",");
+  const aKey = [...sideACountries, ...(sideAFaction ? [sideAFaction] : [])].join(",");
+  const bKey = [...sideBCountries, ...(sideBFaction ? [sideBFaction] : [])].join(",");
 
   const geo = useMemo<FrontGeometry | null>(() => {
     if (!features || features.length === 0) return null;
@@ -160,9 +163,9 @@ export function FrontLineMap({
       if (b) anchor = [2 * centre[0] - b[0], 2 * centre[1] - b[1]];
     }
     if (!anchor) {
-      // Neither side is placed on the world. A west→east axis is arbitrary but
-      // stable, which is all a conflict between two generated forces needs.
-      anchor = [centre[0] - box.w * 2, centre[1]];
+      // Neither side is placed on the world. Follow the host's long side so a
+      // tall country (Vietnam) reads north-south and a wide one stays west-east.
+      anchor = fallbackAdvanceAnchor(box);
     }
 
     const front = frontLine(box, land, anchor, pctA);

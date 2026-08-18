@@ -2,6 +2,11 @@
 // parallel (the 1954 Geneva demarcation line, and the border the 1953 board
 // needs even though Geneva is a year away).
 //
+// WHY 50m, NOT 110m. The 110m coastline is a 44-vertex polygon: the front map
+// reads as a handful of straight edges. 50m is the same Natural Earth family
+// already shipped as public/geo/countries-50m.json (~600 vertices before the
+// clip) and is still small enough to fetch on the conflict page.
+//
 // WHY A CLIP AND NOT A SOURCE FILE. Every other split state in the repo is
 // assembled from real subdivisions: Germany from its Länder, Czechoslovakia from
 // its historic lands, Yugoslavia from its federal units. Vietnam has no such
@@ -18,7 +23,7 @@
 // Output winding is normalized to the repo convention: outer rings CLOCKWISE in
 // (lon,lat), holes CCW — d3-geo interprets rings spherically and renders a CCW
 // outer ring as "the globe minus the shape".
-// Run: node scripts/maps/build-vietnam-geo.mjs
+// Run: node scripts/geo/build-vietnam-geo.mjs
 import { readFileSync, writeFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -72,7 +77,7 @@ const rewind = (geometry) => {
     : { type: "MultiPolygon", coordinates: fixed };
 };
 
-const topo = JSON.parse(readFileSync(pub("geo/countries-110m.json"), "utf8"));
+const topo = JSON.parse(readFileSync(pub("geo/countries-50m.json"), "utf8"));
 const countries = feature(topo, topo.objects.countries);
 const vietnam = countries.features.find((f) => String(f.id) === VIETNAM_FEATURE_ID);
 if (!vietnam) throw new Error(`feature ${VIETNAM_FEATURE_ID} (Vietnam) not in the basemap`);

@@ -16,7 +16,7 @@ export default async function ConflictsPage() {
   await requireConflictsEnabled();
   // Use the pinned display year so the founding phase shows the era start.
   // getGameTime always populates currentYear; startingYear is a defensive floor.
-  const { currentYear, startingYear } = await getGameTime();
+  const { currentYear, startingYear, preIterationTurns } = await getGameTime();
 
   const db = await getDb();
   const docs = await listActiveConflicts(db);
@@ -25,7 +25,7 @@ export default async function ConflictsPage() {
     docs.map((d) => d._id)
   );
   const conflicts = docs.map((d) =>
-    toConflictView(d, { startingYear, casualties: casualties[d._id] ?? 0 })
+    toConflictView(d, { startingYear, casualties: casualties[d._id] ?? 0, preIterationTurns })
   );
 
   const vietnam = await getVietnamEscalationSummary(db);

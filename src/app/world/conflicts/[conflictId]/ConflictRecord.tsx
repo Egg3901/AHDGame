@@ -35,6 +35,9 @@ export interface ConflictRecordView {
   sideBLabel: string;
   sideACountries: string[];
   sideBCountries: string[];
+  /** Faction entity on a proxy-war side (orients the front; not a belligerent). */
+  sideAFaction?: string;
+  sideBFaction?: string;
   /** Side B's share of the host, 0–100, and where it opened. */
   control: number;
   controlStart: number;
@@ -573,6 +576,8 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
               control={c.control}
               sideACountries={c.sideACountries}
               sideBCountries={c.sideBCountries}
+              sideAFaction={c.sideAFaction}
+              sideBFaction={c.sideBFaction}
               sideALabel={c.sideALabel}
               sideBLabel={c.sideBLabel}
             />

@@ -31,6 +31,33 @@ export type PxRing = PxPoint[];
 export const LAND_STEP = 10;
 
 /**
+ * Compass words for a px direction: "west → east" and so on.
+ *
+ * Only the dominant component is named. A front does not need a bearing; it needs
+ * the two words a player would use for it. SVG y increases downward, so a vector
+ * with +y is a north → south advance.
+ */
+export function axisWords(u: PxPoint): string {
+  const [x, y] = u;
+  if (Math.abs(x) >= Math.abs(y)) return x >= 0 ? "west → east" : "east → west";
+  return y >= 0 ? "north → south" : "south → north";
+}
+
+/**
+ * When neither side has a usable world anchor, place a synthetic one off the
+ * host's long side so the line still has an orientation.
+ *
+ * Portrait hosts (Vietnam) advance north → south. Landscape hosts keep the
+ * previous west → east fallback.
+ */
+export function fallbackAdvanceAnchor(box: FrontBox): PxPoint {
+  const cx = box.w / 2;
+  const cy = box.h / 2;
+  if (box.h >= box.w) return [cx, cy - box.h * 2];
+  return [cx - box.w * 2, cy];
+}
+
+/**
  * Cell centres of a `step` grid that fall inside the ring set, by scanline.
  *
  * Even-odd fill, so a hole ring (Brandenburg carries Berlin as an enclave)
