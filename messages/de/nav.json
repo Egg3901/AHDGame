@@ -110,7 +110,8 @@
         "upcomingRaces": "Anstehende Wahlen",
         "primaries": "Vorwahlen",
         "results": "Ergebnisse",
-        "candidateDirectory": "Kandidatenverzeichnis"
+        "candidateDirectory": "Kandidatenverzeichnis",
+        "politicalOperations": "Politische Operationen"
       }
     },
     "state": {
