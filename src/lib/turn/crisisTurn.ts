@@ -212,7 +212,7 @@ export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
 
     // A rung of a chained family ending is what advances the chain. The family's
     // own state decides what comes next, including nothing at all.
-    await processCrisisChain(db, toResolve, turn);
+    await processCrisisChain(db, toResolve, turn, gameState?.currentYear);
   }
 
   // Auto-resolve expired interactions (only if enabled)
