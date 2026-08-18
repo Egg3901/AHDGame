@@ -1,5 +1,7 @@
 import type { Crisis, CrisisEffect, CrisisTemplate } from "@/lib/db/types/crisis";
 import { toNativeEffectValue } from "@/lib/crises/effectScale";
+import { WARSAW_PACT_BLOC_COUNTRY_IDS } from "@/lib/crises/warsawPactSatellites";
+import { getVietnamEscalationLevel } from "@/lib/crises/vietnamEscalationInterface";
 
 /** Resolve a template's default duration for a given scope.
  *  Prefers `durationByScope[scope]`, then falls back to `durationTurns`,
@@ -25,7 +27,7 @@ export function getTemplateDuration(
 // doesn't exist in the schema would silently create a dead, unread field. This table binds
 // the human-readable concepts used in the templates below to real metric paths. Consumer and
 // investor confidence are real per-state metrics (economic.consumerConfidence /
-// economic.investorConfidence — engine-computed in registry/economic.ts), so crisis shocks
+// economic.investorConfidence, engine-computed in registry/economic.ts), so crisis shocks
 // land on the same fields the margin/valuation systems read. Inflation is national, not a
 // stateMetric, and is handled separately in fx() (see below).
 const METRIC_ALIASES: Record<string, { category: string; field: string }> = {
@@ -50,7 +52,7 @@ function fx(
   metricField: string,
   // Authored as a FRACTIONAL swing (e.g. -0.02 = "a 2% swing"). The turn engine
   // applies effects as a raw $inc in native metric units (gdpGrowth ~1.5,
-  // approvalRating 0–100, inflationRate ~2.5), so we convert here via
+  // approvalRating 0-100, inflationRate ~2.5), so we convert here via
   // toNativeEffectValue (×100 flat, ×30 tick). See effectScale.ts.
   swing: number,
   label: string
@@ -71,7 +73,7 @@ function fx(
       label,
     };
   }
-  // Stat effects bypass metric aliases — they target character stats directly.
+  // Stat effects bypass metric aliases, they target character stats directly.
   if (targetType === "stat") {
     return {
       effectType,
@@ -102,10 +104,10 @@ function fx(
 
 /**
  * One-time, real GDP output loss for physical-destruction disasters. `fraction`
- * is the share of the affected region's GDP destroyed at onset (0.005–0.03 →
- * 0.5%–3%), applied once as a multiplicative cut to `state.gdp`. Surfaced in the
+ * is the share of the affected region's GDP destroyed at onset (0.005-0.03 →
+ * 0.5%-3%), applied once as a multiplicative cut to `state.gdp`. Surfaced in the
  * UI as "X% of GDP lost · $Ybn". Prefer this over a `economy.gdp` growth-rate
- * shock for earthquakes/hurricanes/etc. — the growth-rate path is for persistent
+ * shock for earthquakes/hurricanes/etc., the growth-rate path is for persistent
  * economic crises, not one-off destruction.
  */
 function gdpLoss(fraction: number, label: string): CrisisEffect {
@@ -123,7 +125,7 @@ function gdpLoss(fraction: number, label: string): CrisisEffect {
 
 /**
  * A single, steady profit-margin shock for economic crises. Authored in
- * percentage points (NOT scaled — bypasses fx()), it lands at full `value` on the
+ * percentage points (NOT scaled, bypasses fx()), it lands at full `value` on the
  * onset turn and ramps linearly to 0 at expiry, exactly like the infrastructure-
  * disaster margin penalty. Applied as a read-time blend on every corp in the
  * crisis's scope (see disasterMarginPenalty.ts / buildLookups resolveCrisisStateIds),
@@ -133,7 +135,7 @@ function gdpLoss(fraction: number, label: string): CrisisEffect {
  * `physicality` (P3.5) decides how the shock bites under the plants tier:
  * "physical" converts the percentage points into a production haircut (less
  * tonnage), "financial" keeps it a margin hit at unchanged tonnage. Default is
- * "financial" — the conservative choice, and the only one that is safe for
+ * "financial", the conservative choice, and the only one that is safe for
  * already-spawned crises, which carry no flag. Classify a template "physical"
  * only when the event plainly STOPS output (power cut, plant halt, port shut,
  * inputs unavailable); anything that is a price, credit, demand or sentiment
@@ -438,8 +440,8 @@ export const RECESSION_TEMPLATE: CrisisTemplate = {
 // Four templates below author their margin shock as a rise in the cost of
 // INPUTS: Inflation Spike, Energy Crisis, Currency Crisis (imported inputs) and
 // Trade War (tariffed inputs). Under the plants tier a sector pays for its
-// inputs physically — an explicit inputs-cost line valued at live commodity
-// prices — so any input-price movement the market itself produces is already in
+// inputs physically, an explicit inputs-cost line valued at live commodity
+// prices, so any input-price movement the market itself produces is already in
 // the P&L and must not be charged a second time as margin points.
 //
 // These four are nonetheless kept at FULL magnitude and classified "financial",
@@ -449,8 +451,8 @@ export const RECESSION_TEMPLATE: CrisisTemplate = {
 // residual financial shock, not a duplicate of it. Zeroing them under plants
 // would delete the effect outright rather than de-duplicate it.
 //
-// The one template that IS a real quantity shock — Supply Chain Disruption,
-// where inputs are unavailable rather than expensive — is instead reclassified
+// The one template that IS a real quantity shock, Supply Chain Disruption,
+// where inputs are unavailable rather than expensive, is instead reclassified
 // "physical", so it cuts tonnage through the production factor and stops being
 // an unpriced margin hit. That is the double-count guard: reclassification, not
 // magnitude zeroing. If a future template literally raises modelled commodity
@@ -1460,7 +1462,7 @@ export const REFUGEE_CRISIS_TEMPLATE: CrisisTemplate = {
 export const PANDEMIC_TEMPLATE: CrisisTemplate = {
   name: "Pandemic",
   autoTrigger: { kind: "random", cooldownTurns: 432, scope: "global", spawnChance: 0.0015 },
-  // Deliberately NO year window. Global pandemics are not a modern phenomenon —
+  // Deliberately NO year window. Global pandemics are not a modern phenomenon:
   // 1957 Asian flu and 1968 Hong Kong flu each killed over a million people.
   // The old `notForEras` gate was incoherent anyway: it blocked 1979 and 1991
   // while leaving 1953 open. Removing it adds possibility space rather than
@@ -1881,7 +1883,7 @@ export const LABOR_STRIKES_TEMPLATE: CrisisTemplate = {
 };
 
 /**
- * Nationwide steel strike — the first crisis to use real-subsystem action hooks
+ * Nationwide steel strike, the first crisis to use real-subsystem action hooks
  * (see CrisisOptionAction). Steel has no dedicated sector type; it is produced by
  * the `manufacturing` sector, so the strike concentrates its bite there and the
  * supply shock propagates downstream (autos, defense, construction, energy) via
@@ -1930,7 +1932,7 @@ export const STEEL_STRIKE_TEMPLATE: CrisisTemplate = {
   wireMessageOnStart:
     "Steelworkers have struck nationwide. Furnaces are banking down and steel-dependent industry is grinding to a halt.",
   wireMessageOnEnd:
-    "The steel strike is over. The settlement — imposed, negotiated, or won in court — reshapes the industry.",
+    "The steel strike is over. The settlement, imposed, negotiated, or won in court, reshapes the industry.",
   interactionDefinition: {
     decisionTree: [
       {
@@ -1946,7 +1948,7 @@ export const STEEL_STRIKE_TEMPLATE: CrisisTemplate = {
             optionId: "response_executive_order",
             label: "Nationalize by Executive Order",
             description:
-              "Seize the steel industry by emergency executive order and run the mills as state enterprises. Fast and decisive — but the order will be challenged in the Supreme Court, which can strike it down.",
+              "Seize the steel industry by emergency executive order and run the mills as state enterprises. Fast and decisive, but the order will be challenged in the Supreme Court, which can strike it down.",
             nextNodeId: "terminal_executive",
             action: { kind: "executiveNationalize", sectorType: "manufacturing" },
             effects: [
@@ -1972,7 +1974,7 @@ export const STEEL_STRIKE_TEMPLATE: CrisisTemplate = {
             optionId: "response_emergency_bill",
             label: "Emergency Nationalization Bill",
             description:
-              "Send Congress an emergency bill to nationalize steel at fair value. No court risk if it passes — but you need the votes, and the strike burns on while it is debated.",
+              "Send Congress an emergency bill to nationalize steel at fair value. No court risk if it passes, but you need the votes, and the strike burns on while it is debated.",
             nextNodeId: "terminal_bill",
             action: {
               kind: "emergencyNationalizeBill",
@@ -2035,7 +2037,7 @@ export const STEEL_STRIKE_TEMPLATE: CrisisTemplate = {
       {
         nodeId: "terminal_executive",
         type: "terminal",
-        title: "Order signed — now to the Court",
+        title: "Order signed, now to the Court",
         description:
           "You have seized the steel mills by executive order. The state is running them, but a constitutional challenge is on its way to the Supreme Court.",
         outcomeMessage:
@@ -3523,7 +3525,761 @@ export const FOREST_PEST_OUTBREAK_TEMPLATE: CrisisTemplate = {
   wireMessageOnEnd: "The outbreak slows. Salvage logging and replanting get underway.",
 };
 
-// ── ALL TEMPLATES EXPORT ─────────────────────────────────────────────────────
+// ── 1960s: USSR LIBERALIZATION AND US PROTEST ────────────────────────────────
+// A Prague-Spring-style reform-movement crisis for the USSR and its Warsaw
+// Pact satellites, and four distinct American protest crises. All decision
+// options apply real effects (approval/metric writes through crisisTurn.ts)
+// and, where the choice plausibly provokes further unrest, a real
+// `spawnFollowUpCrisis` action that creates another crisis document rather
+// than just changing flavor text. See `spawnFollowUpCrisis` in
+// optionActions.ts for the handler.
+
+export const PRAGUE_SPRING_TEMPLATE: CrisisTemplate = {
+  name: "Reform Movement",
+  fromYear: 1960,
+  geo: { countries: WARSAW_PACT_BLOC_COUNTRY_IDS },
+  autoTrigger: { kind: "random", cooldownTurns: 200, scope: "country", spawnChance: 0.0018 },
+  heroImage:
+    "https://images.unsplash.com/photo-1591259622709-bdb033b4be2b?auto=format&fit=crop&w=1600&q=70",
+  description:
+    "A reform faction inside the ruling party is pushing to loosen censorship, ease travel restrictions, and open the economy to limited market pressure. Students and intellectuals are rallying behind it, and the reform's momentum is starting to worry party hardliners and neighboring governments alike.",
+  scope: "country",
+  countryIds: [],
+  regionIds: [],
+  durationTurns: 6,
+  durationByScope: { country: 6 },
+  effects: [
+    fx(
+      "tick",
+      "approval",
+      "government",
+      "overall",
+      -0.015,
+      "Party authority strained by reform pressure"
+    ),
+    fx(
+      "tick",
+      "metric",
+      "economy",
+      "investorConfidence",
+      -0.01,
+      "Uncertainty over the country's direction"
+    ),
+  ],
+  wireMessageOnStart:
+    "A reform movement inside the ruling party is gathering pace in {location}, pressing for looser censorship and economic liberalization.",
+  wireMessageOnEnd: "The reform movement's moment passes, one way or another.",
+  interactionDefinition: {
+    decisionTree: [
+      {
+        nodeId: "response",
+        type: "choice",
+        title: "Reform movement response",
+        description:
+          "A reform movement is gathering pace, pushing for liberalization the party leadership never authorized. How do you respond?",
+        requiredRoles: ["headOfState"],
+        timeLimitMinutes: null,
+        options: [
+          {
+            optionId: "response_suppress",
+            label: "Suppress Militarily",
+            description:
+              "Send in security forces to restore party control. Ends the movement fast, but reads as a tank rolling through a capital to the rest of the world.",
+            nextNodeId: "terminal",
+            effects: [
+              fx(
+                "flat",
+                "approval",
+                "government",
+                "overall",
+                0.05,
+                "Order restored, control reasserted"
+              ),
+              fx(
+                "flat",
+                "approval",
+                "westernOpinion",
+                "overall",
+                -0.12,
+                "International outcry over the crackdown"
+              ),
+              fx(
+                "flat",
+                "metric",
+                "economy",
+                "investorConfidence",
+                -0.06,
+                "Foreign capital spooked by the crackdown"
+              ),
+            ],
+          },
+          {
+            optionId: "response_tolerate",
+            label: "Tolerate",
+            description:
+              "Let the movement run its course without intervening. Unrest continues to simmer, and the example may embolden reformers elsewhere in the bloc.",
+            nextNodeId: "terminal",
+            effects: [
+              fx(
+                "flat",
+                "approval",
+                "government",
+                "overall",
+                -0.03,
+                "Authority visibly unable to act"
+              ),
+              fx("flat", "approval", "reformers", "overall", 0.04, "Reform movement emboldened"),
+            ],
+            action: {
+              kind: "spawnFollowUpCrisis",
+              templateKey: "prague_spring_reform",
+              countryPool: "warsawPactSatellites",
+              excludeCurrentCountry: true,
+              chance: 0.5,
+            },
+          },
+          {
+            optionId: "response_reform",
+            label: "Genuine Reform",
+            description:
+              "Get ahead of the movement and enact real liberalization: looser censorship, freer travel, room for the economy to breathe. Popular with reformers, but it is a bet the hardliners in the party will not forgive.",
+            nextNodeId: "terminal",
+            effects: [
+              fx(
+                "flat",
+                "approval",
+                "reformers",
+                "overall",
+                0.07,
+                "Genuine liberalization welcomed"
+              ),
+              fx(
+                "flat",
+                "approval",
+                "government",
+                "overall",
+                -0.04,
+                "Party stability shaken by the concessions"
+              ),
+              fx(
+                "flat",
+                "metric",
+                "economy",
+                "investorConfidence",
+                -0.02,
+                "Markets uncertain about the new direction"
+              ),
+            ],
+            action: {
+              kind: "spawnFollowUpCrisis",
+              templateKey: "hardliner_backlash",
+              countryPool: "sameCountry",
+              chance: 0.6,
+            },
+          },
+        ],
+      },
+      {
+        nodeId: "terminal",
+        type: "terminal",
+        title: "Crisis resolved",
+        description: "The reform movement crisis has run its course.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+    ],
+    autoResolveOnExpiry: true,
+  },
+};
+
+export const HARDLINER_BACKLASH_TEMPLATE: CrisisTemplate = {
+  name: "Hardliner Backlash",
+  fromYear: 1960,
+  geo: { countries: WARSAW_PACT_BLOC_COUNTRY_IDS },
+  heroImage:
+    "https://images.unsplash.com/photo-1591259622709-bdb033b4be2b?auto=format&fit=crop&w=1600&q=70",
+  description:
+    "Hardliners inside the party, alarmed by recent liberalization, are maneuvering to reverse it and discipline the reformers who pushed it through.",
+  scope: "country",
+  countryIds: [],
+  regionIds: [],
+  durationTurns: 4,
+  effects: [
+    fx("tick", "approval", "reformers", "overall", -0.02, "Hardliner pressure on reformers"),
+  ],
+  wireMessageOnStart:
+    "Party hardliners in {location} are moving to roll back recent liberalization and discipline the reformers behind it.",
+  wireMessageOnEnd: "The hardliner backlash subsides, its outcome already felt in the party ranks.",
+  interactionDefinition: {
+    decisionTree: [
+      {
+        nodeId: "response",
+        type: "choice",
+        title: "Hardliner backlash response",
+        description: "Hardliners want the recent reforms reversed. How do you handle them?",
+        requiredRoles: ["headOfState"],
+        timeLimitMinutes: null,
+        options: [
+          {
+            optionId: "response_hold",
+            label: "Hold the Line",
+            description: "Keep the reforms in place and face down the hardliners directly.",
+            nextNodeId: "terminal",
+            effects: [
+              fx("flat", "approval", "reformers", "overall", 0.03, "Reformers reassured"),
+              fx("flat", "approval", "government", "overall", -0.03, "Party unity strained"),
+            ],
+          },
+          {
+            optionId: "response_concede",
+            label: "Concede Ground",
+            description: "Walk back part of the reform package to appease the hardliners.",
+            nextNodeId: "terminal",
+            effects: [
+              fx("flat", "approval", "reformers", "overall", -0.05, "Reformers feel betrayed"),
+              fx("flat", "approval", "government", "overall", 0.02, "Party hardliners placated"),
+            ],
+          },
+        ],
+      },
+      {
+        nodeId: "terminal",
+        type: "terminal",
+        title: "Crisis resolved",
+        description: "The hardliner backlash has run its course.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+    ],
+    autoResolveOnExpiry: true,
+  },
+};
+
+export const CIVIL_RIGHTS_MARCHES_TEMPLATE: CrisisTemplate = {
+  name: "Civil Rights Marches",
+  fromYear: 1960,
+  untilYear: 1968,
+  geo: { countries: ["US"] },
+  autoTrigger: { kind: "random", cooldownTurns: 120, scope: "country", spawnChance: 0.003 },
+  heroImage:
+    "https://images.unsplash.com/photo-1591259622709-bdb033b4be2b?auto=format&fit=crop&w=1600&q=70",
+  description:
+    "Mass marches for civil rights and voting rights are drawing hundreds of thousands into the streets. Organizers demand federal action; segregationist state officials dig in.",
+  scope: "country",
+  countryIds: [],
+  regionIds: [],
+  durationTurns: 5,
+  effects: [
+    fx(
+      "tick",
+      "metric",
+      "economy",
+      "consumerConfidence",
+      -0.008,
+      "Disruption from mass demonstrations"
+    ),
+  ],
+  wireMessageOnStart:
+    "Mass civil rights marches are sweeping {location}, demanding federal action on voting rights and desegregation.",
+  wireMessageOnEnd: "The march movement's immediate wave subsides. Its demands remain unresolved.",
+  interactionDefinition: {
+    decisionTree: [
+      {
+        nodeId: "response",
+        type: "choice",
+        title: "Civil rights response",
+        description: "Civil rights marches are sweeping the country. What is the federal response?",
+        requiredRoles: ["headOfState"],
+        timeLimitMinutes: null,
+        options: [
+          {
+            optionId: "response_intervene",
+            label: "Federal Intervention",
+            description:
+              "Send federal marshals to protect marchers and enforce desegregation orders over state objections.",
+            nextNodeId: "terminal",
+            effects: [
+              fx(
+                "flat",
+                "approval",
+                "government",
+                "overall",
+                0.02,
+                "Federal action seen as principled"
+              ),
+              fx("flat", "approval", "civilRightsMovement", "overall", 0.06, "Marchers protected"),
+              fx(
+                "flat",
+                "approval",
+                "segregationistVoters",
+                "overall",
+                -0.08,
+                "States'-rights backlash"
+              ),
+            ],
+          },
+          {
+            optionId: "response_legislate",
+            label: "Push Legislation",
+            description:
+              "Commit to a federal civil rights bill instead of direct intervention. Slower, but builds a durable settlement.",
+            nextNodeId: "terminal",
+            action: {
+              kind: "concessionBill",
+              title: "Civil Rights and Voting Protections Act",
+              summary:
+                "Bars segregation in public accommodations and puts federal protection behind the right to vote.",
+              category: "civil rights",
+            },
+            effects: [
+              fx(
+                "flat",
+                "approval",
+                "government",
+                "overall",
+                0.015,
+                "Legislative commitment welcomed"
+              ),
+              fx(
+                "flat",
+                "metric",
+                "economy",
+                "gdp",
+                -0.003,
+                "Cost of enforcement and compliance programs"
+              ),
+            ],
+          },
+          {
+            optionId: "response_crackdown",
+            label: "Crack Down",
+            description:
+              "Deploy state police to break up the marches. Ends the immediate disruption, but the images make national headlines.",
+            nextNodeId: "terminal",
+            effects: [
+              fx(
+                "flat",
+                "approval",
+                "segregationistVoters",
+                "overall",
+                0.05,
+                "Order restored, base pleased"
+              ),
+              fx(
+                "flat",
+                "approval",
+                "civilRightsMovement",
+                "overall",
+                -0.09,
+                "Movement radicalized by the crackdown"
+              ),
+              fx(
+                "flat",
+                "approval",
+                "government",
+                "overall",
+                -0.04,
+                "National press coverage turns hostile"
+              ),
+            ],
+            action: {
+              kind: "spawnFollowUpCrisis",
+              templateKey: "urban_riots",
+              countryPool: "sameCountry",
+              chance: 0.35,
+            },
+          },
+        ],
+      },
+      {
+        nodeId: "terminal",
+        type: "terminal",
+        title: "Crisis resolved",
+        description: "The civil rights march crisis has run its course.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+    ],
+    autoResolveOnExpiry: true,
+  },
+};
+
+export const CAMPUS_UNREST_TEMPLATE: CrisisTemplate = {
+  name: "Campus Unrest",
+  fromYear: 1964,
+  untilYear: 1972,
+  geo: { countries: ["US"] },
+  autoTrigger: { kind: "random", cooldownTurns: 100, scope: "country", spawnChance: 0.0025 },
+  heroImage:
+    "https://images.unsplash.com/photo-1591259622709-bdb033b4be2b?auto=format&fit=crop&w=1600&q=70",
+  description:
+    "Students have occupied campus buildings over the war, civil rights, and university governance. Administrators are under pressure to call in police; faculty are split.",
+  scope: "country",
+  countryIds: [],
+  regionIds: [],
+  durationTurns: 3,
+  effects: [
+    fx(
+      "tick",
+      "approval",
+      "government",
+      "overall",
+      -0.008,
+      "Generational divide over campus unrest"
+    ),
+  ],
+  wireMessageOnStart:
+    "Student occupations and walkouts are spreading across campuses in {location}.",
+  wireMessageOnEnd: "The campus occupations wind down as the term year runs out.",
+  interactionDefinition: {
+    decisionTree: [
+      {
+        nodeId: "response",
+        type: "choice",
+        title: "Campus unrest response",
+        description: "Student occupations are spreading. How does the administration respond?",
+        requiredRoles: ["headOfState"],
+        timeLimitMinutes: null,
+        options: [
+          {
+            optionId: "response_negotiate",
+            label: "Negotiate with Students",
+            description: "Open talks on the students' demands and de-escalate.",
+            nextNodeId: "terminal",
+            effects: [
+              fx("flat", "approval", "youthVoters", "overall", 0.05, "Students feel heard"),
+              fx(
+                "flat",
+                "approval",
+                "conservativeVoters",
+                "overall",
+                -0.02,
+                "Seen as caving to protesters"
+              ),
+            ],
+          },
+          {
+            optionId: "response_crackdown",
+            label: "Send in Police",
+            description: "Clear the occupied buildings by force. Ends the disruption immediately.",
+            nextNodeId: "terminal",
+            effects: [
+              fx(
+                "flat",
+                "approval",
+                "youthVoters",
+                "overall",
+                -0.09,
+                "Students radicalized by the raid"
+              ),
+              fx(
+                "flat",
+                "approval",
+                "conservativeVoters",
+                "overall",
+                0.05,
+                "Base approves of restoring order"
+              ),
+              fx(
+                "flat",
+                "metric",
+                "publicsafety",
+                "confidence",
+                -0.03,
+                "Footage of the raid shakes public confidence"
+              ),
+            ],
+            action: {
+              kind: "spawnFollowUpCrisis",
+              templateKey: "campus_unrest",
+              countryPool: "sameCountry",
+              chance: 0.3,
+            },
+          },
+        ],
+      },
+      {
+        nodeId: "terminal",
+        type: "terminal",
+        title: "Crisis resolved",
+        description: "The campus unrest crisis has run its course.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+    ],
+    autoResolveOnExpiry: true,
+  },
+};
+
+export const URBAN_RIOTS_TEMPLATE: CrisisTemplate = {
+  name: "Urban Unrest",
+  fromYear: 1964,
+  untilYear: 1968,
+  geo: { countries: ["US"] },
+  autoTrigger: { kind: "random", cooldownTurns: 100, scope: "country", spawnChance: 0.002 },
+  heroImage:
+    "https://images.unsplash.com/photo-1591259622709-bdb033b4be2b?auto=format&fit=crop&w=1600&q=70",
+  description:
+    "Unrest has broken out in urban neighborhoods long neglected by city and federal investment. Fires, looting, and clashes with police have residents and business owners bracing for what comes next.",
+  scope: "country",
+  countryIds: [],
+  regionIds: [],
+  durationTurns: 4,
+  effects: [
+    marginShock(-3, "Unrest disrupts local commerce"),
+    fx("tick", "metric", "economy", "gdp", -0.01, "Local economic disruption"),
+  ],
+  wireMessageOnStart: "Urban unrest has broken out in {location} amid long-standing grievances.",
+  wireMessageOnEnd: "The unrest subsides. The underlying grievances remain unaddressed.",
+  interactionDefinition: {
+    decisionTree: [
+      {
+        nodeId: "response",
+        type: "choice",
+        title: "Urban unrest response",
+        description: "Unrest has broken out in city neighborhoods. What is the response?",
+        requiredRoles: ["headOfState"],
+        timeLimitMinutes: null,
+        options: [
+          {
+            optionId: "response_guard",
+            label: "Deploy the National Guard",
+            description: "Restore order with the Guard. Fast, but raises civil-liberties concerns.",
+            nextNodeId: "terminal",
+            effects: [
+              fx(
+                "flat",
+                "approval",
+                "government",
+                "overall",
+                -0.02,
+                "Military presence unsettles residents"
+              ),
+              fx("flat", "metric", "economy", "gdp", -0.005, "Deployment cost"),
+            ],
+          },
+          {
+            optionId: "response_invest",
+            label: "Announce Investment",
+            description: "Commit to housing and jobs programs in the affected neighborhoods.",
+            nextNodeId: "terminal",
+            action: {
+              kind: "concessionBill",
+              title: "Urban Investment and Jobs Act",
+              summary: "Federal funding for housing and jobs programs in cities hit by unrest.",
+              category: "urban policy",
+            },
+            effects: [
+              fx("flat", "approval", "urbanCommunities", "overall", 0.06, "Investment welcomed"),
+              fx("flat", "metric", "economy", "gdp", -0.008, "Program cost"),
+            ],
+          },
+          {
+            optionId: "response_crackdown",
+            label: "Crack Down",
+            description:
+              "Impose curfews and mass arrests. Ends the unrest fast, but deepens the divide.",
+            nextNodeId: "terminal",
+            effects: [
+              fx(
+                "flat",
+                "approval",
+                "urbanCommunities",
+                "overall",
+                -0.1,
+                "Community trust collapses"
+              ),
+              fx(
+                "flat",
+                "approval",
+                "lawAndOrderVoters",
+                "overall",
+                0.07,
+                "Order restored, base approves"
+              ),
+              fx(
+                "flat",
+                "approval",
+                "government",
+                "overall",
+                -0.03,
+                "National coverage turns critical"
+              ),
+            ],
+            action: {
+              kind: "spawnFollowUpCrisis",
+              templateKey: "urban_riots",
+              countryPool: "sameCountry",
+              chance: 0.3,
+            },
+          },
+        ],
+      },
+      {
+        nodeId: "terminal",
+        type: "terminal",
+        title: "Crisis resolved",
+        description: "The urban unrest crisis has run its course.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+    ],
+    autoResolveOnExpiry: true,
+  },
+};
+
+// Vietnam escalation scaling. `getVietnamEscalationLevel()` currently always
+// returns 0 (see vietnamEscalationInterface.ts, Track A has not wired the
+// real state yet), so today this resolves to the floor values below. Once
+// Track A's implementation lands and returns a live 0-1 reading, these will
+// scale up with it on the next deploy (module-level, so a running process
+// picks up a code change, not a runtime state change, restarting the deploy
+// is what makes escalation take effect, same as any other server constant).
+const VIETNAM_ESCALATION = getVietnamEscalationLevel();
+const ANTIWAR_SPAWN_CHANCE = 0.0015 + 0.0025 * VIETNAM_ESCALATION;
+const ANTIWAR_SEVERITY_SCALE = 1 + VIETNAM_ESCALATION;
+
+export const ANTIWAR_PROTEST_TEMPLATE: CrisisTemplate = {
+  name: "Anti-War Protests",
+  fromYear: 1965,
+  untilYear: 1972,
+  geo: { countries: ["US"] },
+  autoTrigger: {
+    kind: "random",
+    cooldownTurns: 90,
+    scope: "country",
+    spawnChance: ANTIWAR_SPAWN_CHANCE,
+  },
+  heroImage:
+    "https://images.unsplash.com/photo-1591259622709-bdb033b4be2b?auto=format&fit=crop&w=1600&q=70",
+  description:
+    "Anti-war demonstrations are drawing large crowds, draft resistance is spreading, and the war's mounting cost is becoming a domestic political liability.",
+  scope: "country",
+  countryIds: [],
+  regionIds: [],
+  durationTurns: 4,
+  effects: [
+    fx(
+      "tick",
+      "approval",
+      "government",
+      "overall",
+      -0.012 * ANTIWAR_SEVERITY_SCALE,
+      "War-weariness erodes approval"
+    ),
+  ],
+  wireMessageOnStart: "Anti-war demonstrations are spreading across {location}.",
+  wireMessageOnEnd: "The wave of anti-war demonstrations recedes, for now.",
+  interactionDefinition: {
+    decisionTree: [
+      {
+        nodeId: "response",
+        type: "choice",
+        title: "Anti-war protest response",
+        description: "Anti-war demonstrations are spreading. What is the response?",
+        requiredRoles: ["headOfState"],
+        timeLimitMinutes: null,
+        options: [
+          {
+            optionId: "response_intervene",
+            label: "Federal Intervention",
+            description:
+              "Deploy federal forces to keep demonstrations from disrupting the capital.",
+            nextNodeId: "terminal",
+            effects: [
+              fx(
+                "flat",
+                "approval",
+                "government",
+                "overall",
+                -0.02 * ANTIWAR_SEVERITY_SCALE,
+                "Heavy-handed federal presence resented"
+              ),
+            ],
+          },
+          {
+            optionId: "response_concede",
+            label: "Signal De-escalation",
+            description:
+              "Announce troop drawdowns or peace talks to take the wind out of the movement.",
+            nextNodeId: "terminal",
+            action: {
+              kind: "concessionBill",
+              title: "Selective Service and Troop Commitment Review Act",
+              summary: "Reforms the draft system and mandates a review of troop commitment levels.",
+              category: "defense policy",
+            },
+            effects: [
+              fx(
+                "flat",
+                "approval",
+                "antiWarVoters",
+                "overall",
+                0.06 * ANTIWAR_SEVERITY_SCALE,
+                "De-escalation welcomed by the movement"
+              ),
+              fx(
+                "flat",
+                "approval",
+                "hawkishVoters",
+                "overall",
+                -0.03 * ANTIWAR_SEVERITY_SCALE,
+                "Hawks see it as weakness"
+              ),
+            ],
+          },
+          {
+            optionId: "response_crackdown",
+            label: "Crack Down",
+            description: "Order police and National Guard to clear demonstrations by force.",
+            nextNodeId: "terminal",
+            effects: [
+              fx(
+                "flat",
+                "approval",
+                "antiWarVoters",
+                "overall",
+                -0.1 * ANTIWAR_SEVERITY_SCALE,
+                "Movement radicalized by the crackdown"
+              ),
+              fx(
+                "flat",
+                "approval",
+                "hawkishVoters",
+                "overall",
+                0.05 * ANTIWAR_SEVERITY_SCALE,
+                "Order restored, hawks approve"
+              ),
+              fx(
+                "flat",
+                "approval",
+                "government",
+                "overall",
+                -0.04 * ANTIWAR_SEVERITY_SCALE,
+                "Coverage of the crackdown turns hostile"
+              ),
+            ],
+            action: {
+              kind: "spawnFollowUpCrisis",
+              templateKey: "campus_unrest",
+              countryPool: "sameCountry",
+              chance: 0.3 + 0.2 * VIETNAM_ESCALATION,
+            },
+          },
+        ],
+      },
+      {
+        nodeId: "terminal",
+        type: "terminal",
+        title: "Crisis resolved",
+        description: "The anti-war protest crisis has run its course.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+    ],
+    autoResolveOnExpiry: true,
+  },
+};
 
 export const ALL_CRISIS_TEMPLATES: Record<
   string,
@@ -3574,4 +4330,10 @@ export const ALL_CRISIS_TEMPLATES: Record<
   king_tide_flooding: KING_TIDE_FLOODING_TEMPLATE,
   landslide: LANDSLIDE_TEMPLATE,
   forest_pest_outbreak: FOREST_PEST_OUTBREAK_TEMPLATE,
+  prague_spring_reform: PRAGUE_SPRING_TEMPLATE,
+  hardliner_backlash: HARDLINER_BACKLASH_TEMPLATE,
+  civil_rights_marches: CIVIL_RIGHTS_MARCHES_TEMPLATE,
+  campus_unrest: CAMPUS_UNREST_TEMPLATE,
+  urban_riots: URBAN_RIOTS_TEMPLATE,
+  antiwar_protest: ANTIWAR_PROTEST_TEMPLATE,
 };
