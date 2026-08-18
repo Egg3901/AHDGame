@@ -225,6 +225,30 @@ export async function settleEncumbrance(
 }
 
 /**
+ * Draw a country's commitment down by an amount whose CASH leg has already moved.
+ *
+ * Split out from `settleEncumbrance` because the cash leg now goes through the shared money
+ * primitive (`applyMoneyMove`), which owns the idempotency key and the guarded debit but can
+ * only `$inc` one field per leg. The commitment is a MEMO account, not money: nothing enters or
+ * leaves the world when it moves, so expressing it as a money leg would mean inventing a mint
+ * or burn that lies about the money supply, and the primitive rightly refuses legs that do not
+ * net to zero.
+ *
+ * Failing here is deliberately the SAFE direction. The cash is gone and the commitment stays
+ * high, so the country temporarily believes it has less to spend than it does: it under-spends.
+ * The reverse ordering - releasing the commitment and failing to move the cash - would let the
+ * same money be committed twice, which is the exploit. Clamped at the amount actually held so a
+ * double drawdown cannot drive the commitment negative and mint uncommitted budget.
+ */
+export async function drawDownEncumbrance(
+  db: Db,
+  countryId: string,
+  amount: number
+): Promise<void> {
+  await releaseEncumbrance(db, countryId, amount);
+}
+
+/**
  * Undo a settlement: the money goes back to the balance AND back under commitment.
  *
  * The mirror of `settleEncumbrance`, used when a delivery is paid for and then cannot be

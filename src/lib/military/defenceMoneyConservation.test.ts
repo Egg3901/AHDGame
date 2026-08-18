@@ -2,6 +2,9 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { applyDefenceDeliveries } from "@/lib/turn/defenceDeliveryTurn";
 import { lotProductionCost } from "@/lib/military/defenceLotEconomics";
+import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
+import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
+import { COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
 
 vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
 
@@ -30,11 +33,15 @@ interface Ledger {
   claims: Set<string>;
   contracts: Record<string, unknown>[];
   stock: Record<string, number>;
+  commodityPrices?: CommodityPrice[];
+  /** Opening liquid capital on the supplier, which gates delivery at a loss. */
+  corpCapital?: number;
 }
 
 function ledger(over: Partial<Ledger> = {}): Ledger {
   return {
-    balance: 1_000_000,
+    balance: 1_000_000_000,
+    corpCapital: 1e15,
     encumbered: 0,
     corpCash: 0,
     claims: new Set<string>(),
@@ -85,6 +92,9 @@ function stubDb(l: Ledger): Db {
             countryId: "US",
             liquidCurrencyCode: "USD",
             unlockedTechNodeIds: [],
+            // Read off the ledger: whether a supplier can fund a loss is now a real gate on
+            // delivery, so the fixture has to be able to say how much cash it has.
+            liquidCapital: l.corpCapital ?? 0,
           }),
           updateOne: async (_f: unknown, u: Record<string, unknown>) => {
             l.corpCash += ((u.$inc ?? {}) as Record<string, number>).liquidCapital ?? 0;
@@ -104,8 +114,18 @@ function stubDb(l: Ledger): Db {
           },
         };
       }
-      if (name === "defenceMoneyClaims") {
+      if (name === "commodityPrices") {
+        // Live commodity ratios now drive the build cost. An empty book leaves every recipe at
+        // its nominal share, which is the pre-wiring behaviour and the right default here.
         return {
+          find: () => ({ toArray: async () => l.commodityPrices ?? [] }),
+        };
+      }
+      if (name === MONEY_MOVE_COLLECTION) {
+        // The shared money primitive's claim record. A unique `_id` insert is the only atomic
+        // guarantee it relies on, so the stub models exactly that and nothing else.
+        return {
+          findOne: async (f: { _id: string }) => (l.claims.has(f._id) ? { _id: f._id } : null),
           insertOne: async (doc: { _id: string }) => {
             if (l.claims.has(doc._id)) {
               throw Object.assign(new Error("duplicate key"), { code: 11000 });
@@ -113,6 +133,7 @@ function stubDb(l: Ledger): Db {
             l.claims.add(doc._id);
             return { insertedId: doc._id };
           },
+          updateOne: async () => ({ matchedCount: 1, modifiedCount: 1 }),
           deleteOne: async (f: { _id: string }) => {
             l.claims.delete(f._id);
             return { deletedCount: 1 };
@@ -151,7 +172,10 @@ function stubDb(l: Ledger): Db {
   } as unknown as Db;
 }
 
-const PRICE = 1_000;
+// A realistic struck price: comfortably above what a lot costs to build, the way the award
+// band guarantees at signing. A price below cost is now a real (and separately tested) outcome
+// rather than the default, since live input prices can overtake a contract after it is signed.
+const PRICE = Math.ceil(lotProductionCost("heavy_armor")! * 1.5);
 
 function contract(over: Record<string, unknown> = {}) {
   return {
@@ -193,6 +217,9 @@ describe("defence procurement money conservation", () => {
     expect(l.corpCash).toBe(r.paid - r.productionCost);
     expect(r.productionCost).toBeGreaterThan(0);
     expect(r.productionCost).toBeCloseTo(lotProductionCost("heavy_armor")! * r.lots, -1);
+    // Legs net to zero: the appropriation's outlay is exactly the supplier's gain plus the
+    // inputs burned building the materiel.
+    expect(openingBalance - l.balance).toBe(l.corpCash + r.productionCost);
   });
 
   // INVARIANT 2. Delivery DRAWS THE COMMITMENT DOWN rather than spending afresh. A completed
@@ -277,10 +304,11 @@ describe("defence procurement money conservation", () => {
     l.contracts = [contract({ encumberedAmount: undefined })];
     l.encumbered = 0;
 
+    const openingBalance = l.balance;
     const r = await applyDefenceDeliveries(stubDb(l), "US", 1953, 3, 5);
 
     expect(r.lots).toBe(10);
-    expect(l.balance).toBe(1_000_000 - r.paid);
+    expect(openingBalance - l.balance).toBe(r.paid);
   });
 
   // A legacy contract must not be able to eat budget another contract has committed.
@@ -293,5 +321,62 @@ describe("defence procurement money conservation", () => {
 
     expect(r.lots).toBe(2);
     expect(l.balance - l.encumbered).toBeGreaterThanOrEqual(0);
+  });
+});
+
+/**
+ * Live input prices mean a contract can go UNDERWATER after it is signed: the band's floor held
+ * on the day it was struck, and then steel moved. That is a real economic outcome rather than an
+ * error, so it is modelled explicitly instead of being clamped away - and conservation has to
+ * hold in that direction too.
+ */
+describe("a contract the commodity market has overtaken", () => {
+  const DEAR_STEEL = new Map([["steel", 9]]) as never;
+
+  function underwater(over: Record<string, unknown> = {}) {
+    const l = ledger({ balance: 1_000_000_000 });
+    // Struck well BELOW what a lot now costs to build.
+    l.contracts = [
+      contract({ lotsOrdered: 10, pricePerLot: 1_000, encumberedAmount: 10 * 1_000, ...over }),
+    ];
+    l.encumbered = 10 * 1_000;
+    l.commodityPrices = [
+      { commodity: "steel", globalPrice: COMMODITY_BASE_PRICES.steel * 9 } as never,
+    ];
+    void DEAR_STEEL;
+    return l;
+  }
+
+  it("delivers at a loss the supplier funds, and the legs still net to zero", async () => {
+    const l = underwater();
+    l.corpCash = 0;
+    const openingBalance = l.balance;
+
+    const r = await applyDefenceDeliveries(stubDb(l), "US", 1953, 3, 5);
+
+    expect(r.lots).toBe(10);
+    expect(r.productionCost).toBeGreaterThan(r.paid);
+    // The supplier ends POORER: it was paid the contract price and spent more than that on
+    // inputs. Conservation is unchanged - the buyer's outlay plus the supplier's loss is
+    // exactly what the inputs cost.
+    expect(l.corpCash).toBeLessThan(0);
+    expect(openingBalance - l.balance).toBe(r.paid);
+    expect(l.corpCash).toBe(r.paid - r.productionCost);
+  });
+
+  // The guard that keeps a half-applied move out of the repair queue: a supplier with no cash
+  // cannot deliver into a debit it cannot fund, so the sweep refuses BEFORE anything moves.
+  it("refuses to deliver when the supplier cannot fund the loss", async () => {
+    const l = underwater();
+    l.corpCapital = 0;
+    const openingBalance = l.balance;
+    const r = await applyDefenceDeliveries(stubDb(l), "US", 1953, 3, 5);
+
+    expect(r.lots).toBe(0);
+    expect(r.stalled).toBe(1);
+    expect(l.balance).toBe(openingBalance);
+    expect(l.corpCash).toBe(0);
+    expect(l.contracts[0].lotsDelivered).toBe(0);
+    expect(l.contracts[0].carryReason).toBe("supplier_cannot_fund_loss");
   });
 });

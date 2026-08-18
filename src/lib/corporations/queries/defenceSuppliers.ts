@@ -8,6 +8,7 @@ import {
   DEFENCE_FACTORY_SLOTS_PER_PLANT,
 } from "@/lib/military/defenceLotEconomics";
 import { componentsForStrategy } from "@/lib/military/arsenalComponents";
+import { loadDefencePriceRatios } from "@/lib/military/defencePriceRatios";
 import { listOpenContracts } from "@/lib/db/collections/defenceContracts";
 
 /** One plant the defence minister could award a contract to. */
@@ -90,6 +91,10 @@ export async function listDefenceSuppliers(
     committedSlots.set(key, (committedSlots.get(key) ?? 0) + (c.assignedFactories ?? fallback));
   }
 
+  // One read of the price book for the whole picker, so every plant in the list is quoted
+  // against the same market rather than each against whatever it happened to read.
+  const priceRatios = await loadDefencePriceRatios(db);
+
   const rows: DefenceSupplierView[] = [];
   for (const sector of sectors) {
     const corp = corpById.get(sector.corporationId.toString());
@@ -117,7 +122,7 @@ export async function listDefenceSuppliers(
       projectedLotsPerTurn: fill.projectedLotsPerTurn,
       gradeCeiling: fill.gradeCeiling,
       alreadyContracted: contractedSectorIds.has(sector._id.toString()),
-      unitProductionCost: lotProductionCost(sector.strategyId) ?? 0,
+      unitProductionCost: lotProductionCost(sector.strategyId, priceRatios) ?? 0,
       freeFactories,
       totalFactories: DEFENCE_FACTORY_SLOTS_PER_PLANT,
     });
