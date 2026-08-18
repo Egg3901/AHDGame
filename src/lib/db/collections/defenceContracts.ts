@@ -179,9 +179,9 @@ export async function reverseContractDelivery(
  * same amount.
  *
  * Separate from `advanceContract` because lots and money are separate facts here: the sweep
- * pays first and records second (see `applyDefenceDeliveries`), so the lot count can clamp
- * below what was paid for and the two must be reconcilable afterwards rather than assumed
- * equal.
+ * records the lots and then pays (see `applyDefenceDeliveries`), and `advanceContract` clamps,
+ * so the lot count can differ from what was planned and the two must be reconcilable
+ * afterwards rather than assumed equal.
  */
 export async function recordContractPayment(
   db: Db,

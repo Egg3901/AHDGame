@@ -7,6 +7,7 @@ import {
   defenceContractWindow,
 } from "@/lib/military/defenceContractLimits";
 import { resolveDefenseLineFrom } from "@/lib/turn/defenseEnvelope";
+import { applyMoneyMove } from "@/lib/banking/moneyMove";
 import type { Defect, DetectResult, HealPlan, HealResult, VerifyResult } from "../types";
 
 interface Clawback {
@@ -197,51 +198,75 @@ async function plan(db: Db): Promise<HealPlan> {
   };
 }
 
+/**
+ * Idempotency key for recovering one contract's over-award inside one heal run.
+ *
+ * Per contract rather than per corporation, because a contract is the unit the survey plans
+ * and the unit the stamp records, so the money and the paper trail cannot drift apart. Scoped
+ * to the run so a genuinely NEW over-award found later is recovered again, while a retry of
+ * the same run replays and moves nothing.
+ */
+export function procurementClawbackMoveKey(runId: string, contractId: string): string {
+  return `defence-clawback:${runId}:${contractId}`;
+}
+
 async function apply(
   db: Db,
   healPlan: HealPlan,
   ctx: { now: Date; runId?: string }
 ): Promise<HealResult> {
   const result = healPlan.payload as Survey;
-  const byCorporation = new Map<string, number>();
-  const byCountry = new Map<string, number>();
+  const runId = ctx.runId;
+  if (!runId) {
+    // Without a run id there is no stable key, and unkeyed money movement is exactly what a
+    // retried heal must never do. Refusing costs nothing: the runner always supplies one.
+    throw new Error("procurement clawback needs a run id to key its money moves");
+  }
+
+  // One keyed, net-zero move per contract, replacing two bare guarded `$inc`s that were
+  // ordered corporations-then-budgets with nothing joining them. A throw between the two used
+  // to destroy the recovered money outright, and a re-run debited the supplier a second time
+  // because nothing recorded that the first had happened.
+  let moved = 0;
   for (const row of result.clawbacks) {
-    byCorporation.set(
-      row.corporationId,
-      (byCorporation.get(row.corporationId) ?? 0) + row.recoverableAmount
-    );
-    byCountry.set(row.countryId, (byCountry.get(row.countryId) ?? 0) + row.recoverableAmount);
-  }
-
-  for (const [corporationId, amount] of byCorporation) {
-    if (amount <= 0) continue;
-    const update = await db
-      .collection<Corporation>("corporations")
-      .updateOne(
-        { _id: new ObjectId(corporationId), liquidCapital: { $gte: amount } },
-        { $inc: { liquidCapital: -amount } }
+    if (!(row.recoverableAmount > 0)) continue;
+    const outcome = await applyMoneyMove(db, {
+      key: procurementClawbackMoveKey(runId, row.contractId),
+      kind: "defence-clawback",
+      legs: [
+        {
+          kind: "debit",
+          amount: row.recoverableAmount,
+          collection: "corporations",
+          filter: { _id: new ObjectId(row.corporationId) },
+          path: "liquidCapital",
+          note: `supplier ${row.corporationId} returns an over-awarded defence payment`,
+        },
+        {
+          kind: "credit",
+          amount: row.recoverableAmount,
+          collection: "federalBudget",
+          filter: { countryId: row.countryId, "defenseAppropriation.balance": { $type: "number" } },
+          path: "defenseAppropriation.balance",
+          note: `defence appropriation for ${row.countryId} receives the recovery`,
+        },
+      ],
+    });
+    if (outcome.status === "applied") moved += 1;
+    if (outcome.status === "partial" || outcome.status === "rejected") {
+      // Stop on the first hole rather than plough on. A partial move is already in the shared
+      // repair queue with the legs that landed, so an operator can see precisely what is owed.
+      throw new Error(
+        `clawback for contract ${row.contractId} did not settle: ${outcome.error ?? outcome.status}`
       );
-    if (update.modifiedCount !== 1) {
-      throw new Error(`corporation ${corporationId} cannot fund the approved clawback`);
-    }
-  }
-
-  for (const [countryId, amount] of byCountry) {
-    if (amount <= 0) continue;
-    const update = await db
-      .collection<FederalBudget>("federalBudget")
-      .updateOne(
-        { countryId, "defenseAppropriation.balance": { $type: "number" } },
-        { $inc: { "defenseAppropriation.balance": amount } }
-      );
-    if (update.modifiedCount !== 1) {
-      throw new Error(`defence appropriation for ${countryId} could not receive the clawback`);
     }
   }
 
   for (const row of result.clawbacks) {
     const update = await db.collection<DefenceContract>("defenceContracts").updateOne(
-      { _id: new ObjectId(row.contractId) },
+      // Same run stamps a contract once. The money above already replays under its key, and
+      // the stamp has to replay with it or a retry would double the recorded lots.
+      { _id: new ObjectId(row.contractId), administrativeClawbackRunId: { $ne: runId } },
       {
         $inc: {
           administrativeClawbackLots: row.excessLots,
@@ -250,19 +275,24 @@ async function apply(
         },
         $set: {
           administrativeClawbackAt: ctx.now,
-          administrativeClawbackRunId: ctx.runId,
+          administrativeClawbackRunId: runId,
           updatedAt: ctx.now,
         },
       }
     );
     if (update.modifiedCount !== 1) {
-      throw new Error(`contract ${row.contractId} could not be marked as clawed back`);
+      const already = await db
+        .collection<DefenceContract>("defenceContracts")
+        .findOne({ _id: new ObjectId(row.contractId), administrativeClawbackRunId: runId });
+      if (!already) {
+        throw new Error(`contract ${row.contractId} could not be marked as clawed back`);
+      }
     }
   }
 
   return {
     documentsScanned: healPlan.affected,
-    documentsUpdated: result.clawbacks.length + byCorporation.size + byCountry.size,
+    documentsUpdated: result.clawbacks.length + moved,
     notes: [
       `recovered ${result.recoverableAmount.toLocaleString("en-US")} without changing total money`,
       `recorded ${result.unrecoveredAmount.toLocaleString("en-US")} as uncollectible from the supplier`,
