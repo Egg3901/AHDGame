@@ -42,5 +42,18 @@ export async function seedBankingIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // Charter-status lookups: the dead-bank loan servicer scans corporations for
+  // failed/revoked charters every banking turn, and solvency/supervision passes
+  // filter on active status. Sparse-ish in practice (most corporations have no
+  // charter), so the index keeps that a handful of reads instead of a full
+  // collection scan per turn.
+  await ensureIndex(
+    db,
+    "corporations",
+    { "bankCharter.status": 1 },
+    { name: "corporations_bankCharter_status", background: true, sparse: true },
+    log
+  );
+
   log("Banking money-move indexes ensured");
 }

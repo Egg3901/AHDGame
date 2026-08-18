@@ -196,9 +196,6 @@ describe("processBankSolvencyTurn", () => {
       };
       if (u.$inc) {
         for (const [key, value] of Object.entries(u.$inc)) {
-          if (key === "bankCharter.cashReserves" && live.bankCharter) {
-            live.bankCharter.cashReserves = (live.bankCharter.cashReserves ?? 0) + value;
-          }
           if (key === "liquidCapital") {
             live.liquidCapital = (live.liquidCapital ?? 0) + value;
           } else if (key.startsWith("bankCharter.")) {
