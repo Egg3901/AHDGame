@@ -182,9 +182,18 @@ export async function claimMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
 
   try {
     await db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION).insertOne(record);
-  } catch {
-    // Duplicate key: somebody else owns this move. Never a reason to move money.
-    return { status: "replayed" };
+  } catch (error) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? (error as { code?: unknown }).code
+        : undefined;
+    if (code === 11000) {
+      // Duplicate key: somebody else owns this move. Never a reason to move money.
+      return { status: "replayed" };
+    }
+    // Network, write-concern, and server failures do not prove that another
+    // caller owns the key. Reporting them as replays silently drops the move.
+    throw error;
   }
   return { status: "claimed", legs };
 }

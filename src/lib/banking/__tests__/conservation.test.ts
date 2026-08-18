@@ -206,6 +206,31 @@ describe("private banking conserves money", () => {
     expect(charterOf(db).bankCharter.cashReserves).toBe(cashAfterFirst);
   });
 
+  it("surfaces claim storage failures instead of pretending the move replayed", async () => {
+    const failure = Object.assign(new Error("primary stepped down"), { code: 91 });
+    vi.spyOn(db.collection("bankMoneyMoves"), "insertOne").mockRejectedValueOnce(failure);
+    const before = totalMoney(db);
+
+    await expect(
+      applyMoneyMove(db as unknown as Db, {
+        key: "storage-failure",
+        kind: "test",
+        legs: [
+          { kind: "mint", amount: 1_000, note: "outside source" },
+          {
+            kind: "credit",
+            amount: 1_000,
+            collection: "corporations",
+            filter: { _id: CORP_ID },
+            path: "liquidCapital",
+            note: "recipient",
+          },
+        ],
+      })
+    ).rejects.toBe(failure);
+    expect(totalMoney(db)).toBe(before);
+  });
+
   it("never lets a guarded debit overdraw a balance", async () => {
     const before = totalMoney(db);
     const move = await applyMoneyMove(db as unknown as Db, {
