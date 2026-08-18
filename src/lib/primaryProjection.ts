@@ -31,6 +31,7 @@ import {
   PRIMARY_CAMPAIGN_STAGGER_TICK_RATE,
   NPP_STAGGER_EXTRA_MULTIPLIER,
 } from "@/lib/electionEngine/constants";
+import { supportMoodMultiplier } from "@/lib/electionEngine/electionFormulaFactors";
 import { shiftDemographicsForPrimary } from "@/lib/campaigns/shiftPrimaryElectorate";
 
 /**
@@ -63,6 +64,8 @@ export interface ProjectPrimaryInput {
     homeState?: string | null;
     primaryCampaignState?: string | null;
     primaryCampaignTicks?: number;
+    /** ElectionCandidate.support — rally mood (undefined → neutral 1.0×). */
+    support?: number;
   }[];
   /** Target states to project — any that have missing demographics are skipped */
   stateIds: string[];
@@ -217,6 +220,8 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
         const ticks = Math.min(meta.primaryCampaignTicks ?? 0, 5);
         votes *= 1 + ticks * PRIMARY_CAMPAIGN_STAGGER_TICK_RATE;
       }
+      // Rally support (matches stagger). Undefined → 1.0×.
+      votes *= supportMoodMultiplier(meta?.support);
       if (hasPlayerInPartyPrimary && ec.isNPP) {
         votes *= NPP_STAGGER_EXTRA_MULTIPLIER;
       }

@@ -240,6 +240,7 @@ async function applyPresidentialPrimaryDisplay(
             : (characterMap.get(rawCandidate.characterId.toString())?.homeState ?? null),
           primaryCampaignState: rawCandidate.primaryCampaignState ?? null,
           primaryCampaignTicks: rawCandidate.primaryCampaignTicks ?? 0,
+          support: rawCandidate.support,
         };
       })
       .filter((meta): meta is NonNullable<typeof meta> => meta !== null);
