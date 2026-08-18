@@ -4,7 +4,8 @@ import { corpDailyGrossRevenueLocal } from "@/lib/corporations/dailyGrossRevenue
 import {
   canUnlock,
   getCommittedLane,
-  getNodePrereqId,
+  getExclusiveRivalIds,
+  getNodePrereqIds,
   sumStrengthGrants,
   techNodeCashCost,
   type CanUnlockResult,
@@ -27,6 +28,7 @@ const REASON_STATUS: Record<UnlockBlockReason, number> = {
   "decade-locked": 400,
   "lane-locked": 409,
   "prereq-missing": 409,
+  "path-locked": 409,
   "already-owned": 409,
   "insufficient-rd": 402,
   "insufficient-cash": 402,
@@ -37,6 +39,7 @@ const REASON_MESSAGE: Record<UnlockBlockReason, string> = {
   "decade-locked": "That decade's technology is not yet available.",
   "lane-locked": "You have committed to the other track this decade — abandon it first.",
   "prereq-missing": "Unlock the preceding technology in this branch first.",
+  "path-locked": "You have committed to a different specialization this decade — abandon it first.",
   "already-owned": "This technology is already unlocked.",
   "insufficient-rd": "Not enough R&D points to unlock this technology.",
   "insufficient-cash": "Not enough cash to unlock this technology.",
@@ -91,7 +94,8 @@ export async function unlockTechNode(
 
   const committing = getCommittedLane(corpView, node.decadeId) === undefined;
   const laneKey = `techDecadeLane.${node.decadeId}`;
-  const prereqId = getNodePrereqId(node);
+  const prereqIds = getNodePrereqIds(node);
+  const rivalIds = getExclusiveRivalIds(corporation.type, node);
 
   // One-time strength grants applied here (not recomputed each turn).
   const grants = sumStrengthGrants(node.effects);
@@ -110,10 +114,12 @@ export async function unlockTechNode(
       _id: corporation._id,
       rdScore: { $gte: node.cost },
       liquidCapital: { $gte: cashCost },
-      // Must not already own this node, and (tree order) must own its prerequisite.
+      // Must not already own this node, must own at least ONE prerequisite
+      // (any-of), and must not own a rival from this node's exclusive group.
       $and: [
         { unlockedTechNodeIds: { $ne: nodeId } },
-        ...(prereqId ? [{ unlockedTechNodeIds: prereqId }] : []),
+        ...(prereqIds.length > 0 ? [{ unlockedTechNodeIds: { $in: prereqIds } }] : []),
+        ...(rivalIds.length > 0 ? [{ unlockedTechNodeIds: { $nin: rivalIds } }] : []),
       ],
       // Lane guard: decade must be uncommitted OR already on this node's lane.
       $or: [{ [laneKey]: { $exists: false } }, { [laneKey]: node.lane }],

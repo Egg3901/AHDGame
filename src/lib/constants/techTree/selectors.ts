@@ -113,6 +113,7 @@ export type UnlockBlockReason =
   | "decade-locked"
   | "lane-locked"
   | "prereq-missing"
+  | "path-locked"
   | "already-owned"
   | "insufficient-rd"
   | "insufficient-cash";
@@ -166,6 +167,28 @@ export function getNodePrereqId(node: TechTreeNode): string | null {
   return node.id.replace(/-\d+$/, `-${parentSlot}`);
 }
 
+/**
+ * Prerequisite ids for a node, ANY of which satisfies the requirement. v3
+ * nodes (slots 10+) carry explicit `prereqIds`; legacy slots 1–9 derive from
+ * the fixed slot topology.
+ */
+export function getNodePrereqIds(node: TechTreeNode): string[] {
+  if (node.prereqIds && node.prereqIds.length > 0) return node.prereqIds;
+  const legacy = getNodePrereqId(node);
+  return legacy ? [legacy] : [];
+}
+
+/**
+ * Ids of the OTHER members of a node's exclusive group within the same tree
+ * (empty when the node has no group). Owning any of these path-locks `node`.
+ */
+export function getExclusiveRivalIds(sectorType: CorporationType, node: TechTreeNode): string[] {
+  if (!node.exclusiveGroup) return [];
+  return getTreeForType(sectorType)
+    .filter((n) => n.exclusiveGroup === node.exclusiveGroup && n.id !== node.id)
+    .map((n) => n.id);
+}
+
 export type CanUnlockResult =
   { ok: true; node: TechTreeNode } | { ok: false; reason: UnlockBlockReason; node?: TechTreeNode };
 
@@ -201,10 +224,16 @@ export function canUnlock(
   if (committed && committed !== node.lane) {
     return { ok: false, reason: "lane-locked", node };
   }
-  // Tree order: the parent node in this lane must be owned first.
-  const prereqId = getNodePrereqId(node);
-  if (prereqId && !(corp.unlockedTechNodeIds ?? []).includes(prereqId)) {
+  // Tree order: at least one prerequisite in this lane must be owned first.
+  const owned = corp.unlockedTechNodeIds ?? [];
+  const prereqIds = getNodePrereqIds(node);
+  if (prereqIds.length > 0 && !prereqIds.some((id) => owned.includes(id))) {
     return { ok: false, reason: "prereq-missing", node };
+  }
+  // v3 specializations: owning a rival in the exclusive group locks this one.
+  const rivals = getExclusiveRivalIds(corp.type, node);
+  if (rivals.some((id) => owned.includes(id))) {
+    return { ok: false, reason: "path-locked", node };
   }
   if (funds.rdScore < node.cost) {
     return { ok: false, reason: "insufficient-rd", node };
@@ -226,7 +255,10 @@ export function autoGrantedNodeIds(corpType: CorporationType, currentYear: numbe
   const researchable = new Set(getResearchableDecades(currentYear).map((d) => d.id));
   const ids: string[] = [];
   for (const node of getTreeForType(corpType)) {
-    if (!researchable.has(node.decadeId)) ids.push(node.id);
+    // v3: only the BASELINE tree (slots 1–9) is granted for passed decades.
+    // Specializations and capstones were choices; history does not hand them
+    // out free, and granting all three would violate their mutual exclusivity.
+    if (!researchable.has(node.decadeId) && node.slot <= 9) ids.push(node.id);
   }
   return ids;
 }
