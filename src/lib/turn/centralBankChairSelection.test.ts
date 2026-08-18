@@ -96,6 +96,27 @@ describe("isNominationWindowOpen", () => {
       isNominationWindowOpen({ chairCharacterId: null, chairTermExpiresAtTurn: 110 }, 100)
     ).toBe(true);
   });
+
+  it("returns true for an NPP-chaired bank mid-term", () => {
+    // A technocrat is a caretaker, not an incumbent. Prod shape: every bank sat
+    // at chairMode npp with a term running to 411, which held the window shut
+    // until turn 363 and left countries with no way to put a name forward.
+    expect(
+      isNominationWindowOpen(
+        { chairCharacterId: null, chairTermExpiresAtTurn: 411, chairMode: "npp" },
+        221
+      )
+    ).toBe(true);
+  });
+
+  it("still returns false for a seated player chair mid-term", () => {
+    expect(
+      isNominationWindowOpen(
+        { chairCharacterId: new ObjectId(), chairTermExpiresAtTurn: 411, chairMode: "character" },
+        221
+      )
+    ).toBe(false);
+  });
 });
 
 describe("constants", () => {
