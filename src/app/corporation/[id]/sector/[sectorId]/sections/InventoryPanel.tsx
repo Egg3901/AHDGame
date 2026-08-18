@@ -82,6 +82,8 @@ export default function InventoryPanel({
             type="button"
             onClick={toggle}
             disabled={saving}
+            aria-pressed={enabled}
+            aria-busy={saving}
             className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
               enabled
                 ? "border-primary/40 bg-primary/10 text-foreground"
@@ -92,12 +94,17 @@ export default function InventoryPanel({
           </button>
         )}
       </div>
-      {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-2 text-xs text-red-500">
+          {error}
+        </p>
+      )}
       {inventory.heldUnits > 0 && (
         <div className="mt-3 text-xs text-muted">
           <p>
             Holding <span className="font-medium text-foreground">{fmt(inventory.heldUnits)}</span>{" "}
-            units
+            units worth{" "}
+            <span className="font-medium text-foreground">₳ {fmt(inventory.heldValueAnchor)}</span>
             {inventory.drainedUnits > 0 && <> · sold {fmt(inventory.drainedUnits)} last turn</>}
             {inventory.spoiledUnits > 0 && <> · spoiled {fmt(inventory.spoiledUnits)} last turn</>}
           </p>
