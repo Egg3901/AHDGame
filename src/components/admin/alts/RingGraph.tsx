@@ -1,19 +1,17 @@
 "use client";
 
-// RingGraph (plan §4.8): a node-link diagram of the cluster, hand-rolled in
-// SVG (no external library — CSP on the admin app forbids remote/CDN scripts).
-// Nodes are members on a fixed orbit (operator at the hub), colored by role
-// with a surface ring for separation; a banned member gets a dashed danger
-// halo (red is reserved for danger, never a role). Edges are pairwise links,
-// thickness ∝ link confidence and colored on the same severity scale as the
-// meter. Clicking an edge (or a node) selects the pair so the EvidencePanel
-// can focus its evidence; the selected edge shows its % inline.
+// RingGraph: node-link diagram of the cluster. Edges stay SVG; nodes are
+// in-game PFPs with names that open the suspect peek (username / email / IP /
+// cookie / ban / profile). Clicking a portrait still selects its strongest
+// incident edge for the evidence panel.
 
 import { useMemo } from "react";
+import { SuspectMugshot } from "./SuspectPortrait";
+import { SuspectNameButton } from "./SuspectPeek";
 import {
   confidenceHex,
   formatPct,
-  memberDisplayName,
+  memberInGameName,
   pairKey,
   ROLE_HEX,
   ROLE_LABEL,
@@ -37,9 +35,7 @@ interface Node {
 }
 
 const WIDTH = 360;
-const HEIGHT = 320;
-const NODE_R = 15;
-const HUB_R = 18;
+const HEIGHT = 360;
 
 export function RingGraph({
   members,
@@ -49,14 +45,12 @@ export function RingGraph({
   onSelectPair,
 }: RingGraphProps) {
   const hasOperator = Boolean(operatorId && members.some((m) => m.userId === operatorId));
-  const orbitR = Math.min(WIDTH, HEIGHT) / 2 - NODE_R - 30;
+  const orbitR = Math.min(WIDTH, HEIGHT) / 2 - 58;
 
   const nodes = useMemo<Node[]>(() => {
     const cx = WIDTH / 2;
     const cy = HEIGHT / 2;
 
-    // Operator (if any) sits at the hub; everyone else rings around it. With no
-    // operator, all members sit evenly on the circle.
     const ring = members.filter((m) => !(hasOperator && m.userId === operatorId));
     const placed: Node[] = ring.map((member, i) => {
       const angle = (i / Math.max(1, ring.length)) * 2 * Math.PI - Math.PI / 2;
@@ -84,177 +78,132 @@ export function RingGraph({
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto rounded-lg border border-card-border/70 bg-card-muted/60">
-        <svg
-          viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-          className="mx-auto block h-auto w-full max-w-[440px]"
-          role="img"
-          aria-label={`Ring graph of ${members.length} linked accounts`}
+        <div
+          className="relative mx-auto w-full max-w-[440px]"
+          style={{ aspectRatio: `${WIDTH} / ${HEIGHT}` }}
         >
-          <defs>
-            <radialGradient id="ring-graph-vignette" cx="50%" cy="46%" r="62%">
-              <stop offset="0%" stopColor="var(--card-elevated)" stopOpacity="0.55" />
-              <stop offset="100%" stopColor="var(--card-elevated)" stopOpacity="0" />
-            </radialGradient>
-          </defs>
+          <svg
+            viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+            className="absolute inset-0 h-full w-full"
+            role="img"
+            aria-label={`Ring graph of ${members.length} linked accounts`}
+          >
+            <defs>
+              <radialGradient id="ring-graph-vignette" cx="50%" cy="46%" r="62%">
+                <stop offset="0%" stopColor="var(--card-elevated)" stopOpacity="0.55" />
+                <stop offset="100%" stopColor="var(--card-elevated)" stopOpacity="0" />
+              </radialGradient>
+            </defs>
 
-          {/* Ambient center glow + the orbit the members sit on. */}
-          <rect width={WIDTH} height={HEIGHT} fill="url(#ring-graph-vignette)" />
-          <circle
-            cx={WIDTH / 2}
-            cy={HEIGHT / 2}
-            r={orbitR}
-            fill="none"
-            stroke="var(--card-border)"
-            strokeWidth={1}
-            strokeDasharray="2 6"
-            strokeLinecap="round"
-            opacity={0.7}
-          />
+            <rect width={WIDTH} height={HEIGHT} fill="url(#ring-graph-vignette)" />
+            <circle
+              cx={WIDTH / 2}
+              cy={HEIGHT / 2}
+              r={orbitR}
+              fill="none"
+              stroke="var(--card-border)"
+              strokeWidth={1}
+              strokeDasharray="2 6"
+              strokeLinecap="round"
+              opacity={0.7}
+            />
 
-          {/* Edges first, so nodes sit on top */}
-          {links.map((link, i) => {
-            const a = nodeById.get(link.userA);
-            const b = nodeById.get(link.userB);
-            if (!a || !b) return null;
-            const key = pairKey(link.userA, link.userB);
-            const isSelected = selectedPair === key;
-            const dimmed = Boolean(selectedPair) && !isSelected;
-            const width = 1.5 + (link.confidence / maxConfidence) * 4.5;
-            const color = confidenceHex(link.confidence);
-            const mx = (a.x + b.x) / 2;
-            const my = (a.y + b.y) / 2;
-            return (
-              <g
-                key={`edge-${i}`}
-                className="cursor-pointer opacity-90 transition-opacity hover:opacity-100 motion-reduce:transition-none"
-                onClick={() => onSelectPair?.(key)}
-              >
-                {/* Invisible fat hit-target for easy clicking */}
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={14} />
-                <line
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                  stroke={color}
-                  strokeWidth={isSelected ? width + 1.5 : width}
-                  strokeOpacity={isSelected ? 0.95 : dimmed ? 0.18 : 0.5}
-                  strokeLinecap="round"
-                  style={isSelected ? { filter: `drop-shadow(0 0 4px ${color}66)` } : undefined}
-                />
-                <title>{`${memberDisplayName(a.member.name, a.id)} ↔ ${memberDisplayName(b.member.name, b.id)} — ${formatPct(link.confidence)} link confidence`}</title>
-                {/* Inline % on the selected edge — the evidence panel's anchor. */}
-                {isSelected && (
-                  <text
-                    x={mx}
-                    y={my - 7}
-                    textAnchor="middle"
-                    fontSize={10}
-                    fontWeight={700}
-                    fill={color}
-                    stroke="var(--card)"
-                    strokeWidth={3}
-                    paintOrder="stroke"
-                    className="pointer-events-none tabular-nums"
-                  >
-                    {formatPct(link.confidence)}
-                  </text>
-                )}
-              </g>
-            );
-          })}
+            {links.map((link, i) => {
+              const a = nodeById.get(link.userA);
+              const b = nodeById.get(link.userB);
+              if (!a || !b) return null;
+              const key = pairKey(link.userA, link.userB);
+              const isSelected = selectedPair === key;
+              const dimmed = Boolean(selectedPair) && !isSelected;
+              const width = 1.5 + (link.confidence / maxConfidence) * 4.5;
+              const color = confidenceHex(link.confidence);
+              const mx = (a.x + b.x) / 2;
+              const my = (a.y + b.y) / 2;
+              return (
+                <g
+                  key={`edge-${i}`}
+                  className="cursor-pointer opacity-90 transition-opacity hover:opacity-100 motion-reduce:transition-none"
+                  onClick={() => onSelectPair?.(key)}
+                >
+                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={14} />
+                  <line
+                    x1={a.x}
+                    y1={a.y}
+                    x2={b.x}
+                    y2={b.y}
+                    stroke={color}
+                    strokeWidth={isSelected ? width + 1.5 : width}
+                    strokeOpacity={isSelected ? 0.95 : dimmed ? 0.18 : 0.5}
+                    strokeLinecap="round"
+                    style={isSelected ? { filter: `drop-shadow(0 0 4px ${color}66)` } : undefined}
+                  />
+                  <title>{`${memberInGameName(a.member)} ↔ ${memberInGameName(b.member)} — ${formatPct(link.confidence)} link confidence`}</title>
+                  {isSelected && (
+                    <text
+                      x={mx}
+                      y={my - 7}
+                      textAnchor="middle"
+                      fontSize={10}
+                      fontWeight={700}
+                      fill={color}
+                      stroke="var(--card)"
+                      strokeWidth={3}
+                      paintOrder="stroke"
+                      className="pointer-events-none tabular-nums"
+                    >
+                      {formatPct(link.confidence)}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
 
-          {/* Nodes */}
           {nodes.map((node) => {
             const { member } = node;
             const isHub = hasOperator && member.userId === operatorId;
-            const r = isHub ? HUB_R : NODE_R;
-            const fill = ROLE_HEX[member.role];
             const inSelection = Boolean(
               selectedPair && selectedPair.split("_").includes(member.userId)
             );
             const dimmed = Boolean(selectedPair) && !inSelection;
             return (
-              <g
+              <div
                 key={`node-${node.id}`}
-                className="cursor-pointer transition-opacity motion-reduce:transition-none"
-                opacity={dimmed ? 0.45 : 1}
-                onClick={() =>
-                  onSelectPair?.(
-                    // Clicking a node selects its strongest incident edge.
-                    strongestPairFor(node.id, links)
-                  )
-                }
+                className="absolute flex flex-col items-center"
+                style={{
+                  left: `${(node.x / WIDTH) * 100}%`,
+                  top: `${(node.y / HEIGHT) * 100}%`,
+                  transform: "translate(-50%, -50%)",
+                  opacity: dimmed ? 0.45 : 1,
+                }}
               >
-                <title>
-                  {`${memberDisplayName(member.name, member.userId)} — ${ROLE_LABEL[member.role]}${member.banned ? " · BANNED" : ""}`}
-                </title>
-                {/* Banned: dashed danger halo, distinct from any role color. */}
-                {member.banned && (
-                  <circle
-                    cx={node.x}
-                    cy={node.y}
-                    r={r + 4.5}
-                    fill="none"
-                    stroke="var(--error)"
-                    strokeWidth={1.5}
-                    strokeDasharray="3 3"
-                  />
-                )}
-                {/* Selection halo */}
-                {inSelection && (
-                  <circle
-                    cx={node.x}
-                    cy={node.y}
-                    r={r + 3}
-                    fill="none"
-                    stroke={fill}
-                    strokeOpacity={0.45}
-                    strokeWidth={2}
-                  />
-                )}
-                <circle
-                  cx={node.x}
-                  cy={node.y}
-                  r={r}
-                  fill={fill}
-                  fillOpacity={inSelection ? 1 : 0.9}
-                  stroke="var(--background)"
-                  strokeWidth={2}
-                />
-                {/* Hub keel: marks the operator without extra chrome. */}
-                {isHub && (
-                  <circle
-                    cx={node.x}
-                    cy={node.y}
-                    r={r - 5}
-                    fill="none"
-                    stroke="var(--background)"
-                    strokeOpacity={0.55}
-                    strokeWidth={1.5}
-                  />
-                )}
-                <text
-                  x={node.x}
-                  y={node.y + r + 14}
-                  textAnchor="middle"
-                  fontSize={10}
-                  fontWeight={isHub ? 600 : 500}
-                  fill="var(--foreground)"
-                  stroke="var(--card)"
-                  strokeWidth={3}
-                  paintOrder="stroke"
-                  opacity={member.banned ? 0.75 : 0.92}
+                <button
+                  type="button"
+                  onClick={() => onSelectPair?.(strongestPairFor(node.id, links))}
+                  className="rounded-full"
+                  style={
+                    inSelection ? { boxShadow: `0 0 0 2px ${ROLE_HEX[member.role]}` } : undefined
+                  }
+                  title={`${memberInGameName(member)} — ${ROLE_LABEL[member.role]}${member.banned ? " · BANNED" : ""}`}
                 >
-                  {truncate(memberDisplayName(member.name, member.userId), 13)}
-                </text>
-              </g>
+                  <SuspectMugshot
+                    member={member}
+                    size={isHub ? "h-12 w-12" : "h-10 w-10"}
+                    rounded="rounded-full"
+                  />
+                </button>
+                <div className="absolute left-1/2 top-full mt-1 w-24 -translate-x-1/2 text-center">
+                  <SuspectNameButton
+                    member={member}
+                    className="text-[11px] font-semibold text-primary hover:underline"
+                  />
+                </div>
+              </div>
             );
           })}
-        </svg>
+        </div>
       </div>
 
-      {/* Legend — identity is never color-alone. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted">
         <LegendSwatch color={ROLE_HEX.operator} label="Operator" />
         <LegendSwatch color={ROLE_HEX.burner} label="Burner" />
@@ -288,10 +237,6 @@ function LegendSwatch({ color, label }: { color: string; label: string }) {
       {label}
     </span>
   );
-}
-
-function truncate(s: string, n: number): string {
-  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
 }
 
 function strongestPairFor(userId: string, links: ClusterLink[]): string | null {
