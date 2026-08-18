@@ -689,6 +689,26 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
         </div>
       )}
 
+      {viewerChar?.countryId === "US" && (
+        <div className="mb-4 rounded-xl border border-card-border bg-card p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold">State Organization</h3>
+              <p className="mt-1 text-xs text-muted">
+                Per-state infrastructure you build across cycles. Maxing a state is +25% primary
+                vote weight there, independent of party-wide org.
+              </p>
+            </div>
+            <Link
+              href={`/elections/${election._id.toString()}#state-org`}
+              className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
+            >
+              Open builder
+            </Link>
+          </div>
+        </div>
+      )}
+
       <PrimaryMapWithLinks
         partyId={partyId}
         stateData={stateData}

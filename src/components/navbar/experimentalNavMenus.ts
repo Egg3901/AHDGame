@@ -100,6 +100,11 @@ export function buildElectionsSubNavItems(countryId: CountryId): ExperimentalSub
         label: "Candidate directory",
         labelKey: "menus.elections.candidateDirectory",
         href: "/politicians",
+      },
+      {
+        label: "Political Operations",
+        labelKey: "menus.elections.politicalOperations",
+        href: "/political-operations",
       }
     );
   } else {

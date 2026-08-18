@@ -76,6 +76,8 @@ Don't go straight for Senate. A State Senate or House seat is far more achievabl
 
 The party organization (Org) stat for your home state affects two things: your vote total in general elections (0.5x to 1.0x scalar) and your presidential primary score (up to 25 points). If your party's home-state org is low, every candidate in that party is penalized. Coordinate with your party chair to invest in org.
 
+Presidential races also have **your own** per-state organization, built on the Presidential Election page. That is not party org. Maxing a state (level 10) is +25% primary vote weight there. Start investing before you file.
+
 ---
 
 ## 11. Infamy is permanent (and costs you)
