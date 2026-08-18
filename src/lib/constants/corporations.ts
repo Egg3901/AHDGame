@@ -145,6 +145,8 @@ export const SHARE_STRUCTURE_COOLDOWN_TURNS = 48;
  * shares within a trailing CEO_SELF_ACQUISITION_WINDOW_TURNS window, summed
  * across public-float buys and purchases from other characters (self-issuance
  * excluded). Throttles the share pump-dump cycle. Surfaced to players.
+ * Private corporations are exempt: they have no public float, and a sitting
+ * CEO buying a controlling private block is a transfer, not a market pump.
  */
 export const CEO_SELF_ACQUISITION_CAP_FRACTION = 0.1;
 export const CEO_SELF_ACQUISITION_WINDOW_TURNS = 120;

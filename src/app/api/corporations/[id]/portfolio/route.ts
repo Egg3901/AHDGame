@@ -5,6 +5,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { getAuthUser } from "@/lib/auth";
 import { shouldRedactCorporation } from "@/lib/corporations/redaction";
+import { loadReservedPositionsPlacedBy } from "@/lib/corporations/reservedCorporateHoldings";
 import type { Bond, Corporation, CorporationPortfolioHistory, Shareholder } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE, BOND_MATURITY_LABELS } from "@/lib/db/types/bond";
 import type { BondMaturityTurns } from "@/lib/db/types/bond";
@@ -74,7 +75,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       });
     }
 
-    const [heldCorps, activeBonds, fxByCurrency] = await Promise.all([
+    const [heldCorps, activeBonds, fxByCurrency, reservedPlaced] = await Promise.all([
       db
         .collection<Corporation>("corporations")
         .find({ "shareholders.corporationId": corporation._id })
@@ -98,24 +99,53 @@ export async function GET(request: Request, { params }: RouteParams) {
         })
         .toArray(),
       loadFxRatesByCurrency(db),
+      loadReservedPositionsPlacedBy(db, corporation._id),
     ]);
 
     let totalStockValueAnchor = 0;
     let totalUnrealizedPnlAnchor = 0;
+
+    const reservedByTarget = new Map(
+      reservedPlaced.map((r) => [r.targetCorpId.toString(), r.shares])
+    );
+    const heldById = new Map(heldCorps.map((c) => [c._id.toString(), c]));
+    const missingReservedIds = reservedPlaced
+      .map((r) => r.targetCorpId)
+      .filter((id) => !heldById.has(id.toString()));
+    if (missingReservedIds.length > 0) {
+      const extraHeld = await db
+        .collection<Corporation>("corporations")
+        .find({ _id: { $in: missingReservedIds } })
+        .project({
+          _id: 1,
+          name: 1,
+          sequentialId: 1,
+          sharePrice: 1,
+          shareholders: 1,
+          logoUrl: 1,
+          brandColor: 1,
+          liquidCurrencyCode: 1,
+          countryId: 1,
+        })
+        .toArray();
+      heldCorps.push(...extraHeld);
+    }
 
     const stockHoldings = heldCorps
       .map((heldCorp) => {
         const entry = (heldCorp.shareholders as Shareholder[] | undefined)?.find(
           (sh) => sh.corporationId?.toString() === corporation._id.toString()
         );
-        if (!entry || entry.shares <= 0) return null;
+        const reservedShares = reservedByTarget.get(heldCorp._id.toString()) ?? 0;
+        const shares = (entry?.shares ?? 0) + reservedShares;
+        if (shares <= 0) return null;
 
         const sharePrice = getPublicShareQuote(heldCorp);
-        const totalValue = Math.round(entry.shares * sharePrice * 100) / 100;
-        const avgCostPerShare = entry.avgCostPerShare ?? null;
+        const totalValue = Math.round(shares * sharePrice * 100) / 100;
+        const avgCostPerShare = entry?.avgCostPerShare ?? null;
         const unrealizedPnl =
           avgCostPerShare !== null
-            ? Math.round((sharePrice - avgCostPerShare) * entry.shares * 100) / 100
+            ? Math.round((sharePrice - avgCostPerShare) * shares * 100) / 100
             : null;
         const unrealizedPnlPct =
           avgCostPerShare !== null && avgCostPerShare > 0
@@ -145,7 +175,7 @@ export async function GET(request: Request, { params }: RouteParams) {
           logoUrl: heldCorp.logoUrl ?? null,
           brandColor: heldCorp.brandColor ?? null,
           currencyCode: heldCurrency,
-          shares: entry.shares,
+          shares,
           avgCostPerShare,
           sharePrice: Math.round(sharePrice * 100) / 100,
           totalValue,

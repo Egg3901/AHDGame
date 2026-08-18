@@ -54,6 +54,7 @@ function makeDb(parentLiquid = 100_000_000) {
           liquidCapital: parentLiquid,
           liquidCurrencyCode: "USD",
         }),
+        find: vi.fn().mockReturnValue({ toArray: async () => [] }),
         updateOne,
       })),
     } as unknown as Db,

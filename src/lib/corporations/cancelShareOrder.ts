@@ -1,4 +1,4 @@
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import type { Character, Corporation, ShareOrder } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -19,6 +19,26 @@ import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { cancelFundShareOrder } from "@/lib/indexFunds/fundShareOrders";
 
 type CancelResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * True when `actorCharacterId` may cancel this order: they authorized it, or
+ * they are the sitting CEO of the corporation that placed it.
+ */
+export function actorMayCancelShareOrder(
+  order: Pick<ShareOrder, "characterId" | "placerCorporationId">,
+  actorCharacterId: ObjectId,
+  placerCorp: Pick<Corporation, "ceoId" | "ceoVacant"> | null | undefined
+): boolean {
+  if (order.characterId?.equals(actorCharacterId)) return true;
+  if (
+    order.placerCorporationId &&
+    placerCorp?.ceoId?.equals(actorCharacterId) &&
+    placerCorp.ceoVacant !== true
+  ) {
+    return true;
+  }
+  return false;
+}
 
 async function restoreOrderToOpen(db: Db, orderId: ShareOrder["_id"]) {
   await db

@@ -1,6 +1,6 @@
 import type { Db, ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
-import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
+import { resolveControllingCorporateParent } from "@/lib/corporations/reservedCorporateHoldings";
 import {
   anchorToCorpLiquidCapital,
   corpLiquidCapitalToAnchor,
@@ -47,7 +47,7 @@ export async function capitalInjection(
 
   if (!Number.isFinite(amount) || amount <= 0) return fail("Injection amount must be positive.");
 
-  const controllingParent = getControllingCorporateParent(sub);
+  const controllingParent = await resolveControllingCorporateParent(db, sub);
   if (!controllingParent) return fail("This corporation is no longer a subsidiary.", 409);
   const parent = await db
     .collection<Corporation>("corporations")
