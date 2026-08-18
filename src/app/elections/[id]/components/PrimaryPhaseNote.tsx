@@ -58,7 +58,7 @@ export function PrimaryPhaseNote({
         </summary>
         <p className="mt-1.5 text-[11px] leading-relaxed text-muted/80">
           {isUSPresidential
-            ? "Primary share = candidate score ÷ total in that party. Pre-stagger projections use policy alignment (40) + party influence (30) + national influence (20) + favorability (10). Once the final 6 turns begin, awarded delegates stay locked while uncalled states keep projecting forward."
+            ? "Primary share = candidate score ÷ total in that party. Pre-stagger projections use policy alignment (40) + party influence (30) + national influence (20) + favorability (10). Once the final 6 turns begin, awarded delegates stay locked while uncalled states keep projecting forward. Your per-state organization (State Organization on this page) multiplies vote weight in that state, up to +25% at level 10, separate from party-wide org."
             : `Primary share = candidate score ÷ total in that party. Score = party alignment (40, split into state-lean 25 + party 15 where available) + favorability (35) + in-region influence (25). NPP opponents take a 25% score penalty against players.`}
         </p>
       </details>

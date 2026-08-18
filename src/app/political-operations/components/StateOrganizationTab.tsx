@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { PrimaryElectoralMap, type PrimaryStateData } from "@/components/PrimaryElectoralMap";
 import { US_STATE_ID_NAME_PAIRS } from "@/lib/constants/usStateNames";
@@ -64,7 +65,12 @@ function bonusPct(level: number): number {
   return Math.round((level / STATE_ORG_MAX_LEVEL) * MAX_STATE_ORG_BONUS_PRIMARY * 100);
 }
 
-export function StateOrganizationTab() {
+export function StateOrganizationTab({
+  showHubLink = false,
+}: {
+  /** When true, link out to the dedicated Political Operations hub. */
+  showHubLink?: boolean;
+} = {}) {
   const [rows, setRows] = useState<StateOrgRow[]>([]);
   const [homeState, setHomeState] = useState<string | null>(null);
   const [partyHex, setPartyHex] = useState<string>("#3B82F6");
@@ -72,11 +78,22 @@ export function StateOrganizationTab() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedState, setSelectedState] = useState<string | null>(null);
+  const [unauthorized, setUnauthorized] = useState(false);
 
   useEffect(() => {
     fetch("/api/political-operations/state-org/list")
-      .then((r) => r.json())
-      .then((d: ListResponse) => {
+      .then(async (r) => {
+        if (r.status === 401 || r.status === 403) {
+          setUnauthorized(true);
+          setLoading(false);
+          return;
+        }
+        if (!r.ok) {
+          setError("Failed to load state organization");
+          setLoading(false);
+          return;
+        }
+        const d: ListResponse = await r.json();
         setRows(d.states ?? []);
         setHomeState(d.homeState ?? null);
         if (d.partyHex) setPartyHex(d.partyHex);
@@ -139,6 +156,8 @@ export function StateOrganizationTab() {
     }
   }
 
+  if (unauthorized) return null;
+
   if (loading) {
     return <div className="p-4 text-muted">Loading state organization...</div>;
   }
@@ -150,7 +169,17 @@ export function StateOrganizationTab() {
   return (
     <div>
       <div className="mb-4 rounded-lg border border-card-border bg-card p-4">
-        <h3 className="font-medium">State Organization</h3>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="font-medium">State Organization</h3>
+          {showHubLink && (
+            <Link
+              href="/political-operations"
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Political Operations hub →
+            </Link>
+          )}
+        </div>
         <p className="mt-1 text-sm text-muted">
           Build per-state infrastructure for the next presidential primary. Costs{" "}
           {STATE_ORG_COST_ACTIONS} actions + ${STATE_ORG_COST_FUNDS.toLocaleString("en-US")} per +1

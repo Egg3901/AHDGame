@@ -178,6 +178,7 @@ No seat sits vacant. Mechanics:
 ## Presidential election specifics
 
 - **National race.** Any home state can run.
+- **State organization (character org):** Separate from party-wide state org. Build it on the Presidential Election page (the State Organization map) or at Political Operations. Each +1 level costs 3 actions + $50,000, capped at level 10, at most one level per state per turn. Fully built, a state is worth **+25% primary vote weight** and **+15% general vote weight** there. Levels drop to 25% after the presidential general resolves, so investment carries across cycles. This is the ground-game loop for a presidential run; party org is a different lever the chair controls.
 - **Electoral College** (538 votes, 270 to win). ME and NE split by congressional district (\`UNIT_LEAN\` modifiers).
 - **Independent penalty:** 0.3x vote share on the general path (70% reduction).
 - **Running mate (VP):** After the primary, each nominee picks a VP. Cannot be the current President; cannot be the same person.
