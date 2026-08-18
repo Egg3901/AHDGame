@@ -4,11 +4,19 @@
  */
 export function contrastTextColor(hex: string): string {
   const clean = hex.replace("#", "");
-  if (clean.length !== 6) return "#ffffff";
+  // Expand 3-digit shorthand ("fff" -> "ffffff") so CSS shorthand colors work.
+  const expanded =
+    clean.length === 3
+      ? clean
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : clean;
+  if (!/^[0-9a-fA-F]{6}$/.test(expanded)) return "#ffffff";
 
-  const r = parseInt(clean.slice(0, 2), 16) / 255;
-  const g = parseInt(clean.slice(2, 4), 16) / 255;
-  const b = parseInt(clean.slice(4, 6), 16) / 255;
+  const r = parseInt(expanded.slice(0, 2), 16) / 255;
+  const g = parseInt(expanded.slice(2, 4), 16) / 255;
+  const b = parseInt(expanded.slice(4, 6), 16) / 255;
 
   const toLinear = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
 
