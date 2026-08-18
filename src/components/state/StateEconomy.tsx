@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { CAPACITY_UNIT_LABEL, formatUnits } from "@/components/corporation/plantsPresentation";
@@ -365,40 +365,41 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
         topSectorLabel={topSector?.label ?? null}
       />
 
-      {/* KPI summary strip — all-sector snapshot at a glance */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* Headline stats — one thin strip summarising the whole state economy.
+          Everything below narrows to a single sector; this stays all-sector. */}
+      <div className="flex items-stretch divide-x divide-card-border overflow-x-auto rounded-xl border border-card-border bg-card">
         {/* Total Market — sum across all sectors */}
-        <div className="rounded-xl border border-card-border bg-card p-3.5">
+        <div className="flex min-w-max flex-1 flex-col justify-center px-4 py-2.5">
           <Tooltip content={marketCurrencyNote}>
-            <span className="block w-fit cursor-help border-b border-dashed border-card-border/70 text-[10px] uppercase tracking-widest text-muted font-medium">
+            <span className="block w-fit cursor-help border-b border-dashed border-card-border/70 text-[10px] font-medium uppercase tracking-widest text-muted">
               Total Market
             </span>
           </Tooltip>
-          <span className="mt-1 block text-sm font-bold text-foreground tabular-nums">
+          <span className="mt-0.5 text-sm font-bold text-foreground tabular-nums">
             {fmtMarketChip(data.sectors.reduce((sum, s) => sum + s.totalMarket, 0))}
             <span className="text-[10px] font-normal text-muted">/day</span>
           </span>
         </div>
         {/* Top Sector — label + market size */}
-        <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="block text-[10px] uppercase tracking-widest text-muted font-medium">
+        <div className="flex min-w-max flex-1 flex-col justify-center px-4 py-2.5">
+          <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
             Top Sector
           </span>
-          <span className="mt-1 block text-sm font-bold text-primary truncate">
+          <span className="mt-0.5 truncate text-sm font-bold text-primary">
             {topSector?.label ?? "—"}
           </span>
           {topSector && (
-            <span className="block text-[11px] font-medium text-muted tabular-nums">
+            <span className="block text-[10px] font-medium text-muted tabular-nums">
               {fmtMarketChip(topSector.totalMarket)}/day
             </span>
           )}
         </div>
         {/* Corporations — count of all player-owned corps across all sectors */}
-        <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="block text-[10px] uppercase tracking-widest text-muted font-medium">
+        <div className="flex min-w-max flex-1 flex-col justify-center px-4 py-2.5">
+          <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
             Corporations
           </span>
-          <span className="mt-1 block text-sm font-bold text-foreground tabular-nums">
+          <span className="mt-0.5 text-sm font-bold text-foreground tabular-nums">
             {data.sectors.reduce(
               (count, s) => count + s.owners.filter((o) => !o.isNpp && !o.isNatcorp).length,
               0
@@ -406,11 +407,11 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
           </span>
         </div>
         {/* Market Control — average owned % across all sectors */}
-        <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="block text-[10px] uppercase tracking-widest text-muted font-medium">
+        <div className="flex min-w-max flex-1 flex-col justify-center px-4 py-2.5">
+          <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
             Market Control
           </span>
-          <span className="mt-1 block text-sm font-bold text-success tabular-nums">
+          <span className="mt-0.5 text-sm font-bold text-success tabular-nums">
             {data.sectors.length > 0
               ? (
                   data.sectors.reduce((sum, s) => sum + (100 - s.unownedPercent), 0) /
@@ -422,50 +423,39 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
         </div>
       </div>
 
-      {/* National economic model (P7) — economic models are national only; this is
-          the nation's model that governs every region. */}
-      <EconomicModelCard countryId={countryId} />
-
-      {/* Sector board — replaces the old sector dropdown */}
-      <div className="space-y-2.5">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <span className="text-sm font-bold text-foreground">
-            Sectors <span className="font-normal text-muted">· by market size</span>
+      {/* Primary control — pick a sector; the detail below is that sector.
+          The full tile grid moved to "State sector breakdown" at the bottom
+          (both selectors drive `selectedType`, so they stay in sync). */}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-[220px] flex-1">
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-muted">
+            Sector
           </span>
-          <Link
-            href={`${stockmarketUrl(countryId)}?tab=commodities`}
-            className="text-xs text-primary hover:underline"
+          <select
+            aria-label="Select sector"
+            value={selectedType}
+            onChange={(e) => selectSector(e.target.value as CorporationType)}
+            className="w-full cursor-pointer rounded-lg border border-card-border bg-background px-3 py-2 text-sm font-medium focus:border-primary/60 focus:outline-none"
           >
-            View Commodity Prices &rarr;
-          </Link>
+            {[...data.sectors]
+              .sort((a, b) => b.totalMarket - a.totalMarket)
+              .map((s) => (
+                <option key={s.type} value={s.type}>
+                  {s.label} — {fmtMarketChip(s.totalMarket)}/day
+                </option>
+              ))}
+          </select>
         </div>
-        {/* Mobile-only selector: the full tile board is dense on phones, so
-            below sm a dropdown picks the sector and the board collapses to
-            just the selected tile (see SectorBoard's responsive classes). */}
-        <select
-          aria-label="Select sector"
-          value={selectedType}
-          onChange={(e) => selectSector(e.target.value as CorporationType)}
-          className="w-full cursor-pointer rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none sm:hidden"
+        <Link
+          href={`${stockmarketUrl(countryId)}?tab=commodities`}
+          className="pb-2 text-xs text-primary hover:underline"
         >
-          {[...data.sectors]
-            .sort((a, b) => b.totalMarket - a.totalMarket)
-            .map((s) => (
-              <option key={s.type} value={s.type}>
-                {s.label}
-              </option>
-            ))}
-        </select>
-        <SectorBoard
-          tiles={boardTiles}
-          selectedType={selectedType}
-          onSelect={selectSector}
-          formatMarket={fmtMarketChip}
-        />
+          View Commodity Prices &rarr;
+        </Link>
       </div>
 
       {/* Selected sector detail header */}
-      <div className="flex flex-wrap items-center gap-2.5 border-t border-card-border/60 pt-4">
+      <div className="flex flex-wrap items-center gap-2.5">
         <h3 className="text-lg font-bold text-foreground">{sector.label}</h3>
         {specializationBonus > 0 && (
           <span
@@ -1194,7 +1184,70 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
           </div>
         )}
       </div>
+
+      {/* Secondary detail — collapsed by default so the page stays focused on the
+          selected sector. The full sector grid still selects (kept in sync with
+          the dropdown above via `selectedType`) once expanded. */}
+      <CollapsibleSection title="State sector breakdown" subtitle="all sectors by market size">
+        <SectorBoard
+          tiles={boardTiles}
+          selectedType={selectedType}
+          onSelect={selectSector}
+          formatMarket={fmtMarketChip}
+          showAllTiles
+        />
+      </CollapsibleSection>
+
+      {/* National economic model (P7) — economic models are national only; this is
+          the nation's model that governs every region. */}
+      <CollapsibleSection title="National economic model">
+        <EconomicModelCard countryId={countryId} />
+      </CollapsibleSection>
     </div>
+  );
+}
+
+/**
+ * Collapsed-by-default section: a header button that reveals its content when
+ * opened. Native `<details>` so it works without JS and matches the disclosure
+ * pattern used elsewhere in the app. Used for the lower-priority breakdowns at
+ * the bottom of the state economy page.
+ */
+function CollapsibleSection({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className="group space-y-2.5">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl border border-card-border bg-card px-4 py-3 transition-colors hover:border-foreground/30 [&::-webkit-details-marker]:hidden">
+        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="text-sm font-bold text-foreground">{title}</span>
+          {subtitle && <span className="text-xs font-normal text-muted">· {subtitle}</span>}
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-muted">
+          <span className="group-open:hidden">Show</span>
+          <span className="hidden group-open:inline">Hide</span>
+          <svg
+            className="h-4 w-4 transition-transform group-open:rotate-180"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </span>
+      </summary>
+      <div>{children}</div>
+    </details>
   );
 }
 
