@@ -20,11 +20,46 @@ describe("getEraMonetaryBaseline", () => {
   });
 
   it("keeps 1953 anchors well below the 15% inflation model cap", () => {
-    for (const countryId of ["RU", "FR", "IT", "ES", "SE", "TR", "JP", "DE", "NG"] as CountryId[]) {
+    for (const countryId of [
+      "RU",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "JP",
+      "DE",
+      "NG",
+      "BR",
+      "FI",
+    ] as CountryId[]) {
       const era = getEraMonetaryBaseline(countryId, 1953);
       expect(era).toBeDefined();
       expect(era!.targetInflation).toBeLessThanOrEqual(5.0);
     }
+  });
+
+  it("does not treat realized high inflation as a 1953 policy target (BR, FI)", () => {
+    // Ticket 1124: BR 10%/12% was authored from Vargas realized CPI. The
+    // Taylor rule then *tried* for 10%, and the era-blind 6% FX ceiling
+    // structurally weakened BRL even on-target. Pin the policy target.
+    expect(getEraMonetaryBaseline("BR", 1953)).toMatchObject({
+      targetInflation: 4.0,
+      neutralPrimeRate: 8.0,
+    });
+    expect(getEraMonetaryBaseline("BR", 1953)!.targetInflation).toBeLessThan(6.0);
+
+    // Same class as GR: FI had no 1953 row and fell through to the late-1970s
+    // markka calibration (6.0/8.5). FY1953 seeds CPI at 2%.
+    const fi = getEraMonetaryBaseline("FI", 1953);
+    expect(fi).toBeDefined();
+    expect(fi).toMatchObject({
+      targetInflation: 2.0,
+      neutralPrimeRate: 4.5,
+      trendGdpGrowth: 4.0,
+    });
+    expect(fi!.targetInflation).toBeLessThan(MONETARY_BASELINES.FI.targetInflation);
+    expect(fi!.neutralPrimeRate).toBeLessThan(MONETARY_BASELINES.FI.neutralPrimeRate);
   });
 
   it("covers GR for 1953 and 1971 spans instead of falling through to the 1979-calibrated modern table", () => {
@@ -181,6 +216,7 @@ describe("getEraTrendGdpGrowth", () => {
     expect(getEraTrendGdpGrowth("ES", 1953)).toBe(4.5);
     expect(getEraTrendGdpGrowth("SE", 1953)).toBe(3.5);
     expect(getEraTrendGdpGrowth("TR", 1953)).toBe(6.0);
+    expect(getEraTrendGdpGrowth("FI", 1953)).toBe(4.0);
   });
 
   it("is undefined for fully-simulated countries (metric engine owns their growth)", () => {

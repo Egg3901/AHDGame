@@ -4,7 +4,8 @@ import type { PoliticalMetricId } from "./types";
  * Cabinet → political-metrics residual driver channel.
  *
  * Standing cabinet effects (tier settings, ministerial orders, advocacy, the
- * military force effect) are computed as additive per-turn StateMetrics deltas.
+ * military force effect, and sited estates) are computed as additive per-turn
+ * StateMetrics deltas.
  * For the political-pipeline countries (US/UK/RU/DD) those deltas are dropped from
  * stateMetrics; this module maps them onto political-metric families and folds them
  * into a decaying `cabinetResiduals` offset that the dynamics step adds on top of the
@@ -170,18 +171,33 @@ function bareKey(path: string): string {
   return tail[tail.length - 1] ?? path;
 }
 
-/** Map national StateMetrics deltas to political-family contributions (× weight × gain). */
+/** Map StateMetrics deltas to political-family contributions (× weight × gain). */
 export function mapCabinetDeltasToPolitical(
-  nationalDeltas: Record<string, number>
+  deltas: Record<string, number>
 ): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const [path, delta] of Object.entries(nationalDeltas)) {
+  for (const [path, delta] of Object.entries(deltas)) {
     if (!delta) continue;
     const targets = CABINET_KEY_TO_POLITICAL[bareKey(path)];
     if (!targets) continue;
     for (const { id, weight } of targets) {
       out[id] = (out[id] ?? 0) + delta * weight * CABINET_POLITICAL_GAIN;
     }
+  }
+  return out;
+}
+
+/**
+ * Map per-region StateMetrics deltas. Regions whose political mapping is empty
+ * are omitted so a snapshot does not retain stale site ids.
+ */
+export function mapRegionalCabinetDeltasToPolitical(
+  regionalDeltas: Record<string, Record<string, number>>
+): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = {};
+  for (const [regionId, deltas] of Object.entries(regionalDeltas)) {
+    const mapped = mapCabinetDeltasToPolitical(deltas);
+    if (Object.keys(mapped).length > 0) out[regionId] = mapped;
   }
   return out;
 }

@@ -25,6 +25,7 @@ import { createCrisisFromTemplate } from "./createCrisisFromTemplate";
 import { buildRegionalDisasterEffects } from "./autoDisasterSpawn";
 import { regionMatchesTags } from "./regionHazards";
 import { isTemplateAllowedInYear } from "./crisisEraWindow";
+import { refreshVietnamEscalationLevel } from "./vietnamEscalationInterface";
 
 /** Serializable description of an auto-spawnable template, for the admin tab. */
 export interface AutoCrisisCatalogEntry {
@@ -110,6 +111,11 @@ export async function processAutoCrisisSpawn(
   db: Db,
   currentTurn: number
 ): Promise<{ spawned: number }> {
+  // Pull the live Vietnam ladder into the synchronous cache the anti-war
+  // template's spawn-weight getter reads, so this turn's roll reflects this
+  // turn's war rather than whatever the process last saw.
+  await refreshVietnamEscalationLevel(db);
+
   const autoTemplates = (Object.entries(ALL_CRISIS_TEMPLATES) as [string, CrisisTemplate][]).filter(
     ([, t]) => t.autoTrigger
   );

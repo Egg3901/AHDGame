@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import "./_coldwar/theme.css";
+import { ColdWarDialHydrator } from "./_coldwar/ColdWarDialHydrator";
 
 /**
  * Wraps every Cold War section route in the themed-island shell: the `.cw-root`
@@ -21,6 +22,9 @@ export default function ConflictsLayout({ children }: { children: ReactNode }) {
         rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,500&family=IBM+Plex+Mono:wght@400;500;600;700&family=Permanent+Marker&display=swap"
       />
+      {/* Pulls the console's dials from the server into its localStorage cache,
+          whichever route in the section the player entered through. */}
+      <ColdWarDialHydrator />
       <div className="cw-root">{children}</div>
     </>
   );

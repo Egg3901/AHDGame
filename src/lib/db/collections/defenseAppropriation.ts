@@ -106,10 +106,171 @@ export async function debitAppropriation(
   const amt = Math.round(amount);
   if (!(amt > 0)) return true;
   const res = await budgets(db).updateOne(
-    { countryId, "defenseAppropriation.balance": { $gte: amt } },
+    {
+      countryId,
+      $expr: {
+        $gte: [
+          {
+            $subtract: [
+              { $ifNull: ["$defenseAppropriation.balance", 0] },
+              { $ifNull: ["$defenseAppropriation.encumbered", 0] },
+            ],
+          },
+          amt,
+        ],
+      },
+    } as never,
     { $inc: { "defenseAppropriation.balance": -amt } }
   );
   return res.modifiedCount > 0;
+}
+
+/** Appropriation not already committed to a live contract - what a new obligation must fit. */
+export function uncommittedFrom(appropriation: DefenseAppropriation): number {
+  return appropriation.balance - (appropriation.encumbered ?? 0);
+}
+
+/**
+ * Commit money to a contract without moving it.
+ *
+ * The single guard that closes the appropriation-drain exploit. `$expr` compares the balance
+ * against the encumbrance INSIDE the update, so total live obligations can never exceed the
+ * uncommitted appropriation no matter how many awards arrive at once - a read-then-write
+ * check would let two concurrent orders both pass against the same balance, which is exactly
+ * how a bounded-looking cap produces an unbounded outcome.
+ *
+ * Returns false when the money is not there. Callers MUST refuse the award; there is no
+ * overdraft for a new obligation, only for upkeep already incurred.
+ */
+export async function encumberAppropriation(
+  db: Db,
+  countryId: string,
+  amount: number
+): Promise<boolean> {
+  const amt = Math.round(amount);
+  if (!(amt > 0)) return true;
+  const res = await budgets(db).updateOne(
+    {
+      countryId,
+      $expr: {
+        $gte: [
+          {
+            $subtract: [
+              { $ifNull: ["$defenseAppropriation.balance", 0] },
+              { $ifNull: ["$defenseAppropriation.encumbered", 0] },
+            ],
+          },
+          amt,
+        ],
+      },
+    } as never,
+    { $inc: { "defenseAppropriation.encumbered": amt } }
+  );
+  return res.modifiedCount > 0;
+}
+
+/**
+ * Free a commitment nothing will be delivered against: a withdrawn offer, a declined one, a
+ * completed contract's rounding residue, or an award whose insert failed.
+ *
+ * Unguarded on the way down for the same reason `creditAppropriation` is: a release must
+ * never be refused or a cancelled contract would hold the country's budget hostage forever.
+ * Floored at zero so a double release cannot drive the encumbrance negative and mint
+ * uncommitted money out of an accounting slip.
+ */
+export async function releaseEncumbrance(db: Db, countryId: string, amount: number): Promise<void> {
+  const amt = Math.round(amount);
+  if (!(amt > 0)) return;
+  const budget = await budgets(db).findOne({ countryId });
+  const held = budget?.defenseAppropriation?.encumbered ?? 0;
+  const release = Math.min(amt, Math.max(0, held));
+  if (!(release > 0)) return;
+  await budgets(db).updateOne(
+    { countryId, "defenseAppropriation.encumbered": { $gte: release } },
+    { $inc: { "defenseAppropriation.encumbered": -release } }
+  );
+}
+
+/**
+ * Pay a delivery out of the money the contract already reserved: balance and encumbrance fall
+ * together, in one atomic write.
+ *
+ * This is what makes delivery a DRAW-DOWN rather than a fresh spend. Debiting the balance
+ * without releasing the encumbrance would double-count the same lot - the country would be
+ * charged for it and still be holding the commitment - and releasing without debiting would
+ * hand the supplier free money. Guarded on both legs so a partially-settled contract can
+ * never take more than it reserved.
+ */
+export async function settleEncumbrance(
+  db: Db,
+  countryId: string,
+  amount: number
+): Promise<boolean> {
+  const amt = Math.round(amount);
+  if (!(amt > 0)) return true;
+  const res = await budgets(db).updateOne(
+    {
+      countryId,
+      "defenseAppropriation.balance": { $gte: amt },
+      "defenseAppropriation.encumbered": { $gte: amt },
+    },
+    {
+      $inc: {
+        "defenseAppropriation.balance": -amt,
+        "defenseAppropriation.encumbered": -amt,
+      },
+    }
+  );
+  return res.modifiedCount > 0;
+}
+
+/**
+ * Draw a country's commitment down by an amount whose CASH leg has already moved.
+ *
+ * Split out from `settleEncumbrance` because the cash leg now goes through the shared money
+ * primitive (`applyMoneyMove`), which owns the idempotency key and the guarded debit but can
+ * only `$inc` one field per leg. The commitment is a MEMO account, not money: nothing enters or
+ * leaves the world when it moves, so expressing it as a money leg would mean inventing a mint
+ * or burn that lies about the money supply, and the primitive rightly refuses legs that do not
+ * net to zero.
+ *
+ * Failing here is deliberately the SAFE direction. The cash is gone and the commitment stays
+ * high, so the country temporarily believes it has less to spend than it does: it under-spends.
+ * The reverse ordering - releasing the commitment and failing to move the cash - would let the
+ * same money be committed twice, which is the exploit. Clamped at the amount actually held so a
+ * double drawdown cannot drive the commitment negative and mint uncommitted budget.
+ */
+export async function drawDownEncumbrance(
+  db: Db,
+  countryId: string,
+  amount: number
+): Promise<void> {
+  await releaseEncumbrance(db, countryId, amount);
+}
+
+/**
+ * Undo a settlement: the money goes back to the balance AND back under commitment.
+ *
+ * The mirror of `settleEncumbrance`, used when a delivery is paid for and then cannot be
+ * recorded. Restoring only the balance would quietly release the commitment on lots the
+ * contract still owes, so the next award could spend it twice.
+ */
+export async function unsettleEncumbrance(
+  db: Db,
+  countryId: string,
+  amount: number
+): Promise<void> {
+  const amt = Math.round(amount);
+  if (!(amt > 0)) return;
+  await budgets(db).updateOne(
+    { countryId },
+    {
+      $inc: {
+        "defenseAppropriation.balance": amt,
+        "defenseAppropriation.encumbered": amt,
+      },
+    }
+  );
 }
 
 /**

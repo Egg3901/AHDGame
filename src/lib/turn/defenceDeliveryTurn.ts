@@ -1,43 +1,61 @@
 import type { Db, ObjectId } from "mongodb";
-import type { CountryId } from "@/lib/constants/countries";
-import type { Corporation, CorporateSector } from "@/lib/db/types/corporation";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import type { CorporateSector, Corporation } from "@/lib/db/types/corporation";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { rawLotsFromSector, militaryDivertedShare } from "@/lib/military/arsenal";
-import { componentsForStrategy, gradeCeilingFor } from "@/lib/military/arsenalComponents";
+import {
+  canSupply,
+  resolveFillEligibility,
+  deliveredGrade,
+} from "@/lib/military/defenceFillEligibility";
+import {
+  contractLotsThisTurn,
+  defaultFactoryAllocation,
+  lotProductionCost,
+  normalizeGrade,
+  DEFENCE_FACTORY_SLOTS_PER_PLANT,
+  GRADE_PRICE_SCALE,
+} from "@/lib/military/defenceLotEconomics";
 import {
   listActiveContracts,
   advanceContract,
+  reverseContractDelivery,
   stampDeliveryCarry,
+  recordContractPayment,
+  releaseContractEncumbrance,
 } from "@/lib/db/collections/defenceContracts";
-import { depositLots, drawLots } from "@/lib/db/collections/nationalArsenal";
+import { depositLots } from "@/lib/db/collections/nationalArsenal";
 import {
-  debitAppropriation,
-  creditAppropriation,
+  drawDownEncumbrance,
   getDefenseAppropriation,
 } from "@/lib/db/collections/defenseAppropriation";
+import { applyMoneyMove, MONEY_MOVE_COLLECTION, type MoneyMoveLeg } from "@/lib/banking/moneyMove";
+import { loadDefencePriceRatios } from "@/lib/military/defencePriceRatios";
 import { emitTx } from "@/lib/financialTxLog/emit";
+
+/**
+ * Idempotency key for one contract's settlement in one turn.
+ *
+ * A contract settles at most once per turn, forever. Same key means the same move, so a re-run
+ * turn (a crashed sweep, an operator repeat, two overlapping turn processes) replays instead of
+ * paying twice.
+ */
+export function defenceDeliveryMoveKey(contractId: string, turn: number): string {
+  return `defence-delivery:${contractId}:${turn}`;
+}
+
+// `canSupply` moved to `@/lib/military/defenceFillEligibility`, which is now the ONE place
+// fill eligibility is decided - the award picker, the award route, the CEO's accept and this
+// sweep all ask it the same question so that awardable means deliverable. Re-exported because
+// several callers already import it from here.
+export { canSupply };
 
 export interface DeliveryResult {
   lots: number;
   paid: number;
   /** Contracts that could not deliver — retooled plant, foreign supplier, currency mismatch. */
   stalled: number;
-}
-
-/** Whether this corporation may be paid out of this country's appropriation at all. */
-export function canSupply(
-  corp: Pick<Corporation, "countryId" | "liquidCurrencyCode">,
-  countryId: string
-): boolean {
-  // Domestic-only is a payment-safety constraint, not a simplification. Paying a mismatched
-  // corp would move one currency into a balance denominated in another with no conversion
-  // anywhere. Missing `liquidCurrencyCode` is inferred from the corp's country — the same
-  // rule `resolveCorpLiquidCurrencyCode` uses everywhere else — not treated as USD. The USD
-  // default hid every non-US domestic plant from the award picker (ticket #1087).
-  if (corp.countryId !== countryId) return false;
-  const corpCurrency = resolveCorpLiquidCurrencyCode(corp);
-  return corpCurrency === COUNTRY_CURRENCY_MAP[countryId as CountryId];
+  /** Production cost the suppliers bore on what they delivered. */
+  productionCost: number;
 }
 
 /**
@@ -53,12 +71,14 @@ export function canSupply(
  * obligation already incurred, never for new purchases. A country that cannot pay this turn
  * takes fewer lots and the contract waits.
  *
- * **Payment precedes recording, deliberately.** Recording first would need a rollback on a
- * failed debit, and `advanceContract` clamps negatives to zero — so the "rollback" would be a
- * silent no-op that left the buyer credited with materiel they never paid for. Debiting first
- * means every failure mode is an over-payment, and an over-payment is refundable — which the
- * unwind ladder around the deposit does, reclaiming lots and refunding only what the country
- * did not end up keeping.
+ * **Recording precedes payment, and that is a REVERSAL of the old order.** It used to pay
+ * first, because `advanceContract` clamps and a rollback after a failed debit would have been a
+ * silent no-op leaving the buyer credited with materiel they never paid for. That reasoning
+ * held only while the debit was a bare guarded `$inc` that could half-land. The money now goes
+ * through `applyMoneyMove`, which claims its key before anything moves, guards the debit inside
+ * the write, and reports a refused move having touched NOTHING - so a payment that does not
+ * land leaves exactly one thing to unwind, the lot record, and `reverseContractDelivery` undoes
+ * it exactly. One unwind beats the old three-step ladder of refund, reclaim and re-bank.
  *
  * @param currentYear the world's game YEAR (not turn), which gates the tech decades a
  *   corporation may count toward its grade ceiling.
@@ -73,11 +93,25 @@ export async function applyDefenceDeliveries(
   currentTurn = 0
 ): Promise<DeliveryResult> {
   const contracts = await listActiveContracts(db, countryId);
-  if (contracts.length === 0) return { lots: 0, paid: 0, stalled: 0 };
+  if (contracts.length === 0) return { lots: 0, paid: 0, stalled: 0, productionCost: 0 };
+
+  // ONE read of each per country per turn, replacing a read inside the per-contract loop.
+  //
+  // Safe precisely because the read is only used to PLAN. Every debit is guarded inside its own
+  // write by `applyMoneyMove`, so the authoritative "is the money there" question is still
+  // asked at the moment of payment; the projection below just keeps the plan honest as the
+  // sweep spends, so a country with ten contracts does not plan all ten against the same
+  // opening balance and then have nine of them refused into the repair queue.
+  const opening = await getDefenseAppropriation(db, countryId);
+  const priceRatios = await loadDefencePriceRatios(db);
+  let projectedBalance = opening.balance;
+  let projectedEncumbered = opening.encumbered ?? 0;
+  const moveRecords = db.collection<{ _id: string }>(MONEY_MOVE_COLLECTION);
 
   let lots = 0;
   let paid = 0;
   let stalled = 0;
+  let productionCost = 0;
   /** sectorId -> lots delivered this turn, summed across that plant's contracts. */
   const divertedBySector = new Map<string, { sector: CorporateSector; lots: number }>();
 
@@ -86,32 +120,59 @@ export async function applyDefenceDeliveries(
       db.collection<CorporateSector>("corporateSectors").findOne({ _id: contract.sectorId }),
       db.collection<Corporation>("corporations").findOne({ _id: contract.corporationId }),
     ]);
-    if (!sector || !corp || !canSupply(corp, countryId)) {
+    if (!sector || !corp) {
       stalled++;
       continue;
     }
 
-    // The component is frozen at award. A CEO who re-tools mid-contract makes the order
-    // undeliverable rather than silently shipping tanks against an order for submarines.
-    const components = componentsForStrategy(sector.strategyId);
-    if (!components.includes(contract.component)) {
+    // ONE eligibility question, asked here exactly as the award picker and the routes ask it.
+    // The component check inside it is the frozen-component rule: a CEO who re-tools mid
+    // contract makes the order undeliverable rather than silently shipping tanks against an
+    // order for submarines.
+    const fill = resolveFillEligibility({
+      corp,
+      sector,
+      countryId,
+      currentYear,
+      component: contract.component,
+      assignedFactories: contract.assignedFactories,
+    });
+    const components = fill.components;
+    if (!fill.eligible) {
       stalled++;
+      await stampDeliveryCarry(
+        db,
+        contract._id as ObjectId,
+        contract.deliveryCarry ?? 0,
+        "supplier_ineligible",
+        currentTurn
+      );
       continue;
     }
 
-    // A plant serving two domains splits its output rather than delivering in full to each.
-    // Accumulate the fractional remainder across turns: a plant producing under one lot per turn
-    // used to have that output floored to zero and discarded every turn, so its contract never
-    // advanced. The carry (always < 1) is what it has banked toward its next whole lot.
-    const rawShare = rawLotsFromSector(sector) / Math.max(1, components.length);
+    // Throughput is the plant's output scaled by the production lines the CONTRACTOR assigned
+    // to this order (suggestion #281), not an even split across every contract it holds. The
+    // old even split let two contracts on one plant each take its FULL per-component share, so
+    // the plant was paid twice for materiel it built once.
+    const assigned =
+      contract.assignedFactories ??
+      defaultFactoryAllocation(components.length, DEFENCE_FACTORY_SLOTS_PER_PLANT);
+    const rawShare = contractLotsThisTurn(rawLotsFromSector(sector), assigned);
     const carried = contract.deliveryCarry ?? 0;
     const available = carried + rawShare;
     const produced = Math.floor(available);
 
     const remaining = Math.max(0, contract.lotsOrdered - contract.lotsDelivered);
-    const { balance } = await getDefenseAppropriation(db, countryId);
+    // The contract's OWN encumbrance is the funding envelope, not the whole pot: the money was
+    // committed at award and this turn draws it down. Falling back to the uncommitted balance
+    // keeps legacy contracts (awarded before encumbrance existed) delivering rather than
+    // stalling forever on a reservation they never had.
+    const funding =
+      (contract.encumberedAmount ?? 0) > 0
+        ? Math.min(contract.encumberedAmount ?? 0, Math.max(0, projectedBalance))
+        : Math.max(0, projectedBalance - projectedEncumbered);
     const affordable =
-      contract.pricePerLot > 0 ? Math.floor(Math.max(0, balance) / contract.pricePerLot) : produced;
+      contract.pricePerLot > 0 ? Math.floor(funding / contract.pricePerLot) : produced;
 
     const deliverable = Math.min(produced, remaining, affordable);
     // The carry banks everything the plant built and did NOT ship, whole lots included, capped
@@ -122,84 +183,320 @@ export async function applyDefenceDeliveries(
     // cap stops a stalled order stockpiling past what it was billed for.
     const bankFor = (shipped: number) =>
       Math.max(0, Math.min(available - shipped, remaining - shipped));
+    // Every boundary now names itself. A contract that ships nothing must still say why, or
+    // the CEO is back to watching a number sit still with no way to tell scarcity from a bug.
+    const reasonFor = (shipped: number) => {
+      if (available - shipped >= 1 && affordable <= shipped) return "appropriation_short" as const;
+      if (remaining - shipped <= 0) return undefined;
+      if (available - shipped > 0 && available - shipped < 1) {
+        return rawShare > 0 ? ("sub_lot_output" as const) : ("no_output" as const);
+      }
+      if (available - shipped >= 1) return "order_remainder" as const;
+      return rawShare > 0 ? undefined : ("no_output" as const);
+    };
+
     const newCarry = bankFor(deliverable);
     if (deliverable <= 0) {
-      if (newCarry !== carried) await stampDeliveryCarry(db, contract._id as ObjectId, newCarry);
-      continue;
-    }
-    await stampDeliveryCarry(db, contract._id as ObjectId, newCarry);
-
-    const cost = deliverable * contract.pricePerLot;
-    if (cost > 0 && !(await debitAppropriation(db, countryId, cost))) {
-      // Lost the balance to a concurrent order between the read and the debit. Nothing has
-      // been recorded yet, so there is nothing to unwind.
+      await stampDeliveryCarry(db, contract._id as ObjectId, newCarry, reasonFor(0), currentTurn);
       continue;
     }
 
+    const moveKey = defenceDeliveryMoveKey(contract._id.toString(), currentTurn);
+    // Cheap pre-check on the claim record. `applyMoneyMove` is authoritative and will replay a
+    // known key without moving a penny, but it claims the key INSIDE itself, and by then the
+    // lot record has already been written. Reading first catches the ordinary re-run turn
+    // before any work is done; a genuine race still loses the insert below and unwinds.
+    if (await moveRecords.findOne({ _id: moveKey }, { projection: { _id: 1 } })) {
+      await stampDeliveryCarry(
+        db,
+        contract._id as ObjectId,
+        carried,
+        "already_settled_this_turn",
+        currentTurn
+      );
+      continue;
+    }
+
+    await stampDeliveryCarry(
+      db,
+      contract._id as ObjectId,
+      newCarry,
+      reasonFor(deliverable),
+      currentTurn
+    );
+
+    // The lot ledger goes FIRST now. It clamps to what the order still has outstanding, so it
+    // can never over-record, and it yields the authoritative count the money is then moved for.
+    // Paying for `deliverable` and discovering the contract only accepted `recorded` was the
+    // source of the old refund-and-re-bank ladder; there is nothing to refund if nothing has
+    // been paid yet.
     const recorded = await advanceContract(db, contract._id as ObjectId, deliverable);
     if (recorded < deliverable) {
-      // The contract clamped below what was paid for (a concurrent delivery took the
-      // remainder). Refund the difference rather than keeping money for undelivered lots.
-      await creditAppropriation(db, countryId, (deliverable - recorded) * contract.pricePerLot);
-      // Those lots were built but never shipped, so they go back into the bank rather than
-      // being destroyed by the carry stamped for the larger figure.
-      await stampDeliveryCarry(db, contract._id as ObjectId, bankFor(recorded));
+      // A concurrent delivery took part of the remainder. Those lots were built but not
+      // shipped, so they go back into the bank rather than being written off.
+      await stampDeliveryCarry(
+        db,
+        contract._id as ObjectId,
+        bankFor(recorded),
+        reasonFor(recorded),
+        currentTurn
+      );
     }
     if (recorded <= 0) continue;
 
-    const grade = Math.min(gradeCeilingFor(corp, currentYear), maxGrade);
+    const grade = deliveredGrade({
+      corpGradeCeiling: fill.gradeCeiling,
+      contractGradeCeiling: contract.gradeCeiling,
+      eraMaxGrade: maxGrade,
+    });
     const actualCost = recorded * contract.pricePerLot;
+    // What the lots COST the supplier to build, at LIVE input prices. Without this leg the
+    // whole contract price was free cash: liquid capital rose one-for-one with the
+    // appropriation drained, which is both an economy-wide money mint and a direct contaminant
+    // of the market-cap series. Payment is margin, and a plant that took a bad price genuinely
+    // loses money on the order - which is now a thing the commodity market can cause.
+    // Build cost scales with the DELIVERED grade, mirroring the band the contract was priced
+    // in (lotPriceBand grades productionCost by GRADE_PRICE_SCALE). Charging ungraded cost
+    // here made every grade-0 contract underwater from turn one even at the band floor
+    // (floor 0.784x cost vs cost 1.0x), and over-credited grade-3 deliveries by the 1.25x
+    // the band charged but the build never paid.
+    const unitCost = lotProductionCost(sector.strategyId, priceRatios) ?? 0;
+    const gradedUnitCost = unitCost * GRADE_PRICE_SCALE[normalizeGrade(grade)];
+    const buildCost = Math.max(0, Math.round(gradedUnitCost * recorded));
+    const margin = actualCost - buildCost;
 
-    // The buyer's money has already left the pot, so from here every failure must unwind or
-    // it is destroyed outright. Neither write is transactional with the debit, so the
-    // handler reclaims what it can and refunds exactly the lots the country did not keep.
-    let deposited = 0;
+    // Live input prices mean a contract CAN go underwater after it was signed: the band's floor
+    // held on the day it was struck, and steel moved. That is a real outcome, not an error, so
+    // it is modelled rather than clamped away - but a supplier that cannot fund the loss must
+    // not deliver into a debit that would strand the move half-applied. Checked here, before
+    // anything moves, so the refusal is a clean stall with a reason the CEO can act on.
+    if (margin < 0 && (corp.liquidCapital ?? 0) < -margin) {
+      await reverseContractDelivery(db, contract._id as ObjectId, recorded);
+      await stampDeliveryCarry(
+        db,
+        contract._id as ObjectId,
+        bankFor(0),
+        "supplier_cannot_fund_loss",
+        currentTurn
+      );
+      stalled++;
+      continue;
+    }
+
+    // A contract that reserved money draws its OWN commitment down; one awarded before
+    // encumbrance existed spends from the uncommitted appropriation the way it always did.
+    // Legacy orders must keep delivering - retiring them on a reservation they were never
+    // given would strand materiel players already paid politically for.
+    const hasEncumbrance = (contract.encumberedAmount ?? 0) > 0;
+    const legs: MoneyMoveLeg[] = [
+      {
+        kind: "debit",
+        amount: actualCost,
+        collection: "federalBudget",
+        // The primitive adds its own `$gte` on the path, which is the no-overdraft rule. The
+        // `$expr` here is the SECOND guard and the one that matters for a legacy contract: it
+        // keeps a spend out of appropriation another contract has already committed. An
+        // encumbered contract is exempt because the money it is spending IS its own commitment,
+        // so measuring it against uncommitted budget would refuse every settlement it makes.
+        filter: hasEncumbrance
+          ? { countryId }
+          : {
+              countryId,
+              $expr: {
+                $gte: [
+                  {
+                    $subtract: [
+                      { $ifNull: ["$defenseAppropriation.balance", 0] },
+                      { $ifNull: ["$defenseAppropriation.encumbered", 0] },
+                    ],
+                  },
+                  actualCost,
+                ],
+              },
+            },
+        path: "defenseAppropriation.balance",
+        note: `${countryId} defence appropriation pays for ${recorded} lots`,
+      },
+      // Margin, or the loss when input prices have overtaken the struck price. Same leg, and
+      // the sign is the leg KIND's job rather than a negative amount the primitive would filter
+      // out and then refuse for not netting to zero.
+      margin >= 0
+        ? {
+            kind: "credit" as const,
+            amount: margin,
+            collection: "corporations",
+            filter: { _id: corp._id },
+            path: "liquidCapital",
+            note: "supplier receives the margin on the delivery",
+          }
+        : {
+            kind: "debit" as const,
+            amount: -margin,
+            collection: "corporations",
+            filter: { _id: corp._id },
+            path: "liquidCapital",
+            note: "supplier funds the loss on a contract input prices have overtaken",
+          },
+      {
+        // The materiel genuinely consumed inputs. Burning the build cost is what makes the
+        // legs net to zero honestly instead of the supplier pocketing the gross price, and it
+        // is the same statement the physical P&L makes when a plant buys commodities.
+        kind: "burn",
+        amount: buildCost,
+        note: "commodity inputs and overhead consumed building the lots",
+      },
+    ];
+
+    // A throwing collection must stall ONE contract, not the country. `applyMoneyMove` leaves
+    // its record at `partial` when a leg throws mid-move, which is exactly the visible,
+    // finishable state the repair queue exists for, so the throw is caught rather than allowed
+    // to abort every remaining contract in the sweep.
+    const move = await applyMoneyMove(db, {
+      key: moveKey,
+      kind: "defence_contract_delivery",
+      turn: currentTurn,
+      legs,
+    }).catch(
+      () =>
+        ({
+          status: "partial",
+          applied: [],
+          error: "a leg threw mid-move",
+        }) as Awaited<ReturnType<typeof applyMoneyMove>>
+    );
+
+    if (move.status !== "applied") {
+      // Nothing to reclaim from the arsenal: the lots have not been deposited yet. The one
+      // thing written is the lot record, and it comes straight back off.
+      //
+      // A `partial` means the appropriation leg landed and the supplier's did not. That is
+      // recorded in the repair queue with the legs that applied, which is the whole reason the
+      // shared primitive exists - a half-applied move is visible and finishable rather than
+      // silent money loss. The lot record still reverses either way: the country has not
+      // received the materiel.
+      await reverseContractDelivery(db, contract._id as ObjectId, recorded);
+      await stampDeliveryCarry(
+        db,
+        contract._id as ObjectId,
+        bankFor(0),
+        move.status === "replayed" ? "already_settled_this_turn" : "appropriation_short",
+        currentTurn
+      );
+      if (move.status === "partial") stalled++;
+      continue;
+    }
+
+    projectedBalance -= actualCost;
+
+    // The MEMO leg. The cash has moved; this only discharges the reservation against it. It is
+    // not part of the money move because nothing enters or leaves the world when a commitment
+    // is discharged, and the primitive rightly refuses legs that do not net to zero. Failing
+    // here leaves the commitment too high, so the country under-spends until it is reconciled:
+    // the safe direction. Releasing before the cash moved would let the same money be committed
+    // twice, which is the exploit itself.
+    if (hasEncumbrance) {
+      await drawDownEncumbrance(db, countryId, actualCost);
+      projectedEncumbered = Math.max(0, projectedEncumbered - actualCost);
+    }
+    await recordContractPayment(db, contract._id as ObjectId, actualCost, buildCost);
+    // Only NOW is the remaining commitment known. A finished order stops holding budget; the
+    // residue is rounding (the encumbrance is struck in whole lots at a rounded price) but a
+    // country running a hundred contracts would otherwise carry a hundred small permanent
+    // commitments it can never spend again.
+    if (contract.lotsDelivered + recorded >= contract.lotsOrdered) {
+      const released = await releaseContractEncumbrance(db, contract._id as ObjectId);
+      projectedEncumbered = Math.max(0, projectedEncumbered - released);
+    }
+
+    // The money is settled and the lots are recorded; the arsenal deposit is the last step and
+    // the only one left that can fail. It is retried by nothing, so a failure reverses the lot
+    // record and refunds through a paired money move rather than being swallowed.
     try {
       await depositLots(db, countryId, contract.component, recorded, grade);
-      deposited = recorded;
-      await db
-        .collection<Corporation>("corporations")
-        .updateOne({ _id: corp._id }, { $inc: { liquidCapital: actualCost } });
-      const currencyCode = resolveCorpLiquidCurrencyCode(corp);
-      if (currencyCode) {
-        await emitTx(db, {
-          type: "defence_contract_payment",
-          turn: currentTurn,
-          createdAt: new Date(),
-          subjectType: "corporation",
-          subjectId: corp._id,
-          subjectName: corp.name,
-          amount: actualCost,
-          currencyCode,
-          counterpartyType: "system",
-          counterpartyName: `${countryId} defence appropriation`,
-          meta: {
-            contractId: contract._id.toString(),
-            countryId,
-            sectorId: sector._id.toString(),
-            component: contract.component,
-            lots: recorded,
-            pricePerLot: contract.pricePerLot,
-          },
-        });
-      }
     } catch {
-      // Pull back anything that landed before the failure. `drawLots` reports what it
-      // actually took, so lots a concurrent order already consumed stay bought and paid for
-      // rather than being refunded twice.
-      const reclaimed =
-        deposited > 0 ? await drawLots(db, countryId, contract.component, deposited) : 0;
-      const unfunded = recorded - deposited + reclaimed;
-      if (unfunded > 0) {
-        await creditAppropriation(db, countryId, unfunded * contract.pricePerLot);
-      }
+      // depositLots is a single atomic $inc, so a throw means nothing landed. Drawing lots
+      // back out here reclaimed from whatever the arsenal ALREADY held of this component:
+      // a country with pre-existing stock lost `recorded` lots of it and was refunded the
+      // contract on top. Nothing was deposited, so nothing is drawn; the reversal and the
+      // paired refund below fully unwind the delivery.
+      await reverseContractDelivery(db, contract._id as ObjectId, recorded);
+      await recordContractPayment(db, contract._id as ObjectId, -actualCost, -buildCost);
+      await applyMoneyMove(db, {
+        key: `${moveKey}:refund`,
+        kind: "defence_contract_delivery_refund",
+        turn: currentTurn,
+        legs: [
+          // The exact mirror of the forward move's supplier leg, whichever way it ran. A refund
+          // that always debited would credit a loss-making supplier twice.
+          margin >= 0
+            ? {
+                kind: "debit" as const,
+                amount: margin,
+                collection: "corporations",
+                filter: { _id: corp._id },
+                path: "liquidCapital",
+                note: "supplier returns the margin on materiel that never landed",
+              }
+            : {
+                kind: "credit" as const,
+                amount: -margin,
+                collection: "corporations",
+                filter: { _id: corp._id },
+                path: "liquidCapital",
+                note: "supplier is made whole for a loss on materiel that never landed",
+              },
+          {
+            kind: "credit",
+            amount: actualCost,
+            collection: "federalBudget",
+            filter: { countryId },
+            path: "defenseAppropriation.balance",
+            note: `${countryId} defence appropriation refunded`,
+          },
+          {
+            kind: "mint",
+            amount: buildCost,
+            note: "inputs the supplier is no longer out of pocket for",
+          },
+        ],
+      });
+      projectedBalance += actualCost;
       // One broken contract must not take down the sweep for every other country.
       stalled++;
       continue;
     }
 
+    const currencyCode = resolveCorpLiquidCurrencyCode(corp);
+    if (currencyCode) {
+      await emitTx(db, {
+        type: "defence_contract_payment",
+        turn: currentTurn,
+        createdAt: new Date(),
+        subjectType: "corporation",
+        subjectId: corp._id,
+        subjectName: corp.name,
+        amount: actualCost,
+        currencyCode,
+        counterpartyType: "system",
+        counterpartyName: `${countryId} defence appropriation`,
+        meta: {
+          contractId: contract._id.toString(),
+          countryId,
+          sectorId: sector._id.toString(),
+          component: contract.component,
+          lots: recorded,
+          pricePerLot: contract.pricePerLot,
+          grade,
+          productionCost: buildCost,
+          netMargin: margin,
+          moveKey,
+        },
+      });
+    }
+
     lots += recorded;
     paid += actualCost;
+    productionCost += buildCost;
     const key = sector._id.toString();
     const prior = divertedBySector.get(key);
     divertedBySector.set(key, {
@@ -228,5 +525,5 @@ export async function applyDefenceDeliveries(
     );
   }
 
-  return { lots, paid, stalled };
+  return { lots, paid, stalled, productionCost };
 }

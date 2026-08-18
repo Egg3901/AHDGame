@@ -283,6 +283,7 @@ describe("recalculateInflationPerTurn", () => {
       expect.objectContaining({
         $set: expect.objectContaining({
           "economicFactors.inflationRate": 4.2,
+          "economicFactors.householdPriceIndex": expect.closeTo(1.00065625, 12),
         }),
       })
     );
@@ -374,6 +375,32 @@ describe("recalculateInflationPerTurn", () => {
 
     expect(result).toBe(1);
     expect(mockCalculateCountryInflation).toHaveBeenCalledTimes(1);
+  });
+
+  it("advances household prices for countries without a central bank", async () => {
+    mockCalculateCountryInflation.mockResolvedValue(4.2);
+    setupBanks(db, [makeCentralBank("US")]);
+    setupBudget(db, makeBudget("federal"), "federal");
+
+    const ukBudget = makeBudget("UK", 2.5);
+    db.collection("federalBudget");
+    db.collectionMocks["federalBudget"]!.find = vi.fn().mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([ukBudget]),
+    });
+
+    const { recalculateInflationPerTurn } = await import("./inflationRecalc");
+    const result = await recalculateInflationPerTurn(db as unknown as Db, 100);
+
+    expect(result).toBe(2);
+    expect(db.collectionMocks["federalBudget"]!.updateOne).toHaveBeenCalledWith(
+      { _id: "UK" },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          "economicFactors.inflationRate": 4.2,
+          "economicFactors.householdPriceIndex": expect.closeTo(1.00065625, 12),
+        }),
+      })
+    );
   });
 
   // ── Commodity pressure clamp ───────────────────────────────────────────────

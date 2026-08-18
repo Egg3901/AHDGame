@@ -37,6 +37,10 @@ import {
   presentPlannedEconomy,
   type PlannedEconomyView,
 } from "@/lib/economy/presentPlannedEconomy";
+import {
+  householdPriceAdjustedValue,
+  HOUSEHOLD_PRICE_INDEX_BASELINE,
+} from "@/lib/economy/householdPriceIndex";
 
 interface HistoryPoint {
   turn: number;
@@ -68,9 +72,13 @@ export interface CountryEconomyOutlook {
   realEconomy: {
     wageGrowth: number | null;
     tradeGrowth: number | null;
+    /** Country household price level, where 1 = reset-price baseline. */
+    householdPriceIndex: number;
     /** State/province-weighted national metric (not the central-bank figure). */
     unemployment: { value: number | null; trend: number | null };
     medianIncome: { value: number | null; trend: number | null };
+    /** Median income in reset-price purchasing power. */
+    realMedianIncome: number | null;
     /** Total national population (sum of region populations). */
     population: number | null;
   };
@@ -184,6 +192,21 @@ export async function buildCountryEconomyOutlook(
   );
   const gdp = aggregateNationalGdp(states);
   const populationByStateId = new Map(states.map((s) => [s._id, s.population ?? 0]));
+  const medianIncome = popWeighted(
+    stateMetrics.map((m) => ({
+      _id: m._id,
+      value: m.economic?.medianIncome?.value,
+      trend: m.economic?.medianIncome?.trend,
+    })),
+    populationByStateId
+  );
+  const persistedHouseholdPriceIndex = budget?.economicFactors?.householdPriceIndex;
+  const householdPriceIndex =
+    typeof persistedHouseholdPriceIndex === "number" &&
+    Number.isFinite(persistedHouseholdPriceIndex) &&
+    persistedHouseholdPriceIndex > 0
+      ? persistedHouseholdPriceIndex
+      : HOUSEHOLD_PRICE_INDEX_BASELINE;
 
   const gdpGrowthHistory = mapHistory(bank?.gdpGrowthHistory);
   const inflationHistory = mapHistory(bank?.inflationHistory);
@@ -228,6 +251,7 @@ export async function buildCountryEconomyOutlook(
     realEconomy: {
       wageGrowth: budget?.economicFactors?.wageGrowth ?? null,
       tradeGrowth: budget?.economicFactors?.tradeGrowth ?? null,
+      householdPriceIndex,
       unemployment: popWeighted(
         stateMetrics.map((m) => ({
           _id: m._id,
@@ -236,14 +260,8 @@ export async function buildCountryEconomyOutlook(
         })),
         populationByStateId
       ),
-      medianIncome: popWeighted(
-        stateMetrics.map((m) => ({
-          _id: m._id,
-          value: m.economic?.medianIncome?.value,
-          trend: m.economic?.medianIncome?.trend,
-        })),
-        populationByStateId
-      ),
+      medianIncome,
+      realMedianIncome: householdPriceAdjustedValue(medianIncome.value, householdPriceIndex),
       // SP6: the Economy page is the statistics home — total population joins
       // the real-economy rows.
       population: states.reduce((sum, s) => sum + (s.population ?? 0), 0),

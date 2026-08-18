@@ -50,6 +50,7 @@ import { fetchPartyHistory, buildPartyTenures, type PartyTenure } from "@/lib/pa
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { getOfficeLabel, getPartyHex } from "@/lib/utils/politics";
+import { gameDateAnchorFromState } from "@/lib/utils/gameDate";
 import {
   calculateFavorabilityAboveThresholdPenalty,
   calculateNationalInfluenceGain,
@@ -482,13 +483,7 @@ async function getCharacterById(characterId: string) {
             generalEra: CUR_ERA_YEAR,
             isCommandingGeneral: false,
           }),
-      gameDateAnchor: gameState
-        ? {
-            currentTurn: gameState.currentTurn,
-            lastTurnProcessed: gameState.lastTurnProcessed,
-            startingYear: gameState.startingYear ?? 2019,
-          }
-        : undefined,
+      gameDateAnchor: gameState ? gameDateAnchorFromState(gameState) : undefined,
     };
   } catch (error) {
     // redirect() throws NEXT_REDIRECT internally — it must propagate, never be caught

@@ -44,7 +44,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "corporate-r-and-d",
     title: "Corporate R&D & Tech Trees",
     description:
-      "Decade-tiered tech trees with Corporate and Sector lanes, R&D Score + cash unlocks, method gating, and innovation breakthroughs.",
+      "Decade-tiered tech trees with Corporate and Sector lanes, exclusive Scale, Premium, or Resilience specializations, R&D Score + cash unlocks, and innovation breakthroughs.",
     content: corporateRAndDContent,
     category: "economy",
     difficulty: "intermediate",
@@ -178,7 +178,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "plants-corp-guide",
     title: "Running a Corporation under the Plants System",
     description:
-      "The player's guide to the physical-capacity economy: founding a corp, building plants that ramp in per turn, reading the sector page's three headline numbers, why output goes unsold, mothballing, bonds, and the dominance build-cost ramp. With screenshots.",
+      "The player's guide to the physical-capacity economy: founding, plant builds, sector numbers, unsold output, inventory, stranded-plant warnings, mothballing, bonds, and dominance costs. With screenshots.",
     content: plantsCorpGuideContent,
     category: "economy",
     extraTags: [

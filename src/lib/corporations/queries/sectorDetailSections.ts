@@ -1203,6 +1203,25 @@ export interface SectorPlantsSection {
      */
     soldByCommodity: { commodity: string; fraction: number }[];
     /**
+     * Consecutive turns the sector cleared under half its output (see
+     * strandedPlant.ts). Drives the stranded-plant warning on the sector page
+     * once it reaches STRANDED_WARN_TURNS.
+     */
+    lowFillTurns: number;
+    /**
+     * Inventory of unsold storable output (design-realization-legs §6): the
+     * toggle state plus the pile. Null-ish zeros before the first inventory
+     * turn.
+     */
+    inventory: {
+      stockpileUnsold: boolean;
+      heldUnits: number;
+      heldValueAnchor: number;
+      byCommodity: { commodity: string; units: number }[];
+      drainedUnits: number;
+      spoiledUnits: number;
+    };
+    /**
      * Realized revenue per unit PRODUCED (not per unit sold): what a unit
      * coming off the line actually brought in, unsold units included at zero.
      * Null when nothing was produced.
@@ -1569,6 +1588,20 @@ export function buildSectorPlantsSection(args: {
     truth: {
       soldFraction,
       soldByCommodity,
+      lowFillTurns: num(sector.lowFillTurns) ?? 0,
+      inventory: {
+        stockpileUnsold: sector.stockpileUnsold === true,
+        heldUnits: Object.values(sector.inventoryUnits ?? {}).reduce<number>(
+          (s, u) => s + (typeof u === "number" && Number.isFinite(u) ? u : 0),
+          0
+        ),
+        heldValueAnchor: num(sector.inventoryValueAnchor) ?? 0,
+        byCommodity: Object.entries(sector.inventoryUnits ?? {})
+          .filter((e): e is [string, number] => typeof e[1] === "number" && e[1] > 0)
+          .map(([commodity, units]) => ({ commodity, units })),
+        drainedUnits: num(sector.inventoryDrainedUnits) ?? 0,
+        spoiledUnits: num(sector.inventorySpoiledUnits) ?? 0,
+      },
       receivedPerUnitAnchor,
       costPerUnitAnchor,
       fillAdjustedMarginPct,

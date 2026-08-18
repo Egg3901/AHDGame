@@ -5,10 +5,10 @@
  * render, no player action is accepted, and nothing unwinds. This module is the
  * operator recovery tool that still works with the flag off.
  *
- * Unwind returns depositors to the central bank (pointer flip only; balances
- * untouched), returns NPC deposits to the CB externalBroadMoney pool with
- * conservation, then revokes the charter (refunding postedCapital because
- * deposits are cleared first) and archives via revokeCharter / archiveCharter.
+ * Unwind is now a thin wrapper over `revokeCharter`, which runs the shared
+ * deposit-book waterfall: pointers back to the central bank, household deposits
+ * back into the money supply out of the bank's own cash, insurance behind any
+ * shortfall, and only the residual above the household book to the owner.
  *
  * Outstanding player loans are LEFT IN PLACE. They keep amortizing through
  * bankingTurn; the bank corporation still receives payments as a normal corp.
@@ -17,11 +17,6 @@
 
 import type { Db, ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
-import type { Character } from "@/lib/db/types/character";
-import type { CentralBank } from "@/lib/db/types/centralBank";
-import type { CurrencyCode } from "@/lib/constants/currencies";
-import { getCountryIdForCurrency } from "@/lib/constants/currencies";
-import { getBankId } from "@/lib/centralBank/helpers";
 import { revokeCharter } from "@/lib/banking/charter";
 
 export type UnwindBankResult =
@@ -70,46 +65,14 @@ export async function unwindBank(
     };
   }
 
-  const currency = charter.currency as CurrencyCode;
-  const bankIdHex = corporationId.toString();
-  const holderPath = `currencyBalances.savingsHolder.${currency}`;
-  const now = new Date();
-
-  // Pointer-only: never touch currencyBalances.savings.<CODE>.
-  const flipResult = await db.collection<Character>("characters").updateMany(
-    { [holderPath]: bankIdHex },
-    {
-      $set: {
-        [holderPath]: "centralBank",
-        updatedAt: now,
-      },
-    }
-  );
-  const depositorsFlipped = flipResult.modifiedCount ?? 0;
-
+  // Everything the unwind used to do by hand is the shared waterfall's job now.
+  // The hand-rolled version credited the central bank's money pool with the
+  // household book, left the matching cash in the bank, and then let
+  // `revokeCharter` hand that same cash to the shareholder as a refund. The
+  // deposit book existed twice and the owner was paid out of it.
+  //
+  // `revokeCharter` runs the waterfall itself, so calling it is the whole job.
   const npcDeposits = Math.max(0, charter.npcDeposits ?? 0);
-  if (npcDeposits > 0) {
-    const bankId = getBankId(getCountryIdForCurrency(currency));
-    await db.collection<CentralBank>("centralBanks").updateOne(
-      { _id: bankId },
-      {
-        $inc: { externalBroadMoney: npcDeposits },
-        $set: { updatedAt: now },
-      }
-    );
-  }
-
-  // Clear deposit aggregates so revokeCharter refunds postedCapital. Loans stay.
-  await db.collection<Corporation>("corporations").updateOne(
-    { _id: corporationId, "bankCharter.status": "active" },
-    {
-      $set: {
-        "bankCharter.npcDeposits": 0,
-        "bankCharter.totalDeposits": 0,
-        updatedAt: now,
-      },
-    }
-  );
 
   const revokeReason = `admin unwind: ${trimmedReason}`;
   const revoked = await revokeCharter(db, corporationId, revokeReason);
@@ -119,7 +82,7 @@ export async function unwindBank(
       return {
         ok: true,
         alreadyRevoked: true,
-        depositorsFlipped,
+        depositorsFlipped: 0,
         npcDepositsReturned: npcDeposits,
         refundedCapital: 0,
       };
@@ -130,7 +93,7 @@ export async function unwindBank(
   return {
     ok: true,
     alreadyRevoked: false,
-    depositorsFlipped,
+    depositorsFlipped: revoked.depositorsFlipped,
     npcDepositsReturned: npcDeposits,
     refundedCapital: revoked.refundedCapital,
   };

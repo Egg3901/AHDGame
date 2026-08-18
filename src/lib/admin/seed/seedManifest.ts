@@ -113,7 +113,7 @@ const REFERENCE: CollectionEntry[] = [
     name: "politicalCabinetContribution",
     category: "runtime",
     notes:
-      "Per-country snapshot of the standing cabinet contribution to political metrics (PoliticalMetricId → points/turn), written each turn by processMinisterialOrders and folded into region cabinetResiduals by processPoliticalMetricsDynamics. Runtime — wiped on reset, rebuilt by play.",
+      "Per-country snapshot of the standing cabinet contribution to political metrics (PoliticalMetricId → points/turn nationally, plus optional per-region extras from sited estates/orders), written each turn by processMinisterialOrders and folded into region cabinetResiduals by processPoliticalMetricsDynamics. Runtime — wiped on reset, rebuilt by play.",
   },
   {
     name: "conflicts",

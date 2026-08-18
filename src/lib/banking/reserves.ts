@@ -6,6 +6,7 @@ import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
+import { cashBackedDeposits } from "@/lib/banking/balanceSheet";
 import {
   RESERVE_REQUIREMENT_HISTORICAL_DEFAULT,
   RESERVE_REQUIREMENT_MAX,
@@ -93,13 +94,15 @@ export async function setReserveRequirement(
 
 /**
  * Pure: deposits that may still be lent after reserves and existing loans.
- * max(0, (totalDeposits ?? 0) * (1 - reserveRatio) - (totalLoans ?? 0)).
+ * max(0, cashBackedDeposits * (1 - reserveRatio) - (totalLoans ?? 0)).
  */
 export function getLendableHeadroom(
-  charter: Pick<BankCharter, "totalDeposits" | "totalLoans">,
+  charter: Pick<BankCharter, "npcDeposits" | "totalLoans">,
   reserveRatio: number
 ): number {
-  const deposits = charter.totalDeposits ?? 0;
+  // Cash-backed deposits only. Player pointer balances never arrived as cash,
+  // so lending against them was lending money the bank does not hold.
+  const deposits = cashBackedDeposits(charter);
   const loans = charter.totalLoans ?? 0;
   const ratio = Number.isFinite(reserveRatio) ? reserveRatio : 0;
   return Math.max(0, deposits * (1 - ratio) - loans);

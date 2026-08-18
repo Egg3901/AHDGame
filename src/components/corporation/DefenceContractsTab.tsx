@@ -67,6 +67,30 @@ export default function DefenceContractsTab({
   const perTurn = active.reduce((s, c) => s + c.projectedLotsPerTurn, 0);
   const outstanding = active.reduce((s, c) => s + Math.max(0, c.lotsOrdered - c.lotsDelivered), 0);
   const grade = Math.max(0, Math.min(3, Math.round(defence?.gradeCeiling ?? 0)));
+  async function setFactories(contractId: string, assignedFactories: number) {
+    setBusyId(contractId);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/corporations/${corpId}/defence-contracts/${contractId}/factories`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assignedFactories }),
+        }
+      );
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+        setError(payload?.error ?? "Those production lines could not be assigned.");
+        return;
+      }
+      onUpdate?.();
+    } catch {
+      setError("That request could not be sent.");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function respond(contractId: string, action: "accept" | "decline") {
     setBusyId(contractId);
@@ -99,6 +123,10 @@ export default function DefenceContractsTab({
         <Tile label="Lots outstanding" value={outstanding.toLocaleString("en-US")} />
         <Tile label="Lots per turn" value={formatRate(perTurn)} />
         <Tile label="Earned to date" value={formatAmount(defence?.totalEarned ?? 0)} />
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
+        <Tile label="Margin after build cost" value={formatAmount(defence?.totalNetMargin ?? 0)} />
+        <Tile label="Committed by buyers" value={formatAmount(defence?.totalEncumbered ?? 0)} />
       </div>
 
       {error && (
@@ -235,7 +263,31 @@ export default function DefenceContractsTab({
                         </span>
                       </div>
                       <div className="text-[11px] text-muted">
-                        {formatAmount(c.pricePerLot)} per lot · earned {formatAmount(c.earned)}
+                        {formatAmount(c.pricePerLot)} per lot
+                        {c.unitProductionCost != null ? (
+                          <>
+                            {" "}
+                            · costs {formatAmount(c.unitProductionCost)} to build · margin{" "}
+                            <span
+                              className={
+                                c.pricePerLot - c.unitProductionCost >= 0
+                                  ? "text-[var(--success)]"
+                                  : "text-[var(--error)]"
+                              }
+                            >
+                              {formatAmount(c.pricePerLot - c.unitProductionCost)}
+                            </span>{" "}
+                            per lot
+                          </>
+                        ) : (
+                          <> · build cost unknown: the certified plant is gone</>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-muted">
+                        paid {formatAmount(c.amountPaid)} · build cost{" "}
+                        {formatAmount(c.productionCostPaid)}
+                        {c.encumberedAmount > 0 &&
+                          ` · ${formatAmount(c.encumberedAmount)} committed by the buyer`}
                       </div>
                     </div>
                     <div className="text-right">
@@ -250,6 +302,12 @@ export default function DefenceContractsTab({
                             ? "awaiting your answer"
                             : `${Math.round(pct)}% delivered`}
                       </div>
+                      {(c.lotsBuiltNotDelivered > 0 || c.partialLot > 0) && (
+                        <div className="text-[11px] text-[var(--warning)]">
+                          {c.lotsBuiltNotDelivered.toLocaleString("en-US")} built and waiting
+                          {c.partialLot > 0 && ` · ${(c.partialLot * 100).toFixed(0)}% of another`}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="mt-2 h-1 overflow-hidden rounded-full bg-card-muted">
@@ -258,6 +316,41 @@ export default function DefenceContractsTab({
                       style={{ width: `${Math.min(100, pct)}%`, background: "var(--gov)" }}
                     />
                   </div>
+                  {c.carryReasonText && (
+                    <p className="mt-1.5 text-[11px] text-[var(--warning)]">{c.carryReasonText}</p>
+                  )}
+                  {c.selfDealing && (
+                    <p className="mt-1.5 text-[11px] text-[var(--error)]">
+                      Declared interest: {c.selfDealing.ministerName ?? "the awarding minister"}{" "}
+                      {c.selfDealing.basis === "owner"
+                        ? "owns this corporation"
+                        : `holds ${(c.selfDealing.stakeShare * 100).toFixed(1)}% of it`}
+                      . This award is on the public record.
+                    </p>
+                  )}
+                  {isCeo && (c.status === "active" || c.status === "pending") && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] text-muted">Production lines</span>
+                      {Array.from({ length: c.totalFactories }, (_, i) => i + 1).map((n) => (
+                        <button
+                          key={n}
+                          disabled={busyId === c._id || n === c.assignedFactories}
+                          onClick={() => setFactories(c._id, n)}
+                          className={`rounded-md border px-2 py-0.5 text-[11px] disabled:opacity-60 ${
+                            n === c.assignedFactories
+                              ? "border-[color-mix(in_srgb,var(--gov)_45%,transparent)] text-gov-soft"
+                              : "border-card-border text-muted hover:text-foreground"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                      <span className="text-[11px] text-muted">
+                        of {c.totalFactories} at this plant. More lines deliver faster; the price
+                        per lot does not change.
+                      </span>
+                    </div>
+                  )}
                   {stalled && (
                     <p className="mt-1.5 text-[11px] text-[var(--error)]">
                       Delivering nothing. This plant is either re-tooled off {c.component} or

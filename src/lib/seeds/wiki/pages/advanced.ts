@@ -235,7 +235,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     slug: "crisis-interaction",
     title: "Crisis Interaction",
     description:
-      "Template-based crisis creation, decision trees, collective contributions, ambient interaction cards, and the auto-disaster spawner: all gated behind two independent feature flags.",
+      "Template crises, decision trees, collective contributions, chained multi-country decisions such as Vietnam, ambient cards, and automatic spawning.",
     content: crisisInteractionContent,
     category: "advanced",
     featured: false,

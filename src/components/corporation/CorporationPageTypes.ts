@@ -68,6 +68,27 @@ export interface CorporationContractView {
   projectedLotsPerTurn: number;
   /** Revenue earned so far — lots delivered x the struck price. */
   earned: number;
+  /** Whole lots built and banked but not yet shipped, and the fraction still accumulating. */
+  lotsBuiltNotDelivered: number;
+  partialLot: number;
+  /** Cash received, and what building those lots cost - margin, not gross. */
+  amountPaid: number;
+  productionCostPaid: number;
+  /** Break-even for one lot at current input prices; null when the plant no longer exists. */
+  unitProductionCost: number | null;
+  /** Local currency the buyer still has committed against this order. */
+  encumberedAmount: number;
+  /** Why the last delivery turn banked output instead of shipping it. */
+  carryReason?: string;
+  carryReasonText?: string;
+  carryReasonTurn?: number;
+  /** Production lines this order holds, and the plant's total (suggestion #281). */
+  assignedFactories: number;
+  totalFactories: number;
+  /** The grade this order is written for (0..3). */
+  gradeCeiling?: number;
+  /** Public disclosure that the awarding minister had an interest in this corporation. */
+  selfDealing?: { basis: "owner" | "shareholding"; stakeShare: number; ministerName?: string };
 }
 
 /**
@@ -84,6 +105,10 @@ export interface CorporationDefenceView {
   /** Highest grade this corporation can currently deliver (0..3). */
   gradeCeiling: number;
   totalEarned: number;
+  /** Earnings net of what building the materiel cost. */
+  totalNetMargin: number;
+  /** Local currency governments still have committed against this corporation's orders. */
+  totalEncumbered: number;
 }
 
 export interface CorporationDetail {

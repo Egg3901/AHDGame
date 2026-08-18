@@ -82,8 +82,12 @@ const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBaseline>> =
   // Colonial Nigeria on the sterling peg — imported UK price stability
   // (modern table's 6%/12% is the post-independence naira regime).
   NG: { targetInflation: 2.0, neutralPrimeRate: 3.5 },
-  // Vargas-era chronic inflation (~10-20%/yr) — double digits is era-correct.
-  BR: { targetInflation: 10.0, neutralPrimeRate: 12.0 },
+  // BR targetInflation is a POLICY target (Taylor rule + CPI attractor + FX
+  // deviation baseline), not realized Vargas CPI. Authoring 10% here because
+  // 1953 Brazil *experienced* ~10-20% made the NPP/FOMC chair treat 10% as
+  // fine and, with the era-blind 6% FX absolute-penalty ceiling, structurally
+  // depreciated BRL even on-target (ticket 1124). Do not put this back.
+  BR: { targetInflation: 4.0, neutralPrimeRate: 8.0 },
   // Administered prices with annual state retail price cuts; Gosbank
   // administrative rates. trendGdpGrowth matches the authored RU 1953
   // overlay ("economic.gdpGrowth": 6.0 in ruMetricPresets1953).
@@ -98,6 +102,14 @@ const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBaseline>> =
   ES: { targetInflation: 4.0, neutralPrimeRate: 5.0, trendGdpGrowth: 4.5 },
   // CPI ~1%; Riksbank discount 2.75-3%.
   SE: { targetInflation: 2.0, neutralPrimeRate: 3.0, trendGdpGrowth: 3.5 },
+  // Post-reparation Finland: FY1953 budget seeds CPI at 2% ("stabilisation
+  // after the 1950-51 inflation wave"). Without this row FI falls through to
+  // MONETARY_BASELINES.FI (6.0/8.5, late-1970s markka devaluation cycle) for
+  // the whole 1953-1970 span — the same wrong-era attractor bug this table
+  // exists to cure. trendGdpGrowth is the layer-1 fallback (FI is not in
+  // NATIONAL_SCOPE); the 1% seed gdpGrowth is the 1953 recession starting
+  // point, not the structural rate.
+  FI: { targetInflation: 2.0, neutralPrimeRate: 4.5, trendGdpGrowth: 4.0 },
   // Menderes boom: strong growth with inflation building through the
   // mid-1950s (far from the 1979 crisis' 20%).
   TR: { targetInflation: 5.0, neutralPrimeRate: 6.0, trendGdpGrowth: 6.0 },

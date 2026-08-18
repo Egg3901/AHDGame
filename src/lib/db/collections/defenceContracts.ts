@@ -1,8 +1,9 @@
 import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { UnitDomain } from "@/lib/db/types/militaryUnit";
-import type { DefenceContract } from "@/lib/db/types/defenceContract";
+import type { DefenceContract, DefenceCarryReason } from "@/lib/db/types/defenceContract";
 import { releaseDefenceContractLots } from "./defenceProcurementAllocations";
+import { releaseEncumbrance } from "./defenseAppropriation";
 
 function contracts(db: Db) {
   return db.collection<DefenceContract>("defenceContracts");
@@ -49,6 +50,13 @@ export async function awardContract(
     awardedTurn: number;
     allocationWindowId?: string;
     allocatedLots?: number;
+    /** Local currency already reserved against the appropriation for this order. */
+    encumberedAmount?: number;
+    /** Minister's grade ceiling (0..3); absent means whatever the supplier can build. */
+    gradeCeiling?: number;
+    /** Production lines the order starts with; the contractor may change it afterwards. */
+    assignedFactories?: number;
+    selfDealing?: DefenceContract["selfDealing"];
     /**
      * State-owned suppliers have no player CEO to accept. Activate immediately so the
      * order delivers rather than sitting pending forever (ticket #1087).
@@ -67,6 +75,12 @@ export async function awardContract(
     pricePerLot: Math.max(0, Math.round(input.pricePerLot)),
     allocationWindowId: input.allocationWindowId,
     allocatedLots: input.allocatedLots,
+    encumberedAmount: Math.max(0, Math.round(input.encumberedAmount ?? 0)),
+    amountPaid: 0,
+    productionCostPaid: 0,
+    ...(input.gradeCeiling != null ? { gradeCeiling: input.gradeCeiling } : {}),
+    ...(input.assignedFactories != null ? { assignedFactories: input.assignedFactories } : {}),
+    ...(input.selfDealing ? { selfDealing: input.selfDealing } : {}),
     // An offer, not an order, unless the buyer is contracting its own state industry.
     // A National Corporation has no player CEO to click Accept; leaving those pending
     // meant the arsenal never filled.
@@ -98,11 +112,13 @@ export async function advanceContract(db: Db, contractId: ObjectId, lots: number
   const recorded = Math.min(wanted, remaining);
   if (recorded <= 0) {
     // Already filled but still marked active — close it rather than leaving a contract that
-    // can never deliver again sitting in the buyer's active list.
+    // can never deliver again sitting in the buyer's active list. Nothing is being paid on
+    // this path, so any commitment it still holds is safe to hand straight back.
     await contracts(db).updateOne(
       { _id: contractId, status: "active" },
       { $set: { status: "complete", updatedAt: new Date() } }
     );
+    await releaseContractEncumbrance(db, contractId);
     return 0;
   }
 
@@ -114,7 +130,100 @@ export async function advanceContract(db: Db, contractId: ObjectId, lots: number
       $set: { updatedAt: new Date(), ...(nowComplete ? { status: "complete" as const } : {}) },
     }
   );
+  // The residual encumbrance is deliberately NOT released here. The caller has not booked this
+  // delivery's payment yet, so releasing now would hand back money that is about to be spent
+  // and drive the contract's own commitment negative. `applyDefenceDeliveries` releases the
+  // residue after `recordContractPayment`, which is the only point at which the remaining
+  // commitment is actually known.
   return recorded;
+}
+
+/**
+ * Undo a lot record whose payment did not land.
+ *
+ * The delivery sweep records lots BEFORE it moves money now, because the money primitive
+ * guards its own debit and reports a refused move without having touched a balance. That makes
+ * an un-paid lot record the only thing left to unwind, and it has to be exact: the contract is
+ * reopened if the reversal takes it back below its ordered count, or a fully-delivered order
+ * would stay closed holding lots nobody paid for.
+ *
+ * Guarded on `lotsDelivered` so a reversal racing a concurrent delivery cannot take back lots
+ * that delivery legitimately recorded.
+ */
+export async function reverseContractDelivery(
+  db: Db,
+  contractId: ObjectId,
+  lots: number
+): Promise<boolean> {
+  const back = Math.max(0, Math.round(lots));
+  if (back <= 0) return true;
+  const contract = await contracts(db).findOne({ _id: contractId });
+  if (!contract) return false;
+  const remainingAfter = contract.lotsDelivered - back;
+  if (remainingAfter < 0) return false;
+  const res = await contracts(db).updateOne(
+    { _id: contractId, lotsDelivered: contract.lotsDelivered },
+    {
+      $inc: { lotsDelivered: -back },
+      $set: {
+        updatedAt: new Date(),
+        ...(remainingAfter < contract.lotsOrdered ? { status: "active" as const } : {}),
+      },
+    }
+  );
+  return res.modifiedCount > 0;
+}
+
+/**
+ * Book what a delivery cost the buyer and the supplier, and draw the encumbrance down by the
+ * same amount.
+ *
+ * Separate from `advanceContract` because lots and money are separate facts here: the sweep
+ * records the lots and then pays (see `applyDefenceDeliveries`), and `advanceContract` clamps,
+ * so the lot count can differ from what was planned and the two must be reconcilable
+ * afterwards rather than assumed equal.
+ */
+export async function recordContractPayment(
+  db: Db,
+  contractId: ObjectId,
+  paid: number,
+  productionCost: number
+): Promise<void> {
+  const amount = Math.round(paid);
+  const cost = Math.round(productionCost);
+  if (amount === 0 && cost === 0) return;
+  await contracts(db).updateOne(
+    { _id: contractId },
+    {
+      $inc: {
+        amountPaid: amount,
+        productionCostPaid: cost,
+        encumberedAmount: -amount,
+      },
+      $set: { updatedAt: new Date() },
+    }
+  );
+}
+
+/**
+ * Hand back every unit of appropriation this contract still holds, on both books.
+ *
+ * Two writes that must agree: the country's `defenseAppropriation.encumbered` and the
+ * contract's own `encumberedAmount`. The contract is zeroed by a guarded update on the value
+ * that was read, so two concurrent releases (a cancel racing a completion) cannot both
+ * release the same money and drive the country's commitment negative.
+ */
+export async function releaseContractEncumbrance(db: Db, contractId: ObjectId): Promise<number> {
+  const contract = await contracts(db).findOne({ _id: contractId });
+  const held = Math.max(0, Math.round(contract?.encumberedAmount ?? 0));
+  if (!contract || held <= 0) return 0;
+  const res = await contracts(db).updateOne(
+    { _id: contractId, encumberedAmount: held },
+    { $set: { encumberedAmount: 0, updatedAt: new Date() } }
+  );
+  if (res.modifiedCount === 0) return 0;
+  await releaseEncumbrance(db, contract.countryId, held);
+  return held;
 }
 
 /**
@@ -125,11 +234,23 @@ export async function advanceContract(db: Db, contractId: ObjectId, lots: number
 export async function stampDeliveryCarry(
   db: Db,
   contractId: ObjectId,
-  carry: number
+  carry: number,
+  reason?: DefenceCarryReason,
+  turn?: number
 ): Promise<void> {
   await contracts(db).updateOne(
     { _id: contractId, status: "active" },
-    { $set: { deliveryCarry: carry } }
+    {
+      $set: {
+        deliveryCarry: carry,
+        // The reason is stamped on EVERY delivery turn, shipped or not, so the order book can
+        // always answer "why did this not move". An unset reason means it shipped everything
+        // it built, which is a different statement from "we do not know".
+        ...(reason ? { carryReason: reason } : {}),
+        ...(turn != null ? { carryReasonTurn: turn } : {}),
+      },
+      ...(reason ? {} : { $unset: { carryReason: "" } }),
+    }
   );
 }
 
@@ -144,7 +265,12 @@ export async function cancelContract(db: Db, contractId: ObjectId): Promise<bool
     { _id: contractId, status: { $in: ["pending", "active"] } },
     { $set: { status: "cancelled", updatedAt: new Date() } }
   );
-  if (res.modifiedCount > 0 && contract.allocationWindowId && contract.allocatedLots) {
+  if (res.modifiedCount === 0) return false;
+  // Money first: a withdrawn order must stop holding the appropriation immediately, even if
+  // the window quota release below fails. The reverse order would leave the country unable to
+  // re-spend budget on an order that no longer exists.
+  await releaseContractEncumbrance(db, contractId);
+  if (contract.allocationWindowId && contract.allocatedLots) {
     const undelivered = Math.max(0, contract.allocatedLots - contract.lotsDelivered);
     await releaseDefenceContractLots(
       db,
@@ -153,7 +279,7 @@ export async function cancelContract(db: Db, contractId: ObjectId): Promise<bool
       undelivered * contract.pricePerLot
     );
   }
-  return res.modifiedCount > 0;
+  return true;
 }
 
 /**
@@ -180,13 +306,59 @@ export async function respondToContract(
       },
     }
   );
-  if (!accept && res.modifiedCount > 0 && contract.allocationWindowId && contract.allocatedLots) {
-    await releaseDefenceContractLots(
-      db,
-      contract.allocationWindowId,
-      contract.corporationId.toString(),
-      contract.allocatedLots * contract.pricePerLot
-    );
+  if (!accept && res.modifiedCount > 0) {
+    // A declined offer never builds anything, so it must give back everything it reserved:
+    // the appropriation it encumbered and the window quota it took off other suppliers.
+    await releaseContractEncumbrance(db, contractId);
+    if (contract.allocationWindowId && contract.allocatedLots) {
+      await releaseDefenceContractLots(
+        db,
+        contract.allocationWindowId,
+        contract.corporationId.toString(),
+        contract.allocatedLots * contract.pricePerLot
+      );
+    }
   }
   return res.modifiedCount > 0;
+}
+
+/**
+ * The contractor's production-line allocation for one order (suggestion #281).
+ *
+ * Bounded by the caller against what the plant has free - this write only guards that the
+ * contract is still live, so a CEO cannot re-allocate an order the minister has withdrawn.
+ * Price per lot is deliberately untouched: allocation buys SPEED, not a better deal. Letting
+ * it move the price would make it a second, hidden negotiation the minister never agreed to.
+ */
+export async function setContractFactories(
+  db: Db,
+  contractId: ObjectId,
+  assignedFactories: number
+): Promise<boolean> {
+  const res = await contracts(db).updateOne(
+    { _id: contractId, status: { $in: ["pending", "active"] } },
+    { $set: { assignedFactories, updatedAt: new Date() } }
+  );
+  return res.modifiedCount > 0;
+}
+
+/**
+ * Lines already committed on a plant, excluding one contract the caller is re-allocating.
+ *
+ * `defaultAllocation` is what a contract with no stored allocation counts as. Legacy orders
+ * have none, and reading those as zero would report a fully-booked plant as idle and let a
+ * new order over-commit it - the exact double-booking the slot model exists to stop.
+ */
+export async function assignedFactoriesForSector(
+  db: Db,
+  sectorId: ObjectId,
+  defaultAllocation: number,
+  excludeContractId?: ObjectId
+): Promise<number> {
+  const live = await contracts(db)
+    .find({ sectorId, status: { $in: ["pending", "active"] } })
+    .toArray();
+  return live
+    .filter((c) => !excludeContractId || c._id.toString() !== excludeContractId.toString())
+    .reduce((sum, c) => sum + Math.max(0, c.assignedFactories ?? defaultAllocation), 0);
 }

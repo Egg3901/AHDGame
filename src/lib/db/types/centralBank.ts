@@ -315,6 +315,14 @@ export interface CentralBank {
   externalBroadMoney?: number;
   /** Lifetime currency created minus currency retired by explicit monetary operations. */
   netMoneyCreatedLifetime?: number;
+  /**
+   * Lifetime interest paid on savings held at this central bank.
+   *
+   * The payer of that interest used to be nobody: accounts were credited and no
+   * balance anywhere fell. It is currency creation, so it is booked as such,
+   * and this line is the record of how much of the money supply is it.
+   */
+  savingsInterestPaidLifetime?: number;
   /** Recent QE/QT, direct-financing, and liquidity operations. */
   monetaryOperations?: import("./moneySupply").MonetaryOperationRecord[];
   /** Turn of the most recent discretionary monetary operation. */

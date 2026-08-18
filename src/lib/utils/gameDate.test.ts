@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { calendarTurn, turnToGameMonth } from "./gameDate";
+import { MS_PER_TURN } from "@/lib/constants/turnTime";
+import {
+  calendarTurn,
+  formatGameMonth,
+  gameDateAnchorFromState,
+  turnToGameMonth,
+  type GameDateAnchor,
+} from "./gameDate";
 
 describe("calendarTurn (pre-iteration date clock)", () => {
   it("is the identity on normal worlds (no clock)", () => {
@@ -35,5 +42,76 @@ describe("calendarTurn (pre-iteration date clock)", () => {
     const raw = 100;
     const cal = calendarTurn(raw, { preIterationActive: true });
     expect(turnToGameMonth(cal, 1991)).toEqual({ year: 1991, month: 0 });
+  });
+});
+
+describe("formatGameMonth (career-history display)", () => {
+  const lastTurnProcessed = new Date("2026-08-17T19:00:00.000Z");
+
+  // Live 1953 world shape behind ticket #1126: raw turn 194, year 1956 on the
+  // status bar (calendarTurn 146 after a 48-turn founding offset). Career
+  // history was converting wall-clock dates through the RAW turn, so a "now"
+  // event rendered Jan 1957 — a year ahead of the clock, and later than early
+  // tenures that still landed in 1953.
+  const liveAnchor: GameDateAnchor = {
+    currentTurn: 194,
+    lastTurnProcessed,
+    startingYear: 1953,
+    preIterationTurns: 48,
+  };
+
+  function hoursAgo(hours: number): Date {
+    return new Date(lastTurnProcessed.getTime() - hours * MS_PER_TURN);
+  }
+
+  it("is identity on worlds with no founding offset", () => {
+    const anchor: GameDateAnchor = {
+      currentTurn: 194,
+      lastTurnProcessed,
+      startingYear: 1953,
+    };
+    expect(formatGameMonth(lastTurnProcessed, anchor)).toBe("Jan 1957");
+  });
+
+  it("renders a current event on the same calendar month as the status bar", () => {
+    expect(formatGameMonth(lastTurnProcessed, liveAnchor)).toBe("Jan 1956");
+  });
+
+  it("does not leave early tenures in a different year than recent ones", () => {
+    // Raw turn 1 (193 hours ago) is still inside the founding offset, so it
+    // clamps to calendar turn 1 — Jan 1953, not Jun 1953.
+    expect(formatGameMonth(hoursAgo(193), liveAnchor)).toBe("Jan 1953");
+    expect(formatGameMonth(lastTurnProcessed, liveAnchor)).toBe("Jan 1956");
+  });
+
+  it("pins every event to the era start while founding is still active", () => {
+    const founding: GameDateAnchor = {
+      ...liveAnchor,
+      preIterationActive: true,
+      preIterationTurns: 0,
+    };
+    expect(formatGameMonth(lastTurnProcessed, founding)).toBe("Jan 1953");
+    expect(formatGameMonth(hoursAgo(50), founding)).toBe("Jan 1953");
+  });
+});
+
+describe("gameDateAnchorFromState", () => {
+  it("copies the pre-iteration clock onto the display anchor", () => {
+    const lastTurnProcessed = new Date("2026-08-17T19:00:00.000Z");
+    expect(
+      gameDateAnchorFromState({
+        currentTurn: 194,
+        lastTurnProcessed,
+        startingYear: 1953,
+        preIterationTurns: 48,
+        preIteration: { active: false },
+      })
+    ).toEqual({
+      currentTurn: 194,
+      lastTurnProcessed,
+      startingYear: 1953,
+      preIterationTurns: 48,
+      preIterationActive: false,
+    });
   });
 });

@@ -40,6 +40,7 @@ import { migration as adoptOnePartyConfidenceModel } from "./entries/2026-08-10-
 import { migration as smoothLegacyBuildOrders } from "./entries/2026-08-10-smooth-legacy-build-orders";
 import { migration as pensionSchemeFundPositions } from "./entries/2026-08-11-pension-scheme-fund-positions";
 import { migration as ratificationBallotIndexes } from "./entries/2026-08-11-ratification-ballot-indexes";
+import { migration as bankMoneyMoveIndexes } from "./entries/2026-08-18-bank-money-move-indexes";
 import { migration as dropDeadPartyAxes } from "./entries/2026-08-11-drop-dead-party-axes";
 import { migration as heal1953SeedBalance } from "./entries/2026-08-09-heal-1953-seed-balance";
 import { migration as reconcileCommandEconomyUnowned } from "./entries/2026-08-09-reconcile-command-economy-unowned";
@@ -112,6 +113,9 @@ export const MIGRATIONS: Migration[] = [
   // Ticket #1032 — drop the foreignPolicy / culture party axes. Written by
   // every seed and the shift UI, read by nothing.
   dropDeadPartyAxes,
+  // Indexes for the banking money-movement claim records. The seed module
+  // covers a fresh bootstrap; a world that is already running needs this.
+  bankMoneyMoveIndexes,
   // Strategic Operations v2 — migrate campaign investment levers from linear
   // levels to the starter + three-branch tree model. Player-friendly, idempotent.
   campaignOpsTrees,

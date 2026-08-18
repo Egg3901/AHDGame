@@ -75,6 +75,18 @@ When crisis interaction is **off**, the only crisis creation path is the **legac
 
 The legacy creator is always available regardless of the flag state. The flag only gates the richer template-based system on top.
 
+## Chained and multi-country crises
+
+Some historical crisis families continue across several decisions instead of ending after one node. A chain records its family and current stage, so later crises can advance, hold, or reduce the same shared situation.
+
+Vietnam is the first full chained family. Between 1955 and 1975 it can progress from advisors through materiel support, a naval incident, an air campaign, a ground commitment, and a prolonged war. The United States and Soviet Union receive separate country-scoped decisions. One government's response does not close the other government's decision.
+
+Each opening Vietnam decision has a 24 hour real-time deadline. If a government does not respond, the cautious first option holds its current commitment. Increasing support spends treasury funds and moves Cold War readiness, bloc cohesion, war weariness, and procurement demand. Pulling back reduces committed support before it lowers the shared stage.
+
+At the air-campaign stage, the chain opens a real North Vietnam versus South Vietnam conflict. The superpowers remain patrons rather than direct belligerents. Dropping below that stage winds the front down; reaching level zero ends it without allowing the same chain to restart.
+
+The active stage and decisions are visible from the Conflicts and Crises pages. Openings and stage changes also publish through the in-game news and wire plus the configured Discord news and national channels.
+
 ## Strategic implications
 
 | Decision | Impact |

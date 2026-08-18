@@ -13,7 +13,7 @@ import {
 } from "@/lib/constants/countries";
 import { logWireEvent } from "@/lib/wireEvent";
 import { applyCrisisEffects } from "./applyEffects";
-import { runCrisisOptionAction } from "./optionActions";
+import { runCrisisOptionAction, type CrisisActionResult } from "./optionActions";
 import { spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { isCrisisAidBillsEnabled } from "./featureFlag";
 import { AID_MAX_PCT_GDP, AID_DEFAULT_PCT_GDP } from "@/lib/constants/crises";
@@ -202,10 +202,16 @@ export async function applyEffectsForCrisis(
  * their own multi-contributor flows and are not treated as multi-responder here.
  */
 export function isMultiResponderNode(
-  crisis: Pick<Crisis, "scope">,
+  crisis: Pick<Crisis, "scope" | "countryIds">,
   node: CrisisDecisionNode
 ): boolean {
-  return crisis.scope === "global" && node.type === "choice";
+  if (node.type !== "choice") return false;
+  if (crisis.scope === "global") return true;
+  // A country-scoped crisis addressed to MORE THAN ONE nation is also answered
+  // per country: the chained Vietnam rungs put the same question to both
+  // superpowers, and neither leader's choice may resolve the other's. Ordinary
+  // country crises carry exactly one countryId and are untouched by this.
+  return crisis.scope === "country" && (crisis.countryIds?.length ?? 0) > 1;
 }
 
 /**
@@ -451,6 +457,23 @@ export async function submitCrisisDecision(
       await applyEffectsForCountry(db, countryId, option.effects);
     }
 
+    // Multi-responder options get the same real-subsystem action hook as
+    // single-responder ones. Without this a per-country choice could only ever
+    // nudge metrics, which is precisely the cosmetic-crisis problem the hook
+    // exists to solve.
+    if (option.action) {
+      const gameState = await getGameState(db);
+      await runCrisisOptionAction({
+        db,
+        crisis,
+        interaction,
+        option,
+        characterId,
+        countryId,
+        currentTurn: gameState?.currentTurn ?? crisis.startTurn,
+      });
+    }
+
     const character = await db
       .collection<{ name?: string }>("characters")
       .findOne({ _id: characterId }, { projection: { name: 1 } });
@@ -578,10 +601,14 @@ export async function submitCrisisDecision(
   // ── Real-subsystem action hook. Runs after flat effects, before navigation,
   //    so a choice can file a bill / issue a taking / spawn a court case in
   //    addition to nudging metrics. Best-effort (see runCrisisOptionAction). ──
+  //    A handler may also redirect the navigation (see `CrisisActionResult`):
+  //    a retryable action decides for itself whether the attempt succeeded,
+  //    which one static `nextNodeId` on the option cannot express.
+  let actionResult: CrisisActionResult = {};
   const chosenOption = currentNode.options?.find((o) => o.optionId === optionId);
   if (crisis && chosenOption?.action) {
     const gameState = await getGameState(db);
-    await runCrisisOptionAction({
+    actionResult = await runCrisisOptionAction({
       db,
       crisis,
       interaction,
@@ -593,8 +620,12 @@ export async function submitCrisisDecision(
   }
 
   // ── Navigate. Landing on a terminal node applies its outcome and resolves. ──
-  const nextNode = nextNodeId
-    ? (interaction.decisionTree.find((n) => n.nodeId === nextNodeId) ?? null)
+  //    An action hook that returned its own `nextNodeId` wins: the option's
+  //    static target is the "the attempt did not change anything" case, and the
+  //    handler names the node when it did.
+  const resolvedNextNodeId = actionResult.nextNodeId ?? nextNodeId;
+  const nextNode = resolvedNextNodeId
+    ? (interaction.decisionTree.find((n) => n.nodeId === resolvedNextNodeId) ?? null)
     : null;
 
   if (nextNode && nextNode.type !== "terminal") {

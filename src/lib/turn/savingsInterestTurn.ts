@@ -24,6 +24,57 @@ import { processNppSavingsInterest } from "@/lib/turn/nppSavingsInterest";
 const DEFAULT_PRIME = 2.5;
 
 /**
+ * Interest on savings held at the CENTRAL bank had no payer.
+ *
+ * Every quarter the pass credited each account and nothing was debited
+ * anywhere, so the money supply grew by an amount that appeared in no ledger,
+ * no operation record and no telemetry. On a subsystem whose whole disease is
+ * quantities with no cash behind them, an uncounted mint is the disease itself.
+ *
+ * The payer is the central bank, which is who actually pays it: these accounts
+ * are liabilities of the CB, and interest on them is currency creation. That is
+ * already a modelled thing here, so this books it the same way an open-market
+ * operation is booked, against `externalBroadMoney` and
+ * `netMoneyCreatedLifetime`. Nothing about the player's credit changes; what
+ * changes is that the money now comes from somewhere, shows up in the money
+ * supply, and therefore feeds the inflation signal that prices it.
+ *
+ * Deposits held at a PRIVATE bank are not on this path at all: `bankingTurn`
+ * pays those out of the bank's own `cashReserves`, and the accrual loop below
+ * skips any account whose `savingsHolder` is a bank.
+ */
+async function bookCentralBankInterestCreation(
+  db: Db,
+  interestByCountry: Map<CountryId, number>
+): Promise<void> {
+  const rows = [...interestByCountry.entries()].filter(([, amount]) => amount > 0);
+  if (rows.length === 0) return;
+
+  // Shared-bank countries (IE and the rest of the euro area) roll up into one
+  // doc, so sum before writing rather than issuing competing increments.
+  const byBankId = new Map<string, number>();
+  for (const [countryId, amount] of rows) {
+    const bankId = getBankId(countryId);
+    byBankId.set(bankId, (byBankId.get(bankId) ?? 0) + amount);
+  }
+
+  await db.collection<CentralBank>("centralBanks").bulkWrite(
+    [...byBankId.entries()].map(([bankId, amount]) => ({
+      updateOne: {
+        filter: { _id: bankId },
+        update: {
+          $inc: {
+            externalBroadMoney: Math.round(amount * 100) / 100,
+            netMoneyCreatedLifetime: Math.round(amount * 100) / 100,
+            savingsInterestPaidLifetime: Math.round(amount * 100) / 100,
+          },
+        },
+      },
+    }))
+  );
+}
+
+/**
  * Savings interest turn (forex path): two-phase quarterly compounding.
  *
  * Every turn: accrue per-turn interest into currencyBalances.pendingSavingsInterest (no balance
@@ -177,6 +228,8 @@ export async function processSavingsInterestTurn(
       const creditOps: { updateOne: { filter: object; update: object } }[] = [];
       const ledgerBatch: Omit<SavingsLedgerEntry, "_id">[] = [];
       const now = new Date();
+      // What the central bank is about to pay, by jurisdiction.
+      const interestPaidByCountry = new Map<CountryId, number>();
 
       for (const char of creditCharacters) {
         const pending = char.currencyBalances?.pendingSavingsInterest ?? {};
@@ -193,6 +246,11 @@ export async function processSavingsInterestTurn(
           const holder = holders[currency];
           if (holder != null && holder !== "centralBank") continue;
           totalInterest += amount;
+          const payingCountry = getCountryIdForCurrency(currency) as CountryId;
+          interestPaidByCountry.set(
+            payingCountry,
+            (interestPaidByCountry.get(payingCountry) ?? 0) + amount
+          );
           perCharInc[`currencyBalances.savings.${currency}`] = amount;
           perCharInc[`currencyBalances.interestEarned.${currency}`] = amount;
           // Zero out pending (keep key present so next accrual uses $inc cleanly)
@@ -225,6 +283,10 @@ export async function processSavingsInterestTurn(
 
       if (creditOps.length > 0) {
         await db.collection("characters").bulkWrite(creditOps);
+        // Booked AFTER the credit lands: crediting first and failing here
+        // understates money created, which is recoverable from the ledger;
+        // booking first and failing there overstates it, which is not.
+        await bookCentralBankInterestCreation(db, interestPaidByCountry);
       }
       if (ledgerBatch.length > 0) {
         await db.collection("savingsLedger").insertMany(ledgerBatch);
@@ -282,6 +344,7 @@ export async function processSavingsInterestTurn(
   const ledgerBatch: Omit<SavingsLedgerEntry, "_id">[] = [];
   let totalInterest = 0;
   const legacyNationalBalance = new Map<CountryId, number>();
+  const legacyInterestByCountry = new Map<CountryId, number>();
 
   for (const char of characters) {
     const sav = char.savingsOnHand ?? 0;
@@ -297,6 +360,11 @@ export async function processSavingsInterestTurn(
     const interest = computeSavingsInterestForTurn(eligible, prime, home, resolveInflation(home));
     if (interest <= 0) continue;
     totalInterest += interest;
+    const payingCountry = getCountryIdForCurrency(home) as CountryId;
+    legacyInterestByCountry.set(
+      payingCountry,
+      (legacyInterestByCountry.get(payingCountry) ?? 0) + interest
+    );
     bulkOps.push(buildSavingsInterestAccrualBulkOp(char._id, interest, home, false));
     ledgerBatch.push({
       characterId: char._id,
@@ -315,6 +383,7 @@ export async function processSavingsInterestTurn(
   }
 
   await db.collection("characters").bulkWrite(bulkOps);
+  await bookCentralBankInterestCreation(db, legacyInterestByCountry);
   if (ledgerBatch.length > 0) {
     await db.collection("savingsLedger").insertMany(ledgerBatch);
 

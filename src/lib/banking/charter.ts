@@ -1,6 +1,6 @@
 import type { Db, ObjectId } from "mongodb";
 import type { BankCharter, BankCharterType } from "@/lib/db/types/bank";
-import type { Character, Corporation, CorporateSector, GameConfig } from "@/lib/db/types";
+import type { Corporation, CorporateSector, GameConfig } from "@/lib/db/types";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
@@ -14,7 +14,7 @@ import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { archiveCharter } from "@/lib/banking/charterHistory";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
-import { getCashReserves } from "@/lib/banking/bankCash";
+import { returnDepositBook } from "@/lib/banking/depositBookReturn";
 import { clampOffsets, getRateCorridors } from "@/lib/banking/regulationQ";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getCurrentTurn } from "@/lib/currentTurn";
@@ -73,7 +73,17 @@ export type IssueCharterResult =
   { ok: true; charter: BankCharter; postedCapital: number } | { ok: false; reasons: string[] };
 
 export type RevokeCharterResult =
-  { ok: true; refundedCapital: number; charter: BankCharter } | { ok: false; error: string };
+  | {
+      ok: true;
+      /** Residual bank equity paid up to the parent, after depositors. */
+      refundedCapital: number;
+      /** Player savings pointers moved back to the central bank. */
+      depositorsFlipped: number;
+      /** Household deposits returned to the money supply. */
+      npcDepositsReturned: number;
+      charter: BankCharter;
+    }
+  | { ok: false; error: string };
 
 /**
  * Minimum capital to post for a bank charter, in `currency` face value.
@@ -281,8 +291,19 @@ export async function issueCharter(
 }
 
 /**
- * Revoke a charter. Refunds posted capital to the corp treasury only when
- * totalDeposits is zero or absent (capital still backs depositors otherwise).
+ * Revoke a charter, returning the deposit book on the way out.
+ *
+ * This used to set `status: "revoked"` and stop. Depositors stayed pointed at a
+ * dead bank, `npcDeposits` stayed on its books with the matching cash beside
+ * it, and the owner got nothing back because the refund was gated on the
+ * deposit book being empty, which nobody could make it be. That is ticket
+ * 1093: a revoke that erased the balance sheet and stranded everything on it.
+ *
+ * Revocation now runs the same {@link returnDepositBook} waterfall as failure,
+ * admin unwind and a charter switch: household deposits go back to the money
+ * supply out of the bank's cash (insurance covers any shortfall), player
+ * pointers flip to the central bank, and only what is genuinely left over,
+ * capped at book equity, reaches the shareholder.
  */
 export async function revokeCharter(
   db: Db,
@@ -300,15 +321,23 @@ export async function revokeCharter(
   }
 
   const charter = corporation.bankCharter;
-  const deposits = charter.totalDeposits ?? 0;
-  // The bank's whole cash balance returns to the shareholder, not just the
-  // capital they posted. Before the ring-fence these were the same pot, so
-  // refunding `postedCapital` and leaving retained earnings behind happened to
-  // be a no-op; now the earnings are on the other side of a boundary and
-  // stranding them would quietly destroy them.
-  const refund = deposits <= 0 ? getCashReserves(charter) : 0;
   const revokedTurn = await getCurrentTurn(db);
   const now = new Date();
+
+  // Depositors before shareholders, and the waterfall decides what is left
+  // rather than a gate deciding whether anything is returned at all. The
+  // residual it releases is the whole cash balance when the bank has no
+  // deposits, which is the case the old refund rule handled and the only case
+  // it handled correctly.
+  const returned = await returnDepositBook(db, corporationId, {
+    cause: "revocation",
+    turn: revokedTurn,
+    releaseResidualToOwner: true,
+  });
+  if (returned.error) {
+    return { ok: false, error: `Could not return the deposit book: ${returned.error}` };
+  }
+  const refund = returned.ownerResidual;
 
   const revokedCharter: BankCharter = {
     ...charter,
@@ -319,7 +348,6 @@ export async function revokeCharter(
 
   const update: {
     $set: Record<string, unknown>;
-    $inc?: { liquidCapital: number };
   } = {
     $set: {
       "bankCharter.status": "revoked",
@@ -328,10 +356,9 @@ export async function revokeCharter(
       updatedAt: now,
     },
   };
-  if (refund > 0) {
-    update.$inc = { liquidCapital: refund };
-    update.$set["bankCharter.cashReserves"] = 0;
-  }
+  // No cash leg here: `returnDepositBook` already moved every currency unit it
+  // was going to move, with a netting check on the legs. Writing a second
+  // refund here is how the unwind path used to pay the shareholder twice.
 
   const result = await db
     .collection<Corporation>("corporations")
@@ -343,7 +370,13 @@ export async function revokeCharter(
 
   await archiveCharter(db, corporationId, revokedCharter, revokedTurn, "revoked");
 
-  return { ok: true, refundedCapital: refund, charter: revokedCharter };
+  return {
+    ok: true,
+    refundedCapital: refund,
+    depositorsFlipped: returned.depositorsFlipped,
+    npcDepositsReturned: returned.npcReturned,
+    charter: revokedCharter,
+  };
 }
 
 export type CharterSwitchBlocker =
@@ -510,25 +543,25 @@ export async function switchCharterType(
   let npcDepositsReturned = 0;
 
   if (!preview.targetTakesDeposits) {
-    const holderPath = `currencyBalances.savingsHolder.${currency}`;
-    // Pointer-only: never touch currencyBalances.savings.<CODE>.
-    const flip = await db
-      .collection<Character>("characters")
-      .updateMany(
-        { [holderPath]: corporationId.toString() },
-        { $set: { [holderPath]: "centralBank", updatedAt: now } }
-      );
-    depositorsFlipped = flip.modifiedCount ?? 0;
-
-    npcDepositsReturned = Math.max(0, charter.npcDeposits ?? 0);
-    if (npcDepositsReturned > 0) {
-      await db
-        .collection<CentralBank>("centralBanks")
-        .updateOne(
-          { _id: getBankId(getCountryIdForCurrency(currency)) },
-          { $inc: { externalBroadMoney: npcDepositsReturned }, $set: { updatedAt: now } }
-        );
+    // The shared waterfall, not a local copy of it. The local copy credited the
+    // central bank's money pool with the household book and left the matching
+    // cash in the bank, so the same money existed twice.
+    const returned = await returnDepositBook(db, corporationId, {
+      cause: "charter_switch",
+      turn: currentTurn,
+      // A switch is not a wind-up: the bank keeps trading, so its cash stays
+      // with it rather than being paid up to the parent.
+      releaseResidualToOwner: false,
+    });
+    if (returned.error) {
+      return {
+        ok: false,
+        blockers: ["no_active_charter"],
+        reasons: [`Could not return the deposit book: ${returned.error}`],
+      };
     }
+    depositorsFlipped = returned.depositorsFlipped;
+    npcDepositsReturned = returned.npcReturned;
   }
 
   // Offsets are re-clamped: the Regulation Q corridor an investment bank sits
@@ -540,15 +573,9 @@ export async function switchCharterType(
     corridors
   );
 
-  const depositFields = preview.targetTakesDeposits
-    ? {}
-    : {
-        "bankCharter.npcDeposits": 0,
-        "bankCharter.totalDeposits": 0,
-        // The floor follows the deposits out, otherwise the corp stays locked
-        // out of its own cash until the next banking turn recomputes it.
-        "bankCharter.reserveFloor": 0,
-      };
+  // Deposit aggregates are cleared by `returnDepositBook`, after its cash legs
+  // land. Clearing them here as well would be harmless today and wrong the day
+  // the waterfall stops half way, because it would hide the hole.
 
   const updated = await db.collection<Corporation>("corporations").findOneAndUpdate(
     { _id: corporationId, "bankCharter.status": "active", "bankCharter.type": charter.type },
@@ -559,7 +586,6 @@ export async function switchCharterType(
         "bankCharter.lendingOffset": offsets.lendingOffset,
         "bankCharter.charterSwitchTurn": currentTurn,
         "bankCharter.charterSwitchCooldownUntilTurn": cooldownUntilTurn,
-        ...depositFields,
         updatedAt: now,
       },
     },

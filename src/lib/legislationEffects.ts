@@ -30,7 +30,8 @@ import { joinSide } from "@/lib/military/joinSide";
 import { getConflict } from "@/lib/db/collections/conflicts";
 import { applyPrivatizeProvision } from "@/lib/nationalization/legislativePrivatize";
 import { applyDesignateStrategicSectorProvision } from "@/lib/nationalization/legislativeDesignateStrategic";
-import { applyUnionLawProvision } from "@/lib/labour/unionLaws";
+import { applyUnionLawProvision, isUnionsBanned } from "@/lib/labour/unionLaws";
+import { triggerUnionBanStrike } from "@/lib/crises/unionBanStrike";
 import {
   applyOrgFundProvision,
   applyOrgLeaveProvision,
@@ -248,7 +249,17 @@ export async function applyLegislationEffect(
           // v3 Phase 7b. Must stay above the tariff catch-all below — otherwise
           // this provision (no `rate`/`scopeType`/tariff fields) would be cast
           // to TariffProvision and corrupt a real tariff record.
+          //
+          // A ban is read BEFORE the write so the wildcat general strike fires on
+          // the transition, not on the state: re-banning a country that is
+          // already banned is not a new provocation and must not spawn a second
+          // strike. `triggerUnionBanStrike` re-checks the ban and refuses when
+          // the country has no unions or is already striking.
+          const wasBanned = p.banAction === "ban" ? await isUnionsBanned(db, countryId) : false;
           await applyUnionLawProvision(db, countryId, p);
+          if (p.banAction === "ban" && !wasBanned) {
+            await triggerUnionBanStrike(db, countryId, await getCurrentTurn(db));
+          }
         } else if (p.type === "create_department") {
           // Structural act: bring a seat into existence regardless of its era.
           // Must stay above the tariff catch-all (no tariff fields to cast).

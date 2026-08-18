@@ -12,6 +12,7 @@ import {
 } from "@/lib/banking/featureFlag";
 import { archiveCharter } from "@/lib/banking/charterHistory";
 import { getCashReserves } from "@/lib/banking/bankCash";
+import { applyMoneyMove, turnMoveKey } from "@/lib/banking/moneyMove";
 import { computeConfidence, type ConfidenceBand } from "@/lib/banking/confidence";
 import { resolveFailedBankDepositors } from "@/lib/banking/insurance";
 import {
@@ -339,7 +340,7 @@ async function evaluateOneBank(
     postedCapital,
     // The cash-backed base. Player pointer deposits are excluded for the same
     // reason they are excluded from the reserve requirement.
-    totalDeposits: Math.max(0, npcDeposits),
+    cashBackedDeposits: Math.max(0, npcDeposits),
     totalLoans,
     reserveRatioRequired,
     arrearsOutstanding,
@@ -357,36 +358,60 @@ async function evaluateOneBank(
       const outflow = Math.min(npcDeposits * rate, Math.max(0, cashReserves));
       if (outflow > 0) {
         const cbDocId = getBankId(getCountryIdForCurrency(currency));
-        await db.collection<CentralBank>("centralBanks").updateOne(
-          { _id: cbDocId },
-          {
-            $inc: { externalBroadMoney: outflow },
-            $set: { updatedAt: new Date() },
-          }
-        );
-        npcDeposits = Math.max(0, npcDeposits - outflow);
         // Fleeing depositors take their money with them. Capped at what the
         // bank actually holds: a run cannot withdraw cash that is not there,
         // and what it cannot pay is what the failure test is for.
-        cashReserves = Math.max(0, cashReserves - outflow);
-        await db.collection<Corporation>("corporations").updateOne(
-          {
-            _id: corp._id,
-            "bankCharter.status": "active",
-            $or: [
-              { "bankCharter.lastSolvencyTurn": { $ne: turn } },
-              { "bankCharter.lastSolvencyTurn": { $exists: false } },
-            ],
-          },
-          {
-            $set: {
-              "bankCharter.npcDeposits": npcDeposits,
-              "bankCharter.cashReserves": cashReserves,
-              updatedAt: new Date(),
+        //
+        // Both legs go through the shared money-movement primitive: the vault
+        // debit is guarded and lands before the pool credit, and the claimed
+        // key makes a crashed or re-run pass replay instead of crediting the
+        // pool a second time. The cash moves here; only the deposit AGGREGATE
+        // is written below, as a guarded $inc so it cannot clobber a
+        // concurrent move's $inc with a stale absolute.
+        const flightMove = await applyMoneyMove(db, {
+          key: turnMoveKey("solvency-deposit-flight", corp._id.toString(), turn),
+          kind: "solvency_deposit_flight",
+          turn,
+          legs: [
+            {
+              kind: "debit",
+              amount: outflow,
+              collection: "corporations",
+              filter: { _id: corp._id },
+              path: "bankCharter.cashReserves",
+              note: "fleeing depositors drain the vault",
             },
-          }
-        );
-        fled = outflow;
+            {
+              kind: "credit",
+              amount: outflow,
+              collection: "centralBanks",
+              filter: { _id: cbDocId },
+              path: "externalBroadMoney",
+              note: "fled deposits return to the household pool",
+            },
+          ],
+        });
+        if (flightMove.status === "applied" || flightMove.status === "replayed") {
+          npcDeposits = Math.max(0, npcDeposits - outflow);
+          cashReserves = Math.max(0, cashReserves - outflow);
+          await db.collection<Corporation>("corporations").updateOne(
+            {
+              _id: corp._id,
+              "bankCharter.status": "active",
+              $or: [
+                { "bankCharter.lastSolvencyTurn": { $ne: turn } },
+                { "bankCharter.lastSolvencyTurn": { $exists: false } },
+              ],
+            },
+            {
+              $set: {
+                "bankCharter.npcDeposits": npcDeposits,
+                updatedAt: new Date(),
+              },
+            }
+          );
+          fled = outflow;
+        }
       }
     }
   }
@@ -420,7 +445,7 @@ async function evaluateOneBank(
       lastSolvencyTurn: turn,
     };
     await archiveCharter(db, corp._id, failedCharter, turn, "failed");
-    await writeOffInterbankAndMarginOnFailure(db, corp._id, charter, turn);
+    await writeOffLenderSideInterbankOnFailure(db, corp._id, turn);
     await db.collection<Corporation>("corporations").updateOne(
       {
         _id: corp._id,
@@ -438,8 +463,12 @@ async function evaluateOneBank(
           "bankCharter.warningBand": band,
           "bankCharter.npcDeposits": npcDeposits,
           "bankCharter.totalDeposits": totalDeposits,
-          "bankCharter.interbankDebt": 0,
-          "bankCharter.cbMarginDebt": 0,
+          // Interbank and central bank claims are NOT cleared here any more.
+          // Clearing them at failure meant the resolution waterfall, which runs
+          // in a later sweep this same turn, found nothing to pay: the lenders
+          // and the central bank were written off before anyone checked whether
+          // the estate could cover them. They are settled, in priority order,
+          // by `returnDepositBook`.
           "bankCharter.propBook": [],
           "bankCharter.propBookMarkValue": 0,
           "bankCharter.lastSolvencyTurn": turn,
@@ -467,38 +496,23 @@ async function evaluateOneBank(
 }
 
 /**
- * On failure: interbank lenders write off outstanding (loss; no cash), CB margin
- * debt is written off against the CB (LOC-style: clear the claim, no further
- * cash movement since principal was created into the corp).
+ * On failure, the loans this bank made AS A LENDER die with it.
+ *
+ * Its borrowers keep the cash and the asset is written off, which is a real
+ * loss the estate cannot recover: chasing an interbank borrower for early
+ * repayment because its lender failed is a second failure, not a recovery.
+ *
+ * What this deliberately no longer touches is the claims AGAINST this bank.
+ * Those used to be written off here, before anyone had asked whether the estate
+ * could pay them, so a bank that failed holding enough cash to repay its
+ * lenders repaid nobody. They are settled in priority order by
+ * `returnDepositBook`, which runs in the resolution sweep later this turn.
  */
-async function writeOffInterbankAndMarginOnFailure(
+async function writeOffLenderSideInterbankOnFailure(
   db: Db,
   failedCorpId: ObjectId,
-  charter: BankCharter,
   turn: number
 ): Promise<void> {
-  const owedAsBorrower = await db
-    .collection<InterbankLoan>("interbankLoans")
-    .find({
-      borrowerCorporationId: failedCorpId,
-      status: "current",
-    })
-    .toArray();
-
-  for (const loan of owedAsBorrower) {
-    await db.collection<InterbankLoan>("interbankLoans").updateOne(
-      { _id: loan._id },
-      {
-        $set: {
-          status: "defaulted",
-          lastProcessedTurn: turn,
-        },
-      }
-    );
-  }
-
-  // Loans this bank originated as interbank lender: borrowers keep the cash;
-  // the asset is written off (status defaulted) so confidence can see the loss.
   await db.collection<InterbankLoan>("interbankLoans").updateMany(
     {
       lenderCorporationId: failedCorpId,
@@ -511,20 +525,6 @@ async function writeOffInterbankAndMarginOnFailure(
       },
     }
   );
-
-  // Clear borrower-side debt counters on counterparties who lent to the failed bank.
-  for (const loan of owedAsBorrower) {
-    const out = Math.max(0, loan.outstanding ?? 0);
-    if (out <= 0) continue;
-    // Lender absorbs the loss (no cash recovery). Debt already marked defaulted.
-    void charter;
-  }
-
-  // CB margin: write off the claim (principal was created on draw; clearing debt
-  // does not destroy residual cash still on the failed corp).
-  if ((charter.cbMarginDebt ?? 0) > 0) {
-    // No CB pool debit - mirror LOC writeoff (claim extinguished).
-  }
 }
 
 async function sumLoanOutstanding(
