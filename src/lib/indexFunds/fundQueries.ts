@@ -125,7 +125,7 @@ export async function insertFund(db: Db, fund: Omit<IndexFund, "_id">): Promise<
 
 /**
  * Update target constituents and rebalance metadata for a fund.
- * Called at turn boundaries when recomputing weights.
+ * Called on the financial-day cadence when recomputing weights (Pass 2).
  */
 export async function updateFundConstituents(
   db: Db,

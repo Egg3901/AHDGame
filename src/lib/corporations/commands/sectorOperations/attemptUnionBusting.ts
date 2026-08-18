@@ -47,8 +47,8 @@ function notInCooldown(currentTurn: number) {
 }
 
 /**
- * Core logic for a CEO's union-busting attempt on one sector (Phase 7a,
- * `labourSystemMode >= "full"`). Rolls a success/backfire outcome (see
+ * Core logic for a CEO's union-busting attempt on one sector
+ * (`labourSystemMode >= "full"`). Rolls a success/backfire outcome (see
  * `src/lib/labour/unionBusting.ts`), atomically debits the cash cost from
  * the corporation and applies the unionization change + cooldown to the
  * sector, using `runWithOptionalTransaction` since these are two different

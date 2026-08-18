@@ -495,9 +495,9 @@ export async function loadCorporationDetailView(args: {
   }
 
   // Derive ceoIsInactive from the CEO-owning user's lastActivity (or createdAt fallback).
-  // Eligibility must mirror inactiveCeoSectorShed.isInactiveCeoPenaltyCandidate exactly so that
-  // state-owned / nationalized corps (which the turn step skips) don't get falsely
-  // flagged as inactive in the UI.
+  // Same exclusions as inactiveCeoSectorShed.isInactiveCeoPenaltyCandidate except this
+  // query does not skip ceoType === "npp". NPP-run corps can show as inactive here
+  // even though the turn shed never acts on them.
   const INACTIVE_CEO_THRESHOLD_MS = INACTIVE_CEO_TURN_THRESHOLD * 60 * 60 * 1000;
   let ceoIsInactive = false;
   if (

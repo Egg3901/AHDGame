@@ -1,15 +1,15 @@
 /**
  * NPP Investing Behavior
  *
- * Non-player characters (NPPs) earn a GDP-proportional budget each turn and
- * invest it into index funds based on their archetype risk preferences.
+ * Non-player characters (NPPs) earn a GDP-proportional budget and invest it
+ * into index funds based on their archetype risk preferences.
  *
- * GDP per capita is a rough approximation — each country gets a flat annual
- * income figure divided across 48 turns. NPPs then allocate 20–40% of that
- * income to passive fund investments depending on their risk profile.
+ * GDP per capita is a rough approximation: each country gets a flat annual
+ * income figure divided across 48 turns. Every archetype then allocates 40%
+ * of that income to funds (broad vs sector mix and domestic bias vary).
  *
- * This module is called from the fund cron cycle (or turn processing) and is
- * gated behind the indexFundsEnabled feature flag.
+ * Called from the fund cron (Step 6), throttled by NPP_FUND_INVESTMENT_INTERVAL.
+ * Gated behind isIndexFundsEnabled (indexFundsMode).
  */
 
 import { ObjectId, type AnyBulkWriteOperation, type Db, type Document } from "mongodb";
@@ -25,7 +25,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 
 // ── GDP per capita by country (USD-equivalent, annual) ────────────────
 // These are approximate 2024 GDP per capita figures used to determine NPP
-// investable budgets. Real rates are loaded from exchangeRates at runtime.
+// investable budgets.
 
 const GDP_PER_CAPITA_ANCHOR: Record<string, number> = {
   US: 80000,
@@ -142,7 +142,8 @@ export function determineNPPRiskArchetype(npp: NPP): NPRiskArchetype {
 /**
  * Compute the investable budget (in anchor currency) for an NPP this turn.
  * Each NPP earns their country's GDP per capita / 48 turns, and allocates
- * 20–40% of that to fund investments depending on their archetype.
+ * 40% of that to fund investments (broadPct + sectorPct is 0.40 for every
+ * archetype; mix and domestic bias still vary).
  */
 export function computeNPPInvestableBudget(
   npp: NPP,
