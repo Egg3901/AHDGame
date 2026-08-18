@@ -12,6 +12,7 @@ import {
 } from "@/lib/banking/featureFlag";
 import { archiveCharter } from "@/lib/banking/charterHistory";
 import { getCashReserves } from "@/lib/banking/bankCash";
+import { applyMoneyMove, turnMoveKey } from "@/lib/banking/moneyMove";
 import { computeConfidence, type ConfidenceBand } from "@/lib/banking/confidence";
 import { resolveFailedBankDepositors } from "@/lib/banking/insurance";
 import {
@@ -357,36 +358,60 @@ async function evaluateOneBank(
       const outflow = Math.min(npcDeposits * rate, Math.max(0, cashReserves));
       if (outflow > 0) {
         const cbDocId = getBankId(getCountryIdForCurrency(currency));
-        await db.collection<CentralBank>("centralBanks").updateOne(
-          { _id: cbDocId },
-          {
-            $inc: { externalBroadMoney: outflow },
-            $set: { updatedAt: new Date() },
-          }
-        );
-        npcDeposits = Math.max(0, npcDeposits - outflow);
         // Fleeing depositors take their money with them. Capped at what the
         // bank actually holds: a run cannot withdraw cash that is not there,
         // and what it cannot pay is what the failure test is for.
-        cashReserves = Math.max(0, cashReserves - outflow);
-        await db.collection<Corporation>("corporations").updateOne(
-          {
-            _id: corp._id,
-            "bankCharter.status": "active",
-            $or: [
-              { "bankCharter.lastSolvencyTurn": { $ne: turn } },
-              { "bankCharter.lastSolvencyTurn": { $exists: false } },
-            ],
-          },
-          {
-            $set: {
-              "bankCharter.npcDeposits": npcDeposits,
-              "bankCharter.cashReserves": cashReserves,
-              updatedAt: new Date(),
+        //
+        // Both legs go through the shared money-movement primitive: the vault
+        // debit is guarded and lands before the pool credit, and the claimed
+        // key makes a crashed or re-run pass replay instead of crediting the
+        // pool a second time. The cash moves here; only the deposit AGGREGATE
+        // is written below, as a guarded $inc so it cannot clobber a
+        // concurrent move's $inc with a stale absolute.
+        const flightMove = await applyMoneyMove(db, {
+          key: turnMoveKey("solvency-deposit-flight", corp._id.toString(), turn),
+          kind: "solvency_deposit_flight",
+          turn,
+          legs: [
+            {
+              kind: "debit",
+              amount: outflow,
+              collection: "corporations",
+              filter: { _id: corp._id },
+              path: "bankCharter.cashReserves",
+              note: "fleeing depositors drain the vault",
             },
-          }
-        );
-        fled = outflow;
+            {
+              kind: "credit",
+              amount: outflow,
+              collection: "centralBanks",
+              filter: { _id: cbDocId },
+              path: "externalBroadMoney",
+              note: "fled deposits return to the household pool",
+            },
+          ],
+        });
+        if (flightMove.status === "applied" || flightMove.status === "replayed") {
+          npcDeposits = Math.max(0, npcDeposits - outflow);
+          cashReserves = Math.max(0, cashReserves - outflow);
+          await db.collection<Corporation>("corporations").updateOne(
+            {
+              _id: corp._id,
+              "bankCharter.status": "active",
+              $or: [
+                { "bankCharter.lastSolvencyTurn": { $ne: turn } },
+                { "bankCharter.lastSolvencyTurn": { $exists: false } },
+              ],
+            },
+            {
+              $set: {
+                "bankCharter.npcDeposits": npcDeposits,
+                updatedAt: new Date(),
+              },
+            }
+          );
+          fled = outflow;
+        }
       }
     }
   }
