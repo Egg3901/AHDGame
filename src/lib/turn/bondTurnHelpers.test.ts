@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { Bond, Corporation } from "@/lib/db/types";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 
 vi.mock("@/lib/market/featureFlag", () => ({
   getMarketSystemModeForDb: vi.fn().mockResolvedValue("plants"),
@@ -16,7 +17,7 @@ vi.mock("@/lib/currency/gdpAnchorRate", () => ({
 
 import { filterInsolventCorps } from "./bondTurnHelpers";
 
-const FX = new Map([["USD", 1]]);
+const FX: ReadonlyMap<CurrencyCode, number> = new Map([["USD", 1]]);
 
 function makeDb(sectors: Record<string, unknown>[]): Db {
   return {
