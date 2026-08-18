@@ -65,8 +65,12 @@ export const UNION_LOGOS: Record<string, string> = {
   // logo, so it keeps the sector emblem rather than showing another union's mark.
   "Amalgamated Engineering and Electrical Union": `${WIKIPEDIA}Amalgamated_Engineering_and_Electrical_Union_logo.jpg`,
   "Association of Cinematograph, Television and Allied Technicians": `${WIKIPEDIA}Association_of_Cinematograph,_Television_and_Allied_Technicians_logo.jpg`,
+  // 1953 name of the union whose article is filed under its later title.
+  "Association of Cine-Technicians": `${WIKIPEDIA}Association_of_Cinematograph,_Television_and_Allied_Technicians_logo.jpg`,
   "Association of Scientific, Technical and Managerial Staffs": `${WIKIPEDIA}Astms_Logo.jpg`,
   "Banking, Insurance and Finance Union": `${WIKIPEDIA}Banking,_Insurance_and_Finance_Union_logo.png`,
+  // NUBE became BIFU; the article carries the successor mark, same union.
+  "National Union of Bank Employees": `${WIKIPEDIA}Banking,_Insurance_and_Finance_Union_logo.png`,
   "Confederation of Health Service Employees": `${WIKIPEDIA}COHSE_logo.jpg`,
   "Federation of Independent Trade Unions of Russia": `${WIKIPEDIA}Federation_of_Independent_Trade_Unions_of_Russia_logo.svg`,
   "IF Metall": `${WIKIPEDIA}IF_Metall_logo.svg`,
@@ -79,19 +83,30 @@ export const UNION_LOGOS: Record<string, string> = {
   "National Nurses United": `${WIKIPEDIA}Nationalnursesunitedlogo.png`,
   "National Union of Agricultural Workers": `${WIKIPEDIA}National_Union_of_Agricultural_and_Allied_Workers_logo.jpg`,
   "National Union of Agricultural and Allied Workers": `${WIKIPEDIA}National_Union_of_Agricultural_and_Allied_Workers_logo.jpg`,
+  "National Union of Mineworkers": `${WIKIPEDIA}National_Union_of_Mineworkers_(Great_Britain)_(logo).png`,
   "National Union of Railwaymen": `${WIKIPEDIA}National_Union_of_Railwaymen_logo.jpg`,
+  // The 1953 seeded name for the same union, which the article files under its
+  // modern title.
+  "American Newspaper Guild": `${WIKIPEDIA}NewsGuildCWALogo20211124.png`,
   "NewsGuild-CWA": `${WIKIPEDIA}NewsGuildCWALogo20211124.png`,
   "Nigeria Labour Congress": `${WIKIPEDIA}Nigeria_Labour_Congress_logo.svg`,
+  // OCAW is the Oil Workers International Union under its later name.
+  "Oil Workers International Union": `${WIKIPEDIA}OCAW_logo.png`,
   SIPTU: `${WIKIPEDIA}SIPTU_logo.jpg`,
   "Screen Actors Guild": `${WIKIPEDIA}Screen_Actors_Guild_logo.svg`,
   "Service Employees International Union": `${WIKIPEDIA}Service_Employees_International_Union_logo.svg`,
   "Transport and General Workers' Union": `${WIKIPEDIA}TGWU_logo.png`,
   UNISON: `${WIKIPEDIA}UNISON_logo.png`,
+  "Electrical Trades Union": `${WIKIPEDIA}Electrical_Trades_Union_logo.jpg`,
+  // NUGMW became the GMB; the article carries the successor mark, same union.
+  "National Union of General and Municipal Workers": `${WIKIPEDIA}GMB_trade_union_logo.jpg`,
   "Union of Construction, Allied Trades and Technicians": `${WIKIPEDIA}UCATT_logo.png`,
+  "Union of Post Office Workers": `${WIKIPEDIA}Union_of_Post_Office_Workers_logo.jpg`,
   "Union of Shop, Distributive and Allied Workers": `${WIKIPEDIA}USDAW_logo.png`,
   "Unite the Union": `${WIKIPEDIA}Unite_the_Union.svg`,
   "United Auto Workers": `${WIKIPEDIA}United_Auto_Workers_(logo).svg`,
   "United Brotherhood of Carpenters and Joiners": `${WIKIPEDIA}UBC_union_logo.png`,
+  "United Steelworkers of America": `${WIKIPEDIA}United_Steelworkers_logo.svg`,
   "United Farm Workers": `${WIKIPEDIA}UFW_logo.png`,
   "United Food and Commercial Workers": `${WIKIPEDIA}UFCW_logo.svg`,
   "United Mine Workers of America": `${WIKIPEDIA}United_Mine_Workers_of_America_logo.png`,
