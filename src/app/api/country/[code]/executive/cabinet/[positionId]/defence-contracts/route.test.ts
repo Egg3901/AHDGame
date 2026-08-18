@@ -79,19 +79,32 @@ describe("POST defence-contracts", () => {
     expect(body.contract.pricePerLot).toBeGreaterThan(0);
   });
 
-  it("awards more than one lot to a single supplier in a US-scale window (ticket 1108)", async () => {
-    db.collectionMocks.federalBudget.findOne.mockResolvedValue({
-      _id: "federal",
+  // Ticket #1134: a two-domain plant can fill either domain, not only components[0].
+  it("awards the minister's chosen domain on a plant that serves two", async () => {
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      _id: SECTOR_ID,
+      corporationId: CORP_ID,
+      sectorType: "defense",
+      strategyId: "standard",
       countryId: "US",
-      gdp: 387_000_000_000,
-      spending: { byCategory: { defense: 65_081_266_164.8 } },
-      treasuryBalance: 0,
-      debt: { principal: 0, ceiling: 0 },
     });
     const { POST } = await import(ROUTE);
-    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 3 }), params);
+    const res = await POST(
+      req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1, component: "air" }),
+      params
+    );
     expect(res.status).toBe(200);
-    expect((await res.json()).contract.lotsOrdered).toBe(3);
+    expect((await res.json()).contract.component).toBe("air");
+  });
+
+  it("refuses a domain the plant is not certified for", async () => {
+    const { POST } = await import(ROUTE);
+    const res = await POST(
+      req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1, component: "naval" }),
+      params
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/not naval/i);
   });
 
   it("rejects an award larger than the supplier's budget-scaled contracting allowance", async () => {
@@ -420,6 +433,52 @@ describe("POST defence-contracts - the obligation", () => {
     expect(res.status).toBe(409);
     expect((await res.json()).error).toMatch(/uncommitted/i);
     expect(db.collectionMocks.defenceContracts.insertOne).not.toHaveBeenCalled();
+  });
+
+  // Ticket #1134. Command economies have one defence SOE. The private one-third cap
+  // would leave two thirds of the window unspendable and every other plant idle.
+  it("lets a state-owned supplier take more than one third of the national window", async () => {
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: CORP_ID,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+      countryOwnerId: "US",
+      ownershipState: "stateOwned",
+    });
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 10 }), params);
+    expect(res.status).toBe(200);
+    expect((await res.json()).contract.lotsOrdered).toBe(10);
+  });
+
+  it("still caps a private supplier at one third of the window", async () => {
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 10 }), params);
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.maximumLots).toBeLessThan(10);
+    expect(body.error).toMatch(/at most/i);
+  });
+
+  it("assigns every free production line when the supplier is state-owned", async () => {
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      _id: SECTOR_ID,
+      corporationId: CORP_ID,
+      sectorType: "defense",
+      strategyId: "standard",
+      countryId: "US",
+    });
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: CORP_ID,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+      countryOwnerId: "US",
+      ownershipState: "stateOwned",
+    });
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1 }), params);
+    expect(res.status).toBe(200);
+    expect((await res.json()).contract.assignedFactories).toBe(4);
   });
 });
 

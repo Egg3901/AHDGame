@@ -6,6 +6,7 @@ import {
   lotPriceBand,
   contractLotsThisTurn,
   defaultFactoryAllocation,
+  awardFactoryAllocation,
   normalizeGrade,
   GRADE_PRICE_SCALE,
   MIN_CONTRACT_MARGIN,
@@ -114,6 +115,14 @@ describe("factory allocation", () => {
   it("takes only what is free when the plant is already committed", () => {
     expect(defaultFactoryAllocation(1, 1)).toBe(1);
     expect(defaultFactoryAllocation(1, 0)).toBe(0);
+  });
+
+  // Ticket #1134: NatCorp CEOs are vacant, so a split default on a two-domain plant
+  // would leave half the lines idle for the life of the order.
+  it("gives state industry every free line at award", () => {
+    expect(awardFactoryAllocation({ componentCount: 2, freeSlots: 4, stateOwned: true })).toBe(4);
+    expect(awardFactoryAllocation({ componentCount: 2, freeSlots: 4, stateOwned: false })).toBe(2);
+    expect(awardFactoryAllocation({ componentCount: 1, freeSlots: 1, stateOwned: true })).toBe(1);
   });
 
   it("scales throughput with the lines assigned", () => {

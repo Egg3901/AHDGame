@@ -57,7 +57,7 @@ export function ArsenalTab({
   onAwardContract: (
     sectorId: string,
     lotsOrdered: number,
-    options?: { pricePerLot?: number; gradeCeiling?: number }
+    options?: { pricePerLot?: number; gradeCeiling?: number; component?: string }
   ) => Promise<boolean>;
   onCancelContract: (contractId: string) => void;
 }) {
@@ -69,6 +69,8 @@ export function ArsenalTab({
   // specify, so the default path is unchanged.
   const [awardPrice, setAwardPrice] = useState("");
   const [awardGrade, setAwardGrade] = useState<string>("");
+  // Ticket #1134. Empty means the plant's first certified domain.
+  const [awardComponent, setAwardComponent] = useState("");
 
   // What the CURRENT roster is short of, per domain — the demand side of the store.
   const shortfallByDomain = useMemo(() => {
@@ -237,7 +239,10 @@ export function ArsenalTab({
               <select
                 id="award-supplier"
                 value={awardSectorId}
-                onChange={(e) => setAwardSectorId(e.target.value)}
+                onChange={(e) => {
+                  setAwardSectorId(e.target.value);
+                  setAwardComponent("");
+                }}
                 disabled={busy}
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none disabled:opacity-50"
               >
@@ -258,14 +263,41 @@ export function ArsenalTab({
                   </span>{" "}
                   lots per turn · delivers at{" "}
                   {GRADE_LABEL[Math.max(0, Math.min(3, Math.round(selected.gradeCeiling)))]} grade
-                  {selected.components.length > 1 &&
-                    " · output is split across the domains it serves"}
+                  {` · ${selected.freeFactories} of ${selected.totalFactories} production lines free`}
                   {selected.alreadyContracted &&
-                    " · this plant already has an order, and would split its output again"}
+                    " · this plant already has an order, and a second one takes only the lines still free"}
                   {` · ${supplierAllowance.toLocaleString("en-US")} lots available through turn ${selected.allowanceWindowEndTurn ?? "?"}`}
                 </p>
               )}
             </div>
+
+            {selected && selected.components.length > 1 && (
+              <div>
+                <label
+                  htmlFor="award-component"
+                  className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted"
+                >
+                  Domain
+                </label>
+                <select
+                  id="award-component"
+                  value={awardComponent || selected.components[0]}
+                  onChange={(e) => setAwardComponent(e.target.value)}
+                  disabled={busy}
+                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none disabled:opacity-50"
+                >
+                  {selected.components.map((c) => (
+                    <option key={c} value={c}>
+                      {DOMAINS.find((d) => d.id === c)?.label ?? c}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-[11px] text-muted">
+                  This plant can fill any of these. One order is for one domain; award a second
+                  contract if you need the other.
+                </p>
+              </div>
+            )}
 
             <div>
               <label
@@ -410,6 +442,7 @@ export function ArsenalTab({
                 const ok = await onAwardContract(awardSectorId, lotsWanted, {
                   ...(awardPrice !== "" ? { pricePerLot: Math.round(priceWanted) } : {}),
                   ...(awardGrade !== "" ? { gradeCeiling: grade } : {}),
+                  ...(awardComponent !== "" ? { component: awardComponent } : {}),
                 });
                 // Only clear on success — a refused award should leave the figures in place
                 // to correct rather than making the minister retype the whole order.
@@ -418,6 +451,7 @@ export function ArsenalTab({
                   setAwardLots("");
                   setAwardPrice("");
                   setAwardGrade("");
+                  setAwardComponent("");
                 }
               }}
               className="w-full rounded-lg border border-[color-mix(in_srgb,var(--gov)_40%,transparent)] bg-[color-mix(in_srgb,var(--gov)_15%,transparent)] px-3 py-2 text-[13px] font-semibold text-gov-soft disabled:opacity-50"
