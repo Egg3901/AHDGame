@@ -5,6 +5,7 @@
 // Network values are already redacted server-side for moderators.
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { DiscordContact } from "./DiscordContact";
 import { SuspectMugshot } from "./SuspectPortrait";
@@ -121,9 +122,9 @@ function SuspectPeekCard({ member, onClose }: { member: Suspect; onClose: () => 
       ? member.lastKnownIp
       : (member.lastKnownIp ?? member.registrationIp);
 
-  return (
+  const overlay = (
     <div
-      className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-black/60 p-4 backdrop-blur-[2px] motion-reduce:animate-none"
+      className="fixed inset-0 z-[80] flex animate-fade-in items-center justify-center bg-black/60 p-4 backdrop-blur-[2px] motion-reduce:animate-none"
       onClick={(e) => {
         e.stopPropagation();
         onClose();
@@ -133,13 +134,13 @@ function SuspectPeekCard({ member, onClose }: { member: Suspect; onClose: () => 
         role="dialog"
         aria-modal="true"
         aria-label={`${name} account`}
-        className="w-full max-w-sm rounded-xl border border-card-border bg-card p-4 shadow-modal"
+        className="w-full max-w-md rounded-xl border border-card-border bg-card p-4 shadow-modal"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start gap-3">
           <SuspectMugshot member={member} size="h-14 w-14" />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-base font-semibold">{name}</div>
+            <div className="text-base font-semibold text-foreground">{name}</div>
             <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
               {member.role && <span>{ROLE_LABEL[member.role]}</span>}
               {member.banned && (
@@ -152,7 +153,6 @@ function SuspectPeekCard({ member, onClose }: { member: Suspect; onClose: () => 
               discordId={member.discordId}
               discordUsername={member.discordUsername}
               discordCreatedAt={member.discordCreatedAt}
-              compact
             />
           </div>
           <button
@@ -242,6 +242,9 @@ function SuspectPeekCard({ member, onClose }: { member: Suspect; onClose: () => 
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return overlay;
+  return createPortal(overlay, document.body);
 }
 
 function PeekField({
@@ -259,7 +262,7 @@ function PeekField({
     <div className="flex min-w-0 items-baseline gap-2">
       <dt className="w-20 shrink-0 text-[11px] font-medium text-muted">{label}</dt>
       <dd
-        className={`min-w-0 truncate ${mono ? "font-mono text-[11px] tracking-tight" : ""}`}
+        className={`min-w-0 break-all ${mono ? "font-mono text-[11px] tracking-tight" : ""}`}
         title={value ?? undefined}
       >
         {value ??
