@@ -1,93 +1,217 @@
-import { UPGRADE_COSTS } from "./upgradeCosts";
+import type { Campaign, CampaignOpsTree } from "@/lib/db/types";
+import {
+  getMaintenanceCost,
+  getTreeMaintenanceCost,
+  OPS_TREES,
+  type OpsBranchKey,
+  type UpgradeCategory,
+} from "./upgradeCosts";
 
 export type DowngradableCategory = "groundGame" | "mediaSpending";
 
 export interface DowngradeEntry {
-  category: DowngradableCategory;
+  category: UpgradeCategory;
+  /** Branch that was demoted (tree model); absent for legacy level demotions. */
+  branch?: OpsBranchKey;
   fromLevel: number;
   toLevel: number;
 }
 
-export interface AutoDowngradeInput {
-  funds: number;
-  income: number;
-  groundGameLevel: number;
-  mediaSpendingLevel: number;
-}
-
 export interface AutoDowngradeResult {
-  newGroundGameLevel: number;
-  newMediaSpendingLevel: number;
-  /**
-   * Maintenance cost after applying the downgrades. Use this for the actual
-   * funds deduction in the same turn — not the pre-downgrade maintenance.
-   */
+  /** Maintenance (anchor $, pre-family-scalar aggregate) after demotions. */
   newMaintenance: number;
   /**
-   * Sequential list of demotions in the order they were applied. Each entry
-   * represents a single-level drop. Empty when the campaign was already solvent.
+   * Mongo `$set` fields encoding the demotions, e.g. `{ "groundGameTree.a": 1 }`,
+   * `{ "groundGameTree.starter": false }`, or legacy `{ mediaSpendingLevel: 2 }`.
+   * Empty when already solvent.
    */
+  setFields: Record<string, unknown>;
+  /** Ordered single-step demotions applied. Empty when already solvent. */
   downgrades: DowngradeEntry[];
 }
 
-function levelMaintenance(category: DowngradableCategory, level: number): number {
-  if (level <= 0) return 0;
-  const tier = UPGRADE_COSTS[category][level - 1];
-  return tier && "maintenance" in tier && typeof tier.maintenance === "number"
-    ? tier.maintenance
-    : 0;
-}
-
-function totalMaintenance(groundLevel: number, mediaLevel: number): number {
-  let total = 0;
-  for (let i = 1; i <= groundLevel; i++) total += levelMaintenance("groundGame", i);
-  for (let i = 1; i <= mediaLevel; i++) total += levelMaintenance("mediaSpending", i);
-  return total;
+interface WorkingTree extends CampaignOpsTree {
+  started: boolean;
 }
 
 /**
- * Compute the minimal set of single-level demotions needed to keep a campaign
- * solvent this turn. A campaign is solvent when post-income funds cover the
- * per-turn maintenance: `funds + income >= maintenance`. When that fails, drop
- * the tier with the higher incremental maintenance at its current level (tie
- * goes to Media Spending — advertising pulls faster than canvassers). Repeat
- * until solvent or both tiers reach level 0.
+ * Compute the minimal set of single-step demotions to keep a campaign solvent
+ * this turn (`funds + income >= maintenance`). Strategic Operations v2: demotes
+ * the maintenance-bearing branch tier with the highest incremental upkeep,
+ * across every started lever tree (Ground Game field offices / GOTV, Media
+ * broadcast / digital / rapid response, Fundraising digital ops). Levers still
+ * on the legacy linear model demote their old `groundGameLevel` /
+ * `mediaSpendingLevel` instead. Repeats until solvent or nothing left to cut.
  *
- * Termination: each iteration strictly decreases maintenance and one level
- * counter; both levels at 0 yields zero maintenance, which is always solvent
- * when income >= funds (true after the fix pairs with a non-negative funds
- * floor in the caller — here we simply stop demoting).
+ * Termination: each iteration strictly lowers one level counter and (because
+ * only maintenance-bearing tiers are candidates) strictly lowers maintenance;
+ * with nothing left to demote the loop exits.
  */
-export function computeAutoDowngrade(input: AutoDowngradeInput): AutoDowngradeResult {
-  let ground = Math.max(0, Math.floor(input.groundGameLevel));
-  let media = Math.max(0, Math.floor(input.mediaSpendingLevel));
+export function computeAutoDowngrade(
+  campaign: Pick<
+    Campaign,
+    | "fundraisingTree"
+    | "groundGameTree"
+    | "mediaSpendingTree"
+    | "oppositionResearchTree"
+    | "fundraisingLevel"
+    | "groundGameLevel"
+    | "mediaSpendingLevel"
+    | "oppositionResearchLevel"
+  >,
+  input: { funds: number; income: number; electionType?: string }
+): AutoDowngradeResult {
+  const { funds, income, electionType } = input;
+  const projected = funds + income;
+
+  // Working copy of each lever's tree state (or legacy level).
+  const trees: Record<UpgradeCategory, WorkingTree> = {
+    fundraising: toWorking(campaign.fundraisingTree),
+    groundGame: toWorking(campaign.groundGameTree),
+    mediaSpending: toWorking(campaign.mediaSpendingTree),
+    oppositionResearch: toWorking(campaign.oppositionResearchTree),
+  };
+  const legacyLevels: Record<UpgradeCategory, number> = {
+    fundraising: Math.max(0, Math.floor(campaign.fundraisingLevel ?? 0)),
+    groundGame: Math.max(0, Math.floor(campaign.groundGameLevel ?? 0)),
+    mediaSpending: Math.max(0, Math.floor(campaign.mediaSpendingLevel ?? 0)),
+    oppositionResearch: Math.max(0, Math.floor(campaign.oppositionResearchLevel ?? 0)),
+  };
+
+  const setFields: Record<string, unknown> = {};
   const downgrades: DowngradeEntry[] = [];
 
-  let maintenance = totalMaintenance(ground, media);
-  const projected = input.funds + input.income;
+  const total = () => aggregateMaintenance(trees, legacyLevels, electionType);
+  let maintenance = total();
 
-  while (maintenance > projected && (ground > 0 || media > 0)) {
-    const groundIncremental = ground > 0 ? levelMaintenance("groundGame", ground) : -1;
-    const mediaIncremental = media > 0 ? levelMaintenance("mediaSpending", media) : -1;
+  // Legacy categories that carry maintenance in the old model.
+  const legacyDowngradable: DowngradableCategory[] = ["groundGame", "mediaSpending"];
 
-    // Tie-break: Media Spending first (advertising easier to pull). When one
-    // tier is already at 0 the other is forced.
-    const demoteMedia = media > 0 && (ground === 0 || mediaIncremental >= groundIncremental);
+  let guard = 0;
+  while (maintenance > projected && guard++ < 64) {
+    // Build the candidate demotion set: (delta maintenance, apply()).
+    let best: { delta: number; apply: () => void } | null = null;
 
-    if (demoteMedia) {
-      downgrades.push({ category: "mediaSpending", fromLevel: media, toLevel: media - 1 });
-      media -= 1;
-    } else {
-      downgrades.push({ category: "groundGame", fromLevel: ground, toLevel: ground - 1 });
-      ground -= 1;
+    for (const category of Object.keys(trees) as UpgradeCategory[]) {
+      const tree = trees[category];
+      if (tree.started) {
+        for (const branchDef of OPS_TREES[category].branches) {
+          const level = tree[branchDef.key];
+          if (level <= 0) continue;
+          if (!branchDef.tiers.some((t) => (t.maintenance ?? 0) > 0)) continue;
+          const before = maintenance;
+          tree[branchDef.key] = level - 1;
+          const after = total();
+          tree[branchDef.key] = level; // restore
+          const delta = before - after;
+          if (delta > 0 && (!best || delta > best.delta)) {
+            best = {
+              delta,
+              apply: () => {
+                tree[branchDef.key] = level - 1;
+                setFields[`${category}Tree.${branchDef.key}`] = level - 1;
+                downgrades.push({
+                  category,
+                  branch: branchDef.key,
+                  fromLevel: level,
+                  toLevel: level - 1,
+                });
+              },
+            };
+          }
+        }
+        // Last resort: once every maintenance-bearing branch is at 0, the
+        // starter's own upkeep can still be shed by dropping the whole lever
+        // (starter → false). Gated so upkeep branches always shed first; a
+        // zero-upkeep branch (e.g. Volunteer Corps) does not block the shed but
+        // is zeroed alongside it so nothing is stranded behind a dead starter.
+        const upkeepBranchesZero = OPS_TREES[category].branches.every(
+          (bd) => tree[bd.key] === 0 || !bd.tiers.some((t) => (t.maintenance ?? 0) > 0)
+        );
+        if (upkeepBranchesZero && (OPS_TREES[category].starter.maintenance ?? 0) > 0) {
+          const before = maintenance;
+          const saved = { a: tree.a, b: tree.b, c: tree.c };
+          tree.started = false;
+          tree.a = 0;
+          tree.b = 0;
+          tree.c = 0;
+          const after = total();
+          tree.started = true; // restore
+          tree.a = saved.a;
+          tree.b = saved.b;
+          tree.c = saved.c;
+          const delta = before - after;
+          if (delta > 0 && (!best || delta > best.delta)) {
+            best = {
+              delta,
+              apply: () => {
+                tree.started = false;
+                tree.a = 0;
+                tree.b = 0;
+                tree.c = 0;
+                // Drop any per-path branch sets from earlier iterations — Mongo
+                // rejects $set on both `x.a` and `x` in one update.
+                delete setFields[`${category}Tree.a`];
+                delete setFields[`${category}Tree.b`];
+                delete setFields[`${category}Tree.c`];
+                setFields[`${category}Tree`] = { starter: false, a: 0, b: 0, c: 0 };
+                downgrades.push({ category, fromLevel: 1, toLevel: 0 });
+              },
+            };
+          }
+        }
+      } else if (legacyDowngradable.includes(category as DowngradableCategory)) {
+        const level = legacyLevels[category];
+        if (level <= 0) continue;
+        const before = maintenance;
+        legacyLevels[category] = level - 1;
+        const after = total();
+        legacyLevels[category] = level; // restore
+        const delta = before - after;
+        if (delta > 0 && (!best || delta > best.delta)) {
+          best = {
+            delta,
+            apply: () => {
+              legacyLevels[category] = level - 1;
+              setFields[`${category}Level`] = level - 1;
+              downgrades.push({ category, fromLevel: level, toLevel: level - 1 });
+            },
+          };
+        }
+      }
     }
-    maintenance = totalMaintenance(ground, media);
+
+    if (!best) break; // nothing left to demote
+    best.apply();
+    maintenance = total();
   }
 
+  return { newMaintenance: maintenance, setFields, downgrades };
+}
+
+function toWorking(tree: CampaignOpsTree | undefined): WorkingTree {
   return {
-    newGroundGameLevel: ground,
-    newMediaSpendingLevel: media,
-    newMaintenance: maintenance,
-    downgrades,
+    started: !!tree?.starter,
+    starter: !!tree?.starter,
+    a: Math.max(0, Math.floor(tree?.a ?? 0)),
+    b: Math.max(0, Math.floor(tree?.b ?? 0)),
+    c: Math.max(0, Math.floor(tree?.c ?? 0)),
   };
+}
+
+function aggregateMaintenance(
+  trees: Record<UpgradeCategory, WorkingTree>,
+  legacyLevels: Record<UpgradeCategory, number>,
+  electionType?: string
+): number {
+  let total = 0;
+  for (const category of Object.keys(trees) as UpgradeCategory[]) {
+    const tree = trees[category];
+    if (tree.started) {
+      total += getTreeMaintenanceCost(category, tree, electionType);
+    } else {
+      total += getMaintenanceCost(category, legacyLevels[category], electionType);
+    }
+  }
+  return total;
 }

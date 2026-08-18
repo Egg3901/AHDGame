@@ -17,8 +17,10 @@ import type {
   PoliticalParty,
 } from "@/lib/db/types";
 import {
-  getEffectiveUpgradeCost,
+  getEffectiveBranchCost,
+  getOpsBranch,
   getCampaignFamilyScalar,
+  type OpsBranchKey,
   type UpgradeCategory,
 } from "@/lib/campaigns/upgradeCosts";
 import {
@@ -43,9 +45,12 @@ export async function upgradeCampaign(params: {
   campaignId: ObjectId;
   user: AuthUserWithCharacter & { hasCharacter: true; character: Character };
   category: UpgradeCategory;
+  /** Branch sub-track to level; null buys the lever's tier-1 starter unlock. */
+  branch?: OpsBranchKey | null;
   targetId?: string;
 }) {
   const { db, campaignId, user, category, targetId } = params;
+  const branch = params.branch ?? null;
   const campaign = await getCampaignOrThrow(db, campaignId);
   await assertCampaignManagerOrNominee(db, campaign, user);
 
@@ -60,23 +65,46 @@ export async function upgradeCampaign(params: {
   const gameTime = await getGameTime();
   const isGeneralPhase = isCampaignUpgradeGeneralPhase(election, gameTime.currentTurn, gameTime);
 
-  const currentLevel = campaign[`${category}Level` as keyof Campaign] as number;
-  const nextLevel = currentLevel + 1;
-  // Per-race-family budget scalar (state-senate / house upgrades cost less than
-  // presidential-scale magnitudes) plus the general-phase surcharge. SSOT:
-  // getEffectiveUpgradeCost — the campaign UI's cost preview calls the same
-  // helper so the "Upgrade" button only enables when this gate will pass.
-  const cost = getEffectiveUpgradeCost(category, nextLevel, election?.electionType, isGeneralPhase);
+  // Current branch-tree state for this lever (may be undefined on legacy rows;
+  // the migration backfills it, but tolerate absence defensively).
+  const tree = (campaign[`${category}Tree` as keyof Campaign] as
+    { starter: boolean; a: number; b: number; c: number } | undefined) ?? {
+    starter: false,
+    a: 0,
+    b: 0,
+    c: 0,
+  };
+
+  const isStarterPurchase = !tree.starter;
+  if (isStarterPurchase && branch !== null) {
+    throw badRequest("Unlock this lever's starter before buying a branch");
+  }
+  if (!isStarterPurchase && branch === null) {
+    throw badRequest("Select a branch to upgrade");
+  }
+
+  const currentBranchLevel = branch === null ? 0 : tree[branch];
+  const nextLevel = branch === null ? 0 : currentBranchLevel + 1;
+  // SSOT cost helper — shares the per-race-family scalar and general-phase
+  // surcharge with the UI preview so the enabled "Upgrade" button always passes
+  // this gate. Returns null when the branch is already maxed.
+  const cost = getEffectiveBranchCost(
+    category,
+    branch,
+    nextLevel,
+    election?.electionType,
+    isGeneralPhase
+  );
   if (!cost) {
     throw badRequest("Max level reached");
   }
 
   const adjustedFunds = cost.funds;
   const adjustedActions = cost.actions;
-  // Campaign treasury is stored in the campaign's local currency; the upgrade
-  // cost table is anchor. Campaign funds are decoupled from live forex — convert
-  // at the frozen base INITIAL_RATES scale (matches campaignTurn maintenance).
-  const adjustedFundsLocal = campaignAnchorToLocal(adjustedFunds, election?.countryId ?? "US");
+  // Campaign treasury is stored in the campaign's local currency; the cost
+  // table is anchor. Convert at the frozen base rate (matches campaignTurn).
+  const countryId = election?.countryId ?? "US";
+  const adjustedFundsLocal = campaignAnchorToLocal(adjustedFunds, countryId);
   if (campaign.funds < adjustedFundsLocal) {
     throw badRequest("Insufficient funds");
   }
@@ -84,16 +112,30 @@ export async function upgradeCampaign(params: {
     throw badRequest("Insufficient actions");
   }
 
+  // Determine this branch's effect type for on-purchase (lump) effects.
+  const branchDef = branch === null ? null : getOpsBranch(category, branch);
+  const effectType = branchDef?.effectType;
+  // Bundlers (incomeLumpOnPurchase) credit a one-time cash infusion, in local $.
+  const lumpFundsLocal =
+    effectType === "incomeLumpOnPurchase" && cost.lumpSum
+      ? campaignAnchorToLocal(cost.lumpSum, countryId)
+      : 0;
+
+  // Opposition-research target resolution. Required when unlocking the oppo
+  // starter (sets the target) and for a Scandal Leak (needs a current target).
   let targetName: string | null = null;
-  // Hoisted so the post-update notification (below) can reach the target's
-  // userId. Null for NPP / non-character targets.
   let oppoTargetChar: Character | null = null;
-  if (category === "oppositionResearch") {
-    if (!targetId) {
+  const needsTargetNow =
+    category === "oppositionResearch" && (isStarterPurchase || effectType === "oppoLumpOnPurchase");
+  const resolvedTargetId = targetId ?? campaign.oppositionTargetId?.toString();
+  if (needsTargetNow) {
+    if (!resolvedTargetId) {
       throw badRequest("Target required for opposition research");
     }
-
-    const targetOid = new ObjectId(targetId);
+    const targetOid = new ObjectId(resolvedTargetId);
+    if (targetOid.equals(campaign.candidateId)) {
+      throw badRequest("You cannot research your own candidate");
+    }
     const targetChar = await db.collection<Character>("characters").findOne({ _id: targetOid });
     oppoTargetChar = targetChar;
     const targetNpp = !targetChar
@@ -113,7 +155,8 @@ export async function upgradeCampaign(params: {
   const activity: Campaign["activityHistory"][0] = {
     type: "upgrade",
     category,
-    newLevel: nextLevel,
+    ...(branch ? { branch } : {}),
+    newLevel: branch === null ? 1 : nextLevel,
     costFunds: adjustedFundsLocal,
     costActions: adjustedActions,
     ...(targetName ? { targetName } : {}),
@@ -121,42 +164,45 @@ export async function upgradeCampaign(params: {
     turnNumber,
   };
 
-  const update: Record<string, unknown> = {
-    $inc: {
-      funds: -adjustedFundsLocal,
-      actions: -adjustedActions,
-      totalFundsSpent: adjustedFundsLocal,
-      // A2 — money driver reads per-turn spend, not lifetime balance.
-      spendThisTurn: adjustedFundsLocal,
-      totalActionsSpent: adjustedActions,
-      [`${category}Level`]: 1,
-    },
-    $push: {
-      activityHistory: {
-        $each: [activity],
-        $slice: -10,
-      },
-    },
-    $set: {
-      updatedAt: new Date(),
-      ...(category === "oppositionResearch" && targetId
-        ? {
-            oppositionTargetId: new ObjectId(targetId),
-            oppositionTargetName: targetName,
-          }
-        : {}),
-    },
+  const setOnPurchase: Record<string, unknown> = { updatedAt: new Date() };
+  const incOnPurchase: Record<string, number> = {
+    funds: -adjustedFundsLocal + lumpFundsLocal,
+    actions: -adjustedActions,
+    totalFundsSpent: adjustedFundsLocal,
+    // A2 — money driver reads per-turn spend, not lifetime balance.
+    spendThisTurn: adjustedFundsLocal,
+    totalActionsSpent: adjustedActions,
   };
+  if (branch === null) {
+    // Buying the starter initializes the tree with all branches at 0.
+    setOnPurchase[`${category}Tree`] = { starter: true, a: 0, b: 0, c: 0 };
+  } else {
+    incOnPurchase[`${category}Tree.${branch}`] = 1;
+  }
+  if (category === "oppositionResearch" && resolvedTargetId && needsTargetNow) {
+    setOnPurchase.oppositionTargetId = new ObjectId(resolvedTargetId);
+    setOnPurchase.oppositionTargetName = targetName;
+  }
 
-  const updateResult = await db.collection<Campaign>("campaigns").updateOne(
-    {
-      _id: campaignId,
-      funds: { $gte: adjustedFundsLocal },
-      actions: { $gte: adjustedActions },
-      [`${category}Level`]: currentLevel,
-    },
-    update
-  );
+  // Race-safe conditional update: guard on affordability AND the exact tree
+  // state we costed against, so concurrent purchases can't double-apply.
+  const guard: Record<string, unknown> = {
+    _id: campaignId,
+    funds: { $gte: adjustedFundsLocal },
+    actions: { $gte: adjustedActions },
+  };
+  if (branch === null) {
+    guard[`${category}Tree.starter`] = { $ne: true };
+  } else {
+    guard[`${category}Tree.starter`] = true;
+    guard[`${category}Tree.${branch}`] = currentBranchLevel;
+  }
+
+  const updateResult = await db.collection<Campaign>("campaigns").updateOne(guard, {
+    $inc: incOnPurchase,
+    $push: { activityHistory: { $each: [activity], $slice: -10 } },
+    $set: setOnPurchase,
+  });
   if (updateResult.modifiedCount === 0) {
     throw new ApiError(
       409,
@@ -164,13 +210,33 @@ export async function upgradeCampaign(params: {
     );
   }
 
-  // First-time (or changed) opposition-research target gets notified they're
-  // now under research. Guarded on a target change so buying additional levels
-  // against the same opponent doesn't re-spam them each purchase.
+  // Scandal Leak (oppoLumpOnPurchase): apply a one-time favorability hit to the
+  // current target, clamped to [0,100]. `cost.lumpSum` is the % magnitude.
+  if (effectType === "oppoLumpOnPurchase" && cost.lumpSum && resolvedTargetId) {
+    const targetOid = new ObjectId(resolvedTargetId);
+    const clampFav = [
+      {
+        $set: {
+          favorability: {
+            $min: [
+              100,
+              { $max: [0, { $add: [{ $ifNull: ["$favorability", 0] }, -cost.lumpSum] }] },
+            ],
+          },
+        },
+      },
+    ];
+    const charRes = await db.collection("characters").updateOne({ _id: targetOid }, clampFav);
+    if (charRes.matchedCount === 0) {
+      await db.collection("npps").updateOne({ _id: targetOid }, clampFav);
+    }
+  }
+
+  // First-time (or changed) opposition-research target gets a notification.
   if (
     category === "oppositionResearch" &&
     oppoTargetChar &&
-    String(campaign.oppositionTargetId ?? "") !== String(targetId ?? "")
+    String(campaign.oppositionTargetId ?? "") !== String(resolvedTargetId ?? "")
   ) {
     await notifyOppositionResearchTarget(db, oppoTargetChar, user.character.name);
   }
@@ -179,11 +245,11 @@ export async function upgradeCampaign(params: {
   return {
     funds: updated.funds,
     actions: updated.actions,
-    levels: {
-      fundraising: updated.fundraisingLevel,
-      oppositionResearch: updated.oppositionResearchLevel,
-      groundGame: updated.groundGameLevel,
-      mediaSpending: updated.mediaSpendingLevel,
+    trees: {
+      fundraising: updated.fundraisingTree ?? null,
+      oppositionResearch: updated.oppositionResearchTree ?? null,
+      groundGame: updated.groundGameTree ?? null,
+      mediaSpending: updated.mediaSpendingTree ?? null,
     },
     oppositionTargetId: updated.oppositionTargetId?.toString() || null,
     oppositionTargetName: updated.oppositionTargetName,
@@ -805,7 +871,9 @@ export async function retargetOppositionResearch(params: {
     });
   }
 
-  if (campaign.oppositionResearchLevel <= 0) {
+  const oppoUnlocked =
+    campaign.oppositionResearchTree?.starter || (campaign.oppositionResearchLevel ?? 0) > 0;
+  if (!oppoUnlocked) {
     throw badRequest("Opposition research must be purchased before retargeting");
   }
   const now = new Date();
@@ -897,6 +965,7 @@ export async function resetOppositionResearch(params: {
 
   if (
     (campaign.oppositionResearchLevel ?? 0) === 0 &&
+    !campaign.oppositionResearchTree?.starter &&
     !campaign.oppositionTargetId &&
     !campaign.oppositionTargetName &&
     !campaign.oppositionResearchCooldownUntil
@@ -922,6 +991,7 @@ export async function resetOppositionResearch(params: {
     {
       $set: {
         oppositionResearchLevel: 0,
+        oppositionResearchTree: { starter: false, a: 0, b: 0, c: 0 },
         "publicFogOfWar.oppositionResearchLevel": 0,
         "partyFogOfWar.oppositionResearchLevel": 0,
         oppositionTargetId: null,

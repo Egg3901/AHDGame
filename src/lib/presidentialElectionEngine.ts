@@ -40,6 +40,7 @@ import { getStateLean } from "@/lib/utils/demographics";
 import type { StatePartyOrg, StateDemographicTurnout, GovernorEndorsement } from "@/lib/db/types";
 import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
 import { campaignStrengthVoteMultiplier } from "@/lib/campaigns/campaignStrength";
+import { getGroundGameSwingBonus, getGroundGameGotvBonus } from "@/lib/campaigns/opsEffects";
 import { loadPartyGroupFavorability } from "@/lib/governorOffice/address/partyGroupFavorabilityLoader";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
 import { eraYearContextFromGameState } from "@/lib/era/context";
@@ -329,11 +330,17 @@ export async function accumulatePresidentVoteTurn(
     countryId: (election.countryId ?? "US") as CountryId,
   });
 
-  // Fetch campaign ground game levels for vote bonus in swing states
+  // Fetch campaign ground-game bonuses. Strategic Operations v2 splits this into
+  // two channels: `swing` (+% in swing states, from starter + Field Offices) and
+  // `gotv` (+% in ALL areas, from the Get-Out-The-Vote branch). Legacy rows fall
+  // back to the old `groundGameLevel * 0.03` swing-only bonus (gotv = 0).
   const campaigns = await db.collection<Campaign>("campaigns").find({ electionId }).toArray();
-  const groundGameByCandidate = new Map<string, number>();
+  const groundGameByCandidate = new Map<string, { swing: number; gotv: number }>();
   for (const c of campaigns) {
-    groundGameByCandidate.set(c.candidateId.toString(), c.groundGameLevel);
+    groundGameByCandidate.set(c.candidateId.toString(), {
+      swing: getGroundGameSwingBonus(c.groundGameTree, c.groundGameLevel ?? 0),
+      gotv: getGroundGameGotvBonus(c.groundGameTree),
+    });
   }
 
   const campaignStrengthByCandidate = new Map<string, number>();
@@ -624,13 +631,18 @@ export async function accumulatePresidentVoteTurn(
         votes = Math.max(0, votes);
       }
 
-      // Ground game: +3% per level in swing states (suspended campaigns forfeit).
-      if (isSwingState && !isSuspended) {
+      // Ground game (suspended campaigns forfeit): Field Offices boost swing
+      // areas only; Get-Out-The-Vote boosts turnout in EVERY area. Both stack.
+      if (!isSuspended) {
         const csKey =
           campaignStrengthKeyByElectionCandidateId.get(ec.candidateId) ?? ec.characterId;
-        const ggLevel = groundGameByCandidate.get(csKey) ?? 0;
-        if (ggLevel > 0) {
-          votes = Math.round(votes * (1 + ggLevel * 0.03));
+        const gg = groundGameByCandidate.get(csKey);
+        if (gg) {
+          const swingBonus = isSwingState ? gg.swing : 0;
+          const multiplier = 1 + swingBonus + gg.gotv;
+          if (multiplier !== 1) {
+            votes = Math.round(votes * multiplier);
+          }
         }
       }
 

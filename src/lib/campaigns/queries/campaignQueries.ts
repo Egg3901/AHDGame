@@ -6,6 +6,7 @@ import { calculateMaintenanceCosts } from "@/lib/campaigns/maintenance";
 import {
   getEffectiveUpgradeCost,
   getMaintenanceCost,
+  getTreeMaintenanceCost,
   getCampaignFamilyScalar,
 } from "@/lib/campaigns/upgradeCosts";
 import { isCampaignUpgradeGeneralPhase } from "@/lib/elections/phases";
@@ -24,6 +25,7 @@ import {
   getCampaignCurrency,
 } from "@/lib/campaigns/campaignCurrency";
 import type { CampaignData } from "@/lib/campaigns/dto/campaignView";
+import { buildOpsTrees } from "@/lib/campaigns/dto/campaignView";
 import { notFound } from "@/lib/api/errors";
 import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -180,16 +182,15 @@ export async function getCampaignDetail(
   const isGeneralPhase = isCampaignUpgradeGeneralPhase(election, gameTime.currentTurn, gameTime);
   const income = calculateCampaignIncome(campaign, electionType);
   const maintenance = calculateMaintenanceCosts(campaign, electionType);
-  const groundGameMaintenance = getMaintenanceCost(
-    "groundGame",
-    campaign.groundGameLevel,
-    electionType
-  );
-  const mediaSpendingMaintenance = getMaintenanceCost(
-    "mediaSpending",
-    campaign.mediaSpendingLevel,
-    electionType
-  );
+  // Budget-panel split. Strategic Operations v2: read the tree's per-lever
+  // maintenance (starter + branches, less any maintenance-reduction branch);
+  // legacy rows fall back to the old linear-level maintenance.
+  const groundGameMaintenance = campaign.groundGameTree?.starter
+    ? getTreeMaintenanceCost("groundGame", campaign.groundGameTree, electionType)
+    : getMaintenanceCost("groundGame", campaign.groundGameLevel, electionType);
+  const mediaSpendingMaintenance = campaign.mediaSpendingTree?.starter
+    ? getTreeMaintenanceCost("mediaSpending", campaign.mediaSpendingTree, electionType)
+    : getMaintenanceCost("mediaSpending", campaign.mediaSpendingLevel, electionType);
   // playerEndorsements.candidateId is keyed by the electionCandidates row
   // _id (not campaign.candidateId, which is the character/NPP identity id —
   // see ticket #868), so resolve the row once and join on it. A character
@@ -412,6 +413,7 @@ export async function getCampaignDetail(
         toLocal
       ),
     },
+    opsTrees: buildOpsTrees(campaign, electionType, isGeneralPhase, toLocal),
   };
 }
 
