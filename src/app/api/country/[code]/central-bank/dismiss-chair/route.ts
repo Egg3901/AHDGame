@@ -11,7 +11,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { vacateCentralBankChairCharacter } from "@/lib/turn/centralBankChairSelection";
-import { getCentralBankScope } from "@/lib/centralBank/helpers";
+import { getCentralBankScope, vacateFomcChairSeat } from "@/lib/centralBank/helpers";
 import { createSystemNewsPost } from "@/lib/news";
 import { createNotification } from "@/lib/notifications";
 import { recordAudit } from "@/lib/audit/recordAudit";
@@ -100,6 +100,8 @@ export async function POST(_request: Request, context: RouteContext) {
       return NextResponse.json(badRequest("The seat is already vacant.").toJson(), { status: 400 });
 
     await vacateCentralBankChairCharacter(db, chairCharacterId);
+    // The dismissal must reach the committee too, not just the mirror fields.
+    await vacateFomcChairSeat(db, bank._id);
 
     void createNotification({
       userId: auth.character.userId,

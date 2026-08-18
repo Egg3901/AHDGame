@@ -24,6 +24,31 @@ export async function appointNppChair(
   countryId: CountryId,
   currentTurn: number
 ): Promise<void> {
+  // A bank with a committee already HAS a chair: seat 0 of `fomcBoard`. Spawning
+  // a second technocrat here made the central-bank page name one person while
+  // the committee's motions were tabled by another, which is most of why players
+  // read the chair as "randomly selected". Adopt the committee's chair instead.
+  const boardChair = (bank.fomcBoard ?? []).find((seat) => seat.isChair) ?? bank.fomcBoard?.[0];
+  if (boardChair && boardChair.occupantType === "npp" && boardChair.nppId) {
+    await db.collection<CentralBank>("centralBanks").updateOne(
+      { _id: bank._id },
+      {
+        $set: {
+          chairMode: "npp",
+          chairNppId: boardChair.nppId,
+          chairCharacterId: null,
+          chairCharacterName: null,
+          chairAlignment: boardChair.alignment,
+          chairTermExpiresAtTurn: boardChair.termExpiresAtTurn ?? currentTurn + TERM_TURNS,
+          vacancyAwaitingAutomaticSelection: false,
+          updatedAt: new Date(),
+        },
+        $unset: { nominations: "", lobbyingPool: "" },
+      }
+    );
+    return;
+  }
+
   const existing = await db.collection<NPP>("npps").findOne({
     countryId,
     isTechnocrat: true,
@@ -63,6 +88,8 @@ export async function appointNppChair(
       $set: {
         chairMode: "npp",
         chairNppId: chosenNpp._id,
+        chairCharacterId: null,
+        chairCharacterName: null,
         chairAlignment: newAlignment,
         chairTermExpiresAtTurn: currentTurn + TERM_TURNS,
         vacancyAwaitingAutomaticSelection: false,
