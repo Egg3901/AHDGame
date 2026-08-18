@@ -47,7 +47,12 @@ describe("processNppStanceDrift phase (#101)", () => {
     db.collectionMocks.legislationTypes.find.mockReturnValue(cursor([])); // no domain types
   });
 
-  const nppId = new ObjectId();
+  // Pinned, not random. The drift target is `party + leanPull * (stateLean -
+  // party)` plus `nppIdiosyncrasy(id, axis)`, a +/-0.8 offset FNV-hashed from
+  // the id. A fresh ObjectId therefore moved the target every run: on the
+  // social axis (anchor -0.7) it landed inside one 0.3 step often enough to
+  // fail roughly a quarter of runs. See stanceTarget.ts.
+  const nppId = new ObjectId("0123456789abcdef01234567");
   function seedOneNpp(stubbornness: number, econ = 0, social = 0) {
     db.collectionMocks.npps.find.mockReturnValue(
       cursor([
@@ -71,12 +76,15 @@ describe("processNppStanceDrift phase (#101)", () => {
     expect(db.collectionMocks.npps.bulkWrite).not.toHaveBeenCalled();
   });
 
-  it("drifts a mobile NPP's stance toward its state's lean", async () => {
+  it("drifts a mobile NPP's stance toward its party-anchored target", async () => {
     seedOneNpp(0, 0, 0); // fully mobile, starts at (0,0); CA lean is (-3,-2)
     const res = await processNppStanceDrift(db as unknown as Db, NPP_STANCE_DRIFT_INTERVAL);
     expect(res.drifted).toBe(1);
     const op = db.collectionMocks.npps.bulkWrite.mock.calls[0][0][0];
-    // Moves one full step toward the negative (left) lean on both axes.
+    // Party-less NPP, so the anchor is 0 pulled 35% toward the CA lean. For the
+    // pinned id both axis targets sit beyond one step (-1.6 econ, -1.1 social),
+    // so both move the full MAX_STEP left. This is NOT the state lean itself:
+    // the NPP stops well short of it, which is the point of the party anchor.
     expect(op.updateOne.update.$set["policies.economic"]).toBeCloseTo(
       -NPP_STANCE_DRIFT_MAX_STEP,
       10
