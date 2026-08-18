@@ -66,6 +66,14 @@ export function UpcomingElectionView({
           <p className="text-xs text-muted/60 mt-1">Candidates can enter once the primary opens.</p>
         </div>
       )}
+
+      {election.countryId === "US" &&
+        election.electionType === "president" &&
+        election.myCharId && (
+          <p className="text-sm text-muted">
+            You can still build State Organization on this page before the primary opens.
+          </p>
+        )}
     </div>
   );
 }

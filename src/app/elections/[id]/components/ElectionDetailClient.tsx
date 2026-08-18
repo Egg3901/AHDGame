@@ -18,6 +18,7 @@ import { PrimaryMapPills } from "./PrimaryMapPills";
 import { CampaignsListPanel } from "./CampaignsListPanel";
 import { CampaignManagerTab } from "./CampaignManagerTab";
 import { ElectionDetailSkeleton } from "./ElectionDetailSkeleton";
+import { StateOrganizationTab } from "@/app/political-operations/components/StateOrganizationTab";
 import type { ElectionDetail } from "./ElectionDetailTypes";
 import BackButton from "@/components/BackButton";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
@@ -320,6 +321,18 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
                 onRemoveSuccess={fetchElection}
               />
             )}
+
+            {/* State organization is the presidential ground-game build-up
+                loop. It lives on Political Operations, but that page is not
+                where candidates actually sit. Surface the builder here for
+                every phase, including upcoming (you invest between cycles). */}
+            {election.countryId === "US" &&
+              election.electionType === "president" &&
+              !!election.myCharId && (
+                <section id="state-org" className="mt-6 scroll-mt-6">
+                  <StateOrganizationTab showHubLink />
+                </section>
+              )}
 
             {/* Campaign panels — shown for all non-upcoming US presidential
                 elections (components return null gracefully when no campaigns
