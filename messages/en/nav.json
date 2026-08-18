@@ -25,6 +25,9 @@
       "quickSuggest": "Quick suggest (screenshot)"
     },
     "menus": {
+      "profile": {
+        "myUnion": "My Union"
+      },
       "world": {
         "myCorporation": "My Corporation",
         "hallOfFame": "Hall of Fame",
