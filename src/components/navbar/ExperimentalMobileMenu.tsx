@@ -37,6 +37,7 @@ import {
   looseWorldNavItems,
   type WorldNavItem,
 } from "@/components/navbar/worldNavItems";
+import type { ProfileNavItem } from "@/components/navbar/profileNavItems";
 import type { StaffNavItem } from "@/components/navbar/staffNavItems";
 import { MOBILE_MENU_PANEL_CLASS } from "@/components/navbar/dropdownStyles";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
@@ -72,6 +73,7 @@ export interface ExperimentalMobileMenuProps {
   preset: string;
   switchableCountries: CountryId[];
   worldSubItems: WorldNavItem[];
+  profileSubItems: ProfileNavItem[];
   staffSubItems: StaffNavItem[];
   charterEntry: CharterNavEntry | null;
   hasActiveReferendumCampaign: boolean;
@@ -105,6 +107,7 @@ export function ExperimentalMobileMenu({
   preset,
   switchableCountries,
   worldSubItems,
+  profileSubItems,
   staffSubItems,
   charterEntry,
   hasActiveReferendumCampaign,
@@ -129,7 +132,10 @@ export function ExperimentalMobileMenu({
       {/* Core nav items */}
       <div className="flex flex-col gap-0.5">
         {navItems.map((item) => {
-          const active = isNavActive(pathname, item.href);
+          const active =
+            item.key === "profile"
+              ? profileSubItems.some((sub) => isNavActive(pathname, sub.href))
+              : isNavActive(pathname, item.href);
           const subKey = item.key as MobileSubKey | undefined;
           if (subKey) {
             const isSubOpen = !!mobileSubOpen[subKey];
@@ -139,6 +145,7 @@ export function ExperimentalMobileMenu({
                   type="button"
                   onClick={() => toggleMobileSub(subKey)}
                   aria-expanded={isSubOpen}
+                  data-coach={subKey === "profile" ? "nav-actions" : undefined}
                   className={`flex w-full items-center gap-3 rounded-[10px] px-3.5 py-3 text-[15px] transition-colors hover:bg-white/5 ${
                     active || isSubOpen ? "bg-card font-semibold text-foreground" : "text-fg-2"
                   }`}
@@ -149,6 +156,21 @@ export function ExperimentalMobileMenu({
                 </button>
                 {isSubOpen && (
                   <div className="ml-3 mt-0.5 space-y-0.5 border-l border-card-border/60 pl-3">
+                    {subKey === "profile" &&
+                      profileSubItems.map((sub) => (
+                        <Link
+                          key={sub.id}
+                          href={sub.href}
+                          onClick={onClose}
+                          className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 ${
+                            sub.id === "corporation" || sub.id === "union"
+                              ? "text-primary"
+                              : "text-muted"
+                          }`}
+                        >
+                          {t(sub.labelKey)}
+                        </Link>
+                      ))}
                     {subKey === "state" && homeState && (
                       <>
                         <Link
@@ -250,17 +272,14 @@ export function ExperimentalMobileMenu({
                         ))}
                         {/* Grouped categories (Leaderboards / Diplomacy /
                             Economy / Other) — same collapsible header as the
-                            Nation section's Government/Politics/Economy/Other,
-                            collapsed by default except the group holding the
-                            current route. */}
+                            Nation section's Government/Politics/Economy/Other.
+                            Default open; the drawer panel scrolls. */}
                         {buildWorldNavSections(worldSubItems).map((group) => (
                           <CollapsibleNavSection
                             key={group.id}
                             title={t(group.titleKey)}
                             collapsible
-                            defaultOpen={group.items.some((item) =>
-                              isNavActive(pathname, item.href)
-                            )}
+                            defaultOpen
                             className="mt-2"
                             labelClassName="px-3 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted/70"
                           >

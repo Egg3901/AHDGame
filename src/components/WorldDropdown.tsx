@@ -15,6 +15,7 @@ export function WorldDropdown({
   countryId = "US",
   myCorporationId = null,
   conflictsEnabled = false,
+  unionsEnabled = false,
 }: WorldDropdownProps) {
   const t = useTranslations("nav");
   const [isOpen, setIsOpen] = useState(false);
@@ -45,6 +46,7 @@ export function WorldDropdown({
     countryId,
     myCorporationId,
     conflictsEnabled,
+    unionsEnabled,
   });
   const corporate = items.filter((i) => i.section === "corporate");
   const leaderboard = items.filter((i) => i.section === "leaderboard");

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildNationalDetailsSections } from "./nationDetailsSections";
 import { buildStaffNavItems } from "./staffNavItems";
 import { buildWorldNavItems, buildWorldNavSections } from "./worldNavItems";
+import { buildProfileNavItems } from "./profileNavItems";
 import { buildElectionsSubNavItems, buildLegislatureSubNavItems } from "./experimentalNavMenus";
 import enCatalog from "../../../messages/en/nav.json";
 import deCatalog from "../../../messages/de/nav.json";
@@ -85,6 +86,11 @@ describe("nav link inventory parity", () => {
       ...worldItems.map((i) => i.labelKey),
       ...buildWorldNavSections(worldItems).map((g) => g.titleKey),
       ...buildStaffNavItems({ isAdmin: true, isModerator: true }).map((i) => i.labelKey),
+      ...buildProfileNavItems({
+        myCorporationId: 1,
+        myUnionId: "u1",
+        unionsEnabled: true,
+      }).map((i) => i.labelKey),
       ...nationSections.flatMap((s) => [
         s.titleKey,
         ...s.items.map((i) => i.labelKey).filter((k): k is string => !!k),
