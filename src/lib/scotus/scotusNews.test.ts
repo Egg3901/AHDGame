@@ -177,6 +177,17 @@ describe("buildScotusVacancyNews", () => {
     expect(body).toContain("Seat #1 is now vacant");
   });
 
+  it("says the justice died in office when the hazard clock fired", async () => {
+    const { buildScotusVacancyNews } = await import("./scotusNews");
+    const { body } = buildScotusVacancyNews({
+      seatNumber: 1,
+      justiceName: "Lyndon B. Johnson",
+      cause: "death",
+    });
+    expect(body).toContain("Lyndon B. Johnson has died in office");
+    expect(body).not.toContain("has left the Supreme Court");
+  });
+
   it("falls back to generic copy when the seat has no justice name", async () => {
     const { buildScotusVacancyNews } = await import("./scotusNews");
     const { body } = buildScotusVacancyNews({ seatNumber: 6, justiceName: null });

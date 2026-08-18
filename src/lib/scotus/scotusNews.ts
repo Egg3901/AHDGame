@@ -130,17 +130,18 @@ export async function generateScotusSurpriseNews(
 }
 
 /**
- * Pure builder for a Court vacancy (Original Roster chain exhausted, or an
- * NPP Divergent Justice's hazard clock firing). Player-held seats are not
- * vacated by the hazard; this copy is for the seats that do open.
+ * Pure builder for a Court vacancy (Original Roster chain exhausted, or a
+ * Divergent Justice's hazard clock firing, player or NPP).
  */
 export function buildScotusVacancyNews(input: {
   seatNumber: number;
   justiceName: string | null;
+  cause?: "death" | "history";
 }): ScotusNewsContent {
   const title = `SCOTUS Seat #${input.seatNumber} Vacant`;
   const who = input.justiceName?.trim() || "A justice";
-  const body = `${who} has left the Supreme Court. Seat #${input.seatNumber} is now vacant and awaits a presidential nomination.`;
+  const verb = input.cause === "death" ? "has died in office" : "has left the Supreme Court";
+  const body = `${who} ${verb}. Seat #${input.seatNumber} is now vacant and awaits a presidential nomination.`;
   return { title, body };
 }
 
@@ -148,6 +149,7 @@ export function buildScotusVacancyNews(input: {
 export async function generateScotusVacancyNews(input: {
   seatNumber: number;
   justiceName: string | null;
+  cause?: "death" | "history";
 }): Promise<void> {
   const { title, body } = buildScotusVacancyNews(input);
   await createSystemNewsPost(body, "judicial", { title });

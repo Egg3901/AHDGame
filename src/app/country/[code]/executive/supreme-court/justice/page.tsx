@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { Skeleton } from "@/components/ui";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { scotusUrl } from "@/lib/urls";
+import { formatDivergentDeathChance } from "@/lib/scotus/tenure";
 import { useJusticeOffice } from "./useJusticeOffice";
 import { JusticeActionPanel } from "./components/JusticeActionPanel";
 
@@ -97,6 +98,17 @@ export default function JusticeOfficePage() {
                 <p className="text-xs text-warning">
                   This seat has diverged from the real historical succession.
                 </p>
+              )}
+              {data.seat.deathChance && (
+                <div className="flex items-start gap-3">
+                  <span className="w-28 shrink-0 text-[10px] font-semibold uppercase tracking-widest text-muted">
+                    Death chance
+                  </span>
+                  <span className="text-sm text-warning">
+                    {formatDivergentDeathChance(data.seat.deathChance, "full")} If you die in
+                    office, the seat becomes vacant.
+                  </span>
+                </div>
               )}
             </div>
           ) : (

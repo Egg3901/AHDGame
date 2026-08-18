@@ -179,32 +179,59 @@ describe("processScotusTenureTurn", () => {
     );
   });
 
-  it("never vacates a player-held divergent seat, even when the hazard draw would fire", async () => {
+  it("vacates a player-held divergent seat when the hazard fires and notifies the occupant", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.0001);
     const seatId = new ObjectId();
+    const occupantCharId = new ObjectId();
+    const occupantUserId = new ObjectId();
     const seat = {
       _id: seatId,
       countryId: "US",
       seatNumber: 1,
       isDivergent: true,
       historicalOccupants: [],
-      justiceCharacterId: new ObjectId(),
+      justiceCharacterId: occupantCharId,
       justiceNppId: null,
+      justiceName: "Lyndon B. Johnson",
       seatedAtTurn: 100,
       divergentHazardStartsTurn: 100 + DIVERGENT_TENURE_FLOOR_TURNS,
     };
     db.collectionMocks.supremeCourtSeats!.find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([seat]),
     });
+    db.collectionMocks.characters!.findOne.mockResolvedValue({
+      _id: occupantCharId,
+      userId: occupantUserId,
+    });
 
     const { processScotusTenureTurn } = await import("./scotusTenureTurn");
+    const { createNotifications } = await import("@/lib/notifications");
+    const { generateScotusVacancyNews } = await import("@/lib/scotus/scotusNews");
     const result = await processScotusTenureTurn(
       100 + DIVERGENT_TENURE_FLOOR_TURNS + 50,
       db as unknown as Db
     );
 
-    expect(result.seatsVacatedByHazard).toBe(0);
-    expect(db.collectionMocks.supremeCourtSeats!.updateOne).not.toHaveBeenCalled();
+    expect(result.seatsVacatedByHazard).toBe(1);
+    expect(db.collectionMocks.supremeCourtSeats!.updateOne).toHaveBeenCalledWith(
+      { _id: seatId },
+      expect.objectContaining({
+        $set: expect.objectContaining({ justiceCharacterId: null, justiceMode: null }),
+      })
+    );
+    expect(generateScotusVacancyNews).toHaveBeenCalledWith({
+      seatNumber: 1,
+      justiceName: "Lyndon B. Johnson",
+      cause: "death",
+    });
+    expect(createNotifications).toHaveBeenCalledWith([
+      expect.objectContaining({
+        userId: occupantUserId,
+        type: "system",
+        title: "Died in office",
+        message: expect.stringContaining("You died while serving as a Justice"),
+      }),
+    ]);
   });
 
   it("does not replay Original Roster succession over a player-held non-divergent seat", async () => {
@@ -288,13 +315,14 @@ describe("processScotusTenureTurn", () => {
     expect(generateScotusVacancyNews).toHaveBeenCalledWith({
       seatNumber: 6,
       justiceName: "NPP Scholar",
+      cause: "death",
     });
     expect(createNotifications).toHaveBeenCalledWith([
       expect.objectContaining({
         userId: presidentUserId,
         type: "system",
         title: "Supreme Court vacancy",
-        message: expect.stringContaining("Seat #6 is vacant"),
+        message: expect.stringContaining("has died in office"),
       }),
     ]);
   });

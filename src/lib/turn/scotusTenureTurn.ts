@@ -15,9 +15,10 @@
  *
  *  - Divergent seats (`isDivergent === true`): flat per-turn hazard clock
  *    (`rollDivergentDeparture`), age-agnostic, uncapped on the high end.
- *    Player-held seats (`justiceCharacterId`) are exempt: the hazard is an
- *    NPP death/retirement stand-in, and the game has no player mortality
- *    (ticket #1135).
+ *    Applies to player-held seats as well as generated NPPs; otherwise a
+ *    confirmed player stays on the Court forever (ticket #1135). The
+ *    occupant and president are notified when the seat opens, and the UI
+ *    shows the death chance while they sit.
  */
 import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -60,10 +61,12 @@ function vacatedOccupantFields(now: Date) {
 async function notifySeatVacated(
   db: Db,
   seat: SupremeCourtSeat,
-  notifications: NotificationInput[]
+  notifications: NotificationInput[],
+  cause: "death" | "history"
 ): Promise<void> {
   try {
     const notifiedUserIds = new Set<string>();
+    const justiceLabel = seat.justiceName?.trim() || "A justice";
 
     if (seat.justiceCharacterId) {
       const occupant = await db
@@ -74,8 +77,11 @@ async function notifySeatVacated(
         notifications.push({
           userId: occupant.userId,
           type: "system",
-          title: "Left the Supreme Court",
-          message: `Your tenure on Supreme Court seat #${seat.seatNumber} has ended. The seat is now vacant.`,
+          title: cause === "death" ? "Died in office" : "Left the Supreme Court",
+          message:
+            cause === "death"
+              ? `You died while serving as a Justice. Supreme Court seat #${seat.seatNumber} is now vacant.`
+              : `Your tenure on Supreme Court seat #${seat.seatNumber} has ended. The seat is now vacant.`,
           metadata: {
             type: "scotus_vacated",
             seatNumber: seat.seatNumber,
@@ -95,12 +101,15 @@ async function notifySeatVacated(
         .collection<Character>("characters")
         .findOne({ _id: presidentOfficial.characterId }, { projection: { userId: 1 } });
       if (presidentChar?.userId && !notifiedUserIds.has(presidentChar.userId.toString())) {
-        const justiceLabel = seat.justiceName?.trim() || "A justice";
+        const left =
+          cause === "death"
+            ? `${justiceLabel} has died in office`
+            : `${justiceLabel} has left the Court`;
         notifications.push({
           userId: presidentChar.userId,
           type: "system",
           title: "Supreme Court vacancy",
-          message: `${justiceLabel} has left the Court. Seat #${seat.seatNumber} is vacant. You may nominate a replacement.`,
+          message: `${left}. Seat #${seat.seatNumber} is vacant. You may nominate a replacement.`,
           metadata: {
             type: "scotus_vacancy",
             seatNumber: seat.seatNumber,
@@ -113,6 +122,7 @@ async function notifySeatVacated(
     await generateScotusVacancyNews({
       seatNumber: seat.seatNumber,
       justiceName: seat.justiceName,
+      cause,
     }).catch((err) =>
       console.error(`[scotusTenureTurn] vacancy news failed for seat #${seat.seatNumber}:`, err)
     );
@@ -142,11 +152,11 @@ export async function processScotusTenureTurn(
   const notifications: NotificationInput[] = [];
 
   for (const seat of seats) {
-    // A living player on the bench is never overwritten by Original Roster
-    // replay and never rolled on the NPP mortality stand-in.
-    if (playerHoldsSeat(seat)) continue;
-
     if (!seat.isDivergent) {
+      // Do not replay Original Roster succession over a living player who
+      // somehow occupies a still-historical seat.
+      if (playerHoldsSeat(seat)) continue;
+
       const occupant = seat.historicalOccupants[seat.historicalOccupantIndex];
       if (!occupant || occupant.departureYear == null) continue; // still serving to "present"
 
@@ -179,13 +189,13 @@ export async function processScotusTenureTurn(
           .collection<SupremeCourtSeat>("supremeCourtSeats")
           .updateOne({ _id: seat._id }, { $set: vacatedOccupantFields(now) });
         seatsVacatedByHistory++;
-        await notifySeatVacated(database, seat, notifications);
+        await notifySeatVacated(database, seat, notifications, "history");
       }
       continue;
     }
 
-    // Divergent NPP seat: flat hazard clock, only while actually occupied.
-    if (!seat.justiceNppId) continue;
+    // Divergent seat: flat hazard clock while occupied by a player or NPP.
+    if (!seat.justiceCharacterId && !seat.justiceNppId) continue;
     if (seat.divergentHazardStartsTurn == null || seat.seatedAtTurn == null) continue;
 
     const departs = rollDivergentDeparture(
@@ -200,7 +210,7 @@ export async function processScotusTenureTurn(
       .collection<SupremeCourtSeat>("supremeCourtSeats")
       .updateOne({ _id: seat._id }, { $set: vacatedOccupantFields(now) });
     seatsVacatedByHazard++;
-    await notifySeatVacated(database, seat, notifications);
+    await notifySeatVacated(database, seat, notifications, "death");
   }
 
   await createNotifications(notifications);
