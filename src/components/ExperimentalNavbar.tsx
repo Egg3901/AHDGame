@@ -11,7 +11,7 @@
  * so it inherits all 11 themes. The desktop bar mirrors the classic {@link Navbar}
  * organization — logo left; text-forward tabs + icon cluster hug the right; a thin
  * underline for the active tab; an inline expanding search — with the top tabs in
- * the production order (Profile · State · Nation · World · Help · Staff). Keeps this
+ * the production order (Actions · State · Nation · World · Help · Staff). Keeps this
  * redesign's avatar/profile dropdown (notifications folded in) and the improved
  * mobile collapsed bar + slide-down menu.
  */
@@ -49,7 +49,7 @@ import {
 } from "./HelpDropdown";
 import { buildNationalDetailsSections } from "@/components/navbar/nationDetailsSections";
 import { visibleWorldNavItems } from "@/components/navbar/worldNavItems";
-import { visibleProfileNavItems } from "@/components/navbar/profileNavItems";
+import { visibleProfileOrgItems } from "@/components/navbar/profileNavItems";
 import { visibleStaffNavItems } from "@/components/navbar/staffNavItems";
 import {
   Chevron,
@@ -134,17 +134,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   const [open, setOpen] = useState<OpenKey>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  // Mobile drawer sections start expanded (collapsible, default open). The
-  // panel itself is viewport-capped and scrollable, so a full-open drawer
-  // does not overflow the screen.
-  const [mobileSubOpen, setMobileSubOpen] = useState<Partial<Record<MobileSubKey, boolean>>>({
-    profile: true,
-    state: true,
-    nation: true,
-    world: true,
-    help: true,
-    staff: true,
-  });
+  const [mobileSubOpen, setMobileSubOpen] = useState<Partial<Record<MobileSubKey, boolean>>>({});
   const [switchingCharacter, setSwitchingCharacter] = useState(false);
   const [switchingImperial, setSwitchingImperial] = useState(false);
   // Collapsible National Details sub-sections (Economy): closed by default;
@@ -276,18 +266,12 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
       user?.isPatronActive);
   const showWiki = !!(user?.isAdmin || user?.isModerator) || !wikiDisabled;
 
-  // Top-level tabs: Profile · State · Nation · World (Help and Staff are
-  // appended in the bar). Map/Legislature/Elections/Parties/News stay nested
-  // in the Nation/World dropdowns, exactly as in production.
+  // Top-level tabs: Actions · State · Nation · World (Help and Staff are
+  // appended in the bar). Corp and union live on the avatar profile card.
   const navItems: ExperimentalNavItem[] = [];
 
   if (showProfile && !isImperialMode) {
-    navItems.push({
-      label: t("common.profile"),
-      href: "/profile",
-      key: "profile",
-      icon: "Profile",
-    });
+    navItems.push({ label: t("common.actions"), href: "/actions", icon: "Actions" });
   }
 
   if (showProfile && homeState) {
@@ -337,15 +321,17 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
     unionsEnabled,
   });
 
-  const profileSubItems = visibleProfileNavItems({
+  const profileOrgItems = visibleProfileOrgItems({
     myCorporationId,
     myUnionId,
     unionsEnabled,
   });
 
-  // Auto-expand the mobile drawer's top-level section (Profile/State/Nation/World)
-  // that contains the current page. Sections start expanded (see useState above);
-  // this still re-opens a section the user collapsed if they navigate into it.
+  // Auto-expand the mobile drawer's top-level section (State/Nation/World)
+  // that contains the current page. `mobileSubOpen` starts fully collapsed
+  // (see useState above), so without this a user landing directly on, say,
+  // a Policy or Sectors page would find "United States"/"World" collapsed
+  // in the drawer even though that page lives inside them.
   useEffect(() => {
     const stateHrefs = homeState
       ? [
@@ -371,9 +357,6 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
     ].filter((href): href is string => !!href);
 
     const activeTopKeys: MobileSubKey[] = [];
-    if (profileSubItems.some((item) => isNavActive(pathname, item.href))) {
-      activeTopKeys.push("profile");
-    }
     if (stateHrefs.some((href) => isNavActive(pathname, href))) activeTopKeys.push("state");
     if (nationHrefs.some((href) => isNavActive(pathname, href))) activeTopKeys.push("nation");
     if (worldSubItems.some((item) => isNavActive(pathname, item.href))) activeTopKeys.push("world");
@@ -402,27 +385,6 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
       : [];
 
   // ── Dropdown panels ────────────────────────────────────────────────────────
-  const profileMenu = (
-    <DropdownPanel
-      anchorRef={dropdownAnchorRef}
-      panelRef={dropdownPanelRef}
-      align="left"
-      width="w-[220px]"
-    >
-      {profileSubItems.map((item) => (
-        <MenuRow
-          key={item.id}
-          href={item.href}
-          onNavigate={closeAll}
-          strong={item.id === "profile"}
-          dot={item.id === "corporation" || item.id === "union" ? "bg-primary" : undefined}
-        >
-          {t(item.labelKey)}
-        </MenuRow>
-      ))}
-    </DropdownPanel>
-  );
-
   const worldMenu = (
     <DropdownPanel
       anchorRef={dropdownAnchorRef}
@@ -753,6 +715,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
       switchingCharacter={switchingCharacter}
       switchingImperial={switchingImperial}
       canAccessSandbox={canAccessSandbox}
+      profileOrgItems={profileOrgItems}
       closeAll={closeAll}
       handleSwitchCharacter={handleSwitchCharacter}
       handleSwitchImperial={handleSwitchImperial}
@@ -802,10 +765,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                 aria-hidden={searchOpen ? "true" : undefined}
               >
                 {navItems.map((item) => {
-                  const active =
-                    item.key === "profile"
-                      ? profileSubItems.some((sub) => isNavActive(pathname, sub.href))
-                      : isNavActive(pathname, item.href);
+                  const active = isNavActive(pathname, item.href);
                   const tabIcon = item.useFlag ? (
                     <CountryFlag country={pageCountry} size="sm" />
                   ) : (
@@ -824,7 +784,6 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                           onClick={() => toggle(item.key!)}
                           aria-expanded={isOpen}
                           aria-haspopup="menu"
-                          data-coach={item.key === "profile" ? "nav-actions" : undefined}
                           className={navTabClassName(active || isOpen)}
                         >
                           {tabIcon}
@@ -832,15 +791,13 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                           <NavItemChevron open={isOpen} />
                         </button>
                         {isOpen &&
-                          (item.key === "profile"
-                            ? profileMenu
-                            : item.key === "state"
-                              ? stateMenu
-                              : item.key === "world"
-                                ? worldMenu
-                                : item.key === "nation"
-                                  ? nationMenu
-                                  : null)}
+                          (item.key === "state"
+                            ? stateMenu
+                            : item.key === "world"
+                              ? worldMenu
+                              : item.key === "nation"
+                                ? nationMenu
+                                : null)}
                       </div>
                     );
                   }
@@ -849,6 +806,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                       key={item.label}
                       href={item.href}
                       aria-current={active ? "page" : undefined}
+                      data-coach={item.href === "/actions" ? "nav-actions" : undefined}
                       className={navTabClassName(active)}
                     >
                       {tabIcon}
@@ -1153,7 +1111,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               preset={preset}
               switchableCountries={switchableCountries}
               worldSubItems={worldSubItems}
-              profileSubItems={profileSubItems}
+              profileOrgItems={profileOrgItems}
               staffSubItems={staffSubItems}
               charterEntry={charterEntry}
               hasActiveReferendumCampaign={hasActiveReferendumCampaign}

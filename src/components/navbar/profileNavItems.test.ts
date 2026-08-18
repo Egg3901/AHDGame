@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildProfileNavItems, visibleProfileNavItems } from "./profileNavItems";
+import {
+  buildProfileNavItems,
+  visibleProfileNavItems,
+  visibleProfileOrgItems,
+} from "./profileNavItems";
 
 describe("buildProfileNavItems", () => {
   it("always lists Profile then Actions first", () => {
@@ -38,5 +42,16 @@ describe("buildProfileNavItems", () => {
   it("hides corporation and union when ids are missing", () => {
     const hidden = buildProfileNavItems({ unionsEnabled: true }).filter((i) => !i.show);
     expect(hidden.map((i) => i.id)).toEqual(["corporation", "union"]);
+  });
+});
+
+describe("visibleProfileOrgItems", () => {
+  it("returns only corp and union, never Profile or Actions", () => {
+    const ids = visibleProfileOrgItems({
+      myCorporationId: 7,
+      myUnionId: "u1",
+      unionsEnabled: true,
+    }).map((i) => i.id);
+    expect(ids).toEqual(["corporation", "union"]);
   });
 });
