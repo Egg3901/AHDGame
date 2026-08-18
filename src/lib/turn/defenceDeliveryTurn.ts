@@ -11,7 +11,9 @@ import {
   contractLotsThisTurn,
   defaultFactoryAllocation,
   lotProductionCost,
+  normalizeGrade,
   DEFENCE_FACTORY_SLOTS_PER_PLANT,
+  GRADE_PRICE_SCALE,
 } from "@/lib/military/defenceLotEconomics";
 import {
   listActiveContracts,
@@ -21,7 +23,7 @@ import {
   recordContractPayment,
   releaseContractEncumbrance,
 } from "@/lib/db/collections/defenceContracts";
-import { depositLots, drawLots } from "@/lib/db/collections/nationalArsenal";
+import { depositLots } from "@/lib/db/collections/nationalArsenal";
 import {
   drawDownEncumbrance,
   getDefenseAppropriation,
@@ -253,8 +255,14 @@ export async function applyDefenceDeliveries(
     // appropriation drained, which is both an economy-wide money mint and a direct contaminant
     // of the market-cap series. Payment is margin, and a plant that took a bad price genuinely
     // loses money on the order - which is now a thing the commodity market can cause.
+    // Build cost scales with the DELIVERED grade, mirroring the band the contract was priced
+    // in (lotPriceBand grades productionCost by GRADE_PRICE_SCALE). Charging ungraded cost
+    // here made every grade-0 contract underwater from turn one even at the band floor
+    // (floor 0.784x cost vs cost 1.0x), and over-credited grade-3 deliveries by the 1.25x
+    // the band charged but the build never paid.
     const unitCost = lotProductionCost(sector.strategyId, priceRatios) ?? 0;
-    const buildCost = Math.max(0, Math.round(unitCost * recorded));
+    const gradedUnitCost = unitCost * GRADE_PRICE_SCALE[normalizeGrade(grade)];
+    const buildCost = Math.max(0, Math.round(gradedUnitCost * recorded));
     const margin = actualCost - buildCost;
 
     // Live input prices mean a contract CAN go underwater after it was signed: the band's floor
@@ -406,7 +414,11 @@ export async function applyDefenceDeliveries(
     try {
       await depositLots(db, countryId, contract.component, recorded, grade);
     } catch {
-      const reclaimed = await drawLots(db, countryId, contract.component, recorded);
+      // depositLots is a single atomic $inc, so a throw means nothing landed. Drawing lots
+      // back out here reclaimed from whatever the arsenal ALREADY held of this component:
+      // a country with pre-existing stock lost `recorded` lots of it and was refunded the
+      // contract on top. Nothing was deposited, so nothing is drawn; the reversal and the
+      // paired refund below fully unwind the delivery.
       await reverseContractDelivery(db, contract._id as ObjectId, recorded);
       await recordContractPayment(db, contract._id as ObjectId, -actualCost, -buildCost);
       await applyMoneyMove(db, {
@@ -449,7 +461,6 @@ export async function applyDefenceDeliveries(
         ],
       });
       projectedBalance += actualCost;
-      void reclaimed;
       // One broken contract must not take down the sweep for every other country.
       stalled++;
       continue;
