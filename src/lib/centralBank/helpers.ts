@@ -9,6 +9,35 @@ export function getBankId(countryId: CountryId): string {
 }
 
 /**
+ * Empty the committee's chair seat when the single-chair mirror is vacated
+ * (resignation, dismissal, executive-independence removal).
+ *
+ * Clearing only `chairCharacterId` left the departed chair sitting in
+ * `fomcBoard`'s seat 0, where their alignment kept tabling motions and the page
+ * kept naming them. Backdating `termExpiresAtTurn` lets the next
+ * `refreshExpiredSeats` pass drop a caretaker technocrat in, which in turn
+ * routes the vacancy to the player selection phase.
+ *
+ * No-op for banks without a committee.
+ */
+export async function vacateFomcChairSeat(db: Db, bankId: string): Promise<void> {
+  await db.collection<CentralBank>("centralBanks").updateOne(
+    { _id: bankId, "fomcBoard.isChair": true },
+    {
+      $set: {
+        "fomcBoard.$[chair].occupantType": "vacant",
+        "fomcBoard.$[chair].characterId": null,
+        "fomcBoard.$[chair].characterName": null,
+        "fomcBoard.$[chair].nppId": null,
+        "fomcBoard.$[chair].appointedByPresidentId": null,
+        "fomcBoard.$[chair].termExpiresAtTurn": 0,
+      },
+    },
+    { arrayFilters: [{ "chair.isChair": true }] }
+  );
+}
+
+/**
  * Build a countryId → primeRate lookup from central-bank docs, resolving every
  * configured country through its (possibly shared) bank doc. Bank docs are
  * keyed by bank `_id`, and a shared doc's `countryId` only names the anchor

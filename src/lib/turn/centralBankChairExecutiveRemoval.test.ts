@@ -91,13 +91,20 @@ describe("processCentralBankChairExecutiveRemoval", () => {
     const result = await processCentralBankChairExecutiveRemoval(db as unknown as Db, 100, gameNow);
 
     expect(result.chairsRemoved).toBe(1);
-    expect(db._bankUpdateOne).toHaveBeenCalledTimes(1);
+    // Two writes: the single-chair mirror is vacated, then the committee's
+    // chair seat is emptied so the removed executive stops voting the rate.
+    expect(db._bankUpdateOne).toHaveBeenCalledTimes(2);
     const [filter, update] = db._bankUpdateOne.mock.calls[0]!;
     expect(filter).toEqual({ _id: "UK" });
     expect((update as { $set: Record<string, unknown> }).$set.chairCharacterId).toBeNull();
     expect(
       (update as { $set: Record<string, unknown> }).$set.vacancyAwaitingAutomaticSelection
     ).toBe(true);
+    const [seatFilter, seatUpdate] = db._bankUpdateOne.mock.calls[1]!;
+    expect(seatFilter).toEqual({ _id: "UK", "fomcBoard.isChair": true });
+    expect(
+      (seatUpdate as { $set: Record<string, unknown> }).$set["fomcBoard.$[chair].occupantType"]
+    ).toBe("vacant");
   });
 
   it("leaves a chair who only holds a legislative seat untouched", async () => {
@@ -131,7 +138,8 @@ describe("processCentralBankChairExecutiveRemoval", () => {
     const result = await processCentralBankChairExecutiveRemoval(db as unknown as Db, 100, gameNow);
 
     expect(result.chairsRemoved).toBe(1);
-    expect(db._bankUpdateOne).toHaveBeenCalledTimes(1);
+    // Mirror vacate + committee chair-seat vacate.
+    expect(db._bankUpdateOne).toHaveBeenCalledTimes(2);
   });
 
   it("clears a pending proposal whose nominee has become an executive", async () => {
@@ -226,6 +234,7 @@ describe("processCentralBankChairExecutiveRemoval", () => {
     const result = await processCentralBankChairExecutiveRemoval(db as unknown as Db, 100, gameNow);
 
     expect(result.chairsRemoved).toBe(1);
-    expect(db._bankUpdateOne).toHaveBeenCalledTimes(1);
+    // Mirror vacate + committee chair-seat vacate.
+    expect(db._bankUpdateOne).toHaveBeenCalledTimes(2);
   });
 });
