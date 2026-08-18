@@ -703,10 +703,11 @@ describe("fiscal deficit/GDP clamp (BR debt-spiral guard)", () => {
 
 describe("ratchet regression: inflation comes back DOWN under corrective policy", () => {
   it("a BR-like world in fiscal crisis recovers once fiscal policy turns responsible and rates tighten", () => {
-    // Start where the sandbox BR sits: inflation resting near the (old) 15%
-    // ceiling, against BR's own 1953-era anchors (target 10 / neutral 12 —
-    // see monetaryEra.ts), driven by a severe deficit, with a chair that has
-    // already hiked hard (16.72%) in response.
+    // Start where a high-attractor crisis world sits: inflation resting near
+    // the (old) 15% ceiling, against a chronically-elevated target (10) and
+    // neutral (12), driven by a severe deficit, with a chair that has already
+    // hiked hard (16.72%) in response. Numbers are a crisis scenario, not
+    // BR's 1953 policy target (see monetaryEra.ts / ticket 1124).
     let inflation = 15.0;
     const crisisYears = 30;
     for (let t = 0; t < crisisYears; t++) {
@@ -731,16 +732,16 @@ describe("ratchet regression: inflation comes back DOWN under corrective policy"
 
     // Corrective policy: the deficit is brought back to balance (debt
     // restructuring / austerity) while the chair holds a firmly restrictive
-    // rate relative to BR's own neutral. No ratchet should prevent this from
-    // working now that the fiscal term is clamped instead of chasing an
-    // ever-worsening (compounding-debt) deficit ratio forever.
+    // rate relative to this scenario's own neutral. No ratchet should prevent
+    // this from working now that the fiscal term is clamped instead of chasing
+    // an ever-worsening (compounding-debt) deficit ratio forever.
     for (let t = 0; t < 100; t++) {
       inflation = calculateInflation({
         targetInflation: 10.0,
         neutralPrimeRate: 12.0,
         unemployment: 5.0,
         gdpGrowth: 2.0,
-        primeRate: 16.0, // held well above BR's own neutral rate
+        primeRate: 16.0, // held well above this scenario's own neutral rate
         primeRateHistory: Array(12).fill(16.0),
         surplusToGdp: 0.0, // fiscal crisis resolved
         tariffRate: 3.0,
@@ -764,7 +765,7 @@ describe("gravity-not-rails regression: high inflation stays reachable under bad
     let inflation = 10.0;
     for (let t = 0; t < 150; t++) {
       inflation = calculateInflation({
-        targetInflation: 10.0, // BR-like chronically-elevated era target
+        targetInflation: 10.0, // chronically-elevated attractor (crisis scenario)
         neutralPrimeRate: 12.0,
         unemployment: 1.5, // overheating labor market
         gdpGrowth: 8.0,

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   CABINET_KEY_TO_POLITICAL,
   mapCabinetDeltasToPolitical,
+  mapRegionalCabinetDeltasToPolitical,
   foldCabinetResiduals,
   CABINET_RESIDUAL_CAP,
 } from "./cabinetResidual";
@@ -40,6 +41,18 @@ describe("mapCabinetDeltasToPolitical", () => {
 
   it("ignores unmapped keys", () => {
     expect(mapCabinetDeltasToPolitical({ "governance.governmentApproval": 1 })).toEqual({});
+  });
+});
+
+describe("mapRegionalCabinetDeltasToPolitical", () => {
+  it("maps each region's deltas independently and drops empty regions", () => {
+    const out = mapRegionalCabinetDeltasToPolitical({
+      CA: { "publicSafety.crimeRate": -0.02 },
+      TX: { "governance.governmentApproval": 1 },
+    });
+    expect(out.CA?.["order.safety"]).toBeGreaterThan(0);
+    expect(out.TX).toBeUndefined();
+    expect(out.NY).toBeUndefined();
   });
 });
 

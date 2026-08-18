@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import {
@@ -13,9 +13,12 @@ describe("politicalCabinetContribution", () => {
     db.collection("politicalCabinetContribution");
   });
 
-  it("returns {} when absent", async () => {
+  it("returns empty maps when absent", async () => {
     db.collectionMocks.politicalCabinetContribution.findOne.mockResolvedValue(null);
-    expect(await getPoliticalCabinetContribution(db as unknown as Db, "US")).toEqual({});
+    expect(await getPoliticalCabinetContribution(db as unknown as Db, "US")).toEqual({
+      contribution: {},
+      regional: {},
+    });
   });
 
   it("returns the stored contribution", async () => {
@@ -23,18 +26,42 @@ describe("politicalCabinetContribution", () => {
       _id: "US",
       countryId: "US",
       contribution: { "order.safety": 2 },
+      regional: { CA: { "order.safety": 0.4 } },
       turn: 5,
     });
     expect(await getPoliticalCabinetContribution(db as unknown as Db, "US")).toEqual({
-      "order.safety": 2,
+      contribution: { "order.safety": 2 },
+      regional: { CA: { "order.safety": 0.4 } },
     });
   });
 
-  it("upserts a contribution snapshot", async () => {
-    await setPoliticalCabinetContribution(db as unknown as Db, "US", { "order.safety": 1 }, 5);
+  it("treats a pre-#1129 snapshot without regional as {}", async () => {
+    db.collectionMocks.politicalCabinetContribution.findOne.mockResolvedValue({
+      _id: "US",
+      countryId: "US",
+      contribution: { "order.safety": 2 },
+      turn: 5,
+    });
+    expect(await getPoliticalCabinetContribution(db as unknown as Db, "US")).toEqual({
+      contribution: { "order.safety": 2 },
+      regional: {},
+    });
+  });
+
+  it("upserts a contribution snapshot including regional extras", async () => {
+    await setPoliticalCabinetContribution(db as unknown as Db, "US", { "order.safety": 1 }, 5, {
+      CA: { "order.safety": 0.4 },
+    });
     expect(db.collectionMocks.politicalCabinetContribution.updateOne).toHaveBeenCalledWith(
       { _id: "US" },
-      { $set: { countryId: "US", contribution: { "order.safety": 1 }, turn: 5 } },
+      {
+        $set: {
+          countryId: "US",
+          contribution: { "order.safety": 1 },
+          regional: { CA: { "order.safety": 0.4 } },
+          turn: 5,
+        },
+      },
       { upsert: true }
     );
   });

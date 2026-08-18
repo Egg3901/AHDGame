@@ -105,7 +105,16 @@ describe("GET /api/corporations/[id]", () => {
       financialFogOfWar: null,
       // Procurement position. Present on every corporation, empty for one the state has
       // never contracted — a missing block would read to the page as "still loading".
-      defenceContracts: { contracts: [], pendingCount: 0, gradeCeiling: 0, totalEarned: 0 },
+      defenceContracts: {
+        contracts: [],
+        pendingCount: 0,
+        gradeCeiling: 0,
+        totalEarned: 0,
+        // Gross earnings alone became misleading once deliveries carried a production cost:
+        // a corporation can take a fat headline number on a contract it lost money on.
+        totalNetMargin: 0,
+        totalEncumbered: 0,
+      },
     });
   });
 });

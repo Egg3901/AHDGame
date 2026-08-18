@@ -226,6 +226,15 @@ export interface GameState {
   conflictsEnabled?: boolean;
   conflictsEnabledBy?: string;
   conflictsEnabledAt?: string;
+  /** Temporary freeze on NEW defence procurement. When true, no new contracts may be
+   *  awarded and no pending offer may be accepted, but existing active contracts keep
+   *  delivering and settling in the turn sweep, and ministers may still cancel. Mirrors
+   *  `autoCrisisPaused`: the subsystem stays configured, only new activity stops. Default
+   *  false (procurement open). Set to halt a live procurement-drain exploit without a deploy
+   *  once this gate is live. */
+  defenceProcurementPaused?: boolean;
+  defenceProcurementPausedBy?: string;
+  defenceProcurementPausedAt?: string;
   /** Master switch for the Cold War conflict subsystem. All Cold War features
    *  on this branch are gated behind this flag. Default false (system inert). */
   coldWarEnabled?: boolean;

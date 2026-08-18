@@ -25,6 +25,23 @@ import { persistBargainingMediationAction } from "@/lib/unions/commands/bargaini
 import { getBargainingMediationAvailability } from "@/lib/unions/bargaining";
 import { clampWageLevel, WAGE_LEVEL_MAX } from "@/lib/labour/laborCost";
 import { logWireEvent } from "@/lib/wireEvent";
+import type { FederalBudget } from "@/lib/db/types/budget";
+import { spendFromTreasury } from "@/lib/budget/treasurySpend";
+import { computeAidOutcome } from "@/lib/crises/aidScaling";
+import { applyCrisisEffects } from "@/lib/crises/applyEffects";
+import {
+  deescalationApprovalCost,
+  escalationApprovalCost,
+  getVietnamEscalation,
+  recordVietnamMove,
+  supportPctGdpForLevel,
+  vietnamSideForCountry,
+} from "@/lib/crises/vietnamEscalation";
+import { announceVietnamMove } from "@/lib/crises/vietnamWire";
+import { ALL_CRISIS_TEMPLATES } from "@/lib/crises/templates";
+import { createCrisisFromTemplate } from "@/lib/crises/createCrisisFromTemplate";
+import { WARSAW_PACT_SATELLITE_COUNTRY_IDS } from "@/lib/crises/warsawPactSatellites";
+import { runUnionBanStrikeResponse } from "@/lib/crises/unionBanStrike";
 
 /**
  * Context handed to every crisis option-action handler. The crisis is
@@ -55,7 +72,7 @@ function sectorLabelFor(sectorType: string): string {
  * government. Mirrors the executive-nationalize route
  * (`src/app/api/country/[code]/nationalize/route.ts`): reach is limited to
  * NPC/unowned and *distressed* player corps (`executivelyTakeable`) at the
- * `method: "executive"` path — solvent player corps are deliberately skipped
+ * `method: "executive"` path, solvent player corps are deliberately skipped
  * (they need the legislative bill / court fight). Each in-scope sector of the
  * type is absorbed via `nationalizeSector`, which owns compensation + transfer.
  *
@@ -88,7 +105,7 @@ async function executiveNationalize(ctx: CrisisActionContext, sectorType: string
   // Bound the work: an emergency taking should not fan across an unbounded set.
   const EXEC_TAKING_CAP = 50;
   let taken = 0;
-  // Surviving NatCorp sector rows this taking produced — the reversal handles a
+  // Surviving NatCorp sector rows this taking produced, the reversal handles a
   // SCOTUS strike-down uses to return them to their prior owners.
   const takenSectorIds: ObjectId[] = [];
   for (const sector of sectors) {
@@ -130,7 +147,7 @@ async function executiveNationalize(ctx: CrisisActionContext, sectorType: string
     `EMERGENCY: ${ctx.countryId} seizes ${taken} distressed ${label} operation${taken === 1 ? "" : "s"} by executive order`
   );
 
-  // An executive taking goes to the Court automatically — only if it moved
+  // An executive taking goes to the Court automatically, only if it moved
   // something (guarded by taken > 0 above).
   await spawnNationalizationChallenge(ctx, {
     axis: "economic",
@@ -162,7 +179,7 @@ async function spawnNationalizationChallenge(
     /**
      * Surviving NatCorp sector rows an executive taking produced. When present,
      * the case carries a `nationalizationReversal` payload and a divergence
-     * RETURNS those sectors to private hands — the real reversal — instead of the
+     * RETURNS those sectors to private hands, the real reversal, instead of the
      * benign stand-in `effect`. Omitted by the standalone `scotusChallenge`
      * option, which has no specific taken sectors and keeps the generic effect.
      */
@@ -242,9 +259,9 @@ async function spawnNationalizationChallenge(
 /**
  * Introduce an emergency industry-wide nationalization bill straight into
  * active voting. Mirrors the crisis-aid fast path
- * (`src/lib/legislature/commands/proposeCrisisAidBill.ts`) — direct-to-active
+ * (`src/lib/legislature/commands/proposeCrisisAidBill.ts`), direct-to-active
  * status, 24h voting window, no NPI/action cost, sponsor = the head of
- * government — but carries a `NationalizeProvision` (industry-wide: a
+ * government, but carries a `NationalizeProvision` (industry-wide: a
  * `targetSectorType` + `sectorScope` + `sectorCarveFraction`) rather than a
  * bare appropriation. On passage, normal bill enactment routes the provision
  * through `applyNationalizeProvision` → `nationalizeSectorWide`.
@@ -299,7 +316,7 @@ async function emergencyNationalizeBill(
     votingStartedAt: now,
     votingEndsAt: new Date(now.getTime() + VOTING_DURATION_HOURS * 60 * 60 * 1000),
     votingEndsOnTurn: ctx.currentTurn + VOTING_DURATION_HOURS,
-    // Executive emergency measure — no proposal cost, matching the aid fast path.
+    // Executive emergency measure, no proposal cost, matching the aid fast path.
     proposalNpiCost: 0,
     proposalActionCost: 0,
     createdAt: now,
@@ -313,6 +330,71 @@ async function emergencyNationalizeBill(
   );
 }
 
+// ── 3b. Concession / legislation bill ──────────────────────────────────────
+
+/**
+ * Introduce a plain concession or legislative-response bill straight into
+ * active voting. Same fast path as {@link emergencyNationalizeBill} (24h
+ * window, no NPI/action cost, head of government as sponsor) but carries no
+ * provisions, it exists to give a "concede/legislate" crisis option a real,
+ * contestable vote in Congress instead of a flat approval nudge with nothing
+ * behind it. Used by the 1960s civil rights, urban unrest, and anti-war
+ * protest crises for their legislative-response options.
+ */
+async function concessionBill(
+  ctx: CrisisActionContext,
+  title: string,
+  summary: string,
+  category: string
+): Promise<void> {
+  const { db } = ctx;
+  const country = ctx.countryId as CountryId;
+  const config = COUNTRY_CONFIGS[country];
+  if (!config) {
+    console.warn(`[crisis] concessionBill: unknown country ${ctx.countryId}`);
+    return;
+  }
+  const chamberKey = config.legislature.lowerChamber.key as BillChamber;
+  const stateId = getNationalDocId(country) ?? `${country.toLowerCase()}_national`;
+  const now = new Date();
+  const VOTING_DURATION_HOURS = 24;
+
+  const sponsor = await db
+    .collection<Character>("characters")
+    .findOne({ _id: ctx.characterId }, { projection: { name: 1 } });
+
+  const bill: Omit<Bill, "_id"> = {
+    countryId: country,
+    stateId,
+    title,
+    summary,
+    originChamber: chamberKey,
+    currentChamber: chamberKey,
+    sponsorId: ctx.characterId,
+    sponsorName: sponsor?.name ?? "Head of Government",
+    status: "active",
+    votesFor: 0,
+    votesAgainst: 0,
+    votesAbstain: 0,
+    votes: {},
+    category,
+    provisions: [],
+    proposedAt: now,
+    proposedTurn: ctx.currentTurn,
+    votingStartedAt: now,
+    votingEndsAt: new Date(now.getTime() + VOTING_DURATION_HOURS * 60 * 60 * 1000),
+    votingEndsOnTurn: ctx.currentTurn + VOTING_DURATION_HOURS,
+    // Executive emergency measure, no proposal cost, matching the aid fast path.
+    proposalNpiCost: 0,
+    proposalActionCost: 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await db.collection<Omit<Bill, "_id">>("bills").insertOne(bill);
+  await logWireEvent("crisis_outcome", `BILL INTRODUCED: ${ctx.countryId} moves on "${title}"`);
+}
+
 // ── 4. Government-brokered bargaining ──────────────────────────────────────
 
 /**
@@ -322,7 +404,7 @@ async function emergencyNationalizeBill(
  * `persistBargainingMediationAction` (the same primitive the union/employer
  * surfaces use). Mediation carries hard preconditions (an active dispute, a
  * wage package from BOTH parties, sufficient collective-bargaining law support,
- * a timing gate — see `getBargainingMediationAvailability`); when none is met
+ * a timing gate, see `getBargainingMediationAvailability`); when none is met
  * there is nothing to broker, so this logs and returns rather than fabricating
  * a synthetic dispute.
  */
@@ -435,6 +517,162 @@ async function settleWageFloor(ctx: CrisisActionContext, sectorType: string): Pr
   );
 }
 
+// ── 6. Follow-up crisis cascade ────────────────────────────────────────────
+
+/**
+ * Roll `chance` and, on success, spawn another crisis from a template in a
+ * country drawn from the requested pool. Used for cascades (tolerating a
+ * reform movement lets unrest spread to a neighboring satellite) and delayed
+ * backlash (genuine reform provokes a hardliner crisis at home). Starts on
+ * the current turn, the new crisis's own duration/effects handle its pacing,
+ * so there is no separate delay here.
+ */
+async function spawnFollowUpCrisis(
+  ctx: CrisisActionContext,
+  action: Extract<CrisisDecisionOption["action"], { kind: "spawnFollowUpCrisis" }>
+): Promise<void> {
+  const { db } = ctx;
+  if (Math.random() >= action.chance) return;
+
+  const template = ALL_CRISIS_TEMPLATES[action.templateKey];
+  if (!template) {
+    console.warn(`[crisis] spawnFollowUpCrisis: unknown template ${action.templateKey}`);
+    return;
+  }
+
+  let targetCountryId: string;
+  if (action.countryPool === "sameCountry") {
+    targetCountryId = ctx.countryId;
+  } else {
+    const pool = WARSAW_PACT_SATELLITE_COUNTRY_IDS.filter(
+      (id) => !action.excludeCurrentCountry || id !== ctx.countryId
+    );
+    if (pool.length === 0) return;
+    targetCountryId = pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  // One live copy per country. Two satellites both tolerating reform could each
+  // cascade the same follow-up into one third country, stacking identical
+  // active crises with their full effect load.
+  const already = await db.collection<Crisis>("crises").findOne(
+    {
+      templateKey: action.templateKey,
+      status: "active",
+      countryIds: targetCountryId,
+    },
+    { projection: { _id: 1 } }
+  );
+  if (already) return;
+
+  await createCrisisFromTemplate(db, {
+    template,
+    scope: "country",
+    countryIds: [targetCountryId],
+    regionIds: [],
+    // Starts NEXT turn so the turn loop's `turn === startTurn` branch announces
+    // it and applies its one-time flat effects; a crisis started mid-turn on
+    // the current turn is behind that branch and both are silently skipped.
+    currentTurn: ctx.currentTurn + 1,
+    autoGenerated: true,
+    autoSource: "condition",
+  });
+
+  await logWireEvent(
+    "crisis_outcome",
+    `SPREADING UNREST: reports of a follow-on crisis reach ${targetCountryId}`
+  );
+}
+
+// ── 7. Vietnam escalation ladder ───────────────────────────────────────────
+
+/**
+ * Commit this superpower's money and materiel to its side of the Vietnam war.
+ *
+ * The money moves through the same primitives as international aid: the pledge
+ * is sized as a share of the sender's GDP, priced by `computeAidOutcome`, and
+ * paid out of the treasury by `spendFromTreasury` (surplus first, remainder as
+ * debt). Nothing is minted: every unit the ladder records as spent left a
+ * treasury, which is what the engine-level conservation test pins.
+ *
+ * On top of the aid system's diplomatic bump for standing by a client, the
+ * leader pays an anti-war approval cost that grows both with the rung and with
+ * how long the war has already dragged on.
+ */
+async function vietnamSupport(ctx: CrisisActionContext): Promise<void> {
+  const { db } = ctx;
+  const side = vietnamSideForCountry(ctx.countryId);
+  if (!side) {
+    console.warn(`[crisis] vietnamSupport: ${ctx.countryId} is not on the Vietnam ladder`);
+    return;
+  }
+
+  const state = await getVietnamEscalation(db);
+  const budget = await db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ countryId: ctx.countryId as CountryId });
+  const gdp =
+    budget?.gdpSmoothed && budget.gdpSmoothed > 0 ? budget.gdpSmoothed : (budget?.gdp ?? 0);
+
+  const pctGdp = supportPctGdpForLevel(state.level);
+  const { amountLocal, senderEffects } =
+    gdp > 0 ? computeAidOutcome(pctGdp, gdp) : { amountLocal: 0, senderEffects: [] };
+
+  if (amountLocal > 0) {
+    await spendFromTreasury(db, ctx.countryId as CountryId, amountLocal, { resyncDerived: true });
+  }
+
+  const { after } = await recordVietnamMove(db, side, "support", amountLocal);
+
+  await applyCrisisEffects(
+    db,
+    [...senderEffects, ...escalationApprovalCost(state)],
+    [],
+    [ctx.countryId]
+  );
+
+  // Press coverage: the acting capital's own channel always, plus the full rung
+  // announcement (global feed, wire, news webhook, both capitals) when the
+  // decision actually moved the ladder.
+  await announceVietnamMove(ctx.countryId, state, after, "support");
+}
+
+/**
+ * Pull this superpower back from the ladder. Drains its own committed support
+ * first and only then brings the rung itself down, so restraint by one capital
+ * cannot unilaterally cancel the other capital's war. Costs approval with hawks,
+ * and costs more the higher the rung you are climbing down from.
+ */
+async function vietnamDeescalate(ctx: CrisisActionContext): Promise<void> {
+  const { db } = ctx;
+  const side = vietnamSideForCountry(ctx.countryId);
+  if (!side) {
+    console.warn(`[crisis] vietnamDeescalate: ${ctx.countryId} is not on the Vietnam ladder`);
+    return;
+  }
+
+  const state = await getVietnamEscalation(db);
+  const { after } = await recordVietnamMove(db, side, "deescalate");
+
+  await applyCrisisEffects(db, deescalationApprovalCost(state), [], [ctx.countryId]);
+
+  await announceVietnamMove(ctx.countryId, state, after, "deescalate");
+}
+
+/**
+ * What a handler wants the interaction engine to do after it has run.
+ *
+ * Almost every action is fire-and-forget and the decision tree's own
+ * `nextNodeId` decides what happens next. A retryable action cannot work that
+ * way: whether the attempt worked is known only inside the handler, and one
+ * static target on the option cannot carry both answers. `nextNodeId` here
+ * overrides the option's target for that submission. Absent means "the tree
+ * decides", which is the behaviour every pre-existing action keeps.
+ */
+export interface CrisisActionResult {
+  /** Node to navigate to instead of the option's own `nextNodeId`. */
+  nextNodeId?: string;
+}
+
 /**
  * Dispatch a crisis decision option's real-subsystem action, if it has one.
  * Called by `submitCrisisDecision` after the option's flat effects apply and
@@ -442,9 +680,9 @@ async function settleWageFloor(ctx: CrisisActionContext, sectorType: string): Pr
  * `action`. Handlers are best-effort: a throw is logged and swallowed so a
  * subsystem hiccup never wedges the crisis interaction mid-resolution.
  */
-export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<void> {
+export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<CrisisActionResult> {
   const action = ctx.option.action;
-  if (!action) return;
+  if (!action) return {};
   try {
     switch (action.kind) {
       case "executiveNationalize":
@@ -465,6 +703,30 @@ export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<v
       case "settleWageFloor":
         await settleWageFloor(ctx, action.sectorType);
         break;
+      case "spawnFollowUpCrisis":
+        await spawnFollowUpCrisis(ctx, action);
+        break;
+      case "concessionBill":
+        await concessionBill(ctx, action.title, action.summary, action.category);
+        break;
+      case "vietnamSupport":
+        await vietnamSupport(ctx);
+        break;
+      case "vietnamDeescalate":
+        await vietnamDeescalate(ctx);
+        break;
+      case "unionBanStrikeResponse": {
+        const result = await runUnionBanStrikeResponse({
+          db: ctx.db,
+          crisis: ctx.crisis,
+          interaction: ctx.interaction,
+          characterId: ctx.characterId,
+          countryId: ctx.countryId,
+          currentTurn: ctx.currentTurn,
+          response: action.response,
+        });
+        return result.nextNodeId ? { nextNodeId: result.nextNodeId } : {};
+      }
     }
   } catch (err) {
     console.error(
@@ -472,4 +734,5 @@ export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<v
       err
     );
   }
+  return {};
 }

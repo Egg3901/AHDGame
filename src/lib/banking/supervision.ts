@@ -209,11 +209,12 @@ async function revokeForUndercapitalization(
   // The old path just stamped `status = revoked`, which stranded the bank's
   // whole balance sheet: an investment bank's value sits in its prop book and
   // its cash reserves, and neither field is the corporation's `liquidCapital`.
-  // Flatten the marked prop book back into cash first, then use the existing
-  // revoke path, which refunds the full cash balance to the shareholder (once
-  // deposits are zero), zeroes the ring-fenced reserves, and archives. The
-  // failure path haircuts depositors; using it here would punish them for their
-  // bank's owner ignoring a deadline.
+  // Flatten the marked prop book back into cash first, then use the shared
+  // revoke path. `revokeCharter` runs the deposit-book waterfall: household
+  // deposits go back to the money supply out of this cash, player pointers flip
+  // to the central bank, and only the residual above the deposit book, capped
+  // at book equity, reaches the shareholder. Depositors are not punished for
+  // the owner ignoring a deadline; they are simply paid first.
   const unwoundPropBook = await unwindPropBookToCashReserves(db, corp, turn);
   const revoked = await revokeCharter(db, corp._id, "undercapitalized");
   if (!revoked.ok) return false;

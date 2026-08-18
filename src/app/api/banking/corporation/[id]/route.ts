@@ -23,14 +23,9 @@ import {
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
-import {
-  bankEquity,
-  getCashReserves,
-  requiredReserves,
-  upstreamCapacity,
-} from "@/lib/banking/bankCash";
-import { equityCappedDepositCeiling } from "@/lib/banking/deposits";
+import { getCashReserves, requiredReserves, upstreamCapacity } from "@/lib/banking/bankCash";
 import { buildRiskReadout } from "@/lib/banking/riskReadout";
+import { bankBalanceSheet, explainBankCaps } from "@/lib/banking/balanceSheet";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import {
@@ -258,13 +253,15 @@ async function handleGET(_request: Request, { params }: RouteParams) {
     // Live capacity × equity cap, not the cached turn stamp. Pointer deposits
     // used to zero book equity and pin the cached ceiling at $0 until the next
     // bankingTurn; the console must show the number the next turn will use.
-    const depositCeiling =
+    const sheet =
       hasActiveCharter && charter
-        ? equityCappedDepositCeiling(
-            await getBankDepositCeiling(db, corporation),
-            bankEquity(charter)
-          )
+        ? bankBalanceSheet({
+            charter,
+            reserveRatio: reserveRatio ?? 0,
+            capacityCeiling: await getBankDepositCeiling(db, corporation),
+          })
         : null;
+    const depositCeiling = sheet ? sheet.depositCeiling : null;
 
     // The console used to ship raw ObjectId hex for every borrower and every
     // blacklist entry, which the UI then printed (truncated, for the loan
@@ -404,7 +401,6 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               totalDeposits: charter.totalDeposits ?? 0,
               totalLoans: charter.totalLoans ?? 0,
               npcDeposits: charter.npcDeposits ?? 0,
-              reserves: charter.reserves ?? 0,
               cashReserves: getCashReserves(charter),
               requiredReserves: requiredReserves(charter, reserveRatio ?? 0),
               upstreamCapacity: upstreamCapacity(charter, reserveRatio ?? 0),
@@ -436,6 +432,13 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               blacklist,
             }
           : null,
+      // Every cap a player can hit, with the formula and the numbers currently
+      // in it. Tickets 1090, 1111 and 1113 are all the same complaint: the
+      // console showed a number that blocked an action and never said where the
+      // number came from, so the only way to learn a cap was to hit it. These
+      // come from the same computation that enforces them, so the explanation
+      // cannot drift from the rule.
+      caps: sheet ? explainBankCaps(sheet) : null,
       rates,
       loans: loans.map((loan) => ({
         id: loan._id.toString(),
@@ -459,9 +462,9 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       risk:
         hasActiveCharter && charter && isDepositTakingCharter(charter)
           ? buildRiskReadout({
-              cashReserves: getCashReserves(charter),
-              cashBackedDeposits: charter.npcDeposits ?? 0,
-              totalLoans: charter.totalLoans ?? 0,
+              cashReserves: sheet?.cashReserves ?? 0,
+              cashBackedDeposits: sheet?.cashBackedDeposits ?? 0,
+              totalLoans: sheet?.totalLoans ?? 0,
               reserveRatioRequired: reserveRatio ?? 0,
               confidence: charter.confidence ?? 1,
               band: charter.warningBand ?? "green",

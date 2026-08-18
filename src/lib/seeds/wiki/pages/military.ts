@@ -56,7 +56,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     slug: "military-units",
     title: "Units, Recruitment & Procurement",
     description:
-      "Domains, branches and era gating, the full unit catalogue with costs, GDP-share pricing, build times, tech tiers, postures, veterancy and upkeep.",
+      "Domains, branches and era gating, unit costs and upkeep, plus defence contracts, committed appropriations, supplier pricing, equipment grades, and production lines.",
     content: militaryUnitsContent,
     category: "military",
     extraTags: ["units", "procurement", "budget"],

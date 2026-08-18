@@ -171,6 +171,13 @@ export interface EconomicGrowthFactors {
   tradeGrowth: number; // Import/export growth
   lastUpdated: Date;
 
+  /**
+   * Country household price level relative to the world's launch/reset level
+   * (`1` = baseline). Advanced from settled CPI with partial pass-through.
+   * It is a readout for real purchasing power, never an input to CPI.
+   */
+  householdPriceIndex?: number;
+
   // ── Command-economy readouts (P1+) ────────────────────────────────────────
   // Present only for planned economies while `commandEconomyEnabled` is on;
   // undefined for market economies / flag off. See @/lib/economy/commandEconomyState.
@@ -337,6 +344,19 @@ export interface DefenseAppropriation {
    * number the tick drifted to.
    */
   arrearsRatio: number;
+  /**
+   * Local currency already COMMITTED to live procurement contracts and not yet paid out.
+   *
+   * The uncommitted appropriation is `balance - encumbered`, and that - never the raw
+   * balance - is what a new obligation must fit inside. Without it a minister could award
+   * contracts with no upper bound at all: nothing checked the order against the money until
+   * the delivery turn, so an order for a million lots was accepted, and the appropriation was
+   * paid out to the supplier as pure profit lot by lot until it was empty.
+   *
+   * Absent on any budget written before encumbrance shipped, and treated as 0 there, which
+   * reproduces the old arithmetic exactly for a world with no live contracts.
+   */
+  encumbered?: number;
 }
 
 export interface FederalBudget {

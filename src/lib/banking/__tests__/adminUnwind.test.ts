@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
-import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import type { Corporation } from "@/lib/db/types";
+import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { BankCharter } from "@/lib/db/types/bank";
+import { unwindBank } from "../adminUnwind";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+
+const CORP_ID = new ObjectId();
 
 function makeActiveCharter(overrides: Partial<BankCharter> = {}): BankCharter {
   return {
@@ -23,147 +25,109 @@ function makeActiveCharter(overrides: Partial<BankCharter> = {}): BankCharter {
   };
 }
 
-function makeCorp(charter: BankCharter, overrides: Partial<Corporation> = {}): Corporation {
-  return {
-    _id: new ObjectId(),
-    name: "Stuck Bank Corp",
-    type: "financial",
-    liquidCapital: 1_000_000,
-    liquidCurrencyCode: "USD",
-    countryId: "US",
-    ceoId: new ObjectId(),
-    userId: new ObjectId(),
-    headquartersState: "NY",
-    bankCharter: charter,
-    ...overrides,
-  } as unknown as Corporation;
+function makeWorld(charter: BankCharter): InMemoryDb {
+  const db = createInMemoryDb();
+  db.seed("corporations", [
+    {
+      _id: CORP_ID,
+      name: "Stuck Bank Corp",
+      type: "financial",
+      liquidCapital: 1_000_000,
+      liquidCurrencyCode: "USD",
+      countryId: "US",
+      headquartersState: "NY",
+      bankCharter: charter,
+    },
+  ]);
+  db.seed("centralBanks", [{ _id: "US", externalBroadMoney: 50_000_000 }]);
+  db.seed("gameState", [{ _id: "current", currentTurn: 99, preset: "2019-default" }]);
+  // Flag OFF: unwind must still work, it is the recovery tool.
+  db.seed("gameConfig", [{ _id: "default", privateBankingEnabled: false }]);
+  db.seed("depositInsuranceFunds", [{ _id: "USD", balance: 0 }]);
+  db.seed("characters", [
+    {
+      _id: new ObjectId(),
+      name: "Saver",
+      currencyBalances: {
+        savings: { USD: 400_000 },
+        savingsHolder: { USD: CORP_ID.toString() },
+      },
+    },
+  ]);
+  return db;
+}
+
+function corpOf(db: InMemoryDb) {
+  return db.collection("corporations").docs[0] as {
+    liquidCapital: number;
+    bankCharter: Record<string, number | string>;
+  };
 }
 
 describe("adminUnwind.unwindBank", () => {
-  let db: MockDb;
+  let db: InMemoryDb;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    db = createMockDb();
-    const { getDb } = await import("@/lib/mongodb");
-    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
-
-    db.collection("corporations");
-    db.collection("characters");
-    db.collection("centralBanks");
-    db.collection("bankCharterHistory");
-    db.collection("gameState");
-    db.collection("gameConfig");
-
-    db.collectionMocks.gameState!.findOne.mockResolvedValue({
-      _id: "current",
-      currentTurn: 99,
-      preset: "2019-default",
-    });
-    // Flag OFF: unwind must still work (this is the recovery tool).
-    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
-      _id: "default",
-      privateBankingEnabled: false,
-    });
+    db = makeWorld(makeActiveCharter());
   });
 
-  async function importUnwind() {
-    return import("../adminUnwind");
-  }
-
-  it("flips depositor pointers, returns npcDeposits with conservation, refunds capital, archives", async () => {
-    const corp = makeCorp(makeActiveCharter());
+  it("returns the deposit book, pays the owner only the residual, and archives", async () => {
     const externalBefore = 50_000_000;
-    const npcDeposits = corp.bankCharter!.npcDeposits!;
-
-    db.collectionMocks
-      .corporations!.findOne.mockResolvedValueOnce(corp)
-      // revokeCharter re-reads the corp; simulate cleared deposits after our $set
-      .mockResolvedValueOnce({
-        ...corp,
-        bankCharter: {
-          ...corp.bankCharter!,
-          npcDeposits: 0,
-          totalDeposits: 0,
-        },
-      });
-
-    db.collectionMocks.characters!.updateMany.mockResolvedValue({
-      matchedCount: 3,
-      modifiedCount: 3,
-    });
-    db.collectionMocks.centralBanks!.updateOne.mockResolvedValue({
-      matchedCount: 1,
-      modifiedCount: 1,
-    });
-    db.collectionMocks.corporations!.updateOne.mockResolvedValue({
-      matchedCount: 1,
-      modifiedCount: 1,
-    });
-
-    const { unwindBank } = await importUnwind();
-    const result = await unwindBank(db as unknown as Db, corp._id, "stuck freeze recovery");
+    const result = await unwindBank(db as unknown as Db, CORP_ID, "stuck freeze recovery");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.alreadyRevoked).toBe(false);
-    expect(result.depositorsFlipped).toBe(3);
-    expect(result.npcDepositsReturned).toBe(npcDeposits);
-    expect(result.refundedCapital).toBe(10_000_000);
+    expect(result.depositorsFlipped).toBe(1);
+    expect(result.npcDepositsReturned).toBe(2_500_000);
 
-    // Pointer flip: savingsHolder only, not balances
-    const [flipFilter, flipUpdate] = db.collectionMocks.characters!.updateMany.mock.calls[0];
-    expect(flipFilter).toEqual({
-      "currencyBalances.savingsHolder.USD": corp._id.toString(),
-    });
-    expect(flipUpdate.$set["currencyBalances.savingsHolder.USD"]).toBe("centralBank");
-    expect(JSON.stringify(flipUpdate)).not.toContain("savings.USD");
+    // The household book goes back into the money supply out of the bank's own
+    // cash. The old unwind credited the money supply and ALSO handed the same
+    // cash to the shareholder, so the money existed twice.
+    const cb = db.collection("centralBanks").docs[0] as { externalBroadMoney: number };
+    expect(cb.externalBroadMoney).toBe(externalBefore + 2_500_000);
 
-    // Conservation: NPC deposits returned to externalBroadMoney
-    const [cbFilter, cbUpdate] = db.collectionMocks.centralBanks!.updateOne.mock.calls[0];
-    expect(cbFilter).toEqual({ _id: "US" });
-    expect(cbUpdate.$inc.externalBroadMoney).toBe(npcDeposits);
-    expect(externalBefore + npcDeposits).toBe(externalBefore + result.npcDepositsReturned);
+    // Residual to the owner is cash less the deposit book, capped at book
+    // equity (10M cash + 0.5M loans - 2.5M deposits = 8M equity, so the 7.5M
+    // surplus is what moves).
+    expect(result.refundedCapital).toBe(7_500_000);
+    expect(corpOf(db).liquidCapital).toBe(8_500_000);
+    expect(corpOf(db).bankCharter.cashReserves).toBe(0);
+    expect(corpOf(db).bankCharter.status).toBe("revoked");
+    expect(corpOf(db).bankCharter.npcDeposits).toBe(0);
 
-    // revokeCharter archived
-    expect(db.collectionMocks.bankCharterHistory!.insertOne).toHaveBeenCalledTimes(1);
-    const archived = db.collectionMocks.bankCharterHistory!.insertOne.mock.calls[0][0];
-    expect(archived.reason).toBe("revoked");
-    expect(archived.charter.status).toBe("revoked");
+    // Pointer flip only: the player's balance is untouched.
+    const saver = db.collection("characters").docs[0] as {
+      currencyBalances: { savings: { USD: number }; savingsHolder: { USD: string } };
+    };
+    expect(saver.currencyBalances.savingsHolder.USD).toBe("centralBank");
+    expect(saver.currencyBalances.savings.USD).toBe(400_000);
 
-    // Loans not touched: no bankLoans collection writes
-    expect(db.collectionMocks.bankLoans).toBeUndefined();
+    const history = db.collection("bankCharterHistory").docs as { reason: string }[];
+    expect(history).toHaveLength(1);
+    expect(history[0].reason).toBe("revoked");
+
+    // Loans are not touched: they keep amortizing.
+    expect(corpOf(db).bankCharter.totalLoans).toBe(500_000);
   });
 
   it("works with privateBankingEnabled false (no feature-flag gate)", async () => {
-    const corp = makeCorp(makeActiveCharter({ npcDeposits: 0, totalDeposits: 0 }));
-    db.collectionMocks.corporations!.findOne.mockResolvedValue(corp);
-    db.collectionMocks.characters!.updateMany.mockResolvedValue({
-      matchedCount: 0,
-      modifiedCount: 0,
-    });
-    db.collectionMocks.corporations!.updateOne.mockResolvedValue({
-      matchedCount: 1,
-      modifiedCount: 1,
-    });
+    db = makeWorld(makeActiveCharter({ npcDeposits: 0, totalDeposits: 0, totalLoans: 0 }));
+    const result = await unwindBank(db as unknown as Db, CORP_ID, "flag-off recovery");
 
-    const { unwindBank } = await importUnwind();
-    const result = await unwindBank(db as unknown as Db, corp._id, "flag-off recovery");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.alreadyRevoked).toBe(false);
+    // No deposit book, so the whole cash balance is the owner's residual.
     expect(result.refundedCapital).toBe(10_000_000);
-    // gameConfig was never consulted for the flag by unwindBank itself
-    expect(db.collectionMocks.gameConfig!.findOne).not.toHaveBeenCalled();
+    expect(corpOf(db).liquidCapital).toBe(11_000_000);
   });
 
-  it("is idempotent when charter is already revoked", async () => {
-    const corp = makeCorp(makeActiveCharter({ status: "revoked" }));
-    db.collectionMocks.corporations!.findOne.mockResolvedValue(corp);
-
-    const { unwindBank } = await importUnwind();
-    const first = await unwindBank(db as unknown as Db, corp._id, "already done");
-    const second = await unwindBank(db as unknown as Db, corp._id, "already done");
+  it("is idempotent when the charter is already revoked", async () => {
+    db = makeWorld(makeActiveCharter({ status: "revoked" }));
+    const first = await unwindBank(db as unknown as Db, CORP_ID, "already done");
+    const second = await unwindBank(db as unknown as Db, CORP_ID, "already done");
 
     expect(first).toEqual({
       ok: true,
@@ -173,7 +137,11 @@ describe("adminUnwind.unwindBank", () => {
       refundedCapital: 0,
     });
     expect(second).toEqual(first);
-    expect(db.collectionMocks.characters!.updateMany).not.toHaveBeenCalled();
-    expect(db.collectionMocks.bankCharterHistory!.insertOne).not.toHaveBeenCalled();
+    expect(db.collection("bankCharterHistory").docs).toHaveLength(0);
+  });
+
+  it("refuses without a reason", async () => {
+    const result = await unwindBank(db as unknown as Db, CORP_ID, "   ");
+    expect(result.ok).toBe(false);
   });
 });

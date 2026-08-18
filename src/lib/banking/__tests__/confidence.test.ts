@@ -11,7 +11,7 @@ function baseInput(overrides: Partial<ConfidenceInput> = {}): ConfidenceInput {
   return {
     cashReserves: 100_000,
     postedCapital: 100_000,
-    totalDeposits: 1_000_000,
+    cashBackedDeposits: 1_000_000,
     totalLoans: 200_000,
     reserveRatioRequired: 0.1,
     arrearsOutstanding: 0,
@@ -61,7 +61,7 @@ describe("computeConfidence", () => {
       baseInput({
         cashReserves: 40_000,
         postedCapital: 50_000,
-        totalDeposits: 1_000_000,
+        cashBackedDeposits: 1_000_000,
         totalLoans: 300_000,
         reserveRatioRequired: 0.1,
       })
@@ -74,7 +74,7 @@ describe("computeConfidence", () => {
       baseInput({
         cashReserves: 5_000,
         postedCapital: 5_000,
-        totalDeposits: 1_000_000,
+        cashBackedDeposits: 1_000_000,
         totalLoans: 500_000,
         reserveRatioRequired: 0.2,
         arrearsOutstanding: 200_000,

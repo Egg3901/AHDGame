@@ -18,6 +18,12 @@ import {
   BOND_ISSUANCE_COOLDOWN_TURNS_PRIVATE,
   CORPORATE_BOND_SPREAD_PREMIUM,
 } from "@/lib/constants/bonds";
+import {
+  INVENTORY_CARRY_COST_RATE_PER_TURN,
+  INVENTORY_DRAIN_RATE_PER_TURN,
+  INVENTORY_SELL_DOWN_MIN_FILL,
+} from "@/lib/corporations/sectorInventory";
+import { STRANDED_WARN_TURNS } from "@/lib/corporations/strandedPlant";
 
 /**
  * Running a Corporation under the Plants System. Code-backed wiki page: every
@@ -103,6 +109,21 @@ Three practical rules fall out of this:
 - **A low selling share is a demand problem, not a production problem.** Producing more into a glut just raises your costs.
 - **Price is your share weapon.** In an oversupplied market, lowering your price wins sales from rivals. It does not create new demand.
 - **Watch the unowned pool.** Much of many markets is served by no player corporation at all. That revenue is claimable, but only up to what buyers actually spend.
+
+After ${STRANDED_WARN_TURNS} consecutive turns below half sold, the sector page shows a stranded-plant warning. The warning does not close or change a player-owned plant. It explains the condition and points the CEO to growth, mothball, sale, and abandonment controls.
+
+## Keeping unsold goods as inventory
+
+The **Unsold output** panel on a sector page lets its CEO keep storable goods instead of discarding them at the end of the turn. This is off by default and does not apply to services.
+
+Inventory is not free:
+
+- It loses the commodity's normal spoilage each turn.
+- It costs ${pct(INVENTORY_CARRY_COST_RATE_PER_TURN)} of its current value per turn to hold.
+- It starts selling only when at least ${pct(INVENTORY_SELL_DOWN_MIN_FILL)} of fresh output clears.
+- At most ${pct(INVENTORY_DRAIN_RATE_PER_TURN)} of the stored pile sells in one turn.
+
+Turning stockpiling off stops new inventory from being added. It does not delete what is already stored; the existing pile continues to spoil, cost money, and sell down. Use inventory when a temporary glut is likely to clear. Mothball or reduce capacity when the market is structurally oversupplied.
 
 ## Building more capacity
 

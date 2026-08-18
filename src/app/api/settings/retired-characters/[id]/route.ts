@@ -10,6 +10,7 @@ import { notFound } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import type { RetiredCharacter } from "@/lib/db/types/retiredCharacter";
 import type { GameState } from "@/lib/db/types";
+import { gameDateAnchorFromState } from "@/lib/utils/gameDate";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -40,12 +41,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
     return NextResponse.json({
       retiredCharacter: retired,
-      gameDateAnchor: gameState
-        ? {
-            currentTurn: gameState.currentTurn,
-            lastTurnProcessed: gameState.lastTurnProcessed,
-          }
-        : null,
+      gameDateAnchor: gameState ? gameDateAnchorFromState(gameState) : null,
     });
   } catch (error) {
     return handleRouteError(error);

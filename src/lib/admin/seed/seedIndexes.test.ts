@@ -65,6 +65,7 @@ const HEADERS = [
   "Audit anomaly scan indexes:",
   "Watchlist indexes:",
   "Conflict indexes:",
+  "Banking money-move indexes:",
 ];
 
 describe("seedIndexes", () => {

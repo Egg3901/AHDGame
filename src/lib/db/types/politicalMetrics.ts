@@ -30,8 +30,9 @@ export interface PoliticalMetricsDoc {
    * Accumulating, decaying offset from standing cabinet effects (the momentum
    * driver channel). Separate from `residuals` (day-one equilibrium) so the
    * baseline is never touched; composeTarget adds this on top of `residuals`.
-   * Folded each turn from the per-country cabinet contribution snapshot; decays
-   * back to ≈0 when the cabinet stops applying the effect.
+   * Folded each turn from the cabinet contribution snapshot (national standing
+   * effects plus this region's sited extras); decays back to ≈0 when the
+   * cabinet stops applying the effect.
    */
   cabinetResiduals?: Record<PoliticalMetricId, number>;
   /**

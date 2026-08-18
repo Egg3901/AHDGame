@@ -246,8 +246,12 @@ describe("POST military/recruit", () => {
     // Guarded atomic $inc on the pot, NOT a read-modify-write $set on treasuryBalance:
     // the enacted defence line has already left the treasury via processTreasuryTurn, so
     // charging it here as well would bill the country twice for the same unit.
+    //
+    // The guard is an `$expr` on UNCOMMITTED appropriation (balance minus what procurement
+    // contracts have encumbered), not a plain `$gte` on the raw balance: a recruit must not be
+    // able to spend money an open contract is relying on.
     expect(db.collectionMocks.federalBudget.updateOne).toHaveBeenCalledWith(
-      { countryId: "US", "defenseAppropriation.balance": { $gte: 4_160_000_000 } },
+      expect.objectContaining({ countryId: "US", $expr: expect.anything() }),
       { $inc: { "defenseAppropriation.balance": -4_160_000_000 } }
     );
     const treasuryWrites = db.collectionMocks.federalBudget.updateOne.mock.calls.filter(
@@ -261,7 +265,7 @@ describe("POST military/recruit", () => {
   it("refuses when the appropriation cannot cover the price, and unwinds cleanly", async () => {
     db.collectionMocks.federalBudget.updateOne.mockImplementation(
       async (filter: Record<string, unknown>) => {
-        const guarded = filter["defenseAppropriation.balance"] !== undefined;
+        const guarded = filter.$expr !== undefined;
         return { matchedCount: guarded ? 0 : 1, modifiedCount: guarded ? 0 : 1 };
       }
     );
@@ -327,7 +331,7 @@ describe("POST military/recruit", () => {
     const { POST } = await import(ROUTE);
     await POST(req({ branchId: "army", type: "Infantry Division", name: "X" }), params);
     expect(db.collectionMocks.federalBudget.updateOne).toHaveBeenCalledWith(
-      { countryId: "US", "defenseAppropriation.balance": { $gte: 41_600_000_000 } },
+      expect.objectContaining({ countryId: "US", $expr: expect.anything() }),
       { $inc: { "defenseAppropriation.balance": -41_600_000_000 } }
     );
   });
@@ -503,7 +507,7 @@ describe("POST military/recruit", () => {
     const { POST } = await import(ROUTE);
     await POST(req({ branchId: "army", type: "Infantry Division", name: "X" }), params);
     expect(db.collectionMocks.federalBudget.updateOne).toHaveBeenCalledWith(
-      { countryId: "US", "defenseAppropriation.balance": { $gte: 2 * 4_160_000_000 } },
+      expect.objectContaining({ countryId: "US", $expr: expect.anything() }),
       { $inc: { "defenseAppropriation.balance": -2 * 4_160_000_000 } }
     );
   });

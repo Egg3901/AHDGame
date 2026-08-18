@@ -58,6 +58,8 @@ import {
   type DefenceSupplierView,
 } from "@/lib/corporations/queries/defenceSuppliers";
 import { lotPrice } from "@/lib/military/arsenal";
+import { DEFENCE_CARRY_REASON_TEXT } from "@/lib/db/types/defenceContract";
+import { DEFENCE_FACTORY_SLOTS_PER_PLANT } from "@/lib/military/defenceLotEconomics";
 import { militaryPriceAnchor } from "@/lib/military/procurement";
 import type { NationalArsenal } from "@/lib/db/types/nationalArsenal";
 import type { DefenceContractView } from "@/app/country/[code]/executive/cabinet/[positionId]/office/useCabinetOffice";
@@ -356,6 +358,24 @@ export async function GET(_request: Request, { params }: RouteParams) {
         pricePerLot: c.pricePerLot,
         awardedTurn: c.awardedTurn,
         status: c.status,
+        // The funding state of every order, so the minister's board answers "why has this not
+        // moved" without them having to go and ask the supplier.
+        lotsBuiltNotDelivered: Math.floor(Math.max(0, c.deliveryCarry ?? 0)),
+        amountPaid: c.amountPaid ?? c.lotsDelivered * c.pricePerLot,
+        encumberedAmount: c.encumberedAmount ?? 0,
+        ...(c.carryReason ? { carryReasonText: DEFENCE_CARRY_REASON_TEXT[c.carryReason] } : {}),
+        ...(c.gradeCeiling != null ? { gradeCeiling: c.gradeCeiling } : {}),
+        assignedFactories: c.assignedFactories ?? undefined,
+        totalFactories: DEFENCE_FACTORY_SLOTS_PER_PLANT,
+        ...(c.selfDealing
+          ? {
+              selfDealing: {
+                basis: c.selfDealing.basis,
+                stakeShare: c.selfDealing.stakeShare,
+                ministerName: c.selfDealing.ministerName,
+              },
+            }
+          : {}),
       }));
 
       // The award form needs both halves: who can build, and what a lot costs. The price is

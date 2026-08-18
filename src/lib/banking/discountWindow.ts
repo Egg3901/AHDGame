@@ -28,6 +28,7 @@
  */
 
 import type { BankCharter } from "@/lib/db/types/bank";
+import { cashBackedDeposits } from "@/lib/banking/balanceSheet";
 
 /**
  * Penalty over prime, in percentage points. Deliberately above the CB margin
@@ -66,10 +67,10 @@ export function discountWindowRatePercent(primeRate: number): number {
 }
 
 export function quoteDiscountWindow(
-  charter: Pick<BankCharter, "totalDeposits" | "discountWindowDebt">,
+  charter: Pick<BankCharter, "npcDeposits" | "discountWindowDebt">,
   primeRate: number
 ): DiscountWindowQuote {
-  const deposits = Math.max(0, charter.totalDeposits ?? 0);
+  const deposits = cashBackedDeposits(charter);
   const outstanding = Math.max(0, charter.discountWindowDebt ?? 0);
   const capAnchor = deposits * DISCOUNT_WINDOW_CAP_FRACTION;
   return {
@@ -87,7 +88,7 @@ export function quoteDiscountWindow(
  * line, which is what that line is for.
  */
 export function canDraw(
-  charter: Pick<BankCharter, "type" | "status" | "totalDeposits" | "discountWindowDebt">,
+  charter: Pick<BankCharter, "type" | "status" | "npcDeposits" | "discountWindowDebt">,
   amount: number,
   primeRate: number
 ): { ok: true; quote: DiscountWindowQuote } | { ok: false; reason: DiscountWindowDenial } {
@@ -110,11 +111,11 @@ export function canDraw(
  * the same ₳ against a much bigger book.
  */
 export function discountWindowStigma(
-  charter: Pick<BankCharter, "totalDeposits" | "discountWindowDebt">
+  charter: Pick<BankCharter, "npcDeposits" | "discountWindowDebt">
 ): number {
   const outstanding = Math.max(0, charter.discountWindowDebt ?? 0);
   if (outstanding <= 0) return 0;
-  const cap = Math.max(0, charter.totalDeposits ?? 0) * DISCOUNT_WINDOW_CAP_FRACTION;
+  const cap = cashBackedDeposits(charter) * DISCOUNT_WINDOW_CAP_FRACTION;
   if (cap <= 0) return DISCOUNT_WINDOW_STIGMA;
   const usage = Math.min(1, outstanding / cap);
   return DISCOUNT_WINDOW_STIGMA * usage;
