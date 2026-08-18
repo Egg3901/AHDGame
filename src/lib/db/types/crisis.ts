@@ -74,7 +74,28 @@ export type CrisisOptionAction =
   | { kind: "openBargaining"; sectorType: string }
   /** Settle the dispute by conceding a wage floor across the struck sector,
    *  ending the strike immediately at an inflationary cost. */
-  | { kind: "settleWageFloor"; sectorType: string };
+  | { kind: "settleWageFloor"; sectorType: string }
+  /** Roll a chance to spawn another crisis from a template, in a country
+   *  chosen from a named pool. Used for cascades (tolerating unrest lets it
+   *  spread to a neighboring Warsaw Pact satellite) and delayed backlash
+   *  (a genuine reform movement provokes a hardliner crisis in the same
+   *  country). `chance` is evaluated once, at option-resolution time. */
+  | {
+      kind: "spawnFollowUpCrisis";
+      templateKey: string;
+      countryPool: "warsawPactSatellites" | "sameCountry";
+      /** Exclude the crisis's own country from the pool (only meaningful for
+       *  "warsawPactSatellites" — a cascade should land somewhere else). */
+      excludeCurrentCountry?: boolean;
+      /** 0-1 probability the follow-up actually spawns. */
+      chance: number;
+    }
+  /** Introduce a provision-less, direct-to-active concession/legislation bill
+   *  (the crisis-aid fast path: no NPI/action cost, 24h window). Used for
+   *  concession options — civil rights and voting protections, a draft/troop
+   *  review, federal housing and jobs investment — that need a real,
+   *  contestable vote in Congress rather than a flat approval nudge. */
+  | { kind: "concessionBill"; title: string; summary: string; category: string };
 
 export interface CrisisDecisionOption {
   optionId: string;
