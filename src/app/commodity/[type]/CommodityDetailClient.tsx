@@ -32,6 +32,9 @@ const CommodityCountryDrilldownView = dynamic(
   }
 );
 
+const DislocationPanel = dynamic(() => import("./components/DislocationPanel"), {
+  loading: () => null,
+});
 const RegionalBreakdown = dynamic(() => import("./components/RegionalBreakdown"), {
   ssr: false,
   loading: () => <Skeleton className="h-[320px] w-full rounded-xl" />,
@@ -296,6 +299,18 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
           consumerNote={data.demandDriver?.consumerNote}
           marketLabel={marketScope.marketLabel}
         />
+
+        {heavyLoaded && (
+          <DislocationPanel
+            statePrices={marketScope.statePrices}
+            stateSupply={marketScope.stateSupply}
+            stateDemand={marketScope.stateDemand}
+            stateCountryMap={marketScope.stateCountryMap}
+            basePrice={data.basePrice}
+            capacityByState={marketScope.capacityByState}
+            unit={data.unit}
+          />
+        )}
 
         {heavyLoaded && showAdvancedSections ? (
           <RegionalBreakdown
