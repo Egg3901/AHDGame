@@ -16,6 +16,7 @@
  */
 
 import { useTranslations } from "next-intl";
+import { persuadableSlicePct } from "@/lib/elections/computePersuasionDriverDisplay";
 import type { RegBreakdown } from "@/lib/elections/generalViewModel";
 
 export function RegistrationInfluenceCard({
@@ -119,6 +120,17 @@ export function RegistrationInfluenceCard({
             <span className="ml-auto tabular-nums font-bold">
               {t("registration.leanValue", { pct: p.leanPct.toFixed(1) })}
             </span>
+            {/* Ticket #1131 — the lean is not a vote-share floor. Show how much
+                of that party's vote persuasion can still move in one cycle, the
+                same fraction the engine peels (`effectivePeelableFraction`). */}
+            <span
+              className="shrink-0 tabular-nums text-[10px] text-muted"
+              title={t("registration.movableTitle", { party: p.partyAbbr })}
+            >
+              {t("registration.movableValue", {
+                pct: persuadableSlicePct(p.leanPct).toFixed(1),
+              })}
+            </span>
           </div>
         ))}
         {independent > 0 ? (
@@ -145,6 +157,8 @@ export function RegistrationInfluenceCard({
           </div>
         ) : null}
       </div>
+
+      <p className="mt-2 text-[10px] leading-snug text-muted">{t("registration.movableNote")}</p>
 
       {/* Sanity hint when shares don't sum to ~100, the underlying data needs renormalization. */}
       {totalParty + independent + unregistered < 95 ||

@@ -93,7 +93,8 @@
       "empty": "No persuasion drivers computed for {state} yet. Drivers populate once vote data and enrichment data are loaded.",
       "driversGroup": "Persuasion drivers (pts of the persuadable slice)",
       "coattailsGroup": "Coattail tilts (direct % of vote share)",
-      "pts": "pts"
+      "pts": "pts",
+      "ceiling": "Ceiling this cycle: at most {opponentSlice}% of {opponent}'s vote can be persuaded across to {focus}, and {focusSlice}% of {focus}'s vote can be persuaded away. Registration lean sets the starting split and how hard a party is to move, not the final share. These drivers add up to {net} pts of that movable slice."
     },
     "registration": {
       "title": "Registration Influence",
@@ -106,7 +107,10 @@
       "unregistered": "Unregistered",
       "independentTitle": "Independent: {pct}%",
       "unregisteredTitle": "Unregistered: {pct}%",
-      "normalizationNote": "Note: shares total {pct}%, outside the normalized 95-105% band. Bootstrap renormalization may be pending."
+      "normalizationNote": "Note: shares total {pct}%, outside the normalized 95-105% band. Bootstrap renormalization may be pending.",
+      "movableValue": "{pct}% movable",
+      "movableTitle": "{party}: share of this party's vote that persuasion can still move in one cycle. The rest is locked in by their registration lean.",
+      "movableNote": "The movable figure is the share of each party's own vote that campaigning can shift in one cycle. A large lean means a large starting base and a small movable slice."
     },
     "carveUp": {
       "title": "{state} · Carve-up",
