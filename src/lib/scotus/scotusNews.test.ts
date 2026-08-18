@@ -164,3 +164,23 @@ describe("generateScotusRulingNews / generateScotusSurpriseNews", () => {
     );
   });
 });
+
+describe("buildScotusVacancyNews", () => {
+  it("names the departing justice and the vacant seat", async () => {
+    const { buildScotusVacancyNews } = await import("./scotusNews");
+    const { title, body } = buildScotusVacancyNews({
+      seatNumber: 1,
+      justiceName: "Lyndon B. Johnson",
+    });
+    expect(title).toBe("SCOTUS Seat #1 Vacant");
+    expect(body).toContain("Lyndon B. Johnson has left the Supreme Court");
+    expect(body).toContain("Seat #1 is now vacant");
+  });
+
+  it("falls back to generic copy when the seat has no justice name", async () => {
+    const { buildScotusVacancyNews } = await import("./scotusNews");
+    const { body } = buildScotusVacancyNews({ seatNumber: 6, justiceName: null });
+    expect(body).toContain("A justice has left the Supreme Court");
+    expect(body).toContain("Seat #6");
+  });
+});

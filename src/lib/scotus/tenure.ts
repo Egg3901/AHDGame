@@ -8,6 +8,12 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
  * constant per-turn probability thereafter, uncapped on the high end.
  * Deliberately age-agnostic — the game has no character age/mortality concept
  * anywhere, and this avoids inventing one just for SCOTUS.
+ *
+ * Callers must not roll this clock against a player-held seat
+ * (`justiceCharacterId` set). The hazard is a death/retirement stand-in for
+ * generated NPP justices; player characters have no mortality model, and
+ * applying it silently evicts a living player from a lifetime office
+ * (ticket #1135).
  */
 
 /** Turns after confirmation before the hazard starts rolling at all (~2 years). */

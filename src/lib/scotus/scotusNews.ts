@@ -128,3 +128,28 @@ export async function generateScotusSurpriseNews(
   await createSystemNewsPost(body, "judicial", { title });
   await sendNewsEvent({ title, description: body, color: DISCORD_COLORS.scotusRuling });
 }
+
+/**
+ * Pure builder for a Court vacancy (Original Roster chain exhausted, or an
+ * NPP Divergent Justice's hazard clock firing). Player-held seats are not
+ * vacated by the hazard; this copy is for the seats that do open.
+ */
+export function buildScotusVacancyNews(input: {
+  seatNumber: number;
+  justiceName: string | null;
+}): ScotusNewsContent {
+  const title = `SCOTUS Seat #${input.seatNumber} Vacant`;
+  const who = input.justiceName?.trim() || "A justice";
+  const body = `${who} has left the Supreme Court. Seat #${input.seatNumber} is now vacant and awaits a presidential nomination.`;
+  return { title, body };
+}
+
+/** Post + wire a Court vacancy. Does not catch — callers should `.catch(...)`. */
+export async function generateScotusVacancyNews(input: {
+  seatNumber: number;
+  justiceName: string | null;
+}): Promise<void> {
+  const { title, body } = buildScotusVacancyNews(input);
+  await createSystemNewsPost(body, "judicial", { title });
+  await sendNewsEvent({ title, description: body, color: DISCORD_COLORS.scotusRuling });
+}
