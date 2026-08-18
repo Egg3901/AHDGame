@@ -13,7 +13,7 @@ import {
 } from "@/lib/constants/countries";
 import { logWireEvent } from "@/lib/wireEvent";
 import { applyCrisisEffects } from "./applyEffects";
-import { runCrisisOptionAction } from "./optionActions";
+import { runCrisisOptionAction, type CrisisActionResult } from "./optionActions";
 import { spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { isCrisisAidBillsEnabled } from "./featureFlag";
 import { AID_MAX_PCT_GDP, AID_DEFAULT_PCT_GDP } from "@/lib/constants/crises";
@@ -601,10 +601,14 @@ export async function submitCrisisDecision(
   // ── Real-subsystem action hook. Runs after flat effects, before navigation,
   //    so a choice can file a bill / issue a taking / spawn a court case in
   //    addition to nudging metrics. Best-effort (see runCrisisOptionAction). ──
+  //    A handler may also redirect the navigation (see `CrisisActionResult`):
+  //    a retryable action decides for itself whether the attempt succeeded,
+  //    which one static `nextNodeId` on the option cannot express.
+  let actionResult: CrisisActionResult = {};
   const chosenOption = currentNode.options?.find((o) => o.optionId === optionId);
   if (crisis && chosenOption?.action) {
     const gameState = await getGameState(db);
-    await runCrisisOptionAction({
+    actionResult = await runCrisisOptionAction({
       db,
       crisis,
       interaction,
@@ -616,8 +620,12 @@ export async function submitCrisisDecision(
   }
 
   // ── Navigate. Landing on a terminal node applies its outcome and resolves. ──
-  const nextNode = nextNodeId
-    ? (interaction.decisionTree.find((n) => n.nodeId === nextNodeId) ?? null)
+  //    An action hook that returned its own `nextNodeId` wins: the option's
+  //    static target is the "the attempt did not change anything" case, and the
+  //    handler names the node when it did.
+  const resolvedNextNodeId = actionResult.nextNodeId ?? nextNodeId;
+  const nextNode = resolvedNextNodeId
+    ? (interaction.decisionTree.find((n) => n.nodeId === resolvedNextNodeId) ?? null)
     : null;
 
   if (nextNode && nextNode.type !== "terminal") {

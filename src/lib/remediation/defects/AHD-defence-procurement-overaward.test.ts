@@ -169,7 +169,12 @@ describe("procurement clawback settlement", () => {
   it("recovers as one keyed, net-zero move and conserves money", async () => {
     const { db, store } = world();
 
-    await defect.apply(db, healPlan, { now: new Date(), runId: "run_a" });
+    await defect.apply(db, healPlan, {
+      env: "sandbox" as const,
+      dryRun: false,
+      now: new Date(),
+      runId: "run_a",
+    });
 
     expect(store.corporations[0].liquidCapital).toBe(1_000);
     expect((store.federalBudget[0].defenseAppropriation as Doc).balance).toBe(5_000);
@@ -183,7 +188,7 @@ describe("procurement clawback settlement", () => {
 
   it("replays instead of debiting the supplier twice", async () => {
     const { db, store } = world();
-    const ctx = { now: new Date(), runId: "run_a" };
+    const ctx = { env: "sandbox" as const, dryRun: false, now: new Date(), runId: "run_a" };
 
     await defect.apply(db, healPlan, ctx);
     await defect.apply(db, healPlan, ctx);
@@ -196,9 +201,14 @@ describe("procurement clawback settlement", () => {
   it("moves nothing when the supplier cannot fund the approved recovery", async () => {
     const { db, store } = world(10);
 
-    await expect(defect.apply(db, healPlan, { now: new Date(), runId: "run_a" })).rejects.toThrow(
-      /did not settle/
-    );
+    await expect(
+      defect.apply(db, healPlan, {
+        env: "sandbox" as const,
+        dryRun: false,
+        now: new Date(),
+        runId: "run_a",
+      })
+    ).rejects.toThrow(/did not settle/);
 
     expect(store.corporations[0].liquidCapital).toBe(10);
     expect((store.federalBudget[0].defenseAppropriation as Doc).balance).toBe(1_000);
@@ -208,7 +218,9 @@ describe("procurement clawback settlement", () => {
   it("refuses to move unkeyed money when there is no run id", async () => {
     const { db, store } = world();
 
-    await expect(defect.apply(db, healPlan, { now: new Date() })).rejects.toThrow(/run id/);
+    await expect(
+      defect.apply(db, healPlan, { env: "sandbox" as const, dryRun: false, now: new Date() })
+    ).rejects.toThrow(/run id/);
 
     expect(store.corporations[0].liquidCapital).toBe(5_000);
   });
