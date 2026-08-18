@@ -1,18 +1,22 @@
 /**
  * @vitest-environment happy-dom
  */
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
 import {
   clamp01,
   formatPct,
+  memberInGameName,
+  memberProfileHref,
   noisyOr,
   previewClusterConfidence,
+  type AltMemberIdentity,
   type AltSignalWeights,
   type ClusterLink,
 } from "./altTypes";
 import { ConfidenceMeter } from "./ConfidenceMeter";
 import { SignalBreakdown } from "./SignalBreakdown";
+import { SuspectNameButton, SuspectPeekProvider } from "./SuspectPeek";
 import { DEFAULT_ALT_SCORING_WEIGHTS } from "@/lib/altDetection/config";
 
 describe("altTypes helpers", () => {
@@ -64,6 +68,29 @@ describe("altTypes helpers", () => {
     expect(withEdit).toBeGreaterThan(atBaseline); // firing signal scaled up
     expect(withEdit).toBeCloseTo(0.7, 5); // exactly the scaled firing weight, guard added nothing
   });
+
+  it("prefers the in-game character name and sequential profile href", () => {
+    const member: AltMemberIdentity = {
+      userId: "aaaaaaaaaaaaaaaaaaaaaaaa",
+      name: "acct",
+      banned: false,
+      characterName: "Andrew the Geo",
+      characterId: "bbbbbbbbbbbbbbbbbbbbbbbb",
+      sequentialId: 42,
+      avatarUrl: null,
+      discordId: null,
+      discordUsername: null,
+      discordAvatar: null,
+      discordCreatedAt: null,
+      email: "a@b.c",
+      lastKnownIp: "1.2.3.4",
+      registrationIp: null,
+      trackingId: "cookie",
+    };
+    expect(memberInGameName(member)).toBe("Andrew the Geo");
+    expect(memberProfileHref(member)).toBe("/character/42");
+    expect(memberInGameName({ ...member, characterName: null })).toBe("acct");
+  });
 });
 
 describe("ConfidenceMeter", () => {
@@ -97,5 +124,44 @@ describe("SignalBreakdown", () => {
     expect(screen.getByText(/= 90% ring confidence/)).toBeTruthy();
     expect(screen.getByText(/did NOT inflate this score/i)).toBeTruthy();
     expect(screen.getByText(/Cloudflare edge/)).toBeTruthy();
+  });
+});
+
+describe("SuspectNameButton peek", () => {
+  it("opens a window with username, email, IP, cookie, ban, and profile link", () => {
+    const member: AltMemberIdentity = {
+      userId: "aaaaaaaaaaaaaaaaaaaaaaaa",
+      name: "acct",
+      banned: false,
+      characterName: "Andrew the Geo",
+      characterId: "bbbbbbbbbbbbbbbbbbbbbbbb",
+      sequentialId: 42,
+      avatarUrl: null,
+      discordId: null,
+      discordUsername: null,
+      discordAvatar: null,
+      discordCreatedAt: null,
+      email: "acct@example.com",
+      lastKnownIp: "198.51.100.42",
+      registrationIp: "198.51.100.42",
+      trackingId: "cookie-abc",
+    };
+
+    render(
+      <SuspectPeekProvider context="admin" onMemberBanned={vi.fn()} notify={vi.fn()}>
+        <SuspectNameButton member={member} />
+      </SuspectPeekProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Andrew the Geo" }));
+    expect(screen.getByText("Username")).toBeTruthy();
+    expect(screen.getByText("acct")).toBeTruthy();
+    expect(screen.getByText("acct@example.com")).toBeTruthy();
+    expect(screen.getByText("198.51.100.42")).toBeTruthy();
+    expect(screen.getByText("cookie-abc")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open profile" }).getAttribute("href")).toBe(
+      "/character/42"
+    );
+    expect(screen.getByRole("button", { name: "Ban" })).toBeTruthy();
   });
 });

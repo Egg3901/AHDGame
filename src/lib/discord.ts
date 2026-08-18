@@ -90,3 +90,48 @@ export async function fetchDiscordUser(accessToken: string): Promise<DiscordUser
 
   return response.json();
 }
+
+/**
+ * Discord snowflake epoch (2015-01-01T00:00:00.000Z). Account creation time is
+ * encoded in the user id; Discord's REST user payload does not include
+ * `created_at`. See https://discord.com/developers/docs/reference#snowflakes
+ */
+export const DISCORD_EPOCH_MS = 1_420_070_400_000;
+
+/** Public Discord user profile URL. */
+export function discordProfileUrl(id: string): string {
+  return `https://discord.com/users/${id}`;
+}
+
+/**
+ * Decode a Discord user/snowflake id into the account's creation Date.
+ * Returns null for unparseable ids. This is Discord's documented API for
+ * account age: `(snowflake >> 22) + DISCORD_EPOCH`.
+ */
+export function discordCreatedAtFromSnowflake(id: string): Date | null {
+  if (!id || !/^\d+$/.test(id)) return null;
+  try {
+    const snowflake = BigInt(id);
+    const ms = Number((snowflake >> 22n) + BigInt(DISCORD_EPOCH_MS));
+    if (!Number.isFinite(ms) || ms < DISCORD_EPOCH_MS) return null;
+    const created = new Date(ms);
+    return Number.isNaN(created.getTime()) ? null : created;
+  } catch {
+    return null;
+  }
+}
+
+/** Compact age label for a Discord account, e.g. "8y 3mo old" / "11d old". */
+export function formatDiscordAccountAge(createdAt: Date, now: Date = new Date()): string {
+  const ms = now.getTime() - createdAt.getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "unknown age";
+  const days = Math.floor(ms / 86_400_000);
+  if (days < 1) return "created today";
+  if (days < 31) return `${days}d old`;
+  const months = Math.floor(days / 30.4375);
+  if (months < 12) return `${months}mo old`;
+  const years = Math.floor(months / 12);
+  const remMonths = months % 12;
+  if (remMonths === 0) return `${years}y old`;
+  return `${years}y ${remMonths}mo old`;
+}
