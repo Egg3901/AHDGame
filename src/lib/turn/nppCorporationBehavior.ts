@@ -82,13 +82,7 @@ import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { emitBuildCapexTxBulk } from "@/lib/corporations/capexTxLog";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
-import {
-  canUnlock,
-  getTreeForType,
-  sumStrengthGrants,
-  techNodeCashCost,
-  type TechTreeNode,
-} from "@/lib/constants/techTree";
+import { sumStrengthGrants } from "@/lib/constants/techTree";
 import { CAPACITY_BUILD_TURNS, computeBuildCost } from "@/lib/constants/capacityEconomy";
 import { SECTOR_STRATEGIES, STRATEGY_COOLDOWN_TURNS } from "@/lib/constants/sectorStrategies";
 import { getStrategyAvailability } from "@/lib/constants/techTree/strategyAvailability";
@@ -111,6 +105,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
+import { pickBestNppTechNode } from "@/lib/turn/npp/corpBehaviorConfig";
 
 /**
  * Largest share of a sector's gross margin that may be spent on growth before an
@@ -119,197 +114,39 @@ import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
  */
 const GROWTH_COST_MARGIN_SHARE = 0.5;
 
-/**
- * Pick the best tech node an NPP corp should auto-unlock this turn (with its cash
- * cost), or null. Among nodes researchable + affordable in BOTH rdScore and cash,
- * and consistent with the decade's committed lane, prefer the Sector lane (better
- * fit) then the most advanced (highest-cost) node. Deterministic, one per turn.
- */
-function pickBestNppTechNode(
-  corp: Corporation,
-  currentYear: number,
-  dailyGrossRevenue: number
-): { node: TechTreeNode; cashCost: number } | null {
-  const rdScore = corp.rdScore ?? 0;
-  const cashAvailable = corp.liquidCapital ?? 0;
-  const candidates = getTreeForType(corp.type)
-    .map((node) => ({ node, cashCost: techNodeCashCost(node, dailyGrossRevenue) }))
-    .filter(
-      ({ node, cashCost }) =>
-        canUnlock(corp, node.id, currentYear, { rdScore, cashAvailable, cashCost }).ok
-    )
-    .sort((a, b) => {
-      if (a.node.lane !== b.node.lane) return a.node.lane === "sector" ? -1 : 1;
-      return b.node.cost - a.node.cost;
-    });
-  return candidates[0] ?? null;
-}
-
-// ─── NPP capacity reinvestment (plants tier) — PROVISIONAL calibration ───────
-//
-// WHY THIS EXISTS. Under `capital` the NPP brain kept its capacity topped up
-// implicitly: section 2 sets `targetGrowthRate`, and `advanceCapitalStock`
-// turned that slider into stock via `stock × (1 + g − δ)`. Under `plants` the
-// growth slider is vestigial — capacity is BOUGHT — but this module only ever
-// placed a build order when FOUNDING a new sector (`starterOrder`). Nothing
-// expanded an EXISTING plant, so `CAPITAL_DEPRECIATION_PER_TURN` ran one-way
-// and the AI economy decayed with no reinvestment at all.
-//
-// Measured on a controlled 96-turn 1953 A/B (identical seed, capital vs
-// plants): capacity −21.4%, produced units −13.9%, FX-normalized realized
-// revenue 0.74× its own `legacyRevenueShadow` counterfactual, corps insolvent
-// 5 → 55, and ZERO sectors carrying an outstanding build queue at turn 96.
-//
-// THE RULE. Section 2 still computes `targetGrowthRate` every turn — the AI
-// never lost the *judgement*, only the instrument that executed it. So
-// reinvestment simply BUYS what that decision asks for:
-//
-//     unitsPerTurn = replacement + growth
-//     replacement  = min(capitalStock, producedUnits) × δ × fillScale × AGGRESSION
-//     growth       = capitalStock × g × fillScale × AGGRESSION, capped by pool
-//     δ = CAPITAL_DEPRECIATION_PER_TURN            (replace what wears out)
-//     g = targetGrowthRate / 100 / TURNS_PER_YEAR  (the growth it just chose,
-//                                                   % per game YEAR → per turn)
-//
-// then clamped by market headroom, by the corp's cash rails, and to ONE sector
-// per corp per turn.
-//
-// CALIBRATION (PROVISIONAL — re-tune from the next A/B, not from theory).
-// Because an order lands `CAPACITY_BUILD_TURNS` turns after it is placed, a run
-// of length T only collects ~(T − buildTurns) turns of deliveries against T
-// turns of depreciation. At the A/B's T = 96 with the default 48-turn build:
-//
-//     loss    ≈ 96 × δ                     = 4.8% of capacity
-//     gain    ≈ 48 × (δ + g) × fillScale
-//
-// With the typical NPP growth target of 2-5 %/game-year, g = 0.0004…0.0010 per
-// turn, so (δ + g) = 0.0009…0.0015 and 48 turns of deliveries return
-// 4.3%…7.2% × fillScale. That brackets the 4.8% loss for fillScale in the
-// 0.7-1.0 band the gates admit — i.e. the target is HOLD, not boom, which is
-// exactly the ±5%-of-the-capital-arm goal. `AGGRESSION` is the single knob:
-// raise it if the next A/B still shows plants decaying, lower it if plants
-// out-builds capital. Everything else is a safety rail, not a tuning dial.
+// Plants reinvestment converts the existing growth judgement into purchased
+// replacement and growth capacity, bounded by fill, headroom, cash, and queue
+// rails. Aggression is the calibration knob; the other values are safety caps.
 const NPP_REINVEST_AGGRESSION = 1.0;
-/**
- * A sector must have SOLD this share of what it produced last turn before the
- * corp will buy it more capacity. Deliberately high: the failure mode this
- * whole feature can create is building output nobody buys, and `soldUnits /
- * producedUnits` is the only direct evidence of demand the sector carries.
- */
+/** Minimum evidence of demand before buying more capacity. */
 const NPP_REINVEST_MIN_FILL = 0.85;
-/**
- * Never reinvest into a sector already carrying this many outstanding orders —
- * the same ceiling the player path (`buildCapacity`) enforces, and for the same
- * reason: to bound the queue array, not to ration capacity.
- *
- * It is NOT a rationing dial, because a build takes `CAPACITY_BUILD_TURNS`
- * (48 for most types) to land while the AI decides every turn. A depth of 2
- * throttled maintenance to 2 orders per 48-turn build cycle — ~4% of the
- * replacement the sizing rule asks for — which is the same zero-build outcome
- * by a slower route. Rationing is done in UNITS instead: the replacement leg is
- * sized off the depreciation ACCRUED since the sector's last order, so a corp
- * that is throttled here simply places one larger order when a slot frees, and
- * total capacity bought is invariant to the cadence.
- */
+/** Queue depth is a storage bound; replacement size carries the cadence. */
 const NPP_REINVEST_MAX_QUEUE_DEPTH = 20;
-/**
- * Outstanding orders above which the discretionary GROWTH leg stops (the
- * replacement leg continues up to {@link NPP_REINVEST_MAX_QUEUE_DEPTH}).
- * Growth orders are the big, optional ones — a deep queue means the corp has
- * already committed capacity that has not landed yet, and stacking more market
- * entry on top of it is how one corp carpets a bucket.
- */
+/** Stop discretionary growth sooner than necessary replacement. */
 const NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH = 2;
-/**
- * Largest share of a bucket's remaining unowned headroom one reinvestment's
- * GROWTH leg may take. The same quarter the founding path takes, for the same
- * reason: an entry sized off the WHOLE pool would let one corp carpet a market
- * in a turn. The replacement leg is not headroom-scoped at all — see the sizing
- * block in section 6.
- */
+/** One growth order may claim at most a quarter of open headroom. */
 const NPP_REINVEST_HEADROOM_SHARE = 0.25;
-/**
- * Sectors one corp may reinvest into per turn. One. A corp with five healthy
- * sectors reinvests into its best one this turn and rotates as fills move, so
- * a cash-rich conglomerate cannot buy out every market it touches at once.
- */
+/** Prevent a cash-rich conglomerate from buying every market at once. */
 const NPP_REINVEST_MAX_SECTORS_PER_TURN = 1;
-/**
- * Largest share of its liquid cash a corp may spend on a REPLACEMENT-ONLY build.
- *
- * WHY A SECOND RAIL EXISTS. `effectiveCashFloor` is an ENTRY rail: it asks "can
- * this corp afford to make a new discretionary bet and still hold a reserve".
- * Applied to maintenance capex it is a death spiral by construction — a corp
- * below the floor may not spend one unit, so its plant depreciates, its revenue
- * falls, its cash falls further, and it can never re-qualify. Measured on the
- * 96-turn A/B (`ab4_plants`, turn 135): 317 of 395 NPP corps held less than the
- * ₳2,000,000 floor, and the single sector that cleared every other gate was
- * refused a build costing ₳6 against ₳53,478 of cash.
- *
- * Replacing worn-out capacity is an operating necessity, not a bet, so it is
- * rationed as a SHARE of what the corp has rather than gated on an absolute
- * reserve: a quarter of liquid cash, and never into overdraft. Builds that
- * carry a GROWTH leg are still discretionary and still face the full floor.
- */
+/** Maintenance may use a cash share even below the discretionary entry floor. */
 const NPP_REINVEST_MAINTENANCE_CASH_SHARE = 0.25;
 
-// ─── Cash rails (₳) ───────────────────────────────────────────────────────────
-//
-// These gate EVERY discretionary decision the brain makes: expansion (section
-// 5), dividends (section 4) and the growth leg of capacity reinvestment
-// (section 6) all require the corp to clear `effectiveCashFloor`, and expansion
-// additionally requires `EXPANSION_MIN_CASH` of surplus ON TOP of it.
-//
-// WHY THEY CAME DOWN 8x. The old ₳2,000,000 floor was authored against a
-// modern-era money scale and never re-based for the 1953 worlds that actually
-// run. Measured on prod at turn 79 across a 200-corp sample of the 476 NPP-run
-// corps: median liquid capital ₳1,724,110, and 105 of 200 sat BELOW the floor.
-// Over half the AI cohort was therefore locked out of expanding, paying a
-// dividend, or buying growth capacity, permanently, because a corp under the
-// floor cannot spend to earn its way back over it. The visible symptom is a
-// corp with healthy sectors (20-35% margins, selling out) whose share price
-// falls for twenty turns while it sits on idle cash doing nothing.
-//
-// This module already discovered the same failure once, for maintenance capex
-// alone, and patched around it with NPP_REINVEST_MAINTENANCE_CASH_SHARE rather
-// than fixing the floor. Lowering the floor is that fix generalized.
-//
-// The whole family moves by the same factor so the DESIGN RATIOS are untouched:
-// the floor is still 2x the safety rail, and expansion still demands 2.5x the
-// floor in surplus on top of it. Only the scale changed. At ₳250,000 the same
-// prod sample drops from 105/200 frozen to 36/200. The remainder are corps
-// that are genuinely broke, which is what the rail is for.
-//
-// STILL A CONSTANT, STILL WRONG IN PRINCIPLE. The cohort's cash spans four
-// orders of magnitude (p25 ₳398,719, p75 ₳52,833,977), so no single absolute
-// number fits both tails. The durable fix is to derive these from the corp's
-// own revenue and the world's era unit scale, the way `computeBuildCost`
-// already takes `eraUnitScale`. This is the calibration, not the cure.
+// Anchor-denominated rails gate expansion, dividends, and growth capex. Their
+// ratios preserve a cash buffer while fitting the 1953 economy scale.
 const CASH_FLOOR = 250_000; // Never spend below this
 const EXPANSION_COST = 500_000;
 const EXPANSION_MIN_CASH = 625_000; // Need this much above floor to expand
 const EXPANSION_MIN_MARGIN = 15; // Corp-level avg margin must be healthy
 const MAX_SECTORS = 5;
 
-// Hard safety rails: archetype modifiers scale the base levers above, but the
-// result is always clamped so no personality can bankrupt a profitable corp.
-//
-// This one is a MAX(), so it is the binding floor whenever an archetype scales
-// CASH_FLOOR below it. Left at ₳1,000,000 it would have clamped the new
-// ₳250,000 floor straight back up and the change above would have been inert.
+// Archetypes may scale the rails but never remove the minimum buffer.
 const SAFE_CASH_FLOOR_MIN = 125_000; // an aggressive floor still leaves a buffer
 const MAX_DIVIDEND_RATE = 12; // cap any archetype-boosted payout
 
 /** Default archetype for corps whose CEO NPP can't be resolved (legacy / mid-migration). */
 const DEFAULT_ARCHETYPE: CeoArchetype = "cautious";
 
-// Glut mothballing (section 2c, plants only). The knee-compressed price curve
-// barely separates a 3x glut from a 300x one (both read ~0.55-0.6 of base), so
-// GLUT DEPTH is gated on the sector's own soldFraction — the one signal that
-// stays linear — with the price ratio as a market-wide confirmation. The
-// restart threshold sits far above the mothball one (0.9 vs 0.65) so a plant
-// only comes back once its market is genuinely near balance; the wide band is
-// the oscillation guard.
+// Glut response uses fill as the linear signal and a wide restart band.
 const GLUT_MOTHBALL_FILL_THRESHOLD = 0.25;
 const GLUT_MOTHBALL_PRICE_RATIO = 0.65;
 const GLUT_RESTART_PRICE_RATIO = 0.9;
@@ -320,17 +157,7 @@ const NPP_WAGE_BASELINE = 1;
 const NPP_WAGE_SHORTAGE_TARGET = 1.08;
 const NPP_WAGE_GLUT_TARGET = 0.95;
 
-/**
- * Cohort stagger for glut mothball/restart state changes. Measured live
- * (turn 23): 446 NPP corps hold ~1 sector each, so a per-corp rate limit is
- * no limit at all — without staggering, the entire glutted cohort would
- * mothball on one turn (a supply cliff), the resulting shortage would price
- * every market past the restart threshold, and the whole cohort would swing
- * back the next turn. Instead each corp only becomes eligible for a state
- * change (either direction) on turns where hash(corpId) + turn lands in its
- * slot — ~1/8 of the cohort per turn, so a market converges over several
- * turns and the fill/price gates get fresh readings between waves.
- */
+/** Spread cohort state changes across turns to avoid supply cliffs. */
 export const GLUT_STATE_CHANGE_STAGGER = 8;
 
 /** Deterministic per-corp turn slot for glut state changes (exported for tests). */
@@ -340,32 +167,14 @@ export function glutStaggerEligible(corpId: string, turn: number): boolean {
   return (hash + turn) % GLUT_STATE_CHANGE_STAGGER === 0;
 }
 
-// Input-squeeze strategy shift (section 2e). A sector can be unprofitable not
-// because its market is glutted (2c's case) but because its RECIPE is wrong
-// for the current price regime — CA farms on `standard` paying 1.9-2.3x for
-// fertilizers/vehicles/freight while low-input strategies exist, chemical
-// plants making glutted industrial chemicals while fertilizers run 2.3x.
-// Mothballing such a sector destroys good capacity; nothing repointed it
-// (the known gap flagged at COMMODITY_COMBINED_FLOOR). This pass re-scores
-// every era-available strategy for the sector's type against the corp
-// country's reachable price ratios and switches to the best when it beats the
-// current recipe by a real margin. Same cohort stagger, one shift per corp
-// per turn, player-set strategies untouched (NPP-run corps only).
+// Re-score NPP recipes against reachable prices so an input squeeze can trigger
+// a strategy shift instead of destroying otherwise useful capacity.
 
 /** effectiveProfitMargin at/below which a sector is a shift candidate (pp). */
 export const STRATEGY_SHIFT_MARGIN_TRIGGER = -3;
 /** Required price-score advantage over the current strategy (revenue share). */
 export const STRATEGY_SHIFT_MIN_ADVANTAGE = 0.08;
-/**
- * Advantage at which even a PROFITABLE sector retools (profit-seeking, not
- * just distress-driven). Without this the shortage-relief channel barely
- * fires: fertilizers ran 2.3x while chemical plants sat at +5% margin on
- * industrial chemicals — comfortably profitable, never triggered, and the
- * shortage persisted. A 0.42 revenue-share advantage measured live is the
- * scale this exists for; the bar is high (3x the distress threshold) and the
- * cooldown/stagger/one-per-corp limits bound churn exactly as for distress
- * shifts.
- */
+/** High bar for a profitable sector to retool toward a shortage. */
 export const STRATEGY_SHIFT_PROFIT_SEEK_ADVANTAGE = 0.25;
 
 /**
@@ -408,25 +217,7 @@ interface NppCorpDecisionContext {
   now: Date;
   /** Behavior modifiers derived from the CEO NPP's personality. */
   modifiers: CeoArchetypeModifiers;
-  /**
-   * Local units per 1 ₳ for the corp's `liquidCurrencyCode` (1 for pre-forex
-   * corps, and the safe default when the caller cannot resolve a rate).
-   *
-   * WHY THIS EXISTS. Every money constant in this module — CASH_FLOOR,
-   * EXPANSION_MIN_CASH, EXPANSION_COST, and the `computeBuildCost` result — is
-   * an ANCHOR (₳) figure, while `corp.liquidCapital` is stored in the corp's
-   * own currency. Comparing and subtracting the two directly priced every NPP
-   * decision at 1 local unit = 1 ₳, so a corp in a high-nominal currency
-   * (JPY ≈ 360/₳, BRL ≈ 20/₳) read its cash floor and its expansion price as
-   * ~1/fx of their real size and expanded essentially for free.
-   *
-   * Measured on a controlled 96-turn 1953 A/B (identical seed, capital vs
-   * plants): sector counts were IDENTICAL in anchor-ish currencies (US 51/51,
-   * UK 63/63, RU 136/136) and blew out exactly where fx is large — JP 60 → 255,
-   * BR 51 → 255, DE 51 → 114. The player-side paths (`expandSector`,
-   * `buildCapacity`) already convert with `anchorToCorpCapital` /
-   * `corpLiquidCapitalToAnchor`; this brings the AI onto the same footing.
-   */
+  /** Local units per anchor unit for the corporation's liquid currency. */
   fxRate?: number;
   /**
    * Live local-per-₳ rates used to restate each sector's host-currency
@@ -445,51 +236,13 @@ interface NppCorpDecisionContext {
    */
   currentYear?: number;
   techTreesEnabled?: boolean;
-  /**
-   * NET per-turn debt service in ₳: issuer interest paid out, less coupon
-   * collected on bonds the corp holds. Positive is a drag.
-   *
-   * WHY THIS EXISTS. Until this field the brain had no concept of debt at all
-   * (`grep -c bond` over this module returned 0), so its profitability signal
-   * measured operations and corporate overhead and nothing else. A corp whose
-   * bond interest exceeds its entire operating profit therefore read as
-   * healthy, and the AI running it kept the overhead, never deleveraged and
-   * never reacted, while the share price fell every turn.
-   *
-   * Measured on prod at turn 79, corp 446 (Meyer Logistics), the corp this was
-   * found on: revenue ₳30,463, total costs ₳25,123, operating profit ₳5,340,
-   * bond coupon income ₳386, bond interest expense ₳6,390. Net income −₳664.
-   * Six sectors at 21.9-37.6% margin, five of six selling out. The operations
-   * were never the problem. Share price 17.35 → 4.38 across turns 59-79.
-   *
-   * This is the same class of blindness the module has been fixed for twice
-   * already: it read seeded `profitMargin` instead of the effective margin, and
-   * nominal instead of realized revenue. Each time the signal was stable and
-   * wrong, so the AI confidently did the wrong thing. Debt service is the third
-   * instance.
-   *
-   * Absent (pre-wiring callers, and every test that does not set it) leaves the
-   * old signal exactly as it was.
-   */
+  /** Net per-turn debt service in anchor currency; positive is a drag. */
   debtServiceAnchor?: number;
-  /**
-   * Persisted strategy memory (v5). Absent on a corp the loop has not seen, in
-   * which case it adopts `expand`, which is byte-identical to the pre-v5 levers.
-   */
+  /** Persisted strategy memory; absent adopts the legacy expand behavior. */
   strategy?: NppStrategyState;
-  /**
-   * True on this corp's cohort stagger slot. Strategy switches are refused
-   * otherwise, for the same reason glut mothballing is staggered: a young world
-   * is wall-to-wall single-sector NPP corps, so an unstaggered switch is a
-   * cohort-wide cliff and then a cohort-wide swing back.
-   */
+  /** True on this corporation's cohort-stagger slot. */
   strategyEligible?: boolean;
-  /**
-   * `nppCorpStrategyEnabled`. DEFAULT ON: absent means enabled, so existing
-   * worlds keep the behaviour they were promoted with and only an explicit
-   * `false` disables. Disabled pins the corp to the `expand` levers, which are
-   * byte-identical to the pre-v5 brain, and stops persisting strategy memory.
-   */
+  /** Explicit false disables strategy memory and pins legacy expand levers. */
   strategyLoopEnabled?: boolean;
 }
 
