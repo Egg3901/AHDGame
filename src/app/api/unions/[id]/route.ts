@@ -294,9 +294,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
         strength: unionStrength(union),
         organizeActionCost: ORGANIZE_ACTION_COST,
         organizeStrengthGain: ORGANIZE_STRENGTH_GAIN,
-        // Targeted sector drives are a different, dearer action than the
-        // rank-and-file organize drive above, and the UI must quote the real
-        // price before a head spends it, raid or not.
+        // Targeted sector drives quote their own action/treasury price, separate
+        // from the rank-and-file organize drive above.
         organizeSectorActionCost: ORGANIZE_SECTOR_ACTION_COST,
         organizeSectorTreasuryCost: ORGANIZE_SECTOR_TREASURY_COST,
         raidApprovalEdgeRequired: RAID_APPROVAL_EDGE_REQUIRED,

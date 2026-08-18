@@ -126,7 +126,23 @@ export function OrganizeSectorAction({
       </p>
 
       {alreadyOurs ? (
-        <p className="text-xs text-success">Your union already organizes this sector.</p>
+        <>
+          <p className="mb-2 text-xs text-muted">
+            Your union already organizes this sector. Another drive raises unionization further.
+          </p>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={handleOrganize}
+            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+          >
+            {pending ? "Working…" : "Organize This Sector"}
+          </button>
+          <span className="ml-2 text-[11px] text-muted">
+            Costs {myUnion.organizeActionCost} action points and{" "}
+            {myUnion.organizeSectorTreasuryCost.toLocaleString("en-US")} from the treasury
+          </span>
+        </>
       ) : (
         <>
           <p className="mb-2 text-xs text-muted">
