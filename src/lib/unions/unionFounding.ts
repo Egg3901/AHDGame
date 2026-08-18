@@ -30,9 +30,8 @@ import { getFoundingFxRate } from "@/lib/corporations/foundingCosts";
 export const UNION_FOUNDING_COST_CAMPAIGN_FUNDS = 500_000;
 
 /**
- * Action points a founding costs. Deliberately below
- * `ORGANIZE_SECTOR_ACTION_COST` (15): chartering the union is the paperwork,
- * winning it a shop is the work.
+ * Action points a founding costs. Chartering the union is the paperwork.
+ * Winning a shop is a separate 1-AP treasury spend on the Sectors tab.
  */
 export const UNION_FOUNDING_ACTION_COST = 10;
 

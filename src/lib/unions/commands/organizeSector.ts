@@ -25,34 +25,23 @@ import { ObjectId } from "mongodb";
 import type { Character, CorporateSector, Union } from "@/lib/db/types";
 import { unionApproval } from "@/lib/unions/unionDues";
 import { resolveOwnedUnion, rejectIfTurnProcessing, type UnionActionResult } from "./unionActions";
+import {
+  ORGANIZE_SECTOR_ACTION_COST,
+  ORGANIZE_SECTOR_TREASURY_COST,
+  RAID_APPROVAL_EDGE_REQUIRED,
+  SECTOR_RECOGNITION_THRESHOLD,
+  clamp0to100,
+  sectorUnionizationGain,
+} from "@/lib/unions/organizeSectorEconomy";
 
-/** Action points a union head spends to run one targeted drive. 3x the rank-and-file `ORGANIZE_ACTION_COST` (5), this is a leader action that moves a specific sector, not a contribution to the general strength pool. */
-export const ORGANIZE_SECTOR_ACTION_COST = 15;
-
-/** Treasury cost of one targeted drive. A drive aimed at a specific sector, potentially a rival shop, is a real commitment rather than a routine push. */
-export const ORGANIZE_SECTOR_TREASURY_COST = 1000;
-
-/** Unionization points one drive adds to the targeted sector, before clamping to [0, 100]. Three drives from zero clears the recognition threshold below. */
-export const SECTOR_UNIONIZATION_GAIN_PER_DRIVE = 20;
-
-/** Unionization a previously-unrepresented sector must clear before a drive wins it recognition outright. */
-export const SECTOR_RECOGNITION_THRESHOLD = 50;
-
-/**
- * Approval-point edge the attacking union needs over the incumbent to win a
- * raid. A tie or worse goes to the incumbent: a union its own members rate at
- * least as well as the challenger's cannot be muscled out of a shop by money
- * and action points alone. Deliberately small (not a landslide requirement),
- * raiding a mismanaged incumbent should be realistically winnable.
- */
-export const RAID_APPROVAL_EDGE_REQUIRED = 5;
-
-function clamp0to100(value: number | undefined): number {
-  return Math.max(
-    0,
-    Math.min(100, typeof value === "number" && Number.isFinite(value) ? value : 0)
-  );
-}
+export {
+  ORGANIZE_SECTOR_ACTION_COST,
+  ORGANIZE_SECTOR_TREASURY_COST,
+  RAID_APPROVAL_EDGE_REQUIRED,
+  SECTOR_RECOGNITION_THRESHOLD,
+  SECTOR_UNIONIZATION_GAIN_BASE,
+  sectorUnionizationGain,
+} from "@/lib/unions/organizeSectorEconomy";
 
 export interface RaidContestInputs {
   /** Approval (0-100) of the union running the drive. */
@@ -131,7 +120,7 @@ export function resolveOrganizeSectorDrive(
     }
     return {
       applied: true,
-      newUnionization: Math.min(100, current + SECTOR_UNIONIZATION_GAIN_PER_DRIVE),
+      newUnionization: Math.min(100, current + sectorUnionizationGain(inputs.attackerApproval)),
       newRepresentingUnionId: inputs.attackerUnionId,
       won: true,
       wasRaid: true,
@@ -140,7 +129,7 @@ export function resolveOrganizeSectorDrive(
 
   // Unrepresented, this union's own shop, or a dangling incumbent reference
   // (no live rival to contest against): a straight organizing push.
-  const boosted = Math.min(100, current + SECTOR_UNIONIZATION_GAIN_PER_DRIVE);
+  const boosted = Math.min(100, current + sectorUnionizationGain(inputs.attackerApproval));
   const newRepresentingUnionId = isOwnSector
     ? inputs.attackerUnionId
     : boosted >= SECTOR_RECOGNITION_THRESHOLD
