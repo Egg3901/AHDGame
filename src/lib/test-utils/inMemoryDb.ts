@@ -28,9 +28,19 @@ function isPlainObject(value: unknown): value is Doc {
   );
 }
 
+const UNSAFE_PATH_PARTS = new Set(["__proto__", "prototype", "constructor"]);
+
+function safePathParts(path: string): string[] {
+  const parts = path.split(".");
+  if (parts.some((part) => UNSAFE_PATH_PARTS.has(part))) {
+    throw new Error(`inMemoryDb: unsafe document path "${path}"`);
+  }
+  return parts;
+}
+
 function getPath(doc: Doc, path: string): unknown {
   let cur: unknown = doc;
-  for (const part of path.split(".")) {
+  for (const part of safePathParts(path)) {
     if (!isPlainObject(cur)) return undefined;
     cur = cur[part];
   }
@@ -38,7 +48,7 @@ function getPath(doc: Doc, path: string): unknown {
 }
 
 function setPath(doc: Doc, path: string, value: unknown): void {
-  const parts = path.split(".");
+  const parts = safePathParts(path);
   let cur: Doc = doc;
   for (let i = 0; i < parts.length - 1; i += 1) {
     const next = cur[parts[i]];
@@ -49,7 +59,7 @@ function setPath(doc: Doc, path: string, value: unknown): void {
 }
 
 function unsetPath(doc: Doc, path: string): void {
-  const parts = path.split(".");
+  const parts = safePathParts(path);
   let cur: Doc = doc;
   for (let i = 0; i < parts.length - 1; i += 1) {
     const next = cur[parts[i]];
