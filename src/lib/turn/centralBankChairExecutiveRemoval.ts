@@ -16,7 +16,7 @@ import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { Character } from "@/lib/db/types";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getExecutiveCharacterIds } from "@/lib/elections/executiveOffice";
-import { getCentralBankScope } from "@/lib/centralBank/helpers";
+import { getCentralBankScope, vacateFomcChairSeat } from "@/lib/centralBank/helpers";
 import { persistVacancy } from "@/lib/turn/centralBankChairSelection";
 import { createNotifications } from "@/lib/notifications";
 import { createSystemNewsPost } from "@/lib/news";
@@ -67,6 +67,9 @@ export async function processCentralBankChairExecutiveRemoval(
         .collection<Character>("characters")
         .findOne({ _id: bank.chairCharacterId }, { projection: { _id: 1, name: 1, userId: 1 } });
       await persistVacancy(db, bank._id, gameNow);
+      // Independence removal must clear the committee seat as well, otherwise
+      // the new executive keeps voting the bank's rate from seat 0.
+      await vacateFomcChairSeat(db, bank._id);
       result.chairsRemoved++;
       if (chair) await notifyChairRemoved(db, bank, chair);
       continue; // bank is now vacant; pending was already null

@@ -12,7 +12,7 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { vacateCentralBankChairCharacter } from "@/lib/turn/centralBankChairSelection";
 import { notifyCbChairResignedDiscord } from "@/lib/centralBankChairEvents";
 import { createSystemNewsPost } from "@/lib/news";
-import { getBankId } from "@/lib/centralBank/helpers";
+import { getBankId, vacateFomcChairSeat } from "@/lib/centralBank/helpers";
 
 interface RouteContext {
   params: Promise<{ code: string }>;
@@ -51,6 +51,9 @@ export async function POST(request: Request, context: RouteContext) {
     const gameNow = new Date();
 
     await vacateCentralBankChairCharacter(db, bank.chairCharacterId);
+    // Also stand down from the committee's chair seat, or the resigned player
+    // keeps tabling its motions and keeps being named as chair on the page.
+    await vacateFomcChairSeat(db, bank._id);
 
     await db.collection<CentralBank>("centralBanks").updateOne(
       { _id: bank._id },

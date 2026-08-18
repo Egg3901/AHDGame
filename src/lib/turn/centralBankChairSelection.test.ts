@@ -1166,8 +1166,11 @@ describe("processCentralBankChairSelection — NPP autonomy fallback", () => {
     expect($set.chairMode).toBe("npp");
     expect($set.chairNppId).toBeDefined();
     expect($set.vacancyAwaitingAutomaticSelection).toBe(false);
-    // The persistVacancy-only fields must NOT be present on this write.
-    expect($set.chairCharacterId).toBeUndefined();
+    // A technocrat taking the chair must ALSO clear any outgoing player from
+    // the mirror. Leaving it behind produced prod banks that carried a player
+    // `chairCharacterId` and an NPP `chairNppId` at the same time.
+    expect($set.chairCharacterId).toBeNull();
+    expect($set.chairCharacterName).toBeNull();
   });
 
   it("seats a technocrat in a player-enabled country when autonomy is globally enabled but no human candidate exists", async () => {
