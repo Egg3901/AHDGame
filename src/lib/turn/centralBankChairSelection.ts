@@ -110,12 +110,22 @@ export function weightedRandomPick(
   return candidates[candidates.length - 1];
 }
 
-/** Check if nomination window is open for a bank. */
+/**
+ * Check if the nomination window is open for a bank.
+ *
+ * A technocrat chair is a CARETAKER, not an incumbent: it holds the seat only
+ * because no player was available when the seat last came up. Keeping the
+ * window shut against it for the rest of a 4-year term means a country that
+ * gains an eligible candidate has to wait years to put the name forward — which
+ * is how every bank in the world ended up NPP-run with no way back. So an
+ * NPP-chaired bank is always open for nominations.
+ */
 export function isNominationWindowOpen(
-  bank: Pick<CentralBank, "chairCharacterId" | "chairTermExpiresAtTurn">,
+  bank: Pick<CentralBank, "chairCharacterId" | "chairTermExpiresAtTurn" | "chairMode">,
   currentTurn: number
 ): boolean {
   if (bank.chairCharacterId === null && bank.chairTermExpiresAtTurn === null) return true;
+  if (bank.chairMode === "npp" && bank.chairCharacterId === null) return true;
   if (
     bank.chairTermExpiresAtTurn != null &&
     currentTurn >= bank.chairTermExpiresAtTurn - NOMINATION_WINDOW_TURNS
@@ -374,7 +384,17 @@ export async function processCentralBankChairSelection(
     // should still trigger selection so the first chair can be seated.
     const bootstrapVacancy = bank.chairCharacterId === null && bank.chairTermExpiresAtTurn === null;
 
-    if (!termExpired && !automaticVacancyFill && !bootstrapVacancy) continue;
+    // A caretaker technocrat yields the moment the executive names someone. The
+    // seat is not the technocrat's to serve out — it took the chair because the
+    // pool was empty, and the pool is no longer empty. Without this a country
+    // that nominates a day after the seat was filled waits four game years.
+    const caretakerWithNominations =
+      bank.chairMode === "npp" &&
+      bank.chairCharacterId === null &&
+      (bank.nominations?.length ?? 0) > 0;
+
+    if (!termExpired && !automaticVacancyFill && !bootstrapVacancy && !caretakerWithNominations)
+      continue;
 
     result.selectionsTriggered++;
 
