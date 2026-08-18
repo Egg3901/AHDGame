@@ -14,12 +14,13 @@ import { RingGraph } from "./RingGraph";
 import { EvidencePanel } from "./EvidencePanel";
 import { ModeratorActions, type ToastKind } from "./ModeratorActions";
 import { ScoringConfigPanel } from "./ScoringConfigPanel";
+import { DiscordContact } from "./DiscordContact";
+import { SuspectMugshot } from "./SuspectPortrait";
+import { SuspectNameButton } from "./SuspectPeek";
 import {
   confidenceHex,
   confidenceLabel,
   formatRelativeTime,
-  memberDisplayName,
-  ROLE_HEX,
   ROLE_LABEL,
   signalMeta,
   STATUS_LABEL,
@@ -194,16 +195,21 @@ export function ClusterDetailView({
             <ul className="divide-y divide-card-border/60">
               {detail.members.map((m) => (
                 <li key={m.userId} className="flex items-center gap-2.5 py-2.5">
-                  <span
-                    className="inline-block h-2.5 w-2.5 flex-shrink-0 rounded-full ring-2 ring-background"
-                    style={{ backgroundColor: ROLE_HEX[m.role] }}
-                  />
-                  <span className="min-w-0 truncate text-sm font-medium">
-                    {memberDisplayName(m.name, m.userId)}
-                  </span>
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted">
-                    {ROLE_LABEL[m.role]}
-                  </span>
+                  <SuspectMugshot member={m} size="h-9 w-9" />
+                  <div className="min-w-0 flex-1">
+                    <SuspectNameButton member={m} />
+                    <div className="flex flex-wrap items-center gap-x-2">
+                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted">
+                        {ROLE_LABEL[m.role]}
+                      </span>
+                      <DiscordContact
+                        discordId={m.discordId}
+                        discordUsername={m.discordUsername}
+                        discordCreatedAt={m.discordCreatedAt}
+                        compact
+                      />
+                    </div>
+                  </div>
                   {m.banned && (
                     <span className="ml-auto rounded-md border border-red-400/25 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-400">
                       Banned

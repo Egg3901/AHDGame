@@ -19,10 +19,30 @@ export type AltMemberRole = "operator" | "burner" | "associate";
 
 // ─── API response shapes (frozen contract §4.9) ────────────────────────────
 
-export interface ClusterMemberPreview {
+/** Shared identity payload for a suspected alt (list preview + detail roster). */
+export interface AltMemberIdentity {
   userId: string;
+  /** Account username. Display prefers `characterName`. */
   name: string | null;
   banned: boolean;
+  characterName: string | null;
+  characterId: string | null;
+  sequentialId: number | null;
+  avatarUrl: string | null;
+  discordId: string | null;
+  discordUsername: string | null;
+  discordAvatar: string | null;
+  /** ISO timestamp decoded from the Discord snowflake. */
+  discordCreatedAt: string | null;
+  email: string | null;
+  lastKnownIp: string | null;
+  registrationIp: string | null;
+  /** Browser tracking cookie. Null for moderators (admin-only). */
+  trackingId: string | null;
+}
+
+export interface ClusterMemberPreview extends AltMemberIdentity {
+  role?: AltMemberRole;
 }
 
 export interface ClusterListItem {
@@ -52,10 +72,7 @@ export interface SignalContribution {
   evidence: string;
 }
 
-export interface ClusterMember {
-  userId: string;
-  name: string | null;
-  banned: boolean;
+export interface ClusterMember extends AltMemberIdentity {
   role: AltMemberRole;
 }
 
@@ -453,6 +470,25 @@ export function formatRelativeTime(iso: string): string {
 export function memberDisplayName(name: string | null, userId: string): string {
   if (name && name.trim()) return name;
   return `user·${userId.slice(-6)}`;
+}
+
+/** In-game character name when present, else account username / short id. */
+export function memberInGameName(
+  member: Pick<AltMemberIdentity, "characterName" | "name" | "userId">
+): string {
+  if (member.characterName && member.characterName.trim()) return member.characterName.trim();
+  return memberDisplayName(member.name, member.userId);
+}
+
+/** Public character profile href, or null when the account has no character. */
+export function memberProfileHref(
+  member: Pick<AltMemberIdentity, "sequentialId" | "characterId">
+): string | null {
+  if (member.sequentialId != null && member.sequentialId > 0) {
+    return `/character/${member.sequentialId}`;
+  }
+  if (member.characterId) return `/character/${member.characterId}`;
+  return null;
 }
 
 /** `1 - Π(1 - w_i)` — noisy-OR, mirrors `src/lib/altDetection/score.ts`. */
