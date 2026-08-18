@@ -68,7 +68,7 @@ describe("processBankSolvencyTurn", () => {
   let historyInserts: unknown[];
   let fundState: DepositInsuranceFund;
   let charactersByBank: Map<string, { _id: ObjectId; savings: number; holder: string }[]>;
-  let treasuryBalance: number;
+  let _treasuryBalance: number;
 
   function seedBanks(corps: Corporation[]) {
     // Shallow-clone charter only; structuredClone breaks BSON ObjectId.
@@ -152,7 +152,7 @@ describe("processBankSolvencyTurn", () => {
     loans = [];
     historyInserts = [];
     charactersByBank = new Map();
-    treasuryBalance = 100_000_000;
+    _treasuryBalance = 100_000_000;
     fundState = {
       _id: "USD",
       balance: 5_000_000,
@@ -240,6 +240,24 @@ describe("processBankSolvencyTurn", () => {
         }))
       );
     });
+    // The deposit-book waterfall flips holders with a single updateMany rather
+    // than a per-depositor bulkWrite, because a pointer flip is not a money
+    // movement and does not need one write per player.
+    db.collectionMocks.characters!.updateMany.mockImplementation(
+      async (filter: Record<string, unknown>, update: { $set?: Record<string, unknown> }) => {
+        const holderKey = Object.keys(filter).find((k) =>
+          k.startsWith("currencyBalances.savingsHolder.")
+        );
+        if (!holderKey) return { matchedCount: 0, modifiedCount: 0 };
+        const bankHex = filter[holderKey] as string;
+        const chars = charactersByBank.get(bankHex) ?? [];
+        const next = update.$set?.["currencyBalances.savingsHolder.USD"];
+        if (typeof next === "string") {
+          for (const ch of chars) ch.holder = next;
+        }
+        return { matchedCount: chars.length, modifiedCount: chars.length };
+      }
+    );
     db.collectionMocks.characters!.bulkWrite.mockImplementation(async (ops: unknown[]) => {
       for (const op of ops as {
         updateOne: {
@@ -282,7 +300,7 @@ describe("processBankSolvencyTurn", () => {
 
     db.collectionMocks.federalBudget!.updateOne.mockImplementation(async (_f, update) => {
       const inc = (update as { $inc?: { treasuryBalance?: number } }).$inc;
-      if (typeof inc?.treasuryBalance === "number") treasuryBalance += inc.treasuryBalance;
+      if (typeof inc?.treasuryBalance === "number") _treasuryBalance += inc.treasuryBalance;
       return { matchedCount: 1, modifiedCount: 1 };
     });
 

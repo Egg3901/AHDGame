@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { Corporation } from "@/lib/db/types";
 import type { BankCharter } from "@/lib/db/types/bank";
 
@@ -83,34 +84,62 @@ describe("switchCharterType", () => {
   }
 
   it("returns the deposit book to the central bank when moving to investment", async () => {
-    const corp = makeCorp(makeCharter());
-    db.collectionMocks.corporations!.findOne.mockResolvedValue(corp);
-    db.collectionMocks.corporations!.findOneAndUpdate.mockResolvedValue({
-      ...corp,
-      bankCharter: { ...corp.bankCharter!, type: "investment" },
-    });
+    // State, not call shapes: the bug this covers was that the money supply and
+    // the bank's vault BOTH ended up holding the deposit book, which no
+    // assertion on an individual write can see.
+    const memory = createInMemoryDb();
+    const corpId = new ObjectId();
+    memory.seed("corporations", [
+      {
+        _id: corpId,
+        name: "Test Bank Corp",
+        type: "financial",
+        countryId: "US",
+        liquidCapital: 50_000_000,
+        bankCharter: { ...makeCharter(), cashReserves: 6_000_000 },
+      },
+    ]);
+    memory.seed("centralBanks", [{ _id: "US", externalBroadMoney: 100_000_000 }]);
+    memory.seed("gameState", [
+      { _id: "current", preset: "2019-default", currentTurn: CURRENT_TURN },
+    ]);
+    memory.seed("gameConfig", [
+      { _id: "default", privateBankingEnabled: true, playerAdvancedBankChartersEnabled: true },
+    ]);
+    memory.seed("depositInsuranceFunds", [{ _id: "USD", balance: 0 }]);
+    memory.seed("characters", [
+      {
+        _id: new ObjectId(),
+        currencyBalances: {
+          savings: { USD: 1_000_000 },
+          savingsHolder: { USD: corpId.toString() },
+        },
+      },
+    ]);
 
     const { switchCharterType } = await importCharter();
-    const result = await switchCharterType(db as unknown as Db, corp._id, "investment");
+    const result = await switchCharterType(memory as unknown as Db, corpId, "investment");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.npcDepositsReturned).toBe(4_000_000);
-    expect(result.depositorsFlipped).toBe(3);
+    expect(result.depositorsFlipped).toBe(1);
 
-    // NPC money is conserved: it goes back to the pool it came from.
-    expect(db.collectionMocks.centralBanks!.updateOne).toHaveBeenCalledWith(
-      { _id: "US" },
-      expect.objectContaining({ $inc: { externalBroadMoney: 4_000_000 } })
-    );
+    const corp = memory.collection("corporations").docs[0] as {
+      bankCharter: Record<string, number | string>;
+    };
+    const cb = memory.collection("centralBanks").docs[0] as { externalBroadMoney: number };
 
-    const set = expectSwitchWrite();
-    expect(set["bankCharter.type"]).toBe("investment");
-    expect(set["bankCharter.totalDeposits"]).toBe(0);
-    expect(set["bankCharter.npcDeposits"]).toBe(0);
+    // Conservation: the household book left the vault AND arrived in the money
+    // supply. It used to arrive without leaving.
+    expect(cb.externalBroadMoney).toBe(104_000_000);
+    expect(corp.bankCharter.cashReserves).toBe(2_000_000);
+    expect(corp.bankCharter.type).toBe("investment");
+    expect(corp.bankCharter.npcDeposits).toBe(0);
+    expect(corp.bankCharter.totalDeposits).toBe(0);
     // The floor has to follow the deposits out, or the CEO stays locked out of
     // their own treasury until the next banking turn recomputes it.
-    expect(set["bankCharter.reserveFloor"]).toBe(0);
+    expect(corp.bankCharter.reserveFloor).toBe(0);
   });
 
   it("flips depositor pointers without touching a single savings balance", async () => {

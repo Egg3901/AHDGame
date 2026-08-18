@@ -339,7 +339,7 @@ async function evaluateOneBank(
     postedCapital,
     // The cash-backed base. Player pointer deposits are excluded for the same
     // reason they are excluded from the reserve requirement.
-    totalDeposits: Math.max(0, npcDeposits),
+    cashBackedDeposits: Math.max(0, npcDeposits),
     totalLoans,
     reserveRatioRequired,
     arrearsOutstanding,

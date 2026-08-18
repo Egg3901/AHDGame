@@ -25,14 +25,16 @@ import {
   CONFIDENCE_ASSET_QUALITY_WEIGHT,
   CONFIDENCE_BAND_AMBER_MIN,
   CONFIDENCE_BAND_GREEN_MIN,
-  CONFIDENCE_CAPITAL_COVER_CAP,
   CONFIDENCE_CAPITAL_WEIGHT,
-  CONFIDENCE_RESERVE_COVER_CAP,
   CONFIDENCE_RESERVE_WEIGHT,
+  confidenceCovers,
 } from "@/lib/banking/confidence";
+import {
+  RUN_FAILURE_COVER_FRACTION,
+  requiredReserves as computeRequiredReserves,
+} from "@/lib/banking/balanceSheet";
 
-/** Cash below this share of required reserves fails a red-banded bank. */
-export const RUN_FAILURE_COVER_FRACTION = 0.5;
+export { RUN_FAILURE_COVER_FRACTION };
 
 export type ConfidenceTerm = {
   key: "reserves" | "capital" | "assetQuality";
@@ -64,9 +66,6 @@ export type BankRiskReadout = {
   verdict: string;
 };
 
-function clamp(v: number, lo: number, hi: number) {
-  return Math.min(hi, Math.max(lo, v));
-}
 function finite(n: number | undefined): number {
   return typeof n === "number" && Number.isFinite(n) ? n : 0;
 }
@@ -87,42 +86,42 @@ export function buildRiskReadout(input: {
   const loans = Math.max(0, finite(input.totalLoans));
   const ratio = Math.max(0, finite(input.reserveRatioRequired));
 
-  const requiredReserves = deposits * ratio;
+  const requiredReserves = computeRequiredReserves({ npcDeposits: deposits }, ratio);
   const runFailureThreshold = RUN_FAILURE_COVER_FRACTION * requiredReserves;
   const reserveCoverRatio = requiredReserves > 0 ? cash / requiredReserves : 1;
   const headroomToFailure = cash - runFailureThreshold;
 
-  // Same arithmetic as computeConfidence, decomposed so each term can be shown
-  // with the ceiling it is working against.
-  const rawReserveCover = clamp(
-    cash / Math.max(1, ratio * deposits),
-    0,
-    CONFIDENCE_RESERVE_COVER_CAP
-  );
-  const capitalCover = clamp(cash / Math.max(1, loans), 0, CONFIDENCE_CAPITAL_COVER_CAP);
-  const arrearsShare = loans > 0 ? clamp(finite(input.arrearsOutstanding) / loans, 0, 1) : 0;
-  const defaultsShare = loans > 0 ? clamp(finite(input.defaultsLastTurn) / loans, 0, 1) : 0;
-  const assetQuality = clamp(1 - arrearsShare * 0.7 - defaultsShare * 0.3, 0, 1);
+  // The SAME arithmetic computeConfidence scores with, not a second copy of it.
+  // This module used to re-derive the terms with its own literal penalty
+  // constants, so the console could explain a score the engine no longer gave.
+  const covers = confidenceCovers({
+    cashReserves: cash,
+    cashBackedDeposits: deposits,
+    totalLoans: loans,
+    reserveRatioRequired: ratio,
+    arrearsOutstanding: input.arrearsOutstanding,
+    defaultsLastTurn: input.defaultsLastTurn,
+  });
 
   const terms: ConfidenceTerm[] = [
     {
       key: "reserves",
       label: "Reserve cover",
-      contribution: CONFIDENCE_RESERVE_WEIGHT * Math.min(1, rawReserveCover),
+      contribution: CONFIDENCE_RESERVE_WEIGHT * Math.min(1, covers.reserveCover),
       max: CONFIDENCE_RESERVE_WEIGHT,
       lever: "Hold more cash, or take fewer deposits by shrinking the branch network.",
     },
     {
       key: "capital",
       label: "Capital cover",
-      contribution: CONFIDENCE_CAPITAL_WEIGHT * capitalCover,
+      contribution: CONFIDENCE_CAPITAL_WEIGHT * covers.capitalCover,
       max: CONFIDENCE_CAPITAL_WEIGHT,
       lever: "Move capital into the bank, or lend less against the cash you hold.",
     },
     {
       key: "assetQuality",
       label: "Asset quality",
-      contribution: CONFIDENCE_ASSET_QUALITY_WEIGHT * assetQuality,
+      contribution: CONFIDENCE_ASSET_QUALITY_WEIGHT * covers.assetQuality,
       max: CONFIDENCE_ASSET_QUALITY_WEIGHT,
       lever: "Lend to better credit bands; arrears and defaults both bite here.",
     },

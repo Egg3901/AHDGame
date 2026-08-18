@@ -55,6 +55,18 @@ export type ConsolePayload = {
     band: "green" | "amber" | "red";
     verdict: string;
   } | null;
+  /**
+   * Every cap a player can hit, with its formula and current inputs, from the
+   * module that enforces it. Null when there is no active charter.
+   */
+  caps: Array<{
+    key: string;
+    label: string;
+    formula: string;
+    inputs: Array<{ label: string; value: number }>;
+    value: number;
+    lever: string;
+  }> | null;
   corridors: { deposit: Corridor; lending: Corridor } | null;
   reserveRatio: number | null;
   depositCeiling: number | null;

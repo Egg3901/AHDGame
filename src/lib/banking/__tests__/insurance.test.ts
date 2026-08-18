@@ -1,14 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import type { BankCharter, DepositInsuranceFund } from "@/lib/db/types/bank";
-import type { Corporation } from "@/lib/db/types";
+import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import type { DepositInsuranceFund } from "@/lib/db/types/bank";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import { getGdpAnchorRate } from "@/lib/currency/gdpAnchorRate";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
   BASE_PREMIUM_ANNUAL,
-  DEPOSIT_INSURANCE_SPENDING_KEY,
   INSURED_CAP_REFERENCE_USD,
   computeInsurancePremium,
   computeReserveRatioActual,
@@ -19,52 +18,6 @@ import {
 } from "../insurance";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
-
-function makeCharter(overrides: Partial<BankCharter> = {}): BankCharter {
-  return {
-    type: "retail",
-    status: "failed",
-    currency: "USD",
-    charteredTurn: 1,
-    postedCapital: 100_000,
-    depositOffset: 0,
-    lendingOffset: 0,
-    totalDeposits: 0,
-    npcDeposits: 0,
-    failedTurn: 50,
-    blacklist: {},
-    ...overrides,
-  };
-}
-
-function makeCorp(
-  charter: BankCharter,
-  overrides: Partial<Corporation> & { _id?: ObjectId } = {}
-): Corporation {
-  const { _id, ...rest } = overrides;
-  return {
-    _id: _id ?? new ObjectId(),
-    name: "Failed Bank",
-    type: "financial",
-    liquidCapital: 0,
-    liquidCurrencyCode: "USD",
-    countryId: "US",
-    ceoId: new ObjectId(),
-    userId: new ObjectId(),
-    headquartersState: "CA",
-    bankCharter: charter,
-    ...rest,
-  } as unknown as Corporation;
-}
-
-function findCursor(docs: unknown[]) {
-  return {
-    toArray: vi.fn().mockResolvedValue(docs),
-    project: vi.fn().mockReturnThis(),
-    sort: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-  };
-}
 
 describe("deposit insurance", () => {
   let db: MockDb;
@@ -170,309 +123,171 @@ describe("deposit insurance", () => {
   });
 
   describe("resolveFailedBankDepositors", () => {
+    /**
+     * Rewritten against a real in-memory store rather than a call-recording
+     * mock. The failure this suite has to catch is money that stops adding up
+     * across several writes, and a mock that replays each write in isolation
+     * cannot see that.
+     *
+     * The model also changed, deliberately. Player savings are a POINTER: the
+     * balance never left the character, so a failed bank neither holds it nor
+     * can lose it. The old resolution haircut those balances (money destroyed
+     * with no counterparty) and then had the insurance fund pay for the ones it
+     * did not haircut (money created that reached nobody). Both legs are gone.
+     * Deposit insurance now stands behind the household book, which is the part
+     * that is actually made of cash.
+     */
     let bankId: ObjectId;
-    let liveCorp: Corporation;
-    let fundState: DepositInsuranceFund;
-    let characters: {
-      _id: ObjectId;
-      savings: number;
-      holder: string;
-    }[];
-    let cbExternal: number;
-    let treasuryBalance: number;
-    let spendingInsurance: number;
+    let memory: InMemoryDb;
 
-    beforeEach(() => {
+    function build(options: {
+      cashReserves?: number;
+      npcDeposits?: number;
+      fundBalance?: number;
+      playerSavings?: number[];
+    }) {
       bankId = new ObjectId();
-      liveCorp = makeCorp(
-        makeCharter({ postedCapital: 200_000, npcDeposits: 50_000, cashReserves: 100_000 }),
+      memory = createInMemoryDb();
+      memory.seed("corporations", [
         {
           _id: bankId,
+          name: "Failed Bank",
+          countryId: "US",
           liquidCapital: 100_000,
-        }
+          bankCharter: {
+            type: "retail",
+            status: "failed",
+            currency: "USD",
+            charteredTurn: 1,
+            postedCapital: 200_000,
+            depositOffset: 0,
+            lendingOffset: 0,
+            cashReserves: options.cashReserves ?? 100_000,
+            npcDeposits: options.npcDeposits ?? 50_000,
+            totalDeposits: options.npcDeposits ?? 50_000,
+            failedTurn: 50,
+          },
+        },
+      ]);
+      memory.seed("centralBanks", [{ _id: "US", externalBroadMoney: 1_000_000 }]);
+      memory.seed("depositInsuranceFunds", [
+        {
+          _id: "USD",
+          balance: options.fundBalance ?? 0,
+          insuredCap: 5_000_000,
+          premiumsCollectedLifetime: 0,
+          payoutsLifetime: 0,
+          treasuryBackstopLifetime: 0,
+        },
+      ]);
+      memory.seed("federalBudget", [
+        {
+          _id: "federal",
+          treasuryBalance: 10_000_000,
+          spending: { total: 0, byCategory: {} },
+          surplus: 0,
+        },
+      ]);
+      memory.seed("gameState", [{ _id: "current", preset: "2019-default", currentTurn: 50 }]);
+      memory.seed(
+        "characters",
+        (options.playerSavings ?? []).map((savings) => ({
+          _id: new ObjectId(),
+          name: "Saver",
+          currencyBalances: {
+            savings: { USD: savings },
+            savingsHolder: { USD: bankId.toString() },
+          },
+        }))
       );
-      fundState = {
-        _id: "USD",
-        balance: 0,
-        insuredCap: 5_000_000,
-        premiumsCollectedLifetime: 0,
-        payoutsLifetime: 0,
-        treasuryBackstopLifetime: 0,
+      return memory;
+    }
+
+    function charterNow() {
+      return (memory.collection("corporations").docs[0] as { bankCharter: Record<string, number> })
+        .bankCharter;
+    }
+
+    function cbNow() {
+      return (memory.collection("centralBanks").docs[0] as { externalBroadMoney: number })
+        .externalBroadMoney;
+    }
+
+    function fundNow() {
+      return memory.collection("depositInsuranceFunds").docs[0] as {
+        balance: number;
+        payoutsLifetime: number;
+        treasuryBackstopLifetime: number;
       };
-      characters = [];
-      cbExternal = 1_000_000;
-      treasuryBalance = 10_000_000;
-      spendingInsurance = 0;
+    }
 
-      db.collectionMocks.corporations!.findOne.mockImplementation(
-        async (filter: { _id?: ObjectId }) => {
-          if (filter?._id && bankId.equals(filter._id)) {
-            return {
-              ...liveCorp,
-              bankCharter: liveCorp.bankCharter ? { ...liveCorp.bankCharter } : undefined,
-            };
-          }
-          return null;
-        }
-      );
-      // The resolution now CLAIMS its idempotency key atomically before it
-      // touches a depositor, so a crash mid-resolution cannot let a retry
-      // haircut everyone twice. The mock models that claim: first caller wins
-      // and gets the BEFORE document, later callers get null.
-      db.collectionMocks.corporations!.findOneAndUpdate.mockImplementation(
-        async (filter: { _id?: ObjectId }, update: { $set?: Record<string, unknown> }) => {
-          if (!filter?._id || !bankId.equals(filter._id)) return null;
-          if (liveCorp.bankCharter?.status !== "failed") return null;
-          if (liveCorp.bankCharter?.depositorsResolvedTurn != null) return null;
-          const before = {
-            ...liveCorp,
-            bankCharter: liveCorp.bankCharter ? { ...liveCorp.bankCharter } : undefined,
-          };
-          const stamp = update?.$set?.["bankCharter.depositorsResolvedTurn"];
-          if (liveCorp.bankCharter && typeof stamp === "number") {
-            liveCorp.bankCharter.depositorsResolvedTurn = stamp;
-          }
-          return before;
-        }
-      );
-      db.collectionMocks.corporations!.updateOne.mockImplementation(async (filter, update) => {
-        const f = filter as { _id?: ObjectId; "bankCharter.status"?: string };
-        if (!f._id || !bankId.equals(f._id)) return { matchedCount: 0, modifiedCount: 0 };
-        const u = update as { $set?: Record<string, unknown> };
-        if (u.$set) {
-          if (typeof u.$set.liquidCapital === "number") {
-            liveCorp.liquidCapital = u.$set.liquidCapital as number;
-          }
-          for (const [key, value] of Object.entries(u.$set)) {
-            if (key.startsWith("bankCharter.") && liveCorp.bankCharter) {
-              const field = key.slice("bankCharter.".length);
-              (liveCorp.bankCharter as unknown as Record<string, unknown>)[field] = value;
-            }
-          }
-        }
-        return { matchedCount: 1, modifiedCount: 1 };
-      });
+    it("returns the household book in full and leaves player principal alone", async () => {
+      build({ cashReserves: 100_000, npcDeposits: 50_000, playerSavings: [2_000_000, 9_000_000] });
 
-      db.collectionMocks.characters!.find.mockImplementation((filter: Record<string, unknown>) => {
-        const holderKey = "currencyBalances.savingsHolder.USD";
-        if (filter[holderKey] === bankId.toString()) {
-          return findCursor(
-            characters
-              .filter((c) => c.holder === bankId.toString())
-              .map((c) => ({
-                _id: c._id,
-                currencyBalances: {
-                  savings: { USD: c.savings },
-                  savingsHolder: { USD: c.holder },
-                },
-              }))
-          );
-        }
-        return findCursor([]);
-      });
-      db.collectionMocks.characters!.bulkWrite.mockImplementation(async (ops: unknown[]) => {
-        for (const op of ops as {
-          updateOne: {
-            filter: { _id: ObjectId };
-            update: { $set?: Record<string, unknown>; $inc?: Record<string, number> };
-          };
-        }[]) {
-          const ch = characters.find((c) => c._id.equals(op.updateOne.filter._id));
-          if (!ch) continue;
-          const set = op.updateOne.update.$set ?? {};
-          const inc = op.updateOne.update.$inc ?? {};
-          if (typeof set["currencyBalances.savingsHolder.USD"] === "string") {
-            ch.holder = set["currencyBalances.savingsHolder.USD"] as string;
-          }
-          if (typeof inc["currencyBalances.savings.USD"] === "number") {
-            ch.savings += inc["currencyBalances.savings.USD"];
-          }
-        }
-        return { modifiedCount: ops.length, matchedCount: ops.length };
-      });
-
-      db.collectionMocks.depositInsuranceFunds!.updateOne.mockImplementation(
-        async (filter, update) => {
-          const id = String((filter as { _id: string })._id);
-          if (id !== "USD") return { matchedCount: 0, modifiedCount: 0 };
-          const u = update as {
-            $setOnInsert?: Partial<DepositInsuranceFund>;
-            $inc?: Record<string, number>;
-          };
-          if (u.$setOnInsert) {
-            // first-touch shape already in fundState
-          }
-          if (u.$inc) {
-            for (const [k, v] of Object.entries(u.$inc)) {
-              (fundState as unknown as Record<string, number>)[k] =
-                ((fundState as unknown as Record<string, number>)[k] ?? 0) + v;
-            }
-          }
-          return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
-        }
-      );
-      db.collectionMocks.depositInsuranceFunds!.findOne.mockImplementation(async () => ({
-        ...fundState,
-      }));
-
-      db.collectionMocks.centralBanks!.updateOne.mockImplementation(async (_f, update) => {
-        const inc = (update as { $inc?: { externalBroadMoney?: number } }).$inc;
-        if (typeof inc?.externalBroadMoney === "number") {
-          cbExternal += inc.externalBroadMoney;
-        }
-        return { matchedCount: 1, modifiedCount: 1 };
-      });
-
-      db.collectionMocks.federalBudget!.updateOne.mockImplementation(async (_f, update) => {
-        const inc = (update as { $inc?: Record<string, number> }).$inc ?? {};
-        if (typeof inc.treasuryBalance === "number") treasuryBalance += inc.treasuryBalance;
-        if (typeof inc[`spending.byCategory.${DEPOSIT_INSURANCE_SPENDING_KEY}`] === "number") {
-          spendingInsurance += inc[`spending.byCategory.${DEPOSIT_INSURANCE_SPENDING_KEY}`];
-        }
-        return { matchedCount: 1, modifiedCount: 1 };
-      });
-    });
-
-    it("conserves: kept + haircuts == original deposits; fund+recovery+treasury == kept re-backed", async () => {
-      const cap = await getInsuredCap(db as unknown as Db, "USD");
-      // One depositor under cap, one with excess above cap.
-      const under = {
-        _id: new ObjectId(),
-        savings: Math.floor(cap / 2),
-        holder: bankId.toString(),
-      };
-      const over = {
-        _id: new ObjectId(),
-        savings: cap + 400_000,
-        holder: bankId.toString(),
-      };
-      characters = [under, over];
-      const originalPlayer = under.savings + over.savings;
-      const originalNpc = 50_000;
-      liveCorp.bankCharter!.npcDeposits = originalNpc;
-      // Recovery = 100k liquid + 200k posted = 300k; insured gap uses recovery first.
-      fundState.balance = 80_000;
-
-      const recoveryPool = 100_000 + 200_000;
-      const result = await resolveFailedBankDepositors(db as unknown as Db, bankId, 77);
+      const result = await resolveFailedBankDepositors(memory as unknown as Db, bankId, 77);
 
       expect(result.resolved).toBe(true);
-      expect(under.holder).toBe("centralBank");
-      expect(over.holder).toBe("centralBank");
+      expect(result.npcReturned).toBe(50_000);
+      expect(result.recoveryUsed).toBe(50_000);
+      expect(result.haircutsApplied).toBe(0);
+      expect(cbNow()).toBe(1_050_000);
+      expect(charterNow().npcDeposits).toBe(0);
+      expect(charterNow().depositorsResolvedTurn).toBe(77);
 
-      const keptPlayer = under.savings + over.savings;
-      const haircuts = result.haircutsApplied;
-      expect(keptPlayer + haircuts).toBeCloseTo(originalPlayer, 6);
-      expect(result.npcReturned).toBe(originalNpc);
-
-      const totalKept = keptPlayer + originalNpc;
-      // recoveryUsed + insurancePaid (fund+treasury) covers totalKept
-      expect(result.recoveryUsed + result.insurancePaid).toBeCloseTo(totalKept, 6);
-      expect(result.recoveryUsed).toBeLessThanOrEqual(recoveryPool);
-      expect(liveCorp.bankCharter!.cashReserves).toBe(0);
-      expect(liveCorp.bankCharter!.postedCapital).toBe(0);
-      expect(liveCorp.bankCharter!.npcDeposits).toBe(0);
-      expect(liveCorp.bankCharter!.depositorsResolvedTurn).toBe(77);
-      expect(cbExternal).toBe(1_000_000 + originalNpc);
+      const savers = memory.collection("characters").docs as {
+        currencyBalances: { savings: { USD: number }; savingsHolder: { USD: string } };
+      }[];
+      expect(savers.map((c) => c.currencyBalances.savings.USD)).toEqual([2_000_000, 9_000_000]);
+      expect(savers.every((c) => c.currencyBalances.savingsHolder.USD === "centralBank")).toBe(
+        true
+      );
     });
 
-    it("a retry after a crash cannot haircut the same depositors twice", async () => {
-      // The idempotency key used to be stamped at the END, after the haircuts.
-      // On a database with no transactions that leaves a window where a crash
-      // between the two lets a retry confiscate player money a second time,
-      // with no record it happened. The claim is now taken FIRST.
-      const { resolveFailedBankDepositors } = await import("../insurance");
+    it("a retry cannot run the payout a second time", async () => {
+      build({ cashReserves: 20_000, npcDeposits: 50_000, playerSavings: [100_000] });
 
-      // A depositor with a balance above the insured cap, and no recovery pool
-      // to pay the excess from, so the excess actually takes a haircut. That
-      // haircut is the money a retry would confiscate a second time, so a
-      // fixture with no depositors or with recovery covering everything would
-      // prove nothing.
-      const cap = await getInsuredCap(db as unknown as Db, "USD");
-      characters = [{ _id: new ObjectId(), savings: cap + 400_000, holder: bankId.toString() }];
-      liveCorp.bankCharter!.cashReserves = 0;
-      liveCorp.bankCharter!.postedCapital = 0;
-      liveCorp.bankCharter!.npcDeposits = 0;
-
-      const first = await resolveFailedBankDepositors(db as unknown as Db, bankId, 77);
+      const first = await resolveFailedBankDepositors(memory as unknown as Db, bankId, 77);
       expect(first.resolved).toBe(true);
-      const haircutOnce = first.haircutsApplied;
-      const savingsAfterFirst = characters.map((c) => c.savings);
+      const cbAfterFirst = cbNow();
 
-      const second = await resolveFailedBankDepositors(db as unknown as Db, bankId, 78);
+      const second = await resolveFailedBankDepositors(memory as unknown as Db, bankId, 78);
 
       expect(second.resolved).toBe(false);
-      expect(second.haircutsApplied).toBe(0);
-      expect(characters.map((c) => c.savings)).toEqual(savingsAfterFirst);
+      expect(cbNow()).toBe(cbAfterFirst);
       // And the stamp still records the turn the resolution actually ran on.
-      expect(liveCorp.bankCharter!.depositorsResolvedTurn).toBe(77);
-      expect(haircutOnce).toBeGreaterThan(0);
+      expect(charterNow().depositorsResolvedTurn).toBe(77);
     });
 
-    it("cap boundary: balance exactly at cap takes no haircut", async () => {
-      const cap = await getInsuredCap(db as unknown as Db, "USD");
-      characters = [{ _id: new ObjectId(), savings: cap, holder: bankId.toString() }];
-      liveCorp.bankCharter!.cashReserves = 0;
-      liveCorp.bankCharter!.postedCapital = 0;
-      liveCorp.bankCharter!.npcDeposits = 0;
-      fundState.balance = cap;
+    it("draws the fund before the treasury and books both", async () => {
+      build({ cashReserves: 0, npcDeposits: 100_000, fundBalance: 10_000 });
 
-      const result = await resolveFailedBankDepositors(db as unknown as Db, bankId, 10);
-      expect(result.haircutsApplied).toBe(0);
-      expect(characters[0].savings).toBe(cap);
-      expect(characters[0].holder).toBe("centralBank");
-    });
+      const result = await resolveFailedBankDepositors(memory as unknown as Db, bankId, 12);
 
-    it("returns NPC deposits in full to externalBroadMoney", async () => {
-      characters = [];
-      liveCorp.bankCharter!.cashReserves = 0;
-      liveCorp.bankCharter!.postedCapital = 0;
-      liveCorp.bankCharter!.npcDeposits = 250_000;
-      fundState.balance = 250_000;
-
-      const before = cbExternal;
-      const result = await resolveFailedBankDepositors(db as unknown as Db, bankId, 11);
-      expect(result.npcReturned).toBe(250_000);
-      expect(cbExternal).toBe(before + 250_000);
-      expect(liveCorp.bankCharter!.npcDeposits).toBe(0);
-    });
-
-    it("drained fund hits Treasury spending line and treasuryBalance", async () => {
-      const cap = await getInsuredCap(db as unknown as Db, "USD");
-      characters = [{ _id: new ObjectId(), savings: 100_000, holder: bankId.toString() }];
-      liveCorp.bankCharter!.cashReserves = 0;
-      liveCorp.bankCharter!.postedCapital = 0;
-      liveCorp.bankCharter!.npcDeposits = 0;
-      fundState.balance = 10_000;
-
-      const result = await resolveFailedBankDepositors(db as unknown as Db, bankId, 12);
       expect(result.treasuryBackstop).toBe(90_000);
       expect(result.insurancePaid).toBe(100_000);
-      expect(fundState.balance).toBe(0);
-      expect(fundState.treasuryBackstopLifetime).toBe(90_000);
-      expect(treasuryBalance).toBe(10_000_000 - 90_000);
-      expect(spendingInsurance).toBe(90_000);
-      expect(characters[0].savings).toBe(100_000);
-      expect(cap).toBeGreaterThan(100_000);
+      expect(fundNow().balance).toBe(0);
+      expect(fundNow().treasuryBackstopLifetime).toBe(90_000);
+
+      const budget = memory.collection("federalBudget").docs[0] as {
+        treasuryBalance: number;
+        spending: { total: number };
+      };
+      expect(budget.treasuryBalance).toBe(10_000_000 - 90_000);
+      expect(budget.spending.total).toBe(90_000);
+      expect(cbNow()).toBe(1_100_000);
     });
 
-    it("is idempotent: second resolution is a no-op", async () => {
-      characters = [{ _id: new ObjectId(), savings: 10_000, holder: bankId.toString() }];
-      liveCorp.bankCharter!.cashReserves = 10_000;
-      liveCorp.bankCharter!.postedCapital = 0;
-      liveCorp.bankCharter!.npcDeposits = 0;
-      fundState.balance = 0;
+    it("is idempotent: a second resolution is a no-op", async () => {
+      build({ cashReserves: 10_000, npcDeposits: 10_000, playerSavings: [10_000] });
 
-      const first = await resolveFailedBankDepositors(db as unknown as Db, bankId, 13);
+      const first = await resolveFailedBankDepositors(memory as unknown as Db, bankId, 13);
       expect(first.resolved).toBe(true);
-      const fundAfter = fundState.payoutsLifetime;
-      const savAfter = characters[0].savings;
+      const payoutsAfter = fundNow().payoutsLifetime;
 
-      const second = await resolveFailedBankDepositors(db as unknown as Db, bankId, 14);
+      const second = await resolveFailedBankDepositors(memory as unknown as Db, bankId, 14);
       expect(second.resolved).toBe(false);
       expect(second.insurancePaid).toBe(0);
-      expect(fundState.payoutsLifetime).toBe(fundAfter);
-      expect(characters[0].savings).toBe(savAfter);
+      expect(fundNow().payoutsLifetime).toBe(payoutsAfter);
     });
   });
 

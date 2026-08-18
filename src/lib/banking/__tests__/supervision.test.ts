@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { Corporation } from "@/lib/db/types";
 import type { BankCharter } from "@/lib/db/types/bank";
 
@@ -63,13 +64,60 @@ describe("processBankSupervision — revoke refunds capital (ticket 1093)", () =
     db.collectionMocks.gameState!.findOne.mockResolvedValue({ _id: "current", currentTurn: TURN });
   });
 
-  it("unwinds the prop book into cash and refunds the whole balance to the shareholder", async () => {
+  /**
+   * State-based world for the revoke path.
+   *
+   * Revocation now runs the shared deposit-book waterfall, which touches the
+   * money supply, the insurance fund and the parent's treasury. Counting
+   * `updateOne` calls cannot say whether the money added up at the end of that,
+   * which is the only question worth asking here.
+   */
+  function revokeWorld(charter: Partial<BankCharter>, options: { npcDeposits?: number } = {}) {
+    const memory = createInMemoryDb();
+    const corpId = new ObjectId();
+    memory.seed("corporations", [
+      {
+        _id: corpId,
+        name: "Oppenheimer Property Trust",
+        type: "financial",
+        countryId: "US",
+        liquidCapital: 0,
+        bankCharter: {
+          type: "investment",
+          status: "active",
+          currency: "USD",
+          charteredTurn: 10,
+          postedCapital: 0,
+          depositOffset: 0,
+          lendingOffset: 0,
+          npcDeposits: options.npcDeposits ?? 0,
+          ...charter,
+        },
+      },
+    ]);
+    memory.seed("centralBanks", [{ _id: "US", externalBroadMoney: 100_000_000 }]);
+    memory.seed("depositInsuranceFunds", [{ _id: "USD", balance: 0 }]);
+    memory.seed("federalBudget", [
+      { _id: "federal", treasuryBalance: 10_000_000, spending: { total: 0, byCategory: {} } },
+    ]);
+    memory.seed("gameState", [{ _id: "current", currentTurn: TURN }]);
+    return { memory, corpId };
+  }
+
+  function corpState(memory: InMemoryDb) {
+    return memory.collection("corporations").docs[0] as {
+      liquidCapital: number;
+      bankCharter: Record<string, unknown>;
+    };
+  }
+
+  it("unwinds the prop book into cash and pays the whole balance to the shareholder", async () => {
     // Investment bank, no depositors: value sits in the prop book plus cash.
-    // cashReserves (100k) against a 10M book is a 1% capital ratio — well under
-    // the 8% minimum — so it is undercapitalized, and the deadline has expired.
+    // cashReserves (100k) against a 10M book is a 1% capital ratio, well under
+    // the 8% minimum, so it is undercapitalized and the deadline has expired.
     const cashReserves = 100_000;
     const propBookMarkValue = 10_000_000;
-    const corp = bankCorp({
+    const { memory, corpId } = revokeWorld({
       cashReserves,
       propBookMarkValue,
       propBook: [{ asset: "equity", ref: "abc", units: 1, costBasis: 9_000_000 }],
@@ -77,41 +125,20 @@ describe("processBankSupervision — revoke refunds capital (ticket 1093)", () =
       totalDeposits: 0,
       undercapitalizedSinceTurn: BREACHED_SINCE,
     } as Partial<BankCharter>);
-    seedActiveCharters(db, [corp]);
-
-    // After the unwind persists, revokeCharter re-reads the corp: the book value
-    // is now on the cash side, so the refund is the full 10.1M.
-    db.collectionMocks.corporations!.findOne.mockResolvedValue(
-      bankCorp({
-        cashReserves: cashReserves + propBookMarkValue,
-        propBookMarkValue: 0,
-        propBook: [],
-        totalLoans: 0,
-        totalDeposits: 0,
-      } as Partial<BankCharter>)
-    );
 
     const { processBankSupervision } = await importSupervision();
-    const summary = await processBankSupervision(db as unknown as Db, TURN);
+    const summary = await processBankSupervision(memory as unknown as Db, TURN);
 
     expect(summary.chartersRevoked).toBe(1);
-
-    const updates = db.collectionMocks.corporations!.updateOne.mock.calls;
-    // Two writes: (1) unwind the prop book into cash, (2) revoke + refund.
-    expect(updates.length).toBe(2);
-
-    const [, unwind] = updates[0];
-    expect(unwind.$inc["bankCharter.cashReserves"]).toBe(propBookMarkValue);
-    expect(unwind.$set["bankCharter.propBook"]).toEqual([]);
-    expect(unwind.$set["bankCharter.propBookMarkValue"]).toBe(0);
-
-    const [, revoke] = updates[1];
-    expect(revoke.$set["bankCharter.status"]).toBe("revoked");
-    expect(revoke.$set["bankCharter.revokedReason"]).toBe("undercapitalized");
+    const corp = corpState(memory);
+    expect(corp.bankCharter.status).toBe("revoked");
+    expect(corp.bankCharter.revokedReason).toBe("undercapitalized");
+    expect(corp.bankCharter.propBookMarkValue).toBe(0);
     // The regression: the whole balance returns to the corporation treasury
     // instead of vanishing with the licence.
-    expect(revoke.$inc.liquidCapital).toBe(cashReserves + propBookMarkValue);
-    expect(revoke.$set["bankCharter.cashReserves"]).toBe(0);
+    expect(corp.liquidCapital).toBe(cashReserves + propBookMarkValue);
+    expect(corp.bankCharter.cashReserves).toBe(0);
+    expect(corpId.equals((corp as unknown as { _id: ObjectId })._id)).toBe(true);
 
     const { emitTx } = await import("@/lib/financialTxLog/emit");
     expect(emitTx).toHaveBeenCalledTimes(1);
@@ -122,49 +149,50 @@ describe("processBankSupervision — revoke refunds capital (ticket 1093)", () =
     });
   });
 
-  it("refunds cash reserves with no prop book to unwind (retail bank, no deposits)", async () => {
+  it("pays cash reserves out with no prop book to unwind (retail bank, no deposits)", async () => {
     const cashReserves = 3_000_000;
-    const corp = bankCorp({
+    const { memory } = revokeWorld({
       type: "retail",
       cashReserves,
-      totalLoans: 50_000_000, // heavy book vs thin capital -> undercapitalized
+      totalLoans: 50_000_000, // heavy book vs thin capital, so undercapitalized
       totalDeposits: 0,
       undercapitalizedSinceTurn: BREACHED_SINCE,
     } as Partial<BankCharter>);
-    seedActiveCharters(db, [corp]);
-    db.collectionMocks.corporations!.findOne.mockResolvedValue(corp);
 
     const { processBankSupervision } = await importSupervision();
-    const summary = await processBankSupervision(db as unknown as Db, TURN);
+    const summary = await processBankSupervision(memory as unknown as Db, TURN);
 
     expect(summary.chartersRevoked).toBe(1);
-    // No prop book: a single write (the revoke), and no unwind transaction.
-    const updates = db.collectionMocks.corporations!.updateOne.mock.calls;
-    expect(updates.length).toBe(1);
-    expect(updates[0][1].$inc.liquidCapital).toBe(cashReserves);
+    expect(corpState(memory).liquidCapital).toBe(cashReserves);
 
     const { emitTx } = await import("@/lib/financialTxLog/emit");
     expect(emitTx).not.toHaveBeenCalled();
   });
 
-  it("revokes but does not refund while depositors remain", async () => {
-    const corp = bankCorp({
-      type: "retail",
-      cashReserves: 1_000_000,
-      totalLoans: 50_000_000,
-      totalDeposits: 8_000_000, // depositors still owed -> no shareholder refund
-      undercapitalizedSinceTurn: BREACHED_SINCE,
-    } as Partial<BankCharter>);
-    seedActiveCharters(db, [corp]);
-    db.collectionMocks.corporations!.findOne.mockResolvedValue(corp);
+  it("pays the household deposit book back before the shareholder", async () => {
+    const { memory } = revokeWorld(
+      {
+        type: "retail",
+        cashReserves: 1_000_000,
+        totalLoans: 50_000_000,
+        totalDeposits: 8_000_000,
+        undercapitalizedSinceTurn: BREACHED_SINCE,
+      } as Partial<BankCharter>,
+      { npcDeposits: 8_000_000 }
+    );
 
     const { processBankSupervision } = await importSupervision();
-    const summary = await processBankSupervision(db as unknown as Db, TURN);
+    const summary = await processBankSupervision(memory as unknown as Db, TURN);
 
     expect(summary.chartersRevoked).toBe(1);
-    const revoke = db.collectionMocks.corporations!.updateOne.mock.calls.at(-1)![1];
-    expect(revoke.$set["bankCharter.status"]).toBe("revoked");
-    expect(revoke.$inc).toBeUndefined(); // nothing refunded
+    const corp = corpState(memory);
+    expect(corp.bankCharter.status).toBe("revoked");
+    // Every unit of cash went to the depositors, and the treasury covered the
+    // 7M the bank could not pay. The shareholder, who ranks last, gets nothing.
+    expect(corp.liquidCapital).toBe(0);
+    expect(corp.bankCharter.cashReserves).toBe(0);
+    const cb = memory.collection("centralBanks").docs[0] as { externalBroadMoney: number };
+    expect(cb.externalBroadMoney).toBe(108_000_000);
   });
 
   it("does not revoke a bank still within its recap grace window", async () => {

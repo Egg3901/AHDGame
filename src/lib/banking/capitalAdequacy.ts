@@ -81,7 +81,11 @@ import {
   stressLossFraction,
   type BookTranche,
 } from "@/lib/banking/creditBands";
-import type { BankCharter } from "@/lib/db/types/bank";
+import {
+  regulatoryCapital,
+  type BankBorrowings as Borrowings,
+  type CapitalStanding as Standing,
+} from "@/lib/banking/balanceSheet";
 
 export { STRESS_LOSS_FRACTION };
 
@@ -94,24 +98,10 @@ export const STRESS_CAPITAL_RATIO = 0.06;
 /** Turns an undercapitalized bank has to post capital before its charter goes. */
 export const RECAP_GRACE_TURNS = 12;
 
-export type CapitalStanding =
-  /** Meets the minimum and survives the stress scenario. */
-  | "adequate"
-  /** Meets the minimum but fails the scenario: distributions barred. */
-  | "stressed"
-  /** Below the minimum: recapitalize or lose the charter. */
-  | "undercapitalized";
+export type { CapitalStanding, BankBorrowings } from "@/lib/banking/balanceSheet";
+export { mayDistribute, borrowingsFromCharter, totalBorrowings } from "@/lib/banking/balanceSheet";
 
-/** Everything the bank owes somebody other than its shareholders. */
-export interface BankBorrowings {
-  discountWindowDebt?: number;
-  discountWindowArrears?: number;
-  cbMarginDebt?: number;
-  cbMarginArrears?: number;
-  interbankDebt?: number;
-}
-
-export interface BankBalanceSheet {
+export interface CapitalAssessmentInput {
   /**
    * The bank's ring-fenced cash (`bankCharter.cashReserves`).
    *
@@ -129,7 +119,7 @@ export interface BankBalanceSheet {
    * to have. Pass `{}` for a bank that has borrowed nothing, so that saying "no
    * borrowings" is a thing you did rather than a thing you forgot.
    */
-  borrowings: BankBorrowings;
+  borrowings: Borrowings;
   propBookMarkValue?: number;
   /** Book composition for the band-weighted shock. Omit for the flat fallback. */
   bookTranches?: readonly BookTranche[];
@@ -145,51 +135,21 @@ export interface CapitalPosition {
   stressedCapitalRatio: number;
   /** Share of the book assumed to default at once, from its band mix. */
   appliedStressLossFraction: number;
-  standing: CapitalStanding;
+  standing: Standing;
 }
 
 const finite = (n: number | undefined) => (typeof n === "number" && Number.isFinite(n) ? n : 0);
 
-/** Sum of a charter's borrowings. Keeps call sites from forgetting a field. */
-export function borrowingsFromCharter(
-  charter:
-    | Pick<
-        BankCharter,
-        | "discountWindowDebt"
-        | "discountWindowArrears"
-        | "cbMarginDebt"
-        | "cbMarginArrears"
-        | "interbankDebt"
-      >
-    | null
-    | undefined
-): BankBorrowings {
-  return {
-    discountWindowDebt: charter?.discountWindowDebt,
-    discountWindowArrears: charter?.discountWindowArrears,
-    cbMarginDebt: charter?.cbMarginDebt,
-    cbMarginArrears: charter?.cbMarginArrears,
-    interbankDebt: charter?.interbankDebt,
-  };
-}
-
-export function totalBorrowings(borrowings: BankBorrowings): number {
-  return (
-    Math.max(0, finite(borrowings.discountWindowDebt)) +
-    Math.max(0, finite(borrowings.discountWindowArrears)) +
-    Math.max(0, finite(borrowings.cbMarginDebt)) +
-    Math.max(0, finite(borrowings.cbMarginArrears)) +
-    Math.max(0, finite(borrowings.interbankDebt))
-  );
-}
-
-export function assessCapital(input: BankBalanceSheet): CapitalPosition {
-  const ownFunds = Math.max(0, finite(input.cashReserves));
-
-  // Equity. Deliberately NOT floored at zero: a bank that owes more than it
-  // holds is insolvent, and the supervisor needs to see that rather than a
-  // clamped zero that reads the same as a bank with no capital but no hole.
-  const capitalAnchor = ownFunds - totalBorrowings(input.borrowings);
+export function assessCapital(input: CapitalAssessmentInput): CapitalPosition {
+  // Deliberately NOT floored at zero: a bank that owes more than it holds is
+  // insolvent, and the supervisor needs to see that rather than a clamped zero
+  // that reads the same as a bank with no capital but no hole. The line itself
+  // is `regulatoryCapital` from `balanceSheet.ts`; it is computed there so the
+  // console, the solvency pass and this module cannot drift apart.
+  const capitalAnchor = regulatoryCapital({
+    cashReserves: input.cashReserves,
+    ...input.borrowings,
+  });
 
   const riskAssetsAnchor =
     Math.max(0, finite(input.totalLoans)) + Math.max(0, finite(input.propBookMarkValue));
@@ -224,7 +184,7 @@ export function assessCapital(input: BankBalanceSheet): CapitalPosition {
   const stressedCapitalRatio =
     stressedAssets > 0 ? stressedCapital / stressedAssets : stressedCapital > 0 ? 1 : 0;
 
-  const standing: CapitalStanding =
+  const standing: Standing =
     capitalRatio < MIN_CAPITAL_RATIO
       ? "undercapitalized"
       : stressedCapitalRatio < STRESS_CAPITAL_RATIO
@@ -261,15 +221,4 @@ export function recapDeadlineExpired(
 ): boolean {
   if (typeof undercapitalizedSinceTurn !== "number") return false;
   return currentTurn - undercapitalizedSinceTurn >= RECAP_GRACE_TURNS;
-}
-
-/**
- * May this bank distribute to its owner (dividends, prop-book risk-taking)?
- *
- * Only an ADEQUATE bank may. Both impaired standings are barred: a bank that
- * cannot survive the published scenario does not get to pay out in the
- * meantime, and one that is actually below the minimum obviously does not.
- */
-export function mayDistribute(standing: CapitalStanding): boolean {
-  return standing === "adequate";
 }

@@ -31,6 +31,7 @@ import { discountWindowRatePercent } from "@/lib/banking/discountWindow";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
 import { getCashReserves, bankEquity } from "@/lib/banking/bankCash";
+import { applyMoneyMove, turnMoveKey } from "@/lib/banking/moneyMove";
 import {
   CREDIT_BANDS,
   DEFAULT_LENDING_PROFILE,
@@ -341,16 +342,35 @@ async function processOneBank(
     // closes a money-supply conservation hole and makes the reserve test
     // satisfiable by the same stroke.
     //
-    // CB first, then corp npcDeposits. Writing npcDeposits immediately makes a
-    // mid-crash retry compute a near-zero delta (lastBankingTurn is only stamped
-    // at the end of the full bank pass).
-    await db.collection<CentralBank>("centralBanks").updateOne(
-      { _id: cbDocId },
-      {
-        $inc: { externalBroadMoney: -delta },
-        $set: { updatedAt: new Date() },
-      }
-    );
+    // Both legs go through the shared money-movement primitive, which claims an
+    // idempotency key BEFORE either lands and refuses a pair that does not net
+    // to zero. The hand-rolled version wrote the two legs in sequence with
+    // nothing tying them together, so a crash between them left the money
+    // supply and the vault disagreeing by the size of the flow.
+    const inflow = delta > 0;
+    await applyMoneyMove(db, {
+      key: turnMoveKey(inflow ? "npc-deposit-in" : "npc-deposit-out", bankIdHex, turn),
+      kind: "npc_deposit_flow",
+      turn,
+      legs: [
+        {
+          kind: inflow ? "debit" : "credit",
+          amount: Math.abs(delta),
+          collection: "centralBanks",
+          filter: { _id: cbDocId },
+          path: "externalBroadMoney",
+          note: inflow ? "households move money into the bank" : "households take money out",
+        },
+        {
+          kind: inflow ? "credit" : "debit",
+          amount: Math.abs(delta),
+          collection: "corporations",
+          filter: { _id: corp._id },
+          path: "bankCharter.cashReserves",
+          note: inflow ? "deposit arrives as vault cash" : "withdrawal leaves the vault",
+        },
+      ],
+    });
     npcDeposits = Math.max(0, npcDeposits + delta);
     cashReserves = Math.max(0, cashReserves + delta);
     await db.collection<Corporation>("corporations").updateOne(
@@ -364,8 +384,9 @@ async function processOneBank(
       },
       {
         $set: {
+          // Cash is moved by the money move above; only the deposit AGGREGATE
+          // is written here, so the two cannot be applied twice.
           "bankCharter.npcDeposits": npcDeposits,
-          "bankCharter.cashReserves": cashReserves,
           updatedAt: new Date(),
         },
       }
@@ -805,18 +826,26 @@ async function debitBorrower(
       meta: { loanId: loan._id.toString() },
     });
   }
+  // The sufficiency check is IN the filter, not in a snapshot taken before it.
+  // `readBorrowerAvailable` reads the balance and this debits it, and between
+  // those two lines the borrower can spend: the servicing pass ran a repayment
+  // against a number that was already stale, and drove the balance negative.
+  // A guarded write cannot: it either matches a balance that can pay, or it
+  // does not apply and the caller sees a short payment, which is the arrears
+  // path that already exists.
   if (loan.borrowerType === "character") {
+    const path = `currencyBalances.personal.${currency}`;
     await db.collection<Character>("characters").updateOne(
-      { _id: loan.borrowerId },
+      { _id: loan.borrowerId, [path]: { $gte: amount } },
       {
-        $inc: { [`currencyBalances.personal.${currency}`]: -amount },
+        $inc: { [path]: -amount },
         $set: { updatedAt: new Date() },
       }
     );
     return;
   }
   await db.collection<Corporation>("corporations").updateOne(
-    { _id: loan.borrowerId },
+    { _id: loan.borrowerId, liquidCapital: { $gte: amount } },
     {
       $inc: { liquidCapital: -amount },
       $set: { updatedAt: new Date() },

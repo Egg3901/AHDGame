@@ -325,7 +325,7 @@ describe("forced liquidation confidence penalty", () => {
     const base = computeConfidence({
       cashReserves: 200_000,
       postedCapital: 200_000,
-      totalDeposits: 0,
+      cashBackedDeposits: 0,
       totalLoans: 0,
       reserveRatioRequired: 0.1,
       arrearsOutstanding: 0,
@@ -335,7 +335,7 @@ describe("forced liquidation confidence penalty", () => {
     const penalized = computeConfidence({
       cashReserves: 200_000,
       postedCapital: 200_000,
-      totalDeposits: 0,
+      cashBackedDeposits: 0,
       totalLoans: 0,
       reserveRatioRequired: 0.1,
       arrearsOutstanding: 0,

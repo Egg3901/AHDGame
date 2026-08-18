@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { Corporation } from "@/lib/db/types";
 import type { BankCharter } from "@/lib/db/types/bank";
 import { CORPORATION_FOUNDING_COST } from "@/lib/constants/corporations";
@@ -381,81 +382,125 @@ describe("banking charter", () => {
   });
 
   describe("revokeCharter", () => {
-    it("refunds the bank's whole cash balance when totalDeposits is zero or absent", async () => {
-      db.collection("bankCharterHistory");
-      const postedCapital = 10_000_000;
-      // Retained earnings on top of the posted capital, to pin that the refund
-      // is the bank's whole cash balance and not just what was posted.
-      const cashReserves = 12_000_000;
-      const corp = makeCorp({
-        liquidCapital: 5_000_000,
-        bankCharter: {
-          type: "retail",
-          status: "active",
-          currency: "USD",
-          charteredTurn: 10,
-          postedCapital,
-          cashReserves,
-          depositOffset: 0,
-          lendingOffset: 0,
+    /**
+     * State-based, because the bug these cover (ticket 1093) was invisible to a
+     * call-shape assertion: the revoke wrote exactly the fields it meant to and
+     * still stranded every depositor and every unit of cash on a dead charter.
+     */
+    function makeRevokeWorld(charter: Record<string, unknown>, depositorSavings = 0) {
+      const memory = createInMemoryDb();
+      const corpId = new ObjectId();
+      memory.seed("corporations", [
+        {
+          _id: corpId,
+          name: "Test Bank Corp",
+          type: "financial",
+          countryId: "US",
+          liquidCapital: 5_000_000,
+          bankCharter: charter,
         },
-      });
-      db.collectionMocks.corporations!.findOne.mockResolvedValue(corp);
-      db.collectionMocks.corporations!.updateOne.mockResolvedValue({
-        modifiedCount: 1,
-        matchedCount: 1,
+      ]);
+      memory.seed("centralBanks", [{ _id: "US", externalBroadMoney: 100_000_000 }]);
+      memory.seed("gameState", [{ _id: "current", preset: "2019-default", currentTurn: 42 }]);
+      memory.seed("depositInsuranceFunds", [{ _id: "USD", balance: 0 }]);
+      if (depositorSavings > 0) {
+        memory.seed("characters", [
+          {
+            _id: new ObjectId(),
+            currencyBalances: {
+              savings: { USD: depositorSavings },
+              savingsHolder: { USD: corpId.toString() },
+            },
+          },
+        ]);
+      }
+      return { memory, corpId };
+    }
+
+    it("refunds the bank's whole cash balance when there is no deposit book", async () => {
+      const cashReserves = 12_000_000;
+      const { memory, corpId } = makeRevokeWorld({
+        type: "retail",
+        status: "active",
+        currency: "USD",
+        charteredTurn: 10,
+        postedCapital: 10_000_000,
+        cashReserves,
+        depositOffset: 0,
+        lendingOffset: 0,
       });
 
       const { revokeCharter } = await importCharter();
-      const result = await revokeCharter(db as unknown as Db, corp._id, "regulatory action");
+      const result = await revokeCharter(memory as unknown as Db, corpId, "regulatory action");
       expect(result.ok).toBe(true);
       if (!result.ok) return;
+      // The whole cash balance, not just what was posted: retained earnings are
+      // the owner's too, and stranding them would destroy them.
       expect(result.refundedCapital).toBe(cashReserves);
 
-      const [, update] = db.collectionMocks.corporations!.updateOne.mock.calls[0];
-      expect(update.$set["bankCharter.status"]).toBe("revoked");
-      expect(update.$set["bankCharter.revokedReason"]).toBe("regulatory action");
-      expect(update.$inc.liquidCapital).toBe(cashReserves);
-      expect(update.$set["bankCharter.cashReserves"]).toBe(0);
+      const corp = memory.collection("corporations").docs[0] as {
+        liquidCapital: number;
+        bankCharter: Record<string, unknown>;
+      };
+      expect(corp.bankCharter.status).toBe("revoked");
+      expect(corp.bankCharter.revokedReason).toBe("regulatory action");
+      expect(corp.liquidCapital).toBe(17_000_000);
+      expect(corp.bankCharter.cashReserves).toBe(0);
 
-      expect(db.collectionMocks.bankCharterHistory!.insertOne).toHaveBeenCalledTimes(1);
-      const archived = db.collectionMocks.bankCharterHistory!.insertOne.mock.calls[0][0];
-      expect(archived.reason).toBe("revoked");
-      expect(archived.charter.status).toBe("revoked");
+      const history = memory.collection("bankCharterHistory").docs as {
+        reason: string;
+        charter: { status: string };
+      }[];
+      expect(history).toHaveLength(1);
+      expect(history[0].reason).toBe("revoked");
+      expect(history[0].charter.status).toBe("revoked");
     });
 
-    it("does not refund posted capital when deposits remain", async () => {
-      db.collection("bankCharterHistory");
-      const postedCapital = 10_000_000;
-      const corp = makeCorp({
-        liquidCapital: 5_000_000,
-        bankCharter: {
+    it("pays the household deposit book back before the owner sees anything", async () => {
+      const { memory, corpId } = makeRevokeWorld(
+        {
           type: "retail",
           status: "active",
           currency: "USD",
           charteredTurn: 10,
-          postedCapital,
+          postedCapital: 10_000_000,
+          cashReserves: 12_000_000,
+          npcDeposits: 9_000_000,
+          totalDeposits: 10_000,
           depositOffset: 0,
           lendingOffset: 0,
-          totalDeposits: 1_000,
         },
-      });
-      db.collectionMocks.corporations!.findOne.mockResolvedValue(corp);
-      db.collectionMocks.corporations!.updateOne.mockResolvedValue({
-        modifiedCount: 1,
-        matchedCount: 1,
-      });
+        2_000_000
+      );
 
       const { revokeCharter } = await importCharter();
-      const result = await revokeCharter(db as unknown as Db, corp._id, "run risk");
+      const result = await revokeCharter(memory as unknown as Db, corpId, "run risk");
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.refundedCapital).toBe(0);
 
-      const [, update] = db.collectionMocks.corporations!.updateOne.mock.calls[0];
-      expect(update.$set["bankCharter.status"]).toBe("revoked");
-      expect(update.$inc).toBeUndefined();
-      expect(db.collectionMocks.bankCharterHistory!.insertOne).toHaveBeenCalledTimes(1);
+      // Depositors first: 9M of the 12M goes back to the money supply, and the
+      // owner gets the 3M residual. The old rule refunded NOTHING while a
+      // deposit book existed and returned the deposits to nobody.
+      expect(result.npcDepositsReturned).toBe(9_000_000);
+      expect(result.refundedCapital).toBe(3_000_000);
+
+      const cb = memory.collection("centralBanks").docs[0] as { externalBroadMoney: number };
+      expect(cb.externalBroadMoney).toBe(109_000_000);
+
+      const corp = memory.collection("corporations").docs[0] as {
+        liquidCapital: number;
+        bankCharter: Record<string, unknown>;
+      };
+      expect(corp.liquidCapital).toBe(8_000_000);
+      expect(corp.bankCharter.cashReserves).toBe(0);
+      expect(corp.bankCharter.npcDeposits).toBe(0);
+
+      // The player's pointer went home and their balance never moved.
+      const saver = memory.collection("characters").docs[0] as {
+        currencyBalances: { savings: { USD: number }; savingsHolder: { USD: string } };
+      };
+      expect(saver.currencyBalances.savingsHolder.USD).toBe("centralBank");
+      expect(saver.currencyBalances.savings.USD).toBe(2_000_000);
     });
   });
 });

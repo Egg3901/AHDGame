@@ -14,7 +14,7 @@ const charter = (over: Record<string, unknown> = {}) =>
   ({
     type: "retail" as const,
     status: "active" as const,
-    totalDeposits: 1_000_000,
+    npcDeposits: 1_000_000,
     discountWindowDebt: 0,
     ...over,
   }) as never;
@@ -46,7 +46,7 @@ describe("quoteDiscountWindow", () => {
 
   it("never reports negative headroom for a bank whose deposits shrank", () => {
     const quote = quoteDiscountWindow(
-      charter({ totalDeposits: 100_000, discountWindowDebt: 900_000 }),
+      charter({ npcDeposits: 100_000, discountWindowDebt: 900_000 }),
       5
     );
     expect(quote.headroomAnchor).toBe(0);
@@ -81,7 +81,7 @@ describe("canDraw", () => {
   });
 
   it("refuses a bank with no deposit base to size against", () => {
-    const result = canDraw(charter({ totalDeposits: 0 }), 1, 5);
+    const result = canDraw(charter({ npcDeposits: 0 }), 1, 5);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("no_deposits");
   });
@@ -101,10 +101,10 @@ describe("discountWindowStigma", () => {
     // A small bank at its limit is in more trouble than a large one drawing the
     // same ₳ against a much bigger book.
     const small = discountWindowStigma(
-      charter({ totalDeposits: 400_000, discountWindowDebt: 100_000 })
+      charter({ npcDeposits: 400_000, discountWindowDebt: 100_000 })
     );
     const large = discountWindowStigma(
-      charter({ totalDeposits: 40_000_000, discountWindowDebt: 100_000 })
+      charter({ npcDeposits: 40_000_000, discountWindowDebt: 100_000 })
     );
     expect(small).toBeGreaterThan(large);
     expect(small).toBe(DISCOUNT_WINDOW_STIGMA); // 100k of a 100k cap = full usage
@@ -112,7 +112,7 @@ describe("discountWindowStigma", () => {
 
   it("caps at the full penalty even for a bank drawn past its cap", () => {
     expect(
-      discountWindowStigma(charter({ totalDeposits: 100_000, discountWindowDebt: 900_000 }))
+      discountWindowStigma(charter({ npcDeposits: 100_000, discountWindowDebt: 900_000 }))
     ).toBe(DISCOUNT_WINDOW_STIGMA);
   });
 });
