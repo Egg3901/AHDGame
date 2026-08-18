@@ -7,7 +7,7 @@
  * the new format are skipped.
  *
  * Auth: requireModerator
- * Errors: 401, 403
+ * Errors: 403
  */
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

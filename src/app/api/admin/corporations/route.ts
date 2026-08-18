@@ -1,7 +1,7 @@
 // GET /api/admin/corporations
 // Returns all corporations with aggregated sector revenue, CEO name, and timer state.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

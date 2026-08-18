@@ -966,8 +966,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       },
       isCeo,
       labourEnabled: labourWagesEnabled,
-      // v3 Phase 7a (code-review fix #4): gates the union-busting UI panel ,
-      // that mechanic requires "full" tier, one above the wage-slider's "wages" tier.
+      // Gates the union-busting UI panel; that mechanic requires "full" tier,
+      // one above the wage-slider's "wages" tier.
       labourFullEnabled: await isLabourFullMode(),
       // Gates the CEO Prospect action on extraction sectors (per-surface flag
       // convention: the page reads its own GET, no separate flags endpoint).

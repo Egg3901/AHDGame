@@ -19,7 +19,7 @@ const reseedSchema = z.object({
 
 // POST /api/admin/wiki/reseed — Upserts wiki pages from the seed list. Non-destructive by default; pages with human edits are skipped unless `force` is true.
 // Auth: requireAdmin
-// Errors: 400, 401
+// Errors: 400, 403
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

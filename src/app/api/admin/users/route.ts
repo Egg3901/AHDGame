@@ -44,7 +44,7 @@ export interface UserWithCharacter {
 // GET /api/admin/users — List users (newest first) with their associated character data.
 // Auth: requireAdmin
 // Query: ?limit (default 500, max 2000), ?offset (default 0)
-// Errors: 401, 403
+// Errors: 403
 export const GET = withAdminAuth(async (_auth, request: Request) => {
   try {
     const { searchParams } = new URL(request.url);

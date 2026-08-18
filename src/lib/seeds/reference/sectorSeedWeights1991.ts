@@ -72,7 +72,7 @@ export const COUNTRY_SECTOR_WEIGHTS_1991: Record<CountryId, SectorWeightMap> = {
     technology: 2,
     agriculture: 2,
   },
-  // Latent — mirrors UK until SCO weights are authored at activation (SP2).
+  // Latent - mirrors UK; dedicated SCO weights are not authored.
   SCO: {
     manufacturing: 16,
     financial: 11,
@@ -92,7 +92,7 @@ export const COUNTRY_SECTOR_WEIGHTS_1991: Record<CountryId, SectorWeightMap> = {
     technology: 2,
     agriculture: 2,
   },
-  // Latent — mirrors UK until WAL weights are authored at activation (SP2).
+  // Latent - mirrors UK; dedicated WAL weights are not authored.
   WAL: {
     manufacturing: 16,
     financial: 11,
@@ -226,7 +226,7 @@ export const COUNTRY_SECTOR_WEIGHTS_1991: Record<CountryId, SectorWeightMap> = {
     entertainment: 1,
     defense: 1,
   },
-  // Hungary — planned socialist economy (coming-soon placeholder).
+  // Hungary — planned socialist economy.
   HU: {
     manufacturing: 24,
     agriculture: 16,
@@ -246,7 +246,7 @@ export const COUNTRY_SECTOR_WEIGHTS_1991: Record<CountryId, SectorWeightMap> = {
     media: 1,
     entertainment: 1,
   },
-  // Eastern Bloc planned economies (coming-soon placeholders; normalized at read).
+  // Eastern Bloc planned economies (normalized at read).
   PL: {
     manufacturing: 22,
     agriculture: 13,

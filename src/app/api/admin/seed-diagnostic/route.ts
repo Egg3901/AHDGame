@@ -18,7 +18,7 @@ const postSchema = z.object({
 
 // GET /api/admin/seed-diagnostic — Return latest seed diagnostic report(s).
 // Auth: requireAdminOrApiKey
-// Errors: 401, 403
+// Errors: 401, 403, 500
 export async function GET(request: Request) {
   try {
     const auth = await requireAdminOrApiKey(request);
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
 
 // POST /api/admin/seed-diagnostic — Run a seed diagnostic and persist the report.
 // Auth: requireAdminOrApiKey
-// Errors: 400, 401, 403
+// Errors: 400, 401, 403, 500
 export async function POST(request: Request) {
   try {
     const auth = await requireAdminOrApiKey(request);

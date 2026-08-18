@@ -24,7 +24,7 @@ const MIN_CANDIDATES_PER_PARTY = 1;
 
 // POST /api/admin/elections/fill-npps — Deterministically fills vacant race slots with idle NPPs, bypassing normal probability limits.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     const auth = await requireAdmin();

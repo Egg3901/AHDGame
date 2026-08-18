@@ -2,7 +2,7 @@
 // Adds liquid capital to a corporation (positive = grant, negative = drain).
 // Body: { amount: number }
 // Auth: requireAdmin
-// Errors: 401, 403, 400, 404
+// Errors: 403, 400, 404
 
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

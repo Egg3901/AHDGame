@@ -8,7 +8,7 @@ const PRIORITY_ORDER = { critical: 4, high: 3, medium: 2, low: 1 };
 
 // GET /api/admin/tasks/summary — Return summary stats and top priority tasks for the dashboard widget.
 // Auth: requireAdminOrApiKey
-// Errors: 401, 403
+// Errors: 401, 403, 500
 /**
  * GET /api/admin/tasks/summary
  * Returns summary stats and top 5 priority tasks for dashboard widget

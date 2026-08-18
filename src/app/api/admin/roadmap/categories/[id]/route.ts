@@ -14,7 +14,7 @@ const updateCategorySchema = z.object({
 
 // PATCH /api/admin/roadmap/categories/[id] — Updates a roadmap category's name, subcategories, or sort order.
 // Auth: requireAdmin
-// Errors: 400, 401, 404
+// Errors: 400, 403, 404
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAdmin();
@@ -60,7 +60,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 // DELETE /api/admin/roadmap/categories/[id] — Deletes a roadmap category and clears its assignment from related items.
 // Auth: requireAdmin
-// Errors: 400, 401, 404
+// Errors: 400, 403, 404
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAdmin();

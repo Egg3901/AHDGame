@@ -40,8 +40,8 @@ export function isUKDevolutionRegion(stateId: string): boolean {
 /** Office AP cost to change Devolution Policy. */
 export const DEVOLUTION_POLICY_CHANGE_AP_COST = 2;
 
-/** Turns the FM must wait between Devolution Policy changes (1.5 game-days
- *  at 48 turns/year — gives a meaningful "you committed to this" beat). */
+/** Turns the FM must wait between Devolution Policy changes (1.5 game years
+ *  at 48 turns/year - gives a meaningful "you committed to this" beat). */
 export const DEVOLUTION_POLICY_CHANGE_COOLDOWN_TURNS = 72;
 
 // ─── Per-turn drift drivers ──────────────────────────────────────────────────

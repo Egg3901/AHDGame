@@ -352,7 +352,9 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
           .sort((a, b) => b.score - a.score);
       }
 
-      // Country-specific primary winners: US=1, UK=3, JP=3
+      // Advancers per party via getPrimaryWinnersForElection: keyed by
+      // government type (presidential 1, parliamentary 3, onePartyState 7
+      // e.g. CN/RU/DD), except single-winner executives which always advance 1.
       const shares = primarySharePctSoftmax(scored.map((x) => x.score));
       primaryResultsByParty[partyId] = scored.map((s, i) => ({
         candidateId: s.candidateId,

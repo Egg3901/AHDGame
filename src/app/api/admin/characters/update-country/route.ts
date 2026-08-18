@@ -19,7 +19,7 @@ const updateCountrySchema = z.object({
 
 // PATCH /api/admin/characters/update-country — Change a character's countryId/homeState via the full relocation pipeline.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function PATCH(request: Request) {
   try {
     const auth = await requireAdmin();

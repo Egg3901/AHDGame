@@ -1,7 +1,7 @@
 // POST /api/admin/corporations/[id]/timers
 // Resets all turn-based cooldown timers for a single corporation.
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

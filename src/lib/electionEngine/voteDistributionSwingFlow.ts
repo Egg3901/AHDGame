@@ -16,10 +16,8 @@
  *                      − Σ_j swing(P_i → P_j)
  *                      + Σ_j swing(P_j → P_i)
  *
- * This file lands in #4B with the persuasion-driver function stubbed to
- * 1.0 and the transferable_share / persuasionResistance curves as
- * minimal linear placeholders — calibration happens in #4D, real
- * drivers (incl. coattails) in #4C.
+ * Persuasion drivers live in `persuasionDrivers.ts`. Transferable-share
+ * and persuasionResistance curves are calibrated in `electionFormulaFactors.ts`.
  *
  * `govModifier` is the sitting regional executive's down-ballot coattail,
  * supplied per-party via `options.govModifierByParty` (neutral 1.0× when
@@ -72,13 +70,11 @@ function spoilerOrgFactor(
 }
 
 /**
- * Aggregate the per-candidate within-group weight (everything that's still
- * "appeal-shaped" in the §7.3.2 contract: appeal × reach × approval × org ×
- * non-Reg non-Support modifiers) for a single candidate in a single group.
- *
- * Separates the appeal kernel from the Reg / Support / driver layer so the
- * swing-flow model can split nominal_share (appeal-shaped) from swings
- * (Reg + driver-shaped).
+ * Per-candidate within-group weight for the §7.3.2 nominal_share line:
+ * appeal, reach, approval, org, plus NPP/infamy/PGF/regime/coattail/
+ * midterm/state-org/home-state and the Reg baseline/resistance tilts.
+ * Support mood is applied after this kernel; persuasion drivers belong
+ * to the swing step, not this product.
  */
 function appealWeight(
   ec: EnrichedCandidate,

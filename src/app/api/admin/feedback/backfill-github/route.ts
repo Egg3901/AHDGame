@@ -17,7 +17,7 @@ import { ObjectId } from "mongodb";
  */
 // POST /api/admin/feedback/backfill-github — Backfill GitHub issues for all unlinked feedback and sync statuses.
 // Auth: requireAdmin
-// Errors: 400, 401, 403
+// Errors: 400, 403
 export async function POST() {
   try {
     const auth = await requireAdmin();

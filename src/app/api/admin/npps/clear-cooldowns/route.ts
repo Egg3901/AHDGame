@@ -5,7 +5,7 @@ import { handleRouteError } from "@/lib/api/errors";
 
 // POST /api/admin/npps/clear-cooldowns — Clears all election cooldowns from every NPP to fix stale cooldowns
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     const auth = await requireAdmin();

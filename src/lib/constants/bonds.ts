@@ -96,7 +96,7 @@ export const CORP_BOND_DUE_SOON_REMINDER_TURNS: readonly number[] = [12, 4];
 
 /**
  * After a corporate bond default, credit rating is floored for this many turns
- * (1 turn = 1 real hour; 96 = 4 game-days / 96 hours).
+ * (1 turn = 1 real hour; 96 turns = 4 real days / 2 game years).
  */
 export const BOND_DEFAULT_CREDIT_PENALTY_TURNS = 96;
 

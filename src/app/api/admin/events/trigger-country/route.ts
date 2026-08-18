@@ -31,7 +31,7 @@ const TriggerSchema = z.object({
 // Mirrors /api/admin/events/trigger for the country scope (World Events v1 Phase 0 —
 // there is no scheduler yet, so this is the only producer of country-scope offers).
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404, 409
+// Errors: 400, 403, 404, 409
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

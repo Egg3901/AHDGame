@@ -6,7 +6,7 @@ import { getMacroCountryDiagnostics, MACRO_TICK_INTERVAL } from "@/lib/world/mac
 
 // GET /api/admin/macro-countries/diagnostics — Last macro tick + sector contributions.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();

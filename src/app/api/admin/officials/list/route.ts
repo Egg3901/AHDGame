@@ -7,7 +7,7 @@ import type { ElectedOfficial } from "@/lib/db/types";
 
 // GET /api/admin/officials/list — Returns a filtered list of elected officials by state, office type, or vacancy status.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET(request: Request) {
   try {
     // Verify admin authentication

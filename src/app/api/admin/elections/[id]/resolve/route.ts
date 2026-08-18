@@ -21,7 +21,7 @@ interface RouteParams {
 
 // POST /api/admin/elections/[id]/resolve — Force-resolves a single election that is past its primary phase, marking it completed and running resolution logic.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireAdmin();

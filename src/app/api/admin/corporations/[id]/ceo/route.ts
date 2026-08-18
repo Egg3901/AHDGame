@@ -1,7 +1,7 @@
 // POST /api/admin/corporations/[id]/ceo — appoint CEO by character ID
 // DELETE /api/admin/corporations/[id]/ceo — vacate CEO position
 // Auth: requireAdmin
-// Errors: 401, 403, 400, 404
+// Errors: 403, 400, 404
 
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

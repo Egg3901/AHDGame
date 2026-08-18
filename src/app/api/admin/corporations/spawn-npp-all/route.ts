@@ -4,7 +4,7 @@
 // econ-preview market democracies get 2/sector; planned economies and
 // unconfigured/latent regions are skipped. Idempotent per country.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

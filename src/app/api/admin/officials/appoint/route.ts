@@ -11,7 +11,7 @@ import type { Character, ElectedOfficial, OfficeType, User } from "@/lib/db/type
 
 // POST /api/admin/officials/appoint — Appoints or vacates a character in an elected office position, with admin logging.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();
@@ -434,7 +434,7 @@ export async function POST(request: Request) {
 
 // GET /api/admin/officials/appoint?countryId=US — Returns characters for the admin appointment dropdown, filtered by country.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET(request: Request) {
   try {
     const auth = await requireAdmin();

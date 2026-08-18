@@ -7,7 +7,7 @@ import { createAdminLog } from "@/lib/adminLog";
 
 // POST /api/admin/turn/toggle-corporation-actions — Toggles corporation action processing on/off.
 // Auth: requireModerator (admin or moderator)
-// Errors: 401, 403, 404
+// Errors: 403, 404
 export async function POST() {
   try {
     const auth = await requireModerator();

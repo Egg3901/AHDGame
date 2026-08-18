@@ -3,7 +3,7 @@
  * PATCH  /api/admin/crises/[id] — resolve early (body: { action: "resolve" })
  * DELETE /api/admin/crises/[id] — hard delete
  * Auth: requireAdmin
- * Errors: 400 invalid ID/body, 401, 403, 404 not found
+ * Errors: 400 invalid ID/body, 403, 404 not found
  */
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

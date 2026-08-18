@@ -6,7 +6,7 @@ import type { Election, ElectionCandidate, NPP } from "@/lib/db/types";
 
 // POST /api/admin/npps/vacate-primaries — Withdraws all NPP candidates from every active election
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     const auth = await requireAdmin();

@@ -15,7 +15,7 @@ interface RouteParams {
 
 // GET /api/admin/elections/[id]/place-candidate-options — Lists characters and NPPs available to place in a presidential election.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function GET(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireAdmin();

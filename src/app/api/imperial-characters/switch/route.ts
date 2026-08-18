@@ -14,7 +14,7 @@ const switchSchema = z.object({
 /**
  * POST /api/imperial-characters/switch — Switch between character and imperial mode.
  * Auth: requireAdmin() — admin only.
- * Errors: 400 (no imperial character), 401/403 (not admin).
+ * Errors: 400 (no imperial character), 403 (not admin).
  */
 export async function POST(request: Request) {
   try {

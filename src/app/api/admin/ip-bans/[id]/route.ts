@@ -17,7 +17,7 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 // DELETE /api/admin/ip-bans/[id] — remove a row (ban or allowance)
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function DELETE(_request: Request, { params }: RouteParams) {
   try {
     const auth = await requireAdmin();
@@ -48,7 +48,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
 // PATCH /api/admin/ip-bans/[id] — edit note or maxAccounts
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireAdmin();

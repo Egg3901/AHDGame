@@ -6,7 +6,7 @@ import { handleRouteError } from "@/lib/api/errors";
 /**
  * Get the most recent game health snapshot.
  * Auth: requireAdmin()
- * Errors: 401, 404, 500
+ * Errors: 403, 404
  */
 export async function GET() {
   try {

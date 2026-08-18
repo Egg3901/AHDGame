@@ -5,7 +5,7 @@ import { handleRouteError } from "@/lib/api/errors";
 
 // GET /api/admin/bot-api-keys - Lists active bot API keys and recent bot API request logs for admins.
 // Auth: requireAdmin
-// Errors: 401
+// Errors: 403
 export const GET = withAdminAuth(async () => {
   try {
     const db = await getDb();

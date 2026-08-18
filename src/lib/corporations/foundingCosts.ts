@@ -11,11 +11,6 @@ import {
  * Founding-cost multiplier from low investor confidence (spec §12.4 feed 3).
  * 1.0 at/above baseline; up to 1 + FOUNDING_CONFIDENCE_PENALTY_MAX at confidence 0.
  * Capital is shy when expropriation risk is high, so new ventures cost more.
- *
- * Pure + ready, but NOT yet wired into `computeFoundingCosts` / the founding
- * route: the founder charge must equal the FoundCorporationModal preview (see
- * the invariant in app/api/corporations/route.ts), so delivering confidence to
- * the client modal is P6 UI work. Wiring both sites together lands in P6.
  */
 export function getFoundingConfidenceMultiplier(
   investorConfidence: number | null | undefined
@@ -86,10 +81,7 @@ export interface FoundingCostResult {
  * Pure computation of the two founding money legs in LOCAL currency.
  *
  * Both the corp treasury seed AND the founder's charge are scaled by the same
- * `foundingRate`. Pre-fix, only `corpStartingCapital` was converted while
- * `totalPlayerCost` was left in ₳ and debited from the founder's local wallet —
- * a money mint of `foundingRate`× for non-USD countries (the money-laundering
- * exploit: a CN founder paid 24M CNY for a corp seeded with 172.8M CNY).
+ * `foundingRate` so fee and seed stay in the same local currency.
  *
  * With fee == baseline capital the founder pays exactly the seed (system grant
  * = baseline − fee = 0); any extra commitment is charged on top, also in local.

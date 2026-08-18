@@ -48,7 +48,7 @@ interface DiagnosticResult {
 
 // GET /api/admin/debug/stock-exchange-snapshot — Diagnose stock exchange snapshot state and collection counts.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 /**
  * GET /api/admin/debug/stock-exchange-snapshot
  * Diagnose stock exchange snapshot state
@@ -127,7 +127,7 @@ export async function GET() {
 
 // POST /api/admin/debug/stock-exchange-snapshot — Manually trigger stock exchange snapshot generation and return diagnostic data.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 /**
  * POST /api/admin/debug/stock-exchange-snapshot
  * Manually trigger snapshot generation and return diagnostic data

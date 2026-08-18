@@ -1,6 +1,6 @@
 // GET /api/admin/alts/link/[pair] — one pairwise alt-detection link
 // Auth: requireModerator (mods and admins both read; plan §4.6)
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 //
 // `pair` is two hex ObjectIds joined by an underscore, in either order,
 // e.g. `507f1f77bcf86cd799439011_507f191e810c19729de860ea`.

@@ -1,6 +1,6 @@
 // Dismiss all active flags for a character for 30 days.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

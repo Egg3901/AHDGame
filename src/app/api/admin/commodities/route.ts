@@ -1,7 +1,7 @@
 // GET /api/admin/commodities
 // Returns the most recent price document per commodity with nudge state and D/S ratios.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

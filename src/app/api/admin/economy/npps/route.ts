@@ -2,7 +2,7 @@
 // Returns all active NPPs with economy fields (funds, actionPoints, donorBaseLevel)
 // joined with party names. Used by NppEconomyAdminPanel.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

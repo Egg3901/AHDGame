@@ -125,7 +125,7 @@ export const CORPORATION_RENAME_COST = 500_000;
 /** Fraction of current marketing strength lost on rename (25%) */
 export const CORPORATION_RENAME_MS_PENALTY = 0.25;
 
-/** Cooldown between renames — matches type-switch cooldown (48 turns = 2 game days) */
+/** Cooldown between renames - matches type-switch cooldown (48 turns = 1 game year / 2 real days) */
 export const CORPORATION_RENAME_COOLDOWN_TURNS = 48;
 
 /** Cost to expand into a new state (deducted from corporation liquid capital) */
@@ -154,25 +154,22 @@ export const MAX_FORWARD_SHARE_SPLIT_MULTIPLIER = 100;
 
 /**
  * Number of turns AFTER a stock split / reverse split during which the share-price
- * formula uses the smoothing weights below instead of the normal 0.15/0.6/0.25.
- * The consolidate route writes a cap-preserving scaled price, but the corp turn
- * formula's normal 85% pull toward balance-sheet equilibrium would erase that
- * scaling in one turn, making splits look like value-destruction events. This
- * cooldown lets the cap drift gradually instead.
+ * formula blends previous price toward fundamental at STOCK_SPLIT_SMOOTHING_PREV_WEIGHT
+ * instead of applying the normal per-turn rate limiter. The consolidate route writes
+ * a cap-preserving scaled price; without this window the next fundamental would
+ * overwrite that scaling in one turn.
  *
  * Counted as `currentTurn - lastShareStructureTurn`. So `0` means "the same turn
  * the split happened", `1` means "the next turn after the split", etc. Setting
- * this to 2 means the boost applies for the split turn + 2 turns after = 3 total
- * turns of slow drift before normal weights resume.
+ * this to 2 means the blend applies for the split turn + 2 turns after = 3 total
+ * turns of slow drift before the rate limiter resumes.
  */
 export const STOCK_SPLIT_PRICE_SMOOTHING_TURNS = 2;
 
 /**
- * Smoothing weights used during the post-split cooldown window. Must sum to 1.0.
- * `prev` weight is much higher than the normal 0.15 so the just-scaled price
- * dominates; `bsp` and `income` still contribute non-zero so the formula can
- * still react to genuine balance-sheet changes (e.g., bond issuance during
- * cooldown).
+ * Weight on previous price during the post-split cooldown. Price =
+ * PREV * previous + (1 - PREV) * fundamental, so the just-scaled price
+ * dominates while still tracking genuine fundamental moves.
  */
 export const STOCK_SPLIT_SMOOTHING_PREV_WEIGHT = 0.7;
 export const STOCK_SPLIT_SMOOTHING_BSP_WEIGHT = 0.2;
@@ -344,8 +341,8 @@ export const DOMINANCE_MARKET_SHARE_THRESHOLD = 50;
  * share of an entire country's sector while sitting below 50% in every single
  * state (spread thin, each cell legal, the nation an effective oligopolist).
  * National share is a market-weighted average of the cell shares, so it is
- * always ≤ the largest cell — a same-50%-threshold national toll could never
- * fire. This lower threshold is what makes national market power tollable: 40%
+ * always <= the largest cell - a same-50%-threshold national toll could never
+ * fire. This lower threshold is what makes national market power tollable: 30%
  * of a whole country's sector is real concentration even with no local monopoly.
  * The turn charges the HARSHER of the local and national tolls, never both.
  */
@@ -356,7 +353,7 @@ export const DOMINANCE_NATIONAL_SHARE_THRESHOLD = 30;
  * Penalties scale with (share-progress)^EXPONENT, so a value >1 back-loads the
  * cost toward higher market share: ~50–66% is lightly penalised (dominance is
  * maintainable but expensive) while pushing toward 100% bites hard. At 1.0 the
- * ramp is linear; at 2.0 a sector at 66% pays only ~20% of the full growth-cost
+ * ramp is linear; at 2.0 a sector at 66% pays only ~10% of the full growth-cost
  * premium, versus ~64% at 90%.
  */
 export const DOMINANCE_RAMP_EXPONENT = 2;

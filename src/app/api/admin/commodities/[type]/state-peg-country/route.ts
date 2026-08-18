@@ -2,7 +2,7 @@
 // Sets state hard pegs for ALL states in a country.
 // Body: { countryId: string, price: number }
 // Auth: requireAdmin
-// Errors: 401, 403, 400, 404
+// Errors: 403, 400, 404
 
 import { NextResponse } from "next/server";
 import { z } from "zod";

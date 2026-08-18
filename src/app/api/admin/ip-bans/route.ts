@@ -24,7 +24,7 @@ const postSchema = z.union([
 
 // GET /api/admin/ip-bans — list all ban and allowance rows + per-IP user counts
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();
@@ -56,7 +56,7 @@ export async function GET() {
 
 // POST /api/admin/ip-bans — create a ban or allowance row
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 409
+// Errors: 400, 403, 409
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

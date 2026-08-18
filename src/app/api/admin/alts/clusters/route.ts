@@ -1,6 +1,6 @@
 // GET /api/admin/alts/clusters — ranked alt-detection clusters, confidence desc
 // Auth: requireModerator (mods and admins both read; plan §4.6)
-// Errors: 400, 401, 403
+// Errors: 400, 403
 //
 // Frozen contract (forensics/alt-detection rework plan §4.9):
 //   GET /api/admin/alts/clusters?minConfidence&status&signal&limit&cursor

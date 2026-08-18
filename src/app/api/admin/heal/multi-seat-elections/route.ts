@@ -1,6 +1,6 @@
 // GET diagnoses / POST re-allocates seats for resolved House/StateSenate elections with incorrect winner counts.
 // Auth: requireAdmin
-// Errors: 401, 500
+// Errors: 403
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";

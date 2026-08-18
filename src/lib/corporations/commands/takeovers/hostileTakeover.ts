@@ -688,7 +688,7 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
         // bond units pointing at a deleted corp).
         await releaseCorporationHeldBondsToFloat(db, target._id, now);
 
-        // Phase 4: stamp tx history before deleting the absorbed corp so any
+        // Stamp tx history before deleting the absorbed corp so any
         // financial-ledger rows referencing the merged target (corp_dividend
         // it received, stock_trade_buy where it was the target, etc.) keep a
         // resolvable subjectName/sequentialId after the doc is gone.

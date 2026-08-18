@@ -55,7 +55,7 @@ export type {
 
 // GET /api/admin/elections/log — Returns a paginated, filterable election event log with primary and general results.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET(request: Request) {
   try {
     const auth = await requireAdmin();
