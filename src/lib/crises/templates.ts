@@ -1,5 +1,6 @@
 import type { Crisis, CrisisEffect, CrisisTemplate } from "@/lib/db/types/crisis";
 import { toNativeEffectValue } from "@/lib/crises/effectScale";
+import { VIETNAM_LADDER_SIDES } from "@/lib/crises/vietnamEscalation";
 import { WARSAW_PACT_BLOC_COUNTRY_IDS } from "@/lib/crises/warsawPactSatellites";
 import { getVietnamEscalationLevel } from "@/lib/crises/vietnamEscalationInterface";
 
@@ -4128,16 +4129,26 @@ export const URBAN_RIOTS_TEMPLATE: CrisisTemplate = {
   },
 };
 
-// Vietnam escalation scaling. `getVietnamEscalationLevel()` currently always
-// returns 0 (see vietnamEscalationInterface.ts, Track A has not wired the
-// real state yet), so today this resolves to the floor values below. Once
-// Track A's implementation lands and returns a live 0-1 reading, these will
-// scale up with it on the next deploy (module-level, so a running process
-// picks up a code change, not a runtime state change, restarting the deploy
-// is what makes escalation take effect, same as any other server constant).
-const VIETNAM_ESCALATION = getVietnamEscalationLevel();
-const ANTIWAR_SPAWN_CHANCE = 0.0015 + 0.0025 * VIETNAM_ESCALATION;
-const ANTIWAR_SEVERITY_SCALE = 1 + VIETNAM_ESCALATION;
+// Vietnam escalation scaling, wired to the real ladder.
+//
+// `getVietnamEscalationLevel()` reads the process-local cache that
+// `refreshVietnamEscalationLevel` fills from the live ladder once per turn (see
+// vietnamEscalationInterface.ts). It is therefore a RUNTIME reading, not a load
+// -time constant, which is why the spawn chance and the severity effects below
+// are getters rather than plain fields: the auto-spawner reads `spawnChance` on
+// the turn it rolls, and a crisis snapshots `effects` on the turn it spawns, so
+// both pick up the war as it stands then. With no war the cache is 0 and both
+// sit at their documented floor.
+const ANTIWAR_SPAWN_FLOOR = 0.0015;
+const ANTIWAR_SPAWN_ESCALATED_ADD = 0.0025;
+
+function antiwarSpawnChance(): number {
+  return ANTIWAR_SPAWN_FLOOR + ANTIWAR_SPAWN_ESCALATED_ADD * getVietnamEscalationLevel();
+}
+
+function antiwarSeverityScale(): number {
+  return 1 + getVietnamEscalationLevel();
+}
 
 export const ANTIWAR_PROTEST_TEMPLATE: CrisisTemplate = {
   name: "Anti-War Protests",
@@ -4148,7 +4159,9 @@ export const ANTIWAR_PROTEST_TEMPLATE: CrisisTemplate = {
     kind: "random",
     cooldownTurns: 90,
     scope: "country",
-    spawnChance: ANTIWAR_SPAWN_CHANCE,
+    get spawnChance() {
+      return antiwarSpawnChance();
+    },
   },
   heroImage:
     "https://images.unsplash.com/photo-1591259622709-bdb033b4be2b?auto=format&fit=crop&w=1600&q=70",
@@ -4158,128 +4171,420 @@ export const ANTIWAR_PROTEST_TEMPLATE: CrisisTemplate = {
   countryIds: [],
   regionIds: [],
   durationTurns: 4,
-  effects: [
-    fx(
-      "tick",
-      "approval",
-      "government",
-      "overall",
-      -0.012 * ANTIWAR_SEVERITY_SCALE,
-      "War-weariness erodes approval"
-    ),
-  ],
+  get effects(): CrisisEffect[] {
+    return [
+      fx(
+        "tick",
+        "approval",
+        "government",
+        "overall",
+        -0.012 * antiwarSeverityScale(),
+        "War-weariness erodes approval"
+      ),
+    ];
+  },
   wireMessageOnStart: "Anti-war demonstrations are spreading across {location}.",
   wireMessageOnEnd: "The wave of anti-war demonstrations recedes, for now.",
-  interactionDefinition: {
-    decisionTree: [
-      {
-        nodeId: "response",
-        type: "choice",
-        title: "Anti-war protest response",
-        description: "Anti-war demonstrations are spreading. What is the response?",
-        requiredRoles: ["headOfState"],
-        timeLimitMinutes: null,
-        options: [
-          {
-            optionId: "response_intervene",
-            label: "Federal Intervention",
-            description:
-              "Deploy federal forces to keep demonstrations from disrupting the capital.",
-            nextNodeId: "terminal",
-            effects: [
-              fx(
-                "flat",
-                "approval",
-                "government",
-                "overall",
-                -0.02 * ANTIWAR_SEVERITY_SCALE,
-                "Heavy-handed federal presence resented"
-              ),
-            ],
-          },
-          {
-            optionId: "response_concede",
-            label: "Signal De-escalation",
-            description:
-              "Announce troop drawdowns or peace talks to take the wind out of the movement.",
-            nextNodeId: "terminal",
-            action: {
-              kind: "concessionBill",
-              title: "Selective Service and Troop Commitment Review Act",
-              summary: "Reforms the draft system and mandates a review of troop commitment levels.",
-              category: "defense policy",
+  // A getter for the same reason `effects` is one: the option effects scale with
+  // the live war, and a crisis snapshots this tree when it spawns.
+  get interactionDefinition(): CrisisTemplate["interactionDefinition"] {
+    return {
+      decisionTree: [
+        {
+          nodeId: "response",
+          type: "choice",
+          title: "Anti-war protest response",
+          description: "Anti-war demonstrations are spreading. What is the response?",
+          requiredRoles: ["headOfState"],
+          timeLimitMinutes: null,
+          options: [
+            {
+              optionId: "response_intervene",
+              label: "Federal Intervention",
+              description:
+                "Deploy federal forces to keep demonstrations from disrupting the capital.",
+              nextNodeId: "terminal",
+              effects: [
+                fx(
+                  "flat",
+                  "approval",
+                  "government",
+                  "overall",
+                  -0.02 * antiwarSeverityScale(),
+                  "Heavy-handed federal presence resented"
+                ),
+              ],
             },
-            effects: [
-              fx(
-                "flat",
-                "approval",
-                "antiWarVoters",
-                "overall",
-                0.06 * ANTIWAR_SEVERITY_SCALE,
-                "De-escalation welcomed by the movement"
-              ),
-              fx(
-                "flat",
-                "approval",
-                "hawkishVoters",
-                "overall",
-                -0.03 * ANTIWAR_SEVERITY_SCALE,
-                "Hawks see it as weakness"
-              ),
-            ],
-          },
-          {
-            optionId: "response_crackdown",
-            label: "Crack Down",
-            description: "Order police and National Guard to clear demonstrations by force.",
-            nextNodeId: "terminal",
-            effects: [
-              fx(
-                "flat",
-                "approval",
-                "antiWarVoters",
-                "overall",
-                -0.1 * ANTIWAR_SEVERITY_SCALE,
-                "Movement radicalized by the crackdown"
-              ),
-              fx(
-                "flat",
-                "approval",
-                "hawkishVoters",
-                "overall",
-                0.05 * ANTIWAR_SEVERITY_SCALE,
-                "Order restored, hawks approve"
-              ),
-              fx(
-                "flat",
-                "approval",
-                "government",
-                "overall",
-                -0.04 * ANTIWAR_SEVERITY_SCALE,
-                "Coverage of the crackdown turns hostile"
-              ),
-            ],
-            action: {
-              kind: "spawnFollowUpCrisis",
-              templateKey: "campus_unrest",
-              countryPool: "sameCountry",
-              chance: 0.3 + 0.2 * VIETNAM_ESCALATION,
+            {
+              optionId: "response_concede",
+              label: "Signal De-escalation",
+              description:
+                "Announce troop drawdowns or peace talks to take the wind out of the movement.",
+              nextNodeId: "terminal",
+              action: {
+                kind: "concessionBill",
+                title: "Selective Service and Troop Commitment Review Act",
+                summary:
+                  "Reforms the draft system and mandates a review of troop commitment levels.",
+                category: "defense policy",
+              },
+              effects: [
+                fx(
+                  "flat",
+                  "approval",
+                  "antiWarVoters",
+                  "overall",
+                  0.06 * antiwarSeverityScale(),
+                  "De-escalation welcomed by the movement"
+                ),
+                fx(
+                  "flat",
+                  "approval",
+                  "hawkishVoters",
+                  "overall",
+                  -0.03 * antiwarSeverityScale(),
+                  "Hawks see it as weakness"
+                ),
+              ],
             },
-          },
-        ],
-      },
-      {
-        nodeId: "terminal",
-        type: "terminal",
-        title: "Crisis resolved",
-        description: "The anti-war protest crisis has run its course.",
-        requiredRoles: ["any"],
-        timeLimitMinutes: null,
-      },
-    ],
-    autoResolveOnExpiry: true,
+            {
+              optionId: "response_crackdown",
+              label: "Crack Down",
+              description: "Order police and National Guard to clear demonstrations by force.",
+              nextNodeId: "terminal",
+              effects: [
+                fx(
+                  "flat",
+                  "approval",
+                  "antiWarVoters",
+                  "overall",
+                  -0.1 * antiwarSeverityScale(),
+                  "Movement radicalized by the crackdown"
+                ),
+                fx(
+                  "flat",
+                  "approval",
+                  "hawkishVoters",
+                  "overall",
+                  0.05 * antiwarSeverityScale(),
+                  "Order restored, hawks approve"
+                ),
+                fx(
+                  "flat",
+                  "approval",
+                  "government",
+                  "overall",
+                  -0.04 * antiwarSeverityScale(),
+                  "Coverage of the crackdown turns hostile"
+                ),
+              ],
+              action: {
+                kind: "spawnFollowUpCrisis",
+                templateKey: "campus_unrest",
+                countryPool: "sameCountry",
+                chance: 0.3 + 0.2 * getVietnamEscalationLevel(),
+              },
+            },
+          ],
+        },
+        {
+          nodeId: "terminal",
+          type: "terminal",
+          title: "Crisis resolved",
+          description: "The anti-war protest crisis has run its course.",
+          requiredRoles: ["any"],
+          timeLimitMinutes: null,
+        },
+      ],
+      autoResolveOnExpiry: true,
+    };
   },
 };
+
+// ── VIETNAM ESCALATION CHAIN ─────────────────────────────────────────────────
+//
+// One war, six crises. Each rung is addressed to BOTH superpowers at once
+// (scope "country" over US and RU), so each leader answers for their own nation
+// on the same node and neither one's choice resolves the other's. The rung a
+// crisis sits on is not stored on the crisis: it is read off the shared ladder
+// in `vietnamEscalation.ts`, which is what the two support/de-escalate option
+// actions move. When a rung expires, `crisisChain.ts` asks the ladder where it
+// now sits and spawns the matching rung, so the war climbs, holds or winds down
+// according to what the two leaders actually did.
+//
+// The templates below are therefore deliberately thin. The consequences live in
+// the ladder and its derived dials (DEFCON, bloc cohesion, war weariness,
+// procurement demand), not in a wall of authored effects.
+
+const VIETNAM_HERO = [
+  "https://images.unsplash.com/photo-1608396941316-ea89219bd56e?auto=format&fit=crop&w=1600&q=70",
+  "https://images.unsplash.com/photo-1591259622709-bdb033b4be2b?auto=format&fit=crop&w=1600&q=70",
+  "https://images.unsplash.com/photo-1494059980473-813e73ee784b?auto=format&fit=crop&w=1600&q=70",
+];
+
+/** Both superpowers on the ladder, from the ladder's own roster. Nobody else
+ *  gets a say on these nodes. */
+const VIETNAM_COUNTRIES = Object.keys(VIETNAM_LADDER_SIDES);
+
+interface VietnamRungSpec {
+  rung: number;
+  name: string;
+  description: string;
+  /** Node prompt shown to each head of state. */
+  prompt: string;
+  supportLabel: string;
+  supportDescription: string;
+  holdLabel: string;
+  holdDescription: string;
+  deescalateLabel: string;
+  deescalateDescription: string;
+  wireStart: string;
+  wireEnd: string;
+  durationTurns: number;
+  /** Per-turn war drag, as a fractional swing. Grows with the rung. */
+  inflationDrag: number;
+  confidenceDrag: number;
+  approvalDrag: number;
+  /** Sustained margin pressure on manufacturing at the war rungs. Null = none. */
+  marginPressure: number | null;
+}
+
+function vietnamRungTemplate(spec: VietnamRungSpec): CrisisTemplate {
+  const effects: CrisisEffect[] = [
+    fx("tick", "metric", "economy", "inflation", spec.inflationDrag, "War spending stokes prices"),
+    fx(
+      "tick",
+      "metric",
+      "economy",
+      "consumerConfidence",
+      spec.confidenceDrag,
+      "Households read the war news"
+    ),
+    fx("tick", "approval", "government", "overall", spec.approvalDrag, "The war costs the leader"),
+  ];
+  if (spec.marginPressure !== null) {
+    effects.push(
+      marginShock(
+        spec.marginPressure,
+        "War economy squeezes civilian manufacturing",
+        "financial",
+        "manufacturing"
+      )
+    );
+  }
+
+  return {
+    name: spec.name,
+    heroImage: VIETNAM_HERO[(spec.rung - 1) % VIETNAM_HERO.length],
+    description: spec.description,
+    scope: "country",
+    countryIds: VIETNAM_COUNTRIES,
+    regionIds: [],
+    durationTurns: spec.durationTurns,
+    fromYear: 1955,
+    untilYear: 1975,
+    chain: { family: "vietnam", rung: spec.rung },
+    effects,
+    wireMessageOnStart: spec.wireStart,
+    wireMessageOnEnd: spec.wireEnd,
+    interactionDefinition: {
+      autoResolveOnExpiry: true,
+      decisionTree: [
+        {
+          nodeId: "vietnam_posture",
+          type: "choice",
+          title: spec.name,
+          description: spec.prompt,
+          requiredRoles: ["headOfState"],
+          // Multi-responder nodes carry no deadline: the crisis's own expiry
+          // closes them, so a leader who has not yet logged in is not timed out
+          // of a decision their opposite number can still make.
+          timeLimitMinutes: null,
+          options: [
+            {
+              optionId: "vietnam_support",
+              label: spec.supportLabel,
+              description: spec.supportDescription,
+              // Empty by design. The real cost is state-dependent (rung and how
+              // long the war has run) and is applied by the action handler.
+              effects: [],
+              nextNodeId: null,
+              action: { kind: "vietnamSupport" },
+            },
+            {
+              optionId: "vietnam_hold",
+              label: spec.holdLabel,
+              description: spec.holdDescription,
+              effects: [
+                fx(
+                  "flat",
+                  "approval",
+                  "government",
+                  "overall",
+                  -0.005,
+                  "Neither side is satisfied by waiting"
+                ),
+              ],
+              nextNodeId: null,
+            },
+            {
+              optionId: "vietnam_deescalate",
+              label: spec.deescalateLabel,
+              description: spec.deescalateDescription,
+              effects: [],
+              nextNodeId: null,
+              action: { kind: "vietnamDeescalate" },
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+export const VIETNAM_ADVISORS_TEMPLATE: CrisisTemplate = vietnamRungTemplate({
+  rung: 1,
+  name: "Vietnam: Advisory Mission",
+  description:
+    "Officers, trainers and intelligence staff are on the ground in Vietnam on both sides of the line. No one has declared anything. Every capital insists these are technicians.",
+  prompt:
+    "Your service attaches want more people in country. Your ambassador wants fewer. Nothing you decide today will be reported as a war.",
+  supportLabel: "Expand the advisory mission",
+  supportDescription:
+    "More officers, more training, more money to a client that cannot pay for it. Cheap now, and it commits you.",
+  holdLabel: "Hold the current commitment",
+  holdDescription: "Keep the mission at its present size and see what the other side does.",
+  deescalateLabel: "Draw the mission down",
+  deescalateDescription:
+    "Rotate advisors home and let the client stand on its own. Your hawks will call it abandonment.",
+  wireStart: "Foreign military advisors are reported in growing numbers across Vietnam.",
+  wireEnd: "The advisory question drops out of the headlines, for now.",
+  durationTurns: 10,
+  inflationDrag: 0.004,
+  confidenceDrag: -0.005,
+  approvalDrag: -0.004,
+  marginPressure: null,
+});
+
+export const VIETNAM_MATERIEL_TEMPLATE: CrisisTemplate = vietnamRungTemplate({
+  rung: 2,
+  name: "Vietnam: Materiel and Money",
+  description:
+    "Rifles, trucks, transport aircraft and hard currency now move to Vietnam in quantity. The fighting is still done by Vietnamese, with everyone else's equipment.",
+  prompt:
+    "The shipments have outgrown anything you can call training aid. Your treasury notices, and so does the other bloc.",
+  supportLabel: "Open the arsenal",
+  supportDescription:
+    "Ship weapons, vehicles and cash at scale. Your side gains ground and your defence industry gains a customer.",
+  holdLabel: "Keep shipments where they are",
+  holdDescription: "No new commitments. No public retreat either.",
+  deescalateLabel: "Throttle the shipments",
+  deescalateDescription:
+    "Slow the pipeline and put the money somewhere it does not shoot back at you.",
+  wireStart: "Arms shipments to both sides in Vietnam have reached wartime volumes.",
+  wireEnd: "The arms pipeline settles into a routine nobody reports on.",
+  durationTurns: 10,
+  inflationDrag: 0.006,
+  confidenceDrag: -0.007,
+  approvalDrag: -0.006,
+  marginPressure: null,
+});
+
+export const VIETNAM_TONKIN_TEMPLATE: CrisisTemplate = vietnamRungTemplate({
+  rung: 3,
+  name: "Vietnam: Incident in the Gulf",
+  description:
+    "A destroyer reports coming under fire in the gulf. The second report is thinner than the first, and the third contradicts both. The legislature is being asked for a resolution granting the executive a free hand.",
+  prompt:
+    "You have a contested naval report and a draft resolution on your desk. What you say in the next day sets the legal footing for everything after it.",
+  supportLabel: "Take the resolution and act on it",
+  supportDescription:
+    "Treat the incident as an attack. You get authority without a declaration, and you own every consequence that follows.",
+  holdLabel: "Wait for the second report",
+  holdDescription: "Say nothing until the intelligence firms up. It may never firm up.",
+  deescalateLabel: "Call the report unconfirmed",
+  deescalateDescription:
+    "Refuse to build a war on a doubtful signal. Your opponents will say you let an attack on your navy go unanswered.",
+  wireStart: "A naval incident in the Gulf of Tonkin is reported. Details are disputed.",
+  wireEnd: "The gulf incident passes out of the news. The resolution it produced does not.",
+  durationTurns: 8,
+  inflationDrag: 0.008,
+  confidenceDrag: -0.009,
+  approvalDrag: -0.008,
+  marginPressure: null,
+});
+
+export const VIETNAM_AIR_CAMPAIGN_TEMPLATE: CrisisTemplate = vietnamRungTemplate({
+  rung: 4,
+  name: "Vietnam: Air Campaign",
+  description:
+    "Sustained bombing is underway. It is measured in sorties flown, tonnage dropped and aircrew who do not come home, and it has not yet produced the political result anyone promised.",
+  prompt:
+    "The air staff want the target list widened. The bombing has not broken the other side's will, and each month of it is another month you have to defend at home.",
+  supportLabel: "Widen the target list",
+  supportDescription:
+    "More sorties, deeper strikes, more airframes ordered. Your procurement queues fill for years.",
+  holdLabel: "Fly the current campaign",
+  holdDescription: "No expansion, no pause. The campaign continues as approved.",
+  deescalateLabel: "Order a bombing pause",
+  deescalateDescription:
+    "Stop the strikes and offer talks. Your air staff and your hawks will both call it a gift to the enemy.",
+  wireStart: "A sustained bombing campaign over Vietnam has begun.",
+  wireEnd: "The air campaign settles into a rhythm the front pages stop counting.",
+  durationTurns: 12,
+  inflationDrag: 0.011,
+  confidenceDrag: -0.013,
+  approvalDrag: -0.011,
+  marginPressure: -3,
+});
+
+export const VIETNAM_GROUND_COMMITMENT_TEMPLATE: CrisisTemplate = vietnamRungTemplate({
+  rung: 5,
+  name: "Vietnam: Ground Commitment",
+  description:
+    "Combat divisions are ashore. Conscription stops being an argument about policy and becomes a letter arriving at somebody's house.",
+  prompt:
+    "Your commander in country wants more divisions and says he can finish it with them. He said that about the last request too.",
+  supportLabel: "Send the divisions",
+  supportDescription:
+    "Meet the troop request in full. The war becomes yours in a way it was not yesterday.",
+  holdLabel: "Cap the deployment",
+  holdDescription: "Hold the ceiling where it is and make the field commander work inside it.",
+  deescalateLabel: "Begin withdrawing units",
+  deescalateDescription:
+    "Start bringing formations home and hand the fighting back to your client. The generals will say you lost it in the capital.",
+  wireStart: "Combat troops have been committed to Vietnam in division strength.",
+  wireEnd: "The deployment stabilises. The casualty lists do not.",
+  durationTurns: 14,
+  inflationDrag: 0.015,
+  confidenceDrag: -0.017,
+  approvalDrag: -0.015,
+  marginPressure: -5,
+});
+
+export const VIETNAM_FULL_WAR_TEMPLATE: CrisisTemplate = vietnamRungTemplate({
+  rung: 6,
+  name: "Vietnam: The Long War",
+  description:
+    "There is no ceiling left, no exit date and a body count on the evening news. The war now runs your budget, your draft, your inflation and your politics.",
+  prompt:
+    "Everyone in the room has a plan to win it and nobody has a date. The only decision left is whether you keep paying.",
+  supportLabel: "Prosecute the war to the end",
+  supportDescription:
+    "Full mobilisation of money and industry. There is no version of this that is cheap.",
+  holdLabel: "Hold the line and wait them out",
+  holdDescription: "No escalation, no withdrawal. Attrition, and whoever tires first.",
+  deescalateLabel: "Negotiate a way out",
+  deescalateDescription:
+    "Open talks and start climbing down. Everything you spent gets relitigated at the next election.",
+  wireStart: "Vietnam is now a full war with no declared end.",
+  wireEnd: "The war grinds on past the point where the wire bothers to report it.",
+  durationTurns: 16,
+  inflationDrag: 0.02,
+  confidenceDrag: -0.023,
+  approvalDrag: -0.02,
+  marginPressure: -7,
+});
 
 export const ALL_CRISIS_TEMPLATES: Record<
   string,
@@ -4330,6 +4635,13 @@ export const ALL_CRISIS_TEMPLATES: Record<
   king_tide_flooding: KING_TIDE_FLOODING_TEMPLATE,
   landslide: LANDSLIDE_TEMPLATE,
   forest_pest_outbreak: FOREST_PEST_OUTBREAK_TEMPLATE,
+  // Vietnam chain. Keys must stay in step with `vietnamTemplateKeyForLevel`.
+  vietnam_advisors: VIETNAM_ADVISORS_TEMPLATE,
+  vietnam_materiel: VIETNAM_MATERIEL_TEMPLATE,
+  vietnam_tonkin_incident: VIETNAM_TONKIN_TEMPLATE,
+  vietnam_air_campaign: VIETNAM_AIR_CAMPAIGN_TEMPLATE,
+  vietnam_ground_commitment: VIETNAM_GROUND_COMMITMENT_TEMPLATE,
+  vietnam_full_war: VIETNAM_FULL_WAR_TEMPLATE,
   prague_spring_reform: PRAGUE_SPRING_TEMPLATE,
   hardliner_backlash: HARDLINER_BACKLASH_TEMPLATE,
   civil_rights_marches: CIVIL_RIGHTS_MARCHES_TEMPLATE,

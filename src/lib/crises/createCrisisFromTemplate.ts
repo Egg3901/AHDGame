@@ -9,6 +9,9 @@ import { resolveCrisisLocationName, interpolateLocation } from "./crisisLocation
 
 export interface CreateCrisisParams {
   template: CrisisTemplate;
+  /** The `ALL_CRISIS_TEMPLATES` key, stored on the crisis so a chained family can
+   *  tell which rung just ended. Optional: unchained crises never need it. */
+  templateKey?: string;
   scope: Crisis["scope"];
   countryIds: string[];
   regionIds: string[];
@@ -62,6 +65,8 @@ export async function createCrisisFromTemplate(
     wireMessageOnEnd: template.wireMessageOnEnd
       ? interpolateLocation(template.wireMessageOnEnd, locationName)
       : null,
+    templateKey: params.templateKey,
+    chain: template.chain,
     createdBy: null,
     createdAt: new Date(),
     resolvedAt: null,

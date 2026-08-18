@@ -35,8 +35,11 @@ describe("Warsaw Pact satellite constants", () => {
   });
 });
 
-describe("Vietnam escalation interface (Track A stub)", () => {
-  it("returns a safe default of 0 until the real implementation lands", () => {
+describe("Vietnam escalation interface", () => {
+  it("reads the unescalated floor when no turn has filled the cache", () => {
+    // Wired to the real ladder in vietnamEscalation.ts, read through a
+    // process-local cache that refreshVietnamEscalationLevel fills once a turn.
+    // A test that never runs a turn sees 0, which is the no-war reading.
     expect(getVietnamEscalationLevel()).toBe(0);
   });
 });
@@ -202,9 +205,10 @@ describe("1960s US protest templates", () => {
   });
 
   it("anti-war protest spawn chance is at or above its unescalated floor", () => {
-    // With getVietnamEscalationLevel() stubbed to 0, the template should sit at
-    // its documented floor (0.0015). This locks the floor value so a future
-    // change to the interface's default doesn't silently drop it.
+    // With no war on the ladder the template sits at its documented floor
+    // (0.0015). This locks the floor value so a future change to the escalation
+    // scaling doesn't silently drop it. The escalated case is covered in
+    // vietnamChain.test.ts.
     const trig = ANTIWAR_PROTEST_TEMPLATE.autoTrigger;
     expect(trig?.kind).toBe("random");
     if (trig?.kind === "random") {
