@@ -35,6 +35,8 @@ export const COUNTRY_ANCHOR: Record<string, [number, number]> = {
   BAL: [24.5, 57.0],
   CN: [104.2, 35.9],
   JP: [138.3, 36.2],
+  NVN: [105.85, 21.03],
+  SVN: [106.7, 10.78],
   BR: [-51.9, -14.2],
   NG: [8.7, 9.1],
 };

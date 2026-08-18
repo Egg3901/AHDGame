@@ -3,6 +3,7 @@ import { occupationOf } from "@/lib/military/occupation";
 import { anchorOf } from "@/lib/maps/countryAnchors";
 import { getRegion } from "@/lib/military/regions";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { calendarTurn, type CalendarClock } from "@/lib/utils/gameDate";
 import { projectLonLat } from "./regionOverlayBridge";
 import type { Conflict, Severity } from "./conflicts";
 
@@ -17,9 +18,16 @@ import type { Conflict, Severity } from "./conflicts";
  * Spec: docs/superpowers/specs/2026-07-26-live-conflicts-hub-design.md
  */
 
-/** The in-game year a turn falls in. Mirrors gameTime's calendar derivation. */
-export function yearOfTurn(turn: number, startingYear: number): number {
-  return startingYear + Math.floor(Math.max(0, turn - 1) / TURNS_PER_YEAR);
+/**
+ * The in-game year a turn falls in.
+ *
+ * Routes through `calendarTurn` so a founding-phase offset (`preIterationTurns`)
+ * does not push the year a year ahead of the status bar. Without a clock this is
+ * the identity on the raw turn, which is what every existing test asserts.
+ */
+export function yearOfTurn(turn: number, startingYear: number, clock?: CalendarClock): number {
+  const cal = calendarTurn(turn, clock);
+  return startingYear + Math.floor(Math.max(0, cal - 1) / TURNS_PER_YEAR);
 }
 
 /** The board's severity rung. A winding-down war reads as that whatever its weight. */
@@ -33,6 +41,10 @@ export interface ConflictViewOptions {
   startingYear: number;
   /** Cumulative casualties across this conflict's resolved battles. */
   casualties: number;
+  /** Founding-phase calendar offset. Absent on a normal world (identity). */
+  preIterationTurns?: number;
+  /** Pin every date to the era start while the founding phase is still running. */
+  preIterationActive?: boolean;
 }
 
 export function toConflictView(doc: ConflictDoc, opts: ConflictViewOptions): Conflict {
@@ -59,10 +71,17 @@ export function toConflictView(doc: ConflictDoc, opts: ConflictViewOptions): Con
     y = (py / 394.4) * 100;
   }
 
-  const startYear = yearOfTurn(doc.startTurn, opts.startingYear);
+  const clock: CalendarClock | undefined =
+    opts.preIterationTurns != null || opts.preIterationActive
+      ? {
+          preIterationTurns: opts.preIterationTurns,
+          preIterationActive: opts.preIterationActive,
+        }
+      : undefined;
+  const startYear = yearOfTurn(doc.startTurn, opts.startingYear, clock);
   const years =
     doc.endTurn != null
-      ? `${startYear} – ${yearOfTurn(doc.endTurn, opts.startingYear)}`
+      ? `${startYear} – ${yearOfTurn(doc.endTurn, opts.startingYear, clock)}`
       : `${startYear} – present`;
 
   const occupier = occ.occupier === "A" ? doc.sideA : occ.occupier === "B" ? doc.sideB : null;
