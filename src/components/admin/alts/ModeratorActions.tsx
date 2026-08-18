@@ -15,7 +15,7 @@
 
 import { useState } from "react";
 import type { AltClusterStatus, AltContext, ClusterDetail, ClusterMember } from "./altTypes";
-import { ROLE_LABEL, STATUS_LABEL } from "./altTypes";
+import { memberInGameName, ROLE_LABEL, STATUS_LABEL } from "./altTypes";
 
 export type ToastKind = "success" | "error" | "info";
 
@@ -87,7 +87,7 @@ export function ModeratorActions({
         throw new Error(data.error ?? `Request failed (${res.status})`);
       }
       onMemberBanned(member.userId);
-      notify(`Banned ${member.name ?? "member"}.`, "success");
+      notify(`Banned ${memberInGameName(member)}.`, "success");
       setPending(null);
     } catch (e) {
       notify(e instanceof Error ? e.message : "Failed to ban member", "error");
@@ -113,7 +113,7 @@ export function ModeratorActions({
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? `Request failed (${res.status})`);
       }
-      notify(`Note saved for ${member.name ?? "member"}.`, "success");
+      notify(`Note saved for ${memberInGameName(member)}.`, "success");
       setPending(null);
     } catch (e) {
       notify(e instanceof Error ? e.message : "Failed to save note", "error");
@@ -369,7 +369,7 @@ function MemberActionDialog({
       >
         {members.map((m) => (
           <option key={m.userId} value={m.userId}>
-            {(m.name ?? `user·${m.userId.slice(-6)}`) + ` — ${ROLE_LABEL[m.role]}`}
+            {`${memberInGameName(m)} — ${ROLE_LABEL[m.role]}`}
           </option>
         ))}
       </select>

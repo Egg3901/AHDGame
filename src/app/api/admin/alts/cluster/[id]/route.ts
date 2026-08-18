@@ -21,7 +21,7 @@ import type {
   AltLinkSignal,
   AltSignal,
 } from "@/lib/db/types/altDetection";
-import type { User } from "@/lib/db/types";
+import { emptyAltMember, hydrateAltMembers } from "@/lib/altDetection/hydrateMembers";
 import { memberRole, redactEvidenceForRole } from "../../_shared";
 
 interface RouteParams {
@@ -49,16 +49,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const memberIds = cluster.memberUserIds;
     const memberIdStrs = memberIds.map((mid) => mid.toString());
 
-    const [users, linksCol] = await Promise.all([
-      memberIds.length
-        ? db
-            .collection<User>("users")
-            .find({ _id: { $in: memberIds } }, { projection: { username: 1, isBanned: 1 } })
-            .toArray()
-        : Promise.resolve([]),
+    const [hydrated, linksCol] = await Promise.all([
+      hydrateAltMembers(db, memberIds, { revealNetwork: isAdmin }),
       getAltLinksCollection(db),
     ]);
-    const userById = new Map(users.map((u) => [u._id.toString(), u]));
 
     // Internal edges: both endpoints are members of this cluster. These are
     // the edges the cluster was built from (plus any below-threshold weak
@@ -73,11 +67,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     const members = memberIds.map((mid) => {
       const idStr = mid.toString();
-      const u = userById.get(idStr);
       return {
-        userId: idStr,
-        name: u?.username ?? null,
-        banned: u?.isBanned ?? false,
+        ...(hydrated.get(idStr) ?? emptyAltMember(idStr)),
         role: memberRole(idStr, cluster.roles),
       };
     });
