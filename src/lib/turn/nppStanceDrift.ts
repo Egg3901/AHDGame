@@ -1,21 +1,28 @@
 /**
- * NPP stance drift (#101) — makes NPPs feel alive by slowly shifting their
- * economic/social stance toward the political lean of the state they represent,
- * gated by how stubborn each NPP is. A stubborn NPP barely moves; a flexible one
- * converges to its state over time.
+ * NPP stance drift (#101) — nudges each NPP's economic/social stance toward a
+ * per-NPP TARGET each interval, gated by how stubborn each NPP is. A stubborn NPP
+ * barely moves; a flexible one converges to its target over time.
  *
- * Drift-only by design: it reads each NPP's CURRENT stance and nudges it forward,
- * so existing NPPs grandfather in naturally (no backfill/regeneration). Stance
- * (`policies.economic` / `.social`) and the state lean (`cachedEconomicLean` /
- * `cachedSocialLean`) share the same −5 (left) … +5 (right) axis, so the target
- * needs no rescaling. `domainPositions` are re-derived deterministically
- * (`noise: 0`) so the per-domain stances stay consistent with the drifted axes —
- * which is what the cross-pressure resolver reads for modern bills.
+ * The target is NOT the raw state lean. Drifting straight to the electorate
+ * centre made every flexible NPP of both parties collapse onto the same point
+ * (the appeal-maximising position), erasing party contrast and letting NPPs mimic
+ * the ideal winning stance a fixed-position player could never match. The target
+ * is now party-anchored and only pulled part-way toward the state lean, with a
+ * stable per-NPP offset. See {@link nppStanceTarget}; the one-off re-scatter heal
+ * uses the same function, so a healed NPP already sits on its target and does not
+ * re-mimic on the next cycle.
+ *
+ * Drift-only by design: it reads each NPP's CURRENT stance and nudges it forward.
+ * Stance (`policies.economic` / `.social`) and the lean (`cachedEconomicLean` /
+ * `cachedSocialLean`) share the same -5 (left) to +5 (right) axis. `domainPositions`
+ * are re-derived deterministically (`noise: 0`) so per-domain stances track the
+ * axes — what the cross-pressure resolver reads for modern bills.
  */
 import type { AnyBulkWriteOperation } from "mongodb";
 import type { Db } from "@/lib/mongodb";
-import type { LegislationType, NPP, State } from "@/lib/db/types";
+import type { LegislationType, NPP, PoliticalParty, State } from "@/lib/db/types";
 import { deriveDomainPositions } from "@/lib/npp/domainPositions";
+import { nppStanceTarget } from "@/lib/npp/stanceTarget";
 
 /**
  * Max updates per bulkWrite. Sized well under MongoDB's 16MB per-command BSON
@@ -60,7 +67,16 @@ export async function processNppStanceDrift(
     .collection<NPP>("npps")
     .find(
       { retiredAt: null },
-      { projection: { _id: 1, homeState: 1, policies: 1, personality: 1 } }
+      {
+        projection: {
+          _id: 1,
+          homeState: 1,
+          countryId: 1,
+          party: 1,
+          policies: 1,
+          personality: 1,
+        },
+      }
     )
     .toArray();
   if (npps.length === 0) return { drifted: 0 };
@@ -74,6 +90,18 @@ export async function processNppStanceDrift(
     )
     .toArray();
   const leanByState = new Map(states.map((s) => [String(s._id), s]));
+
+  // Party positions anchor each NPP's target so both parties don't converge on
+  // the same state lean. Keyed by countryId + sequentialId to match npp.party.
+  const parties = await db
+    .collection<PoliticalParty>("politicalParties")
+    .find(
+      {},
+      { projection: { sequentialId: 1, countryId: 1, economicPosition: 1, socialPosition: 1 } }
+    )
+    .toArray();
+  const partyByKey = new Map(parties.map((p) => [`${p.countryId}:${p.sequentialId}`, p]));
+
   const legislationTypes = await db
     .collection<LegislationType>("legislationTypes")
     .find({})
@@ -95,9 +123,26 @@ export async function processNppStanceDrift(
 
     const curEcon = npp.policies?.economic ?? 0;
     const curSocial = npp.policies?.social ?? 0;
-    const economic = driftStanceAxis(curEcon, lean.cachedEconomicLean, step);
-    const social = driftStanceAxis(curSocial, lean.cachedSocialLean, step);
-    if (economic === curEcon && social === curSocial) continue; // already at lean
+
+    // Party-anchored target, only pulled part-way to the state lean, plus a
+    // stable per-NPP offset — so flexible NPPs stop collapsing onto the
+    // electorate centre and keep their party contrast. See stanceTarget.ts.
+    const party = partyByKey.get(`${npp.countryId}:${npp.party}`);
+    const targetEcon = nppStanceTarget(
+      party?.economicPosition ?? 0,
+      lean.cachedEconomicLean,
+      String(npp._id),
+      "economic"
+    );
+    const targetSocial = nppStanceTarget(
+      party?.socialPosition ?? 0,
+      lean.cachedSocialLean,
+      String(npp._id),
+      "social"
+    );
+    const economic = driftStanceAxis(curEcon, targetEcon, step);
+    const social = driftStanceAxis(curSocial, targetSocial, step);
+    if (economic === curEcon && social === curSocial) continue; // already at target
 
     // Re-derive domain stances deterministically (noise 0) so they track the
     // drifted axes — the resolver reads these for bills without a policy vector.
