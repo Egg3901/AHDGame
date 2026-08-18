@@ -523,4 +523,120 @@ describe("private banking conserves money", () => {
     expect(finalCharter.npcDeposits).toBe(0);
     expect(finalCharter.totalDeposits).toBe(0);
   });
+
+  it("pays secured central bank facilities before depositors, and burns what it repays", async () => {
+    // 30M of cash against a 20M household book and a 12M discount window draw.
+    // The window is senior, so it is made whole first and the depositors take
+    // what is left, with insurance covering the rest.
+    db = makeWorld({ cashReserves: 30_000_000, npcDeposits: 20_000_000, fund: 5_000_000 });
+    const corp = db.collection("corporations").docs[0] as Record<string, unknown>;
+    (corp.bankCharter as Record<string, unknown>).discountWindowDebt = 12_000_000;
+    db.seed("federalBudget", [
+      { _id: "federal", treasuryBalance: 100_000_000, spending: { total: 0, byCategory: {} } },
+    ]);
+    const before = totalMoney(db);
+
+    const result = await returnDepositBook(db as unknown as Db, CORP_ID, {
+      cause: "failure",
+      turn: 40,
+      releaseResidualToOwner: false,
+    });
+
+    expect(result.centralBankRepaid).toBe(12_000_000);
+    expect(result.centralBankWrittenOff).toBe(0);
+    // 18M of cash left for a 20M book, so insurance covers 2M: 5M fund, so all
+    // of it comes from the fund and none from the treasury.
+    expect(result.fromBankCash).toBe(18_000_000);
+    expect(result.fromInsuranceFund).toBe(2_000_000);
+    expect(result.fromTreasury).toBe(0);
+
+    // The window's principal was minted on the draw, so repaying it destroys
+    // that money: the world is exactly 12M smaller and nothing else moved.
+    expect(totalMoney(db)).toBe(before - 12_000_000);
+    expect(charterOf(db).bankCharter.discountWindowDebt).toBe(0);
+    expect(charterOf(db).bankCharter.cashReserves).toBe(0);
+  });
+
+  it("extinguishes a central bank claim the estate cannot pay, and creates nothing", async () => {
+    db = makeWorld({ cashReserves: 0, npcDeposits: 0 });
+    const corp = db.collection("corporations").docs[0] as Record<string, unknown>;
+    (corp.bankCharter as Record<string, unknown>).cbMarginDebt = 8_000_000;
+    const before = totalMoney(db);
+
+    const result = await returnDepositBook(db as unknown as Db, CORP_ID, {
+      cause: "failure",
+      turn: 41,
+      releaseResidualToOwner: false,
+    });
+
+    expect(result.centralBankRepaid).toBe(0);
+    expect(result.centralBankWrittenOff).toBe(8_000_000);
+    // The central bank ate the loss. Money already in the world stays in it.
+    expect(totalMoney(db)).toBe(before);
+    expect(charterOf(db).bankCharter.cbMarginDebt).toBe(0);
+  });
+
+  it("pays interbank lenders pro rata after depositors and before the owner", async () => {
+    db = makeWorld({ cashReserves: 26_000_000, npcDeposits: 20_000_000 });
+    const corp = db.collection("corporations").docs[0] as Record<string, unknown>;
+    (corp.bankCharter as Record<string, unknown>).interbankDebt = 8_000_000;
+    const lenderA = new ObjectId();
+    const lenderB = new ObjectId();
+    db.seed("corporations", [
+      { _id: lenderA, name: "Lender A", bankCharter: { cashReserves: 0, status: "active" } },
+      { _id: lenderB, name: "Lender B", bankCharter: { cashReserves: 0, status: "active" } },
+    ]);
+    db.seed("interbankLoans", [
+      {
+        _id: new ObjectId(),
+        lenderCorporationId: lenderA,
+        borrowerCorporationId: CORP_ID,
+        currency: "USD",
+        principal: 6_000_000,
+        outstanding: 6_000_000,
+        ratePercent: 5,
+        originatedTurn: 1,
+        status: "current",
+      },
+      {
+        _id: new ObjectId(),
+        lenderCorporationId: lenderB,
+        borrowerCorporationId: CORP_ID,
+        currency: "USD",
+        principal: 2_000_000,
+        outstanding: 2_000_000,
+        ratePercent: 5,
+        originatedTurn: 1,
+        status: "current",
+      },
+    ]);
+    const before = totalMoney(db);
+
+    const result = await returnDepositBook(db as unknown as Db, CORP_ID, {
+      cause: "revocation",
+      turn: 42,
+      releaseResidualToOwner: true,
+    });
+
+    // 26M cash: 20M to depositors, 6M left against 8M of interbank claims, so
+    // lenders recover three quarters each and the owner gets nothing.
+    expect(result.npcReturned).toBe(20_000_000);
+    expect(result.interbankRepaid).toBe(6_000_000);
+    expect(result.interbankWrittenOff).toBe(2_000_000);
+    expect(result.ownerResidual).toBe(0);
+    expect(totalMoney(db)).toBe(before);
+
+    const lenders = db.collection("corporations").docs as {
+      _id: ObjectId;
+      bankCharter?: { cashReserves?: number };
+    }[];
+    const a = lenders.find((c) => c._id.equals(lenderA))!;
+    const b = lenders.find((c) => c._id.equals(lenderB))!;
+    expect(a.bankCharter!.cashReserves).toBeCloseTo(4_500_000, 6);
+    expect(b.bankCharter!.cashReserves).toBeCloseTo(1_500_000, 6);
+
+    const loans = db.collection("interbankLoans").docs as { status: string; outstanding: number }[];
+    expect(loans.every((l) => l.status === "defaulted")).toBe(true);
+    expect(loans.reduce((sum, l) => sum + l.outstanding, 0)).toBeCloseTo(2_000_000, 6);
+  });
 });

@@ -31,7 +31,14 @@ import { discountWindowRatePercent } from "@/lib/banking/discountWindow";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
 import { getCashReserves, bankEquity } from "@/lib/banking/bankCash";
-import { applyMoneyMove, turnMoveKey } from "@/lib/banking/moneyMove";
+import { processDeadBankLoans } from "@/lib/banking/deadBankLoans";
+import {
+  applyMoneyMove,
+  claimMoneyMove,
+  completeMoneyMove,
+  turnMoveKey,
+  type MoneyTarget,
+} from "@/lib/banking/moneyMove";
 import {
   CREDIT_BANDS,
   DEFAULT_LENDING_PROFILE,
@@ -70,6 +77,12 @@ export type BankingTurnSummary = {
   cbMarginInterestPaid: number;
   /** CB margin interest that could not be paid. */
   cbMarginInterestShortfall: number;
+  /** Loans serviced on behalf of a bank that has already been wound up. */
+  deadBankLoansServiced: number;
+  /** Recovered into a failed bank's estate, before its waterfall runs. */
+  deadBankRecoveredToEstate: number;
+  /** Recovered to the insurance fund after the estate was closed. */
+  deadBankRecoveredToInsurer: number;
 };
 
 const ZERO_SUMMARY: BankingTurnSummary = {
@@ -86,6 +99,9 @@ const ZERO_SUMMARY: BankingTurnSummary = {
   interbankDefaultsWrittenOff: 0,
   cbMarginInterestPaid: 0,
   cbMarginInterestShortfall: 0,
+  deadBankLoansServiced: 0,
+  deadBankRecoveredToEstate: 0,
+  deadBankRecoveredToInsurer: 0,
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -224,6 +240,29 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     summary.npcBulkShortfall += bankResult.npcBulkShortfall;
     summary.premiumShortfall += bankResult.premiumShortfall;
   }
+
+  // Loans owed to banks that have already been wound up. They are not part of
+  // any live bank's pass, and before this they were serviced by nobody: the
+  // borrower simply stopped paying and the value never reached the people who
+  // lost out when the bank failed.
+  const deadBankResult = await processDeadBankLoans(db, turn, async (loan, bank, target) => {
+    const serviced = await servicePlayerLoan(
+      db,
+      turn,
+      bank.corporationId,
+      loan,
+      bank.currency,
+      bank.name,
+      target
+    );
+    summary.loanInterestCollected += serviced.interestCollected;
+    summary.loanPrincipalRepaid += serviced.principalRepaid;
+    summary.defaultsWrittenOff += serviced.writtenOff;
+    return { collected: serviced.bankCredit };
+  });
+  summary.deadBankLoansServiced = deadBankResult.loansServiced;
+  summary.deadBankRecoveredToEstate = deadBankResult.recoveredToEstate;
+  summary.deadBankRecoveredToInsurer = deadBankResult.recoveredToInsurer;
 
   if (await isBankPropTradingEnabled()) {
     await serviceInterbankAndCbMargin(db, turn, summary);
@@ -440,49 +479,102 @@ async function processOneBank(
       },
     });
   }
-  if (creditOps.length > 0) {
-    await db.collection("characters").bulkWrite(creditOps);
-    // Real cash leaving the bank's books for a depositor's savings, and until
-    // now the only record was the balance itself. Bulk, with thresholds loaded
-    // ONCE before the loop, per the emitTxBulk contract: this runs for every
-    // depositor of every bank every turn.
-    const thresholds = await loadTxThresholds(db);
-    await emitTxBulk(
-      db,
-      playerCredits
-        .map((pc) => ({ pc, paid: roundSavingsAmount(pc.interest * interestScale, currency) }))
-        .filter(({ paid }) => paid > 0)
-        .map(({ pc, paid }) => ({
-          type: "bank_deposit_interest" as const,
-          turn,
-          createdAt: new Date(),
-          subjectType: "character" as const,
-          subjectId: pc.characterId,
-          subjectName: depositorNameById.get(pc.characterId.toString()) ?? "Depositor",
-          amount: paid,
-          currencyCode: currency,
-          counterpartyType: "corporation" as const,
-          counterpartyId: corp._id,
-          counterpartyName: corp.name,
-          meta: { ratePercent: rates.depositRatePercent },
-        })),
-      thresholds
-    );
+  // Cash actually leaving the bank for a saver's own balance. Claimed before it
+  // moves, like every other money movement, but applied with a bulkWrite: the
+  // counterparty is every depositor at the bank with a different amount each,
+  // and one guarded write per player per bank per turn is a round trip the turn
+  // loop cannot afford. `claimMoneyMove` gives the idempotency and the net-zero
+  // check without the round trips.
+  const interestMoveKey = turnMoveKey("deposit-interest", bankIdHex, turn);
+  let playerInterestSettled = 0;
+
+  if (playerInterestPaid > 0 && creditOps.length > 0) {
+    const claim = await claimMoneyMove(db, {
+      key: interestMoveKey,
+      kind: "deposit_interest",
+      turn,
+      legs: [
+        {
+          kind: "debit",
+          amount: playerInterestPaid,
+          collection: "corporations",
+          filter: { _id: corp._id },
+          path: "bankCharter.cashReserves",
+          note: "deposit interest leaves the bank",
+        },
+        {
+          kind: "credit",
+          amount: playerInterestPaid,
+          note: "credited across every player depositor at this bank",
+        },
+      ],
+    });
+
+    if (claim.status === "claimed") {
+      // The bank half is a guarded write for the same reason every debit is:
+      // it must be impossible to pay interest the vault cannot cover, however
+      // stale the figure this pass has been carrying.
+      const debited = await db.collection<Corporation>("corporations").updateOne(
+        { _id: corp._id, "bankCharter.cashReserves": { $gte: playerInterestPaid } },
+        {
+          $inc: { "bankCharter.cashReserves": -playerInterestPaid },
+          $set: { updatedAt: new Date() },
+        }
+      );
+      if (debited.matchedCount !== 1) {
+        await completeMoneyMove(
+          db,
+          interestMoveKey,
+          [],
+          "the bank could not fund deposit interest"
+        );
+      } else {
+        await db.collection("characters").bulkWrite(creditOps);
+        await completeMoneyMove(db, interestMoveKey, [0, 1]);
+        playerInterestSettled = playerInterestPaid;
+
+        // Real cash leaving the bank's books for a depositor's savings, and
+        // until now the only record was the balance itself. Bulk, with
+        // thresholds loaded ONCE before the loop, per the emitTxBulk contract:
+        // this runs for every depositor of every bank every turn.
+        const thresholds = await loadTxThresholds(db);
+        await emitTxBulk(
+          db,
+          playerCredits
+            .map((pc) => ({ pc, paid: roundSavingsAmount(pc.interest * interestScale, currency) }))
+            .filter(({ paid }) => paid > 0)
+            .map(({ pc, paid }) => ({
+              type: "bank_deposit_interest" as const,
+              turn,
+              createdAt: new Date(),
+              subjectType: "character" as const,
+              subjectId: pc.characterId,
+              subjectName: depositorNameById.get(pc.characterId.toString()) ?? "Depositor",
+              amount: paid,
+              currencyCode: currency,
+              counterpartyType: "corporation" as const,
+              counterpartyId: corp._id,
+              counterpartyName: corp.name,
+              meta: { ratePercent: rates.depositRatePercent },
+            })),
+          thresholds
+        );
+      }
+    }
   }
 
   const npcInterestPaid = roundSavingsAmount(npcInterestDue * interestScale, currency);
-  const totalInterestPaid = playerInterestPaid + npcInterestPaid;
-  if (totalInterestPaid > 0 || npcInterestPaid > 0) {
+  const totalInterestPaid = playerInterestSettled + npcInterestPaid;
+  if (totalInterestPaid > 0) {
     // Only the PLAYER half leaves the building. A player's interest is credited
     // to `currencyBalances.savings`, which is their own balance sheet, so the
     // cash goes with it. An NPC household's interest is credited to the account
     // it already holds AT this bank: the liability grows and the cash stays
     // exactly where it is.
     //
-    // Debiting cash for both was the old behaviour and it was double-counting
-    // an outflow that never happened, draining reserves every turn against a
-    // deposit the bank still held.
-    cashReserves = Math.max(0, cashReserves - playerInterestPaid);
+    // The player half already moved in the database above; this keeps the
+    // in-memory figure the rest of the pass decides on in step with it.
+    cashReserves = Math.max(0, cashReserves - playerInterestSettled);
     npcDeposits = Math.max(0, npcDeposits + npcInterestPaid);
     result.depositInterestPaid += totalInterestPaid;
   }
@@ -524,17 +616,37 @@ async function processOneBank(
     const shortfall = premiumDue - premiumPaid;
     if (shortfall > 0) result.premiumShortfall += shortfall;
     if (premiumPaid > 0) {
-      cashReserves = Math.max(0, cashReserves - premiumPaid);
       await ensureFund(db, currency);
-      await db.collection<DepositInsuranceFund>("depositInsuranceFunds").updateOne(
-        { _id: currency },
-        {
-          $inc: {
-            balance: premiumPaid,
-            premiumsCollectedLifetime: premiumPaid,
+      const premiumMove = await applyMoneyMove(db, {
+        key: turnMoveKey("insurance-premium", bankIdHex, turn),
+        kind: "insurance_premium",
+        turn,
+        legs: [
+          {
+            kind: "debit",
+            amount: premiumPaid,
+            collection: "corporations",
+            filter: { _id: corp._id },
+            path: "bankCharter.cashReserves",
+            note: "insurance premium leaves the bank",
           },
-        }
-      );
+          {
+            kind: "credit",
+            amount: premiumPaid,
+            collection: "depositInsuranceFunds",
+            filter: { _id: currency },
+            path: "balance",
+            note: "premium into the currency's insurance fund",
+          },
+        ],
+      });
+      if (premiumMove.status === "applied") {
+        cashReserves = Math.max(0, cashReserves - premiumPaid);
+        // Lifetime counter, not a balance, so it is not a leg of the move.
+        await db
+          .collection<DepositInsuranceFund>("depositInsuranceFunds")
+          .updateOne({ _id: currency }, { $inc: { premiumsCollectedLifetime: premiumPaid } });
+      }
     }
   }
 
@@ -601,7 +713,7 @@ async function processOneBank(
   result.npcBulkShortfall += bulkResult.shortfall;
 
   // (f) Recompute aggregates + stamp lastBankingTurn (END of bank pass)
-  const finalPlayerDeposits = playerDeposits + playerInterestPaid;
+  const finalPlayerDeposits = playerDeposits + playerInterestSettled;
   const totalDeposits = finalPlayerDeposits + npcDeposits;
 
   await db.collection<Corporation>("corporations").updateOne(
@@ -615,11 +727,15 @@ async function processOneBank(
     },
     {
       $set: {
-        "bankCharter.cashReserves": cashReserves,
+        // Cash is deliberately absent. Every movement in this pass now applies
+        // its own guarded `$inc` through the money primitive, so writing the
+        // in-memory figure here would silently overwrite anything that moved
+        // concurrently and would resurrect money a failed leg never sent. What
+        // is left are the derived aggregates, which are recomputed from the
+        // ledgers each turn and are not balances anyone can claim.
         "bankCharter.npcDeposits": npcDeposits,
         "bankCharter.totalDeposits": totalDeposits,
         "bankCharter.totalLoans": totalLoans,
-        "bankCharter.reserves": cashReserves,
         "bankCharter.depositCeiling": depositCeiling,
         "bankCharter.lastBankingTurn": turn,
         updatedAt: new Date(),
@@ -644,7 +760,19 @@ async function servicePlayerLoan(
   bankCorporationId: ObjectId,
   loan: BankLoan,
   currency: CurrencyCode,
-  bankName: string
+  bankName: string,
+  /**
+   * Where the payment lands. A live bank's vault for a normal turn; whoever
+   * stood behind the bank when it was wound up, if the lender is dead. The
+   * servicing arithmetic is identical either way, so it is a parameter rather
+   * than a second copy of this function.
+   */
+  creditTarget: MoneyTarget = {
+    collection: "corporations",
+    filter: { _id: bankCorporationId },
+    path: "bankCharter.cashReserves",
+    note: "instalment reaches the lending bank",
+  }
 ): Promise<LoanServiceResult> {
   const empty: LoanServiceResult = {
     interestCollected: 0,
@@ -677,7 +805,7 @@ async function servicePlayerLoan(
   const paymentDue = interestDue + principalDue;
 
   const borrowerName = await readBorrowerName(db, loan);
-  const ledger = { turn, bankName, borrowerName };
+  const ledger = { bankName, borrowerName };
 
   const available = await readBorrowerAvailable(db, loan, currency);
   const payment = Math.min(paymentDue, Math.max(0, available));
@@ -691,7 +819,15 @@ async function servicePlayerLoan(
 
     if (arrearsTurns >= ARREARS_DEFAULT_TURNS) {
       const marked = markLoanDefaulted({ outstanding: nextOutstanding, status: "arrears" });
-      await debitBorrower(db, loan, currency, payment, ledger);
+      const collected = await collectLoanPayment(
+        db,
+        turn,
+        loan,
+        currency,
+        payment,
+        creditTarget,
+        ledger
+      );
       await db.collection<BankLoan>("bankLoans").updateOne(
         { _id: loan._id, lastProcessedTurn: { $ne: turn } },
         {
@@ -707,12 +843,20 @@ async function servicePlayerLoan(
         interestCollected: interestPaid,
         principalRepaid: principalPaid,
         writtenOff: marked.outstanding,
-        bankCredit: payment,
+        bankCredit: collected,
         totalLoansDelta: -(principalPaid + marked.outstanding),
       };
     }
 
-    await debitBorrower(db, loan, currency, payment, ledger);
+    const collectedPartial = await collectLoanPayment(
+      db,
+      turn,
+      loan,
+      currency,
+      payment,
+      creditTarget,
+      ledger
+    );
     await db.collection<BankLoan>("bankLoans").updateOne(
       { _id: loan._id, lastProcessedTurn: { $ne: turn } },
       {
@@ -728,7 +872,7 @@ async function servicePlayerLoan(
       interestCollected: interestPaid,
       principalRepaid: principalPaid,
       writtenOff: 0,
-      bankCredit: payment,
+      bankCredit: collectedPartial,
       totalLoansDelta: -principalPaid,
     };
   }
@@ -738,7 +882,15 @@ async function servicePlayerLoan(
   const principalPaid = Math.min(principalDue, outstanding);
   const afterPay = applyLoanPayment({ outstanding, status: loan.status }, principalPaid);
 
-  await debitBorrower(db, loan, currency, paymentDue, ledger);
+  const collectedFull = await collectLoanPayment(
+    db,
+    turn,
+    loan,
+    currency,
+    paymentDue,
+    creditTarget,
+    ledger
+  );
   await db.collection<BankLoan>("bankLoans").updateOne(
     { _id: loan._id, lastProcessedTurn: { $ne: turn } },
     {
@@ -755,7 +907,7 @@ async function servicePlayerLoan(
     interestCollected: interestPaid,
     principalRepaid: principalPaid,
     writtenOff: 0,
-    bankCredit: paymentDue,
+    bankCredit: collectedFull,
     totalLoansDelta: -principalPaid,
   };
 }
@@ -798,22 +950,62 @@ async function readBorrowerAvailable(
 
 /**
  * The single chokepoint every repayment path goes through: full payment,
- * partial/arrears, and the final debit before a default is written off. Emitting
- * the ledger leg HERE rather than at the three call sites is what stops the next
- * servicing branch from being added without one.
+ * partial/arrears, and the final debit before a default is written off.
+ *
+ * It now moves BOTH sides. It used to debit the borrower and leave the bank's
+ * side as a number the caller added to an in-memory total that was flushed at
+ * the end of the whole pass, so a crash anywhere in between destroyed the
+ * payment: the borrower had paid and nobody had been paid. The two legs go
+ * through the shared primitive under a per-loan key, which also makes a retried
+ * turn unable to charge the same borrower twice for the same loan.
+ *
+ * Returns what actually moved, which is zero when the guard refused the debit.
  */
-async function debitBorrower(
+async function collectLoanPayment(
   db: Db,
+  turn: number,
   loan: BankLoan,
   currency: CurrencyCode,
   amount: number,
-  ledger?: { turn: number; bankName: string; borrowerName: string }
-): Promise<void> {
-  if (!(amount > 0) || !loan.borrowerId) return;
+  creditTarget: MoneyTarget,
+  ledger?: { bankName: string; borrowerName: string }
+): Promise<number> {
+  if (!(amount > 0) || !loan.borrowerId) return 0;
+
+  const borrowerPath =
+    loan.borrowerType === "character" ? `currencyBalances.personal.${currency}` : "liquidCapital";
+  const borrowerCollection = loan.borrowerType === "character" ? "characters" : "corporations";
+
+  const move = await applyMoneyMove(db, {
+    key: `loan-service:${loan._id.toString()}:${turn}`,
+    kind: "loan_service",
+    turn,
+    legs: [
+      {
+        kind: "debit",
+        amount,
+        collection: borrowerCollection,
+        filter: { _id: loan.borrowerId },
+        path: borrowerPath,
+        note: "borrower pays the instalment",
+      },
+      {
+        kind: "credit",
+        amount,
+        collection: creditTarget.collection,
+        filter: creditTarget.filter,
+        path: creditTarget.path,
+        note: creditTarget.note,
+      },
+    ],
+  });
+
+  if (move.status !== "applied") return 0;
+
   if (ledger) {
     await emitTx(db, {
       type: "bank_loan_repayment",
-      turn: ledger.turn,
+      turn,
       createdAt: new Date(),
       subjectType: loan.borrowerType === "character" ? "character" : "corporation",
       subjectId: loan.borrowerId,
@@ -826,31 +1018,7 @@ async function debitBorrower(
       meta: { loanId: loan._id.toString() },
     });
   }
-  // The sufficiency check is IN the filter, not in a snapshot taken before it.
-  // `readBorrowerAvailable` reads the balance and this debits it, and between
-  // those two lines the borrower can spend: the servicing pass ran a repayment
-  // against a number that was already stale, and drove the balance negative.
-  // A guarded write cannot: it either matches a balance that can pay, or it
-  // does not apply and the caller sees a short payment, which is the arrears
-  // path that already exists.
-  if (loan.borrowerType === "character") {
-    const path = `currencyBalances.personal.${currency}`;
-    await db.collection<Character>("characters").updateOne(
-      { _id: loan.borrowerId, [path]: { $gte: amount } },
-      {
-        $inc: { [path]: -amount },
-        $set: { updatedAt: new Date() },
-      }
-    );
-    return;
-  }
-  await db.collection<Corporation>("corporations").updateOne(
-    { _id: loan.borrowerId, liquidCapital: { $gte: amount } },
-    {
-      $inc: { liquidCapital: -amount },
-      $set: { updatedAt: new Date() },
-    }
-  );
+  return amount;
 }
 
 type NpcBulkState = {
@@ -986,6 +1154,8 @@ async function serviceNpcBulkBook(
 
   const now = new Date();
   const bulkOps: AnyBulkWriteOperation<BankLoan>[] = [];
+  /** Interest the household pool owes this bank across every credit band. */
+  let interestFromPool = 0;
 
   for (const tranche of work) {
     const current = Math.max(0, tranche.loan?.outstanding ?? 0);
@@ -1030,12 +1200,10 @@ async function serviceNpcBulkBook(
         : 0;
     const interestAffordable = Math.min(interest, poolAvailable);
     if (interestAffordable > 0) {
-      await db
-        .collection<CentralBank>("centralBanks")
-        .updateOne(
-          { _id: state.cbDocId },
-          { $inc: { externalBroadMoney: -interestAffordable }, $set: { updatedAt: now } }
-        );
+      // Accumulated rather than written per tranche: one move for the whole
+      // book, so the household pool and the vault cannot be left disagreeing
+      // by however many credit bands happened to be processed before a crash.
+      interestFromPool += interestAffordable;
       if (state.cb) {
         state.cb.externalBroadMoney = poolAvailable - interestAffordable;
       }
@@ -1091,15 +1259,47 @@ async function serviceNpcBulkBook(
     await db.collection<BankLoan>("bankLoans").bulkWrite(bulkOps);
   }
 
-  // Settle the cash that moved between the bank and the household pool. One
-  // write for the whole book rather than one per band.
+  // Settle the cash that moved between the bank and the household pool. Two
+  // moves for the whole book rather than one write per band: what the pool paid
+  // in interest, and the net principal that was lent out or came back.
+  const bankIdHex = bankCorporationId.toString();
+  const bankVault: MoneyTarget = {
+    collection: "corporations",
+    filter: { _id: bankCorporationId },
+    path: "bankCharter.cashReserves",
+    note: "the lending bank's vault",
+  };
+  const householdPool: MoneyTarget = {
+    collection: "centralBanks",
+    filter: { _id: state.cbDocId },
+    path: "externalBroadMoney",
+    note: "the household money pool",
+  };
+
+  if (interestFromPool > 0) {
+    await applyMoneyMove(db, {
+      key: turnMoveKey("npc-book-interest", bankIdHex, turn),
+      kind: "npc_book_interest",
+      turn,
+      legs: [
+        { kind: "debit", amount: interestFromPool, ...householdPool },
+        { kind: "credit", amount: interestFromPool, ...bankVault },
+      ],
+    });
+  }
+
   if (creditedToPool !== 0) {
-    await db
-      .collection<CentralBank>("centralBanks")
-      .updateOne(
-        { _id: state.cbDocId },
-        { $inc: { externalBroadMoney: creditedToPool }, $set: { updatedAt: now } }
-      );
+    const lendingOut = creditedToPool > 0;
+    const amount = Math.abs(creditedToPool);
+    await applyMoneyMove(db, {
+      key: turnMoveKey("npc-book-principal", bankIdHex, turn),
+      kind: "npc_book_principal",
+      turn,
+      legs: [
+        { kind: lendingOut ? "debit" : "credit", amount, ...bankVault },
+        { kind: lendingOut ? "credit" : "debit", amount, ...householdPool },
+      ],
+    });
     if (state.cb) {
       state.cb.externalBroadMoney = Math.max(
         0,
@@ -1309,6 +1509,49 @@ async function serviceInterbankAndCbMargin(
   }
 }
 
+/**
+ * Interbank interest: one guarded pair, not two hopeful writes.
+ *
+ * Both sides are banks, so both legs are real cash. The old version debited the
+ * borrower with a sufficiency guard and then credited the lender
+ * unconditionally, without checking whether the debit had matched, so a
+ * borrower whose balance had moved produced a lender credit with no debit
+ * behind it. That is money created by a race, in the subsystem whose entire
+ * problem is money that appears from nowhere.
+ */
+async function payInterbankInterest(
+  db: Db,
+  turn: number,
+  loan: InterbankLoan,
+  amount: number
+): Promise<number> {
+  if (!(amount > 0)) return 0;
+  const move = await applyMoneyMove(db, {
+    key: `interbank-interest:${loan._id.toString()}:${turn}`,
+    kind: "interbank_interest",
+    turn,
+    legs: [
+      {
+        kind: "debit",
+        amount,
+        collection: "corporations",
+        filter: { _id: loan.borrowerCorporationId },
+        path: "bankCharter.cashReserves",
+        note: "borrowing bank pays interbank interest",
+      },
+      {
+        kind: "credit",
+        amount,
+        collection: "corporations",
+        filter: { _id: loan.lenderCorporationId },
+        path: "bankCharter.cashReserves",
+        note: "lending bank receives interbank interest",
+      },
+    ],
+  });
+  return move.status === "applied" ? amount : 0;
+}
+
 type InterbankServiceResult = { interestPaid: number; writtenOff: number };
 
 async function serviceOneInterbankLoan(
@@ -1342,20 +1585,7 @@ async function serviceOneInterbankLoan(
 
   if (payment < interestDue - 1e-9) {
     const arrearsTurns = (loan.arrearsTurns ?? 0) + 1;
-    if (payment > 0) {
-      await db
-        .collection<Corporation>("corporations")
-        .updateOne(
-          { _id: loan.borrowerCorporationId, "bankCharter.cashReserves": { $gte: payment } },
-          { $inc: { "bankCharter.cashReserves": -payment }, $set: { updatedAt: new Date() } }
-        );
-      await db
-        .collection<Corporation>("corporations")
-        .updateOne(
-          { _id: loan.lenderCorporationId },
-          { $inc: { "bankCharter.cashReserves": payment }, $set: { updatedAt: new Date() } }
-        );
-    }
+    const partialPaid = await payInterbankInterest(db, turn, loan, payment);
 
     if (arrearsTurns >= ARREARS_DEFAULT_TURNS) {
       // Write off: no cash moves for the remaining principal; clear borrower debt.
@@ -1377,7 +1607,7 @@ async function serviceOneInterbankLoan(
           },
         }
       );
-      return { interestPaid: payment, writtenOff: outstanding };
+      return { interestPaid: partialPaid, writtenOff: outstanding };
     }
 
     await db.collection<InterbankLoan>("interbankLoans").updateOne(
@@ -1389,22 +1619,11 @@ async function serviceOneInterbankLoan(
         },
       }
     );
-    return { interestPaid: payment, writtenOff: 0 };
+    return { interestPaid: partialPaid, writtenOff: 0 };
   }
 
   // Full interest
-  await db
-    .collection<Corporation>("corporations")
-    .updateOne(
-      { _id: loan.borrowerCorporationId, "bankCharter.cashReserves": { $gte: payment } },
-      { $inc: { "bankCharter.cashReserves": -payment }, $set: { updatedAt: new Date() } }
-    );
-  await db
-    .collection<Corporation>("corporations")
-    .updateOne(
-      { _id: loan.lenderCorporationId },
-      { $inc: { "bankCharter.cashReserves": payment }, $set: { updatedAt: new Date() } }
-    );
+  const fullPaid = await payInterbankInterest(db, turn, loan, payment);
   await db.collection<InterbankLoan>("interbankLoans").updateOne(
     { _id: loan._id, lastProcessedTurn: { $ne: turn } },
     {
@@ -1414,5 +1633,5 @@ async function serviceOneInterbankLoan(
       },
     }
   );
-  return { interestPaid: payment, writtenOff: 0 };
+  return { interestPaid: fullPaid, writtenOff: 0 };
 }

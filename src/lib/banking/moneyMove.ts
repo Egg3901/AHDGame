@@ -70,6 +70,21 @@ export interface MoneyMoveLeg {
   note: string;
 }
 
+/**
+ * Where one side of a movement lands.
+ *
+ * Named because the same flow can have different destinations: a loan payment
+ * to a live bank credits its vault, and the same payment to a bank that has
+ * already been wound up credits whoever stood behind it. Passing the target in
+ * is what stops that becoming two copies of the servicing code.
+ */
+export interface MoneyTarget {
+  collection: string;
+  filter: Record<string, unknown>;
+  path: string;
+  note: string;
+}
+
 export interface MoneyMove {
   /** Stable idempotency key. Same key = same move, forever. */
   key: string;
@@ -115,15 +130,31 @@ export function legsNet(legs: readonly MoneyMoveLeg[]): number {
 
 const NET_TOLERANCE = 1e-6;
 
+export type MoneyMoveClaim =
+  | { status: "claimed"; legs: MoneyMoveLeg[] }
+  | { status: "replayed" }
+  | { status: "rejected"; error: string };
+
 /**
- * Claim the key, then move the money.
+ * Claim the key WITHOUT moving anything.
  *
- * Returns `replayed` without touching a balance when the key is already known,
- * which is what makes every caller safe to retry.
+ * Most flows should use {@link applyMoneyMove}, which claims and moves in one
+ * call. This exists for the one shape that cannot: a leg whose counterparty is
+ * thousands of documents with a different amount each, like paying deposit
+ * interest to every saver at a bank. Turning that into one guarded `updateOne`
+ * per depositor would cost a round trip per player per bank per turn, so the
+ * caller keeps its `bulkWrite` and takes the two properties that actually
+ * matter from here: the key is claimed before any money moves, and the legs are
+ * recorded and checked to net to zero.
+ *
+ * Contract: a caller that gets `claimed` MUST finish with
+ * {@link completeMoneyMove}, passing an error if it could not apply everything.
+ * A claim that is never completed stays in the repair queue, which is the
+ * correct place for a flow that stopped half way.
  */
-export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMoveResult> {
+export async function claimMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMoveClaim> {
   const legs = move.legs.filter((leg) => Math.max(0, leg.amount) > 0);
-  if (legs.length === 0) return { status: "applied", applied: [] };
+  if (legs.length === 0) return { status: "claimed", legs: [] };
 
   const net = legsNet(legs);
   if (Math.abs(net) > NET_TOLERANCE) {
@@ -131,12 +162,10 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
     // module exists to make impossible, so it must never be half-written.
     return {
       status: "rejected",
-      applied: [],
       error: `Money move ${move.key} does not net to zero (net ${net}).`,
     };
   }
 
-  const records = db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION);
   const record: MoneyMoveRecord = {
     _id: move.key,
     kind: move.kind,
@@ -152,11 +181,57 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
   };
 
   try {
-    await records.insertOne(record);
+    await db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION).insertOne(record);
   } catch {
     // Duplicate key: somebody else owns this move. Never a reason to move money.
-    return { status: "replayed", applied: [] };
+    return { status: "replayed" };
   }
+  return { status: "claimed", legs };
+}
+
+/**
+ * Close a claimed move.
+ *
+ * `appliedLegs` is the indexes of the legs that landed, so a half-applied move
+ * records WHICH half. An operator repairing it needs that; "something failed"
+ * is not a repair instruction.
+ */
+export async function completeMoneyMove(
+  db: Db,
+  key: string,
+  appliedLegs: number[],
+  error?: string
+): Promise<void> {
+  const records = db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION);
+  const existing = await records.findOne({ _id: key });
+  if (!existing) return;
+  await records.updateOne(
+    { _id: key },
+    {
+      $set: {
+        status: error ? "partial" : "applied",
+        completedAt: new Date(),
+        ...(error ? { error } : {}),
+        legs: existing.legs.map((leg, i) => ({ ...leg, applied: appliedLegs.includes(i) })),
+      },
+    }
+  );
+}
+
+/**
+ * Claim the key, then move the money.
+ *
+ * Returns `replayed` without touching a balance when the key is already known,
+ * which is what makes every caller safe to retry.
+ */
+export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMoveResult> {
+  const claim = await claimMoneyMove(db, move);
+  if (claim.status === "replayed") return { status: "replayed", applied: [] };
+  if (claim.status === "rejected") {
+    return { status: "rejected", applied: [], error: claim.error };
+  }
+  const legs = claim.legs;
+  if (legs.length === 0) return { status: "applied", applied: [] };
 
   const applied: number[] = [];
   let failure: string | undefined;
@@ -196,17 +271,7 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
   }
 
   const status: MoneyMoveStatus = failure ? "partial" : "applied";
-  await records.updateOne(
-    { _id: move.key },
-    {
-      $set: {
-        status,
-        completedAt: new Date(),
-        ...(failure ? { error: failure } : {}),
-        legs: record.legs.map((leg, i) => ({ ...leg, applied: applied.includes(i) })),
-      },
-    }
-  );
+  await completeMoneyMove(db, move.key, applied, failure);
 
   return { status, applied, error: failure };
 }
