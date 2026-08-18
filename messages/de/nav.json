@@ -25,6 +25,9 @@
       "quickSuggest": "Schnellvorschlag (Screenshot)"
     },
     "menus": {
+      "profile": {
+        "myUnion": "Meine Gewerkschaft"
+      },
       "world": {
         "myCorporation": "Mein Unternehmen",
         "hallOfFame": "Ruhmeshalle",

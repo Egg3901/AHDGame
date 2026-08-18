@@ -28,6 +28,8 @@ export interface ClientNavBootstrap {
   myCorporationId: number | null;
   myCorporationType: string | null;
   myCorporationCountryId: string | null;
+  /** Union the viewer leads, or else the one they organize in. Null if neither. */
+  myUnionId: string | null;
   homeState: { id: string; name: string; countryId: string } | null;
   currentParty: { id: string; name: string; countryId: string } | null;
   activeElection: { id: string; seatId?: string; label: string } | null;
