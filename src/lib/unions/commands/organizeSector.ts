@@ -5,15 +5,18 @@
  * one sector's `unionization` up. Same industry only, a union may only ever
  * touch a `CorporateSector` in its own `countryId` + `sectorType`.
  *
- *   - Sector unrepresented: a straight organizing push. Crossing
- *     {@link SECTOR_RECOGNITION_THRESHOLD} sets `representingUnionId` to this
- *     union.
+ *   - Sector unrepresented: a straight organizing push. The first drive
+ *     claims `representingUnionId`, so the shop's workers start counting as
+ *     members immediately. (A 50-point recognition bar with a 3-point drive
+ *     was unwinnable against per-turn drift.)
  *   - Sector already represented by THIS union: reinforcement. Pushes
- *     unionization up further, no ownership change.
+ *     unionization up further, no ownership change. Treasury cost scales with
+ *     current unionization.
  *   - Sector represented by a RIVAL union: a raid. Winner takes all, the
  *     contest in {@link raidSucceeds} decides whether representation flips.
  *     A raid that fails still costs the treasury/action spend (charged before
- *     the contest is even resolved), so raiding is never free.
+ *     the contest is even resolved), so raiding is never free. Cost scales
+ *     with shop size.
  *
  * No decay is applied here on purpose: `trendUnionization`
  * (`src/lib/labour/unionization.ts`, turn engine) walks the sector back toward
@@ -27,10 +30,9 @@ import { unionApproval } from "@/lib/unions/unionDues";
 import { resolveOwnedUnion, rejectIfTurnProcessing, type UnionActionResult } from "./unionActions";
 import {
   ORGANIZE_SECTOR_ACTION_COST,
-  ORGANIZE_SECTOR_TREASURY_COST,
   RAID_APPROVAL_EDGE_REQUIRED,
-  SECTOR_RECOGNITION_THRESHOLD,
   clamp0to100,
+  organizeSectorTreasuryCost,
   sectorUnionizationGain,
 } from "@/lib/unions/organizeSectorEconomy";
 
@@ -38,8 +40,8 @@ export {
   ORGANIZE_SECTOR_ACTION_COST,
   ORGANIZE_SECTOR_TREASURY_COST,
   RAID_APPROVAL_EDGE_REQUIRED,
-  SECTOR_RECOGNITION_THRESHOLD,
   SECTOR_UNIONIZATION_GAIN_BASE,
+  organizeSectorTreasuryCost,
   sectorUnionizationGain,
 } from "@/lib/unions/organizeSectorEconomy";
 
@@ -128,20 +130,15 @@ export function resolveOrganizeSectorDrive(
   }
 
   // Unrepresented, this union's own shop, or a dangling incumbent reference
-  // (no live rival to contest against): a straight organizing push.
+  // (no live rival to contest against): a straight organizing push. The first
+  // successful drive claims the shop so its workers count as members now,
+  // rather than waiting on a recognition bar the per-turn drift would wipe.
   const boosted = Math.min(100, current + sectorUnionizationGain(inputs.attackerApproval));
-  const newRepresentingUnionId = isOwnSector
-    ? inputs.attackerUnionId
-    : boosted >= SECTOR_RECOGNITION_THRESHOLD
-      ? inputs.attackerUnionId
-      : null; // Not yet recognized, also how a dangling rival pointer gets cleaned to null instead of staying dead.
   return {
     applied: true,
     newUnionization: boosted,
-    newRepresentingUnionId,
-    // True whenever the attacker ends up representing the sector, whether
-    // that's freshly won recognition or simply still holding its own shop.
-    won: newRepresentingUnionId === inputs.attackerUnionId,
+    newRepresentingUnionId: inputs.attackerUnionId,
+    won: true,
     wasRaid: false,
   };
 }
@@ -183,6 +180,16 @@ export async function organizeSector(
     };
   }
 
+  const attackerId = union._id.toString();
+  const currentRepresentingUnionId = sector.representingUnionId
+    ? sector.representingUnionId.toString()
+    : null;
+  const treasuryCost = organizeSectorTreasuryCost({
+    workers: sector.workers,
+    unionization: sector.unionization,
+    isOwnSector: currentRepresentingUnionId === attackerId,
+  });
+
   const availableActions = character.actions ?? 0;
   if (availableActions < ORGANIZE_SECTOR_ACTION_COST) {
     return {
@@ -191,18 +198,13 @@ export async function organizeSector(
       error: `An organizing drive costs ${ORGANIZE_SECTOR_ACTION_COST} action points (you have ${availableActions}).`,
     };
   }
-  if (union.treasury < ORGANIZE_SECTOR_TREASURY_COST) {
+  if (union.treasury < treasuryCost) {
     return {
       ok: false,
       status: 402,
       error: "Not enough union treasury to run an organizing drive.",
     };
   }
-
-  const attackerId = union._id.toString();
-  const currentRepresentingUnionId = sector.representingUnionId
-    ? sector.representingUnionId.toString()
-    : null;
 
   let incumbentApproval: number | null = null;
   if (currentRepresentingUnionId && currentRepresentingUnionId !== attackerId) {
@@ -241,8 +243,8 @@ export async function organizeSector(
   const treasurySpend = await db
     .collection<Union>("unions")
     .updateOne(
-      { _id: union._id, treasury: { $gte: ORGANIZE_SECTOR_TREASURY_COST } },
-      { $inc: { treasury: -ORGANIZE_SECTOR_TREASURY_COST }, $set: { updatedAt: now } }
+      { _id: union._id, treasury: { $gte: treasuryCost } },
+      { $inc: { treasury: -treasuryCost }, $set: { updatedAt: now } }
     );
   if (treasurySpend.modifiedCount === 0) {
     await db
@@ -265,7 +267,7 @@ export async function organizeSector(
       won: false,
       unionization: clamp0to100(sector.unionization),
       representingUnionId: currentRepresentingUnionId,
-      cashSpent: ORGANIZE_SECTOR_TREASURY_COST,
+      cashSpent: treasuryCost,
       actionsSpent: ORGANIZE_SECTOR_ACTION_COST,
     };
   }
@@ -295,7 +297,7 @@ export async function organizeSector(
       .updateOne({ _id: character._id }, { $inc: { actions: ORGANIZE_SECTOR_ACTION_COST } });
     await db
       .collection<Union>("unions")
-      .updateOne({ _id: union._id }, { $inc: { treasury: ORGANIZE_SECTOR_TREASURY_COST } });
+      .updateOne({ _id: union._id }, { $inc: { treasury: treasuryCost } });
     return { ok: false, status: 409, error: "Sector state changed, please retry." };
   }
 
@@ -306,7 +308,7 @@ export async function organizeSector(
     won: outcome.won,
     unionization: outcome.newUnionization,
     representingUnionId: outcome.newRepresentingUnionId,
-    cashSpent: ORGANIZE_SECTOR_TREASURY_COST,
+    cashSpent: treasuryCost,
     actionsSpent: ORGANIZE_SECTOR_ACTION_COST,
   };
 }
