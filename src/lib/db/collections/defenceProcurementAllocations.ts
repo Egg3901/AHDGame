@@ -1,8 +1,8 @@
 import type { Db } from "mongodb";
 import {
-  DEFENCE_CONTRACT_SUPPLIER_SHARE,
   defenceContractLotCaps,
   defenceContractWindow,
+  defenceSupplierCapShare,
   type DefenceContractLotCaps,
   type DefenceContractWindow,
 } from "@/lib/military/defenceContractLimits";
@@ -43,24 +43,25 @@ export async function getDefenceContractAvailability(
     currentTurn: number;
     defenseLine: number;
     pricePerLot: number;
+    /** National Corporations skip the private anti-dumping cap (ticket #1134). */
+    stateOwned?: boolean;
   }
 ): Promise<DefenceContractAvailability> {
   const window = defenceContractWindow(input.countryId, input.currentTurn);
   const caps = defenceContractLotCaps(input.defenseLine, input.pricePerLot);
+  const share = defenceSupplierCapShare(input.stateOwned === true);
   const allocation = await allocations(db).findOne({ _id: window.id });
   const countryAmount = allocation?.countryAmount ?? 0;
   const supplierAmount = allocation?.supplierAmounts?.[input.corporationId] ?? 0;
   const countryRemainingAmount = Math.max(0, caps.procurementNotional - countryAmount);
-  const supplierRemainingAmount = Math.max(
-    0,
-    caps.procurementNotional * DEFENCE_CONTRACT_SUPPLIER_SHARE - supplierAmount
-  );
+  const supplierRemainingAmount = Math.max(0, caps.procurementNotional * share - supplierAmount);
   const countryUsed = Math.floor(countryAmount / input.pricePerLot);
   const supplierUsed = Math.floor(supplierAmount / input.pricePerLot);
   const countryRemaining = Math.floor(countryRemainingAmount / input.pricePerLot);
   const supplierRemaining = Math.floor(supplierRemainingAmount / input.pricePerLot);
   return {
     ...caps,
+    supplierLots: caps.countryLots > 0 ? Math.max(1, Math.floor(caps.countryLots * share)) : 0,
     window,
     countryUsed,
     supplierUsed,
@@ -83,6 +84,7 @@ export async function reserveDefenceContractLots(
     defenseLine: number;
     pricePerLot: number;
     lots: number;
+    stateOwned?: boolean;
   }
 ): Promise<DefenceContractAvailability & { reserved: boolean }> {
   const requested = Math.max(0, Math.floor(input.lots));
@@ -130,7 +132,9 @@ export async function reserveDefenceContractLots(
           {
             $lte: [
               { $ifNull: [`$${field}`, 0] },
-              availability.procurementNotional * DEFENCE_CONTRACT_SUPPLIER_SHARE - requestedAmount,
+              availability.procurementNotional *
+                defenceSupplierCapShare(input.stateOwned === true) -
+                requestedAmount,
             ],
           },
         ],

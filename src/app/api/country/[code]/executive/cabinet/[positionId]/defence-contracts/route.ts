@@ -20,6 +20,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import type { Corporation, CorporateSector } from "@/lib/db/types/corporation";
+import type { UnitDomain } from "@/lib/db/types/militaryUnit";
 import { lotPrice } from "@/lib/military/arsenal";
 import { militaryPriceAnchor } from "@/lib/military/procurement";
 import { resolveFillEligibility, FILL_REASON_TEXT } from "@/lib/military/defenceFillEligibility";
@@ -27,6 +28,7 @@ import {
   lotPriceBand,
   lotProductionCost,
   defaultFactoryAllocation,
+  awardFactoryAllocation,
   DEFENCE_FACTORY_SLOTS_PER_PLANT,
 } from "@/lib/military/defenceLotEconomics";
 import { loadDefencePriceRatios } from "@/lib/military/defencePriceRatios";
@@ -76,6 +78,12 @@ const awardSchema = z.object({
   pricePerLot: z.number().positive().optional(),
   /** Suggestion #292. The grade the minister is buying, 0 (cheap mass) to 3 (premium). */
   gradeCeiling: z.number().int().min(0).max(3).optional(),
+  /**
+   * Ticket #1134. Optional: omitted means the plant's first certified domain, which is what
+   * every contract got before ministers could pick. A two-domain plant (standard, naval,
+   * aerospace) otherwise could never fill the second domain.
+   */
+  component: z.enum(["ground", "naval", "air", "rocket", "space", "marine"]).optional(),
 });
 
 interface RouteParams {
@@ -188,6 +196,40 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
     const components = fill.components;
+    const requestedComponent = parsed.data.component;
+    if (requestedComponent != null && !components.includes(requestedComponent as UnitDomain)) {
+      return NextResponse.json(
+        {
+          error:
+            `This plant builds ${components.join(", ")}, not ${requestedComponent}. ` +
+            "Retool it or pick a domain it is certified for.",
+        },
+        { status: 400 }
+      );
+    }
+    const component = (requestedComponent ?? components[0]) as UnitDomain;
+
+    const stateOwned = isStateOwned(corp);
+    const usedSlots = await assignedFactoriesForSector(
+      db,
+      sector._id,
+      defaultFactoryAllocation(components.length, DEFENCE_FACTORY_SLOTS_PER_PLANT)
+    );
+    const assignedFactories = awardFactoryAllocation({
+      componentCount: components.length,
+      freeSlots: Math.max(0, DEFENCE_FACTORY_SLOTS_PER_PLANT - usedSlots),
+      stateOwned,
+    });
+    if (assignedFactories <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Every production line at this plant is already committed to another order. " +
+            "Cancel one or pick a different plant.",
+        },
+        { status: 409 }
+      );
+    }
 
     const anchor = militaryPriceAnchor(budget.gdp, budget.militaryPriceBaselineGdp);
     const anchorPrice = lotPrice(countryId, anchor);
@@ -244,6 +286,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       currentTurn,
       defenseLine,
       pricePerLot,
+      stateOwned,
     });
     if (parsed.data.lotsOrdered > availability.maxLots) {
       return NextResponse.json(
@@ -266,6 +309,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       defenseLine,
       pricePerLot,
       lots: parsed.data.lotsOrdered,
+      stateOwned,
     });
     if (!reservation.reserved) {
       return NextResponse.json(
@@ -309,19 +353,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    // Suggestion #281: the order opens on the share of the plant's lines that reproduces the
-    // old even split, minus whatever its other live orders already hold. The contractor can
-    // re-allocate afterwards; the minister does not get to book lines they do not own.
-    const usedSlots = await assignedFactoriesForSector(
-      db,
-      sector._id,
-      defaultFactoryAllocation(components.length, DEFENCE_FACTORY_SLOTS_PER_PLANT)
-    );
-    const assignedFactories = defaultFactoryAllocation(
-      components.length,
-      Math.max(0, DEFENCE_FACTORY_SLOTS_PER_PLANT - usedSlots)
-    );
-
     const selfDealing = resolveSelfDealing({
       corp,
       ministerUserId: guard.user.userId ? new ObjectId(guard.user.userId.toString()) : null,
@@ -334,17 +365,15 @@ export async function POST(request: Request, { params }: RouteParams) {
         })
       : 0;
 
-    const stateOwned = isStateOwned(corp);
     let contract;
     try {
       contract = await awardContract(db, {
         countryId,
         corporationId: corp._id,
         sectorId: sector._id,
-        // A plant serving two domains supplies the first; the CEO picks the other by
-        // re-tooling. Splitting one contract across components would make "lots delivered"
-        // ambiguous against a single ordered figure.
-        component: components[0],
+        // Ticket #1134: the minister may pick any domain this plant is certified for.
+        // Omitted, this is still components[0] - the behaviour every earlier contract had.
+        component,
         lotsOrdered: parsed.data.lotsOrdered,
         pricePerLot,
         awardedTurn: currentTurn,
@@ -409,18 +438,18 @@ export async function POST(request: Request, { params }: RouteParams) {
           title: stateOwned ? "Defence Contract Awarded" : "Defence Contract Offered",
           message: stateOwned
             ? `${buyer} has placed an order with ${corp.name ?? "your corporation"} for ` +
-              `${parsed.data.lotsOrdered.toLocaleString("en-US")} lots of ${components[0]} ` +
+              `${parsed.data.lotsOrdered.toLocaleString("en-US")} lots of ${component} ` +
               `materiel at ${Math.round(pricePerLot).toLocaleString("en-US")} per lot, paid on ` +
               `delivery. Deliveries begin next turn.`
             : `${buyer} has offered ${corp.name ?? "your corporation"} a contract for ` +
-              `${parsed.data.lotsOrdered.toLocaleString("en-US")} lots of ${components[0]} ` +
+              `${parsed.data.lotsOrdered.toLocaleString("en-US")} lots of ${component} ` +
               `materiel at ${Math.round(pricePerLot).toLocaleString("en-US")} per lot, paid on ` +
               `delivery. Accept or decline it on your corporation's Defence tab.`,
           metadata: {
             contractId: contract._id.toString(),
             corporationId: corp._id.toString(),
             countryId,
-            component: components[0],
+            component,
             lotsOrdered: parsed.data.lotsOrdered,
             pricePerLot,
           },
