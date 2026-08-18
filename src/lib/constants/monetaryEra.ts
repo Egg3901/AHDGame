@@ -157,6 +157,14 @@ const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBaseline>> =
   // inflation gap to correct — exactly the disease this module was built to
   // cure for IT/ES/TR (see the file header), just missed for GR.
   GR: { targetInflation: 3.0, neutralPrimeRate: 6.0, trendGdpGrowth: 6.5 },
+  // AT had no 1953 entry, so it fell through to the modern global table — whose
+  // AT values are an explicitly late-1970s calibration ("hard-schilling DM
+  // shadow policy", 4.0/5.5). Same fall-through that pinned GR's inflation at
+  // the model cap for a whole run, and that FI's entry above already fixes.
+  // Austria 1953: CPI ~0-2% under the 1951-52 Raab-Kamitz stabilization;
+  // Oesterreichische Nationalbank discount 4.5%; post-Marshall-Plan
+  // reconstruction growth.
+  AT: { targetInflation: 2.0, neutralPrimeRate: 4.5, trendGdpGrowth: 5.5 },
 };
 
 /**

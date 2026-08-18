@@ -787,3 +787,64 @@ describe("gravity-not-rails regression: high inflation stays reachable under bad
     expect(inflation).toBeGreaterThan(25.0);
   });
 });
+
+describe("commodity cost-push is a rate, not a level", () => {
+  const base = {
+    targetInflation: 2.0,
+    neutralPrimeRate: 3.0,
+    unemployment: 5.0,
+    gdpGrowth: 2.0,
+    primeRate: 3.0,
+    surplusToGdp: 0,
+    tariffRate: 3.0,
+    wageGrowth: 2.5,
+    forexPressure: 0,
+    savingsPressure: 0,
+    previousInflation: 2.0,
+  };
+
+  it("contributes 0.30pp per 1pp of annual commodity inflation", () => {
+    // Basket rising 10%/yr → +3.0pp of CPI.
+    const { breakdown } = calculateInflationWithBreakdown({
+      ...base,
+      commodityPressure: 0.1,
+    });
+    expect(breakdown.commodity).toBeCloseTo(3.0, 6);
+  });
+
+  it("passes falling prices through at half rate (downward stickiness)", () => {
+    const { breakdown } = calculateInflationWithBreakdown({
+      ...base,
+      commodityPressure: -0.1,
+    });
+    expect(breakdown.commodity).toBeCloseTo(-1.5, 6);
+  });
+
+  it("clamps an acute supply crisis to +9pp rather than an unbounded shock", () => {
+    const { breakdown } = calculateInflationWithBreakdown({
+      ...base,
+      commodityPressure: 3.0, // +300%/yr
+    });
+    expect(breakdown.commodity).toBeCloseTo(9.0, 6);
+  });
+
+  it("clamps a collapsing basket to -2.25pp", () => {
+    const { breakdown } = calculateInflationWithBreakdown({
+      ...base,
+      commodityPressure: -0.9,
+    });
+    expect(breakdown.commodity).toBeCloseTo(-2.25, 6);
+  });
+
+  it("lets CPI settle at target once commodity prices stop moving", () => {
+    // The whole point of the change: a zero rate-of-change contributes nothing,
+    // so a bank at neutral with no other pressure converges on its target. Under
+    // the old level signal this was impossible — prices sitting above their
+    // frozen basePrice injected a permanent constant no policy could answer.
+    let rate = 8.0;
+    for (let i = 0; i < 200; i++) {
+      rate = calculateInflation({ ...base, commodityPressure: 0, previousInflation: rate });
+    }
+    expect(rate).toBeCloseTo(2.0, 1);
+  });
+});
