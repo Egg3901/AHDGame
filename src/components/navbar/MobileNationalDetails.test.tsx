@@ -24,39 +24,44 @@ describe("MobileNationalDetails", () => {
     }
   });
 
-  it("starts every section expanded", () => {
+  it("collapses every section except the one containing the current route", () => {
+    // Mocked pathname is an Economy route — only Economy should start open.
     renderWithIntl(<MobileNationalDetails countryId="UK" onNavigate={() => {}} />);
-    for (const title of ["Government", "Politics", "Economy", "Other"]) {
-      expect(
-        screen
-          .getByRole("button", { name: new RegExp(`^${title}$`, "i") })
-          .getAttribute("aria-expanded")
-      ).toBe("true");
-    }
+    expect(
+      screen.getByRole("button", { name: /^Government$/i }).getAttribute("aria-expanded")
+    ).toBe("false");
+    expect(screen.getByRole("button", { name: /^Politics$/i }).getAttribute("aria-expanded")).toBe(
+      "false"
+    );
+    expect(screen.getByRole("button", { name: /^Economy$/i }).getAttribute("aria-expanded")).toBe(
+      "true"
+    );
   });
 
-  it("collapses a section on click and hides its links", () => {
+  it("expands a collapsed section on click and reveals its links", () => {
     renderWithIntl(<MobileNationalDetails countryId="UK" onNavigate={() => {}} />);
-    expect(screen.getByRole("link", { name: /^Politicians$/i })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /^Politicians$/i })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /^Politics$/i }));
-    expect(screen.queryByRole("link", { name: /^Politicians$/i })).toBeNull();
+    expect(screen.getByRole("link", { name: /^Politicians$/i })).toBeTruthy();
   });
 
-  it("renders the Referendums link only when a campaign is active, inside Politics", () => {
+  it("renders the Referendums link only when a campaign is active, inside the expanded Politics group", () => {
     renderWithIntl(
       <MobileNationalDetails countryId="UK" hasActiveReferendumCampaign onNavigate={() => {}} />
     );
+    fireEvent.click(screen.getByRole("button", { name: /^Politics$/i }));
     expect(screen.getByRole("link", { name: /^Referendums$/i })).toBeTruthy();
   });
 
   it("marks the link for the current path as the active page", () => {
-    // usePathname is mocked to "/country/uk/economy" — Economy is open by default.
+    // usePathname is mocked to "/country/uk/economy" — Economy starts open.
     renderWithIntl(<MobileNationalDetails countryId="UK" onNavigate={() => {}} />);
     expect(screen.getByRole("link", { name: /^Economy$/i }).getAttribute("aria-current")).toBe(
       "page"
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /^Politics$/i }));
     expect(
       screen.getByRole("link", { name: /^Politicians$/i }).getAttribute("aria-current")
     ).toBeNull();
