@@ -4,15 +4,18 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireAuth: vi.fn() }));
+vi.mock("@/lib/gameState", () => ({ getGameState: vi.fn() }));
 
 const { getDb } = await import("@/lib/mongodb");
 const { requireAuth } = await import("@/lib/api/requireAuth");
+const { getGameState } = await import("@/lib/gameState");
 
 const ROUTE = "@/app/api/corporations/[id]/defence-contracts/[contractId]/route";
 
 const CORP_ID = new ObjectId();
 const CONTRACT_ID = new ObjectId();
 const CEO_USER_ID = new ObjectId();
+const SECTOR_ID = new ObjectId();
 
 function req(body: unknown) {
   return new Request("http://localhost/api/corporations/x/defence-contracts/y", {
@@ -37,18 +40,36 @@ describe("POST corporations/[id]/defence-contracts/[contractId]", () => {
       user: { userId: CEO_USER_ID, isAdmin: false },
     } as never);
 
+    vi.mocked(getGameState).mockResolvedValue({ currentTurn: 5, preset: "1953-default" } as never);
+
     db.collection("corporations");
     db.collectionMocks.corporations.findOne.mockResolvedValue({
       _id: CORP_ID,
       sequentialId: 453,
       userId: CEO_USER_ID,
       name: "Lockmartin",
+      countryId: "US",
+      liquidCurrencyCode: "USD",
     });
     db.collection("defenceContracts");
     db.collectionMocks.defenceContracts.findOne.mockResolvedValue({
       _id: CONTRACT_ID,
       corporationId: CORP_ID,
+      countryId: "US",
+      component: "ground",
+      sectorId: SECTOR_ID,
       status: "pending",
+    });
+    // Accepting now asks the SAME fill question the minister's award and the delivery sweep
+    // ask, so a CEO cannot accept an order onto a plant that has been re-tooled off it.
+    db.collection("corporateSectors");
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      _id: SECTOR_ID,
+      corporationId: CORP_ID,
+      sectorType: "defense",
+      strategyId: "heavy_armor",
+      countryId: "US",
+      revenue: 10_000_000,
     });
     db.collectionMocks.defenceContracts.updateOne.mockResolvedValue({
       matchedCount: 1,
@@ -150,7 +171,7 @@ describe("POST corporations/[id]/defence-contracts/[contractId]", () => {
   });
 
   // Kill switch: accepting turns a pending offer into a billing order, so it is frozen. The
-  // pending offer is left untouched — the freeze does not withdraw it.
+  // pending offer is left untouched - the freeze does not withdraw it.
   it("refuses to accept while defence procurement is frozen", async () => {
     db.collection("gameState");
     db.collectionMocks.gameState.findOne.mockResolvedValue({
@@ -208,5 +229,34 @@ describe("POST corporations/[id]/defence-contracts/[contractId]", () => {
     const res = await POST(req({ action: "accept" }), params);
 
     expect(res.status).toBe(200);
+  });
+
+  // Awardable must mean deliverable, from BOTH ends. A CEO who re-tools between the offer and
+  // the click must not be able to accept an order the sweep will refuse forever: accepting it
+  // would hold the country's appropriation committed against materiel that can never arrive.
+  it("refuses to accept onto a plant re-tooled off the contracted component", async () => {
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      _id: SECTOR_ID,
+      corporationId: CORP_ID,
+      sectorType: "defense",
+      strategyId: "naval_systems",
+      countryId: "US",
+      revenue: 10_000_000,
+    });
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ action: "accept" }), params);
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/re-tooled/i);
+    expect(db.collectionMocks.defenceContracts.updateOne).not.toHaveBeenCalled();
+  });
+
+  // Declining is not a new obligation, so it must never be blocked by an eligibility problem.
+  // A CEO has to be able to clear a dead offer off their board.
+  it("still lets a CEO decline an offer its plant can no longer fill", async () => {
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue(null);
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ action: "decline" }), params);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ status: "declined" });
   });
 });

@@ -344,6 +344,19 @@ export interface DefenseAppropriation {
    * number the tick drifted to.
    */
   arrearsRatio: number;
+  /**
+   * Local currency already COMMITTED to live procurement contracts and not yet paid out.
+   *
+   * The uncommitted appropriation is `balance - encumbered`, and that - never the raw
+   * balance - is what a new obligation must fit inside. Without it a minister could award
+   * contracts with no upper bound at all: nothing checked the order against the money until
+   * the delivery turn, so an order for a million lots was accepted, and the appropriation was
+   * paid out to the supplier as pure profit lot by lot until it was empty.
+   *
+   * Absent on any budget written before encumbrance shipped, and treated as 0 there, which
+   * reproduces the old arithmetic exactly for a world with no live contracts.
+   */
+  encumbered?: number;
 }
 
 export interface FederalBudget {

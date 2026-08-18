@@ -71,6 +71,10 @@ interface World {
   sector: Record<string, unknown> | null;
   corp: Record<string, unknown> | null;
   appropriation: number;
+  /** Local currency already committed to live contracts. */
+  encumbered: number;
+  /** Idempotency keys already taken, so a re-run turn cannot pay twice. */
+  claims: Set<string>;
   arsenalDeposits: { domain: string; lots: number; grade: number }[];
   corpCredits: number[];
   contractUpdates: Record<string, unknown>[];
@@ -158,6 +162,23 @@ function stubDb(w: World): Db {
           },
         };
       }
+      if (name === "defenceMoneyClaims") {
+        // A unique `_id` insert is the only atomic primitive the real store relies on, so the
+        // stub models exactly that: the second claim on a key raises Mongo's 11000.
+        return {
+          insertOne: async (doc: { _id: string }) => {
+            if (w.claims.has(doc._id)) {
+              throw Object.assign(new Error("duplicate key"), { code: 11000 });
+            }
+            w.claims.add(doc._id);
+            return { insertedId: doc._id };
+          },
+          deleteOne: async (f: { _id: string }) => {
+            w.claims.delete(f._id);
+            return { deletedCount: 1 };
+          },
+        };
+      }
       // federalBudget — the appropriation.
       return {
         findOne: async () => ({
@@ -165,15 +186,44 @@ function stubDb(w: World): Db {
           gdp: 387_000_000_000,
           defenseAppropriation: {
             balance: w.appropriation,
+            encumbered: w.encumbered,
             accruedThroughTurn: 1,
             arrearsRatio: 0,
           },
         }),
         updateOne: async (f: Record<string, unknown>, u: Record<string, unknown>) => {
-          const need = (f["defenseAppropriation.balance"] as { $gte?: number } | undefined)?.$gte;
-          if (need != null && w.appropriation < need) return { matchedCount: 0, modifiedCount: 0 };
-          const inc = ((u.$inc ?? {}) as Record<string, number>)["defenseAppropriation.balance"];
-          if (inc) w.appropriation += inc;
+          // Three filter shapes reach this collection, and the stub honours all three or the
+          // guards it is meant to be testing are not being tested at all:
+          //   1. `$expr` uncommitted check - a new obligation must fit inside balance minus
+          //      what is already committed;
+          //   2. explicit `$gte` on balance and/or encumbered - a settlement drawing a
+          //      commitment down;
+          //   3. no guard - a refund, which must never be refused.
+          const expr = f.$expr as { $gte?: [unknown, number] } | undefined;
+          if (expr?.$gte) {
+            const need = expr.$gte[1];
+            if (w.appropriation - w.encumbered < need) {
+              return { matchedCount: 0, modifiedCount: 0 };
+            }
+          }
+          const needBalance = (f["defenseAppropriation.balance"] as { $gte?: number } | undefined)
+            ?.$gte;
+          if (needBalance != null && w.appropriation < needBalance) {
+            return { matchedCount: 0, modifiedCount: 0 };
+          }
+          const needEncumbered = (
+            f["defenseAppropriation.encumbered"] as { $gte?: number } | undefined
+          )?.$gte;
+          if (needEncumbered != null && w.encumbered < needEncumbered) {
+            return { matchedCount: 0, modifiedCount: 0 };
+          }
+          const inc = (u.$inc ?? {}) as Record<string, number>;
+          if (inc["defenseAppropriation.balance"]) {
+            w.appropriation += inc["defenseAppropriation.balance"];
+          }
+          if (inc["defenseAppropriation.encumbered"]) {
+            w.encumbered += inc["defenseAppropriation.encumbered"];
+          }
           return { matchedCount: 1, modifiedCount: 1 };
         },
       };
@@ -202,6 +252,8 @@ function world(over: Partial<World> = {}): World {
     sector: { _id: SECTOR_ID, strategyId: "munitions", revenue: 10_000_000 },
     corp: { _id: CORP_ID, countryId: "US", liquidCurrencyCode: "USD", unlockedTechNodeIds: [] },
     appropriation: 1_000_000_000,
+    encumbered: 0,
+    claims: new Set<string>(),
     arsenalDeposits: [],
     corpCredits: [],
     contractUpdates: [],
@@ -218,6 +270,7 @@ describe("applyDefenceDeliveries", () => {
       lots: 0,
       paid: 0,
       stalled: 0,
+      productionCost: 0,
     });
   });
 
@@ -226,7 +279,10 @@ describe("applyDefenceDeliveries", () => {
     const r = await applyDefenceDeliveries(stubDb(w), "US", 1953, 3, 42);
     expect(r.lots).toBeGreaterThan(0);
     expect(w.arsenalDeposits[0].domain).toBe("ground");
-    expect(w.corpCredits[0]).toBe(r.paid);
+    // The supplier is credited MARGIN, not the gross contract price: delivery now carries a
+    // production cost, so payment can no longer mint cash one-for-one out of the appropriation.
+    expect(r.productionCost).toBeGreaterThan(0);
+    expect(w.corpCredits[0]).toBe(r.paid - r.productionCost);
     expect(emitTx).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({

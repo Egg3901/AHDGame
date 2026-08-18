@@ -43,6 +43,9 @@ const supplier = (over: Partial<DefenceSupplierView> = {}): DefenceSupplierView 
   projectedLotsPerTurn: 20,
   gradeCeiling: 2,
   alreadyContracted: false,
+  unitProductionCost: 400,
+  freeFactories: 4,
+  totalFactories: 4,
   availableLots: 6,
   allowanceWindowEndTurn: 12,
   ...over,
@@ -141,7 +144,9 @@ describe("ArsenalTab — awarding a contract", () => {
     fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "5" } });
     fireEvent.click(screen.getByText("Offer contract"));
 
-    expect(onAwardContract).toHaveBeenCalledWith("s1", 5);
+    // The third argument is the minister's optional price and grade (suggestions #291/#292);
+    // an untouched form sends neither, so the route quotes a fair price at the plant's ceiling.
+    expect(onAwardContract).toHaveBeenCalledWith("s1", 5, {});
   });
 
   // Quoting off a different price than the route bills would make the confirmation a lie.

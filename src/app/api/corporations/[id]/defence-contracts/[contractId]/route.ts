@@ -15,6 +15,10 @@ import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import type { DefenceContract } from "@/lib/db/types/defenceContract";
 import { respondToContract } from "@/lib/db/collections/defenceContracts";
+import type { CorporateSector } from "@/lib/db/types/corporation";
+import { resolveFillEligibility, FILL_REASON_TEXT } from "@/lib/military/defenceFillEligibility";
+import { getGameState } from "@/lib/gameState";
+import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
   isDefenceProcurementPaused,
   DEFENCE_PROCUREMENT_PAUSED_MESSAGE,
@@ -74,7 +78,38 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const accept = parsed.data.action === "accept";
-    // Accepting turns a pending offer into a live, billing order — a NEW obligation, so it is
+    // The same fill question the minister's award and the delivery sweep ask. A CEO who
+    // re-tooled the plant between the offer and this click must not be able to accept an order
+    // the sweep will refuse forever: accepting it would hold the country's appropriation
+    // encumbered against materiel that can never arrive.
+    if (accept) {
+      const sector = await db
+        .collection<CorporateSector>("corporateSectors")
+        .findOne({ _id: contract.sectorId });
+      if (!sector) {
+        return NextResponse.json(
+          { error: "This contract's plant no longer exists." },
+          { status: 409 }
+        );
+      }
+      const gameState = await getGameState();
+      const currentTurn = gameState?.currentTurn ?? 1;
+      const fill = resolveFillEligibility({
+        corp,
+        sector,
+        countryId: contract.countryId,
+        currentYear: STARTING_YEAR + Math.floor((currentTurn - 1) / TURNS_PER_YEAR),
+        component: contract.component,
+        assignedFactories: contract.assignedFactories,
+      });
+      if (!fill.eligible) {
+        return NextResponse.json(
+          { error: FILL_REASON_TEXT[fill.reason ?? "no_materiel_line"] },
+          { status: 409 }
+        );
+      }
+    }
+    // Accepting turns a pending offer into a live, billing order - a NEW obligation, so it is
     // frozen with awards. Declining only closes an offer and stays open, so a CEO can still
     // clear their board while procurement is paused.
     if (accept && (await isDefenceProcurementPaused(db))) {
