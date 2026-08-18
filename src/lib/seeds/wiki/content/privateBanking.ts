@@ -20,7 +20,9 @@ Charter types:
 
 Most nations start with a **banking separation** law that allows retail or investment, but not universal. A bill can switch the country to universal charters. Command economies do not offer private bank charters.
 
-The central bank chair (or an admin) can revoke a charter. Posted capital is refunded only when the bank has no deposits left.
+The central bank chair (or an admin) can revoke a charter. A revoke is not a delete: it runs the same wind-up every other ending runs. Household deposits go back into circulation out of the bank's own cash, player savings pointers return to the central bank with their balances untouched, and only what is genuinely left over, capped at book equity, is paid up to the owner.
+
+You can also change charter type yourself from the bank console, without re-chartering or posting capital twice. Moving to a charter that cannot take deposits returns the whole deposit book, and any switch locks the type for 24 turns.
 
 ## Capacity allocation (no double count)
 
@@ -41,9 +43,22 @@ Effective rates are floored at small positive minima so a zero or negative quote
 
 Banks attract NPC household deposits from the central bank's external broad money pool, competing on deposit rate versus the central bank savings APY. Players can move their savings pointer to a private bank (one holder per currency).
 
-Total deposits (players + NPC) are capped by the bank's **deposit ceiling**, derived from financial-sector capacity allocated to branches. NPC inflow stops at the ceiling; outflow is always allowed. Player balances already above the ceiling are grandfathered, but the bank cannot accept new player deposits that would push further over.
+### The two kinds of deposit are not the same thing
 
-Each currency has a deposit insurance fund with an insured cap (era and FX anchored). Balances up to the cap are protected on failure; amounts above the cap take a haircut.
+This distinction drives almost every number in the console, so it is worth reading once:
+
+- **Household (NPC) deposits are cash.** Taking them moves real money out of the central bank's pool and into your vault. They are a liability you owe, they sit in your reserve requirement, and returning them moves cash back.
+- **Player savings are a pointer.** The balance never leaves the player's account; only the label saying who holds it changes. No cash arrived, so player savings are not in your reserve requirement, not in your equity, and not something your bank can lose.
+
+### The deposit ceiling has two halves
+
+    deposit ceiling = min(branch capacity ceiling, book equity x 12)
+
+The branch half is financial-sector capacity allocated to branches. The equity half is the leverage limit: a bank may anchor at most twelve times its book equity in household deposits, so a bank with no capital cannot anchor a deposit base it does not stand behind. The console names which half is binding. If equity binds, building more branches will not move the ceiling; posting capital will.
+
+NPC inflow stops at the ceiling; outflow is always allowed. Player balances already above the ceiling are grandfathered, but the bank cannot accept new player deposits that would push further over.
+
+Each currency has a deposit insurance fund with an insured cap (era and FX anchored). The fund stands behind the household book: if a failed bank cannot return the household deposits it holds, the fund covers the gap and the Treasury covers what the fund cannot. Player savings are not haircut on a failure, because the bank never held that cash. What a player loses by banking with a bank that fails is the yield and the counterparty, not the principal.
 
 ## Loans
 
@@ -68,6 +83,15 @@ Each solvency pass scores the bank on reserves, capital, and loan losses. The sc
 
 NPC deposits flee in proportion to low confidence. A failed bank can raise panic at peer banks in the same currency when contagion is enabled. Contagion and prop trading each have independent kill switches under the master private banking flag.
 
+### The run line
+
+Failure needs two things at once: a red band, and cash below the **run line**.
+
+    run line = 0.5 x required reserves
+    required reserves = household deposits x reserve ratio
+
+The console shows both numbers and your distance to the line. A red band with cash above the line does not fail the bank; cash under the line with a green or amber band does not either. That is one turn of notice, on purpose.
+
 ## Insurance
 
 Chartered banks pay a per turn premium on insured deposits, risk weighted by how thin their reserves are versus the required ratio. Premiums fund the national insurance pool. Payouts come from the fund first; a drained fund is covered by the Treasury and lands in the federal budget.
@@ -78,6 +102,8 @@ Investment and universal charters (when the prop trading kill switch is on) run 
 
 - The **interbank** market: retail banks may lend part of their non reserved deposits to investment banks at a negotiated rate.
 - A **central bank margin** line against posted collateral at prime plus a spread.
+
+The prop book is capped at three times the desk's equity, and any single currency may be at most half the forex book. Borrowed money is never capital: drawing on the margin line or the discount window raises your cash and your debt together and leaves your capital ratio exactly where it was.
 
 Forced liquidation feeds the confidence score. Flag off freezes prop and interbank actions without unwinding existing books.
 

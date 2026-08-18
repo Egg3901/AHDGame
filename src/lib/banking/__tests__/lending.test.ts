@@ -40,7 +40,7 @@ function makeActiveRetailCharter(overrides: Partial<BankCharter> = {}): BankChar
     cashReserves: 10_000_000,
     depositOffset: 0,
     lendingOffset: 1,
-    totalDeposits: 1_000_000,
+    npcDeposits: 1_000_000,
     totalLoans: 0,
     blacklist: {},
     ...overrides,
@@ -109,10 +109,10 @@ describe("banking lending", () => {
 
   describe("getLendableHeadroom", () => {
     it("is deposits * (1 - reserve) minus outstanding loans, floored at 0", () => {
-      expect(getLendableHeadroom({ totalDeposits: 1_000_000, totalLoans: 100_000 }, 0.1)).toBe(
+      expect(getLendableHeadroom({ npcDeposits: 1_000_000, totalLoans: 100_000 }, 0.1)).toBe(
         800_000
       );
-      expect(getLendableHeadroom({ totalDeposits: 100_000, totalLoans: 95_000 }, 0.2)).toBe(0);
+      expect(getLendableHeadroom({ npcDeposits: 100_000, totalLoans: 95_000 }, 0.2)).toBe(0);
       expect(getLendableHeadroom({}, 0.1)).toBe(0);
     });
   });
@@ -219,7 +219,7 @@ describe("banking lending", () => {
             return makeBankCorp(
               makeActiveRetailCharter({
                 blacklist: { indexFundIds: ["us_top_25"] },
-                totalDeposits: 10_000_000,
+                npcDeposits: 10_000_000,
               }),
               { _id: bankId }
             );
@@ -261,7 +261,7 @@ describe("banking lending", () => {
       const characterId = new ObjectId();
       // headroom at 10% reserve: 1_000_000 * 0.9 - 800_000 = 100_000
       db.collectionMocks.corporations!.findOne.mockResolvedValue(
-        makeBankCorp(makeActiveRetailCharter({ totalDeposits: 1_000_000, totalLoans: 800_000 }), {
+        makeBankCorp(makeActiveRetailCharter({ npcDeposits: 1_000_000, totalLoans: 800_000 }), {
           _id: bankId,
         })
       );
@@ -290,7 +290,7 @@ describe("banking lending", () => {
       db.collectionMocks.corporations!.findOne.mockResolvedValue(
         makeBankCorp(
           makeActiveRetailCharter({
-            totalDeposits: 10_000_000,
+            npcDeposits: 10_000_000,
             cashReserves: 4_000,
           }),
           { _id: bankId, liquidCapital: 50_000_000 }
@@ -320,7 +320,7 @@ describe("banking lending", () => {
       const characterId = new ObjectId();
       vi.mocked(estimatePerTurnCurrencyIncomeHomeFace).mockResolvedValue(100);
       db.collectionMocks.corporations!.findOne.mockResolvedValue(
-        makeBankCorp(makeActiveRetailCharter({ totalDeposits: 10_000_000 }), { _id: bankId })
+        makeBankCorp(makeActiveRetailCharter({ npcDeposits: 10_000_000 }), { _id: bankId })
       );
       db.collectionMocks.characters!.findOne.mockResolvedValue({
         _id: characterId,
@@ -348,7 +348,7 @@ describe("banking lending", () => {
         async (query: { _id: ObjectId }) => {
           if (query._id.equals(bankId)) {
             return makeBankCorp(
-              makeActiveRetailCharter({ currency: "USD", totalDeposits: 10_000_000 }),
+              makeActiveRetailCharter({ currency: "USD", npcDeposits: 10_000_000 }),
               { _id: bankId }
             );
           }
@@ -382,7 +382,7 @@ describe("banking lending", () => {
       const characterId = new ObjectId();
       const principal = 25_000;
       const charter = makeActiveRetailCharter({
-        totalDeposits: 1_000_000,
+        npcDeposits: 1_000_000,
         totalLoans: 0,
         lendingOffset: 1,
       });
@@ -445,7 +445,7 @@ describe("banking lending", () => {
       const characterId = new ObjectId();
       const principal = 25_000;
       const charter = makeActiveRetailCharter({
-        totalDeposits: 1_000_000,
+        npcDeposits: 1_000_000,
         totalLoans: 0,
         requireApproval: true,
       });
@@ -496,7 +496,7 @@ describe("banking lending", () => {
       const principal = 25_000;
 
       db.collectionMocks.corporations!.findOne.mockResolvedValue(
-        makeBankCorp(makeActiveRetailCharter({ totalDeposits: 1_000_000, totalLoans: 0 }), {
+        makeBankCorp(makeActiveRetailCharter({ npcDeposits: 1_000_000, totalLoans: 0 }), {
           _id: bankId,
           name: "First National",
         })
@@ -568,7 +568,7 @@ describe("banking lending", () => {
         async (query: { _id: ObjectId }) => {
           if (query._id.equals(bankId)) {
             return makeBankCorp(
-              makeActiveRetailCharter({ totalDeposits: 1_000_000, lendingOffset: 1 }),
+              makeActiveRetailCharter({ npcDeposits: 1_000_000, lendingOffset: 1 }),
               { _id: bankId }
             );
           }
@@ -611,7 +611,7 @@ describe("banking lending", () => {
       const principal = 10_000;
 
       db.collectionMocks.corporations!.findOne.mockResolvedValue(
-        makeBankCorp(makeActiveRetailCharter({ totalDeposits: 1_000_000 }), { _id: bankId })
+        makeBankCorp(makeActiveRetailCharter({ npcDeposits: 1_000_000 }), { _id: bankId })
       );
       db.collectionMocks.characters!.findOne.mockResolvedValue({
         _id: characterId,

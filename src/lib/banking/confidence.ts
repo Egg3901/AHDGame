@@ -44,8 +44,20 @@ export type ConfidenceBand = "green" | "amber" | "red";
 export type ConfidenceInput = {
   /** The bank's ring-fenced cash (`bankCharter.cashReserves`). */
   cashReserves: number;
-  postedCapital: number;
-  totalDeposits: number;
+  /**
+   * Memo of cash the shareholders put in. Not used in the score (the cash it
+   * refers to is already inside `cashReserves`); kept because the callers all
+   * have it and dropping the field would read as the score having changed.
+   */
+  postedCapital?: number;
+  /**
+   * CASH-BACKED deposits only (`npcDeposits`). Player savings pointed at the
+   * bank are not cash the bank holds, so they cannot be in a reserve-cover
+   * denominator: ticket 1111 is what happens when one surface uses the whole
+   * deposit aggregate and another uses this one. Read it from
+   * `balanceSheet.cashBackedDeposits` rather than assembling it at the caller.
+   */
+  cashBackedDeposits: number;
   totalLoans: number;
   reserveRatioRequired: number;
   arrearsOutstanding: number;
@@ -75,10 +87,58 @@ function finiteOrZero(value: number | undefined): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+export type ConfidenceCovers = {
+  /** cash / required reserves, capped. */
+  reserveCover: number;
+  /** cash / loan book, capped at 1. */
+  capitalCover: number;
+  /** 1 less the arrears and defaults penalties. */
+  assetQuality: number;
+};
+
+/**
+ * The three cover terms, decomposed.
+ *
+ * The console used to re-derive these with its own copy of the arithmetic and
+ * its own literal penalty constants, so a change here moved the score without
+ * moving the explanation of the score next to it. One implementation, two
+ * consumers: `computeConfidence` weights them, `riskReadout` displays them.
+ */
+export function confidenceCovers(input: {
+  cashReserves: number;
+  cashBackedDeposits: number;
+  totalLoans: number;
+  reserveRatioRequired: number;
+  arrearsOutstanding?: number;
+  defaultsLastTurn?: number;
+}): ConfidenceCovers {
+  const cash = Math.max(0, finiteOrZero(input.cashReserves));
+  const deposits = Math.max(0, finiteOrZero(input.cashBackedDeposits));
+  const loans = Math.max(0, finiteOrZero(input.totalLoans));
+  const ratio = Math.max(0, finiteOrZero(input.reserveRatioRequired));
+  const loanDenom = Math.max(1, loans);
+
+  return {
+    reserveCover: Math.min(CONFIDENCE_RESERVE_COVER_CAP, cash / Math.max(1, ratio * deposits)),
+    // Not `+ postedCapital`: posted capital is a memo of cash already inside
+    // the reserve balance, so summing them double-counted the same money.
+    capitalCover: Math.min(CONFIDENCE_CAPITAL_COVER_CAP, cash / Math.max(1, loans)),
+    assetQuality: clamp(
+      1 -
+        clamp(Math.max(0, finiteOrZero(input.arrearsOutstanding)) / loanDenom, 0, 1) *
+          CONFIDENCE_ARREARS_PENALTY -
+        clamp(Math.max(0, finiteOrZero(input.defaultsLastTurn)) / loanDenom, 0, 1) *
+          CONFIDENCE_DEFAULTS_PENALTY,
+      0,
+      1
+    ),
+  };
+}
+
 /**
  * Solvency/liquidity confidence in [0, 1] plus the published warning band.
  *
- *   reserveCover = liquid / max(1, reserveRatio * deposits), capped at 1.5
+ *   reserveCover = cash / max(1, reserveRatio * cashBackedDeposits), capped at 1.5
  *   capitalCover = (liquid + posted) / max(1, loans), capped at 1
  *   assetQuality = 1 - arrearsShare*0.7 - defaultsShare*0.3
  *   raw = 0.45*min(1,reserveCover) + 0.25*capitalCover + 0.30*assetQuality
@@ -86,8 +146,7 @@ function finiteOrZero(value: number | undefined): number {
  */
 export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
   const cashReserves = Math.max(0, finiteOrZero(input.cashReserves));
-  const postedCapital = Math.max(0, finiteOrZero(input.postedCapital));
-  const totalDeposits = Math.max(0, finiteOrZero(input.totalDeposits));
+  const cashBacked = Math.max(0, finiteOrZero(input.cashBackedDeposits));
   const totalLoans = Math.max(0, finiteOrZero(input.totalLoans));
   const reserveRatioRequired = Math.max(0, finiteOrZero(input.reserveRatioRequired));
   const arrearsOutstanding = Math.max(0, finiteOrZero(input.arrearsOutstanding));
@@ -95,26 +154,19 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
   const panicTurns = Math.max(0, finiteOrZero(input.panicTurns));
   const forcedLiquidation = input.forcedLiquidation === true;
 
-  const reserveCover = Math.min(
-    CONFIDENCE_RESERVE_COVER_CAP,
-    cashReserves / Math.max(1, reserveRatioRequired * totalDeposits)
-  );
-  const capitalCover = Math.min(
-    CONFIDENCE_CAPITAL_COVER_CAP,
-    // Not `+ postedCapital`: posted capital is a memo of cash already inside
-    // the reserve balance, so summing them double-counted the same money.
-    cashReserves / Math.max(1, totalLoans)
-  );
-  const loanDenom = Math.max(1, totalLoans);
-  const assetQuality =
-    1 -
-    clamp(arrearsOutstanding / loanDenom, 0, 1) * CONFIDENCE_ARREARS_PENALTY -
-    clamp(defaultsLastTurn / loanDenom, 0, 1) * CONFIDENCE_DEFAULTS_PENALTY;
+  const cover = confidenceCovers({
+    cashReserves,
+    cashBackedDeposits: cashBacked,
+    totalLoans,
+    reserveRatioRequired,
+    arrearsOutstanding,
+    defaultsLastTurn,
+  });
 
   const raw =
-    CONFIDENCE_RESERVE_WEIGHT * Math.min(1, reserveCover) +
-    CONFIDENCE_CAPITAL_WEIGHT * capitalCover +
-    CONFIDENCE_ASSET_QUALITY_WEIGHT * assetQuality;
+    CONFIDENCE_RESERVE_WEIGHT * Math.min(1, cover.reserveCover) +
+    CONFIDENCE_CAPITAL_WEIGHT * cover.capitalCover +
+    CONFIDENCE_ASSET_QUALITY_WEIGHT * cover.assetQuality;
 
   // Borrowing from the lender of last resort is a signal, not just a loan: the
   // market reads it as a bank that could not fund itself elsewhere. It is a
