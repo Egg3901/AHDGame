@@ -1,6 +1,6 @@
 // GET /api/admin/alts/cluster/[id] — one cluster's full explainable detail
 // Auth: requireModerator (mods and admins both read; plan §4.6)
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 //
 // Frozen contract (forensics/alt-detection rework plan §4.9):
 //   GET /api/admin/alts/cluster/:id

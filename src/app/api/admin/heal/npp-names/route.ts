@@ -1,7 +1,7 @@
 // GET diagnoses NPPs whose name came from the US fallback pool rather than their own country's.
 // POST renames them from the correct pool and propagates the new name to electedOfficials.
 // Auth: requireAdmin
-// Errors: 401, 500
+// Errors: 403
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";

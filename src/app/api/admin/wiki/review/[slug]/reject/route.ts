@@ -15,7 +15,7 @@ interface RouteContext {
 
 // POST /api/admin/wiki/review/[slug]/reject - Rejects a pending wiki page submission and returns it to draft status with a reason.
 // Auth: requireModerator (admin or moderator)
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function POST(request: Request, context: RouteContext) {
   try {
     const auth = await requireModerator();

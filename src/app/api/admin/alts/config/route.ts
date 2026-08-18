@@ -1,6 +1,6 @@
 // GET/PUT /api/admin/alts/config — alt-detection scoring weights/thresholds
 // Auth: GET requireModerator (all staff roles read); PUT requireAdmin only
-// Errors: 400, 401, 403
+// Errors: 400, 403
 //
 // Frozen contract (forensics/alt-detection rework plan §4.9):
 //   GET /api/admin/alts/config -> { weights:{...}, thresholds:{link, cluster} }   (all roles)

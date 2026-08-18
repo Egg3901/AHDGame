@@ -15,7 +15,7 @@ const STATUS_OPTIONS = ["open", "in_progress", "resolved", "wont_fix"] as const;
  */
 // GET /api/admin/feedback — List all feedback with optional filtering by status, type, limit, and offset.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export const GET = withAdminAuth(async (_auth, request: Request) => {
   try {
     const { searchParams } = new URL(request.url);

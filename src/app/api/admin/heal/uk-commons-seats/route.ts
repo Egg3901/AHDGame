@@ -1,6 +1,6 @@
 // GET diagnoses / POST destructively rebuilds all UK Commons electedOfficials from most recent resolved election tallies.
 // Auth: requireAdmin
-// Errors: 401, 500
+// Errors: 403
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";

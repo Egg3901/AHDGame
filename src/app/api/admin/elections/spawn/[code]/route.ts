@@ -6,7 +6,7 @@
  * countries (success, ms, message, optional electionId/created).
  *
  * Auth: requireAdmin
- * Errors: 401, 403, 404 (no handler registered for country), 500
+ * Errors: 403, 404 (no handler registered for country)
  */
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";

@@ -3,7 +3,7 @@
 // render as unheld. The fix moves the id into holderNppId and nulls
 // holderCharacterId. See issue #2906.
 // Auth: requireAdmin
-// Errors: 401, 500
+// Errors: 403
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";

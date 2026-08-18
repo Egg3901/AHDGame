@@ -11,7 +11,7 @@ import { electionToLarpYear } from "@/lib/utils/formatters";
 
 // POST /api/admin/officials/init — Initializes elected official positions and cycle-1 elections for senate, house, or executive offices.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 409
+// Errors: 400, 403, 409
 export async function POST(request: Request) {
   try {
     // Verify admin authentication
@@ -287,7 +287,7 @@ export async function POST(request: Request) {
 
 // DELETE /api/admin/officials/init — Removes all vacant House seat records left over from the old system.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function DELETE() {
   try {
     const auth = await requireAdmin();
@@ -312,8 +312,8 @@ export async function DELETE() {
 }
 
 // GET /api/admin/officials/init — Returns counts of elected officials by office type, showing filled and vacant seats.
-// Auth: public
-// Errors: none
+// Auth: requireAdmin
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();

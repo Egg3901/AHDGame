@@ -27,9 +27,9 @@ interface RouteParams {
 const bodySchema = z.object({ optionId: z.string().min(1).max(64) });
 
 // POST /api/events/[id]/resolve - Resolve the caller's pending random event with a chosen option.
-// Auth: requireAuthWithCharacter (character scope: instance owner only; country scope: the
+// Auth: requireHumanSessionWithCharacter (character scope: instance owner only; country scope: the
 //   character currently holding the country's national executive office)
-// Errors: 400, 401, 404, 429
+// Errors: 400, 401, 403, 404, 429
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;

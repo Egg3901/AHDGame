@@ -9,7 +9,7 @@
 // `auditProjectionFor` in `src/lib/audit/queryAuditLog.ts` so every read
 // route shares one implementation of the rule.
 //
-// Errors: 400, 401, 403
+// Errors: 400, 403
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";

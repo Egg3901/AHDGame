@@ -1,6 +1,6 @@
 // GET /api/moderator/financial-logs/alerts — suspect alert summary grouped by subject entity
 // Auth: requireModerator
-// Errors: 401, 403
+// Errors: 403
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";

@@ -44,7 +44,7 @@ const POSITION_FIELD: Record<
 
 // POST /api/admin/state-party/[stateId]/[partyId]/appoint — Appoints or vacates a state party leadership position (chair, viceChair, or treasurer).
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireAdmin();

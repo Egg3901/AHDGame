@@ -1,7 +1,7 @@
 // POST /api/admin/npps/[id]/funds
 // Grants funds to a single NPP via $inc on the funds field.
 // Auth: requireAdmin
-// Errors: 401, 403, 400, 404
+// Errors: 403, 400, 404
 
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

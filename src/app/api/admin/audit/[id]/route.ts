@@ -8,7 +8,7 @@
 // Auth: requireModerator. Role gating (plan §4.6): a non-admin caller gets a
 // 404 for an admin-category record (existence is not revealed) and never
 // sees raw `meta`/`net` on the record or any related row.
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";

@@ -34,7 +34,7 @@ interface RouteParams {
 
 // POST /api/admin/elections/[id]/start-general — Ends the primary phase, eliminates primary losers, initializes the vote tally, and creates campaign documents for general candidates.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireAdmin();

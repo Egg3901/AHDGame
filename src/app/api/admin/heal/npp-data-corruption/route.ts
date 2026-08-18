@@ -1,7 +1,7 @@
 // GET diagnoses / POST fixes NaN values on UK statePartyOrg.organization and
 // NaN stats on active NPPs.
 // Auth: requireAdmin
-// Errors: 401, 500
+// Errors: 403
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";

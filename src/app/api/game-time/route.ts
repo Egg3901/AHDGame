@@ -30,7 +30,7 @@ const iterationSchema = z.object({
 
 // PATCH /api/game-time — Update game iteration without resetting
 // Auth: requireAdmin
-// Errors: 400, 401, 403
+// Errors: 400, 403
 export async function PATCH(request: Request) {
   try {
     const auth = await requireAdmin();

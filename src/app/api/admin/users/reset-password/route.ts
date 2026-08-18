@@ -10,7 +10,7 @@ import { adminResetPasswordSchema } from "@/lib/api/schemas/admin";
 
 // POST /api/admin/users/reset-password — Reset a user's password to a new value.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

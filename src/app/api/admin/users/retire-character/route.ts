@@ -1,7 +1,7 @@
 // GET — Fetch retired characters for a given user
 // POST — Admin retires a user's active character
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
@@ -17,7 +17,7 @@ import { z } from "zod";
 
 // GET /api/admin/users/retire-character?userId=xxx — Fetch retired characters for a user.
 // Auth: requireAdmin
-// Errors: 400, 401, 403
+// Errors: 400, 403
 export async function GET(request: Request) {
   try {
     const auth = await requireAdmin();

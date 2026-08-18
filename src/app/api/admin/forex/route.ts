@@ -1,7 +1,7 @@
 // GET /api/admin/forex
 // Returns all exchange rates with history. INT is always included at rate 1.0.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

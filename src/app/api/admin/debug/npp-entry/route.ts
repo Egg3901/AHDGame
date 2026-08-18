@@ -13,7 +13,7 @@ import { primaryOpenFilter } from "@/lib/elections/electionDeadlineFilters";
  */
 // GET /api/admin/debug/npp-entry — Diagnose why NPPs aren't entering primaries by simulating the entry logic.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();

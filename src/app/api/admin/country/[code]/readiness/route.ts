@@ -6,7 +6,7 @@
  * every supported country gets the same checks.
  *
  * Auth: requireAdmin
- * Errors: 400 (unknown country), 401, 403, 404 (no expectations entry), 500
+ * Errors: 400 (unknown country), 403, 404 (no expectations entry)
  */
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

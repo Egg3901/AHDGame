@@ -7,7 +7,7 @@
 // Auth: requireAdmin — ADMIN ONLY (plan §4.6: export is admin-depth, not
 // exposed to moderators at all). Admins see every category and the raw
 // `net`/`meta` fields, so no projection is applied.
-// Errors: 400, 401, 403
+// Errors: 400, 403
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";

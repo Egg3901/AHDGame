@@ -185,7 +185,7 @@ export function shouldReactivatePrematureElection(
 
 // POST /api/admin/elections/recalibrate-timers — Recalculates election timer dates to match the canonical LARP schedule, correcting drift from batch turn firing.
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 export async function POST() {
   try {
     const auth = await requireAdmin();

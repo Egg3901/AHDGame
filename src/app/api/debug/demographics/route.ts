@@ -16,7 +16,7 @@ import { calculateStateLean, getStateLean } from "@/lib/utils/demographics";
 
 // GET /api/debug/demographics — Debug demographic lean calculation for a given state; admin-only in production.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET(request: Request) {
   // Restrict to admins in production; allow unauthenticated in dev
   if (process.env.NODE_ENV === "production") {

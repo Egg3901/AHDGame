@@ -13,7 +13,7 @@ const schema = z.object({
 
 // POST /api/admin/users/reset-founding-cooldown — Clear the corporation-founding cooldown on a user.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 //
 // The founding cooldown (Bug #0728) is deliberately per-USER, not per-character:
 // it blocks the found -> drain -> abandon -> found rotation, and scoping it to

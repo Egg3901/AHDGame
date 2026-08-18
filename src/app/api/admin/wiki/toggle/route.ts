@@ -6,7 +6,7 @@ import { getGameStateCollection } from "@/lib/db/collections";
 
 // POST /api/admin/wiki/toggle — Toggles wiki visibility for non-admin users.
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 export async function POST() {
   try {
     const auth = await requireAdmin();
@@ -41,7 +41,7 @@ export async function POST() {
 
 // GET /api/admin/wiki/toggle — Returns current wiki disabled state.
 // Auth: requireAdmin (used by WikiManagementTab client component)
-// Errors: 401, 403, 404
+// Errors: 403, 404
 export async function GET() {
   try {
     const auth = await requireAdmin();

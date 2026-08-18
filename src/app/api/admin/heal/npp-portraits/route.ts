@@ -1,7 +1,7 @@
 // GET diagnoses NPPs missing gender/ethnicity/avatarUrl fields.
 // POST backfills them: gender inferred from first name, ethnicity weighted by country, portrait selected from image pool.
 // Auth: requireAdmin
-// Errors: 401, 500
+// Errors: 403
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";

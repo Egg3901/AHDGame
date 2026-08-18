@@ -40,7 +40,7 @@ const createSchema = z.object({
 /**
  * POST /api/imperial-characters — Create a new imperial character.
  * Auth: requireAdmin() — admin only.
- * Errors: 400 (validation, ineligible country, already exists), 401/403 (not admin).
+ * Errors: 400 (validation, ineligible country, already exists), 403 (not admin).
  */
 export async function POST(request: Request) {
   try {

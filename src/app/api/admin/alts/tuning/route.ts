@@ -8,7 +8,7 @@
 // admin-only to edit (`PUT /api/admin/alts/config`, plan §4.6) — unlike
 // `GET /api/admin/alts/clusters`/`config`, which are readable by any
 // moderator.
-// Errors: 401, 403
+// Errors: 403
 //
 // GET /api/admin/alts/tuning -> TuningReport (see
 //   src/lib/altDetection/tuning.ts for the full shape and the

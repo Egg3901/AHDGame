@@ -2,7 +2,7 @@
 // Permanently deletes the NPP, their elected office record, and active election candidacy.
 // This is an irreversible admin action — use with caution.
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

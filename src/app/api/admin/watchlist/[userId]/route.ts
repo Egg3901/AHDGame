@@ -1,7 +1,7 @@
 // DELETE /api/admin/watchlist/[userId] — unpin an account.
 // Auth: requireModerator (both moderators and admins can manage the
 // watchlist).
-// Errors: 400 (malformed userId), 401/403 (auth), 404 (not on the
+// Errors: 400 (malformed userId), 403 (auth), 404 (not on the
 // watchlist)
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

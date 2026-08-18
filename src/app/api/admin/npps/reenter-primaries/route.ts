@@ -6,7 +6,7 @@ import { processElectionEntry } from "@/lib/turn/npp/electionEntry";
 
 // POST /api/admin/npps/reenter-primaries — Forces NPPs to re-enter primaries based on current eligibility rules
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

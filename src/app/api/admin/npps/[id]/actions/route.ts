@@ -1,7 +1,7 @@
 // DELETE /api/admin/npps/[id]/actions
 // Resets an NPP's actionPoints counter to 0 (does not delete action records).
 // Auth: requireAdmin
-// Errors: 401, 403, 400, 404
+// Errors: 403, 400, 404
 
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
