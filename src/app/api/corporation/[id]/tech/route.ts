@@ -30,7 +30,8 @@ import {
   getDecadeForYear,
   getDecadeLaneNodes,
   getCommittedLane,
-  getNodePrereqId,
+  getNodePrereqIds,
+  getExclusiveRivalIds,
   getPassedDecadeIds,
   getUnlockedStrategyIds,
   getSectorTechEffects,
@@ -114,8 +115,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
         const cashCost = techNodeCashCost(node, dailyGrossRevenue ?? 0);
         // Past decades have both lanes auto-granted — no lane commitment applies.
         const laneLocked = isPastDecade ? false : !!committed && committed !== lane;
-        const prereqId = getNodePrereqId(node);
-        const prereqMet = !prereqId || unlocked.has(prereqId);
+        const prereqIds = getNodePrereqIds(node);
+        const prereqMet = prereqIds.length === 0 || prereqIds.some((id) => unlocked.has(id));
+        // v3: owning a rival specialization locks this node for the decade.
+        const pathLocked = getExclusiveRivalIds(corporation.type, node).some((id) =>
+          unlocked.has(id)
+        );
         const strategyEffect = node.effects.find((e) => e.kind === "unlockStrategy");
         return {
           id: node.id,
@@ -123,6 +128,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
           description: node.description,
           slot: node.slot,
           parentSlot: SLOT_PARENT[node.slot] ?? null,
+          prereqSlots: prereqIds.map((id) => Number(id.replace(/^.*-(\d+)$/, "$1"))),
+          exclusiveGroup: node.exclusiveGroup ?? null,
           cost: node.cost,
           cashCost: redact ? null : cashCost,
           effects: node.effects.map((e) => ({
@@ -137,12 +144,14 @@ export async function GET(_request: Request, { params }: RouteParams) {
           autoGranted: !redact && owned && isPastDecade,
           laneLocked: redact ? false : laneLocked,
           prereqMet: redact ? false : prereqMet,
+          pathLocked: redact ? false : pathLocked,
           affordable:
             !redact &&
             isCeo &&
             reached &&
             !owned &&
             !laneLocked &&
+            !pathLocked &&
             prereqMet &&
             (rdScore ?? 0) >= node.cost &&
             (liquidCapital ?? 0) >= cashCost,

@@ -10,7 +10,7 @@
  */
 import { connectDb, closeDb } from "../utils/db";
 import type { Corporation, GameState } from "@/lib/db/types";
-import { autoGrantedCorporateNodeIds, getPassedDecadeIds } from "@/lib/constants/techTree";
+import { autoGrantedNodeIds, getPassedDecadeIds } from "@/lib/constants/techTree";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 
 async function main() {
@@ -23,37 +23,43 @@ async function main() {
     gameState?.currentYear ??
     startingYear + Math.floor((Math.max(1, currentTurn) - 1) / TURNS_PER_YEAR);
 
-  const grantIds = autoGrantedCorporateNodeIds(currentYear);
   const passedDecades = getPassedDecadeIds(currentYear);
   console.log(
-    `[backfill-tech-autogrant] currentYear=${currentYear} → ${grantIds.length} corporate nodes across ${passedDecades.length} passed decades`
+    `[backfill-tech-autogrant] currentYear=${currentYear} → ${passedDecades.length} passed decades (baseline slots, both lanes, per corp type)`
   );
-  if (grantIds.length === 0) {
+  if (passedDecades.length === 0) {
     console.log("[backfill-tech-autogrant] nothing to grant for this era. Done.");
     await closeDb();
     return;
   }
 
-  const laneSet: Record<string, "generic"> = {};
-  for (const d of passedDecades) laneSet[`techDecadeLane.${d}`] = "generic";
-
   const corps = await db
     .collection<Corporation>("corporations")
-    .find({}, { projection: { _id: 1, unlockedTechNodeIds: 1, techDecadeLane: 1 } })
+    .find({}, { projection: { _id: 1, type: 1, unlockedTechNodeIds: 1 } })
     .toArray();
+
+  // Grant set depends on the corp's sector type (its sector lane differs).
+  const grantIdsByType = new Map<string, string[]>();
+  const grantsFor = (type: Corporation["type"]): string[] => {
+    const cached = grantIdsByType.get(type);
+    if (cached) return cached;
+    const ids = autoGrantedNodeIds(type, currentYear);
+    grantIdsByType.set(type, ids);
+    return ids;
+  };
 
   let updated = 0;
   for (const corp of corps) {
+    const grantIds = grantsFor(corp.type);
     const owned = new Set(corp.unlockedTechNodeIds ?? []);
     const missing = grantIds.filter((id) => !owned.has(id));
-    const laneMissing = passedDecades.some((d) => (corp.techDecadeLane ?? {})[d] !== "generic");
-    if (missing.length === 0 && !laneMissing) continue;
+    if (missing.length === 0) continue;
 
     await db.collection<Corporation>("corporations").updateOne(
       { _id: corp._id },
       {
-        $addToSet: { unlockedTechNodeIds: { $each: grantIds } },
-        $set: { ...laneSet, updatedAt: new Date() },
+        $addToSet: { unlockedTechNodeIds: { $each: missing } },
+        $set: { updatedAt: new Date() },
       }
     );
     updated++;

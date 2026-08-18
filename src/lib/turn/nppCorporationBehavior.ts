@@ -594,8 +594,12 @@ export async function processNppCorporationDecisions(
   techTreesEnabled: boolean = false
 ): Promise<{
   corpUpdates: Array<{
-    filter: { _id: ObjectId };
-    update: { $set: Record<string, unknown>; $inc?: Record<string, number> };
+    filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
+    update: {
+      $set: Record<string, unknown>;
+      $inc?: Record<string, number>;
+      $addToSet?: { unlockedTechNodeIds: string };
+    };
   }>;
   sectorUpdates: Array<{
     filter: { _id: ObjectId };
@@ -610,8 +614,12 @@ export async function processNppCorporationDecisions(
     .toArray();
 
   const corpUpdates: Array<{
-    filter: { _id: ObjectId };
-    update: { $set: Record<string, unknown>; $inc?: Record<string, number> };
+    filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
+    update: {
+      $set: Record<string, unknown>;
+      $inc?: Record<string, number>;
+      $addToSet?: { unlockedTechNodeIds: string };
+    };
   }> = [];
   const allSectorUpdates: Array<{
     filter: { _id: ObjectId };
@@ -958,17 +966,21 @@ export async function processNppCorporationDecisions(
         if (grants.marketingStrength > 0) techInc.marketingStrength = grants.marketingStrength;
         if (grants.logisticsStrength > 0) techInc.logisticsStrength = grants.logisticsStrength;
         const committing = !(corp.techDecadeLane ?? {})[techNode.decadeId];
-        const techSet: Record<string, unknown> = {
-          unlockedTechNodeIds: [...(corp.unlockedTechNodeIds ?? []), techNode.id],
-          updatedAt: now,
-        };
+        const techSet: Record<string, unknown> = { updatedAt: now };
         if (committing) {
           techSet[`techDecadeLane.${techNode.decadeId}`] = techNode.lane;
           techSet[`techDecadeChosenTurn.${techNode.decadeId}`] = turn;
         }
         corpUpdates.push({
-          filter: { _id: corp._id },
-          update: { $set: techSet, $inc: techInc },
+          // $addToSet + not-already-owned filter mirror the player unlock's
+          // atomic guard: a concurrent write can no longer resurrect a stale
+          // unlockedTechNodeIds array or double-add the node.
+          filter: { _id: corp._id, unlockedTechNodeIds: { $ne: techNode.id } },
+          update: {
+            $set: techSet,
+            $inc: techInc,
+            $addToSet: { unlockedTechNodeIds: techNode.id },
+          },
         });
       }
     }

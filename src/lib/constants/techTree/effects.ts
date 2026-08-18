@@ -24,6 +24,13 @@ export const TECH_LABOR_REDUCTION_CAP = 0.5;
 /** Shield-style effects (dominance/tariff/expansion) cap at this fraction. */
 export const TECH_SHIELD_CAP = 0.6;
 /**
+ * Total price-realization bonus is capped. Under plants this multiplies
+ * realised revenue directly (sectorTurn's derived-revenue leg), so the cap is
+ * deliberately tight: 6% of revenue is already worth more than the old 8pp
+ * margin cap ever was in practice.
+ */
+export const TECH_PRICE_REALIZATION_CAP = 0.06;
+/**
  * Corporate-lane effects apply to ALL of a corp's sectors but at this reduced
  * strength; Sector-lane effects apply only to the corp's PRIMARY sector type, at
  * full strength. See getSectorTechEffects in ./selectors.
@@ -105,8 +112,22 @@ export interface UnlockStrategyEffect {
   strategyId: string;
 }
 
+/**
+ * Raises the price the sector's output actually realises (quality premium,
+ * branding, contract terms). Under plants this multiplies the derived revenue
+ * leg (`producedUnits × mixPrice × sales legs`), the plants-native way to say
+ * "your output sells for more" — it cannot invert and does not touch the
+ * nameplate or the world supply ledger.
+ */
+export interface PriceRealizationEffect {
+  kind: "priceRealization";
+  /** Fraction added to realised revenue (0.02 = +2%). */
+  pct: number;
+}
+
 export type TechEffect =
   | MarginBonusEffect
+  | PriceRealizationEffect
   | GrowthCostReductionEffect
   | LaborCostReductionEffect
   | InputCostEffect
@@ -135,6 +156,9 @@ export function techEffectCategory(kind: TechEffect["kind"]): TechEffectCategory
   switch (kind) {
     case "marginBonus":
       return "margin";
+    case "priceRealization":
+      // Revenue-side like outputRate; shares the output icon.
+      return "output";
     case "growthCostReduction":
       return "growth";
     case "laborCostReduction":
@@ -188,6 +212,8 @@ export interface AggregatedTechEffects {
   tariffShield: number;
   /** 0–TECH_SHIELD_CAP fraction off sector expansion cost. */
   expansionDiscount: number;
+  /** 0–TECH_PRICE_REALIZATION_CAP fraction added to realised revenue (plants). */
+  priceRealizationBonus: number;
 }
 
 /** Neutral aggregate (no tech effects) — used when the feature gate is off. */
@@ -201,6 +227,7 @@ export const NEUTRAL_TECH_EFFECTS: AggregatedTechEffects = {
   dominanceShield: 0,
   tariffShield: 0,
   expansionDiscount: 0,
+  priceRealizationBonus: 0,
 };
 
 /** Scale a single effect's magnitude (corp-lane effects apply at reduced strength). */
@@ -208,6 +235,8 @@ export function scaleEffect(effect: TechEffect, scale: number): TechEffect {
   switch (effect.kind) {
     case "marginBonus":
       return { ...effect, pp: effect.pp * scale };
+    case "priceRealization":
+      return { ...effect, pct: effect.pct * scale };
     case "growthCostReduction":
       return { ...effect, pct: effect.pct * scale };
     case "laborCostReduction":
@@ -226,6 +255,7 @@ export function scaleEffect(effect: TechEffect, scale: number): TechEffect {
 /** Reduce a flat list of effects to the per-turn scalars the turn engine applies. */
 export function aggregateTechEffects(effects: TechEffect[]): AggregatedTechEffects {
   let marginBonusPpRaw = 0;
+  let priceRealizationPct = 0;
   let growthCostReductionPct = 0;
   let laborCostReductionPct = 0;
   let dominanceShield = 0;
@@ -236,6 +266,8 @@ export function aggregateTechEffects(effects: TechEffect[]): AggregatedTechEffec
   for (const effect of effects) {
     if (effect.kind === "marginBonus") {
       marginBonusPpRaw += effect.pp;
+    } else if (effect.kind === "priceRealization") {
+      priceRealizationPct += effect.pct;
     } else if (effect.kind === "growthCostReduction") {
       growthCostReductionPct += effect.pct;
     } else if (effect.kind === "laborCostReduction") {
@@ -270,6 +302,7 @@ export function aggregateTechEffects(effects: TechEffect[]): AggregatedTechEffec
     dominanceShield: shield(dominanceShield),
     tariffShield: shield(tariffShield),
     expansionDiscount: shield(expansionDiscount),
+    priceRealizationBonus: Math.min(TECH_PRICE_REALIZATION_CAP, Math.max(0, priceRealizationPct)),
   };
 }
 
@@ -299,6 +332,8 @@ export function describeTechEffect(effect: TechEffect): string {
   switch (effect.kind) {
     case "marginBonus":
       return `+${effect.pp}pp profit margin`;
+    case "priceRealization":
+      return `+${Math.round(effect.pct * 100)}% realised output price`;
     case "growthCostReduction":
       return `−${Math.round(effect.pct * 100)}% growth cost`;
     case "laborCostReduction":
