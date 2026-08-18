@@ -33,7 +33,11 @@ export interface StaticHostGeometry {
 /** The static shard covering this host, or null when nothing draws it. */
 export function staticHostGeometry(hostEntityId: string): StaticHostGeometry | null {
   if ((VIETNAM_FEATURE_IDS as readonly string[]).includes(hostEntityId)) {
-    return { url: VIETNAM_GEO_URL, codes: [hostEntityId] };
+    // Both halves: a Vietnam proxy is the whole country split at the 17th
+    // parallel, not a single successor state. Drawing only the host left a
+    // half-outline and a west-east fallback axis because the other capital
+    // sat off the map.
+    return { url: VIETNAM_GEO_URL, codes: [...VIETNAM_FEATURE_IDS] };
   }
   if ((HISTORICAL_FEATURE_IDS as readonly string[]).includes(hostEntityId)) {
     return { url: HISTORICAL_GEO_URL, codes: [hostEntityId] };

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { geoArea, geoBounds, geoCentroid } from "d3-geo";
 import { REGION_SHARDS } from "./regionManifest";
 import { VIETNAM_BASE_FEATURE_ID, VIETNAM_FEATURE_IDS, VIETNAM_GEO_URL } from "./vietnamGeometry";
+import { staticHostGeometry } from "./proxyHostGeometry";
 import { getWorldEntityMapSnapshot } from "@/lib/world/worldEntityMap";
 import { ROSTER_BY_KEY } from "@/lib/constants/alignmentRoster";
 
@@ -20,6 +21,23 @@ const PARALLEL = 17;
 describe("the Vietnam split", () => {
   it("supplies exactly the two halves", () => {
     expect(collection.features.map((f) => f.id).sort()).toEqual([...VIETNAM_FEATURE_IDS].sort());
+  });
+
+  it("is fine enough that the coastline is not a handful of straight edges", () => {
+    const verts = collection.features.reduce(
+      (n, f) =>
+        n +
+        f.geometry.coordinates.reduce((m, poly) => m + poly.reduce((k, r) => k + r.length, 0), 0),
+      0
+    );
+    // 110m Natural Earth was 44 vertices for unified Vietnam. The 50m clip is
+    // an order of magnitude denser; a regression back to 110m fails this.
+    expect(verts).toBeGreaterThan(200);
+  });
+
+  it("draws both halves for either Vietnam host", () => {
+    expect(staticHostGeometry("SVN")?.codes).toEqual([...VIETNAM_FEATURE_IDS]);
+    expect(staticHostGeometry("NVN")?.codes).toEqual([...VIETNAM_FEATURE_IDS]);
   });
 
   it("cuts at the 17th parallel, with the right half on each side", () => {

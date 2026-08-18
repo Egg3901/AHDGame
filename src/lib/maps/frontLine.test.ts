@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { sampleLand, frontLine, type PxRing, type PxPoint } from "./frontLine";
+import {
+  sampleLand,
+  frontLine,
+  axisWords,
+  fallbackAdvanceAnchor,
+  type PxRing,
+  type PxPoint,
+} from "./frontLine";
 
 const BOX = { w: 200, h: 200 };
 
@@ -124,5 +131,42 @@ describe("frontLine", () => {
     const heldByEast = land.filter((p) => east.held(p));
     expect(heldByWest.every(([x]) => x < 100)).toBe(true);
     expect(heldByEast.every(([x]) => x > 100)).toBe(true);
+  });
+});
+
+describe("axisWords / fallbackAdvanceAnchor", () => {
+  it("names only the dominant compass pair", () => {
+    expect(axisWords([1, 0])).toBe("west → east");
+    expect(axisWords([-1, 0])).toBe("east → west");
+    expect(axisWords([0, 1])).toBe("north → south");
+    expect(axisWords([0, -1])).toBe("south → north");
+  });
+
+  it("puts a portrait host on a north-south axis", () => {
+    const box = { w: 620, h: 837 };
+    const anchor = fallbackAdvanceAnchor(box);
+    expect(anchor[1]).toBeLessThan(box.h / 2);
+    expect(anchor[0]).toBe(box.w / 2);
+    const land = sampleLand(
+      [
+        [
+          [50, 50],
+          [570, 50],
+          [570, 787],
+          [50, 787],
+        ],
+      ],
+      box
+    );
+    const front = frontLine(box, land, anchor, 50)!;
+    expect(Math.abs(front.u[1])).toBeGreaterThan(Math.abs(front.u[0]));
+    expect(axisWords(front.u)).toBe("north → south");
+  });
+
+  it("keeps a landscape host on a west-east axis", () => {
+    const box = { w: 900, h: 638 };
+    const anchor = fallbackAdvanceAnchor(box);
+    expect(anchor[0]).toBeLessThan(box.w / 2);
+    expect(axisWords([1, 0])).toBe("west → east");
   });
 });
