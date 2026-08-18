@@ -103,7 +103,7 @@ describe("diminishEffects", () => {
     expect(halved).toHaveLength(effects.length);
     halved.forEach((effect, i) => {
       expect(effect.value).toBeCloseTo(effects[i].value * RIDE_OUT_EFFECT_RETENTION);
-      expect(effect.description).toBe(effects[i].description);
+      expect(effect.label).toBe(effects[i].label);
     });
   });
 });

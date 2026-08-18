@@ -180,6 +180,12 @@ describe("P3.5 margin-shock physicality classification", () => {
         "power_grid_failure",
         "steel_strike",
         "supply_chain_disruption",
+        // Three struck sectors, so the wildcat strike carries three physical
+        // shocks: steel and cars stop being made, ports and freight stop
+        // moving them.
+        "union_ban_general_strike",
+        "union_ban_general_strike",
+        "union_ban_general_strike",
       ].sort()
     );
   });
