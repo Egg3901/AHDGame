@@ -37,6 +37,7 @@ import {
   looseWorldNavItems,
   type WorldNavItem,
 } from "@/components/navbar/worldNavItems";
+import type { ProfileNavItem } from "@/components/navbar/profileNavItems";
 import type { StaffNavItem } from "@/components/navbar/staffNavItems";
 import { MOBILE_MENU_PANEL_CLASS } from "@/components/navbar/dropdownStyles";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
@@ -72,6 +73,7 @@ export interface ExperimentalMobileMenuProps {
   preset: string;
   switchableCountries: CountryId[];
   worldSubItems: WorldNavItem[];
+  profileOrgItems: ProfileNavItem[];
   staffSubItems: StaffNavItem[];
   charterEntry: CharterNavEntry | null;
   hasActiveReferendumCampaign: boolean;
@@ -105,6 +107,7 @@ export function ExperimentalMobileMenu({
   preset,
   switchableCountries,
   worldSubItems,
+  profileOrgItems,
   staffSubItems,
   charterEntry,
   hasActiveReferendumCampaign,
@@ -125,6 +128,115 @@ export function ExperimentalMobileMenu({
       <div className="mb-3.5">
         <UniversalSearch />
       </div>
+
+      {/* Profile card — top of the drawer so it's the first thing you hit. */}
+      {showProfile && user && (
+        <div className="mb-3.5 overflow-hidden rounded-xl border border-card-border bg-card">
+          <div className="relative">
+            <div className="relative h-20 overflow-hidden">
+              {characterProfile?.profileHeaderImageUrl ? (
+                <Image
+                  src={characterProfile.profileHeaderImageUrl}
+                  alt=""
+                  fill
+                  className="object-cover object-center"
+                  sizes="320px"
+                  unoptimized={bypassNextImageOptimization(characterProfile.profileHeaderImageUrl)}
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/25 via-card-elevated to-secondary/20" />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-card via-card/55 to-transparent" />
+            </div>
+            <div className="absolute left-3.5 top-20 z-10 -translate-y-1/2">
+              <div className="rounded-lg border-[3px] border-card bg-card shadow-panel">
+                <Avatar
+                  url={characterProfile?.avatarUrl}
+                  name={profileDisplayName}
+                  size="h-10 w-10"
+                  borderKey={characterProfile?.borderKey}
+                  tintColor={characterProfile?.tintColor}
+                  className="rounded-md"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-3.5 pb-3.5 pt-9">
+              <div className="min-w-0 flex-1 pl-12">
+                <div className="truncate text-sm font-semibold text-foreground">
+                  {profileDisplayName}
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <Link
+                    href="/profile"
+                    onClick={onClose}
+                    className="text-xs text-muted transition-colors hover:text-foreground"
+                  >
+                    {t("common.profile")}
+                  </Link>
+                  <Link
+                    href="/notifications"
+                    onClick={onClose}
+                    className="text-xs text-muted transition-colors hover:text-foreground"
+                  >
+                    {t("common.notifications")}
+                    {unreadCount > 0 ? ` (${unreadCount > 9 ? "9+" : unreadCount})` : ""}
+                  </Link>
+                  <Link
+                    href="/settings"
+                    onClick={onClose}
+                    className="text-xs text-muted transition-colors hover:text-foreground"
+                  >
+                    {t("common.settings")}
+                  </Link>
+                  <Link
+                    href="/portfolio?tab=currency"
+                    onClick={onClose}
+                    className="text-xs text-muted transition-colors hover:text-foreground"
+                  >
+                    {t("common.wallet")}
+                  </Link>
+                  {profileOrgItems.map((item) => (
+                    <Link
+                      key={item.id}
+                      href={item.href}
+                      onClick={onClose}
+                      className="text-xs text-primary transition-colors hover:text-foreground"
+                    >
+                      {t(item.labelKey)}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                aria-label={t("userMenu.signOutAria")}
+                className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-card-border bg-background text-muted transition-colors hover:text-foreground"
+              >
+                <svg
+                  className="h-[17px] w-[17px]"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <Link
+            href="/changelog"
+            onClick={onClose}
+            className="flex items-center justify-center border-t border-card-border px-4 py-2 text-center text-xs text-muted transition-colors hover:text-foreground"
+          >
+            v{process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"} ·{" "}
+            {process.env.NEXT_PUBLIC_GIT_COMMIT ?? "dev"}
+          </Link>
+        </div>
+      )}
 
       {/* Core nav items */}
       <div className="flex flex-col gap-0.5">
@@ -248,19 +360,12 @@ export function ExperimentalMobileMenu({
                             {sub.labelKey ? t(sub.labelKey) : sub.label}
                           </Link>
                         ))}
-                        {/* Grouped categories (Leaderboards / Diplomacy /
-                            Economy / Other) — same collapsible header as the
-                            Nation section's Government/Politics/Economy/Other,
-                            collapsed by default except the group holding the
-                            current route. */}
                         {buildWorldNavSections(worldSubItems).map((group) => (
                           <CollapsibleNavSection
                             key={group.id}
                             title={t(group.titleKey)}
                             collapsible
-                            defaultOpen={group.items.some((item) =>
-                              isNavActive(pathname, item.href)
-                            )}
+                            defaultOpen={false}
                             className="mt-2"
                             labelClassName="px-3 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted/70"
                           >
@@ -545,105 +650,6 @@ export function ExperimentalMobileMenu({
             </div>
           )}
         </>
-      )}
-
-      {/* Profile card */}
-      {showProfile && user && (
-        <div className="mt-3.5 overflow-hidden rounded-xl border border-card-border bg-card">
-          <div className="relative">
-            <div className="relative h-20 overflow-hidden">
-              {characterProfile?.profileHeaderImageUrl ? (
-                <Image
-                  src={characterProfile.profileHeaderImageUrl}
-                  alt=""
-                  fill
-                  className="object-cover object-center"
-                  sizes="320px"
-                  unoptimized={bypassNextImageOptimization(characterProfile.profileHeaderImageUrl)}
-                />
-              ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/25 via-card-elevated to-secondary/20" />
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-card via-card/55 to-transparent" />
-            </div>
-            <div className="absolute left-3.5 top-20 z-10 -translate-y-1/2">
-              <div className="rounded-lg border-[3px] border-card bg-card shadow-panel">
-                <Avatar
-                  url={characterProfile?.avatarUrl}
-                  name={profileDisplayName}
-                  size="h-10 w-10"
-                  borderKey={characterProfile?.borderKey}
-                  tintColor={characterProfile?.tintColor}
-                  className="rounded-md"
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-3 px-3.5 pb-3.5 pt-9">
-              <div className="min-w-0 flex-1 pl-12">
-                <div className="truncate text-sm font-semibold text-foreground">
-                  {profileDisplayName}
-                </div>
-                <div className="mt-0.5 flex items-center gap-3">
-                  <Link
-                    href="/profile"
-                    onClick={onClose}
-                    className="text-xs text-muted transition-colors hover:text-foreground"
-                  >
-                    {t("common.profile")}
-                  </Link>
-                  <Link
-                    href="/notifications"
-                    onClick={onClose}
-                    className="text-xs text-muted transition-colors hover:text-foreground"
-                  >
-                    {t("common.notifications")}
-                    {unreadCount > 0 ? ` (${unreadCount > 9 ? "9+" : unreadCount})` : ""}
-                  </Link>
-                  <Link
-                    href="/settings"
-                    onClick={onClose}
-                    className="text-xs text-muted transition-colors hover:text-foreground"
-                  >
-                    {t("common.settings")}
-                  </Link>
-                  <Link
-                    href="/portfolio?tab=currency"
-                    onClick={onClose}
-                    className="text-xs text-muted transition-colors hover:text-foreground"
-                  >
-                    {t("common.wallet")}
-                  </Link>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleSignOut}
-                aria-label={t("userMenu.signOutAria")}
-                className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-card-border bg-background text-muted transition-colors hover:text-foreground"
-              >
-                <svg
-                  className="h-[17px] w-[17px]"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-              </button>
-            </div>
-          </div>
-          <Link
-            href="/changelog"
-            onClick={onClose}
-            className="flex items-center justify-center border-t border-card-border px-4 py-2 text-center text-xs text-muted transition-colors hover:text-foreground"
-          >
-            v{process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"} ·{" "}
-            {process.env.NEXT_PUBLIC_GIT_COMMIT ?? "dev"}
-          </Link>
-        </div>
       )}
 
       {!user && (

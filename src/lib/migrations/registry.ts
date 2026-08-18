@@ -45,6 +45,7 @@ import { migration as dropDeadPartyAxes } from "./entries/2026-08-11-drop-dead-p
 import { migration as heal1953SeedBalance } from "./entries/2026-08-09-heal-1953-seed-balance";
 import { migration as reconcileCommandEconomyUnowned } from "./entries/2026-08-09-reconcile-command-economy-unowned";
 import { migration as repointRuSoes } from "./entries/2026-08-13-repoint-ru-soes";
+import { migration as campaignOpsTrees } from "./entries/2026-08-18-campaign-ops-trees";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -112,10 +113,12 @@ export const MIGRATIONS: Migration[] = [
   // Ticket #1032 — drop the foreignPolicy / culture party axes. Written by
   // every seed and the shift UI, read by nothing.
   dropDeadPartyAxes,
-
   // Indexes for the banking money-movement claim records. The seed module
   // covers a fresh bootstrap; a world that is already running needs this.
   bankMoneyMoveIndexes,
+  // Strategic Operations v2 — migrate campaign investment levers from linear
+  // levels to the starter + three-branch tree model. Player-friendly, idempotent.
+  campaignOpsTrees,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.

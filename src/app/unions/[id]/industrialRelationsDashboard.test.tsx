@@ -27,7 +27,7 @@ const BASE_UNION = {
   pendingLeaderCharacterId: null,
   electionOpen: false,
   leadershipElectionMinPressure: 25,
-  treasury: 500,
+  treasury: 5000,
   members: 7000,
   approval: 60,
   duesPerWorkerAnnual: 0,
@@ -72,6 +72,7 @@ describe("union industrial-relations dashboard", () => {
               workers: 12000,
               wageGap: 0.1,
               unionization: 45,
+              representingUnionId: "u1",
               strikeActive: false,
               strikeCooldownUntilTurn: null,
               strikeBlockReason: null,
@@ -85,6 +86,7 @@ describe("union industrial-relations dashboard", () => {
               workers: 8000,
               wageGap: 0,
               unionization: 20,
+              representingUnionId: "u1",
               strikeActive: false,
               strikeCooldownUntilTurn: null,
               strikeBlockReason: "underorganized",
@@ -111,6 +113,71 @@ describe("union industrial-relations dashboard", () => {
     expect(screen.getByText("0.10× short")).toBeTruthy();
     expect(screen.getByText("Strike ready")).toBeTruthy();
     expect(screen.getByText("Needs organizing")).toBeTruthy();
+    const organizeButtons = screen.getAllByRole("button", { name: "Organize" });
+    expect(organizeButtons.length).toBe(2);
+  });
+
+  it("posts a shop-floor organize from the sectors table", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const path = String(url);
+      if (path.endsWith("/organize-sector") && init?.method === "POST") {
+        return { ok: true, json: async () => ({ success: true }) } as Response;
+      }
+      if (path.includes("/api/character/me")) {
+        return {
+          ok: true,
+          json: async () => ({
+            character: { _id: "c1", cashOnHand: 100_000, actions: 8, unionLeaderOf: "u1" },
+          }),
+        } as Response;
+      }
+      if (path.includes("/leader/vote")) {
+        return {
+          ok: true,
+          json: async () => ({ tallies: [], candidates: [], canVote: false, organizerCount: 0 }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          union: BASE_UNION,
+          sectors: [
+            {
+              sectorId: "s2",
+              corporationId: "corp2",
+              corporationName: "Weak Steel",
+              stateId: "PA",
+              wageLevel: 1.15,
+              workers: 8000,
+              wageGap: 0,
+              unionization: 20,
+              representingUnionId: "u1",
+              strikeActive: false,
+              strikeCooldownUntilTurn: null,
+              strikeBlockReason: "underorganized",
+            },
+          ],
+          workforce: { totalWorkers: 8000, unionizedWorkers: 1600, density: 0.2 },
+          actionableBills: [],
+          endorsements: [],
+        }),
+      } as Response;
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    render(<UnionPage params={PARAMS} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Organize" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/unions/u1/organize-sector",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ sectorId: "s2" }),
+        })
+      );
+    });
   });
 
   it("offers valid candidates and lets the leader take a stance on a live bill", async () => {

@@ -12,7 +12,8 @@ import { requireModerator } from "@/lib/api/requireModerator";
 import { handleRouteError } from "@/lib/api/errors";
 import { getAltClustersCollection } from "@/lib/db/collections";
 import type { AltCluster, AltClusterStatus } from "@/lib/db/types/altDetection";
-import type { User } from "@/lib/db/types";
+import { emptyAltMember, hydrateAltMembers } from "@/lib/altDetection/hydrateMembers";
+import { memberRole } from "@/lib/altDetection/evidenceRedaction";
 import { decodeClusterCursor, encodeClusterCursor, isAltSignal } from "../_shared";
 
 const ALT_CLUSTER_STATUSES: ReadonlySet<AltClusterStatus> = new Set([
@@ -94,22 +95,20 @@ export async function GET(request: Request) {
     const hasMore = docs.length > limit;
     if (hasMore) docs.pop();
 
-    // Batch-fetch usernames for the member preview across every returned
-    // cluster in one query rather than N+1.
-    const previewIds = new Set<string>();
+    // Batch-hydrate character + Discord identity for the member preview
+    // across every returned cluster in two queries rather than N+1.
+    const previewIds: ObjectId[] = [];
+    const seenPreview = new Set<string>();
     for (const doc of docs) {
       for (const id of doc.memberUserIds.slice(0, MEMBER_PREVIEW_LIMIT)) {
-        previewIds.add(id.toString());
+        const key = id.toString();
+        if (seenPreview.has(key)) continue;
+        seenPreview.add(key);
+        previewIds.push(id);
       }
     }
-    const previewObjectIds = [...previewIds].map((id) => new ObjectId(id));
-    const users = previewObjectIds.length
-      ? await db
-          .collection<User>("users")
-          .find({ _id: { $in: previewObjectIds } }, { projection: { username: 1, isBanned: 1 } })
-          .toArray()
-      : [];
-    const userById = new Map(users.map((u) => [u._id.toString(), u]));
+    const isAdmin = auth.user.isAdmin === true;
+    const hydrated = await hydrateAltMembers(db, previewIds, { revealNetwork: isAdmin });
 
     const clusters = docs.map((doc) => ({
       id: doc._id.toString(),
@@ -123,11 +122,10 @@ export async function GET(request: Request) {
       topSignal: doc.signalSummary[0]?.type ?? null,
       status: doc.status,
       memberPreview: doc.memberUserIds.slice(0, MEMBER_PREVIEW_LIMIT).map((id) => {
-        const u = userById.get(id.toString());
+        const idStr = id.toString();
         return {
-          userId: id.toString(),
-          name: u?.username ?? null,
-          banned: u?.isBanned ?? false,
+          ...(hydrated.get(idStr) ?? emptyAltMember(idStr)),
+          role: memberRole(idStr, doc.roles),
         };
       }),
     }));

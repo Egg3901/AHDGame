@@ -3,6 +3,11 @@
 import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
 import { UNION_STRENGTH_DECAY_PER_TURN } from "@/lib/unions/unionEconomy";
+import {
+  ORGANIZE_SECTOR_ACTION_COST,
+  ORGANIZE_SECTOR_TREASURY_COST,
+  sectorUnionizationGain,
+} from "@/lib/unions/organizeSectorEconomy";
 import { WAGE_LEVEL_MAX, WAGE_LEVEL_MIN } from "@/lib/labour/laborCost";
 import { HeroImage } from "@/components/HeroImage";
 import BackButton from "@/components/BackButton";
@@ -38,6 +43,8 @@ interface UnionDetail {
   strength: number;
   organizeActionCost: number;
   organizeStrengthGain: number;
+  organizeSectorActionCost?: number;
+  organizeSectorTreasuryCost?: number;
   treasury: number;
   /** Real headcount: workers across this union's sectors, weighted by unionization. */
   members: number;
@@ -100,6 +107,7 @@ interface SectorRow {
   workers: number;
   wageGap: number | null;
   unionization: number;
+  representingUnionId: string | null;
   strikeActive: boolean;
   strikeCooldownUntilTurn: number | null;
   strikeBlockReason:
@@ -390,6 +398,14 @@ export default function UnionDashboardPage({ params }: PageProps) {
       ]).size,
     },
   ];
+
+  const organizeSectorActionCost = union.organizeSectorActionCost ?? ORGANIZE_SECTOR_ACTION_COST;
+  const organizeSectorTreasuryCost =
+    union.organizeSectorTreasuryCost ?? ORGANIZE_SECTOR_TREASURY_COST;
+  const organizeSectorGain = sectorUnionizationGain(approval);
+  const cannotAffordSectorOrganize =
+    (myActions != null && myActions < organizeSectorActionCost) ||
+    union.treasury < organizeSectorTreasuryCost;
 
   const presidentHref = leader
     ? leader.isNPP
@@ -690,8 +706,9 @@ export default function UnionDashboardPage({ params }: PageProps) {
               actually represents. Growing the union means organizing a
               specific sector, which happens on that sector's own page. */}
           <p className="text-[11px] text-muted">
-            To grow this union, organize a sector directly from its page. A drive raises that
-            sector&apos;s unionization, and if it is held by a rival, it is a raid.
+            To grow this union, open the Sectors tab and organize a local. A drive costs treasury
+            plus one action and raises that shop&apos;s unionization. If a rival holds it, it is a
+            raid.
           </p>
 
           {/* Public wage claim: a pressure signal, not a contract. It shows up
@@ -966,84 +983,109 @@ export default function UnionDashboardPage({ params }: PageProps) {
               />
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-card-border bg-card">
-              <table className="w-full min-w-[760px] text-sm">
-                <thead>
-                  <tr className="border-b border-card-border bg-card-elevated text-left text-[11px] uppercase tracking-wider text-muted">
-                    <th className="px-4 py-3 font-medium">Corporation</th>
-                    <th className="px-4 py-3 font-medium">State</th>
-                    <th className="px-4 py-3 text-right font-medium">Workers</th>
-                    <th className="px-4 py-3 text-right font-medium">Wage</th>
-                    <th className="px-4 py-3 text-right font-medium">Demand gap</th>
-                    <th className="px-4 py-3 text-right font-medium">Unionization</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sectors.map((s) => (
-                    <tr
-                      key={s.sectorId}
-                      className="border-b border-card-border transition-colors last:border-0 hover:bg-card-elevated/60"
-                    >
-                      <td className="px-4 py-3">
-                        <Link
-                          href={`/corporation/${s.corporationId}/sector/${s.sectorId}`}
-                          className="font-medium text-primary hover:underline"
-                        >
-                          {s.corporationName}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-muted">{s.stateId}</td>
-                      <td className="px-4 py-3 text-right font-mono tabular-nums">
-                        {(s.workers ?? 0).toLocaleString("en-US")}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono tabular-nums">
-                        {s.wageLevel.toFixed(2)}×
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono tabular-nums">
-                        {s.wageGap == null ? (
-                          <span className="text-muted">No demand</span>
-                        ) : s.wageGap <= 0 ? (
-                          <span className="text-success">Met</span>
-                        ) : (
-                          <span className="text-warning">{s.wageGap.toFixed(2)}× short</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <div className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-card-elevated sm:block">
-                            <div
-                              className="h-full rounded-full bg-primary"
-                              style={{ width: `${Math.min(100, s.unionization)}%` }}
-                            />
-                          </div>
-                          <span className="font-mono tabular-nums">
-                            {s.unionization.toFixed(1)}%
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {s.strikeActive || s.strikeBlockReason === "already_striking" ? (
-                          <span className="rounded-md bg-error/15 px-2 py-0.5 text-xs font-medium text-error">
-                            Striking
-                          </span>
-                        ) : s.strikeBlockReason === "underorganized" ? (
-                          <span className="text-xs text-muted">Needs organizing</span>
-                        ) : s.strikeBlockReason === "sector_cooldown" ? (
-                          <span className="text-xs text-warning">
-                            Cooldown to turn {s.strikeCooldownUntilTurn}
-                          </span>
-                        ) : s.strikeBlockReason === "collective_agreement" ? (
-                          <span className="text-xs font-medium text-info">Under agreement</span>
-                        ) : (
-                          <span className="text-xs font-medium text-success">Strike ready</span>
-                        )}
-                      </td>
+            <>
+              <div className="overflow-x-auto rounded-xl border border-card-border bg-card">
+                <table className="w-full min-w-[760px] text-sm">
+                  <thead>
+                    <tr className="border-b border-card-border bg-card-elevated text-left text-[11px] uppercase tracking-wider text-muted">
+                      <th className="px-4 py-3 font-medium">Corporation</th>
+                      <th className="px-4 py-3 font-medium">State</th>
+                      <th className="px-4 py-3 text-right font-medium">Workers</th>
+                      <th className="px-4 py-3 text-right font-medium">Wage</th>
+                      <th className="px-4 py-3 text-right font-medium">Demand gap</th>
+                      <th className="px-4 py-3 text-right font-medium">Unionization</th>
+                      <th className="px-4 py-3 font-medium">Status</th>
+                      {isLeader && !suspended && (
+                        <th className="px-4 py-3 font-medium">Organize</th>
+                      )}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {sectors.map((s) => (
+                      <tr
+                        key={s.sectorId}
+                        className="border-b border-card-border transition-colors last:border-0 hover:bg-card-elevated/60"
+                      >
+                        <td className="px-4 py-3">
+                          <Link
+                            href={`/corporation/${s.corporationId}/sector/${s.sectorId}`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            {s.corporationName}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-muted">{s.stateId}</td>
+                        <td className="px-4 py-3 text-right font-mono tabular-nums">
+                          {(s.workers ?? 0).toLocaleString("en-US")}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono tabular-nums">
+                          {s.wageLevel.toFixed(2)}×
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono tabular-nums">
+                          {s.wageGap == null ? (
+                            <span className="text-muted">No demand</span>
+                          ) : s.wageGap <= 0 ? (
+                            <span className="text-success">Met</span>
+                          ) : (
+                            <span className="text-warning">{s.wageGap.toFixed(2)}× short</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-card-elevated sm:block">
+                              <div
+                                className="h-full rounded-full bg-primary"
+                                style={{ width: `${Math.min(100, s.unionization)}%` }}
+                              />
+                            </div>
+                            <span className="font-mono tabular-nums">
+                              {s.unionization.toFixed(1)}%
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {s.strikeActive || s.strikeBlockReason === "already_striking" ? (
+                            <span className="rounded-md bg-error/15 px-2 py-0.5 text-xs font-medium text-error">
+                              Striking
+                            </span>
+                          ) : s.strikeBlockReason === "underorganized" ? (
+                            <span className="text-xs text-muted">Needs organizing</span>
+                          ) : s.strikeBlockReason === "sector_cooldown" ? (
+                            <span className="text-xs text-warning">
+                              Cooldown to turn {s.strikeCooldownUntilTurn}
+                            </span>
+                          ) : s.strikeBlockReason === "collective_agreement" ? (
+                            <span className="text-xs font-medium text-info">Under agreement</span>
+                          ) : (
+                            <span className="text-xs font-medium text-success">Strike ready</span>
+                          )}
+                        </td>
+                        {isLeader && !suspended && (
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              disabled={actionPending || cannotAffordSectorOrganize}
+                              onClick={() => runAction("organize-sector", { sectorId: s.sectorId })}
+                              className="rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                            >
+                              {s.representingUnionId && s.representingUnionId !== union.id
+                                ? "Raid"
+                                : "Organize"}
+                            </button>
+                            <div className="mt-0.5 text-[10px] tabular-nums text-muted">
+                              {organizeSectorActionCost} AP ·{" "}
+                              {organizeSectorTreasuryCost.toLocaleString("en-US")} · +
+                              {organizeSectorGain.toFixed(1)}%
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {isLeader && !suspended && <ActionResult result={actionResult} />}
+            </>
           ))}
 
         {tab === "bargaining" && <UnionPensionSchemePanel scheme={pensionScheme} />}

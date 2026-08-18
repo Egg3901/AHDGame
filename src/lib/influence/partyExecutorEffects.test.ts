@@ -194,4 +194,99 @@ describe("applyPartyInfluenceEffects", () => {
         "Latoya O'Connor has agreed to relocate to Texas at the Democratic Party's request and resigned from office and withdrew from 1 active election.",
     });
   });
+
+  const baseParty = {
+    _id: new ObjectId(),
+    sequentialId: 1,
+    countryId: "US",
+    name: "Democratic Party",
+  } as PoliticalParty;
+
+  function boostInput(
+    nppId: ObjectId,
+    influenceType: "boost_influence" | "boost_favorability"
+  ): ExecutePartyInfluenceInput {
+    return {
+      partyId: "1",
+      partyObjectId: new ObjectId(),
+      countryId: "US",
+      nppId,
+      influenceType,
+      fundAmount: 0,
+      actorCharacterId: new ObjectId(),
+      context: {},
+    };
+  }
+
+  function nppWith(nppId: ObjectId, fields: Partial<NPP>): NPP {
+    return {
+      _id: nppId,
+      name: "Test NPP",
+      homeState: "AK",
+      party: "1",
+      favorability: 50,
+      politicalInfluence: 10,
+      currentOffice: null,
+      retiredAt: null,
+      personality: { loyalty: 60, ambition: 50, stubbornness: 35 },
+      policies: { economic: 0, social: 0 },
+      generatedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...fields,
+    } as NPP;
+  }
+
+  it("boost_influence diminishes toward the cap so it can't out-run PI decay", async () => {
+    const nppId = new ObjectId();
+    const npp = nppWith(nppId, { politicalInfluence: 90 });
+    const result = await applyPartyInfluenceEffects(
+      boostInput(nppId, "boost_influence"),
+      npp,
+      baseParty
+    );
+    // campaignInfluenceGain(90) = 1 - 40/75 = 0.467 -> 0.5, far below the old flat +1.
+    expect(result.statChange).toBeCloseTo(0.5, 5);
+    expect(db.collectionMocks.npps.updateOne).toHaveBeenCalledWith(
+      { _id: nppId },
+      expect.objectContaining({ $set: expect.objectContaining({ politicalInfluence: 90.5 }) })
+    );
+  });
+
+  it("boost_influence still gives the full +1 below the 50 threshold", async () => {
+    const nppId = new ObjectId();
+    const npp = nppWith(nppId, { politicalInfluence: 20 });
+    const result = await applyPartyInfluenceEffects(
+      boostInput(nppId, "boost_influence"),
+      npp,
+      baseParty
+    );
+    expect(result.statChange).toBeCloseTo(1, 5);
+  });
+
+  it("boost_favorability diminishes at high favorability and caps at 100", async () => {
+    const nppId = new ObjectId();
+    const npp = nppWith(nppId, { favorability: 100 });
+    const result = await applyPartyInfluenceEffects(
+      boostInput(nppId, "boost_favorability"),
+      npp,
+      baseParty
+    );
+    expect(result.statChange).toBe(1); // advertiseFavorabilityGain floors at 1
+    expect(db.collectionMocks.npps.updateOne).toHaveBeenCalledWith(
+      { _id: nppId },
+      expect.objectContaining({ $set: expect.objectContaining({ favorability: 100 }) })
+    );
+  });
+
+  it("boost_favorability gives the full +3 at low favorability", async () => {
+    const nppId = new ObjectId();
+    const npp = nppWith(nppId, { favorability: 50 });
+    const result = await applyPartyInfluenceEffects(
+      boostInput(nppId, "boost_favorability"),
+      npp,
+      baseParty
+    );
+    expect(result.statChange).toBe(3);
+  });
 });

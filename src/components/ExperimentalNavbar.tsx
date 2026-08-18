@@ -49,6 +49,7 @@ import {
 } from "./HelpDropdown";
 import { buildNationalDetailsSections } from "@/components/navbar/nationDetailsSections";
 import { visibleWorldNavItems } from "@/components/navbar/worldNavItems";
+import { visibleProfileOrgItems } from "@/components/navbar/profileNavItems";
 import { visibleStaffNavItems } from "@/components/navbar/staffNavItems";
 import {
   Chevron,
@@ -89,6 +90,7 @@ export interface ExperimentalNavbarProps {
   isImperialMode?: boolean;
   wikiDisabled?: boolean;
   myCorporationId?: number | null;
+  myUnionId?: string | null;
   adminCharacters?: AdminCharacter[];
   imperialCharacter?: ImperialCharacterNav;
   conflictsEnabled?: boolean;
@@ -113,6 +115,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   isImperialMode = false,
   wikiDisabled = false,
   myCorporationId,
+  myUnionId,
   adminCharacters,
   imperialCharacter,
   conflictsEnabled = false,
@@ -263,10 +266,8 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
       user?.isPatronActive);
   const showWiki = !!(user?.isAdmin || user?.isModerator) || !wikiDisabled;
 
-  // Top-level tabs mirror the production navbar's set and order:
-  // Actions · State · Nation · World (Help and Staff are appended in the bar).
-  // Map/Legislature/Elections/Parties/News stay nested in the Nation/World
-  // dropdowns, exactly as in production.
+  // Top-level tabs: Actions · State · Nation · World (Help and Staff are
+  // appended in the bar). Corp and union live on the avatar profile card.
   const navItems: ExperimentalNavItem[] = [];
 
   if (showProfile && !isImperialMode) {
@@ -317,63 +318,14 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
     countryId: pageCountry,
     myCorporationId,
     conflictsEnabled,
+    unionsEnabled,
   });
 
-  // Auto-expand the mobile drawer's top-level section (State/Nation/World)
-  // that contains the current page. `mobileSubOpen` starts fully collapsed
-  // (see useState above), so without this a user landing directly on, say,
-  // a Policy or Sectors page would find "United States"/"World" collapsed
-  // in the drawer even though that page lives inside them — the "getting
-  // lost" case this redesign is meant to fix. `isNavActive` (used for the
-  // top nav item's own active-tab highlight) only checks the tab's single
-  // href, which doesn't cover most National Details / World sub-pages, so
-  // this checks against every href actually reachable from each section.
-  useEffect(() => {
-    const stateHrefs = homeState
-      ? [
-          regionUrl(homeState.countryId, homeState.id),
-          currentParty ? regionPartyUrl(homeState.countryId, homeState.id, currentParty.id) : null,
-          regionLegislatureUrl(homeState.countryId, homeState.id),
-          governorOffice && governorOffice.stateId === homeState.id
-            ? `/country/${homeState.countryId.toLowerCase()}/region/${homeState.id.toLowerCase()}/office`
-            : null,
-          cabinetOffice
-            ? `/country/${cabinetOffice.countryCode}/executive/cabinet/${cabinetOffice.positionId}/office`
-            : null,
-          activeElection ? `/elections/${activeElection.seatId ?? activeElection.id}` : null,
-        ].filter((href): href is string => !!href)
-      : [];
-
-    const nationHrefs = [
-      countryUrl(userCountry as CountryId),
-      cabinetOffice ? cabinetOfficeUrl(cabinetOffice.countryCode, cabinetOffice.positionId) : null,
-      currentParty ? partyUrl(currentParty.countryId ?? pageCountry, currentParty.id) : null,
-      userCountry === "US" ? "/political-operations" : null,
-      ...nationalDetailSections.flatMap((section) => section.items.map((item) => item.href)),
-    ].filter((href): href is string => !!href);
-
-    const activeTopKeys: MobileSubKey[] = [];
-    if (stateHrefs.some((href) => isNavActive(pathname, href))) activeTopKeys.push("state");
-    if (nationHrefs.some((href) => isNavActive(pathname, href))) activeTopKeys.push("nation");
-    if (worldSubItems.some((item) => isNavActive(pathname, item.href))) activeTopKeys.push("world");
-    if (activeTopKeys.length === 0) return;
-
-    setMobileSubOpen((cur) => {
-      let changed = false;
-      const next = { ...cur };
-      for (const key of activeTopKeys) {
-        if (!next[key]) {
-          next[key] = true;
-          changed = true;
-        }
-      }
-      return changed ? next : cur;
-    });
-    // Deliberately narrow to `pathname` — the href lists above are rebuilt
-    // every render but are stable for a given route. Keying off them too
-    // would re-fire (and fight a manual collapse) on unrelated re-renders.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
+  const profileOrgItems = visibleProfileOrgItems({
+    myCorporationId,
+    myUnionId,
+    unionsEnabled,
+  });
 
   const staffSubItems =
     user?.isAdmin || user?.isModerator
@@ -711,6 +663,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
       switchingCharacter={switchingCharacter}
       switchingImperial={switchingImperial}
       canAccessSandbox={canAccessSandbox}
+      profileOrgItems={profileOrgItems}
       closeAll={closeAll}
       handleSwitchCharacter={handleSwitchCharacter}
       handleSwitchImperial={handleSwitchImperial}
@@ -801,6 +754,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                       key={item.label}
                       href={item.href}
                       aria-current={active ? "page" : undefined}
+                      data-coach={item.href === "/actions" ? "nav-actions" : undefined}
                       className={navTabClassName(active)}
                     >
                       {tabIcon}
@@ -1105,6 +1059,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               preset={preset}
               switchableCountries={switchableCountries}
               worldSubItems={worldSubItems}
+              profileOrgItems={profileOrgItems}
               staffSubItems={staffSubItems}
               charterEntry={charterEntry}
               hasActiveReferendumCampaign={hasActiveReferendumCampaign}

@@ -357,6 +357,7 @@ describe("GET /api/client-nav", () => {
     expect(json.characterCountryId).toBe("JP");
     expect(json.characterName).toBe("Aurelia");
     expect(json.myCorporationId).toBe(777);
+    expect(json.myUnionId).toBeNull();
     expect(json.myCorporationType).toBeNull();
     expect(json.myCorporationCountryId).toBeNull();
     expect(json.user.imperialCharacter).toEqual({

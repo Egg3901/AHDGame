@@ -76,18 +76,18 @@ async function main() {
       const income = calculateCampaignIncome({
         fundraisingLevel: campaign.fundraisingLevel,
       } as never);
-      const result = computeAutoDowngrade({
+      const result = computeAutoDowngrade(campaign as never, {
         funds: campaign.funds,
         income,
-        groundGameLevel: campaign.groundGameLevel,
-        mediaSpendingLevel: campaign.mediaSpendingLevel,
       });
 
       console.log(
         `  ${campaign._id.toString()} (candidate ${campaign.candidateId.toString()}, party ${campaign.party ?? "?"})`
       );
       console.log(
-        `    funds=${campaign.funds} income=${income} ground L${campaign.groundGameLevel}→L${result.newGroundGameLevel} media L${campaign.mediaSpendingLevel}→L${result.newMediaSpendingLevel} demotions=${result.downgrades.length}`
+        `    funds=${campaign.funds} income=${income} demotions=${result.downgrades.length} (${result.downgrades
+          .map((d) => `${d.category}${d.branch ? `.${d.branch}` : ""}→L${d.toLevel}`)
+          .join(", ")})`
       );
 
       if (result.downgrades.length === 0) continue;
@@ -97,6 +97,7 @@ async function main() {
       const activityEntries = result.downgrades.map((d) => ({
         type: "downgrade" as const,
         category: d.category,
+        ...(d.branch ? { branch: d.branch } : {}),
         newLevel: d.toLevel,
         costFunds: 0,
         costActions: 0,
@@ -110,8 +111,7 @@ async function main() {
           filter: { _id: campaign._id },
           update: {
             $set: {
-              groundGameLevel: result.newGroundGameLevel,
-              mediaSpendingLevel: result.newMediaSpendingLevel,
+              ...result.setFields,
               updatedAt: now,
             },
             $push: {

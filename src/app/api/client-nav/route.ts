@@ -8,6 +8,7 @@ import { getAuthUser, getJwtSecret, getAuthCookieOptions, clearAuthCookie } from
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCabinetOfficeNavEntry } from "@/lib/navigation/cabinetOfficeNavEntry";
+import { resolveMyUnionNav } from "@/lib/navigation/resolveMyUnionNav";
 import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
 import type { CountryId } from "@/lib/constants/countries";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -139,6 +140,7 @@ export async function GET() {
           unreadCount: 0,
           unreadMailCount: 0,
           myCorporationId: null,
+          myUnionId: null,
           homeState: null,
           currentParty: null,
           activeElection: null,
@@ -206,6 +208,7 @@ export async function GET() {
           unreadCount: 0,
           unreadMailCount: 0,
           myCorporationId: null,
+          myUnionId: null,
           homeState: null,
           currentParty: null,
           activeElection: null,
@@ -247,6 +250,7 @@ export async function GET() {
         avatarUrl: 1,
         profileHeaderImageUrl: 1,
         statsAllocated: 1,
+        unionLeaderOf: 1,
       },
     });
 
@@ -264,6 +268,7 @@ export async function GET() {
     let myCorporationId: number | null = null;
     let myCorporationType: string | null = null;
     let myCorporationCountryId: string | null = null;
+    let myUnionId: string | null = null;
     let unreadCount = 0;
     let unreadMailCount = 0;
     let activeImperialCharacterForUser: {
@@ -339,6 +344,11 @@ export async function GET() {
       myCorporationId = myCorporation?.sequentialId ?? null;
       myCorporationType = myCorporation?.type ?? null;
       myCorporationCountryId = myCorporation?.countryId ?? null;
+
+      if (unionsEnabled && !isImperialMode) {
+        const myUnion = await resolveMyUnionNav(db, character);
+        myUnionId = myUnion?.id ?? null;
+      }
 
       if (character.homeState && stateDoc) {
         homeState = {
@@ -668,6 +678,7 @@ export async function GET() {
         myCorporationId,
         myCorporationType,
         myCorporationCountryId,
+        myUnionId,
         funds: character?.funds ?? null,
         actions: character?.actions ?? null,
         homeState,

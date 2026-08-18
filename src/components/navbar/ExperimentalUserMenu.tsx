@@ -14,6 +14,7 @@ import Image from "next/image";
 import { Avatar } from "@/components/Avatar";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 import { DropdownPanel, MenuRow } from "./experimentalNavPrimitives";
+import type { ProfileNavItem } from "./profileNavItems";
 import type {
   AdminCharacter,
   CharacterProfile,
@@ -49,6 +50,7 @@ export interface ExperimentalUserMenuProps {
   switchingCharacter: boolean;
   switchingImperial: boolean;
   canAccessSandbox?: boolean;
+  profileOrgItems?: ProfileNavItem[];
   closeAll: () => void;
   handleSwitchCharacter: (characterId: string) => Promise<void>;
   handleSwitchImperial: (type: "character" | "imperial") => Promise<void>;
@@ -69,6 +71,7 @@ export function ExperimentalUserMenu({
   switchingCharacter,
   switchingImperial,
   canAccessSandbox,
+  profileOrgItems = [],
   closeAll,
   handleSwitchCharacter,
   handleSwitchImperial,
@@ -134,6 +137,11 @@ export function ExperimentalUserMenu({
             {t("common.actions")}
           </MenuRow>
         )}
+        {profileOrgItems.map((item) => (
+          <MenuRow key={item.id} href={item.href} onNavigate={closeAll} dot="bg-primary">
+            {t(item.labelKey)}
+          </MenuRow>
+        ))}
         {showProfile && (
           <MenuRow href="/portfolio?tab=currency" onNavigate={closeAll}>
             {t("common.wallet")}

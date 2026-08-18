@@ -57,6 +57,10 @@ Each drive adds **10 strength** to two places at once:
 
 The banked figure is your voice in everything below.
 
+### Shop-floor organizing
+
+The union president can organize a specific workplace from the union's Sectors tab (or from that sector's own page). A drive costs **1 action point** and a treasury spend, and raises that shop's unionization by **5% times the union's approval**. A well-liked union organizes faster. If another union already holds the shop, the same button is a raid.
+
 ### Weighted leadership votes
 
 Organizers contest the presidency the same way shareholders contest a CEO seat: continuously, weighted by **banked organizing strength**, not one per head. Someone who ran fifty drives outvotes someone who ran one. Once the union reaches the strength threshold, the race stays open whether or not a president already sits — including against an NPP holder. The plurality leader is offered the seat and must accept; a tie keeps the sitting player president. Leadership follows organizing effort: the way to control a union is to build it.

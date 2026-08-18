@@ -35,6 +35,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [myFundsCurrency, setMyFundsCurrency] = useState<CurrencyCode | null>(null);
   const [myActions, setMyActions] = useState<number | null>(null);
   const [myNationalInfluence, setMyNationalInfluence] = useState<number | null>(null);
+  const [myCountryId, setMyCountryId] = useState<string | null>(null);
   const [resetOppoOpen, setResetOppoOpen] = useState(false);
   const [resetOppoBusy, setResetOppoBusy] = useState(false);
   const [resetOppoError, setResetOppoError] = useState("");
@@ -71,6 +72,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       setMyFundsCurrency((meCharacter?.homeCurrency as CurrencyCode | undefined) ?? null);
       setMyActions(meCharacter?.actions ?? null);
       setMyNationalInfluence(meCharacter?.nationalInfluence ?? null);
+      setMyCountryId((meCharacter?.countryId as string | undefined) ?? null);
     } catch {
       // non-critical: contribute card just shows "—" for available balance
     }
@@ -86,14 +88,19 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     return () => clearInterval(t);
   }, [fetchCampaign]);
 
-  async function handleUpgrade(category: string, targetId?: string) {
+  async function handleUpgrade(
+    category: string,
+    branch?: "a" | "b" | "c" | null,
+    targetId?: string
+  ) {
     if (!campaign) return;
-    setUpgrading(category);
+    // Composite key so only the exact node being bought shows its spinner.
+    setUpgrading(branch ? `${category}:${branch}` : category);
     try {
       const res = await fetch(`/api/campaigns/${campaign.id}/upgrade`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category, targetId }),
+        body: JSON.stringify({ category, branch: branch ?? null, targetId }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -103,6 +110,28 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       await fetchCampaign();
     } catch {
       alert("Upgrade failed");
+    } finally {
+      setUpgrading(null);
+    }
+  }
+
+  async function handleRetarget(targetId: string) {
+    if (!campaign) return;
+    setUpgrading("oppositionResearch:retarget");
+    try {
+      const res = await fetch(`/api/campaigns/${campaign.id}/retarget`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Retarget failed");
+        return;
+      }
+      await fetchCampaign();
+    } catch {
+      alert("Retarget failed");
     } finally {
       setUpgrading(null);
     }
@@ -384,6 +413,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           isOwner={canManage}
           upgrading={upgrading}
           onUpgrade={handleUpgrade}
+          onRetarget={canManage ? handleRetarget : undefined}
           onResetOppositionResearch={canManage ? openResetOpposition : undefined}
           resettingOppositionResearch={resetOppoBusy}
         />
@@ -442,7 +472,12 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         {/* Owner: Canvassing Panel */}
         {canManage && campaign.electionInfo && !campaign.electionInfo.isEnded && (
           <div className="mb-6">
-            <CanvassingPanel />
+            <CanvassingPanel
+              countryId={myCountryId ?? undefined}
+              characterActions={myActions ?? undefined}
+              characterFunds={myFunds ?? undefined}
+              onResourcesSpent={fetchMe}
+            />
           </div>
         )}
 

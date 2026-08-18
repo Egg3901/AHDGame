@@ -75,9 +75,16 @@ export default function InputsOutputsPanel({
         {hasPerOutput && "Each thing you make sells at its own rate, the rows are not one number."}
       </p>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      {/*
+        Grid items default to min-width:auto, so a buy-row that cannot shrink
+        (icon + label + price + "66% on the world market") overflows into the
+        make column and paints over it. `min-w-0` lets the track shrink; wrap
+        on each row so the trailing stats drop under the label instead of
+        colliding. Two columns only from xl, lg was still too tight.
+      */}
+      <div data-io-grid className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-2">
         {/* Inputs ───────────────────────────────────────────────────────────*/}
-        <section aria-labelledby="io-inputs">
+        <section aria-labelledby="io-inputs" className="min-w-0">
           <h3
             id="io-inputs"
             className="mb-2 flex items-center gap-1.5 text-body-xs font-semibold uppercase tracking-wider text-muted"
@@ -148,7 +155,7 @@ export default function InputsOutputsPanel({
         </section>
 
         {/* Outputs ──────────────────────────────────────────────────────────*/}
-        <section aria-labelledby="io-outputs">
+        <section aria-labelledby="io-outputs" className="min-w-0">
           <h3
             id="io-outputs"
             className="mb-2 flex items-center gap-1.5 text-body-xs font-semibold uppercase tracking-wider text-muted"
@@ -294,7 +301,7 @@ function FlowRow({
   badge: React.ReactNode;
 }) {
   return (
-    <li className="flex items-center gap-2 rounded-lg border border-card-border bg-background/40 px-3 py-2">
+    <li className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-card-border bg-background/40 px-3 py-2">
       <Link
         href={`/commodities/${flow.commodity}?country=${countryId}`}
         className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border text-body-xs font-bold transition-opacity hover:opacity-80 ${flow.colors}`}

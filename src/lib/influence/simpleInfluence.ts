@@ -12,6 +12,7 @@ import { createNotification } from "@/lib/notifications";
 import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { localCampaignBalance } from "@/lib/currency/campaignBalance";
 import { isSameCountry } from "@/lib/api/sameCountry";
+import { getMediaFavPerTurn } from "@/lib/campaigns/opsEffects";
 
 // Base cost for influence/boost actions
 export const BASE_INFLUENCE_COST = 2;
@@ -57,13 +58,19 @@ const MEDIA_SUSTAIN_THRESHOLD = 4;
  */
 async function isTargetMediaSustainedAtCap(db: Db, target: Character | NPP): Promise<boolean> {
   if ((target.favorability ?? 50) < 100) return false;
-  const campaigns = await db
+  // Strategic Operations v2: media favorability/turn now comes from the media
+  // tree (starter + Broadcast + Digital Ads). Fetch the target's campaigns and
+  // keep those whose per-turn favorability clears the decay-at-cap threshold
+  // (mediaLevel × 0.5 ≥ 2.0), with a legacy-level fallback.
+  const MEDIA_SUSTAIN_FAV_PER_TURN = MEDIA_SUSTAIN_THRESHOLD * 0.5;
+  const allCampaigns = await db
     .collection<Campaign>("campaigns")
     .find(
-      { candidateId: target._id, mediaSpendingLevel: { $gte: MEDIA_SUSTAIN_THRESHOLD } },
-      { projection: { electionId: 1 } }
+      { candidateId: target._id },
+      { projection: { electionId: 1, mediaSpendingLevel: 1, mediaSpendingTree: 1 } }
     )
     .toArray();
+  const campaigns = allCampaigns.filter((c) => getMediaFavPerTurn(c) >= MEDIA_SUSTAIN_FAV_PER_TURN);
   if (campaigns.length === 0) return false;
 
   const presidentialMatch = await db.collection<Election>("elections").findOne(

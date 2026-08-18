@@ -556,6 +556,7 @@ export const Navbar = React.memo(function Navbar({
                 countryId={pageCountry}
                 myCorporationId={myCorporationId}
                 conflictsEnabled={conflictsEnabled}
+                unionsEnabled={unionsEnabled}
               />
             )}
 
@@ -1244,6 +1245,7 @@ export const Navbar = React.memo(function Navbar({
                       countryId: pageCountry,
                       myCorporationId,
                       conflictsEnabled,
+                      unionsEnabled,
                     }).map((item) => (
                       <Link
                         key={item.id}

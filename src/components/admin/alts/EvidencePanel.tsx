@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { ConfidenceBar } from "./ConfidenceMeter";
 import {
-  memberDisplayName,
+  memberInGameName,
   pairKey,
   signalMeta,
   TIER_HEX,
@@ -36,7 +36,7 @@ export function EvidencePanel({
   isAdmin,
 }: EvidencePanelProps) {
   const nameOf = useMemo(() => {
-    const map = new Map(members.map((m) => [m.userId, memberDisplayName(m.name, m.userId)]));
+    const map = new Map(members.map((m) => [m.userId, memberInGameName(m)]));
     return (id: string) => map.get(id) ?? `user·${id.slice(-6)}`;
   }, [members]);
 

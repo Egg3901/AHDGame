@@ -7,10 +7,10 @@ import {
   ORGANIZE_SECTOR_TREASURY_COST,
   RAID_APPROVAL_EDGE_REQUIRED,
   SECTOR_RECOGNITION_THRESHOLD,
-  SECTOR_UNIONIZATION_GAIN_PER_DRIVE,
   organizeSector,
   raidSucceeds,
   resolveOrganizeSectorDrive,
+  sectorUnionizationGain,
 } from "./organizeSector";
 
 describe("raidSucceeds (contest rule)", () => {
@@ -39,6 +39,14 @@ describe("raidSucceeds (contest rule)", () => {
   });
 });
 
+describe("sectorUnionizationGain", () => {
+  it("is 5 points at full approval and scales linearly", () => {
+    expect(sectorUnionizationGain(100)).toBe(5);
+    expect(sectorUnionizationGain(60)).toBe(3);
+    expect(sectorUnionizationGain(0)).toBe(0);
+  });
+});
+
 describe("resolveOrganizeSectorDrive", () => {
   it("organizes an unrepresented sector without granting recognition below threshold", () => {
     const outcome = resolveOrganizeSectorDrive({
@@ -49,7 +57,7 @@ describe("resolveOrganizeSectorDrive", () => {
       incumbentApproval: null,
     });
     expect(outcome.applied).toBe(true);
-    expect(outcome.newUnionization).toBe(10 + SECTOR_UNIONIZATION_GAIN_PER_DRIVE);
+    expect(outcome.newUnionization).toBe(13);
     expect(outcome.newRepresentingUnionId).toBeNull();
     expect(outcome.won).toBe(false);
     expect(outcome.wasRaid).toBe(false);
@@ -57,10 +65,10 @@ describe("resolveOrganizeSectorDrive", () => {
 
   it("grants recognition once the drive crosses SECTOR_RECOGNITION_THRESHOLD", () => {
     const outcome = resolveOrganizeSectorDrive({
-      currentUnionization: SECTOR_RECOGNITION_THRESHOLD - SECTOR_UNIONIZATION_GAIN_PER_DRIVE,
+      currentUnionization: 45,
       currentRepresentingUnionId: null,
       attackerUnionId: "attacker",
-      attackerApproval: 60,
+      attackerApproval: 100,
       incumbentApproval: null,
     });
     expect(outcome.newUnionization).toBe(SECTOR_RECOGNITION_THRESHOLD);
@@ -73,7 +81,7 @@ describe("resolveOrganizeSectorDrive", () => {
       currentUnionization: 95,
       currentRepresentingUnionId: "attacker",
       attackerUnionId: "attacker",
-      attackerApproval: 60,
+      attackerApproval: 100,
       incumbentApproval: null,
     });
     expect(outcome.newUnionization).toBe(100);
@@ -104,7 +112,7 @@ describe("resolveOrganizeSectorDrive", () => {
     expect(outcome.won).toBe(true);
     expect(outcome.wasRaid).toBe(true);
     expect(outcome.newRepresentingUnionId).toBe("attacker");
-    expect(outcome.newUnionization).toBe(80 + SECTOR_UNIONIZATION_GAIN_PER_DRIVE);
+    expect(outcome.newUnionization).toBe(83.5);
   });
 
   it("a losing raid leaves the sector untouched", () => {

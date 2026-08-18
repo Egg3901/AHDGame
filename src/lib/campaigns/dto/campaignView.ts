@@ -1,5 +1,13 @@
 import { getCampaignCopyForElection } from "@/lib/campaigns/raceFamilyCopy";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { Campaign } from "@/lib/db/types";
+import {
+  getEffectiveBranchCost,
+  OPS_MAX_BRANCH_LEVEL,
+  OPS_TREES,
+  type OpsBranchKey,
+  type UpgradeCategory,
+} from "@/lib/campaigns/upgradeCosts";
 
 export interface CampaignUpgrade {
   level: number;
@@ -120,6 +128,16 @@ export interface CampaignData {
   };
 
   /**
+   * Strategic Operations v2 — per-lever branch-tree view for the owner UI.
+   * Owner-only (undefined for non-owner viewers). Each lever carries its
+   * current tree state plus localized next-tier costs, so the ops modal can
+   * render the starter node + three branch sub-tracks without recomputing
+   * costs client-side. Costs share the server's family-scalar + general-phase
+   * surcharge (via `getEffectiveBranchCost`).
+   */
+  opsTrees?: Record<UpgradeCategory, OpsTreeView>;
+
+  /**
    * Phase B — own candidate's Support snapshot for the rally panel.
    * Fog-of-war: only populated when the viewer has owner access (campaign
    * manager / nominee / admin). Opposing viewers see undefined.
@@ -154,13 +172,156 @@ export interface CampaignData {
   };
 }
 
+export interface OpsBranchCostView {
+  funds: number;
+  actions: number;
+  effect: string;
+  maintenance?: number;
+  lumpSum?: number;
+}
+
+export interface OpsBranchView {
+  key: OpsBranchKey;
+  label: string;
+  description: string;
+  effectType: string;
+  level: number;
+  maxLevel: number;
+  /** Localized next-tier cost, or null when the branch is maxed. */
+  next: OpsBranchCostView | null;
+}
+
+export interface OpsTreeView {
+  /** Whether the tier-1 starter is unlocked. */
+  unlocked: boolean;
+  /** Localized starter cost — present only while locked. */
+  starterCost: OpsBranchCostView | null;
+  starterEffect: string;
+  requiresTarget: boolean;
+  branches: OpsBranchView[];
+}
+
+/**
+ * Build the owner-only ops-tree view for one lever, localizing anchor costs
+ * into the campaign's currency via `toLocal`. Mirrors the server purchase gate:
+ * a locked lever exposes only its `starterCost`; an unlocked lever exposes each
+ * branch's next-tier cost (null when maxed).
+ */
+export function buildOpsTreeView(
+  category: UpgradeCategory,
+  tree: { starter: boolean; a: number; b: number; c: number } | undefined,
+  requiresTarget: boolean,
+  electionType: string | undefined,
+  isGeneralPhase: boolean,
+  toLocal: (anchor: number) => number
+): OpsTreeView {
+  const def = OPS_TREES[category];
+  const unlocked = !!tree?.starter;
+  const localizeCost = (
+    c: {
+      funds: number;
+      actions: number;
+      effect: string;
+      maintenance?: number;
+      lumpSum?: number;
+    } | null
+  ): OpsBranchCostView | null =>
+    c == null
+      ? null
+      : {
+          funds: Math.round(toLocal(c.funds)),
+          actions: c.actions,
+          effect: c.effect,
+          ...(c.maintenance != null ? { maintenance: Math.round(toLocal(c.maintenance)) } : {}),
+          // lumpSum is currency for income branches, a raw % for oppo — the
+          // effect string already conveys the % so only localize the currency
+          // (income) case; oppo lumpSum is left off the view (shown via effect).
+          ...(c.lumpSum != null && category === "fundraising"
+            ? { lumpSum: Math.round(toLocal(c.lumpSum)) }
+            : {}),
+        };
+
+  return {
+    unlocked,
+    starterEffect: def.starter.effect,
+    requiresTarget,
+    starterCost: unlocked
+      ? null
+      : localizeCost(getEffectiveBranchCost(category, null, 0, electionType, isGeneralPhase)),
+    branches: def.branches.map((b) => {
+      const level = tree ? tree[b.key] : 0;
+      const next =
+        unlocked && level < OPS_MAX_BRANCH_LEVEL
+          ? getEffectiveBranchCost(category, b.key, level + 1, electionType, isGeneralPhase)
+          : null;
+      return {
+        key: b.key,
+        label: b.label,
+        description: b.description,
+        effectType: b.effectType,
+        level,
+        maxLevel: OPS_MAX_BRANCH_LEVEL,
+        next: localizeCost(next),
+      };
+    }),
+  };
+}
+
+/**
+ * Build every lever's ops-tree view for a campaign (owner surface).
+ */
+export function buildOpsTrees(
+  campaign: Pick<
+    Campaign,
+    "fundraisingTree" | "oppositionResearchTree" | "groundGameTree" | "mediaSpendingTree"
+  >,
+  electionType: string | undefined,
+  isGeneralPhase: boolean,
+  toLocal: (anchor: number) => number
+): Record<UpgradeCategory, OpsTreeView> {
+  return {
+    fundraising: buildOpsTreeView(
+      "fundraising",
+      campaign.fundraisingTree,
+      false,
+      electionType,
+      isGeneralPhase,
+      toLocal
+    ),
+    oppositionResearch: buildOpsTreeView(
+      "oppositionResearch",
+      campaign.oppositionResearchTree,
+      true,
+      electionType,
+      isGeneralPhase,
+      toLocal
+    ),
+    groundGame: buildOpsTreeView(
+      "groundGame",
+      campaign.groundGameTree,
+      false,
+      electionType,
+      isGeneralPhase,
+      toLocal
+    ),
+    mediaSpending: buildOpsTreeView(
+      "mediaSpending",
+      campaign.mediaSpendingTree,
+      false,
+      electionType,
+      isGeneralPhase,
+      toLocal
+    ),
+  };
+}
+
 export const CAMPAIGN_CATEGORIES = [
   {
     key: "fundraising",
     label: "Fundraising",
     description: "Increase campaign revenue generation",
     tooltipText:
-      "Each level adds +$10,000/turn to campaign income. Revenue comes from political influence, personal funds, and fundraising operations.",
+      "Unlock a fundraising operation, then invest in three branches: Grassroots (steady per-turn income), Bundlers (one-time cash infusions), and Digital Ops (a multiplier on all campaign income).",
     colorClass: "text-amber-400",
     bgClass: "bg-amber-500/10 border-amber-500/20",
     barClass: "bg-amber-400",
