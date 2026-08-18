@@ -93,7 +93,8 @@
       "empty": "Für {state} sind noch keine Überzeugungsfaktoren berechnet. Sie füllen sich, sobald Stimm- und Zusatzdaten geladen sind.",
       "driversGroup": "Überzeugungsfaktoren (Punkte des umstimmbaren Anteils)",
       "coattailsGroup": "Coattail-Effekte (direkte % des Stimmenanteils)",
-      "pts": "Pkt."
+      "pts": "Pkt.",
+      "ceiling": "Grenze in diesem Zyklus: Höchstens {opponentSlice}% der Stimmen von {opponent} können zu {focus} wechseln, und {focusSlice}% der Stimmen von {focus} können abwandern. Die Registrierungsneigung bestimmt die Ausgangsverteilung und wie schwer eine Partei zu bewegen ist, nicht den Endanteil. Diese Faktoren ergeben zusammen {net} Pkt. dieses beweglichen Anteils."
     },
     "registration": {
       "title": "Registrierungseinfluss",
@@ -106,7 +107,10 @@
       "unregistered": "Nicht registriert",
       "independentTitle": "Unabhängig: {pct}%",
       "unregisteredTitle": "Nicht registriert: {pct}%",
-      "normalizationNote": "Hinweis: Die Anteile summieren sich auf {pct}%, außerhalb des normalisierten Bandes von 95-105%. Die Bootstrap-Renormalisierung steht womöglich noch aus."
+      "normalizationNote": "Hinweis: Die Anteile summieren sich auf {pct}%, außerhalb des normalisierten Bandes von 95-105%. Die Bootstrap-Renormalisierung steht womöglich noch aus.",
+      "movableValue": "{pct}% beweglich",
+      "movableTitle": "{party}: Anteil der Stimmen dieser Partei, den Überzeugungsarbeit in einem Zyklus noch bewegen kann. Der Rest ist durch die Registrierungsneigung gebunden.",
+      "movableNote": "Der bewegliche Wert ist der Anteil der eigenen Stimmen jeder Partei, den ein Wahlkampf in einem Zyklus verschieben kann. Eine große Neigung bedeutet eine große Ausgangsbasis und einen kleinen beweglichen Anteil."
     },
     "carveUp": {
       "title": "{state} · Aufteilung",

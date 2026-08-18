@@ -3,6 +3,8 @@ import {
   computePersuasionDriverDisplay,
   computePairwiseDriverDisplay,
   pickDefaultDriverPair,
+  persuadableSlicePct,
+  computePersuadableSliceReadout,
 } from "./computePersuasionDriverDisplay";
 
 interface PublicCandidate {
@@ -438,5 +440,42 @@ describe("driver display peel scaling (UI honesty, #2891)", () => {
     const gov = rows.find((r) => r.label === "Gubernatorial Coattails");
     expect(gov?.contributionPct).toBeCloseTo(4.5);
     expect(gov?.unit).toBe("%");
+  });
+});
+
+describe("persuadable-slice readout (ticket #1131)", () => {
+  const cands = [
+    candidate({ party: "dem", id: "d1", sharePct: 49 }),
+    candidate({ party: "rep", id: "r1", sharePct: 51 }),
+  ];
+
+  it("reports the same fraction the engine peels", () => {
+    // effectivePeelableFraction(100) = 0.10 × 0.50 = 0.05 → 5%.
+    expect(persuadableSlicePct(100)).toBeCloseTo(5, 6);
+    // No Reg data → the engine's 0.20 baseline.
+    expect(persuadableSlicePct(undefined)).toBeCloseTo(20, 6);
+  });
+
+  it("reports both sides of the pair and the net driver total", () => {
+    const inputs = {
+      incumbentSeatShareByParty: { dem: 1.0, rep: 0.0 },
+      regByParty: { dem: 59.7, rep: 40.3 },
+    };
+    const rows = computePairwiseDriverDisplay(cands, "d1", "r1", inputs);
+    const readout = computePersuadableSliceReadout(rows, "dem", "rep", inputs);
+    expect(readout.focusSlicePct).toBeCloseTo(persuadableSlicePct(59.7), 6);
+    expect(readout.opponentSlicePct).toBeCloseTo(persuadableSlicePct(40.3), 6);
+    // Net = sum of the already peel-scaled "pts" rows.
+    const expected = rows
+      .filter((r) => r.unit !== "%")
+      .reduce((sum, r) => sum + r.contributionPct, 0);
+    expect(readout.netDriverPts).toBeCloseTo(expected, 6);
+  });
+
+  it("excludes coattail % rows from the net driver total", () => {
+    const inputs = { gubernatorialCoattailPctByParty: { dem: 4.5 } };
+    const rows = computePairwiseDriverDisplay(cands, "d1", "r1", inputs);
+    const readout = computePersuadableSliceReadout(rows, "dem", "rep", inputs);
+    expect(readout.netDriverPts).toBeCloseTo(0, 6);
   });
 });
