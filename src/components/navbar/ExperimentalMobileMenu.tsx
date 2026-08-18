@@ -360,19 +360,12 @@ export function ExperimentalMobileMenu({
                             {sub.labelKey ? t(sub.labelKey) : sub.label}
                           </Link>
                         ))}
-                        {/* Grouped categories (Leaderboards / Diplomacy /
-                            Economy / Other) — same collapsible header as the
-                            Nation section's Government/Politics/Economy/Other,
-                            collapsed by default except the group holding the
-                            current route. */}
                         {buildWorldNavSections(worldSubItems).map((group) => (
                           <CollapsibleNavSection
                             key={group.id}
                             title={t(group.titleKey)}
                             collapsible
-                            defaultOpen={group.items.some((item) =>
-                              isNavActive(pathname, item.href)
-                            )}
+                            defaultOpen={false}
                             className="mt-2"
                             labelClassName="px-3 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted/70"
                           >

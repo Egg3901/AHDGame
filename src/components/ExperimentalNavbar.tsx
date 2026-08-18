@@ -327,58 +327,6 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
     unionsEnabled,
   });
 
-  // Auto-expand the mobile drawer's top-level section (State/Nation/World)
-  // that contains the current page. `mobileSubOpen` starts fully collapsed
-  // (see useState above), so without this a user landing directly on, say,
-  // a Policy or Sectors page would find "United States"/"World" collapsed
-  // in the drawer even though that page lives inside them.
-  useEffect(() => {
-    const stateHrefs = homeState
-      ? [
-          regionUrl(homeState.countryId, homeState.id),
-          currentParty ? regionPartyUrl(homeState.countryId, homeState.id, currentParty.id) : null,
-          regionLegislatureUrl(homeState.countryId, homeState.id),
-          governorOffice && governorOffice.stateId === homeState.id
-            ? `/country/${homeState.countryId.toLowerCase()}/region/${homeState.id.toLowerCase()}/office`
-            : null,
-          cabinetOffice
-            ? `/country/${cabinetOffice.countryCode}/executive/cabinet/${cabinetOffice.positionId}/office`
-            : null,
-          activeElection ? `/elections/${activeElection.seatId ?? activeElection.id}` : null,
-        ].filter((href): href is string => !!href)
-      : [];
-
-    const nationHrefs = [
-      countryUrl(userCountry as CountryId),
-      cabinetOffice ? cabinetOfficeUrl(cabinetOffice.countryCode, cabinetOffice.positionId) : null,
-      currentParty ? partyUrl(currentParty.countryId ?? pageCountry, currentParty.id) : null,
-      userCountry === "US" ? "/political-operations" : null,
-      ...nationalDetailSections.flatMap((section) => section.items.map((item) => item.href)),
-    ].filter((href): href is string => !!href);
-
-    const activeTopKeys: MobileSubKey[] = [];
-    if (stateHrefs.some((href) => isNavActive(pathname, href))) activeTopKeys.push("state");
-    if (nationHrefs.some((href) => isNavActive(pathname, href))) activeTopKeys.push("nation");
-    if (worldSubItems.some((item) => isNavActive(pathname, item.href))) activeTopKeys.push("world");
-    if (activeTopKeys.length === 0) return;
-
-    setMobileSubOpen((cur) => {
-      let changed = false;
-      const next = { ...cur };
-      for (const key of activeTopKeys) {
-        if (!next[key]) {
-          next[key] = true;
-          changed = true;
-        }
-      }
-      return changed ? next : cur;
-    });
-    // Deliberately narrow to `pathname` — the href lists above are rebuilt
-    // every render but are stable for a given route. Keying off them too
-    // would re-fire (and fight a manual collapse) on unrelated re-renders.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
-
   const staffSubItems =
     user?.isAdmin || user?.isModerator
       ? visibleStaffNavItems({ isAdmin: !!user?.isAdmin, isModerator: !!user?.isModerator })
