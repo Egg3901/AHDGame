@@ -158,7 +158,6 @@ export function enrichElectionCandidates(deps: EnrichmentDependencies): Enriched
     }
   }
 
-  // Build lookup maps
   const charMap = new Map(characters.map((c) => [c._id.toString(), c]));
   const nppMap = new Map(npps.map((n) => [n._id.toString(), n]));
   const electionCandidateById = new Map(candidates.map((c) => [c._id.toString(), c]));
