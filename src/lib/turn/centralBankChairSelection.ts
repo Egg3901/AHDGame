@@ -19,7 +19,7 @@
 
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
-import type { CentralBank, ChairSelectionPending } from "@/lib/db/types/centralBank";
+import type { CentralBank, ChairSelectionPending, FomcSeat } from "@/lib/db/types/centralBank";
 import type { Character } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
@@ -467,6 +467,28 @@ export async function acceptCentralBankChairSelection(
   // Atomically claim the acceptance keyed on the pending nominee so a
   // double-submit (or a turn-phase lapse racing this accept) cannot seat the
   // chair twice and double-announce.
+  // Seat the accepting player in the committee's chair seat too. Without this
+  // the board kept the caretaker technocrat in seat 0: it tabled the motions,
+  // its alignment drove policy, and the next time its term lapsed the seat
+  // refresh overwrote the player's mirror fields and evicted them silently.
+  const chairTermExpiresAtTurn = currentTurn + CHAIR_TERM_TURNS;
+  const seatedBoard: FomcSeat[] | null = bank.fomcBoard?.length
+    ? bank.fomcBoard.map((seat) =>
+        seat.isChair
+          ? {
+              ...seat,
+              occupantType: "player" as const,
+              characterId: acceptingCharacterId,
+              characterName: character.name,
+              nppId: null,
+              appointedByPresidentId: pending.appointedByExecutiveId ?? null,
+              appointedAtTurn: currentTurn,
+              termExpiresAtTurn: chairTermExpiresAtTurn,
+            }
+          : seat
+      )
+    : null;
+
   const claimed = await claimStatusTransition(
     db,
     "centralBanks",
@@ -475,6 +497,11 @@ export async function acceptCentralBankChairSelection(
       $set: {
         chairCharacterId: acceptingCharacterId,
         chairCharacterName: character.name,
+        // The mirror must flip out of technocrat mode, or every chair consumer
+        // keeps resolving the caretaker NPP over the player who just accepted.
+        chairMode: "character" as const,
+        chairNppId: null,
+        ...(seatedBoard ? { fomcBoard: seatedBoard } : {}),
         chairAppointedAt: gameNow,
         chairAppointedBy: pending.appointedByExecutiveId,
         // Scrutiny is the INSTITUTION's, not the person's: a new chair inherits
@@ -483,7 +510,7 @@ export async function acceptCentralBankChairSelection(
         // people. The retained fraction leaves a real honeymoon without making
         // the reset worth buying.
         resolveStreak: 0,
-        chairTermExpiresAtTurn: currentTurn + CHAIR_TERM_TURNS,
+        chairTermExpiresAtTurn,
         chairSelectionPending: null,
         nominations: [],
         lobbyingPool: [],

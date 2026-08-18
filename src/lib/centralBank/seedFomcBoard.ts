@@ -46,9 +46,31 @@ export async function seedFomcBoards(
     // Granting independence by law seeds the board then (see billEnactment).
     if (await isBankGovernmentControlledLive(bank, countryId)) continue;
 
+    // A player already holding the chair keeps it: seat 0 adopts them rather
+    // than spawning a technocrat over the top. Granting independence by law is
+    // what creates the committee, and it must not be a backdoor eviction.
+    const sittingChairId = bank.chairMode === "character" ? bank.chairCharacterId : null;
+
     const board: FomcSeat[] = [];
     for (let i = 0; i < FOMC_BOARD_SIZE; i++) {
       const alignment = seatAlignment(i);
+      const termExpiresAtTurn = staggeredExpiry(i, FOMC_BOARD_SIZE, startTurn);
+      if (i === 0 && sittingChairId) {
+        board.push({
+          seatId: "seat-1",
+          isChair: true,
+          occupantType: "player",
+          characterId: sittingChairId,
+          characterName: bank.chairCharacterName ?? "",
+          nppId: null,
+          alignment,
+          appointedByPresidentId: bank.chairAppointedBy ?? null,
+          appointedAtTurn: startTurn,
+          // Keep the player's own term, not the staggered technocrat rotation.
+          termExpiresAtTurn: bank.chairTermExpiresAtTurn ?? termExpiresAtTurn,
+        });
+        continue;
+      }
       const npp = await spawnTechnocratNpp(db, countryId, "fomcMember");
       board.push({
         seatId: `seat-${i + 1}`,
@@ -60,7 +82,7 @@ export async function seedFomcBoards(
         alignment,
         appointedByPresidentId: null,
         appointedAtTurn: startTurn,
-        termExpiresAtTurn: staggeredExpiry(i, FOMC_BOARD_SIZE, startTurn),
+        termExpiresAtTurn,
       });
     }
 
@@ -75,7 +97,7 @@ export async function seedFomcBoards(
           fomcTermStartedAtTurn: startTurn,
           // Mirror the chair onto the single-chair fields so legacy chair
           // consumers (display, infamy) resolve. The committee owns the rate.
-          chairMode: "npp",
+          chairMode: chair.occupantType === "player" ? "character" : "npp",
           chairNppId: chair.nppId,
           chairAlignment: chair.alignment,
           chairTermExpiresAtTurn: chair.termExpiresAtTurn,
