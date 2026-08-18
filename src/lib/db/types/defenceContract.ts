@@ -57,7 +57,89 @@ export interface DefenceContract {
   administrativeClawbackUnrecoveredAmount?: number;
   administrativeClawbackAt?: Date;
   administrativeClawbackRunId?: string;
+  /**
+   * Local currency still COMMITTED against the defence appropriation for undelivered lots.
+   *
+   * Set to the contract's full cost at award and drawn down lot by lot on delivery, so the
+   * appropriation always knows what it owes before it is asked to pay. Released in full when
+   * the contract is cancelled or declined, and any rounding residue is released on completion.
+   * Absent on contracts awarded before encumbrance shipped; those are treated as 0, which is
+   * the only safe reading - the money was never reserved for them.
+   */
+  encumberedAmount?: number;
+  /** Local currency actually paid to the supplier so far, across every delivery. */
+  amountPaid?: number;
+  /** Production cost the supplier has borne so far, so margin is legible on the order book. */
+  productionCostPaid?: number;
+  /**
+   * The grade ceiling the MINISTER set on this order (0..3), bounding what they are willing to
+   * pay for as well as what they receive. The delivered grade is the tightest of this, the
+   * supplier's research ceiling, and the era cap. Absent means "whatever the supplier can
+   * build", which is how every contract behaved before ministers could specify.
+   */
+  gradeCeiling?: number;
+  /**
+   * Production lines the CONTRACTOR has assigned to this order, out of
+   * `DEFENCE_FACTORY_SLOTS_PER_PLANT`. Throughput scales with it, price per lot does not.
+   * Absent on legacy contracts, where the default allocation reproduces the old even split.
+   */
+  assignedFactories?: number;
+  /**
+   * Why this contract shipped less than it could have on its last delivery turn, or absent
+   * when it shipped everything it built.
+   *
+   * Every boundary in the sweep - a sub-lot output, an appropriation that cannot cover the
+   * turn, an order down to its last part-lot - now CARRIES the work in `deliveryCarry` and
+   * records why here. Nothing is discarded silently any more: a plant that appeared to be
+   * building nothing for ten turns was in fact having a finished lot destroyed every turn
+   * (ticket #1099), and the order book gave the CEO no way to see it.
+   */
+  carryReason?: DefenceCarryReason;
+  /** Turn `carryReason` was last written, so a stale reason is legible as stale. */
+  carryReasonTurn?: number;
+  /**
+   * Public disclosure that the awarding minister had an interest in the supplier. Set once, at
+   * award, and never cleared: the record of who signed what does not improve with age.
+   */
+  selfDealing?: {
+    basis: "owner" | "shareholding";
+    /** Fraction of the supplier (0..1) the minister held at award. */
+    stakeShare: number;
+    ministerCharacterId?: ObjectId;
+    ministerName?: string;
+    /** Favorability the minister paid for it, for the order book to state plainly. */
+    favorabilityPenalty: number;
+  };
   status: DefenceContractStatus;
   awardedTurn: number;
   updatedAt?: Date;
 }
+
+/**
+ * Why a delivery turn banked output instead of shipping it. Ordered from the supplier's
+ * problem to the buyer's, which is also the order the sweep discovers them in.
+ */
+export type DefenceCarryReason =
+  | "sub_lot_output"
+  | "appropriation_short"
+  | "order_remainder"
+  | "supplier_ineligible"
+  | "no_output"
+  | "already_settled_this_turn";
+
+/** One line of plain text per reason, shared by the ministerial and corporate order books. */
+export const DEFENCE_CARRY_REASON_TEXT: Record<DefenceCarryReason, string> = {
+  sub_lot_output:
+    "The plant built part of a lot this turn. It is banked and ships as soon as it reaches a " +
+    "whole lot.",
+  appropriation_short:
+    "Lots are built and waiting. The defence appropriation could not cover them this turn, so " +
+    "they ship when it can.",
+  order_remainder:
+    "More was built than the order still needs. The surplus is held against the remaining lots " +
+    "rather than delivered.",
+  supplier_ineligible:
+    "The supplier cannot currently be paid from this appropriation, so nothing shipped.",
+  no_output: "The plant produced nothing this turn, so nothing shipped.",
+  already_settled_this_turn: "This contract has already been settled for this turn.",
+};

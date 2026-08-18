@@ -22,6 +22,14 @@ const contract = (over: Partial<CorporationContractView> = {}): CorporationContr
   status: "active",
   projectedLotsPerTurn: 20,
   earned: 40_000,
+  lotsBuiltNotDelivered: 0,
+  partialLot: 0,
+  amountPaid: 40_000,
+  productionCostPaid: 16_000,
+  unitProductionCost: 400,
+  encumberedAmount: 60_000,
+  assignedFactories: 4,
+  totalFactories: 4,
   ...over,
 });
 
@@ -30,6 +38,8 @@ const defence = (over: Partial<CorporationDefenceView> = {}): CorporationDefence
   pendingCount: 0,
   gradeCeiling: 2,
   totalEarned: 40_000,
+  totalNetMargin: 24_000,
+  totalEncumbered: 60_000,
   ...over,
 });
 

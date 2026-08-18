@@ -188,7 +188,7 @@ describe("POST military/[unitId]/upgrade", () => {
     it("refuses when the appropriation is short and refunds the action", async () => {
       db.collectionMocks.federalBudget.updateOne.mockImplementation(
         async (filter: Record<string, unknown>) => {
-          const guarded = filter["defenseAppropriation.balance"] !== undefined;
+          const guarded = filter.$expr !== undefined;
           return { matchedCount: guarded ? 0 : 1, modifiedCount: guarded ? 0 : 1 };
         }
       );

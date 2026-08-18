@@ -326,6 +326,11 @@ export interface DefenceSupplierView {
   alreadyContracted: boolean;
   availableLots?: number;
   allowanceWindowEndTurn?: number;
+  /** What one lot costs this plant to build - the floor of the price band (suggestion #291). */
+  unitProductionCost: number;
+  /** Production lines free at this plant, out of its total (suggestion #281). */
+  freeFactories: number;
+  totalFactories: number;
 }
 
 export interface DefenceContractView {
@@ -340,6 +345,19 @@ export interface DefenceContractView {
   lotsDelivered: number;
   pricePerLot: number;
   awardedTurn: number;
+  /** Lots built and banked but not yet shipped, so a stalled order reads as stalled. */
+  lotsBuiltNotDelivered?: number;
+  /** Local currency paid so far, and what is still committed against the appropriation. */
+  amountPaid?: number;
+  encumberedAmount?: number;
+  /** Why the last delivery turn banked output instead of shipping it, in plain text. */
+  carryReasonText?: string;
+  /** Grade this order is written for (0..3), and the lines the contractor assigned to it. */
+  gradeCeiling?: number;
+  assignedFactories?: number;
+  totalFactories?: number;
+  /** Public disclosure that the awarding minister had an interest in the supplier. */
+  selfDealing?: { basis: "owner" | "shareholding"; stakeShare: number; ministerName?: string };
 }
 
 export function useCabinetOffice(countryCode: string, positionId: string) {

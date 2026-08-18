@@ -63,7 +63,13 @@ export function MilitaryFlagship({
   const [busy, setBusy] = useState(false);
   const [contractError, setContractError] = useState<string | null>(null);
 
-  async function awardContract(sectorId: string, lotsOrdered: number) {
+  async function awardContract(
+    sectorId: string,
+    lotsOrdered: number,
+    // Suggestion #291/#292. Both optional: omitting them reproduces the old behaviour exactly,
+    // a fair computed price at the supplier's own grade ceiling.
+    options?: { pricePerLot?: number; gradeCeiling?: number }
+  ) {
     setBusy(true);
     setContractError(null);
     try {
@@ -72,7 +78,12 @@ export function MilitaryFlagship({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sectorId, lotsOrdered }),
+          body: JSON.stringify({
+            sectorId,
+            lotsOrdered,
+            ...(options?.pricePerLot != null ? { pricePerLot: options.pricePerLot } : {}),
+            ...(options?.gradeCeiling != null ? { gradeCeiling: options.gradeCeiling } : {}),
+          }),
         }
       );
       if (!res.ok) {

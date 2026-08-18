@@ -1,9 +1,13 @@
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types/corporation";
 import type { UnitDomain } from "@/lib/db/types/militaryUnit";
-import { componentsForStrategy, gradeCeilingFor } from "@/lib/military/arsenalComponents";
-import { rawLotsFromSector } from "@/lib/military/arsenal";
-import { canSupply } from "@/lib/turn/defenceDeliveryTurn";
+import { resolveFillEligibility } from "@/lib/military/defenceFillEligibility";
+import {
+  lotProductionCost,
+  defaultFactoryAllocation,
+  DEFENCE_FACTORY_SLOTS_PER_PLANT,
+} from "@/lib/military/defenceLotEconomics";
+import { componentsForStrategy } from "@/lib/military/arsenalComponents";
 import { listOpenContracts } from "@/lib/db/collections/defenceContracts";
 
 /** One plant the defence minister could award a contract to. */
@@ -28,6 +32,14 @@ export interface DefenceSupplierView {
   /** Lots this supplier may still receive in the current budget window. */
   availableLots?: number;
   allowanceWindowEndTurn?: number;
+  /**
+   * What one lot costs this plant to build, at current input prices. The floor of the price
+   * band the minister may negotiate inside (suggestion #291) is this plus a margin.
+   */
+  unitProductionCost: number;
+  /** Production lines this plant has free, out of its total (suggestion #281). */
+  freeFactories: number;
+  totalFactories: number;
 }
 
 /**
@@ -65,15 +77,34 @@ export async function listDefenceSuppliers(
   const active = await listOpenContracts(db, countryId);
   const contractedSectorIds = new Set(active.map((c) => c.sectorId.toString()));
 
+  // Lines already committed per plant, so the picker can tell a minister that a plant is
+  // productive but fully booked - a distinction it could not previously make at all.
+  const committedSlots = new Map<string, number>();
+  for (const c of active) {
+    const key = c.sectorId.toString();
+    const sector = sectors.find((s) => s._id.toString() === key);
+    const fallback = defaultFactoryAllocation(
+      componentsForStrategy(sector?.strategyId).length,
+      DEFENCE_FACTORY_SLOTS_PER_PLANT
+    );
+    committedSlots.set(key, (committedSlots.get(key) ?? 0) + (c.assignedFactories ?? fallback));
+  }
+
   const rows: DefenceSupplierView[] = [];
   for (const sector of sectors) {
     const corp = corpById.get(sector.corporationId.toString());
-    if (!corp || !canSupply(corp, countryId)) continue;
+    if (!corp) continue;
 
-    // `cyber` maps to nothing — electronics and software, not materiel — so those plants are
-    // absent here for the same reason the route refuses them.
-    const components = componentsForStrategy(sector.strategyId);
-    if (components.length === 0) continue;
+    // The SAME resolver the award route and the delivery sweep use. A picker that offered a
+    // plant the route would refuse turned every clear 400 into a dead option the minister
+    // could not diagnose, and every divergence between these checks has shipped as a ticket.
+    const fill = resolveFillEligibility({ corp, sector, countryId, currentYear });
+    if (!fill.eligible) continue;
+
+    const freeFactories = Math.max(
+      0,
+      DEFENCE_FACTORY_SLOTS_PER_PLANT - (committedSlots.get(sector._id.toString()) ?? 0)
+    );
 
     rows.push({
       sectorId: sector._id.toString(),
@@ -81,11 +112,14 @@ export async function listDefenceSuppliers(
       corporationName: corp.name ?? "Unnamed corporation",
       plantLabel: sector.displayName?.trim() || sector.stateId,
       strategyId: sector.strategyId ?? "standard",
-      component: components[0],
-      components,
-      projectedLotsPerTurn: rawLotsFromSector(sector) / Math.max(1, components.length),
-      gradeCeiling: gradeCeilingFor(corp, currentYear),
+      component: fill.components[0],
+      components: fill.components,
+      projectedLotsPerTurn: fill.projectedLotsPerTurn,
+      gradeCeiling: fill.gradeCeiling,
       alreadyContracted: contractedSectorIds.has(sector._id.toString()),
+      unitProductionCost: lotProductionCost(sector.strategyId) ?? 0,
+      freeFactories,
+      totalFactories: DEFENCE_FACTORY_SLOTS_PER_PLANT,
     });
   }
 
