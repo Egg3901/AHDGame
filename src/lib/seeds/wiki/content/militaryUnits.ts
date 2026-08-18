@@ -211,6 +211,26 @@ Disbanding is **free** and instant. The unit's surviving personnel go back into 
 
 **There is no cash refund.** The purchase price is gone. That unrefunded cost is what keeps unit churn expensive and stops you from cycling formations to farm anything.
 
+## Defence procurement contracts
+
+The defence seat can award contracts to eligible domestic defence sectors from the cabinet office's **Military → Arsenal** area. A contract supplies the national arsenal over time; recruiting and upgrading draw equipment from that stock.
+
+Signing a contract immediately reserves its full price against the defence appropriation. The server refuses an order that exceeds the **uncommitted** balance. Deliveries draw down that reservation, and cancelling, declining, or completing the contract releases whatever remains. Recruiting and upgrading also use the uncommitted balance, so they cannot spend money already promised to a supplier.
+
+The minister chooses:
+
+- **Lots ordered**
+- **Price per lot**, inside the server-calculated floor and ceiling
+- **Equipment grade**, from cheap mass production to premium equipment
+
+The floor follows the supplier's current commodity and overhead costs. If input prices rise after signing, the contract can become unprofitable. A supplier with enough cash delivers at a loss; one that cannot fund the loss stalls and reports why.
+
+The contractor assigns up to four production lines from each plant across its orders. More lines increase delivery speed without changing the agreed price per lot. A plant cannot assign the same line to two contracts.
+
+Both the minister's and contractor's order books show lots ordered, built, carried, delivered, paid, and still committed. A stalled order names the reason. Awards to a corporation the minister owns or materially holds are marked on the contract, reported on the public wire, and reduce the minister's standing.
+
+An admin may pause **new** defence procurement in an emergency. Existing contracts continue to deliver and may still be cancelled or declined.
+
 ## A sensible build order
 
 1. **Check your era.** Open the recruit panel and see which branches and types actually exist this year.

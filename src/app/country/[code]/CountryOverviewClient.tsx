@@ -15,7 +15,6 @@ import {
   getHeadOfStateOfficeType,
   type CountryId,
 } from "@/lib/constants/countries";
-import { POLITICAL_METRIC_COUNTRY_IDS } from "@/lib/politicalMetrics/types";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { useRuntimeCountryConfig } from "@/hooks/useRuntimeCountryConfig";
 import type { SpeakerDisplay, SenateLeaderDisplay } from "@/lib/congress/types";
@@ -29,25 +28,17 @@ import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimizatio
 import {
   executiveApiUrl,
   legislatureApiUrl,
-  partiesUrl,
-  politiciansUrl,
-  metricsUrl,
-  politicalMetricsUrl,
-  policyUrl,
-  centralBankUrl,
-  countryElectionsUrl,
   approvalUrl,
   approvalApiUrl,
-  economyUrl,
   nationalAxesApiUrl,
   overviewCountsApiUrl,
-  scotusUrl,
 } from "@/lib/urls";
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
 import type { OverviewCounts } from "@/lib/country/overviewCounts";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { NationalIdeologyBand, type NationalAxesData } from "./components/NationalIdeologyBand";
 import { ExploreDirectory, type DirectoryGroup } from "./components/ExploreDirectory";
+import { buildCountryDirectory } from "./components/countryDirectory";
 
 function BetaBanner({ countryName }: { countryName: string }) {
   return (
@@ -365,155 +356,28 @@ export default function CountryOverviewClient({
 
   // N2 grouped directory — rows from country config, live figures from the
   // batched counts route; every figure degrades per-row to a plain chevron.
-  const electionFigure = counts?.activeElections
-    ? `${counts.activeElections} live`
-    : counts?.upcomingElections
-      ? `${counts.upcomingElections} upcoming`
-      : null;
-  const groups: DirectoryGroup[] = [
-    {
-      label: "Politics",
-      rows: [
-        ...(activePresidentElection
-          ? [
-              {
-                label: "Presidential Election",
-                href: `/elections/${activePresidentElection.seatId ?? activePresidentElection.id}`,
-                available: true,
-                figure: activePresidentElection.status === "upcoming" ? "upcoming" : "live",
-                figureTone: "warning" as const,
-                highlight: true,
-              },
-            ]
-          : []),
-        {
-          label: "Parties",
-          href: partiesUrl(countryId),
-          available: true,
-          figure: counts?.parties ? `${counts.parties} active` : null,
-        },
-        {
-          label: "Politicians",
-          href: politiciansUrl(countryId),
-          available: true,
-          figure: counts?.politicians ? `${counts.politicians}` : null,
-        },
-        {
-          label: "Elections",
-          href: countryElectionsUrl(countryId),
-          available: true,
-          figure: electionFigure,
-          figureTone: counts?.activeElections ? ("warning" as const) : ("default" as const),
-        },
-      ],
-    },
-    {
-      label: "Government",
-      rows: [
-        {
-          label: config.legislature.name,
-          href: config.legislature.path,
-          available: true,
-          figure:
-            counts?.bills != null
-              ? `${counts.bills} ${counts.bills === 1 ? "bill" : "bills"}`
-              : null,
-        },
-        ...(config.executivePath
-          ? [
-              {
-                label: isPresidential ? "White House" : config.executiveTitle,
-                href: config.executivePath,
-                available: true,
-              },
-            ]
-          : []),
-        {
-          label: "National Policy",
-          href: policyUrl(countryId),
-          available: true,
-          figure: axesData?.axes.lawCount
-            ? `${axesData.axes.lawCount} ${axesData.axes.lawCount === 1 ? "law" : "laws"}`
-            : null,
-        },
-        // SCOTUS is a US-only mechanic (#3581) — same country-literal
-        // convention as the 25th-Amendment VP nomination in WhiteHouseClient.
-        ...(isUS
-          ? [
-              {
-                label: "Supreme Court",
-                href: scotusUrl(countryId),
-                available: true,
-              },
-            ]
-          : []),
-      ],
-    },
-    {
-      label: "Country & Economy",
-      rows: [
-        {
-          label: "Map",
-          href: config.mapPath,
-          available: true,
-          figure: counts?.regions
-            ? `${counts.regions} ${config.regionLabelPlural.toLowerCase()}`
-            : null,
-        },
-        // SP6: playables have one metrics product (the registry card below);
-        // non-playables keep the legacy National Metrics page.
-        ...(!(POLITICAL_METRIC_COUNTRY_IDS as readonly string[]).includes(countryId)
-          ? [
-              {
-                label: "National Metrics",
-                href: metricsUrl(countryId),
-                available: true,
-              },
-            ]
-          : []),
-        // Political Metrics v1 — playable US/UK/RU/DD set only (new metric domain).
-        ...((POLITICAL_METRIC_COUNTRY_IDS as readonly string[]).includes(countryId)
-          ? [
-              {
-                label: "Political Metrics",
-                href: politicalMetricsUrl(countryId),
-                available: true,
-              },
-            ]
-          : []),
-        {
-          label: "Economy",
-          href: economyUrl(countryId),
-          available: true,
-        },
-        {
-          label: config.centralBank.abbreviation,
-          href: centralBankUrl(countryId),
-          available: true,
-          figure: counts?.primeRate != null ? `${counts.primeRate.toFixed(2)}%` : null,
-        },
-        // Command Economy dashboard — only for flag-on planned economies.
-        ...(counts?.commandEconomy
-          ? [
-              {
-                label: "Command Economy",
-                href: `/country/${countryId.toLowerCase()}/command-economy`,
-                available: true,
-                figure: "plan" as string | null,
-              },
-            ]
-          : []),
-      ],
-    },
-  ];
+  // Composition lives in `buildCountryDirectory` so the ordering and the gating
+  // can be tested without mounting the page.
+  const groups: DirectoryGroup[] = buildCountryDirectory({
+    countryId,
+    preset: activePreset,
+    counts,
+    lawCount: axesData?.axes.lawCount ?? null,
+    approval: leadershipData?.approval ?? null,
+    activePresidentElection,
+  });
 
   return (
     <div className="min-h-screen bg-background pb-16">
-      <main className="mx-auto max-w-7xl min-w-0 overflow-x-hidden px-6 py-12 sm:py-16 sm:px-8 lg:px-12 space-y-8">
+      {/* Reading order is the design: identity and vital signs first, then the
+          directory into everything this country contains, then the detail.
+          The hero is deliberately short so the directory starts above the fold
+          on a phone. */}
+      <main className="mx-auto max-w-7xl min-w-0 overflow-x-hidden px-6 py-8 sm:py-12 sm:px-8 lg:px-12 space-y-8">
         {/* Hero header */}
         <header className="relative overflow-hidden rounded-2xl border border-card-border bg-card shadow-lg">
           {/* Hero image */}
-          <div className="relative h-[175px] w-full sm:h-[220px]">
+          <div className="relative h-[130px] w-full sm:h-[170px]">
             {bannerImage && (
               <HeroImage
                 src={bannerImage}
@@ -679,20 +543,23 @@ export default function CountryOverviewClient({
           </div>
         </header>
 
-        {/* National Ideology band — equal-weight axes over implemented national laws */}
-        <NationalIdeologyBand countryId={countryId} data={axesData} loading={axesLoading} />
+        {/* Beta banner, kept directly under the hero, because it changes how
+            everything below it should be read. */}
+        {availability.displayState === "beta-access" && <BetaBanner countryName={name} />}
+
+        {/* Explore directory, the reason the page exists. Everything a country
+            contains is one tap from here, each entry carrying a live figure so
+            the list answers "anything happening?" as well as "where do I go?" */}
+        <div>
+          <SectionLabel className="mb-4">Explore {name}</SectionLabel>
+          <ExploreDirectory groups={groups} />
+        </div>
 
         {/* Descriptor blurb */}
         <p className="text-lg text-muted max-w-3xl leading-relaxed">{config.descriptor}</p>
 
-        {/* Beta banner */}
-        {availability.displayState === "beta-access" && <BetaBanner countryName={name} />}
-
-        {/* Explore directory */}
-        <div>
-          <SectionLabel className="mb-4">Explore</SectionLabel>
-          <ExploreDirectory groups={groups} />
-        </div>
+        {/* National Ideology band: equal-weight axes over implemented national laws */}
+        <NationalIdeologyBand countryId={countryId} data={axesData} loading={axesLoading} />
 
         {/* One-party-state regime stability — short-circuits to null for
             countries whose runtime governmentType isn't onePartyState. */}

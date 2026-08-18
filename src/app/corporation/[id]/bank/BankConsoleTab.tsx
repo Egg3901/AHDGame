@@ -6,6 +6,7 @@ import { useToast } from "@/contexts/ToastContext";
 import type { ConsolePayload } from "./types";
 import { mergeState } from "./lib/helpers";
 import { ActiveCharterPanel } from "./sections/ActiveCharterPanel";
+import { CapsPanel } from "./sections/CapsPanel";
 import { CharterIssueForm } from "./sections/CharterIssueForm";
 
 interface Props {
@@ -93,12 +94,15 @@ export function BankConsoleTab({ corporationId, isCeo }: Props) {
       )}
 
       {data.charter ? (
-        <ActiveCharterPanel
-          data={data}
-          canMutate={canMutate}
-          onChanged={load}
-          showToast={showToast}
-        />
+        <>
+          <ActiveCharterPanel
+            data={data}
+            canMutate={canMutate}
+            onChanged={load}
+            showToast={showToast}
+          />
+          <CapsPanel data={data} />
+        </>
       ) : (
         <CharterIssueForm
           data={data}

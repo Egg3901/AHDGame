@@ -26,7 +26,7 @@ import {
 } from "@/lib/politicalLegislation/dynamics";
 import { getEnactedLevels } from "@/lib/politicalLegislation/enactedLevels";
 import { getPoliticalCabinetContribution } from "@/lib/db/collections/politicalCabinetContribution";
-import { foldCabinetResiduals } from "@/lib/politicalMetrics/cabinetResidual";
+import { addContributions, foldCabinetResiduals } from "@/lib/politicalMetrics/cabinetResidual";
 import { macroResidualFor } from "@/lib/politicalLegislation/macroResidual";
 import type { MacroMetricsDoc } from "@/lib/db/types/macroMetrics";
 import type { GameState } from "@/lib/db/types";
@@ -132,13 +132,15 @@ export async function processPoliticalMetricsDynamics(
       // Countries are independent: each reads and writes only its own docs, so
       // the whole fan-out runs concurrently. The four country-scoped reads are
       // independent of one another too.
-      const [docs, nationalLevels, cabinetContribution, macroDocs] = await Promise.all([
+      const [docs, nationalLevels, cabinetSnapshot, macroDocs] = await Promise.all([
         db.collection<PoliticalMetricsDoc>("politicalMetrics").find({ countryId }).toArray(),
         getEnactedLevels(db, countryId),
-        // Standing cabinet effects (momentum driver channel): the per-country contribution
-        // snapshot the ministerial step persisted last turn. Folded into each region doc's
-        // decaying `cabinetResiduals` and added on top of the day-one `residuals` in
-        // composeTarget. Empty snapshot → the residual decays back toward zero.
+        // Standing cabinet effects (momentum driver channel): the contribution
+        // snapshot the ministerial step persisted last turn. National standing
+        // effects apply to every region; `regional[id]` is the extra from
+        // sited assets (estates, regional orders). Folded into each region
+        // doc's decaying `cabinetResiduals` and added on top of the day-one
+        // `residuals` in composeTarget. Empty snapshot → residual decays to 0.
         getPoliticalCabinetContribution(db, countryId),
         // Bridge B: the region's macro reality, flattened to "category.metricId".
         // Only the macro-owned categories matter — the political board supplies
@@ -214,8 +216,13 @@ export async function processPoliticalMetricsDynamics(
         let changed = false;
 
         // Accumulate + decay the cabinet contribution into this region's isolated
-        // cabinetResiduals (never touches the day-one `residuals`).
-        const nextCabinet = foldCabinetResiduals(doc.cabinetResiduals ?? {}, cabinetContribution);
+        // cabinetResiduals (never touches the day-one `residuals`). National
+        // standing effects plus this region's sited extras (ticket #1129).
+        const regionContribution = addContributions(
+          cabinetSnapshot.contribution,
+          cabinetSnapshot.regional[String(doc._id)] ?? {}
+        );
+        const nextCabinet = foldCabinetResiduals(doc.cabinetResiduals ?? {}, regionContribution);
         const cabinetChanged = !sameNums(doc.cabinetResiduals ?? {}, nextCabinet);
         const cabinetOf = (id: PoliticalMetricId) => nextCabinet[id] ?? 0;
         const labourChanged = !sameNums(doc.labourResiduals ?? {}, nextLabour);

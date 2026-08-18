@@ -343,6 +343,51 @@ describe("processPoliticalMetricsDynamics", () => {
     expect(op.updateOne.update.$set.values[family]).toBeGreaterThan(50);
   });
 
+  it("applies a regional cabinet extra only to the sited region (ticket #1129)", async () => {
+    const values = flatValues(50);
+    const family = unmodelledFamilies(values)[0];
+    expect(family).toBeTruthy();
+
+    wire({
+      metricsDocs: [
+        { _id: "R1", countryId: "UK", values, residuals: equilibriumResiduals("UK", values) },
+        {
+          _id: "R2",
+          countryId: "UK",
+          values: { ...values },
+          residuals: equilibriumResiduals("UK", values),
+        },
+      ],
+    });
+    db.collectionMocks.politicalCabinetContribution.findOne = vi.fn().mockResolvedValue({
+      _id: "UK",
+      countryId: "UK",
+      contribution: {},
+      regional: { R1: { [family]: 5 } },
+      turn: 4,
+    });
+
+    await processPoliticalMetricsDynamics(db as unknown as Db, 5);
+    const ops = (db.collectionMocks.politicalMetrics.bulkWrite as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as Array<{
+      updateOne: {
+        filter: { _id: string };
+        update: {
+          $set: { values: Record<string, number>; cabinetResiduals?: Record<string, number> };
+        };
+      };
+    }>;
+    const r1 = ops.find((op) => op.updateOne.filter._id === "R1");
+    const r2 = ops.find((op) => op.updateOne.filter._id === "R2");
+    expect(r1?.updateOne.update.$set.cabinetResiduals?.[family!]).toBeCloseTo(5, 5);
+    expect(r1?.updateOne.update.$set.values[family!]).toBeGreaterThan(50);
+    // R2 has no extra: either unwritten (nothing moved) or written without that residual.
+    expect(r2?.updateOne.update.$set.cabinetResiduals?.[family!] ?? 0).toBe(0);
+    if (r2?.updateOne.update.$set.values) {
+      expect(r2.updateOne.update.$set.values[family!]).toBe(50);
+    }
+  });
+
   it("persists the labour term to labourResiduals so the strike channel is traceable", async () => {
     const { loadLabourRelationsPoliticalNudgesByCountry } =
       await import("@/lib/unions/labourRelationsPoliticalProvider");

@@ -6,7 +6,8 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { buildNationalBillCountryScopeFilter } from "@/lib/legislature/nationalBillScope";
 import { getBankId } from "@/lib/centralBank/helpers";
 import type { CentralBank, FederalBudget, GameConfig, GameState } from "@/lib/db/types";
-import type { OverviewCounts } from "@/lib/country/overviewCounts";
+import { isColdWarPrincipal, type OverviewCounts } from "@/lib/country/overviewCounts";
+import { getColdWarDials } from "@/lib/coldwar/dials";
 import { commandEconomyOffices } from "@/lib/constants/commandEconomyOffices";
 import { DUAL_TRACK_CEILING, scheduledMarketizationLevel } from "@/lib/constants/commandEconomy";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
@@ -101,6 +102,48 @@ async function resolveCommandEconomyActive(db: Db, countryId: CountryId): Promis
   return level < DUAL_TRACK_CEILING;
 }
 
+/**
+ * National GDP (millions) and the budget balance as a share of GDP. Both come
+ * off the one budget document, and both are null when it is missing rather than
+ * zero, so the directory shows a chevron instead of asserting a balanced budget
+ * for a country whose budget has not been created yet.
+ *
+ * `budget.gdp` is in absolute currency units (Σ regional gdp × 1M), so it is
+ * divided back down to the millions that `formatGDP` expects.
+ */
+async function resolveFiscalFigures(
+  db: Db,
+  countryId: CountryId
+): Promise<{ gdpMillions: number | null; budgetBalancePctGdp: number | null }> {
+  const budget = await db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ _id: getNationalBudgetId(countryId) } as { _id: "federal" }, {
+      projection: { gdp: 1, surplus: 1 },
+    });
+  const gdp = typeof budget?.gdp === "number" && Number.isFinite(budget.gdp) ? budget.gdp : null;
+  const surplus =
+    typeof budget?.surplus === "number" && Number.isFinite(budget.surplus) ? budget.surplus : null;
+  return {
+    gdpMillions: gdp != null && gdp > 0 ? gdp / 1_000_000 : null,
+    budgetBalancePctGdp: gdp != null && gdp > 0 && surplus != null ? (surplus / gdp) * 100 : null,
+  };
+}
+
+/**
+ * Cold War readiness for a principal, or null. Gated on the same
+ * `conflictsEnabled` switch as `/world/conflicts` itself, so switching the
+ * subsystem off removes the directory row rather than leaving a link to a page
+ * that redirects.
+ */
+async function resolveColdWarDefcon(db: Db, countryId: CountryId): Promise<number | null> {
+  if (!isColdWarPrincipal(countryId)) return null;
+  const gameState = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { conflictsEnabled: 1 } });
+  if (!gameState?.conflictsEnabled) return null;
+  return (await getColdWarDials(db)).defcon;
+}
+
 async function assembleOverviewCounts(db: Db, countryId: CountryId): Promise<OverviewCounts> {
   const [
     parties,
@@ -111,6 +154,11 @@ async function assembleOverviewCounts(db: Db, countryId: CountryId): Promise<Ove
     regions,
     primeRate,
     commandEconomy,
+    unions,
+    activeReferendums,
+    totalReferendums,
+    fiscal,
+    coldWarDefcon,
   ] = await Promise.all([
     orNull(
       db.collection("politicalParties").countDocuments({ countryId, isDefunct: { $ne: true } })
@@ -132,6 +180,11 @@ async function assembleOverviewCounts(db: Db, countryId: CountryId): Promise<Ove
         .then((bank) => bank?.primeRate ?? null)
     ),
     orNull(resolveCommandEconomyActive(db, countryId)).then((v) => v ?? false),
+    orNull(db.collection("unions").countDocuments({ countryId })),
+    orNull(db.collection("referendums").countDocuments({ countryId, status: "campaigning" })),
+    orNull(db.collection("referendums").countDocuments({ countryId })),
+    orNull(resolveFiscalFigures(db, countryId)),
+    orNull(resolveColdWarDefcon(db, countryId)),
   ]);
   return {
     parties,
@@ -142,6 +195,12 @@ async function assembleOverviewCounts(db: Db, countryId: CountryId): Promise<Ove
     regions,
     primeRate,
     commandEconomy,
+    unions,
+    activeReferendums,
+    totalReferendums,
+    gdpMillions: fiscal?.gdpMillions ?? null,
+    budgetBalancePctGdp: fiscal?.budgetBalancePctGdp ?? null,
+    coldWarDefcon,
   };
 }
 

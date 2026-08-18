@@ -10,8 +10,10 @@ import { POLITICAL_METRIC_COUNTRY_IDS } from "@/lib/politicalMetrics/types";
 interface RealEconomyData {
   wageGrowth: number | null;
   tradeGrowth: number | null;
+  householdPriceIndex: number;
   unemployment: { value: number | null; trend: number | null };
   medianIncome: { value: number | null; trend: number | null };
+  realMedianIncome: number | null;
   /** Total national population (sum of region populations). */
   population: number | null;
 }
@@ -192,6 +194,18 @@ export function RealEconomyPanel({
               <DeltaChip delta={realEconomy.medianIncome.trend} unit="%" higherIsBetter />
             )
           }
+        />
+        <Row
+          label="Real median income"
+          note="median income in baseline-price purchasing power"
+          value={
+            realEconomy.realMedianIncome != null ? formatIncome(realEconomy.realMedianIncome) : "—"
+          }
+        />
+        <Row
+          label="Household prices"
+          note="partial CPI pass-through · 100 at reset"
+          value={`${(realEconomy.householdPriceIndex * 100).toFixed(1)}`}
         />
         <Row
           label="GDP per capita"

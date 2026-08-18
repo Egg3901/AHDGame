@@ -166,7 +166,7 @@ function simulateRetail(opts: {
     const conf = computeConfidence({
       cashReserves: cash,
       postedCapital: posted,
-      totalDeposits: deposits,
+      cashBackedDeposits: deposits,
       totalLoans: loans,
       reserveRatioRequired: RESERVE_RATIO,
       arrearsOutstanding: 0,

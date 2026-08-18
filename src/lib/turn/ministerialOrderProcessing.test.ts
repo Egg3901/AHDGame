@@ -273,6 +273,60 @@ describe("processMinisterialOrders political-metric contribution snapshot", () =
     expect(contribution["order.safety"]).toBeGreaterThan(0);
   });
 
+  it("snapshots a sited AG Field Office onto only that region's political extra (ticket #1129)", async () => {
+    // Two US states; a justice Field Office in CA. crimeRate is political, so
+    // the $inc loop drops it — it must land on regional.CA, not the national
+    // contribution and not TX.
+    db.collectionMocks.states!.find.mockReturnValue(
+      cursorReturning([{ _id: "CA" }, { _id: "TX" }])
+    );
+    db.collection("cabinetSettings");
+    db.collectionMocks.cabinetSettings!.find.mockReturnValue(cursorReturning([]));
+    db.collection("cabinetEstates");
+    db.collectionMocks.cabinetEstates!.find.mockImplementation(
+      (filter?: { countryId?: string; positionId?: string }) => {
+        if (filter?.countryId === "US" && filter?.positionId === "attorney_general") {
+          return cursorReturning([
+            {
+              countryId: "US",
+              portfolioKey: "justice",
+              positionId: "attorney_general",
+              archetypeId: "field_office",
+              fundingLevel: "standard",
+              tier: 0,
+              condition: 100,
+              siteScope: "region",
+              siteId: "CA",
+              upkeepBase: 70,
+            },
+          ]);
+        }
+        return cursorReturning([]);
+      }
+    );
+
+    const { processMinisterialOrders } = await import("./ministerialOrderProcessing");
+    await processMinisterialOrders(100);
+
+    const usCall = db.collectionMocks.politicalCabinetContribution!.updateOne.mock.calls.find(
+      (c) => (c[0] as { _id: string })._id === "US"
+    );
+    expect(usCall).toBeDefined();
+    const set = (
+      usCall![1] as {
+        $set: {
+          contribution: Record<string, number>;
+          regional: Record<string, Record<string, number>>;
+        };
+      }
+    ).$set;
+    expect(set.regional.CA?.["order.safety"]).toBeGreaterThan(0);
+    expect(set.regional.TX).toBeUndefined();
+    // National standing effects (military, tier) may also touch order.safety;
+    // the Field Office must be an EXTRA on CA, not a country-wide copy.
+    expect(set.regional.CA["order.safety"]).toBeGreaterThan(set.contribution["order.safety"] ?? 0);
+  });
+
   it("never snapshots a non-pipeline country (pipeline countries may persist empty)", async () => {
     // The excluded country is DERIVED from the gate, not hardcoded. This test
     // named DE until the board widened from the four playables to 26 countries

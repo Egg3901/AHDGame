@@ -27,6 +27,7 @@ import { getNationalDocId } from "@/lib/constants/nationalScope";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
 import type { MoneySupplySnapshot } from "@/lib/db/types/moneySupply";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { advanceHouseholdPriceIndex } from "@/lib/economy/householdPriceIndex";
 
 /**
  * Dynamic wage growth target driven by labor-market signals.
@@ -330,6 +331,13 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
             policyStancePressure,
             moneySupplyGrowthPct
           );
+          // Household prices trail the newly settled CPI, but never feed back
+          // into its calculation. This gives inflation a visible purchasing-
+          // power consequence without turning it into a nominal unit rescaler.
+          const householdPriceIndex = advanceHouseholdPriceIndex(
+            budget.economicFactors?.householdPriceIndex,
+            newInflation
+          );
 
           await db.collection<FederalBudget>("federalBudget").updateOne(
             { _id: budget._id },
@@ -337,6 +345,7 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
               $set: {
                 "economicFactors.inflationRate": newInflation,
                 "economicFactors.wageGrowth": newWageGrowth,
+                "economicFactors.householdPriceIndex": householdPriceIndex,
                 "economicFactors.lastUpdated": new Date(),
               },
             }
@@ -386,11 +395,16 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
       const countryId = budget.countryId as CountryId | undefined;
       if (!countryId || !COUNTRY_CONFIGS[countryId]) return;
       const newInflation = await calculateCountryInflation(db, countryId, budget);
+      const householdPriceIndex = advanceHouseholdPriceIndex(
+        budget.economicFactors?.householdPriceIndex,
+        newInflation
+      );
       await db.collection<FederalBudget>("federalBudget").updateOne(
         { _id: budget._id },
         {
           $set: {
             "economicFactors.inflationRate": newInflation,
+            "economicFactors.householdPriceIndex": householdPriceIndex,
             "economicFactors.lastUpdated": new Date(),
           },
         }

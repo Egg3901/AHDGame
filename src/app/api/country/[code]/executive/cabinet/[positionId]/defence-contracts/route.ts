@@ -20,17 +20,44 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import type { Corporation, CorporateSector } from "@/lib/db/types/corporation";
-import { componentsForStrategy } from "@/lib/military/arsenalComponents";
-import { canSupply } from "@/lib/turn/defenceDeliveryTurn";
 import { lotPrice } from "@/lib/military/arsenal";
 import { militaryPriceAnchor } from "@/lib/military/procurement";
-import { awardContract, cancelContract } from "@/lib/db/collections/defenceContracts";
+import { resolveFillEligibility, FILL_REASON_TEXT } from "@/lib/military/defenceFillEligibility";
+import {
+  lotPriceBand,
+  lotProductionCost,
+  defaultFactoryAllocation,
+  DEFENCE_FACTORY_SLOTS_PER_PLANT,
+} from "@/lib/military/defenceLotEconomics";
+import { loadDefencePriceRatios } from "@/lib/military/defencePriceRatios";
+import {
+  resolveSelfDealing,
+  selfDealingFavorabilityPenalty,
+  selfDealingDisclosure,
+} from "@/lib/military/defenceSelfDealing";
+import {
+  awardContract,
+  cancelContract,
+  assignedFactoriesForSector,
+} from "@/lib/db/collections/defenceContracts";
+import {
+  encumberAppropriation,
+  releaseEncumbrance,
+  getDefenseAppropriation,
+  uncommittedFrom,
+} from "@/lib/db/collections/defenseAppropriation";
+import { createSystemNewsPost } from "@/lib/news";
+import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { createNotifications } from "@/lib/notifications";
 import { COUNTRY_CONFIGS as COUNTRIES } from "@/lib/constants/countries";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
 import { getGameState } from "@/lib/gameState";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import {
+  isDefenceProcurementPaused,
+  DEFENCE_PROCUREMENT_PAUSED_MESSAGE,
+} from "@/lib/military/procurementGate";
 import { resolveDefenseLineFrom } from "@/lib/turn/defenseEnvelope";
 import {
   getDefenceContractAvailability,
@@ -41,6 +68,14 @@ import {
 const awardSchema = z.object({
   sectorId: z.string().min(1),
   lotsOrdered: z.number().int().positive(),
+  /**
+   * Suggestion #291. Optional: omitted means "quote me a fair price", which is what every
+   * contract got before ministers could set one. Bounded server-side against the price band -
+   * the client's own bounds are a convenience, never the enforcement.
+   */
+  pricePerLot: z.number().positive().optional(),
+  /** Suggestion #292. The grade the minister is buying, 0 (cheap mass) to 3 (premium). */
+  gradeCeiling: z.number().int().min(0).max(3).optional(),
 });
 
 interface RouteParams {
@@ -76,7 +111,9 @@ async function requireDefenceHolder(code: string, positionId: string) {
       ),
     } as const;
   }
-  return { db, countryId } as const;
+  // The holder's identity rides along: self-dealing disclosure needs to know who signed, and
+  // resolving it a second time from the route would be a second chance to resolve it wrongly.
+  return { db, countryId, member, user: auth.user } as const;
 }
 
 export async function POST(request: Request, { params }: RouteParams) {
@@ -85,6 +122,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     const guard = await requireDefenceHolder(code, positionId);
     if ("error" in guard) return guard.error;
     const { db, countryId } = guard;
+
+    // Kill switch: no NEW contracts while procurement is frozen. Cancel (DELETE) stays open so
+    // a minister can still wind down open orders, and active contracts keep delivering.
+    if (await isDefenceProcurementPaused(db)) {
+      return NextResponse.json({ error: DEFENCE_PROCUREMENT_PAUSED_MESSAGE }, { status: 409 });
+    }
 
     const parsed = await parseJsonBody(request, awardSchema);
     if (!parsed.success) {
@@ -111,37 +154,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    // What this plant is certified to supply comes from the production strategy its CEO
-    // already chose. `cyber` maps to nothing — it makes electronics and software, not
-    // materiel — so it is refused here rather than awarded a contract it can never fill.
-    const components = componentsForStrategy(sector.strategyId);
-    if (components.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "This plant's production line does not build materiel. Change its strategy to a " +
-            "line that supplies an arsenal component first.",
-        },
-        { status: 400 }
-      );
-    }
-
     const corp = await db
       .collection<Corporation>("corporations")
       .findOne({ _id: sector.corporationId });
     if (!corp) {
       return NextResponse.json({ error: "No such corporation" }, { status: 404 });
-    }
-    // Domestic-only, plus a currency check. Missing `liquidCurrencyCode` is inferred from
-    // the corp's country (same as the rest of the corp economy), not treated as USD.
-    if (!canSupply(corp, countryId)) {
-      return NextResponse.json(
-        {
-          error:
-            "Contracts may only be awarded to domestic suppliers paid in this country's currency.",
-        },
-        { status: 400 }
-      );
     }
 
     const gameState = await getGameState();
@@ -157,16 +174,69 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
+    const currentTurn = gameState?.currentTurn ?? 1;
+    const currentYear = STARTING_YEAR + Math.floor((currentTurn - 1) / TURNS_PER_YEAR);
+
+    // ONE eligibility question, the same one the delivery sweep will ask. Awardable must mean
+    // deliverable: every divergence between these two checks has shipped as a ticket where a
+    // minister successfully awarded a contract that then never delivered a single lot.
+    const fill = resolveFillEligibility({ corp, sector, countryId, currentYear });
+    if (!fill.eligible) {
+      return NextResponse.json(
+        { error: FILL_REASON_TEXT[fill.reason ?? "no_materiel_line"] },
+        { status: 400 }
+      );
+    }
+    const components = fill.components;
+
     const anchor = militaryPriceAnchor(budget.gdp, budget.militaryPriceBaselineGdp);
-    const pricePerLot = lotPrice(countryId, anchor);
-    if (pricePerLot == null) {
+    const anchorPrice = lotPrice(countryId, anchor);
+    if (anchorPrice == null) {
       return NextResponse.json(
         { error: "This country has no usable GDP figure — procurement is unavailable" },
         { status: 409 }
       );
     }
 
-    const currentTurn = gameState?.currentTurn ?? 1;
+    // Grade the minister is buying (suggestion #292), capped at what this supplier can build.
+    // Asking for grade 3 from a corporation whose research tops out at 1 would price the
+    // contract as premium and deliver legacy kit.
+    const gradeCeiling = Math.min(
+      parsed.data.gradeCeiling ?? Math.round(fill.gradeCeiling),
+      Math.round(fill.gradeCeiling)
+    );
+
+    // LIVE input prices, not the recipe's nominal share. The band a minister negotiates inside
+    // has to track the commodity market, or the floor is a constant dressed up as a cost and a
+    // supplier can be held to a price struck in a market that no longer exists.
+    const priceRatios = await loadDefencePriceRatios(db);
+    const productionCost = lotProductionCost(sector.strategyId, priceRatios);
+    if (productionCost == null) {
+      return NextResponse.json({ error: FILL_REASON_TEXT.no_materiel_line }, { status: 400 });
+    }
+    const band = lotPriceBand({ anchorPrice, productionCost, grade: gradeCeiling });
+    if (band == null) {
+      return NextResponse.json(
+        { error: "This plant cannot be priced right now - procurement is unavailable" },
+        { status: 409 }
+      );
+    }
+    // Suggestion #291. A minister may negotiate inside the band and nowhere else: below the
+    // floor the supplier builds at a loss it never agreed to, above the ceiling the
+    // appropriation is a private cash tap again.
+    const requested = parsed.data.pricePerLot;
+    if (requested != null && (requested < band.floor || requested > band.ceiling)) {
+      return NextResponse.json(
+        {
+          error:
+            `A grade-${gradeCeiling} lot from this plant must be priced between ` +
+            `${band.floor.toLocaleString("en-US")} and ${band.ceiling.toLocaleString("en-US")}.`,
+          priceBand: band,
+        },
+        { status: 400 }
+      );
+    }
+    const pricePerLot = Math.round(requested ?? band.suggested);
     const defenseLine = resolveDefenseLineFrom(budget);
     const availability = await getDefenceContractAvailability(db, {
       countryId,
@@ -208,6 +278,62 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
+    // THE OBLIGATION. The full cost of the order is committed against the appropriation right
+    // now, before the contract exists, and total live obligations can never exceed the
+    // uncommitted appropriation. This is the guard that closes the drain: an order for a
+    // million lots is not "expensive later", it is refused here, because the money for it is
+    // not there. Everything downstream - delivery, cancellation, completion - only ever draws
+    // this commitment down or hands it back.
+    const contractValue = parsed.data.lotsOrdered * pricePerLot;
+    const releaseWindow = () =>
+      releaseDefenceContractLots(
+        db,
+        reservation.window.id,
+        corp._id.toString(),
+        parsed.data.lotsOrdered * pricePerLot
+      );
+    if (!(await encumberAppropriation(db, countryId, contractValue))) {
+      await releaseWindow();
+      const appropriation = await getDefenseAppropriation(db, countryId);
+      const uncommitted = Math.max(0, uncommittedFrom(appropriation));
+      return NextResponse.json(
+        {
+          error:
+            `This order would commit ${Math.round(contractValue).toLocaleString("en-US")} but ` +
+            `only ${Math.round(uncommitted).toLocaleString("en-US")} of the defence ` +
+            `appropriation is uncommitted. Cancel an open contract or order fewer lots.`,
+          uncommittedAppropriation: uncommitted,
+          maximumLots: pricePerLot > 0 ? Math.floor(uncommitted / pricePerLot) : 0,
+        },
+        { status: 409 }
+      );
+    }
+
+    // Suggestion #281: the order opens on the share of the plant's lines that reproduces the
+    // old even split, minus whatever its other live orders already hold. The contractor can
+    // re-allocate afterwards; the minister does not get to book lines they do not own.
+    const usedSlots = await assignedFactoriesForSector(
+      db,
+      sector._id,
+      defaultFactoryAllocation(components.length, DEFENCE_FACTORY_SLOTS_PER_PLANT)
+    );
+    const assignedFactories = defaultFactoryAllocation(
+      components.length,
+      Math.max(0, DEFENCE_FACTORY_SLOTS_PER_PLANT - usedSlots)
+    );
+
+    const selfDealing = resolveSelfDealing({
+      corp,
+      ministerUserId: guard.user.userId ? new ObjectId(guard.user.userId.toString()) : null,
+      ministerCharacterId: guard.user.character?._id ?? null,
+    });
+    const favorabilityPenalty = selfDealing.basis
+      ? selfDealingFavorabilityPenalty({
+          contractValue,
+          tranche: reservation.procurementNotional,
+        })
+      : 0;
+
     const stateOwned = isStateOwned(corp);
     let contract;
     try {
@@ -224,16 +350,52 @@ export async function POST(request: Request, { params }: RouteParams) {
         awardedTurn: currentTurn,
         allocationWindowId: reservation.window.id,
         allocatedLots: parsed.data.lotsOrdered,
+        encumberedAmount: contractValue,
+        gradeCeiling,
+        assignedFactories,
+        ...(selfDealing.basis
+          ? {
+              selfDealing: {
+                basis: selfDealing.basis,
+                stakeShare: selfDealing.stakeShare,
+                ministerCharacterId: guard.user.character?._id,
+                ministerName: guard.user.character?.name,
+                favorabilityPenalty,
+              },
+            }
+          : {}),
         activateImmediately: stateOwned,
       });
     } catch (error) {
-      await releaseDefenceContractLots(
-        db,
-        reservation.window.id,
-        corp._id.toString(),
-        parsed.data.lotsOrdered * pricePerLot
-      );
+      await releaseEncumbrance(db, countryId, contractValue);
+      await releaseWindow();
       throw error;
+    }
+
+    // Disclosure and its price. Marked on the contract (both order books read it), stated on
+    // the public wire, and charged to the minister's own standing. Deliberately not a refusal:
+    // contracting your own industry is a legitimate thing a government does, and the game's
+    // answer to corruption everywhere else is that the voters find out.
+    if (selfDealing.basis && guard.user.character) {
+      await db
+        .collection("characters")
+        .updateOne(
+          { _id: guard.user.character._id },
+          { $inc: { favorability: -favorabilityPenalty } }
+        );
+      await createSystemNewsPost(
+        selfDealingDisclosure({
+          basis: selfDealing.basis,
+          ministerName: guard.user.character.name ?? "The defence minister",
+          corporationName: corp.name ?? "the supplier",
+          countryName: COUNTRIES[countryId]?.name ?? countryId,
+          lots: parsed.data.lotsOrdered,
+          value: contractValue,
+          stakeShare: selfDealing.stakeShare,
+        }),
+        "executive",
+        { title: "Defence contract awarded to minister's own company" }
+      );
     }
 
     // A private CEO must learn of the offer or it sits pending forever. A National

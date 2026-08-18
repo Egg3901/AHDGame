@@ -32,8 +32,10 @@ function makeCharter(type: BankCharter["type"], overrides: Partial<BankCharter> 
     depositOffset: 0,
     lendingOffset: 0,
     totalDeposits: 1_000_000,
+    // Cash-backed household deposits: lendable headroom is measured against
+    // these, never against player pointer balances.
     totalLoans: 0,
-    npcDeposits: 0,
+    npcDeposits: 1_000_000,
     propBookMarkValue: 0,
     interbankDebt: 0,
     cbMarginDebt: 0,
@@ -72,6 +74,9 @@ describe("interbank lend/repay", () => {
           liquidCapital: 0,
           bankCharter: makeCharter("retail", {
             totalDeposits: 1_000_000,
+            npcDeposits: 1_000_000,
+            // Cash-backed household deposits: lendable headroom is measured against
+            // these, never against player pointer balances.
             totalLoans: 0,
             cashReserves: 500_000,
           }),

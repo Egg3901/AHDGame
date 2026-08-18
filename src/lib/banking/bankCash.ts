@@ -39,118 +39,45 @@
 import type { Db, ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { BankCharter } from "@/lib/db/types/bank";
-import { mayDistribute } from "@/lib/banking/capitalAdequacy";
+import {
+  bankBalanceSheet,
+  getCashReserves as readCashReserves,
+  mayDistribute,
+  requiredReserves as computeRequiredReserves,
+  type BalanceSheetCharter,
+} from "@/lib/banking/balanceSheet";
 
 export type BankCashResult =
   | { ok: true; cashReserves: number; liquidCapital: number; amount: number }
   | { ok: false; error: string };
 
-/** Cash the bank holds. Absent on charters written before the ring-fence. */
-export function getCashReserves(
-  charter: Pick<BankCharter, "cashReserves"> | null | undefined
-): number {
-  const raw = charter?.cashReserves;
-  return typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
-}
-
 /**
- * Deposits that actually credited `cashReserves`.
- *
- * NPC household deposits move cash (`bankingTurn` debits the CB pool and
- * credits the vault). Player savings are a `savingsHolder` pointer: the
- * balance stays on the character, so they must not count as a cash liability
- * or a reserve-floor denominator. Ticket #1111: treating `totalDeposits` as
- * cash-backed zeroed Hunt Oil's equity, withdrawable surplus, and ceiling.
+ * Every balance-sheet line this module used to define now lives in
+ * `balanceSheet.ts`, which is the single authority (see the note there). These
+ * re-exports keep the existing call sites working while there is exactly one
+ * implementation behind them.
  */
-export function cashBackedDeposits(
-  charter: Pick<BankCharter, "npcDeposits"> | null | undefined
-): number {
-  const raw = charter?.npcDeposits;
-  return typeof raw === "number" && Number.isFinite(raw) ? Math.max(0, raw) : 0;
-}
-
-/**
- * Reserves the bank must retain: `cashBackedDeposits × reserveRatio`.
- *
- * Note this is a floor on the BANK's cash, which it can actually satisfy,
- * rather than a floor on the corporation's cash, which is what made the earlier
- * version unshippable. Matches solvency / run-risk, which already exclude
- * player pointer deposits.
- */
-export function requiredReserves(
-  charter: Pick<BankCharter, "npcDeposits">,
-  reserveRatio: number
-): number {
-  const ratio = Number.isFinite(reserveRatio) ? Math.max(0, reserveRatio) : 0;
-  return cashBackedDeposits(charter) * ratio;
-}
-
-/**
- * Book equity: the shareholders' claim after cash-backed depositors are made whole.
- *
- * Assets are the bank's cash plus the retail loans it is owed; cash-backed
- * deposits are the liability. What is left over is contributed capital plus
- * retained earnings — the only money that is genuinely the owner's to take out.
- * Reserves ABOVE the reserve requirement are still mostly depositor money, so
- * the reserve-surplus figure alone is the wrong ceiling on an upstream: a bank
- * handed a large (e.g. NPC) deposit base carries reserves it does not own, and
- * letting the owner drain them to the reserve floor pays shareholders out of
- * deposits.
- *
- * Player pointer deposits are absent from this line for the same reason they
- * are absent from {@link requiredReserves}: they never arrived as cash.
- */
-export function bankEquity(
-  charter: Pick<
-    BankCharter,
-    | "npcDeposits"
-    | "cashReserves"
-    | "totalLoans"
-    | "interbankDebt"
-    | "cbMarginDebt"
-    | "discountWindowDebt"
-  >
-): number {
-  const assets = getCashReserves(charter) + Math.max(0, charter.totalLoans ?? 0);
-  // Cash-backed deposits are the depositor liability; the rest is borrowed cash
-  // that inflates reserves but must be repaid, so none of it is the owner's.
-  const liabilities =
-    cashBackedDeposits(charter) +
-    Math.max(0, charter.interbankDebt ?? 0) +
-    Math.max(0, charter.cbMarginDebt ?? 0) +
-    Math.max(0, charter.discountWindowDebt ?? 0);
-  return assets - liabilities;
-}
+export {
+  getCashReserves,
+  cashBackedDeposits,
+  requiredReserves,
+  bankEquity,
+} from "@/lib/banking/balanceSheet";
 
 /**
  * How much the bank may pay up to its parent right now.
  *
- * Two ceilings, take the lower: the bank may not drop below its reserve
- * requirement, and it may never pay the owner more than its book equity —
- * distributing more than equity is paying shareholders with depositor money.
- *
- * Zero unless the supervisor calls the bank adequate: a stressed or
- * undercapitalized bank does not get to pay its owner while the depositors it
- * cannot currently protect are still on its books. This is the same
- * {@link mayDistribute} rule the prop desk already answers to, applied to the
- * one other way money leaves a bank.
+ * Thin wrapper over the `distributable` line of the balance sheet: the lower of
+ * surplus reserves and book equity, and zero unless the supervisor calls the
+ * bank adequate. Distributing above equity is paying shareholders with
+ * depositor money; distributing below the reserve requirement is paying them
+ * with the reserves that stand behind a run.
  */
 export function upstreamCapacity(
-  charter: Pick<
-    BankCharter,
-    | "npcDeposits"
-    | "cashReserves"
-    | "capitalStanding"
-    | "totalLoans"
-    | "interbankDebt"
-    | "cbMarginDebt"
-    | "discountWindowDebt"
-  >,
+  charter: BalanceSheetCharter & Pick<BankCharter, "capitalStanding" | "totalDeposits">,
   reserveRatio: number
 ): number {
-  if (charter.capitalStanding && !mayDistribute(charter.capitalStanding)) return 0;
-  const reserveSurplus = getCashReserves(charter) - requiredReserves(charter, reserveRatio);
-  return Math.max(0, Math.min(reserveSurplus, bankEquity(charter)));
+  return bankBalanceSheet({ charter, reserveRatio }).distributable;
 }
 
 /**
@@ -197,7 +124,7 @@ export async function injectBankCapital(
   return {
     ok: true,
     amount: move,
-    cashReserves: getCashReserves(updated.bankCharter),
+    cashReserves: readCashReserves(updated.bankCharter),
     liquidCapital: updated.liquidCapital ?? 0,
   };
 }
@@ -247,7 +174,7 @@ export async function upstreamBankCash(
     };
   }
 
-  const required = requiredReserves(charter, reserveRatio);
+  const required = computeRequiredReserves(charter, reserveRatio);
   const postedDown = Math.min(move, Math.max(0, charter.postedCapital ?? 0));
 
   // Re-gate both ceilings inside the write. The read above can go stale against
@@ -279,6 +206,11 @@ export async function upstreamBankCash(
                       { $max: [0, { $ifNull: ["$bankCharter.interbankDebt", 0] }] },
                       { $max: [0, { $ifNull: ["$bankCharter.cbMarginDebt", 0] }] },
                       { $max: [0, { $ifNull: ["$bankCharter.discountWindowDebt", 0] }] },
+                      // Arrears are borrowings too: unpaid interest is still
+                      // owed, and leaving it out of the guard let an owner
+                      // upstream exactly the money the bank could not pay.
+                      { $max: [0, { $ifNull: ["$bankCharter.discountWindowArrears", 0] }] },
+                      { $max: [0, { $ifNull: ["$bankCharter.cbMarginArrears", 0] }] },
                       move,
                     ],
                   },
@@ -310,7 +242,7 @@ export async function upstreamBankCash(
   return {
     ok: true,
     amount: move,
-    cashReserves: getCashReserves(updated.bankCharter),
+    cashReserves: readCashReserves(updated.bankCharter),
     liquidCapital: updated.liquidCapital ?? 0,
   };
 }

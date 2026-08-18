@@ -47,6 +47,37 @@ export const ESSENTIAL_SHORTAGE_SCORE = 1.6;
 export type CommodityPriceRatioFn = (commodity: CommodityType, countryId: string) => number | null;
 
 /**
+ * Optional state-resolution placement signals (supply-dislocation remediation,
+ * t202). Without these the expansion ranking runs at country resolution, which
+ * is exactly what concentrated supply into a handful of states while others
+ * starved: a US corp saw one national iron ratio, so MN's idle deposits and
+ * NY's starvation were the same number. Both signals are optional so callers
+ * without the data (tests, hasEnterableHeadroom) degrade to country scope.
+ */
+export interface PlacementSignals {
+  /** currentPrice/basePrice for a commodity in a STATE; null falls back to the
+   *  country-scope ratio for that commodity. */
+  statePriceRatioOf?: (commodity: CommodityType, stateId: string) => number | null;
+  /**
+   * Deposit headroom factor in [0, 1] for founding an extraction sector in a
+   * state: 1 = deposits wide open, 0 = no unclaimed capacity. Candidates at 0
+   * are dropped outright — a depositless extraction founding clamps at zero
+   * output forever, it is never the right build.
+   */
+  extractionHeadroomOf?: (stateId: string) => number;
+}
+
+/**
+ * Score multiplier for a candidate in the corp's HQ state. Replaces the old
+ * unconditional HQ-first pick, which returned any open HQ bucket before scoring
+ * ran at all — every NPP corp piled supply into its HQ state regardless of
+ * where demand was (the single biggest driver of the t202 geographic supply
+ * concentration: e.g. 95% of rare_earth supply in 3 states). A bonus keeps the
+ * home-market pull as a preference the shortage signal can overrule.
+ */
+export const HQ_STATE_SCORE_BONUS = 1.3;
+
+/**
  * Is there any bucket this corp could actually enter? The strategy loop needs
  * to tell "healthy and boxed in" (defend) from "healthy with somewhere to go"
  * (expand), and headroom is the difference. Reuses the same ranking the
@@ -97,7 +128,8 @@ export function findBestUnownedSector(
   stateControlled: ReadonlySet<string>,
   priceRatioOf: CommodityPriceRatioFn,
   plantsEnabled: boolean = false,
-  eraUnitScale: number = 1
+  eraUnitScale: number = 1,
+  signals?: PlacementSignals
 ): UnownedSector | null {
   const countryUnowned = unownedByCountry.get(countryId);
   if (!countryUnowned || countryUnowned.length === 0) return null;
@@ -118,19 +150,38 @@ export function findBestUnownedSector(
       : us.revenue;
 
   // Filter to non-overlapping types with a positive pool, excluding buckets a
-  // National Corporation controls (don't expand into a nationalized sector).
+  // National Corporation controls (don't expand into a nationalized sector) and
+  // extraction buckets whose state has zero unclaimed deposit capacity.
   const candidates = countryUnowned.filter(
     (us) =>
       !existingTypes.has(us.sectorType) &&
       sizeOf(us) > 0 &&
-      !stateControlled.has(bucketKey(us.stateId, us.sectorType))
+      !stateControlled.has(bucketKey(us.stateId, us.sectorType)) &&
+      !(
+        us.sectorType === "extraction" &&
+        signals?.extractionHeadroomOf !== undefined &&
+        signals.extractionHeadroomOf(us.stateId) <= 0
+      )
   );
 
   if (candidates.length === 0) return null;
 
+  // Shortage at the candidate's own state when a state price exists, country
+  // otherwise. This is what routes a founding to the state that is actually
+  // starved instead of treating every state in the country as one market.
   const shortageOf = (c: UnownedSector) =>
-    sectorShortageScore(c.sectorType as CorporationType, countryId, priceRatioOf);
-  const score = (c: UnownedSector) => sizeOf(c) * shortageOf(c);
+    sectorShortageScore(c.sectorType as CorporationType, countryId, (commodity, cid) => {
+      const stateRatio = signals?.statePriceRatioOf?.(commodity, c.stateId);
+      return stateRatio ?? priceRatioOf(commodity, cid);
+    });
+  const score = (c: UnownedSector) => {
+    let s = sizeOf(c) * shortageOf(c);
+    if (c.sectorType === "extraction" && signals?.extractionHeadroomOf) {
+      s *= signals.extractionHeadroomOf(c.stateId);
+    }
+    if (c.stateId === hqState) s *= HQ_STATE_SCORE_BONUS;
+    return s;
+  };
   // Peak shortage = the price ratio of this sector's SHORTEST single output.
   // The blended `shortageOf` averages a short output against healthy ones
   // (logistics makes freight 0.45 AND consulting 0.25), which would hide a
@@ -147,11 +198,9 @@ export function findBestUnownedSector(
     }
     return peak;
   };
-  const best = (list: UnownedSector[]) => {
-    // Prefer HQ state, then highest market-weighted score.
-    const hq = list.find((c) => c.stateId === hqState);
-    return hq ?? list.sort((a, b) => score(b) - score(a))[0];
-  };
+  // Highest market-weighted score wins; the HQ state gets a score bonus, not
+  // the old unconditional first pick (see HQ_STATE_SCORE_BONUS).
+  const best = (list: UnownedSector[]) => list.sort((a, b) => score(b) - score(a))[0];
 
   // Tier 0 — essential-shortage override: a commodity whose producer sector is
   // critically short jumps the type cascade, so a single-source input like

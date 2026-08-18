@@ -75,7 +75,11 @@ import {
 import { buildCommodityFlowDocs, COMMODITY_FLOW_RETENTION_TURNS } from "@/lib/market/flowLedger";
 import { applyFreightHaulDemand } from "@/lib/logistics/freightDemand";
 import { settleFreightNetwork, type FreightSettlement } from "@/lib/logistics/settlement";
-import { buildSourcingDocs, SOURCING_FLOW_RETENTION_TURNS } from "@/lib/logistics/sourcingLedger";
+import {
+  buildSourcingDocs,
+  SOURCING_FLOW_RETENTION_TURNS,
+  type SourcingNetworkDoc,
+} from "@/lib/logistics/sourcingLedger";
 import { stateHops } from "@/lib/logistics/stateDistance";
 import { importerTariffOnFlow } from "@/lib/trade/tariffDrag";
 import { PRIMARY_SECTOR_BY_COMMODITY } from "@/lib/trade/commoditySector";
@@ -1224,7 +1228,17 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     const sourcingStates = allStates
       .filter((s) => !NATIONAL_SCOPE_IDS.has(s._id) && stateToCountry.has(s._id))
       .map((s) => ({ stateId: s._id, countryId: s.countryId as CountryId }));
+    // Last turn's measured class loads drive the adaptive bulk/special split
+    // (see adaptiveClassShares). Missing doc (first turn) → static 70/30.
+    const priorNetworkDoc = await db
+      .collection<SourcingNetworkDoc>("sourcingNetworkLoad")
+      .find({}, { projection: { freightTeuByState: 1 } })
+      .sort({ turn: -1 })
+      .limit(1)
+      .next();
+    const priorClassLoads = new Map(Object.entries(priorNetworkDoc?.freightTeuByState ?? {}));
     freightSettlement = settleFreightNetwork({
+      priorClassLoads,
       states: sourcingStates,
       byState,
       byCountry,

@@ -22,6 +22,7 @@ import type {
 } from "@/lib/db/types";
 import { getAuthUser } from "@/lib/auth";
 import { getOfficeLabel, getPartyHex } from "@/lib/utils/politics";
+import { gameDateAnchorFromState } from "@/lib/utils/gameDate";
 import {
   calculateFullFundDistribution,
   getPopulationTier,
@@ -336,13 +337,7 @@ async function getCharacterData() {
     nationalNpiOrdinalRank,
     conflictsEnabled: !!gameState?.conflictsEnabled,
     ...conflictExtras,
-    gameDateAnchor: gameState
-      ? {
-          currentTurn: gameState.currentTurn,
-          lastTurnProcessed: gameState.lastTurnProcessed,
-          startingYear: gameState.startingYear ?? 2019,
-        }
-      : undefined,
+    gameDateAnchor: gameState ? gameDateAnchorFromState(gameState) : undefined,
     iteration: gameState?.iteration ?? null,
   };
 }

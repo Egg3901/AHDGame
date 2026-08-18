@@ -15,6 +15,16 @@ Each decade forks into two **lanes**:
 
 You **commit to one lane per decade** on first unlock. The other lane locks until you **abandon** that decade's progress (forfeiting lane-specific nodes).
 
+Completing either lane opens a final **specialization tier** for that decade:
+
+| Specialization | Focus |
+| --- | --- |
+| **Scale** | Lower input, wage, and expansion costs |
+| **Premium** | Higher realized prices and stronger brand effects |
+| **Resilience** | Protection from dominance penalties and tariffs, plus cheaper expansion |
+
+You may complete exactly one specialization per decade. Choosing one locks the other two. Switching requires abandoning that decade and giving up its lane-specific and specialization progress. Specializations cost twice the decade's base research cost, and their capstones cost three times the base cost.
+
 ## Unlocking nodes
 
 Each node has a dual cost:
@@ -37,6 +47,8 @@ Tech nodes grant persistent bonuses, including:
 - Profit **margin** bumps
 - **Marketing** or **logistics** strength grants
 - **Growth cost** reductions
+- Input-cost, wage, output, and realized-price changes
+- Protection from tariff and dominance penalties
 - **Strategy unlocks**: gates advanced operating strategies behind research
 
 Effects stack with normal sector modifiers and apply for the life of the corporation (until a reset removes the corp).
@@ -81,7 +93,7 @@ Tech trees and breakthroughs complement each other: trees give targeted permanen
 
 ## Strategic notes
 
-- **Lane choice matters**: Corporate lane bonuses help every sector; Sector lane unlocks methods and margins specific to your industry.
+- **Lane and specialization choices matter**: Corporate lane bonuses help every sector; Sector lane unlocks methods and margins specific to your industry; the final specialization decides whether that decade favors scale, premium output, or resilience.
 - **Decade timing**: a 2019-start world only researches the final tiers; a 1979-start world walks the full tree over decades.
 - **Cash + score planning**: nodes near the top of a decade cost more R&D and a larger cash slice of daily revenue; fund R&D before a unlock push.
 - **NPP corporations**: autonomous CEOs (NPP autonomy v1+) can unlock affordable nodes when the feature is enabled.

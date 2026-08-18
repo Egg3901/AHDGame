@@ -22,6 +22,21 @@ export function AutoCrisisPanel({
   const [showAuto, setShowAuto] = useState(false);
   const [forceCountry, setForceCountry] = useState<string>(COUNTRY_ORDER[0]);
   const [forcingKey, setForcingKey] = useState<string | null>(null);
+  const [startingVietnam, setStartingVietnam] = useState(false);
+
+  const handleStartVietnam = async () => {
+    setStartingVietnam(true);
+    try {
+      const res = await fetch("/api/admin/crises/vietnam-start", { method: "POST" });
+      const data = await res.json();
+      setMessage(data.message ?? (res.ok ? "Vietnam chain started" : "Failed to start Vietnam"));
+      if (res.ok && data.started) onRefresh();
+    } catch {
+      setMessage("Failed to start Vietnam");
+    } finally {
+      setStartingVietnam(false);
+    }
+  };
 
   const handleForceTrigger = async (key: string, needsCountry: boolean) => {
     setForcingKey(key);
@@ -66,6 +81,27 @@ export function AutoCrisisPanel({
               </>
             )}
           </p>
+
+          <div className="rounded border border-border bg-accent/20 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-medium">Vietnam escalation chain</p>
+                <p className="text-xs text-muted">
+                  Starts the chain now instead of waiting for the turn loop: opens the advisory
+                  rung, gives Washington and Moscow a commitment decision each with a 24 hour
+                  window, and files the wire coverage. Safe to press twice; it only ever starts once
+                  per world, and only inside the 1955 to 1975 window.
+                </p>
+              </div>
+              <button
+                onClick={handleStartVietnam}
+                disabled={startingVietnam}
+                className="shrink-0 rounded border border-border px-3 py-1.5 text-sm font-medium hover:bg-accent disabled:opacity-50"
+              >
+                {startingVietnam ? "Starting..." : "Start Vietnam chain"}
+              </button>
+            </div>
+          </div>
 
           <div className="flex items-center gap-2 text-sm">
             <label className="text-muted">Force-trigger country:</label>

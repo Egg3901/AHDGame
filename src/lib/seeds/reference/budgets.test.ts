@@ -21,6 +21,24 @@ describe("national budget seeds carry a signed treasuryBalance", () => {
   });
 });
 
+describe("national budget household price index", () => {
+  it("seeds every preset at the neutral household price level", () => {
+    for (const preset of [
+      "1953-default",
+      "1979-default",
+      "1991-default",
+      "1999-default",
+      "2007-default",
+      "2019-default",
+      "2023-default",
+    ]) {
+      for (const budget of getInitialNationalBudgetsForPreset(preset)) {
+        expect(budget.economicFactors.householdPriceIndex).toBe(1);
+      }
+    }
+  });
+});
+
 describe("national budget seeds have collision-free document IDs (sandbox-seed-audit-t101)", () => {
   // Regression test for a bug found via a live-DB audit: every non-US budget
   // config across the 1953 and 1979 presets (RU/FR/IT/ES/SE/TR/DD/HU/UK/DE/

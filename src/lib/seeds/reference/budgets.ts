@@ -21,6 +21,7 @@ import {
 } from "@/lib/constants/commandEconomy";
 import { getEraTrendGdpGrowth } from "@/lib/constants/monetaryEra";
 import { makeSeedSoeState } from "@/lib/economy/soe";
+import { HOUSEHOLD_PRICE_INDEX_BASELINE } from "@/lib/economy/householdPriceIndex";
 import {
   COUNTRY_POLICY_CONFIGS,
   NATIONAL_DEFAULT_OPTION_INDEXES,
@@ -885,7 +886,13 @@ function buildNationalBudgetSeed(config: NationalBudgetSeedConfig): SupportedNat
     // corp-turn phase has already overwritten taxBases for the turn - stops the
     // baseline from ever being captured off an already-corrupted value).
     taxBaseGdpShareBaseline: computeTaxBaseGdpShareBaseline(taxBases, config.gdp),
-    economicFactors: config.economicFactors,
+    // Every reset begins at one common household price level. The turn loop
+    // subsequently advances this from CPI; it never rewrites seed nominal units.
+    economicFactors: {
+      ...config.economicFactors,
+      householdPriceIndex:
+        config.economicFactors.householdPriceIndex ?? HOUSEHOLD_PRICE_INDEX_BASELINE,
+    },
     spending,
     debt: config.debt,
     // Signed cash position seeds to the country's current fiscal debt: a country

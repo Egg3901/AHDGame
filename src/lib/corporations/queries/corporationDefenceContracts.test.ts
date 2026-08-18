@@ -9,6 +9,8 @@ function stubDb(opts: {
   contracts: Record<string, unknown>[];
   sectors?: Record<string, unknown>[];
   corp?: Record<string, unknown> | null;
+  /** Live commodity book. Empty leaves every recipe at its nominal input share. */
+  commodityPrices?: Record<string, unknown>[];
 }): Db {
   return {
     collection: (name: string) => {
@@ -19,6 +21,11 @@ function stubDb(opts: {
       }
       if (name === "corporateSectors") {
         return { find: () => ({ toArray: async () => opts.sectors ?? [] }) };
+      }
+      if (name === "commodityPrices") {
+        // The order book quotes each contract's break-even at LIVE input prices now, so the
+        // query reads the price book once. An empty book leaves the nominal recipe share.
+        return { find: () => ({ toArray: async () => opts.commodityPrices ?? [] }) };
       }
       return { findOne: async () => opts.corp ?? null };
     },

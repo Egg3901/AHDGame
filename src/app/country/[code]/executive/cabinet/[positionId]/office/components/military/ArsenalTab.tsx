@@ -10,6 +10,7 @@ import type {
 import { getUnitArchetype } from "@/lib/constants/military";
 import type { UnitDomain } from "@/lib/db/types/militaryUnit";
 import { lotsRequired, lotsToFillUnit } from "@/lib/military/arsenal";
+import { lotPriceBand } from "@/lib/military/defenceLotEconomics";
 import { AggTile, MilIcon, domainIcon, fmtMoneyAbs } from "./militaryUi";
 
 /** Presentation order — the arms of the service as a minister would list them. */
@@ -53,12 +54,21 @@ export function ArsenalTab({
   currencySymbol: string;
   canAct: boolean;
   busy: boolean;
-  onAwardContract: (sectorId: string, lotsOrdered: number) => Promise<boolean>;
+  onAwardContract: (
+    sectorId: string,
+    lotsOrdered: number,
+    options?: { pricePerLot?: number; gradeCeiling?: number }
+  ) => Promise<boolean>;
   onCancelContract: (contractId: string) => void;
 }) {
   const [confirming, setConfirming] = useState<string | null>(null);
   const [awardSectorId, setAwardSectorId] = useState("");
   const [awardLots, setAwardLots] = useState("");
+  // Suggestion #291/#292. Both start empty, which means "quote me the fair price at whatever
+  // grade this supplier can build" - exactly what every contract got before ministers could
+  // specify, so the default path is unchanged.
+  const [awardPrice, setAwardPrice] = useState("");
+  const [awardGrade, setAwardGrade] = useState<string>("");
 
   // What the CURRENT roster is short of, per domain — the demand side of the store.
   const shortfallByDomain = useMemo(() => {
@@ -92,8 +102,37 @@ export function ArsenalTab({
   // Priced off the same anchored GDP the award route uses, so the figure the minister
   // approves is the figure they are billed. A null GDP disables rather than quoting free kit.
   const priced = lotPricePerLot != null && lotPricePerLot > 0;
-  const estimatedCost = priced && lotsValid ? lotsWanted * lotPricePerLot : 0;
-  const canSubmit = canAct && !busy && priced && !!selected && supplierAllowance > 0 && lotsValid;
+
+  // The band the minister may negotiate inside, computed from the SAME pure functions the
+  // award route validates against - so a price the form accepts is a price the server accepts.
+  // The floor is what the plant spends building a lot plus a margin; the ceiling is the GDP
+  // anchor. Outside those two the appropriation is either a private cash tap or a confiscation.
+  const grade = awardGrade === "" ? Math.round(selected?.gradeCeiling ?? 0) : Number(awardGrade);
+  const band =
+    priced && selected
+      ? lotPriceBand({
+          anchorPrice: lotPricePerLot,
+          productionCost: selected.unitProductionCost,
+          grade,
+        })
+      : null;
+  const priceWanted = awardPrice === "" ? (band?.suggested ?? 0) : Number(awardPrice);
+  const priceOutOfBand =
+    band != null &&
+    awardPrice !== "" &&
+    (!Number.isFinite(priceWanted) || priceWanted < band.floor || priceWanted > band.ceiling);
+  const effectivePrice = band ? (priceOutOfBand ? band.suggested : priceWanted) : 0;
+
+  const estimatedCost = priced && lotsValid ? lotsWanted * effectivePrice : 0;
+  const canSubmit =
+    canAct &&
+    !busy &&
+    priced &&
+    !!selected &&
+    supplierAllowance > 0 &&
+    lotsValid &&
+    band != null &&
+    !priceOutOfBand;
   // Whole turns to fill the order at the plant’s current output — the one number that turns
   // "500 lots" from a figure into a decision.
   const turnsToFill =
@@ -254,8 +293,9 @@ export function ArsenalTab({
                 </p>
               )}
               <p className="mt-1.5 text-[11px] text-muted">
-                {fmtMoneyAbs(currencySymbol, lotPricePerLot ?? 0)} per lot, paid out of the
-                appropriation as each lot is delivered — never up front.
+                {fmtMoneyAbs(currencySymbol, effectivePrice)} per lot, paid out of the appropriation
+                as each lot is delivered - never up front. The full order is committed against the
+                appropriation the moment you sign it.
                 {totalNeeded > totalStock && (
                   <>
                     {" "}
@@ -268,6 +308,74 @@ export function ArsenalTab({
                 )}
               </p>
             </div>
+
+            {selected && band && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label
+                    htmlFor="award-grade"
+                    className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted"
+                  >
+                    Grade
+                  </label>
+                  <select
+                    id="award-grade"
+                    value={awardGrade}
+                    onChange={(e) => {
+                      setAwardGrade(e.target.value);
+                      // The band moves with the grade, so a price typed against the old band
+                      // would silently become invalid. Clearing it re-quotes rather than
+                      // submitting a number the server will refuse.
+                      setAwardPrice("");
+                    }}
+                    disabled={busy}
+                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none disabled:opacity-50"
+                  >
+                    {[0, 1, 2, 3]
+                      .filter((g) => g <= Math.round(selected.gradeCeiling))
+                      .map((g) => (
+                        <option key={g} value={String(g)}>
+                          {GRADE_LABEL[g]}
+                        </option>
+                      ))}
+                  </select>
+                  <p className="mt-1.5 text-[11px] text-muted">
+                    Cheaper grades buy more lots per unit of budget; better grades field stronger
+                    formations. This plant can build up to{" "}
+                    {GRADE_LABEL[Math.max(0, Math.min(3, Math.round(selected.gradeCeiling)))]}.
+                  </p>
+                </div>
+                <div>
+                  <label
+                    htmlFor="award-price"
+                    className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted"
+                  >
+                    Price per lot
+                  </label>
+                  <input
+                    id="award-price"
+                    type="number"
+                    inputMode="numeric"
+                    min={band.floor}
+                    max={band.ceiling}
+                    step={1}
+                    placeholder={String(band.suggested)}
+                    value={awardPrice}
+                    onChange={(e) => setAwardPrice(e.target.value)}
+                    disabled={busy}
+                    className="tabular w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none disabled:opacity-50"
+                  />
+                  <p
+                    className={`mt-1.5 text-[11px] ${priceOutOfBand ? "text-[var(--error)]" : "text-muted"}`}
+                  >
+                    {fmtMoneyAbs(currencySymbol, band.floor)} to{" "}
+                    {fmtMoneyAbs(currencySymbol, band.ceiling)}. Below the floor the plant builds at
+                    a loss and will not deliver; above the ceiling you are paying over the odds with
+                    public money. Leave it blank for a fair price.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {lotsValid && selected && (
               <div className="rounded-lg border border-card-border bg-card-muted px-3 py-2 text-[12px]">
@@ -299,12 +407,17 @@ export function ArsenalTab({
               disabled={!canSubmit}
               onClick={async () => {
                 if (!canSubmit) return;
-                const ok = await onAwardContract(awardSectorId, lotsWanted);
+                const ok = await onAwardContract(awardSectorId, lotsWanted, {
+                  ...(awardPrice !== "" ? { pricePerLot: Math.round(priceWanted) } : {}),
+                  ...(awardGrade !== "" ? { gradeCeiling: grade } : {}),
+                });
                 // Only clear on success — a refused award should leave the figures in place
                 // to correct rather than making the minister retype the whole order.
                 if (ok) {
                   setAwardSectorId("");
                   setAwardLots("");
+                  setAwardPrice("");
+                  setAwardGrade("");
                 }
               }}
               className="w-full rounded-lg border border-[color-mix(in_srgb,var(--gov)_40%,transparent)] bg-[color-mix(in_srgb,var(--gov)_15%,transparent)] px-3 py-2 text-[13px] font-semibold text-gov-soft disabled:opacity-50"
@@ -341,11 +454,21 @@ export function ArsenalTab({
                       </div>
                       <div className="text-[11px] text-muted">
                         {c.component} · {fmtMoneyAbs(currencySymbol, c.pricePerLot)} per lot
+                        {c.gradeCeiling != null &&
+                          ` · ${GRADE_LABEL[Math.max(0, Math.min(3, c.gradeCeiling))]} grade`}
                         {c.status === "pending" && (
                           <span className="text-[var(--warning)]">
                             {" · awaiting the supplier's answer"}
                           </span>
                         )}
+                      </div>
+                      <div className="text-[11px] text-muted">
+                        paid {fmtMoneyAbs(currencySymbol, c.amountPaid ?? 0)} ·{" "}
+                        {fmtMoneyAbs(currencySymbol, c.encumberedAmount ?? 0)} still committed
+                        {(c.lotsBuiltNotDelivered ?? 0) > 0 &&
+                          ` · ${(c.lotsBuiltNotDelivered ?? 0).toLocaleString("en-US")} built and waiting`}
+                        {c.assignedFactories != null &&
+                          ` · ${c.assignedFactories} of ${c.totalFactories ?? 4} lines`}
                       </div>
                     </div>
                     <div className="text-right">
@@ -383,6 +506,18 @@ export function ArsenalTab({
                       style={{ width: `${Math.min(100, pct)}%`, background: "var(--gov)" }}
                     />
                   </div>
+                  {c.carryReasonText && (
+                    <p className="mt-1.5 text-[11px] text-[var(--warning)]">{c.carryReasonText}</p>
+                  )}
+                  {c.selfDealing && (
+                    <p className="mt-1.5 text-[11px] text-[var(--error)]">
+                      Declared interest: {c.selfDealing.ministerName ?? "the awarding minister"}{" "}
+                      {c.selfDealing.basis === "owner"
+                        ? "owns this supplier"
+                        : `holds ${(c.selfDealing.stakeShare * 100).toFixed(1)}% of this supplier`}
+                      .
+                    </p>
+                  )}
                 </div>
               );
             })}

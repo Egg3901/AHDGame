@@ -9,6 +9,7 @@ import { isPoliticalApprovalCountry } from "@/lib/politicalLegislation/political
 import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
 import {
   mapCabinetDeltasToPolitical,
+  mapRegionalCabinetDeltasToPolitical,
   addContributions,
 } from "@/lib/politicalMetrics/cabinetResidual";
 import { setPoliticalCabinetContribution } from "@/lib/db/collections/politicalCabinetContribution";
@@ -463,11 +464,12 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
       // Macro paths only. The political half of a cabinet order used to $inc a
       // legacy doc; no country has one, so it wrote nowhere.
       //
-      // Still not wired to the board HERE: the cabinet -> political channel runs
-      // once, below, as a per-country contribution (`mapCabinetDeltasToPolitical`)
-      // that the dynamics step folds into region cabinetResiduals. A second,
-      // simpler implementation inside this per-region loop would double-drive the
-      // same effect — and multiply it by the region count.
+      // National political deltas are snapshotted ONCE below
+      // (`mapCabinetDeltasToPolitical(bucket.national)`). Folding them here
+      // would double-drive the same effect and multiply it by the region count.
+      // Regional political deltas (estates, regional orders/targets) are
+      // snapshotted separately as `regional[stateId]` so a Field Office in CA
+      // tilts only CA.
       const macroInc: Record<string, number> = {};
       for (const [metricPath, modifier] of Object.entries(combinedEffects)) {
         if (!isMacroMetricPath(metricPath)) continue;
@@ -490,10 +492,11 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
     }
 
     // Political-pipeline countries: the loop above only $incs macro paths, so the
-    // political half of the national cabinet deltas goes nowhere there. Snapshot it
-    // as a political-metric contribution the dynamics step folds into region
-    // cabinetResiduals — the "events-to-residuals" channel that routing anticipated.
-    // Persist even when empty so a cleared cabinet lets the residual decay away.
+    // political half of cabinet deltas goes nowhere there. Snapshot national
+    // standing effects plus per-region extras; the dynamics step folds
+    // national+regional[id] into that region's cabinetResiduals. Persist even
+    // when empty so a cleared cabinet (or a demolished estate) lets the residual
+    // decay away.
     if (isPoliticalApprovalCountry(countryId)) {
       // Cabinet StateMetrics deltas (mapped via the key→family table) + direct
       // political contributions (the military force effect's defense-family drive).
@@ -501,7 +504,14 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
         mapCabinetDeltasToPolitical(bucket.national),
         bucket.politicalDirect ?? {}
       );
-      await setPoliticalCabinetContribution(db, countryId, politicalContribution, currentTurn);
+      const regionalPolitical = mapRegionalCabinetDeltasToPolitical(bucket.regional);
+      await setPoliticalCabinetContribution(
+        db,
+        countryId,
+        politicalContribution,
+        currentTurn,
+        regionalPolitical
+      );
     }
   }
 

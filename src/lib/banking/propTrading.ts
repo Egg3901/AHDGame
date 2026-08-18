@@ -394,6 +394,15 @@ export async function openPosition(
       _id: corporationId,
       "bankCharter.status": "active",
       "bankCharter.cashReserves": { $gte: cost },
+      // Re-gate the supervisory standing IN the write, not just on the read
+      // above. Between the two the solvency pass can mark this bank stressed or
+      // undercapitalized, and putting depositor cash at risk on a bank the
+      // supervisor has just barred from taking risk is the check-then-write
+      // hole every other distribution path has already closed.
+      $or: [
+        { "bankCharter.capitalStanding": { $exists: false } },
+        { "bankCharter.capitalStanding": "adequate" },
+      ],
     },
     {
       $inc: { "bankCharter.cashReserves": -cost },

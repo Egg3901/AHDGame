@@ -66,7 +66,13 @@ beforeEach(async () => {
     surplus: -800_000_000_000,
     debtToGdpRatio: 62,
     creditRating: "AA",
-    economicFactors: { inflationRate: 3.4, wageGrowth: 1.8, tradeGrowth: -0.4, gdpGrowth: 1.9 },
+    economicFactors: {
+      inflationRate: 3.4,
+      wageGrowth: 1.8,
+      tradeGrowth: -0.4,
+      gdpGrowth: 1.9,
+      householdPriceIndex: 1.25,
+    },
   });
   mockFind("states", [
     { _id: "CA", countryId: "US", name: "California", gdp: 1_000_000, population: 30 },
@@ -134,6 +140,8 @@ describe("buildCountryEconomyOutlook", () => {
     expect(result.realEconomy.unemployment.value).toBeCloseTo(4.63, 2);
     expect(result.realEconomy.unemployment.trend).toBe(-0.12);
     expect(result.realEconomy.medianIncome.value).toBeCloseTo(68_000, 0);
+    expect(result.realEconomy.householdPriceIndex).toBe(1.25);
+    expect(result.realEconomy.realMedianIncome).toBeCloseTo(54_400, 0);
     expect(result.realEconomy.wageGrowth).toBe(1.8);
     expect(result.realEconomy.tradeGrowth).toBe(-0.4);
   });
@@ -164,6 +172,8 @@ describe("buildCountryEconomyOutlook", () => {
     expect(result.pulse.primeRate.value).toBeNull();
     expect(result.pulse.primeRate.heldTurns).toBeNull();
     expect(result.pulse.credit.rating).toBeNull();
+    expect(result.realEconomy.householdPriceIndex).toBe(1);
+    expect(result.realEconomy.realMedianIncome).toBeCloseTo(68_000, 0);
     expect(result.markets.stockMarketCap).toBeNull();
     expect(result.markets.forexRate).toBeNull();
     // GDP still aggregates from states; sector mix still returns the full board.
