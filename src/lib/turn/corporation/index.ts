@@ -718,13 +718,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   }
   mark("autoCaretaker");
 
-  // Forensics/alt-detection audit spine (plan §3.1, T2.7): aggregate,
-  // NOT-per-corp entries for this turn's silent auto-mutations (vacant/
-  // inactive-CEO sector shedding, NPP caretaker installs, subsidiary
-  // cleanup). Collected once and flushed via a single `recordAuditBulk` call
-  // near the end of this function, corporationTurn is the known turn-loop
-  // hotspot, so no per-corp writes here, just cheap counts already computed
-  // by each sub-step.
+  // Forensics/alt-detection audit spine: aggregate, not-per-corp entries for
+  // this turn's silent auto-mutations (vacant/inactive-CEO shedding, NPP
+  // caretaker installs, subsidiary cleanup). Batched into one `recordAuditBulk`
+  // at the end to avoid N+1 writes on the corp-turn hotspot.
   const corpAuditEntries: ActionAuditInput[] = [];
   if (caretakersInstalled > 0) {
     corpAuditEntries.push({
@@ -988,23 +985,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     }
   }
 
-  // Insert any new NPP sectors.
-  //
-  // PLANTS-GATED: this is the WRITE half of the NPP founding insert whose
-  // document half lives in `nppCorporationBehavior.buildNppSectorDocs`, the
-  // docs carry a `revenue` key, so this statement is a `corporateSectors.revenue`
-  // writer and is registered as one. It stayed invisible to the writer-registry
-  // guard for a while because the guard could only read an insert whose argument
-  // was a literal `[` / `{`; this one passes a variable, so there was no document
-  // text to scan. The guard now recognizes an indirect insert on the collection
-  // by name and demands registration for it, see `sectorRevenueWriters.guard.test.ts`.
-  //
-  // Under plants the `revenue` on each doc is the legacy NAMEPLATE only: the new
-  // sector is born with `capitalStock: 0`, its founding order sitting in
-  // `buildQueue`, `constructionInProgressAnchor` equal to the order's paid ₳ and
-  // `plantsStartTurn` stamped, and `sectorTurn` restates `revenue` from capacity
-  // on the very next tick. Below plants the nameplate is the operative figure.
-  // Either way the quantity that matters is written by the builder, not here.
+  // Insert any new NPP sectors. Write half of the founding insert whose
+  // document half lives in `nppCorporationBehavior.buildNppSectorDocs`.
+  // Docs carry `revenue`, so this is a registered `corporateSectors.revenue`
+  // writer. Under plants that figure is the legacy nameplate only; `sectorTurn`
+  // restates `revenue` from capacity next tick. Below plants the nameplate is
+  // the operative figure. The quantity that matters is written by the builder,
+  // not here.
   if (nppNewSectors.length > 0) {
     await db.collection("corporateSectors").insertMany(nppNewSectors);
   }

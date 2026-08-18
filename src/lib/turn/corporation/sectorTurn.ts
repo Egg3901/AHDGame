@@ -509,29 +509,13 @@ export function processSector(
   // agree and any rounding drift self-heals.
   const constructionInProgressAnchor = queueUndeliveredCost(nextBuildQueue, currentTurn);
   // ─── C4: the turn's queue write is a DELTA, never a whole-array $set ───────
-  //
-  // `nextBuildQueue` is derived from a snapshot taken at the top of the turn.
-  // Persisting it with `$set: { buildQueue: nextBuildQueue }` silently erases
-  // any order a CEO placed between the snapshot and the bulkWrite at the end of
-  // the turn — a window that spans the whole sector-compute phase. The command's
-  // CAS cannot save them: the command wrote first and succeeded, and the turn's
-  // unconditional `$set` lands afterwards. The player is charged and the plant
-  // never arrives.
-  //
-  // So the turn writes only what it actually owns: it REMOVES the orders that
-  // landed. `onlineTurn <= currentTurn` is the exact landing predicate and it is
-  // identity-free, which is what makes it safe as a `$pull` — a freshly placed
-  // order always has `onlineTurn = currentTurn + buildTurns > currentTurn`, so
-  // it can never match. No `orderId` is needed (and adding one would not help:
-  // the ids of concurrently-placed orders are unknown to the snapshot anyway).
-  //
-  // CIP moves by `$inc` of the same delta rather than being restated, for the
-  // same reason: a concurrent order's contribution must survive. Both figures
-  // are taken from the ROUNDED values so the stored integer stays exact, and the
-  // command re-states CIP absolutely on every write, so any residual drift is
-  // self-healing.
-  //
-  // The flip-turn credit order is a `$push` in a SECOND bulkWrite op — Mongo
+  // `nextBuildQueue` is a snapshot; `$set`-ing it would erase any order a CEO
+  // placed during this phase. Write only what the turn owns: `$pull` orders
+  // that landed (`onlineTurn <= currentTurn`). A freshly placed order always
+  // has `onlineTurn > currentTurn`, so it cannot match. CIP `$inc`s the same
+  // delta so a concurrent order's contribution survives; rounded values keep
+  // the stored integer exact, and the command restates CIP absolutely so drift
+  // self-heals. Flip-turn credit is a `$push` in a second bulkWrite op - Mongo
   // rejects `$pull` and `$push` on the same path in one update. bulkWrite is
   // ordered, so the pull always precedes the push.
   const landedOrderCount = plantsEnabled
@@ -585,21 +569,14 @@ export function processSector(
         // has depreciated/invested since), so re-applying the factor would
         // silently gift capacity on every flip.
         //
-        // PROVISIONAL: this makes post-flip sectors consistent with pre-flip
-        // ones under the current seeding rule. Whether plants should seed with
-        // headroom at all — or start pinned and require a build order — is the
-        // flip-day product decision; revisit when P3 build orders land.
-        //
         // P3a: capacity delivered by build orders that came online this turn is
         // added BEFORE the advance, so a landed plant produces the turn it
-        // lands (and takes that turn's depreciation like every other unit — a
+        // lands (and takes that turn's depreciation like every other unit - a
         // ~0.05% haircut, not worth a special case).
         // `seedCapitalStock` IS `impliedOutputUnits(...) x CAPITAL_SEED_HEADROOM`
-        // — the same expression the capital-mode seeding arm above uses.
-        // Spelling it out inline here made it a divergent twin waiting to
-        // happen: the two seeding paths must agree or a sector's capacity
-        // changes depending on which tier it was born in. Hoisted to
-        // `plantsBaseStock` above.
+        // - the same expression the capital-mode seeding arm above uses. The two
+        // seeding paths must agree or a sector's capacity changes depending on
+        // which tier it was born in. Hoisted to `plantsBaseStock` above.
         prevStock: plantsPrevStock,
         currentGrowthRate: 0,
       })
@@ -645,27 +622,10 @@ export function processSector(
   // those units imply. 0 only for a sector whose output mix genuinely prices to
   // nothing (no output commodity with a positive rate AND a positive base).
   //
-  // ZERO-REVENUE TRAP (fixed 2026-08-06). This was `preFlipNameplateRevenue /
-  // nameplateUnits`, which is the SAME number whenever revenue > 0, because
-  // `nameplateUnits === revenue × k`, but resolves 0/0 to 0 at revenue 0. That
-  // made revenue-0 an ABSORBING state, and founding a sector under plants walks
-  // straight into it: `expandSector` creates the sector with capitalStock 0 and
-  // a starter build order, so the first turn writes back
-  // `plantsNameplateRevenue = 0 × mixPrice = 0`, and from the second turn on
-  // mixPrice is 0 forever. When the starter build landed, the sector produced
-  // real units, sold them at a $0 unit price, and booked $0 revenue and $0 costs
-  // permanently, a live, physically-producing sector with no economics at all.
-  //
-  // `plantsTransition.ts` already names this exact condition a hard NO-GO
-  // blocker (`"no-priced-output-mix"`), but the preflight only guards the flip
-  // turn; nothing guarded sectors founded AFTER the flip.
-  //
-  // Deriving the price from the unit yield instead is scale-free, which is what
-  // the comment below already claims mixPrice is, so it is identical for every
-  // sector carrying positive revenue and simply keeps working at revenue 0.
-  // Sectors already stuck at 0 heal on their next turn without a backfill: their
-  // capacity is intact, so `capacity × mixPrice` restores the nameplate, and the
-  // governor passes the derived revenue through unclamped against a 0 baseline.
+  // Derived from unit yield, not `revenue / nameplateUnits`: that ratio is the
+  // same number whenever revenue > 0, but 0/0 at a founding sector (capitalStock
+  // 0 plus a starter build) is an absorbing zero. Yield is scale-free, so it
+  // matches the positive-revenue case and keeps working at revenue 0.
   const plantsMixPriceYield = plantsEnabled
     ? unitYieldForSupply(strategyRates.supply ?? {}, lookups.eraUnitScale)
     : 0;
@@ -690,21 +650,11 @@ export function processSector(
   // capacity to price, so they hold the un-compounded anchor instead of being
   // zeroed.
   //
-  // ROUNDING IDENTITY (fixed 2026-08): `plantsCapacity` is used RAW here, and the
-  // persist block writes it RAW too. Both halves of the stored pair therefore
-  // come from one unrounded value and `revenue === capitalStock × mixPrice`
-  // holds exactly. It previously did not: `capitalStock` was quantised to 2dp on
-  // the way out while `revenue` was priced off the unrounded figure, so the
-  // stored pair silently missed the identity that the SOE overlay and the
-  // shed/attack conservation arguments both assume.
-  //
-  // The fix went to the PERSIST side rather than rounding here, because under
-  // plants `capitalStock` is not a derived display number — it is the
-  // authoritative capacity state, read back verbatim as next turn's
-  // `storedCapacity`. Quantising it makes the D9 retool rescale (multiply by
-  // RPU_from/RPU_to, and later by its inverse in `cancelSectorStrategy`)
-  // non-invertible, and drifts idle-upkeep off the capacity actually held.
-  // Below plants `newCapitalStock` keeps its 2dp rounding byte-identically.
+  // `plantsCapacity` is used RAW here and written RAW: `revenue === capitalStock
+  // x mixPrice` must hold exactly (SOE overlay and shed/attack conservation
+  // assume it). Under plants `capitalStock` is authoritative capacity, read back
+  // as next turn's `storedCapacity`; quantising it makes the D9 retool rescale
+  // non-invertible. Below plants `newCapitalStock` keeps 2dp rounding.
   const plantsNameplateRevenue =
     plantsEnabled && plantsMixPrice > 0 ? plantsCapacity * plantsMixPrice : newRevenue;
   // Governor ramp anchor: stamped on the sector's FIRST plants turn and never
@@ -767,64 +717,40 @@ export function processSector(
     ? 0
     : 1 - embargoExportExposure * TRADE_EMBARGO_EXPORT_LOSS_SHARE;
   // ─── P3b scoped touch: ONE capacity system for extraction ────────────────
-  // (definition hoisted above `baselineHourlyRevenue` — that anchor now reads it
+  // (definition hoisted above `baselineHourlyRevenue` - that anchor now reads it
   // too, so it must be in scope there.)
   //
   // Below plants an extraction sector is gated by TWO capacity systems at once:
   // its own capital stock (the capital tier) and the state's geology, and the
-  // geological leg arrives as a soft, apologetic REVENUE haircut — floored at
+  // geological leg arrives as a soft REVENUE haircut - floored at
   // EXTRACTION_CAPACITY_HAIRCUT_FLOOR (0.5) and faded in over a 240-turn
-  // per-sector grace window, both bolted on in 2026 to stop the un-floored ramp
-  // bankrupting miners while utilization sat at ~0.07.
+  // per-sector grace window.
   //
-  // Under plants that is no longer the right shape. Capacity IS the production
-  // base, so the deposit is simply a second, HARD ceiling on the same quantity:
+  // Under plants, capacity IS the production base, so the deposit is a HARD
+  // ceiling on the same quantity:
   //
   //     producedUnits = min(plant-driven produced, state resource remaining)
   //
-  // implemented as the utilization ratio applied straight to the units chain —
-  // no 0.5 floor (a deposit that can only yield 7% of what the plants can chew
-  // yields 7%, and the answer is to build somewhere else or prospect, not to
-  // conjure ore), and no 240-turn per-sector grace (the plants ramp below is the
-  // only grace period, and it is the same one every other plants leg uses).
+  // No 0.5 floor, no 240-turn per-sector grace - the plants ramp below is the
+  // only fade-in, and it is the same one every other plants leg uses.
   //
   // FLIP IDENTITY: `plantsRampLambda` is 0 on the sector's first plants turn, so
-  // the factor is exactly 1 there — the flip turn is unchanged, and the hard min
-  // fades in over `governorRampTurns` for the over-extracted sectors it will
-  // cut. Non-extraction sectors have utilization 1 and are unaffected; non-plants
-  // worlds keep `capacityHaircut` (floor + 240-turn ramp) byte-identically.
+  // the factor is exactly 1 there. Non-extraction sectors have utilization 1 and
+  // are unaffected; non-plants worlds keep `capacityHaircut` (floor + 240-turn
+  // ramp) byte-identically.
   const plantsExtractionHardMin =
     plantsEnabled && sector.sectorType === "extraction"
       ? 1 - plantsRampLambda * (1 - Math.max(0, Math.min(1, capacityUtil.utilization)))
       : 1;
-  // WHY the two capacity legs below are NOT gated the way `productionFactor`
-  // gates them (audited 2026-08; the asymmetry is deliberate, do not "fix" it):
-  //
   // `baselineHourlyRevenue` is the pre-plants COUNTERFACTUAL. Under plants it is
-  // the anchor `softenedMarketRealization` clamps the plant-derived revenue
-  // against, so it must carry the legs capital mode carried — `capacityHaircut`
-  // and `capitalFactor` included. Gating them off here makes the anchor jump on
-  // the flip turn (λ = 0 returns the anchor verbatim), which is exactly what
-  // `sectorTurn.p3bExtractionHardMin.test.ts` and the governor cases in
-  // `sectorTurn.plants.test.ts` pin: a fully-ramped 0.5 legacy haircut would
-  // double a miner's revenue on flip day.
-  //
-  // It is also NOT a compounding decay, despite looking like a recurrence. The
-  // anchor is built from `preFlipNameplateRevenue`, which reads `sector.revenue`,
-  // which under plants was restated last turn as `plantsCapacity × plantsMixPrice`
-  // — i.e. from CAPACITY, not from realized revenue. And `plantsMixPrice` is
-  // 1/Σ(rate/base) identically (see its definition), so that restatement carries
-  // no realization leg at all: `revenue_t` is a function of `capacity_t` alone.
-  // The haircut therefore multiplies the anchor ONCE per turn at a constant
-  // level; it never feeds its own next input. Held capacity constant, revenue is
-  // a fixed point, not a geometric series — pinned by the multi-turn regression
-  // in `sectorTurn.plantsMultiTurn.test.ts`.
-  //
-  // The LEVEL question this used to raise is now answered by C8: the ±cap does
-  // release. `governorEffectiveCap` widens the clamp with λ and drops it
-  // entirely at full ramp, so a fully-ramped extraction sector is priced by
-  // `plantsExtractionHardMin` and its own capacity — the anchor (legacy haircut
-  // included) governs only the transition, which is all it was ever for.
+  // the governor's clamp anchor, so it must carry the legs capital mode carried
+  // (`capacityHaircut` and `capitalFactor`). Gating them off here jumps the
+  // anchor on flip (λ = 0 returns the anchor verbatim). Do not "fix" the
+  // asymmetry. Not a compounding decay: under plants `sector.revenue` was
+  // restated as `plantsCapacity x plantsMixPrice`, so the haircut multiplies the
+  // anchor once per turn at a constant level. `governorEffectiveCap` drops the
+  // clamp at full ramp; after that `plantsExtractionHardMin` and capacity price
+  // it.
   const baselineHourlyRevenue =
     (preFlipNameplateRevenue / TURNS_PER_DAY) *
     revenueMultiplier *
@@ -873,22 +799,12 @@ export function processSector(
     currentTurn,
     plantsEnabled
   );
-  // FLIP-DAY HANDOVER. The physical leg is a NEW steady-state economics change,
-  // so it obeys the same rule every other plants leg obeys: fade it in on
-  // `plantsRampLambda`, anchored at `plantsStartTurn`. Without this, a sector
-  // whose flip turn happens to fall inside an active physical crisis broke the
-  // identity in BOTH directions at once — revenue stayed pinned to
-  // `baselineHourlyRevenue` (the governor returns the baseline verbatim at
-  // λ = 0, so the tonnage cut never reached the top line) while the penalty's
-  // percentage points had already left `disasterMarginMod`, so cost fell by the
-  // full penalty and profit jumped. A −8pp port closure handed the sector an 8%
-  // free margin gain on flip day.
-  //
-  // The handover is a partition, not a duplication: λ of the penalty drives
-  // tonnage, (1 − λ) stays in the margin stack, and the two always sum to the
-  // pre-P3.5 total. At λ = 0 that is `productionPenalty × 0 === 0` and
-  // `marginPenalty + productionPenalty` — the old number, exactly. At λ = 1 the
-  // whole physical penalty is tonnage, which is the wave's intent.
+  // FLIP-DAY HANDOVER. Fade the physical leg in on `plantsRampLambda`, same
+  // rule as every other plants leg. A partition, not a duplication: λ of the
+  // penalty drives tonnage, (1 - λ) stays in the margin stack, and the two
+  // always sum to the pre-P3.5 total. At λ = 0 that is `productionPenalty x 0
+  // === 0` and `marginPenalty + productionPenalty` - the old number, exactly.
+  // At λ = 1 the whole physical penalty is tonnage, which is the wave's intent.
   const disasterPhysicalRamped = disasterPenalty.productionPenalty * plantsRampLambda;
   const disasterPhysicalDeferred = disasterPenalty.productionPenalty - disasterPhysicalRamped;
   const disasterOutputFactor = disasterProductionFactor(disasterPhysicalRamped);
@@ -1119,8 +1035,8 @@ export function processSector(
     lookups.stateSectorSpecializationByState.get(sector.stateId),
     sector.sectorType as CorporationType
   );
-  // Sector type match: +5% if matches corp type, -15% if mismatch. SOEs are
-  // exempt — a NatCorp is a diversified state holding company, not a
+  // Sector type match: +5% primary, +2.5% secondary, -15% mismatch. SOEs are
+  // exempt - a NatCorp is a diversified state holding company, not a
   // specialized private firm (Bug #0775).
   const sectorTypeMatchMod = isStateOwned(corp)
     ? 0
@@ -1129,8 +1045,10 @@ export function processSector(
         corp.type,
         corp.secondaryType
       );
-  // Logistical sprawl: -0.5% per 2 sectors over 15 (reduced by logistics
-  // spending). SOEs are exempt — they accumulate sectors by nationalization.
+  // Logistical sprawl: -0.5% per 2 sectors over 15 for a single-type corp
+  // (-1.0% per pair if dual-type). Logistics spending raises the threshold
+  // (15 at LS 0, 30 at LS 200) and halves the rate at LS 200. SOEs are exempt
+  // - they accumulate sectors by nationalization.
   const sprawlMod = isStateOwned(corp)
     ? 0
     : getSprawlModifier(corpSectorCount, corp.logisticsStrength ?? 0, !!corp.secondaryType);
