@@ -23,6 +23,8 @@ export type AppointmentVotePayload = {
   status: string;
   closesAt: string;
   closesOnTurn?: number | null;
+  /** Post-election incumbent-retention vote; government stays formed during it. */
+  isConfidenceMotion?: boolean;
 };
 
 export type NoConfidenceVotePayload = {

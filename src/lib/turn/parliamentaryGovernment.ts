@@ -770,7 +770,12 @@ export async function resolveParliamentaryAppointmentVote(
   );
   vote.votesFor = tally.votesFor;
   vote.votesAgainst = tally.votesAgainst;
-  const passed = vote.votesFor > vote.votesAgainst;
+  // Appointment votes need an aye majority to seat someone. A post-election
+  // confidence motion is the inverse: the incumbent stays unless nays strictly
+  // outnumber ayes. An empty or tied ballot must not unseat.
+  const passed = vote.isConfidenceMotion
+    ? vote.votesFor >= vote.votesAgainst
+    : vote.votesFor > vote.votesAgainst;
 
   // Atomic claim: only the caller that flips status "active" → final runs the
   // side effects. Inline-resolve paths (see processParliamentaryGovernmentVotes
@@ -885,7 +890,7 @@ export async function resolveParliamentaryAppointmentVote(
         ? `${config.executiveTitle} Survives Confidence Motion`
         : "Government Formed",
       description: vote.isConfidenceMotion
-        ? `**${vote.nomineeName}** has won the post-election confidence motion (${vote.votesFor}–${vote.votesAgainst}) and remains as ${config.executiveTitle}.`
+        ? `**${vote.nomineeName}** has won the post-election confidence motion (${vote.votesFor} ayes, ${vote.votesAgainst} nays) and remains as ${config.executiveTitle}.`
         : `**${vote.nomineeName}** has been confirmed as ${config.executiveTitle} (${vote.votesFor}–${vote.votesAgainst}).`,
       color: DISCORD_COLORS.govFormed,
       footer: { text: "A House Divided" },
@@ -910,7 +915,7 @@ export async function resolveParliamentaryAppointmentVote(
         const config = getCountryConfig(countryId);
         sendCountryGameEvent(countryId, {
           title: `${config.executiveTitle} Loses Confidence Motion`,
-          description: `**${vote.nomineeName}** lost the post-election confidence motion (${vote.votesFor}–${vote.votesAgainst}) and has been removed from office.`,
+          description: `**${vote.nomineeName}** lost the post-election confidence motion (${vote.votesFor} ayes, ${vote.votesAgainst} nays) and has been removed from office.`,
           color: DISCORD_COLORS.govCollapsed,
           footer: { text: "A House Divided" },
           timestamp: now.toISOString(),
@@ -927,7 +932,7 @@ export async function resolveParliamentaryAppointmentVote(
         ? `${config.executiveTitle} Confidence Motion Failed`
         : `${config.executiveTitle} Appointment Vote Failed`;
       const message = vote.isConfidenceMotion
-        ? `You lost the confidence motion (${vote.votesAgainst} confidence, ${vote.votesFor} no confidence).`
+        ? `You lost the confidence motion (${vote.votesFor} confidence, ${vote.votesAgainst} no confidence).`
         : `Your appointment as ${config.executiveTitle} was rejected (${vote.votesFor} ayes, ${vote.votesAgainst} nays).`;
       await createNotifications([
         {
@@ -1443,6 +1448,15 @@ export async function openConfidenceMotionForIncumbent(
     return { opened: false, reason: "gov-not-formed" };
   }
 
+  const existingMotion = await getPMAppointmentVotesCollection(db).findOne({
+    countryId,
+    status: "active",
+    isConfidenceMotion: true,
+  });
+  if (existingMotion) {
+    return { opened: false, reason: "already-active" };
+  }
+
   const lowerOfficeType = getLowerChamberOfficeType(countryId);
 
   // Verify incumbent retained a seat in the newly-elected lower chamber.
@@ -1484,6 +1498,28 @@ export async function openConfidenceMotionForIncumbent(
   };
 
   await getPMAppointmentVotesCollection(db).insertOne(voteDoc);
+
+  const config = getCountryConfig(countryId);
+  const chamberName = config.legislature.lowerChamber.shortName;
+  const pmChar = await db.collection<Character>("characters").findOne({ _id: gov.pmCharacterId });
+  if (pmChar?.userId) {
+    await createNotifications([
+      {
+        userId: pmChar.userId,
+        title: `${config.executiveTitle} Confidence Motion`,
+        message: `A post-election confidence motion has opened. ${chamberName} members will vote over the next ${PM_VOTE_DURATION_HOURS} hours on whether you remain ${config.executiveTitle}.`,
+        type: "system",
+        metadata: { recipientCharacterId: gov.pmCharacterId.toString() },
+      },
+    ]);
+  }
+  sendCountryGameEvent(countryId, {
+    title: `${config.executiveTitle} Confidence Motion Opened`,
+    description: `A post-election confidence motion is underway for **${gov.pmName}**. ${chamberName} members have ${PM_VOTE_DURATION_HOURS} hours to vote.`,
+    color: DISCORD_COLORS.govFormed,
+    footer: { text: "A House Divided" },
+    timestamp: now.toISOString(),
+  }).catch(() => {});
 
   return { opened: true, voteId };
 }
