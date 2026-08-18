@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
 import Link from "next/link";
 import { VIETNAM_RUNGS, type VietnamEscalationSummary } from "@/lib/crises/vietnamEscalation";
-import { syncVietnamDials } from "./vietnamDials";
 import { defconColor } from "./defcon";
 
 const mono = "'IBM Plex Mono',monospace";
@@ -12,19 +10,17 @@ const serif = "Lora,Georgia,serif";
 /**
  * The Vietnam escalation ladder, on the conflicts hub.
  *
- * Two jobs. It shows players where the war sits, what each superpower has
- * committed and what the war is doing to readiness, bloc cohesion, war weariness
- * and defence procurement demand. And on mount it pushes the derived dials into
- * the Cold War console's shared state, so the crisis, detente, proxy-war and
- * home front boards all read the same war rather than their own defaults.
+ * Shows players where the war sits, what each superpower has committed and what
+ * the war is doing to readiness, bloc cohesion, war weariness and defence
+ * procurement demand. Display only: the same dials reach the crisis, detente,
+ * proxy-war and home front boards through ColdWarDialHydrator, which pulls them
+ * from the server for the whole section.
  */
 export function VietnamEscalationPanel({ summary }: { summary: VietnamEscalationSummary }) {
   const { dials } = summary;
 
-  useEffect(() => {
-    if (summary.level > 0) syncVietnamDials(dials);
-  }, [summary.level, dials]);
-
+  // The dials are written into the console's cache by ColdWarDialHydrator, from
+  // the server, for the whole section. This panel only displays them.
   if (summary.level <= 0) return null;
 
   return (

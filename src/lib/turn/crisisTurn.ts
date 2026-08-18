@@ -18,6 +18,7 @@ import {
 import { processCrisisAidResolutions, reverseCrisisAidPenalties } from "@/lib/crises/aidFinalize";
 import { processCrisisChain, processVietnamChainOpening } from "@/lib/crises/crisisChain";
 import { tickVietnamEscalation } from "@/lib/crises/vietnamEscalation";
+import { syncVietnamFront, VIETNAM_FRONT_NAME } from "@/lib/crises/vietnamFront";
 import { refreshVietnamEscalationLevel } from "@/lib/crises/vietnamEscalationInterface";
 import { getGameState } from "@/lib/gameState";
 
@@ -53,8 +54,14 @@ export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
   // it progressively more expensive in approval.
   const gameState = await getGameState(db);
   await processVietnamChainOpening(db, turn, gameState?.currentYear);
-  await tickVietnamEscalation(db);
+  const vietnam = await tickVietnamEscalation(db);
   await refreshVietnamEscalationLevel(db);
+  // The ladder decides how deep the superpowers are in; the front is what that
+  // adds up to on the ground. Gated on the conflicts subsystem: a world with it
+  // switched off gets the ladder and its dials but no combat document.
+  if (gameState?.conflictsEnabled) {
+    await announceVietnamFront(await syncVietnamFront(db, vietnam, turn));
+  }
 
   if (crises.length === 0) return 0;
 
@@ -218,6 +225,22 @@ export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
   }
 
   return crises.length;
+}
+
+/** Wire copy for a change in the Vietnam front's lifecycle. Silent on no change. */
+async function announceVietnamFront(
+  action: Awaited<ReturnType<typeof syncVietnamFront>>
+): Promise<void> {
+  if (!action) return;
+  const message =
+    action === "opened"
+      ? `The ${VIETNAM_FRONT_NAME} opens as a shooting war.`
+      : action === "reopened"
+        ? `Fighting in the ${VIETNAM_FRONT_NAME} escalates again.`
+        : action === "wound_down"
+          ? `The ${VIETNAM_FRONT_NAME} is winding down as the superpowers step back.`
+          : `The ${VIETNAM_FRONT_NAME} is over.`;
+  await logWireEvent(action === "ended" ? "crisis_end" : "crisis_start", message);
 }
 
 /**
