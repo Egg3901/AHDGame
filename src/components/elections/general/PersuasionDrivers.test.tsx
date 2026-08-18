@@ -181,4 +181,18 @@ describe("PersuasionDrivers", () => {
     expect(screen.getByText("Gubernatorial Coattails")).toBeTruthy();
     expect(screen.getByText(/\+?4\.5%/)).toBeTruthy();
   });
+
+  it("states the persuadable-slice ceiling for the selected pair (ticket #1131)", () => {
+    render(
+      <PersuasionDrivers
+        stateId="OH"
+        stateName="Ohio"
+        candidates={THREE_WAY}
+        inputs={{ regByParty: { dem: 59.7, rep: 40.3 } }}
+      />
+    );
+    // dem lean 59.7 → 12.6% movable; rep lean 40.3 → 16.0% movable.
+    expect(screen.getByText(/at most 16\.0% of .* can be persuaded across/)).toBeTruthy();
+    expect(screen.getByText(/12\.6% of .* can be persuaded away/)).toBeTruthy();
+  });
 });

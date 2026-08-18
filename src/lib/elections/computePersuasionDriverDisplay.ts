@@ -283,3 +283,40 @@ export function computePersuasionDriverDisplay(
   if (!pair) return [];
   return computePairwiseDriverDisplay(candidates, pair.focusId, pair.opponentId, inputs);
 }
+
+/**
+ * Persuadable slice of a party's vote, in percent, for display (ticket #1131).
+ *
+ * The engine can only ever move `pool × transferableShare(reg) × (1 −
+ * persuasionResistance(reg))` of a party's vote in one cycle, no matter how
+ * favourable the drivers are. Players read a large registration lean as a
+ * vote-share floor and then ask why their positive drivers never carry them
+ * past 50%, so the UI states the slice outright.
+ *
+ * Missing / undefined Reg falls back to the engine's no-Reg baseline (20%).
+ */
+export function persuadableSlicePct(reg: number | undefined): number {
+  return effectivePeelableFraction(reg) * 100;
+}
+
+/**
+ * Both sides of the persuadable slice for a Focus/Opponent pair, plus the net
+ * driver total. `opponentSlicePct` is what Focus can win from the opponent this
+ * cycle; `focusSlicePct` is what Focus can lose. `netDriverPts` is the sum of
+ * the already peel-scaled driver rows (coattail "%" rows excluded, since they
+ * tilt nominal share rather than the persuadable slice).
+ */
+export function computePersuadableSliceReadout(
+  drivers: PersuasionDriver[],
+  focusParty: string,
+  opponentParty: string,
+  inputs: DriverDisplayInputs = {}
+): { focusSlicePct: number; opponentSlicePct: number; netDriverPts: number } {
+  return {
+    focusSlicePct: persuadableSlicePct(inputs.regByParty?.[focusParty]),
+    opponentSlicePct: persuadableSlicePct(inputs.regByParty?.[opponentParty]),
+    netDriverPts: drivers
+      .filter((d) => d.unit !== "%")
+      .reduce((sum, d) => sum + d.contributionPct, 0),
+  };
+}
