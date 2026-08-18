@@ -119,7 +119,11 @@ describe("corporateBondDefault", () => {
     expect(r.requiredFace).toBe(200_000);
   });
 
-  it("previewRefinanceIssuance applies default penalty (floors rating to CCC)", () => {
+  it("previewRefinanceIssuance prices a defaulted-debt roll on fundamentals, not the post-default CCC floor", () => {
+    // Ticket #1130. The default sets the CCC floor; pricing the roll that cures
+    // that default off the same floor is circular and tripled a corp's debt
+    // service while handing it no cash. A roll of existing principal is priced
+    // on what the corp actually looks like.
     const corp = {
       liquidCapital: 2_000_000,
       bondDefaultCreditPenaltyUntilTurn: 500,
@@ -139,9 +143,39 @@ describe("corporateBondDefault", () => {
       currentTurn: 100,
       fxByCurrency: EMPTY_FX,
     });
-    expect(p.creditRating.rating).toBe("CCC");
-    expect(p.creditRating.compositeScore).toBeLessThanOrEqual(12);
+    // Healthy balance sheet (2M cash, 200k debt, 1M income) — the penalty would
+    // otherwise force this to CCC and its 12-point spread regardless.
+    expect(p.creditRating.rating).not.toBe("CCC");
+    expect(p.creditRating.compositeScore).toBeGreaterThan(12);
+    // Still a real coupon (prime + tier spread + corporate premium), just not
+    // the distressed-tier one.
     expect(p.couponRate).toBeGreaterThan(4);
+    expect(p.couponRate).toBeLessThan(4 + 12);
+  });
+
+  it("previewRefinanceIssuance still prices a genuinely weak corp poorly", () => {
+    // The penalty is gone, not the rating. A corp with no equity and no income
+    // must still land in the distressed tier on its own merits.
+    const corp = {
+      liquidCapital: 0,
+      bondDefaultCreditPenaltyUntilTurn: 500,
+      headquartersState: "us-ca-test",
+    } as Corporation;
+    const bonds = [
+      { totalIssued: 500_000, defaulted: true, couponRate: 5, matured: false },
+    ] as Bond[];
+    const p = previewRefinanceIssuance({
+      corporation: corp,
+      liquidCapitalAnchor: 0,
+      allNonMaturedBonds: bonds,
+      actualFaceAnchor: 500_000,
+      sectorNpv: 0,
+      annualIncome: 0,
+      primeRate: 4,
+      currentTurn: 100,
+      fxByCurrency: EMPTY_FX,
+    });
+    expect(p.creditRating.rating).toBe("CCC");
   });
 
   describe("allocateShareholderPool (bug #0540 — pro-rata across all buckets)", () => {

@@ -35,12 +35,14 @@ export const MAX_DUES_FRACTION_OF_WAGE = 0.1;
 /**
  * Multiplier on per-turn treasury credits (dues) and debits (services).
  *
- * Annual dues and service prices are a few percent of era-deflated wages, then
- * spread across {@link TURNS_PER_YEAR} (48) turns, so the ledger moved in
- * pennies. Triple the flow so a working union actually sees money arrive and
- * leave, without retuning every wage or the dues slider.
+ * Annual dues are a few percent of era-deflated wages, then spread across
+ * {@link TURNS_PER_YEAR} (48) turns. A 3x scale still left the ledger in
+ * pennies against shop-sized organize costs. 12x makes a working union's
+ * dues cover a typical drive over a handful of turns without retuning wages
+ * or the dues slider. Approval math still uses the wage-fraction, not the
+ * scaled cash.
  */
-export const UNION_TREASURY_FLOW_SCALE = 3;
+export const UNION_TREASURY_FLOW_SCALE = 12;
 
 /**
  * Approval with no dues charged and no services running. Above the midpoint

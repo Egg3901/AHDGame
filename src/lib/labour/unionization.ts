@@ -57,26 +57,11 @@ export const UNIONIZATION_MINWAGE_WEIGHT = 20;
 export const UNIONIZATION_LAW_WEIGHT = 0.6;
 /**
  * Approval at which a representing union neither helps nor hurts its sector's
- * density. Members who are indifferent keep the shop exactly as organized as
- * economic conditions alone would.
+ * density under the old signed-around-50 formula. Kept so older call sites
+ * and comments that still mention "neutral approval" have a name; represented
+ * density now tracks approval directly (see {@link unionizationDriftTarget}).
  */
 export const UNIONIZATION_APPROVAL_NEUTRAL = 50;
-
-/**
- * Union dues v1: weight applied to the representing union's approval, measured
- * against {@link UNIONIZATION_APPROVAL_NEUTRAL}, before adding it to the
- * target. 0.6 puts the union's own contribution in ±30pp.
- *
- * SIGNED, unlike the `membershipPressure` term it replaces. That term could
- * only push density up, because recruitment was the only lever and there was no
- * way to run a union badly. Approval can sit below neutral, so a union that
- * charges heavy dues and funds nothing now watches its own shops drift back
- * toward unorganized. That downward half is the whole point: it is what makes
- * the dues slider a decision rather than free money, and it is what a targeted
- * organizing drive is pushing against when it spikes a sector above target and
- * `trendUnionization` walks it back down.
- */
-export const UNIONIZATION_APPROVAL_WEIGHT = 0.6;
 
 export interface UnionizationDriftInputs {
   /** CEO wage-level slider (1.0 = baseline). Absent/non-finite ⇒ 1 (neutral). */
@@ -105,10 +90,9 @@ export interface UnionizationDriftInputs {
    */
   unionLawBias: number | undefined;
   /**
-   * Union dues v1: the approval (0-100) of the union that REPRESENTS this
-   * sector, or undefined when no union holds it. Undefined leaves the term at
-   * 0, so unrepresented sectors keep Phase 5's NPC drift exactly as it was
-   * ("conversion not reinvention").
+   * Approval (0-100) of the union that REPRESENTS this sector, or undefined
+   * when no union holds it. When set, the drift target IS this approval.
+   * Undefined keeps Phase 5's economic NPC target ("conversion not reinvention").
    *
    * Caller resolves this from `CorporateSector.representingUnionId`, not from
    * a (countryId, sectorType) match: since players can found rivals, matching
@@ -137,42 +121,41 @@ export function realWageIndex(wageLevel: number, costOfLivingIndex: number | und
   return wageLevel / (safeCostOfLiving / 100);
 }
 
-/**
- * Target unionization level (0, 100) for the current turn's conditions. Pure
- *, no DB/turn state. `trendUnionization` steps the persisted value toward
- * this target by at most `UNIONIZATION_TREND_STEP_PER_TURN` per turn.
- */
-export function unionizationDriftTarget(inputs: UnionizationDriftInputs): number {
+function economicUnionizationTarget(inputs: UnionizationDriftInputs): number {
   const wageLevel = finiteOr(inputs.wageLevel, 1);
   const unemploymentRate = finiteOr(inputs.unemploymentRate, UNIONIZATION_NEUTRAL_UNEMPLOYMENT);
   const rawKaitz = finiteOr(inputs.minWageKaitzRatio, UNIONIZATION_NEUTRAL_KAITZ);
   const minWageKaitzRatio = rawKaitz > 0 ? rawKaitz : UNIONIZATION_NEUTRAL_KAITZ;
   const unionLawBias = finiteOr(inputs.unionLawBias, 0);
-  const representingUnionApproval = inputs.representingUnionApproval;
 
   const realWageTerm =
     (1 - realWageIndex(wageLevel, inputs.costOfLivingIndex)) * UNIONIZATION_REAL_WAGE_WEIGHT;
-  // Worker leverage: a tight labor market (low unemployment) raises pressure.
   const unemploymentTerm =
     (UNIONIZATION_NEUTRAL_UNEMPLOYMENT - unemploymentRate) * UNIONIZATION_UNEMPLOYMENT_WEIGHT;
-  // Weak minimum-wage protection (Kaitz ratio below neutral) raises pressure.
   const minWageTerm =
     (UNIONIZATION_NEUTRAL_KAITZ - minWageKaitzRatio) * UNIONIZATION_MINWAGE_WEIGHT;
-  // v3 Phase 7b: the government's structural lever, positive bias (collective
-  // bargaining protection) raises pressure, negative (right-to-work) lowers it.
   const lawTerm = unionLawBias * UNIONIZATION_LAW_WEIGHT;
-  // Union dues v1: the representing union's approval, signed about neutral, so
-  // a badly run union drags its own shops down as surely as a good one lifts
-  // them. Undefined (nobody represents this sector) contributes nothing.
-  const approvalTerm =
-    representingUnionApproval == null || !Number.isFinite(representingUnionApproval)
-      ? 0
-      : (Math.max(0, Math.min(100, representingUnionApproval)) - UNIONIZATION_APPROVAL_NEUTRAL) *
-        UNIONIZATION_APPROVAL_WEIGHT;
 
-  const target =
-    UNIONIZATION_BASELINE + realWageTerm + unemploymentTerm + minWageTerm + lawTerm + approvalTerm;
+  const target = UNIONIZATION_BASELINE + realWageTerm + unemploymentTerm + minWageTerm + lawTerm;
   return Math.max(0, Math.min(100, target));
+}
+
+/**
+ * Target unionization level (0, 100) for the current turn's conditions. Pure,
+ * no DB/turn state. `trendUnionization` steps the persisted value toward
+ * this target by at most `UNIONIZATION_TREND_STEP_PER_TURN` per turn.
+ *
+ * Represented shops track the representing union's approval: a drive that
+ * spikes density above approval walks back toward it, and a shop sitting
+ * below approval climbs toward it. Unrepresented shops keep the economic
+ * NPC target (wages, unemployment, min-wage, union law).
+ */
+export function unionizationDriftTarget(inputs: UnionizationDriftInputs): number {
+  const representingUnionApproval = inputs.representingUnionApproval;
+  if (representingUnionApproval != null && Number.isFinite(representingUnionApproval)) {
+    return Math.max(0, Math.min(100, representingUnionApproval));
+  }
+  return economicUnionizationTarget(inputs);
 }
 
 /**

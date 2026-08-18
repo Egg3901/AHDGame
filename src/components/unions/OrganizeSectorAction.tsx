@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { organizeSectorTreasuryCost } from "@/lib/unions/organizeSectorEconomy";
 
 interface MyUnion {
   id: string;
@@ -9,14 +10,16 @@ interface MyUnion {
   name: string;
   /** Action points a targeted sector drive costs, quoted by the union route. */
   organizeActionCost: number;
-  /** Treasury a targeted sector drive costs. Charged whether or not a raid lands. */
-  organizeSectorTreasuryCost: number;
 }
 
 interface OrganizeSectorActionProps {
   countryId: string;
   sectorType: string;
   sectorId: string;
+  /** Current workforce; used to quote a size-scaled treasury cost. */
+  workers?: number;
+  /** Current unionization 0-100; used when reinforcing an already-held shop. */
+  unionization?: number;
   /** Union currently holding this sector's representation, or null if none. */
   representingUnionId?: string | null;
   representingUnionName?: string | null;
@@ -41,6 +44,8 @@ export function OrganizeSectorAction({
   countryId,
   sectorType,
   sectorId,
+  workers,
+  unionization,
   representingUnionId,
   representingUnionName,
   onOrganized,
@@ -70,7 +75,6 @@ export function OrganizeSectorAction({
           name: unionData.union.name,
           organizeActionCost:
             unionData.union.organizeSectorActionCost ?? unionData.union.organizeActionCost ?? 0,
-          organizeSectorTreasuryCost: unionData.union.organizeSectorTreasuryCost ?? 0,
         });
       } catch {
         // Silent: this is a self-gating affordance, not a data surface that
@@ -91,6 +95,11 @@ export function OrganizeSectorAction({
 
   const alreadyOurs = representingUnionId != null && representingUnionId === myUnion.id;
   const isRaid = representingUnionId != null && !alreadyOurs;
+  const treasuryCost = organizeSectorTreasuryCost({
+    workers,
+    unionization,
+    isOwnSector: alreadyOurs,
+  });
 
   async function handleOrganize() {
     if (!myUnion) return;
@@ -140,7 +149,7 @@ export function OrganizeSectorAction({
           </button>
           <span className="ml-2 text-[11px] text-muted">
             Costs {myUnion.organizeActionCost} action points and{" "}
-            {myUnion.organizeSectorTreasuryCost.toLocaleString("en-US")} from the treasury
+            {treasuryCost.toLocaleString("en-US")} from the treasury
           </span>
         </>
       ) : (
@@ -171,7 +180,7 @@ export function OrganizeSectorAction({
           </button>
           <span className="ml-2 text-[11px] text-muted">
             Costs {myUnion.organizeActionCost} action points and{" "}
-            {myUnion.organizeSectorTreasuryCost.toLocaleString("en-US")} from the treasury
+            {treasuryCost.toLocaleString("en-US")} from the treasury
             {isRaid ? ", win or lose" : ""}
           </span>
         </>
