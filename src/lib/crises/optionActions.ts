@@ -34,10 +34,10 @@ import {
   escalationApprovalCost,
   getVietnamEscalation,
   recordVietnamMove,
-  rungForLevel,
   supportPctGdpForLevel,
   vietnamSideForCountry,
 } from "@/lib/crises/vietnamEscalation";
+import { announceVietnamMove } from "@/lib/crises/vietnamWire";
 import { ALL_CRISIS_TEMPLATES } from "@/lib/crises/templates";
 import { createCrisisFromTemplate } from "@/lib/crises/createCrisisFromTemplate";
 import { WARSAW_PACT_SATELLITE_COUNTRY_IDS } from "@/lib/crises/warsawPactSatellites";
@@ -613,12 +613,10 @@ async function vietnamSupport(ctx: CrisisActionContext): Promise<void> {
     [ctx.countryId]
   );
 
-  const rung = rungForLevel(after.level);
-  await logWireEvent(
-    "crisis_outcome",
-    `${ctx.countryId} deepens its commitment in Vietnam${rung ? `: ${rung.label.toLowerCase()}` : ""}`,
-    { href: `/world/crises/${ctx.crisis._id.toString()}` }
-  );
+  // Press coverage: the acting capital's own channel always, plus the full rung
+  // announcement (global feed, wire, news webhook, both capitals) when the
+  // decision actually moved the ladder.
+  await announceVietnamMove(ctx.countryId, state, after, "support");
 }
 
 /**
@@ -640,13 +638,7 @@ async function vietnamDeescalate(ctx: CrisisActionContext): Promise<void> {
 
   await applyCrisisEffects(db, deescalationApprovalCost(state), [], [ctx.countryId]);
 
-  await logWireEvent(
-    "crisis_outcome",
-    after.level < state.level
-      ? `${ctx.countryId} steps down a rung in Vietnam`
-      : `${ctx.countryId} pares back its commitment in Vietnam`,
-    { href: `/world/crises/${ctx.crisis._id.toString()}` }
-  );
+  await announceVietnamMove(ctx.countryId, state, after, "deescalate");
 }
 
 /**
