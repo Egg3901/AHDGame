@@ -16,6 +16,10 @@ import {
   calculateCollectiveReduction,
 } from "@/lib/crises/interactionEngine";
 import { processCrisisAidResolutions, reverseCrisisAidPenalties } from "@/lib/crises/aidFinalize";
+import { processCrisisChain, processVietnamChainOpening } from "@/lib/crises/crisisChain";
+import { tickVietnamEscalation } from "@/lib/crises/vietnamEscalation";
+import { refreshVietnamEscalationLevel } from "@/lib/crises/vietnamEscalationInterface";
+import { getGameState } from "@/lib/gameState";
 
 /**
  * Process active crises for the current turn.
@@ -42,6 +46,15 @@ export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
   // crisis is currently active, so they must execute before the early return.
   await processCrisisAidResolutions(db, turn);
   await reverseCrisisAidPenalties(db, turn);
+
+  // Chained families open on the world clock, not on a crisis being active, so
+  // this runs before the early return. The war clock behind the Vietnam ladder
+  // advances every turn the war is being fought, which is what makes prolonging
+  // it progressively more expensive in approval.
+  const gameState = await getGameState(db);
+  await processVietnamChainOpening(db, turn, gameState?.currentYear);
+  await tickVietnamEscalation(db);
+  await refreshVietnamEscalationLevel(db);
 
   if (crises.length === 0) return 0;
 
@@ -189,6 +202,10 @@ export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
       const targetStateIds = resolveScope(crisis, allStateIds, statesByCountry);
       await notifyAffectedPlayers(db, crisis, targetStateIds, "crisis_end");
     }
+
+    // A rung of a chained family ending is what advances the chain. The family's
+    // own state decides what comes next, including nothing at all.
+    await processCrisisChain(db, toResolve, turn);
   }
 
   // Auto-resolve expired interactions (only if enabled)

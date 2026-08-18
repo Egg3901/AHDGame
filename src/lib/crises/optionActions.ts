@@ -25,6 +25,19 @@ import { persistBargainingMediationAction } from "@/lib/unions/commands/bargaini
 import { getBargainingMediationAvailability } from "@/lib/unions/bargaining";
 import { clampWageLevel, WAGE_LEVEL_MAX } from "@/lib/labour/laborCost";
 import { logWireEvent } from "@/lib/wireEvent";
+import type { FederalBudget } from "@/lib/db/types/budget";
+import { spendFromTreasury } from "@/lib/budget/treasurySpend";
+import { computeAidOutcome } from "@/lib/crises/aidScaling";
+import { applyCrisisEffects } from "@/lib/crises/applyEffects";
+import {
+  deescalationApprovalCost,
+  escalationApprovalCost,
+  getVietnamEscalation,
+  recordVietnamMove,
+  rungForLevel,
+  supportPctGdpForLevel,
+  vietnamSideForCountry,
+} from "@/lib/crises/vietnamEscalation";
 import { ALL_CRISIS_TEMPLATES } from "@/lib/crises/templates";
 import { createCrisisFromTemplate } from "@/lib/crises/createCrisisFromTemplate";
 import { WARSAW_PACT_SATELLITE_COUNTRY_IDS } from "@/lib/crises/warsawPactSatellites";
@@ -553,6 +566,89 @@ async function spawnFollowUpCrisis(
   );
 }
 
+// ── 7. Vietnam escalation ladder ───────────────────────────────────────────
+
+/**
+ * Commit this superpower's money and materiel to its side of the Vietnam war.
+ *
+ * The money moves through the same primitives as international aid: the pledge
+ * is sized as a share of the sender's GDP, priced by `computeAidOutcome`, and
+ * paid out of the treasury by `spendFromTreasury` (surplus first, remainder as
+ * debt). Nothing is minted: every unit the ladder records as spent left a
+ * treasury, which is what the engine-level conservation test pins.
+ *
+ * On top of the aid system's diplomatic bump for standing by a client, the
+ * leader pays an anti-war approval cost that grows both with the rung and with
+ * how long the war has already dragged on.
+ */
+async function vietnamSupport(ctx: CrisisActionContext): Promise<void> {
+  const { db } = ctx;
+  const side = vietnamSideForCountry(ctx.countryId);
+  if (!side) {
+    console.warn(`[crisis] vietnamSupport: ${ctx.countryId} is not on the Vietnam ladder`);
+    return;
+  }
+
+  const state = await getVietnamEscalation(db);
+  const budget = await db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ countryId: ctx.countryId as CountryId });
+  const gdp =
+    budget?.gdpSmoothed && budget.gdpSmoothed > 0 ? budget.gdpSmoothed : (budget?.gdp ?? 0);
+
+  const pctGdp = supportPctGdpForLevel(state.level);
+  const { amountLocal, senderEffects } =
+    gdp > 0 ? computeAidOutcome(pctGdp, gdp) : { amountLocal: 0, senderEffects: [] };
+
+  if (amountLocal > 0) {
+    await spendFromTreasury(db, ctx.countryId as CountryId, amountLocal, { resyncDerived: true });
+  }
+
+  const { after } = await recordVietnamMove(db, side, "support", amountLocal);
+
+  await applyCrisisEffects(
+    db,
+    [...senderEffects, ...escalationApprovalCost(state)],
+    [],
+    [ctx.countryId]
+  );
+
+  const rung = rungForLevel(after.level);
+  await logWireEvent(
+    "crisis_outcome",
+    `${ctx.countryId} deepens its commitment in Vietnam${rung ? `: ${rung.label.toLowerCase()}` : ""}`,
+    { href: `/world/crises/${ctx.crisis._id.toString()}` }
+  );
+}
+
+/**
+ * Pull this superpower back from the ladder. Drains its own committed support
+ * first and only then brings the rung itself down, so restraint by one capital
+ * cannot unilaterally cancel the other capital's war. Costs approval with hawks,
+ * and costs more the higher the rung you are climbing down from.
+ */
+async function vietnamDeescalate(ctx: CrisisActionContext): Promise<void> {
+  const { db } = ctx;
+  const side = vietnamSideForCountry(ctx.countryId);
+  if (!side) {
+    console.warn(`[crisis] vietnamDeescalate: ${ctx.countryId} is not on the Vietnam ladder`);
+    return;
+  }
+
+  const state = await getVietnamEscalation(db);
+  const { after } = await recordVietnamMove(db, side, "deescalate");
+
+  await applyCrisisEffects(db, deescalationApprovalCost(state), [], [ctx.countryId]);
+
+  await logWireEvent(
+    "crisis_outcome",
+    after.level < state.level
+      ? `${ctx.countryId} steps down a rung in Vietnam`
+      : `${ctx.countryId} pares back its commitment in Vietnam`,
+    { href: `/world/crises/${ctx.crisis._id.toString()}` }
+  );
+}
+
 /**
  * Dispatch a crisis decision option's real-subsystem action, if it has one.
  * Called by `submitCrisisDecision` after the option's flat effects apply and
@@ -588,6 +684,12 @@ export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<v
         break;
       case "concessionBill":
         await concessionBill(ctx, action.title, action.summary, action.category);
+        break;
+      case "vietnamSupport":
+        await vietnamSupport(ctx);
+        break;
+      case "vietnamDeescalate":
+        await vietnamDeescalate(ctx);
         break;
     }
   } catch (err) {

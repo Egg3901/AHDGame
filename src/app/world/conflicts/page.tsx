@@ -5,6 +5,8 @@ import { getDb } from "@/lib/mongodb";
 import { listActiveConflicts } from "@/lib/db/collections/conflicts";
 import { casualtiesByTheater } from "@/lib/db/collections/battleReports";
 import { toConflictView } from "./_coldwar/conflictView";
+import { VietnamEscalationPanel } from "./_coldwar/VietnamEscalationPanel";
+import { getVietnamEscalationSummary } from "@/lib/crises/vietnamEscalation";
 
 // Conflicts hub — every live conflict in the world, on the map and in the list.
 // Gated by `conflictsEnabled`; the themed-island shell and fonts come from the layout.
@@ -26,5 +28,16 @@ export default async function ConflictsPage() {
     toConflictView(d, { startingYear, casualties: casualties[d._id] ?? 0 })
   );
 
-  return <GlobalConflictsBoard year={currentYear ?? startingYear} conflicts={conflicts} />;
+  const vietnam = await getVietnamEscalationSummary(db);
+
+  return (
+    <>
+      {vietnam.level > 0 ? (
+        <div style={{ padding: "26px 26px 0" }}>
+          <VietnamEscalationPanel summary={vietnam} />
+        </div>
+      ) : null}
+      <GlobalConflictsBoard year={currentYear ?? startingYear} conflicts={conflicts} />
+    </>
+  );
 }

@@ -202,10 +202,16 @@ export async function applyEffectsForCrisis(
  * their own multi-contributor flows and are not treated as multi-responder here.
  */
 export function isMultiResponderNode(
-  crisis: Pick<Crisis, "scope">,
+  crisis: Pick<Crisis, "scope" | "countryIds">,
   node: CrisisDecisionNode
 ): boolean {
-  return crisis.scope === "global" && node.type === "choice";
+  if (node.type !== "choice") return false;
+  if (crisis.scope === "global") return true;
+  // A country-scoped crisis addressed to MORE THAN ONE nation is also answered
+  // per country: the chained Vietnam rungs put the same question to both
+  // superpowers, and neither leader's choice may resolve the other's. Ordinary
+  // country crises carry exactly one countryId and are untouched by this.
+  return crisis.scope === "country" && (crisis.countryIds?.length ?? 0) > 1;
 }
 
 /**
@@ -449,6 +455,23 @@ export async function submitCrisisDecision(
 
     if (option.effects.length > 0) {
       await applyEffectsForCountry(db, countryId, option.effects);
+    }
+
+    // Multi-responder options get the same real-subsystem action hook as
+    // single-responder ones. Without this a per-country choice could only ever
+    // nudge metrics, which is precisely the cosmetic-crisis problem the hook
+    // exists to solve.
+    if (option.action) {
+      const gameState = await getGameState(db);
+      await runCrisisOptionAction({
+        db,
+        crisis,
+        interaction,
+        option,
+        characterId,
+        countryId,
+        currentTurn: gameState?.currentTurn ?? crisis.startTurn,
+      });
     }
 
     const character = await db
