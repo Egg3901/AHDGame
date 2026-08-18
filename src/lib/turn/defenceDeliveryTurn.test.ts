@@ -75,8 +75,8 @@ interface World {
   appropriation: number;
   /** Local currency already committed to live contracts. */
   encumbered: number;
-  /** Idempotency keys already taken, so a re-run turn cannot pay twice. */
-  claims: Set<string>;
+  /** Claim records already taken (full docs, as Mongo keeps them), so a re-run turn cannot pay twice. */
+  claims: Map<string, Record<string, unknown>>;
   /** Live commodity book. Empty leaves every recipe at its nominal input share. */
   commodityPrices?: CommodityPrice[];
   arsenalDeposits: { domain: string; lots: number; grade: number }[];
@@ -177,12 +177,15 @@ function stubDb(w: World): Db {
         // The shared money primitive's claim record. A unique `_id` insert is the only atomic
         // guarantee it relies on, so the stub models exactly that and nothing else.
         return {
-          findOne: async (f: { _id: string }) => (w.claims.has(f._id) ? { _id: f._id } : null),
+          findOne: async (f: { _id: string }) => w.claims.get(f._id) ?? null,
           insertOne: async (doc: { _id: string }) => {
             if (w.claims.has(doc._id)) {
               throw Object.assign(new Error("duplicate key"), { code: 11000 });
             }
-            w.claims.add(doc._id);
+            // The FULL document, exactly as Mongo would keep it: completeMoneyMove reads the
+            // claim back and maps over its legs, so a stub that stored only the key made
+            // every completion throw and every delivery reverse itself.
+            w.claims.set(doc._id, doc as unknown as Record<string, unknown>);
             return { insertedId: doc._id };
           },
           updateOne: async () => ({ matchedCount: 1, modifiedCount: 1 }),
@@ -276,7 +279,7 @@ function world(over: Partial<World> = {}): World {
     },
     appropriation: 1_000_000_000,
     encumbered: 0,
-    claims: new Set<string>(),
+    claims: new Map<string, Record<string, unknown>>(),
     arsenalDeposits: [],
     corpCredits: [],
     contractUpdates: [],

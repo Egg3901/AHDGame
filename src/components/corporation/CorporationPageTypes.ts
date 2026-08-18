@@ -74,8 +74,8 @@ export interface CorporationContractView {
   /** Cash received, and what building those lots cost - margin, not gross. */
   amountPaid: number;
   productionCostPaid: number;
-  /** Break-even for one lot at current input prices. */
-  unitProductionCost: number;
+  /** Break-even for one lot at current input prices; null when the plant no longer exists. */
+  unitProductionCost: number | null;
   /** Local currency the buyer still has committed against this order. */
   encumberedAmount: number;
   /** Why the last delivery turn banked output instead of shipping it. */

@@ -263,18 +263,25 @@ export default function DefenceContractsTab({
                         </span>
                       </div>
                       <div className="text-[11px] text-muted">
-                        {formatAmount(c.pricePerLot)} per lot · costs{" "}
-                        {formatAmount(c.unitProductionCost)} to build · margin{" "}
-                        <span
-                          className={
-                            c.pricePerLot - c.unitProductionCost >= 0
-                              ? "text-[var(--success)]"
-                              : "text-[var(--error)]"
-                          }
-                        >
-                          {formatAmount(c.pricePerLot - c.unitProductionCost)}
-                        </span>{" "}
-                        per lot
+                        {formatAmount(c.pricePerLot)} per lot
+                        {c.unitProductionCost != null ? (
+                          <>
+                            {" "}
+                            · costs {formatAmount(c.unitProductionCost)} to build · margin{" "}
+                            <span
+                              className={
+                                c.pricePerLot - c.unitProductionCost >= 0
+                                  ? "text-[var(--success)]"
+                                  : "text-[var(--error)]"
+                              }
+                            >
+                              {formatAmount(c.pricePerLot - c.unitProductionCost)}
+                            </span>{" "}
+                            per lot
+                          </>
+                        ) : (
+                          <> · build cost unknown: the certified plant is gone</>
+                        )}
                       </div>
                       <div className="text-[11px] text-muted">
                         paid {formatAmount(c.amountPaid)} · build cost{" "}
