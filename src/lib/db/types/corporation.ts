@@ -819,6 +819,14 @@ export interface CorporateSector {
   effectivePosture?: number;
   clearingStartTurn?: number | null;
   /**
+   * Consecutive turns the sector cleared less than STRANDED_LOW_FILL_THRESHOLD
+   * of its output (clearing mode only; mothballed turns hold the count). The
+   * chronic-stranding signal behind the player stranded-plant warning and the
+   * NPP stranded-divest — one turn of soldFraction flickers on market noise,
+   * this does not.
+   */
+  lowFillTurns?: number;
+  /**
    * Capital tier (marketSystemMode >= "capital", audit t806 Fix 4 v1):
    * productive capacity in output units/turn. Seeded with 10% headroom at
    * first exposure (mode flip is a no-op); grows with the growth slider,

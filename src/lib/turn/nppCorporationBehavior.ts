@@ -65,6 +65,10 @@ import {
   type ExtractableResource,
 } from "@/lib/constants/commodities";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
+import {
+  STRANDED_DIVEST_TURNS,
+  STRANDED_DIVEST_MAX_PER_TURN,
+} from "@/lib/corporations/strandedPlant";
 import { clampWageLevel } from "@/lib/labour/laborCost";
 import { labourAtLeast, isLabourSystemMode } from "@/lib/labour/modes";
 import { CHRONIC_LOW_FILL_THRESHOLD } from "@/lib/turn/npp/strategyExpectedRevenue";
@@ -1364,6 +1368,36 @@ export function makeNppCorpDecision(
     }
   }
 
+  // ── 1b. Divest stranded plants (supply-dislocation phase 2) ───────────────
+  // A plant that has cleared less than half its output for STRANDED_DIVEST_TURNS
+  // straight is built in the wrong place, and margin cannot see it: the units
+  // that DO sell carry a healthy margin while most of the output evaporates.
+  // Exit it so the corp's next founding (state-aware since P1) rebuilds where
+  // the demand is. Same protections as the margin divest — never the corp's
+  // core type, never the last sector, only while something else is profitable —
+  // plus a one-per-turn cap so exits stay gradual. Capacity is deliberately not
+  // restored to the unowned pool: the state is glutted, re-listing the bucket
+  // would invite the next founding straight back in.
+  if (plants?.enabled && numSectors > 1 && profitableSectors > 0) {
+    let strandedDivests = 0;
+    // Longest-stranded first, so the cap exits the worst plant.
+    const stranded = sectorProfits
+      .filter(
+        (sp) =>
+          (sp.sector.lowFillTurns ?? 0) >= STRANDED_DIVEST_TURNS &&
+          sp.sector.sectorType !== corp.type &&
+          sp.sector.mothballed !== true &&
+          !divestedSectorIds.includes(sp.sector._id)
+      )
+      .sort((a, b) => (b.sector.lowFillTurns ?? 0) - (a.sector.lowFillTurns ?? 0));
+    for (const sp of stranded) {
+      if (strandedDivests >= STRANDED_DIVEST_MAX_PER_TURN) break;
+      if (numSectors - divestedSectorIds.length <= 1) break;
+      divestedSectorIds.push(sp.sector._id);
+      strandedDivests += 1;
+    }
+  }
+
   // Effective sector count after divestiture
   const effectiveSectors = numSectors - divestedSectorIds.length;
 
@@ -1428,10 +1462,16 @@ export function makeNppCorpDecision(
     }
     // Thin margin → keep current target
 
+    // State-resolution shortage (supply-dislocation P1b): the country blend
+    // hid exactly the dislocation this tilt exists to correct — a plant in a
+    // glutted state kept growing because OTHER states' shortage pulled the
+    // national ratio up. Score the plant's own state, country fallback.
     const shortage = sectorShortageScore(
       sp.sector.sectorType,
       sp.sector.countryId ?? corp.countryId,
-      priceRatioOf
+      (commodity, cid) =>
+        placementSignals?.statePriceRatioOf?.(commodity, sp.sector.stateId) ??
+        priceRatioOf(commodity, cid)
     );
     if (shortage >= 1.15 && sp.marginCategory !== "loss" && !growthUnaffordable) {
       targetGrowth = Math.min(5, targetGrowth + 1);
@@ -2036,11 +2076,26 @@ export function makeNppCorpDecision(
       const accrualTurns = Number.isFinite(lastOrderTurn)
         ? Math.min(buildCycle, Math.max(0, ctx.turn - lastOrderTurn))
         : 1;
+      // Stranded-plant decay (supply-dislocation P1b): in a state whose own
+      // market is deep-glut for this sector's outputs, replace only half of
+      // what wears out. Full replacement held every misplaced plant at its
+      // built size forever; half lets it shrink toward what its state can
+      // absorb while a plant in a starved state replaces in full. Growth is
+      // already state-tilted via targetGrowthRate (section 2a).
+      const stateShortage = sectorShortageScore(
+        sector.sectorType,
+        sectorCountryId,
+        (commodity, cid) =>
+          placementSignals?.statePriceRatioOf?.(commodity, sector.stateId) ??
+          priceRatioOf(commodity, cid)
+      );
+      const strandedDecayScale = stateShortage <= 0.85 ? 0.5 : 1;
       const replacementUnits =
         runUnits *
         CAPITAL_DEPRECIATION_PER_TURN *
         accrualTurns *
         fillScale *
+        strandedDecayScale *
         NPP_REINVEST_AGGRESSION;
       const growthWanted =
         !levers.allowGrowthCapex || queueDepth >= NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH

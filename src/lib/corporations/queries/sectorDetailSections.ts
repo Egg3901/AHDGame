@@ -1203,6 +1203,12 @@ export interface SectorPlantsSection {
      */
     soldByCommodity: { commodity: string; fraction: number }[];
     /**
+     * Consecutive turns the sector cleared under half its output (see
+     * strandedPlant.ts). Drives the stranded-plant warning on the sector page
+     * once it reaches STRANDED_WARN_TURNS.
+     */
+    lowFillTurns: number;
+    /**
      * Realized revenue per unit PRODUCED (not per unit sold): what a unit
      * coming off the line actually brought in, unsold units included at zero.
      * Null when nothing was produced.
@@ -1569,6 +1575,7 @@ export function buildSectorPlantsSection(args: {
     truth: {
       soldFraction,
       soldByCommodity,
+      lowFillTurns: num(sector.lowFillTurns) ?? 0,
       receivedPerUnitAnchor,
       costPerUnitAnchor,
       fillAdjustedMarginPct,

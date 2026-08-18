@@ -116,6 +116,7 @@ import {
 import { resolveSectorGrowthPolicy } from "./sectorGrowthPolicy";
 import { resolveSectorLabourEconomics, resolveSectorLabourProductionEffects } from "./sectorLabour";
 import { computeSectorOutputUnits } from "./sectorOutputUnits";
+import { STRANDED_LOW_FILL_THRESHOLD } from "@/lib/corporations/strandedPlant";
 import type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
 
 export { computeSectorOutputUnits } from "./sectorOutputUnits";
@@ -1847,6 +1848,15 @@ export function processSector(
   if (market.clearingEnabled && clearing) {
     sectorUpdate.clearingFactor = Math.round(clearingFactor * 1000) / 1000;
     sectorUpdate.soldFraction = Math.round(clearing.soldFraction * 1000) / 1000;
+    // Chronic-stranding counter: consecutive turns the sector cleared less
+    // than half its output. soldFraction alone is one turn of signal, which
+    // flickers on market noise; the counter is what the stranded-plant player
+    // warning and the NPP stranded-divest gate on. Mothballed plants hold the
+    // count (deliberately idle is not evidence either way).
+    if (!mothballed) {
+      sectorUpdate.lowFillTurns =
+        clearing.soldFraction < STRANDED_LOW_FILL_THRESHOLD ? (sector.lowFillTurns ?? 0) + 1 : 0;
+    }
     // Per-output detail behind the weighted headline, so the sector page can
     // show WHICH output failed to clear instead of one blended number.
     const soldByCommodity: Record<string, number> = {};

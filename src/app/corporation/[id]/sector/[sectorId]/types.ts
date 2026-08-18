@@ -606,6 +606,8 @@ export interface PlantsData {
   truth?: {
     soldFraction: number | null;
     soldByCommodity: { commodity: string; fraction: number }[];
+    /** Consecutive turns under half fill; optional for payloads predating it. */
+    lowFillTurns?: number;
     /** Realized revenue per unit PRODUCED, unsold units included at zero. */
     receivedPerUnitAnchor: number | null;
     /** Full operating cost spread over every unit produced. */

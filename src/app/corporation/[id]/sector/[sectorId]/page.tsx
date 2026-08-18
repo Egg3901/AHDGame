@@ -26,6 +26,7 @@ import WageLevelPanel from "./sections/WageLevelPanel";
 import PricingPanel from "./sections/PricingPanel";
 import CapitalPanel from "./sections/CapitalPanel";
 import MarketRewardBanner from "./sections/MarketRewardBanner";
+import StrandedPlantBanner from "./sections/StrandedPlantBanner";
 import UnionBustingPanel from "./sections/UnionBustingPanel";
 import { OrganizeSectorAction } from "@/components/unions/OrganizeSectorAction";
 import ManagementPanel from "./sections/ManagementPanel";
@@ -863,6 +864,14 @@ export default function SectorDetailPage() {
 
             {(pricing || capital) && (
               <MarketRewardBanner hasPricing={!!pricing} hasCapital={!!capital} />
+            )}
+
+            {plants?.truth && (
+              <StrandedPlantBanner
+                lowFillTurns={plants.truth.lowFillTurns ?? 0}
+                soldFraction={plants.truth.soldFraction}
+                isCeo={isCeo}
+              />
             )}
 
             {pricing && (
