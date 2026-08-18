@@ -133,7 +133,7 @@ describe("OrganizeSectorAction gating", () => {
     });
   });
 
-  it("shows no action when the sector is already the viewer's own union", async () => {
+  it("lets a head reinforce a shop they already represent", async () => {
     global.fetch = mockFetch({ unionLeaderOf: "u1" });
     render(
       <OrganizeSectorAction
@@ -145,6 +145,6 @@ describe("OrganizeSectorAction gating", () => {
     );
 
     expect(await screen.findByText(/already organizes this sector/i)).toBeTruthy();
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByRole("button", { name: /organize this sector/i })).toBeTruthy();
   });
 });

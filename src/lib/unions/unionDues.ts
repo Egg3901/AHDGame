@@ -33,6 +33,16 @@ import {
 export const MAX_DUES_FRACTION_OF_WAGE = 0.1;
 
 /**
+ * Multiplier on per-turn treasury credits (dues) and debits (services).
+ *
+ * Annual dues and service prices are a few percent of era-deflated wages, then
+ * spread across {@link TURNS_PER_YEAR} (48) turns, so the ledger moved in
+ * pennies. Triple the flow so a working union actually sees money arrive and
+ * leave, without retuning every wage or the dues slider.
+ */
+export const UNION_TREASURY_FLOW_SCALE = 3;
+
+/**
  * Approval with no dues charged and no services running. Above the midpoint
  * because a union that asks nothing of its members is not disliked, it is
  * merely useless: it has no treasury, so it cannot strike, cannot run services
@@ -114,7 +124,7 @@ export function maxDuesForWage(annualWage: number): number {
 export function duesIncomePerTurn(members: number, duesPerWorkerAnnual: number): number {
   const m = Math.max(0, finitePositive(members));
   const rate = Math.max(0, finitePositive(duesPerWorkerAnnual));
-  return (m * rate) / TURNS_PER_YEAR;
+  return (UNION_TREASURY_FLOW_SCALE * m * rate) / TURNS_PER_YEAR;
 }
 
 /** Treasury spent this turn running the active service slate. */
@@ -125,7 +135,7 @@ export function servicesCostPerTurn(
 ): number {
   const m = Math.max(0, finitePositive(members));
   const wage = Math.max(0, finitePositive(annualWage));
-  return (m * wage * servicesCostFraction(active)) / TURNS_PER_YEAR;
+  return (UNION_TREASURY_FLOW_SCALE * m * wage * servicesCostFraction(active)) / TURNS_PER_YEAR;
 }
 
 export interface ApprovalInputs {
