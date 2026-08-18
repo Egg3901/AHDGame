@@ -1,5 +1,17 @@
 import type { ObjectId } from "mongodb";
 
+/**
+ * One lever's branch-tree state. `starter` is the tier-1 unlock that gates the
+ * three branch sub-tracks; `a`/`b`/`c` are the branch levels (0..maxBranchLevel
+ * from OPS_TREES). Branch semantics per lever live in `upgradeCosts.ts`.
+ */
+export interface CampaignOpsTree {
+  starter: boolean;
+  a: number;
+  b: number;
+  c: number;
+}
+
 export interface CampaignFogOfWar {
   fundraisingLevel: number;
   oppositionResearchLevel: number;
@@ -11,6 +23,8 @@ export interface CampaignFogOfWar {
 export interface CampaignActivity {
   type: "upgrade" | "downgrade" | "suspend_endorse";
   category?: "fundraising" | "oppositionResearch" | "groundGame" | "mediaSpending";
+  /** Strategic Operations v2: which branch sub-track this entry concerns. */
+  branch?: "a" | "b" | "c";
   newLevel?: number;
   costFunds?: number;
   costActions?: number;
@@ -60,10 +74,29 @@ export interface Campaign {
   funds: number;
   actions: number;
 
+  /**
+   * Legacy linear investment levels (0..N). Retained as the migration source
+   * of record and for back-compat reads on rows not yet converted to the
+   * branch-tree model. New purchases write the `*Tree` fields below; the
+   * one-shot migration (`migrateCampaignOpsTrees`) maps these into a starter
+   * flag + branch levels. Do NOT add new consumers of these — read the tree.
+   */
   fundraisingLevel: number;
   oppositionResearchLevel: number;
   groundGameLevel: number;
   mediaSpendingLevel: number;
+
+  /**
+   * Branch-tree investment (Strategic Operations v2). Each lever is a starter
+   * unlock (tier 1) plus three independently-levelled branch sub-tracks
+   * (a/b/c, each 0..maxBranchLevel). The per-branch meaning (what a/b/c do) is
+   * defined in `upgradeCosts.ts` OPS_TREES. Optional/undefined on legacy rows
+   * until the migration backfills them; effect code degrades to 0 / false.
+   */
+  fundraisingTree?: CampaignOpsTree;
+  oppositionResearchTree?: CampaignOpsTree;
+  groundGameTree?: CampaignOpsTree;
+  mediaSpendingTree?: CampaignOpsTree;
 
   oppositionTargetId: ObjectId | null;
   oppositionTargetName: string | null;

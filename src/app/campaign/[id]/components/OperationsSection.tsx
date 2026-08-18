@@ -1,179 +1,125 @@
 "use client";
 
+import { useState } from "react";
 import { Tooltip } from "@/components/Tooltip";
-import { PlayerSelector } from "@/components/PlayerSelector";
-import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
-import { CAMPAIGN_CATEGORIES, type CampaignData } from "@/lib/campaigns/dto/campaignView";
+import {
+  CAMPAIGN_CATEGORIES,
+  getCampaignCategoriesForElection,
+  type CampaignData,
+} from "@/lib/campaigns/dto/campaignView";
+import type { UpgradeCategory } from "@/lib/campaigns/upgradeCosts";
 import { LevelBar } from "./LevelBar";
-import { getMaxLevel, type UpgradeCategory } from "@/lib/campaigns/upgradeCosts";
+import { OperationsModal } from "./OperationsModal";
 
 interface OperationsSectionProps {
   campaign: CampaignData;
   isOwner: boolean;
   upgrading: string | null;
-  onUpgrade: (category: string, targetId?: string) => void;
+  onUpgrade: (category: string, branch?: "a" | "b" | "c" | null, targetId?: string) => void;
+  onRetarget?: (targetId: string) => void;
   onResetOppositionResearch?: () => void;
   resettingOppositionResearch?: boolean;
 }
 
+/**
+ * Strategic Operations v2. Owner view is a row of one button per lever; clicking
+ * a button opens that lever's tree modal (starter + three branch sub-tracks).
+ * Non-owner (fog) view is a compact read-only investment summary.
+ */
 export function OperationsSection({
   campaign,
   isOwner,
   upgrading,
   onUpgrade,
+  onRetarget,
   onResetOppositionResearch,
   resettingOppositionResearch = false,
 }: OperationsSectionProps) {
-  // Upgrade costs + funds are in the campaign's local currency; format the face
-  // value (useCurrency().formatFull would convert anchor→local → double-count).
-  const formatFull = (value: number) => formatCurrencyFaceAmount(value, campaign.currencyCode);
+  const [openCategory, setOpenCategory] = useState<string | null>(null);
+
+  // Race-family-aware copy (swing states vs counties vs precincts) when we know
+  // the election; otherwise presidential-default labels.
+  const categories = campaign.electionInfo?.electionType
+    ? getCampaignCategoriesForElection({ electionType: campaign.electionInfo.electionType })
+    : CAMPAIGN_CATEGORIES;
+
+  const opsTrees = campaign.opsTrees;
+
+  // Non-owner fog view — read-only summary using the shared level snapshot.
+  if (!isOwner || !opsTrees) {
+    return (
+      <div className="mb-6 rounded-xl border border-card-border bg-card p-5">
+        <h2 className="mb-4 text-lg font-semibold">Campaign Operations</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {categories.map((cat) => {
+            const level = campaign.levels[cat.key as keyof typeof campaign.levels];
+            return (
+              <div key={cat.key} className={`rounded-lg border p-4 ${cat.bgClass}`}>
+                <div className="mb-2 flex items-start justify-between">
+                  <div>
+                    <h3 className={`text-sm font-semibold ${cat.colorClass}`}>{cat.label}</h3>
+                    <p className="mt-0.5 text-xs text-muted">{cat.description}</p>
+                  </div>
+                  <span className={`font-mono text-lg font-bold ${cat.colorClass}`}>{level}</span>
+                </div>
+                <LevelBar level={level} max={10} barClass={cat.barClass} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  const openCat = openCategory ? categories.find((c) => c.key === openCategory) : null;
+  const openTree = openCategory ? opsTrees[openCategory as UpgradeCategory] : null;
+
   return (
     <div className="mb-6 rounded-xl border border-card-border bg-card p-5">
-      <h2 className="text-lg font-semibold mb-4">
-        {isOwner ? "Strategic Operations" : "Campaign Operations"}
-      </h2>
-      <div className="grid gap-4 sm:grid-cols-2">
-        {CAMPAIGN_CATEGORIES.map((cat) => {
-          const level = campaign.levels[cat.key as keyof typeof campaign.levels];
-          const maxLevel = getMaxLevel(cat.key as UpgradeCategory);
-          const nextCost =
-            campaign.nextUpgradeCosts?.[
-              cat.key as keyof NonNullable<typeof campaign.nextUpgradeCosts>
-            ];
-          const canAfford =
-            nextCost &&
-            campaign.funds !== undefined &&
-            campaign.actions !== undefined &&
-            campaign.funds >= nextCost.funds &&
-            campaign.actions >= nextCost.actions;
-
+      <h2 className="mb-1 text-lg font-semibold">Strategic Operations</h2>
+      <p className="mb-4 text-xs text-muted">
+        Each lever is a starter unlock plus three branches. Tap a lever to invest.
+      </p>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {categories.map((cat) => {
+          const tree = opsTrees[cat.key as UpgradeCategory];
+          const invested = tree
+            ? (tree.unlocked ? 1 : 0) + tree.branches.reduce((s, b) => s + b.level, 0)
+            : 0;
+          const maxInvest = 1 + tree.branches.length * (tree.branches[0]?.maxLevel ?? 3);
           return (
-            <div key={cat.key} className={`rounded-lg border p-4 ${cat.bgClass}`}>
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <Tooltip content={cat.tooltipText}>
-                    <h3
-                      className={`text-sm font-semibold ${cat.colorClass} cursor-help border-b border-dashed border-transparent hover:border-current inline-block`}
-                    >
-                      {cat.label}
-                    </h3>
-                  </Tooltip>
-                  <p className="text-xs text-muted mt-0.5">{cat.description}</p>
-                </div>
-                <Tooltip content={`Level ${level} of ${maxLevel}`}>
-                  <span className={`font-mono text-lg font-bold ${cat.colorClass} cursor-help`}>
-                    {level}
-                  </span>
-                </Tooltip>
-              </div>
-
-              <div className="mb-3">
-                <LevelBar level={level} max={maxLevel} barClass={cat.barClass} />
-              </div>
-
-              {/* Owner upgrade controls */}
-              {isOwner && nextCost && (
-                <div className="mt-3 pt-3 border-t border-card-border/50">
-                  <div className="flex items-center justify-between text-xs text-muted mb-2">
-                    <Tooltip
-                      content={`Upgrading to level ${nextCost.level} provides: ${nextCost.effect}`}
-                    >
-                      <span className="cursor-help border-b border-dashed border-card-border/70">
-                        Next: {nextCost.effect}
-                      </span>
-                    </Tooltip>
-                    <div className="flex gap-2 font-mono">
-                      <Tooltip
-                        content={`Cost: ${formatFull(nextCost.funds)} (you have ${formatFull(campaign.funds!)})`}
-                      >
-                        <span
-                          className={`cursor-help ${campaign.funds! >= nextCost.funds ? "text-amber-400" : "text-error"}`}
-                        >
-                          {formatFull(nextCost.funds)}
-                        </span>
-                      </Tooltip>
-                      <Tooltip
-                        content={`Actions cost: ${nextCost.actions} (you have ${campaign.actions!})`}
-                      >
-                        <span
-                          className={`cursor-help ${campaign.actions! >= nextCost.actions ? "text-cyan-400" : "text-error"}`}
-                        >
-                          {nextCost.actions}a
-                        </span>
-                      </Tooltip>
-                    </div>
-                  </div>
-                  {nextCost.maintenance && (
-                    <Tooltip
-                      content={`This upgrade adds ${formatFull(nextCost.maintenance)} to your per-turn maintenance costs`}
-                    >
-                      <div className="text-xs text-warning/70 mb-2 cursor-help inline-block">
-                        +{formatFull(nextCost.maintenance)}/turn maintenance
-                      </div>
-                    </Tooltip>
-                  )}
-
-                  {cat.requiresTarget ? (
-                    <div>
-                      <PlayerSelector
-                        onSelect={(char) => onUpgrade(cat.key, char.id)}
-                        placeholder="Select target to upgrade..."
-                        excludeIds={[]}
-                        className="w-full"
-                      />
-                      {campaign.oppositionTargetName && (
-                        <div className="mt-1.5 text-xs text-muted">
-                          Current target:{" "}
-                          <span className="text-foreground font-medium">
-                            {campaign.oppositionTargetName}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => onUpgrade(cat.key)}
-                      disabled={!canAfford || upgrading === cat.key}
-                      className={`w-full py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors ${
-                        canAfford && upgrading !== cat.key
-                          ? "bg-foreground text-background hover:bg-foreground/90"
-                          : "bg-card-border text-muted cursor-not-allowed"
-                      }`}
-                    >
-                      {upgrading === cat.key
-                        ? "Upgrading..."
-                        : canAfford
-                          ? "Upgrade"
-                          : "Insufficient Resources"}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {isOwner && !nextCost && (
-                <div className="mt-3 pt-3 border-t border-card-border/50 text-center">
-                  <span className="text-xs text-muted">Max Level</span>
-                </div>
-              )}
-
-              {/* Owner-only reset for opposition research */}
-              {isOwner &&
-                cat.key === "oppositionResearch" &&
-                level > 0 &&
-                onResetOppositionResearch && (
-                  <button
-                    type="button"
-                    onClick={onResetOppositionResearch}
-                    disabled={resettingOppositionResearch}
-                    className="mt-2 w-full rounded-md border border-error/30 bg-error/10 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {resettingOppositionResearch ? "Resetting..." : "Reset Opposition Research"}
-                  </button>
-                )}
-            </div>
+            <Tooltip key={cat.key} content={cat.tooltipText}>
+              <button
+                type="button"
+                onClick={() => setOpenCategory(cat.key)}
+                className={`flex w-full flex-col items-start gap-2 rounded-lg border p-3 text-left transition-colors hover:brightness-110 ${cat.bgClass}`}
+              >
+                <span className={`text-sm font-semibold ${cat.colorClass}`}>{cat.label}</span>
+                <span className="text-[11px] text-muted">
+                  {tree.unlocked ? `${invested}/${maxInvest} invested` : "Locked — tap to unlock"}
+                </span>
+                <LevelBar level={invested} max={maxInvest} barClass={cat.barClass} />
+              </button>
+            </Tooltip>
           );
         })}
       </div>
+
+      {openCat && openTree && (
+        <OperationsModal
+          campaign={campaign}
+          category={openCat}
+          tree={openTree}
+          upgrading={upgrading}
+          onUpgrade={onUpgrade}
+          onRetarget={onRetarget}
+          onResetOppositionResearch={
+            openCat.key === "oppositionResearch" ? onResetOppositionResearch : undefined
+          }
+          resettingOppositionResearch={resettingOppositionResearch}
+          onClose={() => setOpenCategory(null)}
+        />
+      )}
     </div>
   );
 }

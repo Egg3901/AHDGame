@@ -1,19 +1,38 @@
 import type { Campaign } from "@/lib/db/types";
-import { FUNDRAISING_INCOME, getCampaignFamilyScalar } from "./upgradeCosts";
+import {
+  FUNDRAISING_INCOME,
+  getCampaignFamilyScalar,
+  getOpsBranchMagnitude,
+  OPS_TREES,
+} from "./upgradeCosts";
 
 /**
- * Per-turn passive income for a campaign based on fundraisingLevel (0–10).
- * Uses FUNDRAISING_INCOME lookup table. Character stats do not contribute.
+ * Per-turn passive campaign income (anchor $ scaled by race family).
  *
- * When `electionType` is supplied, applies the per-race-family budget
- * scalar from `CAMPAIGN_FAMILY_SCALAR_BY_ELECTION_TYPE` so state-senate
- * candidates don't pull presidential-scale fundraising. Backward-compat:
- * no scalar applied when electionType is undefined (existing callers
- * see no change until they're updated to pass the type).
+ * Strategic Operations v2: when the campaign has a fundraising branch tree with
+ * its starter unlocked, income is
+ *   (starter base + Grassroots recurring) × (1 + Digital Ops multiplier)
+ * where Grassroots is branch `a` (incomeFlat) and Digital Ops is branch `c`
+ * (incomeMultiplier). Bundlers (branch `b`) is a one-time lump applied at
+ * purchase (see campaignCommands) and does NOT recur here.
+ *
+ * Legacy fallback: rows not yet migrated to the tree (no `fundraisingTree` or
+ * starter not set) read the old `fundraisingLevel` lookup so income is
+ * unchanged until the migration backfills them. An un-started tree still pays
+ * the L0 base ($20k) that every campaign earns with no upgrade.
  */
 export function calculateCampaignIncome(campaign: Campaign, electionType?: string): number {
-  const level = Math.min(Math.max(campaign.fundraisingLevel, 0), 10);
-  const base = FUNDRAISING_INCOME[level];
   const scalar = getCampaignFamilyScalar(electionType);
-  return Math.round(base * scalar);
+  const tree = campaign.fundraisingTree;
+
+  if (tree?.starter) {
+    const base =
+      OPS_TREES.fundraising.starter.magnitude + getOpsBranchMagnitude("fundraising", "a", tree.a);
+    const multiplier = 1 + getOpsBranchMagnitude("fundraising", "c", tree.c);
+    return Math.round(base * multiplier * scalar);
+  }
+
+  // No tree / un-started: legacy linear level (0 on fresh v2 rows → $20k base).
+  const level = Math.min(Math.max(campaign.fundraisingLevel ?? 0, 0), 10);
+  return Math.round(FUNDRAISING_INCOME[level] * scalar);
 }

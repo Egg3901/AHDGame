@@ -10,6 +10,9 @@ import { upgradeCampaign } from "@/lib/campaigns/commands/campaignCommands";
 
 const upgradeSchema = z.object({
   category: z.enum(["fundraising", "oppositionResearch", "groundGame", "mediaSpending"]),
+  // Strategic Operations v2: `branch` selects which sub-track to level. Omit it
+  // (or send null) to buy the lever's tier-1 starter unlock.
+  branch: z.enum(["a", "b", "c"]).nullish(),
   targetId: z.string().optional(),
 });
 
@@ -39,7 +42,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
-    const { category, targetId } = parsed.data;
+    const { category, branch, targetId } = parsed.data;
 
     if (targetId && !ObjectId.isValid(targetId)) {
       return NextResponse.json({ error: "Invalid target ID" }, { status: 400 });
@@ -51,6 +54,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       campaignId: new ObjectId(campaignId),
       user,
       category,
+      branch: branch ?? null,
       targetId,
     });
     return NextResponse.json({
