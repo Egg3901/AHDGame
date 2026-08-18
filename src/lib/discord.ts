@@ -112,7 +112,7 @@ export function discordCreatedAtFromSnowflake(id: string): Date | null {
   if (!id || !/^\d+$/.test(id)) return null;
   try {
     const snowflake = BigInt(id);
-    const ms = Number((snowflake >> 22n) + BigInt(DISCORD_EPOCH_MS));
+    const ms = Number((snowflake >> BigInt(22)) + BigInt(DISCORD_EPOCH_MS));
     if (!Number.isFinite(ms) || ms < DISCORD_EPOCH_MS) return null;
     const created = new Date(ms);
     return Number.isNaN(created.getTime()) ? null : created;
