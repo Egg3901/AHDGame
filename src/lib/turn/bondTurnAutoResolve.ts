@@ -106,6 +106,13 @@ export async function autoResolveLingeringDefaults(args: {
                   type: "corp_bond_auto_refinanced",
                   title: "Bonds auto-refinanced",
                   message: `${corp.name}'s defaulted bonds were automatically refinanced into a new ${refiMaturityTurns}-turn bond (coupon ${refi.couponRate.toFixed(1)}%). No sectors were sold — the debt was rolled into a replacement issuance.`,
+                  // Without recipientCharacterId the inbox's per-character
+                  // filter and unread badge exclude this entirely, so the CEO
+                  // never sees it (ticket #1130).
+                  metadata: {
+                    recipientCharacterId: corp.ceoId?.toString(),
+                    corporationId: corp._id.toString(),
+                  },
                 });
               }
               auditRows.push({
@@ -154,6 +161,10 @@ export async function autoResolveLingeringDefaults(args: {
                 type: "corp_bond_auto_restructured",
                 title: "Sectors sold to cover bond default",
                 message: `${corp.name} could not refinance its defaulted bonds, so ${result.sectorsLiquidated} sector${result.sectorsLiquidated === 1 ? "" : "s"} ${result.sectorsLiquidated === 1 ? "was" : "were"} sold to repay bondholders in full. The corporation survives with its remaining sectors.`,
+                metadata: {
+                  recipientCharacterId: corp.ceoId?.toString(),
+                  corporationId: corp._id.toString(),
+                },
               });
             }
             auditRows.push({
