@@ -41,6 +41,7 @@ import { announceVietnamMove } from "@/lib/crises/vietnamWire";
 import { ALL_CRISIS_TEMPLATES } from "@/lib/crises/templates";
 import { createCrisisFromTemplate } from "@/lib/crises/createCrisisFromTemplate";
 import { WARSAW_PACT_SATELLITE_COUNTRY_IDS } from "@/lib/crises/warsawPactSatellites";
+import { runUnionBanStrikeResponse } from "@/lib/crises/unionBanStrike";
 
 /**
  * Context handed to every crisis option-action handler. The crisis is
@@ -642,15 +643,30 @@ async function vietnamDeescalate(ctx: CrisisActionContext): Promise<void> {
 }
 
 /**
+ * What a handler wants the interaction engine to do after it has run.
+ *
+ * Almost every action is fire-and-forget and the decision tree's own
+ * `nextNodeId` decides what happens next. A retryable action cannot work that
+ * way: whether the attempt worked is known only inside the handler, and one
+ * static target on the option cannot carry both answers. `nextNodeId` here
+ * overrides the option's target for that submission. Absent means "the tree
+ * decides", which is the behaviour every pre-existing action keeps.
+ */
+export interface CrisisActionResult {
+  /** Node to navigate to instead of the option's own `nextNodeId`. */
+  nextNodeId?: string;
+}
+
+/**
  * Dispatch a crisis decision option's real-subsystem action, if it has one.
  * Called by `submitCrisisDecision` after the option's flat effects apply and
  * before the decision tree navigates. A no-op when the option carries no
  * `action`. Handlers are best-effort: a throw is logged and swallowed so a
  * subsystem hiccup never wedges the crisis interaction mid-resolution.
  */
-export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<void> {
+export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<CrisisActionResult> {
   const action = ctx.option.action;
-  if (!action) return;
+  if (!action) return {};
   try {
     switch (action.kind) {
       case "executiveNationalize":
@@ -683,6 +699,18 @@ export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<v
       case "vietnamDeescalate":
         await vietnamDeescalate(ctx);
         break;
+      case "unionBanStrikeResponse": {
+        const result = await runUnionBanStrikeResponse({
+          db: ctx.db,
+          crisis: ctx.crisis,
+          interaction: ctx.interaction,
+          characterId: ctx.characterId,
+          countryId: ctx.countryId,
+          currentTurn: ctx.currentTurn,
+          response: action.response,
+        });
+        return result.nextNodeId ? { nextNodeId: result.nextNodeId } : {};
+      }
     }
   } catch (err) {
     console.error(
@@ -690,4 +718,5 @@ export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<v
       err
     );
   }
+  return {};
 }

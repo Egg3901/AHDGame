@@ -3,6 +3,10 @@ import { toNativeEffectValue } from "@/lib/crises/effectScale";
 import { VIETNAM_LADDER_SIDES } from "@/lib/crises/vietnamEscalation";
 import { WARSAW_PACT_BLOC_COUNTRY_IDS } from "@/lib/crises/warsawPactSatellites";
 import { getVietnamEscalationLevel } from "@/lib/crises/vietnamEscalationInterface";
+import {
+  UNION_BAN_STRIKE_DURATION_TURNS,
+  UNION_BAN_STRIKE_TEMPLATE_KEY,
+} from "@/lib/crises/unionBanStrikeCopy";
 
 /** Resolve a template's default duration for a given scope.
  *  Prefers `durationByScope[scope]`, then falls back to `durationTurns`,
@@ -2090,6 +2094,211 @@ export const STEEL_STRIKE_TEMPLATE: CrisisTemplate = {
       },
     ],
     autoResolveOnExpiry: true,
+  },
+};
+
+/**
+ * Wildcat general strike against an enacted union ban.
+ *
+ * Not auto-spawned and not on the disaster pool: the only thing that starts it
+ * is a `union_law` provision with `banAction: "ban"` clearing enactment in a
+ * country that has unions (`triggerUnionBanStrike` in `unionBanStrike.ts`). The
+ * template carries no `countryIds`, so the trigger fills in whichever country
+ * passed the ban and the same crisis serves the US, the UK or anyone else.
+ *
+ * Structurally this is the steel strike scaled up. The economic bite is spread
+ * across three struck sectors as PHYSICAL shocks (steel and cars stop being
+ * made, ports and freight stop moving them) plus a smaller economy-wide
+ * FINANCIAL shock for everyone downstream of the freight that has stopped. The
+ * difference is in the tree: the negotiate option loops back on itself so it can
+ * be attempted more than once, and its action hook decides whether the
+ * interaction closes, which the steel strike never needed.
+ */
+export const UNION_BAN_GENERAL_STRIKE_TEMPLATE: CrisisTemplate = {
+  name: "Wildcat General Strike",
+  heroImage:
+    "https://images.unsplash.com/photo-1591189824344-9c2b9b0f4a5f?auto=format&fit=crop&w=1600&q=70",
+  description:
+    "Unions have been outlawed and the workforce has walked out rather than dissolve. Steel, car plants, the docks and freight have all stopped, and with no lawful union left there is nobody the government can sign an agreement with.",
+  scope: "country",
+  countryIds: [],
+  regionIds: [],
+  durationTurns: UNION_BAN_STRIKE_DURATION_TURNS,
+  durationByScope: { country: UNION_BAN_STRIKE_DURATION_TURNS },
+  effects: [
+    marginShock(-22, "Steel and heavy plants stopped by the walkout", "physical", "manufacturing"),
+    marginShock(-22, "Car assembly lines stopped by the walkout", "physical", "automobiles"),
+    marginShock(-26, "Docks and freight shut down", "physical", "logistics"),
+    marginShock(-9, "Nothing is moving, so nothing is being delivered", "financial"),
+    fx("tick", "metric", "economy", "gdp", -0.06, "A stopped economy produces nothing"),
+    fx("tick", "metric", "economy", "inflation", 0.03, "Shortages from a halted freight network"),
+    fx(
+      "tick",
+      "metric",
+      "economy",
+      "unemployment",
+      0.03,
+      "Downstream plants stand their workers down"
+    ),
+    fx("tick", "metric", "economy", "consumerConfidence", -0.05, "Empty shelves and idle plants"),
+    fx(
+      "tick",
+      "metric",
+      "economy",
+      "investorConfidence",
+      -0.05,
+      "A country that has stopped working"
+    ),
+    fx("tick", "approval", "government", "overall", -0.05, "The government owns the paralysis"),
+  ],
+  wireMessageOnStart:
+    "Unions have been banned and the country has stopped working. Plants, docks and freight are all shut.",
+  wireMessageOnEnd:
+    "The general strike is over. Work is restarting on whatever terms the government could get.",
+  interactionDefinition: {
+    decisionTree: [
+      {
+        nodeId: "response",
+        type: "choice",
+        title: "The country has stopped",
+        // Deliberately no `timeLimitMinutes`: the strike itself is the clock, and
+        // a wall-clock deadline would auto-pick an option on a node that is meant
+        // to be answered more than once.
+        description:
+          "The ban is law and the workforce has answered it by walking out. Nothing is being made and nothing is moving. There is no lawful union left to negotiate with, which is your own doing. How do you end this?",
+        requiredRoles: ["headOfState"],
+        timeLimitMinutes: null,
+        options: [
+          {
+            optionId: "response_deploy_army",
+            label: "Deploy the Army",
+            description:
+              "Put soldiers on the gates and the docks and restart the plants under guard. It works, and quickly. It also costs you everyone who was standing on the picket line, and they vote.",
+            nextNodeId: "terminal_army",
+            action: { kind: "unionBanStrikeResponse", response: "army" },
+            effects: [
+              fx("flat", "approval", "government", "overall", -0.06, "Troops against strikers"),
+              fx(
+                "flat",
+                "metric",
+                "economy",
+                "investorConfidence",
+                0.02,
+                "Order restored on the shop floor"
+              ),
+            ],
+          },
+          {
+            optionId: "response_negotiate",
+            label: "Open Talks",
+            description:
+              "Bring the strike committees in and try to buy an end to it. A settlement is not guaranteed, each round costs the treasury, and you can come back and try again.",
+            // Loops back to this node: a failed round leaves the strike running
+            // and the decision open. The action hook closes the interaction when
+            // the talks actually settle it.
+            nextNodeId: "response",
+            action: { kind: "unionBanStrikeResponse", response: "negotiate" },
+            effects: [],
+          },
+          {
+            optionId: "response_ride_it_out",
+            label: "Ride It Out",
+            description:
+              "Concede nothing and wait. Pickets thin as savings run out and some plants restart on their own, so the damage halves from here. It still runs to the end and you bleed support the whole way.",
+            nextNodeId: "terminal_ride_it_out",
+            action: { kind: "unionBanStrikeResponse", response: "rideOut" },
+            effects: [
+              fx(
+                "tick",
+                "approval",
+                "government",
+                "overall",
+                -0.02,
+                "A government waiting out its own country"
+              ),
+            ],
+          },
+          {
+            optionId: "response_back_down",
+            label: "Repeal the Ban",
+            description:
+              "Withdraw the ban. Unions are lawful again, every suspended union is restored intact and the strike ends. Business and the right will call it a surrender and price it accordingly.",
+            nextNodeId: "terminal_back_down",
+            action: { kind: "unionBanStrikeResponse", response: "backDown" },
+            effects: [
+              fx("flat", "approval", "government", "overall", -0.02, "A public reversal"),
+              fx(
+                "flat",
+                "metric",
+                "economy",
+                "investorConfidence",
+                -0.03,
+                "Employers read the repeal as a defeat"
+              ),
+            ],
+          },
+        ],
+      },
+      {
+        nodeId: "terminal_army",
+        type: "terminal",
+        title: "The plants are running under guard",
+        description:
+          "Soldiers hold the gates and the docks and production has restarted. The ban stands. So does the memory of who ordered it.",
+        outcomeMessage: "The general strike has been broken by the army. The union ban stands.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+      {
+        nodeId: "terminal_ride_it_out",
+        type: "terminal",
+        title: "Waiting it out",
+        description:
+          "You have conceded nothing. The strike will run to its end, weaker each week, and the government carries the cost of it the whole way.",
+        outcomeMessage:
+          "The government will not negotiate. The general strike runs on at reduced strength.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+      {
+        nodeId: "terminal_back_down",
+        type: "terminal",
+        title: "The ban is repealed",
+        description:
+          "Unions are lawful again and their officers, funds and members are restored. Work resumes. The policy is dead and everyone knows why.",
+        outcomeMessage: "The union ban has been repealed and the general strike is over.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+      // The negotiate hook redirects here when a round of talks settles it. Its
+      // option's own target loops back to the choice node, so this terminal is
+      // reachable only through the redirect.
+      {
+        nodeId: "terminal_settlement",
+        type: "terminal",
+        title: "A settlement ends the strike",
+        description:
+          "The strike committees accepted terms and the plants and docks are reopening. It cost the treasury real money, and it worked.",
+        outcomeMessage: "Talks have settled the general strike. Work is resuming.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+      // Redirect target when the executive answers a strike that already ended
+      // (expired, or resolved on another path between page load and submit).
+      {
+        nodeId: "terminal_already_over",
+        type: "terminal",
+        title: "The strike is already over",
+        description:
+          "By the time the order went out there was nothing left to end. The walkout had already finished.",
+        outcomeMessage: "The general strike had already ended before the decision took effect.",
+        requiredRoles: ["any"],
+        timeLimitMinutes: null,
+      },
+    ],
+    // The strike is the deadline, and a general strike has no default answer
+    // that could be picked on the executive's behalf.
+    autoResolveOnExpiry: false,
   },
 };
 
@@ -4775,6 +4984,7 @@ export const ALL_CRISIS_TEMPLATES: Record<
   housing_collapse: HOUSING_COLLAPSE_TEMPLATE,
   labor_strikes: LABOR_STRIKES_TEMPLATE,
   steel_strike: STEEL_STRIKE_TEMPLATE,
+  [UNION_BAN_STRIKE_TEMPLATE_KEY]: UNION_BAN_GENERAL_STRIKE_TEMPLATE,
   debt_default_contagion: DEBT_DEFAULT_CONTAGION_TEMPLATE,
   supply_chain_disruption: SUPPLY_CHAIN_DISRUPTION_TEMPLATE,
   tech_bubble_burst: TECH_BUBBLE_BURST_TEMPLATE,

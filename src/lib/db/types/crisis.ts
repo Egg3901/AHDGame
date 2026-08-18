@@ -103,7 +103,19 @@ export type CrisisOptionAction =
   | { kind: "vietnamSupport" }
   /** Pull back from the Vietnam ladder: drain this side's committed support and,
    *  once it is spent, climb down a rung. Costs approval with hawks. */
-  | { kind: "vietnamDeescalate" };
+  | { kind: "vietnamDeescalate" }
+  /** The executive's answer to a wildcat general strike called against an
+   *  enacted union ban. Each response reaches a different subsystem: `army` and
+   *  `negotiate` (on a successful roll) resolve the crisis document itself,
+   *  `rideOut` rewrites the crisis's remaining effects, and `backDown` repeals
+   *  the ban through the same primitive the legislature uses. `negotiate` is the
+   *  one action in the game that can decline to resolve its interaction, so its
+   *  option loops back to its own node for another attempt. Handlers live in
+   *  `src/lib/crises/unionBanStrike.ts`. */
+  | {
+      kind: "unionBanStrikeResponse";
+      response: "army" | "negotiate" | "rideOut" | "backDown";
+    };
 
 export interface CrisisDecisionOption {
   optionId: string;
