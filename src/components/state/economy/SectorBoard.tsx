@@ -28,6 +28,12 @@ interface SectorBoardProps {
   onSelect: (type: CorporationType) => void;
   /** Formats a market size in the sector's home currency. */
   formatMarket: (value: number) => string;
+  /**
+   * Show every tile at all breakpoints instead of the mobile-collapse behaviour
+   * (below sm, only the selected tile shows full-width). Set when the board is
+   * used as a full breakdown grid rather than the page's primary selector.
+   */
+  showAllTiles?: boolean;
 }
 
 /**
@@ -36,7 +42,13 @@ interface SectorBoardProps {
  * `<select>` dropdown. Pure presentation: selection state and data shaping
  * stay in `StateEconomy`.
  */
-export function SectorBoard({ tiles, selectedType, onSelect, formatMarket }: SectorBoardProps) {
+export function SectorBoard({
+  tiles,
+  selectedType,
+  onSelect,
+  formatMarket,
+  showAllTiles = false,
+}: SectorBoardProps) {
   const sorted = [...tiles].sort((a, b) => b.totalMarket - a.totalMarket);
 
   return (
@@ -52,8 +64,12 @@ export function SectorBoard({ tiles, selectedType, onSelect, formatMarket }: Sec
             onClick={() => onSelect(tile.type)}
             className={`rounded-lg border p-3 pb-2.5 text-left transition-colors ${
               isSelected
-                ? "border-primary bg-primary/5 col-span-2 sm:col-span-1"
-                : "hidden border-card-border bg-card hover:border-foreground/30 sm:block"
+                ? showAllTiles
+                  ? "border-primary bg-primary/5"
+                  : "border-primary bg-primary/5 col-span-2 sm:col-span-1"
+                : showAllTiles
+                  ? "border-card-border bg-card hover:border-foreground/30"
+                  : "hidden border-card-border bg-card hover:border-foreground/30 sm:block"
             }`}
           >
             <div className="flex min-h-4 items-baseline justify-between gap-1.5">
