@@ -441,7 +441,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
               .sort((a, b) => b.totalMarket - a.totalMarket)
               .map((s) => (
                 <option key={s.type} value={s.type}>
-                  {s.label} — {fmtMarketChip(s.totalMarket)}/day
+                  {s.label} · {fmtMarketChip(s.totalMarket)}/day
                 </option>
               ))}
           </select>

@@ -69,7 +69,8 @@ async function familyIsActive(db: Db, family: string): Promise<boolean> {
 export async function processCrisisChain(
   db: Db,
   resolved: Crisis[],
-  currentTurn: number
+  currentTurn: number,
+  currentYear?: number
 ): Promise<{ spawned: number }> {
   let spawned = 0;
   const handled = new Set<string>();
@@ -88,13 +89,21 @@ export async function processCrisisChain(
     if (await familyIsActive(db, family)) continue;
 
     const template = ALL_CRISIS_TEMPLATES[nextKey] as CrisisTemplate;
+    // The era window gates the respawn exactly as it gates the opening: a war
+    // still above level 0 when the world passes the family's untilYear winds
+    // down instead of respawning rungs forever.
+    if (currentYear !== undefined && !isTemplateAllowedInYear(template, currentYear)) continue;
     await createCrisisFromTemplate(db, {
       template,
       templateKey: nextKey,
       scope: template.scope,
       countryIds: template.countryIds,
       regionIds: template.regionIds,
-      currentTurn,
+      // The successor starts NEXT turn. This spawner runs after the turn's
+      // crisis pass, so a successor started on the current turn is never seen
+      // by the `turn === startTurn` branch: no wire announcement, no player
+      // notifications, and its one-time flat effects silently dropped.
+      currentTurn: currentTurn + 1,
       autoSource: "condition",
     });
     spawned++;

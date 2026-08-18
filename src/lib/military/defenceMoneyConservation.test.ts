@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { applyDefenceDeliveries } from "@/lib/turn/defenceDeliveryTurn";
-import { lotProductionCost } from "@/lib/military/defenceLotEconomics";
+import { lotProductionCost, GRADE_PRICE_SCALE } from "@/lib/military/defenceLotEconomics";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import { COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
@@ -30,7 +30,7 @@ interface Ledger {
   balance: number;
   encumbered: number;
   corpCash: number;
-  claims: Set<string>;
+  claims: Map<string, Record<string, unknown>>;
   contracts: Record<string, unknown>[];
   stock: Record<string, number>;
   commodityPrices?: CommodityPrice[];
@@ -44,7 +44,7 @@ function ledger(over: Partial<Ledger> = {}): Ledger {
     corpCapital: 1e15,
     encumbered: 0,
     corpCash: 0,
-    claims: new Set<string>(),
+    claims: new Map<string, Record<string, unknown>>(),
     contracts: [],
     stock: {},
     ...over,
@@ -125,12 +125,13 @@ function stubDb(l: Ledger): Db {
         // The shared money primitive's claim record. A unique `_id` insert is the only atomic
         // guarantee it relies on, so the stub models exactly that and nothing else.
         return {
-          findOne: async (f: { _id: string }) => (l.claims.has(f._id) ? { _id: f._id } : null),
+          findOne: async (f: { _id: string }) => l.claims.get(f._id) ?? null,
           insertOne: async (doc: { _id: string }) => {
             if (l.claims.has(doc._id)) {
               throw Object.assign(new Error("duplicate key"), { code: 11000 });
             }
-            l.claims.add(doc._id);
+            // Full doc, as Mongo keeps it: completeMoneyMove maps over the claim's legs.
+            l.claims.set(doc._id, doc as unknown as Record<string, unknown>);
             return { insertedId: doc._id };
           },
           updateOne: async () => ({ matchedCount: 1, modifiedCount: 1 }),
@@ -216,7 +217,12 @@ describe("defence procurement money conservation", () => {
     expect(openingBalance - l.balance).toBe(r.paid);
     expect(l.corpCash).toBe(r.paid - r.productionCost);
     expect(r.productionCost).toBeGreaterThan(0);
-    expect(r.productionCost).toBeCloseTo(lotProductionCost("heavy_armor")! * r.lots, -1);
+    // Build cost is graded to the delivered grade (grade 0 here: nothing researched), the
+    // same scale the contract's price band charged.
+    expect(r.productionCost).toBeCloseTo(
+      lotProductionCost("heavy_armor")! * GRADE_PRICE_SCALE[0] * r.lots,
+      -1
+    );
     // Legs net to zero: the appropriation's outlay is exactly the supplier's gain plus the
     // inputs burned building the materiel.
     expect(openingBalance - l.balance).toBe(l.corpCash + r.productionCost);

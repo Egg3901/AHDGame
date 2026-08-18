@@ -6,7 +6,9 @@ import {
   contractLotsThisTurn,
   defaultFactoryAllocation,
   lotProductionCost,
+  normalizeGrade,
   DEFENCE_FACTORY_SLOTS_PER_PLANT,
+  GRADE_PRICE_SCALE,
 } from "@/lib/military/defenceLotEconomics";
 import { loadDefencePriceRatios } from "@/lib/military/defencePriceRatios";
 import { DEFENCE_CARRY_REASON_TEXT, type DefenceCarryReason } from "@/lib/db/types/defenceContract";
@@ -33,8 +35,12 @@ export interface CorporationContractView {
   amountPaid: number;
   /** What building those lots cost, so the order book shows margin rather than gross. */
   productionCostPaid: number;
-  /** Production cost of ONE lot at current input prices - the break-even the CEO judges by. */
-  unitProductionCost: number;
+  /**
+   * Production cost of ONE lot at current input prices, graded to the contract's ceiling so
+   * it matches what delivery will actually charge. Null when the plant no longer exists:
+   * an unknown cost must render as unknown, not as a free build.
+   */
+  unitProductionCost: number | null;
   /** Local currency the buyer still has committed against this order. */
   encumberedAmount: number;
   /** Why the last delivery turn banked output instead of shipping it, in plain text. */
@@ -146,7 +152,10 @@ export async function loadCorporationDefenceContracts(
       partialLot: carry - Math.floor(carry),
       amountPaid: c.amountPaid ?? c.lotsDelivered * c.pricePerLot,
       productionCostPaid: c.productionCostPaid ?? 0,
-      unitProductionCost: sector ? (lotProductionCost(sector.strategyId, priceRatios) ?? 0) : 0,
+      unitProductionCost: sector
+        ? (lotProductionCost(sector.strategyId, priceRatios) ?? 0) *
+          GRADE_PRICE_SCALE[normalizeGrade(c.gradeCeiling)]
+        : null,
       encumberedAmount: c.encumberedAmount ?? 0,
       ...(c.carryReason
         ? {

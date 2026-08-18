@@ -335,8 +335,10 @@ export interface BankCapExplainer {
   label: string;
   /** The rule, in symbols. */
   formula: string;
-  /** The rule, with this bank's numbers in it. */
-  inputs: { label: string; value: number }[];
+  /** The rule, with this bank's numbers in it. `unit` says how to render the
+   *  number; money is the default. The renderer used to sniff "ratio" out of
+   *  the label, which turned any relabelled fraction into "$0". */
+  inputs: { label: string; value: number; unit?: "money" | "percent" }[];
   value: number;
   /** One line naming what moves it. */
   lever: string;
@@ -367,6 +369,7 @@ export function explainBankCaps(sheet: BankBalanceSheet): BankCapExplainer[] {
           label: "Reserve ratio",
           value:
             sheet.cashBackedDeposits > 0 ? sheet.requiredReserves / sheet.cashBackedDeposits : 0,
+          unit: "percent",
         },
       ],
       value: sheet.requiredReserves,
