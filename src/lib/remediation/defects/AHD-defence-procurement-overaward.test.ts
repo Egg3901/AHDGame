@@ -108,7 +108,9 @@ function memoryDb(seed: Record<string, Doc[]>) {
       }),
       findOne: async (filter: Doc = {}) => rows().find((d) => matches(d, filter)) ?? null,
       insertOne: async (doc: Doc) => {
-        if (rows().some((d) => same(d._id, doc._id))) throw new Error("E11000 duplicate key");
+        if (rows().some((d) => same(d._id, doc._id))) {
+          throw Object.assign(new Error("E11000 duplicate key"), { code: 11000 });
+        }
         rows().push({ ...doc });
         return { insertedId: doc._id };
       },
