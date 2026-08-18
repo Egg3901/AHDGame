@@ -387,7 +387,7 @@ async function processOneBank(
     // nothing tying them together, so a crash between them left the money
     // supply and the vault disagreeing by the size of the flow.
     const inflow = delta > 0;
-    await applyMoneyMove(db, {
+    const flowMove = await applyMoneyMove(db, {
       key: turnMoveKey(inflow ? "npc-deposit-in" : "npc-deposit-out", bankIdHex, turn),
       kind: "npc_deposit_flow",
       turn,
@@ -410,30 +410,37 @@ async function processOneBank(
         },
       ],
     });
-    npcDeposits = Math.max(0, npcDeposits + delta);
-    cashReserves = Math.max(0, cashReserves + delta);
-    await db.collection<Corporation>("corporations").updateOne(
-      {
-        _id: corp._id,
-        "bankCharter.status": "active",
-        $or: [
-          { "bankCharter.lastBankingTurn": { $ne: turn } },
-          { "bankCharter.lastBankingTurn": { $exists: false } },
-        ],
-      },
-      {
-        $set: {
-          // Cash is moved by the money move above; only the deposit AGGREGATE
-          // is written here, so the two cannot be applied twice.
-          "bankCharter.npcDeposits": npcDeposits,
-          updatedAt: new Date(),
+    // The deposit aggregate may only claim cash the move actually delivered.
+    // On `partial`/`rejected` (guard failure, stale pool) the claim record
+    // carries what needs repairing; booking the aggregate anyway would put
+    // phantom cash-backed deposits on the sheet and every downstream line
+    // (reserves, equity, ceiling) would be computed on the phantom.
+    if (flowMove.status === "applied" || flowMove.status === "replayed") {
+      npcDeposits = Math.max(0, npcDeposits + delta);
+      cashReserves = Math.max(0, cashReserves + delta);
+      await db.collection<Corporation>("corporations").updateOne(
+        {
+          _id: corp._id,
+          "bankCharter.status": "active",
+          $or: [
+            { "bankCharter.lastBankingTurn": { $ne: turn } },
+            { "bankCharter.lastBankingTurn": { $exists: false } },
+          ],
         },
+        {
+          $set: {
+            // Cash is moved by the money move above; only the deposit AGGREGATE
+            // is written here, so the two cannot be applied twice.
+            "bankCharter.npcDeposits": npcDeposits,
+            updatedAt: new Date(),
+          },
+        }
+      );
+      result.npcDepositDelta += delta;
+      // Keep in-memory CB stock coherent for later banks in the same currency.
+      if (cb) {
+        cb.externalBroadMoney = Math.max(0, externalBroadMoney - delta);
       }
-    );
-    result.npcDepositDelta += delta;
-    // Keep in-memory CB stock coherent for later banks in the same currency.
-    if (cb) {
-      cb.externalBroadMoney = Math.max(0, externalBroadMoney - delta);
     }
   }
 
@@ -1255,13 +1262,16 @@ async function serviceNpcBulkBook(
     }
   }
 
-  if (bulkOps.length > 0) {
-    await db.collection<BankLoan>("bankLoans").bulkWrite(bulkOps);
-  }
-
   // Settle the cash that moved between the bank and the household pool. Two
   // moves for the whole book rather than one write per band: what the pool paid
   // in interest, and the net principal that was lent out or came back.
+  //
+  // The moves run BEFORE the loan book is stamped. The stamp is the pass's
+  // idempotency check, so stamping first opened a crash window where the book
+  // had grown but the cash never settled and the retry skipped straight past
+  // it; move-first means a crashed pass replays the (keyed, idempotent) moves
+  // and then stamps, and a crash after the moves leaves claim records the
+  // repair queue can see.
   const bankIdHex = bankCorporationId.toString();
   const bankVault: MoneyTarget = {
     collection: "corporations",
@@ -1306,6 +1316,10 @@ async function serviceNpcBulkBook(
         (state.cb.externalBroadMoney ?? 0) + creditedToPool
       );
     }
+  }
+
+  if (bulkOps.length > 0) {
+    await db.collection<BankLoan>("bankLoans").bulkWrite(bulkOps);
   }
 
   // One interest row for the whole book rather than one per band: this fires
@@ -1386,9 +1400,6 @@ async function serviceInterbankAndCbMargin(
     .toArray();
 
   const primeByCurrency = new Map<CurrencyCode, number>();
-  // Margin interest received, per currency, flushed to the issuing central bank
-  // once at the end. Same destination line-of-credit interest already uses.
-  const cbReserveInc = new Map<CurrencyCode, number>();
 
   for (const corp of marginBanks) {
     const charter = corp.bankCharter;
@@ -1412,8 +1423,46 @@ async function serviceInterbankAndCbMargin(
     const debt = hasMargin ? Math.max(0, charter.cbMarginDebt ?? 0) : 0;
     const interestDue = (debt * (rate / 100)) / TURNS_PER_YEAR;
     const liquid = getCashReserves(charter);
-    const paid = Math.min(interestDue, liquid);
-    const shortfall = Math.max(0, interestDue - paid);
+    let paid = Math.min(interestDue, liquid);
+    let shortfall = Math.max(0, interestDue - paid);
+    const cbDocId = getBankId(getCountryIdForCurrency(currency));
+
+    // The bank's debit and the CB's reserveBalance credit travel together
+    // through the primitive. The old shape debited per corp with the stamp in
+    // the same write and flushed the CB credit once at the end of the whole
+    // pass, so a crash after any stamped debit destroyed the interest with no
+    // claim record, and the debit itself was unguarded against concurrent
+    // spends. The guarded debit lands first; if it fails, nothing was paid and
+    // the whole due amount accrues as arrears below.
+    if (paid > 0) {
+      const marginMove = await applyMoneyMove(db, {
+        key: turnMoveKey("cb-margin-interest", corp._id.toString(), turn),
+        kind: "cb_margin_interest",
+        turn,
+        legs: [
+          {
+            kind: "debit",
+            amount: paid,
+            collection: "corporations",
+            filter: { _id: corp._id, "bankCharter.status": "active" },
+            path: "bankCharter.cashReserves",
+            note: "bank pays interest on its central-bank margin line",
+          },
+          {
+            kind: "credit",
+            amount: paid,
+            collection: "centralBanks",
+            filter: { _id: cbDocId },
+            path: "reserveBalance",
+            note: "central bank books margin-line interest",
+          },
+        ],
+      });
+      if (marginMove.status === "partial" || marginMove.status === "rejected") {
+        paid = 0;
+        shortfall = interestDue;
+      }
+    }
 
     // Interest is CB revenue, exactly like line-of-credit interest, which credits
     // the same reserveBalance. Destroying it here while crediting it there made
@@ -1433,11 +1482,10 @@ async function serviceInterbankAndCbMargin(
         updatedAt: new Date(),
       },
     };
-    if (paid > 0 || shortfall > 0) {
-      marginUpdate.$inc = {
-        ...(paid > 0 ? { "bankCharter.cashReserves": -paid } : {}),
-        ...(shortfall > 0 ? { "bankCharter.cbMarginArrears": shortfall } : {}),
-      };
+    if (shortfall > 0) {
+      // Cash moved through the primitive above; this write carries only the
+      // arrears accrual and the stamp.
+      marginUpdate.$inc = { "bankCharter.cbMarginArrears": shortfall };
     }
     await db.collection<Corporation>("corporations").updateOne(
       {
@@ -1460,8 +1508,37 @@ async function serviceInterbankAndCbMargin(
       const windowRate = discountWindowRatePercent(primeByCurrency.get(currency) ?? 0);
       const windowInterestDue = (windowDebt * (windowRate / 100)) / TURNS_PER_YEAR;
       const availableAfterMargin = Math.max(0, liquid - paid);
-      const windowPaid = Math.min(windowInterestDue, availableAfterMargin);
-      const windowShortfall = Math.max(0, windowInterestDue - windowPaid);
+      let windowPaid = Math.min(windowInterestDue, availableAfterMargin);
+      let windowShortfall = Math.max(0, windowInterestDue - windowPaid);
+      if (windowPaid > 0) {
+        const windowMove = await applyMoneyMove(db, {
+          key: turnMoveKey("discount-window-interest", corp._id.toString(), turn),
+          kind: "discount_window_interest",
+          turn,
+          legs: [
+            {
+              kind: "debit",
+              amount: windowPaid,
+              collection: "corporations",
+              filter: { _id: corp._id, "bankCharter.status": "active" },
+              path: "bankCharter.cashReserves",
+              note: "bank pays discount-window interest",
+            },
+            {
+              kind: "credit",
+              amount: windowPaid,
+              collection: "centralBanks",
+              filter: { _id: cbDocId },
+              path: "reserveBalance",
+              note: "central bank books discount-window interest",
+            },
+          ],
+        });
+        if (windowMove.status === "partial" || windowMove.status === "rejected") {
+          windowPaid = 0;
+          windowShortfall = windowInterestDue;
+        }
+      }
       await db.collection<Corporation>("corporations").updateOne(
         {
           _id: corp._id,
@@ -1472,40 +1549,16 @@ async function serviceInterbankAndCbMargin(
           ],
         },
         {
-          ...(windowPaid > 0 || windowShortfall > 0
-            ? {
-                $inc: {
-                  ...(windowPaid > 0 ? { "bankCharter.cashReserves": -windowPaid } : {}),
-                  ...(windowShortfall > 0
-                    ? { "bankCharter.discountWindowArrears": windowShortfall }
-                    : {}),
-                },
-              }
+          ...(windowShortfall > 0
+            ? { $inc: { "bankCharter.discountWindowArrears": windowShortfall } }
             : {}),
           $set: { "bankCharter.lastDiscountWindowTurn": turn, updatedAt: new Date() },
         }
       );
-      if (windowPaid > 0) {
-        cbReserveInc.set(currency, (cbReserveInc.get(currency) ?? 0) + windowPaid);
-      }
-    }
-
-    if (paid > 0) {
-      cbReserveInc.set(currency, (cbReserveInc.get(currency) ?? 0) + paid);
     }
 
     summary.cbMarginInterestPaid += paid;
     summary.cbMarginInterestShortfall += shortfall;
-  }
-
-  for (const [currency, inc] of cbReserveInc) {
-    if (inc <= 0) continue;
-    await db
-      .collection<CentralBank>("centralBanks")
-      .updateOne(
-        { _id: getBankId(getCountryIdForCurrency(currency)) },
-        { $inc: { reserveBalance: inc } }
-      );
   }
 }
 

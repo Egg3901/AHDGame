@@ -236,7 +236,16 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
   const applied: number[] = [];
   let failure: string | undefined;
 
-  for (let i = 0; i < legs.length; i += 1) {
+  // Guarded debits go first: if a debit is going to fail its $gte guard, it
+  // must fail before any credit lands, so a partial move can only ever be
+  // "money not yet delivered", never "money created". Original leg indices are
+  // kept so the repair queue reads the caller's order.
+  const order = [...legs.keys()].sort((a, b) => {
+    const rank = (k: number) => (legs[k].kind === "debit" ? 0 : 1);
+    return rank(a) - rank(b) || a - b;
+  });
+
+  for (const i of order) {
     const leg = legs[i];
     const amount = Math.max(0, leg.amount);
     if (leg.kind === "mint" || leg.kind === "burn") {

@@ -24,6 +24,14 @@ const INDEXES: IndexPlan[] = [
     keys: { turn: -1 },
     options: { name: "bankMoneyMoves_turn_desc", background: true },
   },
+  {
+    // The dead-bank loan servicer scans corporations for failed/revoked
+    // charters every banking turn; without this it is a full collection scan
+    // of `corporations` per turn.
+    collection: "corporations",
+    keys: { "bankCharter.status": 1 },
+    options: { name: "corporations_bankCharter_status", background: true, sparse: true },
+  },
 ];
 
 async function createPlannedIndexes(db: Db, dryRun: boolean): Promise<MigrationResult> {

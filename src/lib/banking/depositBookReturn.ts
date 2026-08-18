@@ -370,6 +370,19 @@ export async function returnDepositBook(
   });
 
   if (move.status === "replayed") {
+    // The cash already moved on a previous attempt, but that attempt may have
+    // crashed before it settled the claims and cleared the book. Both steps
+    // are idempotent, so re-running them here costs nothing on a clean replay
+    // and heals the crashed one; skipping them left `npcDeposits` live on a
+    // dead charter, and a later-turn retry (fresh key, cash already gone)
+    // would have paid the household book a second time.
+    await settleCreditorClaims(db, corporationId, cbDocId, options.turn, {
+      centralBankOwed,
+      centralBankPaid,
+      interbankPayouts,
+      interbankOwed,
+    });
+    await clearDepositAggregates(db, corporationId, options.turn, options.cause);
     return { ...EMPTY, depositorsFlipped };
   }
   if (move.status === "rejected" || move.status === "partial") {
