@@ -11,26 +11,28 @@
  *
  * 1. CARRY OVERRIDES FORWARD, NEVER DECAY THEM
  * --------------------------------------------
- * `STATE_POSITION_OVERRIDES` authors a full 51-state regional map for 1953 and
- * again for 1979, and nothing after. Blending the raw tables would read those
- * missing anchors as "no regional character": every state's lean would converge
- * on the single national number by 1991 and stay there. That is not a subtle
- * calibration drift — it flattens the entire electoral geography of the United
- * States, and it runs the Southern realignment BACKWARDS (Alabama's authored
- * `race.white` economic lean is +2.5 in 1979 against a +1.0 national base, so
- * decay pulls it left).
+ * `STATE_POSITION_OVERRIDES` authors a full 51-state regional map at 1953,
+ * 1979, 1991, and 2019. It does not author 1999, 2007, or 2023. Blending the
+ * raw tables would read those missing anchors as "no regional character":
+ * 1999 and 2007 would flatten every state onto the national number instead of
+ * sitting between the 1991 and 2019 maps, and 2023 would drop the 2019
+ * geography entirely. That is not a subtle calibration drift - it flattens
+ * the electoral geography of the United States, and it runs regional
+ * realignments BACKWARDS (Alabama's authored `race.white` economic lean is
+ * +2.5 in 1979 against a +1.5 national base, a +1.0 gap; treating a later
+ * empty cell as "no override" pulls that gap to zero).
  *
- * A missing later anchor means "unchanged", never "reverted to the mean". Past
- * the last authored anchor the override is carried forward as a DELTA against
- * the national base it was authored against, then re-applied to the current
- * era's national base. Alabama stays 1.0 to the right of the nation
- * permanently, while the national trend itself keeps moving. Authoring real
- * 1991+ overrides later strictly improves on this; it is not a prerequisite.
+ * A missing later anchor means "unchanged", never "reverted to the mean".
+ * Between authored maps the tables blend as authored. Past the last authored
+ * map (2019) the override is carried forward as a DELTA against the national
+ * base it was authored against, then re-applied to the current era's national
+ * base, so regional character holds while the national trend itself keeps
+ * moving. Authoring real 1999/2007/2023 maps would replace that interpolation
+ * and carry-forward; it is not a prerequisite.
  *
- * Within the authored range the tables are used as authored — the 1953 values
- * in particular are absolute registration anchors, not deltas (see the
- * comment on `STATE_POSITION_OVERRIDES["1953"]`), so the delta re-basing only
- * ever applies FORWARD of the last authored anchor.
+ * The 1953 values in particular are absolute registration anchors, not deltas
+ * (see the comment on `STATE_POSITION_OVERRIDES["1953"]`), so the delta
+ * re-basing only ever applies FORWARD of the last authored anchor.
  *
  * 2. DE-DUPLICATE WHAT THE CHECKPOINTS ALREADY OWN
  * ------------------------------------------------

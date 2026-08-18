@@ -18,17 +18,18 @@ import { iterationsPages } from "./pages/iterations";
  * exports a `readonly WikiSeedPage[]`; they are concatenated here into the
  * canonical `WIKI_SEED_PAGES` list consumed by `seedWikiPages`.
  *
- * Phase status:
- *   ✓ Phase 1: Getting Started (8 pages)
- *   ✓ Phase 2: Elections (11 pages)
- *   ✓ Phase 3: Legislatures & Government (9 pages)
- *   ✓ Phase 4: Parties, Coalitions, NPPs (11 pages)
- *   ✓ Phase 5: Country hubs (4 pages: US, UK, DE, JP)
- *   ✓ Phase 6: Economy & Finance (12 pages)
- *   ✓ Phase 7: Advanced + Reference + Strategy (11 pages)
- *   ✓ Phase 8: Resources & Contracts (4 pages)
- *   ✓ Phase 9: Commodities (one page per CommodityType, auto-generated)
- *   ✓ Phase 10: Conflicts & Military (11 pages)
+ * Phase status (page counts from the category files concatenated below):
+ *   Getting Started (9 pages)
+ *   Elections (15 pages)
+ *   Legislatures & Government (11 pages)
+ *   Parties, Coalitions, NPPs (12 pages)
+ *   Country hubs (10 pages: US, UK, DE, JP, IE, BR, CN, NG, RU, DD)
+ *   Economy & Finance (28 pages)
+ *   Advanced + Reference + Strategy (19 pages)
+ *   Resources & Contracts (4 pages)
+ *   Commodities (one page per CommodityType, auto-generated)
+ *   Conflicts & Military (11 pages)
+ *   Iterations (2 pages)
  *
  * Wiki goes public when an admin flips `wikiDisabled = false` in the admin panel.
  */

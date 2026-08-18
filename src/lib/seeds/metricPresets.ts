@@ -46,7 +46,7 @@ type PresetBundles = Partial<Record<ResetPresetId, MetricPresetBundle>>;
  * Country → preset → { regionId → { metricPath → value } } overlays for the new ROOT
  * metrics. Mirrors POPULATION_ANCHOR_BUNDLES (populationAnchors.ts); `selectPresetBundle`
  * falls back to `2019-default`, so a country with only a 2019 bundle never throws for a
- * 1991 world. DE/JP/BR/CN/UK/US register here as each country's presets are authored.
+ * 1991 world. Countries register here as their presets are authored.
  */
 const METRIC_PRESET_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   IE: {
