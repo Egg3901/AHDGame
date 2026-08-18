@@ -11,7 +11,7 @@ export const WARSAW_PACT_SATELLITE_COUNTRY_IDS: CountryId[] = ["PL", "DD", "CS",
 
 export const USSR_COUNTRY_ID: CountryId = "RU";
 
-/** USSR plus every satellite — the full bloc a Prague-Spring-style reform
+/** USSR plus every satellite, the full bloc a Prague-Spring-style reform
  *  movement can be scoped to. */
 export const WARSAW_PACT_BLOC_COUNTRY_IDS: CountryId[] = [
   USSR_COUNTRY_ID,

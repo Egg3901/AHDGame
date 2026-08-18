@@ -27,7 +27,7 @@ export function getTemplateDuration(
 // doesn't exist in the schema would silently create a dead, unread field. This table binds
 // the human-readable concepts used in the templates below to real metric paths. Consumer and
 // investor confidence are real per-state metrics (economic.consumerConfidence /
-// economic.investorConfidence — engine-computed in registry/economic.ts), so crisis shocks
+// economic.investorConfidence, engine-computed in registry/economic.ts), so crisis shocks
 // land on the same fields the margin/valuation systems read. Inflation is national, not a
 // stateMetric, and is handled separately in fx() (see below).
 const METRIC_ALIASES: Record<string, { category: string; field: string }> = {
@@ -52,7 +52,7 @@ function fx(
   metricField: string,
   // Authored as a FRACTIONAL swing (e.g. -0.02 = "a 2% swing"). The turn engine
   // applies effects as a raw $inc in native metric units (gdpGrowth ~1.5,
-  // approvalRating 0–100, inflationRate ~2.5), so we convert here via
+  // approvalRating 0-100, inflationRate ~2.5), so we convert here via
   // toNativeEffectValue (×100 flat, ×30 tick). See effectScale.ts.
   swing: number,
   label: string
@@ -73,7 +73,7 @@ function fx(
       label,
     };
   }
-  // Stat effects bypass metric aliases — they target character stats directly.
+  // Stat effects bypass metric aliases, they target character stats directly.
   if (targetType === "stat") {
     return {
       effectType,
@@ -104,10 +104,10 @@ function fx(
 
 /**
  * One-time, real GDP output loss for physical-destruction disasters. `fraction`
- * is the share of the affected region's GDP destroyed at onset (0.005–0.03 →
- * 0.5%–3%), applied once as a multiplicative cut to `state.gdp`. Surfaced in the
+ * is the share of the affected region's GDP destroyed at onset (0.005-0.03 →
+ * 0.5%-3%), applied once as a multiplicative cut to `state.gdp`. Surfaced in the
  * UI as "X% of GDP lost · $Ybn". Prefer this over a `economy.gdp` growth-rate
- * shock for earthquakes/hurricanes/etc. — the growth-rate path is for persistent
+ * shock for earthquakes/hurricanes/etc., the growth-rate path is for persistent
  * economic crises, not one-off destruction.
  */
 function gdpLoss(fraction: number, label: string): CrisisEffect {
@@ -125,7 +125,7 @@ function gdpLoss(fraction: number, label: string): CrisisEffect {
 
 /**
  * A single, steady profit-margin shock for economic crises. Authored in
- * percentage points (NOT scaled — bypasses fx()), it lands at full `value` on the
+ * percentage points (NOT scaled, bypasses fx()), it lands at full `value` on the
  * onset turn and ramps linearly to 0 at expiry, exactly like the infrastructure-
  * disaster margin penalty. Applied as a read-time blend on every corp in the
  * crisis's scope (see disasterMarginPenalty.ts / buildLookups resolveCrisisStateIds),
@@ -135,7 +135,7 @@ function gdpLoss(fraction: number, label: string): CrisisEffect {
  * `physicality` (P3.5) decides how the shock bites under the plants tier:
  * "physical" converts the percentage points into a production haircut (less
  * tonnage), "financial" keeps it a margin hit at unchanged tonnage. Default is
- * "financial" — the conservative choice, and the only one that is safe for
+ * "financial", the conservative choice, and the only one that is safe for
  * already-spawned crises, which carry no flag. Classify a template "physical"
  * only when the event plainly STOPS output (power cut, plant halt, port shut,
  * inputs unavailable); anything that is a price, credit, demand or sentiment
@@ -440,8 +440,8 @@ export const RECESSION_TEMPLATE: CrisisTemplate = {
 // Four templates below author their margin shock as a rise in the cost of
 // INPUTS: Inflation Spike, Energy Crisis, Currency Crisis (imported inputs) and
 // Trade War (tariffed inputs). Under the plants tier a sector pays for its
-// inputs physically — an explicit inputs-cost line valued at live commodity
-// prices — so any input-price movement the market itself produces is already in
+// inputs physically, an explicit inputs-cost line valued at live commodity
+// prices, so any input-price movement the market itself produces is already in
 // the P&L and must not be charged a second time as margin points.
 //
 // These four are nonetheless kept at FULL magnitude and classified "financial",
@@ -451,8 +451,8 @@ export const RECESSION_TEMPLATE: CrisisTemplate = {
 // residual financial shock, not a duplicate of it. Zeroing them under plants
 // would delete the effect outright rather than de-duplicate it.
 //
-// The one template that IS a real quantity shock — Supply Chain Disruption,
-// where inputs are unavailable rather than expensive — is instead reclassified
+// The one template that IS a real quantity shock, Supply Chain Disruption,
+// where inputs are unavailable rather than expensive, is instead reclassified
 // "physical", so it cuts tonnage through the production factor and stops being
 // an unpriced margin hit. That is the double-count guard: reclassification, not
 // magnitude zeroing. If a future template literally raises modelled commodity
@@ -1462,7 +1462,7 @@ export const REFUGEE_CRISIS_TEMPLATE: CrisisTemplate = {
 export const PANDEMIC_TEMPLATE: CrisisTemplate = {
   name: "Pandemic",
   autoTrigger: { kind: "random", cooldownTurns: 432, scope: "global", spawnChance: 0.0015 },
-  // Deliberately NO year window. Global pandemics are not a modern phenomenon —
+  // Deliberately NO year window. Global pandemics are not a modern phenomenon:
   // 1957 Asian flu and 1968 Hong Kong flu each killed over a million people.
   // The old `notForEras` gate was incoherent anyway: it blocked 1979 and 1991
   // while leaving 1953 open. Removing it adds possibility space rather than
@@ -1883,7 +1883,7 @@ export const LABOR_STRIKES_TEMPLATE: CrisisTemplate = {
 };
 
 /**
- * Nationwide steel strike — the first crisis to use real-subsystem action hooks
+ * Nationwide steel strike, the first crisis to use real-subsystem action hooks
  * (see CrisisOptionAction). Steel has no dedicated sector type; it is produced by
  * the `manufacturing` sector, so the strike concentrates its bite there and the
  * supply shock propagates downstream (autos, defense, construction, energy) via
@@ -1932,7 +1932,7 @@ export const STEEL_STRIKE_TEMPLATE: CrisisTemplate = {
   wireMessageOnStart:
     "Steelworkers have struck nationwide. Furnaces are banking down and steel-dependent industry is grinding to a halt.",
   wireMessageOnEnd:
-    "The steel strike is over. The settlement — imposed, negotiated, or won in court — reshapes the industry.",
+    "The steel strike is over. The settlement, imposed, negotiated, or won in court, reshapes the industry.",
   interactionDefinition: {
     decisionTree: [
       {
@@ -1948,7 +1948,7 @@ export const STEEL_STRIKE_TEMPLATE: CrisisTemplate = {
             optionId: "response_executive_order",
             label: "Nationalize by Executive Order",
             description:
-              "Seize the steel industry by emergency executive order and run the mills as state enterprises. Fast and decisive — but the order will be challenged in the Supreme Court, which can strike it down.",
+              "Seize the steel industry by emergency executive order and run the mills as state enterprises. Fast and decisive, but the order will be challenged in the Supreme Court, which can strike it down.",
             nextNodeId: "terminal_executive",
             action: { kind: "executiveNationalize", sectorType: "manufacturing" },
             effects: [
@@ -1974,7 +1974,7 @@ export const STEEL_STRIKE_TEMPLATE: CrisisTemplate = {
             optionId: "response_emergency_bill",
             label: "Emergency Nationalization Bill",
             description:
-              "Send Congress an emergency bill to nationalize steel at fair value. No court risk if it passes — but you need the votes, and the strike burns on while it is debated.",
+              "Send Congress an emergency bill to nationalize steel at fair value. No court risk if it passes, but you need the votes, and the strike burns on while it is debated.",
             nextNodeId: "terminal_bill",
             action: {
               kind: "emergencyNationalizeBill",
@@ -2037,7 +2037,7 @@ export const STEEL_STRIKE_TEMPLATE: CrisisTemplate = {
       {
         nodeId: "terminal_executive",
         type: "terminal",
-        title: "Order signed — now to the Court",
+        title: "Order signed, now to the Court",
         description:
           "You have seized the steel mills by executive order. The state is running them, but a constitutional challenge is on its way to the Supreme Court.",
         outcomeMessage:
@@ -4129,11 +4129,11 @@ export const URBAN_RIOTS_TEMPLATE: CrisisTemplate = {
 };
 
 // Vietnam escalation scaling. `getVietnamEscalationLevel()` currently always
-// returns 0 (see vietnamEscalationInterface.ts — Track A has not wired the
+// returns 0 (see vietnamEscalationInterface.ts, Track A has not wired the
 // real state yet), so today this resolves to the floor values below. Once
 // Track A's implementation lands and returns a live 0-1 reading, these will
 // scale up with it on the next deploy (module-level, so a running process
-// picks up a code change, not a runtime state change — restarting the deploy
+// picks up a code change, not a runtime state change, restarting the deploy
 // is what makes escalation take effect, same as any other server constant).
 const VIETNAM_ESCALATION = getVietnamEscalationLevel();
 const ANTIWAR_SPAWN_CHANCE = 0.0015 + 0.0025 * VIETNAM_ESCALATION;
