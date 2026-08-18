@@ -211,6 +211,7 @@ async function loadPrimaryData(partySlug: string) {
       homeState,
       primaryCampaignState: c.primaryCampaignState ?? null,
       primaryCampaignTicks: c.primaryCampaignTicks ?? 0,
+      support: c.support,
     };
   });
 
