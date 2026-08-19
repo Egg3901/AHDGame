@@ -18,6 +18,9 @@ import { tradeSystemContent } from "../content/tradeSystem";
 import { rpgStatsContent } from "../content/rpgStats";
 import { crisisInteractionContent } from "../content/crisisInteraction";
 import { playerEventsContent } from "../content/playerEvents";
+import { blocSpheresContent } from "../content/blocSpheres";
+import { notificationsContent } from "../content/notifications";
+import { granularPollingContent } from "../content/granularPolling";
 import {
   INTERNATIONAL_ORGANIZATION_ORDER,
   INTERNATIONAL_ORGANIZATIONS,
@@ -254,5 +257,41 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 4,
+  },
+  {
+    slug: "bloc-spheres",
+    title: "Bloc Alignment & Spheres of Influence",
+    description:
+      "Cold War pole shares and lead, the 60/40 join and leave thresholds with their deadband, passive drift and membership pull, and bloc stress from contested, leaving and newly-digested members.",
+    content: blocSpheresContent,
+    category: "advanced",
+    featured: false,
+    difficulty: "advanced",
+    contentType: "guide",
+    estimatedReadTime: 7,
+  },
+  {
+    slug: "notifications",
+    title: "Notification Center",
+    description:
+      "Reading and managing the in-app inbox: notifications versus mail, the All/Notifs/Mail/Action-needed segments, archiving, and per-type muting and snoozing.",
+    content: notificationsContent,
+    category: "advanced",
+    featured: false,
+    difficulty: "beginner",
+    contentType: "guide",
+    estimatedReadTime: 4,
+  },
+  {
+    slug: "granular-polling",
+    title: "Granular Polling",
+    description:
+      "Reading the granular electorate panel on your poll results: Layer-1 demographic cross-tab segments, dimension tabs, stacked filters, and why smaller segments carry a wider margin of error.",
+    content: granularPollingContent,
+    category: "advanced",
+    featured: false,
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 5,
   },
 ];

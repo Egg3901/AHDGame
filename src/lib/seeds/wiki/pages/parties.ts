@@ -2,6 +2,7 @@ import type { WikiSeedPage } from "../types";
 import { politicalPartiesContent } from "../content/politicalParties";
 import { partyMembershipContent } from "../content/partyMembership";
 import { partyLeadershipContent } from "../content/partyLeadership";
+import { partyLeadershipAuthorityContent } from "../content/partyLeadershipAuthority";
 import { partyOrganizationContent } from "../content/partyOrganization";
 import { partyIdeologyContent } from "../content/partyIdeology";
 import { partyActionsContent } from "../content/partyActions";
@@ -42,6 +43,17 @@ export const partiesPages: readonly WikiSeedPage[] = [
     description:
       "Chair, vice chair, and treasurer roles at the national and state level: elections, whip authority, and the chairId vs chairCharacterId distinction.",
     content: partyLeadershipContent,
+    category: "parties",
+    difficulty: "intermediate",
+    contentType: "reference",
+    estimatedReadTime: 7,
+  },
+  {
+    slug: "party-leadership-authority",
+    title: "Party Leadership & Authority",
+    description:
+      "Acting-chair vice-chair inheritance, the 24-turn leadership tenure gate, the unmanned-default capture shield, and UK regional-party ballot gating.",
+    content: partyLeadershipAuthorityContent,
     category: "parties",
     difficulty: "intermediate",
     contentType: "reference",
