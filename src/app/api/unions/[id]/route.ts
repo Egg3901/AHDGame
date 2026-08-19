@@ -67,6 +67,7 @@ import {
   unionMembers,
 } from "@/lib/unions/unionDues";
 import { normalizeServiceIds } from "@/lib/unions/unionServices";
+import { clampPoliticalContributionPct } from "@/lib/unions/unionPoliticalContributions";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -316,6 +317,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         duesIncomePerTurn: duesIncomePerTurn(members, duesPerWorkerAnnual),
         activeServices,
         servicesCostPerTurn: servicesCostPerTurn(members, annualWage, activeServices),
+        politicalContributionPct: clampPoliticalContributionPct(union.politicalContributionPct),
         foundedByCharacterId: union.foundedByCharacterId?.toString() ?? null,
         demandedWageLevel: union.demandedWageLevel,
         suspended,

@@ -77,6 +77,7 @@ import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getTotalPersonalLiquidWealth, getHomeCurrency } from "@/lib/currency/characterFunds";
 import { getNationalNpiOrdinalRank } from "@/lib/character/nationalNpiOrdinalRank";
 import { getFinancialData } from "@/lib/character/financialData";
+import { unionContributionIncomePerTurn } from "@/lib/unions/unionContributionIncome";
 import { ACTION_HOARDING_THRESHOLD } from "@/lib/actions/recommendationsConstants";
 
 const MIN_BASE_ACTIONS_PER_TURN = 4;
@@ -357,7 +358,11 @@ export default async function ProfilePage() {
     redirect("/create-character");
   }
 
-  const [financialData] = await Promise.all([getFinancialData(data.character._id)]);
+  const db = await getDb();
+  const [financialData, unionContribution] = await Promise.all([
+    getFinancialData(data.character._id),
+    unionContributionIncomePerTurn(db, data.character._id),
+  ]);
   const { corporation, bondIncomePerTurn, dividendIncomePerTurn, portfolioValue, fxRatesRecord } =
     financialData;
 
@@ -732,8 +737,9 @@ export default async function ProfilePage() {
                     baseGen: fundDistribution.baseGeneration,
                     donorBonus: fundDistribution.donorBaseBonus,
                     officeBonus: fundDistribution.officeBonus,
+                    unionContribution,
                     totalTax: fundDistribution.stateTaxAmount + fundDistribution.nationalTaxAmount,
-                    netIncome: fundDistribution.characterReceives,
+                    netIncome: fundDistribution.characterReceives + unionContribution,
                   }}
                   personalIncome={{
                     ceoSalaryPerHour: corporation ? corporation.ceoSalary / 24 : undefined,

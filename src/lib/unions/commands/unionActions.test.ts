@@ -2,7 +2,13 @@ import { describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { Character, CorporateSector, Union } from "@/lib/db/types";
-import { endorseBill, setUnionDues, setUnionServices, setUnionWageDemand } from "./unionActions";
+import {
+  endorseBill,
+  setUnionDues,
+  setUnionPoliticalContributions,
+  setUnionServices,
+  setUnionWageDemand,
+} from "./unionActions";
 import { MAX_DUES_FRACTION_OF_WAGE, maxDuesForWage } from "@/lib/unions/unionDues";
 import { annualWageFromDaily } from "@/lib/unions/unionServices";
 
@@ -350,5 +356,56 @@ describe("setUnionServices", () => {
     if (!result.ok) return;
     expect(result.activeServices).toEqual([]);
     expect(result.servicesCostPerTurn).toBe(0);
+  });
+});
+
+describe("setUnionPoliticalContributions", () => {
+  it("clamps a rate above 50% of free cash flow down to the cap", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id);
+    const { db, updateOne } = duesDb(union, [makeSector()]);
+
+    const result = await setUnionPoliticalContributions(db, character, union._id.toString(), 0.9);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.politicalContributionPct).toBe(0.5);
+
+    const [, update] = updateOne.mock.calls[0];
+    expect(update.$set.politicalContributionPct).toBe(0.5);
+  });
+
+  it("rejects a non-finite rate", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id);
+    const { db } = duesDb(union, [makeSector()]);
+
+    const result = await setUnionPoliticalContributions(
+      db,
+      character,
+      union._id.toString(),
+      Number.NaN
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(400);
+  });
+
+  it("rejects a character who does not lead this union", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(new ObjectId());
+    const { db } = duesDb(union, [makeSector()]);
+
+    const result = await setUnionPoliticalContributions(db, character, union._id.toString(), 0.2);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(403);
+  });
+
+  it("is rejected while the turn is processing", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id);
+    const { db } = duesDb(union, [makeSector()], vi.fn().mockResolvedValue({}), true);
+
+    const result = await setUnionPoliticalContributions(db, character, union._id.toString(), 0.2);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(409);
   });
 });
