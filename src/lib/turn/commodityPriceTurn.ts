@@ -1638,6 +1638,25 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           freightSettlement?.inputAvailabilityByCommodity.get(commodity)?.entries() ?? []
         )
       : undefined;
+    // Sell side of the same settlement: how much of each state's OWN output
+    // found a buyer. Persisted next to the buy-side pair above so next turn's
+    // corporation phase can offer only what a network could actually move.
+    // Without it, clearing (country-scoped) and freight (state-scoped) keep
+    // contradicting each other, which at t225 left 60.4% of world production
+    // stranded in a state that did not need it.
+    const placedSupply = freightSettlementActive
+      ? Object.fromEntries(
+          freightSettlement?.placedSupplyByCommodity.get(commodity)?.entries() ?? []
+        )
+      : undefined;
+    // Why this is persisted separately and not derived as supply minus placed:
+    // the difference lumps a glut in with a delivery failure, and the player
+    // copy built on it says opposite things in the two cases.
+    const deliveryLimitedSupply = freightSettlementActive
+      ? Object.fromEntries(
+          freightSettlement?.deliveryLimitedSupplyByCommodity.get(commodity)?.entries() ?? []
+        )
+      : undefined;
 
     ops.push({
       updateOne: {
@@ -1653,6 +1672,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             stateDemand,
             ...(deliveredSupply ? { stateDeliveredSupply: deliveredSupply } : {}),
             ...(inputAvailability ? { stateInputAvailability: inputAvailability } : {}),
+            ...(placedSupply ? { statePlacedSupply: placedSupply } : {}),
+            ...(deliveryLimitedSupply ? { stateDeliveryLimitedSupply: deliveryLimitedSupply } : {}),
             nationalPrices,
             nationalSupply,
             nationalDemand,

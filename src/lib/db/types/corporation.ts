@@ -799,6 +799,14 @@ export interface CorporateSector {
   throughputBindingInput?: string | null;
   throughputStartTurn?: number | null;
   /**
+   * Share of this sector's offered output (0..1) that no freight network could
+   * place last turn: produced, offered, and undeliverable. Distinct from a
+   * demand failure, which is what `soldFraction` already carries. Split out so
+   * a player can tell "nobody wanted it" from "it could not get there", the
+   * two being opposite instructions about what to do next.
+   */
+  deliveryLimitedFraction?: number;
+  /**
    * Posted-price market clearing (marketSystemMode >= "clearing", audit t806
    * Fix 2). `pricingPosture` is the CEO's posted price relative to market
    * (−0.2 … 0.2); null/absent = auto-position (NPP/unowned heuristic).

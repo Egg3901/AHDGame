@@ -4,8 +4,8 @@
  * persistence and the corporation turn consumes the previous result.
  */
 
-import type { CommodityType } from "@/lib/constants/commodities";
-import { SHIPPED_COMMODITIES } from "./freightClass";
+import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
+import { FREIGHT_CLASS_BY_COMMODITY, SHIPPED_COMMODITIES } from "./freightClass";
 import { runSourcingPass, type SourcingInputs, type SourcingResult } from "./sourcing";
 
 export interface FreightSettlement {
@@ -15,6 +15,28 @@ export interface FreightSettlement {
   deliveredSupplyByCommodity: Map<CommodityType, Map<string, number>>;
   /** Share of a state's requested physical input that the network delivered. */
   inputAvailabilityByCommodity: Map<CommodityType, Map<string, number>>;
+  /**
+   * The BUY side's mirror: units of a state's own production that found a
+   * buyer, `supply - unplaced`. `deliveredSupplyByCommodity` says what a state
+   * received; this says what it managed to get rid of.
+   *
+   * Both halves are needed because the two sides of the market are scoped
+   * differently (clearing is country-wide, freight settles state by state),
+   * and at t225 that disagreement had 60.4% of world production sitting in a
+   * state that did not need it while 28.7% of world demand went unmet.
+   */
+  placedSupplyByCommodity: Map<CommodityType, Map<string, number>>;
+  /**
+   * Of the production a state could NOT place, the part that failed because it
+   * could not reach a willing buyer rather than because there was none. See
+   * `SourcingResult.deliveryLimitedSupplyByState` for the attribution rule.
+   *
+   * This is the only one of the three that may be shown to a player as a
+   * delivery problem. `supply - placed` is not: it also contains plain glut,
+   * and telling the owner of a glutted sector to build freight is worse than
+   * telling them nothing.
+   */
+  deliveryLimitedSupplyByCommodity: Map<CommodityType, Map<string, number>>;
 }
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
@@ -59,5 +81,40 @@ export function settleFreightNetwork(inputs: SourcingInputs): FreightSettlement 
     }
   }
 
-  return { sourcing, deliveredSupplyByCommodity, inputAvailabilityByCommodity };
+  // Placed supply: what each state's own production managed to sell. The
+  // sourcing pass hands back the exact leftover spare, so this is a straight
+  // subtraction rather than a sum over `flows` (grid legs lose units in
+  // transit, so a flow-side reconstruction never closes).
+  const placedSupplyByCommodity = new Map<CommodityType, Map<string, number>>();
+  const deliveryLimitedSupplyByCommodity = new Map<CommodityType, Map<string, number>>();
+  for (const commodity of COMMODITY_TYPES) {
+    const unplaced = sourcing.unplacedSupplyByState.get(commodity);
+    const deliveryLimitedByState = sourcing.deliveryLimitedSupplyByState.get(commodity);
+    const placed = new Map<string, number>();
+    const deliveryLimited = new Map<string, number>();
+    // Unshipped commodities (services, and `freight` itself) have no network
+    // and never enter the sourcing pass, so there is nothing about them that
+    // could be delivery-limited: they are placed in full. NOT capped at local
+    // demand, which would be a demand failure wearing a delivery failure's
+    // clothes. That is `soldFraction`'s job, and capping here would quietly
+    // state-scope the clearing of every service sector.
+    const shipped = FREIGHT_CLASS_BY_COMMODITY[commodity] !== null;
+    for (const { stateId } of inputs.states) {
+      const supply = Math.max(0, inputs.byState.get(stateId)?.get(commodity)?.supply ?? 0);
+      placed.set(stateId, shipped ? Math.max(0, supply - (unplaced?.get(stateId) ?? 0)) : supply);
+      // Unshipped: no network exists to fail, so the delivery-limited figure is
+      // structurally zero rather than merely unmeasured.
+      deliveryLimited.set(stateId, shipped ? (deliveryLimitedByState?.get(stateId) ?? 0) : 0);
+    }
+    placedSupplyByCommodity.set(commodity, placed);
+    deliveryLimitedSupplyByCommodity.set(commodity, deliveryLimited);
+  }
+
+  return {
+    sourcing,
+    deliveredSupplyByCommodity,
+    inputAvailabilityByCommodity,
+    placedSupplyByCommodity,
+    deliveryLimitedSupplyByCommodity,
+  };
 }

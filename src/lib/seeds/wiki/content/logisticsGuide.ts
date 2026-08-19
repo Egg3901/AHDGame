@@ -1,15 +1,21 @@
 import {
   BUYER_TOLERANCE_SLACK,
   FREIGHT_CLASS_CAPACITY_SHARE,
+  FREIGHT_CONGESTION_OVERFLOW,
+  FREIGHT_CONGESTION_SURCHARGE,
   FREIGHT_TEU_PER_UNIT_HOP,
+  GRID_LOSS_PER_HOP,
+  GRID_WHEELING_PER_HOP_FRACTION,
   SEA_FREIGHT_HOP_EQUIV,
 } from "@/lib/logistics/sourcing";
 
 const pct = (value: number) => `${Math.round(value * 100)}%`;
+const overflowMultiple = (1 + FREIGHT_CONGESTION_OVERFLOW).toFixed(1);
+const gridSurvivalOverSeaHops = Math.pow(1 - GRID_LOSS_PER_HOP, SEA_FREIGHT_HOP_EQUIV);
 
 export const logisticsGuideContent = `# Logistics: Freight, Sourcing, and Supply Chains
 
-Logistics connects the commodity market to the map. The game projects how a state with unmet input demand would source locally, across state lines, or from abroad after shipping and tariffs. Logistics sectors provide the freight capacity measured by that projection. Heavy haul becomes real Freight commodity demand, so tight capacity raises freight sold volume and price.
+Logistics connects the commodity market to the map. The game projects how a state with unmet input demand would source locally, across state lines, or from abroad after shipping and tariffs. Logistics sectors provide the freight capacity measured by that projection. Heavy haul becomes real Freight commodity demand, so tight capacity raises freight sold volume and price. Electricity and natural gas are the exception: they travel by wire and pipe, spend no freight capacity, and pay distance in transmission loss instead.
 
 The distinction matters: the haul calculation currently drives the Freight market and the Logistics map. It does not yet replace aggregate commodity clearing with per-route settlement or send a separate shipping payment from each buyer to a logistics corporation.
 
@@ -19,7 +25,7 @@ For a corporation, logistics answers three questions:
 
 1. **Can the market supply the input locally?** Projected local supply fills first and uses no freight capacity.
 2. **If not, where is the cheapest reachable seller?** The sourcing projection compares the seller's ask, shipping cost, and tariff.
-3. **Can the route carry it?** Projected interstate haul consumes freight capacity in the seller's state. Capacity and price tolerance determine the haul load shown on the map.
+3. **What does the route cost?** Projected interstate haul consumes freight capacity in the seller's state, and haul past that state's nominal capacity pays a congestion surcharge on top. Capacity is a price rather than a ceiling: the buyer's price tolerance is what finally stops a route. Grid goods skip the haulage fleet entirely.
 
 For a logistics corporation, the practical loop is simpler: open logistics sectors where the map shows heavy haul load or weak freight capacity, then watch the Freight commodity page to see whether the market is short or oversupplied.
 
@@ -57,27 +63,61 @@ For the haul projection, each state with unmet demand ranks eligible sellers by 
 
 \`landed price = seller ask + shipping + tariff\`
 
-The cheapest eligible source fills first, up to four limits:
+The cheapest eligible source fills first, up to three limits:
 
 1. the buyer's remaining demand;
 2. the seller's spare supply;
-3. the freight capacity available for that class;
-4. the buyer's price tolerance.
+3. the buyer's price tolerance.
+
+Freight capacity is the fourth influence, and it now acts through price rather than as a limit of its own. Haul above a state's nominal class capacity keeps running at a surcharge, which pushes the landed price toward the tolerance ceiling. A state with no freight supply at all still hauls nothing.
 
 The tolerance ceiling is the local price plus ${pct(BUYER_TOLERANCE_SLACK)}. A technically reachable projected shipment can still be rejected when freight and tariffs make it too expensive. The sourcing report records that amount as unmet, while aggregate commodity clearing remains the source of truth for the commodity market itself.
 
 Imports use a flat ${SEA_FREIGHT_HOP_EQUIV}-hop sea equivalent for landed-price comparison. Domestic states with no modeled route use the same fallback. Embargoes remove a route entirely; tariffs leave it open but make it more expensive.
 
-## Bulk and special freight
+## The three freight classes
 
-The network divides state freight capacity into two classes:
+Every shipped commodity belongs to one of three classes. Two of them ride the same haulage fleet and spend a state's freight capacity. The third does not.
 
 | Class | Share of state freight capacity | TEU per commodity unit per hop | Typical cargo |
 | --- | ---: | ---: | --- |
 | Bulk | ${pct(FREIGHT_CLASS_CAPACITY_SHARE.bulk)} | ${FREIGHT_TEU_PER_UNIT_HOP.bulk} | Heavy raw materials and ordinary physical goods |
 | Special | ${pct(FREIGHT_CLASS_CAPACITY_SHARE.special)} | ${FREIGHT_TEU_PER_UNIT_HOP.special} | Higher-care or specialized cargo |
+| Grid | None | ${FREIGHT_TEU_PER_UNIT_HOP.grid} | Electricity and natural gas |
 
-Special freight consumes more TEU per unit per hop. A state can therefore have spare bulk capacity while its special network is tight. The map tooltip exposes both loads.
+Special freight consumes more TEU per unit per hop. A state can therefore have spare bulk capacity while its special network is tight. The map tooltip exposes both loads. The bulk and special shares above are the starting split; each state's split then follows the mix it actually shipped last turn, with a floor under each class so neither can be starved to zero.
+
+### Grid: wire and pipe
+
+Electricity and natural gas are delivered by wire and pipe. They cross state lines like anything else, but they never draw on the haulage fleet and never create Freight demand. Distance still costs, in two ways:
+
+- **Transmission loss.** Every state line crossed loses ${pct(GRID_LOSS_PER_HOP)} of the units dispatched. A ${SEA_FREIGHT_HOP_EQUIV}-hop haul delivers about ${pct(gridSurvivalOverSeaHops)} of what was sent, so the seller draws down more than the buyer receives.
+- **A wheeling charge.** Every crossing adds ${pct(GRID_WHEELING_PER_HOP_FRACTION)} of the seller's ask to the landed price. The charge is priced off the seller, not off the freight market, so a freight shortage does not raise the cost of power.
+
+There is no capacity ceiling on a grid route, so a state short of power can always import it at a price. Loss and wheeling are what keep distant generation behind local generation in the landed-price sort. Generation sited far from load still sells; it sells at a discount for the distance.
+
+## When the network is congested
+
+Freight capacity sets a price, not a ceiling. Once haul in a state passes the nominal capacity for a class:
+
+- the network keeps moving goods up to ${overflowMultiple}x that nominal capacity;
+- every unit above nominal pays a ${pct(FREIGHT_CONGESTION_SURCHARGE)} surcharge on the shipping leg of its landed price;
+- the buyer's tolerance ceiling ends the flow. If the surcharged landed price breaks the ceiling, the overflow does not move and the demand is recorded as unmet on price rather than on capacity.
+
+A short haul into a congested state usually still clears, because the surcharge falls on a small shipping leg. A long haul into the same state prices itself out. A state with no freight supply of its own hauls nothing at any price.
+
+Because haul can now run past nominal capacity, a state's load can exceed its capacity. That is congestion, and the units above capacity are the ones paying the surcharge. Sustained congestion in a state is a standing signal for a logistics CEO: the haul is real Freight demand, and the last units of it are moving at a premium.
+
+## When a sector cannot deliver
+
+A sector's clearing offer is capped by what the freight network could actually place. Output that no route could carry to a buyer is not counted as a sale, and the sector reports the share of its offered output that was produced and could not be delivered. When that share is meaningful, the sector row carries a **Freight** tag and the sector page states how many units had no freight to carry them.
+
+That splits one bad number into two different instructions:
+
+- **Low selling %, small delivery-limited share.** The market did not want the goods. Change price, cut output, or move the sector toward a commodity in demand.
+- **Low selling %, large delivery-limited share.** Buyers exist and the goods could not reach them. Add freight capacity out of that state, by opening a logistics sector there yourself or buying into one, or site new production closer to the demand you sell into.
+
+The second case is a route problem, so check the Logistics map for the origin state before touching production. A thin freight network strands whatever is built behind it, however healthy the national commodity balance looks.
 
 ## What a logistics CEO should do
 
@@ -91,7 +131,7 @@ Special freight consumes more TEU per unit per hop. A state can therefore have s
 
 ### After opening a sector
 
-- Watch **selling %** on the sector page. Low selling means the market does not need all your output.
+- Watch **selling %** on the sector page together with the **Freight** tag beside it. Low selling with no Freight tag means the market does not need the output. Low selling with a Freight tag means the output could not get out of the state.
 - Watch the Logistics map after each market turn. New industrial capacity can create new haul demand.
 - Compare your freight price with the cost of inputs used by physical industries. A freight shortage can raise costs across manufacturing, agriculture, chemicals, extraction, and construction.
 - Use a focused logistics strategy only when its output and input mix match the shortage you are trying to serve.
@@ -112,6 +152,10 @@ Spending on corporate logistics strength does not create TEU. Opening and operat
 **Treating global freight shortage as proof every state is profitable.** Sector economics are still local, national, and global. Check the exchange and state before building.
 
 **Assuming imports use domestic freight capacity.** Overseas supply affects landed price through the sea-hop cost and tariffs, but it does not consume an origin state's domestic freight pool.
+
+**Expecting electricity to need trucks.** Grid commodities cross state lines without touching freight capacity, so a power sector in a state with a thin freight network can still sell outside it. It pays transmission loss and a wheeling charge instead.
+
+**Reading a delivery-limited sector as weak demand.** Output that could not be delivered and output nobody wanted look the same on selling % alone. Check the delivery-limited share before cutting production, because the two call for opposite responses.
 
 **Reading projected routes as settled commodity transfers.** The route calculation measures haul and creates Freight demand. Aggregate commodity clearing still determines commodity supply, demand, and margin effects.
 

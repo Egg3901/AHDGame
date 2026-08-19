@@ -1748,6 +1748,19 @@ export function processSector(
     sectorUpdate.throughputBindingInput = throughputRaw.bindingInput ?? null;
     sectorUpdate.throughputStartTurn = throughputStartTurn ?? null;
   }
+  // Freight seam telemetry (t225): the share of output that was wanted and
+  // still could not be delivered, sat next to `soldFraction` above, which
+  // measures the opposite thing. A glut is NOT in this number: it is attributed
+  // in the sourcing pass against residual unmet demand, because the sector
+  // surface reads it as "buyers still wanted it" and tells the player to fix
+  // freight rather than cut output.
+  // Only settlement worlds populate the map, so a world with settlement off
+  // writes nothing new, except to clear a value it wrote while settlement was
+  // on, which would otherwise sit stale on the sector forever.
+  const deliveryLimited = market.deliveryLimitedBySectorId?.get(sector._id.toString());
+  if (deliveryLimited != null || typeof sector.deliveryLimitedFraction === "number") {
+    sectorUpdate.deliveryLimitedFraction = Math.round((deliveryLimited ?? 0) * 1000) / 1000;
+  }
   // Labour telemetry: persist the per-turn labor cost on a daily basis (like
   // `revenue`), in the sector's host-state currency. Display/analytics only;
   // never read back into the economy. Only written when the labour system is on.

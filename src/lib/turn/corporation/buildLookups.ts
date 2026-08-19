@@ -199,6 +199,8 @@ export async function buildCorporationLookups(
             stateSupply: 1,
             stateDemand: 1,
             stateInputAvailability: 1,
+            statePlacedSupply: 1,
+            stateDeliveryLimitedSupply: 1,
             nationalSupply: 1,
             nationalDemand: 1,
             reachablePrices: 1,
@@ -549,6 +551,8 @@ export async function buildCorporationLookups(
     Map<CommodityType, { supply: number; demand: number }>
   >();
   const stateInputAvailabilityByState = new Map<string, Map<CommodityType, number>>();
+  const statePlacementRatioByState = new Map<string, Map<CommodityType, number>>();
+  const stateDeliveryLimitedRatioByState = new Map<string, Map<CommodityType, number>>();
   // Market rework (marketSystemMode >= "realization"): lagged price-over-base
   // ratio per commodity. commodityPrices docs hold the price computed by the
   // PRIOR commodity-price pass, so reading them here is the one-turn lag that
@@ -608,6 +612,43 @@ export async function buildCorporationLookups(
         stateInputAvailabilityByState
           .get(stateId)!
           .set(cp.commodity, Math.max(0, Math.min(1, availability)));
+      }
+      // Sell-side twin of the availability read above: the share of a state's
+      // own output that last turn's network could place. Sectors offer into a
+      // COUNTRY-scoped clearing book while their goods move on a STATE-scoped
+      // network, so without this the offer claims deliveries the network never
+      // made (t225: 60.4% of world production stranded in a state that did not
+      // need it, against 28.7% of world demand unmet). Missing state, missing
+      // doc field, or zero supply all mean "no evidence of a limit" and are
+      // read as a ratio of 1 by the consumer.
+      for (const [stateId, placed] of Object.entries(cp.statePlacedSupply ?? {})) {
+        if (!Number.isFinite(placed)) continue;
+        const supply = cp.stateSupply?.[stateId] ?? 0;
+        if (!(supply > 0)) continue;
+        if (!statePlacementRatioByState.has(stateId)) {
+          statePlacementRatioByState.set(stateId, new Map());
+        }
+        statePlacementRatioByState
+          .get(stateId)!
+          .set(cp.commodity, Math.max(0, Math.min(1, placed / supply)));
+      }
+      // Second ratio, same denominator, different question. The placement ratio
+      // caps the OFFER (the book should shrink whatever the reason, glut
+      // included); this one is the only figure allowed to tell a player their
+      // goods could not get there. Keeping them apart is the whole point: the
+      // two states of the world call for opposite decisions.
+      for (const [stateId, deliveryLimited] of Object.entries(
+        cp.stateDeliveryLimitedSupply ?? {}
+      )) {
+        if (!Number.isFinite(deliveryLimited)) continue;
+        const supply = cp.stateSupply?.[stateId] ?? 0;
+        if (!(supply > 0)) continue;
+        if (!stateDeliveryLimitedRatioByState.has(stateId)) {
+          stateDeliveryLimitedRatioByState.set(stateId, new Map());
+        }
+        stateDeliveryLimitedRatioByState
+          .get(stateId)!
+          .set(cp.commodity, Math.max(0, Math.min(1, deliveryLimited / supply)));
       }
     }
 
@@ -1043,6 +1084,8 @@ export async function buildCorporationLookups(
     costOfLivingByState,
     globalCommodityBalances,
     stateInputAvailabilityByState,
+    statePlacementRatioByState,
+    stateDeliveryLimitedRatioByState,
     priceRatioByCommodity,
     reachablePriceRatioByCountry,
     reachableInputPriceRatiosByCountry,

@@ -129,6 +129,21 @@ export interface CorporationLookups {
    */
   stateInputAvailabilityByState: Map<string, Map<CommodityType, number>>;
   /**
+   * Lagged share of a state's own production that active freight settlement
+   * managed to PLACE (placed / supply, clamped 0..1), the sell-side mirror of
+   * `stateInputAvailabilityByState`. Sparse and optional: absent state,
+   * commodity or map means no measured limit, i.e. a ratio of 1. Empty
+   * whenever freight settlement is not active.
+   */
+  statePlacementRatioByState?: Map<string, Map<CommodityType, number>>;
+  /**
+   * Lagged share of a state's own production that was produced, wanted, and
+   * still could not reach a buyer (delivery-limited / supply, clamped 0..1).
+   * A subset of `1 - statePlacementRatioByState`: the remainder of what went
+   * unplaced is glut. Player-facing telemetry only, never an offer cap.
+   */
+  stateDeliveryLimitedRatioByState?: Map<string, Map<CommodityType, number>>;
+  /**
    * Lagged global price / base price per commodity (prior turn's computed
    * price). Read by the price-realization multiplier when
    * marketSystemMode >= "realization"; always built (cheap), inert otherwise.
