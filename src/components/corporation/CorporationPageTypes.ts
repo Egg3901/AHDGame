@@ -554,7 +554,19 @@ export interface SectorDetail {
    *  when marginBasis is "physical". `otherPp` is the exact remainder (upkeep,
    *  other opex, financial legs, residual), so
    *  100 − inputsPp − laborPp − otherPp === effectiveProfitMargin. */
-  physicalCosts?: { inputsPp: number; laborPp: number | null; otherPp: number } | null;
+  physicalCosts?: {
+    inputsPp: number;
+    laborPp: number | null;
+    otherPp: number;
+    /**
+     * The policy/tech modifier stack as percentage points of realized revenue,
+     * SIGNED (positive = credit). Its own line rather than part of `otherPp`,
+     * so this drilldown names the same stack the sector page's money chain
+     * names (ticket 1122). 0 or absent on the fallback path, where the credit
+     * cannot be separated from the residual.
+     */
+    policyPp?: number;
+  } | null;
   /** Plants tier: realized profit over the full cost bill, percent. The honest
    *  counterpart to `effectiveProfitMargin`, which divides by sold revenue only
    *  and overstates a low-fill sector. Null below plants and when redacted. */

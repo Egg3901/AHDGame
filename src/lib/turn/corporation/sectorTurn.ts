@@ -1773,6 +1773,41 @@ export function processSector(
       sectorFxRate
     );
   }
+  // Persist the physical P&L the turn actually booked (ticket 1122). Display
+  // and analytics only, on the same daily basis and in the same currency as
+  // `revenue` / `laborCost`; nothing in the engine reads it back.
+  //
+  // Read surfaces used to rebuild these numbers by inverting
+  // `effectiveProfitMargin`, which is this P&L's OUTPUT and is capped at 100.
+  // At the cap the inversion recovers a zero operating cost from a genuinely
+  // NEGATIVE one and reports profit == revenue, and it drops upkeep and
+  // compliance in every case because they sit outside the margin's scope.
+  // Writing the lines is the only way a reader can have the real ones.
+  if (physicalPnl) {
+    const daily = (anchorPerTurn: number) =>
+      writeCorpEconomicLocal(anchorPerTurn * TURNS_PER_DAY, sectorCurrencyCode, sectorFxRate);
+    sectorUpdate.plantsPnl = {
+      // Inventory sell-down earns beside operating revenue and its carry lands
+      // in costs (see the `costs` leg of this function's return), so both are
+      // in the revenue and profit reported here. That makes `revenue` equal
+      // `realizedRevenue` exactly and `profit` the figure the corp booked.
+      revenue: daily(hourlyRevenue + hourlyInventoryRevenue),
+      inventoryRevenue: daily(hourlyInventoryRevenue),
+      inventoryCarry: daily(hourlyInventoryCarry),
+      inputs: daily(physicalPnl.inputsCost),
+      labour: daily(physicalPnl.laborCost),
+      upkeep: daily(physicalPnl.upkeep),
+      compliance: daily(physicalPnl.complianceCost),
+      otherOpex: daily(physicalPnl.otherOpex),
+      financialLegs: daily(physicalPnl.financialLegs),
+      policyCredit: daily(physicalPnl.policyCredit),
+      policyPp: Math.round(plantsPolicyPp * 100) / 100,
+      operatingCost: daily(physicalPnl.operatingCost),
+      totalCost: daily(physicalPnl.totalCost + hourlyInventoryCarry),
+      profit: daily(physicalPnl.profit + hourlyInventoryRevenue - hourlyInventoryCarry),
+      turn: currentTurn,
+    };
+  }
   // Persist effective margin for display and NPP profitability decisions.
   // Below plants it is the modifier stack; under plants it is derived from the
   // physical P&L. Public-enterprise remittance recomputes its own value.

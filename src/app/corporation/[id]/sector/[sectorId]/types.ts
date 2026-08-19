@@ -592,6 +592,13 @@ export interface PlantsData {
     labourAnchor: number;
     upkeepAnchor: number;
     complianceAnchor: number;
+    /**
+     * The policy/tech modifier stack as money, POSITIVE = credit (ticket 1122).
+     * Optional because payloads predating the field omit it.
+     */
+    policyAnchor?: number;
+    /** The same stack in percentage points of revenue. */
+    policyPp?: number;
     otherOperatingAnchor: number;
     growthAndBuildAnchor: number;
     profitAnchor: number;
@@ -599,6 +606,11 @@ export interface PlantsData {
     avgSalePriceAnchor: number | null;
     profitPerUnitAnchor: number | null;
   };
+  /**
+   * The modifiers behind `pnl.policyAnchor`, already in money and summing to it
+   * exactly. Empty or absent when there is no stack to explain.
+   */
+  policyStack?: { key: string; label: string; pp: number; anchor: number }[];
   /**
    * Three-number headline (see SectorPlantsSection.truth in the query layer).
    * Optional because payloads predating the field omit it.

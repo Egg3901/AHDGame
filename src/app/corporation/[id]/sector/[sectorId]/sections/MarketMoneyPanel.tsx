@@ -73,6 +73,18 @@ export default function MarketMoneyPanel({
   const deliveryLimitedShown = deliveryLimited > DELIVERY_LIMITED_MIN_SHARE;
   const deliveryLimitedUnits = Math.round(offered * deliveryLimited);
 
+  // The whole policy/tech modifier stack as ONE signed money line, with the
+  // itemized drilldown below it (ticket 1122). Under plants every modifier a
+  // player can influence (subsidies, tariffs, tech, state metrics, regional
+  // conditions, a live crisis) reaches profit through this single credit and
+  // nothing else. Before this it was folded into "other running costs", so a
+  // subsidy the player fought for showed up nowhere on the page that reports
+  // their money. Absent (0) on a sector whose row predates the persisted P&L,
+  // where the credit genuinely cannot be separated out.
+  const policyAnchor = pnl.policyAnchor ?? 0;
+  const policyStack = plants.policyStack ?? [];
+  const hasPolicy = policyAnchor !== 0;
+
   const costLines: { key: string; label: string; value: number; help: string }[] = [
     {
       key: "inputs",
@@ -98,11 +110,26 @@ export default function MarketMoneyPanel({
       value: pnl.complianceAnchor,
       help: "Extra cost the regulator puts on a sector that dominates its market.",
     },
+    ...(hasPolicy
+      ? [
+          {
+            key: "policy",
+            // Stored as a CREDIT (positive lowers cost); the cost chain wants a
+            // cost, so it flips sign here and `signedCost` renders it back as
+            // "+ money" in the profit tone.
+            label: "Policy, tax and support",
+            value: -policyAnchor,
+            help: "Everything that helps or hurts this sector without being a thing it buys: subsidies, tariffs, tech, the condition of the state it sits in, and any live crisis. It is the only route those effects take to your profit, so the number below is the whole of it.",
+          },
+        ]
+      : []),
     {
       key: "other",
       label: "Other running costs",
       value: pnl.otherOperatingAnchor,
-      help: "Overheads, distribution, insurance and rent, less anything policy or subsidy hands back. Everything the lines above do not name. It shows as a credit when the money coming back outweighs those overheads.",
+      help: hasPolicy
+        ? "Overheads, distribution, insurance and rent, plus any disaster losses. Everything the lines above do not name. It shows as a credit when the sector's own calibrated overhead sits below its named physical costs."
+        : "Overheads, distribution, insurance and rent, less anything policy or subsidy hands back. Everything the lines above do not name. It shows as a credit when the money coming back outweighs those overheads.",
     },
     {
       key: "growth",
@@ -284,6 +311,45 @@ export default function MarketMoneyPanel({
             help={l.help}
           />
         ))}
+        {/* What is inside the policy line ───────────────────────────────────
+            Money, not percentage points, so it reads in the same units as
+            every other line on the panel. The rows sum to the line exactly:
+            each modifier's share is its percentage points scaled so the parts
+            make the whole (see buildPolicyStackRows). The same row set the
+            corporation page's margin drilldown lists, so the two agree. */}
+        {hasPolicy && policyStack.length > 0 && (
+          <details className="ml-4 rounded-lg border border-card-border bg-card-muted/30 px-3 py-2">
+            <summary className="cursor-pointer text-body-sm text-muted">
+              What is in policy, tax and support
+            </summary>
+            <div className="mt-2 space-y-1">
+              {policyStack.map((r) => (
+                <div key={r.key} className="flex items-center justify-between text-body-sm">
+                  <span className="text-muted">
+                    {r.label}{" "}
+                    <span className="text-[11px] tabular-nums opacity-70">
+                      {r.pp > 0 ? "+" : ""}
+                      {r.pp.toFixed(1)}pp
+                    </span>
+                  </span>
+                  <span className={`tabular-nums ${r.anchor >= 0 ? "text-success" : "text-error"}`}>
+                    {r.anchor >= 0 ? "+ " : "− "}
+                    {money(Math.abs(r.anchor))}
+                  </span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between border-t border-card-border pt-1.5 text-body-sm font-semibold">
+                <span className="text-foreground">Total</span>
+                <span
+                  className={`tabular-nums ${policyAnchor >= 0 ? "text-success" : "text-error"}`}
+                >
+                  {policyAnchor >= 0 ? "+ " : "− "}
+                  {money(Math.abs(policyAnchor))}
+                </span>
+              </div>
+            </div>
+          </details>
+        )}
         <div className="flex items-center justify-between border-t border-card-border pt-2">
           <span className="text-body-sm text-muted">All costs</span>
           <span className="text-body-sm tabular-nums text-muted">{signedCost(totalCosts)}</span>
