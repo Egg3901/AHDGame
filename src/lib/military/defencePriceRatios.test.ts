@@ -98,10 +98,15 @@ describe("live commodity prices move the cost floor and the price band", () => {
     })!;
 
     expect(dear.floor).toBeGreaterThan(calm.floor);
-    // The ceiling is the GDP anchor and is deliberately NOT a function of input prices: a
-    // commodity spike must not become licence to pay a supplier more than the economy says a
-    // lot is worth. Costs squeeze the band from below; they do not widen it from above.
-    expect(dear.ceiling).toBe(calm.ceiling);
+    // Both ends move together now (ticket #1134). The ceiling is production cost plus the
+    // maximum margin, so a commodity spike lifts it as well as the floor - it has to, or a
+    // shock would close the band from below against a ceiling that could not follow and no
+    // contract could be written at all. The GDP anchor still caps the result absolutely.
+    expect(dear.ceiling).toBeGreaterThan(calm.ceiling);
+    expect(dear.ceiling).toBeLessThanOrEqual(anchorPrice);
+    // What must NOT track the market is the markup itself: the band widens in absolute terms
+    // with cost, never in proportion to it.
+    expect(dear.ceiling / dear.floor).toBeCloseTo(calm.ceiling / calm.floor, 2);
   });
 
   // The band can close entirely. That is the honest outcome, not an error: it says this line

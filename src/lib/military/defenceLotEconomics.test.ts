@@ -10,6 +10,8 @@ import {
   normalizeGrade,
   GRADE_PRICE_SCALE,
   MIN_CONTRACT_MARGIN,
+  MAX_CONTRACT_MARGIN,
+  TARGET_CONTRACT_MARGIN,
   DEFENCE_FACTORY_SLOTS_PER_PLANT,
 } from "./defenceLotEconomics";
 import { rawLotsFromSector } from "./arsenal";
@@ -69,14 +71,39 @@ describe("lotPriceBand", () => {
 
   // THE exploit guard on the price lever: without a ceiling a minister with an interest in the
   // supplier writes a contract at any number they like and the appropriation is a cash tap.
-  it("caps the price at the grade-scaled GDP anchor", () => {
+  it("caps the price at production cost plus the maximum margin", () => {
     const band = lotPriceBand({ anchorPrice: 10_000, productionCost, grade: 2 })!;
-    expect(band.ceiling).toBe(Math.round(10_000 * GRADE_PRICE_SCALE[2]));
+    expect(band.ceiling).toBe(Math.round(productionCost * (1 + MAX_CONTRACT_MARGIN)));
   });
 
-  it("defaults to the anchor, which is what every contract was priced at before", () => {
+  // Ticket #1134. The GDP anchor is a hard cap and nothing else, so a country whose economy
+  // cannot bear the cost-anchored price still pays the lower of the two.
+  it("keeps the GDP anchor as an upper bound when it is the tighter one", () => {
+    const band = lotPriceBand({ anchorPrice: 150, productionCost, grade: 2 })!;
+    expect(band.ceiling).toBe(150);
+    expect(band.ceiling).toBeLessThan(Math.round(productionCost * (1 + MAX_CONTRACT_MARGIN)));
+  });
+
+  it("defaults to a fair margin over cost rather than to the anchor", () => {
     const band = lotPriceBand({ anchorPrice: 10_000, productionCost, grade: 2 })!;
-    expect(band.suggested).toBe(10_000);
+    expect(band.suggested).toBe(Math.round(productionCost * (1 + TARGET_CONTRACT_MARGIN)));
+    expect(band.suggested).toBeGreaterThanOrEqual(band.floor);
+    expect(band.suggested).toBeLessThanOrEqual(band.ceiling);
+  });
+
+  // THE live case, from `financialTxLog` turn 219 on the production world: a US air lot was
+  // priced at 383,748,809 against a production cost of 1,091, so 99.9997% of the contract
+  // price was margin and the delivery was a transfer of the national appropriation into one
+  // corporation's cash. The band must never quote anywhere near that figure again.
+  it("cannot price a 1,091 lot anywhere near the 383.7m the live world paid", () => {
+    const band = lotPriceBand({ anchorPrice: 383_748_809, productionCost: 1_091, grade: 2 })!;
+    expect(band.ceiling).toBe(2_182);
+    expect(band.suggested).toBe(1_473);
+    expect(band.floor).toBe(1_222);
+    // The margin a delivery credits the supplier is `price - cost`, and it is now a trading
+    // margin rather than the whole contract.
+    expect((band.ceiling - 1_091) / band.ceiling).toBeLessThan(0.51);
+    expect(band.ceiling).toBeLessThan(383_748_809 / 100_000);
   });
 
   // Suggestion #292. Grade is one dial with two ends: cheap mass costs less to build AND

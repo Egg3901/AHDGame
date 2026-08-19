@@ -102,6 +102,35 @@ export function lotProductionCost(
 export const MIN_CONTRACT_MARGIN = 0.12;
 
 /**
+ * The most a contract may mark a lot up over what it costs to build (ticket #1134).
+ *
+ * The band used to be anchored at only ONE end. The floor was production cost plus 12%, but
+ * the ceiling was the GDP anchor, and the two are not denominated in the same thing: the
+ * anchor is a share of national output, while production cost is the commodity bill for the
+ * goods a plant physically hands over. On the live world that put them four to five orders of
+ * magnitude apart - a US aerospace lot costs 1,091 to build and the anchored ceiling was
+ * 383,748,809, a markup of 209,000x. Delivery pays the supplier `price - cost`, so a contract
+ * written near that ceiling was not a purchase at all. It was the defence appropriation moving
+ * into one corporation's cash balance, and the minister signing it could hold a stake in that
+ * corporation.
+ *
+ * Anchoring the ceiling to cost is what makes the band a NEGOTIATION rather than a tap. At
+ * 100% a supplier can still double its money on a hard bargain, which is a fat margin by any
+ * real arms-industry standard and leaves ministers a genuine range to trade quantity against
+ * price inside.
+ */
+export const MAX_CONTRACT_MARGIN = 1.0;
+
+/**
+ * The margin the quoted price carries when a minister does not negotiate one.
+ *
+ * Sits between the 12% floor and the 100% ceiling so the default is a fair deal for both
+ * sides rather than either end of the band: a supplier accepting the standing offer makes
+ * real money, and a minister who does not haggle is not fleeced.
+ */
+export const TARGET_CONTRACT_MARGIN = 0.35;
+
+/**
  * How grade (0..3) scales what a lot costs to build and what it is worth.
  *
  * One dial, two ends. A grade-0 lot is cheap tin: it costs less to build and is worth less,
@@ -128,24 +157,37 @@ export interface LotPriceBand {
   productionCost: number;
   /** Lowest price a contract may be written at: cost plus `MIN_CONTRACT_MARGIN`. */
   floor: number;
-  /** Highest price a contract may be written at: the GDP-anchored price, grade-scaled. */
+  /**
+   * Highest price a contract may be written at: cost plus `MAX_CONTRACT_MARGIN`, and never
+   * above the grade-scaled GDP anchor.
+   */
   ceiling: number;
   /** What the price defaults to when the minister does not set one. */
   suggested: number;
 }
 
 /**
- * The band a minister may set a lot price inside (suggestion #291).
+ * The band a minister may set a lot price inside (suggestion #291, re-anchored by #1134).
  *
- * Bounded at BOTH ends on purpose. The ceiling is the GDP anchor: without it a minister with
- * a stake in the supplier writes a contract at any number they like and the appropriation is
- * a private cash tap again. The floor is production cost plus a margin: without it the same
- * lever runs the other way, a minister writes contracts a rival's plant loses money on and
- * the arsenal is filled by confiscation.
+ * Bounded at BOTH ends by the SAME quantity: what the lot costs to build. The floor is that
+ * cost plus a minimum margin, so a minister cannot fill an arsenal by confiscation from a
+ * rival's plant. The ceiling is that cost plus a maximum margin, so a minister with a stake
+ * in the supplier cannot turn the appropriation into that corporation's cash.
  *
- * `anchorPrice` is `lotPrice(countryId, militaryPriceAnchor(...))` - the figure procurement
- * charged before ministers could set one, so leaving the input blank reproduces the old
- * behaviour at grade 2.
+ * Anchoring both ends to one quantity is the whole fix. While the ceiling was the GDP anchor
+ * and the floor was the commodity bill, the two ends were denominated in different things and
+ * drifted five orders of magnitude apart, which is exactly the room a self-dealing contract
+ * needs. A band whose ends can only move together has no such room, whatever the economy does.
+ *
+ * The GDP anchor survives as a hard upper bound and nothing else. A poor country must not be
+ * quoted a rich country's price just because its plants happen to run expensive inputs, and
+ * the anchor is the figure the rest of procurement already treats as what the economy can bear
+ * for one lot. `anchorPrice` is `lotPrice(countryId, militaryPriceAnchor(...))`.
+ *
+ * Deliberately NOT retroactive. A contract stores `pricePerLot` at award and the delivery
+ * sweep bills against the stored figure, so every live order keeps the price its supplier
+ * agreed to. Players do not have a signed deal repriced under them; the new band governs new
+ * awards.
  *
  * Returns null when either input is unusable. Callers MUST refuse: a null band treated as
  * "no limits" is the exploit this whole module exists to close.
@@ -162,10 +204,19 @@ export function lotPriceBand(input: {
 
   const gradedCost = productionCost * scale;
   const floor = Math.max(1, Math.ceil(gradedCost * (1 + MIN_CONTRACT_MARGIN)));
-  const ceiling = Math.max(floor, Math.round(anchorPrice * scale));
-  // The anchor is the honest mid-market quote; it only moves off it when the floor has
-  // overtaken it, which is a genuine signal that this line cannot build at that price.
-  const suggested = Math.max(floor, Math.min(ceiling, Math.round(anchorPrice * scale)));
+  // Cost first, anchor second. Taking the lower of the two means a lot is priced off what it
+  // took to build it, and the economy-wide anchor can only ever pull that DOWN - it can no
+  // longer lift a 1,091 lot to 383,748,809.
+  const anchorCeiling = Math.round(anchorPrice * scale);
+  const costCeiling = Math.round(gradedCost * (1 + MAX_CONTRACT_MARGIN));
+  const ceiling = Math.max(floor, Math.min(anchorCeiling, costCeiling));
+  // A fair deal, not either end of the band. Clamped rather than assumed inside it: on a line
+  // whose inputs have run away the floor can overtake the target, and the floor wins because
+  // nothing may be written below cost.
+  const suggested = Math.max(
+    floor,
+    Math.min(ceiling, Math.round(gradedCost * (1 + TARGET_CONTRACT_MARGIN)))
+  );
   return { productionCost: gradedCost, floor, ceiling, suggested };
 }
 
