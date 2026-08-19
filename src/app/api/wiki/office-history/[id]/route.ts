@@ -36,7 +36,7 @@ const patchSchema = z.object({
 
 // PATCH /api/wiki/office-history/[id] - Update a curated manual office-history entry.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function PATCH(request: Request, { params }: RouteContext) {
   try {
     const auth = await requireAdmin();
@@ -91,7 +91,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
 // DELETE /api/wiki/office-history/[id] - Delete a curated manual office-history entry.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function DELETE(_request: Request, { params }: RouteContext) {
   try {
     const auth = await requireAdmin();

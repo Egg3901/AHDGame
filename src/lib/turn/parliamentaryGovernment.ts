@@ -59,7 +59,9 @@ import { installNewLeader, renewLeaderMandate } from "@/lib/turn/rulingPartyConf
 import { canFormGovernment, canCollapseGovernment } from "@/lib/turn/onePartyConstraints";
 import { getCountryState, updateCountryState } from "@/lib/countryState";
 import { logger } from "../observability/logger";
-export { resolveGoverningPartyIdsFromDocuments } from "@/lib/government/governingPartyIds";
+import { resolveGoverningPartyIdsFromDocuments } from "@/lib/government/governingPartyIds";
+
+export { resolveGoverningPartyIdsFromDocuments };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -733,6 +735,101 @@ export async function autoAyeNPPsForParliamentaryAppointment(
   }
 }
 
+/**
+ * Auto-cast NPP votes on an active no-confidence motion along the party line.
+ *
+ * Mirrors `autoAyeNPPsForParliamentaryAppointment`: same billWhips lookup, same
+ * "never overwrite an existing vote" rule, same seat-weighted `$inc` guarded by
+ * an `$exists: false` filter so concurrent passes cannot double-count.
+ *
+ * Direction on a confidence motion is the inverse of an appointment vote. "aye"
+ * backs the MOTION, so it is a vote against the government:
+ *   - governing party and coalition NPPs vote "nay" (they keep the government)
+ *   - opposition NPPs vote "aye"
+ *   - NPPs with no party abstain (no party means no party line)
+ *
+ * A party whip still wins. A whip issued before this pass is honoured here via
+ * `billWhips`, and a whip issued afterwards overrides the default through
+ * `applyWhipVotesToGovernmentVote`, which decrements the old vote before
+ * writing the new one. Auto-voting is the floor, not a ceiling.
+ *
+ * Without this, NPP-held government benches cast nothing at all and a whipped
+ * opposition bloc could carry a motion on its own (ticket-1137).
+ */
+export async function autoVoteNPPsForNoConfidence(
+  db: Db,
+  countryId: CountryId,
+  voteId: ObjectId
+): Promise<void> {
+  const votesColl = getNoConfidenceVotesCollection(db);
+  const vote = await votesColl.findOne({ _id: voteId });
+  if (!vote || vote.status !== "active") return;
+
+  const govFormation = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
+  const governingPartyIds = await resolveGoverningPartyIdsFromDocuments(
+    db,
+    countryId,
+    govFormation,
+    null
+  );
+  // No resolvable government means there is no party line to follow.
+  if (governingPartyIds.size === 0) return;
+
+  const whips = await db
+    .collection("billWhips")
+    .find({
+      targetType: "noConfidenceVote",
+      targetId: voteId,
+      // NPP confidence voting only considers NPP whips; character whips already wrote player votes directly.
+      $or: [{ audience: "npp" }, { audience: { $exists: false } }],
+    })
+    .toArray();
+  const whipByParty = new Map(
+    (whips as unknown as Array<{ partyId: string; direction: "for" | "against" }>).map((w) => [
+      w.partyId,
+      w.direction,
+    ])
+  );
+
+  const officials = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .find({ officeType: getLowerChamberOfficeType(countryId), countryId, isNPP: true })
+    .toArray();
+
+  const existingVotes = vote.votes ?? {};
+  const seenNppIds = new Set<string>();
+
+  for (const mp of officials) {
+    if (!mp.nppId) continue;
+    const nppIdStr = mp.nppId.toString();
+    if (seenNppIds.has(nppIdStr)) continue;
+    seenNppIds.add(nppIdStr);
+
+    const nppKey = `npp_${nppIdStr}`;
+    // A vote already on the record (player whip, earlier pass) is never touched.
+    if (existingVotes[nppKey]) continue;
+    if (!mp.party) continue;
+
+    const whipDir = whipByParty.get(mp.party);
+    const voteChoice: "aye" | "nay" = whipDir
+      ? whipDir === "for"
+        ? "aye"
+        : "nay"
+      : governingPartyIds.has(mp.party)
+        ? "nay"
+        : "aye";
+
+    const weight = mp.seatsHeld ?? 1;
+    await votesColl.updateOne(
+      { _id: voteId, [`votes.${nppKey}`]: { $exists: false } },
+      {
+        $set: { [`votes.${nppKey}`]: voteChoice, updatedAt: new Date() },
+        $inc: { [voteChoice === "aye" ? "votesFor" : "votesAgainst"]: weight },
+      }
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Vote Resolution
 // ---------------------------------------------------------------------------
@@ -947,6 +1044,43 @@ export async function resolveParliamentaryAppointmentVote(
 }
 
 /**
+ * Does a no-confidence motion carry?
+ *
+ * A motion of no confidence removes a sitting government, so it must command a
+ * majority of the WHOLE chamber, not a majority of whoever happened to turn up.
+ * Abstentions and unvoted seats therefore count against the motion, which is
+ * how a real confidence vote works: the government survives by default.
+ *
+ * Tallies are seat-weighted (see computeParliamentaryGovernmentTally), so
+ * `votesFor` is directly comparable to the chamber's `majorityThreshold`.
+ *
+ * This is deliberately NOT the cloture rule (3/5 of votes CAST) used for
+ * legislative debate, and it does not apply to any other vote type.
+ *
+ * Fallbacks, in order: the stored `majorityThreshold`, a threshold derived from
+ * `totalSeats`, and finally a strict majority of votes cast when the formation
+ * row carries neither number.
+ */
+export function noConfidenceMotionCarries(input: {
+  votesFor: number;
+  votesAgainst: number;
+  majorityThreshold?: number | null;
+  totalSeats?: number | null;
+}): boolean {
+  const { votesFor, votesAgainst, majorityThreshold, totalSeats } = input;
+  const threshold =
+    majorityThreshold != null && majorityThreshold > 0
+      ? majorityThreshold
+      : totalSeats != null && totalSeats > 0
+        ? Math.floor(totalSeats / 2) + 1
+        : null;
+  if (threshold == null) {
+    return votesFor > votesAgainst;
+  }
+  return votesFor >= threshold;
+}
+
+/**
  * Resolve an expired no-confidence vote for the given country.
  */
 export async function resolveParliamentaryNoConfidenceVote(
@@ -957,6 +1091,10 @@ export async function resolveParliamentaryNoConfidenceVote(
 ): Promise<void> {
   const votesColl = getNoConfidenceVotesCollection(db);
   const govColl = getGovernmentFormationsCollection(db);
+
+  // Final party-line pass: benches that were never whipped still vote, so a
+  // government whose seats are NPP-held is not silently unseated (ticket-1137).
+  await autoVoteNPPsForNoConfidence(db, countryId, voteId);
 
   const vote = await votesColl.findOne({ _id: voteId });
   if (!vote || vote.status !== "active") return;
@@ -972,7 +1110,13 @@ export async function resolveParliamentaryNoConfidenceVote(
   );
   vote.votesFor = tally.votesFor;
   vote.votesAgainst = tally.votesAgainst;
-  const passed = vote.votesFor > vote.votesAgainst;
+  const govFormationForTally = await govColl.findOne({ _id: countryId });
+  const passed = noConfidenceMotionCarries({
+    votesFor: vote.votesFor,
+    votesAgainst: vote.votesAgainst,
+    majorityThreshold: govFormationForTally?.majorityThreshold,
+    totalSeats: govFormationForTally?.totalSeats,
+  });
   const notificationInputs: NotificationInput[] = [];
 
   // Atomic claim: only the caller that flips status "active" → final runs the
@@ -1029,6 +1173,17 @@ export async function resolveParliamentaryNoConfidenceVote(
   } else {
     await govColl.updateOne({ _id: countryId }, { $set: { activeVoteId: null, updatedAt: now } });
 
+    const noConfidenceThresholdSeats =
+      govFormationForTally?.majorityThreshold != null && govFormationForTally.majorityThreshold > 0
+        ? govFormationForTally.majorityThreshold
+        : govFormationForTally?.totalSeats != null && govFormationForTally.totalSeats > 0
+          ? Math.floor(govFormationForTally.totalSeats / 2) + 1
+          : null;
+    const noConfidenceThresholdText =
+      noConfidenceThresholdSeats != null
+        ? `${noConfidenceThresholdSeats} seats`
+        : "a majority of the chamber";
+
     // S#17: VONC fails → the sitting PM survives. Cancel any PM appointment
     // votes that were filed during the VONC window (they're moot now).
     // Notify each nominee so they know why.
@@ -1063,7 +1218,7 @@ export async function resolveParliamentaryNoConfidenceVote(
       notificationInputs.push({
         userId: pmChar.userId,
         title: "Survived No-Confidence Vote",
-        message: `You survived the vote of no confidence (${vote.votesAgainst} confidence, ${vote.votesFor} no confidence).`,
+        message: `You survived the vote of no confidence (${vote.votesAgainst} confidence, ${vote.votesFor} no confidence). A motion needs ${noConfidenceThresholdText} to carry.`,
         type: "system",
         metadata: { recipientCharacterId: vote.targetPmCharacterId.toString() },
       });
@@ -1140,7 +1295,8 @@ export async function processParliamentaryGovernmentVotes(
 }
 
 /**
- * Every-4-turn NPP auto-aye for all active PM appointment votes.
+ * Every-4-turn NPP auto-vote pass for all active PM appointment votes, plus
+ * the country's active no-confidence motion (party-line default).
  * Multiple appointment votes may be active concurrently.
  * CRITICAL: filters by countryId.
  */
@@ -1158,6 +1314,16 @@ export async function processParliamentaryNPPAutoAye(
 
   for (const vote of activeVotes) {
     await autoAyeNPPsForParliamentaryAppointment(db, countryId, vote._id);
+  }
+
+  // Same cadence for an active confidence motion, so the live tally shows the
+  // benches as they stand instead of an empty chamber until resolution.
+  const activeNoConfidence = await getNoConfidenceVotesCollection(db).findOne({
+    countryId,
+    status: "active",
+  });
+  if (activeNoConfidence) {
+    await autoVoteNPPsForNoConfidence(db, countryId, activeNoConfidence._id);
   }
 }
 

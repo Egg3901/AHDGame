@@ -1,16 +1,18 @@
 /**
  * Index Fund Cron Engine
  *
- * Runs once per game turn (via the turn phase) to:
- *   1. Mark holdings to market and recompute NAV.
- *   2. Absorb public float — buy shares proportional to target weights.
- *   3. Rebalance constituents at turn boundaries.
- *   4. Process queued redemptions when cash is available.
- *   5. Snapshot NAV and backing ratio per turn.
+ * Runs once per game turn (via the turn phase):
+ *   Pass 1: mark holdings to market, recompute NAV, deploy bond reserve.
+ *   Pass 2: recompute target constituents (financial-day cadence, or first init).
+ *   Pass 3: two-sided rebalance toward those weights (sell overweight, buy underweight from public float).
+ *   Pass 3b: cross-fund rebalancing (same financial-day cadence as Pass 2).
+ *   Pass 3c: process queued redemptions and snapshot NAV.
+ *   Step 6: NPP fund investing, throttled by NPP_FUND_INVESTMENT_INTERVAL.
+ *   Step 7: sponsored expense fees and wind-down.
  *
  * Gated behind the `indexFundsMode` feature flag. If disabled, the engine
  * is a silent no-op. The HTTP route `/api/cron/index-fund` is a manual/debug
- * entry point — it is not registered in `src/lib/cron.ts`.
+ * entry point; it is not registered in `src/lib/cron.ts`.
  */
 
 import { ObjectId } from "mongodb";
@@ -206,7 +208,7 @@ async function applyMarkToMarketIfNeeded(
   return { ...fund, holdings: refreshedHoldings };
 }
 
-// ── Step 2: Absorb public float ───────────────────────────────────────
+// ── Cash helpers for public-float buys ────────────────────────────────
 
 async function atomicallyDebitFundCashAnchor(
   db: Db,
@@ -243,7 +245,7 @@ async function refundFundCashAnchor(
     );
 }
 
-// ── Step 1: Recompute NAV ────────────────────────────────────────────
+// ── Pass 2 / Pass 3b cadence (financial-day boundary) ─────────────────
 
 export function shouldRebalanceIndexFundConstituents(
   currentTurn: number,
@@ -264,6 +266,8 @@ export function shouldRebalanceIndexFundConstituents(
 export function shouldRunCrossFundRebalancing(currentTurn: number): boolean {
   return currentTurn > 0 && currentTurn % TURNS_PER_DAY === 0;
 }
+
+// ── Pass 1: Recompute NAV ─────────────────────────────────────────────
 
 export function recomputeNav(
   fund: IndexFund,
@@ -290,7 +294,7 @@ export function recomputeNav(
   return Number.isFinite(nav) && nav > 0 ? nav : null;
 }
 
-// ── Step 2: Absorb public float ───────────────────────────────────────
+// ── Pass 3 helper: Absorb public float ────────────────────────────────
 
 /**
  * Execute a single index-fund share purchase from the public float.
@@ -401,7 +405,7 @@ export async function executeFundShareBuy(
   return { ok: true, sharesBought: shares, anchorSpent: actualCost };
 }
 
-// ── Step 3: Two-sided drift rebalance ─────────────────────────────────────────
+// ── Pass 3: Two-sided drift rebalance ─────────────────────────────────────────
 
 export async function rebalanceFundToTarget(
   db: Db,
@@ -575,7 +579,7 @@ function updateHoldingAfterPurchase(
   ];
 }
 
-// ── Step 3: Rebalance constituents (at turn boundaries) ────────────────
+// ── Pass 2: Rebalance constituents (financial-day boundaries) ──────────
 
 export async function rebalanceConstituents(
   db: Db,
@@ -687,7 +691,7 @@ export async function rebalanceConstituents(
   return true;
 }
 
-// ── Step 4: Process queued redemptions ────────────────────────────────
+// ── Pass 3c: Process queued redemptions ───────────────────────────────
 
 async function processQueuedRedemptions(
   db: Db,
@@ -867,9 +871,11 @@ async function processQueuedRedemptions(
 /**
  * Run the full index-fund cron cycle.
  *
- * Processes all active funds: recalculate NAV, absorb float, rebalance
- * constituents (at turn boundaries), and process queued redemptions.
- * Gated behind the indexFundsMode feature flag.
+ * Pass 1 marks holdings and recomputes NAV; Pass 2 recomputes constituents
+ * on the financial-day cadence; Pass 3 two-sided rebalances (including float
+ * buys); Pass 3b cross-fund market; Pass 3c redemptions and snapshot;
+ * Step 6 NPP investing (throttled by NPP_FUND_INVESTMENT_INTERVAL); Step 7
+ * sponsored fees and wind-down. Gated behind indexFundsMode.
  */
 export async function runIndexFundCron(
   db: Db,

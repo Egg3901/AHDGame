@@ -11,7 +11,7 @@ const patchSchema = z.object({ enabled: z.boolean() });
 
 // GET /api/admin/registration — fetch the master registration toggle state
 // Auth: requireModerator (admin or moderator)
-// Errors: 401, 403
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireModerator();
@@ -43,7 +43,7 @@ export async function GET() {
 
 // PATCH /api/admin/registration — toggle master player registration
 // Auth: requireModerator (admin or moderator)
-// Errors: 400, 401, 403
+// Errors: 400, 403
 export async function PATCH(request: Request) {
   try {
     const auth = await requireModerator();

@@ -10,7 +10,7 @@ import type { TurnLog } from "@/lib/db/types";
  */
 // GET /api/admin/logs/hourly — Fetch the last 24 hours of turn processing logs.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();

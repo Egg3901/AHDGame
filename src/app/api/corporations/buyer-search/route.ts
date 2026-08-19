@@ -5,7 +5,7 @@
 // Restricted to a player-held CEO seat so a human can accept the offer;
 // missing `ceoType` counts as character (founding historically omitted it).
 // Excludes state-owned corps and the caller itself.
-// Auth: public read. Errors: 400
+// Auth: public read. Errors: none
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";

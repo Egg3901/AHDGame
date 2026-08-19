@@ -2,7 +2,7 @@
 // Sets the exchange rate once; normal drift resumes next turn.
 // Body: { rate: number }
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 400, 403, 404
 
 import { NextResponse } from "next/server";
 import { z } from "zod";

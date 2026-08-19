@@ -252,7 +252,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // has to track the commodity market, or the floor is a constant dressed up as a cost and a
     // supplier can be held to a price struck in a market that no longer exists.
     const priceRatios = await loadDefencePriceRatios(db);
-    const productionCost = lotProductionCost(sector.strategyId, priceRatios);
+    // Cost is derived FROM the price at `TARGET_SUPPLIER_MARGIN` (ticket #1134), so the two
+    // ends of the band are two views of the anchored figure and cannot drift apart.
+    const productionCost = lotProductionCost(sector.strategyId, anchorPrice, priceRatios);
     if (productionCost == null) {
       return NextResponse.json({ error: FILL_REASON_TEXT.no_materiel_line }, { status: 400 });
     }

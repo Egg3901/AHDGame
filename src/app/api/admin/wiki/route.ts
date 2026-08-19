@@ -11,7 +11,7 @@ import { ObjectId } from "mongodb";
 
 // POST /api/admin/wiki — Creates and immediately publishes a new wiki page, bypassing the review queue.
 // Auth: requireModerator (admins and moderators may publish directly)
-// Errors: 400, 401
+// Errors: 400, 403
 export async function POST(request: Request) {
   try {
     const auth = await requireModerator();

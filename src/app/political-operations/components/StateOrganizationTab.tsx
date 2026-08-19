@@ -6,6 +6,7 @@ import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { PrimaryElectoralMap, type PrimaryStateData } from "@/components/PrimaryElectoralMap";
 import { US_STATE_ID_NAME_PAIRS } from "@/lib/constants/usStateNames";
 import {
+  MAX_STATE_ORG_BONUS_GENERAL,
   MAX_STATE_ORG_BONUS_PRIMARY,
   STATE_ORG_COST_ACTIONS,
   STATE_ORG_COST_FUNDS,
@@ -65,6 +66,10 @@ function bonusPct(level: number): number {
   return Math.round((level / STATE_ORG_MAX_LEVEL) * MAX_STATE_ORG_BONUS_PRIMARY * 100);
 }
 
+function generalBonusPct(level: number): number {
+  return Math.round((level / STATE_ORG_MAX_LEVEL) * MAX_STATE_ORG_BONUS_GENERAL * 100);
+}
+
 export function StateOrganizationTab({
   showHubLink = false,
 }: {
@@ -117,7 +122,7 @@ export function StateOrganizationTab({
       const isHome = r.stateId === homeState;
       const tooltipLines = [
         `Level: ${r.level} / ${STATE_ORG_MAX_LEVEL}`,
-        `Projected primary bonus: +${bonusPct(r.level)}%`,
+        `Projected bonus: +${bonusPct(r.level)}% in the primary, +${generalBonusPct(r.level)}% in the general`,
       ];
       if (isHome) tooltipLines.push("(home state)");
       out[r.stateId] = {
@@ -181,11 +186,18 @@ export function StateOrganizationTab({
           )}
         </div>
         <p className="mt-1 text-sm text-muted">
-          Build per-state infrastructure for the next presidential primary. Costs{" "}
-          {STATE_ORG_COST_ACTIONS} actions + ${STATE_ORG_COST_FUNDS.toLocaleString("en-US")} per +1
-          level. Capped at level {STATE_ORG_MAX_LEVEL} (+
-          {Math.round(MAX_STATE_ORG_BONUS_PRIMARY * 100)}% in-state vote bonus during primaries).
-          Levels reset to 25% after each Presidential General resolves.
+          Build per-state infrastructure for the presidential race. It counts in the primary{" "}
+          <strong>and</strong> in the general election. Costs {STATE_ORG_COST_ACTIONS} actions + $
+          {STATE_ORG_COST_FUNDS.toLocaleString("en-US")} per +1 level. Capped at level{" "}
+          {STATE_ORG_MAX_LEVEL}, worth up to +{Math.round(MAX_STATE_ORG_BONUS_PRIMARY * 100)}%
+          in-state vote bonus in the primary and +{Math.round(MAX_STATE_ORG_BONUS_GENERAL * 100)}%
+          in the general.
+        </p>
+        <p className="mt-2 text-sm text-muted">
+          Build early and keep building. Levels do not reset when the primary ends, so what you put
+          in before the primary keeps working through the general. You can also keep building during
+          the general. Levels drop to 25% only after the presidential general resolves. Organization
+          is per player and per state, so a rival&apos;s investment never covers yours.
         </p>
         <p className="mt-2 text-xs text-muted">
           Hover any state for current investment and projected bonus. Click a state to build. Color
@@ -228,6 +240,10 @@ export function StateOrganizationTab({
                 <div className="flex items-center justify-between">
                   <dt className="text-muted">Projected primary bonus</dt>
                   <dd className="font-mono">+{bonusPct(selectedRow.level)}%</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted">Projected general bonus</dt>
+                  <dd className="font-mono">+{generalBonusPct(selectedRow.level)}%</dd>
                 </div>
                 <div className="flex items-center justify-between">
                   <dt className="text-muted">Career investment</dt>

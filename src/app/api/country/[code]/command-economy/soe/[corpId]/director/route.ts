@@ -6,7 +6,7 @@
 //  - The Gosplan chair or the head of government may appoint ANY citizen, or
 //    clear the seat back to the NPP brain (characterId: null).
 //  - A vacant seat may be self-claimed by a citizen of the country.
-// Errors: 401/403/404/429.
+// Errors: 400/401/403/404/429.
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId } from "mongodb";

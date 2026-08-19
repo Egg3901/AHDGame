@@ -31,6 +31,14 @@ export interface MarketContext {
    */
   clearingBySectorId?: ReadonlyMap<string, SectorClearingResult>;
   /**
+   * Freight seam: per sector id, the share of its clearing offer (0..1) that
+   * last turn's freight network could not place out of its host state, so the
+   * offer was cut by it. Set by the corp-phase entry only while freight
+   * settlement is active; absent everywhere else, which keeps the telemetry
+   * write inert on worlds that do not settle freight.
+   */
+  deliveryLimitedBySectorId?: ReadonlyMap<string, number>;
+  /**
    * Launch-safety governor bounds (tunable live via gameConfig). `cap` is the
    * max fractional deviation the clearing/throughput legs may take from the
    * ledger baseline; `rampTurns` is the window over which that divergence fades

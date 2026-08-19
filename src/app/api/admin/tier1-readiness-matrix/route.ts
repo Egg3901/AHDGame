@@ -7,7 +7,7 @@
  * manifest. Deterministic / DB-free.
  *
  * Auth: requireAdmin
- * Errors: 401, 403, 500
+ * Errors: 403
  */
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";

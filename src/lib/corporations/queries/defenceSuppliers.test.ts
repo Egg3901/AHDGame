@@ -62,9 +62,13 @@ const world = (over: Partial<World> = {}): World => ({
   ...over,
 });
 
+// The country's anchored lot price. Build cost is a share of it (ticket #1134),
+// so the picker needs it to quote a cost at all.
+const LOT_PRICE = 380_000_000;
+
 describe("listDefenceSuppliers", () => {
   it("offers a domestic defence plant on a materiel line", async () => {
-    const rows = await listDefenceSuppliers(stubDb(world()), "US", 1953);
+    const rows = await listDefenceSuppliers(stubDb(world()), "US", 1953, LOT_PRICE);
     expect(rows).toHaveLength(1);
     expect(rows[0].corporationName).toBe("Lockmartin");
     expect(rows[0].component).toBe("ground");
@@ -77,7 +81,8 @@ describe("listDefenceSuppliers", () => {
     const rows = await listDefenceSuppliers(
       stubDb(world({ sectors: [sector({ strategyId: "cyber" })] })),
       "US",
-      1953
+      1953,
+      LOT_PRICE
     );
     expect(rows).toHaveLength(0);
   });
@@ -86,7 +91,8 @@ describe("listDefenceSuppliers", () => {
     const rows = await listDefenceSuppliers(
       stubDb(world({ corps: [corp({ countryId: "UK" })] })),
       "US",
-      1953
+      1953,
+      LOT_PRICE
     );
     expect(rows).toHaveLength(0);
   });
@@ -95,7 +101,8 @@ describe("listDefenceSuppliers", () => {
     const rows = await listDefenceSuppliers(
       stubDb(world({ corps: [corp({ liquidCurrencyCode: "GBP" })] })),
       "US",
-      1953
+      1953,
+      LOT_PRICE
     );
     expect(rows).toHaveLength(0);
   });
@@ -121,7 +128,8 @@ describe("listDefenceSuppliers", () => {
         contracts: [],
       }),
       "RU",
-      1953
+      1953,
+      LOT_PRICE
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].corporationName).toBe("Ministries of Defence Industry");
@@ -155,7 +163,8 @@ describe("listDefenceSuppliers", () => {
         contracts: [],
       }),
       "RU",
-      1953
+      1953,
+      LOT_PRICE
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].stateOwned).toBe(true);
@@ -167,7 +176,8 @@ describe("listDefenceSuppliers", () => {
         })
       ),
       "US",
-      1953
+      1953,
+      LOT_PRICE
     );
     expect(rows[0].projectedLotsPerTurn).toBeCloseTo(privateRows[0].projectedLotsPerTurn * 2, 6);
   });
@@ -176,7 +186,8 @@ describe("listDefenceSuppliers", () => {
     const rows = await listDefenceSuppliers(
       stubDb(world({ sectors: [sector({ sectorType: "manufacturing" })] })),
       "US",
-      1953
+      1953,
+      LOT_PRICE
     );
     expect(rows).toHaveLength(0);
   });
@@ -192,7 +203,8 @@ describe("listDefenceSuppliers", () => {
         })
       ),
       "US",
-      1953
+      1953,
+      LOT_PRICE
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].alreadyContracted).toBe(true);
@@ -209,7 +221,8 @@ describe("listDefenceSuppliers", () => {
         })
       ),
       "US",
-      1953
+      1953,
+      LOT_PRICE
     );
     // The busier plant produces more, but the free one is the one a minister can actually use.
     expect(rows[0].sectorId).toBe(free._id.toString());
@@ -220,7 +233,8 @@ describe("listDefenceSuppliers", () => {
     const rows = await listDefenceSuppliers(
       stubDb(world({ sectors: [sector({ displayName: "Fort Worth Works" })] })),
       "US",
-      1953
+      1953,
+      LOT_PRICE
     );
     expect(rows[0].plantLabel).toBe("Fort Worth Works");
   });
@@ -229,7 +243,8 @@ describe("listDefenceSuppliers", () => {
     const rows = await listDefenceSuppliers(
       stubDb(world({ sectors: [sector({ displayName: "  " })] })),
       "US",
-      1953
+      1953,
+      LOT_PRICE
     );
     expect(rows[0].plantLabel).toBe("TX");
   });

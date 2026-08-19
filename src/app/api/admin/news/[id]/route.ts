@@ -7,7 +7,7 @@ import type { NewsPost } from "@/lib/db/types";
 
 // DELETE /api/admin/news/[id] — Delete a news post and all its replies and reactions.
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAdmin();

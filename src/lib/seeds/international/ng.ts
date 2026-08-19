@@ -8,12 +8,12 @@
  *   - positions: per-era, reflecting documented Nigerian political history
  *   - region/archetype leans EMERGE from census × positions — never hand-calibrated
  *
- * SCAFFOLD NOTE: This is an initial bundle. Only the "2019" era positions are
- * authored; other eras (1979, 1991, 1999, 2007, 2023) currently reuse the 2019
- * positions and the single 2019-default census. A later task should author
- * era-specific positions (Second Republic 1979, early Fourth Republic 1999,
- * Yar'Adua/Jonathan 2007, Buhari 2019, Tinubu 2023) and era-specific census
- * profiles mirroring the BR/CN pattern.
+ * SCAFFOLD NOTE: Only the "2019" era positions are authored; other eras reuse
+ * POSITIONS_2019. Census files exist for 1953 and 1979
+ * (`ngRegionCensusData1953` / `ngRegionCensusData1979`, wired in
+ * `regionCensusData.ts`), but this model still points every era at the 2019
+ * table. Era-specific positions (Second Republic 1979, early Fourth Republic
+ * 1999, Yar'Adua/Jonathan 2007, Tinubu 2023) are still unauthored.
  *
  * Era-fact anchors to validate in ng.test.ts once era-specific positions land:
  *   2019: NORTH-WEST + NORTH-EAST economically RIGHT (Buhari APC base);

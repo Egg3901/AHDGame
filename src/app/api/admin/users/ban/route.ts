@@ -16,7 +16,7 @@ import { invalidateCachedUser } from "@/lib/auth/userDocCache";
 
 // POST /api/admin/users/ban — Ban or unban a user by userId.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

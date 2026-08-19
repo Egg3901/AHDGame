@@ -17,7 +17,7 @@ import { handleRouteError } from "@/lib/api/errors";
 
 // POST /api/elections/snapshot — Records hourly primary standings snapshots for all elections currently in primary phase.
 // Auth: requireCron (falls back to requireAdmin)
-// Errors: 401, 403
+// Errors: 403
 export async function POST(request: Request) {
   try {
     // Allow both admin-authenticated calls and cron (Bearer) calls

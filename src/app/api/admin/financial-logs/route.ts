@@ -1,6 +1,6 @@
 // GET /api/admin/financial-logs — paginated, filterable financial transaction log
 // Auth: requireAdmin
-// Errors: 400, 401, 403
+// Errors: 400, 403
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";

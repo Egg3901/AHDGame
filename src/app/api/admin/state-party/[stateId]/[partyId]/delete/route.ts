@@ -9,7 +9,7 @@ import type { StatePartyOrg, PartyBudget, StatePartyElection } from "@/lib/db/ty
 
 // POST /api/admin/state-party/[stateId]/[partyId]/delete — Deletes a state party organization along with its budget and election records.
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ stateId: string; partyId: string }> }

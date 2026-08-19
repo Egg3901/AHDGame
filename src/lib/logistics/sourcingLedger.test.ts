@@ -10,6 +10,8 @@ function baseResult(overrides: Partial<SourcingResult> = {}): SourcingResult {
     freightTeuByState: new Map(),
     landedPremiumByDestState: new Map(),
     importAggregatesByCountry: new Map(),
+    unplacedSupplyByState: new Map(),
+    deliveryLimitedSupplyByState: new Map(),
     ...overrides,
   };
 }

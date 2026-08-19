@@ -13,7 +13,7 @@ const patchSchema = z.object({
 /**
  * Get or update health check settings (integrity check cadence).
  * Auth: requireAdmin()
- * Errors: 401, 400, 500
+ * Errors: 403, 400
  */
 export async function GET() {
   try {

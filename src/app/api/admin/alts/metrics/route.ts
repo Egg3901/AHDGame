@@ -12,7 +12,7 @@
 //
 // Auth: requireAdmin only. This is pipeline-operations depth (cron health,
 // index/pool sizing), not the ring-review surface moderators use.
-// Errors: 401, 403
+// Errors: 403
 //
 // Query params:
 //   limit — run records to return, 1..200, default 48 (two days of hourly

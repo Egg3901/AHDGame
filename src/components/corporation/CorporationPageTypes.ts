@@ -642,6 +642,13 @@ export interface SectorDetail {
   fillRate?: number | null;
   /** Coarse fill band. Present for everyone who can see the sector at all. */
   fillRateBand?: FillRateBand | null;
+  /**
+   * Share of offered output (0-1) no freight network could place. The part of
+   * the fill shortfall that is a DELIVERY failure rather than a demand
+   * failure, which is the opposite instruction to the player. Insider-only,
+   * like `fillRate`: null when redacted, fogged, or below plants.
+   */
+  deliveryLimitedFraction?: number | null;
   /** Cold-stowed: produces nothing, pays reduced upkeep. */
   mothballed?: boolean;
   /** Outstanding capacity builds; null when nothing is on order. */

@@ -10,7 +10,7 @@ import type { Task, TaskType, TaskPriority, TaskStatus } from "@/lib/db/types";
 
 // GET /api/admin/tasks — Return all tasks with optional filtering by type, status, and priority.
 // Auth: requireAdminOrApiKey
-// Errors: 401, 403
+// Errors: 401, 403, 500
 /**
  * GET /api/admin/tasks
  * Returns all tasks with optional filtering by type, status, priority
@@ -69,7 +69,7 @@ const createTaskSchema = z.object({
 
 // POST /api/admin/tasks — Create a new task with title, description, type, priority, and tags.
 // Auth: requireAdminOrApiKey
-// Errors: 400, 401, 403
+// Errors: 400, 401, 403, 500
 /**
  * POST /api/admin/tasks
  * Create new task

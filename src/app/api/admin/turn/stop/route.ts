@@ -6,7 +6,7 @@ import { createAdminLog } from "@/lib/adminLog";
 
 // POST /api/admin/turn/stop — Pauses the turn system so no new turns are processed until restarted.
 // Auth: requireModerator (admin or moderator)
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     const auth = await requireModerator();

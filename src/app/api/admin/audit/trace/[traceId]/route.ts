@@ -4,7 +4,7 @@
 //
 // Auth: requireModerator. Same role gating as the list endpoint: non-admin
 // callers never see `category:"admin"` rows or raw `meta`/`net`.
-// Errors: 400, 401, 403
+// Errors: 400, 403
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";

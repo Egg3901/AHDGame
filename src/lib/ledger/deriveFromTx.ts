@@ -105,6 +105,11 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // its own repayment per currency instead of two unattributed flows.
   bank_cb_margin_draw: "cb_margin",
   bank_cb_margin_repay: "cb_margin",
+  // Remediation payback. A genuine one-directional mint with no in-world payer,
+  // exactly like onboarding_reward: naming it keeps a heal's credits out of the
+  // Phase-3 `unattributed` backlog and makes the money-supply check report the
+  // repaid value under its own reason.
+  restitution_credit: "restitution",
 };
 
 /** Semantic mint/sink reason for a single-sided row; `unattributed` when unmapped. */

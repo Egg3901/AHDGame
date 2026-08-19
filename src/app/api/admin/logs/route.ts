@@ -6,7 +6,7 @@ import type { AdminLog, AdminLogCategory } from "@/lib/db/types";
 
 // GET /api/admin/logs — List admin action logs with optional category filter and limit.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET(request: Request) {
   try {
     // Verify admin authentication

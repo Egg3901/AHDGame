@@ -23,6 +23,25 @@ import { priceRealizationFactor } from "@/lib/market/priceRealization";
  * uses is deliberate: a second cost table for "what a lot is worth" would drift against the
  * production model the moment either was tuned.
  *
+ * **This MUST read the same base-price table `rawLotsFromSector` reads, and it deliberately
+ * reads the modern `COMMODITY_BASE_PRICES` rather than `eraScaledBasePrices`.** Swapping this
+ * one to the era basis looks like a bug fix on a 1953 world, where the live commodity book is
+ * era-scaled, and it is not. Two things make it wrong:
+ *
+ * 1. The base price is not a cost input here, it is the definition of the lot UNIT. Whatever
+ *    table this function reads, `rawLotsFromSector` must read too, or "how many lots were
+ *    delivered" and "what each lot cost to build" are counted in different units and the
+ *    delivery burn is wrong by the era scale. That is the same denomination mismatch between
+ *    the two ends of the price band that ticket #1134 exists to close.
+ * 2. Changing BOTH is a no-op in money and a balance change in materiel. The base price
+ *    cancels out of the input bill exactly - `computeInputsCost` charges
+ *    `units × unitPrice` where `units = revenue × rate / basePrice` and
+ *    `unitPrice = basePrice × realization` - so a plant's total input spend is
+ *    `revenue × Σ(rate × realization)` on any table. Era-scaling both ends leaves the money
+ *    untouched and simply redefines a lot as ~70x smaller, which makes every unit's
+ *    `lotsRequired` load ~70x cheaper in real terms, because `lotsRequired` is a fixed
+ *    function of archetype cost and does not move with it.
+ *
  * Returns null for a strategy that supplies nothing (`cyber`) or is not a defence line - the
  * same empty case `componentsForStrategy` returns `[]` for, and callers must refuse rather
  * than treat it as free.
@@ -72,19 +91,27 @@ export function lotInputCost(
 }
 
 /**
- * Everything the input bill does not name: overheads, distribution, the labour the recipe
- * does not carry. Solved per sector for the market P&L (`otherOpexPerUnitAnchor`), but that
- * figure is per OUTPUT UNIT of a market mix and is absent on any plant that has not run a
- * producing plants turn, so a contract cannot depend on it existing.
+ * Overheads the commodity recipe does not name, as a flat share of the input bill.
  *
- * A flat share of the input bill instead. It is the conservative direction: it can only push
- * the price FLOOR up, never let a contract be written below the cost of the commodities the
- * plant demonstrably has to buy.
+ * Only reached by `legacyLotProductionCost`. Retained because contracts awarded before ticket
+ * #1134 settle on the cost model they were signed under, not because it is a good model.
  */
 export const LOT_OVERHEAD_SHARE_OF_INPUTS = 0.35;
 
-/** Full production cost of one lot: commodity inputs plus the overhead share. */
-export function lotProductionCost(
+/**
+ * What a lot cost to build under the PRE-#1134 model: the commodity bill plus a flat overhead
+ * share, with no relation at all to what the lot sold for.
+ *
+ * This is the broken model. On the live world it returned about 1,091 against a lot the state
+ * paid 383,748,809 for, so a delivery credited the supplier 99.9997% of the contract and the
+ * defence appropriation converted into corporate cash instead of into equipment.
+ *
+ * It is kept, and still reachable, for exactly one reason: a contract signed under these terms
+ * keeps them for its remaining lots. Players agreed to those deals in good faith under the
+ * rules as they stood, and a repair never takes away what a player already holds. Selection is
+ * by `DefenceContract.costBasis`, and NOTHING should call this for a new award.
+ */
+export function legacyLotProductionCost(
   strategyId: string | undefined | null,
   priceRatios?: ReadonlyMap<CommodityType, number>
 ): number | null {
@@ -94,12 +121,137 @@ export function lotProductionCost(
 }
 
 /**
+ * The build cost that settles a given contract, on the economics it was signed under.
+ *
+ * THE grandfather rule, in one place so the delivery sweep and every order-book view agree.
+ * A CEO's displayed margin must be the margin they are actually paid, or the order book lies
+ * about a deal the player cannot renegotiate.
+ */
+export function contractLotProductionCost(
+  contract: { costBasis?: "margin"; pricePerLot: number },
+  strategyId: string | undefined | null,
+  priceRatios?: ReadonlyMap<CommodityType, number>
+): number | null {
+  return contract.costBasis === "margin"
+    ? lotProductionCost(strategyId, contract.pricePerLot, priceRatios)
+    : legacyLotProductionCost(strategyId, priceRatios);
+}
+
+/**
+ * The profit a defence prime is expected to make on a lot it builds to order.
+ *
+ * THE dial that decides what a contract IS. A lot's price is set by
+ * `lotPrice`, the GDP-anchored figure the arsenal is calibrated around; production cost is
+ * then that price less this margin. Cost is derived from price, not the other way round.
+ *
+ * Inverting the derivation is the whole of ticket #1134. Cost used to be built up from the
+ * commodity recipe alone and came out around 1,091 against a lot the state paid 383,748,809
+ * for, so delivering a lot consumed nothing and the supplier banked 99.9997% of the contract.
+ * The appropriation was not buying materiel, it was buying a number in a corporation's cash
+ * balance, and the minister signing for it could own part of that corporation.
+ *
+ * 15% is a real arms-industry return. The large Western primes run operating margins around
+ * 9% to 11%, and US government contracting fee targets sit near 10% to 15%. Taking the top of
+ * that range rather than the middle is deliberate: this is a game, and a defence contract
+ * should be worth chasing. It is a good business, not a windfall. It also sits just above the
+ * 12% `MIN_CONTRACT_MARGIN` floor, so the negotiable band is a genuine range rather than a
+ * single legal price.
+ */
+export const TARGET_SUPPLIER_MARGIN = 0.15;
+
+/**
+ * Bounds on how far the commodity market may move a lot's build cost from its nominal share.
+ *
+ * Mirrors `priceRealizationFactor`'s own clamp, for the same buy-sell symmetry reason: a
+ * supplier that sells into a damped, clamped market must buy from the same one. It also stops
+ * a broken or half-seeded price book turning into an absurd cost, which under a cost-anchored
+ * band would become an absurd price.
+ */
+export const LOT_COST_INDEX_MIN = 0.7;
+export const LOT_COST_INDEX_MAX = 1.5;
+
+/**
+ * How expensive this line's inputs are right now, against its own nominal recipe. 1.0 in a
+ * calm market, higher in a shortage.
+ *
+ * A RATIO, not a level, and that is the point. The level of `lotInputCost` is set by the
+ * physical lot definition in `rawLotsFromSector`, which is five orders of magnitude away from
+ * what the arsenal prices a lot at, so it can never be a build cost directly. Its movement is
+ * still real information: it says how hard this recipe is being squeezed. Dividing by the same
+ * function at nominal prices keeps the information and discards the broken level.
+ *
+ * Because both ends carry the same base-price basis, that basis cancels here exactly. The
+ * index is identical on a modern or an era-scaled commodity book, which is what makes the
+ * whole cost path immune to the era question `revenueBasisPerLot` documents.
+ */
+export function lotCostIndex(
+  strategyId: string | undefined | null,
+  priceRatios?: ReadonlyMap<CommodityType, number>
+): number | null {
+  const nominal = lotInputCost(strategyId);
+  if (nominal == null || !(nominal > 0)) return null;
+  const live = lotInputCost(strategyId, priceRatios);
+  if (live == null || !Number.isFinite(live)) return null;
+  return Math.min(LOT_COST_INDEX_MAX, Math.max(LOT_COST_INDEX_MIN, live / nominal));
+}
+
+/**
+ * What one lot costs its builder, in the same units as the contract price.
+ *
+ * `lotPrice` is what the lot sells for: at award that is the GDP anchor, and at DELIVERY it
+ * is the contract's own stored `pricePerLot`, so a signed order keeps the margin it was
+ * struck at even if the anchor has moved since.
+ *
+ * Returns null for a line that builds no materiel (`cyber`, or a non-defence sector) or an
+ * unusable price. Callers must refuse rather than treat it as free.
+ */
+export function lotProductionCost(
+  strategyId: string | undefined | null,
+  lotPrice: number,
+  priceRatios?: ReadonlyMap<CommodityType, number>
+): number | null {
+  if (!(lotPrice > 0) || !Number.isFinite(lotPrice)) return null;
+  const index = lotCostIndex(strategyId, priceRatios);
+  if (index == null) return null;
+  // Capped, so a shortage SQUEEZES THE SUPPLIER'S MARGIN and never raises the bill to the
+  // taxpayer. Without the cap a shock of barely 5% pushed cost x MIN_CONTRACT_MARGIN above the
+  // GDP anchor, the band inverted, and the floor became a price ABOVE the ceiling the anchor is
+  // supposed to be. At the cap the margin has fallen to exactly the floor markup and stops:
+  // the contract stays writable at the anchor and the supplier absorbs the rest, which is the
+  // right side of that trade to put the pain on.
+  const share = Math.min((1 - TARGET_SUPPLIER_MARGIN) * index, MAX_COST_SHARE_OF_PRICE);
+  return lotPrice * share;
+}
+
+/**
  * The margin a contract must clear over production cost before it may be written.
  *
  * A floor, not a target: at 12% a supplier that wins on price still makes money, so the
  * cheap-mass doctrine is a real choice rather than a way to bankrupt your own arms industry.
  */
 export const MIN_CONTRACT_MARGIN = 0.12;
+/**
+ * The most of a lot's price that its build cost may consume, whatever the commodity market
+ * does.
+ *
+ * Set so the price floor lands exactly ON the GDP anchor rather than above it:
+ * `cost x (1 + MIN_CONTRACT_MARGIN) = price` at this share. Past it the band would invert, and
+ * a "floor" higher than the anchor is not a floor at all, it is the taxpayer funding a
+ * shortage. A supplier squeezed this hard still clears the minimum contract margin.
+ */
+export const MAX_COST_SHARE_OF_PRICE = 1 / (1 + MIN_CONTRACT_MARGIN);
+
+/**
+ * The most a contract may mark a lot up over what it costs to build (ticket #1134).
+ *
+ * A backstop, not the working ceiling. With cost derived from price at
+ * `TARGET_SUPPLIER_MARGIN` the GDP anchor is normally the tighter of the two bounds and is
+ * what a minister actually negotiates against. This one exists so that if the cost model is
+ * ever changed, mis-seeded, or handed a nonsense figure, the price still cannot float orders
+ * of magnitude above what building the thing consumed. That is the failure mode this ticket
+ * was raised for and it should be impossible by construction, not by calibration.
+ */
+export const MAX_CONTRACT_MARGIN = 1.0;
 
 /**
  * How grade (0..3) scales what a lot costs to build and what it is worth.
@@ -128,24 +280,37 @@ export interface LotPriceBand {
   productionCost: number;
   /** Lowest price a contract may be written at: cost plus `MIN_CONTRACT_MARGIN`. */
   floor: number;
-  /** Highest price a contract may be written at: the GDP-anchored price, grade-scaled. */
+  /**
+   * Highest price a contract may be written at: cost plus `MAX_CONTRACT_MARGIN`, and never
+   * above the grade-scaled GDP anchor.
+   */
   ceiling: number;
   /** What the price defaults to when the minister does not set one. */
   suggested: number;
 }
 
 /**
- * The band a minister may set a lot price inside (suggestion #291).
+ * The band a minister may set a lot price inside (suggestion #291, re-anchored by #1134).
  *
- * Bounded at BOTH ends on purpose. The ceiling is the GDP anchor: without it a minister with
- * a stake in the supplier writes a contract at any number they like and the appropriation is
- * a private cash tap again. The floor is production cost plus a margin: without it the same
- * lever runs the other way, a minister writes contracts a rival's plant loses money on and
- * the arsenal is filled by confiscation.
+ * `anchorPrice` is `lotPrice(countryId, militaryPriceAnchor(...))`, the GDP-anchored figure
+ * the whole arsenal is calibrated around: how much of its budget a country turns into materiel
+ * per turn, how many lots a platform needs, and how long equipping a roster takes are all
+ * derived from it. It is the designed number and this function does not second-guess it.
  *
- * `anchorPrice` is `lotPrice(countryId, militaryPriceAnchor(...))` - the figure procurement
- * charged before ministers could set one, so leaving the input blank reproduces the old
- * behaviour at grade 2.
+ * What #1134 changed is the OTHER end. Production cost is now `anchorPrice` less
+ * `TARGET_SUPPLIER_MARGIN`, so the two ends of the band are two views of one figure and
+ * cannot drift apart. Previously the ceiling was the anchor and the floor was a raw commodity
+ * bill computed on the physical lot definition, which sits five orders of magnitude below what
+ * a lot sells for. The band therefore spanned from about 1,200 to about 383,700,000 and every
+ * contract in it was a transfer rather than a purchase.
+ *
+ * The result is a genuine but narrow negotiation: roughly 12% margin at the floor, the
+ * designed anchor price at the ceiling. A minister who bargains hard saves real money; one who
+ * does not is not fleeced; and no price in the band lets a supplier bank the appropriation.
+ *
+ * Deliberately NOT retroactive on price. A contract stores `pricePerLot` at award and the
+ * delivery sweep bills the stored figure, so every live order keeps the price its supplier
+ * agreed to.
  *
  * Returns null when either input is unusable. Callers MUST refuse: a null band treated as
  * "no limits" is the exploit this whole module exists to close.
@@ -162,10 +327,20 @@ export function lotPriceBand(input: {
 
   const gradedCost = productionCost * scale;
   const floor = Math.max(1, Math.ceil(gradedCost * (1 + MIN_CONTRACT_MARGIN)));
-  const ceiling = Math.max(floor, Math.round(anchorPrice * scale));
-  // The anchor is the honest mid-market quote; it only moves off it when the floor has
-  // overtaken it, which is a genuine signal that this line cannot build at that price.
-  const suggested = Math.max(floor, Math.min(ceiling, Math.round(anchorPrice * scale)));
+  // The anchor is the designed price and normally the binding ceiling; the cost backstop only
+  // takes over if cost is ever mis-derived, and guarantees a price can never again sit orders
+  // of magnitude above what building the lot consumed.
+  const anchorCeiling = Math.round(anchorPrice * scale);
+  const costCeiling = Math.round(gradedCost * (1 + MAX_CONTRACT_MARGIN));
+  const ceiling = Math.max(floor, Math.min(anchorCeiling, costCeiling));
+  // Grossing the graded cost back up by the same margin it was derived with lands exactly on
+  // the anchor in a calm market, so leaving the price blank quotes the designed figure. In a
+  // shortage it rises with cost and the ceiling caps it; if inputs run away far enough the
+  // floor overtakes it and the floor wins, because nothing may be written below cost.
+  const suggested = Math.max(
+    floor,
+    Math.min(ceiling, Math.round(gradedCost / (1 - TARGET_SUPPLIER_MARGIN)))
+  );
   return { productionCost: gradedCost, floor, ceiling, suggested };
 }
 

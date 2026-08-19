@@ -32,6 +32,28 @@ export interface CommodityPrice {
    * throughput constraint when settlement is active.
    */
   stateInputAvailability?: Record<string, number>;
+  /**
+   * Units of each state's OWN production that found a buyer this turn: the
+   * local fill plus everything the freight network carried out. The residual
+   * (stateSupply minus this) is production that physically could not be
+   * placed, which is the number the sell side has to see so a seller is not
+   * credited with output no network could deliver.
+   */
+  statePlacedSupply?: Record<string, number>;
+  /**
+   * The part of a state's unplaced production that failed to reach a WILLING
+   * buyer, as opposed to having no buyer at all.
+   *
+   * Deliberately not `stateSupply - statePlacedSupply`: that difference also
+   * contains plain glut, and the two carry opposite instructions. A glut says
+   * cut output; a delivery failure says the goods were wanted and could not
+   * get there. Attribution rule, per commodity per turn: if any buyer is still
+   * short when the sourcing pass ends, `min(1, residualUnmet / totalSpare)` of
+   * every seller state's leftover spare is delivery-limited; if no buyer is
+   * short, none of it is. Only this field may drive delivery-shaped copy on a
+   * player surface.
+   */
+  stateDeliveryLimitedSupply?: Record<string, number>;
   /** Per-country aggregate prices: countryId -> price (computed with NATIONAL_COMMODITY_STABILIZER) */
   nationalPrices?: Record<string, number>;
   /** Per-country aggregate supply: countryId -> units/day (raw, before stabilizer) */

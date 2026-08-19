@@ -27,7 +27,7 @@ const TriggerSchema = z.object({
 
 // POST /api/admin/events/trigger - Manually offer a specific event to a character.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404, 409
+// Errors: 400, 403, 404, 409
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

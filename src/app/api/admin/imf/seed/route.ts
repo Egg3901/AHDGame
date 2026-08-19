@@ -1,7 +1,7 @@
 // GET /api/admin/imf/seed — Whether the IMF institution corporation exists
 // POST /api/admin/imf/seed — Create or repair IMF corp (admin-picked CEO + 2 shareholders)
 // Auth: requireAdmin
-// Errors: 400, 401, 403
+// Errors: 400, 403
 
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

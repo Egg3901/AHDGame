@@ -15,7 +15,7 @@ import { getOpsBranchMagnitude, OPS_TREES } from "./upgradeCosts";
 export function getMediaFavPerTurn(campaign: Campaign): number {
   const tree = campaign.mediaSpendingTree;
   if (tree?.starter) {
-    // Broadcast (a) + Digital Ads (b) both feed favPerTurn; starter is the base.
+    // Broadcast (a) + Television (b) both feed favPerTurn; starter is the base.
     return (
       OPS_TREES.mediaSpending.starter.magnitude +
       getOpsBranchMagnitude("mediaSpending", "a", tree.a) +

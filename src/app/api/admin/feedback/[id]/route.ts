@@ -12,7 +12,7 @@ import type { Feedback, User } from "@/lib/db/types";
 
 // PATCH /api/admin/feedback/[id] — Update feedback status and/or admin notes, notifying the reporter on status change.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 /**
  * PATCH /api/admin/feedback/[id]
  * Update feedback status and/or admin notes.

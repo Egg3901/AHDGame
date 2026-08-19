@@ -871,6 +871,7 @@ export default function SectorDetailPage() {
               <StrandedPlantBanner
                 lowFillTurns={plants.truth.lowFillTurns ?? 0}
                 soldFraction={plants.truth.soldFraction}
+                deliveryLimitedFraction={plants.truth.deliveryLimitedFraction ?? 0}
                 isCeo={isCeo}
               />
             )}

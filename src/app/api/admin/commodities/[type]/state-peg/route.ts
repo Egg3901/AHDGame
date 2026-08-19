@@ -1,7 +1,7 @@
 // POST /api/admin/commodities/[type]/state-peg — sets a state hard peg.
 // DELETE /api/admin/commodities/[type]/state-peg — removes a state hard peg.
 // Auth: requireAdmin
-// Errors: 401, 403, 400, 404
+// Errors: 403, 400, 404
 
 import { NextResponse } from "next/server";
 import { z } from "zod";

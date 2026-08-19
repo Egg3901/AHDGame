@@ -3,6 +3,32 @@ import type { CorporationType } from "@/lib/constants/corporations";
 
 export type LeanAxis = "economic" | "social" | "display";
 
+/** Numeric lean for the selected axis from a map-overview lean entry. */
+export function leanAxisValue(
+  d: { economicLean: number; socialLean: number; displayLean?: number },
+  axis: LeanAxis
+): number {
+  if (axis === "economic") return d.economicLean;
+  if (axis === "social") return d.socialLean;
+  return d.displayLean ?? (d.economicLean + d.socialLean) / 2;
+}
+
+/**
+ * Symmetric colour-scale half-range for a lean map: the largest |lean| shown on
+ * the selected axis, floored at 0.5 and rounded up to one decimal so the legend
+ * endpoints read cleanly. Symmetric so zero always sits on the neutral centre.
+ */
+export function leanHalfRange(
+  lean: Record<string, { economicLean: number; socialLean: number; displayLean?: number }>,
+  axis: LeanAxis
+): number {
+  let max = 0;
+  for (const d of Object.values(lean)) {
+    max = Math.max(max, Math.abs(leanAxisValue(d, axis)));
+  }
+  return Math.max(0.5, Math.ceil(max * 10) / 10);
+}
+
 export function interpolateGreen(t: number): string {
   const r = Math.round(220 - t * 160);
   const g = Math.round(240 - t * 80);

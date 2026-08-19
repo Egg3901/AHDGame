@@ -3,7 +3,7 @@
 // production target (within a band of the plan quota), the labour-vs-quality
 // tradeoff, and an investment request to Gosbank. Writes soe.planTarget and
 // soe.directive on the corp.
-// Auth: only the character who holds this SOE's directorId. Errors: 401/403/404/429.
+// Auth: only the character who holds this SOE's directorId. Errors: 400/401/403/404/429.
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId } from "mongodb";

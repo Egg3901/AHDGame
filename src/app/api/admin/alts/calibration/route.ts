@@ -13,7 +13,7 @@
 // Auth: requireAdmin only. Same reasoning as the tuning route — this reasons
 // about (and recommends changes to) the scoring config, which is itself
 // admin-only to edit (`PUT /api/admin/alts/config`, plan §4.6).
-// Errors: 401, 403
+// Errors: 403
 //
 // GET /api/admin/alts/calibration -> CalibrationReport (see
 //   src/lib/altDetection/calibration.ts for the full shape, the ground-truth

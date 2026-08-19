@@ -1,4 +1,4 @@
-import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { writeSplitMetricsBulk } from "@/lib/macroMetrics/split";
 import type {
   State,
@@ -11,10 +11,10 @@ import type { StateMetricBaseline } from "@/lib/db/types/statePolicy";
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { resolveSeedPartyTier } from "@/lib/seeds/defaultPartyTiers";
-import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { FederalBudget, EnactedLaw, StateBudget } from "@/lib/db/types/budget";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { CountryId } from "@/lib/constants/countries";
+import { upsertCountryOwnedCorpEntries } from "./upsertCountryOwnedCorps";
 
 export interface EasternBlocSeedConfig {
   countryId: CountryId;
@@ -251,34 +251,7 @@ export async function seedEasternBlocBudget(
     preset,
     easternBlocGameConfig?.commandEconomyEnabled === true
   ).filter((e) => e.corporation.countryOwnerId === countryId);
-  const corpOps: AnyBulkWriteOperation<Corporation>[] = [];
-  const sectorOps: AnyBulkWriteOperation<CorporateSector>[] = [];
-  for (const entry of corpData) {
-    const { _id: corpId, ...corpFields } = entry.corporation;
-    corpOps.push({
-      updateOne: { filter: { _id: corpId }, update: { $set: corpFields }, upsert: true },
-    });
-    for (const sector of entry.sectors) {
-      const { _id: _sid, ...sectorData } = sector;
-      sectorOps.push({
-        updateOne: {
-          filter: { corporationId: corpId, stateId: sector.stateId, sectorType: sector.sectorType },
-          update: { $set: sectorData },
-          upsert: true,
-        },
-      });
-    }
-  }
-  // Corporations before sectors, preserving the original interleaving's
-  // invariant: a sector's owning corporation always exists first.
-  if (corpOps.length > 0) {
-    await db.collection<Corporation>("corporations").bulkWrite(corpOps, { ordered: true });
-  }
-  if (sectorOps.length > 0) {
-    await db
-      .collection<CorporateSector>("corporateSectors")
-      .bulkWrite(sectorOps, { ordered: true });
-  }
+  await upsertCountryOwnedCorpEntries(db, countryId, corpData);
   log(
     `[${countryId}] Seeded national + ${states.length} state budgets, ${laws.length} laws${corpData.length ? `, ${corpData.length} issuer(s)` : ""}`
   );

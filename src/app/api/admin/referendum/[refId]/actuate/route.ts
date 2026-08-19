@@ -11,7 +11,7 @@ import { actuateReferendumTransfer } from "@/lib/referendum/transfer/actuateRefe
 // Admin-only conversion-window action on a passed referendum:
 //   action "resolve" → run the transfer now (NI → Ireland) + mark completed.
 //   action "block"   → cancel the conversion; the region does not transfer.
-// Errors: 400, 401, 404
+// Errors: 400, 403, 404
 export async function POST(request: Request, { params }: { params: Promise<{ refId: string }> }) {
   try {
     const auth = await requireAdmin();

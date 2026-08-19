@@ -5,13 +5,14 @@
  *  - **generic** (Corporate): shared across all 17 sectors, authored once below;
  *  - **sector** (Specialist): unique to each sector type.
  *
- * Each lane has up to 5 unique nodes per decade. The CEO commits to ONE lane per
+ * Each lane has 9 unique nodes per decade (slots 1-9), plus v3 slots 10-15. The CEO commits to ONE lane per
  * decade (first unlock commits); switching requires abandoning that decade. Some
  * nodes carry an `unlockStrategy` effect that makes a production method
  * (SECTOR_STRATEGIES entry) available — modern methods stay locked until then.
  *
- * Cost model: rdScore cost is ~1/6 of v1 (nodes are cheaper but plural), and
- * unlocking also debits cash as a fraction of the corp's daily gross revenue
+ * Cost model: rdScore cost on the first six decades is ~1/6 of v1
+ * (40/55/70/85/100/120); later decades continue the table. Unlocking also
+ * debits cash as a fraction of the corp's daily gross revenue
  * (TECH_NODE_CASH_REVENUE_FRACTION, optionally overridden per node).
  *
  * Tier ART is shared per (lane, sector, decade) — resolved in ./images.ts, not
@@ -61,7 +62,7 @@ export interface NodeSpec {
   cashRevenueFraction?: number;
 }
 
-/** rdScore cost per decade tier — ~1/6 of v1 (40/55/70/85/100/120). */
+/** rdScore cost per decade tier. First six decades are ~1/6 of v1 (40/55/70/85/100/120); the last four continue the curve. */
 const DECADE_COST: Record<string, number> = {
   "1940": 6,
   "1950": 8,
@@ -397,8 +398,7 @@ const CORPORATE: Record<string, NodeSpec[]> = {
 };
 
 // ─── Sector lanes (per sector type) ──────────────────────────────────────────
-// Phase 1 authors energy as the working example; remaining 16 sectors are
-// authored in Phase 4. Sectors without content expose the Corporate lane only.
+// Each of the 17 CORPORATION_TYPES has an authored specialist lane below.
 const SECTOR: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
   energy: {
     "1940": [
@@ -7180,7 +7180,7 @@ export const TECH_TREE: Record<CorporationType, TechTreeNode[]> = Object.fromEnt
   CORPORATION_TYPES.map((t) => [t, buildTreeForSector(t)])
 ) as Record<CorporationType, TechTreeNode[]>;
 
-/** Sector types with an authored sector lane (vs corporate-only for now). */
+/** Sector types with an authored specialist lane. Currently all 17 CORPORATION_TYPES. */
 export const SECTORS_WITH_AUTHORED_LANE: CorporationType[] = (
   Object.keys(SECTOR) as CorporationType[]
 ).filter((t) => SECTOR[t] !== undefined);

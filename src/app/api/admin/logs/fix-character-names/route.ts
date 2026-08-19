@@ -11,7 +11,7 @@ import type { Character } from "@/lib/db/types";
  */
 // POST /api/admin/logs/fix-character-names — Backfill missing character names on account_created admin logs.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     // Verify admin authentication

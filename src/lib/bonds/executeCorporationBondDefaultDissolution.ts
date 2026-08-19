@@ -294,10 +294,7 @@ export async function executeCorporationBondDefaultDissolution(
     return Number.isFinite(rate) && rate && rate > 0 ? amtAnchor * rate : amtAnchor;
   };
 
-  // Pre-Phase-3 every dissolution-payout flow was off the financial ledger:
-  // the defaulting corp's bonds disappeared, sectors got restored, but the
-  // bondholder + shareholder credits were silent. Phase 3 batches one
-  // bond_dissolution_payout tx per bondholder and one
+  // Batch one bond_dissolution_payout tx per bondholder and one
   // corp_dissolution_distribution tx per shareholder, keyed by counterparty
   // back at the defaulting corp so admin queries can pair the two sides.
   const dissolutionTxEntries: Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">[] = [];
@@ -656,7 +653,7 @@ export async function executeCorporationBondDefaultDissolution(
 
   // Stamp tx history before deleting the corp so the bond_default +
   // bond_dissolution_payout rows emitted earlier in this function still
-  // resolve a non-orphaned subjectId on admin forensic queries (Phase 4).
+  // resolve a non-orphaned subjectId on admin forensic queries.
   await stampSubjectDeleted(db, refreshedCorporation._id, {
     sequentialId: refreshedCorporation.sequentialId,
     deletedAt: now,

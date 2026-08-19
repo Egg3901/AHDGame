@@ -2,7 +2,7 @@
 // Returns all non-defaulted bonds with summary stats.
 // Query: ?type=sovereign|corporate, ?countryId=US|UK|...
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

@@ -534,7 +534,8 @@ export const COUNTRY_POLICY_CONFIGS: Record<string, CountryPolicyConfig> = {
     regions: ieRegions,
   },
 
-  // ── Brazil — econ-only stub (policy legislation not yet seeded; consumed by budgets.ts preset bundles) ─────────────
+  // ── Brazil — 2019 map still empty (legislation lives in brLegislationTypes.ts;
+  // 1953 has a full COUNTRY_POLICY_CONFIGS_1953.br; budgets.ts consumes this stub)
   br: {
     nationalStateId: "br_national",
     defaults: {},

@@ -88,10 +88,13 @@ export function buildSourcingDocs(
 
   const freightTeuByState: Record<string, Record<FreightClass, number>> = {};
   for (const [stateId, used] of result.freightTeuByState) {
+    // grid rides no haulage capacity, so it is always 0 here and is not a
+    // reason to keep an otherwise idle state in the ledger.
     if (used.bulk <= 0 && used.special <= 0) continue;
     freightTeuByState[stateId] = {
       bulk: Math.round(used.bulk * 100) / 100,
       special: Math.round(used.special * 100) / 100,
+      grid: 0,
     };
   }
 

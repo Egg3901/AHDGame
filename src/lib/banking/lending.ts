@@ -587,7 +587,7 @@ export async function listBorrowerFacingLoans(
 }
 
 /**
- * Pure NPC household loan-book math. Wiring happens in bankingTurn (phase 4).
+ * Pure NPC household loan-book math. Wired from bankingTurn.
  *
  * volume = lendableDeposits * clamp(1 - (rate - RATE_REF) * SENS, VOL_MIN, VOL_MAX)
  * expectedDefaultRatePercent = clamp(BASE + max(0, rate - DEF_REF) * DEF_SENS, DEF_MIN, DEF_MAX)
@@ -619,7 +619,7 @@ export function computeNpcLoanBook(
 
 /**
  * Pure helper: apply a payment against outstanding. Returns the field set to
- * $set / merge onto the loan doc (used by bankingTurn in phase 4).
+ * $set / merge onto the loan doc (used by bankingTurn).
  */
 export function applyLoanPayment(
   loan: Pick<BankLoan, "outstanding" | "status">,

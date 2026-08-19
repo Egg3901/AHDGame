@@ -311,6 +311,123 @@ export const SOUTHERN_REALIGNMENT_CHECKPOINT: EraCheckpoint = {
  * Expressed directly in the Layer-1 vocabulary (race:black) rather than an
  * archetype proxy, at every US state.
  */
+/** Great Migration destinations: the northern/western industrial states whose
+ * Black electorates were free to register and vote in the late 1950s, unlike
+ * the VRA-era South (whose enfranchisement is the 1965 checkpoint's job). */
+const NORTHERN_BLACK_ELECTORATE_STATES = [
+  "NY",
+  "NJ",
+  "PA",
+  "OH",
+  "IL",
+  "MI",
+  "IN",
+  "MO",
+  "CA",
+  "MD",
+  "DE",
+  "CT",
+  "MA",
+  "RI",
+  "WI",
+  "MN",
+] as const;
+
+/** Yankee New England: the old rock-ribbed Republican belt whose slow
+ * Democratic drift begins in the late 1950s (the 1958 wave elections). */
+const YANKEE_STATES = ["ME", "NH", "VT", "MA", "RI", "CT"] as const;
+
+/**
+ * The road to 1960: the pre-civil-rights-era drift between the 1953 seed and
+ * the Kennedy-Nixon dead heat. No single statute or ruling drives it (hence no
+ * trigger case); it is the compound of four documented late-1950s movements:
+ *
+ *  - NORTHERN Black Democratic consolidation (Little Rock 1957 through the
+ *    1960 sit-ins): Eisenhower took ~39% of the Black vote in 1956; Kennedy
+ *    held ~70%+ in 1960. Northern-only — Southern Black voters largely could
+ *    not vote until the VRA checkpoint enfranchises them.
+ *  - The 1958 recession labor swing: the sharpest postwar downturn to date
+ *    plus peak union density produced the 1958 Democratic wave (House D+12);
+ *    working-class economics move left everywhere.
+ *  - Suburbanization: the growing middle class trends mildly Republican on
+ *    economics (Levittown-era homeownership), the counterweight that kept the
+ *    1960 presidential result a coin flip despite the congressional wave.
+ *  - Yankee New England's Democratic drift: ME/NH/VT and southern New England
+ *    begin leaving the old Republican column (1958: Muskie's Maine).
+ *
+ * Validation anchor: the endpoint world state should rank-correlate with the
+ * real 1960 state margins (MARGINS_1960 in
+ * `src/lib/data/historicalPresidentialMargins.ts`) outside the org-dominated
+ * South, with a near-even national mean (1960 two-party margin D+0.2; House
+ * 1958 D+12 fading to 1960 D+5.5).
+ */
+export const ROAD_TO_1960_CHECKPOINT: EraCheckpoint = {
+  id: "road-to-1960",
+  countryId: "US",
+  title: "The Road to 1960 — Late-Fifties Realignments",
+  fallbackStartTurn: yearToTurn(1957, STARTING_YEAR_1953),
+  durationTurns: 4 * 48, // 1957-1960 inclusive: Little Rock to the Kennedy-Nixon election
+  historicalWindow: { startYear: 1957, endYear: 1961 },
+  // Targets are (dim,bucket)-precise only: this checkpoint moves the granular
+  // electorate directly, no archetype proxies.
+  targets: [
+    // Northern Black consolidation: position and (urban-machine registration)
+    // turnout, both modest against the VRA-era shifts that follow.
+    {
+      dim: "race",
+      bucket: "black",
+      stateIds: NORTHERN_BLACK_ELECTORATE_STATES,
+      axis: "economicLean",
+      totalShift: -1.0,
+    },
+    {
+      dim: "race",
+      bucket: "black",
+      stateIds: NORTHERN_BLACK_ELECTORATE_STATES,
+      axis: "socialLean",
+      totalShift: -0.5,
+    },
+    {
+      dim: "race",
+      bucket: "black",
+      stateIds: NORTHERN_BLACK_ELECTORATE_STATES,
+      axis: "turnout",
+      totalShift: 5,
+    },
+    // 1958 recession labor swing.
+    {
+      dim: "education",
+      bucket: "no_college",
+      stateIds: ALL_US_STATES,
+      axis: "economicLean",
+      totalShift: -0.75,
+    },
+    // Suburbanization counterweight: middle-class economics drift right.
+    {
+      dim: "wealth",
+      bucket: "middle",
+      stateIds: ALL_US_STATES,
+      axis: "economicLean",
+      totalShift: 0.6,
+    },
+    // Yankee New England leaves the Republican column, slowly.
+    {
+      dim: "race",
+      bucket: "white",
+      stateIds: YANKEE_STATES,
+      axis: "economicLean",
+      totalShift: -0.75,
+    },
+    {
+      dim: "race",
+      bucket: "white",
+      stateIds: YANKEE_STATES,
+      axis: "socialLean",
+      totalShift: -0.25,
+    },
+  ],
+};
+
 export const NATIONAL_CIVIL_RIGHTS_ACT_CHECKPOINT: EraCheckpoint = {
   id: "national-civil-rights-act-1964",
   countryId: "US",
@@ -540,6 +657,7 @@ export const MIRANDA_LAW_AND_ORDER_CHECKPOINT: EraCheckpoint = {
  */
 export const ERA_CHECKPOINTS: readonly EraCheckpoint[] = [
   SOUTHERN_REALIGNMENT_CHECKPOINT,
+  ROAD_TO_1960_CHECKPOINT,
   NATIONAL_CIVIL_RIGHTS_ACT_CHECKPOINT,
   VOTING_RIGHTS_ACT_ENFRANCHISEMENT_CHECKPOINT,
   ENGEL_SCHOOL_PRAYER_CHECKPOINT,
