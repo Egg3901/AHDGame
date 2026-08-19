@@ -87,9 +87,11 @@ export const TARGETS: Partial<Record<CountryId, Partial<Record<EraId, Calibratio
       center: 0,
       centerTol: 5,
       minSpread: 0,
-      // Compressed calibration + archetype-path right offset (see the 1999
-      // comment): only the clearest left anchors survive on this surface.
-      expectLeft: ["DC", "HI"],
+      // 2026-08 regional recalibration: the era is authored on the canonical
+      // 2019 transfer ruler, so the 2008 national result (House D+11.1) now
+      // sets the level. The old +0.95 economic centre was the compressed
+      // calibration's archetype-path offset, not a claim about 2008.
+      expectLeft: ["DC", "HI", "VT", "MA", "RI", "NY", "MD", "IL", "CA"],
       expectRight: ["WY", "OK", "ID", "UT", "AL", "AR", "LA", "KY", "TN", "NE", "KS", "WV"],
       ordering: [
         ["MA", "TX"],
@@ -97,7 +99,7 @@ export const TARGETS: Partial<Record<CountryId, Partial<Record<EraId, Calibratio
       ],
       election: "US 2008 presidential, by state",
       twoAxis: {
-        economicCenter: 0.95,
+        economicCenter: 0.05,
         economicCenterTol: 0.5,
         minEconomicSpread: 2.4,
         minSocialSpread: 2.9,
