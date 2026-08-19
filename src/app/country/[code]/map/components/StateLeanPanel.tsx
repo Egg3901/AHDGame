@@ -18,7 +18,11 @@ interface RegionDemographicsResponse {
   groups: Record<string, StateDemographicGroup>;
   calculatedEconomicLean: number;
   calculatedSocialLean: number;
-  categories: { id: string; name: string; groups: { id: string; name: string }[] }[];
+  categories: {
+    id: string;
+    name: string;
+    groups: { id: string; name: string; defaultTurnout?: number }[];
+  }[];
 }
 
 interface GroupRow {
@@ -27,7 +31,15 @@ interface GroupRow {
   population: number;
   economicLean: number;
   socialLean: number;
+  turnout: number | null;
 }
+
+/**
+ * Census dimensions only. Voter-group (archetype) categories are legacy and
+ * share group ids across countries, so a US state's doc matches the UK and
+ * Ireland catalogs too; none of them belong in this breakdown.
+ */
+const CENSUS_CATEGORY_IDS = new Set(["race", "age", "education", "wealth", "ideology"]);
 
 const fmt = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}`;
 
@@ -92,17 +104,25 @@ export function StateLeanPanel({
   const sections = useMemo(() => {
     if (!data) return [];
     return data.categories
+      .filter((cat) => CENSUS_CATEGORY_IDS.has(cat.id))
       .map((cat) => {
         const rows: GroupRow[] = cat.groups
           .map((g) => {
             const sg = data.groups[g.id];
             if (!sg) return null;
+            const turnout =
+              typeof sg.turnout === "number"
+                ? sg.turnout
+                : typeof g.defaultTurnout === "number"
+                  ? g.defaultTurnout
+                  : null;
             return {
               id: g.id,
               name: g.name,
               population: Number(sg.population) || 0,
               economicLean: Number(sg.economicLean) || 0,
               socialLean: Number(sg.socialLean) || 0,
+              turnout,
             };
           })
           .filter((r): r is GroupRow => r !== null && r.population > 0)
@@ -180,6 +200,7 @@ export function StateLeanPanel({
                   <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
                     <th className="pb-1 font-medium">Group</th>
                     <th className="pb-1 font-medium text-right">Share</th>
+                    <th className="pb-1 font-medium text-right">Turnout</th>
                     <th className="pb-1 font-medium text-right">Econ</th>
                     <th className="pb-1 font-medium text-right">Social</th>
                   </tr>
@@ -189,6 +210,9 @@ export function StateLeanPanel({
                     <tr key={r.id} className="border-t border-card-border/40">
                       <td className="py-1 pr-2">{r.name}</td>
                       <td className="py-1 text-right tabular-nums">{r.population.toFixed(0)}%</td>
+                      <td className="py-1 text-right tabular-nums text-muted">
+                        {r.turnout !== null ? `${r.turnout.toFixed(0)}%` : "-"}
+                      </td>
                       <td className="py-1 pl-2 text-right">
                         <LeanValue
                           value={r.economicLean}
