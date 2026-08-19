@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import {
+  MAX_STATE_ORG_BONUS_GENERAL,
   MAX_STATE_ORG_BONUS_PRIMARY,
   STATE_ORG_COST_ACTIONS,
   STATE_ORG_COST_FUNDS,
