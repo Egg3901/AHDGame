@@ -59,7 +59,7 @@ const MEDIA_SUSTAIN_THRESHOLD = 4;
 async function isTargetMediaSustainedAtCap(db: Db, target: Character | NPP): Promise<boolean> {
   if ((target.favorability ?? 50) < 100) return false;
   // Strategic Operations v2: media favorability/turn now comes from the media
-  // tree (starter + Broadcast + Digital Ads). Fetch the target's campaigns and
+  // tree (starter + Broadcast + Television). Fetch the target's campaigns and
   // keep those whose per-turn favorability clears the decay-at-cap threshold
   // (mediaLevel × 0.5 ≥ 2.0), with a legacy-level fallback.
   const MEDIA_SUSTAIN_FAV_PER_TURN = MEDIA_SUSTAIN_THRESHOLD * 0.5;

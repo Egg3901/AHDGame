@@ -660,7 +660,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
             // Phase 5.5: applies to all Campaign-Manager-eligible races (president +
             // US senate / governor / house / stateSenate).
             // Strategic Operations v2: read favorability/turn from the media tree
-            // (starter + Broadcast + Digital Ads), with legacy-level fallback.
+            // (starter + Broadcast + Television), with legacy-level fallback.
             const mediaFavPerTurn = getMediaFavPerTurn(campaign);
             if (applyCampaignPassives && mediaFavPerTurn > 0) {
               const favorabilityBoost = mediaFavPerTurn * seasonMultiplier;

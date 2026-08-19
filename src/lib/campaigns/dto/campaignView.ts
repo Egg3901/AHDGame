@@ -321,7 +321,7 @@ export const CAMPAIGN_CATEGORIES = [
     label: "Fundraising",
     description: "Increase campaign revenue generation",
     tooltipText:
-      "Unlock a fundraising operation, then invest in three branches: Grassroots (steady per-turn income), Bundlers (one-time cash infusions), and Digital Ops (a multiplier on all campaign income).",
+      "Unlock a fundraising operation, then invest in three branches: Grassroots (steady per-turn income), Bundlers (one-time cash infusions), and Direct Mail (a multiplier on all campaign income).",
     colorClass: "text-amber-400",
     bgClass: "bg-amber-500/10 border-amber-500/20",
     barClass: "bg-amber-400",

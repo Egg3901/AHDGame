@@ -262,9 +262,9 @@ export const OPS_TREES: Record<UpgradeCategory, OpsTreeDef> = {
       },
       {
         key: "c",
-        label: "Digital Ops",
+        label: "Direct Mail",
         effectType: "incomeMultiplier",
-        description: "Online fundraising engine — multiplies ALL campaign income.",
+        description: "Mail-order donor drive that multiplies ALL campaign income.",
         tiers: [
           {
             level: 1,
@@ -395,7 +395,8 @@ export const OPS_TREES: Record<UpgradeCategory, OpsTreeDef> = {
         key: "a",
         label: "Broadcast",
         effectType: "favPerTurn",
-        description: "TV and radio buys — the strongest favorability driver, higher upkeep.",
+        description:
+          "Radio, newsreel and press buys. The strongest favorability driver, higher upkeep.",
         tiers: [
           {
             level: 1,
@@ -425,9 +426,9 @@ export const OPS_TREES: Record<UpgradeCategory, OpsTreeDef> = {
       },
       {
         key: "b",
-        label: "Digital Ads",
+        label: "Television",
         effectType: "favPerTurn",
-        description: "Targeted online ads — cheaper favorability with lower upkeep.",
+        description: "Televised spots and appearances. Cheaper favorability with lower upkeep.",
         tiers: [
           {
             level: 1,
