@@ -11,8 +11,8 @@ import {
  *
  * Strategic Operations v2: when the campaign has a fundraising branch tree with
  * its starter unlocked, income is
- *   (starter base + Grassroots recurring) × (1 + Digital Ops multiplier)
- * where Grassroots is branch `a` (incomeFlat) and Digital Ops is branch `c`
+ *   (starter base + Grassroots recurring) × (1 + Direct Mail multiplier)
+ * where Grassroots is branch `a` (incomeFlat) and Direct Mail is branch `c`
  * (incomeMultiplier). Bundlers (branch `b`) is a one-time lump applied at
  * purchase (see campaignCommands) and does NOT recur here.
  *

@@ -71,9 +71,12 @@ export function StateOrganizationPanel({ stateId }: { stateId: string }) {
         </Link>
       </div>
       <p className="mb-2 text-xs text-muted">
-        Per-candidate ground game investment. Each level multiplies the candidate&apos;s primary
-        weight in this state (+{Math.round(MAX_STATE_ORG_BONUS_PRIMARY * 100)}% at level{" "}
-        {STATE_ORG_MAX_LEVEL}). Build your own here, or open the map to invest across states.
+        Per-candidate ground game investment. Each level multiplies the candidate&apos;s vote weight
+        in this state in the primary <strong>and</strong> in the general election (+
+        {Math.round(MAX_STATE_ORG_BONUS_PRIMARY * 100)}% primary, +
+        {Math.round(MAX_STATE_ORG_BONUS_GENERAL * 100)}% general, at level {STATE_ORG_MAX_LEVEL}).
+        Levels carry through the whole cycle and drop to 25% only after the general resolves. Build
+        your own here, or open the map to invest across states.
       </p>
       {candidates.length === 0 ? (
         <p className="mb-3 text-sm text-muted">Nobody has invested here yet.</p>
