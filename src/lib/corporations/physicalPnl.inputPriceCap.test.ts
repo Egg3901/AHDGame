@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { CommodityType } from "@/lib/constants/commodities";
+import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import { capInputPriceRatioAtWorld, computeInputsCost } from "./physicalPnl";
 
 describe("capInputPriceRatioAtWorld", () => {
@@ -41,9 +42,11 @@ describe("computeInputsCost — world-capped input ratios", () => {
       ...args,
       priceRatios: new Map([["iron" as CommodityType, capInputPriceRatioAtWorld(0.767, 3.273)]]),
     });
-    // units = (1000 * 0.15 / 100 / 4) = 0.375
-    expect(uncapped.total).toBeCloseTo(0.375 * 100 * 3.273);
-    expect(capped.total).toBeCloseTo(0.375 * 100 * 0.767);
+    // units = (1000 * 0.15 / 100 / 4) = 0.375. Input billing prices through the
+    // SAME realization function as revenue (clamp(ratio^0.5, 0.7, 1.5)), so the
+    // expectations route through priceRealizationFactor rather than raw ratios.
+    expect(uncapped.total).toBeCloseTo(0.375 * 100 * priceRealizationFactor(3.273));
+    expect(capped.total).toBeCloseTo(0.375 * 100 * priceRealizationFactor(0.767));
     expect(capped.total).toBeLessThan(uncapped.total);
   });
 });
