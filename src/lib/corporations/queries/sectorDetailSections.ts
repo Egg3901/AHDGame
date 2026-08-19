@@ -1456,7 +1456,11 @@ export function buildSectorPlantsSection(args: {
   // lines split that same number, so the panel can never disagree with the
   // profit the turn actually booked: `otherOperating` is whatever the named
   // physical lines do not explain, which is exactly the residual
-  // `physicalPnl.ts` solves for.
+  // `physicalPnl.ts` solves for. It is SIGNED, because that residual is signed.
+  //
+  // The identity every caller may rely on, exactly:
+  //   revenue - (inputs + labour + upkeep + compliance + otherOperating
+  //              + growthAndBuild) === profit
   const utilization =
     capacityUnits != null && capacityUnits > 0 && producedUnits != null
       ? Math.max(0, Math.min(1, producedUnits / capacityUnits))
@@ -1487,13 +1491,30 @@ export function buildSectorPlantsSection(args: {
   const complianceAnchor = nonNeg(
     (money.realizedRevenueAnchor * Math.max(0, regulatoryBurdenPp)) / 100
   );
-  const inputsAnchor = Math.min(
-    nonNeg(money.inputsAnchor),
-    nonNeg(money.maintenanceNetAnchor - upkeepAnchor - complianceAnchor)
-  );
-  const otherOperatingAnchor = nonNeg(
-    money.maintenanceNetAnchor - upkeepAnchor - complianceAnchor - inputsAnchor
-  );
+  // The input bill renders at its real size, and `otherOperating` is the SIGNED
+  // remainder that makes the named lines sum back to `maintenanceNet` exactly.
+  //
+  // Under plants the engine's derived operating cost can land BELOW the named
+  // physical lines. `solveOtherOpexPerUnit` deliberately keeps a NEGATIVE
+  // residual (a sector whose policy credit and calibration anchor outweigh its
+  // physical costs), and `derivedMarginPct` is additionally capped at 100. Both
+  // reconstruct here as a maintenance bill smaller than the wage bill, so
+  // `maintenanceNet` goes negative once wages are carved out. That is a credit,
+  // not an absence of costs.
+  //
+  // Clamping it at zero, and clamping the inputs line to fit inside a negative
+  // budget, is what broke prod sector 6a83e59f97baa9dbe6bb7980 (a California
+  // newsroom, other-opex anchor -0.0754/unit): realized revenue 321,760.57 at
+  // an 88.63% engine margin is a 36,584.10 operating bill against a 70,561.75
+  // wage bill, so the panel printed $322K of revenue, $70.6K of wages, $0 on
+  // every other line and $285K of profit. 322 - 70.6 is 251.4, not 285
+  // (ticket 1122).
+  //
+  // This mirrors the corporation page's `otherPp` residual (corporationDetail.ts,
+  // ticket 1072), which was already signed and unclamped for the same reason.
+  const inputsAnchor = nonNeg(money.inputsAnchor);
+  const otherOperatingAnchor =
+    money.maintenanceNetAnchor - upkeepAnchor - complianceAnchor - inputsAnchor;
   const financialEventsAnchor = nonNeg(
     (money.realizedRevenueAnchor * Math.abs(Math.min(0, crisisMarginPenaltyPp))) / 100
   );
@@ -1521,7 +1542,10 @@ export function buildSectorPlantsSection(args: {
   );
   // Full operating bill: maintenanceNet already carries inputs, upkeep on idle
   // capacity, compliance and other opex; labour is billed beside it.
-  const operatingCostAnchor = nonNeg(money.maintenanceNetAnchor) + nonNeg(money.labourAnchor);
+  // Floor the SUM, not each leg: `maintenanceNet` is routinely negative (a
+  // credit) under plants, and flooring it on its own double-counted wages that
+  // the credit had already offset, inflating cost-per-unit.
+  const operatingCostAnchor = nonNeg(money.maintenanceNetAnchor + money.labourAnchor);
   const totalCostAnchor = operatingCostAnchor + nonNeg(money.growthCostAnchor);
   const receivedPerUnitAnchor =
     producedUnits != null && producedUnits > 0 ? money.realizedRevenueAnchor / producedUnits : null;

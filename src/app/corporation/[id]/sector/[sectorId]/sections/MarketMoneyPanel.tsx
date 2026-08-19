@@ -32,6 +32,14 @@ interface MarketMoneyPanelProps {
  * so `revenue − Σ(lines) = profit` holds on screen exactly. "Other running
  * costs" is the residual by construction, which is what makes the identity
  * exact rather than approximately right.
+ *
+ * That residual is SIGNED. Subsidies, policy support and a negative calibration
+ * anchor can push a sector's operating bill below the sum of its named physical
+ * costs, and when that happens the residual line is money handed back, not money
+ * spent. It renders as a credit with a "+", the way the corporation page's
+ * margin drilldown has always rendered the same number (ticket 1122). Rendering
+ * it as a clamped "− $0" is what made a newsroom show $322K of revenue, $70.6K
+ * of wages, every other cost line at zero, and $285K of profit underneath.
  */
 export default function MarketMoneyPanel({
   plants,
@@ -94,7 +102,7 @@ export default function MarketMoneyPanel({
       key: "other",
       label: "Other running costs",
       value: pnl.otherOperatingAnchor,
-      help: "Overheads, distribution, insurance and rent. Everything the lines above do not name.",
+      help: "Overheads, distribution, insurance and rent, less anything policy or subsidy hands back. Everything the lines above do not name. It shows as a credit when the money coming back outweighs those overheads.",
     },
     {
       key: "growth",
@@ -105,6 +113,10 @@ export default function MarketMoneyPanel({
   ];
 
   const totalCosts = costLines.reduce((s, l) => s + l.value, 0);
+  // A cost line is only ever shown as a subtraction when it IS one. A negative
+  // line is a credit, so it renders "+ $X" in the profit tone. Printing
+  // "− −$34K" (or clamping the value away) is what broke the on-screen sum.
+  const signedCost = (value: number) => (value < 0 ? `+ ${money(-value)}` : `− ${money(value)}`);
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
@@ -266,15 +278,15 @@ export default function MarketMoneyPanel({
           <Row
             key={l.key}
             label={l.label}
-            value={`− ${money(l.value)}`}
-            tone="error"
+            value={signedCost(l.value)}
+            tone={l.value < 0 ? "success" : "error"}
             indent
             help={l.help}
           />
         ))}
         <div className="flex items-center justify-between border-t border-card-border pt-2">
           <span className="text-body-sm text-muted">All costs</span>
-          <span className="text-body-sm tabular-nums text-muted">− {money(totalCosts)}</span>
+          <span className="text-body-sm tabular-nums text-muted">{signedCost(totalCosts)}</span>
         </div>
         <div className="border-t border-card-border pt-2">
           <Row
@@ -282,7 +294,7 @@ export default function MarketMoneyPanel({
             value={money(pnl.profitAnchor)}
             tone={pnl.profitAnchor >= 0 ? "success" : "error"}
             bold
-            help="Revenue minus every cost line above. Corporation-level costs and tax are settled on the corporation page."
+            help="Revenue minus every cost line above, exactly. A line shown with a + is a credit, so it adds back instead of taking away. Corporation-level costs and tax are settled on the corporation page."
           />
         </div>
       </div>
