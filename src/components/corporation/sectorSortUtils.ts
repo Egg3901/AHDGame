@@ -1,6 +1,28 @@
 import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 import type { SectorDetail } from "./CorporationPageTypes";
 
+/**
+ * The revenue basis every player-facing sector surface must use: realized
+ * revenue when the turn processor has persisted it, nameplate otherwise. This
+ * mirrors SectorRow's `displayRevenue` (#3001/#3002). Totals and sorting used
+ * raw nameplate `revenue` while the rows rendered realized, so the Total line
+ * disagreed with the column above it (ticket #1122).
+ *
+ * Redacted private-corp rows carry null revenue; those contribute 0.
+ */
+export function sectorDisplayRevenue(
+  sector: Pick<SectorDetail, "revenue" | "financialRevenue">
+): number {
+  return sector.financialRevenue ?? sector.revenue ?? 0;
+}
+
+/** Sum of {@link sectorDisplayRevenue} across sectors, the Total row's basis. */
+export function sumSectorDisplayRevenue(
+  sectors: Pick<SectorDetail, "revenue" | "financialRevenue">[]
+): number {
+  return sectors.reduce((sum, s) => sum + sectorDisplayRevenue(s), 0);
+}
+
 export type SectorSortKey =
   | "location"
   | "type"
@@ -88,7 +110,9 @@ export function compareSectors(
     case "growthCost":
       return (a.currentGrowthCost - b.currentGrowthCost) * sign;
     case "revenue":
-      return (a.revenue - b.revenue) * sign;
+      // Sort on the same basis the Revenue column renders (#1122), otherwise
+      // the ordering contradicts the visible numbers.
+      return (sectorDisplayRevenue(a) - sectorDisplayRevenue(b)) * sign;
     case "margin":
       return (a.effectiveProfitMargin - b.effectiveProfitMargin) * sign;
     case "profit":

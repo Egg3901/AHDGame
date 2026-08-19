@@ -43,6 +43,19 @@ export interface MapOverviewResponse {
   npcSeats?: Record<string, number>;
 }
 
+/**
+ * Countries whose map renders the labelled left/right lean colour scale.
+ * Everything else renders neutral grey.
+ *
+ * This was previously derived from which archetype category id the country
+ * used, which is why it names an explicit set now. The set is the behaviour
+ * that derivation produced, NG included: NG has no archetype category entry in
+ * that old map, so it fell through to the neutral branch. Whether NG should
+ * carry the scale is a separate call, not a side effect of removing the
+ * archetype lookup.
+ */
+const LEAN_SCALE_COUNTRIES = new Set<CountryId>(["UK", "DE"]);
+
 export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
     const { code } = await params;
@@ -62,19 +75,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
 
     const db = await getDb();
 
-    const VOTER_GROUP_CATEGORY: Partial<Record<CountryId, string>> = {
-      UK: "uk_voterGroups",
-      DE: "de_voterGroups",
-    };
-    const voterGroupCategoryId = VOTER_GROUP_CATEGORY[countryId] ?? "cn_voterGroups";
-
     const [allStates, allDemographics, demographicCategories] = await Promise.all([
       db.collection<State>("states").find({ countryId }).toArray(),
       db.collection<StateDemographics>("stateDemographics").find({ countryId }).toArray(),
-      db
-        .collection<DemographicCategory>("demographicCategories")
-        .find({ _id: voterGroupCategoryId })
-        .toArray(),
+      // Load every category and let each region's own `categoryWeights` select
+      // which ones apply (`calculateStateLean`). This route used to name the
+      // per-country archetype category id directly, which meant a country whose
+      // catalog is not in that hardcoded map fell back to a foreign one.
+      db.collection<DemographicCategory>("demographicCategories").find({}).toArray(),
     ]);
 
     const stateIds = allStates.map((s) => s._id);
@@ -123,11 +131,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
       }
 
       const regionId = stateId;
-      const useUkLean = voterGroupCategoryId !== "cn_voterGroups";
-      const econ = useUkLean
+      const useLeanScale = LEAN_SCALE_COUNTRIES.has(countryId);
+      const econ = useLeanScale
         ? getUkEconomicLeanLabelHex(economicLean)
         : { color: "#888888", label: "Neutral" };
-      const socialMeta = useUkLean
+      const socialMeta = useLeanScale
         ? getSocialLeanLabelHex(socialLean)
         : { color: "#888888", label: "Neutral" };
 

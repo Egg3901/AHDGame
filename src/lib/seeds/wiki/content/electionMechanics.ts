@@ -76,7 +76,7 @@ For each demographic group, for each candidate, per turn:
 
 1. **Reach**: a sqrt curve on political influence, capped at 1.0 once influence reaches 100. State and presidential general elections both use this curve. Presidential primaries use a gentler diminishing-returns curve instead, leaving more room for Support, Favorability, and Org to compete.
 2. **Appeal (per group)**: \`(50 - |econDiff|*5 - |socialDiff|*5)^2 / 100 + APPEAL_POSITION_FLOOR(0.5) + DIRECTION_BONUS(tribal, up to +30) + reach * 12.5\`. Quadratic position scoring with a floor, directional bonus, and influence multiplier. Max **~55** in both state and presidential general races.
-3. **Approval scalar**: \`effectiveFavorability / 100\`, where \`effectiveFavorability = favorability + archetypeApproval * 0.5\` (clamped 0-100). 0% effective favorability = 0 votes.
+3. **Approval scalar**: \`effectiveFavorability / 100\`, where \`effectiveFavorability = favorability + groupApproval * 0.5\` (clamped 0-100). 0% effective favorability = 0 votes.
 4. **Party org scalar**: a normalized share model, \`(partyOrg / totalStateOrg)^0.5\`. Ranges from near 0 (tiny org share) to 1.0 (monopoly). Independents use a flat 0.5. Presidential races use the same normalized share, damped when the field is crowded: \`max(0.2, 1 - (n-2) * 0.15)\`.
 5. **Infamy scalar**: \`1 - 0.05 * (infamy/100)\`. Player characters with high infamy lose up to 5% of their per-group weight. NPPs aren't affected.
 6. **Turn pool scaled by party strength modifier:**

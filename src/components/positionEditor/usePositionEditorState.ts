@@ -16,10 +16,6 @@ type Action =
       field: "share" | "turnout" | "economicLean" | "socialLean";
       value: number;
     }
-  | { type: "SET_WEIGHT"; archetypeId: string; index: number; value: number }
-  | { type: "ADD_WEIGHT"; archetypeId: string; dim: string; key: string }
-  | { type: "REMOVE_WEIGHT"; archetypeId: string; index: number }
-  | { type: "SET_CIVIC"; archetypeId: string; value: number }
   | { type: "SAVED" };
 
 function reducer(state: State, action: Action): State {
@@ -30,23 +26,6 @@ function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "SET_LAYER1":
       cfg.layer1[action.dim][action.key][action.field] = action.value;
-      break;
-    case "SET_WEIGHT":
-      cfg.archetypes.find((a) => a.id === action.archetypeId)!.weights[action.index].w =
-        action.value;
-      break;
-    case "ADD_WEIGHT": {
-      const a = cfg.archetypes.find((x) => x.id === action.archetypeId)!;
-      if (!a.weights.some((w) => w.dim === action.dim && w.key === action.key)) {
-        a.weights.push({ dim: action.dim, key: action.key, w: 0.1 });
-      }
-      break;
-    }
-    case "REMOVE_WEIGHT":
-      cfg.archetypes.find((a) => a.id === action.archetypeId)!.weights.splice(action.index, 1);
-      break;
-    case "SET_CIVIC":
-      cfg.archetypes.find((a) => a.id === action.archetypeId)!.civicMultiplier = action.value;
       break;
   }
   return { config: cfg, dirty: true };

@@ -470,7 +470,6 @@ export async function runSeed(
       layer1Positions,
       positions: override?.positions,
       turnout: override?.turnout,
-      composition: override?.composition,
     });
     const calculatedLean = calculateStateLeanForCache(sd, demographicCategories, {
       countryId: "US",

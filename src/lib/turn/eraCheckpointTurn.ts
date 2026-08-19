@@ -1,46 +1,37 @@
 /**
  * Era Checkpoint Turn — applies each active `EraCheckpoint`'s pull to the
- * targeted states' voter-archetype leans (see `src/lib/demographics/eraCheckpoints.ts`
- * for the full design writeup).
+ * targeted states' Layer-1 census buckets (see
+ * `src/lib/demographics/eraCheckpoints.ts` for the full design writeup).
  *
- * TWO substrates are moved, every active turn, from the SAME netted per-turn
- * delta:
- *  1. `stateDemographics`/`demographicDefaults` `.groups[groupId].<axis>` —
- *     the archetype-level lean, read directly by the legacy (non-granular)
- *     vote-distribution path, `calculateStateLean`, the position editor, and
- *     national-axes/wiki reads. This is the ORIGINAL mechanism.
- *  2. `demographicDefaults.layer1PositionOverrides[dim][bucket].<axis>` — a
- *     durable per-census-bucket position delta, projected from the same
- *     archetype delta via `archetypeValuesToBuckets` (the exact map already
- *     used to diffuse archetype-keyed turnout/approval effects onto cells).
- *     This is the ONLY channel the granular vote path
- *     reads a checkpoint's pull through — see the module doc on
- *     `src/lib/demographics/granularElectorate.ts` for why (1) alone is
- *     invisible to it. Archetypes with no bucket mapping (non-US voter
- *     groups) contribute nothing here — same documented degrade as every
- *     other archetype→bucket channel.
+ * Every checkpoint target is a (`dim`, `bucket`) pair, so one substrate moves
+ * per lean target: `demographicDefaults.layer1PositionOverrides[dim][bucket]
+ * .<axis>`, a durable per-census-bucket position delta. This is the ONLY
+ * channel the granular vote path reads a checkpoint's pull through. See the
+ * module doc on `src/lib/demographics/granularElectorate.ts` for why an
+ * archetype-level `groups[id].<axis>` write is invisible to it.
  *
- * A THIRD substrate moves for `axis: "turnout"` targets specifically (the
- * Voting Rights Act checkpoint's channel — enfranchisement, not lean):
+ * `axis: "turnout"` targets (the Voting Rights Act checkpoint's channel:
+ * enfranchisement, not lean) move a parallel substrate:
  * `demographicDefaults.layer1TurnoutOverrides[dim][bucket]`, a durable
  * turnout-rate delta consumed by `granularElectorate.ts`'s
  * `buildUsTurnoutRates`/`applyTurnoutRateOverlay` BEFORE cell derivation —
- * routed through `applyDurableGroupTurnoutShift`/`applyDurableBucketTurnoutShift`
- * rather than the lean functions, since turnout is a bounded 0-100
- * percentage, not a signed lean axis (see those functions' doc comments in
- * `durableRealignment.ts`). The archetype-level `groups[groupId].turnout`
- * write still happens too (mirroring substrate 1 above), but on its own it is
- * invisible to both vote engines for a Layer-1 US state — see
- * `Layer1TurnoutOverlay`'s doc comment in `src/lib/db/types/demographics.ts`.
+ * routed through `applyDurableBucketTurnoutShift` rather than the lean
+ * function, since turnout is a bounded 0-100 percentage, not a signed lean
+ * axis (see those functions' doc comments in `durableRealignment.ts`).
+ *
+ * Counter-pressure still reads legislation authored against ARCHETYPES: an
+ * active bill's per-archetype shift is projected onto buckets through
+ * `archetypeValuesToBuckets` before netting, so a player's legislation
+ * contests a checkpoint with no new authoring convention needed.
  *
  * Ordering requirement: this MUST run strictly after `processAllStateDemographics`
  * (`src/lib/demographicEffects.ts`) within the same turn, never concurrently with
- * it — both can `$set` the exact same `stateDemographics.groups.<id>.<axis>` field,
- * and running them in the same `Promise.all` would race a lost update (the same
- * class of bug documented in `stateEffectsPhase.ts`'s S4 comment for
+ * it: both write `demographicDefaults` for the same state, and running them in
+ * the same `Promise.all` would race a lost update (the same class of bug
+ * documented in `stateEffectsPhase.ts`'s S4 comment for
  * crisisTurn/ministerialOrders/policyEffects). `processEraCheckpointsTurn` reads
- * `stateDemographics` fresh, so as long as it is awaited AFTER the legislation/decay
- * writer commits, there is no race.
+ * `demographicDefaults` fresh, so as long as it is awaited AFTER the
+ * legislation/decay writer commits, there is no race.
  */
 import type { AnyBulkWriteOperation, Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
@@ -51,9 +42,7 @@ import { getActivePoliciesForState, type LegislationTypeMap } from "@/lib/policy
 import { calculateDemographicShiftsByTarget } from "@/lib/demographicEffects";
 import { archetypeValuesToBuckets } from "@/lib/demographics/archetypeBucketMap";
 import {
-  applyDurableGroupShift,
   applyDurableBucketShift,
-  applyDurableGroupTurnoutShift,
   applyDurableBucketTurnoutShift,
   readLayer1Overlay,
   readLayer1TurnoutOverlay,
@@ -117,9 +106,9 @@ async function resolveActiveCheckpoints(
 /**
  * Apply one turn of every active era-checkpoint's pull, per targeted state,
  * netted against any opposing legislative demographic-effect shift currently
- * active in that state for the same group+axis. Moves BOTH the live
- * `stateDemographics` doc and the seeded `demographicDefaults` snapshot (see
- * the module doc comment on `eraCheckpoints.ts` for why both move together).
+ * active in that state for the same bucket+axis. Moves the durable overlays on
+ * the seeded `demographicDefaults` snapshot (see the module doc comment on
+ * `eraCheckpoints.ts` for why that is the substrate a checkpoint owns).
  */
 export async function processEraCheckpointsTurn(
   db: Db,
@@ -183,60 +172,7 @@ export async function processEraCheckpointsTurn(
         if (!target.stateIds.includes(stateId)) continue;
         const rawDelta = computeCheckpointRawDelta(target, checkpoint);
 
-        if (target.groupId) {
-          // ARCHETYPE target — the original mechanism (see EraCheckpointTarget's
-          // doc comment on eraCheckpoints.ts). Moves the archetype live/default
-          // group AND (via applyDurableGroupShift's bucket projection) the
-          // granular overlay.
-          const group = demographics.groups[target.groupId];
-          if (!group) continue;
-          const current = group[target.axis];
-          if (typeof current !== "number") continue;
-
-          const counterShiftPerTurn = counterShifts[target.axis]?.[target.groupId] ?? 0;
-          const netDelta = applyCounterPressure(rawDelta, counterShiftPerTurn);
-
-          // Narrowed to a local `const` (not `target.axis` itself) so it
-          // narrows correctly INSIDE the `readOverlay` closures below too —
-          // TS does not narrow a captured property access the same way it
-          // narrows a plain `const` binding.
-          const axis = target.axis;
-          const groupId = target.groupId;
-          if (axis === "turnout") {
-            // TURNOUT — the Voting Rights Act checkpoint's channel. Routes
-            // through its own clamp/overlay (`layer1TurnoutOverrides`), not
-            // the lean functions' (`layer1PositionOverrides`) — see
-            // `applyDurableGroupTurnoutShift`'s doc comment.
-            applyDurableGroupTurnoutShift(
-              groupId,
-              netDelta,
-              {
-                live: current,
-                default: defaults?.groups[groupId]?.turnout,
-                readOverlay: (dim, bucket) => readLayer1TurnoutOverlay(defaults, dim, bucket),
-              },
-              acc,
-              countryId
-            );
-          } else {
-            // Shared durable-relocation primitive (see `durableRealignment.ts`) —
-            // the SAME mechanism designated legislation and the SCOTUS
-            // demographic-signal consumer use, so all three channels are visible
-            // to both vote paths identically.
-            applyDurableGroupShift(
-              groupId,
-              axis,
-              netDelta,
-              {
-                live: current,
-                default: defaults?.groups[groupId]?.[axis],
-                readOverlay: (dim, bucket) => readLayer1Overlay(defaults, dim, bucket, axis),
-              },
-              acc,
-              countryId
-            );
-          }
-        } else if (target.dim && target.bucket) {
+        if (target.dim && target.bucket) {
           // BUCKET target — direct Layer-1 targeting, no archetype proxy.
           // Granular-path only (there is no archetype to carry it on the
           // legacy live doc). Counter-pressure projects EVERY active

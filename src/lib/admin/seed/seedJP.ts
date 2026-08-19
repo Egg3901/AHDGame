@@ -142,7 +142,7 @@ export async function seedJPDemographics(
       jpRegionDemographics = buildModelRegionDemographics(
         model,
         full?.positions ?? undefined,
-        full ? { turnout: full.turnout, composition: full.composition } : undefined
+        full ? { turnout: full.turnout } : undefined
       );
       log(
         `[JP] Using Layer-1-derived demographics (${jpRegionDemographics.length} regions, era ${era})`

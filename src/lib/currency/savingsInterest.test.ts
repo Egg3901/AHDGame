@@ -8,6 +8,7 @@ import {
   savingsApyPercent,
   SAVINGS_REAL_RATE_FLOOR_PERCENT,
 } from "./savingsInterest";
+import { savingsInterestContent } from "@/lib/seeds/wiki/content/savingsInterest";
 
 describe("interestEligibleBalance (pool-share cap #3064)", () => {
   it("does not cap an account below the pool share", () => {
@@ -87,5 +88,24 @@ describe("roundSavingsAmount", () => {
 
   it("rounds JPY to integer", () => {
     expect(roundSavingsAmount(106.7, "JPY")).toBe(107);
+  });
+});
+
+describe("APY is the real rate, not half of nominal prime (ticket #1122)", () => {
+  it("does not pay half the nominal prime when inflation is positive", () => {
+    // Player expectation from the ticket: "half of 4.42% is 2.21%". That only
+    // holds at zero inflation; the paid APY is half the REAL rate.
+    expect(savingsApyPercent(4.42, 0)).toBeCloseTo(2.21, 6);
+    expect(savingsApyPercent(4.42, 2)).toBeCloseTo(1.21, 6);
+  });
+
+  it("floors the real rate so every currency still pays something", () => {
+    expect(savingsApyPercent(14, 13.8)).toBeCloseTo(SAVINGS_REAL_RATE_FLOOR_PERCENT / 2, 6);
+    expect(savingsApyPercent(2, 10)).toBeCloseTo(SAVINGS_REAL_RATE_FLOOR_PERCENT / 2, 6);
+  });
+
+  it("wiki copy does not promise the nominal half-prime formula", () => {
+    expect(savingsInterestContent).not.toContain("APY = primeRate / 2");
+    expect(savingsInterestContent).toContain("realRate");
   });
 });

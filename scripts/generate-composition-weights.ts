@@ -48,6 +48,7 @@ const COUNTRIES = [
   "YU",
   "BG",
   "BLR",
+  "UKR",
   "CS",
   "BAL",
 ];

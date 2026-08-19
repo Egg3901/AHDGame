@@ -28,7 +28,7 @@ Key metrics to monitor:
 | Inflation | Price level change | Affects purchasing power, central bank policy |
 | Healthcare index | Public health quality | Affects demographic approval and electoral appeal |
 | Education index | Education system quality | Long-term demographic effects |
-| Environment index | Environmental health | Affects certain voter archetype appeal |
+| Environment index | Environmental health | Affects appeal with some voter groups |
 
 Metrics trend slowly: a single policy bill rarely causes dramatic movement. Watch the trend direction over 4 to 8 turns after major legislation passes to see the effect.
 
@@ -105,7 +105,7 @@ Polling is the most direct diagnostic tool for electoral decision-making:
 - After a major policy change or ad campaign (to measure impact)
 - Early in campaign season (to identify groups to canvass)
 
-**Full Demographic Poll (5 actions, ₳75k):** Shows your appeal across all demographic groups broken down by archetype. Use this:
+**Full Demographic Poll (5 actions, ₳75k):** Shows your appeal across every segment of the state's electorate. Use this:
 - When you need to allocate a large ad budget
 - When a race is close and you need to find pockets of untapped support
 - Before the final 4-turn campaign season sprint

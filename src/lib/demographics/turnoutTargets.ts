@@ -1,3 +1,4 @@
+import { ALL_COUNTRY_IDS } from "@/lib/constants/countries";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { getCountryLayer1Model } from "@/lib/seeds/international";
 import { eraForPreset } from "@/lib/seeds/presetSelector";
@@ -63,6 +64,27 @@ export function getTurnoutTargetsForCountry(
       label: bucketLabel(`${dim}:${key}`, countryId),
     })),
   }));
+}
+
+/**
+ * Every bucket target across every country, deduped by id and grouped by
+ * dimension. For authoring surfaces that are not scoped to one country (the
+ * admin law-type editor), where offering only one country's vocabulary would
+ * make the others unauthorable.
+ */
+export function getAllTurnoutTargetOptions(): Array<{ id: string; label: string; dim: string }> {
+  const seen = new Set<string>();
+  const options: Array<{ id: string; label: string; dim: string }> = [];
+  for (const countryId of ALL_COUNTRY_IDS) {
+    for (const section of getTurnoutTargetsForCountry(countryId)) {
+      for (const option of section.options) {
+        if (seen.has(option.id)) continue;
+        seen.add(option.id);
+        options.push({ id: option.id, label: option.label, dim: section.dim });
+      }
+    }
+  }
+  return options;
 }
 
 /** Every valid target id for a country — the server-side allowlist. */

@@ -150,7 +150,7 @@ export async function seedDEDemographics(
       deRegionDemographics = buildModelRegionDemographics(
         model,
         full?.positions ?? undefined,
-        full ? { turnout: full.turnout, composition: full.composition } : undefined
+        full ? { turnout: full.turnout } : undefined
       );
       log(
         `[DE] Using Layer-1-derived demographics (${deRegionDemographics.length} regions, era ${era})`

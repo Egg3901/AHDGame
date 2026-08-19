@@ -225,8 +225,9 @@ export function SectorRow({
       )}
       {deliveryLimitedShown && (
         <p className="mt-1.5 text-[10px] leading-snug text-muted">
-          {formatFillPercent(deliveryLimited)} of what this sector offered had no freight to carry
-          it. Buyers still wanted it, so that part of the shortfall is delivery, not demand.
+          {formatFillPercent(deliveryLimited)} of this sector&apos;s output has no freight to carry
+          it out of the state, so it can only reach buyers here. A thin freight network is the
+          limit, not demand.
         </p>
       )}
       {isMothballed && (

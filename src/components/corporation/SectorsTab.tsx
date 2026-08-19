@@ -22,7 +22,13 @@ import type { SectorDetail } from "./CorporationPageTypes";
 import ExpandMarketModal from "./ExpandMarketModal";
 import { SectorTableHeader, sectorTableGrid } from "./SectorTableHeader";
 import { SectorRow } from "./SectorRow";
-import { sortSectors, sortOptionsFor, type SectorSortKey, type SortDir } from "./sectorSortUtils";
+import {
+  sortSectors,
+  sortOptionsFor,
+  sumSectorDisplayRevenue,
+  type SectorSortKey,
+  type SortDir,
+} from "./sectorSortUtils";
 import { CAPACITY_UNIT_LABEL, FillChip, formatUnits } from "./plantsPresentation";
 import { computeFillRate, fillRateBand } from "@/lib/corporations/financialFogOfWar";
 
@@ -434,10 +440,7 @@ export default function SectorsTab({
                 // ratios — a mean lets one small plant at 5% drag the headline
                 // for a corporation selling everything it makes.
                 const financialsRedacted = sortedSectors.some((s) => s.revenue == null);
-                const totalRev = sortedSectors.reduce(
-                  (sum, s) => sum + (s.financialRevenue ?? s.revenue ?? 0),
-                  0
-                );
+                const totalRev = sumSectorDisplayRevenue(sortedSectors);
                 const totalProfit = sortedSectors.reduce((sum, s) => sum + (s.profit ?? 0), 0);
                 const totalWorkers = sortedSectors.reduce((sum, s) => sum + (s.workers ?? 0), 0);
                 const totalCapacity = sortedSectors.reduce(
@@ -499,7 +502,12 @@ export default function SectorsTab({
                 // revenue & workers are stripped for outsider-viewed private
                 // corps (redactPrivateSectorRow); avoid NaN totals and show "—".
                 const financialsRedacted = sortedSectors.some((s) => s.revenue == null);
-                const totalRev = sortedSectors.reduce((sum, s) => sum + (s.revenue ?? 0), 0);
+                // Same realized-preferring basis every sector ROW renders
+                // (SectorRow `financialRevenue ?? revenue`, #3001/#3002). This
+                // total used to sum raw nameplate `revenue`, so the Total line
+                // did not equal the column above it for any corp whose realized
+                // revenue differs from nameplate (ticket #1122).
+                const totalRev = sumSectorDisplayRevenue(sortedSectors);
                 const totalProfit = sortedSectors.reduce((sum, s) => sum + (s.profit ?? 0), 0);
                 const totalWorkers = sortedSectors.reduce((sum, s) => sum + (s.workers ?? 0), 0);
                 const avgMargin =

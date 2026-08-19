@@ -14,6 +14,15 @@ import { useDemographicsState } from "./demographics/useDemographicsState";
 const RESEED_COUNTRIES = ["US", "UK", "DE", "RU", "DD", "JP", "IE", "BR", "CN", "NG"] as const;
 const RESEED_ERAS = ["1953", "1979", "1991", "1999", "2007", "2019", "2023"] as const;
 
+/**
+ * Read-only view of the live demographic categories and one region's stored
+ * weights and groups, plus the reseed and overwrite-defaults tools.
+ *
+ * Hand-editing `categoryWeights` and `groups` was removed along with the
+ * PATCH endpoint behind it: both are derived from the seeds and the Layer-1
+ * census, so an edit here could only put a region out of step with the
+ * substrate the vote engine reads.
+ */
 export function DemographicsManager() {
   const [reseedCountry, setReseedCountry] = useState<string>("US");
   const [reseedEra, setReseedEra] = useState<string>("2019");
@@ -113,39 +122,6 @@ export function DemographicsManager() {
     }
   }, [selectedState, fetchDemographics, dispatch]);
 
-  const handleSave = async () => {
-    if (!selectedState || !editWeights || !editGroups) return;
-
-    dispatch({ type: "SET_LOADING", payload: true });
-    dispatch({ type: "SET_MESSAGE", payload: "" });
-    try {
-      const res = await fetch("/api/admin/demographics", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          stateId: selectedState,
-          // DemographicsManager is the US admin tool (US_STATES drives the selector),
-          // so the country is fixed at the call site.
-          countryId: "US",
-          categoryWeights: editWeights,
-          groups: editGroups,
-        }),
-      });
-      const data = await res.json();
-
-      if (res.ok) {
-        dispatch({ type: "SET_MESSAGE", payload: `✓ ${data.message}` });
-        await fetchDemographics(selectedState);
-      } else {
-        dispatch({ type: "SET_MESSAGE", payload: `✗ ${data.error}` });
-      }
-    } catch {
-      dispatch({ type: "SET_MESSAGE", payload: "✗ Network error" });
-    } finally {
-      dispatch({ type: "SET_LOADING", payload: false });
-    }
-  };
-
   // Calculate totals
   const weightsSum = useMemo(() => {
     if (!editWeights) return 0;
@@ -193,15 +169,6 @@ export function DemographicsManager() {
   }, [editWeights, editGroups, categories]);
 
   const toggleCategory = (catId: string) => dispatch({ type: "TOGGLE_CATEGORY", catId });
-
-  const handleWeightChange = (catId: string, value: number) =>
-    dispatch({ type: "UPDATE_WEIGHT", catId, value });
-
-  const handleGroupChange = (
-    groupId: string,
-    field: "population" | "economicLean" | "socialLean",
-    value: number
-  ) => dispatch({ type: "UPDATE_GROUP", groupId, field, value });
 
   const handleReseedDemographics = async () => {
     dispatch({ type: "SET_RESEED_LOADING", payload: true });
@@ -379,14 +346,9 @@ export function DemographicsManager() {
                 {categories.map((cat) => (
                   <div key={cat._id}>
                     <label className="block text-xs text-muted mb-1">{cat.name}</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={editWeights[cat._id] ?? 0}
-                      onChange={(e) => handleWeightChange(cat._id, parseInt(e.target.value) || 0)}
-                      className="w-full rounded-lg border border-card-border bg-background px-2 py-1 text-sm text-center"
-                    />
+                    <div className="w-full rounded-lg border border-card-border bg-background px-2 py-1 text-sm text-center tabular-nums">
+                      {editWeights[cat._id] ?? 0}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -430,56 +392,14 @@ export function DemographicsManager() {
                             {cat.groups.map((g) => (
                               <tr key={g.id}>
                                 <td className="py-2">{g.name}</td>
-                                <td className="py-2 text-center">
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    step="0.1"
-                                    value={editGroups[g.id]?.population || 0}
-                                    onChange={(e) =>
-                                      handleGroupChange(
-                                        g.id,
-                                        "population",
-                                        parseFloat(e.target.value) || 0
-                                      )
-                                    }
-                                    className="w-20 rounded border border-card-border bg-background px-2 py-1 text-center"
-                                  />
+                                <td className="py-2 text-center tabular-nums">
+                                  {editGroups[g.id]?.population ?? 0}
                                 </td>
-                                <td className="py-2 text-center">
-                                  <input
-                                    type="number"
-                                    min="-5"
-                                    max="5"
-                                    step="0.1"
-                                    value={editGroups[g.id]?.economicLean || 0}
-                                    onChange={(e) =>
-                                      handleGroupChange(
-                                        g.id,
-                                        "economicLean",
-                                        parseFloat(e.target.value) || 0
-                                      )
-                                    }
-                                    className="w-20 rounded border border-card-border bg-background px-2 py-1 text-center"
-                                  />
+                                <td className="py-2 text-center tabular-nums">
+                                  {editGroups[g.id]?.economicLean ?? 0}
                                 </td>
-                                <td className="py-2 text-center">
-                                  <input
-                                    type="number"
-                                    min="-5"
-                                    max="5"
-                                    step="0.1"
-                                    value={editGroups[g.id]?.socialLean || 0}
-                                    onChange={(e) =>
-                                      handleGroupChange(
-                                        g.id,
-                                        "socialLean",
-                                        parseFloat(e.target.value) || 0
-                                      )
-                                    }
-                                    className="w-20 rounded border border-card-border bg-background px-2 py-1 text-center"
-                                  />
+                                <td className="py-2 text-center tabular-nums">
+                                  {editGroups[g.id]?.socialLean ?? 0}
                                 </td>
                               </tr>
                             ))}
@@ -564,18 +484,11 @@ export function DemographicsManager() {
               </div>
             )}
 
-            {/* Save Button */}
-            <div className="flex items-center gap-4">
-              <button
-                onClick={handleSave}
-                disabled={loading || weightsSum !== 100}
-                className="rounded-lg bg-primary px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-              >
-                {loading ? "Saving..." : "Save Changes"}
-              </button>
-              {weightsSum !== 100 && (
-                <span className="text-sm text-red-400">Category weights must sum to 100</span>
-              )}
+            {/* Read-only notice. Hand-editing these was removed, see the
+                module comment above. */}
+            <div className="rounded-lg border border-card-border bg-background p-3 text-sm text-muted">
+              These values are derived from the seeds and the Layer-1 census. Use Reseed
+              Demographics above to change them.
             </div>
           </>
         )}
