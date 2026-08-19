@@ -3,313 +3,473 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>A House Divided: State Positions Atlas</title>
+    <title>A House Divided · State Positions Atlas</title>
     <style>
       :root {
-        --bg: #0b0b14;
-        --card: #14141f;
+        --bg: #0e0e16;
+        --card: #16161f;
+        --card2: #1c1c28;
         --border: #2a2a3a;
-        --fg: #e8e8f0;
-        --muted: #9a9ab0;
+        --ink: #eceaf4;
+        --ink2: #a8a6ba;
+        --ink3: #6f6d82;
+        --accent: #a78bfa;
       }
       * {
         box-sizing: border-box;
       }
+      html,
       body {
         margin: 0;
         background: var(--bg);
-        color: var(--fg);
+        color: var(--ink);
         font:
-          14px/1.5 system-ui,
+          14px/1.55 ui-sans-serif,
+          system-ui,
+          "Segoe UI",
+          Roboto,
           sans-serif;
       }
       main {
-        max-width: 1100px;
+        max-width: 1180px;
         margin: 0 auto;
-        padding: 24px 16px 64px;
+        padding: 28px 20px 80px;
       }
-      h1 {
-        font-size: 22px;
-        margin: 0 0 4px;
+      header h1 {
+        font-size: 24px;
+        letter-spacing: -0.01em;
+        margin: 0;
       }
-      .sub {
-        color: var(--muted);
+      header .sub {
+        color: var(--ink2);
         font-size: 13px;
-        margin-bottom: 20px;
+        margin: 4px 0 0;
+      }
+      header .sub a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .tabs {
+        display: flex;
+        gap: 4px;
+        margin: 22px 0 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .tabs button {
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        color: var(--ink2);
+        font: inherit;
+        font-weight: 600;
+        padding: 8px 14px;
+        cursor: pointer;
+      }
+      .tabs button.on {
+        color: var(--ink);
+        border-bottom-color: var(--accent);
       }
       .controls {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
         align-items: center;
-        margin-bottom: 8px;
+        gap: 10px;
+        margin: 18px 0 14px;
       }
-      button.chip {
+      .chip {
         background: var(--card);
         border: 1px solid var(--border);
-        color: var(--muted);
-        border-radius: 8px;
-        padding: 6px 12px;
+        color: var(--ink2);
+        border-radius: 999px;
+        padding: 5px 13px;
         cursor: pointer;
+        font: inherit;
         font-size: 13px;
       }
-      button.chip.on {
-        border-color: #a78bfa;
-        color: #c4b5fd;
-        background: #a78bfa1a;
+      .chip.on {
+        border-color: var(--accent);
+        color: var(--ink);
+        background: #a78bfa14;
+      }
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        overflow: hidden;
+      }
+      .seg button {
+        background: var(--card);
+        border: none;
+        color: var(--ink2);
+        font: inherit;
+        font-size: 13px;
+        padding: 6px 13px;
+        cursor: pointer;
+      }
+      .seg button + button {
+        border-left: 1px solid var(--border);
+      }
+      .seg button.on {
+        background: #a78bfa1f;
+        color: var(--ink);
       }
       .slider-row {
         display: flex;
         align-items: center;
-        gap: 12px;
-        margin: 10px 0 18px;
+        gap: 14px;
+        margin: 6px 0 16px;
       }
-      .slider-row input {
+      .slider-row input[type="range"] {
         flex: 1;
+        accent-color: var(--accent);
       }
       .year {
+        font-size: 26px;
+        font-weight: 700;
         font-variant-numeric: tabular-nums;
-        font-weight: 600;
-        width: 4ch;
+        min-width: 3.2ch;
       }
-      #grid {
+      .grid {
         display: grid;
-        grid-template-columns: repeat(12, 1fr);
-        gap: 3px;
-        max-width: 760px;
+        grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr);
+        gap: 18px;
       }
-      .tile {
-        aspect-ratio: 1;
-        border-radius: 4px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        font-weight: 600;
-        color: #fff;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
-        cursor: pointer;
-        position: relative;
-      }
-      .tile:hover {
-        outline: 2px solid #fff8;
-      }
-      .legend {
-        max-width: 420px;
-        margin: 16px 0;
-      }
-      .legend .bar {
-        height: 10px;
-        border-radius: 999px;
-        border: 1px solid var(--border);
-      }
-      .legend .row {
-        display: flex;
-        justify-content: space-between;
-        color: var(--muted);
-        font-size: 11px;
-        margin-top: 3px;
+      @media (max-width: 900px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
       }
       .panel {
         background: var(--card);
         border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 16px;
-        margin-top: 20px;
+        border-radius: 14px;
+        padding: 18px;
+      }
+      .panel h3 {
+        margin: 0 0 10px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--ink2);
+        font-weight: 700;
+      }
+      #map svg {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      #map path.state {
+        stroke: var(--bg);
+        stroke-width: 0.8;
+        cursor: pointer;
+        transition: filter 0.1s;
+      }
+      #map path.state:hover {
+        filter: brightness(1.25);
+        stroke: #fff;
+        stroke-width: 1.2;
+      }
+      .legend .bar {
+        height: 10px;
+        border-radius: 999px;
+      }
+      .legend .row {
+        display: flex;
+        justify-content: space-between;
+        color: var(--ink2);
+        font-size: 12px;
+        margin-top: 5px;
+      }
+      .legend .note {
+        color: var(--ink3);
+        font-size: 11.5px;
+        margin-top: 6px;
       }
       table {
         border-collapse: collapse;
         width: 100%;
         font-size: 13px;
+        font-variant-numeric: tabular-nums;
       }
       th,
       td {
         text-align: left;
-        padding: 4px 8px;
+        padding: 5px 8px;
         border-top: 1px solid var(--border);
-        font-variant-numeric: tabular-nums;
       }
-      th {
-        color: var(--muted);
+      thead th {
+        color: var(--ink3);
         font-size: 11px;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.05em;
         border-top: none;
         cursor: pointer;
+        position: sticky;
+        top: 0;
+        background: var(--card);
+      }
+      td.num,
+      th.num {
+        text-align: right;
+      }
+      .scroll {
+        max-height: 520px;
+        overflow-y: auto;
       }
       .swatch {
         display: inline-block;
         width: 10px;
         height: 10px;
-        border-radius: 2px;
-        margin-right: 6px;
-        vertical-align: baseline;
+        border-radius: 3px;
+        margin-right: 7px;
+        vertical-align: -1px;
       }
-      .cols {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-      }
-      @media (max-width: 800px) {
-        .cols {
-          grid-template-columns: 1fr;
-        }
-      }
-      .note {
-        color: var(--muted);
+      .src {
+        color: var(--ink3);
         font-size: 12px;
+        margin-top: 14px;
+      }
+      .src a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .src a:hover {
+        text-decoration: underline;
+      }
+      #tooltip {
+        position: fixed;
+        pointer-events: none;
+        background: #21212e;
+        color: var(--ink);
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        padding: 8px 11px;
+        font-size: 12.5px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+        display: none;
+        z-index: 10;
+        line-height: 1.5;
+      }
+      #tooltip b {
+        font-size: 13px;
+      }
+      .bars td .fill {
+        height: 8px;
+        border-radius: 4px 4px 4px 4px;
+        background: var(--accent);
+        opacity: 0.75;
+      }
+      select {
+        background: var(--card);
+        border: 1px solid var(--border);
+        color: var(--ink);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font: inherit;
+      }
+      .cp {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin-bottom: 14px;
+        background: var(--card2);
+      }
+      .cp h4 {
+        margin: 0 0 4px;
+        font-size: 15px;
+      }
+      .cp .meta {
+        color: var(--ink2);
+        font-size: 12.5px;
+        margin-bottom: 8px;
+      }
+      .muted {
+        color: var(--ink3);
+      }
+      .view {
+        display: none;
+      }
+      .view.on {
+        display: block;
       }
     </style>
   </head>
   <body>
     <main>
-      <h1>State Positions Atlas</h1>
-      <div class="sub">
-        Derived electorate leans per state, by seed era and blended year. Regenerated automatically
-        from the seed data on every push.
-      </div>
+      <header>
+        <h1>State Positions Atlas</h1>
+        <p class="sub">
+          Derived electorate leans, census composition, authored positions, and era checkpoints,
+          regenerated from the <a id="repoLink" href="#">seed data</a> on every push.
+        </p>
+      </header>
 
-      <div class="controls" id="eraButtons"></div>
-      <div class="controls" id="axisButtons"></div>
-      <div class="slider-row">
-        <span class="note">Timeline</span>
-        <input type="range" id="yearSlider" min="1953" max="2023" step="1" value="1953" />
-        <span class="year" id="yearLabel">1953</span>
-      </div>
+      <nav class="tabs" id="tabs"></nav>
+      <div class="controls" id="eraChips"></div>
 
-      <div id="grid"></div>
-      <div class="legend">
-        <div class="bar" id="legendBar"></div>
-        <div class="row">
-          <span id="legendLeft"></span><span>0</span><span id="legendRight"></span>
+      <!-- ============ MAP VIEW ============ -->
+      <section class="view" id="view-map">
+        <div class="controls">
+          <span class="seg" id="axisSeg"></span>
         </div>
-        <div class="note" id="legendNote"></div>
-      </div>
-
-      <div class="cols">
-        <div class="panel">
-          <h3 style="margin-top: 0">Ranked states</h3>
-          <table id="rankTable">
-            <thead>
-              <tr>
-                <th data-k="id">State</th>
-                <th data-k="economic">Econ</th>
-                <th data-k="social">Social</th>
-                <th data-k="display">Combined</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+        <div class="slider-row">
+          <span class="year" id="yearLabel">1953</span>
+          <input type="range" id="yearSlider" min="1953" max="2023" step="1" value="1953" />
         </div>
-        <div class="panel">
-          <h3 style="margin-top: 0" id="drillTitle">Group positions</h3>
-          <div class="note" id="drillNote">
-            Click a state tile with an anchor era selected to see the authored group position table
-            for that era. Group positions are era-wide; a state's lean is the turnout-weighted
-            average over its own demographic mix.
+        <div class="grid">
+          <div class="panel">
+            <div id="map">
+              <svg
+                viewBox="0 0 975 610"
+                role="img"
+                aria-label="US states colored by political lean"
+              ></svg>
+            </div>
+            <div class="legend" style="margin-top: 14px">
+              <div class="bar" id="legendBar"></div>
+              <div class="row">
+                <span id="legendLeft"></span><span>0 · center</span><span id="legendRight"></span>
+              </div>
+              <div class="note" id="legendNote"></div>
+            </div>
           </div>
-          <div id="drill"></div>
+          <div class="panel">
+            <h3>Ranked states</h3>
+            <div class="scroll">
+              <table id="rankTable">
+                <thead>
+                  <tr>
+                    <th data-k="id">State</th>
+                    <th class="num" data-k="economic">Econ</th>
+                    <th class="num" data-k="social">Social</th>
+                    <th class="num" data-k="display">Combined</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      </div>
-    </main>
-    <script>
-      // Tile cartogram layout (col,row) per state, classic NPR-style grid.
-      const TILES = {
-        AK: [0, 0],
-        ME: [11, 0],
-        VT: [10, 1],
-        NH: [11, 1],
-        WA: [1, 2],
-        ID: [2, 2],
-        MT: [3, 2],
-        ND: [4, 2],
-        MN: [5, 2],
-        IL: [6, 2],
-        WI: [7, 2],
-        MI: [8, 2],
-        NY: [9, 2],
-        RI: [10, 2],
-        MA: [11, 2],
-        OR: [1, 3],
-        NV: [2, 3],
-        WY: [3, 3],
-        SD: [4, 3],
-        IA: [5, 3],
-        IN: [6, 3],
-        OH: [7, 3],
-        PA: [8, 3],
-        NJ: [9, 3],
-        CT: [10, 3],
-        CA: [1, 4],
-        UT: [2, 4],
-        CO: [3, 4],
-        NE: [4, 4],
-        MO: [5, 4],
-        KY: [6, 4],
-        WV: [7, 4],
-        VA: [8, 4],
-        MD: [9, 4],
-        DE: [10, 4],
-        AZ: [2, 5],
-        NM: [3, 5],
-        KS: [4, 5],
-        AR: [5, 5],
-        TN: [6, 5],
-        NC: [7, 5],
-        SC: [8, 5],
-        DC: [9, 5],
-        OK: [4, 6],
-        LA: [5, 6],
-        MS: [6, 6],
-        AL: [7, 6],
-        GA: [8, 6],
-        HI: [0, 7],
-        TX: [4, 7],
-        FL: [9, 7],
-      };
-      const ECON = [
-        "#1d4ed8",
-        "#2563eb",
-        "#3b82f6",
-        "#60a5fa",
-        "#93c5fd",
-        "#a855f7",
-        "#fca5a5",
-        "#f87171",
-        "#ef4444",
-        "#dc2626",
-        "#b91c1c",
-      ];
-      const SOCIAL = [
-        "#0d9488",
-        "#14b8a6",
-        "#2dd4bf",
-        "#5eead4",
-        "#99f6e4",
-        "#a855f7",
-        "#fde68a",
-        "#fbbf24",
-        "#f59e0b",
-        "#d97706",
-        "#b45309",
-      ];
-      const AXES = [
-        {
-          id: "display",
-          label: "Combined",
-          ramp: ECON,
-          neg: "Left / Liberal",
-          pos: "Right / Traditional",
-        },
-        { id: "economic", label: "Economic", ramp: ECON, neg: "Left", pos: "Right" },
-        { id: "social", label: "Social", ramp: SOCIAL, neg: "Liberal", pos: "Traditional" },
-      ];
-      let atlas = null,
-        mode = { kind: "era", era: "1953" },
-        axis = AXES[0],
-        sortKey = "display",
-        sortDir = 1;
+        <p class="src" id="srcMap"></p>
+      </section>
 
+      <!-- ============ DEMOGRAPHICS VIEW ============ -->
+      <section class="view" id="view-demo">
+        <div class="controls">
+          <label class="muted">State</label>
+          <select id="demoState"></select>
+        </div>
+        <div class="grid">
+          <div class="panel">
+            <h3 id="demoTitle">Census composition</h3>
+            <div id="demoTables"></div>
+          </div>
+          <div class="panel">
+            <h3>Baseline turnout by bucket</h3>
+            <div id="turnoutTable" class="scroll"></div>
+          </div>
+        </div>
+        <p class="src" id="srcDemo"></p>
+      </section>
+
+      <!-- ============ POSITIONS VIEW ============ -->
+      <section class="view" id="view-pos">
+        <div class="grid">
+          <div class="panel">
+            <h3 id="posTitle">Era-wide group positions</h3>
+            <div id="posTables" class="scroll"></div>
+          </div>
+          <div class="panel">
+            <h3>State overrides</h3>
+            <div class="controls"><select id="posState"></select></div>
+            <div id="posOverrides"></div>
+          </div>
+        </div>
+        <p class="src" id="srcPos"></p>
+      </section>
+
+      <!-- ============ CHECKPOINTS VIEW ============ -->
+      <section class="view" id="view-cp">
+        <div id="cpList"></div>
+        <p class="src" id="srcCp"></p>
+      </section>
+
+      <div id="tooltip"></div>
+    </main>
+
+    <script type="module">
+      import { geoPath, geoAlbersUsa } from "https://cdn.jsdelivr.net/npm/d3-geo@3/+esm";
+      import { feature } from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
+
+      const FIPS = {
+        "01": "AL",
+        "02": "AK",
+        "04": "AZ",
+        "05": "AR",
+        "06": "CA",
+        "08": "CO",
+        "09": "CT",
+        10: "DE",
+        11: "DC",
+        12: "FL",
+        13: "GA",
+        15: "HI",
+        16: "ID",
+        17: "IL",
+        18: "IN",
+        19: "IA",
+        20: "KS",
+        21: "KY",
+        22: "LA",
+        23: "ME",
+        24: "MD",
+        25: "MA",
+        26: "MI",
+        27: "MN",
+        28: "MS",
+        29: "MO",
+        30: "MT",
+        31: "NE",
+        32: "NV",
+        33: "NH",
+        34: "NJ",
+        35: "NM",
+        36: "NY",
+        37: "NC",
+        38: "ND",
+        39: "OH",
+        40: "OK",
+        41: "OR",
+        42: "PA",
+        44: "RI",
+        45: "SC",
+        46: "SD",
+        47: "TN",
+        48: "TX",
+        49: "UT",
+        50: "VT",
+        51: "VA",
+        53: "WA",
+        54: "WV",
+        55: "WI",
+        56: "WY",
+      };
+      const STATE_NAMES = {};
+
+      // Diverging ramps: bright poles, neutral low-chroma midpoint (never a hue at
+      // the midpoint), tuned for the dark surface. Values in tooltips + the ranked
+      // table provide contrast relief for the deepest fills.
+      const NEUTRAL = "#585a68";
+      const POLES = {
+        economic: { neg: "#8fbcff", pos: "#ff8a70", negLabel: "Left", posLabel: "Right" },
+        social: { neg: "#4fd6c3", pos: "#ffc857", negLabel: "Liberal", posLabel: "Traditional" },
+        display: {
+          neg: "#8fbcff",
+          pos: "#ff8a70",
+          negLabel: "Left / Liberal",
+          posLabel: "Right / Traditional",
+        },
+      };
       const lerpHex = (a, b, t) => {
         const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
         const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
@@ -324,47 +484,92 @@
             .join("")
         );
       };
-      const rampColor = (ramp, v, half) => {
+      const rampColor = (axis, v, half) => {
         const t = Math.max(-1, Math.min(1, v / Math.max(half, 0.01)));
-        const pos = ((t + 1) / 2) * (ramp.length - 1),
-          i = Math.min(ramp.length - 2, Math.floor(pos));
-        return lerpHex(ramp[i], ramp[i + 1], pos - i);
+        const p = POLES[axis];
+        return t < 0 ? lerpHex(NEUTRAL, p.neg, -t) : lerpHex(NEUTRAL, p.pos, t);
+      };
+      const rampCss = (axis) => {
+        const p = POLES[axis];
+        return `linear-gradient(to right, ${p.neg}, ${NEUTRAL}, ${p.pos})`;
       };
       const fmt = (v) => (v >= 0 ? "+" : "") + v.toFixed(2);
 
+      const TABS = [
+        { id: "map", label: "Lean map" },
+        { id: "demo", label: "Demographics" },
+        { id: "pos", label: "Positions" },
+        { id: "cp", label: "Era checkpoints" },
+      ];
+      let atlas = null,
+        geo = null;
+      let tab = "map",
+        era = "1953",
+        axis = "display",
+        year = 1953,
+        usingYear = false;
+      let sortKey = "display",
+        sortDir = 1;
+
+      const $ = (id) => document.getElementById(id);
+      const blob = (p) => `${atlas.repo}/blob/development/${p}`;
+      const srcLinks = (paths) =>
+        paths
+          .map(
+            (p) => `<a href="${blob(p)}" target="_blank" rel="noopener">${p.split("/").pop()}</a>`
+          )
+          .join(" · ");
+
       function currentRows() {
-        const src =
-          mode.kind === "era" ? atlas.anchors[mode.era] : atlas.timeline[String(mode.year)];
+        const src = usingYear ? atlas.timeline[String(year)] : atlas.anchors[era];
         return Object.entries(src).map(([id, r]) => ({ id, ...r }));
       }
 
-      function render() {
+      // ---------- MAP ----------
+      function renderMap() {
         const rows = currentRows();
+        const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
         const half = Math.max(
           0.5,
-          Math.ceil(Math.max(...rows.map((r) => Math.abs(r[axis.id]))) * 10) / 10
+          Math.ceil(Math.max(...rows.map((r) => Math.abs(r[axis]))) * 10) / 10
         );
-        const grid = document.getElementById("grid");
-        grid.innerHTML = "";
-        for (const r of rows) {
-          const pos = TILES[r.id];
-          if (!pos) continue;
-          const d = document.createElement("div");
-          d.className = "tile";
-          d.style.gridColumn = pos[0] + 1;
-          d.style.gridRow = pos[1] + 1;
-          d.style.background = rampColor(axis.ramp, r[axis.id], half);
-          d.textContent = r.id;
-          d.title = `${r.id}  econ ${fmt(r.economic)}  social ${fmt(r.social)}  combined ${fmt(r.display)}`;
-          d.onclick = () => drill(r);
-          grid.appendChild(d);
+        const svg = document.querySelector("#map svg");
+        svg.innerHTML = "";
+        const projection = geoAlbersUsa().scale(1300).translate([487.5, 305]);
+        const path = geoPath(projection);
+        const tooltip = $("tooltip");
+        for (const f of geo.features) {
+          const code = FIPS[String(f.id).padStart(2, "0")];
+          if (!code) continue;
+          STATE_NAMES[code] = f.properties.name;
+          const row = byId[code];
+          const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          el.setAttribute("d", path(f));
+          el.setAttribute("class", "state");
+          el.setAttribute("fill", row ? rampColor(axis, row[axis], half) : "#26263200");
+          el.addEventListener("mousemove", (ev) => {
+            if (!row) return;
+            tooltip.style.display = "block";
+            tooltip.style.left = Math.min(ev.clientX + 14, innerWidth - 210) + "px";
+            tooltip.style.top = ev.clientY + 14 + "px";
+            tooltip.innerHTML = `<b>${f.properties.name}</b><br>Econ ${fmt(row.economic)} · Social ${fmt(row.social)}<br>Combined ${fmt(row.display)}`;
+          });
+          el.addEventListener("mouseleave", () => (tooltip.style.display = "none"));
+          el.addEventListener("click", () => {
+            $("demoState").value = code;
+            tab = "demo";
+            renderAll();
+          });
+          svg.appendChild(el);
         }
-        document.getElementById("legendBar").style.background =
-          `linear-gradient(to right, ${axis.ramp.join(",")})`;
-        document.getElementById("legendLeft").textContent = `${axis.neg}  −${half.toFixed(1)}`;
-        document.getElementById("legendRight").textContent = `+${half.toFixed(1)}  ${axis.pos}`;
-        document.getElementById("legendNote").textContent =
-          `Scale fitted to the largest lean shown (±${half.toFixed(1)} on the −5..+5 position ruler).`;
+        const p = POLES[axis];
+        $("legendBar").style.background = rampCss(axis);
+        $("legendLeft").textContent = `${p.negLabel}  −${half.toFixed(1)}`;
+        $("legendRight").textContent = `+${half.toFixed(1)}  ${p.posLabel}`;
+        $("legendNote").textContent =
+          `Scale fitted to the largest lean shown (±${half.toFixed(1)} on the −5..+5 position ruler). ` +
+          (usingYear ? `Year ${year}: leans blended between anchor eras.` : `Anchor era ${era}.`) +
+          " Click a state for its demographics.";
         const tbody = document.querySelector("#rankTable tbody");
         tbody.innerHTML = "";
         const sorted = [...rows].sort((a, b) =>
@@ -377,103 +582,208 @@
           tr.innerHTML =
             `<td>${r.id}</td>` +
             ["economic", "social", "display"]
-              .map((k) => {
-                const ramp = k === "social" ? SOCIAL : ECON;
-                return `<td><span class="swatch" style="background:${rampColor(ramp, r[k], half)}"></span>${fmt(r[k])}</td>`;
-              })
+              .map(
+                (k) =>
+                  `<td class="num"><span class="swatch" style="background:${rampColor(k, r[k], half)}"></span>${fmt(r[k])}</td>`
+              )
               .join("");
           tbody.appendChild(tr);
         }
+        $("srcMap").innerHTML =
+          "Derived by the live seed path · sources: " +
+          srcLinks(atlas.sources.leans.concat(atlas.sources.engine.slice(0, 2)));
       }
 
-      function drill(row) {
-        const era = mode.kind === "era" ? mode.era : null;
-        const el = document.getElementById("drill");
-        document.getElementById("drillTitle").textContent =
-          `${row.id}: econ ${fmt(row.economic)}, social ${fmt(row.social)}`;
-        if (!era) {
-          el.innerHTML = "";
-          document.getElementById("drillNote").textContent =
-            "Select an anchor era (not a blended year) to see its authored group position table.";
-          return;
+      // ---------- DEMOGRAPHICS ----------
+      function renderDemo() {
+        const census = atlas.census[era] ?? {};
+        const sel = $("demoState");
+        const states = Object.keys(census).sort();
+        if (sel.options.length !== states.length) {
+          sel.innerHTML = states.map((s) => `<option value="${s}">${s}</option>`).join("");
         }
-        document.getElementById("drillNote").textContent =
-          `Era-wide authored positions for ${era}. Regional/state overrides not shown.`;
-        const gp = atlas.groupPositions[era];
+        const stateId = states.includes(sel.value) ? sel.value : states[0];
+        sel.value = stateId;
+        const cfg = census[stateId] ?? {};
+        $("demoTitle").textContent =
+          `${STATE_NAMES[stateId] ?? stateId} census composition · ${era}`;
         let html = "";
-        for (const [dim, groups] of Object.entries(gp)) {
-          html += `<h4 style="margin:10px 0 4px">${dim}</h4><table><thead><tr><th>Group</th><th>Econ</th><th>Social</th></tr></thead><tbody>`;
-          for (const [g, p] of Object.entries(groups)) {
-            html += `<tr><td>${g}</td><td>${fmt(p.economicLean)}</td><td>${fmt(p.socialLean)}</td></tr>`;
+        for (const dim of ["race", "age", "education", "wealth", "ideology"]) {
+          const shares = cfg[dim];
+          if (!shares) continue;
+          html += `<h3 style="margin-top:14px">${dim}</h3><table class="bars"><tbody>`;
+          for (const [k, v] of Object.entries(shares).sort((a, b) => b[1] - a[1])) {
+            html += `<tr><td style="width:34%">${k.replace(/_/g, " ")}</td>
+        <td><div class="fill" style="width:${Math.min(100, v)}%"></div></td>
+        <td class="num" style="width:8ch">${Number(v).toFixed(0)}%</td></tr>`;
           }
           html += "</tbody></table>";
         }
-        el.innerHTML = html;
-      }
-
-      function makeChips(containerId, items, isOn, onPick) {
-        const el = document.getElementById(containerId);
-        el.innerHTML = "";
-        for (const it of items) {
-          const b = document.createElement("button");
-          b.className = "chip" + (isOn(it) ? " on" : "");
-          b.textContent = it.label;
-          b.onclick = () => {
-            onPick(it);
-            refreshChips();
-            render();
-          };
-          el.appendChild(b);
+        $("demoTables").innerHTML = html || "<p class='muted'>No census data for this era.</p>";
+        const tr = atlas.turnoutRates[era];
+        let tHtml = "<table><tbody>";
+        for (const dim of Object.keys(tr ?? {})) {
+          for (const [k, v] of Object.entries(tr[dim])) {
+            tHtml += `<tr><td class="muted">${dim}</td><td>${k.replace(/_/g, " ")}</td><td class="num">${v}%</td></tr>`;
+          }
         }
-      }
-      function refreshChips() {
-        makeChips(
-          "eraButtons",
-          atlas.eras.map((e) => ({ label: `${e} seed`, era: e })),
-          (it) => mode.kind === "era" && mode.era === it.era,
-          (it) => {
-            mode = { kind: "era", era: it.era };
-            const y = atlas.anchorYears[it.era];
-            document.getElementById("yearSlider").value = y;
-            document.getElementById("yearLabel").textContent = y;
-          }
-        );
-        makeChips(
-          "axisButtons",
-          AXES.map((a) => ({ label: a.label, a })),
-          (it) => axis === it.a,
-          (it) => {
-            axis = it.a;
-          }
-        );
+        tHtml += "</tbody></table>";
+        $("turnoutTable").innerHTML = tHtml;
+        $("srcDemo").innerHTML =
+          "Sources: " +
+          srcLinks([atlas.sources.census[era], "src/lib/seeds/demographicCategories.ts"]);
       }
 
-      fetch("lean-atlas.json")
-        .then((r) => r.json())
-        .then((data) => {
-          atlas = data;
-          document.getElementById("yearSlider").oninput = (e) => {
-            const y = Number(e.target.value);
-            document.getElementById("yearLabel").textContent = y;
-            mode = { kind: "year", year: y };
-            refreshChips();
-            render();
-          };
-          document.querySelectorAll("#rankTable th").forEach(
-            (th) =>
-              (th.onclick = () => {
-                const k = th.dataset.k;
-                if (sortKey === k) sortDir *= -1;
-                else {
-                  sortKey = k;
-                  sortDir = 1;
-                }
-                render();
-              })
+      // ---------- POSITIONS ----------
+      function renderPos() {
+        const gp = atlas.groupPositions[era] ?? {};
+        $("posTitle").textContent = `Era-wide group positions · ${era}`;
+        let html = "";
+        for (const dim of Object.keys(gp)) {
+          html += `<h3 style="margin-top:12px">${dim}</h3><table><thead><tr><th>Group</th><th class="num">Econ</th><th class="num">Social</th></tr></thead><tbody>`;
+          for (const [g, p] of Object.entries(gp[dim])) {
+            html += `<tr><td>${g.replace(/_/g, " ")}</td>
+        <td class="num"><span class="swatch" style="background:${rampColor("economic", p.economicLean, 5)}"></span>${fmt(p.economicLean)}</td>
+        <td class="num"><span class="swatch" style="background:${rampColor("social", p.socialLean, 5)}"></span>${fmt(p.socialLean)}</td></tr>`;
+          }
+          html += "</tbody></table>";
+        }
+        $("posTables").innerHTML = html;
+        const overrides = atlas.statePositions[era] ?? {};
+        const sel = $("posState");
+        const states = Object.keys(overrides).sort();
+        sel.innerHTML =
+          states
+            .map(
+              (s) =>
+                `<option value="${s}">${s} (${Object.keys(overrides[s]).length} cells)</option>`
+            )
+            .join("") || "<option>none</option>";
+        const chosen = states.includes(sel.value) ? sel.value : states[0];
+        if (chosen) sel.value = chosen;
+        const diff = overrides[chosen] ?? {};
+        let oHtml =
+          states.length === 0
+            ? "<p class='muted'>This era has no per-state overrides.</p>"
+            : `<table><thead><tr><th>Cell</th><th class="num">Econ</th><th class="num">Social</th></tr></thead><tbody>`;
+        for (const [cell, p] of Object.entries(diff)) {
+          oHtml += `<tr><td>${cell}</td><td class="num">${fmt(p.economicLean)}</td><td class="num">${fmt(p.socialLean)}</td></tr>`;
+        }
+        if (states.length > 0) oHtml += "</tbody></table>";
+        $("posOverrides").innerHTML = oHtml;
+        $("srcPos").innerHTML =
+          "Sources: " +
+          srcLinks(
+            atlas.sources.leans.slice(0, 2).concat(["src/lib/seeds/eraPositionsForYear.ts"])
           );
-          refreshChips();
-          render();
-        });
+      }
+
+      // ---------- CHECKPOINTS ----------
+      function renderCp() {
+        let html = "";
+        for (const c of atlas.checkpoints) {
+          const w = c.historicalWindow;
+          html += `<div class="cp"><h4>${c.title}</h4>
+      <div class="meta">${w ? `history ${w.startYear}–${w.endYear} · ` : ""}starts turn ${c.fallbackStartTurn}${c.trigger ? ` (or SCOTUS: ${c.trigger})` : ""} · runs ${Math.round(c.durationTurns / 48)} years</div>
+      <table><thead><tr><th>Target</th><th>States</th><th>Axis</th><th class="num">Total shift</th></tr></thead><tbody>`;
+          for (const t of c.targets) {
+            const who = t.dim ? `${t.dim}:${t.bucket}` : (t.groupId ?? "?");
+            const states =
+              t.stateIds.length > 12 ? `${t.stateIds.length} states` : t.stateIds.join(" ");
+            html += `<tr><td>${who}</td><td class="muted">${states}</td><td>${t.axis}</td><td class="num">${fmt(t.totalShift)}</td></tr>`;
+          }
+          html += "</tbody></table></div>";
+        }
+        $("cpList").innerHTML = html;
+        $("srcCp").innerHTML =
+          "Sources: " +
+          srcLinks(
+            atlas.sources.checkpoints.concat(["src/lib/demographics/checkpointBakedShifts.ts"])
+          );
+      }
+
+      // ---------- CHROME ----------
+      function renderChrome() {
+        $("tabs").innerHTML = "";
+        for (const t of TABS) {
+          const b = document.createElement("button");
+          b.textContent = t.label;
+          b.className = tab === t.id ? "on" : "";
+          b.onclick = () => {
+            tab = t.id;
+            renderAll();
+          };
+          $("tabs").appendChild(b);
+        }
+        $("eraChips").innerHTML = "";
+        for (const e of atlas.eras) {
+          const b = document.createElement("button");
+          b.className = "chip" + (!usingYear && era === e ? " on" : "");
+          b.textContent = `${e} seed`;
+          b.onclick = () => {
+            era = e;
+            usingYear = false;
+            year = atlas.anchorYears[e];
+            $("yearSlider").value = year;
+            $("yearLabel").textContent = year;
+            renderAll();
+          };
+          $("eraChips").appendChild(b);
+        }
+        $("axisSeg").innerHTML = "";
+        for (const [id, label] of [
+          ["display", "Combined"],
+          ["economic", "Economic"],
+          ["social", "Social"],
+        ]) {
+          const b = document.createElement("button");
+          b.textContent = label;
+          b.className = axis === id ? "on" : "";
+          b.onclick = () => {
+            axis = id;
+            renderAll();
+          };
+          $("axisSeg").appendChild(b);
+        }
+        for (const t of TABS) $(`view-${t.id}`).classList.toggle("on", tab === t.id);
+      }
+
+      function renderAll() {
+        renderChrome();
+        if (tab === "map") renderMap();
+        if (tab === "demo") renderDemo();
+        if (tab === "pos") renderPos();
+        if (tab === "cp") renderCp();
+      }
+
+      const [atlasData, topo] = await Promise.all([
+        fetch("lean-atlas.json").then((r) => r.json()),
+        fetch("https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json").then((r) => r.json()),
+      ]);
+      atlas = atlasData;
+      geo = feature(topo, topo.objects.states);
+      $("repoLink").href = atlas.repo;
+      $("yearSlider").oninput = (e) => {
+        year = Number(e.target.value);
+        $("yearLabel").textContent = year;
+        usingYear = true;
+        renderAll();
+      };
+      document.querySelectorAll("#rankTable th").forEach(
+        (th) =>
+          (th.onclick = () => {
+            const k = th.dataset.k;
+            if (sortKey === k) sortDir *= -1;
+            else {
+              sortKey = k;
+              sortDir = 1;
+            }
+            renderMap();
+          })
+      );
+      $("demoState").onchange = renderDemo;
+      $("posState").onchange = renderPos;
+      renderAll();
     </script>
   </body>
 </html>
