@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { getCatalog } from "./catalog";
-import { composeTarget, driftStep, lawTargets, metricModifierRows } from "./dynamics";
+import {
+  composeTarget,
+  driftStep,
+  DRIFT_RATE_PER_TURN,
+  lawTargets,
+  metricModifierRows,
+} from "./dynamics";
 
 function levelsFromBaselines(countryId: "US" | "UK" | "RU") {
   return new Map(
@@ -55,12 +61,14 @@ describe("composeTarget (§2)", () => {
 });
 
 describe("driftStep (§2.1)", () => {
-  it("moves 0.5% of the gap per turn", () => {
-    expect(driftStep(50, 100)).toBeCloseTo(50.25, 9);
-    expect(driftStep(50, 0)).toBeCloseTo(49.75, 9);
+  it("moves the configured fraction of the gap per turn", () => {
+    // Ticket #1129 retune: 0.005 (138 turn half-life) read as nothing moving.
+    expect(DRIFT_RATE_PER_TURN).toBe(0.02);
+    expect(driftStep(50, 100)).toBeCloseTo(50 + 50 * DRIFT_RATE_PER_TURN, 9);
+    expect(driftStep(50, 0)).toBeCloseTo(50 - 50 * DRIFT_RATE_PER_TURN, 9);
   });
   it("applies the 0.01 floor on small gaps and never oscillates", () => {
-    expect(driftStep(50, 51)).toBeCloseTo(50.01, 9); // raw step 0.005 → floored
+    expect(driftStep(50, 51)).toBeCloseTo(50.02, 9); // raw step 0.02, above the floor
     expect(driftStep(50, 50.005)).toBe(50.005); // |gap| ≤ 0.01 → snap
   });
   it("a 0.5-point gap closes within 50 turns", () => {

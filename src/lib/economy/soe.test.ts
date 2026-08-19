@@ -9,6 +9,7 @@ import {
   applyDirectedCreditToSoe,
   directedCreditBudget,
   directedCreditIssuance,
+  makeAdoptedSoeState,
   makeSeedSoeState,
   planFulfillment,
   resolveCreditAllocation,
@@ -230,5 +231,59 @@ describe("aggregateCapacityUtilisation (the drift driver)", () => {
       { output: 0, capacity: 100 },
     ]);
     expect(mean).toBeCloseTo(0.5, 6);
+  });
+});
+
+describe("makeAdoptedSoeState", () => {
+  const sectors = [
+    { revenue: 600, realizedRevenue: 400, capitalStock: 10 },
+    { revenue: 400, realizedRevenue: 300, capitalStock: 5 },
+  ];
+
+  it("takes capacity from the plants reading and output from realized revenue", () => {
+    const soe = makeAdoptedSoeState("energy", sectors);
+    expect(soe.capacity).toBe(1_000);
+    expect(soe.output).toBe(700);
+  });
+
+  it("starts the enterprise on-plan so a nameplate gap is not scored as a shortfall", () => {
+    const soe = makeAdoptedSoeState("energy", sectors);
+    expect(soe.planTarget).toBe(soe.output);
+    expect(planFulfillment(soe)).toBe(1);
+    expect(soe.cumulativeLosses).toBe(0);
+    expect(soe.efficiency).toBe(1);
+    expect(soe.directorId).toBeNull();
+  });
+
+  it("ignores sectors with no capital stock when valuing capacity", () => {
+    const soe = makeAdoptedSoeState("energy", [
+      { revenue: 600, realizedRevenue: 400, capitalStock: 10 },
+      { revenue: 900, realizedRevenue: 100, capitalStock: 0 },
+    ]);
+    expect(soe.capacity).toBe(600);
+    expect(soe.output).toBe(500);
+  });
+
+  it("falls back to the seed headroom when the enterprise holds no capital", () => {
+    const soe = makeAdoptedSoeState("energy", [
+      { revenue: 500, realizedRevenue: 500, capitalStock: 0 },
+    ]);
+    expect(soe.capacity).toBe(550);
+  });
+
+  it("survives missing and non-finite sector fields", () => {
+    const soe = makeAdoptedSoeState("energy", [
+      { revenue: Number.NaN, realizedRevenue: null, capitalStock: Number.NaN },
+      {},
+    ]);
+    expect(soe.capacity).toBe(0);
+    expect(soe.output).toBe(0);
+    expect(soe.planTarget).toBe(0);
+  });
+
+  it("uses nominal revenue when a sector has not realized anything yet", () => {
+    const soe = makeAdoptedSoeState("energy", [{ revenue: 800, capitalStock: 4 }]);
+    expect(soe.output).toBe(800);
+    expect(soe.capacity).toBe(800);
   });
 });

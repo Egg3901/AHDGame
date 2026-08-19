@@ -11,8 +11,12 @@ import {
   mapCabinetDeltasToPolitical,
   mapRegionalCabinetDeltasToPolitical,
   addContributions,
+  type CabinetSourceId,
 } from "@/lib/politicalMetrics/cabinetResidual";
-import { setPoliticalCabinetContribution } from "@/lib/db/collections/politicalCabinetContribution";
+import {
+  setPoliticalCabinetContribution,
+  type CabinetSourceContribution,
+} from "@/lib/db/collections/politicalCabinetContribution";
 import {
   getCabinetSettingsCollection,
   getMinisterialOrdersCollection,
@@ -159,28 +163,57 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
 
   // 3. Accumulate order effects per country
   // Structure: { countryId: { national: {...}, regional: { regionId: {...} } } }
+  interface CabinetEffectBucket {
+    national: Record<string, number>;
+    regional: Record<string, Record<string, number>>;
+    // Direct political-family contributions (already in political-point space),
+    // e.g. the military force effect's defense-family drive. Merged into the
+    // political contribution snapshot for pipeline countries.
+    politicalDirect?: Record<string, number>;
+  }
+
+  // Ticket #1129: effects are kept SPLIT BY CHANNEL rather than summed into one
+  // bucket per country. The macro half re-merges them immediately below (its
+  // behaviour is unchanged), but the political half is capped per channel, so a
+  // saturated order book no longer makes a newly built estate worth zero.
   const effectsByCountry: Record<
     string,
-    {
-      national: Record<string, number>;
-      regional: Record<string, Record<string, number>>;
-      // Direct political-family contributions (already in political-point space),
-      // e.g. the military force effect's defense-family drive. Merged into the
-      // political contribution snapshot for pipeline countries.
-      politicalDirect?: Record<string, number>;
-    }
+    Partial<Record<CabinetSourceId, CabinetEffectBucket>>
   > = {};
 
   function ensureCountry(cid: string) {
-    if (!effectsByCountry[cid]) effectsByCountry[cid] = { national: {}, regional: {} };
+    if (!effectsByCountry[cid]) effectsByCountry[cid] = {};
+  }
+
+  function sourceBucket(cid: string, source: CabinetSourceId): CabinetEffectBucket {
+    ensureCountry(cid);
+    const forCountry = effectsByCountry[cid];
+    return (forCountry[source] ??= { national: {}, regional: {} });
+  }
+
+  /** All channels summed: the shape the macro $inc path has always consumed. */
+  function mergedBucket(
+    forCountry: Partial<Record<CabinetSourceId, CabinetEffectBucket>>
+  ): CabinetEffectBucket {
+    const merged: CabinetEffectBucket = { national: {}, regional: {} };
+    for (const bucket of Object.values(forCountry)) {
+      if (!bucket) continue;
+      for (const [metric, v] of Object.entries(bucket.national)) {
+        merged.national[metric] = (merged.national[metric] ?? 0) + v;
+      }
+      for (const [regionId, deltas] of Object.entries(bucket.regional)) {
+        const into = (merged.regional[regionId] ??= {});
+        for (const [metric, v] of Object.entries(deltas)) into[metric] = (into[metric] ?? 0) + v;
+      }
+    }
+    return merged;
   }
 
   /** Per-country discretionary inflation pressure (pp), summed from stance + orders + emergency. */
   const policyInflationByCountry: Record<string, number> = {};
 
   for (const order of activeOrders) {
-    ensureCountry(order.countryId);
-    const bucket = effectsByCountry[order.countryId];
+    const bucket = sourceBucket(order.countryId, "orders");
     const orderMult = statecraftMultByChar.get(order.characterId?.toString() ?? "") ?? 1;
     for (const effect of order.effects) {
       const scaledModifier = effect.modifier * orderMult;
@@ -232,8 +265,7 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
     const mechanics = getCabinetMechanics(setting.countryId, setting.positionId);
     if (!mechanics) continue;
 
-    ensureCountry(setting.countryId);
-    const bucket = effectsByCountry[setting.countryId];
+    const bucket = sourceBucket(setting.countryId, "settings");
 
     const positionMetrics = [...mechanics.nationalMetrics, ...mechanics.regionalMetrics];
 
@@ -371,7 +403,7 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   for (const cid of Object.keys(DEFENSE_POSITION_BY_COUNTRY)) {
     if (!DEFENSE_POSITION_BY_COUNTRY[cid as keyof typeof DEFENSE_POSITION_BY_COUNTRY]) continue;
     ensureCountry(cid);
-    await applyMilitaryForceEffects(db, cid, effectsByCountry[cid], appropriationPreset);
+    await applyMilitaryForceEffects(db, cid, sourceBucket(cid, "military"), appropriationPreset);
   }
 
   // 4b-ii. Resolve declared theater offensives (Conflicts). Declarations made on an
@@ -412,7 +444,7 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
     if (!seats) continue;
     ensureCountry(cid);
     for (const positionId of Object.keys(seats)) {
-      await applyEstateEffects(db, cid, positionId, effectsByCountry[cid]);
+      await applyEstateEffects(db, cid, positionId, sourceBucket(cid, "estates"));
     }
   }
 
@@ -422,7 +454,7 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   for (const [cid, positionId] of Object.entries(ENERGY_POSITION_BY_COUNTRY)) {
     if (!positionId) continue;
     ensureCountry(cid);
-    await applyEnergyEffects(db, cid, positionId, effectsByCountry[cid]);
+    await applyEnergyEffects(db, cid, positionId, sourceBucket(cid, "energy"));
   }
 
   // 4e. Cabinet infrastructure — advance each transportation seat's project pipeline
@@ -431,7 +463,7 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   for (const [cid, positionId] of Object.entries(INFRA_POSITION_BY_COUNTRY)) {
     if (!positionId) continue;
     ensureCountry(cid);
-    await applyInfraEffects(db, cid, positionId, effectsByCountry[cid], currentTurn);
+    await applyInfraEffects(db, cid, positionId, sourceBucket(cid, "infrastructure"), currentTurn);
   }
 
   // 4f. Cabinet monetary — accelerate investor-confidence recovery for any country
@@ -442,7 +474,8 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   // 5. Apply all accumulated effects to region metrics, per country
   const macroMetricsBulkOps: AnyBulkWriteOperation<StateMetrics>[] = [];
 
-  for (const [countryId, bucket] of Object.entries(effectsByCountry)) {
+  for (const [countryId, sourceBuckets] of Object.entries(effectsByCountry)) {
+    const bucket = mergedBucket(sourceBuckets);
     const stateIds = (
       await db.collection("states").find({ countryId }).project({ _id: 1 }).toArray()
     ).map((s) => s._id);
@@ -500,17 +533,34 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
     if (isPoliticalApprovalCountry(countryId)) {
       // Cabinet StateMetrics deltas (mapped via the key→family table) + direct
       // political contributions (the military force effect's defense-family drive).
-      const politicalContribution = addContributions(
-        mapCabinetDeltasToPolitical(bucket.national),
-        bucket.politicalDirect ?? {}
-      );
-      const regionalPolitical = mapRegionalCabinetDeltasToPolitical(bucket.regional);
+      //
+      // Split by channel (ticket #1129) so the dynamics step can cap each one
+      // on its own. The flat `contribution`/`regional` fields stay the SUM of
+      // the channels, so every other reader sees exactly what it always did.
+      const sources: Record<string, CabinetSourceContribution> = {};
+      let politicalContribution: Record<string, number> = {};
+      const regionalPolitical: Record<string, Record<string, number>> = {};
+      for (const [source, sourceEffects] of Object.entries(sourceBuckets)) {
+        if (!sourceEffects) continue;
+        const contribution = addContributions(
+          mapCabinetDeltasToPolitical(sourceEffects.national),
+          sourceEffects.politicalDirect ?? {}
+        );
+        const regional = mapRegionalCabinetDeltasToPolitical(sourceEffects.regional);
+        if (Object.keys(contribution).length === 0 && Object.keys(regional).length === 0) continue;
+        sources[source] = { contribution, regional };
+        politicalContribution = addContributions(politicalContribution, contribution);
+        for (const [regionId, deltas] of Object.entries(regional)) {
+          regionalPolitical[regionId] = addContributions(regionalPolitical[regionId] ?? {}, deltas);
+        }
+      }
       await setPoliticalCabinetContribution(
         db,
         countryId,
         politicalContribution,
         currentTurn,
-        regionalPolitical
+        regionalPolitical,
+        sources
       );
     }
   }

@@ -16,6 +16,7 @@ export default defineConfig({
       "scripts/**/*.test.ts",
     ],
     globals: true,
+    setupFiles: ["./vitest.setup.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],

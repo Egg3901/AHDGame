@@ -18,7 +18,12 @@ import {
   metricModifierRows,
   type ModifierRow,
 } from "@/lib/politicalLegislation/dynamics";
-import { CABINET_RESIDUAL_CAP } from "../cabinetResidual";
+import {
+  CABINET_RESIDUAL_CAP_PER_SOURCE,
+  CABINET_SOURCE_IDS,
+  cappedSourceCount,
+  CABINET_RESIDUAL_TOTAL_CEILING,
+} from "../cabinetResidual";
 import { aggregateNationalPoliticalMetrics, categoryScore, overallScore } from "../aggregate";
 import { loadEvidence, type EvidenceRow } from "../evidence";
 import { FAMILIES_BY_CATEGORY } from "../families";
@@ -83,12 +88,12 @@ export interface MetricModifiersInfo {
    */
   cabinet: number;
   /**
-   * True when most of the population lives in regions whose cabinet residual
-   * for this metric is pinned at ±CABINET_RESIDUAL_CAP. At the cap, further
-   * cabinet effects on this metric contribute exactly nothing.
+   * True when most of the population lives in regions where EVERY cabinet
+   * channel for this metric is pinned at ±CABINET_RESIDUAL_CAP_PER_SOURCE. Only
+   * then does a further order or estate contribute exactly nothing.
    */
   cabinetAtCap: boolean;
-  /** The cap itself, so the UI can name the ceiling rather than hard-code it. */
+  /** The per-channel cap, so the UI can name the ceiling rather than hard-code it. */
   cabinetCap: number;
   /**
    * Turns for the value to close half the remaining gap at the engine's drift
@@ -214,11 +219,17 @@ export async function loadCountryPoliticalMetrics(
     return weighted / totalPopulation;
   };
   /**
-   * Population-weighted mean cabinet residual, plus the share of population
-   * sitting at the ±cap. Ticket #1129: players reported built estates doing
-   * nothing; on prod most US regions are pinned at the cap for the families
-   * estates target, which makes every further estate worth exactly zero. That
-   * has to be visible rather than inferred.
+   * Population-weighted mean cabinet residual, plus the share of population for
+   * which the channel can absorb nothing more. Ticket #1129: players reported
+   * built estates doing nothing, because a single global cap meant a saturated
+   * order book zeroed every other channel too.
+   *
+   * The cap is now per channel, so "at cap" is only true when EVERY channel is
+   * pinned. Anything less and there is still a channel a player can build in,
+   * which is exactly the case the old warning would have called hopeless.
+   * A doc with no per-source split yet (written before the change, or a region
+   * the ministerial step has not touched since) falls back to comparing its
+   * flat total against the full ceiling, which is the same question.
    */
   const meanCabinet = (metricId: PoliticalMetricId): { mean: number; cappedShare: number } => {
     if (totalPopulation <= 0) return { mean: 0, cappedShare: 0 };
@@ -228,7 +239,11 @@ export async function loadCountryPoliticalMetrics(
       const weight = populationByRegion.get(doc._id) ?? 0;
       const cabinet = doc.cabinetResiduals?.[metricId] ?? 0;
       weighted += cabinet * weight;
-      if (Math.abs(cabinet) >= CABINET_RESIDUAL_CAP - 0.01) cappedWeight += weight;
+      const bySource = doc.cabinetResidualsBySource;
+      const saturated = bySource
+        ? cappedSourceCount(bySource, metricId) >= CABINET_SOURCE_IDS.length
+        : Math.abs(cabinet) >= CABINET_RESIDUAL_TOTAL_CEILING - 0.01;
+      if (saturated) cappedWeight += weight;
     }
     return { mean: weighted / totalPopulation, cappedShare: cappedWeight / totalPopulation };
   };
@@ -244,7 +259,7 @@ export async function loadCountryPoliticalMetrics(
       residual: Math.round(residual * 10) / 10,
       cabinet: Math.round(cabinet * 10) / 10,
       cabinetAtCap: cappedShare >= 0.5,
-      cabinetCap: CABINET_RESIDUAL_CAP,
+      cabinetCap: CABINET_RESIDUAL_CAP_PER_SOURCE,
       driftHalfLifeTurns: halfLife,
       target: Math.round(target * 10) / 10,
       direction: Math.abs(gap) <= 0.1 ? "flat" : gap > 0 ? "up" : "down",

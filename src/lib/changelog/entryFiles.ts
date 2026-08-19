@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { parseFrontmatter, asString, asStringArray } from "./frontmatter";
 import { DEV_POSTS_DIR, PUBLIC_POSTS_DIR } from "./paths";
+import { AREA_VALUES, BADGE_VALUES } from "./types";
 
 /**
  * Changelog entry filenames.
@@ -122,9 +123,26 @@ export interface EntryProblem {
 }
 
 const REQUIRED_FIELDS = ["version", "date", "title"] as const;
-const BADGES = new Set(["major", "patch", "hotfix"]);
-const AREAS = new Set(["backend", "frontend", "fullstack"]);
+const BADGES = new Set<string>(BADGE_VALUES);
+const AREAS = new Set<string>(AREA_VALUES);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Say what is allowed, not just what was rejected.
+ *
+ * `unknown badge "minor"` told the author nothing they could act on without
+ * opening posts.ts, and it arrived from CI on someone else's branch. The valid
+ * set is short enough to print in full, and the pointer to `tags` matters
+ * because most rejected values ("bugfix", "balance", "economy") were authors
+ * describing the change, which is what the free-text `tags` field is for.
+ */
+export function unknownValueMessage(field: "badge" | "area", value: string): string {
+  const allowed = field === "badge" ? BADGE_VALUES : AREA_VALUES;
+  return (
+    `unknown ${field} "${value}"; valid ${field}s are ${allowed.join(", ")}. ` +
+    `Descriptive words for what the change was about belong in "tags", which is free text.`
+  );
+}
 
 function listMarkdown(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
@@ -200,12 +218,12 @@ export function checkEntryDir(dir: string, opts: { bareVersionOnly: boolean }): 
 
     for (const badge of asStringArray(data.badges)) {
       if (badge && !BADGES.has(badge)) {
-        problems.push({ file: name, problem: `unknown badge "${badge}"` });
+        problems.push({ file: name, problem: unknownValueMessage("badge", badge) });
       }
     }
     for (const area of asStringArray(data.areas)) {
       if (area && !AREAS.has(area)) {
-        problems.push({ file: name, problem: `unknown area "${area}"` });
+        problems.push({ file: name, problem: unknownValueMessage("area", area) });
       }
     }
   }

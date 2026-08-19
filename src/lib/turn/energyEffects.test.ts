@@ -100,3 +100,41 @@ describe("applyEnergyEffects routing", () => {
     expect(Object.keys(bucket.regional)).toHaveLength(0);
   });
 });
+
+describe("computeRegionEnergyDeltas — grid reliability units (ticket #1129)", () => {
+  const firmMix = [
+    plant({ source: "nuclear" }),
+    plant({ source: "coal" }),
+    plant({ source: "hydro" }),
+    plant({ source: "gas" }),
+  ];
+
+  it("raises reliability for a firm, diverse mix against a real 97-99.9 uptime", () => {
+    // The bug: reliabilityScore returns a 0-100 QUALITY score, `current` is the
+    // metric's own uptime percent. Differencing them made every mix negative.
+    const d = computeRegionEnergyDeltas(firmMix, {
+      renewable: 10,
+      carbon: 30,
+      reliability: 97.5,
+    });
+    expect(d["infrastructure.powerGridReliability"]).toBeGreaterThan(0);
+  });
+
+  it("lowers reliability for an all-intermittent mix", () => {
+    const d = computeRegionEnergyDeltas([plant({ source: "solar" })], {
+      renewable: 10,
+      carbon: 30,
+      reliability: 99.5,
+    });
+    expect(d["infrastructure.powerGridReliability"]).toBeLessThan(0);
+  });
+
+  it("does not pin every region to the negative clamp", () => {
+    const d = computeRegionEnergyDeltas(firmMix, {
+      renewable: 10,
+      carbon: 30,
+      reliability: 99,
+    });
+    expect(d["infrastructure.powerGridReliability"]).not.toBe(-0.08);
+  });
+});

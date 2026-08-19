@@ -3,6 +3,7 @@ import {
   buildDemographicsRows,
   getNationalityLabel,
   getStartingClassLabel,
+  resolveStartingCountryId,
 } from "./profileDemographics";
 
 describe("profileDemographics", () => {
@@ -37,5 +38,35 @@ describe("profileDemographics", () => {
       { label: "Starting Nationality", value: "United States" },
       { label: "Current Nationality", value: "United Kingdom" },
     ]);
+  });
+});
+
+describe("resolveStartingCountryId (ticket 1107)", () => {
+  it("uses the character's own starting country, not the account's", () => {
+    // The reporter's case: account first played US, this character was made in DD.
+    expect(resolveStartingCountryId({ startingCountryId: "DD", countryId: "DD" })).toBe("DD");
+  });
+
+  it("keeps the starting country after the character emigrates", () => {
+    expect(resolveStartingCountryId({ startingCountryId: "DD", countryId: "UK" })).toBe("DD");
+  });
+
+  it("falls back to the current country for characters predating the field", () => {
+    expect(resolveStartingCountryId({ countryId: "DD" })).toBe("DD");
+    expect(resolveStartingCountryId({ startingCountryId: null, countryId: "DD" })).toBe("DD");
+  });
+
+  it("returns null when neither is known", () => {
+    expect(resolveStartingCountryId({})).toBeNull();
+  });
+
+  it("renders East Germany, not United States, in the demographics rows", () => {
+    const rows = buildDemographicsRows(
+      null,
+      resolveStartingCountryId({ startingCountryId: "DD", countryId: "DD" }),
+      "DD"
+    );
+    expect(rows.find((r) => r.label === "Starting Nationality")?.value).toBe("East Germany");
+    expect(rows.find((r) => r.label === "Current Nationality")?.value).toBe("East Germany");
   });
 });
