@@ -81,10 +81,12 @@ export interface InputsCostResult {
  * plant input bill.
  *
  * Reachable books in partitioned markets can print far above the world
- * (live US iron ~3.27 vs world ~0.77). Revenue realization damps that
- * spike (`ratio^0.5`, max 1.5x); the input bill is linear. Taking the
- * cheaper of the two keeps cheap-local discounts (the original overlay)
- * without charging buyers a cost no seller-side leg can recover.
+ * (live US iron ~3.27 vs world ~0.77). The input bill now prices through the
+ * same realization damping revenue does (`ratio^0.5`, max 1.5x, see
+ * `computeInputsCost`), so capping the ratio here still matters: it lowers the
+ * value fed into that factor rather than a raw linear price. Taking the cheaper
+ * of the two keeps cheap-local discounts (the original overlay) without
+ * charging buyers a cost no seller-side leg can recover.
  *
  * Ticket #1120 (Dangote / manufacturing) is the same t175 cliff as the
  * worldwide margin collapse: uncapped reachable input prices.
