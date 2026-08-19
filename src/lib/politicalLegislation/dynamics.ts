@@ -17,8 +17,16 @@ export const PRIMARY_POINTS_PER_LEVEL = 12.5;
 export const SECONDARY_POINTS_PER_LEVEL = 5;
 /** §2 ruling: regional enactments supplement at half strength. */
 export const REGIONAL_SUPPLEMENT_FACTOR = 0.5;
-/** §2.1 ruling: 0.5% of the remaining gap per turn. */
-export const DRIFT_RATE_PER_TURN = 0.005;
+/**
+ * Fraction of the remaining gap a metric closes each turn.
+ *
+ * The §2.1 ruling set this to 0.005, a 138 turn half-life. Ticket #1129: at
+ * that pace an 8 point push moved the displayed value 0.04 points on the turn
+ * it was bought, so players correctly concluded that building did nothing. 0.02
+ * is a ~34 turn half-life, which is still a slow structural channel (laws do
+ * not take effect overnight) but is movement a player can see inside a session.
+ */
+export const DRIFT_RATE_PER_TURN = 0.02;
 /** §2.1 ruling: minimum per-turn movement while a gap exists. */
 export const DRIFT_FLOOR = 0.01;
 

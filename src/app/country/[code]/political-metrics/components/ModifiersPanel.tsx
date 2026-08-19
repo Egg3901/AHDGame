@@ -9,8 +9,9 @@
  *
  * Ticket #1129: players reported that built estates did nothing. The cabinet
  * term was real and stored, but no surface showed it, the served target left it
- * out, and on prod most regions sit pinned at the cabinet ceiling where the next
- * estate is worth exactly zero. All three are stated here instead of inferred.
+ * out, and the channel was capped as one lump so a saturated order book made the
+ * next estate worth exactly zero. The cap is now per channel, and the warning
+ * only fires when every channel is full.
  */
 
 import type { MetricModifiersInfo } from "@/lib/politicalMetrics/queries/countryPoliticalMetrics";
@@ -72,9 +73,10 @@ export function ModifiersPanel({ modifiers }: { modifiers: MetricModifiersInfo }
       </div>
       {modifiers.cabinetAtCap && (
         <p className="mt-2 text-body-xs text-warning">
-          Cabinet effects on this metric are at their {modifiers.cabinetCap} point ceiling in most
-          of the country. More orders or estates aimed here add nothing until something else pulls
-          the total back below the ceiling.
+          Every cabinet channel for this metric is at its {modifiers.cabinetCap} point ceiling in
+          most of the country. Orders, tier settings, estates, energy and infrastructure each carry
+          their own ceiling, and all of them are full, so more of any of them adds nothing here
+          until something pulls one back below its ceiling.
         </p>
       )}
       {modifiers.driftHalfLifeTurns > 0 && (

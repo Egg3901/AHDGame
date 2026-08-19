@@ -26,7 +26,13 @@ import {
 } from "@/lib/politicalLegislation/dynamics";
 import { getEnactedLevels } from "@/lib/politicalLegislation/enactedLevels";
 import { getPoliticalCabinetContribution } from "@/lib/db/collections/politicalCabinetContribution";
-import { addContributions, foldCabinetResiduals } from "@/lib/politicalMetrics/cabinetResidual";
+import {
+  addContributions,
+  foldCabinetResidualsBySource,
+  seedBySourceFromLegacy,
+  sumCabinetResiduals,
+  type CabinetResidualsBySource,
+} from "@/lib/politicalMetrics/cabinetResidual";
 import { macroResidualFor } from "@/lib/politicalLegislation/macroResidual";
 import type { MacroMetricsDoc } from "@/lib/db/types/macroMetrics";
 import type { GameState } from "@/lib/db/types";
@@ -47,6 +53,16 @@ export const HISTORY_MAX_ENTRIES = 365;
 function sameNums(a: Record<string, number>, b: Record<string, number>): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
   for (const k of keys) if ((a[k] ?? 0) !== (b[k] ?? 0)) return false;
+  return true;
+}
+
+/** The same shallow comparison, one level deeper, for the per-source residuals. */
+function sameBySource(
+  a: Record<string, Record<string, number>>,
+  b: Record<string, Record<string, number>>
+): boolean {
+  const sources = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const source of sources) if (!sameNums(a[source] ?? {}, b[source] ?? {})) return false;
   return true;
 }
 
@@ -218,12 +234,49 @@ export async function processPoliticalMetricsDynamics(
         // Accumulate + decay the cabinet contribution into this region's isolated
         // cabinetResiduals (never touches the day-one `residuals`). National
         // standing effects plus this region's sited extras (ticket #1129).
-        const regionContribution = addContributions(
-          cabinetSnapshot.contribution,
-          cabinetSnapshot.regional[String(doc._id)] ?? {}
+        //
+        // Ticket #1129: the cap is applied PER CHANNEL (orders, tier settings,
+        // military, estates, energy, infrastructure). Under the old single
+        // clamp, 21% of US regional entries sat pinned and a newly built estate
+        // aimed at a pinned family contributed exactly zero, which is what two
+        // players reported. A channel can still saturate, but it can no longer
+        // silence the others.
+        const regionId = String(doc._id);
+        const contributionBySource: Record<string, Record<string, number>> = {};
+        for (const [source, sourceContribution] of Object.entries(cabinetSnapshot.sources)) {
+          contributionBySource[source] = addContributions(
+            sourceContribution.contribution,
+            sourceContribution.regional[regionId] ?? {}
+          );
+        }
+        if (Object.keys(cabinetSnapshot.sources).length === 0) {
+          // Pre-#1129 snapshot (the ministerial step has not run since the
+          // deploy): treat the whole thing as one channel for this turn. The
+          // next ministerial step writes the split.
+          const merged = addContributions(
+            cabinetSnapshot.contribution,
+            cabinetSnapshot.regional[regionId] ?? {}
+          );
+          if (Object.keys(merged).length > 0) contributionBySource.legacy = merged;
+        }
+        // Docs written before the split carry only the flat total. Seed the
+        // channels from it by this turn's contribution shares rather than
+        // migrating: the applied total is unchanged on the first turn, and the
+        // 0.9 decay washes the estimate out within a few turns.
+        const prevBySource: CabinetResidualsBySource =
+          doc.cabinetResidualsBySource ??
+          seedBySourceFromLegacy(doc.cabinetResiduals ?? {}, contributionBySource);
+        const nextCabinetBySource = foldCabinetResidualsBySource(
+          prevBySource,
+          contributionBySource
         );
-        const nextCabinet = foldCabinetResiduals(doc.cabinetResiduals ?? {}, regionContribution);
-        const cabinetChanged = !sameNums(doc.cabinetResiduals ?? {}, nextCabinet);
+        const nextCabinet = sumCabinetResiduals(nextCabinetBySource) as Record<
+          PoliticalMetricId,
+          number
+        >;
+        const cabinetChanged =
+          !sameNums(doc.cabinetResiduals ?? {}, nextCabinet) ||
+          !sameBySource(doc.cabinetResidualsBySource ?? {}, nextCabinetBySource);
         const cabinetOf = (id: PoliticalMetricId) => nextCabinet[id] ?? 0;
         const labourChanged = !sameNums(doc.labourResiduals ?? {}, nextLabour);
 
@@ -312,7 +365,10 @@ export async function processPoliticalMetricsDynamics(
                 $set: {
                   values: nextValues,
                   ...(healed && { residuals }),
-                  ...(cabinetChanged && { cabinetResiduals: nextCabinet }),
+                  ...(cabinetChanged && {
+                    cabinetResiduals: nextCabinet,
+                    cabinetResidualsBySource: nextCabinetBySource,
+                  }),
                   ...(labourChanged && { labourResiduals: nextLabour }),
                   lastUpdated: now,
                 },
