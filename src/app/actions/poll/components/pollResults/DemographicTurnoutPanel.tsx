@@ -22,7 +22,7 @@ const DEMOGRAPHIC_SECTIONS: Array<{
     icon: "📅",
     label: "Age Group",
     tooltip:
-      "Older voters consistently turn out at higher rates. This affects which voter archetypes are larger in your state's modeled electorate.",
+      "Older voters consistently turn out at higher rates. This affects which groups are larger in your state's modeled electorate.",
   },
   {
     key: "education",

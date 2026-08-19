@@ -18,7 +18,7 @@ Quick Poll is the "should I run?" tool. Before declaring any candidacy, spend 2 
 
 Full Poll is the "what do I need to fix?" tool. It tells you:
 
-- Your vote share with every one of the 12 voter archetypes.
+- Your vote share with every segment of the state's electorate.
 - Your Favorability per group.
 - Turnout modifiers on each group (who's been canvassed / GOTV'd in this state).
 - Where your appeal times reach times approval math is lowest: the gaps.
@@ -40,7 +40,7 @@ Use it mid-general to plan the closing sprint: which demographics to ad-target, 
 
 For **state races** (House, Senate, Gov, State Senate, Commons, Bundestag constituency, Sangiin, Shūgiin):
 
-Polls run the **exact same** group-level competitive allocation the turn processor uses, with the **same** FPTP spoiler rule for FPTP states. Per-archetype opponent effective favorability is used when available (the "what if my opponent's ad campaign is working on Suburban Professionals" case). Results reflect real vote math.
+Polls run the **exact same** group-level competitive allocation the turn processor uses, with the **same** FPTP spoiler rule for FPTP states. Per-segment opponent effective favorability is used when available (the "what if my opponent's ad campaign is working on graduate-educated suburban voters" case). Results reflect real vote math.
 
 For **presidential races**:
 
@@ -71,7 +71,7 @@ This is the same math the turn processor will run when the election actually res
 - "Worst 5 groups": demographics where your relative share is lowest. These are your ad-targeting and canvassing priorities.
 
 **Full Poll output:**
-- Per-archetype rows with size, turnout, your appeal, your reach, your approval, and the final allocated vote count.
+- Per-segment rows with size, turnout, your appeal, your reach, your approval, and the final allocated vote count.
 - A separate column showing the same numbers for each opponent.
 - A "gap analysis" section identifying the largest deltas.
 
