@@ -3,7 +3,7 @@
  * (tools/positions-atlas/). One JSON with:
  *  - anchors: per anchor era, per-state {econ, social, display} through the
  *    live seed path (`deriveRegionLeans`);
- *  - timeline: per year (2-year steps, 1953..2023), per-state leans blended
+ *  - timeline: per year (yearly, 1953..2023), per-state leans blended
  *    between anchor eras with the same blend the substrate uses
  *    (`resolveEraBlend`). Leans are linear in positions, so lerping the
  *    derived anchor leans matches the position blend; census-share jumps at
@@ -36,7 +36,7 @@ function main() {
   const anchors = Object.fromEntries(ERAS.map((e) => [e, anchorMap(e)]));
 
   const timeline: Record<string, Record<string, LeanRow>> = {};
-  for (let year = 1953; year <= 2023; year += 2) {
+  for (let year = 1953; year <= 2023; year += 1) {
     const { lo, hi, t } = resolveEraBlend(year);
     const a = anchors[lo];
     const b = anchors[hi];
