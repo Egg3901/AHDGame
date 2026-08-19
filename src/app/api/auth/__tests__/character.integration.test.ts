@@ -180,6 +180,10 @@ describe("POST /api/auth/character - Character Creation", () => {
       homeState: "CA",
       party: "democrat",
       countryId: "US",
+      // Ticket 1107: per-character starting nationality, stamped from the state
+      // document's country at creation. `users.accountCountryId` is account-level
+      // and cannot answer "where did THIS character start".
+      startingCountryId: "US",
       donorBaseLevel: 1,
       // Turn-first anchor for the new-character transfer barrier.
       createdTurn: 42,
