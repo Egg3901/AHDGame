@@ -1,7 +1,7 @@
 import type { ObjectId } from "mongodb";
 
 /**
- * Per-character per-state organization investment for presidential primaries.
+ * Per-character, per-state Campaign Presence investment for presidential primaries.
  * `level` (0–10) multiplies the candidate's per-state vote weight during
  * presidential primary stagger waves (capped at `MAX_STATE_ORG_BONUS_PRIMARY` at
  * level 10). `totalInvested` is a career running tally preserved across the

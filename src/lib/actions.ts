@@ -258,17 +258,25 @@ export function advertiseFavorabilityGain(
  * this state (mediaLevel >= 4) to explain a disabled Support button, rather
  * than preventing it.
  *
- * Curve: base − (favorability − 70) × 0.15, floored at 0.5. The rate is steeper
- * than advertise's 0.1 because this stack tops out higher (media + travel), and
- * 0.15 puts a fully-invested campaign's equilibrium near 88 rather than 100.
- * The 0.5 floor sits well under the 2.0 decay ceiling, so no combination of
- * passives can re-pin at the cap.
+ * Curve: base − (favorability − 80) × 0.15, floored at 0.5. The 0.5 floor sits
+ * well under the 2.0 decay ceiling, so no combination of passives can re-pin at
+ * the cap.
+ *
+ * Threshold set at 80, not 70, deliberately: political operations are meant to
+ * be the STRONG way to build standing, so the penalty should not start biting
+ * in the range a serious campaign lives in. A fully-invested media + travel
+ * stack (4.0/turn raw) reaches an equilibrium near 95 — high, clearly rewarding
+ * the investment, and still short of the permanent 100 pin that made
+ * reputation unassailable. Lowering this threshold weakens campaigns; raising
+ * it past ~85 restores the pin. This is the paired opposite of the softened
+ * `APPROVAL_SCALAR_EXPONENT`: favorability matters marginally less per point,
+ * and operations are the intended way to earn the points that remain.
  *
  * Apply AFTER the season multiplier: the final-four-turn 2x doubles the raw
  * gain, and curving the pre-doubled value would let the doubled result clear
  * decay again in exactly the turns that cast 30% of the vote.
  */
-export const PASSIVE_FAV_DIMINISH_THRESHOLD = 70;
+export const PASSIVE_FAV_DIMINISH_THRESHOLD = 80;
 export const PASSIVE_FAV_DIMINISH_RATE = 0.15;
 export const PASSIVE_FAV_MIN_PER_TURN = 0.5;
 

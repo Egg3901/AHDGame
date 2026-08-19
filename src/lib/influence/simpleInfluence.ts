@@ -14,8 +14,23 @@ import { localCampaignBalance } from "@/lib/currency/campaignBalance";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import { getMediaFavPerTurn } from "@/lib/campaigns/opsEffects";
 
-// Base cost for influence/boost actions
-export const BASE_INFLUENCE_COST = 2;
+/**
+ * Base action-point cost for a support/attack influence action.
+ *
+ * Raised 2 → 6. At 2 AP the ±1 reputation move was close to free: the US
+ * playerbase held 9,470 banked action points, i.e. ~4,700 reputation swings
+ * available in a single turn against a stat that only spans 100 points. Since
+ * favorability multiplies a candidate's entire vote (~0.45 vote-share points
+ * per favorability point, measured), that made click volume the most
+ * cost-effective campaign tool in the game by a wide margin.
+ *
+ * At 6 AP the same 80-attack strike costs 480 action points rather than 160, so
+ * it competes properly with campaigning, fundraising and political operations
+ * for a player's turn instead of being loose change. Deliberately a cost change
+ * rather than a lockout: a party that genuinely wants to spend its turns
+ * attacking still can.
+ */
+export const BASE_INFLUENCE_COST = 6;
 
 /**
  * Maximum NET favorability any one target can be moved by player support/attack
@@ -39,13 +54,17 @@ export const BASE_INFLUENCE_COST = 2;
  * points per point — favorability is ~11x stronger, and was the only one of the
  * two with no aggregate limit at all.
  *
- * 3/turn is deliberately non-trivial: a coordinated party still moves a target
- * faster than any individual can, and can still swing 30+ points over a
- * campaign. It just cannot delete a candidate between two turns. Pairs with the
- * per-turn passive/decay curves so favorability has a reachable equilibrium
- * rather than being set by click volume.
+ * This is a BACKSTOP, not the primary limiter. The real throttles are the
+ * raised {@link BASE_INFLUENCE_COST} (2 → 6 AP, so a strike competes with
+ * campaigning for a player's turn) and the softened
+ * `APPROVAL_SCALAR_EXPONENT` (favorability is deliberately less decisive).
+ * 12/turn is set well above normal coordinated play — the observed median
+ * target-turn is far below it — and exists only to stop the extreme case of a
+ * candidate being deleted between two turns. For reference the largest observed
+ * single-turn swings were -39 and -37, which this bounds without touching
+ * ordinary campaigning.
  */
-export const MAX_NET_FAVORABILITY_SWING_PER_TURN = 3;
+export const MAX_NET_FAVORABILITY_SWING_PER_TURN = 12;
 
 /**
  * Net player-driven favorability already applied to `targetId` this turn.

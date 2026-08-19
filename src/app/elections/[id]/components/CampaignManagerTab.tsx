@@ -88,7 +88,7 @@ export function CampaignManagerTab({ electionId }: CampaignManagerTabProps) {
             href="#state-org"
             className="inline-flex items-center justify-center rounded-lg border border-primary/40 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
           >
-            State Organization
+            Campaign Presence
           </Link>
           <Link
             href={`/campaign/${campaign.id}`}

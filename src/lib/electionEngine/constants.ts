@@ -161,7 +161,7 @@ export const PRIMARY_MOMENTUM_WIN_BONUS = 2;
  */
 export const PRIMARY_MOMENTUM_UPSET_BONUS = 2;
 
-// ─── Per-character per-state organization (regional bases) ──────────────────
+// ─── Per-character per-state Campaign Presence (regional bases) ────────────
 //
 // Adds a recurring per-state per-candidate weight multiplier in presidential
 // primary waves AND in the general election (at reduced caps), modelling the
@@ -251,16 +251,53 @@ export const MAX_STATE_ORG_BONUS_GENERAL = 0.15;
  */
 export const HOME_STATE_BONUS_GENERAL = 0.05;
 
-/** Action cost per +1 state-org level. */
+/**
+ * Campaign-action cost per +1 Campaign Presence level.
+ *
+ * Spent from the CAMPAIGN's action pool, not the player's personal one (moved
+ * 2026-08-19). Building presence is campaign work and should compete with the
+ * media / ground-game / opposition-research trees for the same budget, rather
+ * than being funded out of a player's personal turn allowance.
+ */
 export const STATE_ORG_COST_ACTIONS = 3;
 
 /**
- * Cash cost per +1 state-org level (anchor-denominated internally; the
- * forex helper converts to the character's home currency at the API
- * boundary so the player-facing UI never displays anchor units).
- * 30 actions + $500K total to max one state from scratch.
+ * Base cash cost of the FIRST Campaign Presence level (anchor-denominated
+ * internally; the forex helper converts to the character's home currency at the
+ * API boundary so the player-facing UI never displays anchor units).
+ *
+ * Raised from a flat 50,000 (2026-08-19). At 50k, maxing a state cost $500K
+ * against live presidential treasuries of $196M–$284M — roughly 0.2% of budget
+ * for the whole map, which is why campaign funds visibly "didn't matter".
+ * Presence is now the main thing a campaign treasury is FOR, so it is priced
+ * like it.
+ *
+ * @see stateOrgLevelCost for the per-level escalation.
  */
-export const STATE_ORG_COST_FUNDS = 50_000;
+export const STATE_ORG_COST_FUNDS = 250_000;
+
+/**
+ * Growth factor applied per existing level, so presence escalates instead of
+ * being a flat toll. Cost of the Nth level is
+ * `STATE_ORG_COST_FUNDS × STATE_ORG_COST_GROWTH^(N-1)`.
+ *
+ * At 1.35: L1 $250K, L5 ~$820K, L10 ~$3.7M, L15 ~$16.5M, L20 ~$74M. Combined
+ * with the uncapped-but-diminishing bonus this is what keeps an unlimited
+ * ladder from becoming "richest campaign buys unbounded vote share": the bonus
+ * curve flattens while the price compounds, so the marginal level gets rapidly
+ * worse value. A $271M treasury can dominate a handful of chosen states, not
+ * all 50.
+ */
+export const STATE_ORG_COST_GROWTH = 1.35;
+
+/**
+ * Cash cost to buy the level that takes a state from `currentLevel` to
+ * `currentLevel + 1`, anchor-denominated.
+ */
+export function stateOrgLevelCost(currentLevel: number): number {
+  const safeLevel = Math.max(0, Math.floor(currentLevel));
+  return Math.round(STATE_ORG_COST_FUNDS * Math.pow(STATE_ORG_COST_GROWTH, safeLevel));
+}
 
 /**
  * Action throttle: at most +1 to the same state's org level per turn.
@@ -270,8 +307,51 @@ export const STATE_ORG_COST_FUNDS = 50_000;
  */
 export const STATE_ORG_PER_STATE_TURN_CAP = 1;
 
-/** Cap on the org level itself. */
+/**
+ * Reference level for the Campaign Presence bonus curve.
+ *
+ * NOT a cap — the level ladder is unbounded (2026-08-19). This is the level at
+ * which the curve reaches {@link STATE_ORG_REFERENCE_FRACTION} of the maximum
+ * bonus, i.e. the old "maxed" feel is preserved at the level players already
+ * knew. Retained under the old name so the many UI and engine call sites that
+ * used it as a normaliser keep working.
+ */
 export const STATE_ORG_MAX_LEVEL = 10;
+
+/**
+ * Fraction of the maximum bonus delivered at {@link STATE_ORG_MAX_LEVEL}.
+ * 0.75 means level 10 buys three quarters of what is theoretically available,
+ * leaving a real but sharply diminishing tail above it.
+ */
+export const STATE_ORG_REFERENCE_FRACTION = 0.75;
+
+/**
+ * Campaign Presence bonus as a fraction of the applicable maximum
+ * (`MAX_STATE_ORG_BONUS_PRIMARY` / `..._GENERAL`), for an unbounded level.
+ *
+ * Replaces the old linear `level / STATE_ORG_MAX_LEVEL` ratio, which was only
+ * coherent because the level was capped at 10. Uncapping that ratio would have
+ * made vote weight grow without limit — level 40 would have been +100% primary
+ * weight — turning presence into a pure "richest campaign wins" lever. Given
+ * live treasuries span $271.8M (DEM) to $80K (MCPUS), that would have made the
+ * minor-party lockout dramatically worse.
+ *
+ * Curve: `1 − (1 − f)^(level / L)` with `f = STATE_ORG_REFERENCE_FRACTION` and
+ * `L = STATE_ORG_MAX_LEVEL`. Exponential approach to 1.0, never reaching it:
+ *
+ *   L0 → 0%      L5 → 50%     L10 → 75%    L15 → 87.5%
+ *   L20 → 93.8%  L30 → 98.4%  L40 → 99.6%
+ *
+ * Every level still helps, so investment is never wasted and there is no wall
+ * to hit. But the 20th level buys ~1/12th of what the 2nd did, while
+ * {@link STATE_ORG_COST_GROWTH} makes it ~15x more expensive — so the ladder
+ * self-limits on value rather than on a rule.
+ */
+export function stateOrgBonusFraction(level: number): number {
+  const safeLevel = Math.max(0, level);
+  if (safeLevel === 0) return 0;
+  return 1 - Math.pow(1 - STATE_ORG_REFERENCE_FRACTION, safeLevel / STATE_ORG_MAX_LEVEL);
+}
 
 // ─── Governor coattail (§7.3.2 govModifier term) ────────────────────────────
 

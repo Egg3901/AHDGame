@@ -51,14 +51,19 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Character not found" }, { status: 404 });
     }
 
-    // Assign manager
+    // Assign manager. Admin assignment REPLACES the roster with a single
+    // manager rather than appending — it is an override tool, and leaving a
+    // partially-overridden list would be more confusing than a clean reset.
+    // Legacy pair stays mirrored to managers[0] (see campaigns/access.ts).
+    const now = new Date();
     await db.collection<Campaign>("campaigns").updateOne(
       { _id: campaignOid },
       {
         $set: {
+          managers: [{ userId: character.userId, characterId: character._id, appointedAt: now }],
           managerId: character.userId,
           managerCharacterId: character._id,
-          updatedAt: new Date(),
+          updatedAt: now,
         },
       }
     );
@@ -95,6 +100,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       { _id: campaignOid },
       {
         $set: {
+          managers: [],
           managerId: null,
           managerCharacterId: null,
           updatedAt: new Date(),

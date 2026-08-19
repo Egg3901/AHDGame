@@ -41,7 +41,7 @@ import {
   MAX_STATE_ORG_BONUS_PRIMARY,
   HOME_STATE_BONUS_GENERAL,
   HOME_STATE_BONUS_PRIMARY,
-  STATE_ORG_MAX_LEVEL,
+  stateOrgBonusFraction,
 } from "./constants";
 import {
   orgVoteWeight,
@@ -225,11 +225,11 @@ function appealWeight(
   if (options?.stateOrgByCandidate) {
     const level = options.stateOrgByCandidate.get(ec.candidateId) ?? 0;
     if (level > 0) {
-      const clampedLevel = Math.min(level, STATE_ORG_MAX_LEVEL);
       const maxBonus = options.isGeneralElection
         ? MAX_STATE_ORG_BONUS_GENERAL
         : MAX_STATE_ORG_BONUS_PRIMARY;
-      stateOrgMult = 1 + (clampedLevel / STATE_ORG_MAX_LEVEL) * maxBonus;
+      // Unbounded level, diminishing bonus — see stateOrgBonusFraction.
+      stateOrgMult = 1 + stateOrgBonusFraction(level) * maxBonus;
     }
   }
 

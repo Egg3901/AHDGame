@@ -191,6 +191,35 @@ export function calcAppeal(
 }
 
 /**
+ * Softening exponent on the approval scalar ("marginally less decisive
+ * favorability"). `scalar = (fav/100)^γ`, γ < 1, so the curve is pulled up
+ * toward 1 in the middle while both endpoints are preserved exactly:
+ * 0 → 0 and 100 → 1.
+ *
+ * Why a power curve rather than a floor (`a + (1-a)·fav/100`): the floor shape
+ * breaks the documented rule that 0% favorability means 0 votes
+ * (`voteDistribution.test.ts` "zero favorability candidate gets effectively no
+ * votes", and the wiki's demographics page). A power curve compresses the
+ * spread while leaving that endpoint intact.
+ *
+ * Effect on the measured live case (1956 US president, 100 vs 38.4):
+ * the multiplier spread falls from **2.60x to 2.15x**, a ~17% reduction —
+ * deliberately marginal. Favorability stays the strongest single lever; it
+ * just stops being decisive enough that a coordinated reputation strike
+ * substitutes for campaigning. Paired with a raised cost on the ±1 influence
+ * actions and a per-turn aggregate backstop, plus strengthened political
+ * operations, so the weight lost here moves to levers that cost money and
+ * planning rather than clicks.
+ *
+ * Calibration guard: `voteDistribution.test.ts` "balance: favorability impacts
+ * vote share" requires an 80-vs-20 matchup to stay above a 2.5x ratio. At
+ * γ = 0.8 that lands at **3.03x** (was 4.0x), so the calibrated relationship
+ * survives. γ below ~0.62 breaks it. Treat 0.8 as the floor for this knob,
+ * not a midpoint.
+ */
+export const APPROVAL_SCALAR_EXPONENT = 0.8;
+
+/**
  * Approval scalar: 0% favorability = 0 votes, 100% = full votes.
  * "If voters don't approve of you they won't vote for you."
  *
@@ -198,7 +227,8 @@ export function calcAppeal(
  * @returns Multiplier 0-1
  */
 export function approvalScalar(favorability: number): number {
-  return Math.max(0, Math.min(1, (favorability ?? 50) / 100));
+  const normalized = Math.max(0, Math.min(1, (favorability ?? 50) / 100));
+  return Math.pow(normalized, APPROVAL_SCALAR_EXPONENT);
 }
 
 // Retired 2026-06-18 (D3): `partyOrgScalar` (1.0–1.6×) and

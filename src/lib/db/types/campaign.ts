@@ -68,8 +68,24 @@ export interface Campaign {
   archivedAt?: Date | null;
   archivedReason?: "primary_loss" | "withdrawn" | "removed" | "banned";
 
+  /**
+   * Legacy single-manager pair. Retained and kept in sync with `managers[0]` so
+   * pre-multi-manager readers keep working with no backfill. Prefer
+   * `campaignManagerUserIds()` / `isCampaignManagerUser()` over reading these
+   * directly — they fold both shapes together.
+   */
   managerId: ObjectId | null;
   managerCharacterId: ObjectId | null;
+
+  /**
+   * Campaign managers, up to `MAX_CAMPAIGN_MANAGERS`. Absent on rows written
+   * before the change; treat missing as "whatever `managerId` says".
+   */
+  managers?: Array<{
+    userId: ObjectId;
+    characterId: ObjectId;
+    appointedAt: Date;
+  }>;
 
   funds: number;
   actions: number;

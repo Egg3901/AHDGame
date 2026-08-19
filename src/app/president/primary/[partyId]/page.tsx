@@ -693,7 +693,7 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
         <div className="mb-4 rounded-xl border border-card-border bg-card p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold">State Organization</h3>
+              <h3 className="text-sm font-semibold">Campaign Presence</h3>
               <p className="mt-1 text-xs text-muted">
                 Per-state infrastructure you build across cycles. Maxing a state is +25% primary
                 vote weight there, independent of party-wide org.
