@@ -19,6 +19,7 @@ import {
   PRIMARY_PARTY_FIT_WEIGHT,
   MAX_STATE_ORG_BONUS_PRIMARY,
   MAX_STATE_ORG_BONUS_GENERAL,
+  stateOrgBonusFraction,
   HOME_STATE_BONUS_PRIMARY,
   HOME_STATE_BONUS_GENERAL,
   STATE_ORG_MAX_LEVEL,
@@ -203,11 +204,11 @@ export function distributeVotesByGroupLevelAllocation(
         if (options?.stateOrgByCandidate) {
           const level = options.stateOrgByCandidate.get(ec.candidateId) ?? 0;
           if (level > 0) {
-            const clampedLevel = Math.min(level, STATE_ORG_MAX_LEVEL);
             const maxBonus = options.isGeneralElection
               ? MAX_STATE_ORG_BONUS_GENERAL
               : MAX_STATE_ORG_BONUS_PRIMARY;
-            stateOrgMult = 1 + (clampedLevel / STATE_ORG_MAX_LEVEL) * maxBonus;
+            // Unbounded level, diminishing bonus — see stateOrgBonusFraction.
+            stateOrgMult = 1 + stateOrgBonusFraction(level) * maxBonus;
           }
         }
         // Regional bases C — flat home-state bump. Same decoupling: gated on

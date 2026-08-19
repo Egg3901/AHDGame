@@ -5,6 +5,7 @@ import type { UpdateFilter } from "mongodb";
 import type { Campaign, ElectionCandidate } from "@/lib/db/types";
 import { calculateCampaignIncome } from "@/lib/campaigns/income";
 import { calculateCampaignActions } from "@/lib/campaigns/actions";
+import { diminishPassiveFavorabilityGain } from "@/lib/actions";
 import { calculateMaintenanceCosts } from "@/lib/campaigns/maintenance";
 import { getCampaignFamilyScalar, getOpsBranchMagnitude } from "@/lib/campaigns/upgradeCosts";
 import { getMediaFavPerTurn, getOppoDrainPerTurn } from "@/lib/campaigns/opsEffects";
@@ -851,9 +852,39 @@ async function applyPassiveEffectsBulk(
     }
   }
 
+  // Diminishing returns on the SUMMED positive passive gain, so media + travel
+  // + primary bonus together have an equilibrium below the cap instead of
+  // out-running the bounded 2.0/turn decay forever. Negative nets (opposition
+  // research) pass through untouched — an attack should not weaken near the
+  // cap. Needs each target's current favorability, fetched in one round trip
+  // per collection. See `diminishPassiveFavorabilityGain`.
+  const applyDiminishing = async (
+    collection: "characters" | "npps",
+    updates: Map<string, number>
+  ): Promise<Map<string, number>> => {
+    const positives = [...updates.entries()].filter(([, amt]) => amt > 0);
+    if (positives.length === 0) return updates;
+    const docs = await db
+      .collection<{ _id: ObjectId; favorability?: number }>(collection)
+      .find(
+        { _id: { $in: positives.map(([id]) => new ObjectId(id)) } },
+        { projection: { favorability: 1 } }
+      )
+      .toArray();
+    const favById = new Map(docs.map((d) => [d._id.toString(), d.favorability ?? 50]));
+    const out = new Map(updates);
+    for (const [id, amt] of positives) {
+      out.set(id, diminishPassiveFavorabilityGain(amt, favById.get(id) ?? 50));
+    }
+    return out;
+  };
+
+  const characterUpdatesFinal = await applyDiminishing("characters", characterUpdates);
+  const nppUpdatesFinal = await applyDiminishing("npps", nppUpdates);
+
   // Build bulkWrite operations
-  if (characterUpdates.size > 0) {
-    const charOps = [...characterUpdates.entries()].map(([targetId, amount]) => ({
+  if (characterUpdatesFinal.size > 0) {
+    const charOps = [...characterUpdatesFinal.entries()].map(([targetId, amount]) => ({
       updateOne: {
         filter: { _id: new ObjectId(targetId) },
         update: buildClampedFavorabilityUpdate(amount),
@@ -862,8 +893,8 @@ async function applyPassiveEffectsBulk(
     await db.collection("characters").bulkWrite(charOps);
   }
 
-  if (nppUpdates.size > 0) {
-    const nppOps = [...nppUpdates.entries()].map(([targetId, amount]) => ({
+  if (nppUpdatesFinal.size > 0) {
+    const nppOps = [...nppUpdatesFinal.entries()].map(([targetId, amount]) => ({
       updateOne: {
         filter: { _id: new ObjectId(targetId) },
         update: buildClampedFavorabilityUpdate(amount),

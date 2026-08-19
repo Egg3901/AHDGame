@@ -8,6 +8,7 @@ import {
   calcPresidentPrimaryScore,
   primarySharePctSoftmax,
   effectivePartyInfluenceForPresidentialPrimary,
+  PRESIDENT_PRIMARY_PARTY_INFLUENCE_WEIGHT,
   buildPartyChairMaps,
   resolvePartyChairPrimaryRole,
   buildPartyChairIdSet,
@@ -141,11 +142,13 @@ describe("calcPresidentPrimaryScore", () => {
     const atScale = calcPresidentPrimaryScore(0, 0, 0, 0, 50, 100, 150);
     expect(atScale).toBeGreaterThan(below);
     // ...and it KEEPS paying off above the reference scale rather than pinning.
-    // partyInfluence 300 = 2× the scale → party component 60 (vs 30 at scale),
-    // and the extra 30 pts is exactly (300-150)/150 * WEIGHT(30) above `atScale`.
+    // partyInfluence 300 = 2× the scale, so the gain over `atScale` is exactly
+    // one more WEIGHT's worth: (300-150)/150 × WEIGHT. Asserted against the
+    // constant rather than a literal so a weight rebalance doesn't masquerade as
+    // a regression in the uncapped-linearity property this test actually guards.
     const overScale = calcPresidentPrimaryScore(0, 0, 0, 0, 50, 100, 300);
     expect(overScale).toBeGreaterThan(atScale);
-    expect(overScale - atScale).toBeCloseTo(30, 5);
+    expect(overScale - atScale).toBeCloseTo(PRESIDENT_PRIMARY_PARTY_INFLUENCE_WEIGHT, 5);
   });
 
   it("caps presidential favorability at 100 for scoring", () => {
@@ -226,13 +229,17 @@ describe("calcPresidentPrimaryScore", () => {
     expect(ids.has("state-chair")).toBe(true);
   });
 
-  it("weights national influence more than favorability", () => {
-    // Compare adding influence vs adding favorability from a baseline
+  it("weights favorability more than national influence", () => {
+    // Reversed 2026-08-19. Favorability was weighted 10 against national reach's
+    // 20, but favorability is the single most decisive variable in the GENERAL
+    // election — `approvalScalar` multiplies a candidate's entire vote, measured
+    // at ~0.45 vote-share points per favorability point. Pricing it below reach
+    // in the primary is what produced the 1956 nomination of a 4th-percentile
+    // challenger into an unwinnable general. See the weight constants' doc.
     const base = calcPresidentPrimaryScore(0, 0, 0, 0, 0, 0, 0);
     const withInfluence = calcPresidentPrimaryScore(0, 0, 0, 0, 0, 500, 0);
     const withFav = calcPresidentPrimaryScore(0, 0, 0, 0, 100, 0, 0);
-    // Influence coefficient (20) > favorability coefficient (10)
-    expect(withInfluence - base).toBeGreaterThan(withFav - base);
+    expect(withFav - base).toBeGreaterThan(withInfluence - base);
   });
 
   it("national influence keeps growing past 100 with diminishing returns (no hard cap)", () => {

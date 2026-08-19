@@ -8,13 +8,11 @@ import { ELECTION_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/ra
 import { ELECTORAL_VOTE_UNITS } from "@/lib/constants/states";
 import {
   STATE_ORG_COST_ACTIONS,
-  STATE_ORG_COST_FUNDS,
-  STATE_ORG_MAX_LEVEL,
   STATE_ORG_PER_STATE_TURN_CAP,
+  stateOrgLevelCost,
 } from "@/lib/electionEngine/constants";
 import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { localCampaignBalance } from "@/lib/currency/campaignBalance";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
@@ -22,7 +20,7 @@ import {
   unplayableTerritoryHomeError,
 } from "@/lib/elections/usPoliticalHome";
 import { isUsResidentPoliticalRegion } from "@/lib/elections/statehoodAdmission";
-import type { Character, CharacterStateOrg } from "@/lib/db/types";
+import type { Campaign, Character, CharacterStateOrg } from "@/lib/db/types";
 import { MongoServerError } from "mongodb";
 
 const VALID_US_STATES = new Set(ELECTORAL_VOTE_UNITS.map((u) => u.stateId));
@@ -55,13 +53,21 @@ const schema = z.object({
 /**
  * POST /api/political-operations/state-org/build
  *
- * Increments the authenticated US character's state-org level for the given
- * state by +1 (capped at STATE_ORG_MAX_LEVEL). Costs STATE_ORG_COST_ACTIONS
- * actions + STATE_ORG_COST_FUNDS (anchor units, forex-converted to local).
+ * Increments the authenticated US character's Campaign Presence level for the
+ * given state by +1. The level ladder is UNBOUNDED — what limits it is the
+ * escalating price (`stateOrgLevelCost`) against a bonus curve that flattens
+ * (`stateOrgBonusFraction`), so the marginal level gets rapidly worse value.
  *
- * Auth: requireAuthWithCharacter (must be a US character)
- * Errors: 400 (bad input / insufficient actions or funds / cap reached /
- *         throttled), 403 (non-US), 401, 409 (race), 500
+ * Paid from the CAMPAIGN's own pools (`campaigns.actions` / `campaigns.funds`),
+ * not the player's personal ones. Presence is campaign infrastructure and
+ * should compete with the media / ground-game / opposition-research trees for
+ * one budget. This also puts the price against the pot that actually holds the
+ * money: live presidential treasuries run $196M-$284M, against which the old
+ * flat $50k was ~0.02% and effectively free.
+ *
+ * Auth: requireAuthWithCharacter (must be a US character with a campaign)
+ * Errors: 400 (bad input / no campaign / insufficient campaign actions or
+ *         funds / throttled), 403 (non-US), 401, 409 (race), 500
  */
 export async function POST(request: Request) {
   try {
@@ -78,7 +84,7 @@ export async function POST(request: Request) {
     const character = auth.user.character;
     if (character.countryId !== "US") {
       return NextResponse.json(
-        forbidden("State organization is currently a US-only feature").toJson(),
+        forbidden("Campaign Presence is currently a US-only feature").toJson(),
         { status: 403 }
       );
     }
@@ -100,40 +106,61 @@ export async function POST(request: Request) {
 
     const freshChar = await db
       .collection<Character>("characters")
-      .findOne(
-        { _id: character._id },
-        { projection: { actions: 1, funds: 1, currencyBalances: 1, countryId: 1 } }
-      );
+      .findOne({ _id: character._id }, { projection: { countryId: 1 } });
     if (!freshChar) {
       return NextResponse.json(badRequest("Character not found").toJson(), { status: 404 });
     }
-    if (freshChar.actions < STATE_ORG_COST_ACTIONS) {
+
+    // Campaign Presence is campaign infrastructure and is paid for out of the
+    // campaign's own pools. A character with no active campaign has nothing to
+    // build presence FOR, so this is a clean 400 rather than a silent fallback
+    // onto personal action points.
+    const campaign = await db
+      .collection<Campaign>("campaigns")
+      .findOne(
+        { candidateId: character._id, status: { $ne: "archived" } },
+        { projection: { actions: 1, funds: 1 } }
+      );
+    if (!campaign) {
       return NextResponse.json(
         badRequest(
-          `Not enough actions — building state org costs ${STATE_ORG_COST_ACTIONS} (have ${freshChar.actions})`
+          "You need an active campaign to build Campaign Presence — it is funded by the campaign, not by you personally."
         ).toJson(),
         { status: 400 }
       );
     }
+    if ((campaign.actions ?? 0) < STATE_ORG_COST_ACTIONS) {
+      return NextResponse.json(
+        badRequest(
+          `Not enough campaign actions — building presence costs ${STATE_ORG_COST_ACTIONS} (campaign has ${campaign.actions ?? 0})`
+        ).toJson(),
+        { status: 400 }
+      );
+    }
+
+    // Price the NEXT level off the current one — presence escalates, so the
+    // cost is read before the gate and re-asserted inside the atomic update so
+    // a racing build cannot buy a level at a stale (cheaper) price.
+    const existing = await db
+      .collection<CharacterStateOrg>("characterStateOrg")
+      .findOne({ characterId: character._id, stateId }, { projection: { level: 1 } });
+    const currentLevel = existing?.level ?? 0;
+    const costFundsAnchor = stateOrgLevelCost(currentLevel);
 
     const forexEnabled = await isForexEnabled();
     const { rate: homeFxRate } = forexEnabled
       ? await loadCharacterFxRate(db, getHomeCurrency(freshChar))
       : { rate: 1 };
-    // STATE_ORG_COST_FUNDS is anchor-denominated. Convert to local for the
-    // gate + atomic $inc so both operate on currencyBalances.campaign.
-    const costFundsLocal = forexEnabled ? STATE_ORG_COST_FUNDS * homeFxRate : STATE_ORG_COST_FUNDS;
-    const balanceLocal = localCampaignBalance(freshChar, forexEnabled);
-    if (balanceLocal < costFundsLocal) {
+    // Anchor-denominated cost → the campaign treasury's own currency.
+    const costFundsLocal = forexEnabled ? costFundsAnchor * homeFxRate : costFundsAnchor;
+    if ((campaign.funds ?? 0) < costFundsLocal) {
       return NextResponse.json(
         badRequest(
-          `Not enough campaign funds — building state org costs $${STATE_ORG_COST_FUNDS.toLocaleString()}`
+          `Not enough campaign funds — level ${currentLevel + 1} in ${stateId} costs $${Math.round(costFundsAnchor).toLocaleString()} (campaign has $${Math.floor(campaign.funds ?? 0).toLocaleString()})`
         ).toJson(),
         { status: 400 }
       );
     }
-
-    const campaignFundsField = forexEnabled ? "currencyBalances.campaign" : "funds";
     const now = new Date();
     // The throttle is turn-based, not wall-clock. The current turn started at
     // the most recently processed turn boundary; a build that happened in the
@@ -154,16 +181,16 @@ export async function POST(request: Request) {
     try {
       await runWithOptionalTransaction(
         async (session) => {
-          const debitResult = await db.collection<Character>("characters").updateOne(
+          const debitResult = await db.collection<Campaign>("campaigns").updateOne(
             {
-              _id: character._id,
+              _id: campaign._id,
               actions: { $gte: STATE_ORG_COST_ACTIONS },
-              [campaignFundsField]: { $gte: costFundsLocal },
+              funds: { $gte: costFundsLocal },
             },
             {
               $inc: {
                 actions: -STATE_ORG_COST_ACTIONS,
-                [campaignFundsField]: -costFundsLocal,
+                funds: -costFundsLocal,
               },
               $set: { updatedAt: now },
             },
@@ -183,11 +210,14 @@ export async function POST(request: Request) {
                     { updatedAt: { $exists: false } },
                     { updatedAt: { $lt: throttleCutoff } },
                   ],
+                  // No level ceiling. This asserts the level is still the one
+                  // we priced, so a racing build cannot buy a level at a stale
+                  // (cheaper) price on the escalating cost curve.
                   $and: [
                     {
                       $or: [
                         { level: { $exists: false } },
-                        { level: { $lt: STATE_ORG_MAX_LEVEL } },
+                        { level: currentLevel },
                       ],
                     },
                   ],
@@ -206,16 +236,16 @@ export async function POST(request: Request) {
           if (!orgUpdate) throw new Error("ORG_RACE_OR_THROTTLE");
         },
         async () => {
-          const debitResult = await db.collection<Character>("characters").updateOne(
+          const debitResult = await db.collection<Campaign>("campaigns").updateOne(
             {
-              _id: character._id,
+              _id: campaign._id,
               actions: { $gte: STATE_ORG_COST_ACTIONS },
-              [campaignFundsField]: { $gte: costFundsLocal },
+              funds: { $gte: costFundsLocal },
             },
             {
               $inc: {
                 actions: -STATE_ORG_COST_ACTIONS,
-                [campaignFundsField]: -costFundsLocal,
+                funds: -costFundsLocal,
               },
               $set: { updatedAt: now },
             }
@@ -233,11 +263,14 @@ export async function POST(request: Request) {
                     { updatedAt: { $exists: false } },
                     { updatedAt: { $lt: throttleCutoff } },
                   ],
+                  // No level ceiling. This asserts the level is still the one
+                  // we priced, so a racing build cannot buy a level at a stale
+                  // (cheaper) price on the escalating cost curve.
                   $and: [
                     {
                       $or: [
                         { level: { $exists: false } },
-                        { level: { $lt: STATE_ORG_MAX_LEVEL } },
+                        { level: currentLevel },
                       ],
                     },
                   ],
@@ -251,12 +284,12 @@ export async function POST(request: Request) {
               );
             if (!orgUpdate) throw new Error("ORG_RACE_OR_THROTTLE");
           } catch (error) {
-            await db.collection<Character>("characters").updateOne(
-              { _id: character._id },
+            await db.collection<Campaign>("campaigns").updateOne(
+              { _id: campaign._id },
               {
                 $inc: {
                   actions: STATE_ORG_COST_ACTIONS,
-                  [campaignFundsField]: costFundsLocal,
+                  funds: costFundsLocal,
                 },
                 $set: { updatedAt: new Date() },
               }
@@ -270,14 +303,14 @@ export async function POST(request: Request) {
       const msg = (error as Error).message;
       if (msg === "INSUFFICIENT_RESOURCES") {
         return NextResponse.json(
-          badRequest("Your actions or campaign funds changed. Please try again.").toJson(),
+          badRequest("Your campaign's actions or funds changed. Please try again.").toJson(),
           { status: 409 }
         );
       }
       if (msg === "ORG_RACE_OR_THROTTLE") {
         return NextResponse.json(
           badRequest(
-            `Already built ${stateId} this turn (cap ${STATE_ORG_PER_STATE_TURN_CAP} per state per turn) or level cap reached`
+            `Already built ${stateId} this turn (cap ${STATE_ORG_PER_STATE_TURN_CAP} per state per turn), or another build landed first — reload for the current price`
           ).toJson(),
           { status: 409 }
         );

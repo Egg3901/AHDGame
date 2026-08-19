@@ -225,11 +225,46 @@ export async function initPresidentVoteTally(
 /**
  * Accumulate one turn of presidential votes across all electoral units.
  */
+/**
+ * Calibration hooks for {@link accumulatePresidentVoteTurn}. Production passes
+ * nothing and behaves exactly as before; the replay harness
+ * (`scripts/sim/incumbency-approval-replay.ts`) uses these to run the real
+ * engine twice over identical inputs and diff the result.
+ */
+export interface PresidentVoteTurnCalibration {
+  /** Compute everything, persist nothing, and return the payload. */
+  dryRun?: boolean;
+  /**
+   * Which approval feeds the directional incumbency driver.
+   *   "national" — legacy: one stored national approval, identical in every unit.
+   *   "state"    — the approval of the state the votes are being cast in.
+   * Defaults to "national" so production is unchanged.
+   */
+  incumbentApprovalSource?: "national" | "state";
+  /** Override `INCUMBENCY_APPROVAL_PIVOT` for this run. */
+  incumbencyApprovalPivot?: number;
+  /**
+   * Force a candidate's favorability to a given value, keyed by candidateId,
+   * applied after enrichment. Used to measure what a coordinated
+   * support/attack campaign is actually worth in votes, since favorability is
+   * a straight multiplier on the whole vote via `approvalScalar`.
+   */
+  favorabilityOverride?: Record<string, number>;
+}
+
+/** What a dry run hands back: enough to score winners and measure share deltas. */
+export interface PresidentVoteTurnDryRun {
+  totalVotes: Record<string, number>;
+  totalVotesByUnit: Record<string, Record<string, number>>;
+  candidateIds: string[];
+}
+
 export async function accumulatePresidentVoteTurn(
   electionId: ObjectId,
   turnNumber: number,
-  now: Date
-): Promise<void> {
+  now: Date,
+  calibration?: PresidentVoteTurnCalibration
+): Promise<PresidentVoteTurnDryRun | void> {
   const db = await getDb();
 
   const [tally, candidates, election] = await Promise.all([
@@ -329,6 +364,15 @@ export async function accumulatePresidentVoteTurn(
     includePartyPositions: true,
     countryId: (election.countryId ?? "US") as CountryId,
   });
+
+  // Calibration-only: force favorability post-enrichment so a harness can price
+  // a coordinated support/attack campaign. No-op in production.
+  if (calibration?.favorabilityOverride) {
+    for (const ec of enriched) {
+      const forced = calibration.favorabilityOverride[ec.candidateId];
+      if (typeof forced === "number") ec.favorability = forced;
+    }
+  }
 
   // Fetch campaign ground-game bonuses. Strategic Operations v2 splits this into
   // two channels: `swing` (+% in swing states, from starter + Field Offices) and
@@ -578,8 +622,14 @@ export async function accumulatePresidentVoteTurn(
         // Reg maps (third parties absent) degrade to the no-Reg baseline.
         regByParty,
         // Approval-scaled directional incumbency for the President's own race.
+        // Calibration: "state" swaps the single national number for this
+        // state's own government approval, so the incumbent is rewarded and
+        // punished where he actually governed well or badly. Production
+        // default stays "national" until the replay harness clears it.
         incumbentPartyId: incumbentExec?.partyId,
-        incumbentApproval: incumbentExec?.approval,
+        incumbentApproval:
+          calibration?.incumbentApprovalSource === "state" ? approvalPct : incumbentExec?.approval,
+        incumbencyApprovalPivot: calibration?.incumbencyApprovalPivot,
         incumbentTenurePenalty,
         incumbentConsecutiveTerms,
         votingSystem: "fptp",
@@ -710,6 +760,14 @@ export async function accumulatePresidentVoteTurn(
       })
     ),
   };
+
+  if (calibration?.dryRun) {
+    return {
+      totalVotes: newTotalVotes,
+      totalVotesByUnit: newTotalVotesByUnit,
+      candidateIds: enriched.map((ec) => ec.candidateId),
+    };
+  }
 
   await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
     { electionId },

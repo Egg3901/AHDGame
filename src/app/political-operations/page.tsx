@@ -74,7 +74,7 @@ export default function PoliticalOperationsPage() {
         {activeTab === "overview" && (
           <div>
             <p className="text-muted">
-              Build per-state organization, manage your active campaign, and watch your political
+              Build Campaign Presence, manage your active campaign, and watch your political
               footprint grow across cycles.
             </p>
             {data.activePresidentialCandidacy ? (

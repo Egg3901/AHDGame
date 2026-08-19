@@ -94,19 +94,26 @@ function clamp(v: number, lo: number, hi: number): number {
  * Returns `INCUMBENCY_BUDGET` (the flat fallback) when approval is missing /
  * NaN, so callers that don't supply approval are unaffected.
  */
-export function approvalAdjustedIncumbencyBudget(approval: number | undefined): number {
+export function approvalAdjustedIncumbencyBudget(
+  approval: number | undefined,
+  /**
+   * Pivot override, for A/B calibration runs only. Production passes nothing
+   * and gets {@link INCUMBENCY_APPROVAL_PIVOT}. Threaded from
+   * `DistributeVotesOptions.incumbencyApprovalPivot` so the replay harness can
+   * sweep the pivot without patching the constant.
+   */
+  pivotOverride?: number
+): number {
   if (approval == null || !Number.isFinite(approval)) return INCUMBENCY_BUDGET;
+  const pivot =
+    pivotOverride != null && Number.isFinite(pivotOverride)
+      ? pivotOverride
+      : INCUMBENCY_APPROVAL_PIVOT;
   const a = clamp(approval, 0, 100);
-  if (a >= INCUMBENCY_APPROVAL_PIVOT) {
-    return Math.min(
-      INCUMBENCY_SHIELD_MAX,
-      (a - INCUMBENCY_APPROVAL_PIVOT) * INCUMBENCY_APPROVAL_SLOPE
-    );
+  if (a >= pivot) {
+    return Math.min(INCUMBENCY_SHIELD_MAX, (a - pivot) * INCUMBENCY_APPROVAL_SLOPE);
   }
-  return -Math.min(
-    INCUMBENCY_DRAG_MAX,
-    (INCUMBENCY_APPROVAL_PIVOT - a) * INCUMBENCY_APPROVAL_SLOPE
-  );
+  return -Math.min(INCUMBENCY_DRAG_MAX, (pivot - a) * INCUMBENCY_APPROVAL_SLOPE);
 }
 
 /**
@@ -250,7 +257,10 @@ function incumbencyDriver(
     // popular. Folded into this driver — the incumbent gets the net, its
     // challengers the negation, so a net-negative (fatigue > shield) actively
     // helps challengers.
-    const budget = approvalAdjustedIncumbencyBudget(options?.incumbentApproval);
+    const budget = approvalAdjustedIncumbencyBudget(
+      options?.incumbentApproval,
+      options?.incumbencyApprovalPivot
+    );
     const net = budget - (options?.incumbentTenurePenalty ?? 0);
     if (pj === incumbentPartyId) return net;
     if (pi === incumbentPartyId) return -net;
