@@ -1,7 +1,12 @@
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import { ApiError, badRequest, forbidden, notFound } from "@/lib/api/errors";
 import { assertSameCountry, isSameCountry } from "@/lib/api/sameCountry";
-import { isCampaignManagerUser, isCampaignNomineeUser } from "@/lib/campaigns/access";
+import {
+  isCampaignManagerUser,
+  isCampaignNomineeUser,
+  legacyManagersAsList,
+  MAX_CAMPAIGN_MANAGERS,
+} from "@/lib/campaigns/access";
 import { isCampaignEligibleElection } from "@/lib/campaigns/isCampaignEligible";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { campaignAnchorToLocal, campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
@@ -587,21 +592,24 @@ export async function appointCampaignManager(params: {
     user.character?._id ?? null
   );
   if (!isNominee && !isAdmin) {
-    throw forbidden("Only the candidate or an admin may appoint the campaign manager");
+    throw forbidden("Only the candidate or an admin may appoint campaign managers");
   }
 
   const now = new Date();
+  const existing = campaign.managers ?? legacyManagersAsList(campaign);
+
   if (managerCharacterId === null) {
-    await db
-      .collection<Campaign>("campaigns")
-      .updateOne(
-        { _id: campaign._id },
-        { $set: { managerId: null, managerCharacterId: null, updatedAt: now } }
-      );
+    await db.collection<Campaign>("campaigns").updateOne(
+      { _id: campaign._id },
+      {
+        $set: { managerId: null, managerCharacterId: null, managers: [], updatedAt: now },
+      }
+    );
     return {
-      message: "Campaign manager cleared",
+      message: "Campaign managers cleared",
       managerCharacterId: null,
       managerId: null,
+      managers: [],
     };
   }
 
@@ -627,21 +635,47 @@ export async function appointCampaignManager(params: {
     message: "Campaign managers must be from the same country as the campaign",
   });
 
+  // Toggle semantics: appointing an existing manager removes them, so one
+  // endpoint covers add and remove without a second verb.
+  const alreadyIdx = existing.findIndex((m) => m.characterId.equals(managerOid));
+  let next: NonNullable<Campaign["managers"]>;
+  let message: string;
+  if (alreadyIdx >= 0) {
+    next = existing.filter((_, i) => i !== alreadyIdx);
+    message = `${managerChar.name} removed as campaign manager`;
+  } else {
+    if (existing.length >= MAX_CAMPAIGN_MANAGERS) {
+      throw badRequest(
+        `A campaign can have at most ${MAX_CAMPAIGN_MANAGERS} managers. Remove one before appointing another.`
+      );
+    }
+    next = [...existing, { userId: managerChar.userId, characterId: managerOid, appointedAt: now }];
+    message = `${managerChar.name} appointed as campaign manager`;
+  }
+
+  // Mirror the first manager onto the legacy pair so un-migrated readers and
+  // the existing UI still resolve someone, and no backfill is needed.
+  const head = next[0] ?? null;
   await db.collection<Campaign>("campaigns").updateOne(
     { _id: campaign._id },
     {
       $set: {
-        managerId: managerChar.userId,
-        managerCharacterId: managerOid,
+        managers: next,
+        managerId: head?.userId ?? null,
+        managerCharacterId: head?.characterId ?? null,
         updatedAt: now,
       },
     }
   );
 
   return {
-    message: `${managerChar.name} appointed as campaign manager`,
-    managerCharacterId: managerOid.toString(),
-    managerId: managerChar.userId.toString(),
+    message,
+    managerCharacterId: head?.characterId?.toString() ?? null,
+    managerId: head?.userId?.toString() ?? null,
+    managers: next.map((m) => ({
+      userId: m.userId.toString(),
+      characterId: m.characterId.toString(),
+    })),
   };
 }
 
