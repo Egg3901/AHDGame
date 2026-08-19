@@ -9,6 +9,7 @@ import {
   lotPrice,
   MATERIEL_SHARE_OF_UNIT_COST,
 } from "./arsenal";
+import { MILITARY_COUNTRY_SCALE } from "@/lib/constants/military";
 
 // Ticket #1134 pacing calibration, pinned against the live world so the dial cannot drift
 // silently. `MATERIEL_SHARE_OF_UNIT_COST` is the ONE lever that moves arsenal pacing: a unit's
@@ -19,7 +20,10 @@ describe("arsenal pacing", () => {
   // 383,748,809 of procurement per turn, and a lot priced at 383,748,809 under the old 0.35
   // share. One lot per turn, exactly what the original calibration targeted.
   const US_PROCUREMENT_PER_TURN = 383_748_809;
-  const US_ANCHORED_GDP = 383_748_809 / (0.35 / 1_000);
+  // Back-derived from the observed price, THROUGH the country scale. `lotPrice` multiplies by
+  // `MILITARY_COUNTRY_SCALE` (2.6 for the US), so an anchor recovered without it would have
+  // the scale applied twice and quote 570,141,088 instead of 219,285,034.
+  const US_ANCHORED_GDP = 383_748_809 / (0.35 / 1_000) / MILITARY_COUNTRY_SCALE.US;
 
   it("prices the live US lot at the reworked share", () => {
     expect(lotPrice("US", US_ANCHORED_GDP)).toBe(219_285_034);
