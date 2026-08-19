@@ -67,10 +67,7 @@ export const COUNTRY_SECTOR_SEED_MULTIPLIER: Partial<
 };
 
 /** The downstream seed multiplier for one (country, sector); 1 when unset. */
-export function countrySectorSeedMultiplier(
-  countryId: CountryId,
-  sectorType: string
-): number {
+export function countrySectorSeedMultiplier(countryId: CountryId, sectorType: string): number {
   const value = COUNTRY_SECTOR_SEED_MULTIPLIER[countryId]?.[sectorType as CorporationType];
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 1;
 }
