@@ -142,19 +142,18 @@ export interface ClearingSeller {
  * clears cheapest-first exactly as before. Omitting `loyaltyById` (flag off) is
  * byte-identical to the original cheapest-first behaviour.
  *
- * `offerCapById` caps how many of a seller's units may actually reach the book
- * (exclusivity: a supplier that sells a commodity ONLY under contract keeps its
- * surplus off the open market). It deliberately does NOT change `s.units`,
- * which stays the seller's real offered volume and therefore the soldFraction
- * DENOMINATOR — an exclusive supplier that produced twice its contracted volume
- * must report soldFraction ≈ 0.5, not ≈ 1.
+ * A supply agreement is ADDITIVE, not restrictive: `contractedUnitsById`
+ * reserves the buyer's volume off the top (guaranteed-sold), and everything the
+ * supplier produces ABOVE the contract clears on the open market like any other
+ * unit. There is no surplus blackhole — a supplier that contracts 50 of 100
+ * still offers the other 50 to the book, so `soldFraction` reflects real total
+ * sales (contracted + open-market fill), never `contracted / produced`.
  */
 export function clearCommodityMarket(
   demandUnits: number,
   sellers: readonly ClearingSeller[],
   loyaltyById?: ReadonlyMap<string, number>,
-  contractedUnitsById?: ReadonlyMap<string, number>,
-  offerCapById?: ReadonlyMap<string, number>
+  contractedUnitsById?: ReadonlyMap<string, number>
 ): Map<string, number> {
   const result = new Map<string, number>();
   let remaining = Math.max(0, demandUnits);
@@ -165,9 +164,7 @@ export function clearCommodityMarket(
   const offerUnits = new Map<string, number>();
   for (const s of sellers) {
     filledUnits.set(s.id, 0);
-    const cap = offerCapById?.get(s.id);
-    const offered = Math.max(0, s.units);
-    offerUnits.set(s.id, typeof cap === "number" ? Math.max(0, Math.min(offered, cap)) : offered);
+    offerUnits.set(s.id, Math.max(0, s.units));
   }
 
   // ── Contracted pre-pass (private supply agreements) ────────────────────────
@@ -189,10 +186,9 @@ export function clearCommodityMarket(
   // ── Loyal-slice pre-pass ───────────────────────────────────────────────────
   if (loyaltyById && remaining > 0) {
     // Eligibility and the reservation both read `offerUnits`, not `s.units`, so
-    // the contracted pre-pass above and any exclusivity offer-cap are respected
-    // (a seller cannot reserve units it has already sold or withheld). With
-    // neither contracts nor caps in play `offerUnits === s.units`, so this is
-    // byte-identical to the original slice.
+    // the contracted pre-pass above is respected (a seller cannot reserve units
+    // it has already sold). With no contracts in play `offerUnits === s.units`,
+    // so this is byte-identical to the original slice.
     const eligible = sellers.filter(
       (s) => (loyaltyById.get(s.id) ?? 0) >= SLICE_NOISE_FLOOR && (offerUnits.get(s.id) ?? 0) > 0
     );
@@ -349,12 +345,6 @@ export function computeClearingFactors(args: {
   contractedByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
   /** sectorId → owning corpId, required to resolve contracts to sectors. */
   sectorCorpId?: ReadonlyMap<string, string>;
-  /**
-   * Supply-agreement exclusivity: `${corpId}:${commodity}` keys for which the
-   * supplier sells that commodity ONLY under contract. Its non-contracted
-   * surplus is capped off the open book (no loyalty/cheapest-first, no market).
-   */
-  exclusiveByCorpCommodity?: ReadonlySet<string>;
   /**
    * Optional settlement sink: supplier corpId → commodity → contracted units
    * that ACTUALLY cleared this pass. The caller uses it to settle the bilateral
@@ -550,14 +540,10 @@ export function computeClearingFactors(args: {
 
       // Contracted allocation: distribute each supplier corp's contracted volume
       // for this commodity across its selling sectors, proportional to their
-      // (post-normalization) offered units, capped at each sector's units.
+      // (post-normalization) offered units, capped at each sector's units. This
+      // is a RESERVATION, not a ceiling: the contracted units are guaranteed-sold
+      // to the buyer, and the sector's surplus above them still clears openly.
       let contractedUnitsById: Map<string, number> | undefined;
-      // Exclusivity offer caps. Kept OUT of `s.units` on purpose: `s.units` is the
-      // soldFraction denominator (and the produced-units figure the contract
-      // shortfall check reads), so writing the contracted share back into it made
-      // an exclusive supplier that produced far more than it contracted report a
-      // ~100% fill rate and hid its unsold surplus from every downstream consumer.
-      let exclusiveCapById: Map<string, number> | undefined;
       if (args.contractedByCorpCommodity && args.sectorCorpId) {
         contractedUnitsById = new Map<string, number>();
         const unitsByCorp = new Map<string, { total: number; sellers: ClearingSeller[] }>();
@@ -576,19 +562,11 @@ export function computeClearingFactors(args: {
           const contracted = allUnits > 0 ? contractedAll * (e.total / allUnits) : 0;
           if (contracted <= 0 || e.total <= 0) continue;
           const take = Math.min(contracted, e.total);
-          const exclusive = args.exclusiveByCorpCommodity?.has(`${corpId}:${commodity}`) ?? false;
           for (const s of e.sellers) {
             const sectorShare = (take * s.units) / e.total;
             contractedUnitsById.set(s.id, sectorShare);
             contractedCorpBySector.set(s.id, corpId);
             contractedShareBySector.set(s.id, sectorShare);
-            // Exclusive: cap the units that reach the book at the contracted share
-            // so the surplus never reaches loyalty/cheapest-first or the open
-            // market. The cap lives in its own map — see exclusiveCapById above.
-            if (exclusive) {
-              exclusiveCapById ??= new Map<string, number>();
-              exclusiveCapById.set(s.id, sectorShare);
-            }
           }
         }
       }
@@ -597,8 +575,7 @@ export function computeClearingFactors(args: {
         demandForPass,
         groupSellers,
         loyaltyBySectorId,
-        contractedUnitsById,
-        exclusiveCapById
+        contractedUnitsById
       );
       for (const [id, f] of groupSold) sold.set(id, f);
     }

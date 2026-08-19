@@ -5,14 +5,13 @@
  * does NOT hold for the contract paths, and this file exists so the deviation
  * is a decision rather than an accident.
  *
- * Trace: `computeClearingFactors` gates the contracted pre-pass, the loyal-slice
- * `offerUnits` rework and the exclusivity offer-cap on
- * `contractedByCorpCommodity` / `sectorCorpId` / `exclusiveByCorpCommodity`.
- * turn/corporation/index.ts supplies all three whenever `supplyAgreementsEnabled`
+ * Trace: `computeClearingFactors` gates the contracted pre-pass and the
+ * loyal-slice `offerUnits` rework on `contractedByCorpCommodity` / `sectorCorpId`.
+ * turn/corporation/index.ts supplies both whenever `supplyAgreementsEnabled`
  * is on, with NO plants condition (only `producedUnitsOut` and `plantsEnabled`
  * carry one). So in CAPITAL mode with contracts on, fills move: a contracted
- * supplier is served before the loyal slice and before cheapest-first, and an
- * exclusive supplier's surplus never reaches the open book.
+ * supplier is served before the loyal slice and before cheapest-first. The
+ * contract is a RESERVATION, not a cap — the supplier's surplus still clears.
  *
  * The tests below pin that intended behavior with plantsEnabled OFF.
  */
@@ -28,7 +27,6 @@ const ratios: ReadonlyMap<CommodityType, number> = new Map([[commodity, 1]]);
 /** Two sectors of equal size and equal posture, so only contracts can separate them. */
 function run(opts: {
   contracted?: number;
-  exclusive?: boolean;
   loyalty?: [number, number];
   demand: number;
   supply: number;
@@ -66,7 +64,6 @@ function run(opts: {
       opts.contracted != null
         ? new Map([["corpA", new Map([[commodity, opts.contracted]])]])
         : undefined,
-    exclusiveByCorpCommodity: opts.exclusive ? new Set([`corpA:${commodity}`]) : undefined,
     contractSettlementOut: opts.settlementOut,
   });
 }
@@ -87,17 +84,18 @@ describe("clearing: contracts change numbers in CAPITAL mode (not byte-identical
     expect(withContract.get("sA")!.soldFraction).toBeGreaterThan(even.get("sA")!.soldFraction);
   });
 
-  it("caps an exclusive supplier's open-market sales at its contracted share", () => {
-    // Exclusive: corpA sells ONLY under contract. Everything beyond the
-    // contracted units is withheld from the book, so its fill can never exceed
-    // the contracted share of what it offered.
-    const exclusive = run({ demand: 10000, supply: 1000, contracted: 40, exclusive: true });
-    const open = run({ demand: 10000, supply: 1000, contracted: 40 });
-    expect(exclusive.get("sA")!.soldFraction).toBeLessThan(open.get("sA")!.soldFraction);
-    // The non-exclusive neighbour is unharmed by the cap (it can only gain).
-    expect(exclusive.get("sB")!.soldFraction).toBeGreaterThanOrEqual(
-      open.get("sB")!.soldFraction - 1e-9
+  it("does not blackhole a contracted supplier's surplus (additive)", () => {
+    // A contract reserves 40 units for the buyer, but demand is ample. The
+    // supplier's surplus above 40 still clears on the open market, so a contract
+    // never drops its fill below the identical uncontracted neighbour's — the
+    // ticket-1138 regression where an exclusive cap pinned fill to
+    // contracted/produced.
+    const withContract = run({ demand: 10000, supply: 1000, contracted: 40 });
+    expect(withContract.get("sA")!.soldFraction).toBeGreaterThanOrEqual(
+      withContract.get("sB")!.soldFraction - 1e-9
     );
+    // Ample demand ⇒ everything offered clears for the contracted supplier too.
+    expect(withContract.get("sA")!.soldFraction).toBeCloseTo(1, 6);
   });
 
   it("reserves contracted units before the loyal slice, not after", () => {
