@@ -62,8 +62,8 @@ describe("lotProductionCost", () => {
   // Strategy no longer sets the LEVEL of cost, only how hard the market squeezes it. Before
   // #1134 the level swung 40x across production lines for no reason a player could see.
   it("does not let the production line change the level of cost", () => {
-    const calm = ["standard", "heavy_armor", "munitions", "aerospace"].map(
-      (id) => lotProductionCost(id, PRICE)!
+    const calm = ["standard", "heavy_armor", "munitions", "aerospace"].map((id) =>
+      lotProductionCost(id, PRICE)!
     );
     for (const cost of calm) expect(cost).toBeCloseTo(calm[0], 6);
   });
@@ -120,8 +120,7 @@ describe("the lot unit's base-price basis", () => {
     for (const strategyId of strategies) {
       const perLot = lotInputCost(strategyId)!;
       const lots = rawLotsFromSector({ strategyId, revenue });
-      const demandShare = SECTOR_STRATEGIES.defense
-        .find((s) => s.id === strategyId)!
+      const demandShare = SECTOR_STRATEGIES.defense.find((s) => s.id === strategyId)!
         .demand as Record<string, number>;
       const shareSum = Object.values(demandShare).reduce((a, b) => a + b, 0);
       expect(lots * perLot).toBeCloseTo(revenue * shareSum, 3);
@@ -137,10 +136,7 @@ describe("contractLotProductionCost", () => {
   const UK_PRICE = 9_285_111;
 
   it("settles a pre-fix contract on the old economics", () => {
-    const cost = contractLotProductionCost(
-      { pricePerLot: UK_PRICE },
-      "heavy_armor"
-    )!;
+    const cost = contractLotProductionCost({ pricePerLot: UK_PRICE }, "heavy_armor")!;
     expect(cost).toBe(legacyLotProductionCost("heavy_armor")!);
     // The old take: the supplier keeps essentially the whole contract. That is the bug, and
     // for THIS contract it is also the deal the player signed.
