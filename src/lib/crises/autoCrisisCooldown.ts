@@ -29,6 +29,31 @@ export function isOnCooldown(
   return currentTurn - row.lastSpawnTurn < cooldownTurns;
 }
 
+/** True when the template/scope is armed (never spawned, or cleared since). */
+export function isArmed(
+  cooldowns: Map<string, CrisisAutoCooldown>,
+  templateKey: string,
+  scopeKey: string
+): boolean {
+  const row = cooldowns.get(key(templateKey, scopeKey));
+  return row?.armed !== false;
+}
+
+/** Re-arm a template/scope after its trigger condition has cleared. */
+export async function setArmed(
+  db: Db,
+  cooldowns: Map<string, CrisisAutoCooldown>,
+  templateKey: string,
+  scopeKey: string,
+  armed: boolean
+): Promise<void> {
+  const _id = key(templateKey, scopeKey);
+  const row = cooldowns.get(_id);
+  if (!row || row.armed === armed) return;
+  await db.collection<CrisisAutoCooldown>(COLLECTION).updateOne({ _id }, { $set: { armed } });
+  cooldowns.set(_id, { ...row, armed });
+}
+
 /** Stamp the last-spawn turn for a template/scope. Updates the in-memory map too
  *  so a single turn pass won't double-spawn before the DB reload. */
 export async function stampCooldown(
@@ -40,12 +65,26 @@ export async function stampCooldown(
 ): Promise<void> {
   const _id = key(templateKey, scopeKey);
   const now = new Date();
-  await db
-    .collection<CrisisAutoCooldown>(COLLECTION)
-    .updateOne(
-      { _id },
-      { $set: { templateKey, scopeKey, lastSpawnTurn: currentTurn, updatedAt: now } },
-      { upsert: true }
-    );
-  cooldowns.set(_id, { _id, templateKey, scopeKey, lastSpawnTurn: currentTurn, updatedAt: now });
+  await db.collection<CrisisAutoCooldown>(COLLECTION).updateOne(
+    { _id },
+    {
+      $set: {
+        templateKey,
+        scopeKey,
+        lastSpawnTurn: currentTurn,
+        // Disarm on spawn. Only a cleared condition re-arms it.
+        armed: false,
+        updatedAt: now,
+      },
+    },
+    { upsert: true }
+  );
+  cooldowns.set(_id, {
+    _id,
+    templateKey,
+    scopeKey,
+    lastSpawnTurn: currentTurn,
+    armed: false,
+    updatedAt: now,
+  });
 }
