@@ -109,7 +109,10 @@ export function lotsWithinTurnSpendCap(input: {
     input.countryTurnCap - countryPaidThisTurn,
     input.supplierTurnCap - input.supplierPaidThisTurn
   );
-  const lots = remaining > 0 ? Math.floor(remaining / pricePerLot) : 0;
+  // Nudge by a relative epsilon before flooring. The accrual is a chain of float divisions
+  // (48e9 x 0.45 / 48 lands on 449999999.99999994, not 450000000), so a supplier sitting
+  // exactly on its cap would otherwise lose a whole lot to representation error.
+  const lots = remaining > 0 ? Math.floor(remaining / pricePerLot + 1e-9) : 0;
   if (lots > 0) return lots;
   return countryPaidThisTurn <= 0 ? 1 : 0;
 }
