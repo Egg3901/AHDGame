@@ -143,7 +143,7 @@ export default function MarketMoneyPanel({
                     .join(", ")}.`
                 : "The share of what you make that buyers actually take. Units that do not sell cost you money and earn nothing.") +
               (deliveryLimitedShown
-                ? ` ${fmtPct(deliveryLimited)} of what you offered never reached a buyer because freight out of this state ran out, not because demand did.`
+                ? ` Separately, ${fmtPct(deliveryLimited)} of your output cannot be shipped out of this state, so it can only sell to buyers here; building logistics capacity out of the state is what lets more of it reach outside markets.`
                 : "")
             }
           />
@@ -203,8 +203,8 @@ export default function MarketMoneyPanel({
           value={fmtUnits(unsold)}
           tone={unsold > 0 ? "warning" : "muted"}
           help={
-            deliveryLimitedShown
-              ? `Units you made that earned nothing back. About ${fmtUnits(deliveryLimitedUnits)} of them had a buyer and no freight to carry them.`
+            unsold > 0 && deliveryLimitedShown
+              ? `Units you made that earned nothing back. About ${fmtUnits(Math.min(deliveryLimitedUnits, unsold))} of them had buyers in other states that freight out of here could not reach.`
               : "Units you made that nobody bought. You paid to make them and earned nothing back."
           }
         />
@@ -214,10 +214,10 @@ export default function MarketMoneyPanel({
           {fmtUnits(unsold)} units went unsold.{" "}
           {deliveryLimitedShown ? (
             <>
-              About {fmtUnits(deliveryLimitedUnits)} of them ({fmtPct(deliveryLimited)} of what you
-              offered) could not be delivered: freight out of this state is full, so the output
-              never reached the buyers who wanted it. Cutting production does not fix that. Build or
-              expand logistics capacity in this state, or put your next plants nearer the buyers.
+              About {fmtUnits(Math.min(deliveryLimitedUnits, unsold))} of them had buyers in other
+              states, but freight out of this state could not carry them there. Cutting production
+              does not fix that. Build or expand logistics capacity in this state, or put your next
+              plants nearer the buyers.
             </>
           ) : (plants.demandGapUnits ?? 0) >= 1 ? (
             <>
