@@ -156,7 +156,7 @@ const URB_COLORS = ["#38bdf8", "#7dd3fc", "#4ade80"];
 function fmtPopulation(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
-  return n.toLocaleString();
+  return n.toLocaleString("en-US");
 }
 
 function computeAvgTurnout(turnoutData: TurnoutResponse | null): number | null {
