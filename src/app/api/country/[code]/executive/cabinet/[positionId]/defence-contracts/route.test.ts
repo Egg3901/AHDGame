@@ -446,17 +446,21 @@ describe("POST defence-contracts - the obligation", () => {
       ownershipState: "stateOwned",
     });
     const { POST } = await import(ROUTE);
-    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 10 }), params);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 20 }), params);
     expect(res.status).toBe(200);
-    expect((await res.json()).contract.lotsOrdered).toBe(10);
+    expect((await res.json()).contract.lotsOrdered).toBe(20);
   });
 
+  // 20 lots straddles the two caps deliberately: this window runs to 36 country lots, so 20 is
+  // inside the state-owned allowance above and outside the 12-lot private third here. Both
+  // figures rose with the ticket #1134 pacing change (a lot prices at 0.20 of the old 0.35
+  // share, so the same money buys 1.75x the lots) while the MONEY cap behind them is unchanged.
   it("still caps a private supplier at one third of the window", async () => {
     const { POST } = await import(ROUTE);
-    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 10 }), params);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 20 }), params);
     expect(res.status).toBe(409);
     const body = await res.json();
-    expect(body.maximumLots).toBeLessThan(10);
+    expect(body.maximumLots).toBeLessThan(20);
     expect(body.error).toMatch(/at most/i);
   });
 

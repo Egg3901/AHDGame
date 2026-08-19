@@ -176,7 +176,12 @@ function stubDb(l: Ledger): Db {
 // A realistic struck price: comfortably above what a lot costs to build, the way the award
 // band guarantees at signing. A price below cost is now a real (and separately tested) outcome
 // rather than the default, since live input prices can overtake a contract after it is signed.
-const PRICE = Math.ceil(lotProductionCost("heavy_armor")! * 1.5);
+// Cost is a share of price now (ticket #1134), so the anchor leads and cost follows. Kept in
+// the same order of magnitude the struck price always had here: this file tests MONEY
+// CONSERVATION, and a ten-lot order large enough to trip the per-turn payout cap would deliver
+// eight lots and fail on the wrong subject.
+const ANCHOR = 100_000;
+const PRICE = Math.ceil(lotProductionCost("heavy_armor", ANCHOR)! * 1.5);
 
 function contract(over: Record<string, unknown> = {}) {
   return {
@@ -192,6 +197,10 @@ function contract(over: Record<string, unknown> = {}) {
     amountPaid: 0,
     productionCostPaid: 0,
     assignedFactories: 4,
+    // A contract awarded under the current rules. Without the stamp it would be grandfathered
+    // onto the pre-#1134 cost model (see `contractLotProductionCost`), which is covered by its
+    // own boundary tests; this file is about the economics new orders settle on.
+    costBasis: "margin",
     status: "active",
     ...over,
   };
@@ -220,7 +229,7 @@ describe("defence procurement money conservation", () => {
     // Build cost is graded to the delivered grade (grade 0 here: nothing researched), the
     // same scale the contract's price band charged.
     expect(r.productionCost).toBeCloseTo(
-      lotProductionCost("heavy_armor")! * GRADE_PRICE_SCALE[0] * r.lots,
+      lotProductionCost("heavy_armor", PRICE)! * GRADE_PRICE_SCALE[0] * r.lots,
       -1
     );
     // Legs net to zero: the appropriation's outlay is exactly the supplier's gain plus the
@@ -342,8 +351,21 @@ describe("a contract the commodity market has overtaken", () => {
   function underwater(over: Record<string, unknown> = {}) {
     const l = ledger({ balance: 1_000_000_000 });
     // Struck well BELOW what a lot now costs to build.
+    //
+    // Necessarily a PRE-#1134 contract. Under the margin basis build cost is
+    // `price x min(0.85 x index, MAX_COST_SHARE_OF_PRICE)` and that share is capped below 1,
+    // so a shortage squeezes the supplier's margin toward the floor but can never take it
+    // negative. Going underwater is now only reachable on the grandfathered cost model, where
+    // cost was computed with no reference to the price at all - which is exactly the case the
+    // 37 live contracts are settling under, so the guard still has to work.
     l.contracts = [
-      contract({ lotsOrdered: 10, pricePerLot: 1_000, encumberedAmount: 10 * 1_000, ...over }),
+      contract({
+        lotsOrdered: 10,
+        pricePerLot: 1_000,
+        encumberedAmount: 10 * 1_000,
+        costBasis: undefined,
+        ...over,
+      }),
     ];
     l.encumbered = 10 * 1_000;
     l.commodityPrices = [
@@ -372,6 +394,21 @@ describe("a contract the commodity market has overtaken", () => {
 
   // The guard that keeps a half-applied move out of the repair queue: a supplier with no cash
   // cannot deliver into a debit it cannot fund, so the sweep refuses BEFORE anything moves.
+  // The flip side, and a real property of the rework: a contract awarded under the margin
+  // basis cannot be driven underwater by the commodity market at all, because its cost is a
+  // capped share of its own price. The worst a shortage can do is take the supplier down to
+  // the minimum contract margin.
+  it("cannot drive a margin-basis contract underwater however dear inputs get", async () => {
+    const l = underwater({ costBasis: "margin" });
+    l.corpCash = 0;
+    const r = await applyDefenceDeliveries(stubDb(l), "US", 1953, 3, 5);
+
+    expect(r.lots).toBe(10);
+    expect(r.productionCost).toBeLessThan(r.paid);
+    expect(l.corpCash).toBeGreaterThan(0);
+    expect(l.corpCash).toBe(r.paid - r.productionCost);
+  });
+
   it("refuses to deliver when the supplier cannot fund the loss", async () => {
     const l = underwater();
     l.corpCapital = 0;

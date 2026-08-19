@@ -381,11 +381,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
       // The award form needs both halves: who can build, and what a lot costs. The price is
       // computed the same way the award route computes it, off the same anchored GDP, so the
       // quote the minister approves is the price they are actually billed.
-      suppliers = await listDefenceSuppliers(db, countryId, liveYear ?? 0);
+      // Price first: a lot's build cost is a share of what it sells for (ticket #1134), so
+      // the picker cannot quote a cost until the anchored price is known.
       lotPricePerLot = lotPrice(
         countryId,
         militaryPriceAnchor(budget?.gdp, budget?.militaryPriceBaselineGdp)
       );
+      suppliers = await listDefenceSuppliers(db, countryId, liveYear ?? 0, lotPricePerLot ?? null);
       if (lotPricePerLot != null && lotPricePerLot > 0) {
         const defenseLine = resolveDefenseLineFrom(budget ?? null);
         suppliers = await Promise.all(

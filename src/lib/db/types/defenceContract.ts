@@ -110,6 +110,23 @@ export interface DefenceContract {
     /** Favorability the minister paid for it, for the order book to state plainly. */
     favorabilityPenalty: number;
   };
+  /**
+   * Which economics settle this contract's deliveries (ticket #1134).
+   *
+   * `"margin"` means build cost is a share of `pricePerLot` at `TARGET_SUPPLIER_MARGIN`, so a
+   * delivery converts the appropriation into materiel and pays the supplier a normal return.
+   *
+   * **ABSENT means the contract predates that fix and settles under the old economics**, where
+   * cost was a raw commodity bill unrelated to the price and the supplier kept nearly the whole
+   * contract. That is deliberate and it is a rule, not an exception for one order: a player who
+   * signed under the old terms keeps them for the lots they have left. A repair never takes
+   * away what a player already holds.
+   *
+   * Absence is the marker precisely so no backfill is needed. Every contract awarded before the
+   * deploy lacks the field and is grandfathered by construction, including any awarded between
+   * the merge and the release.
+   */
+  costBasis?: "margin";
   status: DefenceContractStatus;
   awardedTurn: number;
   updatedAt?: Date;
