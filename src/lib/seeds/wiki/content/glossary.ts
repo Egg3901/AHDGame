@@ -14,7 +14,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Approval rating**: A country-level aggregate of public opinion. In the US, derived from the President's favorability. In UK/JP/DE, derived from the PM/Chancellor's favorability. Tracked historically and visible on country pages.
 
-**Archetype**: One of 12 voter demographic groups used in vote appeal and turnout calculations. Each archetype is a combination of Layer 1 attributes (race, age, education, wealth, ideology) with a defined economic/social position and a natural turnout rate.
+**Cell**: One combination of census buckets (for example white, mature, no college, middle income) used in vote appeal and turnout calculations. Each cell has an economic/social position averaged from its buckets and a turnout rate blended from theirs. Cells are what the vote engine counts.
 
 **Cabinet**: The executive advisory body appointed by the President (US), Prime Minister (UK, JP), or Chancellor (DE). Cabinet positions grant certain powers (the Secretary of the Treasury can authorize FX Reserve Transfers). US Cabinet members are confirmed by the Senate; parliamentary cabinets are appointed directly after government formation.
 
@@ -64,7 +64,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Home state / region**: The sub-national unit (US state, UK nation, DE Land, JP prefecture) where your character is based. Determines which elections you can enter, where you can canvass, and where your in-state party org applies.
 
-**Ideology grid**: The two-axis system (econ × social) used to position characters, parties, NPPs, and voter archetypes. Alignment scoring uses Manhattan distance on this grid.
+**Ideology grid**: The two-axis system (econ × social) used to position characters, parties, NPPs, and voter groups. Alignment scoring uses Manhattan distance on this grid.
 
 **Infamy**: A permanent accumulated stat increased by attacks, whip defiance, and certain actions. High infamy reduces NPP endorsement success rates and affects some approval metrics. Does not reset.
 
@@ -72,7 +72,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Kokkai**: The Japanese national legislature, composed of the Shūgiin (lower) and Sangiin (upper) houses.
 
-**Layer 1**: The base demographic categories used for canvassing targeting: race, age, education, wealth, ideology. These feed into the 12-archetype voter model used for vote appeal.
+**Layer 1**: The census dimensions a region carries and the buckets inside them. In the US: race, age, education, wealth (plus ideology, which canvassing can target). They are combined into the cells used for vote appeal and turnout.
 
 **Majority**: The seat count required to control a legislative chamber or form a government. US House: 218; UK Commons: 326; DE Bundestag: 316; JP Shūgiin: 233.
 

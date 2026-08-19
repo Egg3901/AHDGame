@@ -145,7 +145,7 @@ export function DeliveryLimitedPill({
   return (
     <span
       className={`inline-flex items-center rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0 text-[9px] font-bold uppercase tracking-wider text-warning ${className}`.trim()}
-      title={`Freight-limited. ${formatFillPercent(fraction)} of what this sector offered had no freight to carry it, so it went unsold with buyers still wanting it. More freight capacity out of this state, or capacity built nearer the buyers, is the fix. Producing less is not.`}
+      title={`Freight-limited. ${formatFillPercent(fraction)} of this sector's output has no freight to carry it out of this state, so it can only reach buyers here. Whatever local demand does not take goes unsold. Add freight capacity out of this state, or site capacity nearer the buyers, to reach outside markets. Cutting production is not the fix.`}
     >
       Freight
     </span>

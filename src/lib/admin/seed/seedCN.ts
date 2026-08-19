@@ -128,7 +128,7 @@ export async function seedCNDemographics(
       cnRegionDemographics = buildModelRegionDemographics(
         model,
         full?.positions ?? undefined,
-        full ? { turnout: full.turnout, composition: full.composition } : undefined
+        full ? { turnout: full.turnout } : undefined
       );
       log(
         `[CN] Using Layer-1-derived demographics (${cnRegionDemographics.length} regions, era ${era})`

@@ -430,7 +430,12 @@ function BankingHero({ primary }: { primary: HubCentralBank | undefined }) {
 
               <div className="grid grid-cols-2 border-t border-card-border lg:border-l lg:border-t-0">
                 <HeroRate label="Prime rate" value={primary.primeRate} />
-                <HeroRate label="Savings APY" value={primary.savingsApyPercent} divided />
+                <HeroRate
+                  label="Savings APY"
+                  value={primary.savingsApyPercent}
+                  hint="Half the real rate: prime minus inflation"
+                  divided
+                />
               </div>
             </div>
             <Link
@@ -453,10 +458,12 @@ function BankingHero({ primary }: { primary: HubCentralBank | undefined }) {
 function HeroRate({
   label,
   value,
+  hint,
   divided = false,
 }: {
   label: string;
   value: number;
+  hint?: string;
   divided?: boolean;
 }) {
   return (
@@ -467,6 +474,7 @@ function HeroRate({
       <p className="mt-1 font-mono text-xl font-bold tabular-nums text-foreground">
         {formatRatePercent(value)}
       </p>
+      {hint && <p className="mt-1 text-[10px] leading-tight text-muted">{hint}</p>}
     </div>
   );
 }
@@ -505,7 +513,11 @@ function CentralBankCard({ bank }: { bank: HubCentralBank }) {
       </div>
       <dl className="mt-5 grid grid-cols-2 divide-x divide-card-border rounded-xl border border-card-border bg-background/45">
         <RateMetric label="Prime rate" value={formatRatePercent(bank.primeRate)} />
-        <RateMetric label="Savings APY" value={formatRatePercent(bank.savingsApyPercent)} />
+        <RateMetric
+          label="Savings APY"
+          value={formatRatePercent(bank.savingsApyPercent)}
+          hint="Half the real rate: prime minus inflation"
+        />
       </dl>
     </Link>
   );
@@ -583,10 +595,12 @@ function PrivateBankCard({ bank }: { bank: HubPrivateBank }) {
 function RateMetric({
   label,
   value,
+  hint,
   compact = false,
 }: {
   label: string;
   value: string;
+  hint?: string;
   compact?: boolean;
 }) {
   return (
@@ -597,6 +611,7 @@ function RateMetric({
       >
         {value}
       </dd>
+      {hint && <dd className="mt-1 text-[10px] leading-tight text-muted">{hint}</dd>}
     </div>
   );
 }

@@ -30,7 +30,7 @@ Canvassing targets one state at a time. For most characters that's your home sta
 
 ## 5. Don't skip demographics early
 
-The demographics page shows your state's voter archetype breakdown: which groups are large, which have high turnout, which lean your way. Reading it once before your first campaign tells you which groups to target with ads and which to canvass. Ignoring demographics means your ad budget goes in random directions.
+The demographics page shows your state's electorate breakdown: which groups are large, which have high turnout, which lean your way. Reading it once before your first campaign tells you which groups to target with ads and which to canvass. Ignoring demographics means your ad budget goes in random directions.
 
 ---
 

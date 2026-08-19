@@ -4,6 +4,11 @@ vi.mock("@/lib/db/collections", () => ({
   getStateDemographicTurnoutCollection: vi.fn(),
 }));
 
+// The non-US branch resolves the country's era from the world's seed preset.
+vi.mock("@/lib/db/collections/gameState", () => ({
+  getGameStatePresetOrDefault: vi.fn(async () => "2019-default"),
+}));
+
 const findOne = vi.fn();
 
 async function setTurnoutDoc(doc: unknown) {
@@ -47,34 +52,43 @@ describe("buildRegionTurnoutResponse", () => {
     expect(res.lastDecayApplied).toBeNull();
   });
 
-  it("returns the voter-group bucket (not US Layer-1) for an archetype country", async () => {
+  it("returns the country's own census buckets (not US Layer-1) for a non-US region", async () => {
     await setTurnoutDoc({
       _id: "JP-13",
       countryId: "JP",
-      modifiers: { jp_voterGroups: { komeito_faithful: 3 } },
+      modifiers: { age: { senior: 3 } },
     });
 
     const { buildRegionTurnoutResponse } = await import("./regionTurnout");
     const res = await buildRegionTurnoutResponse("JP-13", "JP");
 
-    expect(res.turnout.jp_voterGroups).toBeDefined();
+    // JP's model dimensions, not the US ones, and not a `jp_voterGroups` block.
+    expect(res.turnout.urbanization).toBeDefined();
     expect(res.turnout.race).toBeUndefined();
-    expect(res.turnout.jp_voterGroups.komeito_faithful).toEqual({
-      baseline: 72,
-      modifier: 3,
-      actual: 75,
-    });
+    expect(res.turnout.jp_voterGroups).toBeUndefined();
+    expect(res.turnout.age.senior).toEqual({ baseline: 72, modifier: 3, actual: 75 });
   });
 
-  it("returns voter-group baselines with zero modifiers when an archetype region has no doc", async () => {
+  it("returns bucket baselines with zero modifiers when a non-US region has no doc", async () => {
     await setTurnoutDoc(null);
 
     const { buildRegionTurnoutResponse } = await import("./regionTurnout");
     const res = await buildRegionTurnoutResponse("JP-99", "JP");
 
-    expect(res.turnout.jp_voterGroups).toBeDefined();
-    const firstGroup = Object.values(res.turnout.jp_voterGroups)[0];
-    expect(firstGroup.modifier).toBe(0);
-    expect(firstGroup.actual).toBe(firstGroup.baseline);
+    expect(res.turnout.age).toBeDefined();
+    const firstBucket = Object.values(res.turnout.age)[0];
+    expect(firstBucket.modifier).toBe(0);
+    expect(firstBucket.actual).toBe(firstBucket.baseline);
+  });
+
+  it("accepts an explicit preset instead of reading gameState", async () => {
+    await setTurnoutDoc(null);
+
+    const { buildRegionTurnoutResponse } = await import("./regionTurnout");
+    const { getGameStatePresetOrDefault } = await import("@/lib/db/collections/gameState");
+    const res = await buildRegionTurnoutResponse("JP-13", "JP", "2019-default");
+
+    expect(getGameStatePresetOrDefault).not.toHaveBeenCalled();
+    expect(res.turnout.age).toBeDefined();
   });
 });
