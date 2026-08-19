@@ -90,7 +90,7 @@ export async function POST(request: Request) {
       const regionDemographics = buildModelRegionDemographics(
         model,
         full?.positions ?? undefined,
-        full ? { turnout: full.turnout, composition: full.composition } : undefined
+        full ? { turnout: full.turnout } : undefined
       );
 
       // Pre-reseed snapshot
@@ -153,7 +153,6 @@ export async function POST(request: Request) {
         layer1Positions,
         positions: override?.positions,
         turnout: override?.turnout,
-        composition: override?.composition,
       })
     );
 

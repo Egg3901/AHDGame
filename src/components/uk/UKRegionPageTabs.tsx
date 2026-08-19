@@ -52,9 +52,8 @@ interface UKRegionPageTabsProps {
   calculatedLeans: { economicLean: number; socialLean: number } | null;
   turnoutData?: {
     stateId: string;
-    turnout: {
-      uk_voterGroups?: Record<string, { baseline: number; modifier: number; actual: number }>;
-    };
+    /** census dimension → bucket → cell (see `buildRegionTurnoutResponse`). */
+    turnout: Record<string, Record<string, { baseline: number; modifier: number; actual: number }>>;
     lastUpdated: string | null;
     lastDecayApplied: string | null;
   } | null;

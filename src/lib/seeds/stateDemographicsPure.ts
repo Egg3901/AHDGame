@@ -1,36 +1,29 @@
 import { getEraComposition, getEraPositions } from "./demographicCategories";
 import type { EraId } from "./presetSelector";
 
-/** Authored global override of the era's composition/position/turnout tables,
- *  consumed by the gated seed path (see DemographicConfigOverride). Per-state
- *  Layer-1 `share` is never overridden here — it stays census-driven. */
+/** Authored global override of the era's position/turnout tables, consumed by
+ *  the gated seed path (see DemographicConfigOverride). Per-state Layer-1
+ *  `share` is never overridden here; it stays census-driven. The archetype
+ *  composition table is no longer overridable: it is derived from the census,
+ *  and the Position Editor tabs that authored it were removed. */
 export interface Layer1SeedOverride {
   positions?: Record<string, Record<string, { economicLean: number; socialLean: number }>>;
   turnout?: Record<string, Record<string, number>>;
-  composition?: Record<
-    string,
-    { weights: { dim: string; key: string; w: number }[]; civicMultiplier: number }
-  >;
 }
 
 /**
- * Resolve the era composition with any authored overrides applied: composition
- * is replaced per-archetype, baseline turnout rates are merged per dim/key.
- * Returns the static era composition untouched when there is nothing to apply.
+ * Resolve the era composition with any authored turnout override applied:
+ * baseline turnout rates are merged per dim/key. Returns the static era
+ * composition untouched when there is nothing to apply.
  */
 function resolveComposition(
   era: EraId,
   override?: Layer1SeedOverride
 ): ReturnType<typeof getEraComposition> {
   const comp = getEraComposition(era);
-  if (!override?.turnout && !override?.composition) return comp;
+  if (!override?.turnout) return comp;
 
-  const voterGroupComposition = override.composition
-    ? ({
-        ...comp.voterGroupComposition,
-        ...override.composition,
-      } as typeof comp.voterGroupComposition)
-    : comp.voterGroupComposition;
+  const voterGroupComposition = comp.voterGroupComposition;
 
   let turnoutRates = comp.turnoutRates;
   if (override.turnout) {

@@ -13,11 +13,6 @@ const positionSchema = z.object({
   economicLean: z.number().min(-5).max(5),
   socialLean: z.number().min(-5).max(5),
 });
-const weightSchema = z.object({ dim: z.string(), key: z.string(), w: z.number() });
-const compositionSchema = z.object({
-  weights: z.array(weightSchema),
-  civicMultiplier: z.number(),
-});
 const bodySchema = z.object({
   country: z.enum(COUNTRIES),
   era: z.enum(ERAS),
@@ -25,7 +20,6 @@ const bodySchema = z.object({
   // Global (per country+era) overrides authored alongside positions. Per-state
   // Layer-1 share is census-driven and intentionally not persisted here.
   turnout: z.record(z.string(), z.record(z.string(), z.number())).optional(),
-  composition: z.record(z.string(), compositionSchema).optional(),
 });
 
 // POST /api/admin/position-editor/apply — persist authored global Layer-1 positions for a country+era.
@@ -39,7 +33,7 @@ export async function POST(request: Request) {
     if (!parsed.success)
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
 
-    const { country, era, positions, turnout, composition } = parsed.data;
+    const { country, era, positions, turnout } = parsed.data;
     const db = await getDb();
     const doc: DemographicConfigOverride = {
       _id: `${country}:${era}`,
@@ -47,11 +41,10 @@ export async function POST(request: Request) {
       era: era as EraId,
       positions: positions as DemographicConfigOverride["positions"],
       ...(turnout ? { turnout } : {}),
-      ...(composition ? { composition } : {}),
       updatedAt: new Date(),
       updatedBy: auth.admin.username,
     };
-    // Replace the whole doc so clearing turnout/composition on re-apply unsets them.
+    // Replace the whole doc so clearing turnout on re-apply unsets it.
     await db
       .collection<DemographicConfigOverride>("demographicConfigOverrides")
       .replaceOne({ _id: doc._id }, doc, { upsert: true });

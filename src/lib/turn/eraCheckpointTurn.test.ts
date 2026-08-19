@@ -144,6 +144,16 @@ const DECIDED_DIVERGED_CASE: DocketCase = {
   outcome: "diverged",
 };
 
+/** `demographicDefaults.layer1PositionOverrides[dim][bucket][axis]`, or 0. */
+function overlay(
+  doc: StateDemographics,
+  dim: string,
+  bucket: string,
+  axis: "economicLean" | "socialLean"
+): number {
+  return doc.layer1PositionOverrides?.[dim]?.[bucket]?.[axis] ?? 0;
+}
+
 describe("processEraCheckpointsTurn", () => {
   it("does nothing before the checkpoint's start turn", async () => {
     const { db, collections } = createFakeDb({
@@ -157,8 +167,8 @@ describe("processEraCheckpointsTurn", () => {
     const result = await processEraCheckpointsTurn(db, 10, "US");
     expect(result).toEqual({ checkpointsActive: 0, statesUpdated: 0 });
     expect(
-      collections.stateDemographics.__store.get("AL")!.groups.rural_traditionalists.economicLean
-    ).toBe(-2.0);
+      collections.demographicDefaults.__store.get("AL")!.layer1PositionOverrides
+    ).toBeUndefined();
   });
 
   it("does nothing in a non-1953 world, even at a turn where the fallback would fire", async () => {
@@ -176,11 +186,11 @@ describe("processEraCheckpointsTurn", () => {
     const result = await processEraCheckpointsTurn(db, 5000, "US");
     expect(result).toEqual({ checkpointsActive: 0, statesUpdated: 0 });
     expect(
-      collections.stateDemographics.__store.get("AL")!.groups.rural_traditionalists.economicLean
-    ).toBe(-2.0);
+      collections.demographicDefaults.__store.get("AL")!.layer1PositionOverrides
+    ).toBeUndefined();
   });
 
-  it("moves the targeted Deep South archetype leans rightward (historically correct direction) across the simulated span when uncontested", async () => {
+  it("moves the targeted Deep South buckets rightward (historically correct direction) across the simulated span when uncontested", async () => {
     const { db, collections } = createFakeDb({
       docketCases: [DECIDED_AFFIRMED_CASE],
       legislationTypes: [],
@@ -198,47 +208,52 @@ describe("processEraCheckpointsTurn", () => {
     // fixture's docket), so the turn-by-turn RESULT COUNTS are no longer a
     // reliable proxy for "the Southern checkpoint specifically stopped
     // moving" — those other checkpoints' fallback windows can overlap this
-    // span. Track AL's `rural_traditionalists` value directly instead.
+    // span. Track AL's `age:mature` overlay directly instead: the Southern
+    // realignment is the only registered checkpoint that targets it.
     let valueAtWindowClosePlusOne: number | undefined;
     for (let turn = startTurn; turn <= endTurn + 2; turn++) {
       await processEraCheckpointsTurn(db, turn, "US");
       if (turn === endTurn + 1) {
-        valueAtWindowClosePlusOne =
-          collections.stateDemographics.__store.get("AL")!.groups.rural_traditionalists
-            .economicLean;
+        valueAtWindowClosePlusOne = overlay(
+          collections.demographicDefaults.__store.get("AL")!,
+          "age",
+          "mature",
+          "economicLean"
+        );
       }
     }
 
-    const al = collections.stateDemographics.__store.get("AL")!;
-    const alDefaults = collections.demographicDefaults.__store.get("AL")!;
+    const al = collections.demographicDefaults.__store.get("AL")!;
 
-    // Rural traditionalists and evangelicals moved solidly Republican (positive)...
-    expect(al.groups.rural_traditionalists.economicLean).toBeGreaterThan(0);
-    expect(al.groups.rural_traditionalists.socialLean).toBeGreaterThan(0);
-    expect(al.groups.evangelicals.economicLean).toBeGreaterThan(0);
-    // ...while the Black-voter-carrying union_trades archetype consolidated
-    // further Democratic (negative), matching the historical split.
-    expect(al.groups.union_trades.economicLean).toBeLessThan(-4.0);
+    // White, no-college and mature Southern voters moved Republican
+    // (positive) on both axes...
+    expect(overlay(al, "race", "white", "economicLean")).toBeGreaterThan(0);
+    expect(overlay(al, "race", "white", "socialLean")).toBeGreaterThan(0);
+    expect(overlay(al, "education", "no_college", "economicLean")).toBeGreaterThan(0);
+    expect(overlay(al, "age", "mature", "economicLean")).toBeGreaterThan(0);
+    // ...while low-income Southern voters consolidated further Democratic
+    // (negative), matching the historical split. (race:black also carries the
+    // national Civil Rights Act checkpoint's own pull, so wealth:low is the
+    // clean read of the Southern checkpoint's negative half.)
+    expect(overlay(al, "wealth", "low", "economicLean")).toBeLessThan(0);
 
-    // The seeded baseline (demographicDefaults) moved together with the live
-    // doc — this is what makes it a genuine base-value shift, not a decaying
-    // overlay: nothing pulls it back once the checkpoint's window ends.
-    expect(alDefaults.groups.rural_traditionalists.economicLean).toBeCloseTo(
-      al.groups.rural_traditionalists.economicLean,
-      6
-    );
+    // The Southern checkpoint's own authored totals landed in full on the
+    // buckets it targets (age:mature is exclusive to this checkpoint).
+    const matureEcon = SOUTHERN_REALIGNMENT_CHECKPOINT.targets.find(
+      (t) => t.dim === "age" && t.bucket === "mature" && t.axis === "economicLean"
+    )!;
+    expect(overlay(al, "age", "mature", "economicLean")).toBeCloseTo(matureEcon.totalShift, 6);
 
     // A state outside the Southern checkpoint's target list is untouched ON
-    // THIS ARCHETYPE (other national checkpoints target different
-    // archetypes/buckets, not `rural_traditionalists`).
-    const vt = collections.stateDemographics.__store.get("VT")!;
-    expect(vt.groups.rural_traditionalists.economicLean).toBe(-2.0);
+    // THIS BUCKET (other national checkpoints target different buckets).
+    const vt = collections.demographicDefaults.__store.get("VT")!;
+    expect(overlay(vt, "age", "mature", "economicLean")).toBe(0);
 
     // After the Southern checkpoint's own window closes, ITS contribution to
-    // AL's rural_traditionalists lean stops changing (scoped to this
-    // checkpoint/archetype — not a global "no checkpoint anywhere is active"
+    // AL's age:mature overlay stops changing (scoped to this
+    // checkpoint/bucket, not a global "no checkpoint anywhere is active"
     // claim, since the registry now holds several others).
-    expect(al.groups.rural_traditionalists.economicLean).toBeCloseTo(valueAtWindowClosePlusOne!, 6);
+    expect(overlay(al, "age", "mature", "economicLean")).toBeCloseTo(valueAtWindowClosePlusOne!, 6);
   });
 
   it("is beatable: a sustained opposing state law holds the targeted state against the tide", async () => {
@@ -283,12 +298,17 @@ describe("processEraCheckpointsTurn", () => {
       await processEraCheckpointsTurn(db, turn, "US");
     }
 
-    const al = collections.stateDemographics.__store.get("AL")!;
+    const al = collections.demographicDefaults.__store.get("AL")!;
     // The sustained countervailing law didn't just slow the drift — with a
     // per-turn shift several times the checkpoint's own rate, it held the
-    // state at (or past) its starting position instead of the ~+2.0 it would
-    // otherwise have reached.
-    expect(al.groups.rural_traditionalists.economicLean).toBeLessThanOrEqual(-2.0);
+    // targeted buckets at (or past) their starting position (0, no
+    // pre-existing overlay) instead of the full authored shift they would
+    // otherwise have reached. The law is authored against the
+    // `rural_traditionalists` archetype and still nets against bucket targets,
+    // because the turn processor projects every active legislative archetype
+    // shift through `archetypeValuesToBuckets` before netting.
+    expect(overlay(al, "education", "no_college", "economicLean")).toBeLessThanOrEqual(0);
+    expect(overlay(al, "age", "mature", "economicLean")).toBeLessThanOrEqual(0);
   });
 
   it("delays the checkpoint to the fallback turn when the trigger case diverges from history", async () => {
@@ -305,8 +325,8 @@ describe("processEraCheckpointsTurn", () => {
     const result = await processEraCheckpointsTurn(db, 49, "US");
     expect(result).toEqual({ checkpointsActive: 0, statesUpdated: 0 });
     expect(
-      collections.stateDemographics.__store.get("AL")!.groups.rural_traditionalists.economicLean
-    ).toBe(-2.0);
+      collections.demographicDefaults.__store.get("AL")!.layer1PositionOverrides
+    ).toBeUndefined();
 
     // It DOES start at the fallback turn. (`>=1`, not `===1`: the registry
     // holds several other checkpoints whose OWN fallback windows can overlap
@@ -535,14 +555,13 @@ describe("processEraCheckpointsTurn reaches the granular vote path", () => {
 });
 
 /**
- * BUCKET-kind targets (`{ dim, bucket }` rather than `groupId`) — the new
- * capability this ticket adds: direct Layer-1 census-bucket targeting for
- * precise demographic-by-geography effects ("southern whites", "midwestern
- * lower class") with no archetype-proxy fuzziness. Unlike an ARCHETYPE
- * target, a bucket target writes ONLY `layer1PositionOverrides` — there is no
- * archetype to carry it on the legacy live doc — so these tests read the
- * overlay directly (and feed it through the real granular substrate), rather
- * than asserting on `stateDemographics.groups`.
+ * BUCKET-kind targets (`{ dim, bucket }`): direct Layer-1 census-bucket
+ * targeting for precise demographic-by-geography effects ("southern whites",
+ * "midwestern lower class") with no archetype-proxy fuzziness. A bucket
+ * target writes ONLY `layer1PositionOverrides` (there is no archetype to
+ * carry it on the legacy live doc), so these tests read the overlay directly
+ * (and feed it through the real granular substrate), rather than asserting on
+ * `stateDemographics.groups`.
  */
 describe("processEraCheckpointsTurn — BUCKET-kind targets (direct Layer-1 targeting)", () => {
   const REYNOLDS_CASE: DocketCase = {
@@ -649,8 +668,8 @@ describe("processEraCheckpointsTurn — BUCKET-kind targets (direct Layer-1 targ
     // (statute, not gated by a docket case) — starts directly at its
     // fallbackStartTurn. Deliberately avoids Deep South states here: those
     // ALSO receive a race:black contribution from SOUTHERN_REALIGNMENT_
-    // CHECKPOINT's own union_trades archetype target (which maps onto
-    // race:black too, at weight 0.25 in ARCHETYPE_BUCKET_MAP) — correct
+    // CHECKPOINT (which carries a
+    // race:black target of its own), correct
     // layered behavior, but it would muddy THIS assertion's point, which is
     // that the national checkpoint alone already reaches every region.
     const states = ["OH", "CA", "NY", "TX"]; // Midwest, West, Northeast, South (non-Deep-South)

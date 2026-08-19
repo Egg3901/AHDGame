@@ -6,7 +6,7 @@ For the overall election structure see [Election Mechanics](/wiki/election-mecha
 
 ## The vote pool
 
-Each election has a total vote pool derived from the state's **demographics**: 12 voter archetypes, each with a size (share of total), a turnout rate, and policy leans on the economic and social axes.
+Each election has a total vote pool derived from the state's **demographics**: the census is combined into voter segments, each with a size (share of total), a turnout rate, and policy leans on the economic and social axes.
 
 Per-turn allocation of the pool:
 

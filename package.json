@@ -15,7 +15,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check . --cache --cache-location node_modules/.cache/prettier/.prettier-cache",
     "prepare": "husky",
-    "generate:composition": "npx tsx scripts/generate-composition-weights.ts",
+    "generate:composition": "npx tsx scripts/generate-composition-weights.ts && npx prettier --write src/lib/demographics/compositionWeights.generated.ts",
     "seed": "npx tsx scripts/seed/seed.ts",
     "seed:reset": "npx tsx scripts/seed/seed.ts --reset",
     "seed:all": "npm run seed && npm run seed:legislation && npm run seed:policies && npm run seed:demographics && npm run seed:uk",

@@ -1,4 +1,5 @@
 import { getAllVoterArchetypeOptions } from "@/lib/demographics/countryDemographics";
+import { getAllTurnoutTargetOptions } from "@/lib/demographics/turnoutTargets";
 
 export const POLICY_DOMAINS = [
   "economic",
@@ -95,10 +96,20 @@ export const METRIC_OPTIONS: Record<string, string[]> = {
   ],
 };
 
-// Demographic groups for targeting — every country's voter archetypes (US 12 +
-// the six seeded countries), sourced from the demographics SSOT so the admin
-// dropdown stays complete and uses canonical seed IDs.
+/**
+ * Voter archetypes, kept ONLY to resolve a display name for data already
+ * authored against them (`archetypeApprovals` on existing bills). Nothing new
+ * is authored against this list. See `DEMOGRAPHIC_BUCKETS` below.
+ */
 export const DEMOGRAPHIC_GROUPS = getAllVoterArchetypeOptions();
+
+/**
+ * Census buckets for demographic targeting: the vocabulary the electorate is
+ * actually made of, and the same one the Address and canvassing pickers use.
+ * The wizard is not scoped to a country, so this is the union across every
+ * seeded country, deduped by id.
+ */
+export const DEMOGRAPHIC_BUCKETS = getAllTurnoutTargetOptions();
 
 // Committee names by policy domain
 export const COMMITTEE_NAMES: Record<string, string> = {

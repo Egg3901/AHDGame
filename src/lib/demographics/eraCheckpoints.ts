@@ -40,15 +40,15 @@
  * WHAT A CHECKPOINT DOES
  * -----------------------
  * A checkpoint declares a signed, dated, historically-anchored pull on one or
- * more (state, voter archetype, axis) targets. While active it moves BOTH the
- * live `stateDemographics.groups[id].economicLean/socialLean` AND the seeded
- * `demographicDefaults` snapshot for the same field, by the same amount, every
- * turn (see `eraCheckpointTurn.ts`). Moving both together means:
+ * more (state, census bucket, axis) targets. While active it accumulates a
+ * durable per-(dimension, bucket) delta on
+ * `demographicDefaults.layer1PositionOverrides` every turn (see
+ * `eraCheckpointTurn.ts`), which means:
  *
- *   1. it genuinely relocates the group's resting point (the literal "base
+ *   1. it genuinely relocates the bucket's resting point (the literal "base
  *      value" the owner asked for), not a capped deviation from it;
- *   2. the existing v2 decay-to-baseline channel never fights it (baseline
- *      and live move in lockstep, so the distance it decays toward is ~0);
+ *   2. the existing v2 decay-to-baseline channel never fights it (the overlay
+ *      is never decayed, and legislation decays toward its own baseline);
  *   3. a player's own legislation (the SAME `demographicEffects` v2 channel)
  *      still applies its normal ± overlay on top, and can out-pull the
  *      checkpoint (see `applyCounterPressure` below) — gravity, not rails.
@@ -60,44 +60,29 @@
  * era/state Layer-1 CENSUS POSITION TABLES
  * (`DEMOGRAPHIC_POSITIONS`/`STATE_POSITION_OVERRIDES` in
  * `demographicCategories.ts`), not from `stateDemographics.groups[id]` — so
- * archetype-level moves above are invisible to it, and that substrate's own
+ * an archetype-level move is invisible to it, and that substrate's own
  * "legislation is still influential" signal (`live − demographicDefaults`,
  * used for ordinary bills) necessarily stays ~0 for a checkpoint by design
  * (point 2 above), so it can't carry a checkpoint's pull either. A checkpoint
- * therefore ALSO accumulates a separate, durable per-(dimension, bucket)
- * delta on `demographicDefaults.layer1PositionOverrides` (see
- * `Layer1PositionOverlay` in `src/lib/db/types/demographics.ts`), projected
- * from the SAME netted archetype delta via `archetypeValuesToBuckets` (the
- * shared archetype→census-bucket map that already diffuses archetype-keyed
- * turnout/approval effects onto cells) — see `eraCheckpointTurn.ts` for where
- * this is written and `granularElectorate.ts`'s `applyPositionOverlay` for
- * where it's read: applied directly to the resolved position table BEFORE
- * cell derivation, so it moves the actual base value a cell's lean is
- * averaged from, not a post-hoc fold on the derived electorate. This overlay
- * is never decayed, exactly like the archetype-level move. With the flag OFF,
- * this overlay is simply never read — the archetype-level move above is the
- * entire visible effect, unchanged.
+ * therefore targets `demographicDefaults.layer1PositionOverrides` directly
+ * (see `Layer1PositionOverlay` in `src/lib/db/types/demographics.ts`). See
+ * `eraCheckpointTurn.ts` for where this is written and
+ * `granularElectorate.ts`'s `applyPositionOverlay` for where it's read:
+ * applied directly to the resolved position table BEFORE cell derivation, so
+ * it moves the actual base value a cell's lean is averaged from, not a
+ * post-hoc fold on the derived electorate. This overlay is never decayed.
  */
 import type { CountryId } from "@/lib/constants/countries";
 import { US_STATES } from "@/lib/constants";
 import { yearToTurn } from "@/lib/scotus/turnConversion";
 
 /**
- * One (state-set, target, axis) pull of a checkpoint. Exactly one of `groupId`
- * or (`dim` + `bucket`) must be set — this is a loose union (both fields
- * optional, checked at runtime by `eraCheckpointTurn.ts`) rather than a
- * discriminated one so existing archetype-target object literals (no `kind`
- * field) keep compiling unchanged.
+ * One (state-set, target, axis) pull of a checkpoint. `dim` + `bucket` must
+ * both be set; a target that names neither is ignored at runtime by
+ * `eraCheckpointTurn.ts`. Archetype (`groupId`) targets used to be the other
+ * half of this union and have been converted to their bucket equivalents, so
+ * a checkpoint now only ever moves Layer-1 census buckets.
  *
- *  - `groupId` (ARCHETYPE target, the original mechanism): a voter-archetype
- *    id from `demographicCategories.ts` (e.g. "rural_traditionalists"). Moves
- *    the live `stateDemographics.groups[id]` AND `demographicDefaults.groups[id]`
- *    directly, and projects onto Layer-1 census buckets via
- *    `ARCHETYPE_BUCKET_MAP` for the granular path — see `eraCheckpointTurn.ts`.
- *    Necessarily an approximation for a bucket-shaped ask ("southern whites"
- *    is not literally the `rural_traditionalists` archetype, just correlated
- *    with it) but keeps the LEGACY (non-granular) vote path moving too, since
- *    that path only ever reads archetype-keyed leans.
  *  - `dim` + `bucket` (BUCKET target, direct Layer-1 targeting): the exact
  *    census dimension/bucket vocabulary from `DEMOGRAPHIC_POSITIONS`
  *    (`src/lib/seeds/demographicCategories.ts`) — `dim` is one of
@@ -109,14 +94,10 @@ import { yearToTurn } from "@/lib/scotus/turnConversion";
  *    "midwestern lower class" is `{ dim: "wealth", bucket: "low", stateIds:
  *    MIDWEST_STATES }` — with no archetype-proxy fuzziness. Moves ONLY the
  *    durable `layer1PositionOverrides[dim][bucket][axis]` overlay (there is no
- *    archetype to carry it on the legacy live doc); reaches the granular vote
- *    path exactly like an archetype target's projected bucket delta does, but
- *    with no approximation. `stateIds` doubles as scope: a region's state list
+ *    archetype to carry it on the legacy live doc). `stateIds` doubles as scope: a region's state list
  *    for a REGIONAL effect, or `ALL_US_STATES` for a NATIONAL one.
  */
 export interface EraCheckpointTarget {
-  /** ARCHETYPE target — see the interface doc comment. Mutually exclusive with `dim`/`bucket`. */
-  groupId?: string;
   /** BUCKET target — the Layer-1 census dimension (e.g. "race", "wealth"). Paired with `bucket`. */
   dim?: string;
   /** BUCKET target — the bucket key within `dim` (e.g. "white", "low"). Paired with `dim`. */
@@ -225,12 +206,11 @@ const DEEP_SOUTH_STATES = ["AL", "MS", "SC", "LA", "GA", "AR"] as const;
  * the Democratic Solid South; the 1964 Civil Rights Act / 1965 Voting Rights
  * Act complete the decisive break (Goldwater carries the Deep South in '64 —
  * the first Republican sweep of the region since Reconstruction). Modeled as
- * two coupled pulls: white Southern conservatives (rural_traditionalists,
- * evangelicals) drift Republican; Black voters (carried in this era's
- * union_trades archetype composition, which is the only 1953 archetype with a
- * race:black weight — see `ERA_COMPOSITIONS["1953"]` — consolidate further
- * Democratic. No named officeholders: the trigger is a docket case key, the
- * targets are archetypes/states, matching this project's seeds-are-structure
+ * two coupled pulls: white Southern conservatives (race:white,
+ * education:no_college, age:mature) drift Republican; Black and low-income
+ * Southern voters (race:black, wealth:low) consolidate further Democratic.
+ * No named officeholders: the trigger is a docket case key, the targets are
+ * census buckets and states, matching this project's seeds-are-structure
  * convention.
  */
 export const SOUTHERN_REALIGNMENT_CHECKPOINT: EraCheckpoint = {
@@ -250,51 +230,103 @@ export const SOUTHERN_REALIGNMENT_CHECKPOINT: EraCheckpoint = {
   // term — the sharpest, best-documented span of the defection.
   durationTurns: 15 * 48,
   historicalWindow: { startYear: 1954, endYear: 1969 },
+  // BUCKET targets only. These were authored as three archetype targets
+  // (`rural_traditionalists`, `evangelicals`, `union_trades`) plus an
+  // additive `race:white` pair; the archetype halves have been folded into
+  // the buckets they already projected onto at runtime, using the same
+  // ARCHETYPE_BUCKET_MAP weights the engine applied:
+  //   rural_traditionalists = education:no_college .5, race:white .3, age:mature .2
+  //   evangelicals          = race:white .6, education:no_college .4
+  //   union_trades          = education:no_college .4, wealth:low .35, race:black .25
+  // so, per axis, economicLean:
+  //   race:white          3.5 + .3(4.0) + .6(3.5)          = 6.8
+  //   education:no_college     .5(4.0) + .4(3.5) + .4(-1.5) = 2.8
+  //   age:mature               .2(4.0)                      = 0.8
+  //   wealth:low                        .35(-1.5)           = -0.525
+  //   race:black                        .25(-1.5)           = -0.375
+  // and socialLean:
+  //   race:white          3.0 + .3(3.5) + .6(3.0)          = 5.85
+  //   education:no_college     .5(3.5) + .4(3.0) + .4(-1.0) = 2.55
+  //   age:mature               .2(3.5)                      = 0.7
+  //   wealth:low                        .35(-1.0)           = -0.35
+  //   race:black                        .25(-1.0)           = -0.25
+  // Contributions landing on the same (dim, bucket, axis) are summed into one
+  // target rather than emitted as duplicates; the engine adds them either way
+  // (see `applyDurableBucketShift`'s accumulator), one row per bucket just
+  // keeps the table readable.
   targets: [
     {
-      groupId: "rural_traditionalists",
-      stateIds: DEEP_SOUTH_STATES,
-      axis: "economicLean",
-      totalShift: 4.0,
-    },
-    {
-      groupId: "rural_traditionalists",
-      stateIds: DEEP_SOUTH_STATES,
-      axis: "socialLean",
-      totalShift: 3.5,
-    },
-    { groupId: "evangelicals", stateIds: DEEP_SOUTH_STATES, axis: "economicLean", totalShift: 3.5 },
-    { groupId: "evangelicals", stateIds: DEEP_SOUTH_STATES, axis: "socialLean", totalShift: 3.0 },
-    {
-      groupId: "union_trades",
-      stateIds: DEEP_SOUTH_STATES,
-      axis: "economicLean",
-      totalShift: -1.5,
-    },
-    { groupId: "union_trades", stateIds: DEEP_SOUTH_STATES, axis: "socialLean", totalShift: -1.0 },
-    // BUCKET targets (added alongside the archetype ones above): the owner's
-    // own worked example of the (dim,bucket)-precise vocabulary — "southern
-    // whites" expressed literally as race:white × the Deep South, with no
-    // archetype-proxy fuzziness. `rural_traditionalists`/`evangelicals` above
-    // are judgment-call CORRELATES of white Southern conservatives (see
-    // ARCHETYPE_BUCKET_MAP's doc comment); this is the exact bucket itself,
-    // and is what actually moves the granular electorate's race:white base
-    // position in these states (the archetype targets above also reach it,
-    // second-hand, via their own bucket projection — this is additive
-    // precision, not a replacement).
-    {
       dim: "race",
       bucket: "white",
       stateIds: DEEP_SOUTH_STATES,
       axis: "economicLean",
-      totalShift: 3.5,
+      totalShift: 6.8,
     },
     {
       dim: "race",
       bucket: "white",
       stateIds: DEEP_SOUTH_STATES,
       axis: "socialLean",
-      totalShift: 3.0,
+      totalShift: 5.85,
+    },
+    {
+      dim: "education",
+      bucket: "no_college",
+      stateIds: DEEP_SOUTH_STATES,
+      axis: "economicLean",
+      totalShift: 2.8,
+    },
+    {
+      dim: "education",
+      bucket: "no_college",
+      stateIds: DEEP_SOUTH_STATES,
+      axis: "socialLean",
+      totalShift: 2.55,
+    },
+    {
+      dim: "age",
+      bucket: "mature",
+      stateIds: DEEP_SOUTH_STATES,
+      axis: "economicLean",
+      totalShift: 0.8,
+    },
+    {
+      dim: "age",
+      bucket: "mature",
+      stateIds: DEEP_SOUTH_STATES,
+      axis: "socialLean",
+      totalShift: 0.7,
+    },
+    // Black Southern voters consolidate Democratic: the negative half of the
+    // original coupled pull, carried by `union_trades` (the only 1953
+    // archetype with a race:black weight) before the conversion.
+    {
+      dim: "wealth",
+      bucket: "low",
+      stateIds: DEEP_SOUTH_STATES,
+      axis: "economicLean",
+      totalShift: -0.525,
+    },
+    {
+      dim: "wealth",
+      bucket: "low",
+      stateIds: DEEP_SOUTH_STATES,
+      axis: "socialLean",
+      totalShift: -0.35,
+    },
+    {
+      dim: "race",
+      bucket: "black",
+      stateIds: DEEP_SOUTH_STATES,
+      axis: "economicLean",
+      totalShift: -0.375,
+    },
+    {
+      dim: "race",
+      bucket: "black",
+      stateIds: DEEP_SOUTH_STATES,
+      axis: "socialLean",
+      totalShift: -0.25,
     },
   ],
 };
@@ -529,8 +561,9 @@ export const VOTING_RIGHTS_ACT_ENFRANCHISEMENT_CHECKPOINT: EraCheckpoint = {
  * Engel v. Vitale (1962, banned state-composed school prayer): a national
  * religious-conservative reaction, strongest in the South and Midwest (see
  * the historical-grounding note this ticket was scoped against). Modeled as
- * a national `evangelicals`-archetype nudge PLUS an additional regional
- * (Deep South + Midwest) top-up on the same archetype/axis — demonstrating a
+ * a national religious-conservative bucket nudge (race:white,
+ * education:no_college) PLUS an additional regional (Deep South + Midwest)
+ * top-up on the same buckets and axis, demonstrating a
  * SCOTUS ruling with BOTH national and regional components in one case. Not
  * a race/equal-protection case — genuinely composition-driven (see
  * divergence.ts): a differently-composed Court that upheld school prayer
@@ -545,15 +578,33 @@ export const ENGEL_SCHOOL_PRAYER_CHECKPOINT: EraCheckpoint = {
   fallbackStartTurn: yearToTurn(1963, STARTING_YEAR_1953),
   durationTurns: 8 * 48,
   historicalWindow: { startYear: 1963, endYear: 1971 },
+  // Converted from two `evangelicals` archetype targets (national +1.0, South
+  // and Midwest top-up +1.0) to the buckets they already projected onto:
+  // ARCHETYPE_BUCKET_MAP.evangelicals = race:white .6, education:no_college .4.
   targets: [
     // National baseline (all US states).
-    { groupId: "evangelicals", stateIds: ALL_US_STATES, axis: "socialLean", totalShift: 1.0 },
+    { dim: "race", bucket: "white", stateIds: ALL_US_STATES, axis: "socialLean", totalShift: 0.6 },
+    {
+      dim: "education",
+      bucket: "no_college",
+      stateIds: ALL_US_STATES,
+      axis: "socialLean",
+      totalShift: 0.4,
+    },
     // Regional top-up: strongest in the South and Midwest.
     {
-      groupId: "evangelicals",
+      dim: "race",
+      bucket: "white",
       stateIds: [...DEEP_SOUTH_STATES, ...MIDWEST_STATES],
       axis: "socialLean",
-      totalShift: 1.0,
+      totalShift: 0.6,
+    },
+    {
+      dim: "education",
+      bucket: "no_college",
+      stateIds: [...DEEP_SOUTH_STATES, ...MIDWEST_STATES],
+      axis: "socialLean",
+      totalShift: 0.4,
     },
   ],
 };

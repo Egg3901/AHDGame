@@ -129,19 +129,15 @@ export function editorCompositionTable(
 }
 
 /**
- * Apply a stored override (positions + global turnout + composition) onto an
- * editor config in place, so the editor reloads authored values. Per-state
- * Layer-1 `share` is left as census data.
+ * Apply a stored override (positions + global turnout) onto an editor config
+ * in place, so the editor reloads authored values. Per-state Layer-1 `share`
+ * is left as census data.
  */
 export function applyOverrideToEditorConfig(
   cfg: EditorStateConfig,
   override: {
     positions?: Record<string, Record<string, { economicLean: number; socialLean: number }>>;
     turnout?: Record<string, Record<string, number>>;
-    composition?: Record<
-      string,
-      { weights: { dim: string; key: string; w: number }[]; civicMultiplier: number }
-    >;
   }
 ): void {
   if (override.positions || override.turnout) {
@@ -155,14 +151,6 @@ export function applyOverrideToEditorConfig(
         }
         if (tr?.[key] !== undefined) cfg.layer1[dim][key].turnout = tr[key];
       }
-    }
-  }
-  if (override.composition) {
-    for (const arch of cfg.archetypes) {
-      const c = override.composition[arch.id];
-      if (!c) continue;
-      arch.weights = c.weights.map((w) => ({ dim: w.dim, key: w.key, w: w.w }));
-      arch.civicMultiplier = c.civicMultiplier;
     }
   }
 }

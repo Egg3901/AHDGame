@@ -143,4 +143,44 @@ describe("DemographicsAndTurnoutTab electorate dossier", () => {
     expect(screen.getByText("Economic lean")).toBeTruthy();
     expect(screen.getByText("Social lean")).toBeTruthy();
   });
+
+  it("says there is no breakdown yet when the region has no Layer-1 substrate", async () => {
+    // The archetype roster used to fill this slot. It described a projection of
+    // the electorate, so where there is no substrate the honest answer is that
+    // there is nothing to show, not a different set of numbers.
+    render(
+      <DemographicsAndTurnoutTab
+        stateId="PA"
+        demographics={
+          {
+            _id: "PA",
+            stateId: "PA",
+            categoryWeights: {},
+            groups: { g1: { population: 100, economicLean: 1.2, socialLean: -0.8, turnout: 62 } },
+            lastUpdated: null,
+          } as unknown as SerializedStateDemographics
+        }
+        categories={
+          [
+            {
+              _id: "voterGroups",
+              name: "Voter Groups",
+              groups: [
+                { id: "g1", name: "Test Archetype", defaultEconomicLean: 1, defaultSocialLean: -1 },
+              ],
+            },
+          ] as unknown as DemographicCategory[]
+        }
+        censusData={{ race: { white: 60, black: 40 } } as unknown as Layer1Config}
+        turnoutData={null}
+        countryId="US"
+        bucketProfile={null}
+      />
+    );
+    await waitFor(() =>
+      expect(screen.getByText(/No electorate breakdown for this region yet/)).toBeTruthy()
+    );
+    expect(screen.queryByText("Test Archetype")).toBeNull();
+    expect(screen.queryByText("Polling Archetypes")).toBeNull();
+  });
 });

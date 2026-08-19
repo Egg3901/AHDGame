@@ -25,7 +25,7 @@ You pick two things:
 | Wealth | Low Income, Middle Income, High Income |
 | Ideology | Evangelicals, Environmentalists, Libertarians, Progressives, Patriots, Gun Owners |
 
-The category system is separate from the 12-archetype voter model used for vote appeal. Canvassing operates on Layer 1 attributes, which feed into archetype turnout via weighted composition. See [Demographics](/wiki/demographics) for how Layer 1 attributes build the archetypes.
+Canvassing targets one bucket in one category. The modifier reaches every voter carrying that bucket, whatever their other attributes. See [Demographics](/wiki/demographics) for how the census builds the electorate the vote engine counts.
 
 ## The effectiveness formula
 
@@ -99,7 +99,7 @@ Result: a canvass that lands mid-turn hits BEFORE the next turn's decay starts. 
 ### When canvassing beats ads
 
 - **Group already likes you.** If Favorability is high in a group (say 75), ads diminish; the group's votes are largely secured. What's left is turnout, and canvassing gets more of them to actually show up.
-- **Pocket populations.** A 3-point voter archetype whose turnout is 38% is only a 1.14% share of the state. Boosting turnout by 5 points moves it to 43%, effectively a 13% relative improvement in that group's contribution.
+- **Pocket populations.** A group holding 3% of the state at 38% turnout is only a 1.14% share of the vote. Boosting turnout by 5 points moves it to 43%, effectively a 13% relative improvement in that group's contribution.
 - **Late-game closing sprint.** The 2× campaign season multiplier makes every action worth 2 normal actions in the final 4 turns.
 
 ### When ads beat canvassing
@@ -122,8 +122,8 @@ If your party chair is already running GOTV on your aligned demographics, the mo
 ## Related
 
 - [Stats & Actions](/wiki/stats-actions): Action costs, all actions reference.
-- [Demographics & Targeting](/wiki/demographics-targeting): Archetype composition and appeal math.
-- [Demographics](/wiki/demographics): Full demographic system, Layer 1 groups, turnout mechanics.
+- [Demographics & Targeting](/wiki/demographics-targeting): Census composition and appeal math.
+- [Demographics](/wiki/demographics): Full demographic system, census buckets, turnout mechanics.
 - [General Elections](/wiki/general-elections): The 4-turn campaign season window.
 - [Parties](/wiki/parties): Party GOTV spending and how it interacts.
 - [Polling](/wiki/polling): How to diagnose where canvassing has the highest ROI.
