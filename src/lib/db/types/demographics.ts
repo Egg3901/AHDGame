@@ -56,10 +56,19 @@ export interface CategoryWeights {
  * granular vote path: that substrate derives cell leans
  * from the static position tables, not from `StateDemographicGroup`
  * leans, so an archetype-level shift on `groups[id]` (below) is invisible to
- * it. Only ever written by the era-checkpoint turn, on the
- * `demographicDefaults` collection's snapshot doc (never the live
- * `stateDemographics` doc), and only ever grows — nothing decays it, matching
- * the checkpoint's "durable base-value shift, not a capped deviation" design.
+ * it.
+ *
+ * On the `demographicDefaults` snapshot doc this is the DURABLE base: written
+ * by the era-checkpoint turn and by `permanent: true` legislation, only ever
+ * growing, never decayed, matching the checkpoint's "durable base-value shift,
+ * not a capped deviation" design.
+ *
+ * On the LIVE `stateDemographics` doc the same shape carries the TEMPORARY
+ * drift of a `{ dim, bucket }` legislation effect — banded around zero and
+ * decaying back to it, exactly like the archetype drift on `groups[id]`, and
+ * folded onto unit leans AFTER derivation rather than before it so the two
+ * cannot double-count. See `addBucketDriftUpdates` in
+ * `src/lib/demographicEffects.ts`.
  */
 export type Layer1PositionOverlay = Record<
   string,
@@ -109,8 +118,16 @@ export interface StateDemographics {
   cachedEconomicLean?: number;
   cachedSocialLean?: number;
   lastUpdated: Date;
-  /** See {@link Layer1PositionOverlay}. Set only on `demographicDefaults` docs. */
+  /**
+   * See {@link Layer1PositionOverlay}. Present on BOTH demographics docs, with
+   * the same split the group leans already have: on a `demographicDefaults`
+   * doc it is the DURABLE base (era checkpoints, `permanent: true` laws), read
+   * as the derivation overlay; on a live `stateDemographics` doc it is the
+   * TEMPORARY, banded, decaying drift a `{ dim, bucket }` legislation effect
+   * has built up, folded onto unit leans after derivation. A bucket target has
+   * no archetype group to carry that drift on, which is why it lives here.
+   */
   layer1PositionOverrides?: Layer1PositionOverlay;
-  /** See {@link Layer1TurnoutOverlay}. Set only on `demographicDefaults` docs. */
+  /** See {@link Layer1TurnoutOverlay} and `layer1PositionOverrides` above — same two-doc split. */
   layer1TurnoutOverrides?: Layer1TurnoutOverlay;
 }

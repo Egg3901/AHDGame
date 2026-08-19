@@ -18,6 +18,7 @@ import { roundMarketingStrength } from "@/lib/utils/formatters";
 import { normalizeStatusBarLayout } from "@/lib/statusBar/clientStatusRequest";
 import { energyActionLimits } from "@/lib/stats/statDrift";
 import { STAT_MIN } from "@/lib/stats/statsConstants";
+import { unionContributionIncomePerTurn } from "@/lib/unions/unionContributionIncome";
 import {
   computeBonusActions,
   computeClosenessScalar,
@@ -326,6 +327,7 @@ export async function GET(request: Request) {
       currentOfficial,
       dividendCorps,
       holderBonds,
+      unionContribution,
     ] = await Promise.all([
       db
         .collection<State>("states")
@@ -396,6 +398,7 @@ export async function GET(request: Request) {
           holders: { characterId?: ObjectId; units: number }[];
         }>({ couponRate: 1, currencyCode: 1, countryId: 1, holders: 1 })
         .toArray(),
+      unionContributionIncomePerTurn(db, character._id),
     ]);
 
     const statePopulation = homeState?.population ?? 0;
@@ -422,12 +425,13 @@ export async function GET(request: Request) {
       baseGen: toCampaignLocal(fundDistribution.baseGeneration),
       donorBonus: toCampaignLocal(fundDistribution.donorBaseBonus),
       officeBonus: toCampaignLocal(fundDistribution.officeBonus),
+      unionContribution,
       stateTax: toCampaignLocal(fundDistribution.stateTaxAmount),
       nationalTax: toCampaignLocal(fundDistribution.nationalTaxAmount),
       totalTax: toCampaignLocal(
         fundDistribution.stateTaxAmount + fundDistribution.nationalTaxAmount
       ),
-      netPerTurn: toCampaignLocal(fundDistribution.characterReceives),
+      netPerTurn: toCampaignLocal(fundDistribution.characterReceives) + unionContribution,
     };
 
     const latestHistByCorp = await fetchLatestCorpHistoryDividendRows(

@@ -70,6 +70,7 @@
       "baseGen": "Basiseinnahmen ({tier})",
       "donorBonus": "Spendernetzwerk-Bonus",
       "officeSalary": "Amtsgehalt",
+      "unionContribution": "Gewerkschaftsspende",
       "partyTaxes": "Parteisteuern",
       "netPerHour": "Netto/Std.",
       "plusPerHour": "+{amount}/Std.",

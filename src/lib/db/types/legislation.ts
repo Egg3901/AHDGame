@@ -609,7 +609,12 @@ export interface LegislationPolicyOption {
   rate?: number; // Tax rate percentage for tax legislation
   /** @deprecated Use archetypeApprovals instead */
   groupApprovals?: Record<string, number>; // Old demographic groups (college, urban, etc.)
-  /** Per-archetype approval impacts (-100 to +100). Applied when voting on bills with this policy. */
+  /**
+   * Per-group approval impacts (-100 to +100), keyed on Layer-1 census BUCKETS
+   * (`"education:no_college"`). Applied when voting on bills with this policy.
+   * Legacy voter-archetype keys still resolve — see
+   * `Character.archetypeApprovals` for why and for how long.
+   */
   archetypeApprovals?: Record<string, number>;
   /** Direct per-turn metric effects when this option is the active policy */
   metricEffects?: PolicyOptionMetricEffect[];
@@ -668,8 +673,34 @@ export interface EffectTargetWeighted {
  */
 export type DemographicEffectTarget = "population" | "economicLean" | "socialLean" | "turnout";
 
+/**
+ * Who a demographic effect moves.
+ *
+ * Two vocabularies, exactly as `EraCheckpointTarget` carried before its own
+ * conversion:
+ *
+ * - `{ dim, bucket }` — a Layer-1 census bucket (`{ dim: "education", bucket:
+ *   "no_college" }`). Authoritative. The granular vote path counts census
+ *   cells, so a bucket target is the only kind that names voters the engine
+ *   actually has, and it works in every country (each model's own dimensions
+ *   and keys — see `getTurnoutTargetsForCountry`).
+ * - `groupId` — a voter-group archetype id. Legacy, retained ONLY so live
+ *   `legislationTypes` documents authored before the conversion keep resolving
+ *   until the migration has run. Seeds no longer author it.
+ *
+ * Bucket targets support the lean and turnout channels. They deliberately do
+ * NOT support `target: "population"`: a bucket's population IS the region's
+ * raked census marginal, which is demographic fact rather than a legislative
+ * lever, and the flows that legitimately move it live in
+ * `src/lib/demographics/cohortFlows.ts`.
+ */
 export interface DemographicEffect {
-  groupId: string; // e.g., "union_trades", "small_business" (voter-group archetype ids)
+  /** @deprecated Author `{ dim, bucket }` instead — see the doc comment above. */
+  groupId?: string;
+  /** Layer-1 dimension ("education", "race", "ethnicity", "income", …). */
+  dim?: string;
+  /** Bucket key within `dim` ("no_college", "white", "degree_plus", …). */
+  bucket?: string;
   direction: number; // -1 to +1, rate of change per cycle
   /** Target field. Absent = "population" — legacy seed data behaves exactly as before. */
   target?: DemographicEffectTarget;

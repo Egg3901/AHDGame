@@ -314,7 +314,7 @@ describe("processReferendumLifecycle", () => {
     expect(swungCalls).toHaveLength(0);
   });
 
-  it("snapshots cohortBaseline at granted → campaigning from region demographics", async () => {
+  it("snapshots cohortBaseline at granted → campaigning from the region's bucket profile", async () => {
     setup(db, [
       refDoc({
         status: "granted",
@@ -325,18 +325,23 @@ describe("processReferendumLifecycle", () => {
         regionId: "NIR",
       }),
     ]);
-    db.collection("stateDemographics").findOne.mockResolvedValue({
-      _id: "NIR",
-      groups: {
-        a: { population: 100, economicLean: 0, socialLean: 0, turnout: 60 },
-        b: { population: 100, economicLean: 0, socialLean: 0, turnout: 60 },
-      },
-    });
+    // Only `countryId` is read off the doc now — the cohorts come from the
+    // Layer-1 substrate, which is the electorate the vote engine counts.
+    db.collection("stateDemographics").findOne.mockResolvedValue({ _id: "NIR", countryId: "UK" });
     await processReferendumLifecycle(db as unknown as Db, 111);
     const set = lastSet(db, "referendums");
     expect(set.status).toBe("campaigning");
     expect(Array.isArray(set.cohortBaseline)).toBe(true);
-    expect(set.cohortBaseline.length).toBe(2);
+    const ids: string[] = set.cohortBaseline.map((c: { groupId: string }) => c.groupId);
+    expect(ids).toContain("age:senior");
+    expect(ids).toContain("urbanization:urban");
+    expect(ids).not.toContain("_all");
+    // Re-centered to the region's desire, and shaped by the NIR affinity table:
+    // the young lean Yes, pensioners lean No.
+    const byId = new Map(
+      set.cohortBaseline.map((c: { groupId: string; yesLean: number }) => [c.groupId, c.yesLean])
+    );
+    expect(byId.get("age:young")).toBeGreaterThan(byId.get("age:senior") as number);
   });
 
   it("falls back to a single synthetic cohort when a region has no demographics", async () => {

@@ -32,6 +32,7 @@ export interface CampaignIncomeData {
   baseGen: number;
   donorBonus: number;
   officeBonus: number;
+  unionContribution?: number;
   totalTax: number;
   netIncome: number;
 }
@@ -169,6 +170,14 @@ function CampaignPanel({
             <span className="text-muted">{t("officeSalary")}</span>
             <span className="text-success tabular-nums">
               +{formatCampaignFull(campaignIncome.officeBonus)}
+            </span>
+          </div>
+        )}
+        {(campaignIncome.unionContribution ?? 0) > 0 && (
+          <div className="flex justify-between">
+            <span className="text-muted">{t("unionContribution")}</span>
+            <span className="text-success tabular-nums">
+              +{formatCampaignFull(campaignIncome.unionContribution ?? 0)}
             </span>
           </div>
         )}

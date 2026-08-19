@@ -39,6 +39,8 @@
     "migrate:fix-character-userid-index": "npx tsx scripts/migrations/fix-characters-userid-index.ts",
     "migrate:sovereign-crises": "npx tsx scripts/migrations/migrate-sovereign-crises.ts",
     "migrate:perf-indexes": "npx tsx scripts/migrations/add-perf-indexes.ts",
+    "migrate:archetype-buckets:dry": "npx tsx scripts/migrations/2026-08-19-archetype-values-to-buckets.ts",
+    "migrate:archetype-buckets": "npx tsx scripts/migrations/2026-08-19-archetype-values-to-buckets.ts --apply",
     "migrate:metric-effects": "npx tsx scripts/backfill-metric-effects.ts",
     "migrate:metric-effects:dry": "npx tsx scripts/backfill-metric-effects.ts --dry-run",
     "migrate": "npx tsx scripts/run-migrations.ts",
