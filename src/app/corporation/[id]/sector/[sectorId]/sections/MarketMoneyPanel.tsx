@@ -12,6 +12,7 @@ import { fmtUnits, fmtPct, PLANTS_CLOCK_NOTE } from "../lib/plants";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { facilityPlural } from "@/lib/constants/facilityVocabulary";
 import { COMMODITY_LABELS, type CommodityType } from "@/lib/constants/commodities";
+import { DELIVERY_LIMITED_MIN_SHARE } from "@/components/corporation/plantsPresentation";
 
 interface MarketMoneyPanelProps {
   plants: PlantsData;
@@ -55,6 +56,14 @@ export default function MarketMoneyPanel({
   const offered = plants.producedUnits ?? 0;
   const sold = plants.soldUnits ?? 0;
   const unsold = plants.unsoldUnits ?? 0;
+  // Delivery-limited share: made, offered, and no freight network could carry
+  // it. Without naming it this reads as a demand failure on every surface, and
+  // the two failures call for opposite responses: cut output, versus move more
+  // of it. Absent until the freight pass writes the field, so it reads 0 and
+  // nothing extra renders.
+  const deliveryLimited = truth?.deliveryLimitedFraction ?? 0;
+  const deliveryLimitedShown = deliveryLimited > DELIVERY_LIMITED_MIN_SHARE;
+  const deliveryLimitedUnits = Math.round(offered * deliveryLimited);
 
   const costLines: { key: string; label: string; value: number; help: string }[] = [
     {
@@ -125,14 +134,17 @@ export default function MarketMoneyPanel({
                   : "success"
             }
             help={
-              truth.soldByCommodity.length > 0
+              (truth.soldByCommodity.length > 0
                 ? `The share of what you make that buyers actually take. By product: ${truth.soldByCommodity
                     .map(
                       (s) =>
                         `${COMMODITY_LABELS[s.commodity as CommodityType] ?? s.commodity} ${fmtPct(s.fraction)}`
                     )
                     .join(", ")}.`
-                : "The share of what you make that buyers actually take. Units that do not sell cost you money and earn nothing."
+                : "The share of what you make that buyers actually take. Units that do not sell cost you money and earn nothing.") +
+              (deliveryLimitedShown
+                ? ` ${fmtPct(deliveryLimited)} of what you offered never reached a buyer because freight out of this state ran out, not because demand did.`
+                : "")
             }
           />
           <UnitTile
@@ -190,13 +202,24 @@ export default function MarketMoneyPanel({
           label="Unsold"
           value={fmtUnits(unsold)}
           tone={unsold > 0 ? "warning" : "muted"}
-          help="Units you made that nobody bought. You paid to make them and earned nothing back."
+          help={
+            deliveryLimitedShown
+              ? `Units you made that earned nothing back. About ${fmtUnits(deliveryLimitedUnits)} of them had a buyer and no freight to carry them.`
+              : "Units you made that nobody bought. You paid to make them and earned nothing back."
+          }
         />
       </div>
       {unsold > 0 && (
         <p className="mt-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-body-sm text-foreground">
           {fmtUnits(unsold)} units went unsold.{" "}
-          {(plants.demandGapUnits ?? 0) >= 1 ? (
+          {deliveryLimitedShown ? (
+            <>
+              About {fmtUnits(deliveryLimitedUnits)} of them ({fmtPct(deliveryLimited)} of what you
+              offered) could not be delivered: freight out of this state is full, so the output
+              never reached the buyers who wanted it. Cutting production does not fix that. Build or
+              expand logistics capacity in this state, or put your next plants nearer the buyers.
+            </>
+          ) : (plants.demandGapUnits ?? 0) >= 1 ? (
             <>
               Buyers here have room for about {fmtUnits(plants.demandGapUnits)} more units a day.
               Lower your price, or hold off building.
@@ -215,8 +238,9 @@ export default function MarketMoneyPanel({
           (same tone as the demand-gap copy above, ticket #1027 follow-up). */}
       {truth?.soldFraction != null && truth.soldFraction < 0.5 && (
         <p className="mt-2 text-body-sm text-muted">
-          This market is oversupplied. Output beyond what buyers need goes unsold, and extra sales
-          have to be won from rivals on price.
+          {deliveryLimitedShown
+            ? "The rest of the shortfall is demand. Output beyond what buyers need goes unsold, and extra sales have to be won from rivals on price."
+            : "This market is oversupplied. Output beyond what buyers need goes unsold, and extra sales have to be won from rivals on price."}
         </p>
       )}
       {pnl.avgSalePriceAnchor != null && (

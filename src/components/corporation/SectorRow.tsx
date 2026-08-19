@@ -24,8 +24,11 @@ import { SECTOR_TABLE_GRID, PLANTS_SECTOR_TABLE_GRID } from "./SectorTableHeader
 import {
   BuildQueueBadge,
   CAPACITY_UNIT_LABEL,
+  DELIVERY_LIMITED_MIN_SHARE,
+  DeliveryLimitedPill,
   FillChip,
   MothballedPill,
+  formatFillPercent,
   formatUnits,
   sectorBuildUrl,
 } from "./plantsPresentation";
@@ -164,6 +167,13 @@ export function SectorRow({
   // reads 40%+ while the sector loses money. The raw figure stays in the
   // tooltip. Null when redacted/fogged or below plants.
   const fillAdjusted = plantsMode ? (sector.fillAdjustedMarginPct ?? null) : null;
+  // The part of the fill shortfall that is a DELIVERY failure. Null outside
+  // plants, when redacted/fogged, and until the freight pass writes it.
+  const deliveryLimited = plantsMode ? (sector.deliveryLimitedFraction ?? null) : null;
+  const deliveryLimitedShown =
+    deliveryLimited != null &&
+    Number.isFinite(deliveryLimited) &&
+    deliveryLimited > DELIVERY_LIMITED_MIN_SHARE;
   const plantsRevenueTooltip = (
     <>
       <p className="font-semibold text-foreground mb-1">Capacity → net profit</p>
@@ -211,6 +221,12 @@ export function SectorRow({
         <p className="mt-1.5 text-[10px] leading-snug text-muted">
           The effective margin counts only units that sold. &quot;After unsold output&quot; is
           profit over the cost of everything made, so it reflects unsold units too.
+        </p>
+      )}
+      {deliveryLimitedShown && (
+        <p className="mt-1.5 text-[10px] leading-snug text-muted">
+          {formatFillPercent(deliveryLimited)} of what this sector offered had no freight to carry
+          it. Buyers still wanted it, so that part of the shortfall is delivery, not demand.
         </p>
       )}
       {isMothballed && (
@@ -485,8 +501,9 @@ export function SectorRow({
           </div>
 
           {/* Fill */}
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-1">
             <FillChip fill={sector.fillRate} band={sector.fillRateBand} />
+            <DeliveryLimitedPill fraction={deliveryLimited} />
           </div>
 
           {/* Revenue — one figure, chain in the tooltip */}
@@ -838,8 +855,9 @@ export function SectorRow({
               </div>
               <div>
                 <span className="text-[10px] text-muted uppercase tracking-wide">Fill</span>
-                <div className="mt-1">
+                <div className="mt-1 flex flex-wrap items-center gap-1">
                   <FillChip fill={sector.fillRate} band={sector.fillRateBand} />
+                  <DeliveryLimitedPill fraction={deliveryLimited} />
                 </div>
               </div>
             </>

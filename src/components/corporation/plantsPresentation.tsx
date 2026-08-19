@@ -118,6 +118,41 @@ export function FillChip({
 }
 
 /**
+ * Below this share, a delivery-limited fraction is rounding and gets no
+ * qualifier. One threshold so the row, the sector page and the tooltips all
+ * start saying "freight" at the same point.
+ */
+export const DELIVERY_LIMITED_MIN_SHARE = 0.01;
+
+/**
+ * Marker for a sector whose missing fill is a DELIVERY failure.
+ *
+ * The fill chip on its own reads as demand every time: a player sees 60% and
+ * cuts output, when the fix is freight out of the state. This is the one piece
+ * of the row that distinguishes "nobody wanted it" from "it could not get
+ * there", which are opposite instructions about what to do next.
+ */
+export function DeliveryLimitedPill({
+  fraction,
+  className = "",
+}: {
+  fraction: number | null | undefined;
+  className?: string;
+}) {
+  if (fraction == null || !Number.isFinite(fraction) || fraction <= DELIVERY_LIMITED_MIN_SHARE) {
+    return null;
+  }
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0 text-[9px] font-bold uppercase tracking-wider text-warning ${className}`.trim()}
+      title={`Freight-limited. ${formatFillPercent(fraction)} of what this sector offered had no freight to carry it, so it went unsold with buyers still wanting it. More freight capacity out of this state, or capacity built nearer the buyers, is the fix. Producing less is not.`}
+    >
+      Freight
+    </span>
+  );
+}
+
+/**
  * Small badge for capacity that is paid for and on its way.
  *
  * Mid-build is the state the old growth-slider UI had no way to show at all:

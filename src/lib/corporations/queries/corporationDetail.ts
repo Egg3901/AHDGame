@@ -1205,6 +1205,15 @@ export async function loadCorporationDetailView(args: {
       ? summarizeBuildQueue(sector.buildQueue, currentTurn)
       : null;
     const sectorFillRate = computeFillRate(producedUnits, soldUnits);
+    // Share of the fill shortfall that is a DELIVERY failure, not a demand
+    // failure. The row shows one fill number and a player reads every point of
+    // missing fill as "nobody wanted it", which is the opposite instruction
+    // from what a freight-limited sector needs. Null outside plants and when
+    // the freight pass has written nothing.
+    const deliveryLimitedFraction =
+      plantsMode && Number.isFinite(sector.deliveryLimitedFraction)
+        ? Math.max(0, Math.min(1, sector.deliveryLimitedFraction as number))
+        : null;
     const mothballed = plantsMode ? sector.mothballed === true : false;
     // Fill-adjusted margin (ticket #1027 family): realized profit over the full
     // cost bill, not over sold revenue. `effectiveProfitMargin` divides by the
@@ -1293,6 +1302,7 @@ export async function loadCorporationDetailView(args: {
       // band) for a viewer without insider access — see financialFogOfWar.
       fillRate: sectorFillRate,
       fillRateBand: fillRateBand(sectorFillRate),
+      deliveryLimitedFraction,
       mothballed,
       buildQueueSummary,
       constructionInProgressAnchor,
