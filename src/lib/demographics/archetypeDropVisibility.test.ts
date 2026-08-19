@@ -189,6 +189,23 @@ describe("UK voter group coverage", () => {
     expect(getUnmappedArchetypeDrops()).toEqual([]);
   });
 
+  it("passes a key that is already a bucket straight through", () => {
+    // Bucket-authored values must not be counted as unmapped drops. This is
+    // what lets approvals, favorability and lean deltas be authored in the
+    // bucket vocabulary while a document still keyed on an archetype keeps
+    // resolving — one loose union, no second code path per consumer.
+    const out = archetypeValuesToBuckets({ "education:no_college": 8, "income:low": -3 }, "UK");
+    expect(out).toEqual({ "education:no_college": 8, "income:low": -3 });
+    expect(getUnmappedArchetypeDrops()).toEqual([]);
+  });
+
+  it("sums a bucket key with an archetype that projects onto the same bucket", () => {
+    const out = archetypeValuesToBuckets({ "race:white": 10, evangelicals: 10 });
+    // evangelicals is 0.6 race:white, so the two contributions add.
+    expect(out["race:white"]).toBeCloseTo(16, 6);
+    expect(getUnmappedArchetypeDrops()).toEqual([]);
+  });
+
   it("leaves the US archetypes untouched", () => {
     // The UK additions must not have overwritten a US mapping.
     for (const id of ["evangelicals", "college_liberals", "soccer_moms"]) {

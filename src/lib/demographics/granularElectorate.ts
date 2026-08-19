@@ -694,6 +694,23 @@ function computeArchetypeLeanDeltas(
   return { economic, social };
 }
 
+/** Merge a `dim → bucket → axis` overlay into a `"dim:bucket" → value` delta map. */
+function addOverlayDeltas(
+  deltas: Record<string, number>,
+  overlay: Layer1PositionOverlay | undefined,
+  axis: "economicLean" | "socialLean"
+): void {
+  if (!overlay) return;
+  for (const [dim, byBucket] of Object.entries(overlay)) {
+    for (const [bucket, axes] of Object.entries(byBucket)) {
+      const v = axes[axis];
+      if (typeof v !== "number" || v === 0) continue;
+      const k = `${dim}:${bucket}`;
+      deltas[k] = (deltas[k] ?? 0) + v;
+    }
+  }
+}
+
 /** Aggregate live-vs-static turnout ratio over the legacy archetype groups. */
 function aggregateTurnoutRatio(
   demographics: StateDemographics,
@@ -761,6 +778,15 @@ export function buildGranularElectorateSubstrate(
   const leanDeltas = computeArchetypeLeanDeltas(input.demographics, input.demographicDefaults);
   const econBucketDeltas = archetypeValuesToBuckets(leanDeltas.economic, input.countryId);
   const socBucketDeltas = archetypeValuesToBuckets(leanDeltas.social, input.countryId);
+  // Bucket-targeted legislation drifts the SAME two axes, but stores its
+  // deviation directly on the live doc's Layer-1 overlay rather than on an
+  // archetype group (no archetype exists to carry it — see
+  // `addBucketDriftUpdates` in `demographicEffects.ts`). Same fold, same
+  // place; only the source of the bucket deltas differs. The DEFAULTS doc's
+  // overlay is the durable channel and is already applied inside the
+  // derivation above, so folding it again here would double-count it.
+  addOverlayDeltas(econBucketDeltas, input.demographics.layer1PositionOverrides, "economicLean");
+  addOverlayDeltas(socBucketDeltas, input.demographics.layer1PositionOverrides, "socialLean");
   const econDeltaKeys = Object.keys(econBucketDeltas);
   const socDeltaKeys = Object.keys(socBucketDeltas);
   const foldLean = (
@@ -778,12 +804,31 @@ export function buildGranularElectorateSubstrate(
     return clamp(v, -5, 5);
   };
 
+  // Bucket-targeted legislation's TEMPORARY turnout drift, same live-doc
+  // overlay as the lean drift above (the defaults doc's overlay is the durable
+  // channel and is already inside the derivation).
+  const turnoutDrift: Record<string, number> = {};
+  for (const [dim, byBucket] of Object.entries(input.demographics.layer1TurnoutOverrides ?? {})) {
+    for (const [bucket, v] of Object.entries(byBucket)) {
+      if (typeof v === "number" && v !== 0) turnoutDrift[`${dim}:${bucket}`] = v;
+    }
+  }
+  const turnoutDriftKeys = Object.keys(turnoutDrift);
+
   const liveTurnouts: Record<string, number> = {};
   const groups: StateDemographics["groups"] = {};
   const categoryGroups: DemographicCategory["groups"] = [];
   let pool = 0;
   for (const unit of units) {
-    const turnout = ratio === 1 ? unit.turnout : clampTurnout(unit.turnout * ratio);
+    let turnout = ratio === 1 ? unit.turnout : clampTurnout(unit.turnout * ratio);
+    if (turnoutDriftKeys.length > 0) {
+      let drift = 0;
+      for (const k of turnoutDriftKeys) {
+        const w = unit.bucketWeights[k];
+        if (w) drift += w * turnoutDrift[k];
+      }
+      if (drift !== 0) turnout = clampTurnout(turnout + drift);
+    }
     const economicLean = foldLean(unit.economicLean, unit, econDeltaKeys, econBucketDeltas);
     const socialLean = foldLean(unit.socialLean, unit, socDeltaKeys, socBucketDeltas);
     const populationPct = unit.share * 100;

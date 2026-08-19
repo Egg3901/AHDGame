@@ -65,26 +65,51 @@ export function aggregateYesShare(
 }
 
 /**
- * Build re-centered cohorts from a region's demographic groups: layer each
- * group's affinity onto the region desire, then additively shift all leans so
+ * Build re-centered cohorts from a region's Layer-1 bucket profile: layer each
+ * bucket's affinity onto the region desire, then additively shift all leans so
  * the turnout-weighted aggregate equals `regionDesire` exactly.
+ *
+ * Cohorts are census buckets rather than voter archetypes, which is what makes
+ * a cohort something a player can also poll, canvass and target a Governor's
+ * Address at — one vocabulary across the interface instead of a referendum-only
+ * one.
+ *
+ * SHARE NORMALISATION. A bucket profile gives shares that sum to 100 WITHIN a
+ * dimension, so the five UK dimensions describe the same electorate five times
+ * over. Each bucket's share is therefore divided by the number of dimensions,
+ * which makes the shares sum to 1 across the whole table and gives every
+ * dimension equal say. The cost is that cross-dimension correlation is lost —
+ * a young urban graduate is counted once in each of three dimensions at a third
+ * of the weight rather than once as one person. That is the standard
+ * marginals-only approximation, and it is acceptable here because the
+ * re-centering below makes the aggregate exact regardless, and the ground game
+ * operates on marginals anyway.
+ *
+ * Single-bucket dimensions are dropped. Northern Ireland's ethnicity marginal
+ * is 100% white British, so keeping it would spend a fifth of the electorate's
+ * weight on a cohort that cannot differentiate between Yes and No and would
+ * flatten the other four dimensions by that much for no information.
  */
 export function buildReferendumCohorts(
-  groups: Record<
-    string,
-    { population: number; economicLean: number; socialLean: number; turnout?: number }
-  >,
+  sections: Array<{
+    dim: string;
+    buckets: Array<{ id: string; sharePct: number; turnout: number }>;
+  }>,
   regionDesire: number,
   affinities: Record<string, number>
 ): ReferendumCohort[] {
-  const entries = Object.entries(groups);
-  const totalPop = entries.reduce((s, [, g]) => s + (g.population || 0), 0) || 1;
-  const raw: ReferendumCohort[] = entries.map(([groupId, g]) => ({
-    groupId,
-    share: (g.population || 0) / totalPop,
-    turnout: clamp(g.turnout ?? 60, 0, 100),
-    yesLean: clamp(regionDesire + (affinities[groupId] ?? 0), 0, 100),
-  }));
+  const informative = sections.filter((s) => s.buckets.length > 1);
+  const used = informative.length > 0 ? informative : sections.filter((s) => s.buckets.length > 0);
+  const dimCount = used.length;
+  if (dimCount === 0) return [];
+  const raw: ReferendumCohort[] = used.flatMap((section) =>
+    section.buckets.map((bucket) => ({
+      groupId: bucket.id,
+      share: bucket.sharePct / 100 / dimCount,
+      turnout: clamp(bucket.turnout, 0, 100),
+      yesLean: clamp(regionDesire + (affinities[bucket.id] ?? 0), 0, 100),
+    }))
+  );
   // Re-center: additive shift so the weighted aggregate == regionDesire.
   const agg = aggregateYesShare(raw, [], 0);
   const shift = regionDesire - agg;

@@ -14,6 +14,7 @@ import {
   DE_DOMAIN_AFFINITIES,
   CN_DOMAIN_AFFINITIES,
 } from "./archetypeAffinitiesIntl";
+import { bucketAffinitiesFor } from "./bucketAffinities";
 
 export type PolicyDomain =
   | "education"
@@ -781,13 +782,19 @@ export const IE_DOMAIN_AFFINITIES: Record<PolicyDomain, IEArchetypeApprovalTempl
 };
 
 /**
- * Calculate archetype approval impacts based on policy shift.
+ * Calculate approval impacts based on policy shift.
+ *
+ * Impacts are keyed on Layer-1 census BUCKETS (`"education:no_college"`), not
+ * on voter archetypes. The archetype tables in this module are the historical
+ * source those bucket values were projected from, and are retained for now as
+ * the record of that derivation; nothing reads them at runtime any more —
+ * see `src/lib/bucketAffinities.ts`.
  *
  * @param policyDomain - The policy domain (e.g., "education", "healthcare")
  * @param oldIndex - Previous policy option index (0-6, lower = more left)
  * @param newIndex - New policy option index (0-6, lower = more left)
- * @param billCountry - Optional country ID; pass "UK" for UK-specific archetypes
- * @returns Record of archetype ID → approval change
+ * @param billCountry - Optional country ID; selects that country's bucket table
+ * @returns Record of bucket id → approval change
  */
 export function calculateShiftImpacts(
   policyDomain: string,
@@ -807,24 +814,11 @@ export function calculateShiftImpacts(
   optionScores?: number[]
 ): Record<string, number> {
   const domain = getDomainForPolicyDomain(policyDomain);
-  // Select country-specific affinity table, falling back to US archetypes
-  const countryAffinities = billCountry
-    ? {
-        UK: UK_DOMAIN_AFFINITIES,
-        JP: JP_DOMAIN_AFFINITIES,
-        DE: DE_DOMAIN_AFFINITIES,
-        CN: CN_DOMAIN_AFFINITIES,
-        IE: IE_DOMAIN_AFFINITIES,
-      }[billCountry]
-    : undefined;
-  const affinities = (countryAffinities?.[domain] ?? DOMAIN_AFFINITIES[domain]) as
-    Record<string, number | undefined> | undefined;
-
-  // Defensive: if a PolicyDomain is ever missing from both the country table and
-  // the US fallback (e.g. a domain added to the type but not yet to every table),
-  // treat it as "no archetype impacts" instead of crashing the Propose modal /
-  // turn enactment on Object.entries(undefined).
-  if (!affinities) return {};
+  // Country-specific BUCKET table, with the US fallback inside the lookup. A
+  // domain missing from both resolves to `{}` rather than undefined, so a
+  // domain added to the type but not yet to every table means "no impacts"
+  // instead of a crash in the Propose modal or in turn enactment.
+  const affinities: Record<string, number | undefined> = bucketAffinitiesFor(billCountry, domain);
 
   // Direction + extremeness. Prefer the curated position scores (robust to option
   // ordering); fall back to the array index when scores aren't supplied.
@@ -850,7 +844,7 @@ export function calculateShiftImpacts(
 
   const impacts: Record<string, number> = {};
 
-  for (const [archetypeId, affinity] of Object.entries(affinities)) {
+  for (const [bucketId, affinity] of Object.entries(affinities)) {
     if (affinity === undefined || affinity === 0) continue;
 
     // Impact = shift direction × affinity × scale × position multiplier
@@ -860,7 +854,7 @@ export function calculateShiftImpacts(
     const clampedImpact = Math.max(-10, Math.min(10, Math.round(rawImpact)));
 
     if (clampedImpact !== 0) {
-      impacts[archetypeId] = clampedImpact;
+      impacts[bucketId] = clampedImpact;
     }
   }
 

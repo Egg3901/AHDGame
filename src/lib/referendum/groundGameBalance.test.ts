@@ -3,27 +3,20 @@ import { buildReferendumCohorts, aggregateYesShare, type CohortModifier } from "
 import { applyPresetToModifiers } from "./applyPresetToModifiers";
 import { findGroundGamePreset } from "@/lib/constants/groundGamePresets";
 import { cohortAffinitiesFor } from "@/lib/constants/referendumCohorts";
+import { getBucketProfileForRegion } from "@/lib/demographics/bucketProfile";
 
 // Balance contract for the referendum ground game — drives the real engine over
-// the real NIR demographic structure (shares/turnouts from the live dev
-// referendum) so a future tune can't silently regress the signed-off numbers
-// (design 2026-06-18-ground-game-rebalance §9). Bounds are intentionally loose:
-// they pin behavior (label-accuracy, mobilize works + is side-flipped, no
-// landslide single action, contested cancels), not exact magnitudes.
-const NIR = {
-  post_industrial_workers: { population: 280, turnout: 58, economicLean: 0, socialLean: 0 },
-  urban_progressives: { population: 80, turnout: 62, economicLean: 0, socialLean: 0 },
-  suburban_homeowners: { population: 80, turnout: 62, economicLean: 0, socialLean: 0 },
-  young_renters: { population: 80, turnout: 50, economicLean: 0, socialLean: 0 },
-  rural_traditionalists: { population: 100, turnout: 65, economicLean: 0, socialLean: 0 },
-  retirees: { population: 70, turnout: 68, economicLean: 0, socialLean: 0 },
-  public_sector: { population: 70, turnout: 65, economicLean: 0, socialLean: 0 },
-  moderate_centrists: { population: 150, turnout: 64, economicLean: 0, socialLean: 0 },
-  populist_right: { population: 70, turnout: 63, economicLean: 0, socialLean: 0 },
-  green_activists: { population: 0, turnout: 58, economicLean: 0, socialLean: 0 },
-  small_business: { population: 20, turnout: 62, economicLean: 0, socialLean: 0 },
-  new_britons: { population: 0, turnout: 44, economicLean: 0, socialLean: 0 },
-};
+// the real NIR electorate so a future tune can't silently regress the
+// signed-off numbers (design 2026-06-18-ground-game-rebalance §9). Bounds are
+// intentionally loose: they pin behavior (label-accuracy, mobilize works + is
+// side-flipped, no landslide single action, contested cancels), not exact
+// magnitudes.
+//
+// The fixture was a hand-copied archetype table; it now reads NIR's Layer-1
+// bucket profile straight from the substrate, which is both the real structure
+// and the one the vote engine counts, so the contract cannot drift away from
+// the electorate it claims to describe.
+const NIR = getBucketProfileForRegion("UK", "NIR", "2019-default")!;
 const base = buildReferendumCohorts(NIR, 50, cohortAffinitiesFor("NIR"));
 const ys = (m: CohortModifier[]) => aggregateYesShare(base, m, 0);
 const open = ys([]);
@@ -50,11 +43,20 @@ describe("ground-game balance contract (NIR, desire 50)", () => {
     expect(down).toBeLessThan(-2.7);
   });
 
-  it("targeted broadcast is a couple of points, not a landslide", () => {
+  // BALANCE CHANGE, deliberate and flagged. A targeted broadcast's aggregate
+  // effect is bounded by the target's share of the electorate (see
+  // `applyPresetToModifiers`), and bucket cohorts are roughly four times finer
+  // than the archetype cohorts they replace — NIR's largest is now
+  // `income:middle` at ~13% where `post_industrial_workers` was 28%. So the
+  // same card moves ~1.1 points where it used to move ~2.3. Targeting is now a
+  // sharper instrument with a smaller aggregate payoff, which is coherent, but
+  // it is a nerf to a player-facing action. The lever to restore the old feel
+  // is `GG_PERSUADE_TARGET_CONC`, not this bound.
+  it("targeted broadcast is about a point, not a landslide", () => {
     const d =
       ys(applyPresetToModifiers(base, [], p("broadcast_ads"), "yes", { groupId: big })) - open;
-    expect(d).toBeGreaterThan(2);
-    expect(d).toBeLessThan(2.6);
+    expect(d).toBeGreaterThan(0.9);
+    expect(d).toBeLessThan(1.4);
   });
 
   it("contested persuade cancels at volume", () => {

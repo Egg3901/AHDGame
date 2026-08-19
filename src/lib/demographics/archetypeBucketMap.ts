@@ -42,6 +42,7 @@
  */
 
 import { getCountryArchetypeBuckets } from "./countryArchetypeBuckets";
+import { isBucketTarget } from "./turnoutTarget";
 
 export interface ArchetypeBucketWeight {
   /** Layer-1 cell dimension ("race" | "age" | "education" | "wealth"). */
@@ -188,6 +189,17 @@ export function archetypeValuesToBuckets(
   const bucketValues: Record<string, number> = {};
   for (const [archetypeId, value] of Object.entries(valuesByArchetype)) {
     if (typeof value !== "number" || !Number.isFinite(value) || value === 0) continue;
+    // A key that is ALREADY a bucket passes through at full weight rather than
+    // being counted as an unmapped drop. This is what lets a caller author in
+    // the bucket vocabulary without every consumer of the projection having to
+    // learn a second code path: an approval, a favorability delta or a lean
+    // delta keyed `"education:no_college"` reaches the cells exactly, while one
+    // keyed `"union_trades"` still fans out through the table below. Same loose
+    // union `DemographicEffect` and `turnoutTarget` already carry.
+    if (isBucketTarget(archetypeId)) {
+      bucketValues[archetypeId] = (bucketValues[archetypeId] ?? 0) + value;
+      continue;
+    }
     const weights =
       countryTable?.[archetypeId] ?? (countryTable ? undefined : ARCHETYPE_BUCKET_MAP[archetypeId]);
     if (!weights) {
