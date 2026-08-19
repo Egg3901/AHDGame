@@ -1490,18 +1490,16 @@ describe("autoVoteNPPsForNoConfidence — ticket-1137 NPP benches vote the party
     db.collectionMocks["electedOfficials"] = {
       ...db.collection("electedOfficials"),
       find: vi.fn().mockReturnValue({
-        toArray: vi
-          .fn()
-          .mockResolvedValue([
-            {
-              nppId: govNppId,
-              isNPP: true,
-              countryId: "UK",
-              officeType: "commons",
-              party: "1",
-              seatsHeld: 364,
-            },
-          ]),
+        toArray: vi.fn().mockResolvedValue([
+          {
+            nppId: govNppId,
+            isNPP: true,
+            countryId: "UK",
+            officeType: "commons",
+            party: "1",
+            seatsHeld: 364,
+          },
+        ]),
         sort: vi.fn().mockReturnThis(),
         project: vi.fn().mockReturnThis(),
       }),
