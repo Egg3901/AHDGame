@@ -27,10 +27,25 @@ const MAX_TIER = 3;
  * division needs proportionally more materiel than an infantry one without a second cost
  * table to keep in sync.
  *
- * `LOT_COST_UNITS` and `procurement.LOT_COST_SHARE` are ONE dial expressed as two numbers —
- * how many lots a unit needs, and what a lot costs. They are calibrated together against a
- * single target (what share of C1's post-upkeep procurement remainder a fully-equipped seeded
- * roster should consume), never tuned against each other. See `scripts/calibrate-arsenal.ts`.
+ * `LOT_COST_UNITS` and `LOT_COST_SHARE` are ONE dial expressed as two numbers: how many lots
+ * a unit needs, and what a lot costs. Both fall out of `MATERIEL_SHARE_OF_UNIT_COST` against a
+ * single target, what share of a country's post-upkeep procurement remainder a fully-equipped
+ * roster consumes. Never tune them against each other.
+ *
+ * The division of labour between them, because it is not obvious and getting it wrong wastes a
+ * day:
+ *
+ * - The `1_000` they share is pure GRANULARITY, and it is scale-invariant. Doubling it halves
+ *   the lot price and doubles the lots a platform needs. Money per unit is unchanged and
+ *   time-to-equip is unchanged, because a unit needs twice as many lots that arrive twice as
+ *   fast. It cannot move pacing, only how finely materiel is diced.
+ * - `MATERIEL_SHARE_OF_UNIT_COST` is the ONLY lever that moves PACING. A unit's materiel bill
+ *   is that share of its price and the procurement budget per turn is fixed, so time-to-equip
+ *   is directly proportional to it.
+ *
+ * Verify a change against the live world rather than by eye: the `arsenal pacing` block in
+ * `arsenal.test.ts` pins the US case (procurement per turn, lot price, lots per turn) to the
+ * measured production figures, which is the same target this calibration was always aimed at.
  */
 export const LOT_COST_UNITS = ARCHETYPE_COST_GDP_DIVISOR / 1_000; // 387 cost units per lot
 

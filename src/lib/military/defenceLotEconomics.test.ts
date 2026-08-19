@@ -12,6 +12,8 @@ import {
   MIN_CONTRACT_MARGIN,
   TARGET_SUPPLIER_MARGIN,
   lotCostIndex,
+  contractLotProductionCost,
+  legacyLotProductionCost,
   DEFENCE_FACTORY_SLOTS_PER_PLANT,
 } from "./defenceLotEconomics";
 import { rawLotsFromSector } from "./arsenal";
@@ -124,6 +126,47 @@ describe("the lot unit's base-price basis", () => {
       const shareSum = Object.values(demandShare).reduce((a, b) => a + b, 0);
       expect(lots * perLot).toBeCloseTo(revenue * shareSum, 3);
     }
+  });
+});
+
+// Ticket #1134 grandfather rule. A contract signed under the old economics keeps them for the
+// lots it has left. The project's standing rule is that a repair never takes away what a
+// player already holds, and the ONE live order this affects is a real player's.
+describe("contractLotProductionCost", () => {
+  // The live UK ground contract, awarded turn 209 with 2 of 5 lots outstanding.
+  const UK_PRICE = 9_285_111;
+
+  it("settles a pre-fix contract on the old economics", () => {
+    const cost = contractLotProductionCost(
+      { pricePerLot: UK_PRICE },
+      "heavy_armor"
+    )!;
+    expect(cost).toBe(legacyLotProductionCost("heavy_armor")!);
+    // The old take: the supplier keeps essentially the whole contract. That is the bug, and
+    // for THIS contract it is also the deal the player signed.
+    expect((UK_PRICE - cost) / UK_PRICE).toBeGreaterThan(0.99);
+  });
+
+  it("settles a post-fix contract at the supplier margin", () => {
+    const cost = contractLotProductionCost(
+      { pricePerLot: UK_PRICE, costBasis: "margin" },
+      "heavy_armor"
+    )!;
+    expect(cost).toBeCloseTo(UK_PRICE * (1 - TARGET_SUPPLIER_MARGIN), 6);
+    expect((UK_PRICE - cost) / UK_PRICE).toBeCloseTo(0.15, 6);
+  });
+
+  // Absence of the stamp is the marker, which is what makes a backfill unnecessary: every
+  // contract awarded before the deploy lacks it, including any awarded between merge and
+  // release, and is grandfathered by construction.
+  it("treats a missing stamp as pre-fix, so no backfill is needed", () => {
+    const legacy = contractLotProductionCost({ pricePerLot: UK_PRICE }, "heavy_armor")!;
+    const stamped = contractLotProductionCost(
+      { pricePerLot: UK_PRICE, costBasis: "margin" },
+      "heavy_armor"
+    )!;
+    expect(legacy).not.toBeCloseTo(stamped, 0);
+    expect(stamped).toBeGreaterThan(legacy);
   });
 });
 

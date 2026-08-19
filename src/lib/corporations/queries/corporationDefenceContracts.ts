@@ -5,7 +5,7 @@ import { rawLotsFromSector } from "@/lib/military/arsenal";
 import {
   contractLotsThisTurn,
   defaultFactoryAllocation,
-  lotProductionCost,
+  contractLotProductionCost,
   normalizeGrade,
   DEFENCE_FACTORY_SLOTS_PER_PLANT,
   GRADE_PRICE_SCALE,
@@ -152,11 +152,11 @@ export async function loadCorporationDefenceContracts(
       partialLot: carry - Math.floor(carry),
       amountPaid: c.amountPaid ?? c.lotsDelivered * c.pricePerLot,
       productionCostPaid: c.productionCostPaid ?? 0,
-      // Costed against the CONTRACT's own price, not the live anchor: the CEO's margin on a
-      // signed order is fixed by the deal they accepted, and must not appear to move because
-      // the country's GDP did (ticket #1134).
+      // The SAME selector the delivery sweep bills through, so the order book states the
+      // margin the CEO is actually paid. A pre-#1134 contract shows its old economics because
+      // that is what it will settle at (ticket #1134).
       unitProductionCost: sector
-        ? (lotProductionCost(sector.strategyId, c.pricePerLot, priceRatios) ?? 0) *
+        ? (contractLotProductionCost(c, sector.strategyId, priceRatios) ?? 0) *
           GRADE_PRICE_SCALE[normalizeGrade(c.gradeCeiling)]
         : null,
       encumberedAmount: c.encumberedAmount ?? 0,

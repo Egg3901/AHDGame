@@ -91,6 +91,53 @@ export function lotInputCost(
 }
 
 /**
+ * Overheads the commodity recipe does not name, as a flat share of the input bill.
+ *
+ * Only reached by `legacyLotProductionCost`. Retained because contracts awarded before ticket
+ * #1134 settle on the cost model they were signed under, not because it is a good model.
+ */
+export const LOT_OVERHEAD_SHARE_OF_INPUTS = 0.35;
+
+/**
+ * What a lot cost to build under the PRE-#1134 model: the commodity bill plus a flat overhead
+ * share, with no relation at all to what the lot sold for.
+ *
+ * This is the broken model. On the live world it returned about 1,091 against a lot the state
+ * paid 383,748,809 for, so a delivery credited the supplier 99.9997% of the contract and the
+ * defence appropriation converted into corporate cash instead of into equipment.
+ *
+ * It is kept, and still reachable, for exactly one reason: a contract signed under these terms
+ * keeps them for its remaining lots. Players agreed to those deals in good faith under the
+ * rules as they stood, and a repair never takes away what a player already holds. Selection is
+ * by `DefenceContract.costBasis`, and NOTHING should call this for a new award.
+ */
+export function legacyLotProductionCost(
+  strategyId: string | undefined | null,
+  priceRatios?: ReadonlyMap<CommodityType, number>
+): number | null {
+  const inputs = lotInputCost(strategyId, priceRatios);
+  if (inputs == null) return null;
+  return inputs * (1 + LOT_OVERHEAD_SHARE_OF_INPUTS);
+}
+
+/**
+ * The build cost that settles a given contract, on the economics it was signed under.
+ *
+ * THE grandfather rule, in one place so the delivery sweep and every order-book view agree.
+ * A CEO's displayed margin must be the margin they are actually paid, or the order book lies
+ * about a deal the player cannot renegotiate.
+ */
+export function contractLotProductionCost(
+  contract: { costBasis?: "margin"; pricePerLot: number },
+  strategyId: string | undefined | null,
+  priceRatios?: ReadonlyMap<CommodityType, number>
+): number | null {
+  return contract.costBasis === "margin"
+    ? lotProductionCost(strategyId, contract.pricePerLot, priceRatios)
+    : legacyLotProductionCost(strategyId, priceRatios);
+}
+
+/**
  * The profit a defence prime is expected to make on a lot it builds to order.
  *
  * THE dial that decides what a contract IS. A lot's price is set by

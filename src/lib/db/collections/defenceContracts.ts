@@ -81,6 +81,9 @@ export async function awardContract(
     ...(input.gradeCeiling != null ? { gradeCeiling: input.gradeCeiling } : {}),
     ...(input.assignedFactories != null ? { assignedFactories: input.assignedFactories } : {}),
     ...(input.selfDealing ? { selfDealing: input.selfDealing } : {}),
+    // Stamped on every new award. Contracts without it settle under the pre-#1134 economics
+    // they were signed under; see `DefenceContract.costBasis`.
+    costBasis: "margin",
     // An offer, not an order, unless the buyer is contracting its own state industry.
     // A National Corporation has no player CEO to click Accept; leaving those pending
     // meant the arsenal never filled.

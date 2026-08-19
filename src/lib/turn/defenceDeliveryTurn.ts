@@ -10,7 +10,7 @@ import {
 import {
   contractLotsThisTurn,
   defaultFactoryAllocation,
-  lotProductionCost,
+  contractLotProductionCost,
   normalizeGrade,
   DEFENCE_FACTORY_SLOTS_PER_PLANT,
   GRADE_PRICE_SCALE,
@@ -292,10 +292,11 @@ export async function applyDefenceDeliveries(
     // here made every grade-0 contract underwater from turn one even at the band floor
     // (floor 0.784x cost vs cost 1.0x), and over-credited grade-3 deliveries by the 1.25x
     // the band charged but the build never paid.
-    // Costed off the CONTRACT's stored `pricePerLot`, never the live anchor. Cost is a share
-    // of price (ticket #1134), so a signed order keeps the margin it was struck at even if the
-    // country's GDP has moved since - which is the same promise `pricePerLot` itself makes.
-    const unitCost = lotProductionCost(sector.strategyId, contract.pricePerLot, priceRatios) ?? 0;
+    // Settled on the economics THIS contract was signed under. A post-#1134 order costs a
+    // share of its own stored `pricePerLot`, so it keeps the margin it was struck at even if
+    // the country's GDP has moved since. A pre-#1134 order keeps the old model outright: those
+    // players agreed to those terms, and a repair never takes away what a player already holds.
+    const unitCost = contractLotProductionCost(contract, sector.strategyId, priceRatios) ?? 0;
     const gradedUnitCost = unitCost * GRADE_PRICE_SCALE[normalizeGrade(grade)];
     const buildCost = Math.max(0, Math.round(gradedUnitCost * recorded));
     const margin = actualCost - buildCost;
