@@ -573,6 +573,13 @@ export function StatusBar() {
                       valueClass="text-green-500/90"
                     />
                   )}
+                  {(stats.campaignIncomeBreakdown.unionContribution ?? 0) > 0 && (
+                    <BreakdownRow
+                      label="Union Contribution"
+                      value={`+${fullFaceHome(stats.campaignIncomeBreakdown.unionContribution)}`}
+                      valueClass="text-green-500/90"
+                    />
+                  )}
                   {stats.campaignIncomeBreakdown.totalTax > 0 && (
                     <BreakdownRow
                       label="Party Taxes"

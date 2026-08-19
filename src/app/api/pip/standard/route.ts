@@ -7,6 +7,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import { calculateFullFundDistribution } from "@/lib/utils/fundGeneration";
+import { unionContributionIncomePerTurn } from "@/lib/unions/unionContributionIncome";
 import {
   projectInfluenceDecay,
   projectFavorabilityDecay,
@@ -29,36 +30,44 @@ export async function GET() {
 
     const userId = new ObjectId(auth.user.userId);
 
-    const [homeState, party, statePartyOrg, recentNotifications, unreadCount, unreadMailCount] =
-      await Promise.all([
-        character.homeState
-          ? db
-              .collection<State>("states")
-              .findOne({ _id: character.homeState, countryId: character.countryId })
-          : null,
-        character.party && Number.isFinite(Number(character.party))
-          ? db.collection<PoliticalParty>("politicalParties").findOne({
-              sequentialId: Number(character.party),
-              countryId: character.countryId,
-            })
-          : null,
-        character.party
-          ? db.collection<StatePartyOrg>("statePartyOrg").findOne({
-              stateId: character.homeState,
-              partyId: character.party,
-            })
-          : null,
-        db
-          .collection<Notification>("notifications")
-          .find({ userId, read: false })
-          .sort({ createdAt: -1 })
-          .limit(3)
-          .toArray(),
-        db.collection<Notification>("notifications").countDocuments({ userId, read: false }),
-        db
-          .collection("playerMail")
-          .countDocuments({ toUserId: userId, read: false, deletedByRecipient: false }),
-      ]);
+    const [
+      homeState,
+      party,
+      statePartyOrg,
+      recentNotifications,
+      unreadCount,
+      unreadMailCount,
+      unionContribution,
+    ] = await Promise.all([
+      character.homeState
+        ? db
+            .collection<State>("states")
+            .findOne({ _id: character.homeState, countryId: character.countryId })
+        : null,
+      character.party && Number.isFinite(Number(character.party))
+        ? db.collection<PoliticalParty>("politicalParties").findOne({
+            sequentialId: Number(character.party),
+            countryId: character.countryId,
+          })
+        : null,
+      character.party
+        ? db.collection<StatePartyOrg>("statePartyOrg").findOne({
+            stateId: character.homeState,
+            partyId: character.party,
+          })
+        : null,
+      db
+        .collection<Notification>("notifications")
+        .find({ userId, read: false })
+        .sort({ createdAt: -1 })
+        .limit(3)
+        .toArray(),
+      db.collection<Notification>("notifications").countDocuments({ userId, read: false }),
+      db
+        .collection("playerMail")
+        .countDocuments({ toUserId: userId, read: false, deletedByRecipient: false }),
+      unionContributionIncomePerTurn(db, character._id),
+    ]);
 
     const pi = character.politicalInfluence ?? 0;
     const fav = character.favorability ?? 50;
@@ -82,10 +91,11 @@ export async function GET() {
           infamy: projectInfamyDecay(infamy),
         },
         income: {
-          netPerTurn: fundDistribution.characterReceives,
+          netPerTurn: fundDistribution.characterReceives + unionContribution,
           base: fundDistribution.baseGeneration,
           donorBonus: fundDistribution.donorBaseBonus,
           officeBonus: fundDistribution.officeBonus,
+          unionContribution,
           stateTax: fundDistribution.stateTaxAmount,
           nationalTax: fundDistribution.nationalTaxAmount,
         },

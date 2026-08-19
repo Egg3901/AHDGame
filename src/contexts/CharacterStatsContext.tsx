@@ -44,6 +44,7 @@ export interface CampaignIncomeBreakdown {
   baseGen: number;
   donorBonus: number;
   officeBonus: number;
+  unionContribution: number;
   stateTax: number;
   nationalTax: number;
   totalTax: number;

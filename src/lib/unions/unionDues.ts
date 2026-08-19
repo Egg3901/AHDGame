@@ -11,7 +11,8 @@
  *             union actually represents, weighted by each sector's unionization.
  *   DUES      money, set by the union head as an annual charge per member.
  *   APPROVAL  0-100, how the membership feels about the bargain they are
- *             getting. Dues push it down, services push it up.
+ *             getting. Dues push it down, services push it up, political
+ *             contributions push it down.
  *
  * Approval is the load-bearing one. It anchors the unionization drift target in
  * every represented sector, so a union that charges heavily and gives nothing
@@ -28,6 +29,7 @@ import {
   servicesCostFraction,
   type UnionServiceId,
 } from "./unionServices";
+import { politicalContributionApprovalPenalty } from "./unionPoliticalContributions";
 
 /** The slice of a sector's payroll a union may charge, as a fraction of annual wage. */
 export const MAX_DUES_FRACTION_OF_WAGE = 0.1;
@@ -150,17 +152,24 @@ export interface ApprovalInputs {
    * approval instead of continuing to earn it for free.
    */
   servicesLapsed?: boolean;
+  /**
+   * Share of remaining per-turn budget sent to organizers as political
+   * contributions, 0-0.5. Absent reads as none. Costs approval the same way
+   * dues do: the membership is judging the policy, not this turn's cash.
+   */
+  politicalContributionPct?: number;
 }
 
 /**
- * Where approval is heading. Dues subtract, services add, and lapsed services
- * add nothing.
+ * Where approval is heading. Dues and political contributions subtract,
+ * services add, and lapsed services add nothing.
  */
 export function approvalTarget(inputs: ApprovalInputs): number {
   const burden = duesBurdenRatio(inputs.duesPerWorkerAnnual, inputs.annualWage);
   const penalty = burden * APPROVAL_DUES_PENALTY_PER_UNIT;
+  const pacPenalty = politicalContributionApprovalPenalty(inputs.politicalContributionPct);
   const bonus = inputs.servicesLapsed ? 0 : servicesApprovalBonus(inputs.activeServices);
-  return Math.max(0, Math.min(100, BASE_APPROVAL + bonus - penalty));
+  return Math.max(0, Math.min(100, BASE_APPROVAL + bonus - penalty - pacPenalty));
 }
 
 /** Steps approval toward its target by at most `APPROVAL_TREND_STEP_PER_TURN`, no overshoot. */

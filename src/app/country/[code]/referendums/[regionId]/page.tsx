@@ -32,12 +32,19 @@ import { CampaignWire } from "@/components/referendum/campaignsPanel/CampaignWir
 import { ConsentBillStatus } from "@/components/referendum/campaignsPanel/ConsentBillStatus";
 import { buildConsentBillViews, type ConsentBillView } from "@/lib/referendum/consentBillView";
 import type { ObjectId } from "mongodb";
+import { turnoutTargetLabel } from "@/lib/demographics/turnoutTarget";
 
-/** Humanize a cohort group id for display ("urban_progressives" → "Urban progressives"). */
-function cohortName(groupId: string): string {
+/**
+ * Display name for a cohort. Cohorts are Layer-1 buckets
+ * ("education:degree_plus" → "Degree Plus"), so this routes through the same
+ * labeller the targeting picker and the demographics tab use — one name per
+ * group of voters across the whole interface. Campaigns opened before the
+ * bucket conversion still carry archetype ids, which `turnoutTargetLabel`
+ * humanizes rather than rendering blank.
+ */
+function cohortName(groupId: string, countryId: string): string {
   if (groupId === "_all") return "All voters";
-  const s = groupId.replace(/_/g, " ");
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  return turnoutTargetLabel(groupId, countryId);
 }
 
 /** Turnout-weighted average of cohort effective turnouts (null when no cohorts). */
@@ -194,7 +201,7 @@ export default async function ReferendumDetailPage({
     const m = modByGroup.get(c.groupId);
     return {
       groupId: c.groupId,
-      name: cohortName(c.groupId),
+      name: cohortName(c.groupId, countryId),
       share: c.share,
       turnout: Math.max(0, Math.min(100, c.turnout + effTurnout(m?.turnoutMod ?? 0))),
       yesLean: Math.max(0, Math.min(100, c.yesLean + effLean(m?.leanMod ?? 0) + uniformLeanShift)),
@@ -219,7 +226,8 @@ export default async function ReferendumDetailPage({
     targetParam && cohortRows.some((c) => c.groupId === targetParam)
       ? { groupId: targetParam }
       : "whole";
-  const ggTargetName = ggTarget === "whole" ? "Whole electorate" : cohortName(targetParam!);
+  const ggTargetName =
+    ggTarget === "whole" ? "Whole electorate" : cohortName(targetParam!, countryId);
   const cohortSaturation = (groupId: string) => {
     const m = modByGroup.get(groupId);
     // Raw units → 0..1 fill via the same tanh the engine reads through.

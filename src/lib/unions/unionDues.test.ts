@@ -5,6 +5,8 @@ import {
   servicesCostPerTurn,
   unionMembers,
   UNION_TREASURY_FLOW_SCALE,
+  approvalTarget,
+  BASE_APPROVAL,
 } from "./unionDues";
 
 describe("unionMembers", () => {
@@ -34,16 +36,20 @@ describe("union treasury flow scale", () => {
   });
 });
 
-describe("union treasury flow scale", () => {
-  it("credits twelve times the annual dues divided by a 48-turn year", () => {
-    // 100 members * 4.8 a year / 48 turns = 10, then * 12 = 120.
-    expect(TURNS_PER_YEAR).toBe(48);
-    expect(UNION_TREASURY_FLOW_SCALE).toBe(12);
-    expect(duesIncomePerTurn(100, 4.8)).toBe(120);
-  });
-
-  it("bills twelve times the wage-fraction service cost per turn", () => {
-    // healthFund is 2.5% of wages: 100 members * 10 wage * 0.025 / 48 = 0.520833..., * 12 = 6.25.
-    expect(servicesCostPerTurn(100, 10, ["healthFund"])).toBeCloseTo(6.25, 8);
+describe("approvalTarget political contributions", () => {
+  it("drops 5 points at the 50% cap with no dues and no services", () => {
+    const baseline = approvalTarget({
+      duesPerWorkerAnnual: 0,
+      annualWage: 10,
+      activeServices: [],
+    });
+    const atCap = approvalTarget({
+      duesPerWorkerAnnual: 0,
+      annualWage: 10,
+      activeServices: [],
+      politicalContributionPct: 0.5,
+    });
+    expect(baseline).toBe(BASE_APPROVAL);
+    expect(atCap).toBe(BASE_APPROVAL - 5);
   });
 });

@@ -110,6 +110,10 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // Phase-3 `unattributed` backlog and makes the money-supply check report the
   // repaid value under its own reason.
   restitution_credit: "restitution",
+  // Union PAC payouts: campaign-fund credits from a union treasury. The union
+  // is not a ledger account yet, so the character credit is attributed rather
+  // than left in the unattributed backlog.
+  union_contribution: "union_pac",
 };
 
 /** Semantic mint/sink reason for a single-sided row; `unattributed` when unmapped. */
