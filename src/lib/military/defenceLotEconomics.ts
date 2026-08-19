@@ -213,7 +213,14 @@ export function lotProductionCost(
   if (!(lotPrice > 0) || !Number.isFinite(lotPrice)) return null;
   const index = lotCostIndex(strategyId, priceRatios);
   if (index == null) return null;
-  return lotPrice * (1 - TARGET_SUPPLIER_MARGIN) * index;
+  // Capped, so a shortage SQUEEZES THE SUPPLIER'S MARGIN and never raises the bill to the
+  // taxpayer. Without the cap a shock of barely 5% pushed cost x MIN_CONTRACT_MARGIN above the
+  // GDP anchor, the band inverted, and the floor became a price ABOVE the ceiling the anchor is
+  // supposed to be. At the cap the margin has fallen to exactly the floor markup and stops:
+  // the contract stays writable at the anchor and the supplier absorbs the rest, which is the
+  // right side of that trade to put the pain on.
+  const share = Math.min((1 - TARGET_SUPPLIER_MARGIN) * index, MAX_COST_SHARE_OF_PRICE);
+  return lotPrice * share;
 }
 
 /**
@@ -223,6 +230,16 @@ export function lotProductionCost(
  * cheap-mass doctrine is a real choice rather than a way to bankrupt your own arms industry.
  */
 export const MIN_CONTRACT_MARGIN = 0.12;
+/**
+ * The most of a lot's price that its build cost may consume, whatever the commodity market
+ * does.
+ *
+ * Set so the price floor lands exactly ON the GDP anchor rather than above it:
+ * `cost x (1 + MIN_CONTRACT_MARGIN) = price` at this share. Past it the band would invert, and
+ * a "floor" higher than the anchor is not a floor at all, it is the taxpayer funding a
+ * shortage. A supplier squeezed this hard still clears the minimum contract margin.
+ */
+export const MAX_COST_SHARE_OF_PRICE = 1 / (1 + MIN_CONTRACT_MARGIN);
 
 /**
  * The most a contract may mark a lot up over what it costs to build (ticket #1134).
