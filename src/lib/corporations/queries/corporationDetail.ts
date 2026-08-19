@@ -147,6 +147,7 @@ import { isLabourWagesEnabled } from "@/lib/labour/featureFlag";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { computeFillRate, fillRateBand } from "@/lib/corporations/financialFogOfWar";
 import { summarizeBuildQueue } from "@/lib/corporations/sectorBuildQueue";
+import { readPlantsPnl } from "@/lib/corporations/plantsPnlBasis";
 
 function getEmptyStateMetricValues(): StateMetricValues {
   return {
@@ -1112,8 +1113,20 @@ export async function loadCorporationDetailView(args: {
     const engineMargin =
       typeof sector.effectiveProfitMargin === "number" ? sector.effectiveProfitMargin : null;
     const effectiveProfitMargin = engineMargin ?? stackMargin;
-    const maintenance = financialRevenue * (1 - effectiveProfitMargin / 100);
-    const profit = financialRevenue - maintenance - sectorGrowthCostLocal;
+    // Ticket 1122: the turn's own lines when the sector has them, restated into
+    // the corp's currency. Inverting `effectiveProfitMargin` cannot be right:
+    // it is this P&L's capped OUTPUT, so at the cap it recovers a zero
+    // operating cost from a negative one (profit == revenue), and in every case
+    // it drops upkeep and compliance, which the margin's scope excludes and the
+    // profit includes. The inversion stays as the fallback for rows that
+    // predate the field. See `plantsPnlBasis.ts`.
+    const enginePnl = readPlantsPnl(sector);
+    const maintenance = enginePnl
+      ? sectorFieldToCorpCcy(enginePnl.operatingCost, sector)
+      : financialRevenue * (1 - effectiveProfitMargin / 100);
+    const profit = enginePnl
+      ? sectorFieldToCorpCcy(enginePnl.profit, sector)
+      : financialRevenue - maintenance - sectorGrowthCostLocal;
     // Physical cost decomposition for the margin drilldown (ticket 1072: the
     // additive modifier list could not explain a physically-derived margin —
     // base + modifiers summed 40pts above the engine figure with no line
@@ -1132,6 +1145,24 @@ export async function loadCorporationDetailView(args: {
       if (!plantsMode || engineMargin == null) return null;
       const realized = sectorRealizedRevenueLocal;
       if (realized == null || !(realized > 0)) return null;
+      // Exact when the turn's lines are on the row: no re-derivation of the
+      // input bill, and the policy stack gets its own line instead of hiding
+      // inside "other". This is the same decomposition the sector page's money
+      // chain now shows, so the two surfaces agree line for line (ticket 1122).
+      if (enginePnl && enginePnl.revenue > 0) {
+        const pp = (v: number) => Math.round((v / enginePnl.revenue) * 1000) / 10;
+        return {
+          inputsPp: pp(enginePnl.inputs),
+          laborPp: enginePnl.labour > 0 ? pp(enginePnl.labour) : null,
+          // Everything else the margin's scope charges, policy credit excluded
+          // so it can be named. Upkeep and compliance are deliberately absent:
+          // they are outside the margin, and folding them in here would make
+          // the lines stop summing to it.
+          otherPp: pp(enginePnl.otherOpex + enginePnl.financialLegs),
+          // Signed, positive = credit.
+          policyPp: pp(enginePnl.policyCredit),
+        };
+      }
       const util =
         Number.isFinite(sector.capitalStock) &&
         (sector.capitalStock as number) > 0 &&
@@ -1162,7 +1193,7 @@ export async function loadCorporationDetailView(args: {
           : null;
       const otherPp =
         Math.round((100 - effectiveProfitMargin - inputsPp - (laborPp ?? 0)) * 10) / 10;
-      return { inputsPp, laborPp, otherPp };
+      return { inputsPp, laborPp, otherPp, policyPp: 0 };
     })();
     // Local-cell share only: this query scopes to the corp's own buckets, so a
     // correct NATIONAL share (which the turn charges the burden on — see

@@ -69,6 +69,7 @@ import {
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import { buildSectorCommoditySections } from "@/lib/corporations/queries/sectorDetailCommodities";
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
+import { buildPolicyStackRows } from "@/lib/corporations/plantsPnlBasis";
 import {
   buildSectorAttackInfo,
   buildSectorCrisisSection,
@@ -616,7 +617,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
 
     // Margin modifier stack (commodity blend, tariffs, subsidies, transition,
     // state metrics, regional conditions), see computeSectorMarginSection.
-    const { mods, maintenance, profit, transitionProgress, strategyTransitionMod } =
+    const { mods, maintenance, profit, enginePnl, transitionProgress, strategyTransitionMod } =
       computeSectorMarginSection({
         sector,
         sectorType,
@@ -706,6 +707,13 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       const techBuildCostMultiplier = techTreesEnabled
         ? getSectorTechEffects(techCorpView, corporation.type).growthCostMultiplier
         : 1;
+      // Tech margin points ride `policyCredit` under plants like every other
+      // non-physical modifier, and `computeAllMarginModifiers` does not carry
+      // them, so name the row here rather than letting it fall into the scale
+      // factor unlabelled (ticket 1122).
+      const techMarginBonusPp = techTreesEnabled
+        ? getSectorTechEffects(techCorpView, corporation.type).marginBonusPp
+        : 0;
       // The physical input bill: the same demand rows the Inputs panel renders,
       // priced at the BILLED unit price (base x realization factor, the price
       // computeInputsCost actually charges), so the panel and the engine's
@@ -776,7 +784,39 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           growthCostAnchor: sectorAmountAnchor(sector.currentGrowthCost),
           profitAnchor: sectorAmountAnchor(profit),
           inputsAnchor,
+          // Ticket 1122: the turn's own lines, normalized to ₳. Present on any
+          // sector that has run a plants turn since the field shipped; the
+          // builder falls back to reconstruction when it is null.
+          enginePnl: enginePnl
+            ? {
+                revenue: sectorAmountAnchor(enginePnl.revenue),
+                inputs: sectorAmountAnchor(enginePnl.inputs),
+                labour: sectorAmountAnchor(enginePnl.labour),
+                upkeep: sectorAmountAnchor(enginePnl.upkeep),
+                compliance: sectorAmountAnchor(enginePnl.compliance),
+                otherOpex: sectorAmountAnchor(enginePnl.otherOpex),
+                financialLegs: sectorAmountAnchor(enginePnl.financialLegs),
+                inventoryCarry: sectorAmountAnchor(enginePnl.inventoryCarry ?? 0),
+                policyCredit: sectorAmountAnchor(enginePnl.policyCredit),
+                policyPp: enginePnl.policyPp,
+                operatingCost: sectorAmountAnchor(enginePnl.operatingCost),
+                totalCost: sectorAmountAnchor(enginePnl.totalCost),
+                profit: sectorAmountAnchor(enginePnl.profit),
+              }
+            : null,
         },
+        // The modifier stack behind that credit, already in money and summing
+        // to it exactly, so the panel can show WHY the profit is what it is
+        // rather than one opaque line. Same rows the corporation page's margin
+        // drilldown lists, minus commodity pressure, which the physical model
+        // prices directly as the input bill and the sale price.
+        policyStack: enginePnl
+          ? buildPolicyStackRows({
+              policyCreditAnchor: sectorAmountAnchor(enginePnl.policyCredit),
+              revenueAnchor: sectorAmountAnchor(enginePnl.revenue),
+              mods: { ...mods, techMarginBonus: techMarginBonusPp },
+            })
+          : [],
         regulatoryBurdenPp: mods.dominanceRegulatoryBurdenPp ?? 0,
         crisisMarginPenaltyPp: crisisMarginPenalty,
         // C9: the same spread `buildCapacity` charges on top of the build cost.

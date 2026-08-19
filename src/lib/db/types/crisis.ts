@@ -265,6 +265,13 @@ export interface CrisisAutoCooldown {
   templateKey: string;
   scopeKey: string;
   lastSpawnTurn: number;
+  /**
+   * Hysteresis latch for condition-tier triggers. Set false on spawn; set true
+   * again only once the trigger condition has CLEARED by its `clearMargin`. A
+   * disarmed template cannot re-spawn even after its cooldown expires. Absent
+   * on legacy rows, which are read as armed.
+   */
+  armed?: boolean;
   updatedAt: Date;
 }
 
@@ -301,6 +308,15 @@ export interface TriggerClause {
   consecutiveTurns?: number;
   /** For `fxDepreciation`: percentage drop measured over this many turns. */
   windowTurns?: number;
+  /**
+   * Hysteresis band, in the clause's own units. The clause FIRES at `threshold`
+   * but only RE-ARMS once the metric is back past `threshold` by this much on
+   * the healthy side. Without it a crisis whose own effects depress its trigger
+   * metric re-fires forever on every cooldown expiry, because the metric it
+   * damaged never climbs back over the same line it fell through. Default 0
+   * (no hysteresis) for clauses that do not need it.
+   */
+  clearMargin?: number;
 }
 
 /** Declarative trigger condition: every clause must hold (logical AND). */

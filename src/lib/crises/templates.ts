@@ -343,7 +343,9 @@ export const RECESSION_TEMPLATE: CrisisTemplate = {
   autoTrigger: {
     kind: "condition",
     cooldownTurns: 144,
-    condition: { all: [{ metric: "gdpGrowth", op: "lt", threshold: 0, consecutiveTurns: 3 }] },
+    condition: {
+      all: [{ metric: "gdpGrowth", op: "lt", threshold: 0, consecutiveTurns: 3, clearMargin: 0.5 }],
+    },
   },
   heroImage:
     "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=1600&q=70",
@@ -467,7 +469,7 @@ export const INFLATION_SPIKE_TEMPLATE: CrisisTemplate = {
   autoTrigger: {
     kind: "condition",
     cooldownTurns: 144,
-    condition: { all: [{ metric: "inflationRate", op: "gt", threshold: 7 }] },
+    condition: { all: [{ metric: "inflationRate", op: "gt", threshold: 7, clearMargin: 1 }] },
   },
   heroImage:
     "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=1600&q=70",
@@ -864,8 +866,10 @@ export const MASS_PROTESTS_TEMPLATE: CrisisTemplate = {
     cooldownTurns: 144,
     condition: {
       all: [
-        { metric: "approval", op: "lt", threshold: 35 },
-        { metric: "unemploymentRate", op: "gt", threshold: 8 },
+        // Both clauses carry a margin: this crisis ticks approval down -0.05 a
+        // turn, so the approval clause is one it damages itself.
+        { metric: "approval", op: "lt", threshold: 35, clearMargin: 3 },
+        { metric: "unemploymentRate", op: "gt", threshold: 8, clearMargin: 0.5 },
       ],
     },
   },
@@ -1563,7 +1567,7 @@ export const CURRENCY_CRISIS_TEMPLATE: CrisisTemplate = {
     kind: "condition",
     cooldownTurns: 144,
     condition: {
-      all: [{ metric: "fxDepreciation", op: "gt", threshold: 15, windowTurns: 6 }],
+      all: [{ metric: "fxDepreciation", op: "gt", threshold: 15, windowTurns: 6, clearMargin: 5 }],
     },
   },
   heroImage:
@@ -2774,8 +2778,10 @@ export const COUP_ATTEMPT_TEMPLATE: CrisisTemplate = {
     cooldownTurns: 288,
     condition: {
       all: [
-        { metric: "approval", op: "lt", threshold: 25 },
-        { metric: "gdpGrowth", op: "lt", threshold: -2 },
+        // Same self-reinforcing shape: the coup ticks approval -0.06 a turn and
+        // its own trigger reads approval.
+        { metric: "approval", op: "lt", threshold: 25, clearMargin: 3 },
+        { metric: "gdpGrowth", op: "lt", threshold: -2, clearMargin: 0.5 },
       ],
     },
   },
@@ -2908,7 +2914,12 @@ export const POWER_GRID_FAILURE_TEMPLATE: CrisisTemplate = {
   autoTrigger: {
     kind: "condition",
     cooldownTurns: 216,
-    condition: { all: [{ metric: "powerGridReliability", op: "lt", threshold: 90 }] },
+    condition: {
+      // Fires under 90, re-arms only over 92. Every condition crisis here ticks
+      // down the metric its own trigger reads, so without the gap the trigger
+      // stays true on damage the crisis itself did and the crisis is permanent.
+      all: [{ metric: "powerGridReliability", op: "lt", threshold: 90, clearMargin: 2 }],
+    },
   },
   heroImage:
     "https://images.unsplash.com/photo-1520116468816-95b69f847357?auto=format&fit=crop&w=1600&q=70",

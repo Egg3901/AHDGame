@@ -40,6 +40,7 @@ import { getCountryConfig } from "@/lib/constants/countries";
 import { getGameState } from "@/lib/gameState";
 import { getRoundedPublicMarketCap } from "@/lib/corporations/marketQuote";
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
+import { readPlantsPnl } from "@/lib/corporations/plantsPnlBasis";
 import {
   anchorToCorpCapital,
   corpCapitalToAnchor,
@@ -174,8 +175,18 @@ export async function GET(request: Request) {
         0,
         Math.min(100, sector.profitMargin + unemploymentMod + stateSectorSpecializationMod)
       );
-      const maintenance = sector.revenue * (1 - effectiveMargin / 100);
-      const profit = sector.revenue - maintenance - sector.currentGrowthCost;
+      // Ticket 1122: under plants the turn persists the P&L it booked. Prefer
+      // it: the margin rebuilt here is two modifiers wide and never saw the
+      // physical cost model, and inverting ANY margin drops upkeep and
+      // compliance and cannot represent a negative operating cost. Falls back
+      // to the old expression for rows without the field.
+      const bookedPnl = readPlantsPnl(sector);
+      const maintenance = bookedPnl
+        ? bookedPnl.operatingCost
+        : sector.revenue * (1 - effectiveMargin / 100);
+      const profit = bookedPnl
+        ? bookedPnl.profit
+        : sector.revenue - maintenance - sector.currentGrowthCost;
 
       return {
         stateId: sector.stateId,
@@ -276,8 +287,15 @@ export async function GET(request: Request) {
         Math.min(100, sector.profitMargin + unemploymentMod + stateSectorSpecializationMod)
       );
       const sectorRevenue = sectorEconomicRevenue(sector);
-      const maint = sectorRevenue * (1 - effMargin / 100);
-      const profit = sectorRevenue - maint - sector.currentGrowthCost;
+      // Ticket 1122: under plants the turn persists the P&L it booked. Prefer
+      // it: the margin rebuilt here is two modifiers wide and never saw the
+      // physical cost model, and inverting ANY margin drops upkeep and
+      // compliance and cannot represent a negative operating cost. Falls back
+      // to the old expression for rows without the field.
+      const bookedNpvPnl = readPlantsPnl(sector);
+      const profit = bookedNpvPnl
+        ? bookedNpvPnl.profit
+        : sectorRevenue - sectorRevenue * (1 - effMargin / 100) - sector.currentGrowthCost;
       const yearlyProfit = profit * GAME_DAYS_PER_YEAR;
       if (yearlyProfit > 0) totalSectorNPV += Math.round(yearlyProfit / NPV_ANNUAL_DISCOUNT_RATE);
     }
