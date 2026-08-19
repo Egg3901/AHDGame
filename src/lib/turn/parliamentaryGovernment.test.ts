@@ -1054,17 +1054,15 @@ describe("resolveParliamentaryNoConfidenceVote — ticket-1137 minority motion m
     db.collectionMocks["electedOfficials"] = {
       ...db.collection("electedOfficials"),
       find: vi.fn().mockReturnValue({
-        toArray: vi
-          .fn()
-          .mockResolvedValue([
-            {
-              nppId: ayeNppId,
-              isNPP: true,
-              countryId: "UK",
-              officeType: "commons",
-              seatsHeld: 215,
-            },
-          ]),
+        toArray: vi.fn().mockResolvedValue([
+          {
+            nppId: ayeNppId,
+            isNPP: true,
+            countryId: "UK",
+            officeType: "commons",
+            seatsHeld: 215,
+          },
+        ]),
         sort: vi.fn().mockReturnThis(),
         project: vi.fn().mockReturnThis(),
       }),
