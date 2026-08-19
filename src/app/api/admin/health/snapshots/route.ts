@@ -6,7 +6,7 @@ import { handleRouteError } from "@/lib/api/errors";
 /**
  * List game health snapshots with optional turn range filter.
  * Auth: requireAdmin()
- * Errors: 401, 500
+ * Errors: 403
  */
 export async function GET(request: Request) {
   try {

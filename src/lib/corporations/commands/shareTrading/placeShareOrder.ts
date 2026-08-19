@@ -71,11 +71,11 @@ interface RouteParams {
  * POST /api/corporations/[id]/shares/orders
  * Place a limit buy or sell order.
  *
- * Buy order: money deducted from cashOnHand immediately (escrowed).
- *   If current price <= limit price, fills immediately from public float.
- *   Otherwise stays open until price drops.
+ * Buy order: money escrowed immediately from corp `liquidCapital` or character
+ * `currencyBalances.personal`. If current price <= limit price, fills immediately
+ * from public float. Otherwise stays open until price drops.
  *
- * Sell order: shares removed from holdings immediately (reserved).
+ * Sell order: shares debited from holdings immediately (`sharesDebitedAtCreation`).
  *   If current price >= limit price, fills immediately (money credited).
  *   Otherwise stays open until price rises.
  */
@@ -725,11 +725,8 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           targetFxRate
         );
         const costInHome = cost * charFxRate;
-        // Atomic balance-gated debit on the buyer's wallet. Pre-fix this
-        // route used getPersonalBalance(character, ...) against a cached doc
-        // and a separate naïve $inc — the same race shape the bond-buy fix
-        // closed. KIMI ANTONELLI's exploit primarily moved through limit
-        // orders, so this code path is the highest-risk remaining gap.
+        // Atomic balance-gated debit on the buyer's wallet so concurrent
+        // limit buys cannot both pass a stale balance check and overspend.
         const debitResult = await atomicallyDebitCharacterCash(
           db,
           character._id,
@@ -1103,10 +1100,8 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
         });
       }
 
-      // Pending sell order — track reservation without debiting shares.
-      // Shares remain in holder's balance but are marked as reserved.
-      // On fill: debit from holder, credit to buyer.
-      // On cancel: just remove the reservation.
+      // Pending sell: debit holdings now and set sharesDebitedAtCreation so
+      // fill does not debit again. Cancel restores the shares.
       const reservedShares = await debitShares(
         db,
         corporation._id,

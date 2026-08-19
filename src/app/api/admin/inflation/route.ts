@@ -4,7 +4,7 @@
 // each calculation. Lets an admin see exactly which channel is dominating
 // when inflation hits the floor.
 // Auth: requireAdmin
-// Errors: 401, 403, 500
+// Errors: 403
 
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

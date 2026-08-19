@@ -2,7 +2,7 @@
 // Sets a one-shot state price nudge. Drift resumes from nudged value next turn.
 // Body: { stateId: string, price: number }
 // Auth: requireAdmin
-// Errors: 401, 403, 400, 404
+// Errors: 403, 400, 404
 
 import { NextResponse } from "next/server";
 import { z } from "zod";

@@ -1,6 +1,6 @@
 // GET diagnoses / POST backfills missing turn timing fields and countryId on state, national, and committee party elections.
 // Auth: requireAdmin
-// Errors: 401, 500
+// Errors: 403
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";

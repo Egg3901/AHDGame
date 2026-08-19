@@ -6,7 +6,7 @@ import { getGameStateCollection } from "@/lib/db/collections";
 
 // POST /api/admin/turn/toggle-player-transfers - Toggles player-to-player transfer blocking on/off.
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 export async function POST() {
   try {
     const auth = await requireAdmin();

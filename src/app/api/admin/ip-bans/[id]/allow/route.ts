@@ -23,7 +23,7 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 // PATCH /api/admin/ip-bans/[id]/allow — flip row between ban and allowance mode
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireAdmin();

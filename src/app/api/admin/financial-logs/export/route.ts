@@ -4,7 +4,7 @@
 // limit (50 rows) and streams the result as text/csv with a download header.
 //
 // Auth: requireAdmin
-// Errors: 400, 401, 403
+// Errors: 400, 403
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";

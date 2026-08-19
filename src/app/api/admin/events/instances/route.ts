@@ -11,7 +11,7 @@ import { getEventHandler } from "@/lib/events/substrate/registry";
 
 // GET /api/admin/events/instances?characterId=... - Event history for a character (debugger).
 // Auth: requireAdmin
-// Errors: 400, 401, 403
+// Errors: 400, 403
 export async function GET(request: Request) {
   try {
     const auth = await requireAdmin();

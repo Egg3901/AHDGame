@@ -1,6 +1,6 @@
 // GET /api/admin/migrations/create-indexes/diagnose — Report which indexes exist vs missing.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

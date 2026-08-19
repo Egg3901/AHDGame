@@ -7,7 +7,7 @@ import type { User, WikiPage } from "@/lib/db/types";
 
 // GET /api/admin/wiki/review-queue — Returns all wiki pages with pending_review status awaiting moderation.
 // Auth: requireModerator (admin or moderator)
-// Errors: 401, 403
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireModerator();

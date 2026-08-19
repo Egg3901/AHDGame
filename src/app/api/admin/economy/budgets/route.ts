@@ -1,7 +1,7 @@
 // GET /api/admin/economy/budgets?countryId=US&fiscalYear=2021
 // Returns FederalBudget + prime rate + turns-until-FY. Historical snapshot when fiscalYear is set.
 // Auth: requireAdmin
-// Errors: 401, 403, 400, 404
+// Errors: 403, 400, 404
 //
 // **Currency (v0.2.6):** Scoped to one country per query, so every money field
 // in the response is in that country's currency. `currencyCode` is surfaced at

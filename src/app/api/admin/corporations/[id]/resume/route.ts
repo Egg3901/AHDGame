@@ -1,7 +1,7 @@
 // POST /api/admin/corporations/[id]/resume
 // Clears suspension — corporation re-enters turn processing next cycle.
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

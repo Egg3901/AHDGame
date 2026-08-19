@@ -3,10 +3,11 @@ import type { State } from "@/lib/db/types";
 /**
  * Wales's 6 sub-regions as latent State documents, modeled on `ieRegions.ts`.
  *
- * NOT inserted anywhere in Sub-project 1 — the SP2 `expandToSubRegions` step inserts
- * these when Wales secedes. Population + GDP sum to the UK WAL nation-region seed
- * (3,170,000 / 74,000); `houseDistricts` sum to the 60-seat Senedd; `stateSenateSeats`
- * are 0 (unicameral). `votingSystem` is "fptp" (the AMS constituency tier).
+ * Not inserted at UK seed time - `expandToSubRegions` inserts them when Wales
+ * secedes. Population + GDP sum to the UK WAL nation-region seed
+ * (3,170,000 / 74,000); `houseDistricts` sum to the 60-seat Senedd;
+ * `stateSenateSeats` are 0 (unicameral). `votingSystem` is "fptp" (the AMS
+ * constituency tier).
  */
 export const walRegions: State[] = [
   {

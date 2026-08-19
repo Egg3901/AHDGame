@@ -18,7 +18,7 @@ import { ObjectId } from "mongodb";
 
 // POST /api/admin/officials/cleanup — Removes vacant and duplicate house/stateSenate official records and clears stale currentOffice on affected characters.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     const auth = await requireAdmin();

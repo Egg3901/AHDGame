@@ -16,7 +16,7 @@
 //     { "48": 0.25, "96": 0.35, "240": 0.40 }  (must sum to 1)
 //
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 500
+// Errors: 400, 403
 
 import { NextResponse } from "next/server";
 import { z } from "zod";

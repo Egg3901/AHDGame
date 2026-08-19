@@ -11,7 +11,7 @@ import type { TaskComment } from "@/lib/db/types/taskComment";
 
 // GET /api/admin/tasks/[id]/comments — Return all comments for a task, sorted oldest first.
 // Auth: requireAdminOrApiKey
-// Errors: 400, 401, 403, 404
+// Errors: 400, 401, 403, 404, 500
 /**
  * GET /api/admin/tasks/[id]/comments
  * Returns all comments for a task, oldest first.
@@ -53,7 +53,7 @@ const createCommentSchema = z.object({
 
 // POST /api/admin/tasks/[id]/comments — Add a comment to a task, optionally updating its status.
 // Auth: requireAdminOrApiKey
-// Errors: 400, 401, 403, 404
+// Errors: 400, 401, 403, 404, 500
 /**
  * POST /api/admin/tasks/[id]/comments
  * Add a comment, optionally updating task status.

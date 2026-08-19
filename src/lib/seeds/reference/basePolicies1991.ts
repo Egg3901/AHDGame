@@ -43,8 +43,8 @@
  *     anachronistic — positions sit at the most-statist option indexes
  *     to reflect the era's planned-economy posture.
  *
- *   BR — empty stub; matches the 2019 stub (BR is 1991-only and its
- *     policy positions aren't budgeted for at the `basePolicies` level).
+ *   BR — empty stub at this level; matches the 2019 stub. 1953 authors the
+ *     full BR policy map in COUNTRY_POLICY_CONFIGS_1953.
  *
  *   FR/IT/ES/SE/TR — NPP-tier democracies seeded in 1991 worlds (see
  *     seedCountryGameStates PRESET_ENABLEMENT). Blocks follow the same
@@ -539,8 +539,8 @@ export const COUNTRY_POLICY_CONFIGS_1991: Record<string, CountryPolicyConfig> = 
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  Brazil — empty stub (1991-only country, no policy positions seeded
-  //  at this level; budgets feed via `NATIONAL_BUDGET_SEED_CONFIGS_1991`)
+  //  Brazil — empty stub at this level (1953 authors the full BR policy map;
+  //  budgets feed via `NATIONAL_BUDGET_SEED_CONFIGS_1991`)
   // ═══════════════════════════════════════════════════════════════════════════
   br: {
     nationalStateId: "br_national",

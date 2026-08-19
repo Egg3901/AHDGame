@@ -8,7 +8,7 @@ import { getGameStateCollection } from "@/lib/db/collections";
 // When open, each player may make a single cooldown-free party switch (see the party join route).
 // Flip on while staging a launch so players can settle into a party during the pause, off at go-live.
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 export async function POST() {
   try {
     const auth = await requireAdmin();

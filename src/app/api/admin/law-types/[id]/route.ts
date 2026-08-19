@@ -16,7 +16,7 @@ const TERMINAL_STATUSES: BillStatus[] = ["signed", "failed", "vetoed", "withdraw
 
 // PUT /api/admin/law-types/[id] — Updates a law type, creating an admin override for seed-defined types.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAdmin();
@@ -111,7 +111,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
 // DELETE /api/admin/law-types/[id] — Deletes an admin-created law type; blocks deletion if active bills reference it.
 // Auth: requireAdmin
-// Errors: 401, 403, 404, 409
+// Errors: 403, 404, 409
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAdmin();

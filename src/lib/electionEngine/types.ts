@@ -83,10 +83,9 @@ export interface DistributeVotesOptions {
   /** Weight party over candidate: (partyWeight*party + candidate)/(partyWeight+1). 2 = 2:1 party. */
   partyPositionWeight?: number;
   /**
-   * @deprecated 2026-06-18 (D3) — no-op. Selected the retired presidential Org
+   * @deprecated 2026-06-18 (D3) - no-op. Selected the retired presidential Org
    * scalar; general elections now use `normalizedOrgShare` regardless and the
-   * engines no longer read this flag. Kept so existing call sites type-check
-   * until the presidential→swing-flow cutover (Phase 4) removes them.
+   * engines no longer read this flag. Kept so existing call sites type-check.
    */
   usePresidentialPartyOrg?: boolean;
   /** Include NPI influence score in appeal (true for presidential, false for state) */
@@ -198,13 +197,9 @@ export interface DistributeVotesOptions {
    */
   govModifierByParty?: Map<string, number>;
   /**
-   * Opt-in to the §7.3.2 two-phase swing-flow vote distribution model.
-   * When true, the engine routes through `distributeVotesBySwingFlow`
-   * instead of the legacy weight-multiplier model. Default false during
-   * #4B-#4F; flipped to true as default in #4G after diff-test
-   * verification.
-   *
-   * See `docs/plans/archive/2026-05/2026-05-21-swing-flow-implementation.md`.
+   * Unused by the distribution engines. Callers pick
+   * `distributeVotesBySwingFlow` vs the legacy allocator themselves.
+   * `accumulateVoteTurn` always uses swing-flow for generals.
    */
   useSwingFlowModel?: boolean;
   /**
@@ -334,17 +329,18 @@ export interface DistributeVotesOptions {
   applyPartyFit?: boolean;
   /**
    * Regional bases L1: per-candidate state-org levels for the state being
-   * scored. Keyed by candidateId. Only consumed when `applyPartyFit: true`
-   * (the primary path). Missing entries → no bonus (multiplier 1.0). Bonus
-   * formula: `1 + (min(level, 10) / 10) × MAX_STATE_ORG_BONUS_PRIMARY`.
+   * scored. Keyed by candidateId. Consumed whenever the map is present (not
+   * gated on applyPartyFit). Cap is MAX_STATE_ORG_BONUS_PRIMARY in primaries
+   * and MAX_STATE_ORG_BONUS_GENERAL in generals, selected via isGeneralElection.
+   * Missing entries: no bonus (multiplier 1.0).
+   * Formula: `1 + (min(level, 10) / 10) × maxBonus`.
    */
   stateOrgByCandidate?: Map<string, number>;
   /**
    * Regional bases C: per-candidate home state (candidateId → stateId).
-   * Only consumed when `applyPartyFit: true` and `currentStateId` is also
-   * provided. When the candidate's home matches `currentStateId`, a flat
-   * `1 + HOME_STATE_BONUS_PRIMARY` multiplier is applied. Missing entries →
-   * no bonus.
+   * Consumed whenever the map is present and currentStateId is set (not
+   * gated on applyPartyFit). Matching home applies 1 + HOME_STATE_BONUS_PRIMARY
+   * or 1 + HOME_STATE_BONUS_GENERAL depending on isGeneralElection.
    */
   homeStateByCandidate?: Map<string, string>;
   /**

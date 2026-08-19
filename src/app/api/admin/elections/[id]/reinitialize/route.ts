@@ -41,7 +41,7 @@ function yearToCycle(year: number, startingYear: number): number {
 
 // POST /api/admin/elections/[id]/reinitialize — Fully resets a presidential election: deletes all candidates, tallies, and campaigns, then resets timers from now.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireAdmin();

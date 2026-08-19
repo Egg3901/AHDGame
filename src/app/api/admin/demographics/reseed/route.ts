@@ -49,7 +49,7 @@ const ReseedBodySchema = z
 
 // POST /api/admin/demographics/reseed — era-aware, international-scoped reseed.
 // Auth: requireAdmin
-// Errors: 401, 403, 400 (unknown country+era)
+// Errors: 403, 400 (unknown country+era)
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

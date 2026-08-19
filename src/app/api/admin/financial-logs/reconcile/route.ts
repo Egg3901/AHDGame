@@ -13,8 +13,8 @@
 //     into the subject without a logged tx; ≪ 0 means logged tx outpaced
 //     actual movement (refund / cancel / reversal not captured).
 //
-// Auth: requireAdmin. Errors: 400 (invalid params), 401, 403, 404 (no
-// portfolioHistory rows for the subject), 500.
+// Auth: requireAdmin. Errors: 400 (invalid params), 403, 404 (no
+// portfolioHistory rows for the subject).
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";

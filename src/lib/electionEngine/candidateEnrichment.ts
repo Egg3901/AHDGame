@@ -283,10 +283,9 @@ export async function fetchEnrichedCandidates(
       infamy: candidateInfamy,
       archetypeApprovals,
       regimeMult,
-      // Phase 5a — pass through `electionCandidates.support` so general-election
-      // vote distribution can consume it via supportMoodMultiplier. Undefined
-      // when not yet populated (Phase 4 wires support writes; pre-Phase-4
-      // candidates have no value and degrade to neutral 1.0× in the formula).
+      // Pass through `electionCandidates.support` so general-election
+      // vote distribution can consume it via supportMoodMultiplier. Missing
+      // values degrade to neutral 1.0x in the formula.
       ...(typeof c.support === "number" ? { support: c.support } : {}),
       ...(partyPos && { partyEcon: partyPos.econ, partySocial: partyPos.social }),
       ...(regimeStatus !== undefined ? { regimeStatus } : {}),

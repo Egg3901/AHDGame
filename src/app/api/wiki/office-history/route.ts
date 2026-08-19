@@ -38,7 +38,7 @@ export const officeHistoryBodySchema = z.object({
 
 // POST /api/wiki/office-history - Create a curated manual office-history entry.
 // Auth: requireAdmin
-// Errors: 400, 401, 403
+// Errors: 400, 403
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

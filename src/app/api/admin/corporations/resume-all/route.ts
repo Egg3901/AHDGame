@@ -1,7 +1,7 @@
 // POST /api/admin/corporations/resume-all
 // Clears suspension on all suspended corporations at once.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

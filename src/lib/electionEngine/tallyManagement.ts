@@ -207,8 +207,7 @@ export async function accumulateVoteTurn(
   // SHARES are invariant to this basis (the F-4 guarantee), only magnitude differs.
   const electorate = state.votingEligiblePopulation ?? state.population;
 
-  // Resolve effective turnout using GOTV/canvassing/suppression modifiers from turnoutDoc
-  // This is the key change: static demographics now combine with dynamic turnout modifiers
+  // GOTV/canvassing/suppression from turnoutDoc overlay the static demographic turnouts.
   const { totalPool: resolvedTotalPool, byGroup: liveTurnouts } = resolveTurnout(
     electorate,
     demographics,
@@ -219,8 +218,9 @@ export async function accumulateVoteTurn(
 
   const turnPool = turnVoteWeight(totalTurns, turnIndex, resolvedTotalPool);
 
-  // Party strength: state government approval × office strength. Scales the vote pool for this election.
-  // Approval should be a small modifier, not a massive multiplier (50% approval = 5% boost, not 50% boost)
+  // Party strength: state government approval times office strength. Scales the vote pool.
+  // Approval is centered at 50% (no boost) and swings +/-10% at the 0%/100% extremes
+  // via (1 + (approvalDecimal - 0.5) * 0.2), so it cannot dominate the pool.
   const electionCountryId = (election.countryId ?? "US") as CountryId;
 
   // These three reads are mutually independent: state approval keys off the
@@ -251,18 +251,9 @@ export async function accumulateVoteTurn(
   const effectiveTurnPool = turnPool * strengthMultiplier;
 
   // ── Granular-cell electorate substrate ─────────────────────────────────────
-  // The electorate is Layer-1 cells. Same engines, same appeal formula — the
-  // cells ARE the substrate now, not an alternative to one.
-  //
-  // This used to sit behind `granularElectorateEnabled`, whose OFF branch ran
-  // the archetype electorate instead. That branch is gone: every country in the
-  // game has a Layer-1 model (see `devolvedNationModel.ts`, which closed the
-  // last two), so it was unreachable as an engine choice and survived only as a
-  // way to turn the real electorate off.
-  //
-  // A null substrate still falls through, but it now means one thing: this STATE
-  // has no census row yet (newly admitted, mid-migration). That is a
-  // data-integrity fallback, not an engine selection.
+  // The electorate is Layer-1 cells. Same engines, same appeal formula.
+  // A null substrate means this state has no census row yet (newly admitted,
+  // mid-migration): a data-integrity fallback, not an engine selection.
   let effDemographics = demographics;
   let effCategories = categories;
   let effLiveTurnouts = liveTurnouts;
@@ -324,38 +315,20 @@ export async function accumulateVoteTurn(
   const isGeneralElection = isPrimaryEnded(election, turnNumber, phaseGameTime);
   // NPP weight penalty only applies in the general phase (not primaries, which use score-based handicap).
   const hasPlayerInRace = isGeneralElection && enriched.some((c) => !c.isNPP);
-  // #4G cutover (2026-05-21): swing-flow is now the default for general
-  // elections. Legacy weight-multiplier model remains reachable by
-  // passing `useSwingFlowModel: false` explicitly, but tallyManagement
-  // routes new turn-tallies through the §7.3.2 engine. Primaries
-  // always use the legacy engine — §7.3.2 is general-election only and
-  // `primaryResolution.ts` has its own formula.
+  // General elections use the §7.3.2 swing-flow engine. Primaries keep the
+  // legacy allocator; §7.3.2 is general-only and primaryResolution.ts has its
+  // own formula. The true below is hardcoded: accumulateVoteTurn does not
+  // accept a useSwingFlowModel option.
   //
-  // The per-candidate margin tolerance against the legacy engine is
-  // pinned at ±10pt by the diff-test harness
-  // (`voteDistributionSwingFlowDiff.test.ts`). Per-race-family
-  // integration tests (`voteDistributionSwingFlowFamilies.test.ts`)
-  // verify the new engine produces valid distributions for every
-  // §7.3.3 race family.
+  // Per-candidate margin vs the legacy engine is pinned at +/-10pt by
+  // voteDistributionSwingFlowDiff.test.ts. Race-family coverage is in
+  // voteDistributionSwingFlowFamilies.test.ts.
   const useSwingFlowModel = true;
   const distributeFn =
     isGeneralElection && useSwingFlowModel
       ? distributeVotesBySwingFlow
       : distributeVotesByGroupLevelAllocation;
 
-  // A1 — share-weighted incumbency. Look up the prior-cycle vote-share
-  // for this seat so the swing-flow engine's incumbency driver can
-  // scale lift / drag by how much each party was defending. Empty Map
-  // when no prior cycle exists (driver returns 0, matching open-seat
-  // semantics). Only computed for general elections — primaries don't
-  // route through the swing-flow engine.
-  // Single-seat legislative races (US Senate) use the dedicated flat-shield
-  // path below, not the raw-vote-share fallback (which would produce a
-  // meaningless margin-scaled value for a single winner).
-  // Presidential coattail — the sitting President's party gets an
-  // approval-driven nominal-share nudge in every down-ballot general
-  // nationwide (US only). Excludes the presidential race itself. A vacant
-  // presidency or a party not present in this race no-ops to neutral.
   const isOwnHeadOfGovernmentRace = isHeadOfGovernmentRace(
     election.electionType as string,
     electionCountryId
@@ -425,6 +398,10 @@ export async function accumulateVoteTurn(
     // pacing" rather than treasury balance; `spendThisTurn` is reset every
     // turn-tick by the `campaignSpendReset` phase after this accumulator runs.
     isGeneralElection ? getFundsByPartyForElection(electionId, db) : undefined,
+    // Presidential coattail: the sitting President's party gets an
+    // approval-driven nominal-share nudge in every down-ballot general
+    // nationwide (US only). Excludes the presidential race itself. A vacant
+    // presidency or a party not present in this race no-ops to neutral.
     isGeneralElection && !isOwnHeadOfGovernmentRace
       ? resolvePresidentApproval(db, electionCountryId)
       : undefined,

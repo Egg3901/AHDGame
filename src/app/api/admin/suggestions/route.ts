@@ -22,7 +22,7 @@ const STATUS_OPTIONS = [
 
 // GET /api/admin/suggestions — List player forum suggestions (`suggestions` collection).
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export const GET = withAdminAuth(async (auth, request: Request) => {
   try {
     const adminUserId = new ObjectId(auth.admin.userId);

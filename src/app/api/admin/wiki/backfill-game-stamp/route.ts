@@ -7,7 +7,7 @@
  * skipped by the $exists: false filter.
  *
  * Auth: requireAdmin
- * Errors: 401, 403, 500
+ * Errors: 403
  */
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

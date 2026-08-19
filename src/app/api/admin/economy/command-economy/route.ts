@@ -1,7 +1,7 @@
 // GET /api/admin/economy/command-economy
 // Compact per-country planned-economy readouts for operator verification.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

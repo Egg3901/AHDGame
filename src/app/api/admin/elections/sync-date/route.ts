@@ -78,7 +78,7 @@ const SENATE_CYCLE1_END_TURN_FALLBACK: Record<number, number> = {
 
 // POST /api/admin/elections/sync-date — Resets the game to turn 1 and re-initializes all elections from a clean starting slate.
 // Auth: requireAdmin
-// Errors: 401, 403, 500
+// Errors: 403, 500
 export async function POST() {
   try {
     const auth = await requireAdmin();

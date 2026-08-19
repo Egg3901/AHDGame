@@ -15,7 +15,7 @@ const revokeSchema = z.object({
 
 // POST /api/admin/achievements/revoke — Revokes a specified achievement from a single character.
 // Auth: requireAdmin
-// Errors: 400, 401, 404
+// Errors: 400, 403, 404
 export const POST = withAdminAuth(async (_auth, request: Request) => {
   try {
     const parsed = await parseJsonBody(request, revokeSchema);

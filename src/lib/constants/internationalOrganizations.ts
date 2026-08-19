@@ -84,7 +84,7 @@ export interface InternationalOrganizationDef {
 
 /**
  * Voting window length for any org-level proposal (membership, FTA legislation,
- * leadership election). 24 turns = 24 game-hours.
+ * leadership election). 24 turns = 24 real hours.
  */
 export const ORG_PROPOSAL_VOTING_TURNS = 24;
 

@@ -214,34 +214,21 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
  * There is deliberately NO "1953" key — 1953 IS {@link ORDERS_OF_BATTLE}, and
  * duplicating it here would create two sources of truth for one era.
  *
- * Empty for now: every country falls back to its 1953 composition in later eras.
- * Overrides are authored per country as later presets get attention; no logic
- * change is needed to add one.
+ * RU authors 1979, 1991, and 2019 compositions (later-era branches the 1953
+ * table cannot name). Every other country falls back to its 1953 composition
+ * in later eras. No logic change is needed to add another country's override.
  */
 export const ORDERS_OF_BATTLE_BY_ERA: Partial<
   Record<string, Partial<Record<CountryId, OrderOfBattleEntry[]>>>
 > = {
   /**
    * RU is the one country whose 1953 composition does NOT survive the fallback
-   * into later eras, because it is also the only one whose later-era branches are
-   * absent from the canonical table. `rocket` (1959) and `space` (1992) are
-   * unnamed there, so they fall back to random generation and ADD 3-5 units each
-   * on top of the authored 49, at RU's 2.4 cost scale.
-   *
-   * These overrides originally existed to keep RU under a flat, country-independent
-   * upkeep floor (`DEFENSE_DISCRETIONARY_BASELINE`, since deleted). That constraint is
-   * gone: upkeep is now denominated against RU's OWN defence line, so any seeded roster
-   * reads the same starting burden by construction and cannot begin over budget.
-   *
-   * They are kept because the COMPOSITION is still right, which was always the better half
-   * of the argument: unnamed branches falling back to random generation is not an order of
-   * battle, and the post-1959 Soviet Army genuinely is more mechanised and missile-heavy
-   * than Stalin's.
-   *
-   * ⚠️ Changing a count here changes what `seedRosterUpkeepFor` MEASURES, and that figure
-   * is the denominator every RU upkeep burden divides by. It will not put RU over budget —
-   * the seeded roster is the baseline — but it does re-scale how far a player must grow the
-   * force before the budget bites.
+   * into later eras: `rocket` (1959) and `space` (1992) are unnamed in the
+   * canonical table, so they would fall back to random generation. These
+   * overrides keep those branches authored. The post-1959 Soviet Army is more
+   * mechanised and missile-heavy than Stalin's; changing a count here re-scales
+   * how far a player must grow the force before the budget bites (the seeded
+   * roster is the upkeep baseline, not a cap).
    */
   // 5,944 upkeep-base — the 1979 baseline `seedRosterUpkeepFor` measures for RU.
   "1979": {

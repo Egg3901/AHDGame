@@ -11,7 +11,7 @@ import type { TaskLesson } from "@/lib/db/types/taskLesson";
 
 // GET /api/admin/tasks/lessons — Return all lessons learned with task titles joined in.
 // Auth: requireAdminOrApiKey
-// Errors: 401, 403
+// Errors: 401, 403, 500
 /**
  * GET /api/admin/tasks/lessons
  * Returns all lessons learned, with task titles joined in.
@@ -61,7 +61,7 @@ const createLessonSchema = z.object({
 
 // POST /api/admin/tasks/lessons — Log a new lesson learned entry.
 // Auth: requireAdminOrApiKey
-// Errors: 400, 401, 403
+// Errors: 400, 401, 403, 500
 /**
  * POST /api/admin/tasks/lessons
  * Log a lesson learned. Called programmatically by Claude — no UI form.

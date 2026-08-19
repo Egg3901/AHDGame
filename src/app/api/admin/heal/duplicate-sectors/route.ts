@@ -11,7 +11,7 @@ import { normalizeAndMergeCorporateSectors } from "@/lib/corporations/repairDupl
  * cross-border expansion rows that were stamped with the owner's HQ country,
  * which later caused hostile takeovers to create parallel state+type sectors.
  * Auth: requireAdmin
- * Errors: 401, 403
+ * Errors: 403
  */
 export async function POST() {
   try {

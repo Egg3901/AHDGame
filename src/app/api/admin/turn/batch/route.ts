@@ -7,7 +7,7 @@ import { adminTurnBatchSchema } from "@/lib/api/schemas/admin";
 
 // POST /api/admin/turn/batch — Processes multiple game turns in sequence and returns per-turn results.
 // Auth: requireAdmin
-// Errors: 400, 401, 403
+// Errors: 400, 403
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

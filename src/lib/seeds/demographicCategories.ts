@@ -54,11 +54,11 @@ export const DEMOGRAPHIC_TURNOUT_RATES = {
  * Per-era national baseline turnout rates, the year-anchor counterpart of
  * {@link DEMOGRAPHIC_TURNOUT_RATES}.
  *
- * `DEMOGRAPHIC_TURNOUT_RATES` is a single modern table, so until now every
- * world modelled its electorate's participation with 2019 propensities no
- * matter what year it was in — a 1953 world had 2020's steep youth deficit and
- * 2020's senior surge, neither of which existed then. These anchors let
- * turnout slide along the same clock as everything else.
+ * `DEMOGRAPHIC_TURNOUT_RATES` is a single modern table. Without these per-era
+ * anchors every world would model participation with 2019 propensities no
+ * matter what year it was in - a 1953 world would have 2020's steep youth
+ * deficit and 2020's senior surge, neither of which existed then. These
+ * anchors let turnout slide along the same clock as everything else.
  *
  * **The 2019 entry IS `DEMOGRAPHIC_TURNOUT_RATES`**, by reference, so a 2019
  * world is unchanged and every existing calibration test stays green.
@@ -1355,7 +1355,8 @@ export const DEMOGRAPHIC_POSITIONS: Record<
  * Per-era position deltas from the 2019 base, capturing each era's demographic character.
  * The era census shares + composition weights already differ per era; these overrides add the
  * era-specific *positions* of demographic groups. Each entry is [dim, key, economicLean, socialLean].
- * Anchored to the era notes in ERA_COMPOSITIONS. 2007 ≈ 2019 (no overrides).
+ * Anchored to the era notes in ERA_COMPOSITIONS. 2019 is the base table;
+ * every other era overlays the entries below (including a full 2007 table).
  */
 const ERA_POSITION_OVERRIDES: Partial<
   Record<EraId, Array<[keyof DemographicTurnoutRates, string, number, number]>>
@@ -1454,9 +1455,8 @@ const ERA_POSITION_OVERRIDES: Partial<
   // and the prescription-drug fight were Gore's closing argument), while young
   // voters split near-evenly. Asian voters had only recently begun their move
   // to the Democrats (~55% Gore, versus the near-2:1 margins of the 2010s).
-  // Authored in full rather than the two-entry stub that stood here: with the
-  // clock live, a sparse anchor is not "unspecified", it is the 2019 table
-  // wearing a 2000 label, which put 2019's polarisation into a 2000 world.
+  // Authored in full: with the clock live, a sparse anchor is not
+  // "unspecified", it is the 2019 table wearing a 2000 label.
   "1999": [
     ["race", "white", 0.6, 1.2],
     ["race", "black", -4.5, -2.5],
@@ -1484,8 +1484,6 @@ const ERA_POSITION_OVERRIDES: Partial<
   // decisively — Obama carried 18-29 by ~34 points while McCain won seniors,
   // inverting the 2000 relationship — and Black turnout and margin both peak.
   // The education gradient deepens but has not reached its 2019 extreme.
-  // Previously this era had NO entry at all and silently inherited the 2019
-  // table wholesale.
   "2007": [
     ["race", "white", 1.0, 1.2], // Obama lost white voters by ~12
     ["race", "black", -5, -3], // ~95% Obama, peak consolidation
@@ -1914,7 +1912,6 @@ export function getEraPositions(
   const overrides = STATE_POSITION_OVERRIDES[era]?.[stateId];
   if (!overrides || overrides.length === 0) return base;
 
-  // Deep clone + merge state overrides
   const merged = JSON.parse(JSON.stringify(base));
   for (const [dim, key, econ, social] of overrides) {
     merged[dim][key] = { economicLean: econ, socialLean: social };
@@ -1925,11 +1922,12 @@ export function getEraPositions(
 /**
  * Era anchors that author ANY per-state position override, ascending.
  *
- * `STATE_POSITION_OVERRIDES` is deliberately sparse: 1953 and 1979 carry a
- * full regional map of the United States and nothing later does. Callers
- * blending positions across years need to know which anchors are REAL so they
- * can carry the last authored map forward rather than read a missing anchor as
- * "this state has no regional character" — see `getEraPositionsForYear` in
+ * `STATE_POSITION_OVERRIDES` is deliberately sparse: 1953, 1979, 1991, and
+ * 2019 carry a full regional map of the United States; 1999, 2007, and 2023
+ * do not. Callers blending positions across years need to know which anchors
+ * are REAL so they can interpolate between authored maps and carry the last
+ * one forward rather than read a missing anchor as "this state has no
+ * regional character" - see `getEraPositionsForYear` in
  * `eraPositionsForYear.ts` for why that distinction is load-bearing.
  */
 export const STATE_OVERRIDE_ANCHOR_ERAS: readonly EraId[] = (

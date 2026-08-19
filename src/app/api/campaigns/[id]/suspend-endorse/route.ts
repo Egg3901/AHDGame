@@ -17,7 +17,7 @@ interface RouteParams {
 // immediately (one-time), boosts endorsed vote math with 25% of suspender's
 // per-state org each turn (no org debit). Suspender keeps existing votes but
 // stops further accumulation.
-// Auth: requireAuthWithCharacter (nominee only)
+// Auth: requireHumanSessionWithCharacter (nominee only)
 // Errors: 400, 401, 403, 404, 429
 export async function POST(request: Request, { params }: RouteParams) {
   try {

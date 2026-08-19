@@ -21,7 +21,7 @@ interface RouteParams {
 
 // PATCH /api/admin/achievements/[id] — Updates an achievement's name, description, icon, or sort order.
 // Auth: requireAdmin
-// Errors: 400, 401, 404
+// Errors: 400, 403, 404
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireAdmin();
