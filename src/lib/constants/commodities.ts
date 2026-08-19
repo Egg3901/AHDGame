@@ -127,22 +127,24 @@ export function extractionOutputScaleFor(commodity: CommodityType, enabled: bool
  * campaigns, or bond issuance rather than a single state's local balance, so the
  * effective blend becomes 50% global + 50% national.
  *
- * energy and natural_gas are here for a different reason: they are grid and
- * pipeline delivered, so they have no freight class and the sourcing pass never
- * moves them between states — a pure-local regional leg priced each state off
- * whatever happened to be built there, with no transport to arbitrage it
- * (observed t202: natural_gas state prices 0.24 to 0.84 in the same turn while
- * the global ratio sat at 0.95). Pooling the regional leg nationally treats the
- * grid as the national network it is; a real pipeline freight class is the
- * eventual replacement (freightClass.ts open question 5).
+ * energy and natural_gas were here too, for a different reason: they had no
+ * freight class, so the sourcing pass never moved them and a pure-local
+ * regional leg priced each state off whatever happened to be built there with
+ * no transport to arbitrage it (observed t202: natural_gas state prices 0.24 to
+ * 0.84 in the same turn while the global ratio sat at 0.95). Pooling the
+ * regional leg nationally was the stopgap, and it created the opposite problem:
+ * the price said national market while the physics still said the state you
+ * built in, so at t225 energy ran 128 states in local surplus against 100 short
+ * and 27.8% of it went unsold. The `grid` freight class is the replacement the
+ * stopgap was waiting for (freightClass.ts open question 5), so they are now
+ * off this list and price on the same three-leg blend as everything else that
+ * physically moves.
  */
 export const COMMODITIES_NATIONAL_REGIONAL_PRICE_BLEND: ReadonlySet<CommodityType> = new Set([
   "financial_services",
   "healthcare_services",
   "advertising",
   "real_estate_services",
-  "energy",
-  "natural_gas",
 ]);
 
 export const COMMODITY_LABELS: Record<CommodityType, string> = {
