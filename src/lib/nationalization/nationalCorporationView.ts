@@ -37,6 +37,7 @@ import {
   getMandateContributions,
 } from "./soeMandates";
 import { cappedRemittanceLocal, remitFraction } from "./ceoFinance";
+import { soeRealizedRevenue, soeSectorOperatingProfit } from "./soeOperatingProfit";
 import { getMetricDefinition, getMetricDisplayName } from "@/lib/constants/metricDefinitions";
 import type { MetricCategoryId } from "@/lib/db/types/stateMetrics";
 import { readInvestorConfidence } from "./investorConfidence";
@@ -98,6 +99,13 @@ export interface NatViewSector {
   /** Full region name (e.g. "Dublin"), resolved from the states collection. */
   stateName: string;
   revenue: number;
+  /**
+   * What the holding actually sold this turn, in the same units as `revenue`.
+   * `revenue` is the plants-tier NAMEPLATE (capacity x mix price) and survives
+   * mothballing untouched; this is 0 for a plant that is cold. Every money
+   * claim about the holding is built on this one.
+   */
+  realizedRevenue: number;
   workers: number;
   profitMargin: number;
   /** CEO-set target growth rate this sector trends toward each turn (%). */
@@ -130,7 +138,11 @@ export interface NatViewSector {
   efficiency: SoeEfficiencyBreakdown;
   /** SOE margin delta vs an unconstrained private corp (the efficiency drag, pp). */
   vsPrivateMarginDelta: number;
-  /** Per-turn operating profit (local currency) after the efficiency penalty. */
+  /**
+   * Per-turn operating profit (local currency) after the efficiency penalty.
+   * SIGNED: negative when the holding is losing money, including the upkeep a
+   * mothballed or idle plant keeps paying while it earns nothing.
+   */
   operatingProfit: number;
   /** True when this sector carries its own posture override (vs inheriting the corp default). */
   mandateIsOverride: boolean;
@@ -365,17 +377,6 @@ export async function buildNationalCorporationView(
       employmentGuaranteed: !!mandate.employmentGuaranteed,
       concentrationMultiplier: soeConcentrationMultiplier,
     });
-    // Use the margin the sector actually OPERATED at last turn
-    // (`effectiveProfitMargin`, written by sectorTurn) — `profitMargin` is a
-    // seeded constant no turn phase updates, and it collapsed operating profit
-    // (and treasury remittance / mandate subsidy) to ~0 for SOE sectors once the
-    // efficiency penalty was subtracted from it (ticket #1072). effectiveProfitMargin
-    // already bakes in the SOE penalty, so efficiency.total is NOT re-applied here.
-    // Fall back to the old computation for sectors not yet processed by a turn.
-    const effectiveMarginPct = Math.max(
-      0,
-      s.effectiveProfitMargin ?? s.profitMargin + efficiency.total
-    );
 
     // Public-value uplift: the SOE-internal share of this (state, sectorType)
     // drives the per-turn mandate-metric magnitude (same as the turn loop). Sums
@@ -407,6 +408,7 @@ export async function buildNationalCorporationView(
       stateId: s.stateId,
       stateName: regionName(s.stateId),
       revenue: s.revenue,
+      realizedRevenue: soeRealizedRevenue(s, plantsMode),
       workers: s.workers,
       profitMargin: s.profitMargin,
       targetGrowthRate: s.targetGrowthRate ?? 0,
@@ -436,7 +438,19 @@ export async function buildNationalCorporationView(
       employmentGuaranteed: !!mandate.employmentGuaranteed,
       efficiency,
       vsPrivateMarginDelta: efficiency.total,
-      operatingProfit: Math.round(s.revenue * (effectiveMarginPct / 100)),
+      // Operating profit is the engine's own answer, on the REALIZED basis and
+      // signed (ticket #1072). It used to be
+      // `revenue x max(0, effectiveProfitMargin) / 100`, which billed a cold
+      // plant's untouched nameplate at the margin it WOULD have earned if it
+      // had run, and floored every running loss at zero. Five mothballed East
+      // German plants therefore reported +4.78M per day against an
+      // engine-booked loss, and mothballing became the profit-maximizing move.
+      // `effectiveProfitMargin` already bakes in the SOE efficiency penalty, so
+      // `efficiency.total` is added only to the seeded-base fallback a sector
+      // that has never processed a turn falls back to.
+      operatingProfit: Math.round(
+        soeSectorOperatingProfit(s, plantsMode, s.profitMargin + efficiency.total)
+      ),
       mandateIsOverride: s.soeMandate != null,
       mappedMetricLabels,
       publicValuePerTurn,
@@ -544,7 +558,9 @@ export async function buildNationalCorporationView(
   const grossRevenuePerTurn = Math.round(totalRevenue);
   const mandateSubsidyPerTurn = Math.round(
     viewSectors.reduce(
-      (acc, s) => acc + (s.priceControlled ? (s.revenue * -s.efficiency.mandate) / 100 : 0),
+      // Realized, not nameplate (ticket #1072): a cold plant sells nothing, so
+      // price control forgoes nothing on it and the treasury is not paying for it.
+      (acc, s) => acc + (s.priceControlled ? (s.realizedRevenue * -s.efficiency.mandate) / 100 : 0),
       0
     )
   );
