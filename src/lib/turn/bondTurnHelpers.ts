@@ -1,13 +1,20 @@
 import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
-import type { Bond, Corporation } from "@/lib/db/types";
+import type { Bond, CentralBank, Corporation, CorporateSector } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { computeBondShortfallEscrowCover } from "@/lib/corporations/escrowFunding";
 import {
   anchorToCorpCapital,
+  corpCapitalToAnchor,
   fxRateForCorpFromMap,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
+import { sectorExitValueAnchor } from "@/lib/bonds/sectorExitBasis";
+import { buildPrimeRateMap, totalEquityForBonds } from "@/lib/bonds/corporateBondDefault";
+import { sumBondPrincipalAnchor } from "@/lib/bonds/bondPrincipalSum";
+import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
+import { getGameState } from "@/lib/gameState";
+import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 
 /**
  * Bonds-only exception to escrow ring-fencing: before declaring a corp defaulted
@@ -46,6 +53,100 @@ export async function coverBondShortfallsFromEscrow(
   }
   if (ops.length > 0) await db.collection<Corporation>("corporations").bulkWrite(ops);
   return stillNegative;
+}
+
+/**
+ * Narrow a set of cash-negative corp ids down to the ones that are genuinely
+ * INSOLVENT, i.e. whose assets cannot cover their outstanding bond debt.
+ *
+ * `liquidCapital < 0` says a corp is short of cash right now. It cannot
+ * distinguish a corp that has stopped paying from one that converted its cash
+ * into plant and is waiting for it to come online — the second is the normal
+ * borrow-and-build pattern the game asks players to follow.
+ *
+ * Assets are valued on the same exit basis the restructure planner uses when it
+ * decides what to sell ({@link sectorExitValueAnchor}). That equivalence is the
+ * point: if selling assets could have covered the debt, the corp was never
+ * insolvent, and the default ladder — which would have attempted exactly that
+ * sale — should not start.
+ *
+ * Returns the subset that should actually default. Anything filtered out stays
+ * cash-negative and under real pressure; it simply is not liquidated for it.
+ */
+export async function filterInsolventCorps(
+  db: Db,
+  candidates: Set<string>,
+  ctx: {
+    corpMap: Map<string, Corporation>;
+    fxByCurrency: ReadonlyMap<CurrencyCode, number>;
+    centralBanks: { countryId: string; primeRate: number }[];
+    activeBonds: Bond[];
+  }
+): Promise<Set<string>> {
+  if (candidates.size === 0) return candidates;
+
+  const [marketMode, gameState, eraUnitScale] = await Promise.all([
+    getMarketSystemModeForDb(db),
+    getGameState(db),
+    loadWorldEraUnitScale(db),
+  ]);
+  const plantsEnabled = marketAtLeast(marketMode, "plants");
+  const primeMap = buildPrimeRateMap(ctx.centralBanks as CentralBank[]);
+
+  const ids = [...candidates].map((id) => new ObjectId(id));
+  const sectors = await db
+    .collection<CorporateSector>("corporateSectors")
+    .find({ corporationId: { $in: ids } })
+    .toArray();
+  const sectorsByCorp = new Map<string, CorporateSector[]>();
+  for (const s of sectors) {
+    const k = s.corporationId.toString();
+    const list = sectorsByCorp.get(k);
+    if (list) list.push(s);
+    else sectorsByCorp.set(k, [s]);
+  }
+
+  const insolvent = new Set<string>();
+  for (const idStr of candidates) {
+    const corp = ctx.corpMap.get(idStr);
+    // Unknown corp: fall back to the historical behaviour rather than silently
+    // rescuing something we cannot value.
+    if (!corp) {
+      insolvent.add(idStr);
+      continue;
+    }
+
+    const debtAnchor = sumBondPrincipalAnchor(
+      ctx.activeBonds.filter((b) => !b.matured && b.corporationId?.toString() === idStr),
+      ctx.fxByCurrency
+    );
+    // A candidate reached here because it issued a live bond, so a principal of
+    // zero means we could not read the debt, not that there is none. Rescuing on
+    // an unreadable figure is the dangerous direction, so fall back to the
+    // historical behaviour and let it default.
+    if (debtAnchor <= 0) {
+      insolvent.add(idStr);
+      continue;
+    }
+
+    const assetsAnchor = sectorExitValueAnchor(
+      sectorsByCorp.get(idStr) ?? [],
+      primeMap,
+      corp,
+      ctx.fxByCurrency,
+      { plantsEnabled, currentYear: gameState?.currentYear, eraUnitScale }
+    );
+    const cashAnchor = corpCapitalToAnchor(
+      corp.liquidCapital,
+      resolveCorpLiquidCurrencyCode(corp),
+      fxRateForCorpFromMap(corp, ctx.fxByCurrency)
+    );
+
+    if (totalEquityForBonds(cashAnchor, assetsAnchor) < debtAnchor) {
+      insolvent.add(idStr);
+    }
+  }
+  return insolvent;
 }
 
 /**
