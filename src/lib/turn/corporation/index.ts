@@ -23,6 +23,7 @@ import {
   plannedEconomyMediaSupplyFactor,
 } from "@/lib/constants/sectorStrategies";
 import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
+import { applyExtractionResourceCapacityToSupply } from "@/lib/corporations/extractionResourceSupply";
 import {
   eraScaledBasePrices,
   commodityMixWeight,
@@ -394,16 +395,35 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         // media offers state broadcasting, not advertising. If the offer and
         // the ledger disagree on the commodity, clearing's lagged-supply
         // reconciliation misfires.
+        // A sector cannot offer a resource its state has no reserves of. Every
+        // other consumer of the supply mix already filters on state capacity
+        // (sectorTurn, the world supply ledger, the sector page), but the
+        // clearing OFFER did not, so an extraction sector in a resource-poor
+        // state put all six extraction legs on the book. The missing legs land
+        // in a book with no supply and no demand, clear at zero, and are still
+        // rate-weighted into `soldFraction` — which is what the sector page
+        // thresholds "this market is oversupplied" on. Every DD extraction
+        // sector sat at 0.435-0.498 against a 0.5 threshold and so read as
+        // permanently oversupplied on output it could never have made.
+        //
+        // Order matters: the planned-economy remap runs first (it can swap the
+        // commodity entirely), then the capacity filter culls what the state
+        // cannot extract. The helper no-ops for non-extraction sectors and for
+        // states with no capacity document, so nothing else moves.
         const rates = {
           ...baseRates,
-          supply: applyPlannedEconomyOutputMix(
+          supply: applyExtractionResourceCapacityToSupply(
             sector.sectorType,
-            baseRates.supply,
-            isPlannedEconomy(
-              (sector as { countryId?: string }).countryId,
-              currentYear,
-              commandEconomyEnabled
-            )
+            applyPlannedEconomyOutputMix(
+              sector.sectorType,
+              baseRates.supply,
+              isPlannedEconomy(
+                (sector as { countryId?: string }).countryId,
+                currentYear,
+                commandEconomyEnabled
+              )
+            ),
+            lookups.stateResourceCapacityByState.get(sector.stateId)
           ),
         };
         const sectorId = sector._id.toString();
