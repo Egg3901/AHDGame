@@ -1,4 +1,314 @@
 import type { Layer1Config } from "./stateDemographics";
+import { shiftRegionPositions, type PositionsBlock } from "./regionalPositions";
+
+/**
+ * Deep South (AL MS SC LA GA AR), 1991. White presidential Republicanism is now the
+ * default and Gingrich-era tax and defense conservatism overlays what is left of rural
+ * populism. The state means still look competitive only because a quarter to a third of
+ * the electorate is Black, so the white value sits well right of them.
+ */
+const DEEP_SOUTH_1991: PositionsBlock = {
+  race: {
+    white: { economicLean: 0.9, socialLean: 1.2 }, // presidential Republicanism is the white default; the social axis has barely moved
+    black: { economicLean: -4.9, socialLean: -1.6 }, // a third of the electorate in MS and SC, and the most Democratic bloc in the country
+    hispanic: { economicLean: -3.6, socialLean: -1.6 }, // a small Gulf Coast and Delta population
+  },
+  education: {
+    no_college: { economicLean: 2.3, socialLean: 2 }, // already Republican here; the northern Reagan Democrat lag does not apply
+    college: { economicLean: -2.5, socialLean: -2.7 }, // the Atlanta and research-corridor professional class
+    graduate: { economicLean: -3.4, socialLean: -3.9 }, // a nationally rather than regionally coded stratum
+  },
+  wealth: {
+    low: { economicLean: -3.7, socialLean: -0.1 }, // the poorest electorate in the country, disproportionately Black
+    middle: { economicLean: -0.5, socialLean: 0.8 }, // small-metro chamber conservatism plus church attendance
+    high: { economicLean: 1.5, socialLean: 0.7 }, // Sunbelt developer, banking and energy capital
+  },
+  ideology: {
+    evangelicals: { economicLean: 2.2, socialLean: 3.7 }, // Christian Coalition high tide, fully fused with the Republican coalition
+    patriots: { economicLean: 2.2, socialLean: 2.9 }, // Gulf War patriotism over the country's densest base network
+    gunowners: { economicLean: 2, socialLean: 2.5 }, // the assault-weapons fight is about to make this an organized bloc
+    progressives: { economicLean: -4.9, socialLean: -4.9 }, // the biracial civil-rights coalition, a regional minority
+    environmentalists: { economicLean: -4.1, socialLean: -3.9 }, // coastal and river politics without a partisan home
+    libertarians: { economicLean: 4, socialLean: 0.7 }, // anti-regulation business conservatism
+  },
+};
+
+/**
+ * Border and peripheral South (VA NC TN FL TX OK KY MO WV MD DE), 1991. A region
+ * splitting in two: TX, OK and VA continue right while Appalachia has NOT yet flipped.
+ * Clinton takes WV by 16 and KY by 4 on economics that are still New Deal.
+ */
+const BORDER_1991: PositionsBlock = {
+  race: {
+    white: { economicLean: 0.6, socialLean: 0.9 }, // TX, OK and VA keep moving right while Appalachia stays economically Democratic
+    black: { economicLean: -5, socialLean: -1.7 }, // urban Black electorates from Baltimore to Memphis
+    hispanic: { economicLean: -3.6, socialLean: -1.7 }, // south Texas: Democratic, Catholic and socially traditional
+  },
+  education: {
+    no_college: { economicLean: 1.8, socialLean: 1.6 }, // WV and KY non-college whites are still economically Democratic in 1992
+    college: { economicLean: -2.5, socialLean: -2.7 }, // the Northern Virginia and Research Triangle professional class
+    graduate: { economicLean: -3.3, socialLean: -4 }, // federal, university and defense-lab payrolls
+  },
+  wealth: {
+    low: { economicLean: -3.8, socialLean: -0.4 }, // coalfield and Ozark poverty, the last New Deal bloc in the region
+    middle: { economicLean: -0.4, socialLean: 0.4 }, // county-seat merchants and the military middle class
+    high: { economicLean: 1.5, socialLean: 0.5 }, // energy, tobacco and banking capital
+  },
+  ideology: {
+    evangelicals: { economicLean: 2.4, socialLean: 3.9 }, // Southern Baptist mobilization at its organizational peak
+    patriots: { economicLean: 2.4, socialLean: 2.9 }, // Norfolk, Fort Bragg and the Gulf War homecoming
+    gunowners: { economicLean: 2.4, socialLean: 2.5 }, // coalfield and Piedmont gun culture, newly partisan
+    progressives: { economicLean: -5, socialLean: -5 }, // civil-rights and labor organizations, a shrinking minority
+    environmentalists: { economicLean: -4.2, socialLean: -4 }, // strip-mining and river politics
+    libertarians: { economicLean: 4.3, socialLean: 0.4 }, // anti-tax business conservatism
+  },
+};
+
+/**
+ * Industrial Northeast (MA RI CT NY NJ PA), 1991. Deindustrialization has broken union
+ * density without producing an economic left turn, while the Catholic ethnic bloc's
+ * social conservatism is finally eroding. Perot collects the anti-incumbent anger.
+ */
+const MID_ATLANTIC_1991: PositionsBlock = {
+  race: {
+    white: { economicLean: 0.6, socialLean: -0.6 }, // the Yankee inversion reaches the Mid-Atlantic: net socially liberal for the first time
+    black: { economicLean: -4.8, socialLean: -2 }, // the Democratic coalition's urban core
+    hispanic: { economicLean: -3.6, socialLean: -1.8 }, // Puerto Rican and Dominican New York and New Jersey
+  },
+  education: {
+    no_college: { economicLean: 2, socialLean: 0.6 }, // not yet the 2016 inversion: college is left, but non-college is not a right bloc
+    college: { economicLean: -1.9, socialLean: -2.7 }, // the suburban professional class, now reliably Democratic
+    graduate: { economicLean: -3.5, socialLean: -4.3 }, // the academic and media professions, the era's liberal pole
+  },
+  wealth: {
+    low: { economicLean: -3.7, socialLean: -1.1 }, // the post-industrial urban poor
+    middle: { economicLean: 0, socialLean: -0.6 }, // post-industrial suburban professionals, not chamber-of-commerce traditionalists
+    high: { economicLean: 2.3, socialLean: -0.9 }, // finance capital: economically right, socially indifferent
+  },
+  ideology: {
+    evangelicals: { economicLean: 3.1, socialLean: 3.9 }, // a smaller share and less likely to define a state mean
+    patriots: { economicLean: 3.1, socialLean: 3.1 }, // ethnic Catholic Cold War patriotism after the Cold War
+    gunowners: { economicLean: 3.1, socialLean: 2.7 }, // sporting clubs against an urban crime politics
+    progressives: { economicLean: -5, socialLean: -5 }, // the reform-Democratic and public-employee left
+    environmentalists: { economicLean: -4.3, socialLean: -4.3 }, // a mass constituency by now, and Democratic
+    libertarians: { economicLean: 4.9, socialLean: -0.9 }, // a thin anti-tax minority
+  },
+};
+
+/**
+ * Great Lakes (OH IN IL MI WI MN IA), 1991. Union economics still bind enough of the
+ * region for Clinton; the culture war here is evangelical against everyone else, not
+ * college against non-college.
+ */
+const GREAT_LAKES_1991: PositionsBlock = {
+  race: {
+    white: { economicLean: 0.9, socialLean: -0.4 }, // union economics still bind IL, MI, WI and MN enough for Clinton; Indiana stays out
+    black: { economicLean: -5, socialLean: -2 }, // Detroit, Cleveland, Chicago and Milwaukee
+    hispanic: { economicLean: -3.6, socialLean: -1.8 }, // Chicago and the northern Indiana steel towns
+  },
+  education: {
+    no_college: { economicLean: 2.7, socialLean: 1.2 }, // the group Perot takes 20% from: left of the region on economics, right of it on culture
+    college: { economicLean: -2, socialLean: -2.9 }, // the suburban professional tier, socially liberalizing
+    graduate: { economicLean: -3.2, socialLean: -4.3 }, // Big Ten faculty and the research economy
+  },
+  wealth: {
+    low: { economicLean: -3.7, socialLean: -1.2 }, // the plant-closure electorate of the 1980s
+    middle: { economicLean: 0.3, socialLean: -0.4 }, // the union homeowner turned suburban fiscal conservative
+    high: { economicLean: 2.1, socialLean: -0.7 }, // manufacturing capital in retreat
+  },
+  ideology: {
+    evangelicals: { economicLean: 3, socialLean: 3.6 }, // a mobilized bloc across the rural tier, not yet dominant
+    patriots: { economicLean: 2.8, socialLean: 2.8 }, // Legion halls and a heavily drafted generation
+    gunowners: { economicLean: 2.8, socialLean: 2.4 }, // the northern hunting belt, now politically organized
+    progressives: { economicLean: -4.9, socialLean: -5 }, // the DFL and campus left
+    environmentalists: { economicLean: -3.9, socialLean: -4.2 }, // Great Lakes cleanup politics
+    libertarians: { economicLean: 4.8, socialLean: -0.5 }, // small-business anti-regulation opinion
+  },
+};
+
+/**
+ * Plains (ND SD NE KS), 1991. The 1982-86 farm crisis left durable anti-Washington
+ * economics rather than agrarian populism. Perot runs strong, which is anti-system
+ * rather than a left turn.
+ */
+const PLAINS_1991: PositionsBlock = {
+  race: {
+    white: { economicLean: 3.1, socialLean: 1.2 }, // the Republican floor, hardened by the farm crisis into anti-Washington economics
+    black: { economicLean: -4.4, socialLean: -1.8 }, // small urban populations in Omaha, Wichita and Sioux Falls
+    hispanic: { economicLean: -3, socialLean: -1.4 }, // meatpacking labor arriving in the small towns
+  },
+  education: {
+    no_college: { economicLean: 3.3, socialLean: 1.6 }, // no union structure to pull the farm and small-town workforce left
+    college: { economicLean: -1.3, socialLean: -2.3 }, // land-grant graduates in agriculture and county business
+    graduate: { economicLean: -2.6, socialLean: -3.7 }, // extension and university staff
+  },
+  wealth: {
+    low: { economicLean: -2.8, socialLean: -0.6 }, // farm-crisis debt and small-town decline
+    middle: { economicLean: 1.3, socialLean: 0.8 }, // the merchant and farm-owner middle class
+    high: { economicLean: 2.7, socialLean: 0.3 }, // grain, land and banking capital
+  },
+  ideology: {
+    evangelicals: { economicLean: 3.9, socialLean: 4.4 }, // Christian Coalition country alongside the South
+    patriots: { economicLean: 3.7, socialLean: 3.4 }, // missile fields and airbases
+    gunowners: { economicLean: 3.7, socialLean: 3 }, // universal rural ownership fused with national gun politics
+    progressives: { economicLean: -4.4, socialLean: -4.6 }, // the surviving Farmers Union left
+    environmentalists: { economicLean: -3.4, socialLean: -3.6 }, // soil and aquifer conservation
+    libertarians: { economicLean: 5, socialLean: 0.3 }, // anti-federal constitutionalism
+  },
+};
+
+/**
+ * Mountain West and Alaska (MT ID WY CO UT NV AZ NM AK), 1991. Peak economic right:
+ * public-lands, gun and property-rights politics fully fused. Front Range and Santa Fe
+ * exceptions exist but are not yet regional.
+ */
+const MOUNTAIN_1991: PositionsBlock = {
+  race: {
+    white: { economicLean: 2.8, socialLean: 0.7 }, // public lands, guns and property rights fully fused into the era's economic right pole
+    black: { economicLean: -4.5, socialLean: -1.8 }, // small urban populations in Denver, Phoenix and Las Vegas
+    hispanic: { economicLean: -2.9, socialLean: -1 }, // New Mexico Hispanos and Arizona and Nevada service labor
+  },
+  education: {
+    no_college: { economicLean: 2.7, socialLean: 1.1 }, // extraction and service labor with the unions mostly gone
+    college: { economicLean: -1.7, socialLean: -2.5 }, // the professional tier of Denver, Salt Lake, Phoenix and Boise
+    graduate: { economicLean: -2.9, socialLean: -3.8 }, // the national laboratories and state universities
+  },
+  wealth: {
+    low: { economicLean: -3.2, socialLean: -0.7 }, // reservation and service-sector poverty
+    middle: { economicLean: 0.9, socialLean: 0.3 }, // suburban fiscal conservatism plus Amendment 2 era social politics
+    high: { economicLean: 2.5, socialLean: 0.1 }, // energy, mining and real-estate capital
+  },
+  ideology: {
+    evangelicals: { economicLean: 3.2, socialLean: 3.8 }, // the LDS corridor plus Rocky Mountain fundamentalism
+    patriots: { economicLean: 3.2, socialLean: 3.2 }, // the defense installations and a heavy veteran share
+    gunowners: { economicLean: 3.4, socialLean: 2.8 }, // the region where federal firearms politics is most explosive
+    progressives: { economicLean: -4.8, socialLean: -4.9 }, // a Denver, Boulder and Santa Fe minority
+    environmentalists: { economicLean: -4, socialLean: -4.1 }, // wilderness and water politics against the property-rights movement
+    libertarians: { economicLean: 4.7, socialLean: 0 }, // the movement's geographic heartland
+  },
+};
+
+/**
+ * Pacific coast (CA OR WA), 1991. The defense drawdown pushes economics left off the
+ * 1979 tax-revolt peak while social liberalism deepens: the first era a regional white
+ * group goes net socially liberal.
+ */
+const PACIFIC_1991: PositionsBlock = {
+  race: {
+    white: { economicLean: 1.6, socialLean: -1.8 }, // the defense drawdown moves economics left while social liberalism deepens
+    black: { economicLean: -4.5, socialLean: -2.3 }, // Los Angeles, Oakland and Seattle after the 1992 unrest
+    hispanic: { economicLean: -3.3, socialLean: -2.1 }, // a fast-growing electorate, still under-registered before Proposition 187
+  },
+  education: {
+    no_college: { economicLean: 2.5, socialLean: -0.3 }, // aerospace layoffs and inland timber, economically squeezed
+    college: { economicLean: -1.9, socialLean: -3.3 }, // the coastal professional class, now reliably Democratic
+    graduate: { economicLean: -3.5, socialLean: -4.7 }, // the University of California system and the software economy
+  },
+  wealth: {
+    low: { economicLean: -3.4, socialLean: -1.4 }, // inner-city and farmworker poverty
+    middle: { economicLean: 0.9, socialLean: -1.7 }, // post-industrial suburban professionals rather than tax-revolt homeowners
+    high: { economicLean: 2.7, socialLean: -1.7 }, // entertainment, aerospace and early technology capital
+  },
+  ideology: {
+    evangelicals: { economicLean: 3.4, socialLean: 3.4 }, // Orange County and Central Valley congregations against a liberal coast
+    patriots: { economicLean: 3.4, socialLean: 2.4 }, // a shrinking defense economy
+    gunowners: { economicLean: 3.4, socialLean: 2 }, // inland gun culture against coastal restriction
+    progressives: { economicLean: -5, socialLean: -5 }, // the environmental and civil-rights left at its strongest
+    environmentalists: { economicLean: -4.4, socialLean: -4.6 }, // the coast's defining political identity outside the cities
+    libertarians: { economicLean: 4.9, socialLean: -1.5 }, // technology-boom individualism
+  },
+};
+
+/**
+ * Yankee New England (VT NH ME), 1991. The inversion is on. Vermont is now the most
+ * socially liberal white electorate in the country and Maine gives Perot 30%, while
+ * New Hampshire's anti-tax identity survives the change around it.
+ */
+const YANKEE_1991: PositionsBlock = {
+  race: {
+    white: { economicLean: -0.3, socialLean: -0.9 }, // the completed Yankee inversion: VT, ME and the region's whites are now socially liberal
+    black: { economicLean: -4.4, socialLean: -1.8 }, // a very small population concentrated in the mill cities
+    hispanic: { economicLean: -3.4, socialLean: -1.8 }, // small and concentrated in the same mill cities
+  },
+  education: {
+    no_college: { economicLean: 1.3, socialLean: 0.3 }, // mill and quarry labor without a union structure, Perot's best audience
+    college: { economicLean: -2.5, socialLean: -2.7 }, // the region's professional class, the most socially liberal in the file
+    graduate: { economicLean: -4, socialLean: -4.2 }, // the New England college faculties
+  },
+  wealth: {
+    low: { economicLean: -3.7, socialLean: -1 }, // rural hill poverty
+    middle: { economicLean: -0.1, socialLean: -0.9 }, // the anti-tax small-town middle class, still New Hampshire's spine
+    high: { economicLean: 2.1, socialLean: -1.1 }, // Boston-adjacent finance and second-home capital
+  },
+  ideology: {
+    evangelicals: { economicLean: 2.2, socialLean: 3.7 }, // a small old-stock Protestant remnant
+    patriots: { economicLean: 2.4, socialLean: 2.9 }, // town veterans' posts
+    gunowners: { economicLean: 2.6, socialLean: 2.5 }, // deer season as civic ritual, only lightly partisan
+    progressives: { economicLean: -5, socialLean: -4.9 }, // the Vermont left that will produce Dean and Sanders
+    environmentalists: { economicLean: -4.7, socialLean: -4.2 }, // land-use and forest politics, electorally decisive
+    libertarians: { economicLean: 4.4, socialLean: -1 }, // Live Free or Die constitutionalism
+  },
+};
+
+/**
+ * Hawaii, 1991. The ILWU legacy machine still sets the state's economics; a safe
+ * Democratic state on both axes.
+ */
+const ISLANDS_1991: PositionsBlock = {
+  race: {
+    white: { economicLean: -3.1, socialLean: -0.9 }, // military and mainland-transplant households inside a Democratic state
+    black: { economicLean: -4.8, socialLean: -2.1 }, // a small military-linked population
+    hispanic: { economicLean: -3.6, socialLean: -1.9 }, // Filipino and Puerto Rican plantation descendants
+  },
+  education: {
+    no_college: { economicLean: -0.9, socialLean: 0 }, // the hotel and dock workforce, the machine's base
+    college: { economicLean: -3.2, socialLean: -2.9 }, // state civil service and the university
+    graduate: { economicLean: -4.3, socialLean: -4.2 }, // a small professional stratum
+  },
+  wealth: {
+    low: { economicLean: -4.2, socialLean: -1.4 }, // service-sector and camp-housing poverty
+    middle: { economicLean: -2.5, socialLean: -1 }, // the civil-service and small-business class the ILWU machine built
+    high: { economicLean: 0.6, socialLean: -1.3 }, // tourism and Japanese investment capital
+  },
+  ideology: {
+    evangelicals: { economicLean: 1.3, socialLean: 3.3 }, // missionary-descended congregations, a minority
+    patriots: { economicLean: 1.1, socialLean: 2.3 }, // Pearl Harbor and a heavy military presence
+    gunowners: { economicLean: 1.1, socialLean: 1.9 }, // outer-island hunting, a minor identity
+    progressives: { economicLean: -5, socialLean: -5 }, // the ILWU political machine
+    environmentalists: { economicLean: -4.8, socialLean: -4.2 }, // reef and land conservation against resort development
+    libertarians: { economicLean: 3.7, socialLean: -1.2 }, // small-trader independence, marginal
+  },
+};
+
+/**
+ * District of Columbia, 1991. Clinton takes it by 80 points. The economic left pole
+ * of the series and the largest Black electorate share in the country.
+ */
+const CAPITAL_1991: PositionsBlock = {
+  race: {
+    white: { economicLean: -5, socialLean: -2.6 }, // federal professionals and gentrifiers in a Black-majority city
+    black: { economicLean: -5, socialLean: -1.7 }, // the most Democratic electorate in the country
+    hispanic: { economicLean: -4.9, socialLean: -2.1 }, // a growing Salvadoran population in Columbia Heights
+  },
+  education: {
+    no_college: { economicLean: -4.8, socialLean: -0.7 }, // the federal service and hospitality workforce
+    college: { economicLean: -5, socialLean: -4 }, // the career civil service
+    graduate: { economicLean: -5, socialLean: -5 }, // the agency, think-tank and law professional class
+  },
+  wealth: {
+    low: { economicLean: -5, socialLean: -1.2 }, // concentrated urban poverty in the crack-epidemic years
+    middle: { economicLean: -5, socialLean: -2.1 }, // the federal grade-scale middle class
+    high: { economicLean: -3, socialLean: -2.2 }, // law, lobbying and federal contracting
+  },
+  ideology: {
+    evangelicals: { economicLean: -2.8, socialLean: 2.6 }, // Black Baptist congregations: socially traditional, economically left
+    patriots: { economicLean: -2.8, socialLean: 1.5 }, // the military and veterans' bureaucracy
+    gunowners: { economicLean: -2.8, socialLean: 1.2 }, // marginal under the handgun ban
+    progressives: { economicLean: -5, socialLean: -5 }, // the city's civil-rights and public-employee left
+    environmentalists: { economicLean: -5, socialLean: -4.7 }, // the federal environmental bureaucracy's home
+    libertarians: { economicLean: 1.3, socialLean: -1.6 }, // a think-tank minority
+  },
+};
 
 /**
  * 1991-era US state census profiles — independently authored, anchored to the
@@ -40,24 +350,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 7,
       gunowners: 6,
     },
-    positions: {
-      race: { white: { economicLean: 2.4, socialLean: 1.2 } },
-      ideology: {
-        evangelicals: { economicLean: 0.5, socialLean: 0.5 },
-        patriots: { economicLean: 0.0, socialLean: 0.0 },
-        gunowners: { economicLean: 0.5, socialLean: 0.5 },
-        progressives: { economicLean: -4.0, socialLean: -4.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: shiftRegionPositions(MID_ATLANTIC_1991, 0.9, 0.7), // insurance capital and the Gold Coast against Hartford and Bridgeport
   },
   DE: {
     race: { white: 79, black: 17, hispanic: 2, asian: 1, other: 1 },
@@ -72,24 +365,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 8,
       gunowners: 8,
     },
-    positions: {
-      race: { white: { economicLean: 3.7, socialLean: 2.5 } },
-      ideology: {
-        evangelicals: { economicLean: 0.5, socialLean: 0.5 },
-        patriots: { economicLean: 0.0, socialLean: 0.0 },
-        gunowners: { economicLean: 0.5, socialLean: 0.5 },
-        progressives: { economicLean: -4.0, socialLean: -4.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: shiftRegionPositions(BORDER_1991, -0.3, -1.3), // du Pont industry with a Mid-Atlantic social profile
   },
   MA: {
     race: { white: 88, black: 5, hispanic: 5, asian: 2, other: 0 },
@@ -104,24 +380,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 6,
       gunowners: 4,
     },
-    positions: {
-      race: { white: { economicLean: 2.3, socialLean: 1 } },
-      ideology: {
-        evangelicals: { economicLean: 0.0, socialLean: 0.0 },
-        patriots: { economicLean: -0.5, socialLean: -0.5 },
-        gunowners: { economicLean: 0.0, socialLean: 0.0 },
-        progressives: { economicLean: -4.5, socialLean: -4.5 },
-      },
-      education: {
-        no_college: { economicLean: -1.0, socialLean: -1.0 },
-      },
-      wealth: {
-        middle: { economicLean: -1.0, socialLean: -1.0 },
-      },
-      age: {
-        senior: { economicLean: -1.0, socialLean: -1.0 },
-      },
-    },
+    positions: shiftRegionPositions(MID_ATLANTIC_1991, -1.7, -0.7), // Clinton by 24
   },
   MD: {
     race: { white: 69, black: 25, hispanic: 3, asian: 3, other: 0 },
@@ -136,24 +395,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 7,
       gunowners: 7,
     },
-    positions: {
-      race: { white: { economicLean: 3.8, socialLean: 2.4 } },
-      ideology: {
-        evangelicals: { economicLean: 0.5, socialLean: 0.5 },
-        patriots: { economicLean: 0.0, socialLean: 0.0 },
-        gunowners: { economicLean: 0.5, socialLean: 0.5 },
-        progressives: { economicLean: -4.0, socialLean: -4.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: shiftRegionPositions(BORDER_1991, -1, -1.3), // the federal workforce and the Baltimore-Washington suburbs
   },
   ME: {
     race: { white: 97, black: 1, hispanic: 1, asian: 1, other: 0 },
@@ -168,24 +410,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 8,
       gunowners: 12,
     },
-    positions: {
-      race: { white: { economicLean: 2.7, socialLean: 1.4 } },
-      ideology: {
-        evangelicals: { economicLean: 0.5, socialLean: 0.5 },
-        patriots: { economicLean: 0.0, socialLean: 0.0 },
-        gunowners: { economicLean: 0.5, socialLean: 0.5 },
-        progressives: { economicLean: -4.0, socialLean: -4.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: YANKEE_1991,
   },
   NH: {
     race: { white: 97, black: 1, hispanic: 1, asian: 1, other: 0 },
@@ -200,24 +425,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 9,
       gunowners: 12,
     },
-    positions: {
-      race: { white: { economicLean: 3.4, socialLean: 1.8 } },
-      ideology: {
-        evangelicals: { economicLean: 0.5, socialLean: 0.5 },
-        patriots: { economicLean: 0.0, socialLean: 0.0 },
-        gunowners: { economicLean: 0.5, socialLean: 0.5 },
-        progressives: { economicLean: -4.0, socialLean: -4.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: shiftRegionPositions(YANKEE_1991, 2, 0.3), // the anti-tax outlier persists as the rest of New England moves left
   },
   NJ: {
     race: { white: 74, black: 13, hispanic: 10, asian: 3, other: 0 },
@@ -232,24 +440,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 8,
       gunowners: 6,
     },
-    positions: {
-      race: { white: { economicLean: 3.9, socialLean: 2.1 } },
-      ideology: {
-        evangelicals: { economicLean: 0.5, socialLean: 0.5 },
-        patriots: { economicLean: 0.0, socialLean: 0.0 },
-        gunowners: { economicLean: 0.5, socialLean: 0.5 },
-        progressives: { economicLean: -4.0, socialLean: -4.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: shiftRegionPositions(MID_ATLANTIC_1991, 1.3, 0.7), // suburban New Jersey, Clinton by 3
   },
   NY: {
     race: { white: 69, black: 14, hispanic: 12, asian: 4, other: 1 },
@@ -264,24 +455,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 7,
       gunowners: 7,
     },
-    positions: {
-      race: { white: { economicLean: 4.1, socialLean: 2.6 } },
-      ideology: {
-        evangelicals: { economicLean: 0.0, socialLean: 0.0 },
-        patriots: { economicLean: -0.5, socialLean: -0.5 },
-        gunowners: { economicLean: 0.0, socialLean: 0.0 },
-        progressives: { economicLean: -4.5, socialLean: -4.5 },
-      },
-      education: {
-        no_college: { economicLean: -1.0, socialLean: -1.0 },
-      },
-      wealth: {
-        middle: { economicLean: -1.0, socialLean: -1.0 },
-      },
-      age: {
-        senior: { economicLean: -1.0, socialLean: -1.0 },
-      },
-    },
+    positions: shiftRegionPositions(MID_ATLANTIC_1991, -0.8, 0), // Clinton by 19: the Rockefeller Republican tradition is finished
   },
   PA: {
     race: { white: 88, black: 9, hispanic: 2, asian: 1, other: 0 },
@@ -296,24 +470,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 12,
       gunowners: 15,
     },
-    positions: {
-      race: { white: { economicLean: 2.4, socialLean: 1.7 } },
-      ideology: {
-        evangelicals: { economicLean: 1.5, socialLean: 1.5 },
-        patriots: { economicLean: 1.0, socialLean: 1.0 },
-        gunowners: { economicLean: 1.5, socialLean: 1.5 },
-        progressives: { economicLean: -3.0, socialLean: -3.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: MID_ATLANTIC_1991,
   },
   RI: {
     race: { white: 89, black: 4, hispanic: 5, asian: 2, other: 0 },
@@ -328,24 +485,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 7,
       gunowners: 5,
     },
-    positions: {
-      race: { white: { economicLean: 2.1, socialLean: 0.9 } },
-      ideology: {
-        evangelicals: { economicLean: 0.0, socialLean: 0.0 },
-        patriots: { economicLean: -0.5, socialLean: -0.5 },
-        gunowners: { economicLean: 0.0, socialLean: 0.0 },
-        progressives: { economicLean: -4.5, socialLean: -4.5 },
-      },
-      education: {
-        no_college: { economicLean: -1.0, socialLean: -1.0 },
-      },
-      wealth: {
-        middle: { economicLean: -1.0, socialLean: -1.0 },
-      },
-      age: {
-        senior: { economicLean: -1.0, socialLean: -1.0 },
-      },
-    },
+    positions: shiftRegionPositions(MID_ATLANTIC_1991, -2.2, -0.2), // an economically left, socially only moderately liberal union Catholic bloc
   },
   VT: {
     race: { white: 97, black: 1, hispanic: 1, asian: 1, other: 0 },
@@ -360,24 +500,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 6,
       gunowners: 10,
     },
-    positions: {
-      race: { white: { economicLean: 3.1, socialLean: 1.3 } },
-      ideology: {
-        evangelicals: { economicLean: 0.0, socialLean: 0.0 },
-        patriots: { economicLean: -0.5, socialLean: -0.5 },
-        gunowners: { economicLean: 0.0, socialLean: 0.0 },
-        progressives: { economicLean: -4.5, socialLean: -4.5 },
-      },
-      education: {
-        no_college: { economicLean: -1.0, socialLean: -1.0 },
-      },
-      wealth: {
-        middle: { economicLean: -1.0, socialLean: -1.0 },
-      },
-      age: {
-        senior: { economicLean: -1.0, socialLean: -1.0 },
-      },
-    },
+    positions: shiftRegionPositions(YANKEE_1991, -1.2, -0.9), // the most socially liberal white electorate in the country
   },
 
   // ---- South ----
@@ -394,24 +517,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 19,
       gunowners: 24,
     },
-    positions: {
-      race: { white: { economicLean: 2.8, socialLean: 2.8 } },
-      ideology: {
-        evangelicals: { economicLean: 3.5, socialLean: 3.5 },
-        patriots: { economicLean: 3.0, socialLean: 3.0 },
-        gunowners: { economicLean: 3.0, socialLean: 3.0 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      wealth: {
-        middle: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      age: {
-        senior: { economicLean: 1.0, socialLean: 1.0 },
-      },
-    },
+    positions: DEEP_SOUTH_1991,
   },
   AR: {
     race: { white: 82, black: 16, hispanic: 1, asian: 1, other: 0 },
@@ -426,27 +532,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 18,
       gunowners: 23,
     },
-    positions: {
-      // Clinton's home state: favorite-son pull drags working/middle class
-      // toward the Democrats, but rural social conservatism keeps net lean
-      // just right of center.
-      race: { white: { economicLean: 4.5, socialLean: 3 } },
-      ideology: {
-        evangelicals: { economicLean: 1.5, socialLean: 1.5 },
-        patriots: { economicLean: 1.0, socialLean: 1.0 },
-        gunowners: { economicLean: 1.5, socialLean: 1.5 },
-        progressives: { economicLean: -3.0, socialLean: -3.0 },
-      },
-      education: {
-        no_college: { economicLean: -1.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -1.0, socialLean: -1.0 },
-      },
-      age: {
-        senior: { economicLean: -1.0, socialLean: -1.0 },
-      },
-    },
+    positions: shiftRegionPositions(DEEP_SOUTH_1991, -2.7, -0.8), // Clinton's home state: the two-party margin is 20 points of favorite son
   },
   FL: {
     race: { white: 73, black: 13, hispanic: 12, asian: 1, other: 1 },
@@ -461,24 +547,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 13,
       gunowners: 14,
     },
-    positions: {
-      race: { white: { economicLean: 2.8, socialLean: 2.4 } },
-      ideology: {
-        evangelicals: { economicLean: 2.0, socialLean: 2.0 },
-        patriots: { economicLean: 1.5, socialLean: 1.5 },
-        gunowners: { economicLean: 2.0, socialLean: 2.0 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 0.5, socialLean: 0.5 },
-      },
-      wealth: {
-        middle: { economicLean: 0.5, socialLean: 0.5 },
-      },
-      age: {
-        senior: { economicLean: 0.5, socialLean: 0.5 },
-      },
-    },
+    positions: shiftRegionPositions(BORDER_1991, 0.9, 0), // the I-4 corridor and northern retirees
   },
   GA: {
     race: { white: 70, black: 27, hispanic: 2, asian: 1, other: 0 },
@@ -493,24 +562,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 16,
       gunowners: 19,
     },
-    positions: {
-      race: { white: { economicLean: 4.5, socialLean: 3 } },
-      ideology: {
-        evangelicals: { economicLean: 2.0, socialLean: 2.0 },
-        patriots: { economicLean: 1.5, socialLean: 1.5 },
-        gunowners: { economicLean: 2.0, socialLean: 2.0 },
-        progressives: { economicLean: -2.5, socialLean: -2.5 },
-      },
-      education: {
-        no_college: { economicLean: 0.0, socialLean: 0.0 },
-      },
-      wealth: {
-        middle: { economicLean: 0.0, socialLean: 0.0 },
-      },
-      age: {
-        senior: { economicLean: 0.0, socialLean: 0.0 },
-      },
-    },
+    positions: shiftRegionPositions(DEEP_SOUTH_1991, -0.4, -0.1), // Clinton by 0.7, over a white electorate that is already Republican
   },
   KY: {
     race: { white: 91, black: 7, hispanic: 1, asian: 1, other: 0 },
@@ -525,24 +577,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 15,
       gunowners: 21,
     },
-    positions: {
-      race: { white: { economicLean: 2.5, socialLean: 1.8 } },
-      ideology: {
-        evangelicals: { economicLean: 2.0, socialLean: 2.0 },
-        patriots: { economicLean: 1.5, socialLean: 1.5 },
-        gunowners: { economicLean: 2.0, socialLean: 2.0 },
-        progressives: { economicLean: -2.5, socialLean: -2.5 },
-      },
-      education: {
-        no_college: { economicLean: 0.0, socialLean: 0.0 },
-      },
-      wealth: {
-        middle: { economicLean: 0.0, socialLean: 0.0 },
-      },
-      age: {
-        senior: { economicLean: 0.0, socialLean: 0.0 },
-      },
-    },
+    positions: BORDER_1991,
   },
   LA: {
     race: { white: 66, black: 31, hispanic: 2, asian: 1, other: 0 },
@@ -557,24 +592,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 16,
       gunowners: 19,
     },
-    positions: {
-      race: { white: { economicLean: 4.5, socialLean: 3 } },
-      ideology: {
-        evangelicals: { economicLean: 2.5, socialLean: 2.5 },
-        patriots: { economicLean: 2.0, socialLean: 2.0 },
-        gunowners: { economicLean: 2.5, socialLean: 2.5 },
-        progressives: { economicLean: -2.5, socialLean: -2.5 },
-      },
-      education: {
-        no_college: { economicLean: 0.0, socialLean: 0.0 },
-      },
-      wealth: {
-        middle: { economicLean: 0.0, socialLean: 0.0 },
-      },
-      age: {
-        senior: { economicLean: 0.0, socialLean: 0.0 },
-      },
-    },
+    positions: DEEP_SOUTH_1991,
   },
   MS: {
     race: { white: 63, black: 35, hispanic: 1, asian: 1, other: 0 },
@@ -589,24 +607,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 17,
       gunowners: 21,
     },
-    positions: {
-      race: { white: { economicLean: 4.5, socialLean: 3.8 } },
-      ideology: {
-        evangelicals: { economicLean: 3.5, socialLean: 3.5 },
-        patriots: { economicLean: 3.0, socialLean: 3.0 },
-        gunowners: { economicLean: 3.0, socialLean: 3.0 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      wealth: {
-        middle: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      age: {
-        senior: { economicLean: 1.0, socialLean: 1.0 },
-      },
-    },
+    positions: DEEP_SOUTH_1991,
   },
   NC: {
     race: { white: 75, black: 22, hispanic: 1, asian: 1, other: 1 },
@@ -621,24 +622,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 15,
       gunowners: 18,
     },
-    positions: {
-      race: { white: { economicLean: 3, socialLean: 2.3 } },
-      ideology: {
-        evangelicals: { economicLean: 2.5, socialLean: 2.5 },
-        patriots: { economicLean: 2.0, socialLean: 2.0 },
-        gunowners: { economicLean: 2.5, socialLean: 2.5 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 0.5, socialLean: 0.5 },
-      },
-      wealth: {
-        middle: { economicLean: 0.5, socialLean: 0.5 },
-      },
-      age: {
-        senior: { economicLean: 0.5, socialLean: 0.5 },
-      },
-    },
+    positions: BORDER_1991,
   },
   SC: {
     race: { white: 68, black: 30, hispanic: 1, asian: 1, other: 0 },
@@ -653,24 +637,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 17,
       gunowners: 20,
     },
-    positions: {
-      race: { white: { economicLean: 4.5, socialLean: 3.8 } },
-      ideology: {
-        evangelicals: { economicLean: 3.0, socialLean: 3.0 },
-        patriots: { economicLean: 2.5, socialLean: 2.5 },
-        gunowners: { economicLean: 2.5, socialLean: 2.5 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 0.5, socialLean: 0.5 },
-      },
-      wealth: {
-        middle: { economicLean: 0.5, socialLean: 0.5 },
-      },
-      age: {
-        senior: { economicLean: 0.5, socialLean: 0.5 },
-      },
-    },
+    positions: DEEP_SOUTH_1991,
   },
   TN: {
     race: { white: 82, black: 16, hispanic: 1, asian: 1, other: 0 },
@@ -685,24 +652,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 16,
       gunowners: 21,
     },
-    positions: {
-      race: { white: { economicLean: 3.4, socialLean: 2.4 } },
-      ideology: {
-        evangelicals: { economicLean: 2.5, socialLean: 2.5 },
-        patriots: { economicLean: 2.0, socialLean: 2.0 },
-        gunowners: { economicLean: 2.5, socialLean: 2.5 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 0.0, socialLean: 0.0 },
-      },
-      wealth: {
-        middle: { economicLean: 0.0, socialLean: 0.0 },
-      },
-      age: {
-        senior: { economicLean: 0.0, socialLean: 0.0 },
-      },
-    },
+    positions: shiftRegionPositions(BORDER_1991, -0.3, -0.4), // Gore on the ticket blunts the drift
   },
   VA: {
     race: { white: 76, black: 19, hispanic: 3, asian: 2, other: 0 },
@@ -717,24 +667,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 14,
       gunowners: 14,
     },
-    positions: {
-      race: { white: { economicLean: 3, socialLean: 2.5 } },
-      ideology: {
-        evangelicals: { economicLean: 2.0, socialLean: 2.0 },
-        patriots: { economicLean: 1.5, socialLean: 1.5 },
-        gunowners: { economicLean: 2.0, socialLean: 2.0 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 0.5, socialLean: 0.5 },
-      },
-      wealth: {
-        middle: { economicLean: 0.5, socialLean: 0.5 },
-      },
-      age: {
-        senior: { economicLean: 0.5, socialLean: 0.5 },
-      },
-    },
+    positions: shiftRegionPositions(BORDER_1991, 1.3, 0.7), // not yet a Northern Virginia state
   },
   WV: {
     race: { white: 96, black: 3, hispanic: 1, asian: 0, other: 0 },
@@ -749,26 +682,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 15,
       gunowners: 22,
     },
-    positions: {
-      // Transition-era WV: still union-Democratic on economics but socially
-      // right; net lean tips right of center (legacy model has WV clearly red).
-      race: { white: { economicLean: 2, socialLean: 1.9 } },
-      ideology: {
-        evangelicals: { economicLean: 2.5, socialLean: 3.5 },
-        patriots: { economicLean: 2.0, socialLean: 2.5 },
-        gunowners: { economicLean: 2.5, socialLean: 2.5 },
-        progressives: { economicLean: -4.0, socialLean: -4.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: 1.0 }, // coal econ-left, social-right
-      },
-      wealth: {
-        middle: { economicLean: 0.0, socialLean: 0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: 1.0 }, // UMWA pension loyalty fading
-      },
-    },
+    positions: shiftRegionPositions(BORDER_1991, -3.5, 0.1), // Clinton by 16: the file's most extreme economic-left, socially traditional cell
   },
 
   // ---- Midwest ----
@@ -785,24 +699,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 12,
       gunowners: 14,
     },
-    positions: {
-      race: { white: { economicLean: 1.1, socialLean: 1 } },
-      ideology: {
-        evangelicals: { economicLean: 1.5, socialLean: 1.5 },
-        patriots: { economicLean: 1.0, socialLean: 1.0 },
-        gunowners: { economicLean: 1.5, socialLean: 1.5 },
-        progressives: { economicLean: -3.0, socialLean: -3.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: GREAT_LAKES_1991,
   },
   IL: {
     race: { white: 75, black: 15, hispanic: 8, asian: 2, other: 0 },
@@ -817,24 +714,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 9,
       gunowners: 9,
     },
-    positions: {
-      race: { white: { economicLean: 3.4, socialLean: 2.3 } },
-      ideology: {
-        evangelicals: { economicLean: 1.5, socialLean: 1.5 },
-        patriots: { economicLean: 1.0, socialLean: 1.0 },
-        gunowners: { economicLean: 1.0, socialLean: 1.0 },
-        progressives: { economicLean: -3.0, socialLean: -3.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: shiftRegionPositions(GREAT_LAKES_1991, -1.5, 0), // Chicago's machine plus collar-county suburbs moving left
   },
   IN: {
     race: { white: 89, black: 8, hispanic: 2, asian: 1, other: 0 },
@@ -849,24 +729,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 14,
       gunowners: 17,
     },
-    positions: {
-      race: { white: { economicLean: 1.2, socialLean: 1.6 } },
-      ideology: {
-        evangelicals: { economicLean: 2.5, socialLean: 2.5 },
-        patriots: { economicLean: 2.0, socialLean: 2.0 },
-        gunowners: { economicLean: 2.5, socialLean: 2.5 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      wealth: {
-        middle: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      age: {
-        senior: { economicLean: 1.0, socialLean: 1.0 },
-      },
-    },
+    positions: shiftRegionPositions(GREAT_LAKES_1991, 0.8, 1.2), // the Great Lakes state that stays Republican through 1992
   },
   KS: {
     race: { white: 88, black: 6, hispanic: 4, asian: 1, other: 1 },
@@ -881,24 +744,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 13,
       gunowners: 16,
     },
-    positions: {
-      race: { white: { economicLean: 0.8, socialLean: 1.6 } },
-      ideology: {
-        evangelicals: { economicLean: 2.5, socialLean: 2.5 },
-        patriots: { economicLean: 2.0, socialLean: 2.0 },
-        gunowners: { economicLean: 2.5, socialLean: 2.5 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      wealth: {
-        middle: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      age: {
-        senior: { economicLean: 1.0, socialLean: 1.0 },
-      },
-    },
+    positions: PLAINS_1991,
   },
   MI: {
     race: { white: 82, black: 14, hispanic: 2, asian: 1, other: 1 },
@@ -913,24 +759,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 11,
       gunowners: 14,
     },
-    positions: {
-      race: { white: { economicLean: 3.4, socialLean: 2.3 } },
-      ideology: {
-        evangelicals: { economicLean: 1.5, socialLean: 1.5 },
-        patriots: { economicLean: 1.0, socialLean: 1.0 },
-        gunowners: { economicLean: 1.5, socialLean: 1.5 },
-        progressives: { economicLean: -3.0, socialLean: -3.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: GREAT_LAKES_1991,
   },
   MN: {
     race: { white: 93, black: 2, hispanic: 1, asian: 2, other: 2 },
@@ -945,24 +774,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 8,
       gunowners: 12,
     },
-    positions: {
-      race: { white: { economicLean: 2.3, socialLean: 1.5 } },
-      ideology: {
-        evangelicals: { economicLean: 1.0, socialLean: 1.0 },
-        patriots: { economicLean: 0.5, socialLean: 0.5 },
-        gunowners: { economicLean: 1.0, socialLean: 1.0 },
-        progressives: { economicLean: -3.5, socialLean: -3.5 },
-      },
-      education: {
-        no_college: { economicLean: -1.0, socialLean: -1.0 },
-      },
-      wealth: {
-        middle: { economicLean: -1.0, socialLean: -1.0 },
-      },
-      age: {
-        senior: { economicLean: -1.0, socialLean: -1.0 },
-      },
-    },
+    positions: shiftRegionPositions(GREAT_LAKES_1991, -1.6, -0.6), // the DFL over a Ventura-era unmoored center
   },
   MO: {
     race: { white: 87, black: 11, hispanic: 1, asian: 1, other: 0 },
@@ -977,24 +789,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 13,
       gunowners: 16,
     },
-    positions: {
-      race: { white: { economicLean: 2, socialLean: 1.5 } },
-      ideology: {
-        evangelicals: { economicLean: 2.0, socialLean: 2.0 },
-        patriots: { economicLean: 1.5, socialLean: 1.5 },
-        gunowners: { economicLean: 2.0, socialLean: 2.0 },
-        progressives: { economicLean: -2.5, socialLean: -2.5 },
-      },
-      education: {
-        no_college: { economicLean: 0.0, socialLean: 0.0 },
-      },
-      wealth: {
-        middle: { economicLean: 0.0, socialLean: 0.0 },
-      },
-      age: {
-        senior: { economicLean: 0.0, socialLean: 0.0 },
-      },
-    },
+    positions: shiftRegionPositions(BORDER_1991, 0, -0.6), // the bellwether, Clinton by 13
   },
   ND: {
     race: { white: 94, black: 1, hispanic: 1, asian: 1, other: 3 },
@@ -1009,24 +804,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 14,
       gunowners: 17,
     },
-    positions: {
-      race: { white: { economicLean: 0.4, socialLean: 1.3 } },
-      ideology: {
-        evangelicals: { economicLean: 2.5, socialLean: 2.5 },
-        patriots: { economicLean: 2.0, socialLean: 2.0 },
-        gunowners: { economicLean: 2.5, socialLean: 2.5 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      wealth: {
-        middle: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      age: {
-        senior: { economicLean: 1.0, socialLean: 1.0 },
-      },
-    },
+    positions: PLAINS_1991,
   },
   NE: {
     race: { white: 93, black: 4, hispanic: 2, asian: 1, other: 0 },
@@ -1041,24 +819,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 14,
       gunowners: 16,
     },
-    positions: {
-      race: { white: { economicLean: 1.1, socialLean: 1.7 } },
-      ideology: {
-        evangelicals: { economicLean: 2.5, socialLean: 2.5 },
-        patriots: { economicLean: 2.0, socialLean: 2.0 },
-        gunowners: { economicLean: 2.5, socialLean: 2.5 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      wealth: {
-        middle: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      age: {
-        senior: { economicLean: 1.0, socialLean: 1.0 },
-      },
-    },
+    positions: PLAINS_1991,
   },
   OH: {
     race: { white: 87, black: 11, hispanic: 1, asian: 1, other: 0 },
@@ -1073,24 +834,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 12,
       gunowners: 15,
     },
-    positions: {
-      race: { white: { economicLean: 3.4, socialLean: 2.3 } },
-      ideology: {
-        evangelicals: { economicLean: 2.0, socialLean: 2.0 },
-        patriots: { economicLean: 1.5, socialLean: 1.5 },
-        gunowners: { economicLean: 2.0, socialLean: 2.0 },
-        progressives: { economicLean: -2.5, socialLean: -2.5 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: shiftRegionPositions(GREAT_LAKES_1991, 0.3, 0.9), // the manufacturing swing state, Clinton by 2
   },
   SD: {
     race: { white: 91, black: 1, hispanic: 1, asian: 0, other: 7 },
@@ -1105,24 +849,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 14,
       gunowners: 18,
     },
-    positions: {
-      race: { white: { economicLean: 0.1, socialLean: 1.2 } },
-      ideology: {
-        evangelicals: { economicLean: 2.5, socialLean: 2.5 },
-        patriots: { economicLean: 2.0, socialLean: 2.0 },
-        gunowners: { economicLean: 2.5, socialLean: 2.5 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      wealth: {
-        middle: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      age: {
-        senior: { economicLean: 1.0, socialLean: 1.0 },
-      },
-    },
+    positions: shiftRegionPositions(PLAINS_1991, -1, -0.2), // a competitive Democratic delegation over a Republican floor
   },
   WI: {
     race: { white: 91, black: 5, hispanic: 2, asian: 1, other: 1 },
@@ -1137,24 +864,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 10,
       gunowners: 14,
     },
-    positions: {
-      race: { white: { economicLean: 1.8, socialLean: 1.4 } },
-      ideology: {
-        evangelicals: { economicLean: 1.5, socialLean: 1.5 },
-        patriots: { economicLean: 1.0, socialLean: 1.0 },
-        gunowners: { economicLean: 1.5, socialLean: 1.5 },
-        progressives: { economicLean: -3.0, socialLean: -3.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: GREAT_LAKES_1991,
   },
 
   // ---- Southwest ----
@@ -1171,24 +881,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 12,
       gunowners: 14,
     },
-    positions: {
-      race: { white: { economicLean: 2, socialLean: 2.1 } },
-      ideology: {
-        evangelicals: { economicLean: 2.5, socialLean: 2.5 },
-        patriots: { economicLean: 2.0, socialLean: 2.0 },
-        gunowners: { economicLean: 2.5, socialLean: 2.5 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      wealth: {
-        middle: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      age: {
-        senior: { economicLean: 1.0, socialLean: 1.0 },
-      },
-    },
+    positions: MOUNTAIN_1991,
   },
   NM: {
     race: { white: 50, black: 2, hispanic: 38, asian: 1, other: 9 },
@@ -1203,24 +896,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 10,
       gunowners: 11,
     },
-    positions: {
-      race: { white: { economicLean: 4.5, socialLean: 3 } },
-      ideology: {
-        evangelicals: { economicLean: 1.5, socialLean: 1.5 },
-        patriots: { economicLean: 1.0, socialLean: 1.0 },
-        gunowners: { economicLean: 1.5, socialLean: 1.5 },
-        progressives: { economicLean: -3.0, socialLean: -3.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: shiftRegionPositions(MOUNTAIN_1991, -0.6, -0.7), // the Hispano north puts the state mean well left of its white value
   },
   OK: {
     race: { white: 81, black: 7, hispanic: 3, asian: 1, other: 8 },
@@ -1235,6 +911,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 16,
       gunowners: 20,
     },
+    positions: shiftRegionPositions(BORDER_1991, 1.4, 0.4), // the oil bust did not move the Bible Belt
   },
   TX: {
     race: { white: 60, black: 12, hispanic: 26, asian: 2, other: 0 },
@@ -1249,24 +926,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 15,
       gunowners: 17,
     },
-    positions: {
-      race: { white: { economicLean: 2.7, socialLean: 2.5 } },
-      ideology: {
-        evangelicals: { economicLean: 2.5, socialLean: 2.5 },
-        patriots: { economicLean: 2.0, socialLean: 2.0 },
-        gunowners: { economicLean: 2.5, socialLean: 2.5 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      wealth: {
-        middle: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      age: {
-        senior: { economicLean: 1.0, socialLean: 1.0 },
-      },
-    },
+    positions: shiftRegionPositions(BORDER_1991, 0.8, 0.4), // Bush's home state
   },
 
   // ---- West ----
@@ -1283,24 +943,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 15,
       gunowners: 20,
     },
-    positions: {
-      race: { white: { economicLean: 1.8, socialLean: 2.2 } },
-      ideology: {
-        evangelicals: { economicLean: 2.5, socialLean: 2.5 },
-        patriots: { economicLean: 2.0, socialLean: 2.0 },
-        gunowners: { economicLean: 2.5, socialLean: 2.5 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      wealth: {
-        middle: { economicLean: 1.0, socialLean: 1.0 },
-      },
-      age: {
-        senior: { economicLean: 1.0, socialLean: 1.0 },
-      },
-    },
+    positions: shiftRegionPositions(MOUNTAIN_1991, 0.8, 0.4), // Perot's best state at 28.4%: anti-establishment, not moderate
   },
   CA: {
     race: { white: 57, black: 7, hispanic: 26, asian: 9, other: 1 },
@@ -1315,24 +958,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 8,
       gunowners: 8,
     },
-    positions: {
-      race: { white: { economicLean: 4.5, socialLean: 2.8 } },
-      ideology: {
-        evangelicals: { economicLean: 0.5, socialLean: 0.5 },
-        patriots: { economicLean: 0.0, socialLean: 0.0 },
-        gunowners: { economicLean: 0.5, socialLean: 0.5 },
-        progressives: { economicLean: -4.0, socialLean: -4.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: PACIFIC_1991,
   },
   CO: {
     race: { white: 80, black: 4, hispanic: 13, asian: 2, other: 1 },
@@ -1347,24 +973,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 11,
       gunowners: 11,
     },
-    positions: {
-      race: { white: { economicLean: 2.5, socialLean: 2.2 } },
-      ideology: {
-        evangelicals: { economicLean: 2.0, socialLean: 2.0 },
-        patriots: { economicLean: 1.5, socialLean: 1.5 },
-        gunowners: { economicLean: 2.0, socialLean: 2.0 },
-        progressives: { economicLean: -2.5, socialLean: -2.5 },
-      },
-      education: {
-        no_college: { economicLean: 0.0, socialLean: 0.0 },
-      },
-      wealth: {
-        middle: { economicLean: 0.0, socialLean: 0.0 },
-      },
-      age: {
-        senior: { economicLean: 0.0, socialLean: 0.0 },
-      },
-    },
+    positions: shiftRegionPositions(MOUNTAIN_1991, -0.4, -0.7), // Amendment 2 passes in 1992, so it is still socially right of its Denver reputation
   },
   HI: {
     race: { white: 31, black: 2, hispanic: 7, asian: 55, other: 5 },
@@ -1379,24 +988,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 7,
       gunowners: 4,
     },
-    positions: {
-      race: { white: { economicLean: 4.5, socialLean: 2.8 } },
-      ideology: {
-        evangelicals: { economicLean: 0.0, socialLean: 0.0 },
-        patriots: { economicLean: -0.5, socialLean: -0.5 },
-        gunowners: { economicLean: 0.0, socialLean: 0.0 },
-        progressives: { economicLean: -4.5, socialLean: -4.5 },
-      },
-      education: {
-        no_college: { economicLean: -1.0, socialLean: -1.0 },
-      },
-      wealth: {
-        middle: { economicLean: -1.0, socialLean: -1.0 },
-      },
-      age: {
-        senior: { economicLean: -1.0, socialLean: -1.0 },
-      },
-    },
+    positions: ISLANDS_1991,
   },
   ID: {
     race: { white: 92, black: 0, hispanic: 5, asian: 1, other: 2 },
@@ -1411,24 +1003,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 15,
       gunowners: 22,
     },
-    positions: {
-      race: { white: { economicLean: 0.8, socialLean: 1.8 } },
-      ideology: {
-        evangelicals: { economicLean: 3.5, socialLean: 3.5 },
-        patriots: { economicLean: 3.0, socialLean: 3.0 },
-        gunowners: { economicLean: 3.0, socialLean: 3.0 },
-        progressives: { economicLean: -1.5, socialLean: -1.5 },
-      },
-      education: {
-        no_college: { economicLean: 1.5, socialLean: 1.5 },
-      },
-      wealth: {
-        middle: { economicLean: 1.5, socialLean: 1.5 },
-      },
-      age: {
-        senior: { economicLean: 1.5, socialLean: 1.5 },
-      },
-    },
+    positions: shiftRegionPositions(MOUNTAIN_1991, 0.9, 0.9), // tracks Utah rather than the Mountain line
   },
   MT: {
     race: { white: 91, black: 0, hispanic: 2, asian: 1, other: 6 },
@@ -1443,24 +1018,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 13,
       gunowners: 22,
     },
-    positions: {
-      race: { white: { economicLean: 1.9, socialLean: 1.4 } },
-      ideology: {
-        evangelicals: { economicLean: 2.0, socialLean: 2.0 },
-        patriots: { economicLean: 1.5, socialLean: 1.5 },
-        gunowners: { economicLean: 2.0, socialLean: 2.0 },
-        progressives: { economicLean: -2.5, socialLean: -2.5 },
-      },
-      education: {
-        no_college: { economicLean: 0.0, socialLean: 0.0 },
-      },
-      wealth: {
-        middle: { economicLean: 0.0, socialLean: 0.0 },
-      },
-      age: {
-        senior: { economicLean: 0.0, socialLean: 0.0 },
-      },
-    },
+    positions: shiftRegionPositions(MOUNTAIN_1991, -1.1, -0.1), // Clinton wins it by 3: the populist streak survives
   },
   NV: {
     race: { white: 79, black: 6, hispanic: 10, asian: 3, other: 2 },
@@ -1475,24 +1033,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 11,
       gunowners: 14,
     },
-    positions: {
-      race: { white: { economicLean: 4.2, socialLean: 2.8 } },
-      ideology: {
-        evangelicals: { economicLean: 1.5, socialLean: 1.5 },
-        patriots: { economicLean: 1.0, socialLean: 1.0 },
-        gunowners: { economicLean: 1.5, socialLean: 1.5 },
-        progressives: { economicLean: -3.0, socialLean: -3.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: shiftRegionPositions(MOUNTAIN_1991, -0.7, -1.4), // service-sector unionism restrains the state's economics
   },
   OR: {
     race: { white: 91, black: 2, hispanic: 4, asian: 2, other: 1 },
@@ -1507,24 +1048,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 8,
       gunowners: 12,
     },
-    positions: {
-      race: { white: { economicLean: 1.8, socialLean: 1.4 } },
-      ideology: {
-        evangelicals: { economicLean: 0.5, socialLean: 0.5 },
-        patriots: { economicLean: 0.0, socialLean: 0.0 },
-        gunowners: { economicLean: 0.5, socialLean: 0.5 },
-        progressives: { economicLean: -4.0, socialLean: -4.0 },
-      },
-      education: {
-        no_college: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      wealth: {
-        middle: { economicLean: -0.5, socialLean: -0.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: PACIFIC_1991,
   },
   UT: {
     race: { white: 91, black: 1, hispanic: 5, asian: 2, other: 1 },
@@ -1539,24 +1063,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 13,
       gunowners: 13,
     },
-    positions: {
-      race: { white: { economicLean: 3.2, socialLean: 2.8 } },
-      ideology: {
-        evangelicals: { economicLean: 2.5, socialLean: 2.5 },
-        patriots: { economicLean: 2.0, socialLean: 2.0 },
-        gunowners: { economicLean: 2.5, socialLean: 2.5 },
-        progressives: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      education: {
-        no_college: { economicLean: 0.5, socialLean: 0.5 },
-      },
-      wealth: {
-        middle: { economicLean: 0.5, socialLean: 0.5 },
-      },
-      age: {
-        senior: { economicLean: 0.5, socialLean: 0.5 },
-      },
-    },
+    positions: shiftRegionPositions(MOUNTAIN_1991, 1.2, 1.7), // Bush's Mountain fortress: even the Perot protest vote goes right
   },
   WA: {
     race: { white: 87, black: 3, hispanic: 4, asian: 4, other: 2 },
@@ -1571,24 +1078,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 8,
       gunowners: 11,
     },
-    positions: {
-      race: { white: { economicLean: -1.3, socialLean: 0.1 } },
-      ideology: {
-        evangelicals: { economicLean: 4.0, socialLean: 4.0 },
-        patriots: { economicLean: 3.5, socialLean: 3.5 },
-        gunowners: { economicLean: 3.5, socialLean: 3.5 },
-        progressives: { economicLean: -1.5, socialLean: -1.5 },
-      },
-      education: {
-        no_college: { economicLean: 1.5, socialLean: 1.5 },
-      },
-      wealth: {
-        middle: { economicLean: 1.5, socialLean: 1.5 },
-      },
-      age: {
-        senior: { economicLean: 1.5, socialLean: 1.5 },
-      },
-    },
+    positions: PACIFIC_1991,
   },
   WY: {
     race: { white: 91, black: 1, hispanic: 6, asian: 1, other: 1 },
@@ -1603,24 +1093,7 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 16,
       gunowners: 24,
     },
-    positions: {
-      race: { white: { economicLean: 1, socialLean: 1.9 } },
-      ideology: {
-        evangelicals: { economicLean: 3.5, socialLean: 3.5 },
-        patriots: { economicLean: 3.0, socialLean: 3.0 },
-        gunowners: { economicLean: 3.0, socialLean: 3.0 },
-        progressives: { economicLean: -1.5, socialLean: -1.5 },
-      },
-      education: {
-        no_college: { economicLean: 1.5, socialLean: 1.5 },
-      },
-      wealth: {
-        middle: { economicLean: 1.5, socialLean: 1.5 },
-      },
-      age: {
-        senior: { economicLean: -0.5, socialLean: -0.5 },
-      },
-    },
+    positions: shiftRegionPositions(MOUNTAIN_1991, 0.5, 0.4), // an extraction economy with the file's most fused property-rights politics
   },
   DC: {
     race: { white: 27, black: 65, hispanic: 5, asian: 2, other: 1 },
@@ -1635,23 +1108,6 @@ export const stateCensusData1991: Record<string, Layer1Config> = {
       patriots: 5,
       gunowners: 3,
     },
-    positions: {
-      race: { white: { economicLean: 4.5, socialLean: 2.2 } },
-      ideology: {
-        evangelicals: { economicLean: -1.0, socialLean: -1.0 },
-        patriots: { economicLean: -1.5, socialLean: -1.5 },
-        gunowners: { economicLean: -1.0, socialLean: -1.0 },
-        progressives: { economicLean: -5.0, socialLean: -5.0 },
-      },
-      education: {
-        no_college: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      wealth: {
-        middle: { economicLean: -2.0, socialLean: -2.0 },
-      },
-      age: {
-        senior: { economicLean: -2.0, socialLean: -2.0 },
-      },
-    },
+    positions: CAPITAL_1991,
   },
 };
