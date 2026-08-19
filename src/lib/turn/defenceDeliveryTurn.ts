@@ -30,6 +30,13 @@ import {
 } from "@/lib/db/collections/defenseAppropriation";
 import { applyMoneyMove, MONEY_MOVE_COLLECTION, type MoneyMoveLeg } from "@/lib/banking/moneyMove";
 import { loadDefencePriceRatios } from "@/lib/military/defencePriceRatios";
+import {
+  defenceCountryTurnSpendCap,
+  defenceSupplierTurnSpendCap,
+  lotsWithinTurnSpendCap,
+} from "@/lib/military/defenceTurnSpendCap";
+import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
+import { resolveDefenseLine } from "@/lib/turn/defenseEnvelope";
 import { emitTx } from "@/lib/financialTxLog/emit";
 
 /**
@@ -62,10 +69,12 @@ export interface DeliveryResult {
  * Per-turn: every active contract delivers what its plant produced into the arsenal, paid for
  * out of the defence appropriation.
  *
- * Three caps apply, in this order:
+ * Four caps apply, in this order:
  *   1. what the plant produced       — you cannot deliver what you did not build
  *   2. what remains on the order     — a contract never over-delivers what it was billed for
  *   3. what the appropriation covers — procurement has NO overdraft
+ *   4. what the appropriation may pay THIS TURN: procurement has no overdraft and no
+ *      floodgate either, so a whole contracting window cannot settle in one tick
  *
  * Cap 3 stalls rather than borrowing: C1 established the overdraft is for upkeep, an
  * obligation already incurred, never for new purchases. A country that cannot pay this turn
@@ -104,6 +113,15 @@ export async function applyDefenceDeliveries(
   // opening balance and then have nine of them refused into the repair queue.
   const opening = await getDefenseAppropriation(db, countryId);
   const priceRatios = await loadDefencePriceRatios(db);
+  // The payout speed limit. ONE read of the defence line per country per turn, alongside the
+  // appropriation read above, because the cap is a rate against that line and nothing in the
+  // loop can move it. See `defenceTurnSpendCap` for the drain this bounds and the arithmetic
+  // showing it cannot cost a legitimate buyer a lot across a contracting window.
+  const defenceLine = await resolveDefenseLine(db, countryId);
+  const countryTurnCap = defenceCountryTurnSpendCap(defenceLine);
+  let countryPaidThisTurn = 0;
+  /** corporationId -> local currency already paid to that supplier this turn. */
+  const supplierPaidThisTurn = new Map<string, number>();
   let projectedBalance = opening.balance;
   let projectedEncumbered = opening.encumbered ?? 0;
   const moveRecords = db.collection<{ _id: string }>(MONEY_MOVE_COLLECTION);
@@ -174,7 +192,20 @@ export async function applyDefenceDeliveries(
     const affordable =
       contract.pricePerLot > 0 ? Math.floor(funding / contract.pricePerLot) : produced;
 
-    const deliverable = Math.min(produced, remaining, affordable);
+    // Cap 4: how fast the appropriation may be DRAINED, as opposed to how much of it is there.
+    // Caps 1 to 3 all say "you may have this much money"; none of them says "not this fast", and
+    // the whole contracting window settling in a single turn is what made procurement a cash tap
+    // worth freezing.
+    const supplierKey = contract.corporationId.toString();
+    const withinTurnCap = lotsWithinTurnSpendCap({
+      pricePerLot: contract.pricePerLot,
+      countryTurnCap,
+      supplierTurnCap: defenceSupplierTurnSpendCap(defenceLine, isStateOwned(corp)),
+      countryPaidThisTurn,
+      supplierPaidThisTurn: supplierPaidThisTurn.get(supplierKey) ?? 0,
+    });
+
+    const deliverable = Math.min(produced, remaining, affordable, withinTurnCap);
     // The carry banks everything the plant built and did NOT ship, whole lots included, capped
     // at what the order still needs. Banking only the sub-lot remainder destroyed finished lots:
     // a plant under one lot per turn spent ~10 turns accruing a lot, the appropriation could not
@@ -187,6 +218,7 @@ export async function applyDefenceDeliveries(
     // the CEO is back to watching a number sit still with no way to tell scarcity from a bug.
     const reasonFor = (shipped: number) => {
       if (available - shipped >= 1 && affordable <= shipped) return "appropriation_short" as const;
+      if (available - shipped >= 1 && withinTurnCap <= shipped) return "turn_spend_cap" as const;
       if (remaining - shipped <= 0) return undefined;
       if (available - shipped > 0 && available - shipped < 1) {
         return rawShare > 0 ? ("sub_lot_output" as const) : ("no_output" as const);
@@ -387,6 +419,11 @@ export async function applyDefenceDeliveries(
     }
 
     projectedBalance -= actualCost;
+    countryPaidThisTurn += actualCost;
+    supplierPaidThisTurn.set(
+      supplierKey,
+      (supplierPaidThisTurn.get(supplierKey) ?? 0) + actualCost
+    );
 
     // The MEMO leg. The cash has moved; this only discharges the reservation against it. It is
     // not part of the money move because nothing enters or leaves the world when a commitment
@@ -461,6 +498,13 @@ export async function applyDefenceDeliveries(
         ],
       });
       projectedBalance += actualCost;
+      // The refund gives the turn allowance back too, or a delivery that never landed would
+      // still count against every later contract in the same sweep.
+      countryPaidThisTurn = Math.max(0, countryPaidThisTurn - actualCost);
+      supplierPaidThisTurn.set(
+        supplierKey,
+        Math.max(0, (supplierPaidThisTurn.get(supplierKey) ?? 0) - actualCost)
+      );
       // One broken contract must not take down the sweep for every other country.
       stalled++;
       continue;

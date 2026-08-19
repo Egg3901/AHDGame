@@ -89,6 +89,8 @@ interface World {
   failDeposit?: boolean;
   /** Simulates the supplier's payment failing after the lots have landed. */
   failCorpCredit?: boolean;
+  /** Enacted annual defence line. Omitted, the budget falls back to its GDP fraction. */
+  defenceLine?: number;
 }
 
 function stubDb(w: World): Db {
@@ -200,6 +202,12 @@ function stubDb(w: World): Db {
         findOne: async () => ({
           countryId: "US",
           gdp: 387_000_000_000,
+          // The per-turn payout cap is a rate against the enacted defence line, so the stub has
+          // to be able to state one. Omitted, `resolveDefenseLineFrom` falls back to the GDP
+          // fraction, which is what every case written before the cap existed assumes.
+          ...(w.defenceLine != null
+            ? { spending: { byCategory: { defense: w.defenceLine } } }
+            : {}),
           defenseAppropriation: {
             balance: w.appropriation,
             encumbered: w.encumbered,
@@ -528,5 +536,96 @@ describe("applyDefenceDeliveries — diverting output away from the market", () 
 
     // Both contracts point at the same sector — one write, not two.
     expect(w.sectorOps).toHaveLength(1);
+  });
+});
+
+// Ticket #1134 / the procurement freeze. A delivery pays the supplier the contract price minus
+// a production cost that is five orders of magnitude smaller (383,748,809 against 1,091 on the
+// live world), so procurement is very nearly a straight transfer of national appropriation into
+// one corporation's cash. The award quota already bounds the TOTAL per contracting window; these
+// cases pin the RATE, which is what a single high-throughput plant used to be able to empty in
+// one turn.
+describe("applyDefenceDeliveries — the per-turn appropriation spend cap", () => {
+  /** 48bn a year: 450m of procurement accrues per turn, so the country may pay 1.35bn. */
+  const DEFENCE_LINE = 48_000_000_000;
+
+  function drainWorld(over: Partial<World> = {}): World {
+    return world({
+      defenceLine: DEFENCE_LINE,
+      // Deep enough that caps 1 to 3 cannot be what stops anything.
+      appropriation: 1e15,
+      sector: { _id: SECTOR_ID, strategyId: "munitions", revenue: 1e12 },
+      ...over,
+    });
+  }
+
+  function contract(over: Record<string, unknown> = {}) {
+    return {
+      _id: new ObjectId(),
+      countryId: "US",
+      corporationId: CORP_ID,
+      sectorId: SECTOR_ID,
+      component: "ground",
+      lotsOrdered: 100,
+      lotsDelivered: 0,
+      pricePerLot: 500_000_000,
+      assignedFactories: 4,
+      status: "active",
+      ...over,
+    };
+  }
+
+  it("the plant really could build far more than the cap allows", () => {
+    expect(rawLotsFromSector({ strategyId: "munitions", revenue: 1e12 })).toBeGreaterThan(50);
+  });
+
+  it("refuses to drain a whole contracting window into one supplier in one turn", async () => {
+    const w = drainWorld({ contracts: [contract()] });
+    const r = await applyDefenceDeliveries(stubDb(w), "US", 1953, 3, 5);
+    // Private supplier allowance is a third of 1.35bn = 450m, under one 500m lot, so the
+    // country-wide one-lot floor is all this contract gets.
+    expect(r.lots).toBe(1);
+    expect(r.paid).toBe(500_000_000);
+    expect(w.contracts[0].carryReason).toBe("turn_spend_cap");
+  });
+
+  it("does not let a second contract on the same supplier take the floor again", async () => {
+    const w = drainWorld({ contracts: [contract(), contract()] });
+    const r = await applyDefenceDeliveries(stubDb(w), "US", 1953, 3, 5);
+    expect(r.lots).toBe(1);
+    expect(r.paid).toBe(500_000_000);
+  });
+
+  // The other half of the brief: this must not replace a one-plant wall with a rate wall. A
+  // buyer with real throughput and a real budget ships many lots a turn.
+  it("lets a large-budget buyer ship many lots in a single turn", async () => {
+    const w = drainWorld({
+      contracts: [contract({ pricePerLot: 50_000_000, lotsOrdered: 30 })],
+    });
+    const r = await applyDefenceDeliveries(stubDb(w), "US", 1953, 3, 5);
+    // 450m of supplier allowance at 50m a lot.
+    expect(r.lots).toBe(9);
+    expect(r.paid).toBe(450_000_000);
+  });
+
+  it("delivers the whole order over successive turns, so the cap costs no lots", async () => {
+    const w = drainWorld({
+      contracts: [contract({ pricePerLot: 50_000_000, lotsOrdered: 30 })],
+    });
+    let total = 0;
+    for (let turn = 5; turn < 15; turn++) {
+      total += (await applyDefenceDeliveries(stubDb(w), "US", 1953, 3, turn)).lots;
+    }
+    expect(total).toBe(30);
+    expect(w.contracts[0].lotsDelivered).toBe(30);
+  });
+
+  it("leaves a country with no enacted defence line able to ship, not deadlocked", async () => {
+    const w = drainWorld({
+      defenceLine: undefined,
+      contracts: [contract({ pricePerLot: 50_000_000, lotsOrdered: 30 })],
+    });
+    const r = await applyDefenceDeliveries(stubDb(w), "US", 1953, 3, 5);
+    expect(r.lots).toBeGreaterThanOrEqual(1);
   });
 });
