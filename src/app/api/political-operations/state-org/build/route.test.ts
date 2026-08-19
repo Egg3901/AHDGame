@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId, MongoServerError } from "mongodb";
+import { stateOrgLevelCost } from "@/lib/electionEngine/constants";
 
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock("@/lib/time/gameTime", () => ({
 describe("POST /api/political-operations/state-org/build", () => {
   const mockUserId = new ObjectId().toString();
   const mockCharacterId = new ObjectId();
+  const mockCampaignId = new ObjectId();
   const turnStart = new Date("2026-06-30T12:00:00.000Z");
 
   const baseCharacter = {
@@ -93,6 +95,21 @@ describe("POST /api/political-operations/state-org/build", () => {
       effectiveNow: turnStart,
       startingYear: 2019,
     });
+  });
+
+  /**
+   * Campaign Presence is funded from the CAMPAIGN's pools, so every success
+   * path needs a campaign fixture. Generous defaults so tests that are not
+   * about affordability never trip the gate.
+   */
+  const campaignFixture = (over: Record<string, unknown> = {}) => ({
+    findOne: vi.fn().mockResolvedValue({
+      _id: mockCampaignId,
+      actions: 50,
+      funds: 100_000_000,
+      ...over,
+    }),
+    updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
   });
 
   async function setupDb(collections: MockCollections) {
@@ -159,7 +176,7 @@ describe("POST /api/political-operations/state-org/build", () => {
     expect(response.status).toBe(400);
   });
 
-  it("allows building a personal state organization in territorial Alaska", async () => {
+  it("allows building a personal campaign presence in territorial Alaska", async () => {
     const orgFindOneAndUpdate = vi.fn().mockResolvedValue({
       _id: new ObjectId(),
       characterId: mockCharacterId,
@@ -173,6 +190,7 @@ describe("POST /api/political-operations/state-org/build", () => {
         findOne: vi.fn().mockResolvedValue({ ...baseCharacter }),
         updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
       },
+      campaigns: campaignFixture(),
       characterStateOrg: {
         findOne: vi.fn().mockResolvedValue({ level: 1, totalInvested: 3 }),
         findOneAndUpdate: orgFindOneAndUpdate,
@@ -195,7 +213,59 @@ describe("POST /api/political-operations/state-org/build", () => {
     );
   });
 
-  it("returns 400 when the character has insufficient actions", async () => {
+  it("returns 400 when the character has no active campaign", async () => {
+    // Behaviour change: Campaign Presence is campaign infrastructure funded from
+    // the campaign treasury, so a character without one can no longer build it.
+    // Asserted explicitly because it removes a capability non-candidates had.
+    await setupDb({
+      characters: { findOne: vi.fn().mockResolvedValue({ ...baseCharacter }) },
+      campaigns: { findOne: vi.fn().mockResolvedValue(null) },
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/political-operations/state-org/build", {
+        method: "POST",
+        body: JSON.stringify({ stateId: "PA" }),
+      })
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/active campaign/i);
+  });
+
+  it("prices the next level off the current one (escalating cost)", async () => {
+    // The curve is what keeps an uncapped ladder from being a flat toll, so the
+    // route must price level N+1, not a constant.
+    const campaignUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+    await setupDb({
+      characterStateOrg: {
+        findOne: vi.fn().mockResolvedValue({ level: 7, totalInvested: 21 }),
+        findOneAndUpdate: vi.fn().mockResolvedValue({ level: 8, totalInvested: 24 }),
+      },
+      characters: { findOne: vi.fn().mockResolvedValue({ ...baseCharacter }) },
+      campaigns: {
+        findOne: vi
+          .fn()
+          .mockResolvedValue({ _id: mockCampaignId, actions: 50, funds: 100_000_000 }),
+        updateOne: campaignUpdateOne,
+      },
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/political-operations/state-org/build", {
+        method: "POST",
+        body: JSON.stringify({ stateId: "PA" }),
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(campaignUpdateOne.mock.calls[0][1].$inc.funds).toBe(-stateOrgLevelCost(7));
+    // Level 8 must cost strictly more than level 1 — the whole point.
+    expect(stateOrgLevelCost(7)).toBeGreaterThan(stateOrgLevelCost(0));
+  });
+
+  it("returns 400 when the CAMPAIGN has insufficient actions", async () => {
     const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
     vi.mocked(requireAuthWithCharacter).mockResolvedValue({
       ok: true,
@@ -213,6 +283,9 @@ describe("POST /api/political-operations/state-org/build", () => {
       characters: {
         findOne: vi.fn().mockResolvedValue({ ...baseCharacter, actions: 1 }),
       },
+      // Presence is campaign-funded: the personal pool is irrelevant, the
+      // campaign's is what gates.
+      campaigns: campaignFixture({ actions: 1 }),
     });
 
     const { POST } = await import("./route");
@@ -245,6 +318,7 @@ describe("POST /api/political-operations/state-org/build", () => {
     });
     const charUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
     const charFindOne = vi.fn().mockResolvedValue({ ...baseCharacter });
+    const campaignUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
 
     await setupDb({
       characterStateOrg: {
@@ -252,6 +326,12 @@ describe("POST /api/political-operations/state-org/build", () => {
         findOneAndUpdate: orgFindOneAndUpdate,
       },
       characters: { findOne: charFindOne, updateOne: charUpdateOne },
+      campaigns: {
+        findOne: vi
+          .fn()
+          .mockResolvedValue({ _id: mockCampaignId, actions: 50, funds: 100_000_000 }),
+        updateOne: campaignUpdateOne,
+      },
     });
 
     const { POST } = await import("./route");
@@ -266,19 +346,23 @@ describe("POST /api/political-operations/state-org/build", () => {
     expect(body.level).toBe(1);
     expect(body.totalInvested).toBe(3);
 
-    // characters debit — pre-forex uses the legacy `funds` field.
-    const charCall = charUpdateOne.mock.calls[0];
-    expect(charCall[0]).toMatchObject({
-      _id: mockCharacterId,
+    // Debit lands on the CAMPAIGN, not the character. The org doc reports
+    // level 1 pre-build, so the price is the level-1→2 rung of the escalating
+    // curve, asserted through the helper rather than a literal.
+    const expectedCost = stateOrgLevelCost(1);
+    const campCall = campaignUpdateOne.mock.calls[0];
+    expect(campCall[0]).toMatchObject({
+      _id: mockCampaignId,
       actions: { $gte: 3 },
-      funds: { $gte: 50_000 },
+      funds: { $gte: expectedCost },
     });
-    expect(charCall[1].$inc).toMatchObject({
+    expect(campCall[1].$inc).toMatchObject({
       actions: -3,
-      funds: -50_000,
+      funds: -expectedCost,
     });
+    expect(charUpdateOne).not.toHaveBeenCalled();
 
-    // Atomic findOneAndUpdate carries the throttle + cap guards and uses $inc
+    // Atomic findOneAndUpdate carries the throttle + price-stability guards and uses $inc
     // so two parallel requests cannot bypass the throttle.
     expect(orgFindOneAndUpdate).toHaveBeenCalled();
     const orgCall = orgFindOneAndUpdate.mock.calls[0];
@@ -308,6 +392,7 @@ describe("POST /api/political-operations/state-org/build", () => {
         findOne: vi.fn().mockResolvedValue(null),
         findOneAndUpdate: orgFindOneAndUpdate,
       },
+      campaigns: campaignFixture(),
       characters: { findOne: charFindOne, updateOne: charUpdateOne },
     });
 
@@ -345,6 +430,7 @@ describe("POST /api/political-operations/state-org/build", () => {
         }),
         findOneAndUpdate: orgFindOneAndUpdate,
       },
+      campaigns: campaignFixture(),
       characters: { findOne: charFindOne, updateOne: charUpdateOne },
     });
 
@@ -385,6 +471,7 @@ describe("POST /api/political-operations/state-org/build", () => {
         }),
         findOneAndUpdate: orgFindOneAndUpdate,
       },
+      campaigns: campaignFixture(),
       characters: { findOne: charFindOne, updateOne: charUpdateOne },
     });
 
@@ -427,6 +514,7 @@ describe("POST /api/political-operations/state-org/build", () => {
     });
     const charUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
     const charFindOne = vi.fn().mockResolvedValue({ ...baseCharacter });
+    const campaignUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
 
     await setupDb({
       characterStateOrg: {
@@ -434,6 +522,12 @@ describe("POST /api/political-operations/state-org/build", () => {
         findOneAndUpdate: orgFindOneAndUpdate,
       },
       characters: { findOne: charFindOne, updateOne: charUpdateOne },
+      campaigns: {
+        findOne: vi
+          .fn()
+          .mockResolvedValue({ _id: mockCampaignId, actions: 50, funds: 100_000_000 }),
+        updateOne: campaignUpdateOne,
+      },
     });
 
     const { POST } = await import("./route");

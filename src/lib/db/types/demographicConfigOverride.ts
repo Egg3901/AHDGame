@@ -1,18 +1,5 @@
 import type { EraId } from "@/lib/seeds/presetSelector";
 
-/** A single Layer-1 → archetype composition weight. */
-export interface DemographicCompositionWeight {
-  dim: string;
-  key: string;
-  w: number;
-}
-
-/** Per-archetype composition override: which Layer-1 keys feed it and its civic multiplier. */
-export interface DemographicCompositionOverride {
-  weights: DemographicCompositionWeight[];
-  civicMultiplier: number;
-}
-
 /** Per-country-per-era runtime override of the global Layer-1 demographic model,
  *  authored via the Position Editor and consumed by the gated seed path.
  *
@@ -31,8 +18,6 @@ export interface DemographicConfigOverride {
   positions: Record<string, Record<string, { economicLean: number; socialLean: number }>>;
   /** Global baseline turnout rates per Layer-1 dimension/key (%). */
   turnout?: Record<string, Record<string, number>>;
-  /** Per-archetype composition (Layer-1 weights + civic multiplier). */
-  composition?: Record<string, DemographicCompositionOverride>;
   updatedAt: Date;
   updatedBy?: string;
 }

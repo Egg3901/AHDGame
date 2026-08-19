@@ -18,6 +18,8 @@ import {
   resolveOfficeActionBonus,
 } from "@/lib/actions/officeActionBonus";
 import { getActionBreakdown } from "@/lib/actions/actionBreakdown";
+import { fundraiseYieldLocal } from "@/lib/actions";
+import { resolveStartingCountryId } from "@/lib/utils/profileDemographics";
 import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
 import { getSiteUrl } from "@/lib/siteMetadata";
 import type { Filter } from "mongodb";
@@ -77,6 +79,7 @@ import { getTotalPersonalLiquidWealth, getHomeCurrency } from "@/lib/currency/ch
 import { LocWalletStrip } from "@/components/forex/LocWalletStrip";
 import { getNationalNpiOrdinalRank } from "@/lib/character/nationalNpiOrdinalRank";
 import { getFinancialData } from "@/lib/character/financialData";
+import { unionContributionIncomePerTurn } from "@/lib/unions/unionContributionIncome";
 import {
   calculateFullFundDistribution,
   getPopulationTier,
@@ -438,7 +441,6 @@ async function getCharacterById(characterId: string) {
       discordId: user?.discordId ?? null,
       discordUsername: user?.discordUsername ?? null,
       discordAvatar: user?.discordAvatar ?? null,
-      accountCountryId: user?.accountCountryId ?? character.countryId,
       patreonTier: patreonActive ? patreonTier : null,
       patreonExpiresAt: patreonActive ? patreonExpiresAt : null,
       patreonSince: patreonActive ? (user?.patreonSince ?? null) : null,
@@ -504,7 +506,7 @@ export default async function CharacterPage({ params }: PageProps) {
 
   if (!data) redirect("/map");
 
-  const [viewerUserDoc, financialData] = await Promise.all([
+  const [viewerUserDoc, financialData, unionContribution] = await Promise.all([
     userData
       ? (async () => {
           const db = await getDb();
@@ -517,6 +519,10 @@ export default async function CharacterPage({ params }: PageProps) {
         })()
       : Promise.resolve(null),
     getFinancialData(data.character._id),
+    (async () => {
+      const db = await getDb();
+      return unionContributionIncomePerTurn(db, data.character._id);
+    })(),
   ]);
 
   const viewerDisablesAutoplay = viewerUserDoc?.disableAutoplayOnOtherProfiles ?? false;
@@ -534,7 +540,6 @@ export default async function CharacterPage({ params }: PageProps) {
     discordId,
     discordUsername,
     discordAvatar,
-    accountCountryId,
     patreonTier,
     patreonExpiresAt,
     patreonSince,
@@ -989,10 +994,7 @@ export default async function CharacterPage({ params }: PageProps) {
                   donorIncome={{
                     passivePerHour: fundDistribution.donorBaseBonus,
                     perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
-                    fundraiseYield: Math.round(
-                      (50_000 + character.donorBaseLevel * 2_000) *
-                        (1 + (character.politicalInfluence ?? 0) / 100)
-                    ),
+                    fundraiseYield: fundraiseYieldLocal(character, forexEnabled),
                     populationTier,
                     influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,
                   }}
@@ -1001,8 +1003,9 @@ export default async function CharacterPage({ params }: PageProps) {
                     baseGen: fundDistribution.baseGeneration,
                     donorBonus: fundDistribution.donorBaseBonus,
                     officeBonus: fundDistribution.officeBonus,
+                    unionContribution,
                     totalTax: fundDistribution.stateTaxAmount + fundDistribution.nationalTaxAmount,
-                    netIncome: fundDistribution.characterReceives,
+                    netIncome: fundDistribution.characterReceives + unionContribution,
                   }}
                   personalIncome={{
                     ceoSalaryPerHour: corporation ? corporation.ceoSalary / 24 : undefined,
@@ -1037,7 +1040,7 @@ export default async function CharacterPage({ params }: PageProps) {
                 dotColor={accentHex}
                 markers={compassMarkers.length > 0 ? compassMarkers : undefined}
                 demographics={character.demographics}
-                startingCountryId={accountCountryId}
+                startingCountryId={resolveStartingCountryId(character)}
                 currentCountryId={character.countryId}
               />
 

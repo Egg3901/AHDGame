@@ -6,7 +6,6 @@ import type { EraId } from "./presetSelector";
 export interface Layer1ModelOverride {
   positions?: DemographicConfigOverride["positions"];
   turnout?: DemographicConfigOverride["turnout"];
-  composition?: DemographicConfigOverride["composition"];
 }
 
 /** Returns the full admin-authored model override for a country+era, or null if none. */
@@ -20,7 +19,7 @@ export async function loadFullOverride(
     .collection<DemographicConfigOverride>("demographicConfigOverrides")
     .findOne({ _id: id });
   if (!doc) return null;
-  return { positions: doc.positions, turnout: doc.turnout, composition: doc.composition };
+  return { positions: doc.positions, turnout: doc.turnout };
 }
 
 /** Returns the admin-authored positions override for a country+era, or null if none. */

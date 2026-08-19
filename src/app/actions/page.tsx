@@ -11,6 +11,7 @@ import {
   getDonorActionCost,
   getAdvertiseFundCost,
   getBuildDonorBaseFundCost,
+  fundraiseYieldLocal,
 } from "@/lib/actions";
 import { getHomeCurrency, getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { getGdpBaseline } from "@/lib/utils/fundGeneration";
@@ -393,10 +394,10 @@ export default function ActionsPage() {
 
   const actionCosts = useMemo(() => {
     if (!character) return null;
-    const influenceMult = 1 + (character.politicalInfluence ?? 0) / 100;
-    const fundraiseAmount = Math.round(
-      (50_000 + (character.donorBaseLevel ?? 0) * 2_000) * influenceMult
-    );
+    // Face value in the campaign treasury's own currency, computed by the same
+    // helper the server credits with (ticket 1107). Never pass this through the
+    // live-forex formatter: campaign funds convert at the frozen base rate.
+    const fundraiseAmount = fundraiseYieldLocal(character, !!character.currencyBalances);
     const countryId = character.countryId ?? "US";
     const buildDonorBaseFundCost = homeState
       ? getBuildDonorBaseFundCost(
@@ -621,6 +622,7 @@ export default function ActionsPage() {
                 buildDonorBaseActionCost={actionCosts.buildDonorBaseActionCost}
                 buildDonorBaseFundCost={actionCosts.buildDonorBaseFundCost}
                 fundraiseYield={actionCosts.fundraiseAmount}
+                campaignCurrency={getHomeCurrency(character)}
                 displayCampaignFunds={displayCampaignFunds}
                 displayPersonalWealth={displayPersonalWealth}
                 blockGdpScaledCosts={blockGdpScaledCosts}
@@ -638,6 +640,7 @@ export default function ActionsPage() {
         {/* Donor Network Stats */}
         <DonorNetworkStats
           fundraiseAmount={actionCosts.fundraiseAmount}
+          fundraiseCurrency={getHomeCurrency(character)}
           donorUpgradeCost={actionCosts.donorUpgradeCost}
         />
       </main>

@@ -20,6 +20,7 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   "wire_transfer_in",
   "wire_transfer_out",
   "campaign_donation",
+  "union_contribution",
 
   // ── Bonds ──────────────────────────────────────────────────────────────
   "bond_purchase",
@@ -138,6 +139,7 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
   wire_transfer_in: "Wire In",
   wire_transfer_out: "Wire Out",
   campaign_donation: "Campaign Donation",
+  union_contribution: "Union Contribution",
 
   bond_purchase: "Bond Purchase",
   bond_sell: "Bond Sell",

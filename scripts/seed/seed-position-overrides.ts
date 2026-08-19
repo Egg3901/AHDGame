@@ -94,14 +94,6 @@ async function main() {
       comp.turnoutRates as unknown as Record<string, Record<string, number>>
     );
 
-    const composition: DemographicConfigOverride["composition"] = {};
-    for (const [archetypeId, entry] of Object.entries(comp.voterGroupComposition)) {
-      composition[archetypeId] = {
-        weights: entry.weights.map((w) => ({ dim: w.dim as string, key: w.key, w: w.w })),
-        civicMultiplier: entry.civicMultiplier ?? 1,
-      };
-    }
-
     const { dims, keys } = countPositionKeys(positions);
     const id = `US:${era}`;
 
@@ -120,7 +112,6 @@ async function main() {
         era,
         positions,
         turnout,
-        composition,
         updatedAt: new Date(),
         updatedBy: "seed-position-overrides",
       };
@@ -151,14 +142,6 @@ async function main() {
 
       const turnout = flattenTurnout(model.turnoutRates);
 
-      const composition: DemographicConfigOverride["composition"] = {};
-      for (const [archetypeId, entry] of Object.entries(model.composition)) {
-        composition[archetypeId] = {
-          weights: entry.weights.map((w) => ({ dim: w.dim, key: w.key, w: w.w })),
-          civicMultiplier: entry.civicMultiplier ?? 1,
-        };
-      }
-
       const { keys: keyCount } = countPositionKeys(positions);
       const id = `${countryId}:${era}`;
 
@@ -176,7 +159,6 @@ async function main() {
           era,
           positions,
           turnout,
-          composition,
           updatedAt: new Date(),
           updatedBy: "seed-position-overrides",
         };

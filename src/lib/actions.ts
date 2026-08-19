@@ -3,6 +3,7 @@ import { getGdpBaseline } from "@/lib/utils/fundGeneration";
 import { getHomeCurrency, getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 import { statMultiplier } from "@/lib/stats/statMultiplier";
+import { campaignAnchorToLocal } from "@/lib/campaigns/campaignCurrency";
 import { DEBATE_PREP_ACTION_COST, NEUTRAL_STAT, type StatKey } from "@/lib/stats/statsConstants";
 
 /**
@@ -96,6 +97,33 @@ export function calculateFundraisingAmount(
   if (stateInfluence === undefined) return base;
   const multiplier = 1 + Math.max(0, Math.min(100, stateInfluence)) / 100;
   return Math.round(base * multiplier);
+}
+
+/**
+ * Canonical per-use Fundraise yield in ANCHOR units, including the fundraising
+ * stat multiplier. This is the single source of truth: the Fundraise action
+ * effect and every UI that quotes the yield must call this, or the quote and
+ * the credit drift apart (ticket 1107).
+ */
+export function fundraiseYieldAnchor(character: Character): number {
+  const base = calculateFundraisingAmount(
+    character.donorBaseLevel,
+    character.politicalInfluence ?? 0
+  );
+  return Math.round(base * statMultiplier(statValue(character, "fundraising")));
+}
+
+/**
+ * The Fundraise yield as it will actually land in the campaign treasury, in the
+ * character's LOCAL campaign currency. Mirrors executeAction exactly: campaign
+ * funds convert at the FROZEN base rate (`campaignAnchorToLocal`), never the
+ * live forex rate. Quoting this with a live-rate formatter is what made the card
+ * advertise ~1.8M in a 1953 East Germany while the credit paid ~1.0M, because
+ * the live DDM rate is 4.2 and the frozen campaign rate is 2.22.
+ */
+export function fundraiseYieldLocal(character: Character, forexEnabled: boolean): number {
+  const anchor = fundraiseYieldAnchor(character);
+  return forexEnabled ? campaignAnchorToLocal(anchor, character.countryId ?? "US") : anchor;
 }
 
 /**
@@ -237,6 +265,62 @@ export function advertiseFavorabilityGain(
 }
 
 /**
+ * Diminishing-returns shape for a turn's TOTAL passive campaign favorability
+ * (media spending + travel presence + the primary in-state bonus), applied once
+ * to the summed positive gain.
+ *
+ * Third member of the "curves must intersect" family, alongside
+ * {@link advertiseFavorabilityGain} and {@link campaignInfluenceGain}. Both of
+ * those were given a favorability/influence-dependent penalty precisely so a
+ * self-reinforcing stat has a stable equilibrium below the cap. The passive
+ * campaign channel was missed by both fixes and stayed flat.
+ *
+ * Root cause this closes: passive gain did not vary with favorability at all,
+ * while decay is bounded — `calculateFavorabilityAboveThresholdPenalty` maxes
+ * out at (100−60)×0.05 = 2.0/turn. A maxed media tree pays
+ * 0.5 (starter) + 1.5 (Broadcast t3) + 1.0 (Digital Ads t3) = 3.0/turn, doubled
+ * to 6.0 inside the final-four-turn season window, plus 1.0/turn for travel.
+ * Gain 3.0+ against a hard ceiling of 2.0 means the curves never intersect and
+ * the candidate pins at 100 permanently. The engine already knew: see
+ * `isTargetMediaSustainedAtCap` in simpleInfluence.ts, which detects exactly
+ * this state (mediaLevel >= 4) to explain a disabled Support button, rather
+ * than preventing it.
+ *
+ * Curve: base − (favorability − 80) × 0.15, floored at 0.5. The 0.5 floor sits
+ * well under the 2.0 decay ceiling, so no combination of passives can re-pin at
+ * the cap.
+ *
+ * Threshold set at 80, not 70, deliberately: political operations are meant to
+ * be the STRONG way to build standing, so the penalty should not start biting
+ * in the range a serious campaign lives in. A fully-invested media + travel
+ * stack (4.0/turn raw) reaches an equilibrium near 95 — high, clearly rewarding
+ * the investment, and still short of the permanent 100 pin that made
+ * reputation unassailable. Lowering this threshold weakens campaigns; raising
+ * it past ~85 restores the pin. This is the paired opposite of the softened
+ * `APPROVAL_SCALAR_EXPONENT`: favorability matters marginally less per point,
+ * and operations are the intended way to earn the points that remain.
+ *
+ * Apply AFTER the season multiplier: the final-four-turn 2x doubles the raw
+ * gain, and curving the pre-doubled value would let the doubled result clear
+ * decay again in exactly the turns that cast 30% of the vote.
+ */
+export const PASSIVE_FAV_DIMINISH_THRESHOLD = 80;
+export const PASSIVE_FAV_DIMINISH_RATE = 0.15;
+export const PASSIVE_FAV_MIN_PER_TURN = 0.5;
+
+export function diminishPassiveFavorabilityGain(
+  rawGain: number,
+  currentFavorability: number
+): number {
+  if (rawGain <= 0) return rawGain;
+  const penalty =
+    currentFavorability > PASSIVE_FAV_DIMINISH_THRESHOLD
+      ? (currentFavorability - PASSIVE_FAV_DIMINISH_THRESHOLD) * PASSIVE_FAV_DIMINISH_RATE
+      : 0;
+  return Math.max(PASSIVE_FAV_MIN_PER_TURN, rawGain - penalty);
+}
+
+/**
  * Base political-influence gain for one "Campaign" action, before stat scaling.
  * Shared by player actions and NPP turn processing (mirrors
  * `advertiseFavorabilityGain`'s shape exactly, so the same "curves must
@@ -288,12 +372,10 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     baseCost: 3,
     requiresState: false,
     effect: (character: Character, _state?: State, ctx?: ActionEffectContext) => {
-      const baseAmount = calculateFundraisingAmount(
-        character.donorBaseLevel,
-        character.politicalInfluence ?? 0
-      );
-      // Fundraising stat scales the yield (gentle ±20%).
-      const amount = Math.round(baseAmount * statMultiplier(statValue(character, "fundraising")));
+      // Fundraising stat scales the yield (gentle ±20%). Shared with every UI
+      // quote via fundraiseYieldAnchor so the card can never advertise a
+      // different number than the one credited.
+      const amount = fundraiseYieldAnchor(character);
       const fmt = ctx?.formatFunds ?? plainFunds;
       return {
         fundsChange: amount,

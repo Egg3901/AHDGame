@@ -103,13 +103,12 @@ function generateStateDemographics(
     layer1Positions?: boolean;
     positions?: Record<string, Record<string, { economicLean: number; socialLean: number }>>;
     turnout?: Layer1SeedOverride["turnout"];
-    composition?: Layer1SeedOverride["composition"];
   } = {}
 ): StateDemographics {
-  // Turnout/composition overrides are authored alongside positions and only
-  // applied when the Layer-1 path is on (the legacy path is left untouched).
+  // Turnout overrides are authored alongside positions and only applied when
+  // the Layer-1 path is on (the legacy path is left untouched).
   const override: Layer1SeedOverride | undefined = opts.layer1Positions
-    ? { positions: opts.positions, turnout: opts.turnout, composition: opts.composition }
+    ? { positions: opts.positions, turnout: opts.turnout }
     : undefined;
   const comp = getEraComposition(era);
   const populations = deriveGroupPopulations(config, era, override);
@@ -224,7 +223,6 @@ export function registerAndGenerate(
     layer1Positions?: boolean;
     positions?: Record<string, Record<string, { economicLean: number; socialLean: number }>>;
     turnout?: Layer1SeedOverride["turnout"];
-    composition?: Layer1SeedOverride["composition"];
   } = {}
 ): StateDemographics {
   stateCensusDataByEra[era][stateId] = config;
@@ -240,7 +238,6 @@ export function generateStateDemographicsForTest(
     layer1Positions?: boolean;
     positions?: Record<string, Record<string, { economicLean: number; socialLean: number }>>;
     turnout?: Layer1SeedOverride["turnout"];
-    composition?: Layer1SeedOverride["composition"];
   }
 ): StateDemographics {
   return generateStateDemographics(stateId, config, era, "US", opts);

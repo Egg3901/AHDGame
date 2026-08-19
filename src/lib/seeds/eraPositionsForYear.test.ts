@@ -3,7 +3,6 @@ import { getEraPositions } from "./demographicCategories";
 import { ERA_ANCHOR_YEARS, ERA_IDS_ASC } from "./eraInterpolation";
 import { getEraPositionsForYear, resolveEraPositionsAtAnchor } from "./eraPositionsForYear";
 import { ERA_CHECKPOINTS } from "@/lib/demographics/eraCheckpoints";
-import { archetypeValuesToBuckets } from "@/lib/demographics/archetypeBucketMap";
 
 /** A world that does not run era checkpoints, so anchors are used as authored. */
 const NO_CHECKPOINTS = { startingYear: 2019 };
@@ -186,17 +185,10 @@ describe("checkpoint de-duplication", () => {
             ? 1
             : (year - win.startYear) / (win.endYear - win.startYear);
       if (f === 0) continue;
-      const archetypes: Record<string, number> = {};
       for (const t of cp.targets) {
         if (t.axis !== axis || !t.stateIds.includes(stateId)) continue;
-        if (t.dim && t.bucket) {
-          out[`${t.dim}:${t.bucket}`] = (out[`${t.dim}:${t.bucket}`] ?? 0) + t.totalShift * f;
-        } else if (t.groupId) {
-          archetypes[t.groupId] = (archetypes[t.groupId] ?? 0) + t.totalShift * f;
-        }
-      }
-      for (const [k, v] of Object.entries(archetypeValuesToBuckets(archetypes))) {
-        out[k] = (out[k] ?? 0) + v;
+        if (!t.dim || !t.bucket) continue;
+        out[`${t.dim}:${t.bucket}`] = (out[`${t.dim}:${t.bucket}`] ?? 0) + t.totalShift * f;
       }
     }
     return out;

@@ -76,7 +76,7 @@ For each demographic group, for each candidate, per turn:
 
 1. **Reach**: a sqrt curve on political influence, capped at 1.0 once influence reaches 100. State and presidential general elections both use this curve. Presidential primaries use a gentler diminishing-returns curve instead, leaving more room for Support, Favorability, and Org to compete.
 2. **Appeal (per group)**: \`(50 - |econDiff|*5 - |socialDiff|*5)^2 / 100 + APPEAL_POSITION_FLOOR(0.5) + DIRECTION_BONUS(tribal, up to +30) + reach * 12.5\`. Quadratic position scoring with a floor, directional bonus, and influence multiplier. Max **~55** in both state and presidential general races.
-3. **Approval scalar**: \`effectiveFavorability / 100\`, where \`effectiveFavorability = favorability + archetypeApproval * 0.5\` (clamped 0-100). 0% effective favorability = 0 votes.
+3. **Approval scalar**: \`effectiveFavorability / 100\`, where \`effectiveFavorability = favorability + groupApproval * 0.5\` (clamped 0-100). 0% effective favorability = 0 votes.
 4. **Party org scalar**: a normalized share model, \`(partyOrg / totalStateOrg)^0.5\`. Ranges from near 0 (tiny org share) to 1.0 (monopoly). Independents use a flat 0.5. Presidential races use the same normalized share, damped when the field is crowded: \`max(0.2, 1 - (n-2) * 0.15)\`.
 5. **Infamy scalar**: \`1 - 0.05 * (infamy/100)\`. Player characters with high infamy lose up to 5% of their per-group weight. NPPs aren't affected.
 6. **Turn pool scaled by party strength modifier:**
@@ -159,7 +159,7 @@ During the **general election only**, a presidential nominee may **suspend** the
 - You **stay on the ballot**: this is not a withdrawal.
 - Campaign operations stop: turn income, upgrades, rallies, travel, canvassing, contributions, and queued Support drips halt.
 - **One-time campaign-strength transfer** at the moment of endorsement: **25% of your campaign strength** is debited from you and credited to your endorsed nominee. This is a single transfer; no per-turn campaign-strength transfers occur after this.
-- **Org boost:** **25% of your per-state character org investment** (the primary-cycle organization you built as a candidate, not the shared party-wide state organization score) is debited from you and added to your endorsed nominee's effective org for vote distribution in each state, for as long as you stay suspended.
+- **Org boost:** **25% of your per-state character org investment** (the primary-cycle organization you built as a candidate, not the shared party-wide campaign presence score) is debited from you and added to your endorsed nominee's effective org for vote distribution in each state, for as long as you stay suspended.
 - Your **existing vote tally is preserved**: votes already earned across every state stay counted. You remain on the ballot but accumulate **no further votes** in any subsequent turn.
 - Suspended nominees forfeit all passive bonuses (swing-state ground game, VP home-state effect, campaign strength multiplier).
 - **Irreversible** for the rest of the general. Nominee-only (not campaign manager).
@@ -178,7 +178,7 @@ No seat sits vacant. Mechanics:
 ## Presidential election specifics
 
 - **National race.** Any home state can run.
-- **State organization (character org):** Separate from party-wide state org. Build it on the Presidential Election page (the State Organization map) or at Political Operations. Each +1 level costs 3 actions + $50,000, capped at level 10, at most one level per state per turn. Fully built, a state is worth **+25% primary vote weight** and **+15% general vote weight** there. Levels drop to 25% after the presidential general resolves, so investment carries across cycles. This is the ground-game loop for a presidential run; party org is a different lever the chair controls.
+- **Campaign Presence (per-candidate, per-state):** Separate from party-wide state org. Build it on the Presidential Election page (the Campaign Presence map) or at Political Operations. Each +1 level costs 3 **campaign** actions plus an **escalating** cash price from the **campaign treasury** (about $250K for the first level, roughly a third more each level after), at most one level per state per turn. You need an active campaign to build it. There is **no level cap** — but the bonus curve flattens as the price compounds, so level 10 already delivers about three quarters of the maximum and the levels above it buy steadily less. Fully invested, a state approaches **+25% primary vote weight** and **+15% general vote weight** there. Levels drop to 25% after the presidential general resolves, so investment carries across cycles. This is the ground-game loop for a presidential run; party org is a different lever the chair controls.
 - **Electoral College** (538 votes, 270 to win). ME and NE split by congressional district (\`UNIT_LEAN\` modifiers).
 - **Independent penalty:** 0.3x vote share on the general path (70% reduction).
 - **Running mate (VP):** After the primary, each nominee picks a VP. Cannot be the current President; cannot be the same person.

@@ -49,7 +49,7 @@ export interface EnrichedCandidate {
   /** When present, appeal uses average of party and candidate positions */
   partyEcon?: number;
   partySocial?: number;
-  /** Per-archetype approval modifiers (-100 to +100) for effective favorability calculation */
+  /** Per-bucket approval modifiers (-100 to +100) for effective favorability — see `Character.archetypeApprovals`. */
   archetypeApprovals?: Record<string, number>;
   /**
    * Per-candidate Support — short-term mood / momentum, 0..100. Phase 0.5
@@ -267,6 +267,13 @@ export interface DistributeVotesOptions {
    */
   incumbentPartyId?: string;
   incumbentApproval?: number;
+  /**
+   * Calibration-only override for `INCUMBENCY_APPROVAL_PIVOT` (the approval
+   * level an incumbent must clear to earn a shield rather than a drag).
+   * Production leaves this unset and gets the constant; the replay harness
+   * sweeps it to measure how a recentred pivot moves real races.
+   */
+  incumbencyApprovalPivot?: number;
   /**
    * Executive own-race only: party-tenure "voter fatigue" drag in incumbency
    * budget units (≥ 0), subtracted from the incumbent's approval-scaled shield

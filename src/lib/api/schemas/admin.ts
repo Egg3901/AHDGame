@@ -215,14 +215,6 @@ export const adminElectionsPatchSchema = z
     message: "Must provide primaryHours and/or generalHours",
   });
 
-// admin/demographics PATCH
-export const adminDemographicsPatchSchema = z.object({
-  stateId: z.string().min(1),
-  countryId: z.string().min(2).max(3),
-  categoryWeights: z.record(z.string(), z.number()).optional(),
-  groups: z.record(z.string(), z.unknown()).optional(),
-});
-
 // admin/demographics POST
 export const adminDemographicsPostSchema = z.object({
   confirmText: z.literal("OVERWRITE"),

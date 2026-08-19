@@ -15,7 +15,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check . --cache --cache-location node_modules/.cache/prettier/.prettier-cache",
     "prepare": "husky",
-    "generate:composition": "npx tsx scripts/generate-composition-weights.ts",
+    "generate:composition": "npx tsx scripts/generate-composition-weights.ts && npx prettier --write src/lib/demographics/compositionWeights.generated.ts",
     "seed": "npx tsx scripts/seed/seed.ts",
     "seed:reset": "npx tsx scripts/seed/seed.ts --reset",
     "seed:all": "npm run seed && npm run seed:legislation && npm run seed:policies && npm run seed:demographics && npm run seed:uk",
@@ -39,11 +39,14 @@
     "migrate:fix-character-userid-index": "npx tsx scripts/migrations/fix-characters-userid-index.ts",
     "migrate:sovereign-crises": "npx tsx scripts/migrations/migrate-sovereign-crises.ts",
     "migrate:perf-indexes": "npx tsx scripts/migrations/add-perf-indexes.ts",
+    "migrate:archetype-buckets:dry": "npx tsx scripts/migrations/2026-08-19-archetype-values-to-buckets.ts",
+    "migrate:archetype-buckets": "npx tsx scripts/migrations/2026-08-19-archetype-values-to-buckets.ts --apply",
     "migrate:metric-effects": "npx tsx scripts/backfill-metric-effects.ts",
     "migrate:metric-effects:dry": "npx tsx scripts/backfill-metric-effects.ts --dry-run",
     "migrate": "npx tsx scripts/run-migrations.ts",
     "migrate:dry-run": "npx tsx scripts/run-migrations.ts --dry-run",
     "changelog:new": "npx tsx scripts/changelog/new-entry.ts",
+    "changelog:check": "npx tsx scripts/changelog/check-entries.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -77,6 +80,9 @@
     ],
     "*.{json,md,css}": [
       "prettier --write"
+    ],
+    "content/changelog/**/*.md": [
+      "npx tsx scripts/changelog/check-entries.ts"
     ]
   },
   "dependencies": {

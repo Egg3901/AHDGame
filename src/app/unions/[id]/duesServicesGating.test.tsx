@@ -100,6 +100,8 @@ describe("dues and services controls, head-only gating", () => {
     expect(screen.getByText("Running")).toBeTruthy();
     expect(screen.queryByRole("switch")).toBeNull();
     expect(screen.queryByRole("button", { name: /save services/i })).toBeNull();
+    expect(screen.queryByRole("slider", { name: /percent of remaining budget/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /set political contributions/i })).toBeNull();
   });
 
   it("gives the union head the dues slider and the service toggles", async () => {
@@ -114,5 +116,7 @@ describe("dues and services controls, head-only gating", () => {
     const switches = screen.getAllByRole("switch");
     expect(switches.length).toBe(4);
     expect(screen.getByRole("button", { name: /save services/i })).toBeTruthy();
+    expect(screen.getByRole("slider", { name: /percent of remaining budget/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /set political contributions/i })).toBeTruthy();
   });
 });

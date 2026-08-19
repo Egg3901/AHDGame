@@ -32,6 +32,8 @@ import { ruDemographicCategories } from "@/lib/seeds/ru/ruDemographicCategories"
 import { seDemographicCategories } from "@/lib/seeds/se/seDemographicCategories";
 import { trDemographicCategories } from "@/lib/seeds/tr/trDemographicCategories";
 import { ukDemographicCategories } from "@/lib/seeds/uk/ukDemographicCategories";
+import { makeEasternBlocCategories } from "@/lib/seeds/shared/easternBlocModel";
+import { ALL_COUNTRY_IDS } from "@/lib/constants/countries";
 
 type Cats = Array<{ groups?: Array<{ id: string }> }>;
 
@@ -53,6 +55,22 @@ const BY_COUNTRY: Record<string, Cats> = {
   SE: seDemographicCategories as Cats,
   TR: trDemographicCategories as Cats,
   UK: ukDemographicCategories as Cats,
+  // Devolved nations have no catalog of their own: they inherit the UK's
+  // twelve voter groups (see `regionData.ts`'s CATEGORY_BY_COUNTRY).
+  SCO: ukDemographicCategories as Cats,
+  WAL: ukDemographicCategories as Cats,
+  // Eastern bloc: nine generated catalogs, all six-group, all built from the
+  // shared model. Their absence from this map is why Ukraine's effects were
+  // silently discarded while this gate stayed green.
+  HU: makeEasternBlocCategories("hu_voterGroups", "Hungary Voter Groups") as Cats,
+  PL: makeEasternBlocCategories("pl_voterGroups", "Poland Voter Groups") as Cats,
+  RO: makeEasternBlocCategories("ro_voterGroups", "Romania Voter Groups") as Cats,
+  YU: makeEasternBlocCategories("yu_voterGroups", "Yugoslavia Voter Groups") as Cats,
+  BG: makeEasternBlocCategories("bg_voterGroups", "Bulgaria Voter Groups") as Cats,
+  BLR: makeEasternBlocCategories("blr_voterGroups", "Belarus Voter Groups") as Cats,
+  UKR: makeEasternBlocCategories("ua_voterGroups", "Ukraine Voter Groups") as Cats,
+  CS: makeEasternBlocCategories("cs_voterGroups", "Czechoslovakia Voter Groups") as Cats,
+  BAL: makeEasternBlocCategories("bal_voterGroups", "Baltics Voter Groups") as Cats,
 };
 
 function groupIds(cats: Cats): string[] {
@@ -60,6 +78,18 @@ function groupIds(cats: Cats): string[] {
 }
 
 describe("archetype bucket coverage", () => {
+  // The gate on the gate. Ukraine was missing from both this map and the
+  // composition generator, so 100% of its archetype-keyed effects projected
+  // onto nothing while every assertion below stayed green. Pinning the key
+  // set to the real country universe means a new country cannot be added
+  // without a mapping again.
+  it("covers every country except the US, which has its own table", () => {
+    const expected = ALL_COUNTRY_IDS.filter((id) => id !== "US")
+      .map(String)
+      .sort();
+    expect(Object.keys(BY_COUNTRY).sort()).toEqual(expected);
+  });
+
   it("every seeded voter group in every country has a mapping", () => {
     const missing: string[] = [];
     for (const [country, cats] of Object.entries(BY_COUNTRY)) {

@@ -153,7 +153,7 @@ export async function seedNGDemographics(
       ngRegionDemographics = buildModelRegionDemographics(
         model,
         full?.positions ?? undefined,
-        full ? { turnout: full.turnout, composition: full.composition } : undefined
+        full ? { turnout: full.turnout } : undefined
       );
       log(
         `[NG] Using Layer-1-derived demographics (${ngRegionDemographics.length} regions, era ${era})`

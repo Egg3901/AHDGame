@@ -447,37 +447,38 @@ describe("computeClearingFactors — supply-agreement settlement + exclusivity",
     expect(settlementOut.get("C1")?.get("steel")).toBeCloseTo(50, 1);
   });
 
-  it("exclusive supplier keeps its surplus off the book but still reports it unsold", () => {
+  it("a supply agreement is additive: the surplus above the contract still clears", () => {
+    // A contract reserves 50 units for the buyer; the sector produces 100 into a
+    // glut book (demand 60). The 50 contracted are guaranteed-sold, then the
+    // remaining 10 of demand clears the surplus → 60 of 100 offered. A contract
+    // never blackholes the surplus, so this is identical to no contract at all.
     const common = {
       sectors: [{ sectorId: "s1", revenue: 80_000, supplyRates: { steel: 1 }, posture: 0 }],
       balances: bals([["steel", { supply: 100, demand: 60 }]]), // glut: demand 60 < supply 100
       priceRatioByCommodity: new Map<CommodityType, number>([["steel", 1]]),
       basePrices,
+      sectorCorpId: new Map([["s1", "C1"]]),
+    };
+    const noContract = computeClearingFactors(common);
+    const withContract = computeClearingFactors({
+      ...common,
       contractedByCorpCommodity: new Map<string, Map<CommodityType, number>>([
         ["C1", new Map<CommodityType, number>([["steel", 50]])],
       ]),
-      sectorCorpId: new Map([["s1", "C1"]]),
-    };
-    const nonExclusive = computeClearingFactors(common);
-    const exclusive = computeClearingFactors({
-      ...common,
-      exclusiveByCorpCommodity: new Set(["C1:steel"]),
     });
-    // Non-exclusive: 100 offered, only 60 clear → 0.6. Exclusive: the surplus is
-    // withheld from the book, so only the 50 contracted units clear — out of the
-    // 100 the sector still OFFERED. soldFraction is 0.5, not 1.
-    //
-    // REGRESSION: exclusivity used to overwrite the seller's `units` with its
-    // contracted share, which was also the soldFraction denominator, so an
-    // exclusive supplier always looked ~100% sold no matter how much output it
-    // stranded — and autoPosture's own-fill feedback then read that as healthy.
-    expect(nonExclusive.get("s1")!.soldFraction).toBeCloseTo(0.6, 1);
-    expect(exclusive.get("s1")!.soldFraction).toBeCloseTo(0.5, 6);
+    // Both clear the whole 60 of demand across the 100 offered → 0.6. The
+    // contract only changes WHO buys (50 guaranteed to the buyer), not how much
+    // the sector sells.
+    expect(noContract.get("s1")!.soldFraction).toBeCloseTo(0.6, 1);
+    expect(withContract.get("s1")!.soldFraction).toBeCloseTo(0.6, 1);
   });
 
   it("keeps the ORIGINAL offered units as the soldFraction denominator", () => {
-    // Contracted volume well below output: the stranded surplus must show up as
-    // unsold, and the fraction must equal contracted ÷ produced exactly.
+    // Contracted volume well below output, demand ample: the contract reserves
+    // 20 for the buyer and the surplus 80 clears on the open market too, so the
+    // sector sells everything → 1.0 over its 100 offered units. If soldFraction
+    // used the contracted 20 as the denominator this would misreport, and if the
+    // surplus were blackholed it would read ~0.2.
     const res = computeClearingFactors({
       sectors: [{ sectorId: "s1", revenue: 80_000, supplyRates: { steel: 1 }, posture: 0 }],
       balances: bals([["steel", { supply: 100, demand: 1000 }]]), // huge demand
@@ -485,10 +486,8 @@ describe("computeClearingFactors — supply-agreement settlement + exclusivity",
       basePrices,
       contractedByCorpCommodity: new Map([["C1", new Map([["steel", 20]])]]),
       sectorCorpId: new Map([["s1", "C1"]]),
-      exclusiveByCorpCommodity: new Set(["C1:steel"]),
     });
-    // 100 units offered, 20 contracted, everything else withheld → 0.2.
-    expect(res.get("s1")!.soldFraction).toBeCloseTo(0.2, 6);
+    expect(res.get("s1")!.soldFraction).toBeCloseTo(1, 6);
   });
 
   it("records each corp's offered (produced) units into producedUnitsOut", () => {

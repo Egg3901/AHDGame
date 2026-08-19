@@ -123,6 +123,7 @@ const TX_TYPE_TO_AUDIT_ACTION: Partial<Record<FinancialTxType, string>> = {
   wire_transfer_in: "wire.receive",
   wire_transfer_out: "wire.send",
   campaign_donation: "party.donate",
+  union_contribution: "union.contribute",
 
   // Bonds
   bond_purchase: "bond.buy",

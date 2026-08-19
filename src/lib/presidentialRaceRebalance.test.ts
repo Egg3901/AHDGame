@@ -11,7 +11,12 @@ import {
   turnVoteWeight,
   type EnrichedCandidate,
 } from "@/lib/electionEngine";
-import { calcPresidentPrimaryScore } from "@/lib/primaryScore";
+import {
+  calcPresidentPrimaryScore,
+  PRESIDENT_PRIMARY_PARTY_INFLUENCE_WEIGHT,
+  PRESIDENT_PRIMARY_FAVORABILITY_WEIGHT,
+  PRESIDENT_PRIMARY_NATIONAL_REACH_WEIGHT,
+} from "@/lib/primaryScore";
 import { demographicCategories } from "@/lib/seeds/demographicCategories";
 import { stateDemographics } from "@/lib/seeds/stateDemographics";
 import { ELECTORAL_VOTE_UNITS } from "@/lib/constants/states";
@@ -392,10 +397,10 @@ describe("Presidential primary rebalance — calcPresidentPrimaryScore", () => {
       expect(high).toBeGreaterThan(low);
     });
 
-    it("national influence contributes up to 20 pts once raw NPI saturates the curve", () => {
+    it("national influence contributes its full weight once raw NPI saturates the curve", () => {
       const zero = calcPresidentPrimaryScore(-2, -2, partyEcon, partySocial, 50, 0, 50);
       const saturated = calcPresidentPrimaryScore(-2, -2, partyEcon, partySocial, 50, 600, 50);
-      expect(saturated - zero).toBeCloseTo(20, 0);
+      expect(saturated - zero).toBeCloseTo(PRESIDENT_PRIMARY_NATIONAL_REACH_WEIGHT, 0);
     });
   });
 
@@ -406,10 +411,12 @@ describe("Presidential primary rebalance — calcPresidentPrimaryScore", () => {
       expect(high).toBeGreaterThan(low);
     });
 
-    it("party influence contributes up to 30 pts at the 150 cap", () => {
+    it("party influence contributes its full weight at the 150 reference scale", () => {
       const zero = calcPresidentPrimaryScore(-2, -2, partyEcon, partySocial, 50, 50, 0);
       const full = calcPresidentPrimaryScore(-2, -2, partyEcon, partySocial, 50, 50, 150);
-      expect(full - zero).toBeCloseTo(30, 0);
+      // Asserted against the constant, not a literal, so a deliberate weight
+      // rebalance reads as a rebalance rather than a regression.
+      expect(full - zero).toBeCloseTo(PRESIDENT_PRIMARY_PARTY_INFLUENCE_WEIGHT, 0);
     });
   });
 
@@ -421,7 +428,10 @@ describe("Presidential primary rebalance — calcPresidentPrimaryScore", () => {
     });
 
     it("policy alignment dominates over favorability in presidential formula", () => {
-      // Fav is only 10 pts max; policy is 40 pts
+      // Policy (40) must stay strictly above favorability (25). This scenario is
+      // the binding one: 12 ideology points adrift costs 24, and 80 points of
+      // favorability buys 20. At a favorability weight of 30 the two tie exactly,
+      // which is why 25 is the ceiling for that lever.
       const alignedLowFav = calcPresidentPrimaryScore(-2, -2, partyEcon, partySocial, 20, 50, 50);
       const misalignedHighFav = calcPresidentPrimaryScore(
         4,
@@ -436,11 +446,11 @@ describe("Presidential primary rebalance — calcPresidentPrimaryScore", () => {
     });
   });
 
-  describe("favorability (10 pts max)", () => {
-    it("favorability contributes up to 10 pts", () => {
+  describe("favorability", () => {
+    it("favorability contributes its full weight at 100", () => {
       const zero = calcPresidentPrimaryScore(-2, -2, partyEcon, partySocial, 0, 50, 50);
       const full = calcPresidentPrimaryScore(-2, -2, partyEcon, partySocial, 100, 50, 50);
-      expect(full - zero).toBeCloseTo(10, 0);
+      expect(full - zero).toBeCloseTo(PRESIDENT_PRIMARY_FAVORABILITY_WEIGHT, 0);
     });
   });
 

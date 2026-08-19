@@ -22,7 +22,7 @@ const BASE_CHECKPOINT: EraCheckpoint = {
   fallbackStartTurn: 500,
   durationTurns: 100,
   targets: [
-    { groupId: "rural_traditionalists", stateIds: ["AL"], axis: "economicLean", totalShift: 4.0 },
+    { dim: "race", bucket: "white", stateIds: ["AL"], axis: "economicLean", totalShift: 4.0 },
   ],
 };
 
@@ -151,10 +151,10 @@ describe("applyCheckpointStep", () => {
 describe("Southern realignment checkpoint — simulated span", () => {
   const checkpoint = SOUTHERN_REALIGNMENT_CHECKPOINT;
   const target = checkpoint.targets.find(
-    (t) => t.groupId === "rural_traditionalists" && t.axis === "economicLean"
+    (t) => t.dim === "race" && t.bucket === "white" && t.axis === "economicLean"
   )!;
-  // Deep South rural_traditionalists start Democratic-leaning per the 1953
-  // seed's STATE_POSITION_OVERRIDES (party-registration anchor).
+  // Deep South whites start Democratic-leaning per the 1953 seed's
+  // STATE_POSITION_OVERRIDES (party-registration anchor).
   const SEEDED_DEEP_SOUTH_LEAN = -2.0;
 
   it("moves the base lean rightward (historically correct direction) over the full window when uncontested", () => {
@@ -236,19 +236,17 @@ describe("EraCheckpointTarget shape — every registered checkpoint's targets ar
   function isBucketTarget(t: EraCheckpointTarget): boolean {
     return typeof t.dim === "string" && typeof t.bucket === "string";
   }
-  function isArchetypeTarget(t: EraCheckpointTarget): boolean {
-    return typeof t.groupId === "string";
-  }
-
-  it("every target is EXACTLY one of archetype (groupId) or bucket (dim+bucket), never both, never neither", () => {
+  it("every target is a bucket target (dim + bucket), with no archetype targets left", () => {
     for (const checkpoint of ERA_CHECKPOINTS) {
       for (const target of checkpoint.targets) {
-        const archetype = isArchetypeTarget(target);
-        const bucket = isBucketTarget(target);
         expect(
-          archetype !== bucket,
-          `${checkpoint.id}: target must be exactly one of archetype/bucket, got groupId=${target.groupId} dim=${target.dim} bucket=${target.bucket}`
+          isBucketTarget(target),
+          `${checkpoint.id}: target must be a bucket target, got dim=${target.dim} bucket=${target.bucket}`
         ).toBe(true);
+        expect(
+          "groupId" in target,
+          `${checkpoint.id}: archetype targets were removed; found a stray groupId`
+        ).toBe(false);
       }
     }
   });

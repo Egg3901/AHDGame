@@ -25,6 +25,7 @@ import {
 import { UnionDuesPanel } from "@/components/unions/UnionDuesPanel";
 import { UnionServicesPanel } from "@/components/unions/UnionServicesPanel";
 import { UnionFundTreasuryPanel } from "@/components/unions/UnionFundTreasuryPanel";
+import { UnionPoliticalContributionsPanel } from "@/components/unions/UnionPoliticalContributionsPanel";
 import { BASE_APPROVAL, unionMembers } from "@/lib/unions/unionDues";
 import { normalizeServiceIds, type UnionServiceId } from "@/lib/unions/unionServices";
 import { buildCharacterHref, buildNppHref } from "@/lib/utils/profileUrls";
@@ -54,6 +55,11 @@ interface UnionDetail {
   duesPerWorkerAnnual: number;
   /** Service programmes currently switched on. */
   activeServices: UnionServiceId[];
+  /**
+   * Share of remaining per-turn budget sent to organizers as political
+   * contributions, 0-0.5. Absent reads as none.
+   */
+  politicalContributionPct?: number;
   /**
    * Member-weighted average annual wage across this union's sectors, needed to
    * price dues and services against local pay. 0 = not known yet (e.g. before
@@ -300,6 +306,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
   const approval = union?.approval ?? BASE_APPROVAL;
   const duesPerWorkerAnnual = union?.duesPerWorkerAnnual ?? 0;
   const activeServices = normalizeServiceIds(union?.activeServices);
+  const politicalContributionPct = union?.politicalContributionPct ?? 0;
   const annualWage = union?.annualWage ?? 0;
   // Organize drives are paid in action points, so an empty action bar is the
   // single most common reason the button appears to do nothing.
@@ -613,13 +620,13 @@ export default function UnionDashboardPage({ params }: PageProps) {
         <ActionResult result={organizeResult} />
       </section>
 
-      {/* Dues and services: the head's two levers over the union's finances
-          and approval. Everyone sees the current values; only the head can
-          move them. */}
+      {/* Dues, services and political contributions: the head's levers over
+          the union's finances and approval. Everyone sees the current values;
+          only the head can move them. */}
       <section className="space-y-5 rounded-xl border border-card-border bg-card p-5">
         <div className="flex items-center gap-3">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
-            Dues &amp; Services
+            Dues, Services &amp; Politics
           </h2>
           <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
         </div>
@@ -630,6 +637,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
           duesPerWorkerAnnual={duesPerWorkerAnnual}
           annualWage={annualWage}
           activeServices={activeServices}
+          politicalContributionPct={politicalContributionPct}
           isHead={isLeader}
           suspended={suspended}
           onSaved={loadData}
@@ -650,6 +658,22 @@ export default function UnionDashboardPage({ params }: PageProps) {
           treasury={union.treasury}
           duesPerWorkerAnnual={duesPerWorkerAnnual}
           activeServices={activeServices}
+          isHead={isLeader}
+          suspended={suspended}
+          onSaved={loadData}
+        />
+        <UnionPoliticalContributionsPanel
+          unionId={id}
+          countryId={union.countryId}
+          members={members}
+          duesPerWorkerAnnual={duesPerWorkerAnnual}
+          annualWage={annualWage}
+          activeServices={activeServices}
+          politicalContributionPct={politicalContributionPct}
+          myInfluencePct={
+            organizers.find((organizer) => organizer.characterId === myCharacterId)?.influencePct ??
+            0
+          }
           isHead={isLeader}
           suspended={suspended}
           onSaved={loadData}

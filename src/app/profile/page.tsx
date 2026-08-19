@@ -8,6 +8,8 @@ import {
   resolveOfficeActionBonus,
 } from "@/lib/actions/officeActionBonus";
 import { getActionBreakdown } from "@/lib/actions/actionBreakdown";
+import { fundraiseYieldLocal } from "@/lib/actions";
+import { resolveStartingCountryId } from "@/lib/utils/profileDemographics";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
   Character,
@@ -77,6 +79,7 @@ import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getTotalPersonalLiquidWealth, getHomeCurrency } from "@/lib/currency/characterFunds";
 import { getNationalNpiOrdinalRank } from "@/lib/character/nationalNpiOrdinalRank";
 import { getFinancialData } from "@/lib/character/financialData";
+import { unionContributionIncomePerTurn } from "@/lib/unions/unionContributionIncome";
 import { ACTION_HOARDING_THRESHOLD } from "@/lib/actions/recommendationsConstants";
 
 const MIN_BASE_ACTIONS_PER_TURN = 4;
@@ -325,7 +328,6 @@ async function getCharacterData() {
     patreonExpiresAt: viewerUser?.patreonExpiresAt ?? null,
     patreonSince: viewerUser?.patreonSince ?? null,
     patreonProfileBorder: viewerUser?.patreonProfileBorder ?? null,
-    accountCountryId: viewerUser?.accountCountryId ?? character.countryId,
     countrySlug: charCountryId?.toLowerCase() ?? "us",
     partyNames,
     partyHistory,
@@ -357,7 +359,11 @@ export default async function ProfilePage() {
     redirect("/create-character");
   }
 
-  const [financialData] = await Promise.all([getFinancialData(data.character._id)]);
+  const db = await getDb();
+  const [financialData, unionContribution] = await Promise.all([
+    getFinancialData(data.character._id),
+    unionContributionIncomePerTurn(db, data.character._id),
+  ]);
   const { corporation, bondIncomePerTurn, dividendIncomePerTurn, portfolioValue, fxRatesRecord } =
     financialData;
 
@@ -382,7 +388,6 @@ export default async function ProfilePage() {
     patreonExpiresAt,
     patreonSince,
     patreonProfileBorder,
-    accountCountryId,
     countrySlug,
     partyNames,
     partyHistory,
@@ -688,7 +693,7 @@ export default async function ProfilePage() {
                 dotColor={profileAccentHex}
                 markers={compassMarkers.length > 0 ? compassMarkers : undefined}
                 demographics={character.demographics}
-                startingCountryId={accountCountryId}
+                startingCountryId={resolveStartingCountryId(character)}
                 currentCountryId={character.countryId}
               />
 
@@ -720,10 +725,7 @@ export default async function ProfilePage() {
                   donorIncome={{
                     passivePerHour: fundDistribution.donorBaseBonus,
                     perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
-                    fundraiseYield: Math.round(
-                      (50_000 + character.donorBaseLevel * 2_000) *
-                        (1 + (character.politicalInfluence ?? 0) / 100)
-                    ),
+                    fundraiseYield: fundraiseYieldLocal(character, forexEnabled),
                     populationTier,
                     influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,
                   }}
@@ -732,8 +734,9 @@ export default async function ProfilePage() {
                     baseGen: fundDistribution.baseGeneration,
                     donorBonus: fundDistribution.donorBaseBonus,
                     officeBonus: fundDistribution.officeBonus,
+                    unionContribution,
                     totalTax: fundDistribution.stateTaxAmount + fundDistribution.nationalTaxAmount,
-                    netIncome: fundDistribution.characterReceives,
+                    netIncome: fundDistribution.characterReceives + unionContribution,
                   }}
                   personalIncome={{
                     ceoSalaryPerHour: corporation ? corporation.ceoSalary / 24 : undefined,

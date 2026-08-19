@@ -3,7 +3,6 @@
 import { useState, type ReactNode } from "react";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { REGION_CENSUS_LABELS } from "@/lib/constants/regionCensusLabels";
-import { calculateDerivedTurnout } from "@/lib/demographics/derivedTurnout";
 import { LocalTime } from "@/components/time/LocalTime";
 import { LivePopulationPanel } from "@/components/demographics/LivePopulationPanel";
 import { ElectorateDossier } from "./demographics/ElectorateDossier";
@@ -30,8 +29,7 @@ interface TurnoutResponse {
     education?: Record<string, TurnoutData>;
     wealth?: Record<string, TurnoutData>;
     ideology?: Record<string, TurnoutData>;
-    uk_voterGroups?: Record<string, TurnoutData>;
-    jp_voterGroups?: Record<string, TurnoutData>;
+    /** Non-US models use their own dimensions (ethnicity/income/urbanization). */
     [key: string]: Record<string, TurnoutData> | undefined;
   };
   lastUpdated: string | null;
@@ -443,147 +441,6 @@ function fmtLean(v: number) {
   return (v >= 0 ? "+" : "") + v.toFixed(1);
 }
 
-function VoterGroupsSection({
-  category,
-  demographics,
-  turnoutData,
-}: {
-  category: DemographicCategory;
-  demographics: SerializedStateDemographics;
-  turnoutData: TurnoutResponse | null;
-}) {
-  const [open, setOpen] = useState(false);
-
-  // Turnout is keyed by the voter-group category id (e.g. `ie_voterGroups`),
-  // so look it up directly — works for every archetype country.
-  const voterTurnout = turnoutData?.turnout[category._id];
-
-  const groups = category.groups
-    .map((g) => ({
-      ...g,
-      population: demographics.groups[g.id]?.population ?? 0,
-      economicLean: demographics.groups[g.id]?.economicLean ?? g.defaultEconomicLean,
-      socialLean: demographics.groups[g.id]?.socialLean ?? g.defaultSocialLean,
-      turnoutModifier: voterTurnout?.[g.id]?.modifier ?? 0,
-      turnoutActual: voterTurnout?.[g.id]?.actual ?? 0,
-    }))
-    .filter((g) => g.population > 0)
-    .sort((a, b) => b.population - a.population);
-
-  const totalPopulation = groups.reduce((sum, g) => sum + g.population, 0);
-  const hasTurnout = groups.some((g) => g.turnoutActual > 0);
-
-  return (
-    <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-card">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-card-elevated/30 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-            Polling Archetypes
-          </span>
-          <span className="rounded-full bg-card-border/50 px-1.5 py-0.5 text-[10px] text-muted tabular-nums">
-            {groups.length} groups
-          </span>
-        </div>
-        <svg
-          className={`h-4 w-4 text-muted transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-
-      {open && groups.length > 0 && (
-        <div className="border-t border-card-border">
-          <div className="bg-card-muted/30 px-4 py-2 text-[11px] text-muted/70 border-b border-card-border">
-            Composite voter archetypes derived from census data — used for polling and election
-            simulations.
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-card-muted/50 border-b border-card-border uppercase text-muted font-semibold">
-                <tr>
-                  <th className="px-4 py-2 w-1/4">Archetype</th>
-                  <th className="px-4 py-2">Lean</th>
-                  <th className="px-4 py-2 text-right">Share</th>
-                  {hasTurnout && (
-                    <>
-                      <th className="px-4 py-2 text-right" title="Party GOTV / canvassing modifier">
-                        GOTV ±
-                      </th>
-                      <th className="px-4 py-2 text-right" title="Baseline + modifier">
-                        Turnout %
-                      </th>
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-card-border/40">
-                {groups.map((g) => (
-                  <tr key={g.id} className="hover:bg-card-elevated/30 transition-colors">
-                    <td className="px-4 py-2 font-medium text-foreground" title={g.name}>
-                      {g.name}
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-16 rounded-full bg-card-border/40 overflow-hidden">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${(Math.abs(g.economicLean) / 1) * 100}%`,
-                              backgroundColor: leanBarColor(g.economicLean),
-                              marginLeft: g.economicLean < 0 ? 0 : "auto",
-                              marginRight: g.economicLean > 0 ? 0 : "auto",
-                            }}
-                          />
-                        </div>
-                        <span
-                          className={`text-[10px] font-semibold tabular-nums w-8 text-right ${leanTextClass(g.economicLean)}`}
-                        >
-                          {fmtLean(g.economicLean)}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums text-muted">
-                      {((g.population / (totalPopulation || 1)) * 100).toFixed(1)}%
-                    </td>
-                    {hasTurnout && (
-                      <>
-                        <td className="px-4 py-2 text-right">
-                          <span
-                            className={
-                              g.turnoutModifier > 0
-                                ? "text-success"
-                                : g.turnoutModifier < 0
-                                  ? "text-error"
-                                  : "text-muted"
-                            }
-                          >
-                            {g.turnoutModifier > 0 ? "+" : ""}
-                            {g.turnoutModifier.toFixed(1)}%
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-right tabular-nums text-foreground font-semibold">
-                          {g.turnoutActual.toFixed(1)}%
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /**
  * Per-bucket electorate table — the Layer-1 replacement for the archetype
  * roster. Buckets are what the vote engine counts, so these shares and leans are
@@ -695,6 +552,24 @@ function ElectorateBucketsSection({ profile }: { profile: BucketProfileSection[]
   );
 }
 
+/**
+ * Shown wherever the electorate breakdown would go when the region has no
+ * Layer-1 substrate to build it from. Deliberately states what is missing
+ * rather than falling back to a different, non-authoritative breakdown.
+ */
+function NoElectorateSubstrateNotice() {
+  return (
+    <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
+      <p className="text-[11px] font-semibold uppercase tracking-widest text-muted mb-2">
+        Electorate
+      </p>
+      <p className="text-xs text-muted/80">
+        No electorate breakdown for this region yet. It appears once the region has census data.
+      </p>
+    </div>
+  );
+}
+
 // ─── main export ─────────────────────────────────────────────────────────────
 
 type ViewMode = "chart" | "table" | "combined";
@@ -733,9 +608,6 @@ export function DemographicsAndTurnoutTab({
     ? COUNTRY_CONFIGS[upperCountryId]?.demographicProfileId
     : undefined;
   const isArchetypeBased = /^[a-z]{2}_archetypes$/.test(profileId ?? "");
-  const voterGroupsCategory = categories.find(
-    (c) => c._id === "voterGroups" || /_voterGroups$/.test(c._id)
-  );
 
   if (!censusData && !demographics) {
     // Census-share / polling demographics are unconfigured — but the LIVE cohort
@@ -782,12 +654,10 @@ export function DemographicsAndTurnoutTab({
       label: labels[key] || key,
       pct,
       color: colors[i % colors.length],
-      // Direct turnout when the census dimension IS a stored bucket (US); otherwise
-      // derive per-census-bucket turnout from the country's voter archetypes
-      // (UK/JP/DE/IE/CN/BR/DD) via the shared SSOT helper. US returns undefined here.
-      turnout: turnoutCategory
-        ? turnoutData?.turnout[turnoutCategory]?.[key]
-        : calculateDerivedTurnout(countryId, key, turnoutData?.turnout),
+      // Turnout is keyed by census dimension and bucket for every country
+      // (see `buildRegionTurnoutResponse`), so a card reads its own dimension
+      // directly with no per-country conversion.
+      turnout: turnoutCategory ? turnoutData?.turnout[turnoutCategory]?.[key] : undefined,
     }));
   };
 
@@ -797,11 +667,26 @@ export function DemographicsAndTurnoutTab({
     const data = censusData as unknown as Record<string, Record<string, number>>;
     const labels = upperCountryId ? REGION_CENSUS_LABELS[upperCountryId] : undefined;
 
-    const ethnicityRows = buildRows(data.ethnicity, ETH_COLORS, labels?.ethnicity ?? {});
-    const ageRows = buildRows(data.age, AGE_COLORS, labels?.age ?? {});
-    const educationRows = buildRows(data.education, EDU_COLORS, labels?.education ?? {});
-    const incomeRows = buildRows(data.income, INC_COLORS, labels?.income ?? {});
-    const urbanizationRows = buildRows(data.urbanization, URB_COLORS, labels?.urbanization ?? {});
+    const ethnicityRows = buildRows(
+      data.ethnicity,
+      ETH_COLORS,
+      labels?.ethnicity ?? {},
+      "ethnicity"
+    );
+    const ageRows = buildRows(data.age, AGE_COLORS, labels?.age ?? {}, "age");
+    const educationRows = buildRows(
+      data.education,
+      EDU_COLORS,
+      labels?.education ?? {},
+      "education"
+    );
+    const incomeRows = buildRows(data.income, INC_COLORS, labels?.income ?? {}, "income");
+    const urbanizationRows = buildRows(
+      data.urbanization,
+      URB_COLORS,
+      labels?.urbanization ?? {},
+      "urbanization"
+    );
 
     return (
       <div className="space-y-3">
@@ -809,7 +694,7 @@ export function DemographicsAndTurnoutTab({
             static census-share cards (different data layer). */}
         {countryId && <LivePopulationPanel stateId={stateId} countryId={countryId} />}
         <KpiStrip {...kpi} />
-        {/* ── archetype roster + dossier (read-only flagship) ── */}
+        {/* ── electorate dossier (read-only flagship) ── */}
         {bucketProfile && bucketProfile.length > 0 && (
           <ElectorateDossier profile={bucketProfile} regionParties={regionParties} />
         )}
@@ -915,19 +800,12 @@ export function DemographicsAndTurnoutTab({
           />
         </div>
 
-        {/* ── polling archetypes + how-to-read grid ── */}
+        {/* ── electorate buckets + how-to-read grid ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {bucketProfile && bucketProfile.length > 0 ? (
             <ElectorateBucketsSection profile={bucketProfile} />
           ) : (
-            voterGroupsCategory &&
-            demographics && (
-              <VoterGroupsSection
-                category={voterGroupsCategory}
-                demographics={demographics}
-                turnoutData={turnoutData}
-              />
-            )
+            <NoElectorateSubstrateNotice />
           )}
 
           {/* ── how to read ── */}
@@ -1012,7 +890,7 @@ export function DemographicsAndTurnoutTab({
             static census-share cards (different data layer). */}
         {countryId && <LivePopulationPanel stateId={stateId} countryId={countryId} />}
         <KpiStrip {...kpi} />
-        {/* ── archetype roster + dossier (read-only flagship) ── */}
+        {/* ── electorate dossier (read-only flagship) ── */}
         {bucketProfile && bucketProfile.length > 0 && (
           <ElectorateDossier profile={bucketProfile} regionParties={regionParties} />
         )}
@@ -1098,19 +976,12 @@ export function DemographicsAndTurnoutTab({
           <CensusCard title="Ideological Tendencies" rows={ideoRows} viewMode={viewMode} />
         </div>
 
-        {/* ── polling archetypes + how-to-read grid ── */}
+        {/* ── electorate buckets + how-to-read grid ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {bucketProfile && bucketProfile.length > 0 ? (
             <ElectorateBucketsSection profile={bucketProfile} />
           ) : (
-            voterGroupsCategory &&
-            demographics && (
-              <VoterGroupsSection
-                category={voterGroupsCategory}
-                demographics={demographics}
-                turnoutData={turnoutData}
-              />
-            )
+            <NoElectorateSubstrateNotice />
           )}
 
           {/* ── how to read ── */}
@@ -1143,10 +1014,10 @@ export function DemographicsAndTurnoutTab({
     );
   }
 
-  // Fallback: archetype country with voter-group demographics but no Layer-1
-  // census file yet — render the Polling Archetypes table so the tab is never
-  // blank. (Census donut cards appear once the country's census file lands.)
-  if (isArchetypeBased && demographics && voterGroupsCategory) {
+  // Fallback: an archetype-profile country with demographics stored but no
+  // Layer-1 census file yet. Renders the live panel and an explicit notice so
+  // the tab is never blank and never claims data it does not have.
+  if (isArchetypeBased && demographics) {
     return (
       <div className="space-y-3">
         {countryId && <LivePopulationPanel stateId={stateId} countryId={countryId} />}
@@ -1155,33 +1026,10 @@ export function DemographicsAndTurnoutTab({
           <ElectorateDossier profile={bucketProfile} regionParties={regionParties} />
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <VoterGroupsSection
-            category={voterGroupsCategory}
-            demographics={demographics}
-            turnoutData={turnoutData}
-          />
-          {turnoutData && (
-            <div className="rounded-xl border border-card-border bg-card-muted/30 p-4 shadow-card">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted mb-2">
-                How to read turnout data
-              </p>
-              <ul className="text-xs text-muted/80 space-y-1">
-                <li>
-                  <strong>Turnout %</strong> = Baseline + GOTV modifier (expected turnout for this
-                  group)
-                </li>
-                <li>
-                  <strong>GOTV ±</strong> = party boost or suppression vs baseline
-                </li>
-                <li>
-                  <span className="text-success">Green</span> = Higher than baseline
-                </li>
-                <li>
-                  <span className="text-error">Red</span> = Lower than baseline
-                </li>
-                <li>Modifiers decay 2% per turn toward 0</li>
-              </ul>
-            </div>
+          {bucketProfile && bucketProfile.length > 0 ? (
+            <ElectorateBucketsSection profile={bucketProfile} />
+          ) : (
+            <NoElectorateSubstrateNotice />
           )}
         </div>
       </div>

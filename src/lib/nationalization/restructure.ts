@@ -7,6 +7,7 @@ import {
   buildNationalCorporationDoc,
   ensurePrimaryNationalCorporation,
 } from "./nationalCorporation";
+import { makeAdoptedSoeState } from "@/lib/economy/soe";
 
 /**
  * Split-off & merge-back of National Corporation sector types (spec §24.2).
@@ -84,7 +85,61 @@ export async function splitOffSectorType(db: Db, params: SplitOffParams): Promis
     sectorsMoved = res.modifiedCount ?? 0;
   }
 
+  // Under a command economy the split-off is an ENTERPRISE, not just a holding
+  // shell, so it needs the `soe` overlay to exist as one. Without it
+  // `loadCommandEconomyDashboard` (which selects on `soe: {$exists: true}`)
+  // cannot see it, the enterprise appears in no table, and there is no director
+  // seat to claim. The split-off silently removes a sector type from the plan.
+  // Derived from the sectors we just moved so the enterprise starts on-plan
+  // against what it actually produces.
+  await attachSoeOverlayIfPlanned(db, params.countryId, newId, params.sectorType);
+
   return { newNationalCorporationId: newId, sectorsMoved };
+}
+
+/**
+ * Attach the `soe` overlay to a National Corporation when the world is running
+ * a command economy, deriving it from the sectors the corp now holds. No-op
+ * when the plan is off (a market NatCorp has no plan target to meet) or when an
+ * overlay is already present (never clobber a live plan or a seated director).
+ *
+ * Exported so the DD/RU repair migrations can adopt split-offs that were
+ * created before `splitOffSectorType` did this.
+ */
+export async function attachSoeOverlayIfPlanned(
+  db: Db,
+  countryId: CountryId,
+  corpId: ObjectId,
+  sectorType: CorporationType
+): Promise<boolean> {
+  const config = await db
+    .collection("gameConfig")
+    .findOne<{ commandEconomyEnabled?: boolean }>(
+      { commandEconomyEnabled: { $exists: true } },
+      { projection: { commandEconomyEnabled: 1 } }
+    );
+  if (!config?.commandEconomyEnabled) return false;
+
+  const existing = await db
+    .collection<Corporation>("corporations")
+    .findOne({ _id: corpId, soe: { $exists: true } }, { projection: { _id: 1 } });
+  if (existing) return false;
+
+  const sectors = await db
+    .collection<CorporateSector>("corporateSectors")
+    .find(
+      { corporationId: corpId },
+      { projection: { revenue: 1, realizedRevenue: 1, capitalStock: 1 } }
+    )
+    .toArray();
+
+  await db
+    .collection<Corporation>("corporations")
+    .updateOne(
+      { _id: corpId },
+      { $set: { soe: makeAdoptedSoeState(sectorType, sectors), updatedAt: new Date() } }
+    );
+  return true;
 }
 
 export interface MergeBackParams {

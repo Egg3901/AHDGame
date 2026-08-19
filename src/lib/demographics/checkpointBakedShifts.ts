@@ -65,7 +65,6 @@
  * spanning one) stays correct without a rewrite.
  */
 import { ERA_CHECKPOINTS, type EraCheckpoint } from "./eraCheckpoints";
-import { archetypeValuesToBuckets } from "./archetypeBucketMap";
 
 /**
  * The only `startingYear` whose worlds run era checkpoints. Must stay in sync
@@ -104,12 +103,9 @@ export function historicalDeliveredFraction(checkpoint: EraCheckpoint, year: num
  * Total per-(dim, bucket) lean shift the checkpoints had baked into the
  * authored anchor tables for `stateId` by `year`, keyed `"dim:key"` → delta.
  *
- * Accounts for BOTH kinds of target, exactly as `eraCheckpointTurn.ts` applies
- * them, so the subtraction matches what the overlay will re-add:
- *  - BUCKET targets (`dim` + `bucket`) land on their bucket directly;
- *  - ARCHETYPE targets (`groupId`) are projected onto buckets through the
- *    shared `archetypeValuesToBuckets` map, the same weighted diffusion the
- *    turn processor uses.
+ * Every checkpoint target is a (`dim`, `bucket`) pair and lands on its bucket
+ * directly, exactly as `eraCheckpointTurn.ts` applies it, so the subtraction
+ * matches what the overlay will re-add.
  *
  * Returns an empty record for any world that does not run checkpoints.
  */
@@ -128,20 +124,12 @@ export function bakedCheckpointBucketShifts(
     const fraction = historicalDeliveredFraction(checkpoint, year);
     if (fraction === 0) continue;
 
-    const archetypeTotals: Record<string, number> = {};
     for (const target of checkpoint.targets) {
       if (target.axis !== axis) continue;
       if (!target.stateIds.includes(stateId)) continue;
-      const delivered = target.totalShift * fraction;
-      if (target.dim && target.bucket) {
-        const k = `${target.dim}:${target.bucket}`;
-        bucketShifts[k] = (bucketShifts[k] ?? 0) + delivered;
-      } else if (target.groupId) {
-        archetypeTotals[target.groupId] = (archetypeTotals[target.groupId] ?? 0) + delivered;
-      }
-    }
-    for (const [k, v] of Object.entries(archetypeValuesToBuckets(archetypeTotals, countryId))) {
-      bucketShifts[k] = (bucketShifts[k] ?? 0) + v;
+      if (!target.dim || !target.bucket) continue;
+      const k = `${target.dim}:${target.bucket}`;
+      bucketShifts[k] = (bucketShifts[k] ?? 0) + target.totalShift * fraction;
     }
   }
   return bucketShifts;

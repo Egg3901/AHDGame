@@ -144,7 +144,7 @@ export async function seedIEDemographics(
       ieRegionDemographics = buildModelRegionDemographics(
         model,
         full?.positions ?? undefined,
-        full ? { turnout: full.turnout, composition: full.composition } : undefined
+        full ? { turnout: full.turnout } : undefined
       );
       log(
         `[IE] Using Layer-1-derived demographics (${ieRegionDemographics.length} regions, era ${era})`

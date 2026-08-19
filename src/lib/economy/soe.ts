@@ -115,6 +115,66 @@ export function makeSeedSoeState(sector: CorporationType, planTarget: number): S
   };
 }
 
+/**
+ * Build the {@link SoeState} for an enterprise that is being brought under the
+ * plan with sectors ALREADY RUNNING underneath it: the split-off path, and the
+ * repair path for split-offs that were created before this overlay existed.
+ *
+ * It differs from {@link makeSeedSoeState} only in where the numbers come from,
+ * because a live sector already knows what it produced:
+ *
+ *  - `capacity` mirrors the plants-tier reading the command-economy turn will
+ *    recompute anyway (Σ capitalStock × mixPrice, and `revenue` under plants IS
+ *    capitalStock × mixPrice), so the overlay does not jump on the first turn
+ *    after it is attached. With no capital stock anywhere it falls back to the
+ *    seed's 10% headroom over the target.
+ *  - `output` is the realized figure, not the nameplate.
+ *  - `planTarget` equals output, which is the seed convention ("a new
+ *    enterprise starts on-plan") applied to a real production history. This
+ *    matters: `planTarget` is sticky (the turn only ever recomputes it when it
+ *    is zero) and it is the denominator the director is graded on, so seeding
+ *    it from the NAMEPLATE would permanently brand an input-starved enterprise
+ *    a failure for a shortfall it never had a chance to cover. The Gosplan
+ *    chair sets the real quota from here.
+ *
+ * Efficiency starts at baseline and losses at zero: the enterprise has no
+ * record under the plan yet, and inventing one would be inventing a grade.
+ */
+export function makeAdoptedSoeState(
+  sector: CorporationType,
+  sectors: ReadonlyArray<{
+    revenue?: number | null;
+    realizedRevenue?: number | null;
+    capitalStock?: number | null;
+  }>
+): SoeState {
+  let capacityValue = 0;
+  let realized = 0;
+  for (const sec of sectors) {
+    const nominal = Number.isFinite(sec.revenue) ? (sec.revenue as number) : 0;
+    const capitalStock = Number.isFinite(sec.capitalStock) ? (sec.capitalStock as number) : 0;
+    // Written as the explicit identity (not just `+= nominal`) to keep it a
+    // CAPACITY reading: a sector with no capital contributes no capacity.
+    if (capitalStock > 0) capacityValue += capitalStock * (nominal / capitalStock);
+    realized +=
+      typeof sec.realizedRevenue === "number" && Number.isFinite(sec.realizedRevenue)
+        ? sec.realizedRevenue
+        : nominal;
+  }
+  const output = Math.round(realized > 0 ? realized : 0);
+  const capacity =
+    capacityValue > 0 ? Math.round(capacityValue) : Math.round(output * SOE_CAPACITY_HEADROOM);
+  return {
+    sector,
+    capacity,
+    output,
+    planTarget: output,
+    efficiency: 1.0,
+    cumulativeLosses: 0,
+    directorId: null,
+  };
+}
+
 // ── Command Economy v2 (P1): directed credit (the active Gosbank) ────────────
 
 /**

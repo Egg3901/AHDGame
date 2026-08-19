@@ -5,20 +5,23 @@ import { Button, Modal, Toast } from "@/components/ui";
 import type { ToastVariant } from "@/components/ui/Toast";
 import { usePositionEditorState } from "./usePositionEditorState";
 import { Layer1Tab } from "./tabs/Layer1Tab";
-import { CompositionTab } from "./tabs/CompositionTab";
-import { FinalCompositionTab } from "./tabs/FinalCompositionTab";
 import { LivePreviewPanel } from "./LivePreviewPanel";
 import {
   computeDerivedComposition,
   editorPositionsTable,
   editorTurnoutTable,
-  editorCompositionTable,
 } from "@/lib/positionEditor/derive";
 import { loadOverride, clearOverride } from "@/lib/positionEditor/storage";
 import { stateConfigToCsv, downloadCsv } from "@/lib/positionEditor/csv";
 import type { EraId, EditorStateConfig } from "@/lib/positionEditor/types";
 
-const TABS = ["Layer 1 Demographics", "Archetype Composition Rates", "Final Composition"] as const;
+/**
+ * Layer 1 is the only authoring surface left. The "Archetype Composition
+ * Rates" and "Final Composition" tabs authored the archetype composition
+ * table, which is derived from the census rather than hand-set, so editing it
+ * could only put the editor out of step with what the vote engine reads.
+ */
+const TABS = ["Layer 1 Demographics"] as const;
 
 /** Returns a list of dimension names whose shares don't sum to 100 (±0.5). */
 function getInvalidDims(cfg: EditorStateConfig): Array<{ dim: string; sum: number }> {
@@ -109,7 +112,6 @@ export function StateEditor({
           era,
           positions: editorPositionsTable(cfg),
           turnout: editorTurnoutTable(cfg),
-          composition: editorCompositionTable(cfg),
         }),
       });
       const data = await res.json();
@@ -210,22 +212,6 @@ export function StateEditor({
               }}
             />
           )}
-          {tab === TABS[1] && (
-            <CompositionTab
-              config={cfg}
-              onWeight={(archetypeId, index, value) =>
-                dispatch({ type: "SET_WEIGHT", archetypeId, index, value })
-              }
-              onAdd={(archetypeId, dim, key) =>
-                dispatch({ type: "ADD_WEIGHT", archetypeId, dim, key })
-              }
-              onRemove={(archetypeId, index) =>
-                dispatch({ type: "REMOVE_WEIGHT", archetypeId, index })
-              }
-              onCivic={(archetypeId, value) => dispatch({ type: "SET_CIVIC", archetypeId, value })}
-            />
-          )}
-          {tab === TABS[2] && <FinalCompositionTab derived={derived} />}
         </div>
         <LivePreviewPanel derived={derived} />
       </div>
@@ -236,7 +222,7 @@ export function StateEditor({
         onClose={() => setConfirmOpen(false)}
       >
         <p className="text-sm text-muted">
-          Apply these positions, turnout rates, and archetype composition as the global{" "}
+          Apply these positions and turnout rates as the global{" "}
           <span className="font-semibold text-foreground">{era}</span> seed defaults? This affects
           every state when the world is reseeded with the flag on. (Per-state Layer-1 shares stay
           census-driven and are not saved.)

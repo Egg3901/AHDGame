@@ -65,7 +65,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       categories: categories.map((c) => ({
         id: c._id,
         name: c.name,
-        groups: c.groups.map((g) => ({ id: g.id, name: g.name })),
+        groups: c.groups.map((g) => ({ id: g.id, name: g.name, defaultTurnout: g.defaultTurnout })),
       })),
     });
   } catch (error) {

@@ -12,7 +12,6 @@ interface SupplyAgreement {
   commodity: CommodityType;
   volumeCap: number;
   pricePremium: number;
-  exclusive: boolean;
   status: "pending" | "active" | "cancelled";
   proposedByCorpId: string;
 }
@@ -70,7 +69,6 @@ export default function SupplyAgreementsSection({
   const [commodity, setCommodity] = useState<CommodityType>(COMMODITY_TYPES[0]);
   const [volumeCap, setVolumeCap] = useState("");
   const [premiumPct, setPremiumPct] = useState(0);
-  const [exclusive, setExclusive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -157,7 +155,6 @@ export default function SupplyAgreementsSection({
           commodity,
           volumeCap: cap,
           pricePremium: premiumPct / 100,
-          exclusive,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -168,7 +165,6 @@ export default function SupplyAgreementsSection({
         setSelectedBuyer(null);
         setVolumeCap("");
         setPremiumPct(0);
-        setExclusive(false);
         setShowForm(false);
         await load();
       } else {
@@ -218,7 +214,6 @@ export default function SupplyAgreementsSection({
           <span>
             Price: <span className="font-medium text-foreground">{fmtPremium(a.pricePremium)}</span>
           </span>
-          {a.exclusive && <span className="font-medium text-primary">Exclusive</span>}
         </div>
 
         {(canAccept || canCancel) && (
@@ -361,6 +356,10 @@ export default function SupplyAgreementsSection({
                 placeholder="e.g. 5000"
                 className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
               />
+              <p className="text-[11px] text-muted">
+                Units/day reserved for the buyer. Anything your sectors make above this still sells
+                on the open market as normal.
+              </p>
             </div>
           </div>
 
@@ -384,17 +383,6 @@ export default function SupplyAgreementsSection({
               the buyer.
             </p>
           </div>
-
-          {/* Exclusive */}
-          <label className="flex items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={exclusive}
-              onChange={(e) => setExclusive(e.target.checked)}
-              className="h-4 w-4 accent-primary"
-            />
-            Exclusive — sell this commodity only to the buyer (no open-market sales)
-          </label>
 
           <div className="flex justify-end">
             <button

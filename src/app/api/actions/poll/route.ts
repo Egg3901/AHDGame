@@ -21,7 +21,6 @@ import { eraYearContextFromGameState } from "@/lib/era/context";
 import type {
   Character,
   State,
-  DemographicCategory,
   StateDemographics,
   StatePartyOrg,
   StateDemographicTurnout,
@@ -317,16 +316,10 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const voterGroupsCategory = categories.find((c) => (c._id as string) === "voterGroups");
-    if (!voterGroupsCategory?.groups?.length) {
-      return NextResponse.json(
-        {
-          error:
-            "Demographic categories not configured. Run Admin → Demographics → Reseed Demographics, then try again.",
-        },
-        { status: 400 }
-      );
-    }
+    // No hard gate on a `voterGroups` archetype category existing: a poll runs
+    // off the granular electorate, and a world with a Layer-1 substrate and no
+    // archetype catalog is a valid world. The `demographics` check above is the
+    // one that matters.
 
     let pollSnapshot: Record<string, unknown> | null = null;
     const electionContext = await getElectionOpponents(character);

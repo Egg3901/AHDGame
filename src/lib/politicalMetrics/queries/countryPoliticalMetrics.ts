@@ -13,10 +13,17 @@ import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
 import { getEnactedLevels } from "@/lib/politicalLegislation/enactedLevels";
 import {
   composeTarget,
+  DRIFT_RATE_PER_TURN,
   lawTargets,
   metricModifierRows,
   type ModifierRow,
 } from "@/lib/politicalLegislation/dynamics";
+import {
+  CABINET_RESIDUAL_CAP_PER_SOURCE,
+  CABINET_SOURCE_IDS,
+  cappedSourceCount,
+  CABINET_RESIDUAL_TOTAL_CEILING,
+} from "../cabinetResidual";
 import { aggregateNationalPoliticalMetrics, categoryScore, overallScore } from "../aggregate";
 import { loadEvidence, type EvidenceRow } from "../evidence";
 import { FAMILIES_BY_CATEGORY } from "../families";
@@ -72,10 +79,37 @@ export interface MetricModifiersInfo {
   laws: ModifierRow[];
   /** Population-weighted mean structural residual (rounded 0.1). */
   residual: number;
-  /** National-view target: composeTarget(nationalPoints, 0, meanResidual). */
+  /**
+   * Population-weighted mean cabinet residual (rounded 0.1) — the standing
+   * contribution of tier settings, ministerial orders and sited estates.
+   * Ticket #1129: this term moves the target the engine drifts toward, so
+   * omitting it made the served target disagree with the engine and left a
+   * player's built estates with no visible effect anywhere.
+   */
+  cabinet: number;
+  /**
+   * True when most of the population lives in regions where EVERY cabinet
+   * channel for this metric is pinned at ±CABINET_RESIDUAL_CAP_PER_SOURCE. Only
+   * then does a further order or estate contribute exactly nothing.
+   */
+  cabinetAtCap: boolean;
+  /** The per-channel cap, so the UI can name the ceiling rather than hard-code it. */
+  cabinetCap: number;
+  /**
+   * Turns for the value to close half the remaining gap at the engine's drift
+   * rate. Derived, so it stays true if the rate is retuned.
+   */
+  driftHalfLifeTurns: number;
+  /** National-view target: composeTarget(nationalPoints, 0, residual + cabinet). */
   target: number;
   /** Drift direction vs the current national value (|gap| ≤ 0.1 = flat). */
   direction: "up" | "down" | "flat";
+}
+
+/** Turns to close half a gap at `rate` per turn (exponential half-life). */
+export function driftHalfLifeTurns(rate: number): number {
+  if (rate <= 0 || rate >= 1) return 0;
+  return Math.round(Math.log(0.5) / Math.log(1 - rate));
 }
 
 export interface MetricLegislationInfo {
@@ -184,14 +218,49 @@ export async function loadCountryPoliticalMetrics(
     }
     return weighted / totalPopulation;
   };
+  /**
+   * Population-weighted mean cabinet residual, plus the share of population for
+   * which the channel can absorb nothing more. Ticket #1129: players reported
+   * built estates doing nothing, because a single global cap meant a saturated
+   * order book zeroed every other channel too.
+   *
+   * The cap is now per channel, so "at cap" is only true when EVERY channel is
+   * pinned. Anything less and there is still a channel a player can build in,
+   * which is exactly the case the old warning would have called hopeless.
+   * A doc with no per-source split yet (written before the change, or a region
+   * the ministerial step has not touched since) falls back to comparing its
+   * flat total against the full ceiling, which is the same question.
+   */
+  const meanCabinet = (metricId: PoliticalMetricId): { mean: number; cappedShare: number } => {
+    if (totalPopulation <= 0) return { mean: 0, cappedShare: 0 };
+    let weighted = 0;
+    let cappedWeight = 0;
+    for (const doc of docs) {
+      const weight = populationByRegion.get(doc._id) ?? 0;
+      const cabinet = doc.cabinetResiduals?.[metricId] ?? 0;
+      weighted += cabinet * weight;
+      const bySource = doc.cabinetResidualsBySource;
+      const saturated = bySource
+        ? cappedSourceCount(bySource, metricId) >= CABINET_SOURCE_IDS.length
+        : Math.abs(cabinet) >= CABINET_RESIDUAL_TOTAL_CEILING - 0.01;
+      if (saturated) cappedWeight += weight;
+    }
+    return { mean: weighted / totalPopulation, cappedShare: cappedWeight / totalPopulation };
+  };
+  const halfLife = driftHalfLifeTurns(DRIFT_RATE_PER_TURN);
   const buildMetricModifiers = (metricId: PoliticalMetricId): MetricModifiersInfo => {
     const laws = metricModifierRows(countryId, metricId, enactedLevels);
     const residual = meanResidual(metricId);
-    const target = composeTarget(nationalLawPoints[metricId], 0, residual);
+    const { mean: cabinet, cappedShare } = meanCabinet(metricId);
+    const target = composeTarget(nationalLawPoints[metricId], 0, residual + cabinet);
     const gap = target - national[metricId];
     return {
       laws,
       residual: Math.round(residual * 10) / 10,
+      cabinet: Math.round(cabinet * 10) / 10,
+      cabinetAtCap: cappedShare >= 0.5,
+      cabinetCap: CABINET_RESIDUAL_CAP_PER_SOURCE,
+      driftHalfLifeTurns: halfLife,
       target: Math.round(target * 10) / 10,
       direction: Math.abs(gap) <= 0.1 ? "flat" : gap > 0 ? "up" : "down",
     };

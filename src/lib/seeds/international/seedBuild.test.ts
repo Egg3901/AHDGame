@@ -93,29 +93,6 @@ describe("buildModelRegionDemographics — override merge", () => {
     );
   });
 
-  it("composition override (civicMultiplier) changes that archetype's population/turnout", () => {
-    const model = getCountryLayer1Model("UK", "2019")!;
-    // Pick an archetype with a real composition entry to perturb.
-    const gid = model.groupIds.find((g) => (model.composition[g]?.weights.length ?? 0) > 0)!;
-    expect(gid).toBeDefined();
-    const base = buildModelRegionDemographics(model);
-    const orig = model.composition[gid];
-
-    const overridden = buildModelRegionDemographics(model, undefined, {
-      composition: {
-        [gid]: { weights: orig.weights, civicMultiplier: (orig.civicMultiplier ?? 1) + 3 },
-      },
-    });
-
-    const region = base[0]._id;
-    const baseGroup = base.find((r) => r._id === region)!.groups[gid];
-    const ovGroup = overridden.find((r) => r._id === region)!.groups[gid];
-    // Raising civicMultiplier raises this archetype's relative weight (population)
-    // and its derived turnout.
-    expect(ovGroup.population).toBeGreaterThan(baseGroup.population);
-    expect(ovGroup.turnout ?? 0).toBeGreaterThan(baseGroup.turnout ?? 0);
-  });
-
   it("turnout override changes derived archetype turnout", () => {
     const model = getCountryLayer1Model("UK", "2019")!;
     const gid = model.groupIds.find((g) => (model.composition[g]?.weights.length ?? 0) > 0)!;

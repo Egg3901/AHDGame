@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { CorporateSector, Union } from "@/lib/db/types";
@@ -17,10 +17,21 @@ import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoS
 import { seedUnions } from "@/lib/admin/seed/seedUnions";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import {
+  freeCashFlowPerTurn,
+  politicalContributionPerTurn,
+} from "@/lib/unions/unionPoliticalContributions";
 
 let labourFullModeEnabled = true;
 vi.mock("@/lib/labour/featureFlag", () => ({
   isLabourFullMode: vi.fn().mockImplementation(async () => labourFullModeEnabled),
+}));
+vi.mock("@/lib/currency/featureFlag", () => ({
+  isForexEnabled: vi.fn().mockResolvedValue(false),
+}));
+vi.mock("@/lib/financialTxLog/emit", () => ({
+  emitTxBulk: vi.fn().mockResolvedValue(undefined),
+  loadTxThresholds: vi.fn().mockResolvedValue({}),
 }));
 
 // Safety-net seeding (zero union docs at full mode) is asserted via this mock,
@@ -73,12 +84,14 @@ function makeSector(unionId: ObjectId, overrides: Partial<CorporateSector> = {})
 function mockDb({
   unions,
   sectors = [],
+  organizers = [],
   activeCharacterIds = [],
   totalUnionCount,
   seededCountryIds = ["US"],
 }: {
   unions: Union[];
   sectors?: CorporateSector[];
+  organizers?: { unionId: ObjectId; characterId: ObjectId; strength: number }[];
   /** Character _ids (as strings) considered ACTIVE (lastActivity = now). Any owner not listed here has no user doc at all (skipped, not vacated) unless overridden via `inactiveCharacterIds`. */
   activeCharacterIds?: string[];
   /** countDocuments result for the safety-net check. Defaults to a COMPLETE roster (`seededCountryIds.length * CORPORATION_TYPES.length`) so the incomplete-roster backfill does not fire unless a test asks for it. */
@@ -96,7 +109,9 @@ function mockDb({
     .fn()
     .mockImplementation(async () => unions.filter((u) => u.suspended).map((u) => u._id));
   const organizersUpdateMany = vi.fn().mockResolvedValue({});
+  const organizersFind = vi.fn().mockReturnValue({ toArray: () => Promise.resolve(organizers) });
   const charactersUpdateMany = vi.fn().mockResolvedValue({});
+  const charactersBulkWrite = vi.fn().mockResolvedValue({});
   const sectorsFind = vi.fn().mockReturnValue({ toArray: () => Promise.resolve(sectors) });
   const db = {
     collection: (name: string) => {
@@ -110,7 +125,7 @@ function mockDb({
         };
       }
       if (name === "unionOrganizers") {
-        return { updateMany: organizersUpdateMany };
+        return { updateMany: organizersUpdateMany, find: organizersFind };
       }
       if (name === "corporateSectors") {
         return { find: sectorsFind };
@@ -133,6 +148,7 @@ function mockDb({
               ),
           }),
           updateMany: charactersUpdateMany,
+          bulkWrite: charactersBulkWrite,
         };
       }
       if (name === "users") {
@@ -163,13 +179,20 @@ function mockDb({
     sectorsFind,
     charactersUpdateMany,
     unionsDistinct,
+    organizersFind,
     organizersUpdateMany,
+    charactersBulkWrite,
   };
 }
 
 describe("processUnionsTurn", () => {
-  it("does nothing when there are no owned unions", async () => {
+  beforeEach(async () => {
     labourFullModeEnabled = true;
+    const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
+    vi.mocked(emitTxBulk).mockClear();
+  });
+
+  it("does nothing when there are no owned unions", async () => {
     const { db, unionsBulkWrite } = mockDb({ unions: [] });
     const result = await processUnionsTurn(db);
     expect(result.unionsProcessed).toBe(0);
@@ -419,6 +442,150 @@ describe("processUnionsTurn", () => {
     const [charFilter, charUpdate] = charactersUpdateMany.mock.calls[0];
     expect(charFilter._id.$in).toContainEqual(union.ownerId);
     expect(charUpdate.$set.unionLeaderOf).toBeNull();
+  });
+
+  it("debits a share of remaining budget and pays organizers by influence", async () => {
+    const sectorTemplate = { workers: 100, unionization: 50, wagePerWorker: 10 };
+    const withinCeiling = maxDuesForWage(averageAnnualWage([sectorTemplate])) / 2;
+    const organizerA = new ObjectId();
+    const organizerB = new ObjectId();
+    const union = makeUnion({
+      treasury: 1000,
+      duesPerWorkerAnnual: withinCeiling,
+      activeServices: [],
+      politicalContributionPct: 0.4,
+    });
+    const sector = makeSector(union._id, sectorTemplate);
+    const { db, unionsBulkWrite, charactersBulkWrite } = mockDb({
+      unions: [union],
+      sectors: [sector],
+      activeCharacterIds: [union.ownerId!.toString()],
+      organizers: [
+        { unionId: union._id, characterId: organizerA, strength: 40 },
+        { unionId: union._id, characterId: organizerB, strength: 60 },
+      ],
+    });
+
+    await processUnionsTurn(db);
+
+    const duesIncome = duesIncomePerTurn(unionMembers([sector]), withinCeiling);
+    const contribution = politicalContributionPerTurn(freeCashFlowPerTurn(duesIncome, 0), 0.4);
+    const treasuryInc = unionsBulkWrite.mock.calls[0][0][0].updateOne.update.$inc.treasury;
+    expect(treasuryInc).toBeCloseTo(duesIncome - contribution, 6);
+
+    const charOps = charactersBulkWrite.mock.calls[0][0];
+    expect(charOps).toHaveLength(2);
+    const byId = Object.fromEntries(
+      charOps.map(
+        (op: {
+          updateOne: { filter: { _id: ObjectId }; update: { $inc: Record<string, number> } };
+        }) => [op.updateOne.filter._id.toString(), op.updateOne.update.$inc.funds]
+      )
+    );
+    expect(byId[organizerA.toString()]).toBeCloseTo(contribution * 0.4, 6);
+    expect(byId[organizerB.toString()]).toBeCloseTo(contribution * 0.6, 6);
+
+    const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
+    expect(vi.mocked(emitTxBulk)).toHaveBeenCalled();
+    const logged = vi.mocked(emitTxBulk).mock.calls.flatMap(
+      (call) =>
+        call[1] as Array<{
+          type: string;
+          amount: number;
+          subjectId: ObjectId;
+          counterpartyName?: string;
+          meta?: { unionId?: string };
+        }>
+    );
+    expect(logged).toHaveLength(2);
+    expect(logged.every((entry) => entry.type === "union_contribution")).toBe(true);
+    const loggedById = Object.fromEntries(
+      logged.map((entry) => [entry.subjectId.toString(), entry.amount])
+    );
+    expect(loggedById[organizerA.toString()]).toBeCloseTo(contribution * 0.4, 6);
+    expect(loggedById[organizerB.toString()]).toBeCloseTo(contribution * 0.6, 6);
+    expect(logged[0].counterpartyName).toBe(union.name);
+    expect(logged[0].meta?.unionId).toBe(union._id.toString());
+  });
+
+  it("keeps the surplus in the treasury when a rate is set but nobody has influence", async () => {
+    const sectorTemplate = { workers: 100, unionization: 50, wagePerWorker: 10 };
+    const withinCeiling = maxDuesForWage(averageAnnualWage([sectorTemplate])) / 2;
+    const union = makeUnion({
+      treasury: 1000,
+      duesPerWorkerAnnual: withinCeiling,
+      activeServices: [],
+      politicalContributionPct: 0.5,
+    });
+    const sector = makeSector(union._id, sectorTemplate);
+    const { db, unionsBulkWrite, charactersBulkWrite } = mockDb({
+      unions: [union],
+      sectors: [sector],
+      activeCharacterIds: [union.ownerId!.toString()],
+    });
+
+    await processUnionsTurn(db);
+
+    const duesIncome = duesIncomePerTurn(unionMembers([sector]), withinCeiling);
+    expect(unionsBulkWrite.mock.calls[0][0][0].updateOne.update.$inc.treasury).toBeCloseTo(
+      duesIncome,
+      6
+    );
+    expect(charactersBulkWrite).not.toHaveBeenCalled();
+    const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
+    expect(vi.mocked(emitTxBulk)).not.toHaveBeenCalled();
+  });
+
+  it("trends approval 5 points lower at the 50% cap than with no contributions", async () => {
+    const sectorTemplate = { workers: 100, unionization: 50, wagePerWorker: 10 };
+    const annualWage = averageAnnualWage([sectorTemplate]);
+    const withPac = makeUnion({
+      treasury: 1_000_000,
+      duesPerWorkerAnnual: 0,
+      politicalContributionPct: 0.5,
+      approval: 55,
+    });
+    const withoutPac = makeUnion({
+      treasury: 1_000_000,
+      duesPerWorkerAnnual: 0,
+      politicalContributionPct: 0,
+      approval: 55,
+    });
+    const { db: pacDb, unionsBulkWrite: pacBulk } = mockDb({
+      unions: [withPac],
+      sectors: [makeSector(withPac._id, sectorTemplate)],
+      activeCharacterIds: [withPac.ownerId!.toString()],
+    });
+    const { db: plainDb, unionsBulkWrite: plainBulk } = mockDb({
+      unions: [withoutPac],
+      sectors: [makeSector(withoutPac._id, sectorTemplate)],
+      activeCharacterIds: [withoutPac.ownerId!.toString()],
+    });
+
+    await processUnionsTurn(pacDb);
+    await processUnionsTurn(plainDb);
+
+    const pacTarget = approvalTarget({
+      duesPerWorkerAnnual: 0,
+      annualWage,
+      activeServices: [],
+      politicalContributionPct: 0.5,
+    });
+    const plainTarget = approvalTarget({
+      duesPerWorkerAnnual: 0,
+      annualWage,
+      activeServices: [],
+      politicalContributionPct: 0,
+    });
+    expect(plainTarget - pacTarget).toBe(5);
+    expect(pacBulk.mock.calls[0][0][0].updateOne.update.$set.approval).toBeCloseTo(
+      trendApproval(55, pacTarget),
+      6
+    );
+    expect(plainBulk.mock.calls[0][0][0].updateOne.update.$set.approval).toBeCloseTo(
+      trendApproval(55, plainTarget),
+      6
+    );
   });
 });
 

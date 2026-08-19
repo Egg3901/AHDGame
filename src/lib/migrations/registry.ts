@@ -46,6 +46,7 @@ import { migration as heal1953SeedBalance } from "./entries/2026-08-09-heal-1953
 import { migration as reconcileCommandEconomyUnowned } from "./entries/2026-08-09-reconcile-command-economy-unowned";
 import { migration as repointRuSoes } from "./entries/2026-08-13-repoint-ru-soes";
 import { migration as campaignOpsTrees } from "./entries/2026-08-18-campaign-ops-trees";
+import { migration as backfillPoliticalLegislationTypes } from "./entries/2026-08-19-backfill-political-legislation-types";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -119,6 +120,10 @@ export const MIGRATIONS: Migration[] = [
   // Strategic Operations v2 — migrate campaign investment levers from linear
   // levels to the starter + three-branch tree model. Player-friendly, idempotent.
   campaignOpsTrees,
+  // Ticket #1106: live worlds never received legislation types added to the
+  // typed catalog after they were seeded (US state tax sliders). Insert-missing
+  // only, so admin law-type edits are preserved.
+  backfillPoliticalLegislationTypes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.

@@ -31,7 +31,7 @@ export function PresidentialElectionPanel({ activePresidentialCandidacy }: Props
             sub === "stateOrg" ? "bg-primary/10 text-primary" : "text-muted hover:text-foreground"
           }`}
         >
-          State Organization
+          Campaign Presence
         </button>
         <button
           type="button"

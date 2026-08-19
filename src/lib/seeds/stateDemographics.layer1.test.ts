@@ -265,7 +265,7 @@ describe("per-era position tables keep each era's blue/red ordering", () => {
   }
 });
 
-describe("generateStateDemographics — global turnout/composition overrides", () => {
+describe("generateStateDemographics: global turnout override", () => {
   const era: EraId = "2019";
   const comp = ERA_COMPOSITIONS[era];
   // An archetype with a real composition entry to perturb.
@@ -277,7 +277,6 @@ describe("generateStateDemographics — global turnout/composition overrides", (
     const same = generateStateDemographicsForTest("XX", REDDISH, era, {
       layer1Positions: true,
       turnout: undefined,
-      composition: undefined,
     });
     expect(JSON.stringify({ ...same, lastUpdated: 0 })).toBe(
       JSON.stringify({ ...base, lastUpdated: 0 })
@@ -291,17 +290,5 @@ describe("generateStateDemographics — global turnout/composition overrides", (
       turnout: { [firstWeight.dim]: { [firstWeight.key]: 95 } },
     });
     expect(overridden.groups[gid].turnout).not.toBe(base.groups[gid].turnout);
-  });
-
-  it("composition override (raised civicMultiplier) raises that archetype's population", () => {
-    const orig = comp.voterGroupComposition[gid];
-    const base = generateStateDemographicsForTest("XX", REDDISH, era, { layer1Positions: true });
-    const overridden = generateStateDemographicsForTest("XX", REDDISH, era, {
-      layer1Positions: true,
-      composition: {
-        [gid]: { weights: orig.weights, civicMultiplier: (orig.civicMultiplier ?? 1) + 3 },
-      },
-    });
-    expect(overridden.groups[gid].population).toBeGreaterThan(base.groups[gid].population);
   });
 });

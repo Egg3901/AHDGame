@@ -188,7 +188,7 @@ export async function seedUKDemographics(
       ukRegionDemographics = buildModelRegionDemographics(
         model,
         full?.positions ?? undefined,
-        full ? { turnout: full.turnout, composition: full.composition } : undefined
+        full ? { turnout: full.turnout } : undefined
       );
       log(
         `[UK] Using Layer-1-derived demographics (${ukRegionDemographics.length} regions, era ${era})`
