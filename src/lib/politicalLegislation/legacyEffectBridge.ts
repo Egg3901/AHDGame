@@ -33,11 +33,31 @@
  * THE CONVERSION normalizes the legacy delta over `metricQualityRange` — the
  * same span the derivation uses in both directions — and flips sign for
  * lower-is-better metrics, so a law that cuts `crimeRate` RAISES `order.safety`.
+ *
+ * CAPPED, because the span can be far narrower than the metric's own scale.
+ * `powerGridReliability` is stored as a 0-100 uptime percent but its realistic
+ * quality span is [97, 99.9] — 2.9 points wide. Normalizing over that span is
+ * a 34.5x amplifier, so the -4.5 per turn a "grid reliability collapse" crisis
+ * was authored to apply arrived as -155 board points, floored
+ * `infrastructure.utilities` to 0 on the first tick and held it there for as
+ * long as the crisis ran. Every authored legacy delta in the game is written
+ * against the metric's OWN scale, not against its quality band, so any metric
+ * with a narrow band turns a routine effect into an annihilating one.
+ *
+ * BOARD_DELTA_CAP matches ENGINE_BOUND and MACRO_BOUND: one channel BENDS a
+ * family, it never overrules it in a single write. A shock big enough to hit
+ * the cap still lands at full strength every turn it is applied, so a sustained
+ * crisis still walks the family down; it just cannot teleport it to the floor.
  */
 import { getMetricDefinition } from "@/lib/constants/metricDefinitions";
 import { metricQualityRange } from "@/lib/corporations/sectorMetricMarginProfiles";
 import type { MetricCategoryId } from "@/lib/db/types";
 import { ADAPTER_TIER1 } from "./marginAdapter";
+
+/** Largest board movement one legacy-unit conversion may produce, either way. */
+export const BOARD_DELTA_CAP = 12;
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 export interface BoardScoreDelta {
   /** Political family the legacy path maps onto. */
@@ -57,7 +77,9 @@ export interface BoardScoreDelta {
 export function boardDeltaForLegacyEffect(
   category: string,
   metricId: string,
-  legacyDelta: number
+  legacyDelta: number,
+  /** Opt-in era: score the delta against the metric's band FOR THAT YEAR. */
+  era?: { countryId?: string | null; year?: number | null }
 ): BoardScoreDelta | null {
   if (!Number.isFinite(legacyDelta) || legacyDelta === 0) return null;
   const familyId = ADAPTER_TIER1[`${category}.${metricId}`];
@@ -65,11 +87,12 @@ export function boardDeltaForLegacyEffect(
 
   const definition = getMetricDefinition(category as MetricCategoryId, metricId);
   if (!definition) return null;
-  const { min, max } = metricQualityRange(definition, metricId);
+  const { min, max } = metricQualityRange(definition, metricId, era);
   if (!(max > min)) return null;
 
   const magnitude = (legacyDelta / (max - min)) * 100;
-  const scoreDelta = definition.isHigherBetter ? magnitude : -magnitude;
+  const signed = definition.isHigherBetter ? magnitude : -magnitude;
+  const scoreDelta = clamp(signed, -BOARD_DELTA_CAP, BOARD_DELTA_CAP);
   if (!Number.isFinite(scoreDelta) || scoreDelta === 0) return null;
   return { familyId, scoreDelta };
 }

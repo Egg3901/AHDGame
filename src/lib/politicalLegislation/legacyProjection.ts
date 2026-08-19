@@ -53,7 +53,17 @@ const PROJECTABLE_PATHS: string[] = Object.keys(ADAPTER_TIER1).filter((path) =>
  * no adapter row, so it can never appear here.
  */
 export function legacyPoliticalHalfFromBoard(
-  values: Record<PoliticalMetricId, number> | null | undefined
+  values: Record<PoliticalMetricId, number> | null | undefined,
+  /**
+   * Opt-in era. The FORWARD direction (`politicalScoreFromLegacyValue`, used by
+   * the dynamics engine term) is era-aware, so leaving the inverse on the
+   * modern band made the round trip asymmetric: a 1953 board score of 0
+   * projected to a grid uptime of 97, which the 1953 band then scored back as
+   * 93. Every region's engine term pinned to its bound and the family climbed
+   * to the ceiling regardless of what the board actually said. Callers that
+   * feed a scoring path pass the year; display callers keep the modern band.
+   */
+  era?: { countryId?: string | null; year?: number | null }
 ): Record<string, Record<string, { value: number }>> | null {
   if (!values || Object.keys(values).length === 0) return null;
 
@@ -62,7 +72,7 @@ export function legacyPoliticalHalfFromBoard(
     const [category, metricId] = path.split(".");
     const score = politicalValueForLegacyMetric(values, category, metricId);
     if (score == null) continue;
-    const value = legacyValueFromPoliticalScore(category, metricId, score);
+    const value = legacyValueFromPoliticalScore(category, metricId, score, era);
     if (value == null || !Number.isFinite(value)) continue;
     (out[category] ??= {})[metricId] = { value };
   }

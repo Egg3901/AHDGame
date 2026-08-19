@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { politicalScoreFromLegacyValue } from "@/lib/politicalMetrics/derive/legacyInversion";
-import { boardDeltaForLegacyEffect } from "./legacyEffectBridge";
+import { BOARD_DELTA_CAP, boardDeltaForLegacyEffect } from "./legacyEffectBridge";
 
 describe("boardDeltaForLegacyEffect", () => {
   it("returns null for a legacy path with no adapter row", () => {
@@ -36,12 +36,14 @@ describe("boardDeltaForLegacyEffect", () => {
     const best = politicalScoreFromLegacyValue("education", "literacyRate", 100);
     expect(worst).not.toBeNull();
     expect(best).not.toBeNull();
-    // Find the span the derivation actually used by bisecting is unnecessary —
-    // a delta equal to the span must yield |scoreDelta| === 100.
+    // A delta equal to the span is one full board sweep BEFORE the cap, so the
+    // scale is checked at a tenth of it and the cap is asserted separately.
     const oneBoardPoint = boardDeltaForLegacyEffect("education", "literacyRate", 1)!.scoreDelta;
     const spanDelta = 100 / oneBoardPoint; // legacy units per full board sweep
+    const tenth = boardDeltaForLegacyEffect("education", "literacyRate", spanDelta / 10)!;
+    expect(tenth.scoreDelta).toBeCloseTo(10, 6);
     const full = boardDeltaForLegacyEffect("education", "literacyRate", spanDelta)!;
-    expect(full.scoreDelta).toBeCloseTo(100, 6);
+    expect(full.scoreDelta).toBe(BOARD_DELTA_CAP);
   });
 
   it("flips sign for lower-is-better metrics", () => {
@@ -62,5 +64,37 @@ describe("boardDeltaForLegacyEffect", () => {
     const minusOne = boardDeltaForLegacyEffect("education", "literacyRate", -1)!.scoreDelta;
     expect(two).toBeCloseTo(one * 2, 9);
     expect(minusOne).toBeCloseTo(-one, 9);
+  });
+});
+
+describe("boardDeltaForLegacyEffect — narrow-band amplification (ticket #1129)", () => {
+  it("caps a grid-collapse crisis tick instead of flooring the family", () => {
+    // powerGridReliability's quality span is [97, 99.9] — 2.9 points wide — so
+    // the authored -4.5 per turn normalized to -155 board points and clamped
+    // infrastructure.utilities to 0 on the first tick.
+    const hit = boardDeltaForLegacyEffect("infrastructure", "powerGridReliability", -4.5);
+    expect(hit).not.toBeNull();
+    expect(hit?.familyId).toBe("infrastructure.utilities");
+    expect(hit?.scoreDelta).toBe(-BOARD_DELTA_CAP);
+  });
+
+  it("caps in the positive direction too", () => {
+    const hit = boardDeltaForLegacyEffect("infrastructure", "powerGridReliability", 4.5);
+    expect(hit?.scoreDelta).toBe(BOARD_DELTA_CAP);
+  });
+
+  it("leaves an in-range delta untouched", () => {
+    const hit = boardDeltaForLegacyEffect("infrastructure", "powerGridReliability", 0.03);
+    expect(hit?.scoreDelta).toBeCloseTo(1.0345, 3);
+  });
+
+  it("uses the era band when a year is supplied", () => {
+    // 1953 band is [84, 98] — 14 points wide — so the same delta is far smaller.
+    const modern = boardDeltaForLegacyEffect("infrastructure", "powerGridReliability", 0.29);
+    const early = boardDeltaForLegacyEffect("infrastructure", "powerGridReliability", 0.29, {
+      countryId: "US",
+      year: 1953,
+    });
+    expect(early!.scoreDelta).toBeLessThan(modern!.scoreDelta);
   });
 });

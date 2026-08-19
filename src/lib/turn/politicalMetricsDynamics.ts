@@ -237,7 +237,15 @@ export async function processPoliticalMetricsDynamics(
         const nodeTargets = politicalNodeTargets({
           countryId,
           stateId: String(doc._id),
-          legacy: { ...regionMacro, ...flattenLegacy(legacyPoliticalHalfFromBoard(doc.values)) },
+          legacy: {
+            ...regionMacro,
+            // Era-aware, so the projection is the exact inverse of the scoring
+            // `engineTermFor` applies to the node outputs below. Asymmetric
+            // bands made the engine term a constant.
+            ...flattenLegacy(
+              legacyPoliticalHalfFromBoard(doc.values, { countryId, year: eraYear })
+            ),
+          },
           spending: spendingRollup.perCapitaByRegion.get(String(doc._id)) ?? {},
           providers: {
             sectorRevenueTax: {
