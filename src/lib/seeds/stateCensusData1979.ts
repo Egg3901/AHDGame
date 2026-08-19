@@ -9,24 +9,24 @@ import { shiftRegionPositions, type PositionsBlock } from "./regionalPositions";
  */
 const DEEP_SOUTH_1979: PositionsBlock = {
   race: {
-    white: { economicLean: 1.6, socialLean: 1.5 }, // realigned on economics by the Sunbelt boom, unmoved on the social axis
+    white: { economicLean: 1.5, socialLean: 1.5 }, // realigned on economics by the Sunbelt boom, unmoved on the social axis
     black: { economicLean: -5, socialLean: -1.6 }, // post-Voting Rights Act mobilization: the era's most consolidated Democratic bloc
     hispanic: { economicLean: -3.8, socialLean: -2 }, // Gulf Coast and Delta farm labor, weakly registered
   },
   education: {
-    no_college: { economicLean: 0.3, socialLean: 0.9 }, // working-class whites here realigned earlier and harder than northern Reagan Democrats
-    college: { economicLean: -2.6, socialLean: -3.5 }, // the region's growing metro professional class, its least traditional white cell
+    no_college: { economicLean: 2, socialLean: 0.9 }, // working-class whites here realigned earlier and harder than northern Reagan Democrats
+    college: { economicLean: -2.7, socialLean: -3.5 }, // the region's growing metro professional class, its least traditional white cell
     graduate: { economicLean: -3.4, socialLean: -4.6 }, // university and research-triangle professionals, a national rather than regional cell
   },
   wealth: {
     low: { economicLean: -4.2, socialLean: -0.2 }, // the poorest electorate in the country, disproportionately Black
-    middle: { economicLean: -0.1, socialLean: -0.1 }, // small-metro Chamber of Commerce plus church
-    high: { economicLean: 1.7, socialLean: 0.3 }, // the new Sunbelt developer and energy capital
+    middle: { economicLean: -0.2, socialLean: -0.1 }, // small-metro Chamber of Commerce plus church
+    high: { economicLean: 1.6, socialLean: 0.3 }, // the new Sunbelt developer and energy capital
   },
   ideology: {
-    evangelicals: { economicLean: 2.8, socialLean: 2.5 }, // the Moral Majority's founding constituency, mobilizing this year
-    patriots: { economicLean: 2.9, socialLean: 2.1 }, // the region's military bases and the post-Vietnam patriotic revival
-    gunowners: { economicLean: 2.7, socialLean: 1.7 }, // the NRA's political turn lands on an already armed rural culture
+    evangelicals: { economicLean: 2.7, socialLean: 2.5 }, // the Moral Majority's founding constituency, mobilizing this year
+    patriots: { economicLean: 2.8, socialLean: 2.1 }, // the region's military bases and the post-Vietnam patriotic revival
+    gunowners: { economicLean: 2.6, socialLean: 1.7 }, // the NRA's political turn lands on an already armed rural culture
     progressives: { economicLean: -4.9, socialLean: -5 }, // a small biracial coalition around the civil-rights organizations
     environmentalists: { economicLean: -4.2, socialLean: -4.4 }, // coastal and river conservation, a minority position
     libertarians: { economicLean: 4.4, socialLean: 0.4 }, // anti-regulation business conservatism in the right-to-work states
@@ -40,24 +40,24 @@ const DEEP_SOUTH_1979: PositionsBlock = {
  */
 const BORDER_1979: PositionsBlock = {
   race: {
-    white: { economicLean: 1.3, socialLean: 1.3 }, // oil-patch and military suburbs pulling right, Appalachian New Deal Democrats holding
+    white: { economicLean: 1.2, socialLean: 1.3 }, // oil-patch and military suburbs pulling right, Appalachian New Deal Democrats holding
     black: { economicLean: -4.9, socialLean: -1.9 }, // urban Black electorates now fully registered and heavily Democratic
     hispanic: { economicLean: -3.9, socialLean: -2.1 }, // south Texas and Oklahoma: Democratic, Catholic, socially traditional
   },
   education: {
-    no_college: { economicLean: -0.3, socialLean: 0.8 }, // coal, tobacco and textile labor, the last economically Democratic white bloc here
-    college: { economicLean: -2.8, socialLean: -3.3 }, // the metro professional tier of Atlanta's northern neighbors
+    no_college: { economicLean: 1.4, socialLean: 0.8 }, // coal, tobacco and textile labor, the last economically Democratic white bloc here
+    college: { economicLean: -2.9, socialLean: -3.3 }, // the metro professional tier of Atlanta's northern neighbors
     graduate: { economicLean: -3.5, socialLean: -4.6 }, // federal and university payrolls from Norfolk to Oak Ridge
   },
   wealth: {
     low: { economicLean: -4.2, socialLean: -0.5 }, // Appalachian and Ozark poverty, still inside the New Deal coalition
-    middle: { economicLean: -0.5, socialLean: -0.2 }, // county-seat merchants and the military middle class
-    high: { economicLean: 1.5, socialLean: 0.1 }, // energy, tobacco and banking capital
+    middle: { economicLean: -0.6, socialLean: -0.2 }, // county-seat merchants and the military middle class
+    high: { economicLean: 1.4, socialLean: 0.1 }, // energy, tobacco and banking capital
   },
   ideology: {
-    evangelicals: { economicLean: 2.4, socialLean: 3 }, // Southern Baptist mobilization one notch behind the Deep South
-    patriots: { economicLean: 2.6, socialLean: 2.4 }, // the country's heaviest concentration of military installations
-    gunowners: { economicLean: 2.6, socialLean: 2 }, // hunting culture fusing with the new gun politics
+    evangelicals: { economicLean: 2.3, socialLean: 3 }, // Southern Baptist mobilization one notch behind the Deep South
+    patriots: { economicLean: 2.5, socialLean: 2.4 }, // the country's heaviest concentration of military installations
+    gunowners: { economicLean: 2.5, socialLean: 2 }, // hunting culture fusing with the new gun politics
     progressives: { economicLean: -5, socialLean: -5 }, // the region's civil-rights and labor left
     environmentalists: { economicLean: -4.2, socialLean: -4.5 }, // strip-mining and river conservation fights
     libertarians: { economicLean: 4.5, socialLean: 0.2 }, // anti-tax, anti-Washington business conservatism
@@ -76,7 +76,7 @@ const MID_ATLANTIC_1979: PositionsBlock = {
     hispanic: { economicLean: -3.8, socialLean: -2.1 }, // Puerto Rican and Dominican New York, machine-connected and economically left
   },
   education: {
-    no_college: { economicLean: 0.1, socialLean: 0.6 }, // union residue delays the economic right turn that busing has already started socially
+    no_college: { economicLean: 1.9, socialLean: 0.6 }, // union residue delays the economic right turn that busing has already started socially
     college: { economicLean: -2.3, socialLean: -3.3 }, // the suburban professional class moving left on culture
     graduate: { economicLean: -3.5, socialLean: -4.6 }, // the Northeast academic and media professions, the era's liberal pole
   },
@@ -107,7 +107,7 @@ const GREAT_LAKES_1979: PositionsBlock = {
     hispanic: { economicLean: -3.8, socialLean: -2.1 }, // Chicago and the steel towns, union-organized
   },
   education: {
-    no_college: { economicLean: 0.2, socialLean: 0.5 }, // the Reagan Democrat cell proper, still left of southern no-college whites
+    no_college: { economicLean: 2, socialLean: 0.5 }, // the Reagan Democrat cell proper, still left of southern no-college whites
     college: { economicLean: -2.4, socialLean: -3.4 }, // the suburban professional tier, socially liberalizing
     graduate: { economicLean: -3.7, socialLean: -4.6 }, // Big Ten faculty and research staff
   },
@@ -137,7 +137,7 @@ const PLAINS_1979: PositionsBlock = {
     hispanic: { economicLean: -3.3, socialLean: -1.8 }, // meatpacking and railroad labor, thinly registered
   },
   education: {
-    no_college: { economicLean: 0.7, socialLean: 0.6 }, // no union structure to pull the farm and small-town workforce left
+    no_college: { economicLean: 2.5, socialLean: 0.6 }, // no union structure to pull the farm and small-town workforce left
     college: { economicLean: -1.8, socialLean: -3.1 }, // land-grant graduates in county business and agriculture
     graduate: { economicLean: -3.1, socialLean: -4.3 }, // extension service and university staff
   },
@@ -163,24 +163,24 @@ const PLAINS_1979: PositionsBlock = {
  */
 const MOUNTAIN_1979: PositionsBlock = {
   race: {
-    white: { economicLean: 3.8, socialLean: 1.7 }, // Sagebrush Rebellion economics: public lands, extraction and defense
+    white: { economicLean: 3.7, socialLean: 1.7 }, // Sagebrush Rebellion economics: public lands, extraction and defense
     black: { economicLean: -4.5, socialLean: -2.2 }, // small urban populations in Denver, Phoenix and Las Vegas
     hispanic: { economicLean: -3.3, socialLean: -1.4 }, // New Mexico Hispanos and Arizona farm labor: Democratic and socially traditional
   },
   education: {
-    no_college: { economicLean: 0.8, socialLean: 0.7 }, // mine, ranch and service labor with a thinning extractive-union tradition
-    college: { economicLean: -1.8, socialLean: -3 }, // the professional tier of Denver, Salt Lake and Phoenix
+    no_college: { economicLean: 2.5, socialLean: 0.7 }, // mine, ranch and service labor with a thinning extractive-union tradition
+    college: { economicLean: -1.9, socialLean: -3 }, // the professional tier of Denver, Salt Lake and Phoenix
     graduate: { economicLean: -3.2, socialLean: -4.3 }, // the national laboratories and state universities
   },
   wealth: {
     low: { economicLean: -3.8, socialLean: -0.9 }, // reservation and migrant poverty
-    middle: { economicLean: 1.2, socialLean: -0.1 }, // property-assessment inflation makes the tax revolt a live grievance here
-    high: { economicLean: 2.7, socialLean: -0.2 }, // energy, mining and land capital
+    middle: { economicLean: 1.1, socialLean: -0.1 }, // property-assessment inflation makes the tax revolt a live grievance here
+    high: { economicLean: 2.6, socialLean: -0.2 }, // energy, mining and land capital
   },
   ideology: {
-    evangelicals: { economicLean: 3.4, socialLean: 3 }, // the LDS corridor plus Rocky Mountain fundamentalism
-    patriots: { economicLean: 3.7, socialLean: 2.8 }, // defense installations and the missile fields
-    gunowners: { economicLean: 3.8, socialLean: 2.4 }, // public-lands hunting and the federal-firearms backlash
+    evangelicals: { economicLean: 3.3, socialLean: 3 }, // the LDS corridor plus Rocky Mountain fundamentalism
+    patriots: { economicLean: 3.6, socialLean: 2.8 }, // defense installations and the missile fields
+    gunowners: { economicLean: 3.7, socialLean: 2.4 }, // public-lands hunting and the federal-firearms backlash
     progressives: { economicLean: -4.7, socialLean: -5 }, // a small urban-Denver and university left
     environmentalists: { economicLean: -4.2, socialLean: -4.5 }, // wilderness and water politics, the Rebellion's antagonist
     libertarians: { economicLean: 4.6, socialLean: -0.1 }, // the movement's geographic heartland
@@ -194,27 +194,27 @@ const MOUNTAIN_1979: PositionsBlock = {
  */
 const PACIFIC_1979: PositionsBlock = {
   race: {
-    white: { economicLean: 3.1, socialLean: -0.3 }, // Proposition 13 economics over a coast already liberalizing socially
+    white: { economicLean: 2.9, socialLean: -0.3 }, // Proposition 13 economics over a coast already liberalizing socially
     black: { economicLean: -4.6, socialLean: -2.5 }, // Oakland, Los Angeles and Seattle, strongly Democratic
     hispanic: { economicLean: -3.6, socialLean: -2.3 }, // the post-1965 Mexican migration, still lightly registered
   },
   education: {
-    no_college: { economicLean: 0.6, socialLean: -0.6 }, // aerospace, timber and longshore labor, inland rather than coastal
-    college: { economicLean: -2.1, socialLean: -3.4 }, // the coastal professional class, the era's socially liberal vanguard
-    graduate: { economicLean: -3.6, socialLean: -4.7 }, // the University of California system and the research economy
+    no_college: { economicLean: 2.2, socialLean: -0.6 }, // aerospace, timber and longshore labor, inland rather than coastal
+    college: { economicLean: -2.2, socialLean: -3.4 }, // the coastal professional class, the era's socially liberal vanguard
+    graduate: { economicLean: -3.7, socialLean: -4.7 }, // the University of California system and the research economy
   },
   wealth: {
-    low: { economicLean: -3.8, socialLean: -1.4 }, // farmworker and inner-city poverty
-    middle: { economicLean: 1.2, socialLean: -1.6 }, // the suburban tax revolt without Southern social traditionalism
-    high: { economicLean: 2.8, socialLean: -1.8 }, // aerospace, entertainment and agribusiness capital
+    low: { economicLean: -3.9, socialLean: -1.4 }, // farmworker and inner-city poverty
+    middle: { economicLean: 1, socialLean: -1.6 }, // the suburban tax revolt without Southern social traditionalism
+    high: { economicLean: 2.7, socialLean: -1.8 }, // aerospace, entertainment and agribusiness capital
   },
   ideology: {
-    evangelicals: { economicLean: 2.8, socialLean: 2.6 }, // Orange County and Central Valley congregations, a real but regional bloc
-    patriots: { economicLean: 3.5, socialLean: 2.5 }, // the defense economy and a large veteran population
-    gunowners: { economicLean: 3.5, socialLean: 2.1 }, // rural and inland gun culture against a liberalizing coast
-    progressives: { economicLean: -4.8, socialLean: -5 }, // the environmental and antiwar left at its organizational height
-    environmentalists: { economicLean: -4.6, socialLean: -5 }, // the coast's defining political identity outside the cities
-    libertarians: { economicLean: 4.6, socialLean: -1.3 }, // growth-boom individualism, socially permissive
+    evangelicals: { economicLean: 2.7, socialLean: 2.6 }, // Orange County and Central Valley congregations, a real but regional bloc
+    patriots: { economicLean: 3.4, socialLean: 2.5 }, // the defense economy and a large veteran population
+    gunowners: { economicLean: 3.4, socialLean: 2.1 }, // rural and inland gun culture against a liberalizing coast
+    progressives: { economicLean: -4.9, socialLean: -5 }, // the environmental and antiwar left at its organizational height
+    environmentalists: { economicLean: -4.7, socialLean: -5 }, // the coast's defining political identity outside the cities
+    libertarians: { economicLean: 4.5, socialLean: -1.3 }, // growth-boom individualism, socially permissive
   },
 };
 
@@ -225,24 +225,24 @@ const PACIFIC_1979: PositionsBlock = {
  */
 const YANKEE_1979: PositionsBlock = {
   race: {
-    white: { economicLean: 2.8, socialLean: -0.1 }, // the no-broad-based-tax pledge as civic identity, with the social inversion beginning
+    white: { economicLean: 2.7, socialLean: -0.1 }, // the no-broad-based-tax pledge as civic identity, with the social inversion beginning
     black: { economicLean: -4.2, socialLean: -2.1 }, // a very small population concentrated in the mill cities
     hispanic: { economicLean: -3.4, socialLean: -2.1 }, // negligible outside the mill towns
   },
   education: {
-    no_college: { economicLean: 0.1, socialLean: -0.4 }, // quarry, mill and hill-farm labor without a strong union structure
-    college: { economicLean: -2.3, socialLean: -3.2 }, // the region's professional class, socially the most liberal in the file
+    no_college: { economicLean: 1.8, socialLean: -0.4 }, // quarry, mill and hill-farm labor without a strong union structure
+    college: { economicLean: -2.4, socialLean: -3.2 }, // the region's professional class, socially the most liberal in the file
     graduate: { economicLean: -3.7, socialLean: -4.5 }, // the New England college faculties
   },
   wealth: {
     low: { economicLean: -3.9, socialLean: -1.3 }, // rural hill poverty, weakly organized
-    middle: { economicLean: 0.9, socialLean: -1.4 }, // the anti-tax suburban and small-town middle class
-    high: { economicLean: 2.6, socialLean: -1.6 }, // Boston-adjacent finance and summer-resident capital
+    middle: { economicLean: 0.8, socialLean: -1.4 }, // the anti-tax suburban and small-town middle class
+    high: { economicLean: 2.5, socialLean: -1.6 }, // Boston-adjacent finance and summer-resident capital
   },
   ideology: {
-    evangelicals: { economicLean: 2.1, socialLean: 2.6 }, // a small old-stock Protestant remnant, not a mobilized bloc
-    patriots: { economicLean: 3, socialLean: 2.6 }, // town veterans' posts and a long militia tradition
-    gunowners: { economicLean: 3.1, socialLean: 2.2 }, // deer season as civic ritual, only lightly partisan
+    evangelicals: { economicLean: 2, socialLean: 2.6 }, // a small old-stock Protestant remnant, not a mobilized bloc
+    patriots: { economicLean: 2.9, socialLean: 2.6 }, // town veterans' posts and a long militia tradition
+    gunowners: { economicLean: 3, socialLean: 2.2 }, // deer season as civic ritual, only lightly partisan
     progressives: { economicLean: -4.9, socialLean: -5 }, // counterculture in-migration is building the modern Vermont left
     environmentalists: { economicLean: -4.6, socialLean: -4.9 }, // land-use and forest politics, already electorally decisive
     libertarians: { economicLean: 4.7, socialLean: -1.1 }, // Live Free or Die constitutionalism
@@ -255,27 +255,27 @@ const YANKEE_1979: PositionsBlock = {
  */
 const ISLANDS_1979: PositionsBlock = {
   race: {
-    white: { economicLean: -2.6, socialLean: -0.5 }, // military and mainland-transplant households against a Democratic machine
+    white: { economicLean: -2.8, socialLean: -0.5 }, // military and mainland-transplant households against a Democratic machine
     black: { economicLean: -4.9, socialLean: -2.4 }, // a small military-linked population
     hispanic: { economicLean: -3.9, socialLean: -2.2 }, // Filipino and Puerto Rican plantation descendants inside the ILWU
   },
   education: {
-    no_college: { economicLean: -3.8, socialLean: -0.9 }, // the hotel, dock and plantation workforce, the machine's base
-    college: { economicLean: -3.9, socialLean: -3.4 }, // state civil service and the university
-    graduate: { economicLean: -4.9, socialLean: -4.7 }, // a small professional stratum around the university
+    no_college: { economicLean: -2.2, socialLean: -0.9 }, // the hotel, dock and plantation workforce, the machine's base
+    college: { economicLean: -4, socialLean: -3.4 }, // state civil service and the university
+    graduate: { economicLean: -5, socialLean: -4.7 }, // a small professional stratum around the university
   },
   wealth: {
     low: { economicLean: -5, socialLean: -1.6 }, // plantation-camp and service-sector poverty
-    middle: { economicLean: -3.2, socialLean: -1.7 }, // the Nisei small-business and civil-service class the machine built
-    high: { economicLean: 0.2, socialLean: -1.8 }, // the surviving Big Five and tourism capital
+    middle: { economicLean: -3.4, socialLean: -1.7 }, // the Nisei small-business and civil-service class the machine built
+    high: { economicLean: 0.1, socialLean: -1.8 }, // the surviving Big Five and tourism capital
   },
   ideology: {
-    evangelicals: { economicLean: 0.3, socialLean: 2.1 }, // missionary-descended congregations, a small minority
-    patriots: { economicLean: 0.7, socialLean: 1.9 }, // Pearl Harbor, the 442nd and a heavy military presence
-    gunowners: { economicLean: 0.7, socialLean: 1.5 }, // outer-island hunting, a minor identity
+    evangelicals: { economicLean: 0.2, socialLean: 2.1 }, // missionary-descended congregations, a small minority
+    patriots: { economicLean: 0.6, socialLean: 1.9 }, // Pearl Harbor, the 442nd and a heavy military presence
+    gunowners: { economicLean: 0.6, socialLean: 1.5 }, // outer-island hunting, a minor identity
     progressives: { economicLean: -5, socialLean: -5 }, // the ILWU political machine that runs the state
     environmentalists: { economicLean: -5, socialLean: -4.8 }, // land and reef conservation against resort development
-    libertarians: { economicLean: 3.5, socialLean: -1.3 }, // small-trader independence, marginal
+    libertarians: { economicLean: 3.4, socialLean: -1.3 }, // small-trader independence, marginal
   },
 };
 
@@ -285,27 +285,27 @@ const ISLANDS_1979: PositionsBlock = {
  */
 const CAPITAL_1979: PositionsBlock = {
   race: {
-    white: { economicLean: -4.2, socialLean: -1.4 }, // federal managers and gentrifying professionals in a Black-majority city
+    white: { economicLean: -4.5, socialLean: -1.4 }, // federal managers and gentrifying professionals in a Black-majority city
     black: { economicLean: -5, socialLean: -1.8 }, // home rule won in 1973: the most Democratic electorate in the country
-    hispanic: { economicLean: -4.7, socialLean: -2.2 }, // a small Salvadoran and embassy-linked population
+    hispanic: { economicLean: -4.8, socialLean: -2.2 }, // a small Salvadoran and embassy-linked population
   },
   education: {
-    no_college: { economicLean: -5, socialLean: -0.6 }, // the federal service and hospitality workforce, heavily unionized
+    no_college: { economicLean: -3.4, socialLean: -0.6 }, // the federal service and hospitality workforce, heavily unionized
     college: { economicLean: -5, socialLean: -3.8 }, // the career civil service
     graduate: { economicLean: -5, socialLean: -5 }, // the agency and think-tank professional class
   },
   wealth: {
     low: { economicLean: -5, socialLean: -1.1 }, // concentrated urban poverty a mile from the Capitol
     middle: { economicLean: -5, socialLean: -1.8 }, // the federal grade-scale middle class
-    high: { economicLean: -2, socialLean: -2 }, // law, lobbying and the federal contracting economy
+    high: { economicLean: -2.2, socialLean: -2 }, // law, lobbying and the federal contracting economy
   },
   ideology: {
-    evangelicals: { economicLean: -2.2, socialLean: 2.3 }, // large Black Baptist congregations: socially traditional, economically left
-    patriots: { economicLean: -1.6, socialLean: 1.9 }, // the military and veterans' bureaucracy
-    gunowners: { economicLean: -1.6, socialLean: 1.7 }, // a marginal identity under the 1976 handgun ban
+    evangelicals: { economicLean: -2.4, socialLean: 2.3 }, // large Black Baptist congregations: socially traditional, economically left
+    patriots: { economicLean: -1.8, socialLean: 1.9 }, // the military and veterans' bureaucracy
+    gunowners: { economicLean: -1.8, socialLean: 1.7 }, // a marginal identity under the 1976 handgun ban
     progressives: { economicLean: -5, socialLean: -5 }, // the city's civil-rights and public-employee left
     environmentalists: { economicLean: -5, socialLean: -4.9 }, // the federal environmental bureaucracy's home
-    libertarians: { economicLean: 2.1, socialLean: -1.2 }, // a think-tank minority in the federal city
+    libertarians: { economicLean: 2, socialLean: -1.2 }, // a think-tank minority in the federal city
   },
 };
 
@@ -416,7 +416,7 @@ export const stateCensusData1979: Record<string, Layer1Config> = {
       patriots: 6,
       gunowners: 8,
     },
-    positions: shiftRegionPositions(PACIFIC_1979, 0.8, 0.4), // Proposition 13 economics plus mass social liberalization
+    positions: shiftRegionPositions(PACIFIC_1979, 0.9, 0.4), // Proposition 13 economics plus mass social liberalization
   },
   CO: {
     race: { white: 82, black: 4, hispanic: 12, asian: 1, other: 1 },
@@ -491,7 +491,7 @@ export const stateCensusData1979: Record<string, Layer1Config> = {
       patriots: 12,
       gunowners: 13,
     },
-    positions: shiftRegionPositions(BORDER_1979, 2, 0), // retiree and Cuban in-migration diluting the Southern base
+    positions: shiftRegionPositions(BORDER_1979, 2.1, 0), // retiree and Cuban in-migration diluting the Southern base
   },
   GA: {
     race: { white: 71, black: 27, hispanic: 1, asian: 1, other: 0 },
@@ -551,7 +551,7 @@ export const stateCensusData1979: Record<string, Layer1Config> = {
       patriots: 14,
       gunowners: 22,
     },
-    positions: shiftRegionPositions(MOUNTAIN_1979, 0.1, 0.4), // tracks Utah more than the Mountain line
+    positions: shiftRegionPositions(MOUNTAIN_1979, 0.2, 0.4), // tracks Utah more than the Mountain line
   },
   IL: {
     race: { white: 78, black: 15, hispanic: 6, asian: 1, other: 0 },
@@ -581,7 +581,7 @@ export const stateCensusData1979: Record<string, Layer1Config> = {
       patriots: 12,
       gunowners: 13,
     },
-    positions: shiftRegionPositions(GREAT_LAKES_1979, 0, 0.8), // the most Republican Great Lakes state since 1936
+    positions: shiftRegionPositions(GREAT_LAKES_1979, -0.1, 0.8), // the most Republican Great Lakes state since 1936
   },
   KS: {
     race: { white: 91, black: 5, hispanic: 3, asian: 1, other: 0 },
@@ -611,7 +611,7 @@ export const stateCensusData1979: Record<string, Layer1Config> = {
       patriots: 13,
       gunowners: 19,
     },
-    positions: shiftRegionPositions(BORDER_1979, -0.5, -0.3), // eastern coalfield Democrats against a Republican Bluegrass
+    positions: shiftRegionPositions(BORDER_1979, -0.4, -0.3), // eastern coalfield Democrats against a Republican Bluegrass
   },
   LA: {
     race: { white: 68, black: 29, hispanic: 2, asian: 1, other: 0 },
@@ -701,7 +701,7 @@ export const stateCensusData1979: Record<string, Layer1Config> = {
       patriots: 6,
       gunowners: 11,
     },
-    positions: shiftRegionPositions(GREAT_LAKES_1979, -3.4, -1.4), // the DFL, Mondale on the ticket, and one of only six Carter states
+    positions: shiftRegionPositions(GREAT_LAKES_1979, -3.5, -1.4), // the DFL, Mondale on the ticket, and one of only six Carter states
   },
   MO: {
     race: { white: 88, black: 10, hispanic: 1, asian: 1, other: 0 },
@@ -866,7 +866,7 @@ export const stateCensusData1979: Record<string, Layer1Config> = {
       patriots: 5,
       gunowners: 6,
     },
-    positions: shiftRegionPositions(MID_ATLANTIC_1979, -2, -0.3), // the fiscal crisis city and the last big-machine Democratic electorate
+    positions: shiftRegionPositions(MID_ATLANTIC_1979, -2.1, -0.3), // the fiscal crisis city and the last big-machine Democratic electorate
   },
   OH: {
     race: { white: 88, black: 10, hispanic: 1, asian: 1, other: 0 },
@@ -896,7 +896,7 @@ export const stateCensusData1979: Record<string, Layer1Config> = {
       patriots: 14,
       gunowners: 18,
     },
-    positions: shiftRegionPositions(BORDER_1979, 1.8, 0.5), // oil-patch economics plus Bible Belt mobilization
+    positions: shiftRegionPositions(BORDER_1979, 1.9, 0.5), // oil-patch economics plus Bible Belt mobilization
   },
   OR: {
     race: { white: 93, black: 1, hispanic: 3, asian: 2, other: 1 },
@@ -941,7 +941,7 @@ export const stateCensusData1979: Record<string, Layer1Config> = {
       patriots: 5,
       gunowners: 5,
     },
-    positions: shiftRegionPositions(MID_ATLANTIC_1979, -4.2, -0.6), // the densest Catholic union electorate in the country
+    positions: shiftRegionPositions(MID_ATLANTIC_1979, -4.3, -0.6), // the densest Catholic union electorate in the country
   },
   SC: {
     race: { white: 68, black: 30, hispanic: 1, asian: 1, other: 0 },
@@ -986,7 +986,7 @@ export const stateCensusData1979: Record<string, Layer1Config> = {
       patriots: 14,
       gunowners: 18,
     },
-    positions: shiftRegionPositions(BORDER_1979, -0.4, -0.5), // the peripheral South's swing state, still competitive on economics
+    positions: shiftRegionPositions(BORDER_1979, -0.3, -0.5), // the peripheral South's swing state, still competitive on economics
   },
   TX: {
     race: { white: 66, black: 12, hispanic: 21, asian: 1, other: 0 },

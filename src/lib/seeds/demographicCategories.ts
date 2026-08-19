@@ -1572,7 +1572,7 @@ const DEEP_SOUTH_1953: PositionEntry[] = [
   ["race", "white", -0.5, 4.1], // populist toward Washington money, at the caste order's ceiling socially
   ["race", "black", -3.2, 1.2], // disfranchised outside the cities; church-centered and economically dependent
   ["race", "hispanic", -2.6, 1.2], // south Texas and Delta farm labor, tied to the same patron economy
-  ["education", "no_college", -0.4, 2.8], // mill-town and small-farmer Dixiecrats, not northern union Democrats
+  ["education", "no_college", -1.7, 2.8], // mill-town and small-farmer Dixiecrats, not northern union Democrats
   ["education", "college", 0.6, 2], // the professional class of the courthouse ring
   ["education", "graduate", 0, 1.6], // a thin university and medical stratum, less bound by the county machine
   ["wealth", "low", -2.2, 3.1], // tenant farmers and sharecroppers: the region's populist floor
@@ -1595,7 +1595,7 @@ const BORDER_1953: PositionEntry[] = [
   ["race", "white", 0.2, 0.7], // two-party country: Ike took VA, TX and FL in 1952 without an ideological shift
   ["race", "black", -3.4, 0.3], // urban Black electorates in Baltimore, Louisville and St Louis could vote
   ["race", "hispanic", -2.6, 0.1], // Texas and Oklahoma farm labor with a Catholic Democratic tilt
-  ["education", "no_college", -0.5, 1.2], // textile, tobacco and coal workers still inside the New Deal coalition
+  ["education", "no_college", -1.8, 1.2], // textile, tobacco and coal workers still inside the New Deal coalition
   ["education", "college", 1, 0.6], // the business and professional towns Eisenhower cracked first
   ["education", "graduate", 0.3, 0.3], // state universities and federal science payrolls
   ["wealth", "low", -2.5, 1.6], // Appalachian and Ozark poverty, the most reliably Democratic bloc here
@@ -1615,21 +1615,21 @@ const BORDER_1953: PositionEntry[] = [
  * traditional region of the era outside the Pacific.
  */
 const MID_ATLANTIC_1953: PositionEntry[] = [
-  ["race", "white", 0.4, -0.8], // Yankee Protestant business Republicans and New Deal Catholic ethnics roughly cancel
-  ["race", "black", -4.2, -1.7], // Great Migration electorates in Harlem, Philadelphia and Newark, CIO-organized
-  ["race", "hispanic", -3.2, -0.8], // the first mass Puerto Rican migration, union and machine-connected
-  ["education", "no_college", -1.4, 0.4], // peak union density: traditional on family and sex, New Deal on bread
-  ["education", "college", 1.4, -1.2], // the professional and managerial tier that voted for Eisenhower
-  ["education", "graduate", 0, -2], // the era's small academic and cultural left
-  ["wealth", "low", -3.5, 0.3], // tenement and mill poverty, the New Deal coalition's foundation
-  ["wealth", "middle", 1.2, -0.4], // new suburban homeowners moving toward tax sensitivity
-  ["wealth", "high", 3.2, -0.4], // Wall Street and industrial capital, the anti-New Deal economic right
-  ["ideology", "evangelicals", 0.1, 0.9], // a small non-mainline minority with no political vehicle
-  ["ideology", "patriots", 1.3, 0.3], // Cold War and veterans' organizations, Korean War patriotism
-  ["ideology", "gunowners", 0.9, 0.1], // sporting clubs rather than a political identity
-  ["ideology", "progressives", -5, -4.8], // the labor left proper: CIO, ADA and the garment unions
-  ["ideology", "environmentalists", -2.7, -2.3], // Pinchot-tradition conservation, Democratic-leaning
-  ["ideology", "libertarians", 4.6, -0.8], // old-right anti-statists, socially indifferent
+  ["race", "white", 1.2, -0.9], // Yankee Protestant business Republicans and New Deal Catholic ethnics roughly cancel
+  ["race", "black", -4, -1.7], // Great Migration electorates in Harlem, Philadelphia and Newark, CIO-organized
+  ["race", "hispanic", -3, -0.8], // the first mass Puerto Rican migration, union and machine-connected
+  ["education", "no_college", -2.1, 0.3], // peak union density: traditional on family and sex, New Deal on bread
+  ["education", "college", 1.9, -1.3], // the professional and managerial tier that voted for Eisenhower
+  ["education", "graduate", 0.3, -2], // the era's small academic and cultural left
+  ["wealth", "low", -3.3, 0.3], // tenement and mill poverty, the New Deal coalition's foundation
+  ["wealth", "middle", 1.8, -0.5], // new suburban homeowners moving toward tax sensitivity
+  ["wealth", "high", 3.7, -0.5], // Wall Street and industrial capital, the anti-New Deal economic right
+  ["ideology", "evangelicals", 0.7, 0.8], // a small non-mainline minority with no political vehicle
+  ["ideology", "patriots", 1.9, 0.2], // Cold War and veterans' organizations, Korean War patriotism
+  ["ideology", "gunowners", 1.5, 0], // sporting clubs rather than a political identity
+  ["ideology", "progressives", -4.8, -4.8], // the labor left proper: CIO, ADA and the garment unions
+  ["ideology", "environmentalists", -2.5, -2.3], // Pinchot-tradition conservation, Democratic-leaning
+  ["ideology", "libertarians", 4.9, -0.8], // old-right anti-statists, socially indifferent
 ];
 
 /**
@@ -1640,7 +1640,7 @@ const GREAT_LAKES_1953: PositionEntry[] = [
   ["race", "white", 1, -0.8], // farm-Republican countryside plus Taft small business, cross-pressured by the UAW
   ["race", "black", -4.2, -1.5], // Detroit, Chicago and Cleveland industrial electorates at peak union membership
   ["race", "hispanic", -3, -0.7], // Mexican-American steel and packinghouse labor in Chicago and Gary
-  ["education", "no_college", -0.8, -0.3], // the union card, not schooling, sets this bloc's economics
+  ["education", "no_college", -2.1, -0.3], // the union card, not schooling, sets this bloc's economics
   ["education", "college", 1.7, -1.2], // Main Street professionals who broke two-to-one for Eisenhower
   ["education", "graduate", 0.5, -1.8], // Big Ten faculty and research staff, Stevenson's constituency
   ["wealth", "low", -3.1, -0.1], // the industrial poor inside the CIO's organising reach
@@ -1662,7 +1662,7 @@ const PLAINS_1953: PositionEntry[] = [
   ["race", "white", 3.4, 0.2], // isolationist farm Republicanism; the region gave Eisenhower his largest margins
   ["race", "black", -3.2, -1], // a small urban population in Omaha, Wichita and Topeka
   ["race", "hispanic", -2.4, 0], // sugar-beet and railroad labor, thinly settled
-  ["education", "no_college", 2.8, 0.6], // the owner-operator farmer and the small-town proprietor, not a wage worker
+  ["education", "no_college", 1.5, 0.6], // the owner-operator farmer and the small-town proprietor, not a wage worker
   ["education", "college", 2.9, -0.2], // land-grant graduates who stayed in county business
   ["education", "graduate", 1.7, -0.8], // agricultural extension and university staff
   ["wealth", "low", -1.4, 0.7], // the farm tenancy that the New Deal's price supports rescued
@@ -1682,18 +1682,18 @@ const PLAINS_1953: PositionEntry[] = [
  * realignment; traditional without the racial caste order.
  */
 const MOUNTAIN_1953: PositionEntry[] = [
-  ["race", "white", 2.1, 0.1], // small government in principle, federal water, land and defense money in practice
+  ["race", "white", 2.2, 0.1], // small government in principle, federal water, land and defense money in practice
   ["race", "black", -3.4, -1.1], // small urban populations in Denver, Phoenix and the defense towns
   ["race", "hispanic", -2, 0.7], // New Mexico Hispanos and Arizona farm labor: Catholic, Democratic, traditional
-  ["education", "no_college", 1.7, 0.5], // ranch and mine labor with a real extractive-union tradition
-  ["education", "college", 2.3, -0.2], // the professional tier of Denver, Salt Lake and Phoenix
+  ["education", "no_college", 0.5, 0.5], // ranch and mine labor with a real extractive-union tradition
+  ["education", "college", 2.4, -0.2], // the professional tier of Denver, Salt Lake and Phoenix
   ["education", "graduate", 1.2, -0.8], // the atomic laboratories and state universities
   ["wealth", "low", -2, 0.6], // reservation and migrant poverty, weakly enfranchised
-  ["wealth", "middle", 2.5, 0.5], // the small-town merchant class, Republican before the Southern realignment
-  ["wealth", "high", 3.5, 0.6], // mining, cattle and land capital
-  ["ideology", "evangelicals", 1.5, 1.6], // the Mormon corridor plus scattered Protestant fundamentalism
-  ["ideology", "patriots", 2.5, 1], // defense installations and a heavy veteran share
-  ["ideology", "gunowners", 2.3, 0.8], // hunting and ranch ownership, universal and non-partisan
+  ["wealth", "middle", 2.6, 0.5], // the small-town merchant class, Republican before the Southern realignment
+  ["wealth", "high", 3.6, 0.6], // mining, cattle and land capital
+  ["ideology", "evangelicals", 1.6, 1.6], // the Mormon corridor plus scattered Protestant fundamentalism
+  ["ideology", "patriots", 2.6, 1], // defense installations and a heavy veteran share
+  ["ideology", "gunowners", 2.4, 0.8], // hunting and ranch ownership, universal and non-partisan
   ["ideology", "progressives", -3.4, -3], // Butte and Coeur d'Alene mining unionism, the region's economic left
   ["ideology", "environmentalists", -1.4, -1], // reclamation and public-lands conservation
   ["ideology", "libertarians", 5, 0.6], // sagebrush anti-federalism a generation before the Rebellion
@@ -1704,18 +1704,18 @@ const MOUNTAIN_1953: PositionEntry[] = [
  * boom, strong maritime labor, and a milder social climate than the interior.
  */
 const PACIFIC_1953: PositionEntry[] = [
-  ["race", "white", 1.8, -1], // Warren-era growth Republicanism: business-friendly, conservationist, socially mild
+  ["race", "white", 1.9, -1], // Warren-era growth Republicanism: business-friendly, conservationist, socially mild
   ["race", "black", -3.6, -1.7], // wartime shipyard migration into Oakland, Portland and Seattle
   ["race", "hispanic", -2, -0.9], // bracero-era farm labor, largely unenfranchised
-  ["education", "no_college", 1, -0.3], // aerospace, maritime and longshore labor with strong unions
-  ["education", "college", 2.1, -1.4], // the growth professional class of the coastal cities
+  ["education", "no_college", -0.2, -0.3], // aerospace, maritime and longshore labor with strong unions
+  ["education", "college", 2.2, -1.4], // the growth professional class of the coastal cities
   ["education", "graduate", 0.5, -2.2], // Berkeley, Stanford and Caltech: the era's academic left
   ["wealth", "low", -2.4, -0.2], // migrant farm and cannery poverty
-  ["wealth", "middle", 2.4, -0.7], // new tract suburbs built on defense payrolls
-  ["wealth", "high", 3.7, -0.6], // aerospace, oil and agribusiness capital
-  ["ideology", "evangelicals", 1.4, 0.4], // Okie migrant Pentecostalism in the Central Valley, not a coastal bloc
-  ["ideology", "patriots", 2.4, 0], // the largest defense economy in the country
-  ["ideology", "gunowners", 2, -0.2], // hunting and sporting culture, non-partisan
+  ["wealth", "middle", 2.5, -0.7], // new tract suburbs built on defense payrolls
+  ["wealth", "high", 3.8, -0.6], // aerospace, oil and agribusiness capital
+  ["ideology", "evangelicals", 1.5, 0.4], // Okie migrant Pentecostalism in the Central Valley, not a coastal bloc
+  ["ideology", "patriots", 2.5, 0], // the largest defense economy in the country
+  ["ideology", "gunowners", 2.1, -0.2], // hunting and sporting culture, non-partisan
   ["ideology", "progressives", -3.2, -4], // ILWU and Popular Front residue, the coast's economic left
   ["ideology", "environmentalists", -2.2, -2.4], // Sierra Club conservation, already a mass constituency
   ["ideology", "libertarians", 5, -0.8], // growth-boom individualism, socially permissive
@@ -1730,7 +1730,7 @@ const YANKEE_1953: PositionEntry[] = [
   ["race", "white", 2.9, -1.3], // town-meeting Republicanism: market-friendly, civic-reform, mainline Protestant
   ["race", "black", -3.5, -1.4], // a tiny population that had voted Republican since Lincoln
   ["race", "hispanic", -2.7, -0.8], // negligible in the 1950 census outside the mill towns
-  ["education", "no_college", 1.8, -0.3], // hill-farm and quarry labor, proprietors more often than wage workers
+  ["education", "no_college", 0.5, -0.3], // hill-farm and quarry labor, proprietors more often than wage workers
   ["education", "college", 2.9, -1.5], // the professional tier of the region's Republican establishment
   ["education", "graduate", 1.6, -2], // the New England college faculties, the region's liberal edge
   ["wealth", "low", -1.5, 0.1], // marginal hill-farm poverty without an industrial union structure
@@ -1749,18 +1749,18 @@ const YANKEE_1953: PositionEntry[] = [
  * Economically the furthest left electorate in the file, socially plural and mild.
  */
 const ISLANDS_1953: PositionEntry[] = [
-  ["race", "white", -1.5, -1.6], // haole planter and military households, the territory's Republican remnant
+  ["race", "white", -1.4, -1.6], // haole planter and military households, the territory's Republican remnant
   ["race", "black", -3.9, -1.7], // a small military-linked population
   ["race", "hispanic", -2.7, -1.1], // Puerto Rican and Filipino plantation labor inside the ILWU
-  ["education", "no_college", -3, -0.7], // the plantation and dock workforce the 1946 strikes organized
-  ["education", "college", -0.9, -1.6], // territorial civil service and the university
+  ["education", "no_college", -4.2, -0.7], // the plantation and dock workforce the 1946 strikes organized
+  ["education", "college", -0.8, -1.6], // territorial civil service and the university
   ["education", "graduate", -1.6, -2.4], // a thin professional stratum around the university
   ["wealth", "low", -3.8, -0.4], // camp housing and seasonal plantation poverty
-  ["wealth", "middle", -1, -0.9], // the emerging Nisei small-business and civil-service class
-  ["wealth", "high", 1.7, -0.8], // the Big Five sugar and shipping oligarchy
-  ["ideology", "evangelicals", -0.3, 0.6], // missionary-descended Protestant congregations
-  ["ideology", "patriots", 0.2, 0], // Pearl Harbor and the 442nd: patriotic without Mainland partisanship
-  ["ideology", "gunowners", 0.1, -0.2], // hunting on the outer islands, a minor identity
+  ["wealth", "middle", -0.9, -0.9], // the emerging Nisei small-business and civil-service class
+  ["wealth", "high", 1.8, -0.8], // the Big Five sugar and shipping oligarchy
+  ["ideology", "evangelicals", -0.2, 0.6], // missionary-descended Protestant congregations
+  ["ideology", "patriots", 0.3, 0], // Pearl Harbor and the 442nd: patriotic without Mainland partisanship
+  ["ideology", "gunowners", 0.2, -0.2], // hunting on the outer islands, a minor identity
   ["ideology", "progressives", -4.8, -4], // the ILWU political machine that built the territorial Democrats
   ["ideology", "environmentalists", -2.8, -2.4], // watershed and fishery conservation
   ["ideology", "libertarians", 3.8, -1], // small-trader independence against the Big Five
@@ -1774,7 +1774,7 @@ const CAPITAL_1953: PositionEntry[] = [
   ["race", "white", -1.8, -1.2], // federal managers and Georgetown professionals with no vote to cast
   ["race", "black", -4.5, -0.9], // the majority of the city: federal employment plus severe segregation
   ["race", "hispanic", -3.5, -1], // a very small embassy-linked population
-  ["education", "no_college", -2.9, -0.4], // the federal service and hotel workforce, unionising through the AFL
+  ["education", "no_college", -4.2, -0.4], // the federal service and hotel workforce, unionising through the AFL
   ["education", "college", -0.8, -1.9], // the career civil service, New Deal in formation
   ["education", "graduate", -1.6, -2.5], // the agency professional class, the era's technocratic left
   ["wealth", "low", -4.1, 0.1], // alley housing poverty a mile from the Capitol
@@ -1819,58 +1819,58 @@ const STATE_POSITION_OVERRIDES: Partial<
     MS: shiftRegion(DEEP_SOUTH_1953, 0.2, 1.1), // Delta planter caste order, the era's traditional ceiling
     SC: shiftRegion(DEEP_SOUTH_1953, 0.3, -0.7), // Byrnes bolted toward Eisenhower; textile capital pulls econ right of the Black Belt
     LA: shiftRegion(DEEP_SOUTH_1953, 0, -0.5), // south Louisiana Catholicism blunts the evangelical-Protestant frame
-    GA: shiftRegion(DEEP_SOUTH_1953, -0.8, -0.2), // Talmadge rural populism: the widest Stevenson margin in the country
-    AR: shiftRegion(DEEP_SOUTH_1953, -0.5, -1.4), // hill-country populism west of the Delta
+    GA: shiftRegion(DEEP_SOUTH_1953, -0.7, -0.2), // Talmadge rural populism: the widest Stevenson margin in the country
+    AR: shiftRegion(DEEP_SOUTH_1953, -0.4, -1.4), // hill-country populism west of the Delta
     // Border
     VA: shiftRegion(BORDER_1953, 1.6, 1.1), // the Byrd organization: fiscally tight, socially the Border's most traditional
     NC: BORDER_1953,
     TN: BORDER_1953,
     FL: shiftRegion(BORDER_1953, 1.5, -0.3), // northern retiree and tourism in-migration already dilutes the Southern base
-    TX: shiftRegion(BORDER_1953, 2, 0), // oil and gas capital gives Texas a business conservatism the Deep South lacks
+    TX: shiftRegion(BORDER_1953, 2.1, 0), // oil and gas capital gives Texas a business conservatism the Deep South lacks
     OK: BORDER_1953,
     KY: shiftRegion(BORDER_1953, -1.5, -0.1), // Stevenson carried it by 700 votes; eastern coalfield unionism, not Black Belt
     MO: shiftRegion(BORDER_1953, -0.9, -0.6), // Truman's border state, split between St Louis and Kansas City labor and the Ozarks
     WV: shiftRegion(BORDER_1953, -2.4, 0), // UMWA coal unionism: the clearest econ-left, socially traditional cell in the file
-    MD: shiftRegion(BORDER_1953, -0.4, -1.1), // functionally Mid-Atlantic already: Baltimore industry and federal employment
-    DE: shiftRegion(BORDER_1953, -0.6, -1.2), // du Pont industry and a Mid-Atlantic rather than Southern social profile
+    MD: shiftRegion(BORDER_1953, 0.5, -2.1), // functionally Mid-Atlantic already: Baltimore industry and federal employment
+    DE: shiftRegion(BORDER_1953, 0.5, -2.1), // du Pont industry and a Mid-Atlantic rather than Southern social profile
     // Yankee
     VT: shiftRegion(YANKEE_1953, 0.6, -0.3), // the strongest GOP state of 1952 (R+43.3), reform Yankee rather than traditionalist
     NH: shiftRegion(YANKEE_1953, -1, 0.3), // the no-broad-based-tax identity is already the state's civic creed
     ME: YANKEE_1953,
     // MidAtlantic
     MA: MID_ATLANTIC_1953,
-    RI: shiftRegion(MID_ATLANTIC_1953, -1, -0.3), // the densest Catholic union electorate in the country; Stevenson's closest Northern state
+    RI: shiftRegion(MID_ATLANTIC_1953, -0.2, -0.3), // the densest Catholic union electorate in the country; Stevenson's closest Northern state
     CT: MID_ATLANTIC_1953,
     NY: MID_ATLANTIC_1953,
     NJ: MID_ATLANTIC_1953,
-    PA: shiftRegion(MID_ATLANTIC_1953, -1, -0.3), // anthracite and steel: the USWA belt anchors the state's economics
+    PA: shiftRegion(MID_ATLANTIC_1953, -0.4, -0.3), // anthracite and steel: the USWA belt anchors the state's economics
     // GreatLakes
     OH: GREAT_LAKES_1953,
     IN: GREAT_LAKES_1953,
     IL: GREAT_LAKES_1953,
     MI: GREAT_LAKES_1953,
-    WI: shiftRegion(GREAT_LAKES_1953, 0.7, 0), // La Follette Progressive residue survives inside both parties
-    MN: shiftRegion(GREAT_LAKES_1953, -0.7, -0.6), // the 1944 DFL merger and a Farmer-Labor tradition with no Southern analogue
-    IA: shiftRegion(GREAT_LAKES_1953, 1.5, 0.6), // owner-operator Corn Belt farming sits right of the industrial Great Lakes
+    WI: shiftRegion(GREAT_LAKES_1953, 0.5, 0), // La Follette Progressive residue survives inside both parties
+    MN: shiftRegion(GREAT_LAKES_1953, -0.1, -0.6), // the 1944 DFL merger and a Farmer-Labor tradition with no Southern analogue
+    IA: shiftRegion(GREAT_LAKES_1953, 1.5, 0.5), // owner-operator Corn Belt farming sits right of the industrial Great Lakes
     // Plains
     ND: shiftRegion(PLAINS_1953, -1.1, 0.4), // Nonpartisan League agrarian radicalism survives inside the Republican party
     SD: PLAINS_1953,
     NE: PLAINS_1953,
     KS: PLAINS_1953,
     // Mountain
-    MT: shiftRegion(MOUNTAIN_1953, -1.2, -0.6), // Butte mining unionism holds the state's economics off the Mountain line
+    MT: shiftRegion(MOUNTAIN_1953, -1.3, -0.6), // Butte mining unionism holds the state's economics off the Mountain line
     ID: MOUNTAIN_1953,
     WY: MOUNTAIN_1953,
     CO: MOUNTAIN_1953,
     UT: shiftRegion(MOUNTAIN_1953, 0.2, 2.3), // the LDS correlation of piety, teetotaling and Republicanism is already visible
-    NV: shiftRegion(MOUNTAIN_1953, -0.4, -1.7), // legal gambling and permissive divorce law make it a social outlier
+    NV: shiftRegion(MOUNTAIN_1953, -0.5, -1.7), // legal gambling and permissive divorce law make it a social outlier
     AZ: MOUNTAIN_1953,
-    NM: shiftRegion(MOUNTAIN_1953, -0.8, 0.4), // the Hispano north keeps the state left of its Mountain neighbors
+    NM: shiftRegion(MOUNTAIN_1953, -0.9, 0.4), // the Hispano north keeps the state left of its Mountain neighbors
     AK: MOUNTAIN_1953,
     // Pacific
     CA: PACIFIC_1953,
     OR: PACIFIC_1953,
-    WA: shiftRegion(PACIFIC_1953, -0.8, -0.1), // Boeing and the maritime unions anchor a Democratic economics
+    WA: shiftRegion(PACIFIC_1953, -0.9, -0.1), // Boeing and the maritime unions anchor a Democratic economics
     // Islands
     HI: ISLANDS_1953,
     // Capital
