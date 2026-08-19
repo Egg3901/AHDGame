@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { PLANTS_SORT_OPTIONS, SORT_OPTIONS, sortOptionsFor, sortSectors } from "./sectorSortUtils";
+import {
+  PLANTS_SORT_OPTIONS,
+  SORT_OPTIONS,
+  sectorDisplayRevenue,
+  sortOptionsFor,
+  sortSectors,
+  sumSectorDisplayRevenue,
+} from "./sectorSortUtils";
 import type { SectorDetail } from "./CorporationPageTypes";
 
 function sector(partial: Partial<SectorDetail> & { stateName: string }): SectorDetail {
@@ -108,5 +115,44 @@ describe("sortSectors — plants keys", () => {
       "Bavaria",
       "Alsace",
     ]);
+  });
+});
+
+describe("sectorDisplayRevenue (ticket #1122)", () => {
+  it("prefers realized revenue over nameplate", () => {
+    expect(
+      sectorDisplayRevenue(sector({ stateName: "Ohio", revenue: 100, financialRevenue: 60 }))
+    ).toBe(60);
+  });
+
+  it("falls back to nameplate when realized revenue is absent", () => {
+    expect(
+      sectorDisplayRevenue({ revenue: 100, financialRevenue: undefined } as unknown as SectorDetail)
+    ).toBe(100);
+  });
+
+  it("treats a redacted private-corp row as zero", () => {
+    expect(
+      sectorDisplayRevenue({ revenue: null, financialRevenue: null } as unknown as SectorDetail)
+    ).toBe(0);
+  });
+
+  it("totals the same basis the sector rows render, not nameplate", () => {
+    const sectors = [
+      sector({ stateName: "Ohio", revenue: 100, financialRevenue: 60 }),
+      sector({ stateName: "Texas", revenue: 200, financialRevenue: 150 }),
+    ];
+    // The Total row used to sum nameplate (300) while every row above it showed
+    // realized, so the column did not add up to its own total.
+    expect(sumSectorDisplayRevenue(sectors)).toBe(210);
+  });
+
+  it("sorts by the displayed revenue, not nameplate", () => {
+    const sectors = [
+      sector({ stateName: "Ohio", revenue: 500, financialRevenue: 10 }),
+      sector({ stateName: "Texas", revenue: 100, financialRevenue: 90 }),
+    ];
+    const sorted = sortSectors(sectors, "revenue", "desc");
+    expect(sorted.map((s) => s.stateName)).toEqual(["Texas", "Ohio"]);
   });
 });
