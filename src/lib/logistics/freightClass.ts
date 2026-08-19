@@ -1,10 +1,22 @@
 /**
  * Freight classification for the landed-price sourcing pass.
  *
- * Every commodity is either physically shipped (in one of two freight classes)
- * or not shipped at all (services, grid-delivered energy, and freight itself).
- * A shipped commodity spends freight capacity of its class when it crosses a
- * state line; intra-state delivery is free by design.
+ * Every commodity is either physically shipped (in one of three freight
+ * classes) or not shipped at all (services and freight itself). A shipped
+ * commodity spends freight capacity of its class when it crosses a state line;
+ * intra-state delivery is free by design.
+ *
+ * The `grid` class is the exception and the reason it exists. Energy and
+ * natural gas are delivered by wire and pipe, not by truck, so they must not
+ * draw on the haulage fleet the other two classes share. Before this class
+ * existed they were typed `null` (never shipped), which meant a state could
+ * only ever consume what it generated, while their PRICE was pooled nationally
+ * via COMMODITIES_NATIONAL_REGIONAL_PRICE_BLEND. The price said national market
+ * and the physics said the state you built in: measured on prod at t225, energy
+ * ran 128 states in local surplus against 100 short with state prices from 1.17
+ * to 4.34, and 27.8% of all energy produced went unsold. Grid flows now move,
+ * consume no TEU, and pay distance in transmission loss and a wheeling charge
+ * instead of against a hard capacity ceiling.
  *
  * This is the "freight-class field on the commodity table" from the
  * interstate-logistics plan (Rev 4). The single `freight` commodity is NOT yet
@@ -15,13 +27,13 @@
 
 import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
 
-export type FreightClass = "bulk" | "special";
+export type FreightClass = "bulk" | "special" | "grid";
 
 /**
- * `null` = never shipped interstate (services and non-physical flows are
- * delivered wherever they're bought; energy and natural gas ride grid/pipeline
- * networks the freight system deliberately does not model — see plan open
- * question 5 on a possible third class).
+ * `null` = never shipped interstate: services and non-physical flows are
+ * delivered wherever they are bought, and `freight` itself is the haulage being
+ * spent rather than a thing hauled. Energy and natural gas are `grid`, the
+ * third class the interstate-logistics plan left as open question 5.
  */
 export const FREIGHT_CLASS_BY_COMMODITY: Record<CommodityType, FreightClass | null> = {
   // Bulk: high volume, low value density.
@@ -42,9 +54,10 @@ export const FREIGHT_CLASS_BY_COMMODITY: Record<CommodityType, FreightClass | nu
   rare_earth: "special",
   ordnance: "special",
   retail: "special",
+  // Grid and pipeline: wire and pipe, not trucks. No TEU, lossy over distance.
+  energy: "grid",
+  natural_gas: "grid",
   // Not shipped.
-  energy: null,
-  natural_gas: null,
   construction_services: null,
   healthcare_services: null,
   real_estate_services: null,
@@ -57,7 +70,15 @@ export const FREIGHT_CLASS_BY_COMMODITY: Record<CommodityType, FreightClass | nu
   entertainment_services: null,
 };
 
-/** Shipped commodities only — the set the sourcing pass iterates. */
+/** True when the class rides the haulage fleet and spends TEU capacity. */
+export function isHauledClass(freightClass: FreightClass): boolean {
+  return freightClass !== "grid";
+}
+
+/** The two haulage classes, the ones that share a state's freight supply. */
+export const HAULED_FREIGHT_CLASSES: readonly FreightClass[] = ["bulk", "special"];
+
+/** Shipped commodities only, the set the sourcing pass iterates. */
 export const SHIPPED_COMMODITIES: readonly CommodityType[] = COMMODITY_TYPES.filter(
   (c) => FREIGHT_CLASS_BY_COMMODITY[c] !== null
 );

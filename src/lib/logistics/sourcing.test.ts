@@ -10,6 +10,9 @@ import {
   adaptiveClassShares,
   SEA_FREIGHT_HOP_EQUIV,
   type SourcingInputs,
+  FREIGHT_CONGESTION_OVERFLOW,
+  GRID_LOSS_PER_HOP,
+  GRID_WHEELING_PER_HOP_FRACTION,
 } from "./sourcing";
 import { FREIGHT_CLASS_BY_COMMODITY } from "./freightClass";
 import { COMMODITY_TYPES } from "@/lib/constants/commodities";
@@ -182,17 +185,25 @@ describe("runSourcingPass", () => {
           { stateId: "A2", countryId: "US" as CountryId },
         ],
         byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 100 }]])]]),
+        // Buyer pays well above the landed price, so the congestion surcharge
+        // still clears its tolerance ceiling and overflow is allowed.
+        statePricesFor: () => ({ A1: 200, A2: 90, B1: 80 }),
       })
     );
-    const shippable =
+    // Congestion, not a wall: with headroom under the buyer's tolerance the
+    // network hauls past nominal capacity at a surcharge on the overflow units.
+    const nominal =
       (freightSupply * FREIGHT_CLASS_CAPACITY_SHARE.bulk) / FREIGHT_TEU_PER_UNIT_HOP.bulk;
+    const shippable = nominal * (1 + FREIGHT_CONGESTION_OVERFLOW);
     const coal = r.summaries.find((s) => s.commodity === "coal")!;
     expect(coal.interStateUnits).toBeCloseTo(shippable);
+    expect(coal.congestionUnits).toBeCloseTo(nominal * FREIGHT_CONGESTION_OVERFLOW);
+    expect(coal.congestionSurchargePaid).toBeGreaterThan(0);
     expect(coal.capacityBoundUnits).toBeGreaterThan(0);
     expect(coal.unmetUnits).toBeCloseTo(100 - shippable);
     // Network load ledger records the consumption on the ORIGIN state.
     expect(r.freightTeuByState.get("A2")!.bulk).toBeCloseTo(
-      freightSupply * FREIGHT_CLASS_CAPACITY_SHARE.bulk
+      freightSupply * FREIGHT_CLASS_CAPACITY_SHARE.bulk * (1 + FREIGHT_CONGESTION_OVERFLOW)
     );
   });
 
@@ -268,19 +279,21 @@ describe("runSourcingPass", () => {
 describe("adaptiveClassShares", () => {
   it("falls back to the static split with no prior load", () => {
     expect(adaptiveClassShares(undefined)).toEqual(FREIGHT_CLASS_CAPACITY_SHARE);
-    expect(adaptiveClassShares({ bulk: 0, special: 0 })).toEqual(FREIGHT_CLASS_CAPACITY_SHARE);
+    expect(adaptiveClassShares({ bulk: 0, special: 0, grid: 0 })).toEqual(
+      FREIGHT_CLASS_CAPACITY_SHARE
+    );
   });
 
   it("follows the measured mix (NY t202: ~90% special demand got 30% capacity)", () => {
-    const shares = adaptiveClassShares({ bulk: 328, special: 2958 });
+    const shares = adaptiveClassShares({ bulk: 328, special: 2958, grid: 0 });
     expect(shares.special).toBeCloseTo(1 - FREIGHT_CLASS_SHARE_FLOOR, 5);
     expect(shares.bulk).toBeCloseTo(FREIGHT_CLASS_SHARE_FLOOR, 5);
   });
 
   it("floors both classes so neither is starved by a one-turn skew", () => {
-    const allBulk = adaptiveClassShares({ bulk: 1000, special: 0 });
+    const allBulk = adaptiveClassShares({ bulk: 1000, special: 0, grid: 0 });
     expect(allBulk.special).toBeCloseTo(FREIGHT_CLASS_SHARE_FLOOR, 5);
-    const even = adaptiveClassShares({ bulk: 500, special: 500 });
+    const even = adaptiveClassShares({ bulk: 500, special: 500, grid: 0 });
     expect(even.bulk).toBeCloseTo(0.5, 5);
     expect(even.special).toBeCloseTo(0.5, 5);
   });
@@ -288,7 +301,7 @@ describe("adaptiveClassShares", () => {
   it("the pass sizes per-state capacity from the prior loads", () => {
     // A2 hauled special-heavy last turn; with the static 30% share its special
     // capacity would be 300 TEU, adaptive gives it 80% of 1000.
-    const heavy = new Map([["A2", { bulk: 100, special: 900 }]]);
+    const heavy = new Map([["A2", { bulk: 100, special: 900, grid: 0 }]]);
     const withPrior = runSourcingPass(
       makeInputs({
         freightPrice: 10,
@@ -369,5 +382,65 @@ describe("adaptiveClassShares", () => {
     // rare_earth is special class: adaptive split moves more of A2's fleet to
     // special trailers, so more units reach A1 before capacity binds.
     expect(shipped(withPrior)).toBeGreaterThan(shipped(noPrior));
+  });
+});
+
+describe("grid class (energy and natural gas)", () => {
+  const gridInputs = (overrides: Partial<SourcingInputs> = {}) =>
+    makeInputs({
+      byState: new Map([
+        ["A1", new Map([["energy", { supply: 0, demand: 100 }]]) as Map<CommodityType, Balance>],
+        [
+          "A2",
+          new Map([
+            ["energy", { supply: 500, demand: 0 }],
+            // No freight supply at all: a grid haul must not need any.
+            ["freight", { supply: 0, demand: 0 }],
+          ]) as Map<CommodityType, Balance>,
+        ],
+      ]),
+      states: [
+        { stateId: "A1", countryId: "US" as CountryId },
+        { stateId: "A2", countryId: "US" as CountryId },
+      ],
+      byCountry: new Map([["US", new Map([["energy", { supply: 500, demand: 100 }]])]]),
+      statePricesFor: () => ({ A1: 100, A2: 90 }),
+      nationalPricesFor: () => ({ US: 95 }),
+      ...overrides,
+    });
+
+  it("moves energy between states, which the null class never could", () => {
+    const r = runSourcingPass(gridInputs());
+    const energy = r.summaries.find((s) => s.commodity === "energy")!;
+    expect(energy.interStateUnits).toBeGreaterThan(0);
+    expect(r.flows.some((f) => f.commodity === "energy" && f.destStateId === "A1")).toBe(true);
+  });
+
+  it("spends no haulage capacity, so a state with zero freight still wheels power", () => {
+    const r = runSourcingPass(gridInputs());
+    expect(r.freightTeuByState.get("A2")?.grid ?? 0).toBe(0);
+    const energy = r.summaries.find((s) => s.commodity === "energy")!;
+    expect(energy.capacityBoundUnits).toBe(0);
+    expect(
+      r.flows.filter((f) => f.commodity === "energy").every((f) => f.freightTeuConsumed === 0)
+    ).toBe(true);
+  });
+
+  it("loses a share of every dispatched unit to transmission, per hop", () => {
+    const r = runSourcingPass(gridInputs());
+    const energy = r.summaries.find((s) => s.commodity === "energy")!;
+    // One hop: the buyer's 100 units of demand need 100 / (1 - loss) dispatched.
+    expect(energy.gridLossUnits).toBeCloseTo(100 / (1 - GRID_LOSS_PER_HOP) - 100, 2);
+    expect(energy.interStateUnits).toBeCloseTo(100);
+  });
+
+  it("prices distance as wheeling off the ask, not off the freight market", () => {
+    const cheapFreight = runSourcingPass(gridInputs({ freightPrice: 1 }));
+    const dearFreight = runSourcingPass(gridInputs({ freightPrice: 100000 }));
+    const leg = (r: ReturnType<typeof runSourcingPass>) =>
+      r.flows.find((f) => f.commodity === "energy")!.shippingPerUnit;
+    // A freight-price spike has no business moving the cost of electricity.
+    expect(leg(cheapFreight)).toBeCloseTo(leg(dearFreight));
+    expect(leg(cheapFreight)).toBeCloseTo(90 * GRID_WHEELING_PER_HOP_FRACTION);
   });
 });

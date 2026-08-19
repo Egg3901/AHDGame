@@ -55,10 +55,12 @@ describe("settleFreightNetwork", () => {
     );
   });
 
-  it("makes freight capacity, rather than the origin's spare coal, bind the buyer", () => {
+  it("lets freight capacity congest rather than wall the buyer off", () => {
     const result = settleFreightNetwork(inputs(0.2));
 
-    expect(result.deliveredSupplyByCommodity.get("coal")?.get("B")).toBeCloseTo(23.5);
-    expect(result.inputAvailabilityByCommodity.get("coal")?.get("B")).toBeCloseTo(0.235);
+    // 20 units land locally; the rest hauls up to nominal capacity plus the
+    // congestion overflow (freight is a cost, not a wall).
+    expect(result.deliveredSupplyByCommodity.get("coal")?.get("B")).toBeCloseTo(25.25);
+    expect(result.inputAvailabilityByCommodity.get("coal")?.get("B")).toBeCloseTo(0.2525);
   });
 });

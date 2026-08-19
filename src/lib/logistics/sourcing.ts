@@ -27,7 +27,12 @@
 
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { CountryId } from "@/lib/constants/countries";
-import { FREIGHT_CLASS_BY_COMMODITY, SHIPPED_COMMODITIES, type FreightClass } from "./freightClass";
+import {
+  FREIGHT_CLASS_BY_COMMODITY,
+  isHauledClass,
+  SHIPPED_COMMODITIES,
+  type FreightClass,
+} from "./freightClass";
 
 // ── Tuning constants (dark-ledger calibrated; money wiring still off) ────────
 
@@ -45,7 +50,67 @@ import { FREIGHT_CLASS_BY_COMMODITY, SHIPPED_COMMODITIES, type FreightClass } fr
 export const FREIGHT_TEU_PER_UNIT_HOP: Record<FreightClass, number> = {
   bulk: 0.04,
   special: 0.12,
+  // Grid rides wire and pipe, not the haulage fleet: it never spends TEU.
+  // Distance is paid in transmission loss and a wheeling charge instead.
+  grid: 0,
 };
+
+/**
+ * Fraction of dispatched units lost per hop on the grid/pipeline network:
+ * resistive line loss on the wire, compressor fuel on the pipe. This is what
+ * makes grid distance real without a hard capacity ceiling, so a state can
+ * always import power at a price rather than being told no.
+ *
+ * 3%/hop puts a six-hop haul at ~17% loss, which is punitive enough that
+ * generating near load still wins and cross-continent wheeling stays a
+ * last resort.
+ */
+export const GRID_LOSS_PER_HOP = 0.03;
+
+/**
+ * Wheeling charge per hop as a fraction of the seller's ask. The grid operator
+ * is not the trucking market, so grid legs must not be priced off the `freight`
+ * commodity: a freight price spike has no business making the lights more
+ * expensive. Small per hop, but it still puts distant generation behind local
+ * generation in the landed-price sort, which is the ordering we want.
+ */
+export const GRID_WHEELING_PER_HOP_FRACTION = 0.02;
+
+/**
+ * How far a state's haulage may be pushed past its nominal class capacity
+ * before nothing more moves, and what the overflow costs.
+ *
+ * The capacity gate used to be a hard wall: once a state's class capacity ran
+ * dry, the remaining units simply did not ship and the seller ate them with no
+ * signal. Measured on prod at t225 that wall was a large part of why 60.4% of
+ * world production sat in a state that did not need it while 28.7% of world
+ * demand went unmet. Freight should be a COST, not a wall (owner decision
+ * 2026-08-19): past nominal capacity the network still moves goods, at a
+ * surcharge that rises with how far past capacity it is being pushed, and the
+ * buyer's tolerance ceiling is what finally stops the flow. That keeps a real
+ * economic limit on long hauls while removing the silent hard stop.
+ */
+export const FREIGHT_CONGESTION_OVERFLOW = 0.5;
+/**
+ * Surcharge on the shipping leg for units moving above nominal capacity.
+ *
+ * Sized against BUYER_TOLERANCE_SLACK (0.35 of the whole landed price): a
+ * surcharge on the shipping LEG alone at this rate stays well inside the
+ * buyer's tolerance for a short haul and prices itself out on a long one,
+ * which is the behaviour we want. Deliberately not 1.0: at a full doubling of
+ * the shipping leg almost no real route clears the ceiling, and a congestion
+ * price that never clears is just the old wall with extra steps.
+ */
+export const FREIGHT_CONGESTION_SURCHARGE = 0.35;
+
+/**
+ * Landed price for a haul whose units move above nominal capacity. The pass
+ * charges the surcharge only on the overflow units, so this is the price the
+ * ceiling test uses to decide whether overflow may happen at all.
+ */
+export function congestedLandedPrice(landed: number, shippingPerUnit: number): number {
+  return landed + shippingPerUnit * FREIGHT_CONGESTION_SURCHARGE;
+}
 
 /**
  * TEU per commodity-unit per hop on the world's era unit basis.
@@ -67,6 +132,7 @@ export function freightTeuPerUnitHop(freightClass: FreightClass, eraUnitScale: n
 export const FREIGHT_CLASS_CAPACITY_SHARE: Record<FreightClass, number> = {
   bulk: 0.7,
   special: 0.3,
+  grid: 0,
 };
 
 /**
@@ -95,12 +161,13 @@ export function adaptiveClassShares(
   const bulk = priorLoad?.bulk ?? 0;
   const special = priorLoad?.special ?? 0;
   const total = bulk + special;
+  // grid never draws on the haulage fleet, so it holds no share of it.
   if (!(total > 0)) return { ...FREIGHT_CLASS_CAPACITY_SHARE };
   const specialShare = Math.min(
     1 - FREIGHT_CLASS_SHARE_FLOOR,
     Math.max(FREIGHT_CLASS_SHARE_FLOOR, special / total)
   );
-  return { bulk: 1 - specialShare, special: specialShare };
+  return { bulk: 1 - specialShare, special: specialShare, grid: 0 };
 }
 
 /**
@@ -158,6 +225,12 @@ export interface SourcingCommoditySummary {
   toleranceBoundUnits: number;
   /** Units that could not ship because the origin state's class capacity ran dry. */
   capacityBoundUnits: number;
+  /** Units that shipped only by pushing a state's network past nominal capacity. */
+  congestionUnits: number;
+  /** Extra shipping charge those overflow units paid. */
+  congestionSurchargePaid: number;
+  /** Units dispatched on the grid that never arrived (transmission loss). */
+  gridLossUnits: number;
 }
 
 /** Delivered units and the extra-cost-over-local-price they carried, for a state/commodity. */
@@ -263,8 +336,9 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     freightCapByState.set(stateId, {
       bulk: freightSupply * shares.bulk,
       special: freightSupply * shares.special,
+      grid: 0,
     });
-    freightUsedByState.set(stateId, { bulk: 0, special: 0 });
+    freightUsedByState.set(stateId, { bulk: 0, special: 0, grid: 0 });
   }
 
   const flows: SourcingFlow[] = [];
@@ -293,7 +367,15 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
   for (const commodity of SHIPPED_COMMODITIES) {
     const freightClass = FREIGHT_CLASS_BY_COMMODITY[commodity]!;
     const teuPerUnitHop = freightTeuPerUnitHop(freightClass, eraUnitScale);
+    const isGrid = freightClass === "grid";
+    // Haulage legs are priced off the freight market; grid legs are wheeled at
+    // a fraction of the ask, because a trucking price spike has no business
+    // moving the cost of electricity.
     const shippingPerUnitPerHop = freightPrice * teuPerUnitHop;
+    const gridWheelingPerHop = (ask: number) => ask * GRID_WHEELING_PER_HOP_FRACTION;
+    /** Share of dispatched units that survive `hopCount` hops on the grid. */
+    const gridDeliveryFactor = (hopCount: number) =>
+      isGrid ? Math.max(0, Math.pow(1 - GRID_LOSS_PER_HOP, hopCount)) : 1;
     const basePrice = basePriceFor(commodity);
     const statePrices = statePricesFor(commodity) ?? {};
     const nationalPrices = nationalPricesFor(commodity) ?? {};
@@ -332,6 +414,9 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       unmetUnits: 0,
       toleranceBoundUnits: 0,
       capacityBoundUnits: 0,
+      congestionUnits: 0,
+      congestionSurchargePaid: 0,
+      gridLossUnits: 0,
     };
     for (const local of localFillByState.values()) summary.intraStateUnits += local;
 
@@ -366,7 +451,9 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         const routeMultiplier = shippingCostMultiplier
           ? Math.max(0, shippingCostMultiplier(buyer.countryId, seller.stateId, buyer.stateId))
           : 1;
-        const shippingPerUnit = shippingPerUnitPerHop * hopCount * routeMultiplier;
+        const shippingPerUnit = isGrid
+          ? gridWheelingPerHop(ask) * hopCount * routeMultiplier
+          : shippingPerUnitPerHop * hopCount * routeMultiplier;
         candidates.push({
           originType: "state",
           originId: seller.stateId,
@@ -384,7 +471,9 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         if (spare <= 0) continue;
         if (isBlocked(commodity, cid, buyer.countryId)) continue;
         const ask = nationalPrices[cid] ?? basePrice;
-        const shippingPerUnit = shippingPerUnitPerHop * SEA_FREIGHT_HOP_EQUIV;
+        const shippingPerUnit = isGrid
+          ? gridWheelingPerHop(ask) * SEA_FREIGHT_HOP_EQUIV
+          : shippingPerUnitPerHop * SEA_FREIGHT_HOP_EQUIV;
         const ratePct = tariffRatePct(commodity, cid, buyer.countryId);
         const tariffPerUnit = ask * (ratePct / 100);
         candidates.push({
@@ -419,31 +508,73 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
             : spareByCountry.get(cand.originId as CountryId)!;
         if (spare <= 0) continue;
 
-        let take = Math.min(unmet, spare);
+        // Grid legs lose a share of what they dispatch, so the buyer's fill and
+        // the seller's drawdown are two different numbers. `deliver` is what
+        // lands, `dispatch` is what leaves.
+        const deliveryFactor = gridDeliveryFactor(cand.hopCount);
+        let deliver = Math.min(unmet, spare * deliveryFactor);
+        let dispatch = deliveryFactor > 0 ? deliver / deliveryFactor : 0;
         let teuConsumed = 0;
-        if (cand.originType === "state") {
+        let overflowDispatch = 0;
+        let congestionSurchargePaid = 0;
+        if (cand.originType === "state" && isHauledClass(freightClass)) {
           // Origin-state capacity gate (plan open question 4: v1 charges the
-          // whole route to the origin's network).
+          // whole route to the origin's network). Past nominal capacity the
+          // haul still runs, at a congestion surcharge on the overflow units
+          // only, up to the overflow limit: freight is a cost, not a wall.
           const cap = freightCapByState.get(cand.originId)!;
           const used = freightUsedByState.get(cand.originId)!;
-          const teuAvailable = cap[freightClass] - used[freightClass];
+          const nominal = cap[freightClass];
           const teuPerUnit = teuPerUnitHop * cand.hopCount;
-          const shippable = teuPerUnit > 0 ? teuAvailable / teuPerUnit : take;
-          if (shippable < take) {
-            summary.capacityBoundUnits += take - Math.max(0, shippable);
-            take = Math.max(0, shippable);
+          if (teuPerUnit > 0) {
+            if (!(nominal > 0)) {
+              // A state with no freight supply at all hauls nothing.
+              summary.capacityBoundUnits += deliver;
+              continue;
+            }
+            const unitsToNominal = Math.max(0, nominal - used[freightClass]) / teuPerUnit;
+            const unitsInOverflow =
+              Math.max(
+                0,
+                nominal * (1 + FREIGHT_CONGESTION_OVERFLOW) - Math.max(used[freightClass], nominal)
+              ) / teuPerUnit;
+            // Overflow units carry the full surcharge. If that price breaks the
+            // buyer's tolerance the overflow simply does not happen, which is a
+            // tolerance outcome rather than a hard capacity wall.
+            const congestedLanded = congestedLandedPrice(cand.landed, cand.shippingPerUnit);
+            const overflowAffordable = congestedLanded <= ceiling;
+            const dispatchCeiling = unitsToNominal + (overflowAffordable ? unitsInOverflow : 0);
+            if (dispatchCeiling <= 0) {
+              summary.capacityBoundUnits += deliver;
+              continue;
+            }
+            if (dispatch > dispatchCeiling) {
+              const lost = (dispatch - dispatchCeiling) * deliveryFactor;
+              if (overflowAffordable) summary.capacityBoundUnits += lost;
+              else summary.toleranceBoundUnits += lost;
+              dispatch = dispatchCeiling;
+              deliver = dispatch * deliveryFactor;
+            }
+            if (dispatch <= 0) continue;
+            overflowDispatch = Math.max(0, dispatch - unitsToNominal);
+            congestionSurchargePaid =
+              overflowDispatch * cand.shippingPerUnit * FREIGHT_CONGESTION_SURCHARGE;
+            teuConsumed = dispatch * teuPerUnit;
+            used[freightClass] += teuConsumed;
           }
-          if (take <= 0) continue;
-          teuConsumed = take * teuPerUnit;
-          used[freightClass] += teuConsumed;
         }
+        if (deliver <= 0) continue;
+        const take = deliver;
+        summary.gridLossUnits += Math.max(0, dispatch - deliver);
+        summary.congestionUnits += overflowDispatch * deliveryFactor;
+        summary.congestionSurchargePaid += congestionSurchargePaid;
 
-        const tariffPaid = take * cand.ask * (cand.tariffRatePct / 100);
+        const tariffPaid = dispatch * cand.ask * (cand.tariffRatePct / 100);
         if (cand.originType === "state") {
-          spareByState.set(cand.originId, spare - take);
+          spareByState.set(cand.originId, spare - dispatch);
           summary.interStateUnits += take;
         } else {
-          spareByCountry.set(cand.originId as CountryId, spare - take);
+          spareByCountry.set(cand.originId as CountryId, spare - dispatch);
           summary.importUnits += take;
           summary.tariffPaid += tariffPaid;
         }
@@ -492,6 +623,9 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     summary.unmetUnits = round2(summary.unmetUnits);
     summary.toleranceBoundUnits = round2(summary.toleranceBoundUnits);
     summary.capacityBoundUnits = round2(summary.capacityBoundUnits);
+    summary.congestionUnits = round2(summary.congestionUnits);
+    summary.congestionSurchargePaid = round2(summary.congestionSurchargePaid);
+    summary.gridLossUnits = round2(summary.gridLossUnits);
     summaries.push(summary);
   }
 
