@@ -1,21 +1,10 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import type { CountryId } from "@/lib/constants/countries";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
-import { adminDemographicsPatchSchema, adminDemographicsPostSchema } from "@/lib/api/schemas/admin";
-import type {
-  CategoryWeights,
-  DemographicCategory,
-  StateDemographics,
-  StateDemographicGroup,
-  State,
-  AdminLog,
-  GameState,
-} from "@/lib/db/types";
-import { validateCategoryWeights } from "@/lib/utils/demographics";
-import { calculateStateLeanForCache } from "@/lib/demographics/cachedStateLean";
+import { adminDemographicsPostSchema } from "@/lib/api/schemas/admin";
+import type { DemographicCategory, StateDemographics, AdminLog } from "@/lib/db/types";
 
 // GET /api/admin/demographics — Returns demographic categories and optionally a single state's demographics.
 // Auth: requireAdmin
@@ -52,130 +41,11 @@ export async function GET(request: Request) {
   }
 }
 
-// PATCH /api/admin/demographics — Updates a state's demographic group weights and recalculates cached political leans.
-// Auth: requireAdmin
-// Errors: 400, 403, 404
-export async function PATCH(request: Request) {
-  try {
-    const auth = await requireAdmin();
-    if (!auth.ok) return auth.response;
-    const { admin } = auth;
-
-    const parsed = await parseJsonBody(request, adminDemographicsPatchSchema);
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
-    }
-    const { stateId, countryId, categoryWeights, groups } = parsed.data;
-
-    const db = await getDb();
-
-    // Validate state exists (scope by countryId to avoid cross-country ID collisions).
-    const state = await db
-      .collection<State>("states")
-      .findOne({ _id: stateId.toUpperCase(), countryId: countryId.toUpperCase() as CountryId });
-    if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
-    }
-
-    // Build update object
-    const updateData: Partial<StateDemographics> = {
-      lastUpdated: new Date(),
-    };
-
-    if (categoryWeights) {
-      if (!validateCategoryWeights(categoryWeights as unknown as CategoryWeights)) {
-        return NextResponse.json({ error: "Category weights must sum to 100" }, { status: 400 });
-      }
-      updateData.categoryWeights = categoryWeights as unknown as CategoryWeights;
-    }
-
-    if (groups) {
-      updateData.groups = groups as Record<string, StateDemographicGroup>;
-    }
-
-    // Update or insert
-    await db
-      .collection<StateDemographics>("stateDemographics")
-      .updateOne({ _id: stateId.toUpperCase() }, { $set: updateData }, { upsert: true });
-
-    // Recalculate cached leans
-    const categories = await db
-      .collection<DemographicCategory>("demographicCategories")
-      .find({})
-      .toArray();
-
-    const updatedDemographics = await db
-      .collection<StateDemographics>("stateDemographics")
-      .findOne({ _id: stateId.toUpperCase() });
-
-    if (updatedDemographics) {
-      const [gameState, demographicDefaults] = await Promise.all([
-        db.collection<GameState>("gameState").findOne(
-          { _id: "current" },
-          {
-            projection: {
-              preset: 1,
-              currentYear: 1,
-              startingYear: 1,
-              eraSystemEnabled: 1,
-            },
-          }
-        ),
-        db
-          .collection<StateDemographics>("demographicDefaults")
-          .findOne({ _id: stateId.toUpperCase() }),
-      ]);
-      const calculatedLean = calculateStateLeanForCache(updatedDemographics, categories, {
-        countryId: updatedDemographics.countryId,
-        stateId: updatedDemographics._id,
-        preset: gameState?.preset,
-        demographicDefaults,
-        year: gameState?.eraSystemEnabled ? gameState.currentYear : null,
-        startingYear: gameState?.startingYear,
-      });
-
-      // Update cached values in stateDemographics
-      await db.collection<StateDemographics>("stateDemographics").updateOne(
-        { _id: stateId.toUpperCase() },
-        {
-          $set: {
-            cachedEconomicLean: calculatedLean.economicLean,
-            cachedSocialLean: calculatedLean.socialLean,
-          },
-        }
-      );
-
-      // Also update state collection for quick access
-      await db.collection<State>("states").updateOne(
-        { _id: stateId.toUpperCase() },
-        {
-          $set: {
-            cachedEconomicLean: calculatedLean.economicLean,
-            cachedSocialLean: calculatedLean.socialLean,
-            demographicsLastUpdated: new Date(),
-          },
-        }
-      );
-    }
-
-    // Log the update
-    await db.collection<AdminLog>("adminLogs").insertOne({
-      category: "system",
-      action: "demographics_updated",
-      username: "SYSTEM",
-      adminUsername: admin.username,
-      details: `Demographics updated for ${state.name} (${stateId.toUpperCase()})`,
-      createdAt: new Date(),
-    } as AdminLog);
-
-    return NextResponse.json({
-      success: true,
-      message: `Demographics updated for ${state.name}`,
-    });
-  } catch (error) {
-    return handleRouteError(error);
-  }
-}
+// PATCH was removed. It was the only surface that could author an arbitrary
+// `categoryWeights` map and arbitrary archetype `groups` entries by hand. Both
+// are derived from the seeds and the Layer-1 census now, so hand-editing them
+// could only put a region out of step with the substrate the vote engine reads.
+// Use Reseed Demographics (POST /api/admin/demographics/reseed) instead.
 
 // POST /api/admin/demographics — Overwrites the demographic defaults collection with the current live state demographics.
 // Auth: requireAdmin

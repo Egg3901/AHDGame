@@ -45,8 +45,6 @@ type Action =
   | { type: "TOGGLE_CATEGORY"; catId: string }
   | { type: "SET_EDIT"; weights: CategoryWeights; groups: Record<string, StateDemographicGroup> }
   | { type: "CLEAR_EDIT" }
-  | { type: "UPDATE_WEIGHT"; catId: string; value: number }
-  | { type: "UPDATE_GROUP"; groupId: string; field: keyof StateDemographicGroup; value: number }
   | { type: "SET_OVERWRITE_CONFIRM"; payload: boolean }
   | { type: "SET_OVERWRITE_CONFIRM_TEXT"; payload: string }
   | { type: "SET_OVERWRITE_LOADING"; payload: boolean }
@@ -91,18 +89,6 @@ function reducer(state: DemographicsState, action: Action): DemographicsState {
       return { ...state, editWeights: action.weights, editGroups: action.groups };
     case "CLEAR_EDIT":
       return { ...state, editWeights: null, editGroups: null };
-    case "UPDATE_WEIGHT":
-      if (!state.editWeights) return state;
-      return { ...state, editWeights: { ...state.editWeights, [action.catId]: action.value } };
-    case "UPDATE_GROUP":
-      if (!state.editGroups) return state;
-      return {
-        ...state,
-        editGroups: {
-          ...state.editGroups,
-          [action.groupId]: { ...state.editGroups[action.groupId], [action.field]: action.value },
-        },
-      };
     case "SET_OVERWRITE_CONFIRM":
       return { ...state, showOverwriteConfirm: action.payload };
     case "SET_OVERWRITE_CONFIRM_TEXT":

@@ -17,10 +17,6 @@ export function buildModelRegionDemographics(
   positionsOverride?: CountryLayer1Model["positions"],
   override?: {
     turnout?: Record<string, Record<string, number>>;
-    composition?: Record<
-      string,
-      { weights: { dim: string; key: string; w: number }[]; civicMultiplier: number }
-    >;
   }
 ): StateDemographics[] {
   // Deep-merge override over model.positions (override wins per dim/key)
@@ -36,7 +32,7 @@ export function buildModelRegionDemographics(
       }
     : model.positions;
 
-  // Merge turnout (per dim/key, override wins) and composition (per-archetype replace).
+  // Merge turnout per dim/key, override wins.
   const merged: CountryLayer1Model = override
     ? {
         ...model,
@@ -51,9 +47,6 @@ export function buildModelRegionDemographics(
               ),
             }
           : model.turnoutRates,
-        composition: override.composition
-          ? { ...model.composition, ...override.composition }
-          : model.composition,
       }
     : model;
 

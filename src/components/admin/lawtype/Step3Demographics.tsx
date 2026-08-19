@@ -1,7 +1,7 @@
 "use client";
 
 import type { DemographicTargeting } from "@/lib/db/types";
-import { DEMOGRAPHIC_GROUPS } from "./constants";
+import { DEMOGRAPHIC_BUCKETS } from "./constants";
 
 interface Step3DemographicsProps {
   targeting: DemographicTargeting[];
@@ -31,13 +31,14 @@ export function Step3Demographics({ targeting, onChange }: Step3DemographicsProp
       <div>
         <h3 className="font-medium">Demographic Targeting</h3>
         <p className="text-xs text-muted mt-1">
-          Select which voter groups care most about this law. This amplifies appeal/opposition for
-          matching groups.
+          Select which parts of the electorate care most about this law. This amplifies
+          appeal/opposition for matching voters. Buckets are listed for every country, so pick the
+          ones that exist in the countries this law is for.
         </p>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
-        {DEMOGRAPHIC_GROUPS.map((group) => {
+        {DEMOGRAPHIC_BUCKETS.map((group) => {
           const selected = targeting.find((t) => t.groupId === group.id);
           return (
             <div
@@ -52,7 +53,8 @@ export function Step3Demographics({ targeting, onChange }: Step3DemographicsProp
                   checked={!!selected}
                   onChange={() => toggleGroup(group.id)}
                 />
-                <span className="text-sm font-medium">{group.name}</span>
+                <span className="text-sm font-medium">{group.label}</span>
+                <span className="text-[10px] text-muted">{group.dim}</span>
               </label>
 
               {selected && (

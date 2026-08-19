@@ -532,7 +532,12 @@ export interface LegislationEffectTargetV2 {
 }
 
 export interface DemographicTargeting {
-  groupId: string; // e.g., "young_renters", "retirees"
+  /**
+   * A census bucket id, `"<dim>:<bucket>"` (e.g. "race:white", "age:senior").
+   * Rows authored before the admin picker moved to the bucket vocabulary carry
+   * a voter-archetype id here instead (e.g. "young_renters").
+   */
+  groupId: string;
   weight: "low" | "medium" | "high";
   stance: "support" | "oppose"; // Whether this group supports or opposes the policy
 }
