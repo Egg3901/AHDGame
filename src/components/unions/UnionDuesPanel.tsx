@@ -24,6 +24,8 @@ interface UnionDuesPanelProps {
   /** Member-weighted average annual wage across this union's sectors. 0 = not known yet. */
   annualWage: number;
   activeServices: readonly UnionServiceId[];
+  /** Current political contribution rate, so the approval preview matches the engine. */
+  politicalContributionPct?: number;
   /** Only the union head may change dues; everyone else sees the read-only summary. */
   isHead: boolean;
   suspended: boolean;
@@ -69,6 +71,7 @@ export function UnionDuesPanel({
   duesPerWorkerAnnual,
   annualWage,
   activeServices,
+  politicalContributionPct = 0,
   isHead,
   suspended,
   onSaved,
@@ -100,11 +103,13 @@ export function UnionDuesPanel({
     duesPerWorkerAnnual,
     annualWage,
     activeServices,
+    politicalContributionPct,
   });
   const draftApprovalTarget = approvalTarget({
     duesPerWorkerAnnual: draft,
     annualWage,
     activeServices,
+    politicalContributionPct,
   });
   const approvalDelta = Math.round((draftApprovalTarget - currentApprovalTarget) * 10) / 10;
   const dirty = draft !== duesPerWorkerAnnual;

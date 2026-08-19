@@ -79,12 +79,12 @@ export interface Union {
    */
   membershipPressure?: number;
   /**
-   * 0-100, how the membership rates the bargain they are getting. Dues push it
-   * down, running services pushes it up (`approvalTarget()` in
-   * `src/lib/unions/unionDues.ts`). It anchors the unionization drift target in
-   * every sector this union represents, so it governs both whether density
-   * holds and whether the union can win new shops. Absent on documents written
-   * before dues v1, which reads as `BASE_APPROVAL`.
+   * 0-100, how the membership rates the bargain they are getting. Dues and
+   * political contributions push it down, running services pushes it up
+   * (`approvalTarget()` in `src/lib/unions/unionDues.ts`). It anchors the
+   * unionization drift target in every sector this union represents, so it
+   * governs both whether density holds and whether the union can win new shops.
+   * Absent on documents written before dues v1, which reads as `BASE_APPROVAL`.
    */
   approval?: number;
   /**
@@ -100,6 +100,13 @@ export interface Union {
    * stale document cannot widen the effect.
    */
   activeServices?: UnionServiceId[];
+  /**
+   * Share of this turn's remaining budget (dues income minus the service bill
+   * that ran) sent to organizers as political contributions, in [0, 0.5].
+   * Paid out per turn in proportion to each organizer's banked strength.
+   * Absent on documents written before this lever, which reads as none.
+   */
+  politicalContributionPct?: number;
   /**
    * Set when a player founded this union rather than the world seeding it.
    * Founded unions are how a rival appears in an industry that already has one,

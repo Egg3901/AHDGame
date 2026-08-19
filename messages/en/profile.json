@@ -70,6 +70,7 @@
       "baseGen": "Base Gen ({tier})",
       "donorBonus": "Donor Network Bonus",
       "officeSalary": "Office Salary",
+      "unionContribution": "Union Contribution",
       "partyTaxes": "Party Taxes",
       "netPerHour": "Net / hr",
       "plusPerHour": "+{amount}/hr",

@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
+import type { AnyBulkWriteOperation } from "mongodb";
 import type { Character, CorporateSector, State, Union, User } from "@/lib/db/types";
 import type { UnionOrganizer } from "@/lib/db/types/union";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
@@ -15,12 +16,22 @@ import {
   unionMembers,
 } from "@/lib/unions/unionDues";
 import { normalizeServiceIds } from "@/lib/unions/unionServices";
+import {
+  clampPoliticalContributionPct,
+  distributePoliticalContributions,
+  freeCashFlowPerTurn,
+  politicalContributionPerTurn,
+} from "@/lib/unions/unionPoliticalContributions";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
+import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { seedUnions } from "@/lib/admin/seed/seedUnions";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoSectorShed";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { processLabourRelationsTurn } from "./labourRelationsTurn";
 
 export interface UnionsTurnResult {
@@ -105,10 +116,12 @@ export async function adoptUnrepresentedSectors(db: Db): Promise<number> {
  * Union dues v1 turn-processing pass, for every OWNED, non-suspended union:
  * resolve the sectors it represents (`CorporateSector.representingUnionId`),
  * derive real `members` and their member-weighted `averageAnnualWage` from
- * those sectors, credit `duesIncomePerTurn`, debit `servicesCostPerTurn`, and
- * trend `approval` toward `approvalTarget`. Unowned unions are skipped
- * entirely: no treasury/approval changes, so Phase 5's NPC drift stays
- * untouched for the sectors they represent ("conversion not reinvention").
+ * those sectors, credit `duesIncomePerTurn`, debit `servicesCostPerTurn`,
+ * debit political contributions (a share of remaining free cash flow, paid
+ * to organizers by influence), and trend `approval` toward `approvalTarget`.
+ * Unowned unions are skipped entirely: no treasury/approval changes, so
+ * Phase 5's NPC drift stays untouched for the sectors they represent
+ * ("conversion not reinvention").
  *
  * The service bill NEVER pushes the treasury negative: if this turn's dues
  * income can't cover it, the services LAPSE (no charge, `servicesLapsed:
@@ -133,7 +146,8 @@ export async function adoptUnrepresentedSectors(db: Db): Promise<number> {
  * after `"corporationTurn"`, reads sector `unionization`/`workers`/
  * `wagePerWorker` state that phase writes this same turn, though this pass
  * itself only touches `unions`/`characters` documents (and reads
- * `corporateSectors`).
+ * `corporateSectors`), and writes a `union_contribution` financialTxLog row
+ * per organizer payout.
  */
 
 export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
@@ -148,7 +162,8 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
     };
   }
 
-  const labourRelations = await processLabourRelationsTurn(db, await getCurrentTurn(db));
+  const currentTurn = await getCurrentTurn(db);
+  const labourRelations = await processLabourRelationsTurn(db, currentTurn);
 
   // Safety net: at "full" the roster must be COMPLETE, one union per
   // (country, sectorType) for every seeded country (unions are only ever
@@ -223,9 +238,12 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
           _id: 1,
           ownerId: 1,
           ownerType: 1,
+          name: 1,
+          countryId: 1,
           treasury: 1,
           duesPerWorkerAnnual: 1,
           activeServices: 1,
+          politicalContributionPct: 1,
           approval: 1,
         },
       }
@@ -319,6 +337,26 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
       else sectorsByUnionId.set(key, [sector]);
     }
 
+    const organizers = await db
+      .collection<UnionOrganizer>("unionOrganizers")
+      .find(
+        { unionId: { $in: stillOwnedIds }, strength: { $gt: 0 } },
+        { projection: { unionId: 1, characterId: 1, strength: 1 } }
+      )
+      .toArray();
+    const organizersByUnionId = new Map<string, UnionOrganizer[]>();
+    for (const organizer of organizers) {
+      const key = organizer.unionId.toString();
+      const list = organizersByUnionId.get(key);
+      if (list) list.push(organizer);
+      else organizersByUnionId.set(key, [organizer]);
+    }
+
+    const forexEnabled = await isForexEnabled();
+    const campaignFundsField = forexEnabled ? "currencyBalances.campaign" : "funds";
+    const characterOps: AnyBulkWriteOperation<Character>[] = [];
+    const contributionTx: Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">[] = [];
+
     const ops = stillOwned.map((u) => {
       const sectors = sectorsByUnionId.get(u._id.toString()) ?? [];
       const members = unionMembers(sectors);
@@ -340,24 +378,85 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
       const affordableTreasury = u.treasury + duesIncome;
       const servicesLapsed = fullServicesCost > affordableTreasury;
       const servicesCost = servicesLapsed ? 0 : fullServicesCost;
+      const contributionPct = clampPoliticalContributionPct(u.politicalContributionPct);
+      const freeCashFlow = freeCashFlowPerTurn(duesIncome, servicesCost);
+      const requestedContribution = politicalContributionPerTurn(freeCashFlow, contributionPct);
+      const payouts = distributePoliticalContributions(
+        requestedContribution,
+        (organizersByUnionId.get(u._id.toString()) ?? []).map((organizer) => ({
+          characterId: organizer.characterId.toString(),
+          strength: organizer.strength ?? 0,
+        }))
+      );
+      // Only debit what we can actually pay out. A union with a rate set but
+      // no organizers of any strength keeps the surplus in the treasury.
+      const contribution = payouts.reduce((sum, payout) => sum + payout.amount, 0);
+      const currencyCode = (COUNTRY_CURRENCY_MAP[
+        u.countryId as keyof typeof COUNTRY_CURRENCY_MAP
+      ] ?? "USD") as CurrencyCode;
+      for (const payout of payouts) {
+        characterOps.push({
+          updateOne: {
+            filter: { _id: new ObjectId(payout.characterId) },
+            update: {
+              $inc: { [campaignFundsField]: payout.amount },
+              $set: { updatedAt: now },
+            },
+          },
+        });
+        contributionTx.push({
+          type: "union_contribution",
+          turn: currentTurn,
+          createdAt: now,
+          subjectType: "character",
+          subjectId: new ObjectId(payout.characterId),
+          subjectName: "",
+          amount: payout.amount,
+          currencyCode,
+          counterpartyType: "system",
+          counterpartyName: u.name,
+          meta: { unionId: u._id.toString(), unionName: u.name, source: "union_pac" },
+        });
+      }
       const target = approvalTarget({
         duesPerWorkerAnnual: duesRate,
         annualWage,
         activeServices,
         servicesLapsed,
+        politicalContributionPct: contributionPct,
       });
       const newApproval = trendApproval(unionApproval(u), target);
       return {
         updateOne: {
           filter: { _id: u._id },
           update: {
-            $inc: { treasury: duesIncome - servicesCost },
+            $inc: { treasury: duesIncome - servicesCost - contribution },
             $set: { approval: newApproval, updatedAt: now },
           },
         },
       };
     });
     await db.collection<Union>("unions").bulkWrite(ops);
+    if (characterOps.length > 0) {
+      await db.collection<Character>("characters").bulkWrite(characterOps);
+    }
+    if (contributionTx.length > 0) {
+      const payoutIds = [
+        ...new Set(contributionTx.map((entry) => entry.subjectId!.toString())),
+      ].map((id) => new ObjectId(id));
+      const named = await db
+        .collection<Character>("characters")
+        .find({ _id: { $in: payoutIds } }, { projection: { _id: 1, name: 1 } })
+        .toArray();
+      const nameById = new Map(
+        named.map((character) => [character._id.toString(), character.name])
+      );
+      for (const entry of contributionTx) {
+        entry.subjectName = nameById.get(entry.subjectId!.toString()) ?? "Unknown";
+      }
+      const thresholds = await loadTxThresholds(db);
+      void emitTxBulk(db, contributionTx, thresholds);
+    }
   }
 
   return {

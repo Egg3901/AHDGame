@@ -10,6 +10,7 @@ export type FinancialTxType =
   | "wire_transfer_in"
   | "wire_transfer_out"
   | "campaign_donation"
+  | "union_contribution"
 
   // Bonds
   | "bond_purchase"

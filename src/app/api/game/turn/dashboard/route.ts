@@ -12,6 +12,7 @@ import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { FAVORABILITY_NATURAL_DECAY_THRESHOLD } from "@shared/constants/formulas";
 import { resolveOfficeActionBonusForType } from "@/lib/actions/officeBonusRegistry";
+import { unionContributionIncomePerTurn } from "@/lib/unions/unionContributionIncome";
 import {
   projectFavorabilityDecay,
   projectInfamyDecay,
@@ -93,39 +94,48 @@ export async function GET() {
     }
 
     // Fetch config, home state, party data, nearest election, corp, and portfolio in parallel
-    const [config, homeState, party, statePartyOrg, nearestElection, corpDoc, portfolioSnapshots] =
-      await Promise.all([
-        db.collection<GameConfig>("gameConfig").findOne({ _id: "default" }),
-        db
-          .collection<State>("states")
-          .findOne({ _id: character.homeState, countryId: character.countryId }),
-        character.party && Number.isFinite(Number(character.party))
-          ? db.collection<PoliticalParty>("politicalParties").findOne({
-              sequentialId: Number(character.party),
-              countryId: character.countryId,
-            })
-          : null,
-        character.party
-          ? db.collection<StatePartyOrg>("statePartyOrg").findOne({
-              stateId: character.homeState,
-              partyId: character.party,
-            })
-          : null,
-        // Find the nearest election the player is a candidate in, or the nearest active election
-        findNearestElection(db, character, await getGameTime()),
-        // hasCorp: is this character the CEO of an active corporation?
-        db
-          .collection<Corporation>("corporations")
-          .findOne({ ceoId: character._id, ceoVacant: { $ne: true } }, { projection: { _id: 1 } }),
-        // Two most recent snapshots — used to compute portfolioChangePercent
-        db
-          .collection<PortfolioHistory>("portfolioHistory")
-          .find({ characterId: character._id })
-          .sort({ turn: -1 })
-          .limit(2)
-          .project({ totalValue: 1 })
-          .toArray() as Promise<Pick<PortfolioHistory, "_id" | "totalValue">[]>,
-      ]);
+    const [
+      config,
+      homeState,
+      party,
+      statePartyOrg,
+      nearestElection,
+      corpDoc,
+      portfolioSnapshots,
+      unionContribution,
+    ] = await Promise.all([
+      db.collection<GameConfig>("gameConfig").findOne({ _id: "default" }),
+      db
+        .collection<State>("states")
+        .findOne({ _id: character.homeState, countryId: character.countryId }),
+      character.party && Number.isFinite(Number(character.party))
+        ? db.collection<PoliticalParty>("politicalParties").findOne({
+            sequentialId: Number(character.party),
+            countryId: character.countryId,
+          })
+        : null,
+      character.party
+        ? db.collection<StatePartyOrg>("statePartyOrg").findOne({
+            stateId: character.homeState,
+            partyId: character.party,
+          })
+        : null,
+      // Find the nearest election the player is a candidate in, or the nearest active election
+      findNearestElection(db, character, await getGameTime()),
+      // hasCorp: is this character the CEO of an active corporation?
+      db
+        .collection<Corporation>("corporations")
+        .findOne({ ceoId: character._id, ceoVacant: { $ne: true } }, { projection: { _id: 1 } }),
+      // Two most recent snapshots — used to compute portfolioChangePercent
+      db
+        .collection<PortfolioHistory>("portfolioHistory")
+        .find({ characterId: character._id })
+        .sort({ turn: -1 })
+        .limit(2)
+        .project({ totalValue: 1 })
+        .toArray() as Promise<Pick<PortfolioHistory, "_id" | "totalValue">[]>,
+      unionContributionIncomePerTurn(db, character._id),
+    ]);
 
     // --- Action cost tiers ---
     const pi = character.politicalInfluence ?? 0;
@@ -216,10 +226,11 @@ export async function GET() {
         baseGeneration: fundDistribution.baseGeneration,
         donorBaseBonus: fundDistribution.donorBaseBonus,
         officeBonus: fundDistribution.officeBonus,
-        totalGeneration: fundDistribution.totalGeneration,
+        unionContribution,
+        totalGeneration: fundDistribution.totalGeneration + unionContribution,
         stateTax: fundDistribution.stateTaxAmount,
         nationalTax: fundDistribution.nationalTaxAmount,
-        netPerTurn: fundDistribution.characterReceives,
+        netPerTurn: fundDistribution.characterReceives + unionContribution,
       },
       actionsPerTurn: {
         base: baseActionsPerTurn,

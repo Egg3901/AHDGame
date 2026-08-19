@@ -16,6 +16,11 @@ import {
   type UnionMemberSector,
 } from "@/lib/unions/unionDues";
 import { normalizeServiceIds } from "@/lib/unions/unionServices";
+import {
+  clampPoliticalContributionPct,
+  freeCashFlowPerTurn,
+  politicalContributionPerTurn,
+} from "@/lib/unions/unionPoliticalContributions";
 
 export type UnionActionResult =
   { ok: true; status: 200; [key: string]: unknown } | { ok: false; status: number; error: string };
@@ -210,6 +215,61 @@ export async function setUnionServices(
     activeServices: normalized,
     members,
     servicesCostPerTurn: servicesCostPerTurn(members, annualWage, normalized),
+  };
+}
+
+/**
+ * Set the share of remaining per-turn budget sent to organizers as political
+ * contributions. Clamped into [0, 0.5]. The engine reads the same field each
+ * turn, so a mid-turn write is rejected the same way dues and services are.
+ */
+export async function setUnionPoliticalContributions(
+  db: Db,
+  character: Character,
+  unionId: string,
+  politicalContributionPct: number
+): Promise<UnionActionResult> {
+  const turnBusy = await rejectIfTurnProcessing(db);
+  if (turnBusy) return turnBusy;
+
+  const resolved = await resolveOwnedUnion(db, character, unionId);
+  if (!resolved.ok) return resolved;
+  const { union } = resolved;
+
+  if (!Number.isFinite(politicalContributionPct)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "politicalContributionPct must be a finite number.",
+    };
+  }
+
+  const clamped = clampPoliticalContributionPct(politicalContributionPct);
+  const sectors = await loadRepresentedSectors(db, union);
+  const annualWage = averageAnnualWage(sectors);
+  const members = unionMembers(sectors);
+  const duesRate = Math.min(
+    Math.max(0, union.duesPerWorkerAnnual ?? 0),
+    maxDuesForWage(annualWage)
+  );
+  const activeServices = normalizeServiceIds(union.activeServices);
+  const duesIncome = duesIncomePerTurn(members, duesRate);
+  const servicesCost = servicesCostPerTurn(members, annualWage, activeServices);
+  const freeCashFlow = freeCashFlowPerTurn(duesIncome, servicesCost);
+
+  await db
+    .collection<Union>("unions")
+    .updateOne(
+      { _id: union._id },
+      { $set: { politicalContributionPct: clamped, updatedAt: new Date() } }
+    );
+
+  return {
+    ok: true,
+    status: 200,
+    politicalContributionPct: clamped,
+    freeCashFlowPerTurn: freeCashFlow,
+    politicalContributionPerTurn: politicalContributionPerTurn(freeCashFlow, clamped),
   };
 }
 
