@@ -3,7 +3,10 @@ import { logWireEvent } from "@/lib/wireEvent";
 import { createNotifications } from "@/lib/notifications";
 import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
-import { boardDeltaForLegacyEffect } from "@/lib/politicalLegislation/legacyEffectBridge";
+import {
+  BOARD_TICK_DELTA_CAP,
+  boardDeltaForLegacyEffect,
+} from "@/lib/politicalLegislation/legacyEffectBridge";
 import { applyBoardDelta } from "@/lib/politicalLegislation/boardWrite";
 import type { Crisis, CrisisEffect, CrisisInteraction } from "@/lib/db/types/crisis";
 import { getMetricDefinition } from "@/lib/constants/metricDefinitions";
@@ -393,7 +396,8 @@ async function applyMetricEffects(
   // clamp — crisis effects can target ANY stateMetrics field (not just engine
   // registry nodes), and metricDefinitions is the write-path-authoritative
   // range for that collection. Mirrors the profitMargin pipeline clamp below.
-  const deltas: Record<string, { delta: number; min: number; max: number }> = {};
+  const deltas: Record<string, { delta: number; min: number; max: number; recurring: boolean }> =
+    {};
   for (const effect of effects) {
     if (effect.metricCategory && effect.metricField) {
       const path = `${effect.metricCategory}.${effect.metricField}.value`;
@@ -405,8 +409,12 @@ async function applyMetricEffects(
         delta: 0,
         min: def?.minValue ?? 0,
         max: def?.maxValue ?? 100,
+        recurring: false,
       };
       entry.delta += effect.value;
+      // A path carrying ANY per-turn effect is capped as recurring, the
+      // conservative read on the one turn where a flat onset shock shares it.
+      entry.recurring ||= effect.effectType === "tick";
       deltas[path] = entry;
     }
   }
@@ -453,9 +461,20 @@ async function applyMetricEffects(
   //
   // The bridge takes "category.metricId", so the trailing `.value` that the
   // legacy `$set` path carries is dropped.
-  for (const [path, { delta }] of Object.entries(politicalDeltas)) {
+  for (const [path, { delta, recurring }] of Object.entries(politicalDeltas)) {
     const [category, metricId] = path.split(".");
-    const hit = boardDeltaForLegacyEffect(category, metricId, delta);
+    // Recurring effects get the per-turn slice of the cap, so a crisis that
+    // runs for its whole duration lands the same total bend as a one-off shock
+    // rather than 24 of them. Without this the grid-failure tick zeroed
+    // `infrastructure.utilities` outright, which then held its own trigger
+    // condition true for good.
+    const hit = boardDeltaForLegacyEffect(
+      category,
+      metricId,
+      delta,
+      undefined,
+      recurring ? BOARD_TICK_DELTA_CAP : undefined
+    );
     if (!hit) continue;
     for (const stateId of targetStateIds) {
       writes.push(

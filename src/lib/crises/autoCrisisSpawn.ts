@@ -7,8 +7,10 @@ import { getSimulatedCountryIds } from "@/lib/countryAccess";
 import { ALL_CRISIS_TEMPLATES, getTemplateDuration } from "./templates";
 import {
   GLOBAL_SCOPE_KEY,
+  isArmed,
   isOnCooldown,
   loadCooldownMap,
+  setArmed,
   stampCooldown,
 } from "./autoCrisisCooldown";
 import {
@@ -19,6 +21,7 @@ import {
 import {
   loadNationalSnapshot,
   evaluateCondition,
+  conditionCleared,
   type NationalSnapshot,
 } from "./autoCrisisConditions";
 import { createCrisisFromTemplate } from "./createCrisisFromTemplate";
@@ -141,7 +144,10 @@ export async function processAutoCrisisSpawn(
   const snap = async (countryId: CountryId): Promise<NationalSnapshot> => {
     let s = snapshotCache.get(countryId);
     if (!s) {
-      s = await loadNationalSnapshot(db, countryId);
+      // Era-gated exactly like the dynamics and energy phases: with the era
+      // system off, the metric bands stay modern and the year must not be fed
+      // in, or the two halves score the same board differently.
+      s = await loadNationalSnapshot(db, countryId, gs?.eraSystemEnabled ? currentYear : null);
       snapshotCache.set(countryId, s);
     }
     return s;
@@ -159,8 +165,21 @@ export async function processAutoCrisisSpawn(
     for (const countryId of countryIds) {
       if (spawned >= MAX_AUTO_CRISES_PER_TURN) break;
       if (!countryAllowed(template, countryId)) continue;
-      if (isOnCooldown(cooldowns, key, countryId, currentTurn, trig.cooldownTurns)) continue;
       const s = await snap(countryId);
+      // Hysteresis latch. A condition crisis disarms itself on spawn and only
+      // re-arms once its condition has cleared by `clearMargin`. Several of
+      // these crises tick down the very metric their trigger reads (the grid
+      // failure is the extreme case), so trigger-only logic made them permanent:
+      // the crisis drove the metric past its own threshold, the cooldown
+      // expired, and it fired again on damage it had caused itself.
+      if (!isArmed(cooldowns, key, countryId)) {
+        if (conditionCleared(trig.condition, s)) {
+          await setArmed(db, cooldowns, key, countryId, true);
+        } else {
+          continue;
+        }
+      }
+      if (isOnCooldown(cooldowns, key, countryId, currentTurn, trig.cooldownTurns)) continue;
       if (!evaluateCondition(trig.condition, s)) continue;
       await createCrisisFromTemplate(db, {
         template,

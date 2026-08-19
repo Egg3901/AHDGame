@@ -4,6 +4,7 @@ import { getNationalDocId } from "@/lib/constants/nationalScope";
 import { loadNationalPoliticalBoard } from "@/lib/politicalLegislation/conditionsSignal";
 import { politicalValueForLegacyMetric } from "@/lib/politicalLegislation/marginAdapter";
 import { isPoliticalApprovalCountry } from "@/lib/politicalLegislation/politicalApprovalProvider";
+import { legacyValueFromPoliticalScore } from "@/lib/politicalMetrics/derive/legacyInversion";
 import type { TriggerClause, TriggerCondition, TriggerMetric } from "@/lib/db/types/crisis";
 
 interface MetricPoint {
@@ -41,7 +42,9 @@ interface HistoryDoc {
  *  metrics, so clauses over them evaluate to false (the crisis won't fire). */
 export async function loadNationalSnapshot(
   db: Db,
-  countryId: CountryId
+  countryId: CountryId,
+  /** Live game year, so the grid clause is scored on that era's uptime band. */
+  year?: number | null
 ): Promise<NationalSnapshot> {
   const nationalDocId = getNationalDocId(countryId);
 
@@ -98,7 +101,22 @@ export async function loadNationalSnapshot(
     const adapted = board
       ? politicalValueForLegacyMetric(board, "infrastructure", "powerGridReliability")
       : null;
-    if (typeof adapted === "number") current.powerGridReliability = adapted;
+    // UNITS. The adapter returns the 0-100 FAMILY SCORE, but the trigger
+    // threshold is authored in the metric's own unit: "grid uptime below 90
+    // percent". Comparing the two put a permanent crisis on every country whose
+    // utilities score sat in the normal 55-80 band, which is most of them, and
+    // the crisis then drove the score down and kept its own trigger true. The
+    // score is inverted back through the era's uptime band first, so 90 means
+    // ninety percent uptime, which is what a grid collapse actually looks like.
+    if (typeof adapted === "number") {
+      const uptime = legacyValueFromPoliticalScore(
+        "infrastructure",
+        "powerGridReliability",
+        adapted,
+        { countryId, year: year ?? null }
+      );
+      if (typeof uptime === "number") current.powerGridReliability = uptime;
+    }
   }
   if (typeof federalBudget?.economicFactors?.inflationRate === "number") {
     current.inflationRate = federalBudget.economicFactors.inflationRate;
@@ -145,6 +163,37 @@ export function evaluateClause(clause: TriggerClause, snap: NationalSnapshot): b
 
   const value = snap.current[clause.metric];
   return value != null && satisfies(value, clause.op, clause.threshold);
+}
+
+/**
+ * True when a clause has CLEARED: the metric is back on the healthy side of its
+ * threshold by at least `clearMargin`.
+ *
+ * This is the other half of the trigger, and the half that was missing. A crisis
+ * whose own per-turn effects push its trigger metric further past the threshold
+ * can never stop being true, so trigger-only logic re-fires it on every cooldown
+ * expiry forever. Clearing is deliberately strict: an absent metric reads as NOT
+ * cleared, so a template stays latched rather than re-arming on missing data.
+ *
+ * Always evaluated on the CURRENT value, never on the consecutive-turn history.
+ * Recovery should be recognised as soon as it happens; only the firing side
+ * needs to prove persistence.
+ */
+export function clauseCleared(clause: TriggerClause, snap: NationalSnapshot): boolean {
+  const margin = clause.clearMargin ?? 0;
+  const value =
+    clause.metric === "fxDepreciation"
+      ? snap.fxDepreciation(clause.windowTurns ?? 6)
+      : snap.current[clause.metric];
+  if (value == null) return false;
+  return clause.op === "lt"
+    ? value >= clause.threshold + margin
+    : value <= clause.threshold - margin;
+}
+
+/** True when ANY clause has cleared, which is enough to break an ALL condition. */
+export function conditionCleared(condition: TriggerCondition, snap: NationalSnapshot): boolean {
+  return condition.all.some((clause) => clauseCleared(clause, snap));
 }
 
 /** True when every clause in the condition holds (logical AND). */
