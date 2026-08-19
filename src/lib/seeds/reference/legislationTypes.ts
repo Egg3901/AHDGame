@@ -166,9 +166,6 @@ const rawLegislationTypes: LegislationType[] = [
       { metricCategoryId: "economic" as const, metricId: "economicFreedom", weight: -0.3 },
       { metricCategoryId: "economic" as const, metricId: "smallBusinessFormation", weight: -0.15 },
     ],
-    demographicEffects: [
-      { groupId: "college", direction: 0.02 }, // More education funding increases college attainment over time
-    ],
     positions: standardCommitteePositions("Education"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -232,10 +229,6 @@ const rawLegislationTypes: LegislationType[] = [
       { metricCategoryId: "economic" as const, metricId: "economicFreedom", weight: -0.3 },
       { metricCategoryId: "economic" as const, metricId: "smallBusinessFormation", weight: -0.15 },
     ],
-    demographicEffects: [
-      { groupId: "college", direction: 0.03 }, // Science funding strongly increases college attainment
-      { groupId: "urban", direction: 0.01 }, // Research institutions concentrate in urban areas
-    ],
     positions: standardCommitteePositions("Education"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -296,9 +289,6 @@ const rawLegislationTypes: LegislationType[] = [
       { category: "social", metric: "socialCohesion", weight: 0.3 },
       { category: "economic", metric: "economicFreedom", weight: -0.2 },
     ]),
-    demographicEffects: [
-      { groupId: "college", direction: 0.01 }, // Standards affect long-term college rates
-    ],
     positions: standardCommitteePositions("Education"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -355,9 +345,6 @@ const rawLegislationTypes: LegislationType[] = [
       ])!,
       { metricCategoryId: "economic" as const, metricId: "economicFreedom", weight: -0.25 },
     ],
-    demographicEffects: [
-      { groupId: "retirees", direction: 0.01 }, // Better healthcare increases senior population
-    ],
     positions: standardCommitteePositions("Health"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -410,9 +397,6 @@ const rawLegislationTypes: LegislationType[] = [
       { category: "healthcare", metric: "preventableMortality", weight: 0.3 },
       { category: "economic", metric: "economicFreedom", weight: -0.15 },
     ]),
-    demographicEffects: [
-      { groupId: "retirees", direction: 0.02 }, // Drug pricing heavily affects seniors
-    ],
     positions: standardCommitteePositions("Health"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -581,14 +565,33 @@ const rawLegislationTypes: LegislationType[] = [
     // Federal scope divides by 1/50 per state, so magnitudes run high (intensive
     // lean dilution — same trap as UK_BIRTH_RATE_TICK_RATES_7 above).
     demographicEffects: [
-      // Big federal spending normalizes pro-government economics among public
-      // workers (stimulus era pulls them left; austerity pushes them right).
-      { groupId: "public_sector", target: "economicLean", direction: 1, magnitude: 2 },
+      // Big federal spending normalizes pro-government economics among the
+      // credentialed middle-income public workforce (stimulus era pulls them
+      // left; austerity pushes them right).
+      { dim: "education", bucket: "college", target: "economicLean", direction: 0.4, magnitude: 2 },
+      { dim: "wealth", bucket: "middle", target: "economicLean", direction: 0.4, magnitude: 2 },
+      {
+        dim: "education",
+        bucket: "graduate",
+        target: "economicLean",
+        direction: 0.2,
+        magnitude: 2,
+      },
       // Public-works stimulus flows to construction/trades — weaker coupling.
-      { groupId: "union_trades", target: "economicLean", direction: 0.5, magnitude: 2 },
+      {
+        dim: "education",
+        bucket: "no_college",
+        target: "economicLean",
+        direction: 0.2,
+        magnitude: 2,
+      },
+      { dim: "wealth", bucket: "low", target: "economicLean", direction: 0.175, magnitude: 2 },
+      { dim: "race", bucket: "black", target: "economicLean", direction: 0.125, magnitude: 2 },
       // Jobs programs mobilize low-propensity young/low-income voters
       // (negative direction: left options carry negative strength → turnout up).
-      { groupId: "young_renters", target: "turnout", direction: -0.5, magnitude: 2 },
+      { dim: "age", bucket: "young", target: "turnout", direction: -0.25, magnitude: 2 },
+      { dim: "wealth", bucket: "low", target: "turnout", direction: -0.15, magnitude: 2 },
+      { dim: "education", bucket: "no_college", target: "turnout", direction: -0.1, magnitude: 2 },
     ],
     positions: standardCommitteePositions("Appropriations"),
     policyOptions: withPerCapitaCosts(
@@ -645,9 +648,13 @@ const rawLegislationTypes: LegislationType[] = [
     demographicEffects: [
       // State spending posture shapes public workers' economic lean directly
       // (state scope: full 1.0 multiplier — the fast lever vs the federal law).
-      { groupId: "public_sector", target: "economicLean", direction: 1 },
+      { dim: "education", bucket: "college", target: "economicLean", direction: 0.4 },
+      { dim: "wealth", bucket: "middle", target: "economicLean", direction: 0.4 },
+      { dim: "education", bucket: "graduate", target: "economicLean", direction: 0.2 },
       // State jobs/works programs reach low-propensity immigrant communities.
-      { groupId: "new_immigrants", target: "turnout", direction: -0.5 },
+      { dim: "race", bucket: "hispanic", target: "turnout", direction: -0.25 },
+      { dim: "race", bucket: "asian", target: "turnout", direction: -0.15 },
+      { dim: "race", bucket: "other", target: "turnout", direction: -0.1 },
     ],
     positions: standardCommitteePositions("Appropriations"),
     policyOptions: withPerCapitaCosts(
@@ -709,10 +716,6 @@ const rawLegislationTypes: LegislationType[] = [
       ])!,
       { metricCategoryId: "economic" as const, metricId: "economicFreedom", weight: -0.2 },
     ],
-    demographicEffects: [
-      { groupId: "urban", direction: 0.01 }, // Transit investment favors urban areas
-      { groupId: "suburban", direction: 0.01 },
-    ],
     positions: standardCommitteePositions("Transportation"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -768,9 +771,6 @@ const rawLegislationTypes: LegislationType[] = [
         { category: "economic", metric: "economicFreedom", weight: -0.15 },
       ]
     ),
-    demographicEffects: [
-      { groupId: "rural", direction: 0.02 }, // Broadband expansion benefits rural areas most
-    ],
     positions: standardCommitteePositions("Energy"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -830,10 +830,6 @@ const rawLegislationTypes: LegislationType[] = [
       ])!,
       { metricCategoryId: "economic" as const, metricId: "economicFreedom", weight: -0.4 },
     ],
-    demographicEffects: [
-      { groupId: "urban", direction: 0.01 }, // Clean energy jobs concentrate in urban areas
-      { groupId: "college", direction: 0.01 }, // Green tech sector employs educated workers
-    ],
     positions: standardCommitteePositions("Environment"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -890,9 +886,6 @@ const rawLegislationTypes: LegislationType[] = [
         { category: "infrastructure", metric: "waterQuality", weight: 0.3 },
       ])!,
       { metricCategoryId: "economic" as const, metricId: "economicFreedom", weight: -0.4 },
-    ],
-    demographicEffects: [
-      { groupId: "rural", direction: -0.01 }, // Conservation can reduce rural economic activity
     ],
     positions: standardCommitteePositions("Environment"),
     policyOptions: withPerCapitaCosts(
@@ -1087,12 +1080,23 @@ const rawLegislationTypes: LegislationType[] = [
       { metricCategoryId: "economic" as const, metricId: "smallBusinessFormation", weight: 0.1 },
     ],
     demographicEffects: [
-      // Military communities are disproportionately rural: a buildup (right)
-      // reinforces their right-economic lean; a peace dividend pulls it back.
-      { groupId: "rural_traditionalists", target: "economicLean", direction: 0.75, magnitude: 2 },
+      // Military communities are disproportionately non-college, white and
+      // middle-aged: a buildup (right) reinforces their right-economic lean;
+      // a peace dividend pulls it back.
+      {
+        dim: "education",
+        bucket: "no_college",
+        target: "economicLean",
+        direction: 0.375,
+        magnitude: 2,
+      },
+      { dim: "race", bucket: "white", target: "economicLean", direction: 0.225, magnitude: 2 },
+      { dim: "age", bucket: "mature", target: "economicLean", direction: 0.15, magnitude: 2 },
       // A buildup mobilizes pro-military communities (bases, contractors);
       // drawdowns demobilize them.
-      { groupId: "rural_traditionalists", target: "turnout", direction: 0.5, magnitude: 2 },
+      { dim: "education", bucket: "no_college", target: "turnout", direction: 0.25, magnitude: 2 },
+      { dim: "race", bucket: "white", target: "turnout", direction: 0.15, magnitude: 2 },
+      { dim: "age", bucket: "mature", target: "turnout", direction: 0.1, magnitude: 2 },
     ],
     positions: standardCommitteePositions("Armed Services"),
     policyOptions: withPerCapitaCosts(
@@ -1149,10 +1153,14 @@ const rawLegislationTypes: LegislationType[] = [
     demographicEffects: [
       // Internationalist engagement (left) mobilizes immigrant communities
       // (diaspora ties, welcoming posture); isolationism depresses turnout.
-      { groupId: "new_immigrants", target: "turnout", direction: -0.75, magnitude: 2 },
+      { dim: "race", bucket: "hispanic", target: "turnout", direction: -0.375, magnitude: 2 },
+      { dim: "race", bucket: "asian", target: "turnout", direction: -0.225, magnitude: 2 },
+      { dim: "race", bucket: "other", target: "turnout", direction: -0.15, magnitude: 2 },
       // Multilateral engagement nudges cosmopolitan professionals' social lean
       // left; isolationist retrenchment nudges it back right.
-      { groupId: "secular_professionals", target: "socialLean", direction: 0.5, magnitude: 2 },
+      { dim: "education", bucket: "graduate", target: "socialLean", direction: 0.25, magnitude: 2 },
+      { dim: "wealth", bucket: "high", target: "socialLean", direction: 0.15, magnitude: 2 },
+      { dim: "age", bucket: "mid", target: "socialLean", direction: 0.1, magnitude: 2 },
     ],
     positions: standardCommitteePositions("Foreign Relations"),
     policyOptions: withPerCapitaCosts(
@@ -1219,9 +1227,6 @@ const rawLegislationTypes: LegislationType[] = [
       ])!,
       { metricCategoryId: "economic" as const, metricId: "economicFreedom", weight: -0.2 },
     ],
-    demographicEffects: [
-      { groupId: "retirees", direction: 0.02 }, // SS expansion increases retiree population
-    ],
     positions: standardCommitteePositions("Ways and Means"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -1286,10 +1291,6 @@ const rawLegislationTypes: LegislationType[] = [
       ])!,
       { metricCategoryId: "economic" as const, metricId: "economicFreedom", weight: -0.25 },
     ],
-    demographicEffects: [
-      { groupId: "poor", direction: 0.01 }, // Medicaid expansion helps low-income populations
-      { groupId: "working_class", direction: 0.01 },
-    ],
     positions: standardCommitteePositions("Health"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -1338,10 +1339,6 @@ const rawLegislationTypes: LegislationType[] = [
         { category: "social", metric: "incomeInequality", weight: 0.4 },
       ])!,
       { metricCategoryId: "economic" as const, metricId: "smallBusinessFormation", weight: -0.4 },
-    ],
-    demographicEffects: [
-      { groupId: "working_class", direction: 0.01 }, // Minimum wage helps workers
-      { groupId: "poor", direction: 0.01 },
     ],
     positions: standardCommitteePositions("Education and Labor"),
     policyOptions: policyOptions(
@@ -1507,10 +1504,6 @@ const rawLegislationTypes: LegislationType[] = [
       // urbanizationRate lever stays (policy-drivable hybrid, exempt §4.7).
       { category: "population", metric: "urbanizationRate", weight: 0.2 },
     ]),
-    demographicEffects: [
-      { groupId: "urban", direction: 0.01 }, // Housing programs concentrate in urban areas
-      { groupId: "poor", direction: 0.01 },
-    ],
     positions: standardCommitteePositions("Financial Services"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -1561,10 +1554,6 @@ const rawLegislationTypes: LegislationType[] = [
       { category: "economic", metric: "costOfLiving", weight: 0.4 },
       { category: "social", metric: "socialMobility", weight: 0.3 },
     ]),
-    demographicEffects: [
-      { groupId: "urban", direction: 0.01 }, // Housing programs concentrate in urban areas
-      { groupId: "poor", direction: 0.01 },
-    ],
     positions: standardCommitteePositions("Housing"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -1673,9 +1662,6 @@ const rawLegislationTypes: LegislationType[] = [
       // to economicFreedom; looser entry is a small boost.
       { metricCategoryId: "economic" as const, metricId: "economicFreedom", weight: 0.15 },
     ],
-    demographicEffects: [
-      { groupId: "rural", direction: 0.01 }, // Border communities affected
-    ],
     positions: standardCommitteePositions("Homeland Security"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -1740,10 +1726,6 @@ const rawLegislationTypes: LegislationType[] = [
       // Right-lane axis metric: tighter visa regimes (right) raise borderSecurity
       // modestly; expansion lowers it. Weaker than the enforcement act.
       { metricCategoryId: "governance" as const, metricId: "borderSecurity", weight: -0.4 },
-    ],
-    demographicEffects: [
-      { groupId: "urban", direction: 0.02 }, // Immigrants tend to settle in urban areas
-      { groupId: "young_adults", direction: 0.01 }, // Immigration affects age demographics
     ],
     positions: standardCommitteePositions("Judiciary"),
     policyOptions: withPerCapitaCosts(
@@ -1910,10 +1892,6 @@ const rawLegislationTypes: LegislationType[] = [
         { category: "economic", metric: "economicFreedom", weight: -0.15 },
       ]
     ),
-    demographicEffects: [
-      { groupId: "suburban", direction: 0.01 }, // State roads benefit suburbs
-      { groupId: "rural", direction: 0.01 },
-    ],
     positions: standardCommitteePositions("Transportation"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -1967,9 +1945,6 @@ const rawLegislationTypes: LegislationType[] = [
         { category: "economic", metric: "economicFreedom", weight: -0.15 },
       ]
     ),
-    demographicEffects: [
-      { groupId: "rural", direction: 0.02 }, // Utility expansion helps rural areas
-    ],
     positions: standardCommitteePositions("Energy"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -2118,7 +2093,6 @@ const rawLegislationTypes: LegislationType[] = [
       ])!,
       { metricCategoryId: "economic" as const, metricId: "smallBusinessFormation", weight: -0.4 },
     ],
-    demographicEffects: [{ groupId: "working_class", direction: 0.01 }],
     positions: standardCommitteePositions("Labor"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -2177,10 +2151,6 @@ const rawLegislationTypes: LegislationType[] = [
         { category: "social", metric: "incomeInequality", weight: 0.5 },
       ])!,
       { metricCategoryId: "economic" as const, metricId: "smallBusinessFormation", weight: -0.4 },
-    ],
-    demographicEffects: [
-      { groupId: "working_class", direction: 0.01 },
-      { groupId: "poor", direction: 0.01 },
     ],
     positions: standardCommitteePositions("Labor"),
     policyOptions: policyOptions(
@@ -2342,7 +2312,6 @@ const rawLegislationTypes: LegislationType[] = [
     effectTargetsWeighted: weightedTargets({ category: "education", metric: "educationSpending" }, [
       { category: "economic", metric: "economicFreedom", weight: -0.2 },
     ]),
-    demographicEffects: [{ groupId: "college", direction: 0.02 }],
     positions: standardCommitteePositions("Education"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -2395,10 +2364,6 @@ const rawLegislationTypes: LegislationType[] = [
         { category: "economic", metric: "economicFreedom", weight: -0.2 },
       ]
     ),
-    demographicEffects: [
-      { groupId: "college", direction: 0.03 },
-      { groupId: "young_adults", direction: 0.01 },
-    ],
     positions: standardCommitteePositions("Education"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -2455,10 +2420,6 @@ const rawLegislationTypes: LegislationType[] = [
       ])!,
       { metricCategoryId: "economic" as const, metricId: "economicFreedom", weight: -0.4 },
     ],
-    demographicEffects: [
-      { groupId: "urban", direction: 0.01 },
-      { groupId: "college", direction: 0.01 },
-    ],
     positions: standardCommitteePositions("Environment"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -2514,13 +2475,18 @@ const rawLegislationTypes: LegislationType[] = [
       ]
     ),
     demographicEffects: [
-      // Deregulation (right) entrenches pro-market lean among business owners;
-      // heavy regulation radicalizes fewer owners than it converts (state
-      // scope: full multiplier — flagship lean lever of the v2 tranche).
-      { groupId: "small_business", target: "economicLean", direction: 1, magnitude: 1.5 },
+      // Deregulation (right) entrenches pro-market lean among business owners
+      // (high-income, mature, white); heavy regulation radicalizes fewer owners
+      // than it converts (state scope: full multiplier — flagship lean lever of
+      // the v2 tranche).
+      { dim: "wealth", bucket: "high", target: "economicLean", direction: 0.5, magnitude: 1.5 },
+      { dim: "age", bucket: "mature", target: "economicLean", direction: 0.3, magnitude: 1.5 },
+      { dim: "race", bucket: "white", target: "economicLean", direction: 0.2, magnitude: 1.5 },
       // A business-friendly climate mobilizes owner participation (chambers of
       // commerce networks); a hostile one sees owners disengage from politics.
-      { groupId: "small_business", target: "turnout", direction: 0.5 },
+      { dim: "wealth", bucket: "high", target: "turnout", direction: 0.25 },
+      { dim: "age", bucket: "mature", target: "turnout", direction: 0.15 },
+      { dim: "race", bucket: "white", target: "turnout", direction: 0.1 },
     ],
     positions: standardCommitteePositions("Commerce"),
     policyOptions: withPerCapitaCosts(
@@ -2949,10 +2915,6 @@ const rawLegislationTypes: LegislationType[] = [
       // it (right) raises them.
       { category: "population", metric: "birthRate", weight: -0.3 },
     ]),
-    demographicEffects: [
-      { groupId: "young_adults", direction: 0.01 }, // Reproductive rights affect young women
-      { groupId: "urban", direction: 0.01 }, // Pro-choice policies attract urban residents
-    ],
     positions: standardCommitteePositions("Health"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -3006,9 +2968,6 @@ const rawLegislationTypes: LegislationType[] = [
       { category: "economic", metric: "laborParticipation", weight: 0.5 },
       { category: "social", metric: "socialMobility", weight: 0.3 },
     ]),
-    demographicEffects: [
-      { groupId: "young_adults", direction: 0.02 }, // paid leave / childcare supports young families
-    ],
     positions: standardCommitteePositions("Ways and Means"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -3074,9 +3033,6 @@ const rawLegislationTypes: LegislationType[] = [
       // raises it. The two-sided tradeoff both directions carry.
       { metricCategoryId: "publicSafety" as const, metricId: "firearmRights", weight: -1.0 },
     ],
-    demographicEffects: [
-      { groupId: "rural", direction: 0.01 }, // Gun rights attract rural residents
-    ],
     positions: standardCommitteePositions("Judiciary"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -3127,10 +3083,6 @@ const rawLegislationTypes: LegislationType[] = [
       ])!,
       // Phase A2: tradeoff — left expansion reduces economic freedom; right cuts improve it
       { metricCategoryId: "economic" as const, metricId: "economicFreedom", weight: -0.25 },
-    ],
-    demographicEffects: [
-      { groupId: "poor", direction: 0.01 },
-      { groupId: "working_class", direction: 0.01 },
     ],
     positions: standardCommitteePositions("Health"),
     policyOptions: withPerCapitaCosts(
@@ -3468,10 +3420,14 @@ const rawLegislationTypes: LegislationType[] = [
     demographicEffects: [
       // A low-corporate-tax environment (right) entrenches pro-market economics
       // among business owners; high rates pull owner opinion back left.
-      { groupId: "small_business", target: "economicLean", direction: 0.75, magnitude: 2 },
+      { dim: "wealth", bucket: "high", target: "economicLean", direction: 0.375, magnitude: 2 },
+      { dim: "age", bucket: "mature", target: "economicLean", direction: 0.225, magnitude: 2 },
+      { dim: "race", bucket: "white", target: "economicLean", direction: 0.15, magnitude: 2 },
       // A tax-cutting agenda energizes the anti-tax base; a high-tax regime
       // demoralizes it.
-      { groupId: "libertarians", target: "turnout", direction: 0.5, magnitude: 2 },
+      { dim: "race", bucket: "white", target: "turnout", direction: 0.2, magnitude: 2 },
+      { dim: "education", bucket: "college", target: "turnout", direction: 0.15, magnitude: 2 },
+      { dim: "wealth", bucket: "middle", target: "turnout", direction: 0.15, magnitude: 2 },
     ],
     positions: standardCommitteePositions("Ways and Means"),
     policyOptions: taxRateOptions("federal_domestic_corporate_tax_rate", [
@@ -3603,7 +3559,15 @@ const rawLegislationTypes: LegislationType[] = [
       // FDI-driven multinational white-collar employment normalizes
       // market-friendly economics among professionals; taxing foreign capital
       // out (left) removes that pull. Federal 1/50 scope, hence magnitude.
-      { groupId: "secular_professionals", target: "economicLean", direction: 0.5, magnitude: 2 },
+      {
+        dim: "education",
+        bucket: "graduate",
+        target: "economicLean",
+        direction: 0.25,
+        magnitude: 2,
+      },
+      { dim: "wealth", bucket: "high", target: "economicLean", direction: 0.15, magnitude: 2 },
+      { dim: "age", bucket: "mid", target: "economicLean", direction: 0.1, magnitude: 2 },
     ],
     positions: standardCommitteePositions("Ways and Means"),
     policyOptions: taxRateOptions("us_federal_foreign_corporate_tax_rate", [
@@ -3732,9 +3696,6 @@ const rawLegislationTypes: LegislationType[] = [
     effectTargetsWeighted: weightedTargets({ category: "economic", metric: "povertyRate" }, [
       { category: "healthcare", metric: "lifeExpectancy", weight: 0.3 },
     ]),
-    demographicEffects: [
-      { groupId: "retirees", direction: 0.01 }, // Payroll taxes fund SS/Medicare
-    ],
     positions: standardCommitteePositions("Ways and Means"),
     policyOptions: taxRateOptions("federal_payroll_tax_rate", [
       {
@@ -3871,7 +3832,9 @@ const rawLegislationTypes: LegislationType[] = [
       // Protection (right, positive score) revives mill-town civic confidence
       // and union GOTV capacity; free-trade shocks (left) depress turnout in
       // manufacturing communities. Federal 1/50 scope, hence magnitude.
-      { groupId: "union_trades", target: "turnout", direction: 0.75, magnitude: 2 },
+      { dim: "education", bucket: "no_college", target: "turnout", direction: 0.3, magnitude: 2 },
+      { dim: "wealth", bucket: "low", target: "turnout", direction: 0.2625, magnitude: 2 },
+      { dim: "race", bucket: "black", target: "turnout", direction: 0.1875, magnitude: 2 },
     ],
     positions: standardCommitteePositions("Ways and Means"),
     policyOptions: taxRateOptions("federal_tariff_rate", [
@@ -4370,7 +4333,9 @@ const rawLegislationTypes: LegislationType[] = [
     demographicEffects: [
       // State corporate tax posture shapes local business-owner lean directly
       // (state scope: full multiplier — the fast lever vs the federal rate).
-      { groupId: "small_business", target: "economicLean", direction: 0.75 },
+      { dim: "wealth", bucket: "high", target: "economicLean", direction: 0.375 },
+      { dim: "age", bucket: "mature", target: "economicLean", direction: 0.225 },
+      { dim: "race", bucket: "white", target: "economicLean", direction: 0.15 },
     ],
     positions: standardCommitteePositions("Finance"),
     policyOptions: taxRateOptions("state_domestic_corporate_tax_rate", [
@@ -4502,7 +4467,9 @@ const rawLegislationTypes: LegislationType[] = [
       // A state courting FDI (right) builds a multinational professional class
       // that normalizes market-friendly economics; taxing it away reverses the
       // pull (state scope: full multiplier).
-      { groupId: "secular_professionals", target: "economicLean", direction: 0.5 },
+      { dim: "education", bucket: "graduate", target: "economicLean", direction: 0.25 },
+      { dim: "wealth", bucket: "high", target: "economicLean", direction: 0.15 },
+      { dim: "age", bucket: "mid", target: "economicLean", direction: 0.1 },
     ],
     positions: standardCommitteePositions("Finance"),
     policyOptions: taxRateOptions("us_state_foreign_corporate_tax_rate", [
@@ -4628,9 +4595,6 @@ const rawLegislationTypes: LegislationType[] = [
       { category: "social", metric: "homelessnessRate", weight: 0.3 },
       { category: "economic", metric: "costOfLiving", weight: 0.4 },
     ]),
-    demographicEffects: [
-      { groupId: "suburban", direction: 0.01 }, // Property taxes affect homeownership
-    ],
     positions: standardCommitteePositions("Finance"),
     policyOptions: taxRateOptions("state_property_tax_rate", [
       {
@@ -4762,7 +4726,6 @@ const rawLegislationTypes: LegislationType[] = [
       { category: "social", metric: "incomeInequality", weight: -0.6 },
       { category: "economic", metric: "costOfLiving", weight: 0.3 },
     ]),
-    demographicEffects: [{ groupId: "wealthy", direction: -0.02 }],
     positions: standardUKCommitteePositions("Treasury"),
     policyOptions: taxRateOptions("uk_income_tax_rate", [
       {
@@ -4879,7 +4842,6 @@ const rawLegislationTypes: LegislationType[] = [
       { category: "healthcare", metric: "lifeExpectancy", weight: 0.4 },
       { category: "social", metric: "socialMobility", weight: 0.3 },
     ]),
-    demographicEffects: [{ groupId: "retirees", direction: 0.01 }],
     positions: standardUKCommitteePositions("Treasury"),
     policyOptions: taxRateOptions("uk_national_insurance", [
       {
@@ -5749,7 +5711,6 @@ const rawLegislationTypes: LegislationType[] = [
       { category: "healthcare", metric: "publicHealthPreparedness" },
       [{ category: "economic", metric: "economicFreedom", weight: -0.15 }]
     ),
-    demographicEffects: [{ groupId: "retirees", direction: 0.01 }],
     positions: standardUKCommitteePositions("Health"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -5807,7 +5768,6 @@ const rawLegislationTypes: LegislationType[] = [
         { category: "economic", metric: "economicFreedom", weight: -0.15 },
       ]
     ),
-    demographicEffects: [{ groupId: "retirees", direction: 0.02 }],
     positions: standardUKCommitteePositions("Health"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -6034,7 +5994,6 @@ const rawLegislationTypes: LegislationType[] = [
         { category: "economic", metric: "economicFreedom", weight: -0.2 },
       ]
     ),
-    demographicEffects: [{ groupId: "college", direction: 0.01 }],
     positions: standardUKCommitteePositions("Education"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -6135,7 +6094,6 @@ const rawLegislationTypes: LegislationType[] = [
     effectTargetsWeighted: weightedTargets({ category: "education", metric: "educationSpending" }, [
       { category: "economic", metric: "economicFreedom", weight: -0.2 },
     ]),
-    demographicEffects: [{ groupId: "college", direction: 0.01 }],
     positions: standardUKCommitteePositions("Education"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -6188,7 +6146,6 @@ const rawLegislationTypes: LegislationType[] = [
       { category: "economic", metric: "smallBusinessFormation", weight: 0.3 },
       { category: "economic", metric: "economicFreedom", weight: -0.2 },
     ]),
-    demographicEffects: [{ groupId: "college", direction: 0.01 }],
     positions: standardUKCommitteePositions("Science"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -6536,7 +6493,6 @@ const rawLegislationTypes: LegislationType[] = [
         { category: "economic", metric: "economicFreedom", weight: -0.15 },
       ]
     ),
-    demographicEffects: [{ groupId: "urban", direction: 0.01 }],
     positions: standardUKCommitteePositions("Transport"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -7124,7 +7080,6 @@ const rawLegislationTypes: LegislationType[] = [
       { category: "governance", metric: "budgetBalance", weight: -0.4 },
       { category: "economic", metric: "smallBusinessFormation", weight: 0.1 },
     ]),
-    demographicEffects: [{ groupId: "veterans", direction: 0.01 }],
     positions: standardUKCommitteePositions("Defence"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -7217,7 +7172,6 @@ const rawLegislationTypes: LegislationType[] = [
       { category: "social", metric: "socialCohesion", weight: 0.2 },
       { category: "governance", metric: "budgetBalance", weight: -0.3 },
     ]),
-    demographicEffects: [{ groupId: "immigrants", direction: 0.01 }],
     positions: standardUKCommitteePositions("Foreign Affairs"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -7382,7 +7336,6 @@ const rawLegislationTypes: LegislationType[] = [
       // participation; raising the age (right) lifts it. §4.6 aging-society wire.
       { category: "economic", metric: "laborParticipation", weight: -0.3 },
     ]),
-    demographicEffects: [{ groupId: "retirees", direction: 0.02 }],
     positions: standardUKCommitteePositions("Work & Pensions"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -7489,7 +7442,6 @@ const rawLegislationTypes: LegislationType[] = [
       ])!,
       { metricCategoryId: "social" as const, metricId: "housingAffordability", weight: -0.4 },
     ],
-    demographicEffects: [{ groupId: "immigrants", direction: 0.02 }],
     positions: standardUKCommitteePositions("Home Affairs"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -7545,7 +7497,6 @@ const rawLegislationTypes: LegislationType[] = [
       ])!,
       { metricCategoryId: "social" as const, metricId: "housingAffordability", weight: -0.4 },
     ],
-    demographicEffects: [{ groupId: "immigrants", direction: 0.01 }],
     positions: standardUKCommitteePositions("Home Affairs"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -7601,7 +7552,6 @@ const rawLegislationTypes: LegislationType[] = [
       { category: "economic", metric: "smallBusinessFormation", weight: -0.3 },
       { category: "social", metric: "socialMobility", weight: 0.3 },
     ]),
-    demographicEffects: [{ groupId: "union", direction: 0.01 }],
     positions: standardUKCommitteePositions("Work & Pensions"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -7781,7 +7731,6 @@ const rawLegislationTypes: LegislationType[] = [
       { category: "economic", metric: "propertyValueIndex", weight: 0.3 },
       { category: "population", metric: "urbanizationRate", weight: 0.2 },
     ]),
-    demographicEffects: [{ groupId: "urban", direction: 0.01 }],
     positions: standardUKCommitteePositions("Housing"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -8411,7 +8360,6 @@ const rawLegislationTypes: LegislationType[] = [
       { category: "economic", metric: "ruralRevitalization", weight: 0.5 },
       { category: "economic", metric: "smallBusinessFormation", weight: 0.3 },
     ]),
-    demographicEffects: [{ groupId: "rural", direction: 0.02 }],
     positions: standardUKCommitteePositions("Environment Food Rural"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -8471,7 +8419,6 @@ const rawLegislationTypes: LegislationType[] = [
         { category: "social", metric: "socialCohesion", weight: 0.2 },
       ]
     ),
-    demographicEffects: [{ groupId: "rural", direction: 0.01 }],
     positions: standardUKCommitteePositions("Environment Food Rural"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -8534,10 +8481,6 @@ const rawLegislationTypes: LegislationType[] = [
       ])!,
       { metricCategoryId: "economic" as const, metricId: "smallBusinessFormation", weight: -0.4 },
     ],
-    demographicEffects: [
-      { groupId: "college", direction: 0.02 },
-      { groupId: "urban", direction: 0.01 },
-    ],
     positions: standardUKCommitteePositions("Science"),
     policyOptions: withPerCapitaCosts(
       policyOptions(
@@ -8597,7 +8540,6 @@ const rawLegislationTypes: LegislationType[] = [
       ])!,
       { metricCategoryId: "economic" as const, metricId: "smallBusinessFormation", weight: -0.4 },
     ],
-    demographicEffects: [{ groupId: "college", direction: 0.01 }],
     positions: standardUKCommitteePositions("Science"),
     policyOptions: withPerCapitaCosts(
       policyOptions(

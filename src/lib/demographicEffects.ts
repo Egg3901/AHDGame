@@ -56,7 +56,10 @@ import type { GameState } from "@/lib/db/types/gameState";
 import type { State } from "@/lib/db/types/state";
 import { getFederalMultiplier } from "@shared/constants/formulas";
 import { calculateStateLeanForCache } from "@/lib/demographics/cachedStateLean";
+import { isBucketTarget } from "@/lib/demographics/turnoutTarget";
 import {
+  applyDurableBucketShift,
+  applyDurableBucketTurnoutShift,
   applyDurableGroupShift,
   applyDurableGroupTurnoutShift,
   readLayer1Overlay,
@@ -155,7 +158,36 @@ export function clampDemographicEffectMagnitude(magnitude: number | undefined): 
   );
 }
 
-/** Per-target accumulated shifts: groupId → per-turn delta. */
+/**
+ * The key a demographic effect accumulates under, or null when it names
+ * nothing this engine can move.
+ *
+ * A `{ dim, bucket }` effect keys as `"dim:bucket"` — the same `"dim:key"`
+ * form the cell `bucketWeights`, the GOTV modifiers and the Layer-1 overlays
+ * all use, so `isBucketTarget` tells the two vocabularies apart downstream
+ * without a second flag to keep in sync. A legacy archetype effect keys as its
+ * `groupId`.
+ *
+ * Returns null for a bucket target on the population channel: a bucket's
+ * population is the region's raked census marginal, not a legislative lever
+ * (see `DemographicEffect`'s doc comment).
+ */
+export function demographicEffectTargetKey(effect: DemographicEffect): string | null {
+  if (effect.dim && effect.bucket) {
+    if ((effect.target ?? "population") === "population") return null;
+    return `${effect.dim}:${effect.bucket}`;
+  }
+  return effect.groupId || null;
+}
+
+/** Split a `"dim:bucket"` key. Null for an archetype key. */
+function splitBucketKey(key: string): { dim: string; bucket: string } | null {
+  if (!isBucketTarget(key)) return null;
+  const sep = key.indexOf(":");
+  return { dim: key.slice(0, sep), bucket: key.slice(sep + 1) };
+}
+
+/** Per-target accumulated shifts: target key → per-turn delta. */
 export interface DemographicShiftSet {
   population: Record<string, number>;
   /** Note: `calculateDemographicShiftsByTarget` includes EVERY effect (permanent or not) — see that function's doc comment for why. `subtractDurableShifts` is what narrows this down to the temporary-only rate `buildDemographicUpdates` consumes. */
@@ -221,8 +253,10 @@ function computeShiftsByTarget(
         SHIFT_RATE_BY_TARGET[target] *
         magnitude;
 
+      const key = demographicEffectTargetKey(effect);
+      if (!key) continue;
       const channel = shifts[target];
-      channel[effect.groupId] = (channel[effect.groupId] ?? 0) + shiftAmount;
+      channel[key] = (channel[key] ?? 0) + shiftAmount;
     }
   }
 
@@ -504,10 +538,101 @@ export function buildDemographicUpdates(
     }
   }
 
+  addBucketDriftUpdates(demographics, shifts, updates);
+
   return updates;
 }
 
-/** Clone a demographics doc and apply `groups.<id>.<field>` dot-path updates in memory. */
+/**
+ * Temporary lean/turnout drift for `{ dim, bucket }` effects.
+ *
+ * An archetype effect drifts `groups.<id>.<axis>` on the LIVE demographics doc
+ * and the substrate reads it back as `live − default` (see
+ * `computeArchetypeLeanDeltas`). A bucket target has no group to carry that
+ * drift on, so it stores the drift directly, in the same overlay shape the
+ * DURABLE channel writes to `demographicDefaults` — the same parallel the two
+ * docs already have for groups: the defaults doc holds the base, the live doc
+ * holds what legislation has moved it to. `buildGranularElectorateSubstrate`
+ * folds the live doc's overlay onto unit leans and turnouts exactly where it
+ * folds the archetype deltas.
+ *
+ * Baseline is 0 rather than a seeded value: this overlay IS the deviation, so
+ * the deviation band and the decay-back-to-baseline both measure from zero and
+ * a fully decayed law leaves no residue.
+ */
+function addBucketDriftUpdates(
+  demographics: StateDemographics,
+  shifts: DemographicShiftSet,
+  updates: Record<string, number>
+): void {
+  const leanAxes = [
+    { axis: "economicLean" as const, shifts: shifts.economicLean },
+    { axis: "socialLean" as const, shifts: shifts.socialLean },
+  ];
+
+  for (const { axis, shifts: axisShifts } of leanAxes) {
+    const stored = demographics.layer1PositionOverrides ?? {};
+    const keys = new Set(Object.keys(axisShifts).filter(isBucketTarget));
+    for (const [dim, byBucket] of Object.entries(stored)) {
+      for (const bucket of Object.keys(byBucket)) keys.add(`${dim}:${bucket}`);
+    }
+    for (const key of keys) {
+      const parts = splitBucketKey(key);
+      if (!parts) continue;
+      const current = stored[parts.dim]?.[parts.bucket]?.[axis] ?? 0;
+      const shift = axisShifts[key];
+      const next =
+        typeof shift === "number" && shift !== 0
+          ? applyBandedShift(
+              current,
+              0,
+              shift,
+              LEAN_MAX_DEVIATION_FROM_BASELINE,
+              LEAN_ABS_MIN,
+              LEAN_ABS_MAX
+            )
+          : applyBaselineDecay(current, 0);
+      if (Math.abs(next - current) > MIN_CHANGE_THRESHOLD) {
+        updates[`layer1PositionOverrides.${parts.dim}.${parts.bucket}.${axis}`] = next;
+      }
+    }
+  }
+
+  const storedTurnout = demographics.layer1TurnoutOverrides ?? {};
+  const turnoutKeys = new Set(Object.keys(shifts.turnout).filter(isBucketTarget));
+  for (const [dim, byBucket] of Object.entries(storedTurnout)) {
+    for (const bucket of Object.keys(byBucket)) turnoutKeys.add(`${dim}:${bucket}`);
+  }
+  for (const key of turnoutKeys) {
+    const parts = splitBucketKey(key);
+    if (!parts) continue;
+    const current = storedTurnout[parts.dim]?.[parts.bucket] ?? 0;
+    const shift = shifts.turnout[key];
+    // Drift is a signed delta on the turnout rate, so its absolute bounds are
+    // the deviation band itself, not the 0-100 rate scale the band sits on.
+    const next =
+      typeof shift === "number" && shift !== 0
+        ? applyBandedShift(
+            current,
+            0,
+            shift,
+            TURNOUT_MAX_DEVIATION_FROM_BASELINE,
+            -TURNOUT_MAX_DEVIATION_FROM_BASELINE,
+            TURNOUT_MAX_DEVIATION_FROM_BASELINE
+          )
+        : applyBaselineDecay(current, 0);
+    if (Math.abs(next - current) > MIN_CHANGE_THRESHOLD) {
+      updates[`layer1TurnoutOverrides.${parts.dim}.${parts.bucket}`] = next;
+    }
+  }
+}
+
+/**
+ * Clone a demographics doc and apply this turn's dot-path updates in memory —
+ * `groups.<id>.<field>` for archetype drift, and the two Layer-1 overlay paths
+ * for bucket drift, so the cached-lean recompute below sees a bucket-targeted
+ * law's effect in the same turn it is written rather than one turn late.
+ */
 function cloneWithUpdates(
   demographics: StateDemographics,
   updates: Record<string, number>
@@ -517,6 +642,8 @@ function cloneWithUpdates(
     groups: Object.fromEntries(
       Object.entries(demographics.groups).map(([id, g]) => [id, { ...g }])
     ),
+    layer1PositionOverrides: structuredClone(demographics.layer1PositionOverrides ?? {}),
+    layer1TurnoutOverrides: structuredClone(demographics.layer1TurnoutOverrides ?? {}),
   };
   for (const [path, value] of Object.entries(updates)) {
     const parts = path.split(".");
@@ -526,6 +653,16 @@ function cloneWithUpdates(
       if (group) {
         (group as unknown as Record<string, number>)[field] = value;
       }
+    } else if (parts.length === 4 && parts[0] === "layer1PositionOverrides") {
+      const [, dim, bucket, axis] = parts;
+      const overlay = (clone.layer1PositionOverrides ??= {});
+      const byBucket = (overlay[dim] ??= {});
+      const entry = (byBucket[bucket] ??= { economicLean: 0, socialLean: 0 });
+      (entry as unknown as Record<string, number>)[axis] = value;
+    } else if (parts.length === 3 && parts[0] === "layer1TurnoutOverrides") {
+      const [, dim, bucket] = parts;
+      const overlay = (clone.layer1TurnoutOverrides ??= {});
+      (overlay[dim] ??= {})[bucket] = value;
     }
   }
   return clone;
@@ -841,6 +978,21 @@ export async function processAllStateDemographics(db: Db): Promise<number> {
       for (const axis of ["economicLean", "socialLean"] as const) {
         for (const [groupId, netDelta] of Object.entries(durableShifts[axis])) {
           if (!netDelta) continue;
+          // A `{ dim, bucket }` target relocates the census bucket directly —
+          // exact, and with no archetype to carry it on the live doc (see
+          // `applyDurableBucketShift`).
+          const bucket = splitBucketKey(groupId);
+          if (bucket) {
+            applyDurableBucketShift(
+              bucket.dim,
+              bucket.bucket,
+              axis,
+              netDelta,
+              (dim, key) => readLayer1Overlay(stateDefaults, dim, key, axis),
+              durableAcc
+            );
+            continue;
+          }
           const currentLive = demographics.groups[groupId]?.[axis];
           if (typeof currentLive !== "number") continue;
           applyDurableGroupShift(
@@ -864,6 +1016,17 @@ export async function processAllStateDemographics(db: Db): Promise<number> {
       // `DemographicEffect.permanent`'s doc comment.
       for (const [groupId, netDelta] of Object.entries(durableShifts.turnout)) {
         if (!netDelta) continue;
+        const bucket = splitBucketKey(groupId);
+        if (bucket) {
+          applyDurableBucketTurnoutShift(
+            bucket.dim,
+            bucket.bucket,
+            netDelta,
+            (dim, key) => readLayer1TurnoutOverlay(stateDefaults, dim, key),
+            durableAcc
+          );
+          continue;
+        }
         const currentLive = demographics.groups[groupId]?.turnout;
         if (typeof currentLive !== "number") continue;
         applyDurableGroupTurnoutShift(
