@@ -4,12 +4,13 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { handleRouteError, forbidden } from "@/lib/api/errors";
 import { loadUsPoliticalStateIds } from "@/lib/elections/usPoliticalHome";
 import { getPartyHex } from "@/lib/utils/politics";
+import { loadRacePresence } from "@/lib/politicalOperations/racePresence";
 import type { CharacterStateOrg, PoliticalParty } from "@/lib/db/types";
 
 /**
  * GET /api/political-operations/state-org/list
  *
- * Returns the authenticated US character's per-state org levels for every
+ * Returns the authenticated US character's per-state Campaign Presence levels for every
  * political US state or territory (level 0 included). Consumed by the State
  * Organization tab.
  *
@@ -26,7 +27,7 @@ export async function GET() {
     }
 
     const db = await getDb();
-    const [rows, party, { residentPoliticalIds }] = await Promise.all([
+    const [rows, party, { residentPoliticalIds }, racePresence] = await Promise.all([
       db
         .collection<CharacterStateOrg>("characterStateOrg")
         .find({ characterId: character._id })
@@ -44,6 +45,9 @@ export async function GET() {
             )
         : Promise.resolve(null),
       loadUsPoliticalStateIds(db),
+      // Every candidate in the live presidential race, so the map can show the
+      // contested ground and not just the viewer's own investment.
+      loadRacePresence(db, character._id),
     ]);
     const byState = new Map(rows.map((r) => [r.stateId, r]));
 
@@ -65,6 +69,7 @@ export async function GET() {
 
     return NextResponse.json({
       states: result,
+      racePresence,
       homeState: character.homeState ?? null,
       partyHex,
       partyName: party?.name ?? null,

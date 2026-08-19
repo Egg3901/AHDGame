@@ -1162,10 +1162,22 @@ describe("distributeVotesBySwingFlow — regional bases (state org / home state)
     expect(withOrg.sharesPct.c1).toBeGreaterThan(base.sharesPct.c1);
   });
 
-  it("state-org bonus is capped: level 10 and level 99 produce the same share", () => {
-    const atMax = run({ stateOrgByCandidate: new Map([["c1", 10]]) });
-    const overMax = run({ stateOrgByCandidate: new Map([["c1", 99]]) });
-    expect(overMax.sharesPct.c1).toBe(atMax.sharesPct.c1);
+  it("state-org level is uncapped but its bonus diminishes sharply", () => {
+    // The level ladder no longer has a ceiling (2026-08-19): investment is
+    // never wasted, so 99 must beat 10. What bounds it is the curve, not a cap
+    // — see stateOrgBonusFraction. Level 10 delivers 75% of the maximum bonus,
+    // so the entire remaining 89 levels are worth less than a third of what the
+    // first 10 bought. That is what stops an unbounded treasury buying
+    // unbounded vote weight.
+    const base = run();
+    const atReference = run({ stateOrgByCandidate: new Map([["c1", 10]]) });
+    const farAbove = run({ stateOrgByCandidate: new Map([["c1", 99]]) });
+
+    expect(farAbove.sharesPct.c1).toBeGreaterThan(atReference.sharesPct.c1);
+
+    const firstTenGain = atReference.sharesPct.c1 - base.sharesPct.c1;
+    const next89Gain = farAbove.sharesPct.c1 - atReference.sharesPct.c1;
+    expect(next89Gain).toBeLessThan(firstTenGain / 2);
   });
 
   it("homeStateByCandidate bumps the candidate only in their home state", () => {

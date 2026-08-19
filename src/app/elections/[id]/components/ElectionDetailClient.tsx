@@ -322,7 +322,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
               />
             )}
 
-            {/* State organization is the presidential ground-game build-up
+            {/* Campaign Presence is the presidential ground-game build-up
                 loop. It lives on Political Operations, but that page is not
                 where candidates actually sit. Surface the builder here for
                 every phase, including upcoming (you invest between cycles). */}

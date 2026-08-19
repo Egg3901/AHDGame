@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   calcAppeal,
   approvalScalar,
+  APPROVAL_SCALAR_EXPONENT,
   MAX_APPEAL,
   APPEAL_POSITION_FLOOR,
   DIRECTION_BONUS_PER_AXIS,
@@ -248,13 +249,27 @@ describe("approvalScalar", () => {
     expect(approvalScalar(100)).toBe(1);
   });
 
-  it("returns 0.5 for 50 favorability", () => {
-    expect(approvalScalar(50)).toBe(0.5);
+  it("sits above the linear midpoint at 50 favorability (softening curve)", () => {
+    // APPROVAL_SCALAR_EXPONENT < 1 pulls the middle of the curve UP toward 1,
+    // so a mid-favorability candidate is penalised less than the old linear
+    // mapping did. Endpoints are unchanged (see the 0 and 100 cases above).
+    expect(approvalScalar(50)).toBeCloseTo(Math.pow(0.5, APPROVAL_SCALAR_EXPONENT), 10);
+    expect(approvalScalar(50)).toBeGreaterThan(0.5);
+  });
+
+  it("compresses the spread between a popular and an unpopular candidate", () => {
+    // The point of the softening: favorability stays the strongest lever but
+    // stops being decisive enough that a reputation strike substitutes for
+    // campaigning. Measured live case was 100 vs 38.4 → 2.60x before, ~2.15x now.
+    const ratio = approvalScalar(100) / approvalScalar(38.4);
+    expect(ratio).toBeLessThan(2.6);
+    expect(ratio).toBeGreaterThan(1.5);
   });
 
   it("defaults to 50 when given null/undefined", () => {
-    expect(approvalScalar(null as unknown as number)).toBe(0.5);
-    expect(approvalScalar(undefined as unknown as number)).toBe(0.5);
+    const atFifty = approvalScalar(50);
+    expect(approvalScalar(null as unknown as number)).toBe(atFifty);
+    expect(approvalScalar(undefined as unknown as number)).toBe(atFifty);
   });
 
   it("clamps to 0-1", () => {

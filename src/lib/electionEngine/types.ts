@@ -268,6 +268,13 @@ export interface DistributeVotesOptions {
   incumbentPartyId?: string;
   incumbentApproval?: number;
   /**
+   * Calibration-only override for `INCUMBENCY_APPROVAL_PIVOT` (the approval
+   * level an incumbent must clear to earn a shield rather than a drag).
+   * Production leaves this unset and gets the constant; the replay harness
+   * sweeps it to measure how a recentred pivot moves real races.
+   */
+  incumbencyApprovalPivot?: number;
+  /**
    * Executive own-race only: party-tenure "voter fatigue" drag in incumbency
    * budget units (≥ 0), subtracted from the incumbent's approval-scaled shield
    * AFTER the cap so it bites popular multi-term incumbents. Derived from the
