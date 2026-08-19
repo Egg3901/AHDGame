@@ -37,9 +37,10 @@ How much of the turned-out voters a candidate can actually contact and persuade.
 
 ### 2. Appeal
 \`\`\`
-appeal = (50 − |econDiff| × 5 − |socialDiff| × 5)² / 100 + (politicalInfluence / 100) × 25
+positionScore = 25 × (positionRaw / 50)^1.5 + floor(0.5)
+appeal = positionScore + directionalBonus + normalizeNPI(politicalInfluence) × 12.5
 \`\`\`
-Where \`econDiff\` and \`socialDiff\` are the absolute differences between the candidate's policy positions and the cell's leans. Maximum appeal is 50. Candidates who match a cell's positions score high; candidates far from their positions score low.
+Where \`positionRaw\` is derived from the absolute economic and social distance between the candidate's policy positions and the cell's leans, and \`directionalBonus\` adds a small amount per axis when the candidate's lean matches the cell's lean direction (tribal-voter effect). Maximum appeal is 50. Candidates who match a cell's positions score high; candidates far from their positions score low. The exponent (1.5, not squared) keeps position from swamping every other lever in the formula.
 
 ### 3. Approval scalar
 \`\`\`

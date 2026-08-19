@@ -51,7 +51,13 @@ sharePrice = 1.0 * tangibleBookPerShare
            + 0.1 * growthPremiumPerShare
 \`\`\`
 
-The formula produces a **fundamental value** each turn. During normal operation the market price equals this fundamental value. Additional multipliers (sentiment, order flow, IMF bailout) can adjust the displayed market price in real time.
+The formula produces a **fundamental value** each turn, then several additional modifiers can move the price away from that pure fundamental:
+
+- **Bond-holdings haircut:** bonds counted in tangible book are marked at 0.75x their market price, so leveraged bond positions don't inflate the valuation.
+- **Insider-concentration discount:** a public corp whose character CEO personally holds more than 65% of shares takes a quadratic penalty reaching -30% at 100% CEO ownership.
+- **Index-inclusion premium:** shares held by index funds get a small price premium reflecting passive-flow demand.
+- **IMF bailout multiplier:** while a sovereign IMF facility is active, corporations headquartered in that country trade at a 0.85x discount.
+- **±35% per-turn rate limiter:** the final price can't move more than 35% from the prior turn's price in a single turn (skipped once the price has fallen to $1.00 or below, so recovering penny corps aren't pinned at the floor).
 
 **Constants:**
 | Constant | Value |
@@ -60,7 +66,10 @@ The formula produces a **fundamental value** each turn. During normal operation 
 | Tangible book weight | 1.0 |
 | Earnings power weight | 0.4 |
 | Growth premium weight | 0.1 |
-| IMF bailout multiplier | 0.8 (applies when active) |
+| Bond-holdings haircut | 0.75x |
+| Insider-concentration max penalty | -30% (at 100% CEO ownership, threshold 65%) |
+| IMF bailout multiplier | 0.85 (applies when active) |
+| Per-turn rate limiter | ±35% |
 
 ## Buying and selling shares
 
@@ -174,7 +183,7 @@ Profits do **not** consolidate. Each corporation is taxed on its own sectors, an
 
 A parent and its **formalized** subsidiaries form a **group**. De facto control is not enough: the group is the set of relationships the parent has actually declared.
 
-**Group balance sheet.** The corporation page shows the consolidated position of the whole group — combined cash, combined revenue, every member, every industry and country it operates in. It is a view, not a merger: members keep their own balance sheets, share prices and shareholders. Group size is visible to everyone, not just the parent's CEO. A structure should be a way to organise a business, not a way to disappear.
+**Group balance sheet.** The corporation page shows the consolidated position of the whole group, combined cash, combined revenue, every member, every industry and country it operates in. It is a view, not a merger: members keep their own balance sheets, share prices and shareholders. Group size is visible to everyone, not just the parent's CEO. A structure should be a way to organise a business, not a way to disappear.
 
 **Group loss relief.** Within a single country, a group's losses are surrendered against its profits, and the group is taxed on the net. A parent earning ₳1,000,000 alongside a subsidiary losing ₳250,000 is taxed as though it earned ₳750,000; the tax on the sheltered ₳250,000 is refunded from the treasury that collected it, split across the members that actually paid.
 
@@ -185,25 +194,25 @@ Four limits, all of them deliberate:
 - **Relief never exceeds the tax the group actually paid.** The state refunds; it does not pay out.
 - **Formalized subsidiaries only.** Relief is bought with a declaration.
 
-That last point is the trade. Formalizing a subsidiary is what unlocks relief, and it is also what makes the group legible — to everyone reading the corporation page, and to the competition authority reviewing your next merger.
+That last point is the trade. Formalizing a subsidiary is what unlocks relief, and it is also what makes the group legible, to everyone reading the corporation page, and to the competition authority reviewing your next merger.
 
 ## Group synergies
 
 A group is not only a tax structure. Each turn, its members converge toward the group's **best** marketing and logistics capability, closing 5% of the gap per turn, up to 60% of the leader's level.
 
-**Synergy only ever lifts.** No member is reduced to bring the group toward an average. Averaging would mean acquiring a weak subsidiary drags your strong parent down, and the optimal move would be to never group anything — which is not what a group is for. The strong member's distribution network and brand are what the weak one gets access to, not the other way round.
+**Synergy only ever lifts.** No member is reduced to bring the group toward an average. Averaging would mean acquiring a weak subsidiary drags your strong parent down, and the optimal move would be to never group anything, which is not what a group is for. The strong member's distribution network and brand are what the weak one gets access to, not the other way round.
 
 A member already above the capped share gains nothing. There is no reason to hold a flagship back.
 
-**A spin-off carries the brand out with it.** A corporation spun off from a group member keeps a higher ceiling — 85% instead of 60% — for two game years, because last turn it was literally part of that business. The advantage decays as the spin-off becomes its own company, and it disappears immediately if the corporation it came from leaves the group.
+**A spin-off carries the brand out with it.** A corporation spun off from a group member keeps a higher ceiling, 85% instead of 60%, for two game years, because last turn it was literally part of that business. The advantage decays as the spin-off becomes its own company, and it disappears immediately if the corporation it came from leaves the group.
 
 ## Transfer pricing
 
-Supply agreements carry an agreed price offset from market. Between two unrelated corporations that is a negotiation. Between two members of the same group it is a dial: both sides have the same owner, so the price decides which member books the profit — and when those members sit in **different countries**, it decides which treasury collects the tax.
+Supply agreements carry an agreed price offset from market. Between two unrelated corporations that is a negotiation. Between two members of the same group it is a dial: both sides have the same owner, so the price decides which member books the profit, and when those members sit in **different countries**, it decides which treasury collects the tax.
 
 Price an intra-group cross-border contract away from market and the shifted profit accumulates as **exposure** on that contract. Cross ₳5,000,000 of accumulated exposure and the treasury that lost the base reassesses: it charges the tax that was avoided, plus a **40% surcharge**, and the exposure resets to zero.
 
-The surcharge is the point. Without it an assessment is a free option — worst case, you pay exactly the tax you owed anyway, later.
+The surcharge is the point. Without it an assessment is a free option, worst case, you pay exactly the tax you owed anyway, later.
 
 Three things worth knowing:
 

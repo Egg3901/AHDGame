@@ -8,26 +8,27 @@ NPPs vote on all active federal bills. State/regional bills are not currently pr
 
 ### The vote decision
 
-Each turn, NPPs that haven't yet voted on an open bill evaluate it using a deterministic cross-pressure model. Four signed forces are summed:
+Each turn, NPPs that haven't yet voted on an open bill evaluate it using a deterministic cross-pressure model. Several signed forces are summed:
 
 1. **Ideology**: alignment between the NPP's positions and the bill's positions
-2. **Whip**: if a whip directive exists, it contributes a signed force (positive for FOR, negative for AGAINST)
-3. **District**: constituency pressure based on the NPP's home state demographics
-4. **Donors**: donor-class pressure based on the NPP's donor alignment
+2. **Whip**: party whip and caucus whip directives, each contributing a signed force (positive for FOR, negative for AGAINST), gated by the NPP's compliance multiplier
+3. **Party-line default**: when the NPP shares the bill sponsor's party and no explicit whip is set, a smaller default pull toward FOR kicks in, scaled by the same compliance multiplier. This only applies to co-partisans of the sponsor; opposition and unaffiliated NPPs get nothing from it
+4. **District**: constituency pressure based on the NPP's home state demographics
+5. **Donors**: donor-class pressure based on the NPP's donor alignment
 
-The total is the sum of all four signed forces. The verdict is:
+The total is the sum of all active signed forces. The verdict uses a **strict** threshold, not an inclusive one:
 
 | Verdict | Condition |
 | --- | --- |
-| **For** | Total ≥ +5 |
-| **Against** | Total ≤ −5 |
-| **Abstain** | \|total\| < 5 (i.e., cross-pressure is too close to call) |
+| **For** | Total > +5 |
+| **Against** | Total < −5 |
+| **Abstain** | Total is exactly +5, exactly −5, or anywhere in between |
 
 This is a deterministic model, not a probabilistic one. There is no random roll or compliance chance.
 
 ### Whip force details
 
-A **soft whip** contributes a base force of **30**. A **hard whip** contributes a stronger base force of **60**. However, even a hard whip is not binding: the whip force is still multiplied by the NPP's compliance multiplier before being added to the total. The compliance multiplier is derived from loyalty and stubbornness, but the final vote is always determined by the summed-force threshold.
+A **party whip** contributes a base force of **30** (soft) or **60** (hard). A **caucus whip** contributes a base force of **40** (soft) or **80** (hard), plus a further ±20 bonus when the bill aligns with one of the caucus's core positions. Party and caucus whip forces stack if both are active. Every whip force is multiplied by the NPP's compliance multiplier before being added to the total, so even a hard whip is not binding. The compliance multiplier is derived from loyalty and stubbornness, but the final vote is always determined by the summed-force threshold.
 
 ### Multi-seat weighting
 

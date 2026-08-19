@@ -15,15 +15,29 @@ Your character also has personal policy positions on these same axes. Your chara
 
 ## How ideology affects primaries
 
-Primary scoring compares your character's economic and social positions against the **party's official positions**. The alignment component of your primary score is:
+Primary scoring compares your character's economic and social positions against the **party's official positions**, and (for state-level races) against the state's own cached ideological lean.
+
+The **live default** splits alignment into two pieces, worth 40 points combined:
 
 \`\`\`
-econDiff = |yourEcon − partyEcon|
-socialDiff = |yourSocial − partySocial|
-alignment = max(0, 40 − (econDiff + socialDiff) × 2.0)
+econDiffState = |yourEcon − stateEcon|
+socialDiffState = |yourSocial − stateSocial|
+alignmentState = max(0, 25 − (econDiffState + socialDiffState) × 1.25)
+
+econDiffParty = |yourEcon − partyEcon|
+socialDiffParty = |yourSocial − partySocial|
+alignmentParty = max(0, 15 − (econDiffParty + socialDiffParty) × 0.75)
+
+alignment = alignmentState + alignmentParty
 \`\`\`
 
-This gives a maximum alignment score of **40 points** when you're at the party's exact position. Each point of Manhattan distance (econ + social combined) costs you **2 alignment points**. A candidate 10 points away from the party center scores 0 alignment. Even if they're ideologically reasonable, they won't win the primary without enormous favorability or influence advantages.
+25 points ride on matching the state's lean, 15 on matching the party's official position. Only when the state has no cached lean on record does the game fall back to a single **40-point party-only** formula:
+
+\`\`\`
+alignment = max(0, 40 − (econDiffParty + socialDiffParty) × 2.0)
+\`\`\`
+
+Either way, the maximum alignment score is 40 points at perfect alignment, and it degrades to 0 well before 20 points of combined distance. Even if a badly-misaligned candidate is otherwise reasonable, they won't win the primary without enormous favorability or influence advantages.
 
 ## How ideology affects NPP alignment
 
@@ -39,13 +53,14 @@ NPPs also get a **+80 bonus** for candidates who share their party (country-scop
 
 ## How ideology affects voter appeal
 
-In general elections, voter appeal uses the same distance math but in a different formula:
+In general elections, voter appeal uses the same distance math but runs it through a power curve with an exponent of **1.5**, not a square:
 
 \`\`\`
-appeal (per demographic group) = (50 − |econDiff| × 5 − |socialDiff| × 5)² / 100 + reachBonus
+positionScore = 25 × (positionRaw / 50) ^ 1.5   // plus a small position floor
+appeal (per demographic group) = positionScore + reachBonus
 \`\`\`
 
-This is **quadratic**: small ideological gaps reduce appeal much less than large gaps. A candidate 1 point away from a demographic group's center loses only about 10% of max appeal. A candidate 3 points away loses nearly 50%. The quadratic formula rewards ideological proximity but doesn't punish modest deviation harshly.
+Squaring (exponent 2) was the old legacy curve; it was softened to 1.5 in a 2026-07-09 rebalance because the squared version made ideology overwhelmingly dominant, drowning out favorability, org, and campaigning. At 1.5, small ideological gaps still reduce appeal less than large gaps, but the gap between a close match and a middling one is less punishing than it used to be.
 
 Different demographic groups have different ideological centers. Rural white voters, urban college-educated voters, and minority communities each sit at different points on the grid. Candidates who match their demographics outperform those who don't, regardless of party.
 

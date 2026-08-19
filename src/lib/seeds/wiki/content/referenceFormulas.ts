@@ -45,16 +45,17 @@ Used for: US President only.
 
 | Component | Range | Formula |
 |---|---|---|
-| Policy alignment (party only) | 0 to 40 | \`max(0, 40 − (|econDiff_party| + |socialDiff_party|) × 2.0)\` |
-| Party Organization (home state) | 0 to 25 | \`(min(100, max(0, partyOrganization)) / 100) × 25\` |
-| National Political Influence | 0 to 25 | \`normalizeNationalReachPresidentialPrimary(NPI) × 25\` (*) |
-| Favorability | 0 to 10 | \`(favorability / 100) × 10\` |
+| Alignment (party only) | 0 to 40 | \`max(0, 40 − (|econDiff_party| + |socialDiff_party|) × 2.0)\` |
+| Party Influence | 0 to 20 | \`normalizePartyInfluencePresidentialPrimary(partyInfluence) × 20\` (reference scale: partyInfluence 150) |
+| National Reach | 0 to 15 | \`normalizeNationalReachPresidentialPrimary(NPI) × 15\` (*) |
+| Favorability | 0 to 25 | \`(favorability / 100) × 25\` |
 
 Same infamy penalty applies on the final score. Key differences from the state formula:
 - **No state-position alignment**: presidential primaries are national, only the party platform matters.
-- **Favorability is only worth 10 points** (vs 35 in state races).
-- **Party org is a major factor**: maxes out at 25 pts when home-state org = 100.
-- **NPI normalization curve is different**: uses a diminishing-returns curve \`1 − exp(−NPI/45)\` (\`normalizeNationalReachPresidentialPrimary\`), not the sqrt curve that state PI uses. The diminishing shape keeps Support, Favorability, and Org meaningful against a moderate NPI gap.
+- **Alignment stays dominant at 40 pts**, so parties still favor candidates who agree with them.
+- **Favorability is worth 25 points**, high enough to matter but never enough on its own to outweigh alignment.
+- **Party influence and national reach split the rest** (20 and 15 pts), with party influence still outranking raw reach.
+- **NPI normalization curve is different**: uses a diminishing-returns curve \`1 − exp(−NPI/45)\` (\`normalizeNationalReachPresidentialPrimary\`), not the sqrt curve that state PI uses. The diminishing shape keeps favorability and reach meaningful against a moderate NPI gap.
 
 ---
 

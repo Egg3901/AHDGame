@@ -201,7 +201,7 @@ Many factors adjust your sector profit margins. These are additive:
 | Carbon emissions | up to -3% | Applies to energy, chemical_industries, manufacturing, automobiles, extraction |
 | Cost of living | ±3% | Higher cost of living raises labor costs; applies to manufacturing, retail, agriculture, construction, logistics, extraction, chemical_industries |
 | Inflation | +2% to -8% | Bonus below 2%, penalty above |
-| Debt-to-GDP | up to -15% | Penalty starts at 50% D/GDP |
+| Debt-to-GDP | up to -5% | Penalty starts at 50% D/GDP |
 | Deficit stimulus | up to +5% | +0.5% per 1% of GDP deficit |
 | Subsidies | +7.5% per subsidy | Federal and state stack |
 | Logistical sprawl | up to -0.5%/2 sectors | Penalty above 15 sectors; see Logistical Sprawl below |
@@ -281,7 +281,7 @@ Aggressive policy maximizes revenue and commodity throughput but also raises inp
 
 ## Operating strategies
 
-Each sector type has **2 to 7 operating strategies** that change which commodities it supplies and demands. Strategies are how you specialize: an energy sector can run Conventional (fossil fuels), Renewables Focus (solar/wind using electronics and rare earth), or Nuclear Expansion (high output, heavy steel and chemicals). A chemical industries sector can pivot between industrial chemicals, fertilizer production, pharmaceuticals, or plastics.
+Each sector type has **2 to 8 operating strategies** that change which commodities it supplies and demands. Strategies are how you specialize: an energy sector can run Conventional (fossil fuels), Renewables Focus (solar/wind using electronics and rare earth), Nuclear Expansion (high output, heavy steel and chemicals), and several more besides. A chemical industries sector can pivot between industrial chemicals, fertilizer production, pharmaceuticals, or plastics.
 
 **Strategies have no direct margin bonus**: their value comes entirely from commodity market dynamics. Switching to a strategy that supplies a scarce commodity or avoids expensive inputs can dramatically improve margins; switching into an oversupplied market does the opposite.
 
@@ -302,25 +302,29 @@ Computer-run corporations may automatically retool a sector onto a better strate
 
 | Sector | Strategies |
 | --- | --- |
-| Energy | Conventional, Renewables Focus, Nuclear Expansion |
-| Manufacturing | Standard, Heavy Metals, Electronics Manufacturing |
-| Technology | Standard, Hardware Focus, Software Focus |
-| Agriculture | Traditional, Industrial, Sustainable |
-| Chemical Industries | Industrial Chemicals, Fertilizer Production, Pharmaceuticals, Plastics & Polymers |
-| Healthcare | Standard, Hospital Networks, Outpatient & Preventive |
-| Automobiles | Standard, EV Focus, Heavy Machinery |
-| Financial | Standard, Fintech, Traditional Banking |
-| Media | Standard, Digital-First, Legacy Broadcast |
-| Defense | Standard, Cyber Warfare, Heavy Armor, Munitions & Arms Export |
-| Real Estate | Standard, Commercial Development, Green Building |
-| Construction | General Contracting, Infrastructure Buildout, Modular Construction |
-| Telecommunications | Standard, 5G/Infrastructure, Cloud Services |
-| Entertainment | Standard, Streaming/Digital, Live/Venue |
-| Retail | Standard, E-Commerce, Brick & Mortar |
-| Logistics | Standard, Automated Logistics, Full-Service |
-| Extraction & Mining | Diversified, Iron & Metals Mining, Oil & Gas, Rare Earth Mining, Coal Mining, Copper Mining, Timber & Forestry |
+| Sector | Strategies | Count |
+| --- | --- | --- |
+| Energy | Hydraulic Fracturing, Conventional, Renewables Focus, Nuclear Expansion, Smart Grid, Fusion Generation | 6 |
+| Manufacturing | Standard, Heavy Metals, Electronics Manufacturing, and more | varies |
+| Technology | Standard, Hardware Focus, Software Focus, and more | varies |
+| Agriculture | Traditional, Industrial, Sustainable | 3 |
+| Chemical Industries | Industrial Chemicals, Fertilizer Production, Pharmaceuticals, Plastics & Polymers | 4 |
+| Healthcare | Standard, Hospital Networks, Outpatient & Preventive | 3 |
+| Automobiles | Standard, EV Focus, Heavy Machinery | 3 |
+| Financial | Standard, Fintech, Traditional Banking | 3 |
+| Media | Standard, Digital-First, Legacy Broadcast | 3 |
+| Defense | Directed-Energy Systems, Standard, Cyber Warfare, Heavy Armor, Munitions & Arms Export, Naval Systems, Missile & Rocket Systems, Aerospace Systems | 8 |
+| Real Estate | Standard, Commercial Development, Green Building | 3 |
+| Construction | General Contracting, Infrastructure Buildout, Modular Construction | 3 |
+| Telecommunications | Standard, 5G/Infrastructure, Cloud Services | 3 |
+| Entertainment | Standard, Streaming/Digital, Live/Venue | 3 |
+| Retail | Standard, E-Commerce, Brick & Mortar | 3 |
+| Logistics | Standard, Automated Logistics, Full-Service | 3 |
+| Extraction & Mining | Diversified, Iron & Metals Mining, Oil & Gas, Rare Earth Minerals Mining, Coal Mining, Timber & Forestry | 6 |
 
-For extraction sectors specifically, the **Diversified** strategy spreads output across all seven resource types at lower per-commodity rates. The focused strategies (Iron & Metals Mining, Oil & Gas, etc.) produce **4 to 10×** more of their target commodity, so switching to the focused strategy that matches the scarcest resource is almost always the higher-margin play when a clear shortage exists. See [Commodities](/wiki/commodities#extraction-strategies) for a full breakdown.
+There is no separate Copper Mining strategy: copper was merged into the Rare Earth Minerals commodity, and Rare Earth Minerals Mining covers both markets.
+
+For extraction sectors specifically, the **Diversified** strategy spreads output across all six resource types (copper is merged into the Rare Earth Minerals market) at lower per-commodity rates. The focused strategies (Iron & Metals Mining, Oil & Gas, etc.) produce roughly **3 to 5×** more of their target commodity, so switching to the focused strategy that matches the scarcest resource is almost always the higher-margin play when a clear shortage exists. See [Commodities](/wiki/commodities#extraction-strategies) for a full breakdown.
 
 **Telecommunications** sectors produce **Network Services** (subscription-equivalent broadband/connectivity capacity) as their primary unique output alongside software. The three strategies (Standard, 5G/Infrastructure, Cloud Services) differ in how much network_services vs software they supply and in their hardware/energy input mix. Network services have background macro demand from GDP, so there is always a market even before player-built Telecom sectors are common.
 

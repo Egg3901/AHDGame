@@ -10,21 +10,23 @@ Germany is a **federal parliamentary republic** that uses **mixed-member proport
 | --- | --- | --- | --- |
 | Chancellor | Confidence vote of Bundestag members | No fixed term | 1 |
 | Member of Bundestag (MdB) | Mixed-member proportional (AMS) | 4 years | 630 |
-| Minister-President | Sub-national election | 5 years | 1 per state (16) |
+| Minister-President | Sub-national election | 5 years | 1 per state (11) |
 | Federal President | Ceremonial (not player-facing) | 5 years | 1 |
 | President of the ECB | Appointed action | 4 years | 1 |
 
-**The Bundestag** is the primary legislative chamber. Germany's upper chamber is the **Bundesrat**: 69 members representing the 16 German states (Länder). Bundesrat members are appointed by state governments, not elected by players directly.
+**The Bundestag** is the primary legislative chamber. Germany's upper chamber is the **Bundesrat**, representing the German states (Länder). Bundesrat members are appointed by state governments, not elected by players directly.
 
 The **Federal President** is a ceremonial head of state (like the UK Monarch), not the head of government. The head of government is the Chancellor.
 
 ---
 
-## 16 German states (Länder)
+## 11 German states (Länder)
 
-Germany has 16 federal states. Each state elects its own Minister-President, who is the sub-national executive equivalent to a US Governor. Minister-Presidents also influence the Bundesrat's composition.
+The 1953 seed models West Germany: 11 federal states. Each state elects its own Minister-President, who is the sub-national executive equivalent to a US Governor. Minister-Presidents also influence the Bundesrat's composition.
 
-The 16 states are: Baden-Württemberg, Bavaria, Berlin, Brandenburg, Bremen, Hamburg, Hesse, Lower Saxony, Mecklenburg-Vorpommern, North Rhine-Westphalia, Rhineland-Palatinate, Saarland, Saxony, Saxony-Anhalt, Schleswig-Holstein, Thuringia.
+The 11 states are: Baden-Württemberg, Bavaria, Berlin, Bremen, Hamburg, Hesse, Lower Saxony, North Rhine-Westphalia, Rhineland-Palatinate, Saarland, Schleswig-Holstein.
+
+The five eastern states from reunified Germany (Brandenburg, Mecklenburg-Vorpommern, Saxony, Saxony-Anhalt, Thuringia) belong to East Germany (DD), which is a separate playable country in this era.
 
 ---
 

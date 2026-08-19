@@ -37,16 +37,16 @@ Fog of war is automatic. Opponents can see your upgrade levels, but only through
 - Negative-funds warning if you've overspent.
 - Auto-downgrade warning if projected maintenance > projected income.
 
-### Upgrades
+### Strategic Ops
 
-Four dimensions, each with its own card:
+Four **branch trees**, each with its own card, replacing the old flat-level upgrade model:
 
-- **Fundraising** (10 levels, ₳20k to ₳5M/turn)
-- **Media Spending** (5 levels, +0.5% Favorability/level/turn, maintenance)
-- **Ground Game** (5 levels, +3% turnout/level in your race's competitive areas: swing states for president, swing counties for senate / gov, swing precincts for house / state senate; maintenance applies)
-- **Opposition Research** (5 levels, −0.5%/turn drain to target, retargetable)
+- **Fundraising**: starter passive income, then branches (Grassroots, Bundlers, Direct Mail) that add more.
+- **Media Spending**: starter passive Favorability gain, then Broadcast and Television branches that add more, plus a Rapid Response branch.
+- **Ground Game**: starter turnout bonus in your race's competitive areas (swing states for president, swing counties for senate / gov, swing precincts for house / state senate), then Field Offices, Get-Out-The-Vote, and Volunteer Corps branches.
+- **Opposition Research**: starter drain to one target, then Dossier, Scandal Leak, and Counter-Intel branches that add or amplify drain. Retargetable.
 
-Each card shows current level, next-level cost (both money and campaign actions), and per-turn effect.
+Each card shows the starter node and its branches, next-branch cost (both money and campaign actions), and current per-turn effect.
 
 **General-phase cost multiplier:** All upgrade costs are **1.5× higher** once the election enters the general phase. Front-load upgrades in the primary.
 
@@ -160,32 +160,32 @@ Donations show up in the Budget tab and Activity Log with attribution.
 
 ### In the build phase
 
-- Upgrade Fundraising to level 1 or 2 early (₳50k to ₳170k) for the passive income boost. Primary-phase upgrade cost is lower than general-phase.
+- Start the Fundraising tree early for the passive income boost. Primary-phase costs are lower than general-phase.
 
 ### Entering a primary
 
-- Decide on initial strategy: ads-heavy (upgrade Media Spending), turnout-heavy (Ground Game), or damage-opponent (Opposition Research).
+- Decide on initial strategy: ads-heavy (Media Spending tree), turnout-heavy (Ground Game tree), or damage-opponent (Opposition Research tree).
 - Most candidates pick one emphasis plus Fundraising.
 
 ### Early general
 
-- Push fundraising to level 3 to 5 if you can.
-- Purchase Media or Ground Game to 2 to 3 levels depending on race.
-- Start Opposition Research on the leading opponent at level 1 or 2.
+- Push the Fundraising tree further if you can.
+- Invest in Media or Ground Game branches depending on race.
+- Start Opposition Research on the leading opponent.
 
 ### Closing sprint (final 4 turns)
 
-- Everything doubles. Don't buy new upgrades (expensive, no time for effect): run existing tiers at full tilt.
+- Everything doubles. Don't start new branches (expensive, no time for effect): run existing trees at full tilt.
 - Use campaign actions from endorsement bonuses.
 - Retarget Opposition Research at the leading opponent if your original target isn't the current frontrunner.
 
 ## Common mistakes
 
-- **Upgrading in general instead of primary.** You pay 1.5× more. Front-load.
-- **Buying high maintenance tiers you can't afford.** Auto-downgrade kicks in, you lose the investment.
-- **Ignoring Opposition Research retarget cooldown.** 6 hours. Plan retargets ahead of time.
-- **Not checking fog-adjusted opponent upgrades.** Opponent shown at level 8 (±3) could actually be level 5. Don't over-react.
-- **Forgetting endorsement action bonuses.** If you have 9 NPP endorsements, your campaign has 10 actions/turn, worth about ₳150k/turn in upgrade velocity.
+- **Upgrading in general instead of primary.** You pay more. Front-load.
+- **Buying high-maintenance branches you can't afford.** Auto-downgrade kicks in, you lose the investment.
+- **Ignoring Opposition Research retarget cooldown.** Plan retargets ahead of time.
+- **Not checking fog-adjusted opponent investment.** A fogged opponent estimate could be well off. Don't over-react.
+- **Forgetting endorsement action bonuses.** If you have 9 NPP endorsements, your campaign has 10 actions/turn, worth real upgrade velocity.
 
 ## Related
 

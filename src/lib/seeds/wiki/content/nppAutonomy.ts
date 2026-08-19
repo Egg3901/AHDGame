@@ -1,6 +1,6 @@
 export const nppAutonomyContent = `# NPP Autonomy
 
-**NPP autonomy** is the graduated system that makes Non-Player Politicians act more like full political actors: sponsoring bills, forming governments, staffing ministries, and running campaigns without waiting for player nudges. It replaces the old binary on/off flag with levels **off → v0 → v1 → v2 → v3**.
+**NPP autonomy** is the graduated system that makes Non-Player Politicians act more like full political actors: sponsoring bills, forming governments, staffing ministries, and running campaigns without waiting for player nudges. It replaces the old binary on/off flag with levels **off → v0 → v1 → v2 → v3 → v4**. The game's seeded default is **v4**.
 
 For baseline NPP behavior (bill cross-pressure, elections, influence actions), see [NPPs Overview](/wiki/npps-overview), [NPP Behavior](/wiki/npp-behavior), and [NPP Elections](/wiki/npp-elections).
 
@@ -13,14 +13,15 @@ For baseline NPP behavior (bill cross-pressure, elections, influence actions), s
 | **v1** | Executive formation, ministerial governance, governing agendas: NPP-led cabinets start behaving coherently |
 | **v2** | **Comingle tier for player countries**: caretaker ministers, deeper executive/campaign autonomy where players and NPPs share a country |
 | **v3** | Full economic autonomy for NPP actors (savings, campaign finance depth, expanded decision loops) |
+| **v4** | Extends comingle depth into player-enabled countries: active-bill sponsorship caps and further player-country NPP behavior tuning |
 
-Levels are cumulative: v2 includes everything in v0 and v1.
+Levels are cumulative: v2 includes everything in v0 and v1, v4 includes everything below it.
 
 ## Player vs non-player countries
 
 Autonomy applies differently by country type:
 
-- **Non-player countries**: the configured global level applies as-is (v0/v1/v2/v3).
+- **Non-player countries**: the configured global level applies as-is (v0/v1/v2/v3/v4).
 - **Player-enabled countries**: autonomy **only activates at v2 and above** (the "comingle" tiers). Below v2, player countries stay on manual NPP behavior so humans remain primary.
 
 This rail prevents autonomous NPP governments from overriding player-led countries until admins explicitly enable comingle tiers.

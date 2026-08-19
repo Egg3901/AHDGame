@@ -12,10 +12,11 @@ Per-turn allocation of the pool:
 
 | Turn phase | Share of pool | Per-turn weight |
 | --- | --- | --- |
-| Early turns (all non-final) | 75% | \`0.75 × pool / (totalTurns − 4)\` |
-| Final 4 turns | 25% | \`0.25 × pool / 4\` |
+| Early turns | 50% | Spread evenly across the early band |
+| Ramp (8 turns before election day) | 20% | Spread evenly across the ramp band |
+| Election day (final 4 turns) | 30% | \`0.3 × pool / 4\` |
 
-For a US House or Senate race (96 total turns with a 48-hour primary, so 48 general turns), the final 4 turns each hold ~12× the weight of an early turn.
+The final 4 turns are a sharp closing spike: they carry 30% of the pool on their own, well above their share of the turn count, and each one is heavier than any ramp or early turn.
 
 **Implication:** your stats at the moment of each turn's vote snapshot matter. A dip in Favorability or a stale Political Influence on the last day can cost you the race even if you dominated the first three-quarters.
 
@@ -59,8 +60,8 @@ If a state has passed legislation switching to **Ranked Choice Voting**, the FPT
 US House, US State Senate, UK Commons regions, DE Bundestag constituencies, and JP Shūgiin use proportional allocation:
 
 - **Largest-remainder method** converts vote shares to seat shares.
-- **Minimum threshold:** 20% of votes needed for any seats.
-- **2-seat special case:** winner takes both unless the runner-up reaches 20%.
+- **Minimum threshold:** 20% of votes for US House and UK Commons; **10%** for US State Senate and Regional Council races, which run in larger districts where more parties split the vote.
+- **2-seat special case (House):** winner takes both unless the runner-up reaches the threshold.
 - **Seats estimate** updates each turn as votes accumulate.
 
 If you're running for a 4-seat region and your party projects to 42% of the vote, you expect ~2 seats. If you're projected at 17% and another party is at 25%, you likely get 0 and they get all.
@@ -128,7 +129,7 @@ After the primary, each presidential nominee selects a running mate (VP):
 
 - Must be a valid character; cannot be the current President, cannot be the nominee themselves.
 - If confirmed, the VP takes office alongside the President on win.
-- **VP has +2 actions/turn and ₳25k/turn fund bonus; tie-breaks Senate votes.**
+- **VP has +2 actions/turn and ₳25k/turn fund bonus.**
 
 You can change your running mate any time before the election resolves, and clear it entirely if you want to run without one.
 

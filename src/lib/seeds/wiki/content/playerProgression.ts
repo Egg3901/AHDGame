@@ -19,10 +19,10 @@ One character per account. See [Create a Character](/wiki/create-a-character) fo
 
 You're an independent with no office. You cannot run for office yet. Everything else is available:
 
-- Campaign (+1% PI per action, free)
-- Fundraise (earns ₳50k + ₳10k × donor level)
-- Run Ads (+1 to 3 Favorability, ₳100k)
-- Build Donor Network (₳50k + ₳25k × level, +1 donor level)
+- Campaign (+1 PI per action, diminishing above 50, free)
+- Fundraise (earns ₳50k + ₳2k × donor level)
+- Run Ads (+1 to 3 Favorability, cost scaled by state GDP)
+- Build Donor Network (₳3k + ₳1.5k × level, scaled by state GDP, +1 donor level)
 - Commission Polls (Quick ₳25k / Full ₳75k)
 - Support or Attack other politicians (+/−1% their Favorability)
 - Barnstorm for allies (+1% their PI, 5 actions + ₳100k)
@@ -89,7 +89,7 @@ Applied every turn on top of the 4-action base:
 | --- | --- |
 | House / State Sen / MP / MdB / Sangiin member | +1 |
 | Senate / Vice President | +2 |
-| Governor / equivalent sub-national executive | +3 |
+| Governor / equivalent sub-national executive | +2 |
 | President / Prime Minister / Chancellor | +4 |
 | Central Bank Chair | +3 (stacks with elected office) |
 
@@ -151,7 +151,7 @@ Detail: [Japan](/wiki/japan).
 Beyond elected office, there are appointed and elected sub-roles:
 
 - **Vice President (US)**: chosen by the Presidential candidate as running mate. +2 action bonus; tie-breaks Senate votes.
-- **Cabinet Secretary (US)**: nominated by the President, confirmed by the Senate. Eighteen roles exist.
+- **Cabinet Secretary (US)**: nominated by the President, confirmed by the Senate. Fifteen roles exist.
 - **Committee Chair (US, UK, DE, JP)**: earned through committee elections within a party or chamber.
 - **Central Bank Chair**: separate role; +3 action bonus stacks on any elected office.
 
@@ -161,7 +161,7 @@ None of these are dead ends: cabinet experience often translates into later Sena
 
 | Stat | Starting | Grows by |
 | --- | --- | --- |
-| Political Influence | 0 | Campaign (+1%/action); decays 0.75%/turn |
+| Political Influence | 0 | Campaign (+1/action, diminishing above 50); decays 0.75%/turn |
 | National Influence (NPI) | 0 | +state PI / 100 per turn (uncapped, logarithmic in presidential races) |
 | Favorability | 50 | Ads, Travel; decays if > 60 |
 | Infamy | 0 | Attack or NPP lower action; decays 5%/turn |

@@ -8,7 +8,7 @@ The complete reference for every stat a character carries and every action they 
 
 - **Scale:** 0 to 100, per state
 - **Start:** 0
-- **Grows by:** Campaign action (+1% per action)
+- **Grows by:** Campaign action (+1 base per action, diminishing above 50, floored at +0.1)
 - **Decays by:** 0.75% of current value per turn (floor 0)
 - **Drives:** Vote reach in state races, primary scores in state races
 - **Scope:** Single value; home-state focus in current implementation
@@ -18,7 +18,7 @@ PI is the most important stat in the early game. Because decay is relative (not 
 ### National Political Influence (NPI)
 
 - **Scale:** Uncapped; starts at 0
-- **Grows by:** +state PI ÷ 100 per turn (automatic, no action required), **plus a position bonus** of +0.5 to 2.5 per turn depending on held office (President +2.5, VP/Governor/Senator +1.5, House/State Senate +0.5, none +0)
+- **Grows by:** +state PI ÷ 100 per turn (automatic, no action required), **plus a position bonus** per turn depending on held office (President/PM/Chancellor +2.5, VP +2.0, other seated offices, Governor, Senator, Representative, cabinet, etc., +1.0, none +0)
 - **Drives:** Presidential races **exclusively**: both reach and appeal
 - **Scaling:** Sqrt curve, capped at 1.0 once NPI reaches 100. NPI 25 → 0.5×; NPI 50 → ~0.71×; NPI 85 → ~0.92×; NPI 99 → ~0.995×; NPI ≥ 100 → 1.0× (cap)
 
@@ -95,7 +95,7 @@ Fund generation per turn:
 ### Actions
 
 - **Base per turn:** 4
-- **Office bonus:** House/State Sen +1 · Senate/VP +2 · Gov +3 · Pres +4 · Central Bank Chair +3
+- **Office bonus:** House/State Sen +1 · Senate/VP +2 · Gov +2 · Pres +4 · Central Bank Chair +3
 - **Party bonus:** variable per turn, distributed from party pool by your Party Influence × platform alignment
 - **Cap:** 200
 - **Hoarding penalty:** −4/turn above 100
@@ -140,8 +140,8 @@ Target another player character or NPP from their profile page. Cross-country ac
 
 | Action | Actions | Funds | Effect on target | Effect on you |
 | --- | --- | --- | --- | --- |
-| Support | 2 | None | +1% Favorability | None |
-| Attack | 2 | None | −1% Favorability (fails if roll < Infamy × 10) | +2% Infamy (always) |
+| Support | 6 | None | +1% Favorability (±12 net swing cap per target per turn) | None |
+| Attack | 6 | None | −1% Favorability (fails if roll < Infamy × 10; ±12 net swing cap per target per turn) | +2% Infamy (always) |
 | Barnstorm | 5 | −₳100,000 | +1% PI (+2% if your home state matches target's) | None |
 
 - Out-of-state cost multipliers apply to Support and Attack.

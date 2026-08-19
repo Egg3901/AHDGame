@@ -41,7 +41,7 @@ When the voting window closes, the turn processor tallies votes.
 
 - **Majority confirms:** The character takes office as the Cabinet member, and the position is marked filled.
 - **Majority rejects:** The nomination fails. The position remains vacant. The President can submit a new nomination for the same position immediately.
-- **If the vote ends in a tie:** The Vice President breaks the tie (same rule as Senate bill votes).
+- **If the vote ends in a tie:** The nomination fails. Confirmation requires a strict majority of Confirm votes over Reject; there is no Vice President tie-break here, unlike on Senate bills.
 
 ## What can block a confirmation
 

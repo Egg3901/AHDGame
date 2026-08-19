@@ -17,7 +17,7 @@ Treasury funds are spent on budget allocations (GOTV, suppression, org building)
 
 Political Strength (PS) is the renamed-from-action-pool reserve a party spends on direct actions like Build Org, Influence, Recruitment, and the like. Unlike the old flat \`+5/turn\` action pool, PS is a stored reserve that grows over time:
 
-- a passive \`+1 PS / turn\` trickle for both national and state parties
+- a passive flat trickle, treasury-independent: **20 PS/turn** for national parties, **5 PS/turn** for state parties
 - treasury-driven PS gains, normalized per country (state-party PS is generated at half the national rate in the same country)
 - both streams grow at full rate up to the hard cap: the cap is the only ceiling, and once the reserve reaches it no further gain is added (or charged for)
 

@@ -37,7 +37,7 @@ Each turn you receive:
 - **Office bonus**: stacked on top of base:
   - House / State Senate / Bundestag member / Sangiin member / MP: **+1**
   - Senate / Vice President / state governor analogue: **+2**
-  - Governor: **+3**
+  - Governor: **+2**
   - President: **+4**
   - Central Bank Chair: **+3** (stacks on any office bonus you also hold)
 - **Party bonus**: a variable share of your party's action pool, allocated by Party Influence × platform-alignment closeness.
@@ -57,8 +57,8 @@ Action costs for core activities (full list on [Stats & Actions](/wiki/stats-act
 | Run Advertisements | 5-9 (tiered by favorability) | Scaled by state GDP | +1-3 Favorability (diminishing above 70%) |
 | Full Demographic Poll | 6 | ₳75k | complete breakdown |
 | Build Donor Network | 4-20 (tiered by level) | Scaled by state GDP | donor level +1 |
-| Support | 2 | none | +1% target Favorability |
-| Attack | 2 | none | −1% target Favorability; +2% own Infamy |
+| Support | 6 | none | +1% target Favorability (±12 net swing cap per target per turn) |
+| Attack | 6 | none | −1% target Favorability; +2% own Infamy (±12 net swing cap per target per turn) |
 | Barnstorm | 5 | ₳100k | +1-2% target Political Influence |
 | Presidential Travel | 5 | none | Sets travel state during general; +1%/turn Favorability while there |
 

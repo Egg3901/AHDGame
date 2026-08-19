@@ -77,7 +77,7 @@ National chair, vice chair, and committee-confirmed campaigners can spend party 
 
 ## National committee proposals
 
-The national committee can vote on formal proposals to change the party. All proposals run for **24 turns** and pass or fail by **60% of filled roles** (more than half the eligible voters must vote yes or no to resolve early; otherwise the proposal expires).
+The national committee can vote on formal proposals to change the party. All proposals run for **24 turns** and pass or fail by **60% of filled roles** (more than half the eligible voters must vote yes or no to resolve early). If the window runs out before that threshold is hit, the proposal doesn't just lapse: it resolves anyway, with every non-voting member counted as a **nay**, so an unresolved proposal usually fails.
 
 ### Who can propose and vote
 

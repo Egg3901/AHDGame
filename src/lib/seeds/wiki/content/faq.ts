@@ -144,7 +144,7 @@ When Forex is enabled, you can trade currencies: USD, GBP, EUR, and JPY. Exchang
 
 **Can I change my home state?**
 
-Yes, via the relocation action. Relocating costs actions and funds, and there is a cooldown period. After relocating, your home state updates for canvassing and future elections. You cannot change which country your character belongs to.
+Yes, via the relocation action. Relocating costs actions and funds, and there is a cooldown period. After relocating, your home state updates for canvassing and future elections. Relocation can also move you to a different country - that resets your national influence and drops you to independent in the new country, so treat it as a fresh start there, not a free jump.
 
 ---
 

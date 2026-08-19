@@ -1,8 +1,8 @@
 export const commoditiesContent = `# Commodities
 
-The commodity market tracks 29 raw materials and services that flow between corporate sectors. Commodity prices shift each turn based on supply and demand from all active corporations. These prices directly affect corporate profit margins, sometimes dramatically.
+The commodity market tracks 28 raw materials and services that flow between corporate sectors. Commodity prices shift each turn based on supply and demand from all active corporations. These prices directly affect corporate profit margins, sometimes dramatically.
 
-## The 29 commodities
+## The 28 commodities
 
 | Commodity | Typical suppliers | Typical buyers |
 | --- | --- | --- |
@@ -27,14 +27,15 @@ The commodity market tracks 29 raw materials and services that flow between corp
 | Iron Ore | Extraction | Manufacturing, Automobiles, Defense |
 | Coal | Extraction | Energy, Manufacturing |
 | Crude Oil | Extraction | Energy, Chemical Industries |
-| Rare Earth Minerals | Extraction | Technology, Defense, Energy (Renewables), Automobiles (EV) |
-| Copper | Extraction | Manufacturing, Technology, Energy, Automobiles, Construction, Telecommunications |
+| Rare Earth Minerals | Extraction | Technology, Defense, Energy (Renewables), Automobiles (EV), Manufacturing, Construction, Telecommunications |
 | Timber & Lumber | Extraction | Manufacturing, Real Estate, Agriculture, Construction, Retail |
 | Natural Gas | Extraction | Energy, Manufacturing, Chemical Industries, Agriculture, Retail |
 | Ordnance & Weapons Systems | Defense | Extraction focused strategies (mining explosives) |
 | Plastics & Polymers | Chemical Industries (all strategies co-produce; Plastics strategy maximises output) | Manufacturing, Healthcare, Agriculture, Automobiles, Construction, Retail |
 | **Network Services** | **Telecommunications (all strategies)** | (macro demand from GDP: broadband/connectivity) |
 | **Entertainment Services** | **Entertainment (all strategies)** | (macro demand from GDP: leisure spending) |
+
+Copper is not a standalone commodity: its market was merged into Rare Earth Minerals, which now covers both and is priced as a demand-weighted blend of the two.
 
 ## How prices work
 
@@ -56,18 +57,18 @@ Only **owned** sectors participate. Unowned market share does not contribute sup
 - **Aggressive (+25):** +15% supply output, +10% demand inputs
 - **Conservative (-25):** -10% supply output, -15% demand inputs
 
-Market price updates each turn using a **logarithmic curve** with a 3× soft-knee (a gradual transition instead of a hard cutoff):
+Market price updates each turn using a **logarithmic curve** with a soft-knee (a gradual transition instead of a hard cutoff): 3× for most commodities, widened to **8×** for the six extractable resources (oil, coal, iron, timber, natural gas, and the merged rare earth/copper market), since their prices are allowed more room to run before the tail compresses.
 
 \`\`\`
 rawRatio = demand / supply
-effectiveRatio = rawRatio inside 3x shortage or 3x oversupply
+effectiveRatio = rawRatio inside the soft-knee (3x standard, 8x extractables) shortage or oversupply
 above the soft-knee, log pressure keeps growing at 25% of the raw tail slope
 
 if effectiveRatio >= 1 (shortage):   price = basePrice * (1 + 0.7 * ln(effectiveRatio))
 if effectiveRatio < 1 (oversupply): price = basePrice / (1 + 0.7 * ln(1 / effectiveRatio))
 \`\`\`
 
-Raw D/S remains visible on market and admin screens. Prices and margins use the effective ratio, so anything beyond 3× can keep worsening, but each extra unit of shortage or oversupply has steeply diminishing impact.
+Raw D/S remains visible on market and admin screens. Prices and margins use the effective ratio, so anything beyond the soft-knee can keep worsening, but each extra unit of shortage or oversupply has steeply diminishing impact.
 
 **Global stabilizer:** A 50,000-unit floor is added to both global supply and global demand to prevent extreme price swings when real activity is near zero (e.g. early game).
 
@@ -215,7 +216,7 @@ Margin modifiers are computed independently at three scales (**global**, **natio
 The state leg adds a stabilizer to both supply and demand to prevent extreme ratios when a state has minimal local production. State *prices* don't get this stabilizer: only the margin path does.
 
 - **Standard commodities:** 250-unit stabilizer (STATE_COMMODITY_SUPPLY_DEMAND = 250)
-- **Extractable resources** (oil, coal, iron, copper, natural gas, timber, rare earth): **2,500-unit stabilizer** (EXTRACTABLE_RESOURCE_STATE_STABILIZER = 2500): these commodities are globally traded, so a state without local deposits can realistically import them. The larger stabilizer prevents states from suffering extreme margin penalties just because they have no local oil fields or iron mines.
+- **Extractable resources** (oil, coal, iron, natural gas, timber, rare earth/copper): **2,500-unit stabilizer** (EXTRACTABLE_RESOURCE_STATE_STABILIZER = 2500): these commodities are globally traded, so a state without local deposits can realistically import them. The larger stabilizer prevents states from suffering extreme margin penalties just because they have no local oil fields or iron mines.
 
 Tariffs shift this blend (see [Tariffs](/wiki/tariffs#commodity-blend-weight-shift)). The **local weight stays fixed at 25%**; tariff pressure moves weight from **global -> national** so corporate margins become more sensitive to country-level conditions and less to global ones. At 100% effective tariff coverage the blend becomes 25% global / 50% national / 25% local.
 
@@ -238,19 +239,18 @@ When a sector runs a non-standard strategy, its effective supply/demand rates ov
 
 ### Extraction strategies
 
-Extraction sectors choose between a **Diversified** strategy (standard) and six **focused** strategies:
+Extraction sectors choose between a **Diversified** strategy (standard) and five **focused** strategies (there is no separate Copper Mining strategy: copper was merged into the Rare Earth Minerals commodity, and the old copper_mining strategy now maps to Rare Earth Minerals Mining):
 
 | Strategy | Supply rate | vs Diversified | Notes |
 | --- | --- | --- | --- |
-| Diversified | Iron 0.17, Coal 0.15, Oil 0.14, Rare Earth 0.07, Copper 0.07, Natural Gas 0.08, Timber 0.06 | n/a | Broad coverage; no ordnance demand; strong when no single shortage dominates |
-| Iron & Metals Mining | Iron **0.78** | **~4.6×** iron output | Best when iron is severely scarce (D/S above 2×) |
-| Oil & Gas | Oil **0.58** + Natural Gas **0.32** | **~4.1× / ~4.0×** | Best when oil and/or natural gas are scarce |
-| Coal Mining | Coal **0.72** | **~4.8×** | Best when coal is scarce |
-| Copper Mining | Copper **0.72** | **~10.3×** | Best when copper is scarce |
-| Timber & Forestry | Timber **0.64** | **~10.7×** | Best when timber is scarce |
-| Rare Earth Mining | Rare Earth **0.45** | **~6.4×** | Best when rare earth is scarce |
+| Diversified | Iron 0.25, Coal 0.22, Oil 0.14, Rare Earth 0.14, Natural Gas 0.14, Timber 0.12 | n/a | Broad coverage; no ordnance demand; strong when no single shortage dominates |
+| Iron & Metals Mining | Iron **0.78** | **~3.1×** iron output | Best when iron is severely scarce (D/S above 2×) |
+| Oil & Gas | Oil **0.58** + Natural Gas **0.32** | **~4.1× / ~2.3×** | Best when oil and/or natural gas are scarce |
+| Coal Mining | Coal **0.72** | **~3.3×** | Best when coal is scarce |
+| Timber & Forestry | Timber **0.64** | **~5.3×** | Best when timber is scarce |
+| Rare Earth Minerals Mining | Rare Earth **0.72** | **~5.1×** | Covers the merged copper + rare-earth market; best when that market is scarce |
 
-Focused strategies produce **4 to 10× more** of their target commodity than the diversified strategy. If a resource is at D/S 2×+ and you have 3+ sectors, focusing beats diversifying on both supply contribution and margin. The Diversified strategy earns a broad surplus bonus across many commodities but caps quickly at the +30pp aggregate ceiling. Note: ordnance demand was removed from the Diversified strategy (blasting costs are now part of the chemicals budget rather than a weapons-system procurement).
+Focused strategies produce roughly **3 to 5× more** of their target commodity than the diversified strategy. If a resource is at D/S 2×+ and you have 3+ sectors, focusing beats diversifying on both supply contribution and margin. The Diversified strategy earns a broad surplus bonus across many commodities but caps quickly at the +30pp aggregate ceiling. Note: ordnance demand was removed from the Diversified strategy (blasting costs are now part of the chemicals budget rather than a weapons-system procurement).
 
 ### Extraction capacity multipliers
 

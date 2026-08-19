@@ -46,7 +46,7 @@ You have a lot of stats. These four matter first:
 
 | Stat | Range | How to grow | What it does |
 | --- | --- | --- | --- |
-| Political Influence | 0 to 100 | Campaign action (+1% per action) | Drives reach in state elections; decays 0.75%/turn |
+| Political Influence | 0 to 100 | Campaign action (+1 base, diminishing above 50) | Drives reach in state elections; decays 0.75%/turn |
 | Favorability | 0 to 100 | Ads (+1 to 3, diminishing above 70%) | Drives vote appeal; starts at 50 |
 | Donor Base Level | 1+ | Build Donor Network action | Scales fundraising income per turn |
 | Party Influence | 0 to 100 | Passive (stay active in party) | Your share of the party's bonus action pool |
@@ -58,7 +58,7 @@ Full list with every stat, action, and formula: [Stats & Actions](/wiki/stats-ac
 You earn actions each turn and they carry over (cap 200; hoarding penalty −4/turn above 100, so don't stockpile forever).
 
 - **Base**: 4 actions per turn.
-- **Office bonus** (if you hold office): House/State Senate +1, Senate/VP +2, Governor +3, President +4. Non-US offices grant equivalent bonuses.
+- **Office bonus** (if you hold office): House/State Senate +1, Senate/VP +2, Governor +2, President +4. Non-US offices grant equivalent bonuses.
 - **Party bonus**: A variable share of your party's action pool, distributed each turn based on your Party Influence and platform alignment.
 
 The one-time **25-action starting grant** is yours to spend on whatever you like. A common opener is: 2× Build Donor Network (~₳4.5k + ~₳6k = ~₳10.5k for donor level 1→3), one Run Advertisements (scaled by state GDP, ~₳100k at national average), and the rest on Campaign actions.

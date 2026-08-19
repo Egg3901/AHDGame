@@ -42,14 +42,14 @@ Presidential primaries reward national reach and party infrastructure more than 
 
 | Bucket | Max | How it's scored |
 | --- | --- | --- |
-| Policy alignment (party only) | 40 | Points lost scale with how far your positions sit from your party's official platform |
-| Party organization (home state) | 25 | A straight percentage of your party's organization score in your home state |
-| National Political Influence | 25 | A curve based on your national reach, capped at the maximum |
-| Favorability | 10 | A straight percentage of your Favorability score |
+| Alignment (party only) | 40 | Points lost scale with how far your positions sit from your party's official platform |
+| Party Influence | 20 | Normalized on the candidate's own accumulated party influence (uncapped above the reference scale) |
+| National Reach | 15 | A diminishing-returns curve on your national political influence |
+| Favorability | 25 | A straight percentage of your Favorability score |
 
 The raw score gets the same infamy penalty as the state-level formula. Presidential primaries are national, so there's no state-position alignment component: only the party platform applies.
 
-Presidential contenders live or die on NPI and party-org investment in their home state. A candidate with low NPI but high state PI can win state races but loses presidential primaries.
+Presidential contenders live or die on national reach, party influence, and favorability. A candidate with low national reach but high state PI can win state races but loses presidential primaries.
 
 ## NPP primary candidates
 

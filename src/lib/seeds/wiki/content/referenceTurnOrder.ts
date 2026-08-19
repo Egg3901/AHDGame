@@ -1,6 +1,6 @@
 export const referenceTurnOrderContent = `# Reference: turn order
 
-The game runs on an hourly cron. Every real-world hour is one game turn, which is one game week. Turn processing executes **40+ phases in 14 groups**, each hour. This page lists every group, what runs in it, and why the ordering matters.
+The game runs on an hourly cron. Every real-world hour is one game turn, which is one game week. Turn processing runs through roughly a dozen top-level adapters that together call over 100 phase steps, each hour. This page lists the major groups of phases, what runs in each, and why the ordering matters.
 
 **1 turn = 1 game week = 1 real hour**
 **48 turns = 1 game year**

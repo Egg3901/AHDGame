@@ -13,7 +13,7 @@ Only the CEO can issue bonds. Access the bond panel from the corporation page.
 | Unit face value | anchor currency 1,000 per bond unit |
 | Maturity options | 96 turns (2 years), 240 turns (5 years), 336 turns (7 years) |
 | Coupon rate | prime rate + credit spread + 1.0pp + term premium (see below) |
-| Issuance cooldown | 24 turns between issuances |
+| Issuance cooldown | 24 turns between issuances for publicly-listed corporations; 12 turns for private corporations |
 
 **Blocked while under IMF bailout:** If your corporation is under an active IMF sovereign bailout, you cannot issue new bonds or refinance defaulted debt until the restructuring ends.
 
@@ -48,10 +48,10 @@ Longer bonds command a higher coupon to compensate investors for locking up capi
 
 **Full formula:** coupon rate = prime rate + credit spread + 1.0pp (corporate premium) + term premium
 
-A BBB-rated corporation with a prime rate of 3.0% would pay:
-- 2yr: 3.0 + 1.5 + 1.0 + 0.00 = **5.50%**
-- 5yr: 3.0 + 1.5 + 1.0 + 1.00 = **6.50%**
-- 7yr: 3.0 + 1.5 + 1.0 + 1.75 = **7.25%**
+A BBB-rated corporation (credit spread 3.0pp) with a prime rate of 3.0% would pay:
+- 2yr: 3.0 + 3.0 + 1.0 + 0.00 = **7.00%**
+- 5yr: 3.0 + 3.0 + 1.0 + 1.00 = **8.00%**
+- 7yr: 3.0 + 3.0 + 1.0 + 1.75 = **8.75%**
 
 The bond issuance form shows the exact rate for each duration before you commit.
 
