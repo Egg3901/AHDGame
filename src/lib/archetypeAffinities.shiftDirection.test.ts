@@ -3,11 +3,15 @@ import { calculateShiftImpacts } from "@/lib/archetypeAffinities";
 import { legislationTypes } from "@/lib/seeds/reference/legislationTypes";
 
 /**
- * Regression: archetype-approval shift direction must follow the curated per-option
+ * Regression: approval shift direction must follow the curated per-option
  * position scores (economic+social), NOT the raw array index. Tax brackets are authored
  * right→left (index 0 = 0% / most market-friendly), so an index-based shift runs opposite
- * the affinity convention and flips every sign (the "libertarians approve a 50% income
+ * the affinity convention and flips every sign (the "anti-tax voters approve a 50% income
  * tax" bug). Passing optionScores corrects it; non-tax left→right sets are unchanged in sign.
+ *
+ * Impacts are keyed on Layer-1 buckets, so the assertions name the buckets the
+ * anti-tax and pro-redistribution coalitions live in rather than the archetypes
+ * that used to stand in for them.
  */
 
 function scoresFor(typeId: string): number[] {
@@ -21,19 +25,20 @@ describe("calculateShiftImpacts — score-based direction (tax, right→left ord
   it("proposing a 50% top rate (far-left) is read as a LEFTWARD shift", () => {
     // current 25% (index 5, center) → proposed 50% (index 10, far-left).
     const impacts = calculateShiftImpacts("tax", 5, 10, undefined, scores);
-    // Anti-tax archetypes DISAPPROVE; pro-redistribution archetypes APPROVE.
-    expect(impacts.libertarians).toBeLessThan(0);
-    expect(impacts.small_business).toBeLessThan(0);
-    expect(impacts.rural_traditionalists).toBeLessThan(0);
-    expect(impacts.public_sector).toBeGreaterThan(0);
-    expect(impacts.union_trades).toBeGreaterThan(0);
-    expect(impacts.college_liberals).toBeGreaterThan(0);
+    // The anti-tax coalition (high wealth, white, mature) DISAPPROVES; the
+    // pro-redistribution one (low wealth, graduate, young) APPROVES.
+    expect(impacts["wealth:high"]).toBeLessThan(0);
+    expect(impacts["race:white"]).toBeLessThan(0);
+    expect(impacts["age:mature"]).toBeLessThan(0);
+    expect(impacts["wealth:low"]).toBeGreaterThan(0);
+    expect(impacts["education:graduate"]).toBeGreaterThan(0);
+    expect(impacts["age:young"]).toBeGreaterThan(0);
   });
 
   it("documents the OLD index-based bug (flipped) when scores are omitted", () => {
     const buggy = calculateShiftImpacts("tax", 5, 10); // legacy index path
-    expect(buggy.libertarians).toBeGreaterThan(0); // wrong: "approve" a 50% tax
-    expect(buggy.public_sector).toBeLessThan(0); // wrong: "oppose" funding government
+    expect(buggy["wealth:high"]).toBeGreaterThan(0); // wrong: "approve" a 50% tax
+    expect(buggy["wealth:low"]).toBeLessThan(0); // wrong: "oppose" redistribution
   });
 });
 
@@ -53,8 +58,9 @@ describe("calculateShiftImpacts — non-tax left→right sets keep their sign", 
         expect(Math.sign(a), `flipped sign for ${k}`).toBe(Math.sign(b));
       }
     }
-    // And the direction is sane: a big minimum-wage hike pleases unions, not small business.
-    expect(withScores.union_trades).toBeGreaterThan(0);
-    expect(withScores.small_business).toBeLessThan(0);
+    // And the direction is sane: a big minimum-wage hike pleases low-wage
+    // voters, not the high-wealth bucket small business sits in.
+    expect(withScores["wealth:low"]).toBeGreaterThan(0);
+    expect(withScores["wealth:high"]).toBeLessThan(0);
   });
 });

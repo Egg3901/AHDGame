@@ -609,7 +609,12 @@ export interface LegislationPolicyOption {
   rate?: number; // Tax rate percentage for tax legislation
   /** @deprecated Use archetypeApprovals instead */
   groupApprovals?: Record<string, number>; // Old demographic groups (college, urban, etc.)
-  /** Per-archetype approval impacts (-100 to +100). Applied when voting on bills with this policy. */
+  /**
+   * Per-group approval impacts (-100 to +100), keyed on Layer-1 census BUCKETS
+   * (`"education:no_college"`). Applied when voting on bills with this policy.
+   * Legacy voter-archetype keys still resolve — see
+   * `Character.archetypeApprovals` for why and for how long.
+   */
   archetypeApprovals?: Record<string, number>;
   /** Direct per-turn metric effects when this option is the active policy */
   metricEffects?: PolicyOptionMetricEffect[];

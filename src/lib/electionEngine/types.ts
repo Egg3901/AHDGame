@@ -49,7 +49,7 @@ export interface EnrichedCandidate {
   /** When present, appeal uses average of party and candidate positions */
   partyEcon?: number;
   partySocial?: number;
-  /** Per-archetype approval modifiers (-100 to +100) for effective favorability calculation */
+  /** Per-bucket approval modifiers (-100 to +100) for effective favorability — see `Character.archetypeApprovals`. */
   archetypeApprovals?: Record<string, number>;
   /**
    * Per-candidate Support — short-term mood / momentum, 0..100. Phase 0.5
