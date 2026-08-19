@@ -24,7 +24,7 @@ import { parseHeapSnapshotJson } from "@/lib/observability/heapWatchdog";
  * pre-OOM trip path had no headroom. Manual invocation is fine.
  *
  * Auth: requireAdmin
- * Errors: 403, 500
+ * Errors: 403
  */
 
 const DEFAULT_TOP_N = 25;

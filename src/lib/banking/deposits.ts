@@ -79,7 +79,7 @@ function clamp(value: number, min: number, max: number): number {
  *
  * When the sum across banks exceeds {@link NPC_DEPOSIT_MAX_TOTAL_SHARE}, every
  * share is scaled down proportionally. Actual per-turn movement of
- * externalBroadMoney is wired in bankingTurn (phase 4) - this function is math only.
+ * externalBroadMoney is wired in bankingTurn - this function is math only.
  */
 export function computeNpcDepositShare(
   banks: readonly NpcDepositBankInput[],

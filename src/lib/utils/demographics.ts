@@ -120,12 +120,13 @@ export function getDisplayLean(economicLean: number, socialLean: number): number
 /**
  * Get lean label based on value.
  *
- * Labels use the shared −5..+5 position-name ruler (integer buckets). Since the
- * 0.4.0 Layer-1 calibration, derived state leans span roughly −2.5..+2.5 across
- * US states (within-state spread up to ~4.3) and ~±1.5 for international regions,
- * so the Center-Left/Centrist/Center-Right/Lean buckets all get real use. These
- * values describe the electorate's ideological center of gravity as derived from
- * group compositions, not a candidate's declared position.
+ * Labels use the shared −5..+5 position-name ruler (integer buckets). US state
+ * leans come from the granular era-aware substrate (`calculateStateLeanForCache`
+ * → `buildGranularElectorateSubstrate`), whose national spread is well under ±1,
+ * so most states label as Centrist here; map fills use a continuous scale fitted
+ * to the observed spread instead of these buckets. These values describe the
+ * electorate's ideological center of gravity as derived from group compositions,
+ * not a candidate's declared position.
  */
 export function getLeanLabel(lean: number): string {
   return getEconomicPositionName(lean);

@@ -1,6 +1,6 @@
 // Paginated list of suspicious characters, sorted by severity then flag count.
 // Auth: requireAdmin
-// Errors: 400, 401, 403
+// Errors: 400, 403
 
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

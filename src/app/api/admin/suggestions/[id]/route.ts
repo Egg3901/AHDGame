@@ -31,7 +31,7 @@ async function findSuggestionByAdminId(db: Db, id: string): Promise<Suggestion |
 
 // GET /api/admin/suggestions/[id] — Full suggestion for admin triage (includes adminNotes).
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAdmin();
@@ -95,7 +95,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
 // PATCH /api/admin/suggestions/[id] — Update suggestion status / admin notes (player forum).
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAdmin();
@@ -206,7 +206,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 // DELETE /api/admin/suggestions/[id] — Delete a single suggestion and cascade.
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAdmin();

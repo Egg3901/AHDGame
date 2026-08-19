@@ -52,12 +52,15 @@ describe("priceRatiosFrom", () => {
  * was a constant dressed up as a cost.
  */
 describe("live commodity prices move the cost floor and the price band", () => {
-  const nominal = lotProductionCost("heavy_armor")!;
+  // Cost is a share of the lot price now (ticket #1134); the ratios move it around that share.
+  const ANCHOR = 10_000_000;
+  const nominal = lotProductionCost("heavy_armor", ANCHOR)!;
 
   it("raises the build cost when a major input gets more expensive", () => {
     // Heavy armour is steel-intensive: 0.30 steel, 0.15 iron of nominal revenue.
     const dear = lotProductionCost(
       "heavy_armor",
+      ANCHOR,
       priceRatiosFrom([price("steel", COMMODITY_BASE_PRICES.steel * 4)])
     )!;
     expect(dear).toBeGreaterThan(nominal);
@@ -66,6 +69,7 @@ describe("live commodity prices move the cost floor and the price band", () => {
   it("lowers it when the same input gets cheaper", () => {
     const cheap = lotProductionCost(
       "heavy_armor",
+      ANCHOR,
       priceRatiosFrom([price("steel", COMMODITY_BASE_PRICES.steel * 0.25)])
     )!;
     expect(cheap).toBeLessThan(nominal);
@@ -77,6 +81,7 @@ describe("live commodity prices move the cost floor and the price band", () => {
   it("damps a price shock instead of passing it through linearly", () => {
     const shocked = lotProductionCost(
       "heavy_armor",
+      ANCHOR,
       priceRatiosFrom([price("steel", COMMODITY_BASE_PRICES.steel * 9)])
     )!;
     expect(shocked).toBeGreaterThan(nominal);
@@ -86,22 +91,26 @@ describe("live commodity prices move the cost floor and the price band", () => {
   // THE point of wiring the ratios through: the band a minister negotiates inside has to track
   // the market, or a supplier can be held to a price struck in a market that no longer exists.
   it("lifts the price band's floor with the market", () => {
-    const anchorPrice = 10_000_000;
+    const anchorPrice = ANCHOR;
     const calm = lotPriceBand({ anchorPrice, productionCost: nominal, grade: 2 })!;
     const dear = lotPriceBand({
       anchorPrice,
       productionCost: lotProductionCost(
         "heavy_armor",
+        ANCHOR,
         priceRatiosFrom([price("steel", COMMODITY_BASE_PRICES.steel * 4)])
       )!,
       grade: 2,
     })!;
 
     expect(dear.floor).toBeGreaterThan(calm.floor);
-    // The ceiling is the GDP anchor and is deliberately NOT a function of input prices: a
-    // commodity spike must not become licence to pay a supplier more than the economy says a
-    // lot is worth. Costs squeeze the band from below; they do not widen it from above.
+    // The GDP anchor is the designed price and does NOT move with inputs, so a commodity
+    // spike squeezes the supplier's margin from below rather than letting it charge more.
+    // That is the intended direction: a shortage is the supplier's problem to manage, not the
+    // taxpayer's to fund (ticket #1134).
     expect(dear.ceiling).toBe(calm.ceiling);
+    expect(dear.ceiling).toBeLessThanOrEqual(anchorPrice);
+    expect(dear.ceiling - dear.floor).toBeLessThan(calm.ceiling - calm.floor);
   });
 
   // The band can close entirely. That is the honest outcome, not an error: it says this line
@@ -115,6 +124,6 @@ describe("live commodity prices move the cost floor and the price band", () => {
   });
 
   it("falls back to the nominal share when the book is empty", () => {
-    expect(lotProductionCost("heavy_armor", priceRatiosFrom([]))).toBe(nominal);
+    expect(lotProductionCost("heavy_armor", ANCHOR, priceRatiosFrom([]))).toBe(nominal);
   });
 });

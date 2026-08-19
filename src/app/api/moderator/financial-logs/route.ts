@@ -1,6 +1,6 @@
 // GET /api/moderator/financial-logs — paginated, filterable financial transaction log
 // Auth: requireModerator
-// Errors: 400, 401, 403
+// Errors: 400, 403
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";

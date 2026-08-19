@@ -2,7 +2,7 @@
 // Forces an immediate dividend payout based on current dividendRate.
 // Distributes liquidCapital * dividendRate% proportionally to character shareholders.
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

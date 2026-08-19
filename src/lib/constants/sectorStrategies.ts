@@ -1,7 +1,7 @@
 /**
  * Sector Operating Strategies.
  *
- * Each sector type has 2–3 strategies that change its commodity input/output
+ * Each sector type has 4-8 strategies that change its commodity input/output
  * rates. Margin impacts come naturally from commodity market dynamics — there
  * is NO direct margin modifier per strategy. During a transition, a flat −5%
  * margin penalty applies to represent retooling disruption.
@@ -84,7 +84,7 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       id: "standard",
       name: "Conventional",
       description: "Traditional fossil-fuel energy generation with established infrastructure.",
-      // Matches SECTOR_SUPPLY/SECTOR_DEMAND in commodities.ts (energy output 0.65, oil 0.07, copper 0.04).
+      // Matches SECTOR_SUPPLY/SECTOR_DEMAND in commodities.ts (energy output 0.65, oil 0.07, rare_earth 0.04; rare_earth covers copper).
       supply: { energy: 0.65 },
       demand: {
         steel: 0.15,
@@ -345,8 +345,7 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       id: "standard",
       name: "Industrial Chemicals",
       description: "Balanced production of industrial chemical feedstocks and process materials.",
-      // Added plastics co-production 0.15 to match SECTOR_SUPPLY update (Phase 4).
-      // Polymer synthesis is integral to large chemical plants.
+      // Added plastics co-production 0.15. Polymer synthesis is integral to large chemical plants.
       supply: { chemicals: 0.5, plastics: 0.15 },
       demand: {
         energy: 0.18,
@@ -809,8 +808,8 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       id: "standard",
       name: "General Contracting",
       description: "Balanced residential, commercial, and civil construction services.",
-      // Reduced building_materials 0.20→0.15, copper 0.06→0.04, natural_gas 0.03→0.02,
-      // timber 0.10→0.08 to match SECTOR_DEMAND update.
+      // Reduced building_materials 0.20 to 0.15, rare_earth (covers copper) 0.06 to 0.04, natural_gas 0.03 to 0.02,
+      // timber 0.10 to 0.08.
       supply: { construction_services: 0.45 },
       demand: {
         building_materials: 0.15,
@@ -875,7 +874,7 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       name: "Standard",
       description: "Traditional telecom infrastructure and services.",
       // Added network_services supply 0.40 — unique output for telecom differentiation.
-      // Reduced electronics 0.25→0.18 and copper 0.12→0.09 to match SECTOR_DEMAND update.
+      // Reduced electronics 0.25 to 0.18 and rare_earth (covers copper) 0.12 to 0.09 to match SECTOR_DEMAND update.
       supply: { software: 0.2, network_services: 0.4 },
       demand: {
         electronics: 0.18,
@@ -893,7 +892,7 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
         "Next-gen network buildout. High network service output with heavier infrastructure investment.",
       // Network-services specialist: 0.55 network_services (up from 0.35) and 0.10 software.
       // Demand reflects physical infrastructure capex (construction, steel) rather than
-      // ongoing component consumption — electronics lowered to 0.12, copper to 0.06.
+      // ongoing component consumption - electronics lowered to 0.12, rare_earth (covers copper) to 0.06.
       supply: { software: 0.1, network_services: 0.55 },
       demand: {
         construction_services: 0.15,

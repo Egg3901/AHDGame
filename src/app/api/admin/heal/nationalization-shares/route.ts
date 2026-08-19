@@ -24,7 +24,7 @@ const schema = z.object({
  * appropriate National Corporation and credits the value.
  *
  * Auth: requireAdmin
- * Errors: 400, 403, 500
+ * Errors: 400, 403
  */
 export async function POST(request: Request) {
   try {

@@ -22,7 +22,7 @@ const updateTaskSchema = z.object({
 
 // PATCH /api/admin/tasks/[id] — Update an existing task's fields such as title, status, or priority.
 // Auth: requireAdminOrApiKey
-// Errors: 400, 401, 403, 404
+// Errors: 400, 401, 403, 404, 500
 /**
  * PATCH /api/admin/tasks/[id]
  * Update existing task
@@ -82,7 +82,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 // DELETE /api/admin/tasks/[id] — Hard-delete a task by ID.
 // Auth: requireAdminOrApiKey
-// Errors: 400, 401, 403, 404
+// Errors: 400, 401, 403, 404, 500
 /**
  * DELETE /api/admin/tasks/[id]
  * Delete task (hard delete)

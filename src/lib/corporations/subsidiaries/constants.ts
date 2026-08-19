@@ -19,12 +19,12 @@ export const SUBSIDIARY_CAPITAL_INJECTION_MAX_PCT_OF_PARENT_LIQUID = 0.25;
 /** Per-subsidiary cooldown between capital injections (≈1 real day). */
 export const SUBSIDIARY_CAPITAL_INJECTION_COOLDOWN_TURNS = 24;
 
-/** Spin-off (Phase 2): cooldown per parent (≈7 real days). */
+/** Spin-off cooldown per parent (≈7 real days). */
 export const SPIN_OFF_COOLDOWN_TURNS = 168;
-/** Spin-off (Phase 2): modest fixed cost in ₳ (anchor units). */
+/** Spin-off modest fixed cost in ₳ (anchor units). */
 export const SPIN_OFF_BASE_COST_ANCHOR = 500_000;
 /**
- * Spin-off (Phase 2): additional per-sector transfer fee in ₳, charged for each
+ * Spin-off additional per-sector transfer fee in ₳, charged for each
  * sector of the chosen type moved into the new corp. Total cost is
  * SPIN_OFF_BASE_COST_ANCHOR + SPIN_OFF_PER_SECTOR_COST_ANCHOR × (# sectors moved).
  */
@@ -35,4 +35,4 @@ export function spinOffCostAnchor(sectorCount: number): number {
   return SPIN_OFF_BASE_COST_ANCHOR + SPIN_OFF_PER_SECTOR_COST_ANCHOR * Math.max(0, sectorCount);
 }
 
-// NOTE: synergy constants intentionally omitted — see Phase 3 (deferred, separate flag).
+// Synergy constants intentionally omitted (deferred, separate flag).

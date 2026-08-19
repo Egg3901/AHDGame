@@ -3,7 +3,7 @@
  * POST   /api/admin/tariffs — Force-set a tariff (bypass legislation).
  * DELETE /api/admin/tariffs?id=<tariffId> — Remove a tariff document.
  * Auth: requireAdmin
- * Errors: 400, 401, 403
+ * Errors: 400, 403
  */
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

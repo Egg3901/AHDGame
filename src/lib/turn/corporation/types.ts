@@ -129,6 +129,21 @@ export interface CorporationLookups {
    */
   stateInputAvailabilityByState: Map<string, Map<CommodityType, number>>;
   /**
+   * Lagged share of a state's own production that active freight settlement
+   * managed to PLACE (placed / supply, clamped 0..1), the sell-side mirror of
+   * `stateInputAvailabilityByState`. Sparse and optional: absent state,
+   * commodity or map means no measured limit, i.e. a ratio of 1. Empty
+   * whenever freight settlement is not active.
+   */
+  statePlacementRatioByState?: Map<string, Map<CommodityType, number>>;
+  /**
+   * Lagged share of a state's own production that was produced, wanted, and
+   * still could not reach a buyer (delivery-limited / supply, clamped 0..1).
+   * A subset of `1 - statePlacementRatioByState`: the remainder of what went
+   * unplaced is glut. Player-facing telemetry only, never an offer cap.
+   */
+  stateDeliveryLimitedRatioByState?: Map<string, Map<CommodityType, number>>;
+  /**
    * Lagged global price / base price per commodity (prior turn's computed
    * price). Read by the price-realization multiplier when
    * marketSystemMode >= "realization"; always built (cheap), inert otherwise.
@@ -142,10 +157,12 @@ export interface CorporationLookups {
    */
   reachablePriceRatioByCountry?: Map<string, Map<CommodityType, number>>;
   /**
-   * World price ratios overlaid with each country's reachable ratios — the
-   * price level a buyer in that country actually pays. Consumed by the
-   * physical input bill (`computeInputsCost`); world map is the fallback for
-   * countries without a book.
+   * World price ratios overlaid with each country's reachable ratios, then
+   * capped at the world ratio per commodity (`min(world, reachable)` via
+   * `capInputPriceRatioAtWorld`). Cheap local inputs still win; expensive
+   * reachable books cannot bill above world. Consumed by the physical input
+   * bill (`computeInputsCost`); world map is the fallback for countries
+   * without a book.
    */
   reachableInputPriceRatiosByCountry?: Map<string, Map<CommodityType, number>>;
   /**

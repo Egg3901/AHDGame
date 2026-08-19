@@ -6,7 +6,7 @@ import { SENATE_CLASSES } from "@/lib/constants";
 
 // POST /api/admin/officials/heal-senate — Deletes senate official and election records with invalid senate classes for their state.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     const auth = await requireAdmin();
@@ -71,7 +71,7 @@ export async function POST() {
 
 // GET /api/admin/officials/heal-senate — Dry-run that returns counts of senate official and election records with invalid senate classes.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();

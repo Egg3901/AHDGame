@@ -24,7 +24,7 @@ const createSchema = z.object({
 
 // GET /api/admin/achievements — Lists all achievements with how many characters have earned each one.
 // Auth: requireAdmin
-// Errors: 401
+// Errors: 403
 export const GET = withAdminAuth(async () => {
   try {
     const achievements = await getAllAchievements();
@@ -58,7 +58,7 @@ export const GET = withAdminAuth(async () => {
 
 // POST /api/admin/achievements — Creates a new manual-only achievement definition.
 // Auth: requireAdmin
-// Errors: 400, 401, 409
+// Errors: 400, 403, 409
 export const POST = withAdminAuth(async (_auth, request: Request) => {
   try {
     const parsed = await parseJsonBody(request, createSchema);

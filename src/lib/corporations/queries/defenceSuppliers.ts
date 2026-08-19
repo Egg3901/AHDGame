@@ -62,7 +62,13 @@ export interface DefenceSupplierView {
 export async function listDefenceSuppliers(
   db: Db,
   countryId: string,
-  currentYear: number
+  currentYear: number,
+  /**
+   * The country's anchored lot price. Build cost is a share of it (ticket #1134), so the
+   * picker cannot quote a cost without it. A null or unusable price yields a zero cost, which
+   * is what the caller already shows when a country has no usable GDP.
+   */
+  anchorPrice: number | null
 ): Promise<DefenceSupplierView[]> {
   const sectors = await db
     .collection<CorporateSector>("corporateSectors")
@@ -139,7 +145,10 @@ export async function listDefenceSuppliers(
       projectedLotsPerTurn: fill.projectedLotsPerTurn,
       gradeCeiling: fill.gradeCeiling,
       alreadyContracted: contractedSectorIds.has(sector._id.toString()),
-      unitProductionCost: lotProductionCost(sector.strategyId, priceRatios) ?? 0,
+      unitProductionCost:
+        anchorPrice != null
+          ? (lotProductionCost(sector.strategyId, anchorPrice, priceRatios) ?? 0)
+          : 0,
       freeFactories,
       totalFactories: DEFENCE_FACTORY_SLOTS_PER_PLANT,
       stateOwned,

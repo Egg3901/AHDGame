@@ -7,8 +7,7 @@
  * Why this matters:
  * - StateDemographics stores baseline turnout rates per group
  * - StateDemographicTurnout stores runtime modifiers (-20 to +20 percentage points)
- * - Elections must use the combined (baseline + modifier) rate for honest results
- * - Polls currently compute this ad-hoc; this module unifies the calculation
+ * - Elections and polls use the combined (baseline + modifier) rate
  */
 
 import type { DemographicCategory, StateDemographics } from "@/lib/db/types";
@@ -229,12 +228,10 @@ export function resolveTurnout(
         }
       }
 
-      // Apply explicit overrides (for testing)
       if (modifierOverrides?.[group.id] != null) {
         modifier = modifierOverrides[group.id];
       }
 
-      // Calculate effective turnout and clamp
       const effectiveTurnout = Math.max(
         minTurnout,
         Math.min(maxTurnout, baselineTurnout + modifier)
@@ -242,7 +239,6 @@ export function resolveTurnout(
 
       byGroup[group.id] = effectiveTurnout;
 
-      // Calculate contribution to total pool
       const populationPct = stateGroup?.population ?? 0;
       const groupContribution = statePopulation * (populationPct / 100) * (effectiveTurnout / 100);
       totalPool += groupContribution * (categoryWeight / totalCategoryWeight);
@@ -274,7 +270,6 @@ export function resolveSingleGroupTurnout(
 ): number {
   const { modifierOverrides, minTurnout = 0, maxTurnout = 100 } = options;
 
-  // Sum modifiers across all categories
   let modifier = 0;
   if (turnoutDoc?.modifiers) {
     for (const groupModifiers of Object.values(turnoutDoc.modifiers)) {
@@ -287,7 +282,6 @@ export function resolveSingleGroupTurnout(
     }
   }
 
-  // Apply explicit override
   if (modifierOverrides?.[groupId] != null) {
     modifier = modifierOverrides[groupId];
   }

@@ -25,6 +25,10 @@ function parsePostFile(filePath: string): ChangelogPost | null {
   );
 
   return {
+    // The filename stem. Dev entries add a topic suffix after the version
+    // (`1.2.3-union-dues`) so two branches never write the same path; see
+    // entryFiles.ts. Ordering and grouping come from the frontmatter below, not
+    // from this name.
     slug: path.basename(filePath, ".md"),
     version,
     date,
@@ -50,14 +54,24 @@ export function loadPublicPosts(): ChangelogPost[] {
   return listPostFiles(PUBLIC_POSTS_DIR)
     .map(parsePostFile)
     .filter((p): p is ChangelogPost => p !== null)
-    .sort((a, b) => compareVersionsDesc(a.version, b.version) || b.date.localeCompare(a.date));
+    .sort(
+      (a, b) =>
+        compareVersionsDesc(a.version, b.version) ||
+        b.date.localeCompare(a.date) ||
+        a.slug.localeCompare(b.slug)
+    );
 }
 
 export function loadDevPosts(): ChangelogPost[] {
   return listPostFiles(DEV_POSTS_DIR)
     .map(parsePostFile)
     .filter((p): p is ChangelogPost => p !== null)
-    .sort((a, b) => compareVersionsDesc(a.version, b.version) || b.date.localeCompare(a.date));
+    .sort(
+      (a, b) =>
+        compareVersionsDesc(a.version, b.version) ||
+        b.date.localeCompare(a.date) ||
+        a.slug.localeCompare(b.slug)
+    );
 }
 
 export function loadPublicPost(version: string): ChangelogPost | null {

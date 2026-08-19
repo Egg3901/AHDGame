@@ -37,7 +37,7 @@ interface RouteParams {
 
 // POST /api/admin/elections/[id]/place-candidate — Places a character or NPP as a candidate in a presidential election, transferring votes from withdrawn same-party candidates.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireAdmin();

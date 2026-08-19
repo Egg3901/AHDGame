@@ -326,7 +326,7 @@ function CensusCard({ title, rows, viewMode }: CensusCardProps) {
                     )}
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums text-foreground">
-                    {r.turnout ? r.turnout.actual.toFixed(1) : "—"}%
+                    {r.turnout ? `${r.turnout.actual.toFixed(1)}%` : "—"}
                   </td>
                 </tr>
               ))}
@@ -384,12 +384,17 @@ function CensusCard({ title, rows, viewMode }: CensusCardProps) {
         </div>
       )}
 
-      {/* Turnout summary footer */}
+      {/* Turnout summary footer. Chart and table modes have no turnout column,
+          so the footer carries the turnout rate itself and shows the GOTV swing
+          only where a party has actually moved it. A row of zeroes reads as
+          "turnout is zero" and it is not. */}
       {rows.some((r) => r.turnout) && (
         <div className="mt-3 pt-3 border-t border-card-border/50">
-          <div className="flex items-center justify-between text-[10px] text-muted uppercase tracking-wider">
-            <span>Turnout modifier</span>
-            <div className="flex gap-3">
+          <div className="flex items-center justify-between gap-3 text-[10px] text-muted uppercase tracking-wider">
+            <span className="shrink-0" title="Baseline turnout plus any GOTV swing">
+              Turnout %
+            </span>
+            <div className="flex flex-wrap justify-end gap-x-3 gap-y-1">
               {rows
                 .filter((r) => r.turnout)
                 .map((r) => (
@@ -398,18 +403,20 @@ function CensusCard({ title, rows, viewMode }: CensusCardProps) {
                       className="h-1.5 w-1.5 rounded-full"
                       style={{ backgroundColor: r.color }}
                     />
-                    <span
-                      className={
-                        r.turnout!.modifier > 0
-                          ? "text-success"
-                          : r.turnout!.modifier < 0
-                            ? "text-error"
-                            : "text-muted"
-                      }
-                    >
-                      {r.label}: {r.turnout!.modifier > 0 ? "+" : ""}
-                      {r.turnout!.modifier.toFixed(1)}%
+                    <span className="tabular-nums text-foreground/80">
+                      {r.label}: {r.turnout!.actual.toFixed(1)}%
                     </span>
+                    {r.turnout!.modifier !== 0 && (
+                      <span
+                        className={`tabular-nums ${
+                          r.turnout!.modifier > 0 ? "text-success" : "text-error"
+                        }`}
+                        title="GOTV / canvassing swing vs baseline"
+                      >
+                        ({r.turnout!.modifier > 0 ? "+" : ""}
+                        {r.turnout!.modifier.toFixed(1)})
+                      </span>
+                    )}
                   </span>
                 ))}
             </div>

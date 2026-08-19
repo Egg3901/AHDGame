@@ -8,7 +8,7 @@ import type { CountryId } from "@/lib/constants/countries";
 
 // GET /api/admin/heal/discord-users — Diagnoses user/character linkage issues and characters missing countryId
 // Auth: requireAdmin
-// Errors: 401, 403, 500
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();
@@ -82,7 +82,7 @@ export async function GET() {
 
 // POST /api/admin/heal/discord-users — Fixes missing activeCharacterId, broken links, and missing countryId
 // Auth: requireAdmin
-// Errors: 401, 403, 500
+// Errors: 403
 export async function POST() {
   try {
     const auth = await requireAdmin();

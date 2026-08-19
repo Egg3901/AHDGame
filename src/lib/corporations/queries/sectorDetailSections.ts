@@ -1203,6 +1203,14 @@ export interface SectorPlantsSection {
      */
     soldByCommodity: { commodity: string; fraction: number }[];
     /**
+     * Share of offered output (0..1) that no freight network could place last
+     * turn. The other half of the shortfall `soldFraction` reports: on screen
+     * the two look identical and they mean opposite things, because a demand
+     * shortfall says cut output while a delivery shortfall says buy freight or
+     * build somewhere else. 0 when the engine wrote nothing.
+     */
+    deliveryLimitedFraction: number;
+    /**
      * Consecutive turns the sector cleared under half its output (see
      * strandedPlant.ts). Drives the stranded-plant warning on the sector page
      * once it reaches STRANDED_WARN_TURNS.
@@ -1504,6 +1512,13 @@ export function buildSectorPlantsSection(args: {
       commodity,
       fraction: Math.max(0, Math.min(1, fraction)),
     }));
+  // Share of the shortfall that is a DELIVERY failure, not a demand failure.
+  // Absent on every sector until the freight pass writes it, so it reads as 0
+  // and the surfaces render nothing extra.
+  const deliveryLimitedFraction = Math.max(
+    0,
+    Math.min(1, num(sector.deliveryLimitedFraction) ?? 0)
+  );
   // Full operating bill: maintenanceNet already carries inputs, upkeep on idle
   // capacity, compliance and other opex; labour is billed beside it.
   const operatingCostAnchor = nonNeg(money.maintenanceNetAnchor) + nonNeg(money.labourAnchor);
@@ -1588,6 +1603,7 @@ export function buildSectorPlantsSection(args: {
     truth: {
       soldFraction,
       soldByCommodity,
+      deliveryLimitedFraction,
       lowFillTurns: num(sector.lowFillTurns) ?? 0,
       inventory: {
         stockpileUnsold: sector.stockpileUnsold === true,

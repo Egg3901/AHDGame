@@ -43,7 +43,9 @@ const supplier = (over: Partial<DefenceSupplierView> = {}): DefenceSupplierView 
   projectedLotsPerTurn: 20,
   gradeCeiling: 2,
   alreadyContracted: false,
-  unitProductionCost: 400,
+  // 85% of the 1,000 lot price below. Build cost is a share of price now (ticket #1134), so a
+  // fixture where the two are unrelated quotes a band the server would never produce.
+  unitProductionCost: 850,
   freeFactories: 4,
   totalFactories: 4,
   stateOwned: false,

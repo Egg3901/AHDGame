@@ -3,12 +3,12 @@ import type { State } from "@/lib/db/types";
 /**
  * Scotland's 7 sub-regions as latent State documents, modeled on `ieRegions.ts`.
  *
- * NOT inserted anywhere in Sub-project 1 — this is the target map the SP2
- * `expandToSubRegions` step will insert (apportioning the live SCO nation-region's
- * aggregates) when Scotland secedes. Population + GDP sum to the UK SCO nation-region
- * seed (5,440,000 / 163,000); `houseDistricts` sum to the 129-seat Holyrood;
- * `stateSenateSeats` are 0 (unicameral). `votingSystem` is "fptp" (the AMS
- * constituency tier; the list tier is handled by the country election system).
+ * Not inserted at UK seed time - `expandToSubRegions` inserts them when
+ * Scotland secedes, apportioning the live SCO nation-region's aggregates.
+ * Population + GDP sum to the UK SCO nation-region seed (5,440,000 / 163,000);
+ * `houseDistricts` sum to the 129-seat Holyrood; `stateSenateSeats` are 0
+ * (unicameral). `votingSystem` is "fptp" (the AMS constituency tier; the list
+ * tier is handled by the country election system).
  */
 export const scoRegions: State[] = [
   {

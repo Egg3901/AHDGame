@@ -46,7 +46,7 @@ const snapshotSchema = z.object({
 /**
  * GET: List code quality snapshots. POST: Ingest from build script.
  * Auth: GET requires requireAdmin(), POST requires requireAdminOrApiKey()
- * Errors: 401, 400, 500
+ * Errors: 400, 401, 403, 500
  */
 export const GET = withAdminAuth(async (_auth, request: Request) => {
   try {

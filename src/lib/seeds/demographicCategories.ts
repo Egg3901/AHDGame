@@ -1,5 +1,6 @@
 import type { DemographicCategory } from "@/lib/db/types";
 import type { EraId } from "./presetSelector";
+import { shiftRegion, type PositionEntry } from "./regionalPositions";
 
 export interface VoterGroupCompositionEntry {
   weights: Array<{ dim: keyof typeof DEMOGRAPHIC_TURNOUT_RATES; key: string; w: number }>;
@@ -54,11 +55,11 @@ export const DEMOGRAPHIC_TURNOUT_RATES = {
  * Per-era national baseline turnout rates, the year-anchor counterpart of
  * {@link DEMOGRAPHIC_TURNOUT_RATES}.
  *
- * `DEMOGRAPHIC_TURNOUT_RATES` is a single modern table, so until now every
- * world modelled its electorate's participation with 2019 propensities no
- * matter what year it was in — a 1953 world had 2020's steep youth deficit and
- * 2020's senior surge, neither of which existed then. These anchors let
- * turnout slide along the same clock as everything else.
+ * `DEMOGRAPHIC_TURNOUT_RATES` is a single modern table. Without these per-era
+ * anchors every world would model participation with 2019 propensities no
+ * matter what year it was in - a 1953 world would have 2020's steep youth
+ * deficit and 2020's senior surge, neither of which existed then. These
+ * anchors let turnout slide along the same clock as everything else.
  *
  * **The 2019 entry IS `DEMOGRAPHIC_TURNOUT_RATES`**, by reference, so a 2019
  * world is unchanged and every existing calibration test stays green.
@@ -467,10 +468,14 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
         ],
       },
       evangelicals: {
-        weights: [{ dim: "ideology", key: "evangelicals", w: 1.0 }],
+        weights: [
+          { dim: "ideology", key: "evangelicals", w: 1.0 },
+          { dim: "race", key: "white", w: 0.21 },
+        ],
       },
       rural_traditionalists: {
         weights: [
+          { dim: "race", key: "white", w: 0.21 },
           { dim: "ideology", key: "patriots", w: 0.6 },
           { dim: "ideology", key: "gunowners", w: 0.6 },
         ],
@@ -478,6 +483,7 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
       union_trades: {
         weights: [
           { dim: "race", key: "black", w: 0.3 },
+          { dim: "race", key: "white", w: 0.1 },
           { dim: "ideology", key: "progressives", w: 0.5 },
           { dim: "wealth", key: "low", w: 0.2 },
         ],
@@ -486,6 +492,7 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
         weights: [
           { dim: "age", key: "mid", w: 0.4 },
           { dim: "wealth", key: "middle", w: 0.45 },
+          { dim: "race", key: "white", w: 0.15 },
           { dim: "ideology", key: "patriots", w: 0.15 },
         ],
       },
@@ -494,6 +501,7 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
           { dim: "ideology", key: "progressives", w: 0.6 },
           { dim: "education", key: "college", w: 0.25 },
           { dim: "education", key: "graduate", w: 0.15 },
+          { dim: "race", key: "white", w: 0.1 },
         ],
       },
       small_business: {
@@ -501,6 +509,7 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
           { dim: "ideology", key: "libertarians", w: 0.4 },
           { dim: "wealth", key: "high", w: 0.4 },
           { dim: "age", key: "mature", w: 0.2 },
+          { dim: "race", key: "white", w: 0.15 },
         ],
       },
       public_sector: {
@@ -513,10 +522,14 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
         weights: [
           { dim: "age", key: "senior", w: 0.65 },
           { dim: "age", key: "mature", w: 0.35 },
+          { dim: "race", key: "white", w: 0.15 },
         ],
       },
       libertarians: {
-        weights: [{ dim: "ideology", key: "libertarians", w: 1.0 }],
+        weights: [
+          { dim: "ideology", key: "libertarians", w: 1.0 },
+          { dim: "race", key: "white", w: 0.15 },
+        ],
       },
       new_immigrants: {
         weights: [
@@ -591,12 +604,14 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
       evangelicals: {
         weights: [
           { dim: "ideology", key: "evangelicals", w: 1.0 },
+          { dim: "race", key: "white", w: 0.21 },
           // race weight removed — ideology is the defining dimension;
           // adding race dilutes the lean by blending with white voters' position
         ],
       },
       rural_traditionalists: {
         weights: [
+          { dim: "race", key: "white", w: 0.21 },
           { dim: "ideology", key: "patriots", w: 0.6 },
           { dim: "ideology", key: "gunowners", w: 0.6 },
         ],
@@ -604,6 +619,7 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
       union_trades: {
         weights: [
           { dim: "race", key: "black", w: 0.4 },
+          { dim: "race", key: "white", w: 0.1 },
           { dim: "ideology", key: "progressives", w: 0.4 },
           { dim: "wealth", key: "low", w: 0.2 },
         ],
@@ -612,6 +628,7 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
         weights: [
           { dim: "age", key: "mid", w: 0.4 },
           { dim: "wealth", key: "middle", w: 0.4 },
+          { dim: "race", key: "white", w: 0.15 },
           { dim: "ideology", key: "patriots", w: 0.1 },
         ],
       },
@@ -621,6 +638,7 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
           { dim: "ideology", key: "environmentalists", w: 0.4 },
           { dim: "education", key: "college", w: 0.2 },
           { dim: "education", key: "graduate", w: 0.15 },
+          { dim: "race", key: "white", w: 0.1 },
         ],
       },
       small_business: {
@@ -628,6 +646,7 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
           { dim: "ideology", key: "libertarians", w: 0.5 },
           { dim: "wealth", key: "high", w: 0.4 },
           { dim: "age", key: "mature", w: 0.2 },
+          { dim: "race", key: "white", w: 0.15 },
         ],
       },
       public_sector: {
@@ -641,10 +660,14 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
         weights: [
           { dim: "age", key: "senior", w: 0.6 },
           { dim: "age", key: "mature", w: 0.2 },
+          { dim: "race", key: "white", w: 0.15 },
         ],
       },
       libertarians: {
-        weights: [{ dim: "ideology", key: "libertarians", w: 1.0 }],
+        weights: [
+          { dim: "ideology", key: "libertarians", w: 1.0 },
+          { dim: "race", key: "white", w: 0.15 },
+        ],
       },
       new_immigrants: {
         weights: [
@@ -719,11 +742,13 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
       evangelicals: {
         weights: [
           { dim: "ideology", key: "evangelicals", w: 1.0 },
+          { dim: "race", key: "white", w: 0.21 },
           // race weight removed — ideology is the defining dimension
         ],
       },
       rural_traditionalists: {
         weights: [
+          { dim: "race", key: "white", w: 0.21 },
           { dim: "ideology", key: "patriots", w: 0.6 },
           { dim: "ideology", key: "gunowners", w: 0.6 },
         ],
@@ -731,6 +756,7 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
       union_trades: {
         weights: [
           { dim: "race", key: "black", w: 0.4 },
+          { dim: "race", key: "white", w: 0.1 },
           { dim: "ideology", key: "progressives", w: 0.4 },
           { dim: "wealth", key: "low", w: 0.2 },
         ],
@@ -739,6 +765,7 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
         weights: [
           { dim: "age", key: "mid", w: 0.4 },
           { dim: "wealth", key: "middle", w: 0.4 },
+          { dim: "race", key: "white", w: 0.15 },
           { dim: "ideology", key: "patriots", w: 0.1 },
         ],
       },
@@ -748,6 +775,7 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
           { dim: "ideology", key: "environmentalists", w: 0.4 },
           { dim: "education", key: "college", w: 0.2 },
           { dim: "education", key: "graduate", w: 0.15 },
+          { dim: "race", key: "white", w: 0.1 },
         ],
       },
       small_business: {
@@ -755,6 +783,7 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
           { dim: "ideology", key: "libertarians", w: 0.5 },
           { dim: "wealth", key: "high", w: 0.4 },
           { dim: "age", key: "mature", w: 0.2 },
+          { dim: "race", key: "white", w: 0.15 },
         ],
       },
       public_sector: {
@@ -768,10 +797,14 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
         weights: [
           { dim: "age", key: "senior", w: 0.6 },
           { dim: "age", key: "mature", w: 0.2 },
+          { dim: "race", key: "white", w: 0.15 },
         ],
       },
       libertarians: {
-        weights: [{ dim: "ideology", key: "libertarians", w: 1.0 }],
+        weights: [
+          { dim: "ideology", key: "libertarians", w: 1.0 },
+          { dim: "race", key: "white", w: 0.15 },
+        ],
       },
       new_immigrants: {
         weights: [
@@ -1355,7 +1388,8 @@ export const DEMOGRAPHIC_POSITIONS: Record<
  * Per-era position deltas from the 2019 base, capturing each era's demographic character.
  * The era census shares + composition weights already differ per era; these overrides add the
  * era-specific *positions* of demographic groups. Each entry is [dim, key, economicLean, socialLean].
- * Anchored to the era notes in ERA_COMPOSITIONS. 2007 ≈ 2019 (no overrides).
+ * Anchored to the era notes in ERA_COMPOSITIONS. 2019 is the base table;
+ * every other era overlays the entries below (including a full 2007 table).
  */
 const ERA_POSITION_OVERRIDES: Partial<
   Record<EraId, Array<[keyof DemographicTurnoutRates, string, number, number]>>
@@ -1454,9 +1488,8 @@ const ERA_POSITION_OVERRIDES: Partial<
   // and the prescription-drug fight were Gore's closing argument), while young
   // voters split near-evenly. Asian voters had only recently begun their move
   // to the Democrats (~55% Gore, versus the near-2:1 margins of the 2010s).
-  // Authored in full rather than the two-entry stub that stood here: with the
-  // clock live, a sparse anchor is not "unspecified", it is the 2019 table
-  // wearing a 2000 label, which put 2019's polarisation into a 2000 world.
+  // Authored in full: with the clock live, a sparse anchor is not
+  // "unspecified", it is the 2019 table wearing a 2000 label.
   "1999": [
     ["race", "white", 0.6, 1.2],
     ["race", "black", -4.5, -2.5],
@@ -1484,8 +1517,6 @@ const ERA_POSITION_OVERRIDES: Partial<
   // decisively — Obama carried 18-29 by ~34 points while McCain won seniors,
   // inverting the 2000 relationship — and Black turnout and margin both peak.
   // The education gradient deepens but has not reached its 2019 extreme.
-  // Previously this era had NO entry at all and silently inherited the 2019
-  // table wholesale.
   "2007": [
     ["race", "white", 1.0, 1.2], // Obama lost white voters by ~12
     ["race", "black", -5, -3], // ~95% Obama, peak consolidation
@@ -1532,6 +1563,232 @@ for (const era of ["1953", "1979", "1991", "1999", "2007", "2023"] as const) {
 }
 
 /**
+ * Deep South (AL MS SC LA GA AR): one-party organization, not left ideology.
+ * Whites here are New Deal beneficiaries (TVA, REA, farm parity) who sit at the
+ * caste order's traditional ceiling. Black disfranchisement makes the white value
+ * close to the state mean rather than bolder than it.
+ */
+const DEEP_SOUTH_1953: PositionEntry[] = [
+  ["race", "white", -0.5, 4.2], // populist toward Washington money, at the caste order's ceiling socially
+  ["race", "black", -3.4, -2], // disfranchised outside the cities; church-centered and economically dependent
+  ["race", "hispanic", -2.6, 1.2], // south Texas and Delta farm labor, tied to the same patron economy
+  ["education", "no_college", -1.7, 2.9], // mill-town and small-farmer Dixiecrats, not northern union Democrats
+  ["education", "college", 0.6, 2.1], // the professional class of the courthouse ring
+  ["education", "graduate", 0, 1.6], // a thin university and medical stratum, less bound by the county machine
+  ["wealth", "low", -2.2, 3.1], // tenant farmers and sharecroppers: the region's populist floor
+  ["wealth", "middle", 0.8, 2.6], // the courthouse and Main Street class, the region's most conservative element
+  ["wealth", "high", 2.2, 2.7], // planter and textile capital, anti-union and property-first
+  ["ideology", "evangelicals", -0.6, 3.2], // pre-Moral Majority: pious and segregationist, economically populist
+  ["ideology", "patriots", -0.4, 3.1], // Southern military tradition, yellow-dog Democratic in party terms
+  ["ideology", "gunowners", -0.8, 3], // rural hunting culture with no partisan vehicle of its own
+  ["ideology", "progressives", -3.4, -1.3], // TVA and rural-electrification progressivism, silent on race
+  ["ideology", "environmentalists", -1.4, 0.4], // soil conservation and flood control, a federal-works constituency
+  ["ideology", "libertarians", 3.4, 2.8], // states-rights constitutionalism rather than market liberalism
+];
+
+/**
+ * Border and peripheral South (VA NC TN FL TX OK KY MO WV MD DE): same New Deal
+ * dependence one notch weaker, a live two-party contest in the highland counties,
+ * and Byrd-style pay-as-you-go conservatism where the courthouse rings are strong.
+ */
+const BORDER_1953: PositionEntry[] = [
+  ["race", "white", 0.2, 0.7], // two-party country: Ike took VA, TX and FL in 1952 without an ideological shift
+  ["race", "black", -3.6, -2], // urban Black electorates in Baltimore, Louisville and St Louis could vote
+  ["race", "hispanic", -2.6, 0.1], // Texas and Oklahoma farm labor with a Catholic Democratic tilt
+  ["education", "no_college", -1.8, 1.2], // textile, tobacco and coal workers still inside the New Deal coalition
+  ["education", "college", 1, 0.6], // the business and professional towns Eisenhower cracked first
+  ["education", "graduate", 0.3, 0.3], // state universities and federal science payrolls
+  ["wealth", "low", -2.5, 1.6], // Appalachian and Ozark poverty, the most reliably Democratic bloc here
+  ["wealth", "middle", 1.1, 1], // county-seat merchants: fiscally tight, socially church-bound
+  ["wealth", "high", 2.6, 1], // oil, tobacco and banking capital, business-conservative
+  ["ideology", "evangelicals", 0, 1.9], // Southern Baptist majority culture, politically unorganized
+  ["ideology", "patriots", 0.4, 1.7], // heavy military-base presence from Norfolk to Fort Sill
+  ["ideology", "gunowners", 0, 1.5], // hunting and rural self-defense, no partisan alignment yet
+  ["ideology", "progressives", -3.9, -2.8], // the New Deal wing that survived in the highland counties
+  ["ideology", "environmentalists", -1.5, -0.4], // TVA-adjacent conservation, mildly federal-friendly
+  ["ideology", "libertarians", 3.9, 1.3], // anti-tax and anti-Washington without the Deep South's caste politics
+];
+
+/**
+ * Industrial Northeast (MA RI CT NY NJ PA): peak union density with a very large
+ * Catholic ethnic bloc. Economically the New Deal's core, socially the least
+ * traditional region of the era outside the Pacific.
+ */
+const MID_ATLANTIC_1953: PositionEntry[] = [
+  ["race", "white", 1.2, -0.9], // Yankee Protestant business Republicans and New Deal Catholic ethnics roughly cancel
+  ["race", "black", -4, -1.7], // Great Migration electorates in Harlem, Philadelphia and Newark, CIO-organized
+  ["race", "hispanic", -3, -0.8], // the first mass Puerto Rican migration, union and machine-connected
+  ["education", "no_college", -2.1, 0.3], // peak union density: traditional on family and sex, New Deal on bread
+  ["education", "college", 1.9, -1.3], // the professional and managerial tier that voted for Eisenhower
+  ["education", "graduate", 0.3, -2], // the era's small academic and cultural left
+  ["wealth", "low", -3.3, 0.3], // tenement and mill poverty, the New Deal coalition's foundation
+  ["wealth", "middle", 1.8, -0.5], // new suburban homeowners moving toward tax sensitivity
+  ["wealth", "high", 3.7, -0.5], // Wall Street and industrial capital, the anti-New Deal economic right
+  ["ideology", "evangelicals", 0.7, 0.8], // a small non-mainline minority with no political vehicle
+  ["ideology", "patriots", 1.9, 0.2], // Cold War and veterans' organizations, Korean War patriotism
+  ["ideology", "gunowners", 1.5, 0], // sporting clubs rather than a political identity
+  ["ideology", "progressives", -4.8, -4.8], // the labor left proper: CIO, ADA and the garment unions
+  ["ideology", "environmentalists", -2.5, -2.3], // Pinchot-tradition conservation, Democratic-leaning
+  ["ideology", "libertarians", 4.9, -0.8], // old-right anti-statists, socially indifferent
+];
+
+/**
+ * Great Lakes (OH IN IL MI WI MN IA): Main Street Taft Republicanism over a
+ * UAW/USWA industrial core. Net centre-right, cross-pressured on both axes.
+ */
+const GREAT_LAKES_1953: PositionEntry[] = [
+  ["race", "white", 1, -0.8], // farm-Republican countryside plus Taft small business, cross-pressured by the UAW
+  ["race", "black", -4.2, -1.5], // Detroit, Chicago and Cleveland industrial electorates at peak union membership
+  ["race", "hispanic", -3, -0.7], // Mexican-American steel and packinghouse labor in Chicago and Gary
+  ["education", "no_college", -2.1, -0.3], // the union card, not schooling, sets this bloc's economics
+  ["education", "college", 1.7, -1.2], // Main Street professionals who broke two-to-one for Eisenhower
+  ["education", "graduate", 0.5, -1.8], // Big Ten faculty and research staff, Stevenson's constituency
+  ["wealth", "low", -3.1, -0.1], // the industrial poor inside the CIO's organising reach
+  ["wealth", "middle", 1.6, -0.5], // GI Bill suburbs: mortgage interest and property tax pull econ right
+  ["wealth", "high", 3.3, -0.4], // auto, steel and machine-tool capital, solidly Republican
+  ["ideology", "evangelicals", 0.7, 0.9], // rural Methodist and Lutheran piety, dry rather than mobilized
+  ["ideology", "patriots", 1.7, 0.3], // American Legion country with a large veteran population
+  ["ideology", "gunowners", 1.3, 0.1], // hunting culture across the northern tier, non-partisan
+  ["ideology", "progressives", -4.7, -4.5], // La Follette and Farmer-Labor residue, genuinely economically left
+  ["ideology", "environmentalists", -2.1, -1.9], // Izaak Walton League conservation, mildly Democratic
+  ["ideology", "libertarians", 4.9, -0.6], // Chicago-school and Old Right anti-New Deal opinion
+];
+
+/**
+ * Plains (ND SD NE KS): the country's most reliably Republican region in 1952
+ * (KS R+38.5, NE R+38.4, SD R+38.6, ND R+42.9), small-proprietor and anti-federal.
+ */
+const PLAINS_1953: PositionEntry[] = [
+  ["race", "white", 3.4, 0.2], // isolationist farm Republicanism; the region gave Eisenhower his largest margins
+  ["race", "black", -3.2, -1], // a small urban population in Omaha, Wichita and Topeka
+  ["race", "hispanic", -2.4, 0], // sugar-beet and railroad labor, thinly settled
+  ["education", "no_college", 1.5, 0.6], // the owner-operator farmer and the small-town proprietor, not a wage worker
+  ["education", "college", 2.9, -0.2], // land-grant graduates who stayed in county business
+  ["education", "graduate", 1.7, -0.8], // agricultural extension and university staff
+  ["wealth", "low", -1.4, 0.7], // the farm tenancy that the New Deal's price supports rescued
+  ["wealth", "middle", 3.2, 0.6], // the merchant and farm-owner middle class: the region's Republican spine
+  ["wealth", "high", 3.9, 0.6], // grain, banking and land capital, anti-federal on spending
+  ["ideology", "evangelicals", 2.2, 1.7], // dry Protestant moralism, prohibitionist in memory
+  ["ideology", "patriots", 3.2, 1.1], // isolationist patriotism reworked by the Korean War
+  ["ideology", "gunowners", 3, 0.9], // universal rural gun ownership, entirely non-partisan
+  ["ideology", "progressives", -2.8, -2.3], // Nonpartisan League and Farmers Union agrarian radicalism
+  ["ideology", "environmentalists", -0.8, -0.9], // Dust Bowl soil conservation, a federal program constituency
+  ["ideology", "libertarians", 5, 0.6], // anti-Washington constitutionalism, the region's default rhetoric
+];
+
+/**
+ * Mountain West and Alaska (MT ID WY CO UT NV AZ NM AK): ranching, mining,
+ * reclamation and the Mormon corridor. Republican well before the Southern
+ * realignment; traditional without the racial caste order.
+ */
+const MOUNTAIN_1953: PositionEntry[] = [
+  ["race", "white", 2.2, 0.1], // small government in principle, federal water, land and defense money in practice
+  ["race", "black", -3.4, -1.1], // small urban populations in Denver, Phoenix and the defense towns
+  ["race", "hispanic", -2, 0.7], // New Mexico Hispanos and Arizona farm labor: Catholic, Democratic, traditional
+  ["education", "no_college", 0.5, 0.5], // ranch and mine labor with a real extractive-union tradition
+  ["education", "college", 2.4, -0.2], // the professional tier of Denver, Salt Lake and Phoenix
+  ["education", "graduate", 1.2, -0.8], // the atomic laboratories and state universities
+  ["wealth", "low", -2, 0.6], // reservation and migrant poverty, weakly enfranchised
+  ["wealth", "middle", 2.6, 0.5], // the small-town merchant class, Republican before the Southern realignment
+  ["wealth", "high", 3.6, 0.6], // mining, cattle and land capital
+  ["ideology", "evangelicals", 1.6, 1.6], // the Mormon corridor plus scattered Protestant fundamentalism
+  ["ideology", "patriots", 2.6, 1], // defense installations and a heavy veteran share
+  ["ideology", "gunowners", 2.4, 0.8], // hunting and ranch ownership, universal and non-partisan
+  ["ideology", "progressives", -3.4, -3], // Butte and Coeur d'Alene mining unionism, the region's economic left
+  ["ideology", "environmentalists", -1.4, -1], // reclamation and public-lands conservation
+  ["ideology", "libertarians", 5, 0.6], // sagebrush anti-federalism a generation before the Rebellion
+];
+
+/**
+ * Pacific coast (CA OR WA): Warren-era progressive Republicanism, defense-industry
+ * boom, strong maritime labor, and a milder social climate than the interior.
+ */
+const PACIFIC_1953: PositionEntry[] = [
+  ["race", "white", 1.9, -1], // Warren-era growth Republicanism: business-friendly, conservationist, socially mild
+  ["race", "black", -3.6, -1.7], // wartime shipyard migration into Oakland, Portland and Seattle
+  ["race", "hispanic", -2, -0.9], // bracero-era farm labor, largely unenfranchised
+  ["education", "no_college", -0.2, -0.3], // aerospace, maritime and longshore labor with strong unions
+  ["education", "college", 2.2, -1.4], // the growth professional class of the coastal cities
+  ["education", "graduate", 0.5, -2.2], // Berkeley, Stanford and Caltech: the era's academic left
+  ["wealth", "low", -2.4, -0.2], // migrant farm and cannery poverty
+  ["wealth", "middle", 2.5, -0.7], // new tract suburbs built on defense payrolls
+  ["wealth", "high", 3.8, -0.6], // aerospace, oil and agribusiness capital
+  ["ideology", "evangelicals", 1.5, 0.4], // Okie migrant Pentecostalism in the Central Valley, not a coastal bloc
+  ["ideology", "patriots", 2.5, 0], // the largest defense economy in the country
+  ["ideology", "gunowners", 2.1, -0.2], // hunting and sporting culture, non-partisan
+  ["ideology", "progressives", -3.2, -4], // ILWU and Popular Front residue, the coast's economic left
+  ["ideology", "environmentalists", -2.2, -2.4], // Sierra Club conservation, already a mass constituency
+  ["ideology", "libertarians", 5, -0.8], // growth-boom individualism, socially permissive
+];
+
+/**
+ * Yankee New England (VT NH ME): town-meeting Republicanism, market-friendly and
+ * mainline Protestant. VT was the strongest GOP state of 1952 at R+43.3 and is not
+ * a Southern traditionalist in any era.
+ */
+const YANKEE_1953: PositionEntry[] = [
+  ["race", "white", 2.9, -1.3], // town-meeting Republicanism: market-friendly, civic-reform, mainline Protestant
+  ["race", "black", -3.5, -1.4], // a tiny population that had voted Republican since Lincoln
+  ["race", "hispanic", -2.7, -0.8], // negligible in the 1950 census outside the mill towns
+  ["education", "no_college", 0.5, -0.3], // hill-farm and quarry labor, proprietors more often than wage workers
+  ["education", "college", 2.9, -1.5], // the professional tier of the region's Republican establishment
+  ["education", "graduate", 1.6, -2], // the New England college faculties, the region's liberal edge
+  ["wealth", "low", -1.5, 0.1], // marginal hill-farm poverty without an industrial union structure
+  ["wealth", "middle", 3.2, -0.7], // the Yankee merchant and farm-owner class, fiscally tight
+  ["wealth", "high", 4.3, -0.7], // Boston-adjacent and summer-resident capital
+  ["ideology", "evangelicals", 1.5, 0.8], // old-stock Congregational and Baptist piety, dry and reformist
+  ["ideology", "patriots", 2.8, 0], // town veterans' posts, a long militia tradition
+  ["ideology", "gunowners", 2.6, -0.2], // deer season as civic ritual, no partisan content
+  ["ideology", "progressives", -2.9, -3.3], // the Yankee reform tradition, Republican in this era rather than labor-left
+  ["ideology", "environmentalists", -1.5, -1.9], // forest and watershed conservation, a Republican cause here
+  ["ideology", "libertarians", 5, -1], // no-broad-based-tax constitutionalism
+];
+
+/**
+ * Hawaii: ILWU plantation unionism built the territory's Democratic machine.
+ * Economically the furthest left electorate in the file, socially plural and mild.
+ */
+const ISLANDS_1953: PositionEntry[] = [
+  ["race", "white", -1.4, -1.6], // haole planter and military households, the territory's Republican remnant
+  ["race", "black", -3.9, -1.7], // a small military-linked population
+  ["race", "hispanic", -2.7, -1.1], // Puerto Rican and Filipino plantation labor inside the ILWU
+  ["education", "no_college", -4.2, -0.7], // the plantation and dock workforce the 1946 strikes organized
+  ["education", "college", -0.8, -1.6], // territorial civil service and the university
+  ["education", "graduate", -1.6, -2.4], // a thin professional stratum around the university
+  ["wealth", "low", -3.8, -0.4], // camp housing and seasonal plantation poverty
+  ["wealth", "middle", -0.9, -0.9], // the emerging Nisei small-business and civil-service class
+  ["wealth", "high", 1.8, -0.8], // the Big Five sugar and shipping oligarchy
+  ["ideology", "evangelicals", -0.2, 0.6], // missionary-descended Protestant congregations
+  ["ideology", "patriots", 0.3, 0], // Pearl Harbor and the 442nd: patriotic without Mainland partisanship
+  ["ideology", "gunowners", 0.2, -0.2], // hunting on the outer islands, a minor identity
+  ["ideology", "progressives", -4.8, -4], // the ILWU political machine that built the territorial Democrats
+  ["ideology", "environmentalists", -2.8, -2.4], // watershed and fishery conservation
+  ["ideology", "libertarians", 3.8, -1], // small-trader independence against the Big Five
+];
+
+/**
+ * District of Columbia: a federal-payroll, majority-Black electorate with no
+ * presidential vote until 1964. Economically the era's left pole.
+ */
+const CAPITAL_1953: PositionEntry[] = [
+  ["race", "white", -1.8, -1.2], // federal managers and Georgetown professionals with no vote to cast
+  ["race", "black", -4.5, -2], // the majority of the city: federal employment plus severe segregation
+  ["race", "hispanic", -3.5, -1], // a very small embassy-linked population
+  ["education", "no_college", -4.2, -0.4], // the federal service and hotel workforce, unionising through the AFL
+  ["education", "college", -0.8, -1.9], // the career civil service, New Deal in formation
+  ["education", "graduate", -1.6, -2.5], // the agency professional class, the era's technocratic left
+  ["wealth", "low", -4.1, 0.1], // alley housing poverty a mile from the Capitol
+  ["wealth", "middle", -1.1, -1], // the federal grade-scale middle class
+  ["wealth", "high", 1.2, -1.1], // law, lobbying and old Washington capital
+  ["ideology", "evangelicals", -1.5, 0.5], // large Black Baptist congregations, socially traditional
+  ["ideology", "patriots", -0.5, -0.3], // the military and veterans' bureaucracy
+  ["ideology", "gunowners", -0.9, -0.5], // a minor identity in a dense city
+  ["ideology", "progressives", -5, -5], // the New Deal agency left in its home city
+  ["ideology", "environmentalists", -3.3, -2.7], // Interior Department conservation
+  ["ideology", "libertarians", 3.6, -1.1], // a small anti-federal minority in the federal city
+];
+
+/**
  * Per-state, per-era position overrides for Layer-1 demographics.
  * Allows whites in MA to lean Democratic while whites in GA lean Republican.
  * Each entry: [dimension, key, economicLean, socialLean].
@@ -1539,164 +1796,85 @@ for (const era of ["1953", "1979", "1991", "1999", "2007", "2023"] as const) {
 const STATE_POSITION_OVERRIDES: Partial<
   Record<EraId, Record<string, Array<[keyof DemographicTurnoutRates, string, number, number]>>>
 > = {
-  // 1953: The Solid South — every Deep South state is HEAVILY Democratic in registration.
-  // Whites in the South lean strongly Democratic (opposite of all later eras).
-  // Northern/Rust Belt whites remain union-Democratic. Mountain West leans Republican.
+  // 1953 (2026-08 regional recalibration). Every state takes its region's table
+  // from the block above, with single-state exceptions expressed as a shift.
   //
-  // Two mechanics notes (2026-07 recalibration):
-  //  • The 1953 archetype composition contains NO `race.white` weight, so the
-  //    white overrides flow into the granular-cell electorate but barely into
-  //    archetype leans. The Solid South's party-D anchor therefore ALSO
-  //    overrides the ideology buckets that DO carry archetype weight
-  //    (evangelicals/patriots/gunowners): in 1953 the white southern
-  //    evangelical/rural-patriot bloc was yellow-dog DEMOCRATIC — the Moral
-  //    Majority realignment is decades away. Symmetrically, VT/NH/ME and the
-  //    Pacific coast override `progressives` rightward (Yankee reform /
-  //    Warren-era Republicans), since their modern-shaped ideology census
-  //    shares otherwise drag these Ike-landslide states left.
-  //  • The white entries authored as R-relative-to-baseline (Mountain West /
-  //    Plains / northern New England / Pacific) are re-based +1.0 econ /
-  //    +0.3 social — the same shift race.white received in the era-wide table
-  //    (0.5→1.5 / 0→0.3) — preserving their authored deltas. The Solid South /
-  //    Border / Northeast values are ABSOLUTE registration anchors and stay
-  //    as authored.
+  // What changed and why:
+  //  • The old table read the 1952 RESULT back into ideology: the Solid South's
+  //    Democratic vote was encoded as economically left whites plus Democratic
+  //    evangelical/patriot/gunowner buckets. That is party, not ideology. The
+  //    Deep South here is economically populist-but-not-left (-0.5: TVA, farm
+  //    parity, rural electrification) and sits at the caste order's traditional
+  //    ceiling (+4.1), which is what the 1953 electorate actually was.
+  //  • The party-proxy ideology overrides are gone. Regional character now runs
+  //    through every bucket the era's archetypes weight, led by `race.white`,
+  //    which carries archetype weight in this era's composition as it does from
+  //    1999 on (before that it reached the granular cells but not the archetype
+  //    leans, so no amount of white authoring moved a state's lean).
+  //  • Margins were used only as an advisory rank-order check on geography, with
+  //    the org-dominated Solid South excluded from the check.
   "1953": {
-    // Deep Solid South — white voters + the evangelical/rural blocs strongly
-    // Democratic (opposition to GOP = Reconstruction legacy; Stevenson won
-    // AL D+29.9, MS D+20.8, SC D+1.5, GA D+39.4, LA D+5.8, AR D+12.1).
-    AL: [
-      ["race", "white", -2.4, 4],
-      ["ideology", "evangelicals", -2, 2],
-      ["ideology", "patriots", -1.5, 1.5],
-      ["ideology", "gunowners", -1.5, 1],
-    ],
-    MS: [
-      ["race", "white", 0.3, 4.5],
-      ["ideology", "evangelicals", -2, 2],
-      ["ideology", "patriots", -1.5, 1.5],
-      ["ideology", "gunowners", -1.5, 1],
-    ],
-    SC: [
-      ["race", "white", -0.6, 4.2],
-      ["ideology", "evangelicals", -2, 2],
-      ["ideology", "patriots", -1.5, 1.5],
-      ["ideology", "gunowners", -1.5, 1],
-    ],
-    LA: [
-      ["race", "white", -1.1, 3.5],
-      ["ideology", "evangelicals", -1.5, 2],
-      ["ideology", "patriots", -1, 1.5],
-      ["ideology", "gunowners", -1, 1],
-    ],
-    GA: [
-      ["race", "white", -2.5, 4],
-      ["ideology", "evangelicals", -1.5, 2],
-      ["ideology", "patriots", -1, 1.5],
-      ["ideology", "gunowners", -1, 1],
-    ],
-    AR: [
-      // Deep-strength overrides: AR stayed D+12.1 in '52 despite the wave.
-      ["race", "white", -1.1, 3],
-      ["ideology", "evangelicals", -2, 2],
-      ["ideology", "patriots", -1.5, 1.5],
-      ["ideology", "gunowners", -1.5, 1],
-    ],
-    NC: [
-      ["race", "white", 0.3, 2.5],
-      ["ideology", "evangelicals", -1, 2],
-      ["ideology", "patriots", -0.5, 1.5],
-      ["ideology", "gunowners", -0.5, 1],
-    ],
-    // Peripheral South — Ike cracked these in '52 (TX R+6.6, FL R+10.0,
-    // VA R+12.9, TN R+0.3). 2026-08 recalibration: white values are now
-    // solved per state against the 1952 VOTE (target = -margin/30, same
-    // mapping as the 2019 calibration) via
-    // scripts/calibrate-1953-state-positions.ts — the old D-tinged
-    // registration anchors left every Ike state with a Democratic-mean
-    // electorate and the sim re-electing Democrats through the 1950s.
-    // No ideology-bloc override, letting the national wave carry them.
-    TX: [["race", "white", 0.8, 2.4]],
-    FL: [["race", "white", 1.1, 2.3]],
-    VA: [["race", "white", 1.3, 3.2]],
-    TN: [["race", "white", 0.5, 2]],
-    // Border South — still leaning Democratic but less intense
-    KY: [["race", "white", 0.3, 1.5]],
-    WV: [
-      // Union + South: very Democratic — coal-union whites held D+3.8 in '52;
-      // the rural-patriot bloc here is union-Democratic, not Republican.
-      ["race", "white", 0, 1],
-      ["ideology", "patriots", -1, 1],
-      ["ideology", "gunowners", -1, 0.5],
-    ],
-    MO: [["race", "white", -0.1, 1.3]],
-    OK: [["race", "white", 0.4, 1.9]],
-    // Northeast / Rust Belt — union + FDR coalition in registration, but the
-    // '52 VOTE is the anchor (Ike swept the region: NY R+11.9, MA R+8.8,
-    // WI R+22.2): whites sit modestly right so state means match the vote;
-    // the D registration story survives in the minority/low-income/young cells.
-    MA: [["race", "white", -0.4, -0.5]],
-    RI: [["race", "white", -0.6, -0.5]],
-    NY: [["race", "white", 0.1, -1.1]],
-    CT: [["race", "white", -0.6, -0.5]],
-    NJ: [["race", "white", 0, -0.3]],
-    PA: [["race", "white", -0.1, -0.2]],
-    MI: [["race", "white", 0, -0.9]], // UAW/CIO stronghold
-    WI: [["race", "white", 0.6, -0.5]],
-    OH: [["race", "white", 0.1, 0]],
-    IL: [["race", "white", -0.1, -0.4]],
-    MN: [["race", "white", 0, -1.3]],
-    // Mountain West / Plains — the Republican heartland (even in 1953);
-    // re-based +1.0/+0.3 with the era-wide white baseline.
-    UT: [["race", "white", 0.5, 2.2]], // LDS Republican stronghold
-    ID: [["race", "white", 1.7, 1.4]],
-    WY: [["race", "white", 0.8, 1.1]],
-    ND: [["race", "white", 2.5, 0.9]],
-    SD: [["race", "white", 2.4, 0.9]],
-    NE: [["race", "white", 2, 1]],
-    KS: [["race", "white", 2.1, 0.8]],
-    IA: [["race", "white", 1.3, 0.6]], // Farm-Republican lean
-    // New England — split: Vermont/Maine Republican, MA Catholic Democratic.
-    // The 1953 "progressive" bucket here is the Yankee reform tradition —
-    // REPUBLICAN in this era (VT was the strongest GOP state in '52, R+43.3).
-    VT: [
-      ["race", "white", 2.5, -0.4], // Yankee Republican — strongest GOP bastion in 1953
-      ["ideology", "progressives", -2, -3],
-      ["ideology", "environmentalists", -0.5, -1],
-    ],
-    NH: [
-      ["race", "white", 0.6, 0.4],
-      ["ideology", "progressives", -2.5, -3],
-    ],
-    ME: [
-      ["race", "white", 1.8, 0.2],
-      ["ideology", "progressives", -2.5, -3],
-    ],
-    // Pacific Coast — Warren-era Republican California (R+13.6), OR R+21.6,
-    // WA R+9.6: moderate whites, reform-Republican "progressive" tradition.
-    CA: [
-      ["race", "white", 0.3, 0.5],
-      ["ideology", "progressives", -3, -3.5],
-    ],
-    OR: [
-      ["race", "white", 0.7, 0.3],
-      ["ideology", "progressives", -3, -3.5],
-    ],
-    WA: [
-      ["race", "white", -0.1, -0.2],
-      ["ideology", "progressives", -3.5, -4],
-    ],
-    // Remaining states (2026-08 recalibration): white solved per state against
-    // the 1952 two-party vote via scripts/calibrate-1953-state-positions.ts —
-    // these had no authored entry, so the era-wide white (1.5/0.5) undershot
-    // the Ike landslide in the Mountain West / Southwest and the Border.
-    MD: [["race", "white", 0.4, 1.4]],
-    DE: [["race", "white", -0.3, 0.9]],
-    IN: [["race", "white", 0.6, 0.7]],
-    MT: [["race", "white", 0.9, 1]],
-    CO: [["race", "white", 0.8, 0.7]],
-    NM: [["race", "white", 2.1, 1.1]],
-    AZ: [["race", "white", 1.1, 1.4]],
-    NV: [["race", "white", 0.8, 1]],
+    // DeepSouth
+    AL: DEEP_SOUTH_1953,
+    MS: shiftRegion(DEEP_SOUTH_1953, 0.2, 1.2), // Delta planter caste order, the era's traditional ceiling
+    SC: shiftRegion(DEEP_SOUTH_1953, 0.3, -0.7), // Byrnes bolted toward Eisenhower; textile capital pulls econ right of the Black Belt
+    LA: shiftRegion(DEEP_SOUTH_1953, 0, -0.4), // south Louisiana Catholicism blunts the evangelical-Protestant frame
+    GA: shiftRegion(DEEP_SOUTH_1953, -0.7, -0.2), // Talmadge rural populism: the widest Stevenson margin in the country
+    AR: shiftRegion(DEEP_SOUTH_1953, -0.4, -1.5), // hill-country populism west of the Delta
+    // Border
+    VA: shiftRegion(BORDER_1953, 1.6, 1.1), // the Byrd organization: fiscally tight, socially the Border's most traditional
+    NC: BORDER_1953,
+    TN: BORDER_1953,
+    FL: shiftRegion(BORDER_1953, 1.5, -0.3), // northern retiree and tourism in-migration already dilutes the Southern base
+    TX: shiftRegion(BORDER_1953, 2.1, 0), // oil and gas capital gives Texas a business conservatism the Deep South lacks
+    OK: BORDER_1953,
+    KY: shiftRegion(BORDER_1953, -1.5, -0.1), // Stevenson carried it by 700 votes; eastern coalfield unionism, not Black Belt
+    MO: shiftRegion(BORDER_1953, -0.9, -0.6), // Truman's border state, split between St Louis and Kansas City labor and the Ozarks
+    WV: shiftRegion(BORDER_1953, -2.4, 0), // UMWA coal unionism: the clearest econ-left, socially traditional cell in the file
+    MD: shiftRegion(BORDER_1953, 0.5, -2.1), // functionally Mid-Atlantic already: Baltimore industry and federal employment
+    DE: shiftRegion(BORDER_1953, 0.5, -2.1), // du Pont industry and a Mid-Atlantic rather than Southern social profile
+    // Yankee
+    VT: shiftRegion(YANKEE_1953, 0.6, -0.3), // the strongest GOP state of 1952 (R+43.3), reform Yankee rather than traditionalist
+    NH: shiftRegion(YANKEE_1953, -1, 0.3), // the no-broad-based-tax identity is already the state's civic creed
+    ME: YANKEE_1953,
+    // MidAtlantic
+    MA: MID_ATLANTIC_1953,
+    RI: shiftRegion(MID_ATLANTIC_1953, -0.2, -0.3), // the densest Catholic union electorate in the country; Stevenson's closest Northern state
+    CT: MID_ATLANTIC_1953,
+    NY: MID_ATLANTIC_1953,
+    NJ: MID_ATLANTIC_1953,
+    PA: shiftRegion(MID_ATLANTIC_1953, -0.4, -0.3), // anthracite and steel: the USWA belt anchors the state's economics
+    // GreatLakes
+    OH: GREAT_LAKES_1953,
+    IN: GREAT_LAKES_1953,
+    IL: GREAT_LAKES_1953,
+    MI: GREAT_LAKES_1953,
+    WI: shiftRegion(GREAT_LAKES_1953, 0.5, 0), // La Follette Progressive residue survives inside both parties
+    MN: shiftRegion(GREAT_LAKES_1953, -0.1, -0.6), // the 1944 DFL merger and a Farmer-Labor tradition with no Southern analogue
+    IA: shiftRegion(GREAT_LAKES_1953, 1.5, 0.5), // owner-operator Corn Belt farming sits right of the industrial Great Lakes
+    // Plains
+    ND: shiftRegion(PLAINS_1953, -1.1, 0.4), // Nonpartisan League agrarian radicalism survives inside the Republican party
+    SD: PLAINS_1953,
+    NE: PLAINS_1953,
+    KS: PLAINS_1953,
+    // Mountain
+    MT: shiftRegion(MOUNTAIN_1953, -1.3, -0.6), // Butte mining unionism holds the state's economics off the Mountain line
+    ID: MOUNTAIN_1953,
+    WY: MOUNTAIN_1953,
+    CO: MOUNTAIN_1953,
+    UT: shiftRegion(MOUNTAIN_1953, 0.2, 2.3), // the LDS correlation of piety, teetotaling and Republicanism is already visible
+    NV: shiftRegion(MOUNTAIN_1953, -0.5, -1.7), // legal gambling and permissive divorce law make it a social outlier
+    AZ: MOUNTAIN_1953,
+    NM: shiftRegion(MOUNTAIN_1953, -0.9, 0.4), // the Hispano north keeps the state left of its Mountain neighbors
+    AK: MOUNTAIN_1953,
+    // Pacific
+    CA: PACIFIC_1953,
+    OR: PACIFIC_1953,
+    WA: shiftRegion(PACIFIC_1953, -0.9, -0.1), // Boeing and the maritime unions anchor a Democratic economics
+    // Islands
+    HI: ISLANDS_1953,
+    // Capital
+    DC: CAPITAL_1953,
   },
   "1979": {
     // Northeast — white working class still Democratic in 1980
@@ -1914,7 +2092,6 @@ export function getEraPositions(
   const overrides = STATE_POSITION_OVERRIDES[era]?.[stateId];
   if (!overrides || overrides.length === 0) return base;
 
-  // Deep clone + merge state overrides
   const merged = JSON.parse(JSON.stringify(base));
   for (const [dim, key, econ, social] of overrides) {
     merged[dim][key] = { economicLean: econ, socialLean: social };
@@ -1925,11 +2102,12 @@ export function getEraPositions(
 /**
  * Era anchors that author ANY per-state position override, ascending.
  *
- * `STATE_POSITION_OVERRIDES` is deliberately sparse: 1953 and 1979 carry a
- * full regional map of the United States and nothing later does. Callers
- * blending positions across years need to know which anchors are REAL so they
- * can carry the last authored map forward rather than read a missing anchor as
- * "this state has no regional character" — see `getEraPositionsForYear` in
+ * `STATE_POSITION_OVERRIDES` is deliberately sparse: 1953, 1979, 1991, and
+ * 2019 carry a full regional map of the United States; 1999, 2007, and 2023
+ * do not. Callers blending positions across years need to know which anchors
+ * are REAL so they can interpolate between authored maps and carry the last
+ * one forward rather than read a missing anchor as "this state has no
+ * regional character" - see `getEraPositionsForYear` in
  * `eraPositionsForYear.ts` for why that distinction is load-bearing.
  */
 export const STATE_OVERRIDE_ANCHOR_ERAS: readonly EraId[] = (

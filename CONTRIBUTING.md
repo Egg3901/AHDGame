@@ -31,7 +31,7 @@ Follow the README. You'll have a local world with an admin account in about ten 
 2. Lint, format, typecheck, and tests pass (`npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run test:run`). CI runs exactly this gate. (`npm run verify` additionally runs an architecture audit with known pre-existing findings; new findings from your change are yours, old ones aren't.)
 3. New or changed API routes need integration tests. Copy the pattern from any `route.test.ts`.
 4. New logic gets unit tests next to it.
-5. Player-visible changes get a `CHANGELOG.md` entry.
+5. Every PR ships a changelog entry with the change. Run `npm run changelog:new -- "Title of the change"`; it writes `content/changelog/dev/<version>-<topic>.md`, named for your branch so it cannot collide with another PR in flight. The version in the frontmatter is a label, not a claim: two entries may carry the same number and both merge cleanly. Player-visible releases also get a curated `content/changelog/public/<version>.md`, which is the published URL and stays named for the version alone.
 6. Match the surrounding code: strict TypeScript, Zod on request bodies, collection access through `src/lib/db` getters, no new dependencies without discussion. No em or en dashes in player-facing text.
 7. The PR body says why, not just what.
 

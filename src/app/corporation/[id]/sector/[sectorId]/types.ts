@@ -606,6 +606,12 @@ export interface PlantsData {
   truth?: {
     soldFraction: number | null;
     soldByCommodity: { commodity: string; fraction: number }[];
+    /**
+     * Share of offered output no freight network could place. Separates a
+     * delivery failure from a demand failure, which call for opposite
+     * responses. Optional for payloads predating it; absent reads as 0.
+     */
+    deliveryLimitedFraction?: number;
     /** Consecutive turns under half fill; optional for payloads predating it. */
     lowFillTurns?: number;
     /** Unsold-output inventory (§6); optional for payloads predating it. */

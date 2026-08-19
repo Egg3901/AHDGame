@@ -20,7 +20,7 @@ import { handleSpawnNPPs } from "./lib/spawn";
 
 // GET /api/admin/npps — Returns NPP statistics including totals, counts by state and party, and recent NPPs
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();
@@ -118,7 +118,7 @@ export async function GET() {
 
 // POST /api/admin/npps — Generates, spawns, removes, or backfills images for NPPs based on the requested action
 // Auth: requireAdmin
-// Errors: 400, 401, 403
+// Errors: 400, 403
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();
@@ -150,7 +150,7 @@ export async function POST(request: Request) {
 
 // DELETE /api/admin/npps — Retires NPPs and removes their candidacies or vacates their elected seats
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function DELETE(request: Request) {
   try {
     const auth = await requireAdmin();

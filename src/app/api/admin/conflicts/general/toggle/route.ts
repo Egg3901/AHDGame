@@ -10,7 +10,7 @@ const bodySchema = z.object({ enabled: z.boolean() });
 
 // GET /api/admin/conflicts/general/toggle - Read the Conflicts subsystem flag.
 // Auth: requireAdmin
-// Errors: 401
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();
@@ -40,7 +40,7 @@ export async function GET() {
 // POST /api/admin/conflicts/general/toggle - Enable/disable the Conflicts subsystem.
 // When enabled, the World navbar surfaces the Conflicts link / page.
 // Auth: requireAdmin
-// Errors: 400, 401
+// Errors: 400, 403
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

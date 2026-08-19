@@ -1,11 +1,11 @@
 /**
  * Era interpolation — the numeric spine of era continuity.
  *
- * Today every era-keyed table (`Record<EraId, T>`) is resolved ONCE from the
- * frozen seed preset and the world keeps that value forever. This module turns
- * those same tables into points on a curve over the LIVE in-game year: pick the
- * two anchor eras bracketing the year, lerp every number between them, and the
- * world slides along the curve as the clock advances.
+ * Era-keyed tables (`Record<EraId, T>`) are points on a curve over the LIVE
+ * in-game year: pick the two anchor eras bracketing the year, lerp every
+ * number between them, and the world slides along the curve as the clock
+ * advances. Without this, each table would be resolved once from the frozen
+ * seed preset and the world would keep that value forever.
  *
  * Design rules (see the era-continuity program, tracker project
  * `era-continuity`):

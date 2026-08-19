@@ -1,6 +1,6 @@
 // POST /api/admin/forex/enable — One-time migration to enable the forex system.
 // Auth: requireAdmin
-// Errors: 400 (already enabled), 404, 409 (turn processing), 500
+// Errors: 400 (already enabled), 403, 404, 409 (turn processing)
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";

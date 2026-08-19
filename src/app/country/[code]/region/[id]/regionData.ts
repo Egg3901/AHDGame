@@ -364,7 +364,9 @@ export async function getRegionOfficials(stateId: string, countryId: CountryId) 
     const db = await getDb();
     const officials = await db
       .collection<ElectedOfficial>("electedOfficials")
-      .find({ state: stateId.toUpperCase() })
+      // Region ids are not globally unique across countries, so scope the
+      // lookup by country as well as by state (ticket-1107).
+      .find({ state: stateId.toUpperCase(), countryId })
       .sort({ officeType: 1, senateClass: 1, seatsHeld: -1 })
       .toArray();
 

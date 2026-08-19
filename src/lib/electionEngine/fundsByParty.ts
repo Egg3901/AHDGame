@@ -3,8 +3,8 @@
  *
  * Implements A2 from `2026-05-22-swing-flow-driver-activation.md`. The
  * money driver reads "active pacing" (spend-this-turn) rather than
- * "treasury sitting balance" — see the driver math in
- * `persuasionDrivers.ts:149` for the log-ratio shape.
+ * "treasury sitting balance" - see the log-ratio shape in
+ * `moneyDriver` in `persuasionDrivers.ts`.
  *
  * `spendThisTurn` is $inc'd at every campaign spend write (upgrade
  * purchases in `campaignCommands.ts`, maintenance ticks in

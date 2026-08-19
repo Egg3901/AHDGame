@@ -151,8 +151,9 @@ describe("interpolation between anchors", () => {
   it("blends Alabama's realignment smoothly across 1953→1979", () => {
     const lo = getEraPositions("1953", "AL").race.white.economicLean;
     const hi = getEraPositions("1979", "AL").race.white.economicLean;
-    // 2026-08 compressed 1953 calibration: AL whites -2.4 (was -3).
-    expect(lo).toBe(-2.4);
+    // 2026-08 regional recalibration: AL whites -0.5 (was -2.4), the Deep South
+    // regional value. Populist-but-not-left, see demographicCategories.test.ts.
+    expect(lo).toBe(-0.5);
     expect(hi).toBe(2.5);
 
     const mid = getEraPositionsForYear(1966, "AL", NO_CHECKPOINTS).race.white.economicLean;

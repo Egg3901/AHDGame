@@ -3,7 +3,7 @@
 // credit aggressiveness, budget softness, and an optional explicit per-sector
 // directed-credit weighting. Writes economicFactors.gosbankDirective (the P1
 // seam the turn engine already honors: directive > NPP stance > default).
-// Auth: the Gosbank seat holder or the head of government. Errors: 401/403/404/429.
+// Auth: the Gosbank seat holder or the head of government. Errors: 400/401/403/404/429.
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";

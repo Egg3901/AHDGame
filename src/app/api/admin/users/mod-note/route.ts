@@ -13,7 +13,7 @@ const modNoteSchema = z.object({
 
 // PATCH /api/admin/users/mod-note — Set or clear a mod note on a user.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function PATCH(request: Request) {
   try {
     const auth = await requireAdmin();

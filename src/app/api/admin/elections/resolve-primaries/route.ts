@@ -42,7 +42,7 @@ import { primaryClosedFilter, electionOpenFilter } from "@/lib/elections/electio
 
 // POST /api/admin/elections/resolve-primaries — Eliminates primary losers and initializes vote tallies for elections whose primary phase has ended.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     const auth = await requireAdmin();

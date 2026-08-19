@@ -1,6 +1,6 @@
 // POST /api/admin/financial-logs/[id]/review — dismiss or un-dismiss a suspect flag on a transaction
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";

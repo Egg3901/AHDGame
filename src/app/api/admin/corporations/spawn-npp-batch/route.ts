@@ -2,7 +2,7 @@
 // Admin-only: batch spawn NPP-run corporations for a country.
 // Spawns one corporation per sector type (up to 18) in the country's capital state.
 // Auth: requireAdmin
-// Errors: 401, 403, 400
+// Errors: 403, 400
 
 import { NextResponse } from "next/server";
 import { z } from "zod";

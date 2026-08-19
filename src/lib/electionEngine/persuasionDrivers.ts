@@ -64,16 +64,9 @@ export const INCUMBENCY_BUDGET = 0.1 as const;
  * Slope is 1pp of budget per approval point (budget units ×100 = pp shown).
  * See 2026-06-22-incumbency-approval-bonus-design.md.
  */
-// Pivot recalibrated 50→43 (#2899 / ticket 921), then 43→46 (2026-07-18, ticket
-// 971): the pivot is the approval level an incumbent must clear to earn any
-// shield (below it, a drag). It was set to ~the live national-average approval
-// so an above-average incumbent is shielded and a below-average one dragged.
-// Approvals have since drifted UP (national mean ≈59, US the lowest at ~52; US
-// state mean ≈56), so 43 shielded essentially every incumbent near the cap. 46
-// raises the bar modestly — most incumbents still earn a (smaller) shield, and
-// only the weakest (~44-46 approval) tip into a mild drag. Note this remains
-// well below the true current mean, so incumbency is still a broad shield;
-// re-centering it to the live average (~55-59) is the fuller fix — see follow-up.
+// Pivot: approval an incumbent must clear to earn a shield (below it, a drag).
+// Held below the live national mean so most incumbents still get a smaller
+// shield and only the weakest (~44-46) tip into mild drag.
 export const INCUMBENCY_APPROVAL_PIVOT = 46 as const;
 export const INCUMBENCY_SHIELD_MAX = 0.1 as const;
 // Symmetric with the shield: incumbency should not penalize an unpopular
@@ -294,10 +287,11 @@ function incumbencyDriver(
  * contribution in `[-1, +1]`.
  *
  * Components contributing to the bounded sum:
- *   - candidate-Support delta (#4B)
- *   - policy-distance proxy (#4B)
- *   - money — log-ratio of campaign funds (#4C)
- *   - incumbency — small fixed shield for the incumbent party (#4C)
+ *   - candidate Support delta
+ *   - policy-distance proxy
+ *   - money: log-ratio of campaign funds
+ *   - incumbency: seat-share shield for legislatures; approval-scaled
+ *     shield/drag for single-winner executive own-races
  *
  * Each component contributes within its own per-driver budget so no
  * single signal dominates. Per-driver budgets sum to 0.75 so the
@@ -344,9 +338,9 @@ export function getPersuasionDriverBreakdown(
 ): PersuasionDriverComponent[] {
   // Scale internal [-1, +1] component values to percentage points so the
   // UI's signed-bar rendering reads naturally. Multiplied by 100, each
-  // row falls in [-budget × 100, +budget × 100] — ranges from +10 / −15 pp
-  // (Incumbency: the approval drag reaches −15pp for executive own-races) to
-  // ±30 pp (Support delta) per the T1 calibration.
+  // row falls in [-budget x 100, +budget x 100]: incumbency approval
+  // shield/drag is +/-10 pp (tenure fatigue can push the net lower);
+  // Support delta is +/-30 pp.
   const scale = 100;
   return [
     { label: "Candidate Support", contributionPct: supportDeltaDriver(pj, pi, enriched) * scale },

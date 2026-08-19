@@ -3,6 +3,7 @@ import type { Db } from "mongodb";
 import { bulkOps, createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import {
   computeUnownedSeedRevenue,
+  countrySectorSeedMultiplier,
   MIN_UNOWNED_SECTOR_REVENUE,
   seedUnownedSectors,
 } from "./seedUnownedSectors";
@@ -10,6 +11,43 @@ import {
 function cursor(docs: unknown[]) {
   return { toArray: vi.fn().mockResolvedValue(docs) };
 }
+
+describe("countrySectorSeedMultiplier (ticket-1072)", () => {
+  it("lifts East German automobiles and construction and nothing else", () => {
+    expect(countrySectorSeedMultiplier("DD", "automobiles")).toBe(10);
+    expect(countrySectorSeedMultiplier("DD", "construction")).toBe(8);
+    expect(countrySectorSeedMultiplier("DD", "manufacturing")).toBe(1);
+    expect(countrySectorSeedMultiplier("DD", "extraction")).toBe(1);
+  });
+
+  it("is a no-op for every other country", () => {
+    for (const countryId of ["CS", "PL", "DE", "US", "RU"] as const) {
+      expect(countrySectorSeedMultiplier(countryId, "automobiles")).toBe(1);
+      expect(countrySectorSeedMultiplier(countryId, "construction")).toBe(1);
+    }
+  });
+
+  it("multiplies DD downstream seed revenue without touching DD upstream", () => {
+    const args = { gdp: 17_156, countryId: "DD", stateId: "SN", preset: "1953-default" } as const;
+    const auto = computeUnownedSeedRevenue({ ...args, sectorType: "automobiles" });
+    const construction = computeUnownedSeedRevenue({ ...args, sectorType: "construction" });
+    const manufacturing = computeUnownedSeedRevenue({ ...args, sectorType: "manufacturing" });
+
+    // Same bucket at multiplier 1 is the floor-or-market figure divided back out.
+    expect(auto / 10).toBeGreaterThan(0);
+    expect(construction / 8).toBeGreaterThan(0);
+    // Upstream is untouched: no sector is cut to pay for the uplift.
+    const csManufacturing = computeUnownedSeedRevenue({
+      gdp: 17_156,
+      countryId: "CS",
+      stateId: "CS_BOH",
+      sectorType: "manufacturing",
+      preset: "1953-default",
+    });
+    expect(manufacturing).toBeGreaterThan(0);
+    expect(csManufacturing).toBeGreaterThan(0);
+  });
+});
 
 describe("computeUnownedSeedRevenue", () => {
   it("reproduces a small 1991 CN market (HB logistics, near the floor)", () => {

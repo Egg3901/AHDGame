@@ -2,7 +2,7 @@
 // Moves a corporation's headquarters to a different country/region.
 // Body: { countryId: "US"|"UK"|"JP"|"DE", regionId: string }
 // Auth: requireAdmin
-// Errors: 401, 403, 400, 404
+// Errors: 403, 400, 404
 //
 // Cross-country moves that cross a currency boundary also convert the corp's
 // treasury + sectors + cancel open orders/listings, mirroring the player

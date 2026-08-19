@@ -14,7 +14,7 @@ import { ensureDEElections } from "@/lib/turn/perpetualElections";
 
 // POST /api/admin/elections/restart — Spawns any missing US, UK, and DE elections immediately without waiting for the next turn.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     const auth = await requireAdmin();

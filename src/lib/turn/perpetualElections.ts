@@ -883,7 +883,7 @@ function endTimeToLarpTurn(endTime: Date, nowRef: Date, currentTurn: number): nu
  * Spawns anchor to the **canonical LARP schedule** via
  * {@link pickNextCanonicalCycle}. When the admin fast-forwards a regular
  * cycle via the "Modify Timers" PATCH, the next regular stays on calendar
- * (endTurn = 219 + (N − 1) × 240). Snap elections still shift the schedule
+ * (endTurn = anchors.ukCommons + (N - 1) x UK_COMMONS_CYCLE_PERIOD_HOURS). Snap elections still shift the schedule
  * for the immediate post-snap regular — the shared helper accepts
  * `priorEndTurn = snap.endTurn`, giving `endTurn = snap.endTurn + 240` per
  * docs/design/snap-elections.md. Subsequent regulars (past the first post-snap
@@ -1190,7 +1190,7 @@ export async function ensureUKRegionalCouncilElections(now: Date): Promise<void>
  * Spawns anchor to the **canonical LARP schedule** via
  * {@link pickNextCanonicalCycle}. When the admin fast-forwards a regular
  * cycle via "Modify Timers", the next regular stays on calendar
- * (endTurn = 240 + (N − 1) × 192). Snap elections still shift the schedule
+ * (endTurn = anchors.jpShugiin + (N - 1) x dur.durationHours). Snap elections still shift the schedule
  * for the immediate post-snap regular — when prev is a `snap_shugiin`, the
  * shared helper receives `priorEndTurn = snap.endTurn` and the new cycle
  * anchors to `snap.endTurn + 192` per docs/design/snap-elections.md.

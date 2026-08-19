@@ -6,7 +6,7 @@ import { handleRouteError } from "@/lib/api/errors";
 /**
  * Get the most recent code quality snapshot, optionally filtered by environment.
  * Auth: requireAdmin()
- * Errors: 401, 404, 500
+ * Errors: 403, 404
  */
 export const GET = withAdminAuth(async (_auth, request: Request) => {
   try {

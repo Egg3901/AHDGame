@@ -43,6 +43,7 @@
     "migrate:metric-effects:dry": "npx tsx scripts/backfill-metric-effects.ts --dry-run",
     "migrate": "npx tsx scripts/run-migrations.ts",
     "migrate:dry-run": "npx tsx scripts/run-migrations.ts --dry-run",
+    "changelog:new": "npx tsx scripts/changelog/new-entry.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -130,7 +131,7 @@
   },
   "devDependencies": {
     "@commitlint/cli": "^20.4.4",
-    "@commitlint/config-conventional": "^20.4.4",
+    "@commitlint/config-conventional": "^21.2.0",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.1",

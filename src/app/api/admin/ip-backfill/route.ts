@@ -8,7 +8,7 @@ import type { User, GameConfig } from "@/lib/db/types";
 // POST /api/admin/ip-backfill — Backfill IP details for users missing them.
 // Auth: requireAdmin
 // Body: { limit?: number } (default 10, max 50)
-// Errors: 401, 403, 503
+// Errors: 403, 503
 export const POST = withAdminAuth(async (_auth) => {
   try {
     const db = await getDb();

@@ -24,7 +24,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
     if (!COUNTRY_CONFIGS[countryId]) {
       return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
     }
-    const stateId = id;
+    // State ids are stored upper-case ("BEO", "SN"). The server-rendered region
+    // page already uppercases before querying; this route did not, so a
+    // lower-case id in the URL matched nothing and the parliament list came
+    // back empty (ticket-1107).
+    const stateId = id.toUpperCase();
 
     const db = await getDb();
 
@@ -37,7 +41,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // Get all elected officials for this state
     const officials = await db
       .collection<ElectedOfficial>("electedOfficials")
-      .find({ state: stateId })
+      .find({ state: stateId, countryId })
       .sort({ officeType: 1, senateClass: 1, seatsHeld: -1 })
       .toArray();
 

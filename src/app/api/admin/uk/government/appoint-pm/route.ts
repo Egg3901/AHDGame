@@ -4,7 +4,7 @@
  * Accepts optional countryId in body (defaults to "UK" for backwards compat).
  * Only updates the governmentFormations collection (new system).
  * Auth: requireAdmin
- * Errors: 400, 401, 403, 404
+ * Errors: 400, 403, 404
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";

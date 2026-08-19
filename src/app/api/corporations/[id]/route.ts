@@ -303,6 +303,9 @@ export async function GET(request: Request, { params }: RouteParams) {
             // profit-to-cost position the fog exists to blur. Insider-only,
             // like the exact fill rate.
             row.fillAdjustedMarginPct = null;
+            // Also a ratio, and the same class of intel as the exact fill rate:
+            // it names which of this corp's plants cannot reach their market.
+            row.deliveryLimitedFraction = null;
           }
         }
         const corpPhysical = corpObj?.physical as Record<string, unknown> | null | undefined;

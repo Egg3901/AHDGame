@@ -10,7 +10,7 @@ import type { LegislationTypePosition } from "@/lib/db/types/legislation";
 
 // GET /api/admin/law-types — Lists all legislation types, merging seed definitions with admin-created overrides.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();
@@ -50,7 +50,7 @@ export async function GET() {
 
 // POST /api/admin/law-types — Creates a new admin-defined legislation type, optionally marking it permanent.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 409
+// Errors: 400, 403, 409
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

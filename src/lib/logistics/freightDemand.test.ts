@@ -25,8 +25,8 @@ describe("applyFreightHaulDemand", () => {
 
     applyFreightHaulDemand(
       new Map([
-        ["NY", { bulk: 3, special: 1 }],
-        ["CA", { bulk: 0, special: 0.5 }],
+        ["NY", { bulk: 3, special: 1, grid: 0 }],
+        ["CA", { bulk: 0, special: 0.5, grid: 0 }],
       ]),
       { global, byState, byCountry, stateToCountry }
     );
@@ -48,8 +48,8 @@ describe("applyFreightHaulDemand", () => {
 
     applyFreightHaulDemand(
       new Map([
-        ["ZZ", { bulk: 2, special: 0 }],
-        ["YY", { bulk: 0, special: 0 }],
+        ["ZZ", { bulk: 2, special: 0, grid: 0 }],
+        ["YY", { bulk: 0, special: 0, grid: 0 }],
       ]),
       { global, byState, byCountry, stateToCountry }
     );

@@ -39,6 +39,7 @@ import { processSovereignLegislativeTurn } from "@/lib/sovereignDefault/legislat
 import { processCrisisAutoActions } from "@/lib/sovereignDefault/crisisAutoAction";
 import {
   coverBondShortfallsFromEscrow,
+  filterInsolventCorps,
   resolveBondCurrency,
   rollbackDefaultedIssuerMaturityFlows,
   type BondMaturityFlow,
@@ -528,7 +529,32 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
       (corp) => corp.liquidCapital < 0 && !natcorpIds.has(corp._id.toString())
     );
     const stillNegative = await coverBondShortfallsFromEscrow(db, negativeNonNatcorp, now);
-    for (const idStr of stillNegative) {
+
+    // SOLVENCY GATE. `liquidCapital < 0` is a liquidity snapshot, not
+    // insolvency. A corp that has converted cash into plant is short of cash by
+    // construction, and saying so is not the same as saying it cannot pay.
+    // Ticket #1130 defaulted a corp 16.58 under, holding ₳232k of assets
+    // (mostly paid-for construction not yet delivered) against ₳165k of debt,
+    // then ran it through a ladder that sold its only sector.
+    //
+    // The test is whether the corp's assets could cover its debt, valued on the
+    // SAME exit basis the restructure planner uses to decide what to sell. That
+    // is deliberate: if restructuring could have covered the debt, the corp was
+    // never insolvent, only illiquid, and the ladder should not start. A corp
+    // whose assets fall short is insolvent and defaults exactly as before.
+    //
+    // A corp left illiquid still cannot spend what it does not have, so it is
+    // under real pressure — it simply is not liquidated over a cash dip.
+    //
+    // Scope: initial detection only. Cascade defaults (Phase 3.5) are a
+    // counterparty genuinely failing to pay, so they are left untouched.
+    const solvencyChecked = await filterInsolventCorps(db, stillNegative, {
+      corpMap,
+      fxByCurrency,
+      centralBanks,
+      activeBonds,
+    });
+    for (const idStr of solvencyChecked) {
       defaultedCorps.add(idStr);
     }
   }

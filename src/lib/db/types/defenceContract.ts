@@ -110,6 +110,23 @@ export interface DefenceContract {
     /** Favorability the minister paid for it, for the order book to state plainly. */
     favorabilityPenalty: number;
   };
+  /**
+   * Which economics settle this contract's deliveries (ticket #1134).
+   *
+   * `"margin"` means build cost is a share of `pricePerLot` at `TARGET_SUPPLIER_MARGIN`, so a
+   * delivery converts the appropriation into materiel and pays the supplier a normal return.
+   *
+   * **ABSENT means the contract predates that fix and settles under the old economics**, where
+   * cost was a raw commodity bill unrelated to the price and the supplier kept nearly the whole
+   * contract. That is deliberate and it is a rule, not an exception for one order: a player who
+   * signed under the old terms keeps them for the lots they have left. A repair never takes
+   * away what a player already holds.
+   *
+   * Absence is the marker precisely so no backfill is needed. Every contract awarded before the
+   * deploy lacks the field and is grandfathered by construction, including any awarded between
+   * the merge and the release.
+   */
+  costBasis?: "margin";
   status: DefenceContractStatus;
   awardedTurn: number;
   updatedAt?: Date;
@@ -126,6 +143,7 @@ export type DefenceCarryReason =
   | "supplier_ineligible"
   | "no_output"
   | "supplier_cannot_fund_loss"
+  | "turn_spend_cap"
   | "already_settled_this_turn";
 
 /** One line of plain text per reason, shared by the ministerial and corporate order books. */
@@ -145,5 +163,8 @@ export const DEFENCE_CARRY_REASON_TEXT: Record<DefenceCarryReason, string> = {
   supplier_cannot_fund_loss:
     "Input prices have risen above the price this order was struck at, and the supplier does " +
     "not have the cash to deliver at a loss. Nothing shipped.",
+  turn_spend_cap:
+    "Lots are built and waiting. The appropriation is limited in how much it can pay out in a " +
+    "single turn, so they ship over the next few turns rather than all at once.",
   already_settled_this_turn: "This contract has already been settled for this turn.",
 };

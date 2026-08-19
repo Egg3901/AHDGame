@@ -17,7 +17,7 @@ const updateRoadmapItemSchema = z.object({
 
 // PATCH /api/admin/roadmap/[id] — Updates a roadmap item's title, description, status, sort order, or category.
 // Auth: requireAdmin
-// Errors: 400, 401, 404
+// Errors: 400, 403, 404
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAdmin();
@@ -90,7 +90,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 // DELETE /api/admin/roadmap/[id] — Permanently deletes a roadmap item by ID.
 // Auth: requireAdmin
-// Errors: 400, 401, 404
+// Errors: 400, 403, 404
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAdmin();

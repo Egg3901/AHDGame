@@ -6,7 +6,7 @@ import type { Election, ElectionCandidate, ElectionVoteTally } from "@/lib/db/ty
 
 // GET /api/admin/elections/heal-withdrawn-tallies — Diagnoses active election tallies that still contain data for withdrawn candidates.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();
@@ -84,7 +84,7 @@ export async function GET() {
 
 // POST /api/admin/elections/heal-withdrawn-tallies — Removes withdrawn candidates' data from all active election tallies and recalculates seat estimates.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     const auth = await requireAdmin();

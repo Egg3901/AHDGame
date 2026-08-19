@@ -7,7 +7,7 @@ import { writeAdminSeedFile, ADMIN_SEED_FILE } from "@/lib/admin/seedFileGenerat
 
 // POST /api/admin/law-types/[id]/make-permanent — Marks a law type as permanent and regenerates the admin seed file.
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAdmin();

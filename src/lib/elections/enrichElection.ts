@@ -338,8 +338,7 @@ async function applyPresidentialPrimaryDisplay(
 /**
  * Low-level enrichment function that accepts pre-fetched dependencies.
  * Exported with underscore prefix to signal that it is an internal helper
- * intended for use by resolveElection() and the upcoming resolveElections()
- * batch function (Task 2).
+ * intended for use by resolveElection() and resolveElections().
  *
  * @param election   - The election document
  * @param deps       - All pre-fetched dependency data
@@ -702,7 +701,6 @@ export async function _enrichElection(
     );
 
     if (resolvedTally) {
-      // Filter tally to active candidates only
       const filterRecord = <T>(rec: Record<string, T>): Record<string, T> => {
         const out: Record<string, T> = {};
         for (const [k, v] of Object.entries(rec)) {
@@ -1182,7 +1180,6 @@ export async function fetchDepsForElection(
   const isPresident = election.electionType === "president";
   const countryId = election.countryId ?? "US";
 
-  // Candidates: for completed/resolved include all; for active/upcoming only active
   const candidateQuery: Record<string, unknown> = { electionId: electionOid };
   if (election.status !== "completed" && election.status !== "resolved") {
     candidateQuery.status = "active";
@@ -1192,7 +1189,6 @@ export async function fetchDepsForElection(
     .find(candidateQuery)
     .toArray();
 
-  // Collect IDs
   const characterIds = candidates.filter((c) => !c.isNPP).map((c) => c.characterId);
   const runningMateIds = candidates.filter((c) => c.runningMateId).map((c) => c.runningMateId!);
   const allCharIds = [
