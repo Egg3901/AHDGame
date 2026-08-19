@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { getCatalog } from "@/lib/politicalLegislation/catalog";
 import { composeTarget, lawTargets } from "@/lib/politicalLegislation/dynamics";
-import { loadCountryPoliticalMetrics } from "./countryPoliticalMetrics";
+import { CABINET_RESIDUAL_CAP } from "../cabinetResidual";
+import { DRIFT_RATE_PER_TURN } from "@/lib/politicalLegislation/dynamics";
+import { driftHalfLifeTurns, loadCountryPoliticalMetrics } from "./countryPoliticalMetrics";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -100,5 +102,87 @@ describe("countryPoliticalMetrics — SP2 payload (history + modifiers)", () => 
     const response = await loadCountryPoliticalMetrics("UK", db as unknown as Db);
     const metric = response!.categories.flatMap((c) => c.metrics)[0];
     expect(metric.history).toEqual([]);
+  });
+  /**
+   * Ticket #1129 regression. Players reported that built estates did nothing.
+   * The cabinet term WAS being written and folded into the target the engine
+   * drifts toward, but the served payload left it out entirely, so the panel
+   * showed a target that disagreed with the engine and no surface named the
+   * estates at all.
+   */
+  describe("ticket #1129 — the cabinet term is served, not silently dropped", () => {
+    function withCabinet(cabinet: Record<string, number>) {
+      db.collectionMocks.politicalMetrics.find = vi.fn().mockImplementation(() => ({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: "R1",
+            countryId: "UK",
+            values: fullValues(60),
+            residuals: {},
+            cabinetResiduals: cabinet,
+          },
+        ]),
+      }));
+    }
+
+    async function healthMetric() {
+      const response = await loadCountryPoliticalMetrics("UK", db as unknown as Db);
+      return response!.categories
+        .flatMap((c) => c.metrics)
+        .find((m) => m.id === "health.universalCare")!;
+    }
+
+    it("reports the population-weighted cabinet term and folds it into the target", async () => {
+      withCabinet({ "health.universalCare": 5 });
+      const metric = await healthMetric();
+      const points = lawTargets("UK", baselineLevels())["health.universalCare"];
+      expect(metric.modifiers.cabinet).toBe(5);
+      // Structural residual is the lazy view (value − points); cabinet rides on top.
+      expect(metric.modifiers.target).toBeCloseTo(
+        Math.round(composeTarget(points, 0, 60 - points + 5) * 10) / 10,
+        6
+      );
+      // The target now leads the value, so the panel says so.
+      expect(metric.modifiers.direction).toBe("up");
+    });
+
+    it("flags saturation when the population sits at the cabinet ceiling", async () => {
+      withCabinet({ "health.universalCare": CABINET_RESIDUAL_CAP });
+      const metric = await healthMetric();
+      expect(metric.modifiers.cabinetAtCap).toBe(true);
+      expect(metric.modifiers.cabinetCap).toBe(CABINET_RESIDUAL_CAP);
+    });
+
+    it("does not flag saturation below the ceiling", async () => {
+      withCabinet({ "health.universalCare": CABINET_RESIDUAL_CAP - 1 });
+      const metric = await healthMetric();
+      expect(metric.modifiers.cabinetAtCap).toBe(false);
+    });
+
+    it("treats a doc with no cabinetResiduals as a zero term", async () => {
+      const metric = await healthMetric();
+      expect(metric.modifiers.cabinet).toBe(0);
+      expect(metric.modifiers.cabinetAtCap).toBe(false);
+    });
+
+    it("serves the drift half-life derived from the engine rate", async () => {
+      const metric = await healthMetric();
+      expect(metric.modifiers.driftHalfLifeTurns).toBe(driftHalfLifeTurns(DRIFT_RATE_PER_TURN));
+      // The pace is the whole complaint: an 8 point cabinet push takes many
+      // turns to become visible, so the number has to be large, not incidental.
+      expect(metric.modifiers.driftHalfLifeTurns).toBeGreaterThan(50);
+    });
+  });
+
+  describe("driftHalfLifeTurns", () => {
+    it("inverts the per-turn drift rate", () => {
+      expect(driftHalfLifeTurns(0.5)).toBe(1);
+      expect(driftHalfLifeTurns(0.005)).toBe(138);
+    });
+
+    it("returns 0 for rates outside (0, 1)", () => {
+      expect(driftHalfLifeTurns(0)).toBe(0);
+      expect(driftHalfLifeTurns(1)).toBe(0);
+    });
   });
 });
