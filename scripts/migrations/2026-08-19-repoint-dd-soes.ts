@@ -48,7 +48,13 @@
  * no seat and no equity to take away.
  *
  * Idempotent: re-running finds the SOEs already present and no sectors left on
- * the primary corporation, and does nothing.
+ * the primary corporation, and does nothing. "Already present" means matching
+ * on `soe.sector` OR `assignedSectorTypes`, so an enterprise that a player
+ * carved out through `POST /national-corporation/split` (random id, no
+ * overlay) is adopted and given its overlay rather than duplicated at the
+ * canonical
+ * id. That is not hypothetical: it is exactly what DD looked like by the time
+ * this migration was due to run.
  *
  * Usage:
  *   npx tsx scripts/migrations/2026-08-19-repoint-dd-soes.ts --dry-run
@@ -61,6 +67,7 @@ import type { Corporation, CorporateSector, State } from "../../src/lib/db/types
 import type { CorporationType } from "../../src/lib/constants/corporations";
 import type { MigrationResult } from "../../src/lib/migrations/types";
 import { NUMERIC_BSON_TYPE } from "../../src/lib/db/queryHelpers";
+import { attachSoeOverlayIfPlanned } from "../../src/lib/nationalization/restructure";
 
 const COUNTRY = "DD" as const;
 
@@ -115,19 +122,39 @@ export async function runRepointDdSoes(
   let inserted = 0;
   let updated = 0;
   let scanned = 0;
+  let adopted = 0;
 
   for (const entry of entries) {
     const sectorType = (entry.corporation.assignedSectorTypes?.[0] ??
       entry.corporation.type) as CorporationType;
 
-    // An enterprise on a legacy id band is still THIS sector's enterprise:
-    // match on the overlay, never on the id, so the 0x600 / 0xc10 corporations
-    // are reused rather than duplicated at their canonical id.
-    const existing = await db
-      .collection<Corporation>("corporations")
-      .findOne({ countryId: COUNTRY, "soe.sector": sectorType }, { projection: { _id: 1 } });
+    // An enterprise on a legacy id band, OR one a player carved out through
+    // `POST /national-corporation/split`, is still THIS sector's enterprise:
+    // match on what the corporation CLAIMS, never on its id, so the 0x600 /
+    // 0xc10 corporations and any random-id split-off are reused rather than
+    // duplicated at their canonical id.
+    //
+    // `assignedSectorTypes` is the load-bearing half of that. Matching on
+    // `soe.sector` alone was not enough: on 2026-08-19 a DD player split off
+    // all 8 of the sector types this migration was written to create, and
+    // `splitOffSectorType` did not attach an `soe` overlay at the time. Those
+    // enterprises were therefore invisible to a `soe.sector` probe, so a run
+    // would have created 8 duplicates on the canonical ids and stranded the
+    // real ones, one of which a player is CEO of.
+    const existing = await db.collection<Corporation>("corporations").findOne(
+      {
+        countryId: COUNTRY,
+        $or: [{ "soe.sector": sectorType }, { assignedSectorTypes: sectorType }],
+      },
+      { projection: { _id: 1, soe: 1 } }
+    );
 
     let corpId = existing?._id ?? (entry.corporation._id as ObjectId);
+
+    // An enterprise that exists but carries no overlay is adopted, not
+    // replaced: give it the overlay so the command-economy dashboard and the
+    // director seat find it. Runs after any re-point below would be pointless,
+    // so it is deliberately ordered after the sector move (see end of loop).
 
     if (!existing) {
       // Never claim an id another corporation already owns.
@@ -186,18 +213,35 @@ export async function runRepointDdSoes(
       updated += matched;
       log(`[DD] ${dryRun ? "would re-point" : "re-pointed"} ${matched} ${sectorType} sector(s)`);
     }
+
+    // Adopt an overlay-less enterprise (a player split-off, or anything else
+    // created outside the seed). Done after the re-point so the overlay is
+    // derived from the full set of sectors the corp ends up holding.
+    if (existing && !existing.soe) {
+      if (dryRun) {
+        adopted++;
+        log(`[DD] would attach soe overlay to existing ${sectorType} enterprise`);
+      } else if (await attachSoeOverlayIfPlanned(db, COUNTRY, corpId, sectorType)) {
+        adopted++;
+        log(`[DD] attached soe overlay to existing ${sectorType} enterprise`);
+      }
+    }
   }
 
   const leftOnPrimary = await db
     .collection<CorporateSector>("corporateSectors")
     .countDocuments({ countryId: COUNTRY, corporationId: primary._id });
   notes.push(`sectorsRemainingOnPrimary=${dryRun ? "(dry-run, unchanged) " : ""}${leftOnPrimary}`);
-  notes.push(`soesCreated=${inserted}`, `sectorsRepointed=${updated}`);
+  notes.push(
+    `soesCreated=${inserted}`,
+    `sectorsRepointed=${updated}`,
+    `overlaysAdopted=${adopted}`
+  );
 
   return {
     documentsScanned: scanned,
     documentsInserted: inserted,
-    documentsUpdated: updated,
+    documentsUpdated: updated + adopted,
     documentsDeleted: 0,
     notes,
   };
