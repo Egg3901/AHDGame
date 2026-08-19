@@ -1569,18 +1569,18 @@ for (const era of ["1953", "1979", "1991", "1999", "2007", "2023"] as const) {
  * close to the state mean rather than bolder than it.
  */
 const DEEP_SOUTH_1953: PositionEntry[] = [
-  ["race", "white", -0.5, 4.1], // populist toward Washington money, at the caste order's ceiling socially
-  ["race", "black", -3.2, 1.2], // disfranchised outside the cities; church-centered and economically dependent
+  ["race", "white", -0.5, 4.2], // populist toward Washington money, at the caste order's ceiling socially
+  ["race", "black", -3.4, -2], // disfranchised outside the cities; church-centered and economically dependent
   ["race", "hispanic", -2.6, 1.2], // south Texas and Delta farm labor, tied to the same patron economy
-  ["education", "no_college", -1.7, 2.8], // mill-town and small-farmer Dixiecrats, not northern union Democrats
-  ["education", "college", 0.6, 2], // the professional class of the courthouse ring
+  ["education", "no_college", -1.7, 2.9], // mill-town and small-farmer Dixiecrats, not northern union Democrats
+  ["education", "college", 0.6, 2.1], // the professional class of the courthouse ring
   ["education", "graduate", 0, 1.6], // a thin university and medical stratum, less bound by the county machine
   ["wealth", "low", -2.2, 3.1], // tenant farmers and sharecroppers: the region's populist floor
-  ["wealth", "middle", 0.8, 2.5], // the courthouse and Main Street class, the region's most conservative element
-  ["wealth", "high", 2.2, 2.6], // planter and textile capital, anti-union and property-first
-  ["ideology", "evangelicals", -0.6, 3.1], // pre-Moral Majority: pious and segregationist, economically populist
-  ["ideology", "patriots", -0.4, 3], // Southern military tradition, yellow-dog Democratic in party terms
-  ["ideology", "gunowners", -0.8, 2.9], // rural hunting culture with no partisan vehicle of its own
+  ["wealth", "middle", 0.8, 2.6], // the courthouse and Main Street class, the region's most conservative element
+  ["wealth", "high", 2.2, 2.7], // planter and textile capital, anti-union and property-first
+  ["ideology", "evangelicals", -0.6, 3.2], // pre-Moral Majority: pious and segregationist, economically populist
+  ["ideology", "patriots", -0.4, 3.1], // Southern military tradition, yellow-dog Democratic in party terms
+  ["ideology", "gunowners", -0.8, 3], // rural hunting culture with no partisan vehicle of its own
   ["ideology", "progressives", -3.4, -1.3], // TVA and rural-electrification progressivism, silent on race
   ["ideology", "environmentalists", -1.4, 0.4], // soil conservation and flood control, a federal-works constituency
   ["ideology", "libertarians", 3.4, 2.8], // states-rights constitutionalism rather than market liberalism
@@ -1593,7 +1593,7 @@ const DEEP_SOUTH_1953: PositionEntry[] = [
  */
 const BORDER_1953: PositionEntry[] = [
   ["race", "white", 0.2, 0.7], // two-party country: Ike took VA, TX and FL in 1952 without an ideological shift
-  ["race", "black", -3.4, 0.3], // urban Black electorates in Baltimore, Louisville and St Louis could vote
+  ["race", "black", -3.6, -2], // urban Black electorates in Baltimore, Louisville and St Louis could vote
   ["race", "hispanic", -2.6, 0.1], // Texas and Oklahoma farm labor with a Catholic Democratic tilt
   ["education", "no_college", -1.8, 1.2], // textile, tobacco and coal workers still inside the New Deal coalition
   ["education", "college", 1, 0.6], // the business and professional towns Eisenhower cracked first
@@ -1772,7 +1772,7 @@ const ISLANDS_1953: PositionEntry[] = [
  */
 const CAPITAL_1953: PositionEntry[] = [
   ["race", "white", -1.8, -1.2], // federal managers and Georgetown professionals with no vote to cast
-  ["race", "black", -4.5, -0.9], // the majority of the city: federal employment plus severe segregation
+  ["race", "black", -4.5, -2], // the majority of the city: federal employment plus severe segregation
   ["race", "hispanic", -3.5, -1], // a very small embassy-linked population
   ["education", "no_college", -4.2, -0.4], // the federal service and hotel workforce, unionising through the AFL
   ["education", "college", -0.8, -1.9], // the career civil service, New Deal in formation
@@ -1816,11 +1816,11 @@ const STATE_POSITION_OVERRIDES: Partial<
   "1953": {
     // DeepSouth
     AL: DEEP_SOUTH_1953,
-    MS: shiftRegion(DEEP_SOUTH_1953, 0.2, 1.1), // Delta planter caste order, the era's traditional ceiling
+    MS: shiftRegion(DEEP_SOUTH_1953, 0.2, 1.2), // Delta planter caste order, the era's traditional ceiling
     SC: shiftRegion(DEEP_SOUTH_1953, 0.3, -0.7), // Byrnes bolted toward Eisenhower; textile capital pulls econ right of the Black Belt
-    LA: shiftRegion(DEEP_SOUTH_1953, 0, -0.5), // south Louisiana Catholicism blunts the evangelical-Protestant frame
+    LA: shiftRegion(DEEP_SOUTH_1953, 0, -0.4), // south Louisiana Catholicism blunts the evangelical-Protestant frame
     GA: shiftRegion(DEEP_SOUTH_1953, -0.7, -0.2), // Talmadge rural populism: the widest Stevenson margin in the country
-    AR: shiftRegion(DEEP_SOUTH_1953, -0.4, -1.4), // hill-country populism west of the Delta
+    AR: shiftRegion(DEEP_SOUTH_1953, -0.4, -1.5), // hill-country populism west of the Delta
     // Border
     VA: shiftRegion(BORDER_1953, 1.6, 1.1), // the Byrd organization: fiscally tight, socially the Border's most traditional
     NC: BORDER_1953,
