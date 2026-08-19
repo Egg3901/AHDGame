@@ -1,5 +1,8 @@
 "use client";
 
+import { AREA_VALUES, BADGE_VALUES } from "@/lib/changelog/types";
+import { AREA_STYLES, BADGE_STYLES } from "./postStyles";
+
 interface ChangelogFeedFilterProps {
   search: string;
   onSearchChange: (value: string) => void;
@@ -19,16 +22,12 @@ interface ChangelogFeedFilterProps {
 
 const BADGE_OPTIONS = [
   { value: "all", label: "All releases" },
-  { value: "major", label: "Major" },
-  { value: "patch", label: "Patch" },
-  { value: "hotfix", label: "Hotfix" },
+  ...BADGE_VALUES.map((value) => ({ value, label: BADGE_STYLES[value].label })),
 ];
 
 const AREA_OPTIONS = [
   { value: "all", label: "All areas" },
-  { value: "backend", label: "Backend" },
-  { value: "frontend", label: "Frontend" },
-  { value: "fullstack", label: "Full-stack" },
+  ...AREA_VALUES.map((value) => ({ value, label: AREA_STYLES[value].label })),
 ];
 
 function FilterPills({
