@@ -29,14 +29,20 @@ import { announceConsentBillResolved } from "@/lib/referendum/referendumWebhooks
 import { upsertPollPoint } from "@/lib/referendum/pollSnapshot";
 import { buildReferendumCohorts, type ReferendumCohort } from "@/lib/referendum/cohortEngine";
 import { cohortAffinitiesFor } from "@/lib/constants/referendumCohorts";
+import { getBucketProfileForRegion } from "@/lib/demographics/bucketProfile";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { referendumYesShare } from "@/lib/referendum/resolveYesShare";
 import { recordWireEvent } from "@/lib/referendum/wire";
 import { WIRE_SWING_THRESHOLD } from "@/lib/constants/referendum";
 
 /**
- * Snapshot a region's cohort baseline at campaign open. Falls back to a single
- * synthetic cohort (so `yesShare == regionDesire`) when a region has no
- * `stateDemographics` groups.
+ * Snapshot a region's cohort baseline at campaign open, from the Layer-1
+ * bucket profile — the same units the vote engine counts, so a cohort a player
+ * campaigns at is a group of voters that exists rather than a projection.
+ *
+ * Falls back to a single synthetic cohort (so `yesShare == regionDesire`) when
+ * a region has no substrate. The `stateDemographics` read stays because it is
+ * how the region's country is resolved; the groups on it are no longer used.
  */
 async function buildCohortBaseline(
   db: Db,
@@ -46,10 +52,18 @@ async function buildCohortBaseline(
   const demo = await db
     .collection<StateDemographics>("stateDemographics")
     .findOne({ _id: regionId });
-  if (!demo?.groups || Object.keys(demo.groups).length === 0) {
+  if (!demo?.countryId) {
     return [{ groupId: "_all", share: 1, turnout: 60, yesLean: regionDesire }];
   }
-  return buildReferendumCohorts(demo.groups, regionDesire, cohortAffinitiesFor(regionId));
+  const preset = await getGameStatePresetOrDefault(db);
+  const profile = getBucketProfileForRegion(demo.countryId, regionId, preset);
+  if (!profile) {
+    return [{ groupId: "_all", share: 1, turnout: 60, yesLean: regionDesire }];
+  }
+  const cohorts = buildReferendumCohorts(profile, regionDesire, cohortAffinitiesFor(regionId));
+  return cohorts.length > 0
+    ? cohorts
+    : [{ groupId: "_all", share: 1, turnout: 60, yesLean: regionDesire }];
 }
 
 const ACTIVE_STATUSES: ReferendumStatus[] = ["granted", "campaigning", "polling", "actuating"];

@@ -8,45 +8,52 @@ import {
   effTurnout,
 } from "./cohortEngine";
 
-const groups = {
-  a: { population: 100, economicLean: 0, socialLean: 0, turnout: 60 },
-  b: { population: 100, economicLean: 0, socialLean: 0, turnout: 60 },
-};
+// Cohorts are Layer-1 bucket sections now (see buildReferendumCohorts), so the
+// fixture is one dimension with two equally-sized buckets.
+const sections = [
+  {
+    dim: "age",
+    buckets: [
+      { id: "a", sharePct: 50, turnout: 60 },
+      { id: "b", sharePct: 50, turnout: 60 },
+    ],
+  },
+];
 
 describe("buildReferendumCohorts", () => {
   it("re-centers so the turnout-weighted aggregate equals the region desire", () => {
-    const cohorts = buildReferendumCohorts(groups, 55, { a: 40, b: -40 });
+    const cohorts = buildReferendumCohorts(sections, 55, { a: 40, b: -40 });
     expect(aggregateYesShare(cohorts, [], 0)).toBeCloseTo(55, 5);
   });
 
   it("preserves the relative spread (a leans more Yes than b)", () => {
-    const cohorts = buildReferendumCohorts(groups, 55, { a: 40, b: -40 });
+    const cohorts = buildReferendumCohorts(sections, 55, { a: 40, b: -40 });
     const ca = cohorts.find((c) => c.groupId === "a")!;
     const cb = cohorts.find((c) => c.groupId === "b")!;
     expect(ca.yesLean).toBeGreaterThan(cb.yesLean);
   });
 
   it("defaults missing affinities to neutral", () => {
-    const cohorts = buildReferendumCohorts(groups, 50, {});
+    const cohorts = buildReferendumCohorts(sections, 50, {});
     expect(aggregateYesShare(cohorts, [], 0)).toBeCloseTo(50, 5);
   });
 });
 
 describe("aggregateYesShare", () => {
   it("a mobilize modifier amplifies the targeted cohort's lean weight", () => {
-    const cohorts = buildReferendumCohorts(groups, 50, { a: 30, b: -30 });
+    const cohorts = buildReferendumCohorts(sections, 50, { a: 30, b: -30 });
     const base = aggregateYesShare(cohorts, [], 0);
     const mobA = aggregateYesShare(cohorts, [{ groupId: "a", turnoutMod: 20, leanMod: 0 }], 0);
     expect(mobA).toBeGreaterThan(base); // a leans Yes; mobilizing it raises Yes
   });
 
   it("a uniform lean shift moves every cohort", () => {
-    const cohorts = buildReferendumCohorts(groups, 50, {});
+    const cohorts = buildReferendumCohorts(sections, 50, {});
     expect(aggregateYesShare(cohorts, [], 5)).toBeCloseTo(55, 5);
   });
 
   it("clamps the result to [0,100]", () => {
-    const cohorts = buildReferendumCohorts(groups, 50, {});
+    const cohorts = buildReferendumCohorts(sections, 50, {});
     expect(aggregateYesShare(cohorts, [], 999)).toBe(100);
     expect(aggregateYesShare(cohorts, [], -999)).toBe(0);
   });
