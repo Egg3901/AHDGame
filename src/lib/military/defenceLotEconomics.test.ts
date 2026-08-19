@@ -15,6 +15,7 @@ import {
   DEFENCE_FACTORY_SLOTS_PER_PLANT,
 } from "./defenceLotEconomics";
 import { rawLotsFromSector } from "./arsenal";
+import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 
 describe("revenueBasisPerLot", () => {
   // The whole cost model rests on this being the exact inverse of the production model. If
@@ -53,6 +54,43 @@ describe("lotProductionCost", () => {
 
   it("returns null for a line that builds no materiel", () => {
     expect(lotProductionCost("not_a_strategy")).toBeNull();
+  });
+});
+
+// Ticket #1134 follow-up. The 1953 world's live commodity book is era-scaled (steel 11.47,
+// not 800), which makes `revenueBasisPerLot` reading the MODERN table look like a bug. It is
+// not, and these two tests are here so the next person to notice does not "fix" it.
+describe("the lot unit's base-price basis", () => {
+  const strategies = ["standard", "heavy_armor", "munitions", "aerospace"] as const;
+
+  // The invariant that matters: cost per lot and lots produced must be counted in the same
+  // unit. Break it and the delivery burn is wrong by the era scale, which is exactly the
+  // denomination mismatch between the ends of the price band that this ticket closed.
+  it("is shared with rawLotsFromSector, so a lot means one thing on both sides", () => {
+    for (const strategyId of strategies) {
+      const basis = revenueBasisPerLot(strategyId)!;
+      const lotsFromOneRevenue = rawLotsFromSector({ strategyId, revenue: 1 });
+      expect(basis * lotsFromOneRevenue).toBeCloseTo(1, 9);
+    }
+  });
+
+  // Why era-scaling both sides would be a no-op in money: the base price cancels out of the
+  // bill. `computeInputsCost` charges `units x unitPrice` with `units = revenue x rate / base`
+  // and `unitPrice = base x realization`, so a plant's whole input spend is
+  // `revenue x sum(rate x realization)` on any table. Scaling the basis only redefines how
+  // finely a lot is diced, and would make every unit's materiel load ~70x cheaper in real
+  // terms because `lotsRequired` is a fixed function of archetype cost.
+  it("cancels out of a plant's total input bill", () => {
+    const revenue = 870_987;
+    for (const strategyId of strategies) {
+      const perLot = lotInputCost(strategyId)!;
+      const lots = rawLotsFromSector({ strategyId, revenue });
+      const demandShare = SECTOR_STRATEGIES.defense
+        .find((s) => s.id === strategyId)!
+        .demand as Record<string, number>;
+      const shareSum = Object.values(demandShare).reduce((a, b) => a + b, 0);
+      expect(lots * perLot).toBeCloseTo(revenue * shareSum, 3);
+    }
   });
 });
 

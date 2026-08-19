@@ -23,6 +23,25 @@ import { priceRealizationFactor } from "@/lib/market/priceRealization";
  * uses is deliberate: a second cost table for "what a lot is worth" would drift against the
  * production model the moment either was tuned.
  *
+ * **This MUST read the same base-price table `rawLotsFromSector` reads, and it deliberately
+ * reads the modern `COMMODITY_BASE_PRICES` rather than `eraScaledBasePrices`.** Swapping this
+ * one to the era basis looks like a bug fix on a 1953 world, where the live commodity book is
+ * era-scaled, and it is not. Two things make it wrong:
+ *
+ * 1. The base price is not a cost input here, it is the definition of the lot UNIT. Whatever
+ *    table this function reads, `rawLotsFromSector` must read too, or "how many lots were
+ *    delivered" and "what each lot cost to build" are counted in different units and the
+ *    delivery burn is wrong by the era scale. That is the same denomination mismatch between
+ *    the two ends of the price band that ticket #1134 exists to close.
+ * 2. Changing BOTH is a no-op in money and a balance change in materiel. The base price
+ *    cancels out of the input bill exactly - `computeInputsCost` charges
+ *    `units × unitPrice` where `units = revenue × rate / basePrice` and
+ *    `unitPrice = basePrice × realization` - so a plant's total input spend is
+ *    `revenue × Σ(rate × realization)` on any table. Era-scaling both ends leaves the money
+ *    untouched and simply redefines a lot as ~70x smaller, which makes every unit's
+ *    `lotsRequired` load ~70x cheaper in real terms, because `lotsRequired` is a fixed
+ *    function of archetype cost and does not move with it.
+ *
  * Returns null for a strategy that supplies nothing (`cyber`) or is not a defence line - the
  * same empty case `componentsForStrategy` returns `[]` for, and callers must refuse rather
  * than treat it as free.
