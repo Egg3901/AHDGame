@@ -24,9 +24,12 @@ import { calendarTurn } from "@/lib/utils/gameDate";
 import {
   type LeanAxis,
   interpolateGreen,
+  leanAxisValue,
+  leanHalfRange,
   sectorSpecializationMapEntry,
   NATION_COLORS,
 } from "./mapShared";
+import { interpolateLeanHex } from "@/lib/utils/politics";
 import { MapFallback } from "./MapFallback";
 import type { FreightDemandResponse } from "@/lib/logistics/types";
 import { freightHaulLoadLabel, freightHaulLoadTooltip } from "./freightHaulLoadCopy";
@@ -139,6 +142,8 @@ export interface CountryMapConfig {
   mapMinHeight?: string;
   /** Computes the per-region color/label/tooltip table for the chosen mode. */
   buildRegionData: (args: BuildRegionDataArgs) => Record<string, MapRegionCell>;
+  /** European lean palette (red = left / blue = right) for the legend; must match buildRegionData's leanCell flag. */
+  leanEuropean?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -167,17 +172,21 @@ const DE_REGION_GROUPING_COLORS: Record<string, string> = {
 function leanCell(
   d: NonNullable<MapOverviewResponse["lean"]>[string] | undefined,
   regionName: string,
-  leanAxis: LeanAxis
+  leanAxis: LeanAxis,
+  halfRange: number,
+  european = false
 ): MapRegionCell {
   if (!d) {
     return { color: "#334155", label: regionName, tooltip: [regionName, "No lean data"] };
   }
-  const color =
-    leanAxis === "economic"
-      ? (d.economicColor ?? d.color)
-      : leanAxis === "social"
-        ? (d.socialColor ?? d.color)
-        : d.color;
+  // Continuous fill fitted to the current spread; the bucketed server colours
+  // flatten compressed leans into one centre shade.
+  const color = interpolateLeanHex(
+    leanAxisValue(d, leanAxis),
+    leanAxis === "social" ? "social" : "economic",
+    halfRange,
+    european
+  );
   const label =
     leanAxis === "economic"
       ? (d.economicLabel ?? d.label)
@@ -251,6 +260,7 @@ function buildUKRegionData(args: BuildRegionDataArgs): Record<string, MapRegionC
   const commons = args.mapData?.commons ?? {};
   const approval = args.mapData?.approval ?? {};
   const lean = args.mapData?.lean ?? {};
+  const leanHalf = leanHalfRange(lean, args.leanAxis);
 
   for (const region of UK_REGIONS) {
     const id = region.id;
@@ -276,7 +286,7 @@ function buildUKRegionData(args: BuildRegionDataArgs): Record<string, MapRegionC
         ? { color: d.color, label: `${d.approval.toFixed(0)}%`, tooltip: d.tooltip }
         : { color: "#334155", label: region.name, tooltip: [region.name, "No approval data"] };
     } else if (args.mode === "lean") {
-      result[id] = leanCell(lean[id], region.name, args.leanAxis);
+      result[id] = leanCell(lean[id], region.name, args.leanAxis, leanHalf, true);
     } else {
       result[id] = {
         color: NATION_COLORS[region.nationId] ?? "#4f7ac7",
@@ -323,6 +333,7 @@ function buildDERegionData(
   const bundestag = args.mapData?.house ?? {};
   const approval = args.mapData?.approval ?? {};
   const lean = args.mapData?.lean ?? {};
+  const leanHalf = leanHalfRange(lean, args.leanAxis);
 
   for (const region of regions) {
     const id = region._id;
@@ -348,7 +359,7 @@ function buildDERegionData(
         ? { color: d.color, label: `${d.approval.toFixed(0)}%`, tooltip: d.tooltip }
         : { color: "#334155", label: region.name, tooltip: [region.name, "No approval data"] };
     } else if (args.mode === "lean") {
-      result[id] = leanCell(lean[id], region.name, args.leanAxis);
+      result[id] = leanCell(lean[id], region.name, args.leanAxis, leanHalf, true);
     } else {
       result[id] = {
         color: DE_REGION_GROUPING_COLORS[region.region] ?? "#4f7ac7",
@@ -399,6 +410,7 @@ function buildJPRegionData(args: BuildRegionDataArgs): Record<string, MapRegionC
   const governorMap = args.mapData?.governor ?? {};
   const approval = args.mapData?.approval ?? {};
   const lean = args.mapData?.lean ?? {};
+  const leanHalf = leanHalfRange(lean, args.leanAxis);
 
   for (const region of JP_REGIONS) {
     const id = region.id;
@@ -443,7 +455,7 @@ function buildJPRegionData(args: BuildRegionDataArgs): Record<string, MapRegionC
         ? { color: d.color, label: `${d.approval.toFixed(0)}%`, tooltip: d.tooltip }
         : { color: "#334155", label: region.name, tooltip: [region.name, "No approval data"] };
     } else if (args.mode === "lean") {
-      result[id] = leanCell(lean[id], region.name, args.leanAxis);
+      result[id] = leanCell(lean[id], region.name, args.leanAxis, leanHalf);
     }
   }
   return result;
@@ -505,6 +517,7 @@ function buildCNRegionData(args: BuildRegionDataArgs): Record<string, MapRegionC
   const house = args.mapData?.house ?? {};
   const approval = args.mapData?.approval ?? {};
   const lean = args.mapData?.lean ?? {};
+  const leanHalf = leanHalfRange(lean, args.leanAxis);
 
   for (const region of cnRegions) {
     const id = region._id;
@@ -530,7 +543,7 @@ function buildCNRegionData(args: BuildRegionDataArgs): Record<string, MapRegionC
         ? { color: d.color, label: `${d.approval.toFixed(0)}%`, tooltip: d.tooltip }
         : { color: "#334155", label: region.name, tooltip: [region.name, "No approval data"] };
     } else if (args.mode === "lean") {
-      result[id] = leanCell(lean[id], region.name, args.leanAxis);
+      result[id] = leanCell(lean[id], region.name, args.leanAxis, leanHalf);
     }
   }
   return result;
@@ -567,6 +580,7 @@ function buildBRRegionData(args: BuildRegionDataArgs): Record<string, MapRegionC
   const house = args.mapData?.house ?? {};
   const approval = args.mapData?.approval ?? {};
   const lean = args.mapData?.lean ?? {};
+  const leanHalf = leanHalfRange(lean, args.leanAxis);
 
   for (const region of brRegions) {
     const id = region._id;
@@ -592,7 +606,7 @@ function buildBRRegionData(args: BuildRegionDataArgs): Record<string, MapRegionC
         ? { color: d.color, label: `${d.approval.toFixed(0)}%`, tooltip: d.tooltip }
         : { color: "#334155", label: region.name, tooltip: [region.name, "No approval data"] };
     } else if (args.mode === "lean") {
-      result[id] = leanCell(lean[id], region.name, args.leanAxis);
+      result[id] = leanCell(lean[id], region.name, args.leanAxis, leanHalf);
     }
   }
   return result;
@@ -642,6 +656,7 @@ function buildNGRegionData(args: BuildRegionDataArgs): Record<string, MapRegionC
   const governorMap = args.mapData?.governor ?? {};
   const approval = args.mapData?.approval ?? {};
   const lean = args.mapData?.lean ?? {};
+  const leanHalf = leanHalfRange(lean, args.leanAxis);
 
   for (const region of ngRegions) {
     const id = region._id;
@@ -687,7 +702,7 @@ function buildNGRegionData(args: BuildRegionDataArgs): Record<string, MapRegionC
         ? { color: d.color, label: `${d.approval.toFixed(0)}%`, tooltip: d.tooltip }
         : { color: "#334155", label: name, tooltip: [name, "No approval data"] };
     } else if (args.mode === "lean") {
-      result[id] = leanCell(lean[id], name, args.leanAxis);
+      result[id] = leanCell(lean[id], name, args.leanAxis, leanHalf);
     }
   }
   return result;
@@ -696,6 +711,7 @@ function buildNGRegionData(args: BuildRegionDataArgs): Record<string, MapRegionC
 export const COUNTRY_MAP_CONFIGS: Record<ParliamentaryMapCountryId, CountryMapConfig> = {
   UK: {
     countryId: "UK",
+    leanEuropean: true,
     modes: UK_MODES,
     defaultMode: "commons",
     regions: UK_REGIONS.map((r) => ({
@@ -719,6 +735,7 @@ export const COUNTRY_MAP_CONFIGS: Record<ParliamentaryMapCountryId, CountryMapCo
   },
   DE: {
     countryId: "DE",
+    leanEuropean: true,
     modes: DE_MODES,
     defaultMode: "bundestag",
     regions: deRegions.map((r) => ({

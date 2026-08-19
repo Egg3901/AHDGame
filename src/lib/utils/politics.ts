@@ -150,7 +150,7 @@ export function getLeanLabel(lean: number): { label: string; color: string } {
 
 /**
  * Get economic lean label and hex color (for inline styles / map fills)
- * @param lean - Turnout-weighted display lean (approx −2.0 to +1.5 in practice)
+ * @param lean - Turnout-weighted display lean (national spread is well under ±1 in current worlds)
  * @returns Object with label and hex color code
  */
 export function getLeanLabelHex(lean: number): { label: string; color: string } {
@@ -307,6 +307,44 @@ function bucketIndex(value: number, axis: "economic" | "social", european: boole
   const bucket = roundLabelBucket(value);
   const signed = axis === "economic" && european ? -bucket : bucket;
   return Math.max(0, Math.min(10, signed + 5));
+}
+
+/** Ramp stops for a lean axis in value order (−range … +range), honouring the European swap. */
+export function leanRampStops(axis: "economic" | "social", european = false): string[] {
+  const ramp = axis === "economic" ? ECON_BUCKET_HEX : SOCIAL_BUCKET_HEX;
+  return axis === "economic" && european ? [...ramp].reverse() : ramp;
+}
+
+function lerpChannel(a: number, b: number, t: number): number {
+  return Math.round(a + (b - a) * t);
+}
+
+function lerpHex(a: string, b: string, t: number): string {
+  const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+  const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+  return `#${pa.map((c, i) => lerpChannel(c, pb[i], t).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/**
+ * Continuous diverging map fill for a lean value. `positionBucketHex` quantizes
+ * to the 0.5 label ruler, which collapses compressed state leans (national
+ * spread is often well under ±1) into one flat centre colour; this interpolates
+ * across the same 11-stop ramp with the domain fitted to `halfRange` (the
+ * largest |lean| currently on the map), so relative differences stay visible at
+ * any spread. Zero always maps to the centre stop.
+ */
+export function interpolateLeanHex(
+  value: number,
+  axis: "economic" | "social",
+  halfRange: number,
+  european = false
+): string {
+  const stops = leanRampStops(axis, european);
+  const range = Math.max(halfRange, 0.01);
+  const t = Math.max(-1, Math.min(1, value / range));
+  const pos = ((t + 1) / 2) * (stops.length - 1);
+  const i = Math.min(stops.length - 2, Math.floor(pos));
+  return lerpHex(stops[i], stops[i + 1], pos - i);
 }
 
 /**

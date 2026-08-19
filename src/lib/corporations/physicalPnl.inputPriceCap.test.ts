@@ -42,11 +42,9 @@ describe("computeInputsCost — world-capped input ratios", () => {
       ...args,
       priceRatios: new Map([["iron" as CommodityType, capInputPriceRatioAtWorld(0.767, 3.273)]]),
     });
-    // units = (1000 * 0.15 / 100 / 4) = 0.375. Since #379 the bill prices each
-    // unit through priceRealizationFactor(ratio) (clamp(ratio^0.5, 0.7, 1.5)),
-    // the same damping revenue uses, so the ratio enters non-linearly. The cap
-    // still matters: it lowers the ratio fed into that factor (1.5 -> 0.876),
-    // which is what this test protects.
+    // units = (1000 * 0.15 / 100 / 4) = 0.375. Input billing prices through the
+    // SAME realization function as revenue (clamp(ratio^0.5, 0.7, 1.5)), so the
+    // expectations route through priceRealizationFactor rather than raw ratios.
     expect(uncapped.total).toBeCloseTo(0.375 * 100 * priceRealizationFactor(3.273));
     expect(capped.total).toBeCloseTo(0.375 * 100 * priceRealizationFactor(0.767));
     expect(capped.total).toBeLessThan(uncapped.total);
