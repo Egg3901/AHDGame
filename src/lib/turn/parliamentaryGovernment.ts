@@ -59,7 +59,9 @@ import { installNewLeader, renewLeaderMandate } from "@/lib/turn/rulingPartyConf
 import { canFormGovernment, canCollapseGovernment } from "@/lib/turn/onePartyConstraints";
 import { getCountryState, updateCountryState } from "@/lib/countryState";
 import { logger } from "../observability/logger";
-export { resolveGoverningPartyIdsFromDocuments } from "@/lib/government/governingPartyIds";
+import { resolveGoverningPartyIdsFromDocuments } from "@/lib/government/governingPartyIds";
+
+export { resolveGoverningPartyIdsFromDocuments };
 
 // ---------------------------------------------------------------------------
 // Helpers
