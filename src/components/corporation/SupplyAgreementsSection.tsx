@@ -212,7 +212,7 @@ export default function SupplyAgreementsSection({
           <span>
             Volume cap:{" "}
             <span className="font-medium text-foreground tabular-nums">
-              {a.volumeCap.toLocaleString("en-US")}/turn
+              {a.volumeCap.toLocaleString("en-US")} units/day
             </span>
           </span>
           <span>
@@ -352,7 +352,9 @@ export default function SupplyAgreementsSection({
 
             {/* Volume cap */}
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Volume cap (per turn)</label>
+              <label className="text-xs font-semibold text-foreground">
+                Volume cap (units/day)
+              </label>
               <input
                 type="number"
                 min={1}
@@ -361,6 +363,10 @@ export default function SupplyAgreementsSection({
                 placeholder="e.g. 5000"
                 className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
               />
+              <p className="text-[11px] text-muted">
+                Same units/day as sector capacity. Exclusive contracts cap fill at this volume in
+                the buyer&apos;s home country.
+              </p>
             </div>
           </div>
 
@@ -393,7 +399,8 @@ export default function SupplyAgreementsSection({
               onChange={(e) => setExclusive(e.target.checked)}
               className="h-4 w-4 accent-primary"
             />
-            Exclusive — sell this commodity only to the buyer (no open-market sales)
+            Exclusive: sell this commodity only to the buyer (no open-market sales in the
+            buyer&apos;s home country)
           </label>
 
           <div className="flex justify-end">

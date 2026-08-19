@@ -356,6 +356,15 @@ export function computeClearingFactors(args: {
    */
   exclusiveByCorpCommodity?: ReadonlySet<string>;
   /**
+   * Home-country (market-group) of each exclusive contract's buyer, keyed the
+   * same way as {@link exclusiveByCorpCommodity}. When the book is partitioned,
+   * exclusive only withholds surplus in a group the buyer is actually in — a
+   * US exclusive buyer cannot receive JP output, so capping the JP book would
+   * strand it rather than deliver it (ticket #1138). Omitted ⇒ today's
+   * worldwide exclusive cap, including in partitioned books.
+   */
+  exclusiveBuyerGroupsByCorpCommodity?: ReadonlyMap<string, ReadonlySet<string>>;
+  /**
    * Optional settlement sink: supplier corpId → commodity → contracted units
    * that ACTUALLY cleared this pass. The caller uses it to settle the bilateral
    * price premium (a contract-for-difference) as a separate cash transfer, so
@@ -576,7 +585,20 @@ export function computeClearingFactors(args: {
           const contracted = allUnits > 0 ? contractedAll * (e.total / allUnits) : 0;
           if (contracted <= 0 || e.total <= 0) continue;
           const take = Math.min(contracted, e.total);
-          const exclusive = args.exclusiveByCorpCommodity?.has(`${corpId}:${commodity}`) ?? false;
+          const exclusiveKey = `${corpId}:${commodity}`;
+          const exclusive = args.exclusiveByCorpCommodity?.has(exclusiveKey) ?? false;
+          // Partitioned books: only withhold surplus in a market the buyer is
+          // actually in. Unpartitioned (no group map, or group "") keeps the
+          // worldwide exclusive cap. Missing buyer-group metadata also keeps
+          // today's cap, so existing callers/tests stay byte-identical.
+          const buyerGroups = args.exclusiveBuyerGroupsByCorpCommodity?.get(exclusiveKey);
+          const exclusiveInThisGroup =
+            exclusive &&
+            (!args.balancesByGroup ||
+              g === "" ||
+              buyerGroups == null ||
+              buyerGroups.size === 0 ||
+              buyerGroups.has(g));
           for (const s of e.sellers) {
             const sectorShare = (take * s.units) / e.total;
             contractedUnitsById.set(s.id, sectorShare);
@@ -585,7 +607,7 @@ export function computeClearingFactors(args: {
             // Exclusive: cap the units that reach the book at the contracted share
             // so the surplus never reaches loyalty/cheapest-first or the open
             // market. The cap lives in its own map — see exclusiveCapById above.
-            if (exclusive) {
+            if (exclusiveInThisGroup) {
               exclusiveCapById ??= new Map<string, number>();
               exclusiveCapById.set(s.id, sectorShare);
             }

@@ -269,6 +269,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // resolved against actual output inside clearing.
   let contractedByCorpCommodity: Map<string, Map<CommodityType, number>> | undefined;
   let exclusiveByCorpCommodity: Set<string> | undefined;
+  let exclusiveBuyerGroupsByCorpCommodity: Map<string, Set<string>> | undefined;
   let settleableAgreements: SettleableSupplyAgreement[] | undefined;
   // Populated during clearing: supplier corpId → commodity → contracted units that
   // actually cleared this turn. Drives the post-clearing premium settlement.
@@ -281,6 +282,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   if (supplyAgreementsEnabled) {
     contractedByCorpCommodity = new Map();
     exclusiveByCorpCommodity = new Set();
+    exclusiveBuyerGroupsByCorpCommodity = new Map();
     settleableAgreements = [];
     // C6: a contract under NOTICE keeps delivering and settling until its
     // effective turn. Retire the ones whose notice has run out first, then load
@@ -324,7 +326,16 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       const byCommodity = contractedByCorpCommodity.get(corpId) ?? new Map<CommodityType, number>();
       byCommodity.set(a.commodity, (byCommodity.get(a.commodity) ?? 0) + cap);
       contractedByCorpCommodity.set(corpId, byCommodity);
-      if (a.exclusive) exclusiveByCorpCommodity.add(`${corpId}:${a.commodity}`);
+      if (a.exclusive) {
+        const exclusiveKey = `${corpId}:${a.commodity}`;
+        exclusiveByCorpCommodity.add(exclusiveKey);
+        const buyerCountry = lookups.corpById.get(a.buyerCorpId.toString())?.countryId;
+        if (buyerCountry) {
+          const groups = exclusiveBuyerGroupsByCorpCommodity.get(exclusiveKey) ?? new Set();
+          groups.add(buyerCountry);
+          exclusiveBuyerGroupsByCorpCommodity.set(exclusiveKey, groups);
+        }
+      }
       settleableAgreements.push({
         agreementId: a._id?.toString(),
         supplierCorpId: corpId,
@@ -697,6 +708,9 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       contractedByCorpCommodity: supplyAgreementsEnabled ? contractedByCorpCommodity : undefined,
       sectorCorpId: supplyAgreementsEnabled ? sectorCorpId : undefined,
       exclusiveByCorpCommodity: supplyAgreementsEnabled ? exclusiveByCorpCommodity : undefined,
+      exclusiveBuyerGroupsByCorpCommodity: supplyAgreementsEnabled
+        ? exclusiveBuyerGroupsByCorpCommodity
+        : undefined,
       contractSettlementOut: supplyAgreementsEnabled ? contractSettlementByCorp : undefined,
       // The shortfall sink is no longer fed from the clearing offer, see the
       // PRODUCTION SINK note in the input loop above. Clearing's `s.units` is

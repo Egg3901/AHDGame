@@ -93,6 +93,74 @@ describe("computeClearingFactors market partition", () => {
     expect(res.get("b")!.soldFraction).toBeCloseTo(1, 5);
   });
 
+  it("exclusive with a US buyer does not withhold surplus from the RU book", () => {
+    // Ticket #1138: exclusive used to cap EVERY sector of the supplier at
+    // volumeCap / worldwide production, including plants in countries the buyer
+    // cannot reach. A small US exclusive food deal then pinned JP/AT/UK farms
+    // to the same ~5% fill as the US ones.
+    //
+    // One corp, two equal plants. Contract is 10 of 200 units (5%) exclusive
+    // to a US buyer. US demand is ample so the US plant sells only its
+    // contracted slice; the RU plant still clears its local glut book.
+    const res = computeClearingFactors({
+      sectors: [seller("usPlant", 100 * steelBase), seller("ruPlant", 100 * steelBase)],
+      balances: balances(200, 200),
+      groupBySector: new Map([
+        ["usPlant", "US"],
+        ["ruPlant", "RU"],
+      ]),
+      balancesByGroup: new Map([
+        ["US", balances(100, 1000)],
+        ["RU", balances(100, 80)],
+      ]),
+      priceRatioByCommodity: new Map(),
+      basePrices: COMMODITY_BASE_PRICES,
+      contractedByCorpCommodity: new Map([
+        ["corp1", new Map<CommodityType, number>([["steel", 10]])],
+      ]),
+      sectorCorpId: new Map([
+        ["usPlant", "corp1"],
+        ["ruPlant", "corp1"],
+      ]),
+      exclusiveByCorpCommodity: new Set(["corp1:steel"]),
+      exclusiveBuyerGroupsByCorpCommodity: new Map([["corp1:steel", new Set(["US"])]]),
+    });
+    // US: exclusive withholds the 95-unit surplus → fill = 10/200 of worldwide
+    // allocated to this book = 5/100 = 0.05.
+    expect(res.get("usPlant")!.soldFraction).toBeCloseTo(0.05, 5);
+    // RU: same contracted slice is reserved, but the surplus still sells into
+    // the RU book (80 demand / 100 offer → 0.80, and the 5 contracted units
+    // are already inside that 80).
+    expect(res.get("ruPlant")!.soldFraction).toBeCloseTo(0.8, 5);
+  });
+
+  it("exclusive without buyer-group metadata still caps every partitioned book (legacy)", () => {
+    const res = computeClearingFactors({
+      sectors: [seller("usPlant", 100 * steelBase), seller("ruPlant", 100 * steelBase)],
+      balances: balances(200, 200),
+      groupBySector: new Map([
+        ["usPlant", "US"],
+        ["ruPlant", "RU"],
+      ]),
+      balancesByGroup: new Map([
+        ["US", balances(100, 1000)],
+        ["RU", balances(100, 80)],
+      ]),
+      priceRatioByCommodity: new Map(),
+      basePrices: COMMODITY_BASE_PRICES,
+      contractedByCorpCommodity: new Map([
+        ["corp1", new Map<CommodityType, number>([["steel", 10]])],
+      ]),
+      sectorCorpId: new Map([
+        ["usPlant", "corp1"],
+        ["ruPlant", "corp1"],
+      ]),
+      exclusiveByCorpCommodity: new Set(["corp1:steel"]),
+    });
+    expect(res.get("usPlant")!.soldFraction).toBeCloseTo(0.05, 5);
+    expect(res.get("ruPlant")!.soldFraction).toBeCloseTo(0.05, 5);
+  });
+
   it("price realization reads the seller's own group ratio, falling back to worldwide", () => {
     const run = (priceRatioByGroup?: Map<string, Map<CommodityType, number>>) =>
       computeClearingFactors({
