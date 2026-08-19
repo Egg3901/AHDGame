@@ -25,8 +25,8 @@ const DEEP_SOUTH_1999: PositionsBlock = {
   },
   ideology: {
     evangelicals: { economicLean: 2.5, socialLean: 4.9 }, // peak organizational strength, though impeachment has spent some of it
-    patriots: { economicLean: 2, socialLean: 4.1 }, // Gulf War patriotism over the country's densest base network
-    gunowners: { economicLean: 2.2, socialLean: 4.1 }, // the assault-weapons fight is about to make this an organized bloc
+    patriots: { economicLean: 2, socialLean: 4.1 }, // the country's densest base network in the pre-9/11 lull
+    gunowners: { economicLean: 2.2, socialLean: 4.1 }, // the assault-weapons ban made this an organized Republican bloc
     progressives: { economicLean: -5, socialLean: -4.4 }, // the biracial civil-rights coalition, a regional minority
     environmentalists: { economicLean: -4.4, socialLean: -3.6 }, // coastal and river politics without a partisan home
     libertarians: { economicLean: 3.9, socialLean: 1.2 }, // anti-regulation business conservatism
@@ -56,7 +56,7 @@ const BORDER_1999: PositionsBlock = {
   },
   ideology: {
     evangelicals: { economicLean: 2.9, socialLean: 4.8 }, // peak organizational strength across the Bible Belt
-    patriots: { economicLean: 2.2, socialLean: 3.8 }, // Norfolk, Fort Bragg and the Gulf War homecoming
+    patriots: { economicLean: 2.2, socialLean: 3.8 }, // Norfolk and Fort Bragg over a heavy veteran share
     gunowners: { economicLean: 2.6, socialLean: 3.8 }, // coalfield and Piedmont gun culture, newly partisan
     progressives: { economicLean: -5, socialLean: -4.7 }, // civil-rights and labor organizations, a shrinking minority
     environmentalists: { economicLean: -4.5, socialLean: -3.9 }, // strip-mining and river politics
@@ -112,7 +112,7 @@ const GREAT_LAKES_1999: PositionsBlock = {
     graduate: { economicLean: -3.7, socialLean: -4.4 }, // Big Ten faculty and the research economy
   },
   wealth: {
-    low: { economicLean: -4, socialLean: -0.9 }, // the plant-closure electorate of the 1980s
+    low: { economicLean: -4, socialLean: -0.9 }, // the plant-closure electorate, left behind by the boom
     middle: { economicLean: -0.2, socialLean: -0.3 }, // the union homeowner turned suburban fiscal conservative
     high: { economicLean: 2.1, socialLean: -0.5 }, // manufacturing capital in retreat
   },
@@ -147,7 +147,7 @@ const PLAINS_1999: PositionsBlock = {
     high: { economicLean: 3.1, socialLean: 0.5 }, // grain, land and banking capital
   },
   ideology: {
-    evangelicals: { economicLean: 4.6, socialLean: 4.4 }, // Christian Coalition country alongside the South
+    evangelicals: { economicLean: 4.6, socialLean: 4.4 }, // Bible Belt organization at its peak alongside the South
     patriots: { economicLean: 3.9, socialLean: 3.4 }, // missile fields and airbases
     gunowners: { economicLean: 4.3, socialLean: 3.4 }, // universal rural ownership fused with national gun politics
     progressives: { economicLean: -4.3, socialLean: -4.6 }, // the surviving Farmers Union left
@@ -195,8 +195,8 @@ const MOUNTAIN_1999: PositionsBlock = {
 const PACIFIC_1999: PositionsBlock = {
   race: {
     white: { economicLean: 1.9, socialLean: -1.7 }, // post-Proposition 187 California: the white group itself moves left, not just the electorate
-    black: { economicLean: -4.5, socialLean: -2 }, // Los Angeles, Oakland and Seattle after the 1992 unrest
-    hispanic: { economicLean: -3.3, socialLean: -2.2 }, // a fast-growing electorate, still under-registered before Proposition 187
+    black: { economicLean: -4.5, socialLean: -2 }, // Los Angeles, Oakland and Seattle
+    hispanic: { economicLean: -3.3, socialLean: -2.2 }, // registration surging in the Proposition 187 backlash
   },
   education: {
     no_college: { economicLean: 1.2, socialLean: 0.1 }, // aerospace layoffs and inland timber, economically squeezed
@@ -230,7 +230,7 @@ const YANKEE_1999: PositionsBlock = {
     hispanic: { economicLean: -3.2, socialLean: -2 }, // small and concentrated in the same mill cities
   },
   education: {
-    no_college: { economicLean: 0.6, socialLean: 0.4 }, // mill and quarry labor without a union structure, Perot's best audience
+    no_college: { economicLean: 0.6, socialLean: 0.4 }, // mill and quarry labor without a union structure
     college: { economicLean: -1.8, socialLean: -2.4 }, // the region's professional class, the most socially liberal in the file
     graduate: { economicLean: -3.6, socialLean: -4.4 }, // the New England college faculties
   },
@@ -294,7 +294,7 @@ const CAPITAL_1999: PositionsBlock = {
     graduate: { economicLean: -5, socialLean: -5 }, // the agency, think-tank and law professional class
   },
   wealth: {
-    low: { economicLean: -5, socialLean: -1.1 }, // concentrated urban poverty in the crack-epidemic years
+    low: { economicLean: -5, socialLean: -1.1 }, // concentrated urban poverty a mile from the Capitol
     middle: { economicLean: -4.5, socialLean: -2.4 }, // the federal grade-scale middle class
     high: { economicLean: -1, socialLean: -2.2 }, // law, lobbying and federal contracting
   },
