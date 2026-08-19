@@ -451,23 +451,6 @@ export function USMapWithModes({
               </button>
             ))}
           </div>
-          {mode === "lean" && (
-            <div className="mt-2 flex gap-2">
-              {(["display", "economic", "social"] as const).map((ax) => (
-                <button
-                  key={ax}
-                  onClick={() => setLeanAxis(ax)}
-                  className={`rounded border px-2 py-1 text-xs font-medium transition-colors ${
-                    leanAxis === ax
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-card-border bg-card text-muted hover:text-foreground"
-                  }`}
-                >
-                  {ax === "display" ? "Combined" : ax === "economic" ? "Economic" : "Social"}
-                </button>
-              ))}
-            </div>
-          )}
           {mode === "resources" && (
             <div className="mt-3 flex flex-wrap gap-3">
               <div className="flex flex-wrap gap-1">
@@ -512,6 +495,26 @@ export function USMapWithModes({
             </p>
           )}
         </div>
+
+        {/* Outside the horizontally-scrolling mode-chip strip: on mobile the
+            strip scrolls to reach "Lean", which pushed this toggle off-screen. */}
+        {mode === "lean" && (
+          <div className="-mt-2 mb-4 flex gap-2 sm:-mt-4 sm:mb-6">
+            {(["display", "economic", "social"] as const).map((ax) => (
+              <button
+                key={ax}
+                onClick={() => setLeanAxis(ax)}
+                className={`rounded border px-2 py-1 text-xs font-medium transition-colors ${
+                  leanAxis === ax
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-card-border bg-card text-muted hover:text-foreground"
+                }`}
+              >
+                {ax === "display" ? "Combined" : ax === "economic" ? "Economic" : "Social"}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="rounded-xl border border-card-border bg-card p-4 sm:p-6">
           <div
