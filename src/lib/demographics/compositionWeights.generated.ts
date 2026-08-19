@@ -3675,6 +3675,120 @@ export const COMPOSITION_WEIGHTS: Record<string, Record<string, ArchetypeBucketW
       },
     ],
   },
+  UKR: {
+    party_nomenklatura: [
+      {
+        dim: "income",
+        key: "high",
+        w: 0.4,
+      },
+      {
+        dim: "education",
+        key: "university",
+        w: 0.3,
+      },
+      {
+        dim: "urbanization",
+        key: "urban",
+        w: 0.2,
+      },
+      {
+        dim: "age",
+        key: "mature",
+        w: 0.1,
+      },
+    ],
+    industrial_worker: [
+      {
+        dim: "income",
+        key: "low",
+        w: 0.35,
+      },
+      {
+        dim: "education",
+        key: "vocational",
+        w: 0.35,
+      },
+      {
+        dim: "urbanization",
+        key: "urban",
+        w: 0.2,
+      },
+      {
+        dim: "age",
+        key: "mid",
+        w: 0.1,
+      },
+    ],
+    collective_farmer: [
+      {
+        dim: "urbanization",
+        key: "rural",
+        w: 0.55,
+      },
+      {
+        dim: "income",
+        key: "low",
+        w: 0.25,
+      },
+      {
+        dim: "age",
+        key: "mature",
+        w: 0.2,
+      },
+    ],
+    intelligentsia: [
+      {
+        dim: "education",
+        key: "university",
+        w: 0.5,
+      },
+      {
+        dim: "income",
+        key: "middle",
+        w: 0.25,
+      },
+      {
+        dim: "urbanization",
+        key: "urban",
+        w: 0.25,
+      },
+    ],
+    religious_traditional: [
+      {
+        dim: "age",
+        key: "senior",
+        w: 0.4,
+      },
+      {
+        dim: "urbanization",
+        key: "rural",
+        w: 0.3,
+      },
+      {
+        dim: "education",
+        key: "primary_or_below",
+        w: 0.3,
+      },
+    ],
+    youth: [
+      {
+        dim: "age",
+        key: "young",
+        w: 0.6,
+      },
+      {
+        dim: "education",
+        key: "vocational",
+        w: 0.2,
+      },
+      {
+        dim: "urbanization",
+        key: "urban",
+        w: 0.2,
+      },
+    ],
+  },
   CS: {
     party_nomenklatura: [
       {
