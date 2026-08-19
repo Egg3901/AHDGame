@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
@@ -69,6 +69,16 @@ describe("processScotusTurn — multi-turn simulation", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    // `processScotusTurn` also runs `processScotusSurpriseCaseTurn`, whose spawn
+    // roll defaults to a live `Math.random()` at a 0.004/turn hazard. A spawned
+    // surprise case enacts its own ruling through `enactRulingBill`, which calls
+    // `onBillEnacted`, so an unlucky draw added extra calls and made the
+    // `toHaveBeenCalledTimes(1)` assertions below fail at random (~1.6% of runs,
+    // this test drives four turns). Pin the draw above the spawn probability so
+    // this file only ever exercises the curated docket hand-off it is asserting.
+    // The surprise-case path has its own deterministic coverage in
+    // scotusSurpriseCaseTurn.test.ts, which injects its draws explicitly.
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
     db = createMockDb();
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
@@ -202,6 +212,10 @@ describe("processScotusTurn — multi-turn simulation", () => {
     });
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   function setTurn(turn: number) {
     return async () => {
       const { getGameState } = await import("@/lib/gameState");
@@ -222,6 +236,10 @@ describe("processScotusTurn — multi-turn simulation", () => {
       seatsVacatedByHazard: 0,
     });
     expect(result.docket.casesFired).toBe(0);
+    // Guard: the pinned Math.random above must keep the surprise-case hazard
+    // from firing, otherwise the onBillEnacted counts below are not this
+    // test's to assert.
+    expect(result.surpriseCase.spawned).toBe(false);
 
     // Turn 49: seat 3's real historical departure. No successor authored -> vacant.
     await setTurn(49)();
