@@ -9,7 +9,16 @@ import { STATE_IDS } from "@/lib/constants/states";
 import { EXTRACTABLE_RESOURCES, COMMODITY_LABELS } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import type { MapOverviewResponse } from "@/lib/map/overviewTypes";
-import { type LeanAxis, interpolateGreen, sectorSpecializationMapEntry } from "./mapShared";
+import {
+  type LeanAxis,
+  interpolateGreen,
+  leanAxisValue,
+  leanHalfRange,
+  sectorSpecializationMapEntry,
+} from "./mapShared";
+import { interpolateLeanHex } from "@/lib/utils/politics";
+import { LeanMapLegend } from "./LeanMapLegend";
+import { StateLeanPanel } from "./StateLeanPanel";
 import { MapFallback } from "./MapFallback";
 import { useResourceMapData } from "./useResourceMapData";
 import { useFreightDemandData } from "./useFreightDemandData";
@@ -163,6 +172,8 @@ export function USMapWithModes({
 }) {
   const [mode, setMode] = useState<USMapMode>("house");
   const [leanAxis, setLeanAxis] = useState<LeanAxis>("display");
+  // State whose demographic breakdown is open (lean mode click; null = closed).
+  const [leanDetailId, setLeanDetailId] = useState<string | null>(null);
   const [resourceType, setResourceType] = useState<ExtractableResource>("oil");
   const [resourceToggle, setResourceToggle] = useState<
     "capacity" | "contractedPct" | "openAccessPct"
@@ -338,15 +349,17 @@ export function USMapWithModes({
         }
       }
     } else if (mode === "lean") {
+      // Continuous fills fitted to the current national spread; the bucketed
+      // server colours flatten compressed leans into one centre shade.
+      const halfRange = leanHalfRange(lean, leanAxis);
       for (const stateId of allStateIds) {
         const d = lean[stateId];
         if (d) {
-          const color =
-            leanAxis === "economic"
-              ? (d.economicColor ?? d.color)
-              : leanAxis === "social"
-                ? (d.socialColor ?? d.color)
-                : d.color;
+          const color = interpolateLeanHex(
+            leanAxisValue(d, leanAxis),
+            leanAxis === "social" ? "social" : "economic",
+            halfRange
+          );
           const label =
             leanAxis === "economic"
               ? (d.economicLabel ?? d.label)
@@ -424,7 +437,10 @@ export function USMapWithModes({
             {US_MODE_CONFIG.map((m) => (
               <button
                 key={m.id}
-                onClick={() => setMode(m.id)}
+                onClick={() => {
+                  setMode(m.id);
+                  setLeanDetailId(null);
+                }}
                 className={`shrink-0 rounded-lg border px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium transition-colors ${
                   mode === m.id
                     ? "border-primary bg-primary/10 text-primary"
@@ -514,10 +530,22 @@ export function USMapWithModes({
               zoomable
               splitMode={senateSplitMode}
               splitData={splitData}
-              onRegionClick={onRegionClick}
+              onRegionClick={(id) => (mode === "lean" ? setLeanDetailId(id) : onRegionClick(id))}
             />
           </div>
+          {mode === "lean" && mapData?.lean && (
+            <LeanMapLegend axis={leanAxis} halfRange={leanHalfRange(mapData.lean, leanAxis)} />
+          )}
         </div>
+
+        {mode === "lean" && leanDetailId && (
+          <StateLeanPanel
+            key={leanDetailId}
+            countryCode={config.id}
+            stateId={leanDetailId}
+            onClose={() => setLeanDetailId(null)}
+          />
+        )}
 
         {mode === "presidential" && mapData?.presidentialElectoralVotes && (
           <PresidentialResultsPanel

@@ -19,7 +19,7 @@ export interface CachedStateLeanContext {
 /**
  * Derive the lean persisted on state cache documents.
  *
- * The calibrated US electorate lives in the Layer-1 granular substrate, which is
+ * The calibrated US electorate lives in the granular substrate, which is
  * era-aware: `DEMOGRAPHIC_POSITIONS` authors a position table per era and
  * `STATE_POSITION_OVERRIDES` layers a regional map on the anchor eras, with
  * `getEraPositionsForYear` blending forward for the eras between anchors.

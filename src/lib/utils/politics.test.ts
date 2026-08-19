@@ -5,6 +5,7 @@ import {
   getEconomicPositionName,
   getSocialPositionName,
   positionBucketHex,
+  interpolateLeanHex,
   positionBucketColorClass,
   getLeanLabel,
   getLeanLabelHex,
@@ -118,6 +119,30 @@ describe("positionBucketHex", () => {
     expect(positionBucketHex(-5, "social")).toBe("#0d9488");
     expect(positionBucketHex(5, "social")).toBe("#b45309");
     expect(positionBucketHex(-5, "social", true)).toBe("#0d9488");
+  });
+});
+
+describe("interpolateLeanHex", () => {
+  it("maps zero to the centre stop regardless of range", () => {
+    expect(interpolateLeanHex(0, "economic", 0.8)).toBe("#a855f7");
+    expect(interpolateLeanHex(0, "social", 3)).toBe("#a855f7");
+  });
+  it("hits the ramp ends at ±halfRange", () => {
+    expect(interpolateLeanHex(-0.8, "economic", 0.8)).toBe("#1d4ed8");
+    expect(interpolateLeanHex(0.8, "economic", 0.8)).toBe("#b91c1c");
+    expect(interpolateLeanHex(0.8, "social", 0.8)).toBe("#b45309");
+  });
+  it("clamps values beyond the range", () => {
+    expect(interpolateLeanHex(4, "economic", 0.8)).toBe("#b91c1c");
+  });
+  it("distinguishes values the 0.5 bucket ruler collapses", () => {
+    expect(interpolateLeanHex(0.1, "economic", 0.8)).not.toBe(
+      interpolateLeanHex(0.4, "economic", 0.8)
+    );
+  });
+  it("swaps economic sides for the European convention, social untouched", () => {
+    expect(interpolateLeanHex(-0.8, "economic", 0.8, true)).toBe("#b91c1c");
+    expect(interpolateLeanHex(-0.8, "social", 0.8, true)).toBe("#0d9488");
   });
 });
 

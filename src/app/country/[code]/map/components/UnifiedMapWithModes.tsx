@@ -11,7 +11,9 @@ import type { ExtractableResource } from "@/lib/constants/commodities";
 import type { MapOverviewResponse } from "@/lib/map/overviewTypes";
 import { regionUrl } from "@/lib/urls";
 import { fetchJson } from "@/lib/observability/fetchJson";
-import { type LeanAxis } from "./mapShared";
+import { type LeanAxis, leanHalfRange } from "./mapShared";
+import { LeanMapLegend } from "./LeanMapLegend";
+import { StateLeanPanel } from "./StateLeanPanel";
 import { useResourceMapData } from "./useResourceMapData";
 import { useFreightDemandData } from "./useFreightDemandData";
 import { freightHaulLoadCaption } from "./freightHaulLoadCopy";
@@ -35,6 +37,8 @@ export function UnifiedMapWithModes({
   const displayName = getCountryDisplayName(countryConfig.countryId, preset);
   const [mode, setMode] = useState<string>(countryConfig.defaultMode);
   const [leanAxis, setLeanAxis] = useState<LeanAxis>("display");
+  // Region whose demographic breakdown is open (lean mode click; null = closed).
+  const [leanDetailId, setLeanDetailId] = useState<string | null>(null);
   const [resourceType, setResourceType] = useState<ExtractableResource>("oil");
   const [resourceToggle, setResourceToggle] = useState<
     "capacity" | "contractedPct" | "openAccessPct"
@@ -130,7 +134,10 @@ export function UnifiedMapWithModes({
             {countryConfig.modes.map((m) => (
               <button
                 key={m.id}
-                onClick={() => setMode(m.id)}
+                onClick={() => {
+                  setMode(m.id);
+                  setLeanDetailId(null);
+                }}
                 className={`shrink-0 rounded-lg border px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium transition-colors ${
                   mode === m.id
                     ? "border-primary bg-primary/10 text-primary"
@@ -217,11 +224,18 @@ export function UnifiedMapWithModes({
             >
               {countryConfig.renderPaths({
                 regionData,
-                onRegionClick,
+                onRegionClick: (id) => (mode === "lean" ? setLeanDetailId(id) : onRegionClick(id)),
                 gameTime,
                 regionCodes: liveRoster ?? undefined,
               })}
             </div>
+            {mode === "lean" && mapData?.lean && (
+              <LeanMapLegend
+                axis={leanAxis}
+                halfRange={leanHalfRange(mapData.lean, leanAxis)}
+                european={countryConfig.leanEuropean}
+              />
+            )}
           </div>
 
           <div className="lg:col-span-2 rounded-xl border border-card-border bg-card p-6">
@@ -252,6 +266,15 @@ export function UnifiedMapWithModes({
             </div>
           </div>
         </div>
+
+        {mode === "lean" && leanDetailId && (
+          <StateLeanPanel
+            key={leanDetailId}
+            countryCode={countryConfig.countryId}
+            stateId={leanDetailId}
+            onClose={() => setLeanDetailId(null)}
+          />
+        )}
 
         <div className="mt-6 flex flex-wrap items-center gap-3 pt-4 border-t border-card-border/40">
           <Link
