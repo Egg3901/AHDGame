@@ -1,7 +1,8 @@
-import type { AnyBulkWriteOperation, Db } from "mongodb";
-import type { Corporation, CorporateSector, State } from "@/lib/db/types";
+import type { Db } from "mongodb";
+import type { State } from "@/lib/db/types";
 import type { FederalBudget, EnactedLaw, StateBudget } from "@/lib/db/types/budget";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
+import { upsertCountryOwnedCorpEntries } from "./upsertCountryOwnedCorps";
 
 /**
  * Seeds the USSR FY1979 national budget, default enacted laws (from the su_*
@@ -109,33 +110,7 @@ export async function seedRuBudgets(
   const suCorpData = countryOwnedSeedData.filter(
     (entry) => entry.corporation.countryOwnerId === "RU"
   );
-  const corpOps: AnyBulkWriteOperation<Corporation>[] = [];
-  const sectorOps: AnyBulkWriteOperation<CorporateSector>[] = [];
-  for (const entry of suCorpData) {
-    const { _id: corpId, ...corpData } = entry.corporation;
-    corpOps.push({
-      updateOne: { filter: { _id: corpId }, update: { $set: corpData }, upsert: true },
-    });
-    for (const sector of entry.sectors) {
-      const { _id: _sectorId, ...sectorData } = sector;
-      sectorOps.push({
-        updateOne: {
-          filter: { corporationId: corpId, stateId: sector.stateId, sectorType: sector.sectorType },
-          update: { $set: sectorData },
-          upsert: true,
-        },
-      });
-    }
-  }
-  // Corporations first, so a sector never lands before its owning corporation.
-  if (corpOps.length > 0) {
-    await db.collection<Corporation>("corporations").bulkWrite(corpOps, { ordered: true });
-  }
-  if (sectorOps.length > 0) {
-    await db
-      .collection<CorporateSector>("corporateSectors")
-      .bulkWrite(sectorOps, { ordered: true });
-  }
+  await upsertCountryOwnedCorpEntries(db, "RU", suCorpData);
   const suSectorCount = suCorpData.reduce((n, e) => n + e.sectors.length, 0);
   if (suCorpData.length > 0)
     log(

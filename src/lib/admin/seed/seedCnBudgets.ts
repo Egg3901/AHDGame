@@ -1,7 +1,8 @@
 import type { Db } from "mongodb";
-import type { Corporation, CorporateSector, State } from "@/lib/db/types";
+import type { State } from "@/lib/db/types";
 import type { FederalBudget, EnactedLaw, StateBudget } from "@/lib/db/types/budget";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
+import { upsertCountryOwnedCorpEntries } from "./upsertCountryOwnedCorps";
 
 export async function seedCnBudgets(
   db: Db,
@@ -109,22 +110,7 @@ export async function seedCnBudgets(
   const cnCorpData = countryOwnedSeedData.filter(
     (entry) => entry.corporation.countryOwnerId === "CN"
   );
-  for (const entry of cnCorpData) {
-    const { _id: corpId, ...corpData } = entry.corporation;
-    await db
-      .collection<Corporation>("corporations")
-      .updateOne({ _id: corpId }, { $set: corpData }, { upsert: true });
-    for (const sector of entry.sectors) {
-      const { _id: _sectorId, ...sectorData } = sector;
-      await db
-        .collection<CorporateSector>("corporateSectors")
-        .updateOne(
-          { corporationId: corpId, stateId: sector.stateId, sectorType: sector.sectorType },
-          { $set: sectorData },
-          { upsert: true }
-        );
-    }
-  }
+  await upsertCountryOwnedCorpEntries(db, "CN", cnCorpData);
   if (cnCorpData.length > 0) {
     const cnSectorCount = cnCorpData.reduce((n, e) => n + e.sectors.length, 0);
     const cnSoeCount = cnCorpData.filter((e) => e.corporation.soe).length;
