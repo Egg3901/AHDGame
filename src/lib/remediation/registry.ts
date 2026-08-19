@@ -19,6 +19,7 @@ import { defect as duplicateSectors } from "./defects/AHD-duplicate-sectors";
 import { defect as defenceProcurementOveraward } from "./defects/AHD-defence-procurement-overaward";
 import { defect as privateMarketCapHistory } from "./defects/AHD-private-market-cap-history";
 import { defect as ukVatRevenueGap } from "./defects/AHD-1102-uk-vat-revenue-gap";
+import { defect as brlForcedMaturityRestitution } from "./defects/AHD-1124-brl-forced-maturity-restitution";
 import type { Defect } from "./types";
 
 export const DEFECTS: Defect[] = [
@@ -33,6 +34,10 @@ export const DEFECTS: Defect[] = [
   // Ticket #1102: the Poon Choi Act was law for 67 turns while a tax-slider
   // enactment bug left UK sales tax and tariffs at 0.
   ukVatRevenueGap,
+  // Ticket #1124: BR's 1953 inflation target was the Vargas CPI, so the Taylor
+  // rule chased 10% inflation and BRL ran away. Bond maturities are compulsory,
+  // so holders were force-converted out of BRL at the corrupted rate.
+  brlForcedMaturityRestitution,
 ];
 
 export function getDefect(id: string): Defect | undefined {

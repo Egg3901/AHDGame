@@ -127,6 +127,7 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   "govt_royalty_receipt",
   "corp_supply_agreement",
   "defence_contract_payment",
+  "restitution_credit",
 ] as const;
 
 export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
@@ -232,6 +233,7 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
   govt_royalty_receipt: "Royalty Receipt",
   corp_supply_agreement: "Supply Agreement Settlement",
   defence_contract_payment: "Defence Contract Payment",
+  restitution_credit: "Restitution Credit",
 };
 
 /**
