@@ -1,5 +1,6 @@
 import type { Character, State } from "@/lib/db/types";
 import type { ActionImageSlug } from "@/lib/images/actionImages";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 
 export interface ActionCard {
   type: string;
@@ -57,8 +58,14 @@ export interface ActionCardProps {
   fundraiseActionCost: number;
   buildDonorBaseActionCost: number;
   buildDonorBaseFundCost: number;
-  /** Per-use fundraise yield (PI-scaled); card label must match `calculateFundraisingAmount`. */
+  /**
+   * Per-use fundraise yield, already in the campaign treasury's LOCAL currency
+   * face value (see `fundraiseYieldLocal`). Render it with
+   * `formatCurrencyFaceAmount`, never with the live-forex `formatAmount`.
+   */
   fundraiseYield: number;
+  /** Currency code the campaign treasury (and therefore `fundraiseYield`) is denominated in. */
+  campaignCurrency: CurrencyCode;
   /** Campaign balance for affordability (matches execute when forex is on). */
   displayCampaignFunds: number;
   /** Personal spendable balance for convert-cash UI (matches execute when forex is on). */

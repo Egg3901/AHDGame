@@ -61,6 +61,11 @@ export interface DonorIncomeData {
   /** Per-level hourly rate for this population tier (before GDP scalar and influence) */
   perLevelRate: number;
   /** One-shot fundraise action yield (with influence multiplier applied) */
+  /**
+   * Already in campaign-treasury LOCAL face value (see `fundraiseYieldLocal`).
+   * Rendered with `formatCurrencyFaceAmount`, never the FX-aware `formatFull`,
+   * so the quote matches what the Fundraise action actually credits.
+   */
   fundraiseYield: number;
   /** Population tier label (e.g. "mega", "large") */
   populationTier: string;
@@ -128,7 +133,7 @@ function DonorPanel({
         <div className="flex justify-between pt-1.5 border-t border-card-border">
           <span className="text-muted">{t("fundraiseYield")}</span>
           <span className="text-foreground tabular-nums font-semibold">
-            {formatFull(donorIncome.fundraiseYield, currencyCode)}
+            {formatCurrencyFaceAmount(donorIncome.fundraiseYield, currencyCode)}
           </span>
         </div>
       </div>

@@ -18,6 +18,8 @@ import {
   resolveOfficeActionBonus,
 } from "@/lib/actions/officeActionBonus";
 import { getActionBreakdown } from "@/lib/actions/actionBreakdown";
+import { fundraiseYieldLocal } from "@/lib/actions";
+import { resolveStartingCountryId } from "@/lib/utils/profileDemographics";
 import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
 import { getSiteUrl } from "@/lib/siteMetadata";
 import type { Filter } from "mongodb";
@@ -439,7 +441,6 @@ async function getCharacterById(characterId: string) {
       discordId: user?.discordId ?? null,
       discordUsername: user?.discordUsername ?? null,
       discordAvatar: user?.discordAvatar ?? null,
-      accountCountryId: user?.accountCountryId ?? character.countryId,
       patreonTier: patreonActive ? patreonTier : null,
       patreonExpiresAt: patreonActive ? patreonExpiresAt : null,
       patreonSince: patreonActive ? (user?.patreonSince ?? null) : null,
@@ -539,7 +540,6 @@ export default async function CharacterPage({ params }: PageProps) {
     discordId,
     discordUsername,
     discordAvatar,
-    accountCountryId,
     patreonTier,
     patreonExpiresAt,
     patreonSince,
@@ -994,10 +994,7 @@ export default async function CharacterPage({ params }: PageProps) {
                   donorIncome={{
                     passivePerHour: fundDistribution.donorBaseBonus,
                     perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
-                    fundraiseYield: Math.round(
-                      (50_000 + character.donorBaseLevel * 2_000) *
-                        (1 + (character.politicalInfluence ?? 0) / 100)
-                    ),
+                    fundraiseYield: fundraiseYieldLocal(character, forexEnabled),
                     populationTier,
                     influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,
                   }}
@@ -1043,7 +1040,7 @@ export default async function CharacterPage({ params }: PageProps) {
                 dotColor={accentHex}
                 markers={compassMarkers.length > 0 ? compassMarkers : undefined}
                 demographics={character.demographics}
-                startingCountryId={accountCountryId}
+                startingCountryId={resolveStartingCountryId(character)}
                 currentCountryId={character.countryId}
               />
 

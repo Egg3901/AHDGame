@@ -15,8 +15,55 @@ import type { PoliticalMetricId } from "./types";
 
 /** Residual carry-over per turn (0.9 → ~10× steady-state, ~20-turn fade). */
 export const CABINET_RESIDUAL_DECAY = 0.9;
-/** Absolute clamp so the channel stays a nudge under laws (which command up to ~62 pts). */
-export const CABINET_RESIDUAL_CAP = 8;
+
+/**
+ * The cabinet channels a residual can come from, ticket #1129.
+ *
+ * Before this, every cabinet effect was summed into ONE number per metric and
+ * clamped once. On prod that clamp bound 21% of US regional entries, and for
+ * `society.civicLife` and `economy.competition` it bound ALL 51 states, so a
+ * player who built an estate aimed at those families bought exactly zero. The
+ * clamp is now applied per SOURCE, which is the granularity the turn phase
+ * already computes effects at and the one a player acts on: an estate is not
+ * an order and is not a tier setting, so a saturated order book must not make
+ * a new estate worthless.
+ *
+ * These ids are persisted (`cabinetResidualsBySource`), so renaming one strands
+ * that channel's stored residual and it decays away over ~20 turns. Adding one
+ * raises the theoretical total ceiling by CABINET_RESIDUAL_CAP_PER_SOURCE.
+ */
+export const CABINET_SOURCE_IDS = [
+  "orders",
+  "settings",
+  "military",
+  "estates",
+  "energy",
+  "infrastructure",
+] as const;
+export type CabinetSourceId = (typeof CABINET_SOURCE_IDS)[number];
+
+/**
+ * Holding pen for residual that predates the per-source split. It receives no
+ * new contribution, so it only ever decays. See `seedBySourceFromLegacy`.
+ */
+export const CABINET_LEGACY_SOURCE = "legacy";
+
+/**
+ * Absolute clamp PER SOURCE. Unchanged in value from the single global cap it
+ * replaces, deliberately: raising it would have inflated every channel that is
+ * already binding, and the complaint was never that a saturated channel was too
+ * weak, it was that a saturated channel silenced the OTHER channels.
+ *
+ * Theoretical total ceiling is therefore 6 × 8 = 48 points, against the ~62 a
+ * fully stacked law book commands. Both maxima need every lever in the game
+ * pointed at one family: the observed prod maximum after the split is about 16
+ * (economy.competition), so the channel stays well under laws in practice.
+ */
+export const CABINET_RESIDUAL_CAP_PER_SOURCE = 8;
+
+/** Theoretical maximum total cabinet offset on one metric, all channels pinned. */
+export const CABINET_RESIDUAL_TOTAL_CEILING =
+  CABINET_RESIDUAL_CAP_PER_SOURCE * CABINET_SOURCE_IDS.length;
 /** Scales the tiny StateMetrics deltas (~0.02–0.08) up to a meaningful political nudge. */
 export const CABINET_POLITICAL_GAIN = 20;
 
@@ -212,7 +259,7 @@ export function addContributions(
   return out;
 }
 
-/** next = clamp(prev·DECAY + contribution, ±CAP) per id; drops ids that fade to ≈0. */
+/** One channel's fold: next = clamp(prev·DECAY + contribution, ±cap per source). */
 export function foldCabinetResiduals(
   prev: Record<string, number>,
   contribution: Record<string, number>
@@ -221,8 +268,98 @@ export function foldCabinetResiduals(
   const out: Record<string, number> = {};
   for (const id of ids) {
     const raw = (prev[id] ?? 0) * CABINET_RESIDUAL_DECAY + (contribution[id] ?? 0);
-    const capped = Math.max(-CABINET_RESIDUAL_CAP, Math.min(CABINET_RESIDUAL_CAP, raw));
+    const capped = Math.max(
+      -CABINET_RESIDUAL_CAP_PER_SOURCE,
+      Math.min(CABINET_RESIDUAL_CAP_PER_SOURCE, raw)
+    );
     if (Math.abs(capped) >= 0.01) out[id] = +capped.toFixed(4);
   }
   return out;
+}
+
+/** Per-source residual state: sourceId → (metricId → points). */
+export type CabinetResidualsBySource = Record<string, Record<string, number>>;
+
+/**
+ * Reinterpret a pre-#1129 flat residual as per-source state WITHOUT a migration.
+ *
+ * The stored flat number is a sum whose composition was never recorded, so it
+ * cannot be split truthfully. It is split by each source's share of THIS turn's
+ * contribution instead, which keeps the applied total identical on the first
+ * turn (no player sees a lurch) and is washed out within a few turns by the 0.9
+ * decay, after which every channel carries its own true history. Any part of a
+ * metric with no current contribution has no share to assign, so it goes to the
+ * legacy pen and simply decays.
+ */
+export function seedBySourceFromLegacy(
+  flatPrev: Record<string, number>,
+  contributionBySource: Record<string, Record<string, number>>
+): CabinetResidualsBySource {
+  const out: CabinetResidualsBySource = {};
+  const put = (source: string, id: string, v: number) => {
+    if (!v) return;
+    (out[source] ??= {})[id] = +((out[source][id] ?? 0) + v).toFixed(4);
+  };
+  for (const [id, prev] of Object.entries(flatPrev)) {
+    if (!prev) continue;
+    let shareTotal = 0;
+    for (const contribution of Object.values(contributionBySource)) {
+      shareTotal += Math.abs(contribution[id] ?? 0);
+    }
+    if (shareTotal <= 0) {
+      put(CABINET_LEGACY_SOURCE, id, prev);
+      continue;
+    }
+    for (const [source, contribution] of Object.entries(contributionBySource)) {
+      const share = Math.abs(contribution[id] ?? 0) / shareTotal;
+      if (share > 0) put(source, id, prev * share);
+    }
+  }
+  return out;
+}
+
+/**
+ * Fold every channel independently. A channel at its cap can no longer grow,
+ * but it cannot stop any OTHER channel from growing either, which is the whole point of
+ * ticket #1129. Empty channels are dropped so the stored doc stays small.
+ */
+export function foldCabinetResidualsBySource(
+  prev: CabinetResidualsBySource,
+  contributionBySource: Record<string, Record<string, number>>
+): CabinetResidualsBySource {
+  const sources = new Set([...Object.keys(prev), ...Object.keys(contributionBySource)]);
+  const out: CabinetResidualsBySource = {};
+  for (const source of sources) {
+    const next = foldCabinetResiduals(prev[source] ?? {}, contributionBySource[source] ?? {});
+    if (Object.keys(next).length > 0) out[source] = next;
+  }
+  return out;
+}
+
+/** Flatten per-source residuals to the applied total per metric. */
+export function sumCabinetResiduals(bySource: CabinetResidualsBySource): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const perMetric of Object.values(bySource)) {
+    for (const [id, v] of Object.entries(perMetric)) out[id] = (out[id] ?? 0) + v;
+  }
+  for (const [id, v] of Object.entries(out)) {
+    const rounded = +v.toFixed(4);
+    if (Math.abs(rounded) < 0.01) delete out[id];
+    else out[id] = rounded;
+  }
+  return out;
+}
+
+/**
+ * How many channels are pinned at the per-source cap for a metric. The board's
+ * at-ceiling warning is only honest when EVERY channel is pinned: below that,
+ * building in an unsaturated channel still buys movement.
+ */
+export function cappedSourceCount(bySource: CabinetResidualsBySource, metricId: string): number {
+  let pinned = 0;
+  for (const perMetric of Object.values(bySource)) {
+    const v = perMetric[metricId] ?? 0;
+    if (Math.abs(v) >= CABINET_RESIDUAL_CAP_PER_SOURCE - 0.01) pinned++;
+  }
+  return pinned;
 }

@@ -217,6 +217,10 @@ export async function POST(request: Request) {
       name,
       homeState,
       countryId,
+      // Per-character starting nationality. `users.accountCountryId` is set from
+      // the player's first character only, so it cannot answer "where did THIS
+      // character start" (ticket 1107).
+      startingCountryId: countryId,
 
       // Core Stats (10% bonus if referred, except donorBase)
       politicalInfluence: isReferred

@@ -18,6 +18,7 @@ describe("politicalCabinetContribution", () => {
     expect(await getPoliticalCabinetContribution(db as unknown as Db, "US")).toEqual({
       contribution: {},
       regional: {},
+      sources: {},
     });
   });
 
@@ -32,6 +33,7 @@ describe("politicalCabinetContribution", () => {
     expect(await getPoliticalCabinetContribution(db as unknown as Db, "US")).toEqual({
       contribution: { "order.safety": 2 },
       regional: { CA: { "order.safety": 0.4 } },
+      sources: {},
     });
   });
 
@@ -45,6 +47,7 @@ describe("politicalCabinetContribution", () => {
     expect(await getPoliticalCabinetContribution(db as unknown as Db, "US")).toEqual({
       contribution: { "order.safety": 2 },
       regional: {},
+      sources: {},
     });
   });
 
@@ -59,6 +62,7 @@ describe("politicalCabinetContribution", () => {
           countryId: "US",
           contribution: { "order.safety": 1 },
           regional: { CA: { "order.safety": 0.4 } },
+          sources: {},
           turn: 5,
         },
       },

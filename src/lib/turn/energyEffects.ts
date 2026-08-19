@@ -13,6 +13,9 @@ import { getCabinetMechanics } from "@/lib/constants/cabinetMechanics";
 import { resolveMetricPath } from "@/lib/cabinet/resolveMetricPath";
 import { resolveEnergyEnvelope } from "./energyEnvelope";
 import { loadPoliticalMacroInputs } from "@/lib/politicalLegislation/politicalMacroInputs";
+import { legacyValueFromPoliticalScore } from "@/lib/politicalMetrics/derive/legacyInversion";
+import { resolveGameYear } from "@/lib/era/era";
+import type { GameState } from "@/lib/db/types";
 
 const CAP = 0.08; // matches MAX_PER_METRIC_MODIFIER_PER_TURN; the pipeline re-clamps too.
 const clampCap = (v: number) => Math.max(-CAP, Math.min(CAP, v));
@@ -25,17 +28,36 @@ export function reliabilityScore(mix: MixAggregate): number {
   return Math.round(100 * (0.7 * mix.firmShare + 0.3 * diversity));
 }
 
-/** Pure: nudge a region's energy metrics toward its mix-implied targets. */
+/**
+ * Pure: nudge a region's energy metrics toward its mix-implied targets.
+ *
+ * UNITS. `current.reliability` arrives in the metric's OWN unit — grid uptime
+ * percent, which sits in a realistic 97-99.9 band — while `reliabilityScore`
+ * returns a 0-100 QUALITY score. Differencing them directly compared a score of
+ * 70 against an uptime of 99, so the gap was hugely negative for every mix on
+ * earth, the result pinned to the -CAP clamp every single turn, and an energy
+ * estate could only ever DAMAGE its own grid. `relTarget` is converted into the
+ * metric's own unit first, so a good mix raises reliability and a bad one
+ * lowers it, which is the whole point of the mechanic.
+ */
 export function computeRegionEnergyDeltas(
   regionPlants: EnergyPlant[],
-  current: { renewable: number; carbon: number; reliability: number }
+  current: { renewable: number; carbon: number; reliability: number },
+  /** Opt-in era: convert the reliability target against that year's band. */
+  era?: { countryId?: string | null; year?: number | null }
 ): Record<string, number> {
   if (regionPlants.length === 0) return {};
   const mix = aggregateMix(regionPlants);
   if (mix.totalCapacity <= 0) return {};
   const renewTarget = mix.renewableShare * 100;
   const carbonTarget = mix.carbonIntensity * ENERGY_EFFECT.carbonTargetMax;
-  const relTarget = reliabilityScore(mix);
+  const relTarget =
+    legacyValueFromPoliticalScore(
+      "infrastructure",
+      "powerGridReliability",
+      reliabilityScore(mix),
+      era
+    ) ?? current.reliability;
   return {
     "environment.renewableEnergy": clampCap(
       (renewTarget - current.renewable) * ENERGY_EFFECT.renewableWeight
@@ -98,6 +120,19 @@ export async function applyEnergyEffects(
   // powerGridReliability has an authored Bridge A band — the other two would
   // come back null and silently pin `current` to 0.
   const political = await loadPoliticalMacroInputs(db);
+  // Era-aware only while the era system is on, matching the dynamics phase: a
+  // realistic 1953 grid never clears the modern band, so scoring it there reads
+  // every early-Cold-War region as bottom-of-scale.
+  const eraGameState = await db
+    .collection<GameState>("gameState")
+    .findOne(
+      { _id: "current" as GameState["_id"] },
+      { projection: { currentYear: 1, currentTurn: 1, startingYear: 1, eraSystemEnabled: 1 } }
+    );
+  const era = {
+    countryId,
+    year: eraGameState?.eraSystemEnabled ? (resolveGameYear(eraGameState) ?? null) : null,
+  };
 
   for (const [regionId, regionPlants] of byRegion) {
     // A region with no board reads all three as 0, which is what the legacy
@@ -110,7 +145,7 @@ export async function applyEnergyEffects(
       carbon: fromBoard("environment.carbonEmissions"),
       reliability: fromBoard("infrastructure.powerGridReliability"),
     };
-    const deltas = computeRegionEnergyDeltas(regionPlants, current);
+    const deltas = computeRegionEnergyDeltas(regionPlants, current, era);
     for (const [rawPath, v] of Object.entries(deltas)) {
       if (!v) continue;
       const path = resolveMetricPath(rawPath, metrics);

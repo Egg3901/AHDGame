@@ -46,6 +46,7 @@
     "migrate": "npx tsx scripts/run-migrations.ts",
     "migrate:dry-run": "npx tsx scripts/run-migrations.ts --dry-run",
     "changelog:new": "npx tsx scripts/changelog/new-entry.ts",
+    "changelog:check": "npx tsx scripts/changelog/check-entries.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -79,6 +80,9 @@
     ],
     "*.{json,md,css}": [
       "prettier --write"
+    ],
+    "content/changelog/**/*.md": [
+      "npx tsx scripts/changelog/check-entries.ts"
     ]
   },
   "dependencies": {

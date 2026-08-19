@@ -3,6 +3,7 @@ import { getGdpBaseline } from "@/lib/utils/fundGeneration";
 import { getHomeCurrency, getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 import { statMultiplier } from "@/lib/stats/statMultiplier";
+import { campaignAnchorToLocal } from "@/lib/campaigns/campaignCurrency";
 import { DEBATE_PREP_ACTION_COST, NEUTRAL_STAT, type StatKey } from "@/lib/stats/statsConstants";
 
 /**
@@ -96,6 +97,33 @@ export function calculateFundraisingAmount(
   if (stateInfluence === undefined) return base;
   const multiplier = 1 + Math.max(0, Math.min(100, stateInfluence)) / 100;
   return Math.round(base * multiplier);
+}
+
+/**
+ * Canonical per-use Fundraise yield in ANCHOR units, including the fundraising
+ * stat multiplier. This is the single source of truth: the Fundraise action
+ * effect and every UI that quotes the yield must call this, or the quote and
+ * the credit drift apart (ticket 1107).
+ */
+export function fundraiseYieldAnchor(character: Character): number {
+  const base = calculateFundraisingAmount(
+    character.donorBaseLevel,
+    character.politicalInfluence ?? 0
+  );
+  return Math.round(base * statMultiplier(statValue(character, "fundraising")));
+}
+
+/**
+ * The Fundraise yield as it will actually land in the campaign treasury, in the
+ * character's LOCAL campaign currency. Mirrors executeAction exactly: campaign
+ * funds convert at the FROZEN base rate (`campaignAnchorToLocal`), never the
+ * live forex rate. Quoting this with a live-rate formatter is what made the card
+ * advertise ~1.8M in a 1953 East Germany while the credit paid ~1.0M, because
+ * the live DDM rate is 4.2 and the frozen campaign rate is 2.22.
+ */
+export function fundraiseYieldLocal(character: Character, forexEnabled: boolean): number {
+  const anchor = fundraiseYieldAnchor(character);
+  return forexEnabled ? campaignAnchorToLocal(anchor, character.countryId ?? "US") : anchor;
 }
 
 /**
@@ -344,12 +372,10 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     baseCost: 3,
     requiresState: false,
     effect: (character: Character, _state?: State, ctx?: ActionEffectContext) => {
-      const baseAmount = calculateFundraisingAmount(
-        character.donorBaseLevel,
-        character.politicalInfluence ?? 0
-      );
-      // Fundraising stat scales the yield (gentle ±20%).
-      const amount = Math.round(baseAmount * statMultiplier(statValue(character, "fundraising")));
+      // Fundraising stat scales the yield (gentle ±20%). Shared with every UI
+      // quote via fundraiseYieldAnchor so the card can never advertise a
+      // different number than the one credited.
+      const amount = fundraiseYieldAnchor(character);
       const fmt = ctx?.formatFunds ?? plainFunds;
       return {
         fundsChange: amount,

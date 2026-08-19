@@ -36,6 +36,16 @@ export interface PoliticalMetricsDoc {
    */
   cabinetResiduals?: Record<PoliticalMetricId, number>;
   /**
+   * The same offset split by the channel that produced it (orders, tier
+   * settings, military, estates, energy, infrastructure), ticket #1129. The cap
+   * is applied per channel here, and `cabinetResiduals` above is the sum, so a
+   * saturated order book can no longer make a newly built estate worth zero.
+   *
+   * Absent on docs written before the split: the turn phase seeds it from the
+   * flat field on first fold, so no migration is needed and no value jumps.
+   */
+  cabinetResidualsBySource?: Record<string, Record<PoliticalMetricId, number>>;
+  /**
    * The labour-relations offset applied to this region's target this turn (the
    * strike/settlement channel, `src/lib/unions/labourRelationsPoliticalProvider.ts`).
    * Persisted for the same reason `cabinetResiduals` is: an offset that moves

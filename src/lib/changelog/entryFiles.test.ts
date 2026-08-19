@@ -10,9 +10,12 @@ import {
   toEntrySuffix,
   devEntryFileName,
   frontmatterDamage,
+  unknownValueMessage,
   BARE_NAME_CUTOFF_DATE,
 } from "./entryFiles";
 import { loadDevPosts, loadPublicPosts } from "./posts";
+import { AREA_VALUES, BADGE_VALUES } from "./types";
+import { AREA_STYLES, BADGE_STYLES } from "@/app/changelog/components/postStyles";
 
 describe("parseEntryStem", () => {
   it("accepts a bare version and a suffixed version", () => {
@@ -132,6 +135,85 @@ describe("bare dev entry names", () => {
     expect(problems).toHaveLength(1);
     expect(problems[0].file).toBe("1.2.17.md");
     expect(problems[0].problem).toContain("<version>-<topic>.md");
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+// Three separate authors wrote "minor", "bugfix", "balance" and "engine" into
+// entries, and each one turned development red for everyone else. The
+// vocabulary now lives in one place and every surface derives from it, so these
+// assert the derivation actually holds rather than restating the lists.
+describe("changelog vocabulary", () => {
+  it("styles every badge and area, so no accepted value renders as an unstyled chip", () => {
+    expect(Object.keys(BADGE_STYLES).sort()).toEqual([...BADGE_VALUES].sort());
+    expect(Object.keys(AREA_STYLES).sort()).toEqual([...AREA_VALUES].sort());
+    for (const style of [...Object.values(BADGE_STYLES), ...Object.values(AREA_STYLES)]) {
+      expect(style.label).toBeTruthy();
+      expect(style.classes).toBeTruthy();
+    }
+  });
+
+  it("carries the values authors reached for", () => {
+    expect(BADGE_VALUES).toContain("minor");
+    expect(AREA_VALUES).toContain("engine");
+  });
+
+  it("names the valid values in the failure, not just the rejected one", () => {
+    const message = unknownValueMessage("badge", "bugfix");
+    expect(message).toContain('"bugfix"');
+    for (const value of BADGE_VALUES) expect(message).toContain(value);
+    expect(message).toContain("tags");
+
+    const areaMessage = unknownValueMessage("area", "engine-room");
+    for (const value of AREA_VALUES) expect(areaMessage).toContain(value);
+  });
+
+  // The generator now writes the accepted vocabulary as YAML comments above
+  // each field, which is the whole point: the author reads it where they type.
+  // Comments must survive the hand-written frontmatter parser untouched.
+  it("parses an entry carrying the generator's vocabulary comments", () => {
+    const generated = `---
+version: "1.2.29"
+date: 2026-08-19
+title: A change
+summary: >-
+  Why it matters.
+# Free text. What the change was about: economy, elections, balance.
+tags: [economy]
+# How big the release is. One of: ${BADGE_VALUES.join(" | ")}
+badges: [minor]
+# Which part of the codebase moved. Any of: ${AREA_VALUES.join(" | ")}
+areas: [backend, engine]
+---
+Body
+`;
+    expect(frontmatterDamage(generated)).toEqual([]);
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "changelog-generated-"));
+    fs.writeFileSync(path.join(dir, "1.2.29-a-change.md"), generated);
+    expect(checkEntryDir(dir, { bareVersionOnly: false })).toEqual([]);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("rejects the exact values that broke the build, and accepts the extended ones", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "changelog-vocab-"));
+    const write = (name: string, badges: string, areas: string) =>
+      fs.writeFileSync(
+        path.join(dir, name),
+        `---\nversion: "1.2.3"\ndate: 2026-08-19\ntitle: T\nbadges: [${badges}]\nareas: [${areas}]\n---\nBody\n`
+      );
+
+    write("1.2.3-good.md", "minor", "backend, engine");
+    expect(checkEntryDir(dir, { bareVersionOnly: false })).toEqual([]);
+
+    fs.rmSync(path.join(dir, "1.2.3-good.md"));
+    write("1.2.3-bad.md", "patch, bugfix, balance", "frontend, database");
+    const problems = checkEntryDir(dir, { bareVersionOnly: false }).map((p) => p.problem);
+    expect(problems).toHaveLength(3);
+    expect(problems.join(" ")).toContain('"bugfix"');
+    expect(problems.join(" ")).toContain('"balance"');
+    expect(problems.join(" ")).toContain('"database"');
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
