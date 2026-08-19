@@ -237,6 +237,54 @@ export function advertiseFavorabilityGain(
 }
 
 /**
+ * Diminishing-returns shape for a turn's TOTAL passive campaign favorability
+ * (media spending + travel presence + the primary in-state bonus), applied once
+ * to the summed positive gain.
+ *
+ * Third member of the "curves must intersect" family, alongside
+ * {@link advertiseFavorabilityGain} and {@link campaignInfluenceGain}. Both of
+ * those were given a favorability/influence-dependent penalty precisely so a
+ * self-reinforcing stat has a stable equilibrium below the cap. The passive
+ * campaign channel was missed by both fixes and stayed flat.
+ *
+ * Root cause this closes: passive gain did not vary with favorability at all,
+ * while decay is bounded — `calculateFavorabilityAboveThresholdPenalty` maxes
+ * out at (100−60)×0.05 = 2.0/turn. A maxed media tree pays
+ * 0.5 (starter) + 1.5 (Broadcast t3) + 1.0 (Digital Ads t3) = 3.0/turn, doubled
+ * to 6.0 inside the final-four-turn season window, plus 1.0/turn for travel.
+ * Gain 3.0+ against a hard ceiling of 2.0 means the curves never intersect and
+ * the candidate pins at 100 permanently. The engine already knew: see
+ * `isTargetMediaSustainedAtCap` in simpleInfluence.ts, which detects exactly
+ * this state (mediaLevel >= 4) to explain a disabled Support button, rather
+ * than preventing it.
+ *
+ * Curve: base − (favorability − 70) × 0.15, floored at 0.5. The rate is steeper
+ * than advertise's 0.1 because this stack tops out higher (media + travel), and
+ * 0.15 puts a fully-invested campaign's equilibrium near 88 rather than 100.
+ * The 0.5 floor sits well under the 2.0 decay ceiling, so no combination of
+ * passives can re-pin at the cap.
+ *
+ * Apply AFTER the season multiplier: the final-four-turn 2x doubles the raw
+ * gain, and curving the pre-doubled value would let the doubled result clear
+ * decay again in exactly the turns that cast 30% of the vote.
+ */
+export const PASSIVE_FAV_DIMINISH_THRESHOLD = 70;
+export const PASSIVE_FAV_DIMINISH_RATE = 0.15;
+export const PASSIVE_FAV_MIN_PER_TURN = 0.5;
+
+export function diminishPassiveFavorabilityGain(
+  rawGain: number,
+  currentFavorability: number
+): number {
+  if (rawGain <= 0) return rawGain;
+  const penalty =
+    currentFavorability > PASSIVE_FAV_DIMINISH_THRESHOLD
+      ? (currentFavorability - PASSIVE_FAV_DIMINISH_THRESHOLD) * PASSIVE_FAV_DIMINISH_RATE
+      : 0;
+  return Math.max(PASSIVE_FAV_MIN_PER_TURN, rawGain - penalty);
+}
+
+/**
  * Base political-influence gain for one "Campaign" action, before stat scaling.
  * Shared by player actions and NPP turn processing (mirrors
  * `advertiseFavorabilityGain`'s shape exactly, so the same "curves must

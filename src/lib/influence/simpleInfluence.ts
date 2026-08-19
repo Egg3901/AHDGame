@@ -17,6 +17,74 @@ import { getMediaFavPerTurn } from "@/lib/campaigns/opsEffects";
 // Base cost for influence/boost actions
 export const BASE_INFLUENCE_COST = 2;
 
+/**
+ * Maximum NET favorability any one target can be moved by player support/attack
+ * in a single turn, in either direction.
+ *
+ * Root cause this closes: `supportPlayer` / `attackPlayer` move favorability by
+ * a flat ±1 with no cooldown, no dedupe and no per-turn cap — the only limiter
+ * was the actor's own action points and infamy. Those limits are per-ACTOR, so
+ * they do not bind in aggregate: a coordinated party simply spreads the cost.
+ *
+ * Measured on the live 1956 US presidential race (turn 227, harness
+ * `scripts/sim/favorability-bomb-replay.ts`, real engine in dry-run):
+ * favorability is worth ~0.45 points of vote share per point, because
+ * `approvalScalar` multiplies the candidate's ENTIRE vote. Forcing the
+ * incumbent from 100 → 20 moved his projected national share 64.8% → 46.6% and
+ * the electoral college 531-0 → 141-390. That is 80 landed attacks: two per
+ * head across a 42-member party, ~168 action points out of the 3,715 they had
+ * banked. Under 5% of one party's reserves bought the presidency.
+ *
+ * For comparison the approval-scaled incumbency channel measures 0.04 share
+ * points per point — favorability is ~11x stronger, and was the only one of the
+ * two with no aggregate limit at all.
+ *
+ * 3/turn is deliberately non-trivial: a coordinated party still moves a target
+ * faster than any individual can, and can still swing 30+ points over a
+ * campaign. It just cannot delete a candidate between two turns. Pairs with the
+ * per-turn passive/decay curves so favorability has a reachable equilibrium
+ * rather than being set by click volume.
+ */
+export const MAX_NET_FAVORABILITY_SWING_PER_TURN = 3;
+
+/**
+ * Net player-driven favorability already applied to `targetId` this turn.
+ * Positive = net supported, negative = net attacked. Reads the same
+ * `actionLogs` rows the influence routes write, so there is no new state to
+ * keep in sync and no backfill: turns with no logged actions score 0.
+ *
+ * Sums the authoritative `result.targetFavorabilityChange` the routes already
+ * record, rather than inferring from `actionType`. That is what actually moved,
+ * so attacks that failed the infamy roll contribute 0 and correctly do not
+ * consume the target's budget.
+ */
+export async function netFavorabilitySwingThisTurn(
+  db: Db,
+  targetId: ObjectId,
+  targetType: TargetType,
+  turn: number
+): Promise<number> {
+  const targetField = targetType === "character" ? "targetCharacterId" : "targetNPPId";
+  const rows = await db
+    .collection<{ result?: { targetFavorabilityChange?: number } }>("actionLogs")
+    .find(
+      {
+        [targetField]: targetId,
+        turn,
+        actionType: { $in: ["supportPlayer", "attackPlayer"] },
+      },
+      { projection: { result: 1 } }
+    )
+    .toArray();
+
+  let net = 0;
+  for (const r of rows) {
+    const delta = r.result?.targetFavorabilityChange;
+    if (typeof delta === "number") net += delta;
+  }
+  return net;
+}
+
 export type TargetType = "character" | "npp";
 
 export interface SimpleInfluenceInfo {
@@ -398,6 +466,30 @@ export async function executeSimpleInfluence(
       error: {
         message: `${target.name}'s favorability is already at the floor (0%). They can't be attacked further.`,
         status: 400,
+      },
+    };
+  }
+
+  // Aggregate per-target throttle. The ±1 move is per-actor, so per-actor costs
+  // (action points, infamy) never bound how far a COORDINATED group can push a
+  // single target in one turn. Measured worth: ~0.45 vote-share points per
+  // favorability point, so an unthrottled group could decide a national
+  // election between two turns. See MAX_NET_FAVORABILITY_SWING_PER_TURN.
+  const netSwing = await netFavorabilitySwingThisTurn(
+    db,
+    target._id as ObjectId,
+    targetType,
+    gameState?.currentTurn ?? 0
+  );
+  const wouldBe = netSwing + (action === "raise" ? 1 : -1);
+  if (Math.abs(wouldBe) > MAX_NET_FAVORABILITY_SWING_PER_TURN) {
+    return {
+      error: {
+        message:
+          action === "raise"
+            ? `${target.name} has already been supported as much as they can be this turn (limit ${MAX_NET_FAVORABILITY_SWING_PER_TURN} net per turn). Try again next turn.`
+            : `${target.name} has already been attacked as much as they can be this turn (limit ${MAX_NET_FAVORABILITY_SWING_PER_TURN} net per turn). Try again next turn.`,
+        status: 429,
       },
     };
   }

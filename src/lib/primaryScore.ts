@@ -9,9 +9,9 @@
  *
  * Presidential (national) formula — see {@link calcPresidentPrimaryScore} JSDoc:
  *   - Party alignment (policy): 0–40 pts
- *   - Party influence (candidate's own accumulated party clout): 0–30 pts
- *   - National reach (diminishing via normalizeNationalReachPresidentialPrimary): 0–20 pts
- *   - Favorability: 0–10 pts
+ *   - Favorability: 0–25 pts
+ *   - Party influence (candidate's own accumulated party clout): 0–20 pts
+ *   - National reach (diminishing via normalizeNationalReachPresidentialPrimary): 0–15 pts
  *   - Infamy multiplier applied at the end
  */
 
@@ -121,14 +121,46 @@ export function calcPrimaryScore(
 
 /**
  * Presidential primary component weights (sum = 100).
- * Party influence is weighted above national reach so party standing — and the
- * chair / leadership path that accumulates it — meaningfully moves primary
- * performance (#934 follow-up).
+ *
+ * Party influence used to be weighted above national reach so party standing —
+ * and the chair / leadership path that accumulates it — meaningfully moved
+ * primary performance (#934 follow-up). Rebalanced 2026-08-19: it was weighted
+ * above FAVORABILITY too, and favorability is the single most decisive variable
+ * in the general election while party influence does not enter the general vote
+ * formula anywhere at all.
+ *
+ * Evidence: `approvalScalar` multiplies a candidate's ENTIRE general-election
+ * vote, measured at ~0.45 vote-share points per favorability point on the live
+ * 1956 US race. The primary priced that at 10 of 100 and priced a term with
+ * zero general-election effect at 30. The result was the 1956 nomination of a
+ * challenger in the 4th percentile of favorability (38.4 against a field median
+ * of 57.2) to run against an incumbent pinned at the 100 cap — an unwinnable
+ * matchup produced by the selection rule rather than by play.
+ *
+ * Favorability 10 → 25 makes the primary select for roughly what the general
+ * election rewards. Alignment stays dominant at 40, so parties still nominate
+ * people who agree with them; they just stop nominating people the electorate
+ * has already rejected. Party influence 30 → 20 and reach 20 → 15 fund it while
+ * PRESERVING the #934 ordering (party influence still outranks national reach),
+ * so the chair / leadership path retains its edge over raw name recognition.
+ *
+ * Why 25 and not 30: at 30 the favorability term exactly ties the alignment term
+ * in the `presidentialRaceRebalance` scenario where a candidate 12 ideology
+ * points adrift of their party runs at 100 favorability against a perfectly
+ * aligned rival at 20 (both deltas land on 24). That is the boundary at which a
+ * party would start nominating its own ideological opponents for being popular.
+ * 25 keeps alignment strictly dominant (24 vs 20) while still repricing
+ * favorability 2.5x. Treat 25 as the ceiling for this lever, not a midpoint.
+ *
+ * MUST ship alongside the favorability-economy fixes (the per-turn aggregate
+ * swing cap and the passive-gain curve). On its own this only makes races
+ * closer without ever flipping them, because a better challenger still loses to
+ * an opponent held at the cap.
  */
 export const PRESIDENT_PRIMARY_ALIGNMENT_WEIGHT = 40;
-export const PRESIDENT_PRIMARY_PARTY_INFLUENCE_WEIGHT = 30;
-export const PRESIDENT_PRIMARY_NATIONAL_REACH_WEIGHT = 20;
-export const PRESIDENT_PRIMARY_FAVORABILITY_WEIGHT = 10;
+export const PRESIDENT_PRIMARY_PARTY_INFLUENCE_WEIGHT = 20;
+export const PRESIDENT_PRIMARY_NATIONAL_REACH_WEIGHT = 15;
+export const PRESIDENT_PRIMARY_FAVORABILITY_WEIGHT = 25;
 
 export type PartyChairPrimaryRole = "national" | "state" | null;
 
