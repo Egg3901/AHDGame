@@ -31,6 +31,51 @@ export const UNOWNED_REVENUE_MULTIPLIER = 1.0;
 export const COUNTRY_UNOWNED_REVENUE_MULTIPLIER: Partial<Record<CountryId, number>> = {};
 
 /**
+ * Per-country, per-sector seed multiplier for DOWNSTREAM (input-consuming)
+ * industry — additive capacity on top of the normalised sector-weight share,
+ * not a redistribution of it (ticket-1072).
+ *
+ * WHY A MULTIPLIER AND NOT A WEIGHT BUMP. `computeUnownedSeedRevenue` sizes a
+ * bucket from the country's NORMALISED sector weight, so raising one weight
+ * lowers every other sector's share. East Germany's problem is not the shape of
+ * its mix, it is that its downstream consumers are absolutely too small against
+ * its upstream producers: on the live 1953 world DD carries ~63.1k units of
+ * steel SUPPLY against ~10.8k units of steel DEMAND, while Czechoslovakia at a
+ * smaller population runs ~95.8k supply against ~80.4k demand. Re-weighting
+ * inside a fixed pie tops out near 1.4x; the country needs more downstream
+ * plant, not a different slice of the same plant.
+ *
+ * WHY DD, AND WHY THESE TWO SECTORS. The CoCom embargo walls DD steel out of
+ * the West, so it cannot export the surplus away, and private founding is
+ * banned in a command economy, so no player can build the missing consumers.
+ * Automobiles (IFA/Wartburg/Robur heavy machinery, steel demand rate 0.35) and
+ * construction (the Aufbau/Stalinallee programme, steel demand rate 0.15) are
+ * the two steel-consuming sectors the 1953 GDR genuinely ran at scale and the
+ * seed sized at the era floor.
+ *
+ * `capitalStock` is derived from this same ₳ figure (see `buildSector` in
+ * seeds/reference/budgets.ts), so capacity and revenue move together and no
+ * existing sector is cut.
+ */
+export const COUNTRY_SECTOR_SEED_MULTIPLIER: Partial<
+  Record<CountryId, Partial<Record<CorporationType, number>>>
+> = {
+  DD: {
+    automobiles: 10,
+    construction: 8,
+  },
+};
+
+/** The downstream seed multiplier for one (country, sector); 1 when unset. */
+export function countrySectorSeedMultiplier(
+  countryId: CountryId,
+  sectorType: string
+): number {
+  const value = COUNTRY_SECTOR_SEED_MULTIPLIER[countryId]?.[sectorType as CorporationType];
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 1;
+}
+
+/**
  * Canonical market size (₳) for one (state, sectorType): the single source of
  * truth used by both the seeder and the 1991-recompute heal script. `gdp` is
  * the state's stored GDP (local-currency millions); `usdExchangeRate` normalizes
@@ -62,9 +107,13 @@ export function computeUnownedSeedRevenue(params: {
       (weights[sectorType as CorporationType] ?? 0)
   );
   const countryMultiplier = COUNTRY_UNOWNED_REVENUE_MULTIPLIER[countryId] ?? 1;
+  // Applied AFTER the era floor so the uplift is real capacity rather than
+  // headroom the floor would have swallowed (ticket-1072).
+  const downstreamMultiplier = countrySectorSeedMultiplier(countryId, sectorType);
   return Math.round(
     Math.max(getMinUnownedSectorRevenue(preset), Math.round(base * UNOWNED_REVENUE_MULTIPLIER)) *
       countryMultiplier *
+      downstreamMultiplier *
       boostMultiplier
   );
 }
