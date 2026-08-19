@@ -3,10 +3,11 @@ import path from "path";
 import { asString, asStringArray, parseFrontmatter } from "./frontmatter";
 import { DEV_POSTS_DIR, PUBLIC_POSTS_DIR } from "./paths";
 import { compareVersionsDesc } from "./postUtils";
+import { AREA_VALUES, BADGE_VALUES } from "./types";
 import type { ChangelogBadge, ChangelogPost, DevArea } from "./types";
 
-const BADGE_VALUES = new Set<ChangelogBadge>(["major", "patch", "hotfix"]);
-const AREA_VALUES = new Set<DevArea>(["backend", "frontend", "fullstack"]);
+const BADGES = new Set<string>(BADGE_VALUES);
+const AREAS = new Set<string>(AREA_VALUES);
 
 function parsePostFile(filePath: string): ChangelogPost | null {
   const raw = fs.readFileSync(filePath, "utf-8");
@@ -17,12 +18,11 @@ function parsePostFile(filePath: string): ChangelogPost | null {
 
   if (!version || !date || !title) return null;
 
-  const badges = asStringArray(data.badges).filter((b): b is ChangelogBadge =>
-    BADGE_VALUES.has(b as ChangelogBadge)
-  );
-  const areas = asStringArray(data.areas).filter((a): a is DevArea =>
-    AREA_VALUES.has(a as DevArea)
-  );
+  // Unknown values are dropped rather than thrown, so one bad entry cannot take
+  // the whole feed down in production. checkEntryDir is what makes them loud:
+  // it fails CI and the pre-commit hook before the entry ever merges.
+  const badges = asStringArray(data.badges).filter((b): b is ChangelogBadge => BADGES.has(b));
+  const areas = asStringArray(data.areas).filter((a): a is DevArea => AREAS.has(a));
 
   return {
     // The filename stem. Dev entries add a topic suffix after the version
