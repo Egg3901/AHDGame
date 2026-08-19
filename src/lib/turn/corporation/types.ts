@@ -142,10 +142,12 @@ export interface CorporationLookups {
    */
   reachablePriceRatioByCountry?: Map<string, Map<CommodityType, number>>;
   /**
-   * World price ratios overlaid with each country's reachable ratios — the
-   * price level a buyer in that country actually pays. Consumed by the
-   * physical input bill (`computeInputsCost`); world map is the fallback for
-   * countries without a book.
+   * World price ratios overlaid with each country's reachable ratios, then
+   * capped at the world ratio per commodity (`min(world, reachable)` via
+   * `capInputPriceRatioAtWorld`). Cheap local inputs still win; expensive
+   * reachable books cannot bill above world. Consumed by the physical input
+   * bill (`computeInputsCost`); world map is the fallback for countries
+   * without a book.
    */
   reachableInputPriceRatiosByCountry?: Map<string, Map<CommodityType, number>>;
   /**

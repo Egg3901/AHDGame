@@ -26,6 +26,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
 import { buildPrimeRateByCountry } from "@/lib/centralBank/helpers";
 import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
+import { capInputPriceRatioAtWorld } from "@/lib/corporations/physicalPnl";
 import { getActiveSubsidies } from "@/lib/subsidies/subsidyEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
 import { reconcileSignedTariffBills } from "@/lib/tariffs/reconcileTariffs";
@@ -635,7 +636,7 @@ export async function buildCorporationLookups(
     const merged = new Map(priceRatioByCommodity);
     for (const [commodity, ratio] of byCommodity) {
       const world = priceRatioByCommodity.get(commodity);
-      merged.set(commodity, typeof world === "number" ? Math.min(world, ratio) : ratio);
+      merged.set(commodity, capInputPriceRatioAtWorld(world, ratio));
     }
     reachableInputPriceRatiosByCountry.set(countryId, merged);
   }
