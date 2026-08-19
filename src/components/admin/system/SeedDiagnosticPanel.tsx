@@ -49,7 +49,7 @@ function formatValue(value: number | string | null): string {
     if (Math.abs(value) >= 1e9 || (Math.abs(value) > 0 && Math.abs(value) < 1e-2)) {
       return value.toExponential(3);
     }
-    return value.toLocaleString(undefined, { maximumFractionDigits: 4 });
+    return value.toLocaleString("en-US", { maximumFractionDigits: 4 });
   }
   return String(value);
 }
