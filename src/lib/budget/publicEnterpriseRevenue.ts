@@ -23,7 +23,7 @@ import { resolveSectorMandate } from "@/lib/nationalization/soeMandates";
 import { cappedRemittanceLocal, uncappedRemittanceLocal } from "@/lib/nationalization/ceoFinance";
 import { loadSoeGovernanceInputs } from "@/lib/nationalization/soeGovernanceInputs";
 import { TURNS_PER_DAY, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
-import { IDLE_UPKEEP_FRACTION } from "@/lib/constants/capacityEconomy";
+import { IDLE_UPKEEP_FRACTION, MOTHBALL_UPKEEP_FRACTION } from "@/lib/constants/capacityEconomy";
 import { sectorConstructionInProgressAnchor } from "@/lib/corporations/sectorProfitBasis";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import type { MarketSystemMode } from "@/lib/market/featureFlag";
@@ -218,7 +218,14 @@ export function estimateNationalizedOperatingIncome(
         })
       : 0;
     const effectiveMargin = Math.max(0, Math.min(100, sector.profitMargin + soePenalty));
-    const maintenance = revenueAnchor * (1 - effectiveMargin / 100);
+    // MOTHBALLED plants earn nothing (ticket #1072). `sector.revenue` is the
+    // plants-tier nameplate (capacity x mix price) and mothballing does not
+    // touch it, so without this the treasury kept booking a cold plant's full
+    // nameplate at its seeded margin as budget revenue and as remittable
+    // profit. The engine is unconditional in the other direction: a mothballed
+    // sector "earns exactly 0" (`marketHourlyRevenue`, sectorTurn D12).
+    const earningRevenueAnchor = plantsEnabled && sector.mothballed === true ? 0 : revenueAnchor;
+    const maintenance = earningRevenueAnchor * (1 - effectiveMargin / 100);
     // Plants: the growth charge is vestigial, but dropping it outright is a
     // one-off remittance windfall. Replace it with the two real capital costs
     // the plants tier creates — amortized construction-in-progress and the
@@ -272,12 +279,21 @@ export function estimateNationalizedOperatingIncome(
       Number.isFinite(sector.plantsUpkeepMarginBasisAnchor)
         ? Math.max(0, Math.min(1, sector.plantsUpkeepMarginBasisAnchor))
         : Math.max(0, 1 - effectiveMargin / 100);
+    // A mothballed plant is COLD, not idle: it pays MOTHBALL_UPKEEP_FRACTION on
+    // its whole capacity, which is the charge `plantsUpkeepCost` applies in the
+    // turn. Charging it the idle rate on the idle share instead both overstated
+    // the cost and, paired with the nameplate revenue above, let the sign of
+    // the whole line depend on the sector's seeded margin.
+    const upkeepCharge =
+      sector.mothballed === true
+        ? revenueAnchor * upkeepBasis * MOTHBALL_UPKEEP_FRACTION * upkeepLambda
+        : revenueAnchor * ownerIdleShare * upkeepBasis * IDLE_UPKEEP_FRACTION * upkeepLambda;
     const plantsCapitalCharge = plantsEnabled
       ? sectorConstructionInProgressAnchor(sector) * CAPEX_AMORTIZATION_PER_TURN * TURNS_PER_DAY +
-        revenueAnchor * ownerIdleShare * upkeepBasis * IDLE_UPKEEP_FRACTION * upkeepLambda
+        upkeepCharge
       : 0;
     const operatingProfit =
-      revenueAnchor - maintenance - (plantsEnabled ? plantsCapitalCharge : growthCostAnchor);
+      earningRevenueAnchor - maintenance - (plantsEnabled ? plantsCapitalCharge : growthCostAnchor);
     sectorIncome += operatingProfit;
   }
 
