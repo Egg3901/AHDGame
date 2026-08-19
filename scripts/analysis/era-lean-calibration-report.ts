@@ -44,8 +44,14 @@ interface MarginsModule {
 }
 
 async function loadMargins(): Promise<MarginsModule | null> {
+  // Guarded import: the dataset lands with the era recalibration branch. The
+  // specifier is a variable so tsc does not require the module to exist here.
+  const specifier = "../../src/lib/data/historicalPresidentialMargins";
   try {
-    const m = await import("@/lib/data/historicalPresidentialMargins");
+    const m = (await import(specifier)) as {
+      HISTORICAL_MARGINS: Record<string, Record<string, number>>;
+      HOUSE_NATIONAL_MARGIN: Record<string, number>;
+    };
     return { margins: m.HISTORICAL_MARGINS, houseNationalMargin: m.HOUSE_NATIONAL_MARGIN };
   } catch {
     return null;
@@ -125,7 +131,7 @@ async function main() {
         scored.map((l) => l.display),
         scored.map((l) => -margins[l.regionId])
       );
-      const houseMargin = marginsData?.houseNationalMargin[election];
+      const houseMargin = election ? marginsData?.houseNationalMargin[election] : undefined;
       const targetMean =
         houseMargin !== undefined
           ? CANONICAL_TRANSFER.slope * (-houseMargin / 10) + CANONICAL_TRANSFER.intercept
