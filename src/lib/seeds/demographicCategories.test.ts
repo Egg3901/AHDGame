@@ -58,12 +58,13 @@ describe("DEMOGRAPHIC_POSITIONS 1953 hydration (audit P0)", () => {
   it("getEraPositions('1953', 'AL') merges Solid-South state overrides without throwing", async () => {
     const { getEraPositions } = await import("./demographicCategories");
     const al = getEraPositions("1953", "AL");
-    // 2026-08 compressed calibration solved AL whites to -2.4 economic (#4054).
-    // The social value is authored independently: economically Democratic
-    // (Solid South) and socially reactionary (Jim Crow). It was -1.6, a scaled
-    // copy of the economic lean, which made the Deep South read as the most
-    // socially LEFT region in 1953.
-    expect(al.race?.white).toEqual({ economicLean: -2.4, socialLean: 4 });
+    // 2026-08 regional recalibration: Alabama now takes the Deep South regional
+    // table unshifted. Economically populist rather than left (-0.5: TVA, farm
+    // parity and rural electrification, not redistribution) and at the caste
+    // order's traditional ceiling (+4.1). The pair is authored independently:
+    // the social value was once -1.6, a scaled copy of the economic lean, which
+    // made the Deep South read as the most socially LEFT region in 1953.
+    expect(al.race?.white).toEqual({ economicLean: -0.5, socialLean: 4.1 });
   });
 
   it("getEraPositions('1953') applies STATE_POSITION_OVERRIDES when stateId is passed: VT shifts right of the era baseline", async () => {
