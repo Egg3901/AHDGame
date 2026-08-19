@@ -32,6 +32,7 @@ import {
 import type { FtaCoverage } from "@/lib/tariffs/ftaOverrides";
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
 import { deliveredFraction } from "@/lib/corporations/buildDelivery";
+import { readPlantsPnl, type PolicyStackRow } from "@/lib/corporations/plantsPnlBasis";
 import {
   SPLIT_BASE_CAPTURE_FRACTION,
   UNOWNED_CAPTURE_BONUS_MULTIPLIER,
@@ -1015,13 +1016,26 @@ export function computeSectorMarginSection(args: {
     typeof sector.effectiveProfitMargin === "number" ? sector.effectiveProfitMargin : null;
   const effectiveMargin = engineMargin ?? stackMargin;
   const effectiveMods = { ...mods, effective: effectiveMargin };
-  const maintenance = economicRevenue * (1 - effectiveMargin / 100);
-  const profit = economicRevenue - maintenance - sector.currentGrowthCost;
+  // Ticket 1122: prefer the P&L the turn actually booked over inverting the
+  // margin. `effectiveProfitMargin` is that P&L's OUTPUT, capped at 100, so
+  // inverting it recovers a zero operating cost from a genuinely negative one
+  // (profit == revenue, the reported defect) and drops upkeep + compliance on
+  // every plants sector because they sit outside the margin's scope. See
+  // `plantsPnlBasis.ts`. The inversion below stays as the fallback for sectors
+  // with no persisted P&L yet, where it is the pre-existing behaviour exactly.
+  const enginePnl = readPlantsPnl(sector);
+  const maintenance = enginePnl
+    ? enginePnl.operatingCost
+    : economicRevenue * (1 - effectiveMargin / 100);
+  const profit = enginePnl
+    ? enginePnl.profit
+    : economicRevenue - maintenance - sector.currentGrowthCost;
 
   return {
     mods: effectiveMods,
     maintenance,
     profit,
+    enginePnl,
     transitionProgress,
     strategyTransitionMod,
   };
@@ -1160,10 +1174,19 @@ export interface SectorPlantsSection {
     maxAffordableUnits: number;
   };
   /**
+   * The modifiers behind `pnl.policyAnchor`, already in money and summing to it
+   * exactly. Empty when there is no stack to explain, or on the fallback path
+   * where the credit cannot be separated from the residual.
+   */
+  policyStack: PolicyStackRow[];
+  /**
    * The physical profit and loss, ₳/day. Reconciles by construction:
-   * `profit = revenue − inputs − labour − upkeep − compliance − otherOperating
-   * − growthAndBuild`, and that identity equals the engine's own profit,
-   * because `otherOperating` is the solved residual (see `physicalPnl.ts`).
+   * `profit = revenue − inputs − labour − upkeep − compliance + policy
+   * − otherOperating − growthAndBuild`, and that identity IS the engine's own
+   * profit whenever `plantsPnl` is on the row, because every line is read
+   * straight off it (ticket 1122). Absent that row it falls back to inverting
+   * the margin, where `otherOperating` is the solved residual that makes the
+   * same identity hold.
    */
   pnl: {
     revenueAnchor: number;
@@ -1171,6 +1194,20 @@ export interface SectorPlantsSection {
     labourAnchor: number;
     upkeepAnchor: number;
     complianceAnchor: number;
+    /**
+     * The policy/tech modifier stack as money: tariffs, subsidies, state
+     * metrics, regional conditions, tech bonuses, strategy transition, the SOE
+     * and nationalization terms. POSITIVE is a credit that lowers cost.
+     *
+     * Under plants this is the ONLY channel by which any of those modifiers
+     * reaches profit, so showing it is the difference between a player seeing
+     * their subsidy and a player seeing an unexplained residual. 0 on the
+     * fallback path, where the credit is still buried in `otherOperatingAnchor`
+     * and cannot be separated.
+     */
+    policyAnchor: number;
+    /** The same stack in percentage points of revenue, after the soft cap. */
+    policyPp: number;
     otherOperatingAnchor: number;
     growthAndBuildAnchor: number;
     profitAnchor: number;
@@ -1302,7 +1339,35 @@ export function buildSectorPlantsSection(args: {
     profitAnchor: number;
     /** Physical input bill computed from the demand rows at market prices. */
     inputsAnchor: number;
+    /**
+     * Ticket 1122: the lines the turn ACTUALLY booked, in ₳. When present every
+     * money figure below is read straight off them and nothing is
+     * reconstructed. Absent on a sector that has not run a plants turn since
+     * the field shipped, which falls back to the margin inversion exactly as
+     * before. See `plantsPnlBasis.ts` for why the inversion is not enough.
+     */
+    enginePnl?: {
+      revenue: number;
+      inputs: number;
+      labour: number;
+      upkeep: number;
+      compliance: number;
+      otherOpex: number;
+      financialLegs: number;
+      inventoryCarry: number;
+      policyCredit: number;
+      policyPp: number;
+      operatingCost: number;
+      totalCost: number;
+      profit: number;
+    } | null;
   };
+  /**
+   * The modifier stack behind `pnl.policyAnchor`, already in money. Empty when
+   * there is no stack to explain. Built by `buildPolicyStackRows` from the same
+   * rows the corporation page's margin drilldown shows, so the two agree.
+   */
+  policyStack?: PolicyStackRow[];
   /** Regulatory burden in margin-pp equivalent (dominance). */
   regulatoryBurdenPp: number;
   /** Active-crisis margin penalty in pp (negative). */
@@ -1483,14 +1548,16 @@ export function buildSectorPlantsSection(args: {
     ? MOTHBALL_UPKEEP_FRACTION
     : utilization + IDLE_UPKEEP_FRACTION * idleShareForBill;
   const fullMaintenance = costBasis > 0 ? money.maintenanceNetAnchor / costBasis : 0;
-  const upkeepAnchor = nonNeg(
-    mothballed
-      ? money.maintenanceNetAnchor
-      : fullMaintenance * IDLE_UPKEEP_FRACTION * idleShareForBill
-  );
-  const complianceAnchor = nonNeg(
-    (money.realizedRevenueAnchor * Math.max(0, regulatoryBurdenPp)) / 100
-  );
+  const upkeepAnchor = money.enginePnl
+    ? nonNeg(money.enginePnl.upkeep)
+    : nonNeg(
+        mothballed
+          ? money.maintenanceNetAnchor
+          : fullMaintenance * IDLE_UPKEEP_FRACTION * idleShareForBill
+      );
+  const complianceAnchor = money.enginePnl
+    ? nonNeg(money.enginePnl.compliance)
+    : nonNeg((money.realizedRevenueAnchor * Math.max(0, regulatoryBurdenPp)) / 100);
   // The input bill renders at its real size, and `otherOperating` is the SIGNED
   // remainder that makes the named lines sum back to `maintenanceNet` exactly.
   //
@@ -1512,12 +1579,31 @@ export function buildSectorPlantsSection(args: {
   //
   // This mirrors the corporation page's `otherPp` residual (corporationDetail.ts,
   // ticket 1072), which was already signed and unclamped for the same reason.
-  const inputsAnchor = nonNeg(money.inputsAnchor);
-  const otherOperatingAnchor =
-    money.maintenanceNetAnchor - upkeepAnchor - complianceAnchor - inputsAnchor;
-  const financialEventsAnchor = nonNeg(
-    (money.realizedRevenueAnchor * Math.abs(Math.min(0, crisisMarginPenaltyPp))) / 100
-  );
+  //
+  // Ticket 1122 follow-up: all of the above is the FALLBACK. When the turn's own
+  // lines are on the row (`money.enginePnl`) they are used verbatim and nothing
+  // is inverted, because the inversion cannot be right at the margin cap: a
+  // sector whose policy credit outruns its operating bill has a NEGATIVE
+  // operating cost and a profit above its revenue, and `min(100, ...)` erases
+  // exactly that. The engine path also carries upkeep and compliance, which the
+  // margin's scope excludes and the profit includes.
+  const engine = money.enginePnl ?? null;
+  const inputsAnchor = engine ? engine.inputs : nonNeg(money.inputsAnchor);
+  const otherOperatingAnchor = engine
+    ? // Financial legs (disaster losses) and inventory carry have no line of
+      // their own in the cost chain, so they sit here, exactly as the residual
+      // used to carry them.
+      engine.otherOpex + engine.financialLegs + engine.inventoryCarry
+    : money.maintenanceNetAnchor - upkeepAnchor - complianceAnchor - inputsAnchor;
+  // The whole modifier stack as one signed line: positive is a credit that
+  // lowers cost. Rendered as its own row with a drilldown, so a player can see
+  // their subsidy or a live crisis as a number in the same units as the wage
+  // bill instead of it vanishing inside "other running costs".
+  const policyAnchor = engine ? engine.policyCredit : 0;
+  const policyPp = engine ? engine.policyPp : 0;
+  const financialEventsAnchor = engine
+    ? nonNeg(engine.financialLegs)
+    : nonNeg((money.realizedRevenueAnchor * Math.abs(Math.min(0, crisisMarginPenaltyPp))) / 100);
 
   // ─── Truth headline ───────────────────────────────────────────────────────
   // Everything below is per-PRODUCED-unit on purpose. The stored margin divides
@@ -1545,10 +1631,27 @@ export function buildSectorPlantsSection(args: {
   // Floor the SUM, not each leg: `maintenanceNet` is routinely negative (a
   // credit) under plants, and flooring it on its own double-counted wages that
   // the credit had already offset, inflating cost-per-unit.
-  const operatingCostAnchor = nonNeg(money.maintenanceNetAnchor + money.labourAnchor);
-  const totalCostAnchor = operatingCostAnchor + nonNeg(money.growthCostAnchor);
+  //
+  // Ticket 1122: with the engine's own lines the bill needs no flooring at all.
+  // A negative total would be a sector paid more to run than it spends, and the
+  // engine can say so; the fallback keeps the floor because an INVERTED total
+  // can go negative for reasons that are artefacts of the inversion.
+  const engineGrowthAnchor = engine
+    ? engine.totalCost -
+      engine.operatingCost -
+      engine.upkeep -
+      engine.compliance -
+      engine.inventoryCarry
+    : 0;
+  const operatingCostAnchor = engine
+    ? engine.totalCost - engineGrowthAnchor
+    : nonNeg(money.maintenanceNetAnchor + money.labourAnchor);
+  const totalCostAnchor = engine
+    ? engine.totalCost
+    : operatingCostAnchor + nonNeg(money.growthCostAnchor);
+  const revenueAnchor = engine ? engine.revenue : money.realizedRevenueAnchor;
   const receivedPerUnitAnchor =
-    producedUnits != null && producedUnits > 0 ? money.realizedRevenueAnchor / producedUnits : null;
+    producedUnits != null && producedUnits > 0 ? revenueAnchor / producedUnits : null;
   const costPerUnitAnchor =
     producedUnits != null && producedUnits > 0 ? operatingCostAnchor / producedUnits : null;
   const fillAdjustedMarginPct =
@@ -1609,18 +1712,20 @@ export function buildSectorPlantsSection(args: {
           ? Math.max(0, Math.floor(corpCapitalAnchor / perUnitChargedAnchor))
           : 0,
     },
+    policyStack: args.policyStack ?? [],
     pnl: {
-      revenueAnchor: money.realizedRevenueAnchor,
+      revenueAnchor,
       inputsAnchor,
-      labourAnchor: nonNeg(money.labourAnchor),
+      labourAnchor: engine ? engine.labour : nonNeg(money.labourAnchor),
       upkeepAnchor,
       complianceAnchor,
+      policyAnchor,
+      policyPp,
       otherOperatingAnchor,
-      growthAndBuildAnchor: nonNeg(money.growthCostAnchor),
+      growthAndBuildAnchor: engine ? nonNeg(engineGrowthAnchor) : nonNeg(money.growthCostAnchor),
       profitAnchor: money.profitAnchor,
       financialEventsAnchor,
-      avgSalePriceAnchor:
-        soldUnits != null && soldUnits > 0 ? money.realizedRevenueAnchor / soldUnits : null,
+      avgSalePriceAnchor: soldUnits != null && soldUnits > 0 ? revenueAnchor / soldUnits : null,
       profitPerUnitAnchor:
         producedUnits != null && producedUnits > 0 ? money.profitAnchor / producedUnits : null,
     },

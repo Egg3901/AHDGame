@@ -32,6 +32,7 @@ import { getCountryConfig } from "@/lib/constants/countries";
 import { getGameState } from "@/lib/gameState";
 import { getPublicShareQuote, getRoundedPublicMarketCap } from "@/lib/corporations/marketQuote";
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
+import { readPlantsPnl } from "@/lib/corporations/plantsPnlBasis";
 import { roundMarketingStrength } from "@/lib/utils/formatters";
 import {
   anchorToCorpCapital,
@@ -304,8 +305,11 @@ async function buildCorpDetail(nameLower: string): Promise<CorpDetailPayload> {
     );
     const sectorRevenueAnchor = sectorAmountAnchor(sectorEconomicRevenue(sector), sector);
     const growthCostAnchor = sectorAmountAnchor(sector.currentGrowthCost, sector);
-    const maint = sectorRevenueAnchor * (1 - effMargin / 100);
-    const profit = sectorRevenueAnchor - maint - growthCostAnchor;
+    // Ticket 1122: prefer the P&L the turn booked (see the financials route).
+    const bookedPnl = readPlantsPnl(sector);
+    const profit = bookedPnl
+      ? sectorAmountAnchor(bookedPnl.profit, sector)
+      : sectorRevenueAnchor - sectorRevenueAnchor * (1 - effMargin / 100) - growthCostAnchor;
     const yearlyProfit = profit * GAME_DAYS_PER_YEAR;
     if (yearlyProfit > 0) totalSectorNPVAnchor += yearlyProfit / NPV_ANNUAL_DISCOUNT_RATE;
   }
