@@ -343,6 +343,63 @@ describe("processPoliticalMetricsDynamics", () => {
     expect(op.updateOne.update.$set.values[family]).toBeGreaterThan(50);
   });
 
+  /**
+   * Ticket #1129 balance pass. A player built estates and nothing happened: the
+   * whole cabinet channel shared ONE cap, and on prod the standing tier settings
+   * had already filled it. The cap is now per channel, so the estate lands in
+   * its own channel and buys movement.
+   */
+  it("an estate still contributes when another cabinet channel is saturated", async () => {
+    const values = flatValues(50);
+    const family = unmodelledFamilies(values)[0];
+    expect(family).toBeTruthy();
+
+    wire({
+      metricsDocs: [
+        {
+          _id: "R1",
+          countryId: "UK",
+          values,
+          residuals: equilibriumResiduals("UK", values),
+          cabinetResiduals: { [family]: 8 },
+          cabinetResidualsBySource: { settings: { [family]: 8 } },
+        },
+      ],
+    });
+    db.collectionMocks.politicalCabinetContribution.findOne = vi.fn().mockResolvedValue({
+      _id: "UK",
+      countryId: "UK",
+      contribution: { [family]: 5 },
+      regional: { R1: { [family]: 2 } },
+      sources: {
+        settings: { contribution: { [family]: 5 }, regional: {} },
+        estates: { contribution: {}, regional: { R1: { [family]: 2 } } },
+      },
+      turn: 4,
+    });
+
+    await processPoliticalMetricsDynamics(db as unknown as Db, 5);
+    const op = (db.collectionMocks.politicalMetrics.bulkWrite as ReturnType<typeof vi.fn>).mock
+      .calls[0][0][0] as {
+      updateOne: {
+        update: {
+          $set: {
+            values: Record<string, number>;
+            cabinetResiduals: Record<string, number>;
+            cabinetResidualsBySource: Record<string, Record<string, number>>;
+          };
+        };
+      };
+    };
+    const set = op.updateOne.update.$set;
+    // The settings channel stays pinned at its own cap and absorbs nothing more.
+    expect(set.cabinetResidualsBySource.settings[family]).toBe(8);
+    // The estate contributes in full, on top, which the old single cap forbade.
+    expect(set.cabinetResidualsBySource.estates[family]).toBeCloseTo(2, 5);
+    expect(set.cabinetResiduals[family]).toBeCloseTo(10, 5);
+    expect(set.values[family]).toBeGreaterThan(50);
+  });
+
   it("applies a regional cabinet extra only to the sited region (ticket #1129)", async () => {
     const values = flatValues(50);
     const family = unmodelledFamilies(values)[0];
