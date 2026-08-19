@@ -8,6 +8,8 @@ import {
   resolveOfficeActionBonus,
 } from "@/lib/actions/officeActionBonus";
 import { getActionBreakdown } from "@/lib/actions/actionBreakdown";
+import { fundraiseYieldLocal } from "@/lib/actions";
+import { resolveStartingCountryId } from "@/lib/utils/profileDemographics";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
   Character,
@@ -326,7 +328,6 @@ async function getCharacterData() {
     patreonExpiresAt: viewerUser?.patreonExpiresAt ?? null,
     patreonSince: viewerUser?.patreonSince ?? null,
     patreonProfileBorder: viewerUser?.patreonProfileBorder ?? null,
-    accountCountryId: viewerUser?.accountCountryId ?? character.countryId,
     countrySlug: charCountryId?.toLowerCase() ?? "us",
     partyNames,
     partyHistory,
@@ -387,7 +388,6 @@ export default async function ProfilePage() {
     patreonExpiresAt,
     patreonSince,
     patreonProfileBorder,
-    accountCountryId,
     countrySlug,
     partyNames,
     partyHistory,
@@ -693,7 +693,7 @@ export default async function ProfilePage() {
                 dotColor={profileAccentHex}
                 markers={compassMarkers.length > 0 ? compassMarkers : undefined}
                 demographics={character.demographics}
-                startingCountryId={accountCountryId}
+                startingCountryId={resolveStartingCountryId(character)}
                 currentCountryId={character.countryId}
               />
 
@@ -725,10 +725,7 @@ export default async function ProfilePage() {
                   donorIncome={{
                     passivePerHour: fundDistribution.donorBaseBonus,
                     perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
-                    fundraiseYield: Math.round(
-                      (50_000 + character.donorBaseLevel * 2_000) *
-                        (1 + (character.politicalInfluence ?? 0) / 100)
-                    ),
+                    fundraiseYield: fundraiseYieldLocal(character, forexEnabled),
                     populationTier,
                     influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,
                   }}

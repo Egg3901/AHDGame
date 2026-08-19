@@ -4,6 +4,7 @@ import { memo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 import { calculateConvertCashInfamy } from "@/lib/actions";
 import { CARD_PHOTO_SCRIM, CATEGORY_ACCENTS, CATEGORY_LABELS } from "../actionsConstants";
@@ -34,6 +35,7 @@ const ActionCard = memo(function ActionCard({
   buildDonorBaseActionCost,
   buildDonorBaseFundCost,
   fundraiseYield,
+  campaignCurrency,
   displayCampaignFunds,
   displayPersonalWealth,
   blockGdpScaledCosts,
@@ -73,7 +75,8 @@ const ActionCard = memo(function ActionCard({
   if (isCampaign) effectiveFundLabel = formatAmount(campaignFundCost);
   else if (isAdvertise) effectiveFundLabel = formatAmount(advertiseFundCost);
   else if (isBuildDonorBase) effectiveFundLabel = formatAmount(buildDonorBaseFundCost);
-  else if (isFundraise) effectiveFundLabel = `+${formatAmount(fundraiseYield)}`;
+  else if (isFundraise)
+    effectiveFundLabel = `+${formatCurrencyFaceAmount(fundraiseYield, campaignCurrency)}`;
   else if (isConvertCash) {
     effectiveFundLabel =
       displayPersonalWealth > 0 ? `${formatAmount(displayPersonalWealth)} available` : "No cash";

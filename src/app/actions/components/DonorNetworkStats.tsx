@@ -1,14 +1,19 @@
 "use client";
 
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 
 interface DonorNetworkStatsProps {
+  /** Already in campaign-treasury local face value; do not re-convert. */
   fundraiseAmount: number;
+  fundraiseCurrency: CurrencyCode;
   donorUpgradeCost: number;
 }
 
 export default function DonorNetworkStats({
   fundraiseAmount,
+  fundraiseCurrency,
   donorUpgradeCost,
 }: DonorNetworkStatsProps) {
   const { formatAmount } = useCurrency();
@@ -28,7 +33,7 @@ export default function DonorNetworkStats({
               Fundraise Yield
             </div>
             <div className="text-xl font-bold text-green-400 tabular-nums">
-              {formatAmount(fundraiseAmount)}
+              {formatCurrencyFaceAmount(fundraiseAmount, fundraiseCurrency)}
             </div>
           </div>
           <div className="text-right">
