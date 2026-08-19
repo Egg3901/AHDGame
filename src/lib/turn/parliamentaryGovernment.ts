@@ -733,6 +733,101 @@ export async function autoAyeNPPsForParliamentaryAppointment(
   }
 }
 
+/**
+ * Auto-cast NPP votes on an active no-confidence motion along the party line.
+ *
+ * Mirrors `autoAyeNPPsForParliamentaryAppointment`: same billWhips lookup, same
+ * "never overwrite an existing vote" rule, same seat-weighted `$inc` guarded by
+ * an `$exists: false` filter so concurrent passes cannot double-count.
+ *
+ * Direction on a confidence motion is the inverse of an appointment vote. "aye"
+ * backs the MOTION, so it is a vote against the government:
+ *   - governing party and coalition NPPs vote "nay" (they keep the government)
+ *   - opposition NPPs vote "aye"
+ *   - NPPs with no party abstain (no party means no party line)
+ *
+ * A party whip still wins. A whip issued before this pass is honoured here via
+ * `billWhips`, and a whip issued afterwards overrides the default through
+ * `applyWhipVotesToGovernmentVote`, which decrements the old vote before
+ * writing the new one. Auto-voting is the floor, not a ceiling.
+ *
+ * Without this, NPP-held government benches cast nothing at all and a whipped
+ * opposition bloc could carry a motion on its own (ticket-1137).
+ */
+export async function autoVoteNPPsForNoConfidence(
+  db: Db,
+  countryId: CountryId,
+  voteId: ObjectId
+): Promise<void> {
+  const votesColl = getNoConfidenceVotesCollection(db);
+  const vote = await votesColl.findOne({ _id: voteId });
+  if (!vote || vote.status !== "active") return;
+
+  const govFormation = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
+  const governingPartyIds = await resolveGoverningPartyIdsFromDocuments(
+    db,
+    countryId,
+    govFormation,
+    null
+  );
+  // No resolvable government means there is no party line to follow.
+  if (governingPartyIds.size === 0) return;
+
+  const whips = await db
+    .collection("billWhips")
+    .find({
+      targetType: "noConfidenceVote",
+      targetId: voteId,
+      // NPP confidence voting only considers NPP whips; character whips already wrote player votes directly.
+      $or: [{ audience: "npp" }, { audience: { $exists: false } }],
+    })
+    .toArray();
+  const whipByParty = new Map(
+    (whips as unknown as Array<{ partyId: string; direction: "for" | "against" }>).map((w) => [
+      w.partyId,
+      w.direction,
+    ])
+  );
+
+  const officials = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .find({ officeType: getLowerChamberOfficeType(countryId), countryId, isNPP: true })
+    .toArray();
+
+  const existingVotes = vote.votes ?? {};
+  const seenNppIds = new Set<string>();
+
+  for (const mp of officials) {
+    if (!mp.nppId) continue;
+    const nppIdStr = mp.nppId.toString();
+    if (seenNppIds.has(nppIdStr)) continue;
+    seenNppIds.add(nppIdStr);
+
+    const nppKey = `npp_${nppIdStr}`;
+    // A vote already on the record (player whip, earlier pass) is never touched.
+    if (existingVotes[nppKey]) continue;
+    if (!mp.party) continue;
+
+    const whipDir = whipByParty.get(mp.party);
+    const voteChoice: "aye" | "nay" = whipDir
+      ? whipDir === "for"
+        ? "aye"
+        : "nay"
+      : governingPartyIds.has(mp.party)
+        ? "nay"
+        : "aye";
+
+    const weight = mp.seatsHeld ?? 1;
+    await votesColl.updateOne(
+      { _id: voteId, [`votes.${nppKey}`]: { $exists: false } },
+      {
+        $set: { [`votes.${nppKey}`]: voteChoice, updatedAt: new Date() },
+        $inc: { [voteChoice === "aye" ? "votesFor" : "votesAgainst"]: weight },
+      }
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Vote Resolution
 // ---------------------------------------------------------------------------
@@ -995,6 +1090,10 @@ export async function resolveParliamentaryNoConfidenceVote(
   const votesColl = getNoConfidenceVotesCollection(db);
   const govColl = getGovernmentFormationsCollection(db);
 
+  // Final party-line pass: benches that were never whipped still vote, so a
+  // government whose seats are NPP-held is not silently unseated (ticket-1137).
+  await autoVoteNPPsForNoConfidence(db, countryId, voteId);
+
   const vote = await votesColl.findOne({ _id: voteId });
   if (!vote || vote.status !== "active") return;
 
@@ -1194,7 +1293,8 @@ export async function processParliamentaryGovernmentVotes(
 }
 
 /**
- * Every-4-turn NPP auto-aye for all active PM appointment votes.
+ * Every-4-turn NPP auto-vote pass for all active PM appointment votes, plus
+ * the country's active no-confidence motion (party-line default).
  * Multiple appointment votes may be active concurrently.
  * CRITICAL: filters by countryId.
  */
@@ -1212,6 +1312,16 @@ export async function processParliamentaryNPPAutoAye(
 
   for (const vote of activeVotes) {
     await autoAyeNPPsForParliamentaryAppointment(db, countryId, vote._id);
+  }
+
+  // Same cadence for an active confidence motion, so the live tally shows the
+  // benches as they stand instead of an empty chamber until resolution.
+  const activeNoConfidence = await getNoConfidenceVotesCollection(db).findOne({
+    countryId,
+    status: "active",
+  });
+  if (activeNoConfidence) {
+    await autoVoteNPPsForNoConfidence(db, countryId, activeNoConfidence._id);
   }
 }
 

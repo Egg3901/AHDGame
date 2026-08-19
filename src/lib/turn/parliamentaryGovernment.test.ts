@@ -40,6 +40,7 @@ import {
   checkAppointmentEligibility,
   isVoteClosed,
   noConfidenceMotionCarries,
+  autoVoteNPPsForNoConfidence,
 } from "./parliamentaryGovernment";
 
 describe("isVoteClosed — turn-based with closesAt fallback", () => {
@@ -1293,5 +1294,223 @@ describe("appointPrimeMinister — same-holder announce guard", () => {
       new Date()
     );
     expect(sendCountryGameEvent).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("autoVoteNPPsForNoConfidence — ticket-1137 NPP benches vote the party line", () => {
+  it("keeps a 364-seat NPP government alive against a whipped 215-seat opposition bloc", async () => {
+    const voteId = new ObjectId();
+    const targetPmId = new ObjectId();
+    const govNppId = new ObjectId();
+    const oppNppId = new ObjectId();
+    const govKey = `npp_${govNppId.toString()}`;
+    const oppKey = `npp_${oppNppId.toString()}`;
+
+    // Mutable vote doc so the auto-vote pass and the resolver read the same
+    // record, the way they do against a real collection.
+    const voteDoc: {
+      _id: ObjectId;
+      countryId: string;
+      status: string;
+      votesFor: number;
+      votesAgainst: number;
+      votes: Record<string, "aye" | "nay">;
+      targetPmCharacterId: ObjectId;
+    } = {
+      _id: voteId,
+      countryId: "UK",
+      status: "active",
+      votesFor: 215, // opposition bloc, already whipped in
+      votesAgainst: 0,
+      votes: { [oppKey]: "aye" },
+      targetPmCharacterId: targetPmId,
+    };
+
+    db.collectionMocks["noConfidenceVotes"] = {
+      ...db.collection("noConfidenceVotes"),
+      findOne: vi.fn().mockImplementation(async () => voteDoc),
+      updateOne: vi
+        .fn()
+        .mockImplementation(
+          async (
+            filter: Record<string, unknown>,
+            update: { $set?: Record<string, unknown>; $inc?: Record<string, number> }
+          ) => {
+            // Honour the `$exists: false` guard so an existing vote is never
+            // overwritten, exactly as Mongo would.
+            for (const [key, cond] of Object.entries(filter)) {
+              if (!key.startsWith("votes.")) continue;
+              const nppKey = key.slice("votes.".length);
+              if (
+                (cond as { $exists?: boolean }).$exists === false &&
+                voteDoc.votes[nppKey] !== undefined
+              ) {
+                return { matchedCount: 0, modifiedCount: 0 };
+              }
+            }
+            for (const [key, value] of Object.entries(update.$set ?? {})) {
+              if (key.startsWith("votes.")) {
+                voteDoc.votes[key.slice("votes.".length)] = value as "aye" | "nay";
+              }
+            }
+            for (const [key, value] of Object.entries(update.$inc ?? {})) {
+              if (key === "votesFor") voteDoc.votesFor += value;
+              if (key === "votesAgainst") voteDoc.votesAgainst += value;
+            }
+            return { matchedCount: 1, modifiedCount: 1 };
+          }
+        ),
+      findOneAndUpdate: vi
+        .fn()
+        .mockResolvedValue({ _id: voteId, countryId: "UK", status: "failed" }),
+      updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+    } as MockDb["collectionMocks"][string];
+
+    db.collectionMocks["governmentFormations"] = {
+      ...db.collection("governmentFormations"),
+      findOne: vi.fn().mockResolvedValue({
+        _id: "UK",
+        status: "formed",
+        pmCharacterId: targetPmId,
+        governingPartyId: "1",
+        coalitionId: null,
+        coalitionPartyIds: null,
+        majorityThreshold: 313,
+        totalSeats: 625,
+        seatsByParty: { "1": 364, "2": 215 },
+      }),
+      updateOne: vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
+    } as MockDb["collectionMocks"][string];
+
+    const officials = [
+      {
+        nppId: govNppId,
+        isNPP: true,
+        countryId: "UK",
+        officeType: "commons",
+        party: "1",
+        seatsHeld: 364,
+      },
+      {
+        nppId: oppNppId,
+        isNPP: true,
+        countryId: "UK",
+        officeType: "commons",
+        party: "2",
+        seatsHeld: 215,
+      },
+    ];
+    db.collectionMocks["electedOfficials"] = {
+      ...db.collection("electedOfficials"),
+      find: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue(officials),
+        sort: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+      }),
+    } as MockDb["collectionMocks"][string];
+
+    // No whip on the government benches: the opposition whipped, the
+    // government did not. That is the prod scenario.
+    db.collectionMocks["billWhips"] = {
+      ...db.collection("billWhips"),
+      find: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ partyId: "2", direction: "for", audience: "npp" }]),
+        sort: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+      }),
+    } as MockDb["collectionMocks"][string];
+
+    db.collectionMocks["pmAppointmentVotes"] = {
+      ...db.collection("pmAppointmentVotes"),
+      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+    } as MockDb["collectionMocks"][string];
+
+    db.collectionMocks["characters"] = {
+      ...db.collection("characters"),
+      findOne: vi.fn().mockResolvedValue({ _id: targetPmId, userId: new ObjectId() }),
+      updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+      find: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+        project: vi.fn().mockReturnThis(),
+      }),
+    } as MockDb["collectionMocks"][string];
+
+    const now = new Date("2026-08-19T18:00:00Z");
+    await resolveParliamentaryNoConfidenceVote(db as unknown as Db, "UK", voteId, now);
+
+    // Government benches auto-voted to keep the government; the whipped
+    // opposition vote was left exactly as the whip set it.
+    expect(voteDoc.votes[govKey]).toBe("nay");
+    expect(voteDoc.votes[oppKey]).toBe("aye");
+
+    const claim = (
+      db.collectionMocks["noConfidenceVotes"].findOneAndUpdate as ReturnType<typeof vi.fn>
+    ).mock.calls[0];
+    expect(claim[1].$set.status).toBe("failed");
+    expect(claim[1].$set.votesFor).toBe(215);
+    expect(claim[1].$set.votesAgainst).toBe(364);
+
+    const updateCalls = (
+      db.collectionMocks["governmentFormations"].updateOne as ReturnType<typeof vi.fn>
+    ).mock.calls;
+    expect(updateCalls.find((c) => c[1].$set?.status === "pending")).toBeUndefined();
+  });
+
+  it("lets a later whip override the auto-cast default", async () => {
+    const voteId = new ObjectId();
+    const govNppId = new ObjectId();
+    const govKey = `npp_${govNppId.toString()}`;
+
+    const voteDoc = {
+      _id: voteId,
+      countryId: "UK",
+      status: "active",
+      votesFor: 0,
+      votesAgainst: 0,
+      votes: { [govKey]: "aye" } as Record<string, "aye" | "nay">,
+    };
+
+    db.collectionMocks["noConfidenceVotes"] = {
+      ...db.collection("noConfidenceVotes"),
+      findOne: vi.fn().mockResolvedValue(voteDoc),
+      updateOne: vi.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 }),
+    } as MockDb["collectionMocks"][string];
+
+    db.collectionMocks["governmentFormations"] = {
+      ...db.collection("governmentFormations"),
+      findOne: vi.fn().mockResolvedValue({
+        _id: "UK",
+        governingPartyId: "1",
+        coalitionId: null,
+        coalitionPartyIds: null,
+      }),
+    } as MockDb["collectionMocks"][string];
+
+    db.collectionMocks["electedOfficials"] = {
+      ...db.collection("electedOfficials"),
+      find: vi.fn().mockReturnValue({
+        toArray: vi
+          .fn()
+          .mockResolvedValue([
+            {
+              nppId: govNppId,
+              isNPP: true,
+              countryId: "UK",
+              officeType: "commons",
+              party: "1",
+              seatsHeld: 364,
+            },
+          ]),
+        sort: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+      }),
+    } as MockDb["collectionMocks"][string];
+
+    await autoVoteNPPsForNoConfidence(db as unknown as Db, "UK", voteId);
+
+    // The whipped "aye" survives: auto-voting never writes over a recorded vote.
+    expect(voteDoc.votes[govKey]).toBe("aye");
+    expect(db.collectionMocks["noConfidenceVotes"].updateOne).not.toHaveBeenCalled();
   });
 });
