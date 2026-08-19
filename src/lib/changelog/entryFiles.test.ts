@@ -1,3 +1,6 @@
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { describe, it, expect } from "vitest";
 import {
   ENTRY_DIRS,
@@ -6,6 +9,8 @@ import {
   parseEntryStem,
   toEntrySuffix,
   devEntryFileName,
+  frontmatterDamage,
+  BARE_NAME_CUTOFF_DATE,
 } from "./entryFiles";
 import { loadDevPosts, loadPublicPosts } from "./posts";
 
@@ -64,5 +69,70 @@ describe("content/changelog entries", () => {
     const second = loadDevPosts().map((p) => p.slug);
     expect(first).toEqual(second);
     expect(first).toEqual([...new Set(first)]);
+  });
+});
+
+describe("frontmatterDamage", () => {
+  const good = `---
+version: "1.2.3"
+summary: >-
+  Indented continuation.
+---
+Body
+`;
+
+  it("passes a well formed entry", () => {
+    expect(frontmatterDamage(good)).toEqual([]);
+  });
+
+  it("catches the signature a conflict-resolution script left on 1.2.4 and 1.2.8", () => {
+    const blankLine = `---
+
+version: "1.2.3"
+---
+Body
+`;
+    expect(frontmatterDamage(blankLine)).toContain(
+      "blank line directly after the opening --- delimiter"
+    );
+
+    const unclosed = `---
+version: "1.2.3"
+summary: >-
+Not indented, so the block never ends.
+`;
+    const damage = frontmatterDamage(unclosed);
+    expect(damage).toContain("frontmatter is never closed by a second --- delimiter");
+
+    const unindented = `---
+version: "1.2.3"
+summary: >-
+Not indented.
+---
+Body
+`;
+    expect(frontmatterDamage(unindented).join(" ")).toContain("unindented content");
+  });
+});
+
+describe("bare dev entry names", () => {
+  it("accepts entries authored on or before the cutoff and rejects later ones", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "changelog-guard-"));
+    const write = (name: string, date: string) =>
+      fs.writeFileSync(
+        path.join(dir, name),
+        `---\nversion: "${name.slice(0, 6)}"\ndate: ${date}\ntitle: T\n---\nBody\n`
+      );
+
+    write("1.2.16.md", BARE_NAME_CUTOFF_DATE);
+    expect(checkEntryDir(dir, { bareVersionOnly: false })).toEqual([]);
+
+    write("1.2.17.md", "2026-09-01");
+    const problems = checkEntryDir(dir, { bareVersionOnly: false });
+    expect(problems).toHaveLength(1);
+    expect(problems[0].file).toBe("1.2.17.md");
+    expect(problems[0].problem).toContain("<version>-<topic>.md");
+
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });

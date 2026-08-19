@@ -62,47 +62,59 @@ export function devEntryFileName(version: string, suffix: string): string {
 }
 
 /**
- * Dev entries that predate the suffix convention.
+ * The last day on which a bare `<version>.md` dev entry is accepted.
  *
- * They keep their bare `<version>.md` names so nothing that links to them or
- * quotes them has to change. The list only ever shrinks: a new entry is not
- * allowed to be added to it.
+ * Grandfathering has to survive other pull requests landing: any hardcoded list
+ * of accepted stems goes stale the moment a branch that was cut before this one
+ * merges, and then someone has to hand-patch the list. Deriving the set from git
+ * history is not an option either, because CI checks out at depth 1, so no
+ * earlier commit is present to compare against.
+ *
+ * The entry's own frontmatter date is the stable signal. Every entry already
+ * carries one, it is committed alongside the file, and it does not move when
+ * branches merge in a different order. An entry authored on or before the cutoff
+ * keeps its bare name; anything dated after it must carry a topic suffix. The
+ * grandfathered set therefore shrinks on its own as time passes, with nothing to
+ * maintain.
  */
-export const LEGACY_BARE_DEV_STEMS = new Set<string>([
-  "0.4.0",
-  "0.4.1",
-  "0.4.2",
-  "1.0.0",
-  "1.1.0",
-  "1.1.1",
-  "1.1.2",
-  "1.1.7",
-  "1.1.8",
-  "1.1.9",
-  "1.1.10",
-  "1.1.11",
-  "1.1.12",
-  "1.1.13",
-  "1.1.14",
-  "1.1.15",
-  "1.1.16",
-  "1.1.17",
-  "1.1.39",
-  "1.2.0",
-  "1.2.1",
-  "1.2.2",
-  "1.2.3",
-  "1.2.4",
-  "1.2.5",
-  "1.2.6",
-  "1.2.7",
-  "1.2.8",
-  "1.2.9",
-  "1.2.10",
-  "1.2.11",
-  "1.2.12",
-  "1.2.15",
-]);
+export const BARE_NAME_CUTOFF_DATE = "2026-08-19";
+
+/**
+ * Damage a conflict-resolution script left on 1.2.4 and 1.2.8: a blank line
+ * after the opening delimiter, an unindented `>-` block, or a frontmatter block
+ * that is never closed. The parser returns an empty object for all three, so the
+ * entry loads as nothing and silently disappears from the feed instead of
+ * failing loudly. Named here so the guard reports the cause, not just the
+ * missing fields that follow from it.
+ */
+export function frontmatterDamage(raw: string): string[] {
+  const found: string[] = [];
+  const lines = raw.split(/\r?\n/);
+
+  if (lines[0]?.trim() !== "---") {
+    found.push("file does not open with a --- frontmatter delimiter");
+    return found;
+  }
+  if (lines[1]?.trim() === "") {
+    found.push("blank line directly after the opening --- delimiter");
+  }
+
+  const closeIdx = lines.findIndex((line, i) => i > 0 && line.trim() === "---");
+  if (closeIdx === -1) {
+    found.push("frontmatter is never closed by a second --- delimiter");
+    return found;
+  }
+
+  for (let i = 1; i < closeIdx; i++) {
+    if (!/^[A-Za-z0-9_-]+:\s*>-?\s*$/.test(lines[i])) continue;
+    const next = lines[i + 1];
+    if (next !== undefined && next.trim() !== "" && !/^\s/.test(next)) {
+      found.push(`block scalar on line ${i + 1} has unindented content beneath it`);
+    }
+  }
+
+  return found;
+}
 
 export interface EntryProblem {
   file: string;
@@ -143,22 +155,30 @@ export function checkEntryDir(dir: string, opts: { bareVersionOnly: boolean }): 
       });
       continue;
     }
+    const raw = fs.readFileSync(path.join(dir, name), "utf-8");
+    const { data } = parseFrontmatter(raw);
+
     if (opts.bareVersionOnly && parsed.suffix) {
       problems.push({
         file: name,
         problem: "public entries are the published URL and must be named <version>.md",
       });
     }
-    if (!opts.bareVersionOnly && !parsed.suffix && !LEGACY_BARE_DEV_STEMS.has(stem)) {
-      problems.push({
-        file: name,
-        problem:
-          "a bare <version>.md name is what makes parallel branches collide; name it <version>-<topic>.md, e.g. 1.2.3-union-dues.md",
-      });
+    for (const damage of frontmatterDamage(raw)) {
+      problems.push({ file: name, problem: damage });
     }
 
-    const raw = fs.readFileSync(path.join(dir, name), "utf-8");
-    const { data } = parseFrontmatter(raw);
+    const entryDate = asString(data.date);
+    if (
+      !opts.bareVersionOnly &&
+      !parsed.suffix &&
+      !(entryDate && entryDate <= BARE_NAME_CUTOFF_DATE)
+    ) {
+      problems.push({
+        file: name,
+        problem: `a bare <version>.md name is what makes parallel branches collide; entries dated after ${BARE_NAME_CUTOFF_DATE} must be named <version>-<topic>.md, e.g. 1.2.3-union-dues.md`,
+      });
+    }
 
     for (const field of REQUIRED_FIELDS) {
       if (!asString(data[field])) {
@@ -174,9 +194,8 @@ export function checkEntryDir(dir: string, opts: { bareVersionOnly: boolean }): 
       });
     }
 
-    const date = asString(data.date);
-    if (date && !DATE_RE.test(date)) {
-      problems.push({ file: name, problem: `date "${date}" is not YYYY-MM-DD` });
+    if (entryDate && !DATE_RE.test(entryDate)) {
+      problems.push({ file: name, problem: `date "${entryDate}" is not YYYY-MM-DD` });
     }
 
     for (const badge of asStringArray(data.badges)) {
