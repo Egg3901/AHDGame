@@ -120,6 +120,84 @@ describe("buildSectorPlantsSection", () => {
     expect(s.pnl.otherOperatingAnchor).toBeGreaterThanOrEqual(0);
   });
 
+  // Ticket 1122, reproduced from prod sector 6a83e59f97baa9dbe6bb7980 (a
+  // California newsroom): realized revenue 321,760.57, engine margin 88.63%,
+  // wage bill 70,561.75, no growth spend. The engine's operating bill is
+  // therefore 36,584.10, which is LESS than the wage bill alone, because the
+  // sector's solved other-opex anchor is negative (-0.0754/unit). The panel
+  // used to clamp both the inputs line and the residual at zero, so it printed
+  // $322K revenue, $70.6K of wages, $0 on every other line, and $285K of profit
+  // underneath: 322 - 70.6 = 251.4, not 285.
+  describe("signed operating residual (ticket 1122)", () => {
+    const REALIZED = 321_760.57;
+    const MARGIN_PCT = 88.63;
+    const MAINTENANCE = REALIZED * (1 - MARGIN_PCT / 100);
+    const LABOUR = 70_561.75;
+    const PROFIT = REALIZED - MAINTENANCE;
+    const newsroom = {
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      sectorType: "media" as const,
+      sector: sectorFixture({
+        sectorType: "media",
+        revenue: 243_873.89,
+        realizedRevenue: REALIZED,
+        laborCost: LABOUR,
+        effectiveProfitMargin: MARGIN_PCT,
+        currentGrowthCost: 0,
+      }),
+      money: {
+        realizedRevenueAnchor: REALIZED,
+        // What sectorDetail passes: gross maintenance NET of the wage carve-out.
+        // Negative here, and that is the sector's real state, not an error.
+        maintenanceNetAnchor: MAINTENANCE - LABOUR,
+        labourAnchor: LABOUR,
+        growthCostAnchor: 0,
+        profitAnchor: PROFIT,
+        inputsAnchor: 12_400,
+      },
+    };
+
+    it("reproduces the owner's 322 / 70.6 / 285 panel and makes it add up", () => {
+      const s = buildSectorPlantsSection(newsroom);
+      expect(s.pnl.revenueAnchor).toBeCloseTo(321_760.57, 2);
+      expect(s.pnl.labourAnchor).toBeCloseTo(70_561.75, 2);
+      expect(s.pnl.profitAnchor).toBeCloseTo(285_176.39, 2);
+
+      const costs =
+        s.pnl.inputsAnchor +
+        s.pnl.labourAnchor +
+        s.pnl.upkeepAnchor +
+        s.pnl.complianceAnchor +
+        s.pnl.otherOperatingAnchor +
+        s.pnl.growthAndBuildAnchor;
+      expect(s.pnl.revenueAnchor - costs).toBeCloseTo(s.pnl.profitAnchor, 6);
+      // The lines the player reads must total the engine's operating bill, not
+      // the wage bill on its own.
+      expect(costs).toBeCloseTo(MAINTENANCE, 6);
+    });
+
+    it("shows the input bill at its real size instead of clamping it to zero", () => {
+      const s = buildSectorPlantsSection(newsroom);
+      expect(s.pnl.inputsAnchor).toBeCloseTo(12_400, 6);
+    });
+
+    it("carries the offsetting credit as a negative residual, not a hidden zero", () => {
+      const s = buildSectorPlantsSection(newsroom);
+      expect(s.pnl.otherOperatingAnchor).toBeLessThan(0);
+    });
+
+    it("does not double count wages in cost per unit when the residual is a credit", () => {
+      const s = buildSectorPlantsSection(newsroom);
+      const produced = s.producedUnits as number;
+      // Operating cost per produced unit is the engine's bill spread over
+      // output. Flooring maintenanceNet on its own would have charged the full
+      // wage bill with no credit against it, i.e. roughly twice the truth.
+      expect(s.truth.costPerUnitAnchor).toBeCloseTo(MAINTENANCE / produced, 6);
+      expect(s.truth.costPerUnitAnchor).toBeLessThan(LABOUR / produced);
+    });
+  });
+
   it("quotes a per-unit build price the dialog can multiply, with an affordable cap", () => {
     const s = buildSectorPlantsSection({ eraUnitScale: 1, ...BASE_ARGS, sector: sectorFixture() });
     expect(s.buildQuote.perUnitAnchor).toBeGreaterThan(0);

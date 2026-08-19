@@ -167,6 +167,9 @@ export function SectorMarginDrilldown({
               <ModifierLine label="Inputs (at market prices)" value={-physical.inputsPp} />
               {physical.laborPp != null && <ModifierLine label="Wages" value={-physical.laborPp} />}
               <ModifierLine label="Upkeep, taxes & other operating" value={-physical.otherPp} />
+              {physical.policyPp != null && physical.policyPp !== 0 && (
+                <ModifierLine label="Policy, tax and support" value={physical.policyPp} />
+              )}
             </div>
             <div className="mt-2 flex items-center justify-between border-t border-card-border pt-2 text-[12px]">
               <span className="font-semibold text-foreground">Effective margin</span>
@@ -177,9 +180,10 @@ export function SectorMarginDrilldown({
               </span>
             </div>
             <p className="mt-2 text-[11px] leading-snug text-muted">
-              This margin comes from real costs, so the cost lines above always add up to it. The
-              influences listed below steer those costs and your prices instead of adding percentage
-              points directly.
+              This margin comes from real costs, so the cost lines above always add up to it. Every
+              modifier listed below reaches your profit through the single &ldquo;policy, tax and
+              support&rdquo; line, which the sector page shows in money with each modifier&rsquo;s
+              own share.
             </p>
           </>
         ) : (

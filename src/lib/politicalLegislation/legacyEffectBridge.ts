@@ -52,10 +52,25 @@
 import { getMetricDefinition } from "@/lib/constants/metricDefinitions";
 import { metricQualityRange } from "@/lib/corporations/sectorMetricMarginProfiles";
 import type { MetricCategoryId } from "@/lib/db/types";
+import { MIN_CRISIS_DURATION_TURNS } from "@/lib/crises/crisisDuration";
 import { ADAPTER_TIER1 } from "./marginAdapter";
 
 /** Largest board movement one legacy-unit conversion may produce, either way. */
 export const BOARD_DELTA_CAP = 12;
+
+/**
+ * The same allowance, spread over a full-length crisis, for effects that RECUR
+ * every turn.
+ *
+ * A per-write cap alone does not bound a per-turn effect: a "grid reliability
+ * collapse" tick still arrived at -12 board points on every one of the crisis's
+ * 24 turns, which annihilates the family just as thoroughly as one -155 write
+ * did, only slower. The rule that makes both cases sane is the same one:
+ * ONE CRISIS BENDS A FAMILY BY AT MOST ONE CAP, whether it spends that in a
+ * single shock or over its whole life. Callers applying a recurring effect pass
+ * this instead of `BOARD_DELTA_CAP`.
+ */
+export const BOARD_TICK_DELTA_CAP = BOARD_DELTA_CAP / MIN_CRISIS_DURATION_TURNS;
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -79,7 +94,9 @@ export function boardDeltaForLegacyEffect(
   metricId: string,
   legacyDelta: number,
   /** Opt-in era: score the delta against the metric's band FOR THAT YEAR. */
-  era?: { countryId?: string | null; year?: number | null }
+  era?: { countryId?: string | null; year?: number | null },
+  /** Cap for this write. Recurring effects pass `BOARD_TICK_DELTA_CAP`. */
+  cap: number = BOARD_DELTA_CAP
 ): BoardScoreDelta | null {
   if (!Number.isFinite(legacyDelta) || legacyDelta === 0) return null;
   const familyId = ADAPTER_TIER1[`${category}.${metricId}`];
@@ -92,7 +109,7 @@ export function boardDeltaForLegacyEffect(
 
   const magnitude = (legacyDelta / (max - min)) * 100;
   const signed = definition.isHigherBetter ? magnitude : -magnitude;
-  const scoreDelta = clamp(signed, -BOARD_DELTA_CAP, BOARD_DELTA_CAP);
+  const scoreDelta = clamp(signed, -cap, cap);
   if (!Number.isFinite(scoreDelta) || scoreDelta === 0) return null;
   return { familyId, scoreDelta };
 }

@@ -65,3 +65,52 @@ describe("MarketMoneyPanel period and scope labels", () => {
     expect(link.getAttribute("href")).toBe("/corporation/natcorp-1?tab=overview");
   });
 });
+
+describe("signed cost lines (ticket 1122)", () => {
+  // Same prod newsroom as sectorDetailPlants.test.ts: $322K revenue, $70.6K of
+  // wages, a $34K operating credit, $285K of profit. The credit has to be on
+  // screen, or revenue minus the visible lines lands on $251K and the player is
+  // reading a panel that does not add up.
+  const newsroom = {
+    producedUnits: 1_000,
+    soldUnits: 900,
+    unsoldUnits: 100,
+    demandGapUnits: 0,
+    fillRate: 0.9,
+    pnl: {
+      revenueAnchor: 321_760,
+      inputsAnchor: 12_400,
+      labourAnchor: 70_562,
+      upkeepAnchor: 0,
+      complianceAnchor: 0,
+      otherOperatingAnchor: -46_378,
+      growthAndBuildAnchor: 0,
+      profitAnchor: 285_176,
+      financialEventsAnchor: 0,
+      avgSalePriceAnchor: 4.43,
+      profitPerUnitAnchor: 285.18,
+    },
+    truth: null,
+  } as never;
+
+  it("renders a negative running-cost line as a credit and totals the real bill", () => {
+    render(
+      <MarketMoneyPanel
+        plants={newsroom}
+        sectorType="media"
+        financials={null}
+        corporation={{ _id: "corp-1", name: "Lockheed Commerce" }}
+      />
+    );
+
+    // The credit reads as money added back, never as "− −$46,378".
+    expect(screen.getByText("+ M46378")).toBeTruthy();
+    expect(screen.queryByText("− M-46378")).toBeNull();
+    // Wages still bill in full.
+    expect(screen.getByText("− M70562")).toBeTruthy();
+    // All costs = 12,400 + 70,562 − 46,378 = 36,584, and
+    // 321,760 − 36,584 = 285,176, the profit printed underneath.
+    expect(screen.getByText("− M36584")).toBeTruthy();
+    expect(screen.getByText("M285176")).toBeTruthy();
+  });
+});

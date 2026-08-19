@@ -954,6 +954,64 @@ export interface CorporateSector {
    */
   plantsUpkeepMarginBasisAnchor?: number;
   /**
+   * Plants tier (ticket 1122): the assembled physical P&L the turn ACTUALLY
+   * booked for this sector, persisted so read surfaces stop rebuilding it out
+   * of `effectiveProfitMargin`.
+   *
+   * `effectiveProfitMargin` is an OUTPUT of this P&L, and a capped one:
+   * `derivedMarginPct = min(100, 100 x (1 - operatingCost / revenue))`. The cap
+   * is right for a display percentage and wrong as a source of money. When a
+   * sector's policy credit outruns its operating bill the operating cost goes
+   * NEGATIVE and the booked profit legitimately exceeds revenue, but a reader
+   * inverting the capped percentage recovers an operating cost of exactly zero
+   * and reports profit == revenue. Nine prod media sectors sat at the cap.
+   * Inverting the percentage also silently drops upkeep and compliance, which
+   * are outside the margin's scope but inside the profit.
+   *
+   * Every field is on the DAILY basis and in the same stored currency as
+   * `revenue` and `laborCost`. Display and analytics only, exactly like
+   * `laborCost`: nothing in the engine reads it back, so it cannot feed the
+   * economy. Written on every physical-P&L turn, absent below plants and on
+   * sectors that have not run a plants turn since this shipped, and readers
+   * keep their old margin-inversion path as the fallback.
+   */
+  plantsPnl?: {
+    /**
+     * Realized revenue the P&L was assembled against, inventory sell-down
+     * included. Equals the persisted `realizedRevenue` exactly.
+     */
+    revenue: number;
+    /** Inventory sell-down revenue inside `revenue`. */
+    inventoryRevenue: number;
+    /** Inventory carrying cost inside `totalCost`. */
+    inventoryCarry: number;
+    inputs: number;
+    labour: number;
+    upkeep: number;
+    compliance: number;
+    /** SIGNED: the calibration residual is negative on most prod sectors. */
+    otherOpex: number;
+    financialLegs: number;
+    /**
+     * The policy/tech modifier stack as money. POSITIVE is a credit that
+     * lowers cost, negative a charge. This is the single channel through which
+     * tariffs, subsidies, state metrics, regional conditions, tech margin
+     * bonuses, strategy transition and the SOE/nationalization terms reach a
+     * plants sector's profit.
+     */
+    policyCredit: number;
+    /** The same stack in percentage points, after the soft cap. */
+    policyPp: number;
+    /** inputs + labour + otherOpex + financialLegs - policyCredit. */
+    operatingCost: number;
+    /** operatingCost + upkeep + compliance + growth + inventory carry. */
+    totalCost: number;
+    /** revenue - totalCost. The number the turn booked. */
+    profit: number;
+    /** Turn this was written on, so a stale row is recognisable. */
+    turn: number;
+  };
+  /**
    * Plants tier (P3a, D12): the sector is MOTHBALLED. Its capacity produces
    * nothing and offers nothing to the market, and it pays only
    * MOTHBALL_UPKEEP_FRACTION of the maintenance it would carry while running.
