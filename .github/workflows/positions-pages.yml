@@ -1,0 +1,43 @@
+name: positions-pages
+
+# Publishes the state positions atlas viewer to GitHub Pages whenever the
+# seed data that feeds it changes on development (or the viewer itself changes).
+on:
+  push:
+    branches: [development]
+    paths:
+      - "src/lib/seeds/**"
+      - "tools/positions-atlas/**"
+      - "scripts/analysis/export-lean-atlas.ts"
+      - ".github/workflows/positions-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: positions-pages
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsx --tsconfig tsconfig.json scripts/analysis/export-lean-atlas.ts tools/positions-atlas/lean-atlas.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: tools/positions-atlas
+      - id: deployment
+        uses: actions/deploy-pages@v4

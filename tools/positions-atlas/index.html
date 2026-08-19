@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>A House Divided: State Positions Atlas</title>
+<style>
+  :root {
+    --bg: #0b0b14; --card: #14141f; --border: #2a2a3a; --fg: #e8e8f0; --muted: #9a9ab0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  button.chip { background: var(--card); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  button.chip.on { border-color: #a78bfa; color: #c4b5fd; background: #a78bfa1a; }
+  .slider-row { display: flex; align-items: center; gap: 12px; margin: 10px 0 18px; }
+  .slider-row input { flex: 1; }
+  .year { font-variant-numeric: tabular-nums; font-weight: 600; width: 4ch; }
+  #grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; max-width: 760px; }
+  .tile { aspect-ratio: 1; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.7); cursor: pointer; position: relative; }
+  .tile:hover { outline: 2px solid #fff8; }
+  .legend { max-width: 420px; margin: 16px 0; }
+  .legend .bar { height: 10px; border-radius: 999px; border: 1px solid var(--border); }
+  .legend .row { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; margin-top: 3px; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-top: 20px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 8px; border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border-top: none; cursor: pointer; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: baseline; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 800px) { .cols { grid-template-columns: 1fr; } }
+  .note { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>State Positions Atlas</h1>
+  <div class="sub">Derived electorate leans per state, by seed era and blended year. Regenerated automatically from the seed data on every push.</div>
+
+  <div class="controls" id="eraButtons"></div>
+  <div class="controls" id="axisButtons"></div>
+  <div class="slider-row">
+    <span class="note">Timeline</span>
+    <input type="range" id="yearSlider" min="1953" max="2023" step="2" value="1953" />
+    <span class="year" id="yearLabel">1953</span>
+  </div>
+
+  <div id="grid"></div>
+  <div class="legend">
+    <div class="bar" id="legendBar"></div>
+    <div class="row"><span id="legendLeft"></span><span>0</span><span id="legendRight"></span></div>
+    <div class="note" id="legendNote"></div>
+  </div>
+
+  <div class="cols">
+    <div class="panel">
+      <h3 style="margin-top:0">Ranked states</h3>
+      <table id="rankTable"><thead><tr><th data-k="id">State</th><th data-k="economic">Econ</th><th data-k="social">Social</th><th data-k="display">Combined</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="panel">
+      <h3 style="margin-top:0" id="drillTitle">Group positions</h3>
+      <div class="note" id="drillNote">Click a state tile with an anchor era selected to see the authored group position table for that era. Group positions are era-wide; a state's lean is the turnout-weighted average over its own demographic mix.</div>
+      <div id="drill"></div>
+    </div>
+  </div>
+</main>
+<script>
+// Tile cartogram layout (col,row) per state, classic NPR-style grid.
+const TILES = {
+  AK:[0,0], ME:[11,0], VT:[10,1], NH:[11,1], WA:[1,2], ID:[2,2], MT:[3,2], ND:[4,2], MN:[5,2], IL:[6,2], WI:[7,2], MI:[8,2], NY:[9,2], RI:[10,2], MA:[11,2],
+  OR:[1,3], NV:[2,3], WY:[3,3], SD:[4,3], IA:[5,3], IN:[6,3], OH:[7,3], PA:[8,3], NJ:[9,3], CT:[10,3],
+  CA:[1,4], UT:[2,4], CO:[3,4], NE:[4,4], MO:[5,4], KY:[6,4], WV:[7,4], VA:[8,4], MD:[9,4], DE:[10,4],
+  AZ:[2,5], NM:[3,5], KS:[4,5], AR:[5,5], TN:[6,5], NC:[7,5], SC:[8,5], DC:[9,5],
+  OK:[4,6], LA:[5,6], MS:[6,6], AL:[7,6], GA:[8,6],
+  HI:[0,7], TX:[4,7], FL:[9,7],
+};
+const ECON = ["#1d4ed8","#2563eb","#3b82f6","#60a5fa","#93c5fd","#a855f7","#fca5a5","#f87171","#ef4444","#dc2626","#b91c1c"];
+const SOCIAL = ["#0d9488","#14b8a6","#2dd4bf","#5eead4","#99f6e4","#a855f7","#fde68a","#fbbf24","#f59e0b","#d97706","#b45309"];
+const AXES = [
+  { id: "display", label: "Combined", ramp: ECON, neg: "Left / Liberal", pos: "Right / Traditional" },
+  { id: "economic", label: "Economic", ramp: ECON, neg: "Left", pos: "Right" },
+  { id: "social", label: "Social", ramp: SOCIAL, neg: "Liberal", pos: "Traditional" },
+];
+let atlas = null, mode = { kind: "era", era: "1953" }, axis = AXES[0], sortKey = "display", sortDir = 1;
+
+const lerpHex = (a, b, t) => {
+  const pa = [1,3,5].map(i => parseInt(a.slice(i,i+2),16));
+  const pb = [1,3,5].map(i => parseInt(b.slice(i,i+2),16));
+  return "#" + pa.map((c,i) => Math.round(c+(pb[i]-c)*t).toString(16).padStart(2,"0")).join("");
+};
+const rampColor = (ramp, v, half) => {
+  const t = Math.max(-1, Math.min(1, v / Math.max(half, 0.01)));
+  const pos = (t+1)/2*(ramp.length-1), i = Math.min(ramp.length-2, Math.floor(pos));
+  return lerpHex(ramp[i], ramp[i+1], pos-i);
+};
+const fmt = v => (v >= 0 ? "+" : "") + v.toFixed(2);
+
+function currentRows() {
+  const src = mode.kind === "era" ? atlas.anchors[mode.era] : atlas.timeline[String(mode.year)];
+  return Object.entries(src).map(([id, r]) => ({ id, ...r }));
+}
+
+function render() {
+  const rows = currentRows();
+  const half = Math.max(0.5, Math.ceil(Math.max(...rows.map(r => Math.abs(r[axis.id]))) * 10) / 10);
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  for (const r of rows) {
+    const pos = TILES[r.id];
+    if (!pos) continue;
+    const d = document.createElement("div");
+    d.className = "tile";
+    d.style.gridColumn = pos[0] + 1;
+    d.style.gridRow = pos[1] + 1;
+    d.style.background = rampColor(axis.ramp, r[axis.id], half);
+    d.textContent = r.id;
+    d.title = `${r.id}  econ ${fmt(r.economic)}  social ${fmt(r.social)}  combined ${fmt(r.display)}`;
+    d.onclick = () => drill(r);
+    grid.appendChild(d);
+  }
+  document.getElementById("legendBar").style.background = `linear-gradient(to right, ${axis.ramp.join(",")})`;
+  document.getElementById("legendLeft").textContent = `${axis.neg}  −${half.toFixed(1)}`;
+  document.getElementById("legendRight").textContent = `+${half.toFixed(1)}  ${axis.pos}`;
+  document.getElementById("legendNote").textContent =
+    `Scale fitted to the largest lean shown (±${half.toFixed(1)} on the −5..+5 position ruler).`;
+  const tbody = document.querySelector("#rankTable tbody");
+  tbody.innerHTML = "";
+  const sorted = [...rows].sort((a,b) => sortKey === "id" ? a.id.localeCompare(b.id)*sortDir : (b[sortKey]-a[sortKey])*sortDir);
+  for (const r of sorted) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${r.id}</td>` + ["economic","social","display"].map(k => {
+      const ramp = k === "social" ? SOCIAL : ECON;
+      return `<td><span class="swatch" style="background:${rampColor(ramp, r[k], half)}"></span>${fmt(r[k])}</td>`;
+    }).join("");
+    tbody.appendChild(tr);
+  }
+}
+
+function drill(row) {
+  const era = mode.kind === "era" ? mode.era : null;
+  const el = document.getElementById("drill");
+  document.getElementById("drillTitle").textContent = `${row.id}: econ ${fmt(row.economic)}, social ${fmt(row.social)}`;
+  if (!era) {
+    el.innerHTML = "";
+    document.getElementById("drillNote").textContent = "Select an anchor era (not a blended year) to see its authored group position table.";
+    return;
+  }
+  document.getElementById("drillNote").textContent = `Era-wide authored positions for ${era}. Regional/state overrides not shown.`;
+  const gp = atlas.groupPositions[era];
+  let html = "";
+  for (const [dim, groups] of Object.entries(gp)) {
+    html += `<h4 style="margin:10px 0 4px">${dim}</h4><table><thead><tr><th>Group</th><th>Econ</th><th>Social</th></tr></thead><tbody>`;
+    for (const [g, p] of Object.entries(groups)) {
+      html += `<tr><td>${g}</td><td>${fmt(p.economicLean)}</td><td>${fmt(p.socialLean)}</td></tr>`;
+    }
+    html += "</tbody></table>";
+  }
+  el.innerHTML = html;
+}
+
+function makeChips(containerId, items, isOn, onPick) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = "";
+  for (const it of items) {
+    const b = document.createElement("button");
+    b.className = "chip" + (isOn(it) ? " on" : "");
+    b.textContent = it.label;
+    b.onclick = () => { onPick(it); refreshChips(); render(); };
+    el.appendChild(b);
+  }
+}
+function refreshChips() {
+  makeChips("eraButtons",
+    atlas.eras.map(e => ({ label: `${e} seed`, era: e })),
+    it => mode.kind === "era" && mode.era === it.era,
+    it => { mode = { kind: "era", era: it.era };
+      const y = atlas.anchorYears[it.era];
+      document.getElementById("yearSlider").value = y; document.getElementById("yearLabel").textContent = y; });
+  makeChips("axisButtons", AXES.map(a => ({ label: a.label, a })),
+    it => axis === it.a, it => { axis = it.a; });
+}
+
+fetch("lean-atlas.json").then(r => r.json()).then(data => {
+  atlas = data;
+  document.getElementById("yearSlider").oninput = (e) => {
+    const y = Number(e.target.value);
+    document.getElementById("yearLabel").textContent = y;
+    mode = { kind: "year", year: y };
+    refreshChips(); render();
+  };
+  document.querySelectorAll("#rankTable th").forEach(th => th.onclick = () => {
+    const k = th.dataset.k;
+    if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = 1; }
+    render();
+  });
+  refreshChips(); render();
+});
+</script>
+</body>
+</html>
