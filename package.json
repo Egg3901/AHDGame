@@ -43,6 +43,7 @@
     "migrate:metric-effects:dry": "npx tsx scripts/backfill-metric-effects.ts --dry-run",
     "migrate": "npx tsx scripts/run-migrations.ts",
     "migrate:dry-run": "npx tsx scripts/run-migrations.ts --dry-run",
+    "changelog:new": "npx tsx scripts/changelog/new-entry.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
