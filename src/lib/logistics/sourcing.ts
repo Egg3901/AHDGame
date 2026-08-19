@@ -263,6 +263,40 @@ export interface SourcingResult {
    * across all import flows into that country this turn.
    */
   importAggregatesByCountry: Map<string, ImportAggregate>;
+  /**
+   * Per commodity, per state: the state's OWN production that found no buyer
+   * anywhere: what is left of its spare after local fill, every interstate
+   * haul it could pay for, and the congestion overflow.
+   *
+   * This is the working spare the fill loop consumes, read at the end, so it
+   * is exact. It CANNOT be reconstructed from `flows`: grid legs lose units in
+   * transit, so delivered != dispatched and the arithmetic does not close.
+   *
+   * The sell side needs this number. Clearing is country-scoped while freight
+   * settles state by state, and with neither side knowing about the other a
+   * seller is credited with output no network could ever deliver: measured on
+   * prod at t225, 60.4% of world production was made in a state that did not
+   * need it while 28.7% of world demand went unmet.
+   */
+  unplacedSupplyByState: Map<CommodityType, Map<string, number>>;
+  /**
+   * The share of {@link unplacedSupplyByState} that failed for a DELIVERY
+   * reason rather than because nobody wanted the goods.
+   *
+   * Spare left over when the pass ends means one of two very different things,
+   * and a player needs them told apart: "the market is full" says cut output,
+   * "it could not get there" says build freight. The test is whether any buyer
+   * is still short at the end of the pass. Residual unmet demand and unsold
+   * spare coexisting is the definition of a delivery failure, whatever stopped
+   * the haul (tolerance ceiling, class capacity, embargo, no route).
+   *
+   * Attributed proportionally and uniformly across the commodity's sellers:
+   * `min(1, residualUnmet / totalSpare)` of every state's spare. Per-flow
+   * origin blame is not available (a buyer's shortfall is not attributable to
+   * one seller), and a uniform share is honest about that rather than
+   * inventing precision.
+   */
+  deliveryLimitedSupplyByState: Map<CommodityType, Map<string, number>>;
 }
 
 type Balance = { supply: number; demand: number };
@@ -345,6 +379,8 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
   const summaries: SourcingCommoditySummary[] = [];
   const landedPremiumByDestState = new Map<string, Map<CommodityType, LandedPremiumAccumulator>>();
   const importAggregatesByCountry = new Map<string, ImportAggregate>();
+  const unplacedSupplyByState = new Map<CommodityType, Map<string, number>>();
+  const deliveryLimitedSupplyByState = new Map<CommodityType, Map<string, number>>();
 
   const addLandedPremium = (
     destStateId: string,
@@ -616,6 +652,27 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       summary.unmetUnits += Math.max(0, unmet);
     }
 
+    // Every buyer has been offered every seller, so whatever is still spare is
+    // production this turn's network could not place: no local demand, no haul
+    // inside the buyer's tolerance, no importer. Snapshot it before the working
+    // map goes out of scope. It is the only exact record of the sell side of
+    // the freight seam. Kept unrounded; the price turn rounds on persist.
+    unplacedSupplyByState.set(commodity, new Map(spareByState));
+
+    // Split that spare by REASON. `summary.unmetUnits` is still unrounded here
+    // and holds every buyer's residual shortfall, so spare with no residual
+    // unmet demand against it is a plain glut: the goods reached everyone who
+    // wanted them and stopped because want stopped. Spare standing against
+    // residual unmet demand is the seam this whole pass exists to measure.
+    const totalSpare = [...spareByState.values()].reduce((sum, spare) => sum + spare, 0);
+    const deliveryShare =
+      totalSpare > 0 ? Math.min(1, Math.max(0, summary.unmetUnits) / totalSpare) : 0;
+    const deliveryLimited = new Map<string, number>();
+    for (const [stateId, spare] of spareByState) {
+      deliveryLimited.set(stateId, spare * deliveryShare);
+    }
+    deliveryLimitedSupplyByState.set(commodity, deliveryLimited);
+
     summary.intraStateUnits = round2(summary.intraStateUnits);
     summary.interStateUnits = round2(summary.interStateUnits);
     summary.importUnits = round2(summary.importUnits);
@@ -635,5 +692,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     freightTeuByState: freightUsedByState,
     landedPremiumByDestState,
     importAggregatesByCountry,
+    unplacedSupplyByState,
+    deliveryLimitedSupplyByState,
   };
 }

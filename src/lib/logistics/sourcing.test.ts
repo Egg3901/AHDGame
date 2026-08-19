@@ -274,6 +274,158 @@ describe("runSourcingPass", () => {
     const r = runSourcingPass(makeInputs());
     expect(r.importAggregatesByCountry.has("US")).toBe(false);
   });
+
+  it("unplacedSupplyByState: reports the spare no buyer anywhere took", () => {
+    // A2 makes 200 coal, A1 wants 100 and takes all of it; nobody else buys.
+    const r = runSourcingPass(makeInputs());
+    const unplaced = r.unplacedSupplyByState.get("coal")!;
+    expect(unplaced.get("A2")).toBeCloseTo(100);
+    // A1 produced nothing, so it has nothing it failed to place. A state that
+    // consumed its own output is likewise clean.
+    expect(unplaced.get("A1")).toBeCloseTo(0);
+  });
+
+  it("unplacedSupplyByState: a seller walled off by capacity keeps its stock", () => {
+    // A2 can only haul a sliver, so most of its 200 units stay put. This is the
+    // t225 seam: the country book says the coal sold, the network says it never
+    // moved.
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 100 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 0.2, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 100 }]])]]),
+        statePricesFor: () => ({ A1: 200, A2: 90, B1: 80 }),
+      })
+    );
+    const coal = r.summaries.find((s) => s.commodity === "coal")!;
+    const unplaced = r.unplacedSupplyByState.get("coal")!.get("A2")!;
+    // Everything the network could not move is unplaced, exactly.
+    expect(unplaced).toBeCloseTo(200 - coal.interStateUnits);
+    expect(unplaced).toBeGreaterThan(190);
+  });
+
+  it("deliveryLimitedSupplyByState: spare standing against unmet demand is a delivery failure", () => {
+    // A2 can haul only a sliver of its 200 units, so A1 ends the pass still
+    // short. Spare and unmet demand coexisting IS the seam: those goods were
+    // wanted and could not get there.
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 100 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 0.2, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 100 }]])]]),
+        statePricesFor: () => ({ A1: 200, A2: 90, B1: 80 }),
+      })
+    );
+    const coal = r.summaries.find((s) => s.commodity === "coal")!;
+    const deliveryLimited = r.deliveryLimitedSupplyByState.get("coal")!.get("A2")!;
+    const unplaced = r.unplacedSupplyByState.get("coal")!.get("A2")!;
+    // One seller state, so the uniform share resolves to min(spare, unmet).
+    expect(deliveryLimited).toBeCloseTo(Math.min(unplaced, coal.unmetUnits));
+    expect(deliveryLimited).toBeGreaterThan(0);
+    // The rest of the spare had no buyer at all and is not blamed on freight.
+    expect(deliveryLimited).toBeLessThan(unplaced);
+  });
+
+  it("deliveryLimitedSupplyByState: a pure glut is zero, even though placement falls", () => {
+    // Every buyer is satisfied and A2 still holds 100 units. Nobody wanted
+    // them, so no amount of freight would have helped and the player must not
+    // be told otherwise.
+    const r = runSourcingPass(makeInputs());
+    const coal = r.summaries.find((s) => s.commodity === "coal")!;
+    expect(coal.unmetUnits).toBe(0);
+    expect(r.unplacedSupplyByState.get("coal")!.get("A2")).toBeCloseTo(100);
+    expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A2")).toBe(0);
+  });
+
+  it("deliveryLimitedSupplyByState: attributes only the spare somebody wanted", () => {
+    // Tolerance locks every seller out, so nothing ships. A1 wants 100 and A2
+    // holds 200: half of what A2 could not place was wanted by someone, the
+    // other half was never wanted at all.
+    const r = runSourcingPass(
+      makeInputs({
+        statePricesFor: () => ({ A1: 100, A2: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
+        nationalPricesFor: () => ({ UK: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
+      })
+    );
+    const unplaced = r.unplacedSupplyByState.get("coal")!.get("A2")!;
+    expect(unplaced).toBeCloseTo(200);
+    expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A2")).toBeCloseTo(100);
+  });
+
+  it("deliveryLimitedSupplyByState: saturates at the spare on hand", () => {
+    // Demand of 500 against 200 of unshippable spare. The share caps at 1: a
+    // seller can only ever fail to deliver what it actually holds.
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 500 }]]) as Map<CommodityType, Balance>],
+          ["A2", new Map([["coal", { supply: 200, demand: 0 }]]) as Map<CommodityType, Balance>],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 500 }]])]]),
+        statePricesFor: () => ({ A1: 100, A2: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
+        nationalPricesFor: () => ({ UK: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
+      })
+    );
+    const unplaced = r.unplacedSupplyByState.get("coal")!.get("A2")!;
+    expect(unplaced).toBeCloseTo(200);
+    expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A2")).toBeCloseTo(200);
+  });
+
+  it("unplacedSupplyByState: grid losses make the flow ledger unable to answer this", () => {
+    // A2 dispatches more than A1 receives, so `flows` (delivered units) cannot
+    // reconstruct what left the seller. The seller's own spare can.
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["energy", { supply: 0, demand: 100 }]]) as Map<CommodityType, Balance>],
+          ["A2", new Map([["energy", { supply: 500, demand: 0 }]]) as Map<CommodityType, Balance>],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["energy", { supply: 500, demand: 100 }]])]]),
+        statePricesFor: () => ({ A1: 100, A2: 90 }),
+        nationalPricesFor: () => ({ US: 95 }),
+      })
+    );
+    const dispatched = 100 / (1 - GRID_LOSS_PER_HOP);
+    const delivered = r.flows
+      .filter((f) => f.commodity === "energy")
+      .reduce((s, f) => s + f.units, 0);
+    expect(delivered).toBeCloseTo(100);
+    expect(r.unplacedSupplyByState.get("energy")!.get("A2")).toBeCloseTo(500 - dispatched);
+    // The difference is real: 500 - delivered would over-credit the seller.
+    expect(r.unplacedSupplyByState.get("energy")!.get("A2")).toBeLessThan(500 - delivered);
+  });
 });
 
 describe("adaptiveClassShares", () => {

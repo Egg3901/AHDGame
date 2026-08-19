@@ -380,6 +380,56 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     const clearingGroupBySector = lookups.countryClearingBooks
       ? new Map<string, string>()
       : undefined;
+    // Freight seam: per sector, the share of its offer that no network could
+    // place. Populated only while settlement is active, so worlds with it off
+    // (and every modern world) offer exactly what they offered before.
+    const deliveryLimitedBySectorId = new Map<string, number>();
+    /**
+     * Share of a sector's output its host state could place last turn, 1 when
+     * there is no measured limit. Min across the sector's output commodities:
+     * one output leg that cannot leave the state caps the whole offer, because
+     * a sector's units split across its mix rather than choosing a leg.
+     */
+    const placementRatioForSector = (
+      stateId: string | undefined,
+      supplyRates: Partial<Record<CommodityType, number>>
+    ): number => {
+      if (!freightSettlementActive || !stateId) return 1;
+      const byCommodity = lookups.statePlacementRatioByState?.get(stateId);
+      if (!byCommodity) return 1;
+      let ratio = 1;
+      for (const commodity of Object.keys(supplyRates) as CommodityType[]) {
+        if (!((supplyRates[commodity] ?? 0) > 0)) continue;
+        ratio = Math.min(ratio, byCommodity.get(commodity) ?? 1);
+      }
+      return Math.max(0, Math.min(1, ratio));
+    };
+    /**
+     * Share of a sector's output that was wanted and still could not be
+     * delivered, 0 when there is no measured limit. MAX across output legs,
+     * the mirror of the MIN above: the leg that binds the offer is the leg
+     * with the worst placement, so its delivery share is the sector's. It can
+     * never exceed the haircut the offer took, because each leg's
+     * delivery-limited share is a part of that same leg's unplaced share.
+     *
+     * Separate from `1 - placementRatio` on purpose. That number also contains
+     * plain glut, and the sector surface tells the player to build freight on
+     * the strength of this one.
+     */
+    const deliveryLimitedForSector = (
+      stateId: string | undefined,
+      supplyRates: Partial<Record<CommodityType, number>>
+    ): number => {
+      if (!freightSettlementActive || !stateId) return 0;
+      const byCommodity = lookups.stateDeliveryLimitedRatioByState?.get(stateId);
+      if (!byCommodity) return 0;
+      let ratio = 0;
+      for (const commodity of Object.keys(supplyRates) as CommodityType[]) {
+        if (!((supplyRates[commodity] ?? 0) > 0)) continue;
+        ratio = Math.max(ratio, byCommodity.get(commodity) ?? 0);
+      }
+      return Math.max(0, Math.min(1, ratio));
+    };
     for (const [corpId, sectors] of lookups.sectorsByCorp) {
       const fx = fxByCorpId.get(corpId);
       for (const sector of sectors) {
@@ -474,7 +524,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
             }
           }
         }
-        clearingInputs.push({
+        const clearingInput: SectorClearingInput = {
           sectorId,
           revenue: revenueAnchor,
           supplyRates: rates.supply ?? {},
@@ -542,7 +592,46 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
                     ),
                 })
               : undefined,
-        });
+        };
+        // FREIGHT SEAM (t225). The offer now carries delivery feasibility.
+        //
+        // A sector's `soldFraction` came out of a COUNTRY-scoped book while its
+        // rationing came out of STATE-scoped freight settlement, and neither
+        // knew about the other: 60.4% of world production was being made in a
+        // state that did not need it while 28.7% of world demand went unmet,
+        // and a Texas extraction sector could not sell its natural gas with a
+        // Texas energy plant next door starved of it. Clearing GRANULARITY is
+        // deliberately unchanged (a country is still the market); the offer is
+        // simply capped at what a network could move out of the seller's state.
+        //
+        // MIN over the sector's outputs, not a mean: output splits across the
+        // mix by `commodityMixWeight`, so a chemical plant cannot place its
+        // chemicals through a plastics network (the same reasoning as
+        // sectorDemandGapUnits). Both offer bases are scaled, since either can
+        // be the one clearing reads. The cap is TOTAL placement, glut included:
+        // the book should carry only what could actually be placed, whatever
+        // stopped it.
+        //
+        // SCOPE: this makes the OFFER honest, not the revenue leg. sectorTurn
+        // multiplies by `soldFraction` rather than absolute sold units, and
+        // clearing's `demandForPass` shrinks with the offer, so a stranded
+        // seller still books close to its old revenue. Whether a badly sited
+        // corp should lose money for it is an owner decision on a live world,
+        // deliberately left open; do not assume the loop is closed.
+        const placementRatio = placementRatioForSector(sector.stateId, rates.supply ?? {});
+        if (placementRatio < 1) {
+          clearingInput.revenue *= placementRatio;
+          if (typeof clearingInput.producedUnits === "number") {
+            clearingInput.producedUnits *= placementRatio;
+          }
+        }
+        if (freightSettlementActive) {
+          deliveryLimitedBySectorId.set(
+            sectorId,
+            deliveryLimitedForSector(sector.stateId, rates.supply ?? {})
+          );
+        }
+        clearingInputs.push(clearingInput);
         // Brand loyalty (A2): remember what the rollup needs, joined post-clearing.
         if (brandLoyaltyEnabled) {
           loyaltySectorMeta.set(sectorId, {
@@ -563,6 +652,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // loudly at that threshold; the benign haircut gap stays silent.
     const BOOK_MISMATCH_TRIPWIRE = 3;
     const bookViolations: string[] = [];
+    // Telemetry only, and only while settlement is active: sectorTurn writes it
+    // beside the fill it is NOT part of, so a player can read "nobody wanted it"
+    // apart from "it could not get there". Carries the delivery-attributed
+    // share alone, never the whole offer haircut.
+    if (freightSettlementActive) market.deliveryLimitedBySectorId = deliveryLimitedBySectorId;
     market.clearingBySectorId = computeClearingFactors({
       sectors: clearingInputs,
       balances: lookups.globalCommodityBalances,
