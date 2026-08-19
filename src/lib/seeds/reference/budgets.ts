@@ -3644,8 +3644,8 @@ function makeEasternBlocBudget1953(
   creditRating: NationalBudgetSeedConfig["creditRating"]
 ): NationalBudgetSeedConfig[] {
   const prefix = countryId.toLowerCase();
-  // Prefer era-authored 1953 defaults; fall back to the shared map for bloc
-  // countries that do not yet have a dedicated 1953 policy config (HU/PL/…).
+  // Prefer era-authored 1953 defaults; fall back to the shared map if a bloc
+  // country is missing from COUNTRY_POLICY_CONFIGS_1953.
   const pc = COUNTRY_POLICY_CONFIGS_1953[prefix] ?? COUNTRY_POLICY_CONFIGS[prefix];
   return [
     {

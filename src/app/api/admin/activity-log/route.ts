@@ -1,6 +1,6 @@
 // Paginated, filterable activity log for admin review.
 // Auth: requireAdmin
-// Errors: 400, 401, 403
+// Errors: 400, 403
 
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

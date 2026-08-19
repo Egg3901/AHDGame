@@ -12,7 +12,7 @@ import { getSuggestionCommentsCollection } from "@/lib/db/collections/suggestion
 
 // POST /api/admin/suggestions/merge — Merge multiple suggestions into one.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

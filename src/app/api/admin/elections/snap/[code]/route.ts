@@ -20,7 +20,7 @@ import { getGameTime } from "@/lib/time/gameTime";
 
 // POST /api/admin/elections/snap/[code] — Admin-forced snap election (UK, JP, DE).
 // Auth: requireAdmin
-// Errors: 400, 401, 403
+// Errors: 400, 403
 export async function POST(_req: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
     const auth = await requireAdmin();

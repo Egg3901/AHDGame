@@ -1,7 +1,7 @@
 /**
  * Index-fund bond reserve: buy real sovereign bonds from public float.
  * Coupon income is paid on the turn schedule via bondTurn (credited to
- * fund cashAnchor); hourly cron redeploys cash into bonds to maintain 25%.
+ * fund cashAnchor); the fund cron redeploys cash into bonds to maintain 25%.
  */
 
 import type { Db } from "mongodb";

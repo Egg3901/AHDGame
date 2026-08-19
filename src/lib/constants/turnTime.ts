@@ -174,7 +174,7 @@ export const JP_SANGIIN_CYCLE1_END_TURN: Record<number, number> = {
 };
 
 /**
- * JP Sangiin term length in turns (game-hours). A Councillor serves 6 game years
+ * JP Sangiin term length in turns (1 turn = 1 real hour). A Councillor serves 6 game years
  * per class. Half-elections every 3 years contest one class at a time, so the
  * stagger between Class 1 and Class 2 end turns is 144, but each class's own
  * cycle period is the full 6-year term (288 turns).

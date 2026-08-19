@@ -77,6 +77,29 @@ export interface InputsCostResult {
 }
 
 /**
+ * Merge a country's reachable price ratio onto the world ratio for the
+ * plant input bill.
+ *
+ * Reachable books in partitioned markets can print far above the world
+ * (live US iron ~3.27 vs world ~0.77). Revenue realization damps that
+ * spike (`ratio^0.5`, max 1.5x); the input bill is linear. Taking the
+ * cheaper of the two keeps cheap-local discounts (the original overlay)
+ * without charging buyers a cost no seller-side leg can recover.
+ *
+ * Ticket #1120 (Dangote / manufacturing) is the same t175 cliff as the
+ * worldwide margin collapse: uncapped reachable input prices.
+ */
+export function capInputPriceRatioAtWorld(
+  worldRatio: number | undefined,
+  reachableRatio: number
+): number {
+  if (typeof worldRatio === "number" && Number.isFinite(worldRatio)) {
+    return Math.min(worldRatio, reachableRatio);
+  }
+  return reachableRatio;
+}
+
+/**
  * Physical input bill for one sector-turn.
  *
  * Units consumed are the SAME quantity the world commodity ledger books as this

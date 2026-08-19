@@ -11,7 +11,7 @@ interface MigrationRecord {
 
 // GET /api/admin/migrations/status — List all completed migration records.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();
@@ -35,7 +35,7 @@ export async function GET() {
 
 // DELETE /api/admin/migrations/status — Delete a migration record by ID to allow re-running it.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function DELETE(request: Request) {
   try {
     const auth = await requireAdmin();

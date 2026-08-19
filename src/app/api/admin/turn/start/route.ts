@@ -6,7 +6,7 @@ import { createAdminLog } from "@/lib/adminLog";
 
 // POST /api/admin/turn/start — Starts the turn system so it processes turns on the hourly cron schedule.
 // Auth: requireModerator (admin or moderator)
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     const auth = await requireModerator();

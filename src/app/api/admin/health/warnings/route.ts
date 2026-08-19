@@ -21,7 +21,7 @@ interface UnifiedWarning {
 /**
  * Flattened, filterable list of warnings and errors from recent snapshots.
  * Auth: requireAdmin()
- * Errors: 401, 500
+ * Errors: 403
  */
 export async function GET(request: Request) {
   try {

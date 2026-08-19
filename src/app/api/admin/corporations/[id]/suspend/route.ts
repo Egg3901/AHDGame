@@ -1,7 +1,7 @@
 // POST /api/admin/corporations/[id]/suspend
 // Marks a corporation as suspended — skipped by turn processing until resumed.
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

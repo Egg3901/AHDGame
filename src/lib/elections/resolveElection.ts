@@ -7,9 +7,9 @@
  * (/api/country/[code]/elections).
  *
  * Public entry points:
- *   resolveElection()   — single election (fetches its own data)
- *   _enrichElection()   — low-level enrichment on pre-fetched data; exported
- *                         so resolveElections() (Task 2) can batch-fetch deps.
+ *   resolveElection()   - single election (fetches its own data)
+ *   resolveElections()  - batch (one round of queries, then _enrichElection)
+ *   _enrichElection()   - low-level enrichment on pre-fetched data
  */
 
 import type { Db, ObjectId as MongoObjectId } from "mongodb";
@@ -88,7 +88,6 @@ export async function resolveElection(
 ): Promise<ElectionResponse | null> {
   const isFull = options.view === "full";
 
-  // Fetch election document if only an ID was given
   let election: Election | null = null;
   if (typeof idOrElection === "string") {
     const id = idOrElection;
@@ -194,12 +193,10 @@ export async function resolveElections(
     .find({ electionId: { $in: electionIds } })
     .toArray();
 
-  // Filter candidates per-election: active/upcoming → active only; completed/resolved → all
   const completedStatuses = new Set(["completed", "resolved"]);
   const candidatesByElection = new Map<string, ElectionCandidate[]>();
   for (const eid of electionIdStrings) candidatesByElection.set(eid, []);
 
-  // Build a status lookup once
   const electionStatusMap = new Map(elections.map((e) => [e._id.toString(), e.status]));
   for (const c of allCandidatesRaw) {
     const eid = c.electionId.toString();
@@ -293,12 +290,10 @@ export async function resolveElections(
       : Promise.resolve([] as NPP[]),
   ]);
 
-  // Index tallies by election ID
   const tallyByElection = new Map<string, ElectionVoteTally>(
     talliesRaw.map((t) => [t.electionId.toString(), t])
   );
 
-  // Build incumbent map for single-seat elections
   const incumbentByElection = new Map<string, { name: string; partyId: string } | null>(
     elections.map((e) => [e._id.toString(), null])
   );

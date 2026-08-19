@@ -10,7 +10,7 @@ import { ObjectId } from "mongodb";
 
 // POST /api/admin/achievements/seed — Seeds achievement definitions from static seed data if the collection is empty.
 // Auth: requireAdmin
-// Errors: 401
+// Errors: 403
 export const POST = withAdminAuth(async () => {
   try {
     const db = await getDb();
@@ -71,7 +71,7 @@ export const POST = withAdminAuth(async () => {
 
 // PATCH /api/admin/achievements/seed — Syncs achievement names, descriptions, and icons from seed data to existing DB records.
 // Auth: requireAdmin
-// Errors: 401
+// Errors: 403
 export const PATCH = withAdminAuth(async () => {
   try {
     const db = await getDb();

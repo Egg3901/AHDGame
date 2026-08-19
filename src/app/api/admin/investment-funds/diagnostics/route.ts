@@ -9,7 +9,7 @@ import { listFunds } from "@/lib/indexFunds/fundQueries";
 
 // GET /api/admin/investment-funds/diagnostics — Why specific funds are hidden from players.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();

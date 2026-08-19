@@ -26,7 +26,7 @@ const TURN_MS = 60 * 60 * 1000; // turns fire every hour
 
 // POST /api/admin/elections/snap-timers — Re-anchors all active election timers to exact turn-fire boundaries to eliminate sub-turn drift.
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 403, 404
 export async function POST() {
   try {
     const auth = await requireAdmin();

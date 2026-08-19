@@ -5,7 +5,7 @@ import { toggleFastMode } from "@/lib/turnSystem";
 
 // POST /api/admin/turn/toggle-fast-mode — Toggles fast mode (30-minute turn cycles).
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     const auth = await requireAdmin();

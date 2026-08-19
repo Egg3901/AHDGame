@@ -1,6 +1,6 @@
 // GET diagnoses / POST deletes statePartyOrg records where the party belongs to a different country than the state.
 // Auth: requireAdmin
-// Errors: 401, 500
+// Errors: 403
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";

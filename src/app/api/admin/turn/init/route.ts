@@ -6,7 +6,7 @@ import { requireAdmin } from "@/lib/api/requireAdmin";
 
 // POST /api/admin/turn/init — Initializes the game state and cron jobs for the turn system.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 // This endpoint initializes the cron jobs and game state
 // Call this when the server starts or from admin panel
 export async function POST() {
@@ -31,7 +31,7 @@ export async function POST() {
 
 // GET /api/admin/turn/init — Checks and initializes game state, returning the current turn and active status.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 // Also allow GET for easy server initialization check
 export async function GET() {
   try {

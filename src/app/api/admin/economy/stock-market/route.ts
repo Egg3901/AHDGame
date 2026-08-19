@@ -1,7 +1,7 @@
 // GET /api/admin/economy/stock-market
 // Returns all corporations with aggregated sector revenue and market-cap summary.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

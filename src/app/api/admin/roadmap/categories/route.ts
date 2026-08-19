@@ -12,7 +12,7 @@ const createCategorySchema = z.object({
 
 // GET /api/admin/roadmap/categories — Lists all roadmap categories in sort order.
 // Auth: requireAdmin
-// Errors: 401
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();
@@ -33,7 +33,7 @@ export async function GET() {
 
 // POST /api/admin/roadmap/categories — Creates a new roadmap category.
 // Auth: requireAdmin
-// Errors: 400, 401
+// Errors: 400, 403
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

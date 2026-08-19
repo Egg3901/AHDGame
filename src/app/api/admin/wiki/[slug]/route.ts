@@ -14,7 +14,7 @@ interface RouteContext {
 
 // PATCH /api/admin/wiki/[slug] — Updates fields on an existing wiki page by slug.
 // Auth: requireModerator (admins and moderators may edit any page)
-// Errors: 400, 401, 404
+// Errors: 400, 403, 404
 export async function PATCH(request: Request, context: RouteContext) {
   try {
     const auth = await requireModerator();
@@ -58,7 +58,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
 // DELETE /api/admin/wiki/[slug] — Archives a wiki page by slug (soft delete, sets status to archived).
 // Auth: requireModerator (admins and moderators may archive pages)
-// Errors: 401, 404
+// Errors: 403, 404
 export async function DELETE(request: Request, context: RouteContext) {
   try {
     const auth = await requireModerator();

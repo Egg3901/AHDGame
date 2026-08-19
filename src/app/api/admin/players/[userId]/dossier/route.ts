@@ -1,6 +1,6 @@
 // GET /api/admin/players/[userId]/dossier — per-account forensic footprint
 // Auth: requireModerator (moderators and admins read; PII masked for non-admins)
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";

@@ -5,7 +5,7 @@ import { processTurn } from "@/lib/turnSystem";
 
 // POST /api/admin/turn/process — Manually triggers a single game turn and returns the result with timing.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     // Verify admin authentication

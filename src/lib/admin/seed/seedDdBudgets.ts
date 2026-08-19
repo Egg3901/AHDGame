@@ -1,7 +1,8 @@
 import type { Db } from "mongodb";
-import type { Corporation, CorporateSector, State } from "@/lib/db/types";
+import type { State } from "@/lib/db/types";
 import type { FederalBudget, EnactedLaw, StateBudget } from "@/lib/db/types/budget";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
+import { upsertCountryOwnedCorpEntries } from "./upsertCountryOwnedCorps";
 
 /**
  * Seeds East Germany's FY1979 national budget, default enacted laws (from the dd_*
@@ -108,21 +109,13 @@ export async function seedDdBudgets(
   const ddCorpData = countryOwnedSeedData.filter(
     (entry) => entry.corporation.countryOwnerId === "DD"
   );
-  for (const entry of ddCorpData) {
-    const { _id: corpId, ...corpData } = entry.corporation;
-    await db
-      .collection<Corporation>("corporations")
-      .updateOne({ _id: corpId }, { $set: corpData }, { upsert: true });
-    for (const sector of entry.sectors) {
-      const { _id: _sectorId, ...sectorData } = sector;
-      await db
-        .collection<CorporateSector>("corporateSectors")
-        .updateOne(
-          { corporationId: corpId, stateId: sector.stateId, sectorType: sector.sectorType },
-          { $set: sectorData },
-          { upsert: true }
-        );
-    }
+  const ddUpsert = await upsertCountryOwnedCorpEntries(db, "DD", ddCorpData);
+  if (ddCorpData.length > 0) {
+    log(
+      `Seeded ${ddCorpData.length} DD sovereign issuer setup(s)` +
+        (ddUpsert.repointed > 0
+          ? `, re-pointed ${ddUpsert.repointed} sector(s) off a stale state-enterprise id`
+          : "")
+    );
   }
-  if (ddCorpData.length > 0) log(`Seeded ${ddCorpData.length} DD sovereign issuer setup(s)`);
 }

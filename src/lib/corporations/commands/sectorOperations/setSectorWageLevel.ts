@@ -17,7 +17,7 @@ interface RouteParams {
 
 /**
  * POST /api/corporations/[id]/sectors/[sectorId]/wage
- * Set the CEO-directed wage level for a sector (Labour system, Phase 2).
+ * Set the CEO-directed wage level for a sector.
  * 1.0 is the profit-invariant baseline; lower cuts wages, higher pays up.
  * CEO only. Available only when labourSystemMode ≥ "wages".
  */

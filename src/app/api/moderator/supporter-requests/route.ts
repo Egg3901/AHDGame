@@ -37,7 +37,7 @@ function serialize(
 // GET /api/moderator/supporter-requests — pending supporter requests plus the
 // most recently decided ones, enriched with requester name and tier.
 // Auth: requireModerator
-// Errors: 401, 403
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireModerator();

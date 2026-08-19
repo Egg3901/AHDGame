@@ -69,8 +69,8 @@ export const SUPPORT_SCANDAL_PENALTY = 10 as const;
 export const SUPPORT_ENDORSEMENT_BUMP = 3 as const;
 
 /**
- * Support bump for winning a debate event (stretch / B4 stub). Real
- * debate infrastructure isn't wired yet — see the activation plan §B4.
+ * Support bump for a debate win. Debate resolution currently applies
+ * favorability deltas only; this constant is not consumed on that path.
  */
 export const SUPPORT_DEBATE_WIN_BUMP = 4 as const;
 
@@ -82,10 +82,9 @@ export const SUPPORT_DEBATE_WIN_BUMP = 4 as const;
  * resistance, Support as candidate-level mood.
  *
  * Pure functions; safe for both server and client. Bounds and curves chosen
- * for tunability — the Balance Appendix records calibration tweaks rather
+ * for tunability - the Balance Appendix records calibration tweaks rather
  * than this file. Backward-compat: every helper returns a neutral value
- * when its input is `undefined` (matches the bootstrap-deferred state where
- * Reg / Support fields are unset on most rows pre-Phase 1.5 / Phase 4).
+ * when its input is `undefined` (unseeded Reg / Support rows).
  *
  * See plan §"Phase 5a — Decisions Recorded During Execution" D4-D5.
  */
@@ -120,23 +119,10 @@ export function normalizedOrgShare(orgByParty: Map<string, number>, partyId: str
 
 /**
  * Exponent applied to the normalized Org share when it enters the vote weight.
- * `< 1` gives diminishing returns — doubling Org less-than-doubles weight —
- * which softens a dominant party's structural Org edge. `0.5` (sqrt) is the
- * tuned default; `1.0` would reproduce the legacy linear share.
- *
- * Set 2026-06-18 (D1): the linear share made Org a near-deterministic driver
- * (weight ratio = raw Org ratio); the sqrt curve compresses that ratio
- * (`sqrt(orgA/orgB)`) so a 3:1 Org lead becomes ~1.73:1 of weight (~63/37 in a
- * 2-way race) instead of 75/25.
- *
- * Recalibrated 2026-07-09 (paired with the appeal-kernel compression in
- * `demographicAppeal.ts`): the multiplier-side A/B sweep (52 resolved US
- * gov+senate races, turn 980) showed the sqrt curve still left Org as the
- * dominant structural margin driver. Flattening to `0.2` cut mean margin
- * 21.0 → 18.9 and landslides 36.5% → 34.6% while RAISING stored-winner match
- * to 84.6% (above both baseline and the appeal combo alone). A 3:1 Org lead
- * now yields ~1.25:1 weight. Approval/reach compression variants were
- * evaluated and rejected (inert / winner-match regression respectively).
+ * `< 1` gives diminishing returns - doubling Org less-than-doubles weight -
+ * which softens a dominant party's structural Org edge. `0.2` is the tuned
+ * value (a 3:1 Org lead yields ~1.25:1 weight); `1.0` would reproduce the
+ * legacy linear share.
  */
 export const ORG_WEIGHT_EXPONENT = 0.2;
 
@@ -291,8 +277,8 @@ export function regResistanceMultiplier(reg: number | undefined): number {
  *   - support = 50  → 1.0× (neutral, default for new candidates)
  *   - support = 100 → 1.4× (peak momentum)
  *
- * Backward-compat: undefined / NaN support returns 1.0× (neutral). New
- * candidates created before Phase 4 wires Support don't get penalized.
+ * Backward-compat: undefined / NaN support returns 1.0× (neutral) so
+ * rows without a Support value are not penalized.
  *
  * The asymmetry — Support penalty (0.4) is half the bonus (0.4) but
  * starting from below baseline — is intentional: scandalous candidates

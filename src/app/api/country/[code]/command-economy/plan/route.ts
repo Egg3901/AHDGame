@@ -3,7 +3,7 @@
 // output quotas (plan targets) across the country's SOEs. Writes soe.planTarget
 // per enterprise (the quota SOE directors execute against, and the base the
 // engine scores fulfillment and sizes directed credit from).
-// Auth: the Gosplan seat holder or the head of government. Errors: 401/403/404/429.
+// Auth: the Gosplan seat holder or the head of government. Errors: 400/401/403/404/429.
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId } from "mongodb";

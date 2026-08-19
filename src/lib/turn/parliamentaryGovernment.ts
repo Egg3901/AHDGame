@@ -947,6 +947,43 @@ export async function resolveParliamentaryAppointmentVote(
 }
 
 /**
+ * Does a no-confidence motion carry?
+ *
+ * A motion of no confidence removes a sitting government, so it must command a
+ * majority of the WHOLE chamber, not a majority of whoever happened to turn up.
+ * Abstentions and unvoted seats therefore count against the motion, which is
+ * how a real confidence vote works: the government survives by default.
+ *
+ * Tallies are seat-weighted (see computeParliamentaryGovernmentTally), so
+ * `votesFor` is directly comparable to the chamber's `majorityThreshold`.
+ *
+ * This is deliberately NOT the cloture rule (3/5 of votes CAST) used for
+ * legislative debate, and it does not apply to any other vote type.
+ *
+ * Fallbacks, in order: the stored `majorityThreshold`, a threshold derived from
+ * `totalSeats`, and finally a strict majority of votes cast when the formation
+ * row carries neither number.
+ */
+export function noConfidenceMotionCarries(input: {
+  votesFor: number;
+  votesAgainst: number;
+  majorityThreshold?: number | null;
+  totalSeats?: number | null;
+}): boolean {
+  const { votesFor, votesAgainst, majorityThreshold, totalSeats } = input;
+  const threshold =
+    majorityThreshold != null && majorityThreshold > 0
+      ? majorityThreshold
+      : totalSeats != null && totalSeats > 0
+        ? Math.floor(totalSeats / 2) + 1
+        : null;
+  if (threshold == null) {
+    return votesFor > votesAgainst;
+  }
+  return votesFor >= threshold;
+}
+
+/**
  * Resolve an expired no-confidence vote for the given country.
  */
 export async function resolveParliamentaryNoConfidenceVote(
@@ -972,7 +1009,13 @@ export async function resolveParliamentaryNoConfidenceVote(
   );
   vote.votesFor = tally.votesFor;
   vote.votesAgainst = tally.votesAgainst;
-  const passed = vote.votesFor > vote.votesAgainst;
+  const govFormationForTally = await govColl.findOne({ _id: countryId });
+  const passed = noConfidenceMotionCarries({
+    votesFor: vote.votesFor,
+    votesAgainst: vote.votesAgainst,
+    majorityThreshold: govFormationForTally?.majorityThreshold,
+    totalSeats: govFormationForTally?.totalSeats,
+  });
   const notificationInputs: NotificationInput[] = [];
 
   // Atomic claim: only the caller that flips status "active" → final runs the
@@ -1029,6 +1072,17 @@ export async function resolveParliamentaryNoConfidenceVote(
   } else {
     await govColl.updateOne({ _id: countryId }, { $set: { activeVoteId: null, updatedAt: now } });
 
+    const noConfidenceThresholdSeats =
+      govFormationForTally?.majorityThreshold != null && govFormationForTally.majorityThreshold > 0
+        ? govFormationForTally.majorityThreshold
+        : govFormationForTally?.totalSeats != null && govFormationForTally.totalSeats > 0
+          ? Math.floor(govFormationForTally.totalSeats / 2) + 1
+          : null;
+    const noConfidenceThresholdText =
+      noConfidenceThresholdSeats != null
+        ? `${noConfidenceThresholdSeats} seats`
+        : "a majority of the chamber";
+
     // S#17: VONC fails → the sitting PM survives. Cancel any PM appointment
     // votes that were filed during the VONC window (they're moot now).
     // Notify each nominee so they know why.
@@ -1063,7 +1117,7 @@ export async function resolveParliamentaryNoConfidenceVote(
       notificationInputs.push({
         userId: pmChar.userId,
         title: "Survived No-Confidence Vote",
-        message: `You survived the vote of no confidence (${vote.votesAgainst} confidence, ${vote.votesFor} no confidence).`,
+        message: `You survived the vote of no confidence (${vote.votesAgainst} confidence, ${vote.votesFor} no confidence). A motion needs ${noConfidenceThresholdText} to carry.`,
         type: "system",
         metadata: { recipientCharacterId: vote.targetPmCharacterId.toString() },
       });

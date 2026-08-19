@@ -12,7 +12,7 @@ const schema = z.object({
 
 // POST /api/admin/users/reset-movement — Clear the movement cooldown on a user's character.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

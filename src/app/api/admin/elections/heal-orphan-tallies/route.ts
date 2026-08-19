@@ -6,7 +6,7 @@ import type { Election, ElectionCandidate } from "@/lib/db/types";
 
 // GET /api/admin/elections/heal-orphan-tallies — Diagnoses candidate records for elections that no longer exist.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();
@@ -56,7 +56,7 @@ export async function GET() {
 
 // POST /api/admin/elections/heal-orphan-tallies — Deletes candidate records for elections that no longer exist.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     const auth = await requireAdmin();

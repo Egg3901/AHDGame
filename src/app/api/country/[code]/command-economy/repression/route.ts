@@ -5,7 +5,7 @@
 // reform) but burns regime legitimacy, and that cost climbs with the still-present
 // shortage. Writes economicFactors.repressionDirective (the seam the turn engine
 // honors: directive > NPP commandStance > default).
-// Auth: the head of government or the Gosbank chair. Errors: 401/403/404/429.
+// Auth: the head of government or the Gosbank chair. Errors: 400/401/403/404/429.
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";

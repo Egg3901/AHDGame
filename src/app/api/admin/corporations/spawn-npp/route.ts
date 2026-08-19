@@ -2,7 +2,7 @@
 // Admin-only: spawn an NPP-run corporation with AI CEO.
 // The NPP CEO holds 51% of shares; 49% is in public float (purchasable by players).
 // Auth: requireAdmin
-// Errors: 401, 403, 400, 404, 409
+// Errors: 403, 400, 404, 409
 
 import { NextResponse } from "next/server";
 import { z } from "zod";

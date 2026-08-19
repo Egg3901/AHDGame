@@ -11,7 +11,7 @@ import { handleRouteError } from "@/lib/api/errors";
 
 // POST /api/admin/officials/reset — Deletes all elected officials and clears currentOffice on all characters and NPPs.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function POST() {
   try {
     const auth = await requireAdmin();

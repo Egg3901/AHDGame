@@ -3,16 +3,18 @@
  * Maps sector types to the commodities they supply and demand.
  * Only owned sectors create demand or supply.
  *
- * Retail generates consumer demand for ALL commodities, scaled by GDP growth
- * (50% national average + 50% regional). This makes retail the primary demand
- * driver for the commodity market.
+ * Retail generates consumer demand across a broad finished-and-intermediate
+ * basket (21 of 28 commodity keys), scaled by GDP growth (50% national average
+ * + 50% regional). This makes retail the primary demand driver for the
+ * commodity market.
  *
  * Supply/demand in UNITS:
  *   units = (sector daily revenue × rate) / basePrice
  *
  * Market price is dynamic with sliding logarithmic returns:
  *   rawRatio = max(totalDemand, MIN_COMMODITY_FLOW_UNITS) / max(totalSupply, MIN_COMMODITY_FLOW_UNITS)
- *   effectiveRatio = rawRatio inside the 3x soft-knee, compressed beyond it
+ *   effectiveRatio = rawRatio inside the soft-knee (3x default; 8x for
+ *   extractable prices), compressed beyond it
  *   if effectiveRatio >= 1: price = basePrice × (1 + PRICE_LOG_SCALE × ln(effectiveRatio))
  *   else:                   price = basePrice / (1 + PRICE_LOG_SCALE × ln(1 / effectiveRatio))
  *
@@ -72,10 +74,11 @@ export type ExtractableResource = (typeof EXTRACTABLE_RESOURCES)[number];
  * Per-resource extraction output scale (audit t873, "structural extraction
  * shortage"). In the S/D ratio the base price cancels, so a commodity's
  * shortage is purely Σ(extraction_revenue × supply_rate) vs Σ(manufacturing
- * _revenue × demand_rate) — and manufacturing sectors out-mass extraction in
- * revenue, so every extractable runs chronically short (copper/rare_earth 4-5×,
- * iron/gas 2-3×). This map lifts the supply side per-resource, calibrated to how
- * short each one is (coal is near-balanced, so it stays 1.0 and is omitted).
+ * _revenue × demand_rate) - and manufacturing sectors out-mass extraction in
+ * revenue, so every extractable runs chronically short (rare_earth, which
+ * covers copper, 4-5x; iron/gas 2-3x). This map lifts the supply side
+ * per-resource, calibrated to how short each one is (coal is near-balanced,
+ * so it stays 1.0 and is omitted).
  *
  * This is a CALIBRATION STABILIZER, not the durable fix: it gets the board to a
  * sane starting point so the clearing/capital tiers can equilibrate (shortage →
@@ -87,18 +90,11 @@ export type ExtractableResource = (typeof EXTRACTABLE_RESOURCES)[number];
  * marketSystemMode). Applied BEFORE the capacity haircut so the boost fills the
  * ample idle deposit capacity rather than exceeding it.
  *
- * RE-TUNE FLAG (t961, before first enabling live): copper's 2.5× was
- * calibrated at t873 against a global copper S/D that has since also received
- * a large one-off manual boost (5 focused sectors at ₳25M each, ~+10,000 tons,
- * see ops-knowledge memory ahd-copper-structural-formula-t873) — a much bigger
- * per-resource intervention than any other entry here got. Live check at t972:
- * copper S/D is still 0.49 (51% idle capacity) so there's no evidence of an
- * immediate overshoot, but stacking the full systemic 2.5× on top of that
- * manual boost is more supply-side lift than this value was actually
- * calibrated for. Worth a deliberate call on whether to trim this before
- * flipping extractionOutputScaleEnabled on, rather than assuming 2.5× still
- * holds unchanged — not adjusted here since that's a live economic judgment
- * call, not a mechanical fix.
+ * RE-TUNE FLAG: rare_earth's 2.5x (covers the merged copper market) was
+ * calibrated at t873 against a global S/D that later received a large one-off
+ * manual boost. Stacking the full 2.5x on that lift is more supply-side help
+ * than this value was calibrated for. Revisit before flipping
+ * extractionOutputScaleEnabled on.
  */
 export const EXTRACTION_OUTPUT_SCALE: Partial<Record<ExtractableResource, number>> = {
   rare_earth: 2.5,
@@ -374,7 +370,7 @@ export const MIN_COMMODITY_FLOW_UNITS = 0.01;
  * Base supply and demand added to every commodity at the global level.
  * Acts as a stabilizer — prevents extreme price swings when real activity
  * is near zero (e.g. early game). At 50,000 it is only ~2% of a high-volume
- * market like iron, but 70–85% of a thin market like copper or rare earth, so
+ * market like iron, but 70-85% of a thin market like rare_earth (covers copper), so
  * it currently flattens those thin markets' displayed ratios toward 1.0×
  * regardless of real supply (audit t786). Prefer COMMODITY_STABILIZER below,
  * which sizes the stabilizer per-commodity; this flat value is retained only as
@@ -388,7 +384,7 @@ export const BASE_COMMODITY_SUPPLY_DEMAND = 50_000;
  * activity (clamped to [1500, 50000]), calibrated against live turn-787
  * demand (audit t786). This keeps the stabilizer a small, roughly uniform
  * fraction of every market instead of a flat 50k that dominated thin markets
- * (copper/rare_earth/ordnance/vehicles were 70–85% stabilizer, pinning their
+ * (rare_earth, which covers copper, plus ordnance/vehicles were 70-85% stabilizer, pinning their
  * displayed ratios near 1.0× regardless of a real 5–35× shortage).
  *
  * Big markets keep 50k (already <5% of their flow, so behaviour is unchanged);
@@ -430,7 +426,7 @@ export const COMMODITY_STABILIZER: Record<CommodityType, number> = {
 /**
  * Commodities income demographics demand as end consumers: EVERY commodity
  * EXCEPT the raw extractables (a household buys petrol/electronics/services,
- * not crude oil or copper ore). Consumers pull the whole finished + intermediate
+ * not crude oil or rare-earth ore; rare_earth covers copper). Consumers pull the whole finished + intermediate
  * chain; only the raw resources themselves are excluded (2026-07-06 owner spec).
  */
 export const DEMOGRAPHIC_CONSUMER_COMMODITIES: readonly CommodityType[] = COMMODITY_TYPES.filter(
@@ -484,12 +480,13 @@ export const STATE_COMMODITY_SUPPLY_DEMAND = 250;
 
 /**
  * State-level stabilizer for EXTRACTABLE RESOURCE margin calculations.
- * Oil, gas, iron, copper, timber, coal, and rare earth are globally traded —
- * a state with zero local extraction can realistically import these resources,
- * so treating the local zero-supply pocket as a hard shortage overstates the
- * margin penalty. At 2500, a state with no local oil but 1000 demand sees
- * ratio ≈ 2500/3500 = 0.71 instead of the 1000/250 = 4× the default stabilizer
- * would produce. State prices are unchanged (visual locality preserved).
+ * Oil, gas, iron, timber, coal, and rare earth (covers copper) are globally
+ * traded - a state with zero local extraction can realistically import these
+ * resources, so treating the local zero-supply pocket as a hard shortage
+ * overstates the margin penalty. Stabilizer is added to BOTH supply and demand.
+ * At 2500, a state with no local oil but 1000 demand sees ratio
+ * (0+2500)/(1000+2500) = 0.71 instead of (0+250)/(1000+250) = 0.20 with the
+ * default stabilizer. State prices are unchanged (visual locality preserved).
  */
 export const EXTRACTABLE_RESOURCE_STATE_STABILIZER = 2500;
 
@@ -578,7 +575,7 @@ export const COMMODITY_PRESSURE_SOFT_KNEE = 3;
 export const COMMODITY_PRESSURE_TAIL_SLOPE = 0.25;
 
 /**
- * Wider soft-knee for the seven EXTRACTABLE resources in PRICE math.
+ * Wider soft-knee for the six EXTRACTABLE resources in PRICE math.
  * The default knee (3) compresses pressure exactly where the clearing-era
  * economy is scarcest (rare earth ran 4.1× demand/supply at t899 with its
  * signal squashed to ~3.3× effective). Extractables are the commodities the
@@ -597,15 +594,9 @@ export function getPriceSoftKnee(commodity: CommodityType): number {
 
 /**
  * Fraction of corporate marketing budgets that converts to advertising commodity demand.
- * E.g. at 0.40, a $1M/day total marketing budget adds 2,667 campaign-units/day of demand
- * (1,000,000 × 0.40 / $150 base price = 2,667 campaigns/day).
- * History: 0.60 -> 0.40 to ease a critical advertising SHORTAGE (S/D ~0.38).
- * That market has since inverted completely — prod at turn 114 read 44x
- * OVERSUPPLIED with the price pinned to the 0.32x deflation clamp — so the cut
- * is reversed and then some. Raised to 0.90 alongside buyer-side rates for the
- * consumer-facing sectors that actually advertise; no single lever reaches a
- * 21x gap, and the rate caps at 1.0 (a corp cannot spend more than its whole
- * marketing budget).
+ * At 0.90, a $1M/day marketing budget adds 6,000 campaign-units/day
+ * (1,000,000 x 0.90 / $150 base price). Caps at 1.0: a corp cannot spend more
+ * than its whole marketing budget.
  */
 export const MARKETING_ADVERTISING_DEMAND_RATE = 0.9;
 
@@ -1193,7 +1184,8 @@ export function computeCommodityPressureRatio(supplyUnits: number, demandUnits: 
 
 /**
  * Convert raw supply/demand pressure into the effective pressure used by price
- * and margin math. Ratios within 3x shortage or 3x oversupply are unchanged.
+ * and margin math. Ratios within the soft-knee (default 3x; callers pass
+ * EXTRACTABLE_PRESSURE_SOFT_KNEE (8) for extractable prices) are unchanged.
  * Beyond that soft-knee, the log-pressure tail keeps increasing at a steeply
  * diminishing rate. The transform is symmetric around 1x.
  */
@@ -1336,8 +1328,10 @@ export function applyRetailPenaltyFactor(
  * Computes modifiers at global, national, and state level independently, then blends
  * them with tariff-aware weights.
  *
- * State balances get STATE_COMMODITY_SUPPLY_DEMAND added to both sides to prevent
- * extreme ratios when a state has zero supply. National balances are used as-is.
+ * State balances get STATE_COMMODITY_SUPPLY_DEMAND (or
+ * EXTRACTABLE_RESOURCE_STATE_STABILIZER for extractables) added to both sides
+ * to prevent extreme ratios when a state has zero supply. National balances
+ * are used as-is.
  *
  * @returns { inputMod, surplusMod } — both in percentage points of margin
  */
@@ -1407,19 +1401,9 @@ export function computeBlendedMarginModifiers(
   // when selling into every scarce market simultaneously.
   const surplusMod = Math.min(COMMODITY_AGGREGATE_SURPLUS_CAP, Math.round(rawSurplus * 100) / 100);
 
-  // Combined floor across BOTH legs.
-  //
-  // Each leg was capped independently — input at -30, surplus only on its
-  // UPSIDE (Math.min) with no downside floor at all. So a sector whose inputs
-  // were scarce AND whose output was glutted took both hits stacked, unbounded
-  // below the input cap. That is the common case, not a corner: on the 1000-turn
-  // run the two legs fired negative together for -11.9pp average (the single
-  // largest margin drag), with agriculture at -35.5 and entertainment at -24.4 —
-  // past the point any firm can survive, and with no agent able to respond
-  // because nothing repoints a sector away from a glutted output.
-  //
-  // Scaling both legs proportionally preserves their relative signal (which
-  // commodity is hurting, and how much) while bounding the total.
+  // Combined floor across BOTH legs: scale proportionally when
+  // inputMod + surplusMod is below -COMMODITY_COMBINED_FLOOR so stacked
+  // scarcity plus glut cannot exceed the floor that each leg's own cap misses.
   const combined = inputMod + surplusMod;
   if (combined < -COMMODITY_COMBINED_FLOOR) {
     const scale = COMMODITY_COMBINED_FLOOR / Math.abs(combined);
@@ -1482,7 +1466,7 @@ export const SECTOR_SUPPLY: Partial<Record<CorporationType, CommodityFlow[]>> = 
     { commodity: "electronics", rate: 0.35 },
     { commodity: "software", rate: 0.35 },
   ],
-  // Raised from 0.6 → 0.65: energy producers buy several scarce inputs (oil, gas, copper)
+  // Raised from 0.6 to 0.65: energy producers buy several scarce inputs (oil, gas, rare_earth)
   // but currently sit near break-even. Higher output rate partially compensates.
   energy: [{ commodity: "energy", rate: 0.65 }],
   chemical_industries: [
@@ -1518,15 +1502,13 @@ export const SECTOR_SUPPLY: Partial<Record<CorporationType, CommodityFlow[]>> = 
     { commodity: "freight", rate: 0.45 },
     { commodity: "consulting_services", rate: 0.25 },
   ],
-  // Broad-mix extraction rates. copper/rare_earth were previously 0.03 on the
-  // assumption they were "near-balanced" — but that balance was an artifact of
-  // the flat 50k stabilizer masking a real 34×/33× shortage (617 units copper vs
-  // 21k demand). With the stabilizer unmasked (audit t786), copper/rare_earth are
-  // bumped 0.03 → 0.15/0.12 so broad-mix extraction actually produces a
-  // meaningful amount. This is partial relief only — closing the gap fully
-  // depends on extraction sectors adopting the copper_mining/rare_earth_mining
-  // strategies (rate 0.72) in the states that carry those deposits, which is the
-  // durable fix (automated strategy adoption).
+  // Broad-mix extraction rates. rare_earth (covers copper) was previously 0.03
+  // on the assumption it was "near-balanced" - that balance was an artifact of
+  // the flat 50k stabilizer masking a real ~34x shortage. With the stabilizer
+  // unmasked (audit t786), the merged rare_earth rate is 0.27 (was 0.15 copper
+  // + 0.12 rare_earth) so broad-mix extraction actually produces a meaningful
+  // amount. Closing the gap fully depends on extraction sectors adopting the
+  // rare_earth_mining strategy (rate 0.72) in states that carry those deposits.
   extraction: [
     { commodity: "iron", rate: 0.4 },
     { commodity: "coal", rate: 0.3 },
@@ -1540,8 +1522,9 @@ export const SECTOR_SUPPLY: Partial<Record<CorporationType, CommodityFlow[]>> = 
 /**
  * What each sector type DEMANDS (consumes as inputs).
  *
- * Retail generates consumer demand for ALL commodities, representing end-consumer
- * purchasing flowing through retail channels. Retail demand is scaled at runtime
+ * Retail generates consumer demand across a broad finished-and-intermediate
+ * basket (21 of 28 commodity keys), representing end-consumer purchasing
+ * flowing through retail channels. Retail demand is scaled at runtime
  * by GDP growth (50% national average + 50% regional) via computeRetailDemandMultiplier.
  */
 export const SECTOR_DEMAND: Partial<Record<CorporationType, CommodityFlow[]>> = {
@@ -1568,8 +1551,8 @@ export const SECTOR_DEMAND: Partial<Record<CorporationType, CommodityFlow[]>> = 
   energy: [
     { commodity: "steel", rate: 0.15 },
     { commodity: "coal", rate: 0.15 },
-    // Reduced oil 0.1→0.07 and copper 0.07→0.04: energy plants are not primary oil
-    // consumers (fuel switching to gas/coal is realistic), and copper is already
+    // Reduced oil 0.1 to 0.07 and rare_earth (covers copper) 0.07 to 0.04: energy plants are not primary oil
+    // consumers (fuel switching to gas/coal is realistic), and rare_earth is already
     // severely scarce. Reduced inputs improve energy sector viability without
     // distorting the commodity signal.
     { commodity: "oil", rate: 0.07 },
@@ -1658,8 +1641,8 @@ export const SECTOR_DEMAND: Partial<Record<CorporationType, CommodityFlow[]>> = 
     { commodity: "timber", rate: 0.07 },
   ],
   construction: [
-    // Reduced building_materials 0.20→0.15, copper 0.06→0.04, natural_gas 0.03→0.02,
-    // timber 0.10→0.08: construction stacks 9 scarce inputs simultaneously, driving
+    // Reduced building_materials 0.20 to 0.15, rare_earth (covers copper) 0.06 to 0.04, natural_gas 0.03 to 0.02,
+    // timber 0.10 to 0.06: construction stacks 9 scarce inputs simultaneously, driving
     // aggregate input penalties near the -30pp floor. These further reductions bring
     // construction into target profitability band.
     { commodity: "building_materials", rate: 0.15 },
@@ -1674,8 +1657,8 @@ export const SECTOR_DEMAND: Partial<Record<CorporationType, CommodityFlow[]>> = 
     { commodity: "plastics", rate: 0.07 },
   ],
   telecommunications: [
-    // Reduced electronics 0.25→0.18 and copper 0.12→0.09: telecom was over-contributing
-    // to electronics and copper shortages. Lower rates reflect that most capex is now
+    // Reduced electronics 0.25 to 0.18 and rare_earth (covers copper) 0.12 to 0.09: telecom was over-contributing
+    // to electronics and rare_earth shortages. Lower rates reflect that most capex is now
     // capitalised infrastructure rather than ongoing component consumption.
     { commodity: "electronics", rate: 0.18 },
     { commodity: "energy", rate: 0.1 },
@@ -1699,7 +1682,7 @@ export const SECTOR_DEMAND: Partial<Record<CorporationType, CommodityFlow[]>> = 
     /** Cold chain and contract food distribution */
     { commodity: "food", rate: 0.06 },
   ],
-  /** Retail: consumer demand for ALL commodities (base rates, scaled by GDP growth at runtime) */
+  /** Retail: consumer demand across a broad basket (21 of 28 keys), scaled by GDP growth at runtime */
   retail: [
     { commodity: "food", rate: 0.15 },
     { commodity: "electronics", rate: 0.1 },
@@ -2010,7 +1993,6 @@ export function computeRawSupplyDemand(
     }
     const stateMap = byState.get(sector.stateId)!;
 
-    // Natcorp sectors contribute only 0.25% of commodity flows
     const natcorpScale = sector.isNatcorp ? NATCORP_COMMODITY_MULTIPLIER : 1;
     // Production policy: asymmetric multipliers for output (supply) and input (demand)
     // High policy (+25): +15% output, +10% inputs, +10% revenue

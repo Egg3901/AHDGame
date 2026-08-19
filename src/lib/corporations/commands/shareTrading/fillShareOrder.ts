@@ -478,7 +478,8 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         }
 
         try {
-          // Corporation sell orders already debited shares at order creation.
+          // Skip when sharesDebitedAtCreation: placement already took the shares.
+          // Legacy character sells without that flag still debit here.
           if (!order.placerCorporationId && order.sharesDebitedAtCreation !== true) {
             const remainingSellerShares = await debitShares(
               db,
@@ -685,9 +686,8 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         }
 
         try {
-          // Corporation sell orders already debited shares from the corp's
-          // shareholder entry at order-creation time — do NOT debit again.
-          // Character sell orders only reserved shares, so debit now.
+          // Skip when sharesDebitedAtCreation: placement already took the shares.
+          // Legacy character sells without that flag still debit here.
           if (!order.placerCorporationId && order.sharesDebitedAtCreation !== true) {
             const remainingSellerShares = await debitShares(
               db,

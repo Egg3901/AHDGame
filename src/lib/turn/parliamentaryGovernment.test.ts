@@ -39,6 +39,7 @@ import {
   resolveParliamentaryAppointmentVote,
   checkAppointmentEligibility,
   isVoteClosed,
+  noConfidenceMotionCarries,
 } from "./parliamentaryGovernment";
 
 describe("isVoteClosed — turn-based with closesAt fallback", () => {
@@ -962,6 +963,139 @@ describe("resolveParliamentaryNoConfidenceVote — VONC-fail cancels parallel ap
     const batched = vi.mocked(createNotifications).mock.calls.flatMap((call) => call[0]);
     const cancelNotif = batched.find((n) => String(n.title).includes("Cancelled"));
     expect(cancelNotif).toBeDefined();
+  });
+});
+
+describe("noConfidenceMotionCarries — chamber majority, not majority of votes cast", () => {
+  it("ticket-1137: 215 aye / 0 nay does not carry a 625-seat chamber (threshold 313)", () => {
+    expect(
+      noConfidenceMotionCarries({
+        votesFor: 215,
+        votesAgainst: 0,
+        majorityThreshold: 313,
+        totalSeats: 625,
+      })
+    ).toBe(false);
+  });
+
+  it("carries when the ayes reach the chamber threshold", () => {
+    expect(
+      noConfidenceMotionCarries({
+        votesFor: 313,
+        votesAgainst: 0,
+        majorityThreshold: 313,
+        totalSeats: 625,
+      })
+    ).toBe(true);
+  });
+
+  it("treats abstentions and unvoted seats as support for the government", () => {
+    expect(
+      noConfidenceMotionCarries({
+        votesFor: 312,
+        votesAgainst: 1,
+        majorityThreshold: 313,
+        totalSeats: 625,
+      })
+    ).toBe(false);
+  });
+
+  it("derives the threshold from totalSeats when majorityThreshold is missing", () => {
+    expect(noConfidenceMotionCarries({ votesFor: 215, votesAgainst: 0, totalSeats: 625 })).toBe(
+      false
+    );
+    expect(noConfidenceMotionCarries({ votesFor: 313, votesAgainst: 0, totalSeats: 625 })).toBe(
+      true
+    );
+  });
+
+  it("falls back to a strict majority of votes cast when the chamber size is unknown", () => {
+    expect(noConfidenceMotionCarries({ votesFor: 215, votesAgainst: 0 })).toBe(true);
+    expect(noConfidenceMotionCarries({ votesFor: 0, votesAgainst: 0 })).toBe(false);
+  });
+});
+
+describe("resolveParliamentaryNoConfidenceVote — ticket-1137 minority motion must not unseat", () => {
+  it("does not vacate the PM on 215 aye / 0 nay against a 313 threshold", async () => {
+    const voteId = new ObjectId();
+    const targetPmId = new ObjectId();
+    const ayeNppId = new ObjectId();
+
+    db.collectionMocks["noConfidenceVotes"] = {
+      ...db.collection("noConfidenceVotes"),
+      findOne: vi.fn().mockResolvedValue({
+        _id: voteId,
+        countryId: "UK",
+        status: "active",
+        votesFor: 215,
+        votesAgainst: 0,
+        votes: { [`npp_${ayeNppId.toString()}`]: "aye" },
+        targetPmCharacterId: targetPmId,
+      }),
+      findOneAndUpdate: vi
+        .fn()
+        .mockResolvedValue({ _id: voteId, countryId: "UK", status: "failed" }),
+      updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+    } as MockDb["collectionMocks"][string];
+
+    db.collectionMocks["governmentFormations"] = {
+      ...db.collection("governmentFormations"),
+      findOne: vi.fn().mockResolvedValue({
+        _id: "UK",
+        status: "formed",
+        pmCharacterId: targetPmId,
+        majorityThreshold: 313,
+        totalSeats: 625,
+        seatsByParty: { "1": 364, "2": 215, "3": 37, "6": 9 },
+      }),
+      updateOne: vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
+    } as MockDb["collectionMocks"][string];
+
+    db.collectionMocks["electedOfficials"] = {
+      ...db.collection("electedOfficials"),
+      find: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            nppId: ayeNppId,
+            isNPP: true,
+            countryId: "UK",
+            officeType: "commons",
+            seatsHeld: 215,
+          },
+        ]),
+        sort: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+      }),
+    } as MockDb["collectionMocks"][string];
+
+    db.collectionMocks["pmAppointmentVotes"] = {
+      ...db.collection("pmAppointmentVotes"),
+      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+    } as MockDb["collectionMocks"][string];
+
+    db.collectionMocks["characters"] = {
+      ...db.collection("characters"),
+      findOne: vi.fn().mockResolvedValue({ _id: targetPmId, userId: new ObjectId() }),
+      updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+      find: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+        project: vi.fn().mockReturnThis(),
+      }),
+    } as MockDb["collectionMocks"][string];
+
+    const now = new Date("2026-08-18T18:00:00Z");
+    await resolveParliamentaryNoConfidenceVote(db as unknown as Db, "UK", voteId, now);
+
+    const claim = (
+      db.collectionMocks["noConfidenceVotes"].findOneAndUpdate as ReturnType<typeof vi.fn>
+    ).mock.calls[0];
+    expect(claim[1].$set.status).toBe("failed");
+
+    const updateCalls = (
+      db.collectionMocks["governmentFormations"].updateOne as ReturnType<typeof vi.fn>
+    ).mock.calls;
+    expect(updateCalls.find((c) => c[1].$set?.status === "pending")).toBeUndefined();
   });
 });
 

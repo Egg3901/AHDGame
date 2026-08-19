@@ -1,6 +1,6 @@
 // PATCH — Switches the active character for an admin account
 // Auth: requireAdmin
-// Errors: 401, 403 (not admin), 404 (character not found or not owned)
+// Errors: 403 (not admin), 404 (character not found or not owned)
 
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";

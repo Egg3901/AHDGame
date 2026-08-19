@@ -87,7 +87,7 @@ export const COUNTRY_SECTOR_WEIGHTS: Record<CountryId, SectorWeightMap> = {
     extraction: 3,
     agriculture: 1,
   },
-  // Latent — mirrors UK until SCO weights are authored at activation (SP2).
+  // Latent - mirrors UK; dedicated SCO weights are not authored.
   SCO: {
     real_estate: 14,
     financial: 13,
@@ -107,7 +107,7 @@ export const COUNTRY_SECTOR_WEIGHTS: Record<CountryId, SectorWeightMap> = {
     extraction: 3,
     agriculture: 1,
   },
-  // Latent — mirrors UK until WAL weights are authored at activation (SP2).
+  // Latent - mirrors UK; dedicated WAL weights are not authored.
   WAL: {
     real_estate: 14,
     financial: 13,
@@ -242,7 +242,7 @@ export const COUNTRY_SECTOR_WEIGHTS: Record<CountryId, SectorWeightMap> = {
     automobiles: 1,
   },
   // Hungary — planned socialist economy: heavy industry + agriculture, minimal
-  // finance/tech/media (coming-soon placeholder; refine with the HU seed stack).
+  // finance/tech/media.
   HU: {
     manufacturing: 22,
     agriculture: 14,
@@ -262,7 +262,7 @@ export const COUNTRY_SECTOR_WEIGHTS: Record<CountryId, SectorWeightMap> = {
     media: 1,
     entertainment: 1,
   },
-  // Eastern Bloc planned economies (coming-soon placeholders; normalized at read).
+  // Eastern Bloc planned economies (normalized at read).
   PL: {
     manufacturing: 22,
     agriculture: 13,

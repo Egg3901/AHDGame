@@ -8,7 +8,7 @@ import { getOfficeLabel } from "@/lib/utils/politics";
 
 // GET /api/characters/search — Search characters by name with optional party, country, and exclude filters
 // Auth: public
-// Errors: 400
+// Errors: none
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);

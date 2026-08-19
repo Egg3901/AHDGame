@@ -3,7 +3,7 @@
 // donorBaseLevel is intentionally preserved — drain removes current funds,
 // not future earning capacity. Use the Economy tab to inspect donor levels.
 // Auth: requireAdmin
-// Errors: 401, 403, 400, 404
+// Errors: 403, 400, 404
 
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";

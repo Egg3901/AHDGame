@@ -23,6 +23,7 @@ import {
   plannedEconomyMediaSupplyFactor,
 } from "@/lib/constants/sectorStrategies";
 import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
+import { applyExtractionResourceCapacityToSupply } from "@/lib/corporations/extractionResourceSupply";
 import {
   eraScaledBasePrices,
   commodityMixWeight,
@@ -444,16 +445,35 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         // media offers state broadcasting, not advertising. If the offer and
         // the ledger disagree on the commodity, clearing's lagged-supply
         // reconciliation misfires.
+        // A sector cannot offer a resource its state has no reserves of. Every
+        // other consumer of the supply mix already filters on state capacity
+        // (sectorTurn, the world supply ledger, the sector page), but the
+        // clearing OFFER did not, so an extraction sector in a resource-poor
+        // state put all six extraction legs on the book. The missing legs land
+        // in a book with no supply and no demand, clear at zero, and are still
+        // rate-weighted into `soldFraction` — which is what the sector page
+        // thresholds "this market is oversupplied" on. Every DD extraction
+        // sector sat at 0.435-0.498 against a 0.5 threshold and so read as
+        // permanently oversupplied on output it could never have made.
+        //
+        // Order matters: the planned-economy remap runs first (it can swap the
+        // commodity entirely), then the capacity filter culls what the state
+        // cannot extract. The helper no-ops for non-extraction sectors and for
+        // states with no capacity document, so nothing else moves.
         const rates = {
           ...baseRates,
-          supply: applyPlannedEconomyOutputMix(
+          supply: applyExtractionResourceCapacityToSupply(
             sector.sectorType,
-            baseRates.supply,
-            isPlannedEconomy(
-              (sector as { countryId?: string }).countryId,
-              currentYear,
-              commandEconomyEnabled
-            )
+            applyPlannedEconomyOutputMix(
+              sector.sectorType,
+              baseRates.supply,
+              isPlannedEconomy(
+                (sector as { countryId?: string }).countryId,
+                currentYear,
+                commandEconomyEnabled
+              )
+            ),
+            lookups.stateResourceCapacityByState.get(sector.stateId)
           ),
         };
         const sectorId = sector._id.toString();
@@ -812,13 +832,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   }
   mark("autoCaretaker");
 
-  // Forensics/alt-detection audit spine (plan §3.1, T2.7): aggregate,
-  // NOT-per-corp entries for this turn's silent auto-mutations (vacant/
-  // inactive-CEO sector shedding, NPP caretaker installs, subsidiary
-  // cleanup). Collected once and flushed via a single `recordAuditBulk` call
-  // near the end of this function, corporationTurn is the known turn-loop
-  // hotspot, so no per-corp writes here, just cheap counts already computed
-  // by each sub-step.
+  // Forensics/alt-detection audit spine: aggregate, not-per-corp entries for
+  // this turn's silent auto-mutations (vacant/inactive-CEO shedding, NPP
+  // caretaker installs, subsidiary cleanup). Batched into one `recordAuditBulk`
+  // at the end to avoid N+1 writes on the corp-turn hotspot.
   const corpAuditEntries: ActionAuditInput[] = [];
   if (caretakersInstalled > 0) {
     corpAuditEntries.push({
@@ -1084,21 +1101,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
 
   // Insert any new NPP sectors.
   //
-  // PLANTS-GATED: this is the WRITE half of the NPP founding insert whose
-  // document half lives in `nppCorporationBehavior.buildNppSectorDocs`, the
-  // docs carry a `revenue` key, so this statement is a `corporateSectors.revenue`
-  // writer and is registered as one. It stayed invisible to the writer-registry
-  // guard for a while because the guard could only read an insert whose argument
-  // was a literal `[` / `{`; this one passes a variable, so there was no document
-  // text to scan. The guard now recognizes an indirect insert on the collection
-  // by name and demands registration for it, see `sectorRevenueWriters.guard.test.ts`.
-  //
-  // Under plants the `revenue` on each doc is the legacy NAMEPLATE only: the new
-  // sector is born with `capitalStock: 0`, its founding order sitting in
-  // `buildQueue`, `constructionInProgressAnchor` equal to the order's paid ₳ and
-  // `plantsStartTurn` stamped, and `sectorTurn` restates `revenue` from capacity
-  // on the very next tick. Below plants the nameplate is the operative figure.
-  // Either way the quantity that matters is written by the builder, not here.
+  // PLANTS-GATED: write half of the founding insert whose document half lives
+  // in `nppCorporationBehavior.buildNppSectorDocs`. Docs carry `revenue`, so
+  // this is a registered `corporateSectors.revenue` writer, see
+  // `sectorRevenueWriters.guard.test.ts`. Under plants that figure is the legacy nameplate only; `sectorTurn`
+  // restates `revenue` from capacity next tick. Below plants the nameplate is
+  // the operative figure. The quantity that matters is written by the builder,
+  // not here.
   if (nppNewSectors.length > 0) {
     await db.collection("corporateSectors").insertMany(nppNewSectors);
   }

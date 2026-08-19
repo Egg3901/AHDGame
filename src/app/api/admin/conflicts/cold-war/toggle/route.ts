@@ -6,7 +6,7 @@ import type { GameState } from "@/lib/db/types";
 
 // GET /api/admin/conflicts/cold-war/toggle - Read the Cold War subsystem flag.
 // Auth: requireAdmin
-// Errors: 401
+// Errors: 403
 export async function GET() {
   try {
     const auth = await requireAdmin();
@@ -36,7 +36,7 @@ export async function GET() {
 // POST /api/admin/conflicts/cold-war/toggle - Refused: this legacy flag is retired.
 // The live conflict system uses conflictsEnabled as its single master gate.
 // Auth: requireAdmin
-// Errors: 401, 409
+// Errors: 403, 409
 export async function POST() {
   try {
     const auth = await requireAdmin();

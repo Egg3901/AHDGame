@@ -12,7 +12,6 @@ export async function getOrCreateVoteTally(
   inPrimary: boolean,
   isEnded: boolean
 ): Promise<ElectionVoteTally | null> {
-  // Fetch existing tally
   let voteTally = await db
     .collection<ElectionVoteTally>("electionVoteTallies")
     .findOne({ electionId });

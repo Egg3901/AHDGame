@@ -25,11 +25,10 @@ export function calcEffectiveFavorability(
 
 // ─── Vote potential for one candidate in one state ──────────────────────────
 //
-// weight = appeal × reach × approval × org
-//   appeal = position score (policy alignment with voter group)
-//   reach  = normalizeNPI(politicalInfluence) — name recognition in state
-//   approval = favorability/100 — do voters who know you approve of you?
-//   org = party organization scalar
+// Simplified estimator (not the live vote engine):
+//   potential = reached voters × (appeal / MAX_APPEAL)
+//   appeal = position score vs the group (state-level: NPI is reach, not appeal)
+//   reach  = normalizeNPI(politicalInfluence), name recognition in state
 //
 
 export function calcCandidateVotePotential(

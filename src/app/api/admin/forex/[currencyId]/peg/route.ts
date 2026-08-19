@@ -1,7 +1,7 @@
 // POST /api/admin/forex/[currencyId]/peg — sets hardPeg and applies rate immediately.
 // DELETE /api/admin/forex/[currencyId]/peg — removes hardPeg (drift resumes next turn).
 // Auth: requireAdmin
-// Errors: 401, 403, 404
+// Errors: 400, 403, 404
 
 import { NextResponse } from "next/server";
 import { z } from "zod";

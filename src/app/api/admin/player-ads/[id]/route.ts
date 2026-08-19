@@ -20,7 +20,7 @@ const toggleAdSchema = z
 
 // PATCH /api/admin/player-ads/[id] — Toggles active state and/or sets moderation status.
 // Auth: requireAdmin
-// Errors: 400, 401, 404
+// Errors: 400, 403, 404
 export async function PATCH(request: Request, { params }: RouteContext) {
   try {
     const auth = await requireAdmin();
@@ -60,7 +60,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
 // DELETE /api/admin/player-ads/[id] — Permanently removes a player banner ad and blob asset.
 // Auth: requireAdmin
-// Errors: 400, 401, 404
+// Errors: 400, 403, 404
 export async function DELETE(_req: Request, { params }: RouteContext) {
   try {
     const auth = await requireAdmin();

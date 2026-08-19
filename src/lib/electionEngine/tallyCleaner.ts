@@ -22,7 +22,6 @@ export async function removeWithdrawnCandidateFromTally(
 
   if (!tally) return;
 
-  // Build $unset paths to remove this candidate from all tally maps
   const unsetPaths: Record<string, ""> = {
     [`totalVotes.${candidateId}`]: "",
     [`candidateNames.${candidateId}`]: "",

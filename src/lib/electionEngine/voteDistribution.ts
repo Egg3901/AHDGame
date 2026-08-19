@@ -52,7 +52,10 @@ function spoilerOrgFactor(
 //
 // Each demographic group contributes to the turn pool proportionally to its
 // size. Within each group, candidates split that contribution by relative
-// (appeal × reach × approval × partyOrg). Groups vote as blocs.
+// weight. The product is appeal, reach, approval, org, plus Reg resistance,
+// seeded baseline, Support mood, NPP penalty, infamy, party-group favorability,
+// regime, party-fit, state-org, home-state, and party influence as applicable.
+// Groups vote as blocs.
 //
 
 export function distributeVotesByGroupLevelAllocation(
@@ -133,7 +136,6 @@ export function distributeVotesByGroupLevelAllocation(
           ec.partyEcon,
           ec.partySocial
         );
-        // Use effective favorability per archetype: favorability + archetypeApproval * 0.5
         const archetypeApproval = ec.archetypeApprovals?.[group.id] ?? 0;
         const effectiveFav = calcEffectiveFavorability(ec.favorability, archetypeApproval);
         const approval = approvalScalar(effectiveFav);
@@ -196,7 +198,7 @@ export function distributeVotesByGroupLevelAllocation(
         // on map presence (not on applyPartyFit) so the general path can
         // populate the same map and pick its own cap via isGeneralElection.
         // Primary cap: MAX_STATE_ORG_BONUS_PRIMARY (0.25). General cap:
-        // MAX_STATE_ORG_BONUS_GENERAL (0.10).
+        // MAX_STATE_ORG_BONUS_GENERAL (0.15).
         let stateOrgMult = 1;
         if (options?.stateOrgByCandidate) {
           const level = options.stateOrgByCandidate.get(ec.candidateId) ?? 0;

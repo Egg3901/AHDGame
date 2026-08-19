@@ -19,7 +19,7 @@ import { calculateStateLeanForCache } from "@/lib/demographics/cachedStateLean";
 
 // GET /api/admin/demographics — Returns demographic categories and optionally a single state's demographics.
 // Auth: requireAdmin
-// Errors: 401, 403
+// Errors: 403
 export async function GET(request: Request) {
   try {
     const auth = await requireAdmin();
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 
 // PATCH /api/admin/demographics — Updates a state's demographic group weights and recalculates cached political leans.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function PATCH(request: Request) {
   try {
     const auth = await requireAdmin();
@@ -179,7 +179,7 @@ export async function PATCH(request: Request) {
 
 // POST /api/admin/demographics — Overwrites the demographic defaults collection with the current live state demographics.
 // Auth: requireAdmin
-// Errors: 400, 401, 403
+// Errors: 400, 403
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

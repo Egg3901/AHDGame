@@ -1,6 +1,6 @@
 // POST /api/admin/loc/funding-source — Set the funding source for a player's open LOC account
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 //
 // Note: this only changes the source flag on the loan. It does NOT retroactively
 // shuffle already-deducted pool balances between deposits and reserves; the new

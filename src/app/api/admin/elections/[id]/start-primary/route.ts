@@ -24,7 +24,7 @@ const DEFAULT_GENERAL_HOURS = DEFAULT_DURATIONS.president.generalDurationHours;
 
 // POST /api/admin/elections/[id]/start-primary — Opens or re-opens the primary phase for a presidential election, resetting timers from now.
 // Auth: requireAdmin
-// Errors: 400, 401, 403, 404
+// Errors: 400, 403, 404
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireAdmin();

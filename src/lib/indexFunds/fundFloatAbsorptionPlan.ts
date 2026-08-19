@@ -27,7 +27,7 @@ export type PlannedFloatPurchase = {
 
 /**
  * Plan per-fund float purchases for one cron pass.
- * Splits each corporation's hourly cap fairly across funds by target weight.
+ * Splits each corporation's per-turn absorption cap fairly across funds by target weight.
  */
 export function planFloatAbsorptionAcrossFunds(
   funds: IndexFund[],

@@ -18,7 +18,7 @@ const patchLessonSchema = z.object({
 
 // PATCH /api/admin/tasks/lessons/[id] — Update tags and/or category on a lesson.
 // Auth: requireAdminOrApiKey
-// Errors: 400, 401, 403, 404
+// Errors: 400, 401, 403, 404, 500
 /**
  * PATCH /api/admin/tasks/lessons/[id]
  * Update tags and/or category on a lesson.
