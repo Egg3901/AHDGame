@@ -39,18 +39,29 @@ export function lotsRequired(archetype: { cost: number }): number {
 }
 
 /**
- * The share of a unit's purchase price that its full load of materiel costs. THE one dial —
+ * The share of a unit's purchase price that its full load of materiel costs. THE one dial -
  * `LOT_COST_UNITS` above and `LOT_COST_SHARE` below are both derived from it, never tuned
  * against each other.
  *
- * At 0.35 a fully-equipped formation's kit costs about a third of what the platform itself
- * cost to build, leaving the balance as hulls, airframes and personnel. Measured against the
- * C1 board: the US nets ~$300M/turn after upkeep and a lot prices at ~$352M, so materiel
- * accrues at roughly one lot per turn — an infantry division's four lots take about five
- * turns to fill, and equipping a from-scratch national roster is a game-year project rather
- * than an afternoon's.
+ * At 0.20 a fully-equipped formation's kit costs a fifth of what the platform itself cost to
+ * build, leaving the balance as hulls, airframes and personnel.
+ *
+ * Lowered from 0.35 in ticket #1134. This is the ONLY lever that moves arsenal PACING: a
+ * unit's materiel bill is this share of its price, the procurement budget per turn is fixed,
+ * so time-to-equip is directly proportional to it. The lot-granularity divisor the two derived
+ * constants share cannot do it - halving it halves the lot price and doubles the lots a
+ * platform needs, which is scale-invariant and changes nothing.
+ *
+ * Measured against the C1 board and the live world, which agree: the US nets ~383.7M/turn of
+ * procurement after upkeep, a lot priced at 0.35 costs 383.7M, and the observed contracting
+ * window is 12 lots over 12 turns - exactly the one lot per turn the 0.35 calibration
+ * targeted. At 0.20 a lot prices at 219.3M and the same budget accrues 1.75 lots per turn, so
+ * an infantry division's four lots take about 2.3 turns instead of 4 and equipping a
+ * from-scratch national roster takes about 27 turns instead of a full 48-turn game year.
+ * Deliberately a modest step, not a collapse: procurement money still constrains how fast an
+ * army can be re-equipped, which is the property the original calibration existed to create.
  */
-export const MATERIEL_SHARE_OF_UNIT_COST = 0.35;
+export const MATERIEL_SHARE_OF_UNIT_COST = 0.2;
 
 /**
  * Price of one lot as a fraction of the country's anchored GDP, before its cost scale.

@@ -176,7 +176,9 @@ function stubDb(l: Ledger): Db {
 // A realistic struck price: comfortably above what a lot costs to build, the way the award
 // band guarantees at signing. A price below cost is now a real (and separately tested) outcome
 // rather than the default, since live input prices can overtake a contract after it is signed.
-const PRICE = Math.ceil(lotProductionCost("heavy_armor")! * 1.5);
+// Cost is a share of price now (ticket #1134), so the anchor leads and cost follows.
+const ANCHOR = 10_000_000;
+const PRICE = Math.ceil(lotProductionCost("heavy_armor", ANCHOR)! * 1.5);
 
 function contract(over: Record<string, unknown> = {}) {
   return {
@@ -220,7 +222,7 @@ describe("defence procurement money conservation", () => {
     // Build cost is graded to the delivered grade (grade 0 here: nothing researched), the
     // same scale the contract's price band charged.
     expect(r.productionCost).toBeCloseTo(
-      lotProductionCost("heavy_armor")! * GRADE_PRICE_SCALE[0] * r.lots,
+      lotProductionCost("heavy_armor", PRICE)! * GRADE_PRICE_SCALE[0] * r.lots,
       -1
     );
     // Legs net to zero: the appropriation's outlay is exactly the supplier's gain plus the

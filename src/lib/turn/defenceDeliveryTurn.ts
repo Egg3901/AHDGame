@@ -292,7 +292,10 @@ export async function applyDefenceDeliveries(
     // here made every grade-0 contract underwater from turn one even at the band floor
     // (floor 0.784x cost vs cost 1.0x), and over-credited grade-3 deliveries by the 1.25x
     // the band charged but the build never paid.
-    const unitCost = lotProductionCost(sector.strategyId, priceRatios) ?? 0;
+    // Costed off the CONTRACT's stored `pricePerLot`, never the live anchor. Cost is a share
+    // of price (ticket #1134), so a signed order keeps the margin it was struck at even if the
+    // country's GDP has moved since - which is the same promise `pricePerLot` itself makes.
+    const unitCost = lotProductionCost(sector.strategyId, contract.pricePerLot, priceRatios) ?? 0;
     const gradedUnitCost = unitCost * GRADE_PRICE_SCALE[normalizeGrade(grade)];
     const buildCost = Math.max(0, Math.round(gradedUnitCost * recorded));
     const margin = actualCost - buildCost;

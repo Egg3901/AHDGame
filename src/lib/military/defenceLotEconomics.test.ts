@@ -10,8 +10,8 @@ import {
   normalizeGrade,
   GRADE_PRICE_SCALE,
   MIN_CONTRACT_MARGIN,
-  MAX_CONTRACT_MARGIN,
-  TARGET_CONTRACT_MARGIN,
+  TARGET_SUPPLIER_MARGIN,
+  lotCostIndex,
   DEFENCE_FACTORY_SLOTS_PER_PLANT,
 } from "./defenceLotEconomics";
 import { rawLotsFromSector } from "./arsenal";
@@ -33,14 +33,37 @@ describe("revenueBasisPerLot", () => {
 });
 
 describe("lotProductionCost", () => {
-  it("is positive for every line that can hold a contract", () => {
-    for (const id of ["standard", "heavy_armor", "munitions"]) {
-      expect(lotProductionCost(id)!).toBeGreaterThan(0);
+  // The live US figure, from prod: anchoredGdp x LOT_COST_SHARE x scale at the reworked
+  // MATERIEL_SHARE_OF_UNIT_COST of 0.20.
+  const PRICE = 219_285_034;
+
+  it("is a margin-derived share of what the lot sells for", () => {
+    for (const id of ["standard", "heavy_armor", "munitions", "aerospace"]) {
+      const cost = lotProductionCost(id, PRICE)!;
+      expect(cost).toBeCloseTo(PRICE * (1 - TARGET_SUPPLIER_MARGIN), 6);
     }
   });
 
-  it("carries overhead on top of the commodity bill", () => {
-    expect(lotProductionCost("heavy_armor")!).toBeGreaterThan(lotInputCost("heavy_armor")!);
+  // THE ticket #1134 regression, from `financialTxLog` turn 219 on the production world. A US
+  // air lot was priced 383,748,809 against a build cost of 1,091, so 99.9997% of the contract
+  // was margin and the delivery was a transfer of the national appropriation into one
+  // corporation's cash. Cost is now derived FROM price, so a four-figure build cost against a
+  // nine-figure lot is no longer representable.
+  it("cannot leave a nine-figure lot costing four figures to build", () => {
+    const cost = lotProductionCost("aerospace", 383_748_809)!;
+    expect(cost).toBeGreaterThan(1_091 * 100_000);
+    expect(cost / 383_748_809).toBeCloseTo(0.85, 6);
+    // The supplier's take is a normal industrial return, not the whole appropriation.
+    expect((383_748_809 - cost) / 383_748_809).toBeCloseTo(0.15, 6);
+  });
+
+  // Strategy no longer sets the LEVEL of cost, only how hard the market squeezes it. Before
+  // #1134 the level swung 40x across production lines for no reason a player could see.
+  it("does not let the production line change the level of cost", () => {
+    const calm = ["standard", "heavy_armor", "munitions", "aerospace"].map(
+      (id) => lotProductionCost(id, PRICE)!
+    );
+    for (const cost of calm) expect(cost).toBeCloseTo(calm[0], 6);
   });
 
   // Buy-sell symmetry: the bill prices through the same realization clamp the revenue side
@@ -52,8 +75,18 @@ describe("lotProductionCost", () => {
     expect(shock).toBeLessThan(base * 4);
   });
 
-  it("returns null for a line that builds no materiel", () => {
-    expect(lotProductionCost("not_a_strategy")).toBeNull();
+  it("moves cost with the market, within the index clamp", () => {
+    const calm = lotProductionCost("heavy_armor", PRICE)!;
+    const dear = lotProductionCost("heavy_armor", PRICE, new Map([["steel", 4]]))!;
+    expect(dear).toBeGreaterThan(calm);
+    expect(dear).toBeLessThanOrEqual(PRICE * (1 - TARGET_SUPPLIER_MARGIN) * 1.5);
+    expect(lotCostIndex("heavy_armor")).toBeCloseTo(1, 9);
+  });
+
+  it("returns null for a line that builds no materiel, or an unusable price", () => {
+    expect(lotProductionCost("not_a_strategy", PRICE)).toBeNull();
+    expect(lotProductionCost("heavy_armor", 0)).toBeNull();
+    expect(lotProductionCost("heavy_armor", -1)).toBeNull();
   });
 });
 
@@ -95,7 +128,9 @@ describe("the lot unit's base-price basis", () => {
 });
 
 describe("lotPriceBand", () => {
-  const productionCost = 100;
+  // Cost is derived from price now, so a realistic band input is `anchor x (1 - margin)`.
+  const ANCHOR = 10_000;
+  const productionCost = ANCHOR * (1 - TARGET_SUPPLIER_MARGIN);
 
   it("never lets a contract be written below the cost of building it", () => {
     const band = lotPriceBand({ anchorPrice: 1, productionCost, grade: 2 })!;
@@ -107,41 +142,51 @@ describe("lotPriceBand", () => {
     expect(band.ceiling).toBeGreaterThanOrEqual(band.floor);
   });
 
-  // THE exploit guard on the price lever: without a ceiling a minister with an interest in the
-  // supplier writes a contract at any number they like and the appropriation is a cash tap.
-  it("caps the price at production cost plus the maximum margin", () => {
-    const band = lotPriceBand({ anchorPrice: 10_000, productionCost, grade: 2 })!;
-    expect(band.ceiling).toBe(Math.round(productionCost * (1 + MAX_CONTRACT_MARGIN)));
+  // The GDP anchor is the designed price and the working ceiling: it is the tighter of the
+  // two bounds whenever the commodity market is calm.
+  it("caps the price at the grade-scaled GDP anchor in a calm market", () => {
+    const band = lotPriceBand({ anchorPrice: ANCHOR, productionCost, grade: 2 })!;
+    expect(band.ceiling).toBe(ANCHOR);
   });
 
-  // Ticket #1134. The GDP anchor is a hard cap and nothing else, so a country whose economy
-  // cannot bear the cost-anchored price still pays the lower of the two.
-  it("keeps the GDP anchor as an upper bound when it is the tighter one", () => {
-    const band = lotPriceBand({ anchorPrice: 150, productionCost, grade: 2 })!;
-    expect(band.ceiling).toBe(150);
-    expect(band.ceiling).toBeLessThan(Math.round(productionCost * (1 + MAX_CONTRACT_MARGIN)));
+  // The backstop, for the day the cost model is changed or mis-seeded. Whatever happens, a
+  // price cannot sit orders of magnitude above what building the lot consumed. That is the
+  // failure mode ticket #1134 was raised for.
+  it("caps the price at twice cost even when the anchor is absurd", () => {
+    const band = lotPriceBand({ anchorPrice: 383_748_809, productionCost: 1_091, grade: 2 })!;
+    expect(band.ceiling).toBe(2_182);
+    expect(band.ceiling).toBeLessThan(383_748_809 / 100_000);
   });
 
-  it("defaults to a fair margin over cost rather than to the anchor", () => {
-    const band = lotPriceBand({ anchorPrice: 10_000, productionCost, grade: 2 })!;
-    expect(band.suggested).toBe(Math.round(productionCost * (1 + TARGET_CONTRACT_MARGIN)));
+  // Leaving the price blank quotes the designed anchor: grossing the cost back up by the same
+  // margin it was derived with returns exactly the figure it came from.
+  it("defaults to the designed anchor price in a calm market", () => {
+    const band = lotPriceBand({ anchorPrice: ANCHOR, productionCost, grade: 2 })!;
+    expect(band.suggested).toBe(ANCHOR);
     expect(band.suggested).toBeGreaterThanOrEqual(band.floor);
     expect(band.suggested).toBeLessThanOrEqual(band.ceiling);
   });
 
-  // THE live case, from `financialTxLog` turn 219 on the production world: a US air lot was
-  // priced at 383,748,809 against a production cost of 1,091, so 99.9997% of the contract
-  // price was margin and the delivery was a transfer of the national appropriation into one
-  // corporation's cash. The band must never quote anywhere near that figure again.
-  it("cannot price a 1,091 lot anywhere near the 383.7m the live world paid", () => {
-    const band = lotPriceBand({ anchorPrice: 383_748_809, productionCost: 1_091, grade: 2 })!;
-    expect(band.ceiling).toBe(2_182);
-    expect(band.suggested).toBe(1_473);
-    expect(band.floor).toBe(1_222);
-    // The margin a delivery credits the supplier is `price - cost`, and it is now a trading
-    // margin rather than the whole contract.
-    expect((band.ceiling - 1_091) / band.ceiling).toBeLessThan(0.51);
-    expect(band.ceiling).toBeLessThan(383_748_809 / 100_000);
+  // THE live case, from `financialTxLog` turn 219 on the production world. A US air lot was
+  // priced 383,748,809 against a build cost of 1,091, so 99.9997% of the contract was margin
+  // and the delivery was a transfer of the national appropriation into one corporation's cash.
+  // Under the reworked model the price stays the designed figure and the COST rises to meet
+  // it, so the appropriation converts into materiel rather than into a cash balance.
+  it("leaves the supplier a normal industrial return on the live US lot", () => {
+    const anchorPrice = 219_285_034; // the live US lot at MATERIEL_SHARE_OF_UNIT_COST 0.20
+    const cost = lotProductionCost("aerospace", anchorPrice)!;
+    const band = lotPriceBand({ anchorPrice, productionCost: cost, grade: 2 })!;
+
+    expect(Math.round(cost)).toBe(186_392_279);
+    expect(band.floor).toBe(208_759_353);
+    expect(band.suggested).toBe(219_285_034);
+    expect(band.ceiling).toBe(219_285_034);
+
+    // The supplier's take across the whole negotiable band is a real but ordinary return,
+    // nothing like the 99.9997% the live world paid.
+    expect((band.ceiling - cost) / band.ceiling).toBeCloseTo(0.15, 3);
+    expect((band.floor - cost) / band.floor).toBeGreaterThan(0.1);
+    expect((band.ceiling - cost) / band.ceiling).toBeLessThan(0.2);
   });
 
   // Suggestion #292. Grade is one dial with two ends: cheap mass costs less to build AND

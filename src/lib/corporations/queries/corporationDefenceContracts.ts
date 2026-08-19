@@ -152,8 +152,11 @@ export async function loadCorporationDefenceContracts(
       partialLot: carry - Math.floor(carry),
       amountPaid: c.amountPaid ?? c.lotsDelivered * c.pricePerLot,
       productionCostPaid: c.productionCostPaid ?? 0,
+      // Costed against the CONTRACT's own price, not the live anchor: the CEO's margin on a
+      // signed order is fixed by the deal they accepted, and must not appear to move because
+      // the country's GDP did (ticket #1134).
       unitProductionCost: sector
-        ? (lotProductionCost(sector.strategyId, priceRatios) ?? 0) *
+        ? (lotProductionCost(sector.strategyId, c.pricePerLot, priceRatios) ?? 0) *
           GRADE_PRICE_SCALE[normalizeGrade(c.gradeCeiling)]
         : null,
       encumberedAmount: c.encumberedAmount ?? 0,

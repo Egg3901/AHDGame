@@ -6,7 +6,41 @@ import {
   blendGrade,
   refitOrder,
   lotsToFillUnit,
+  lotPrice,
+  MATERIEL_SHARE_OF_UNIT_COST,
 } from "./arsenal";
+
+// Ticket #1134 pacing calibration, pinned against the live world so the dial cannot drift
+// silently. `MATERIEL_SHARE_OF_UNIT_COST` is the ONE lever that moves arsenal pacing: a unit's
+// materiel bill is this share of its price and the procurement budget per turn is fixed, so
+// time-to-equip is directly proportional to it.
+describe("arsenal pacing", () => {
+  // Measured on prod: the US contracting window ran 4,604,985,708 over 12 turns, i.e.
+  // 383,748,809 of procurement per turn, and a lot priced at 383,748,809 under the old 0.35
+  // share. One lot per turn, exactly what the original calibration targeted.
+  const US_PROCUREMENT_PER_TURN = 383_748_809;
+  const US_ANCHORED_GDP = 383_748_809 / (0.35 / 1_000);
+
+  it("prices the live US lot at the reworked share", () => {
+    expect(lotPrice("US", US_ANCHORED_GDP)).toBe(219_285_034);
+  });
+
+  it("fills between 1.5x and 2x faster than the one lot per turn baseline", () => {
+    const price = lotPrice("US", US_ANCHORED_GDP)!;
+    const lotsPerTurn = US_PROCUREMENT_PER_TURN / price;
+    expect(lotsPerTurn).toBeGreaterThan(1.5);
+    expect(lotsPerTurn).toBeLessThan(2.0);
+    expect(lotsPerTurn).toBeCloseTo(1.75, 2);
+  });
+
+  // The granularity divisor the two derived constants share CANNOT do this job: halving it
+  // halves the lot price and doubles the lots a platform needs, which leaves time-to-equip
+  // unchanged. Only the share moves pacing, which is why it is the single dial.
+  it("leaves a platform's lot requirement untouched, so pacing comes from price alone", () => {
+    expect(lotsRequired({ cost: 1_548 })).toBe(4);
+    expect(MATERIEL_SHARE_OF_UNIT_COST).toBe(0.2);
+  });
+});
 
 describe("lotsRequired", () => {
   it("scales with what the unit costs to build", () => {
