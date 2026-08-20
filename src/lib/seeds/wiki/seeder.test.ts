@@ -145,11 +145,13 @@ describe("seedWikiPages", () => {
     vi.clearAllMocks();
   });
 
-  it("requires lastUpdated (YYYY-MM-DD) on every seed page", async () => {
+  it("resolves a lastUpdated date (YYYY-MM-DD) for every seed page", async () => {
     const { WIKI_SEED_PAGES } = await import("./pages");
+    const { WIKI_LAST_UPDATED } = await import("./lastUpdated.generated");
     expect(WIKI_SEED_PAGES.length).toBeGreaterThan(50);
     for (const page of WIKI_SEED_PAGES) {
-      expect(page.lastUpdated, page.slug).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      const date = page.lastUpdated ?? WIKI_LAST_UPDATED[page.slug];
+      expect(date, page.slug).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     }
   });
 });

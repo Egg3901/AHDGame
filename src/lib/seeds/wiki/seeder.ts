@@ -2,6 +2,7 @@ import type { Db, ObjectId } from "mongodb";
 import type { WikiPage } from "@/lib/db/types";
 import type { WikiSeedPage } from "./types";
 import { WIKI_SEED_PAGES } from "./pages";
+import { WIKI_LAST_UPDATED } from "./lastUpdated.generated";
 
 export interface WikiSeedSkipped {
   slug: string;
@@ -35,9 +36,14 @@ function hasHumanEdits(page: WikiPage): boolean {
   return history.some((h) => h.action !== "created" && !h.note?.startsWith("Reseed"));
 }
 
-function parseSeedDate(isoDate: string): Date {
+function parseSeedDate(isoDate: string | undefined): Date {
   const parsed = new Date(`${isoDate}T00:00:00.000Z`);
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+/** Explicit seed override wins; otherwise the git-derived date for the slug. */
+function seedLastUpdated(seed: WikiSeedPage): Date {
+  return parseSeedDate(seed.lastUpdated ?? WIKI_LAST_UPDATED[seed.slug]);
 }
 
 function pageDocForSeed(
@@ -46,7 +52,7 @@ function pageDocForSeed(
   now: Date
 ): Omit<WikiPage, "_id"> {
   const tags = Array.from(new Set([seed.category, ...(seed.extraTags ?? [])]));
-  const lastUpdated = parseSeedDate(seed.lastUpdated);
+  const lastUpdated = seedLastUpdated(seed);
   return {
     slug: seed.slug,
     title: seed.title,
@@ -122,7 +128,7 @@ export async function seedWikiPages(
     }
 
     const tags = Array.from(new Set([seed.category, ...(seed.extraTags ?? [])]));
-    const lastUpdated = parseSeedDate(seed.lastUpdated);
+    const lastUpdated = seedLastUpdated(seed);
     await wikiPages.updateOne(
       { slug: seed.slug },
       {

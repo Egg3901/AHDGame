@@ -15,7 +15,6 @@ export const iterationsPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 12,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "beta-2",
@@ -29,6 +28,5 @@ export const iterationsPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 14,
-    lastUpdated: "2026-08-11",
   },
 ];

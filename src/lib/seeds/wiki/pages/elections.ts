@@ -30,7 +30,6 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 9,
-    lastUpdated: "2026-08-13",
   },
   {
     slug: "election-mechanics",
@@ -43,7 +42,6 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 8,
-    lastUpdated: "2026-08-19",
     designDocUrl: "design/elections.html",
   },
   {
@@ -56,7 +54,6 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "general-elections",
@@ -68,7 +65,6 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
-    lastUpdated: "2026-08-19",
   },
   {
     slug: "polling",
@@ -80,7 +76,6 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 5,
-    lastUpdated: "2026-08-19",
   },
   {
     slug: "fundraising-ads",
@@ -92,7 +87,6 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 6,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "canvassing",
@@ -104,7 +98,6 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 5,
-    lastUpdated: "2026-08-19",
   },
   {
     slug: "demographics-targeting",
@@ -116,7 +109,6 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 7,
-    lastUpdated: "2026-08-19",
   },
   {
     slug: "demographics",
@@ -128,7 +120,6 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 8,
-    lastUpdated: "2026-08-19",
   },
   {
     slug: "us-house-redistricting",
@@ -141,7 +132,6 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 7,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "campaign-strategy",
@@ -154,7 +144,6 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "strategy",
     estimatedReadTime: 9,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "campaign-manager",
@@ -166,7 +155,6 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "primary-general-tactics",
@@ -178,7 +166,6 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "strategy",
     estimatedReadTime: 7,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "snap-elections",
@@ -190,7 +177,6 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "reference",
     estimatedReadTime: 6,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "live-election-results",

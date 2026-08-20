@@ -37,10 +37,11 @@ export interface WikiSeedPage {
   private?: boolean;
 
   /**
-   * ISO date (YYYY-MM-DD) of the last git commit that touched this page's
-   * content file. Shown as the "Updated <date>" badge. Not wall-clock reseed time.
+   * Optional override for the "Updated <date>" badge (YYYY-MM-DD). When absent,
+   * the seeder uses lastUpdated.generated.ts, derived from the git history of the
+   * page's content file by scripts/generate-wiki-last-updated.ts.
    */
-  lastUpdated: string;
+  lastUpdated?: string;
 
   /**
    * Path after the docs host, e.g. "design/elections.html".

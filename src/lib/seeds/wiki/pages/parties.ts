@@ -25,7 +25,6 @@ export const partiesPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 5,
-    lastUpdated: "2026-08-11",
     designDocUrl: "design/parties.html",
   },
   {
@@ -38,7 +37,6 @@ export const partiesPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 5,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "party-leadership",
@@ -50,7 +48,6 @@ export const partiesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 7,
-    lastUpdated: "2026-08-12",
   },
   {
     slug: "party-leadership-authority",
@@ -74,7 +71,6 @@ export const partiesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "party-ideology",
@@ -86,7 +82,6 @@ export const partiesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 6,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "party-actions",
@@ -98,7 +93,6 @@ export const partiesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "coalitions",
@@ -110,7 +104,6 @@ export const partiesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 5,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "coalition-formation",
@@ -122,7 +115,6 @@ export const partiesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "npps-overview",
@@ -134,7 +126,6 @@ export const partiesPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 6,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "npp-behavior",
@@ -146,7 +137,6 @@ export const partiesPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "reference",
     estimatedReadTime: 8,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "npp-elections",
@@ -158,7 +148,6 @@ export const partiesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "npp-autonomy",
@@ -170,6 +159,5 @@ export const partiesPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "reference",
     estimatedReadTime: 7,
-    lastUpdated: "2026-08-12",
   },
 ];

@@ -84,6 +84,10 @@
     ],
     "content/changelog/**/*.md": [
       "npx tsx scripts/changelog/check-entries.ts"
+    ],
+    "src/lib/seeds/wiki/{content,pages}/**/*.ts": [
+      "npx tsx scripts/generate-wiki-last-updated.ts",
+      "git add src/lib/seeds/wiki/lastUpdated.generated.ts"
     ]
   },
   "dependencies": {

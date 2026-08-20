@@ -24,7 +24,6 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 8,
-    lastUpdated: "2026-08-11",
     designDocUrl: "design/bills-legislation.html",
   },
   {
@@ -37,7 +36,6 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "policy-effects",
@@ -50,7 +48,6 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "reference",
     estimatedReadTime: 8,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "congress-leadership",
@@ -62,7 +59,6 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "chamber-leadership",
@@ -85,7 +81,6 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "cabinet-guide",
@@ -97,7 +92,6 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 12,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "cabinet-projects",
@@ -109,7 +103,6 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 8,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "confirmation-process",
@@ -121,7 +114,6 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "government-formation",
@@ -133,7 +125,6 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 8,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "no-confidence-votes",
@@ -145,7 +136,6 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
-    lastUpdated: "2026-08-11",
   },
   {
     slug: "one-party-states",
@@ -157,6 +147,5 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
-    lastUpdated: "2026-08-11",
   },
 ];
