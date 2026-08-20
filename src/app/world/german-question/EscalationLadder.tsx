@@ -16,14 +16,14 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const arm = async () => {
+  const post = async (path: "escalate" | "declare", fallback: string) => {
     setPending(true);
     setError(null);
     try {
-      const res = await fetch("/api/world/german-question/escalate", { method: "POST" });
+      const res = await fetch(`/api/world/german-question/${path}`, { method: "POST" });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error ?? "The ladder could not be forced.");
+        setError(body?.error ?? fallback);
         return;
       }
       onArmed();
@@ -33,6 +33,9 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
       setPending(false);
     }
   };
+
+  const arm = () => post("escalate", "The ladder could not be forced.");
+  const declare = () => post("declare", "The declaration could not be sent.");
   return (
     <section className="rounded-xl border border-warning/40 bg-warning/[0.05] p-4">
       <h2 className="mb-3 font-mono text-body-xs font-bold tracking-wider text-gold-muted">
@@ -87,21 +90,34 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
       )}
 
       {seat?.canEscalate ? (
-        <button
-          type="button"
-          disabled={pending || !seat.canArmNow}
-          onClick={() => void arm()}
-          title={
-            seat.canArmNow
-              ? "Take the ladder to rung 5. This arms a declaration and starts the levy."
-              : view.armed
-                ? "The ladder is already at the top rung."
+        view.armed ? (
+          // The SECOND press. Deliberately a separate control with its own copy
+          // rather than the same button relabelled: arming can be walked back by
+          // letting the heat decay, and this cannot be walked back at all.
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => void declare()}
+            title="Open the war. The influence contest closes and the settlement goes to whoever wins."
+            className="mt-3 w-full rounded-md border border-error bg-error/15 p-2.5 font-mono text-body-xs font-bold tracking-wider text-error hover:bg-error/25 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pending ? "DECLARING…" : "☢ DECLARE — OPEN THE WAR"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={pending || !seat.canArmNow}
+            onClick={() => void arm()}
+            title={
+              seat.canArmNow
+                ? "Take the ladder to rung 5. This arms a declaration and starts the levy."
                 : "The ladder must reach rung 4 on coercive plays before it can be forced."
-          }
-          className="mt-3 w-full rounded-md border border-warning/40 bg-warning/[0.07] p-2.5 font-mono text-body-xs font-semibold tracking-wider text-warning hover:bg-warning/[0.14] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {pending ? "FORCING…" : "▲ FORCE THE ISSUE — ESCALATE"}
-        </button>
+            }
+            className="mt-3 w-full rounded-md border border-warning/40 bg-warning/[0.07] p-2.5 font-mono text-body-xs font-semibold tracking-wider text-warning hover:bg-warning/[0.14] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pending ? "FORCING…" : "▲ FORCE THE ISSUE — ESCALATE"}
+          </button>
+        )
       ) : (
         <p className="mt-3 rounded-md border border-dashed border-card-border p-3 font-mono text-body-xs leading-relaxed text-muted">
           NO ESCALATION AUTHORITY — {seat?.escalateGate ?? "only a delegation may take the ladder."}

@@ -32,6 +32,7 @@ import { resolvePlayBatch, type ResolvedBatch } from "@/lib/settlement/resolvePl
 import { isArmed, nextHeat, outcomeFor } from "@/lib/settlement/outcome";
 import { isSettlementCrisisEnabled } from "@/lib/settlement/featureFlag";
 import { levyMobilisation } from "@/lib/settlement/mobilisation";
+import { settleFrozenCrisisFromConflict } from "@/lib/settlement/settleFromConflict";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
 import type { GameState } from "@/lib/db/types";
 
@@ -70,6 +71,16 @@ export async function processSettlementTurn(
   if (!(await isSettlementCrisisEnabled(gameState ?? {}))) return idle();
 
   const crises = await getSettlementCrisesCollection(db);
+
+  // A frozen crisis is waiting on its war. Sweep that first: the moment the
+  // conflict resolves, the settlement is decided by who won it, and the board
+  // should not sit frozen for a turn longer than the fighting lasted.
+  const frozen = await crises.findOne({ status: "frozen" } as Filter<SettlementCrisisDoc>);
+  if (frozen) {
+    const settled = await settleFrozenCrisisFromConflict(db, frozen, currentTurn);
+    return { ...idle(), crisesResolved: settled.settled ? 1 : 0 };
+  }
+
   const crisis = await crises.findOne({ status: "open" } as Filter<SettlementCrisisDoc>);
   // `frozen` and `resolved` are both excluded by the query; the explicit guard
   // keeps this correct if the query is ever widened.

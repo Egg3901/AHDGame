@@ -87,7 +87,12 @@ function arrange(db: MockDb, doc: SettlementCrisisDoc, plays: SettlementPlayDoc[
     _id: "current",
     settlementCrisisEnabled: true,
   });
-  prime(db, "settlementCrises").findOne.mockResolvedValue(doc);
+  // Filter-aware: the phase asks for a FROZEN crisis first (the war sweep) and
+  // an OPEN one second. A blanket mock hands the same document to both, so the
+  // sweep swallows every open-crisis test.
+  prime(db, "settlementCrises").findOne.mockImplementation(async (filter: { status?: string }) =>
+    filter?.status === doc.status ? doc : null
+  );
   // The tick claim runs through updateOne on the crisis collection. Default
   // matchedCount 1 = this runner won the tick.
   prime(db, "settlementCrises").updateOne.mockResolvedValue({ matchedCount: 1 });
@@ -414,6 +419,42 @@ describe("processSettlementTurn", () => {
     a.heat = 99;
     const b = await processSettlementTurn(db as unknown as Db, 413);
     expect(b.heat).toBe(0);
+  });
+
+  it("settles a frozen crisis the moment its war resolves", async () => {
+    arrange(db, crisis({ status: "frozen", conflictId: "gq_de_412" }), []);
+    prime(db, "conflicts").findOne.mockResolvedValue({
+      _id: "gq_de_412",
+      status: "resolved",
+      sideA: { label: "NATO", backer: "west" },
+      sideB: { label: "Warsaw Pact", backer: "east" },
+      outcome: { winner: "B" },
+    });
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 412);
+
+    expect(result.crisesResolved).toBe(1);
+    const settle = db.collectionMocks.settlementCrises!.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.outcome !== undefined
+    );
+    expect(settle![1].$set).toMatchObject({ status: "resolved", outcome: "challenger" });
+  });
+
+  it("leaves a frozen crisis alone while its war is still being fought", async () => {
+    arrange(db, crisis({ status: "frozen", conflictId: "gq_de_412" }), [play()]);
+    prime(db, "conflicts").findOne.mockResolvedValue({
+      _id: "gq_de_412",
+      status: "active",
+      sideA: { label: "NATO", backer: "west" },
+      sideB: { label: "Warsaw Pact", backer: "east" },
+    });
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 412);
+
+    expect(result.crisesResolved).toBe(0);
+    expect(result.playsResolved).toBe(0);
+    // No drift, no play resolution — the meter is held where the war froze it.
+    expect(db.collectionMocks.settlementPlays!.updateOne).not.toHaveBeenCalled();
   });
 
   it("levies mobilisation while the ladder is armed", async () => {
