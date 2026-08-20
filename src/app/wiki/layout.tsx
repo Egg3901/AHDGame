@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
+import { WikiSiteHeader } from "@/components/wiki/layout/WikiSiteHeader";
+import { getDocsUrl, getSiteUrl } from "@/lib/siteMetadata";
 
 /** Wiki pages read from MongoDB; avoid static generation at build time (CI may have no DB / no seed). */
 export const dynamic = "force-dynamic";
@@ -21,7 +23,8 @@ export default async function WikiLayout({ children }: { children: React.ReactNo
 
   return (
     <div className="min-h-screen min-w-0 overflow-x-hidden bg-background">
-      <main>{children}</main>
+      <WikiSiteHeader playUrl={getSiteUrl()} docsUrl={getDocsUrl()} />
+      {children}
     </div>
   );
 }

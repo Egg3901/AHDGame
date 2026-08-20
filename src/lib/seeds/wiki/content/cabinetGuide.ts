@@ -13,7 +13,7 @@ Every cabinet seat in A House Divided is a real executive office with its own da
 ## How cabinets are filled
 
 - **Presidential systems (US, NG):** the President nominates and the legislature confirms. See [Cabinet](/wiki/cabinet) and the confirmation process.
-- **Parliamentary systems (UK, DE, JP, IE, CN, and the devolved Scottish and Welsh governments):** the head of government appoints ministers directly after [Government Formation](/wiki/government-formation), with no confirmation vote. The whole cabinet resets when the government changes.
+- **Parliamentary systems (UK, DE, JP, IE):** the head of government appoints ministers directly after [Government Formation](/wiki/government-formation), with no confirmation vote. The whole cabinet resets when the government changes. China is a one-party state, not a parliamentary cabinet. Scotland and Wales are latent countries; they are not live player cabinets.
 
 ## What ministers can do
 

@@ -7,6 +7,7 @@ import {
   assertShareStructureChangePreservesHolders,
   corporationCanRestructureShares,
   findDroppedShareholders,
+  issuanceDilutionFactor,
   planFundHoldingSplitSync,
   scaleSharePricesForStructureChange,
   sumAccountedOutstandingShares,
@@ -475,5 +476,30 @@ describe("findDroppedShareholders", () => {
     const dropped = findDroppedShareholders(before, after);
     expect(dropped).toHaveLength(1);
     expect(dropped[0]?.ownerId.toString()).toBe(tiny.toString());
+  });
+});
+
+describe("issuanceDilutionFactor (2026-08-20 market-cap fabrication fix)", () => {
+  it("preserves market cap across an issuance", () => {
+    // 1.02M shares at 3158 must be worth the same after 128.1M new shares.
+    const oldTotal = 1_020_000;
+    const newShares = 128_124_511;
+    const price = 3158;
+    const factor = issuanceDilutionFactor(oldTotal, newShares);
+    const capBefore = oldTotal * price;
+    const capAfter = (oldTotal + newShares) * price * factor;
+    expect(capAfter).toBeCloseTo(capBefore, 3);
+  });
+
+  it("is the forward-split scaling for the same share counts", () => {
+    const factor = issuanceDilutionFactor(100, 300);
+    const split = scaleSharePricesForStructureChange(100, 400, 1).sharePrice;
+    expect(factor).toBeCloseTo(split, 10);
+  });
+
+  it("degenerate inputs return 1 (no scaling)", () => {
+    expect(issuanceDilutionFactor(0, 100)).toBe(1);
+    expect(issuanceDilutionFactor(-5, 100)).toBe(1);
+    expect(issuanceDilutionFactor(100, 0)).toBe(1);
   });
 });

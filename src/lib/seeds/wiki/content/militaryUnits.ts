@@ -193,7 +193,7 @@ That second point is the whole design. A Cutting-Edge division is better than a 
 
 ## Veterancy and strength
 
-**Veterancy** runs from Green to Elite across five grades and is earned by fighting. Veterans are meaningfully better than green troops at the same headcount, and this compounds: preserving an experienced formation is one of the highest-value things you can do.
+**Veterancy** runs from Green to Elite across five grades and is earned by fighting. Veterans are meaningfully better than green troops at the same headcount. The bonus is a grade table, not a compounding multiplier: preserving an experienced formation is still one of the highest-value things you can do.
 
 **Strength** is current personnel divided by establishment, shown as a percentage on the unit card. A unit ground down in battle fights at reduced effect in proportion to its losses. **A division at 40% strength fights like a much smaller formation**: it is not a full-power unit with a cosmetic wound.
 

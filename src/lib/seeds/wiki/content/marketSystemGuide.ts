@@ -23,7 +23,7 @@ You don't turn these on, the game does. Your job is to understand each one so yo
 
 ## Prices come from supply and demand
 
-Every commodity has a price that moves each turn based on how much of it corporations produce (supply) versus how much they consume (demand). Scarcity pushes prices up; a glut pushes them down. The full mechanic (the 29 commodities, the curves, the three-tier blend) lives in [Commodities](/wiki/commodities). The market system is what turns those prices into your revenue.
+Every commodity has a price that moves each turn based on how much of it corporations produce (supply) versus how much they consume (demand). Scarcity pushes prices up; a glut pushes them down. The full mechanic (the 28 commodities, the curves, the three-tier blend) lives in [Commodities](/wiki/commodities). Copper is merged into rare earth; it is not a separate commodity. The market system is what turns those prices into your revenue.
 
 ## Price realization: scarcity pays, gluts hurt
 
@@ -123,7 +123,7 @@ This is deliberate. You get time to adapt your pricing posture and investment le
 
 ## Related systems
 
-- [Commodities](/wiki/commodities): the 29-commodity market, prices, and the [market-tiers reference](/wiki/commodities#market-tiers-clearing-and-capital)
+- [Commodities](/wiki/commodities): the 28-commodity market, prices, and the [market-tiers reference](/wiki/commodities#market-tiers-clearing-and-capital)
 - [Stock Market](/wiki/stock-market): how owned assets and earnings power set your share price
 - [Corporations](/wiki/corporations): founding and running sectors, strategies, and margins
 - [Corporate R&D & Tech Trees](/wiki/corporate-r-and-d): unlocks that shift your cost and output curves

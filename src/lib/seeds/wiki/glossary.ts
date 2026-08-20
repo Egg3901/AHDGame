@@ -116,7 +116,7 @@ export const WIKI_GLOSSARY = {
   },
   "party org": {
     definition:
-      "Party organization in a state: ground infrastructure from 0 to 100. It scales general-election votes and feeds presidential primary scores.",
+      "Party organization in a state: ground infrastructure from 0 to 100. It scales general-election votes. Presidential primaries use party influence, not org.",
     aliases: ["party organization", "org score"],
   },
   whip: {
@@ -193,6 +193,40 @@ export const WIKI_GLOSSARY = {
   filibuster: {
     definition:
       "A delay tactic that keeps a bill from closing. Cloture is the counter: a vote to end debate and move to passage.",
+  },
+  "ministerial actions": {
+    definition:
+      "The daily action pool for a cabinet seat (cabinet actions in presidential systems). They refill at midnight Eastern and cap at 4.",
+    aliases: ["ministerial action", "cabinet actions", "cabinet action"],
+  },
+  SED: {
+    definition:
+      "Sozialistische Einheitspartei Deutschlands. East Germany's ruling party. The Volkskammer is elected on the single National Front list the SED leads.",
+    aliases: ["Sozialistische Einheitspartei"],
+  },
+  "National Front": {
+    definition:
+      "East Germany's single electoral list. All Volkskammer seats are contested on it; the SED leads, and approved bloc parties take the rest.",
+  },
+  "command economy": {
+    definition:
+      "A planned economy: administered prices, state-owned enterprises, and a monobank instead of an independent central bank. Used by the USSR, China, and East Germany.",
+    aliases: ["planned economy", "planned economies", "command economies"],
+  },
+  FOMC: {
+    definition:
+      "The 7-seat rate-setting board at a market central bank (Federal Open Market Committee in the US). The chair proposes; a majority of the full board must agree. Abstains count against.",
+    aliases: ["federal open market committee"],
+  },
+  "world events": {
+    definition:
+      "Scheduled country-scope events the turn processor offers to a head of government. At most one pending offer per country per turn. Olympics and World's Fairs pick a host on a fixed cadence.",
+    aliases: ["world event"],
+  },
+  SCOTUS: {
+    definition:
+      "The US Supreme Court: 9 seats. A justice seat does not occupy your current office. The President nominates; the Senate confirms by majority. Historical occupants replay until the first live confirmation.",
+    aliases: ["supreme court", "Supreme Court"],
   },
 } as const satisfies Record<string, WikiGlossaryTerm>;
 

@@ -212,6 +212,86 @@ describe("fillPendingShareOrders", () => {
     expect(pushAnywhere).toBe(false);
   });
 
+  it("caps character sell fills at current holdings after a reverse split (ticket #1154)", async () => {
+    const { fillPendingShareOrders } = await import("./shareOrders");
+    const corpId = new ObjectId();
+    const sellerId = new ObjectId();
+
+    const sellOrder = {
+      _id: new ObjectId(),
+      corporationId: corpId,
+      characterId: sellerId,
+      type: "sell",
+      shares: 1_000_000,
+      sharesRemaining: 1_000_000,
+      pricePerShare: 500,
+      escrowAmount: 0,
+      status: "open",
+    };
+    (db.collection("shareOrders").find as ReturnType<typeof vi.fn>).mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([sellOrder]),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+    });
+
+    const corpDoc = {
+      _id: corpId,
+      name: "Test Corp",
+      sharePrice: 3200, // post-reverse spike; still >= the stale 500 limit
+      publicFloat: 0,
+      liquidCapital: 10_000_000_000,
+      shareholders: [{ characterId: sellerId, shares: 10, avgCostPerShare: 400 }],
+      liquidCurrencyCode: "USD",
+      countryId: "US",
+    };
+    (db.collection("corporations").find as ReturnType<typeof vi.fn>).mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([corpDoc]),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      project: vi.fn().mockImplementation(() => ({
+        toArray: vi.fn().mockResolvedValue([{ _id: corpId, name: "Test Corp" }]),
+        sort: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        skip: vi.fn().mockReturnThis(),
+      })),
+    });
+
+    (db.collection("characters").find as ReturnType<typeof vi.fn>).mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: sellerId, name: "Seller", countryId: "US" }]),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      project: vi.fn().mockImplementation(() => ({
+        toArray: vi.fn().mockResolvedValue([{ _id: sellerId, name: "Seller" }]),
+        sort: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        skip: vi.fn().mockReturnThis(),
+      })),
+    });
+
+    await fillPendingShareOrders(db as unknown as Db, new Date(), 257);
+
+    const corpsColl = db.collectionMocks["corporations"]!;
+    const incOps = corpsColl.bulkWrite.mock.calls.flatMap(
+      (call) => call[0] as Array<{ updateOne?: { update?: { $inc?: Record<string, number> } } }>
+    );
+    const shareInc = incOps.find(
+      (op) => op.updateOne?.update?.$inc?.["shareholders.$.shares"] != null
+    );
+    expect(shareInc?.updateOne?.update?.$inc?.["shareholders.$.shares"]).toBe(-10);
+
+    const floatInc = incOps.find((op) => op.updateOne?.update?.$inc?.publicFloat != null);
+    expect(floatInc?.updateOne?.update?.$inc?.publicFloat).toBe(10);
+
+    const ordersColl = db.collectionMocks["shareOrders"]!;
+    const orderUpdate = ordersColl.bulkWrite.mock.calls[0][0][0];
+    expect(orderUpdate.updateOne.update.$set.sharesRemaining).toBe(999_990);
+    expect(orderUpdate.updateOne.update.$set.status).toBe("open");
+  });
+
   it("emits a limit_fill shareTradeHistory entry per fill", async () => {
     const { fillPendingShareOrders } = await import("./shareOrders");
     const corpId = new ObjectId();

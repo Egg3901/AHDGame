@@ -255,7 +255,22 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         });
       } else if (order.type === "sell" && currentPrice >= order.pricePerShare) {
         // Fill sell order: add shares to public float, pay seller at limit price.
-        const proceedsLocal = order.sharesRemaining * order.pricePerShare;
+        // Character sell orders are not debited at placement, so a reverse split
+        // (or any later sale) can leave sharesRemaining far above the live
+        // holding. Capping here stops the fill from driving the seller negative
+        // and dumping a pre-split share count into the float (ticket #1154).
+        let toFill = order.sharesRemaining;
+        if (!order.placerCorporationId && charIdStr) {
+          const held =
+            (corp.shareholders ?? []).find((sh) => sh.characterId?.toString() === charIdStr)
+              ?.shares ?? 0;
+          const alreadyDebited = corpShareholderUpdates.get(corpIdStr)?.get(charIdStr)?.delta ?? 0;
+          const available = Math.max(0, held + alreadyDebited);
+          toFill = Math.min(toFill, available);
+        }
+        if (toFill <= 0) continue;
+
+        const proceedsLocal = toFill * order.pricePerShare;
         // Treasury cap: the issuer buys the shares back from its own
         // liquidCapital. If it can't cover, leave the order open (no mint).
         if (treasuryRemaining < proceedsLocal) continue;
@@ -279,11 +294,8 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         }
 
         // Shares go to public float
-        availableFloat += order.sharesRemaining;
-        corpFloatDeltas.set(
-          corpIdStr,
-          (corpFloatDeltas.get(corpIdStr) ?? 0) + order.sharesRemaining
-        );
+        availableFloat += toFill;
+        corpFloatDeltas.set(corpIdStr, (corpFloatDeltas.get(corpIdStr) ?? 0) + toFill);
 
         // Corp sell orders already debited shares from the corp's shareholder
         // entry at order-creation time — do NOT debit again.
@@ -291,7 +303,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         if (!order.placerCorporationId && charIdStr) {
           const delta = corpShareholderUpdates.get(corpIdStr) ?? new Map<string, ShareDelta>();
           const existing = delta.get(charIdStr) ?? { delta: 0 };
-          delta.set(charIdStr, { delta: existing.delta - order.sharesRemaining });
+          delta.set(charIdStr, { delta: existing.delta - toFill });
           corpShareholderUpdates.set(corpIdStr, delta);
         }
 
@@ -301,7 +313,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         historyEmits.push({
           corporationId: new ObjectId(corpIdStr),
           kind: "limit_fill",
-          shares: order.sharesRemaining,
+          shares: toFill,
           pricePerShareAnchor: corpLiquidCapitalToAnchor(order.pricePerShare, corp, targetFxRate),
           corpCurrencyCode,
           fromPartyRef: order.placerCorporationId
@@ -309,10 +321,17 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
             : { characterId: order.characterId },
         });
 
+        const filled = toFill >= order.sharesRemaining;
         orderFillOps.push({
           updateOne: {
             filter: { _id: order._id },
-            update: { $set: { sharesRemaining: 0, status: "filled", updatedAt: now } },
+            update: {
+              $set: {
+                sharesRemaining: filled ? 0 : order.sharesRemaining - toFill,
+                status: filled ? "filled" : "open",
+                updatedAt: now,
+              },
+            },
           },
         });
       }

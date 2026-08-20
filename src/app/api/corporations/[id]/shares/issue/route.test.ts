@@ -119,10 +119,17 @@ describe("POST /api/corporations/[id]/shares/issue", () => {
     expect(body.pricePerShare).toBe(10);
     // Issuance creates float inventory only — totalShares + publicFloat rise, but
     // NO cash/proceeds are credited at issuance (Bug #0624). The corp realizes both
-    // as the float is bought.
-    const incArg = db.collectionMocks["corporations"].findOneAndUpdate.mock.calls[0][1].$inc;
-    expect(incArg).toEqual({ totalShares: 1000, publicFloat: 1000 });
-    expect(incArg.liquidCapital).toBeUndefined();
-    expect(incArg.shareIssuanceProceeds).toBeUndefined();
+    // as the float is bought. The update is now an aggregation pipeline that also
+    // scales sharePrice/fundamentalSharePrice by the dilution factor so the
+    // issuance cannot fabricate market cap (2026-08-20 incident).
+    const pipeline = db.collectionMocks["corporations"].findOneAndUpdate.mock.calls[0][1];
+    expect(Array.isArray(pipeline)).toBe(true);
+    const setStage = pipeline[0].$set;
+    expect(setStage.totalShares).toEqual({ $add: [{ $ifNull: ["$totalShares", 0] }, 1000] });
+    expect(setStage.publicFloat).toEqual({ $add: [{ $ifNull: ["$publicFloat", 0] }, 1000] });
+    expect(setStage.sharePrice).toBeDefined();
+    expect(setStage.fundamentalSharePrice).toBeDefined();
+    expect(setStage.liquidCapital).toBeUndefined();
+    expect(setStage.shareIssuanceProceeds).toBeUndefined();
   });
 });

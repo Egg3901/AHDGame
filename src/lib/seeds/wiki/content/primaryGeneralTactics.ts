@@ -72,7 +72,7 @@ The formula itself differs from state primaries:
 - **Favorability is 25 pts.** Repriced up from a 10-point floor so the primary selects for something close to what the general rewards.
 - **Alignment still 40 pts.** Still the biggest lever.
 
-The implication: **presidential primaries reward long-term investment** in state party org and NPI, not one-cycle Favorability and PI bursts.
+The implication: **presidential primaries reward party influence and Favorability**, not one-cycle PI bursts. State party org still matters in the general.
 
 ### Presidential general
 
