@@ -11,7 +11,13 @@ afterEach(cleanup);
 // Ticket #1141: a player saw "+6.9k 38T" beside a FREIGHT pill and asked what
 // freight meant in sectors. The pill is the build queue, not freight, and its
 // only explanation was a hover title.
-const QUEUE = { unitsOrdered: 6900, turnsRemaining: 38, orders: 1 };
+const QUEUE = {
+  orders: 1,
+  unitsOrdered: 6900,
+  unitsRemaining: 6900,
+  nextOnlineTurn: 288,
+  turnsRemaining: 38,
+};
 
 describe("BuildQueueBadge", () => {
   it("says what it is on its face, not only on hover", () => {
@@ -35,7 +41,15 @@ describe("BuildQueueBadge", () => {
 
   it("renders nothing when no capacity is on order", () => {
     const { container } = render(
-      <BuildQueueBadge queue={{ unitsOrdered: 0, turnsRemaining: null, orders: 0 }} />
+      <BuildQueueBadge
+        queue={{
+          orders: 0,
+          unitsOrdered: 0,
+          unitsRemaining: 0,
+          nextOnlineTurn: null,
+          turnsRemaining: null,
+        }}
+      />
     );
     expect(container.textContent).toBe("");
   });
