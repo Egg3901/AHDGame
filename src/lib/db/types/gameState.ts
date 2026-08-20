@@ -533,6 +533,25 @@ export interface CountryGameState {
   /** DB-driven country status - overrides CountryConfig.status at runtime */
   status?: CountryStatus;
   /**
+   * Turn this country ceased to exist — absorbed into another state.
+   *
+   * The registry could previously only ever ADD: `registeredBase` returns
+   * `[...COUNTRY_ORDER, ...activated]`, so a country compiled into the static
+   * base list could be hidden from players but never retired from the engine.
+   * A merge needs the opposite, and leaving an emptied country enumerated by
+   * every site that walks the country list is how you get elections with no
+   * regions and budgets over no states.
+   *
+   * A DATE-STAMPED FIELD rather than a new `CountryStatus` member on purpose:
+   * `status` is read at 90-odd sites and widening its union risks silently
+   * changing behaviour in code that switches on it. This is additive, and the
+   * two enumeration chokepoints are the only readers.
+   *
+   * Retirement is not deletion. The documents stay for history, the wiki, and
+   * any future restoration; the country simply stops being simulated.
+   */
+  dissolvedTurn?: number | null;
+  /**
    * When true, non-admin players can view economy-only pages (map, metrics,
    * stockmarket, central bank, budget, forex) even while `enabledForPlayers`
    * is false. Political routes (elections, legislature, parties, etc.) remain

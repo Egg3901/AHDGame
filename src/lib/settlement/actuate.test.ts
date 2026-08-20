@@ -6,6 +6,14 @@ import { SETTLEMENT_REOPEN_COOLDOWN_TURNS } from "@/lib/constants/settlementCris
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/turn/history/recordCountryEvent", () => ({ recordCountryEvent: vi.fn() }));
+vi.mock("@/lib/country/mergeCountry", () => ({ mergeCountry: vi.fn() }));
+vi.mock("@/lib/countryState", () => ({ getCountryState: vi.fn() }));
+vi.mock("@/lib/db/collections/countryState", () => ({ getCountryStateCollection: vi.fn() }));
+vi.mock("@/lib/db/collections/gameState", () => ({
+  getGameStatePresetOrDefault: vi.fn().mockResolvedValue("1953-default"),
+}));
+vi.mock("@/lib/world/blocMembership", () => ({ blocOrgFor: vi.fn() }));
+vi.mock("@/lib/internationalOrganizations/joinApplication", () => ({ admitMember: vi.fn() }));
 
 function prime(db: MockDb, name: string): MockCollection {
   return db.collection(name) as unknown as MockCollection;
@@ -35,6 +43,22 @@ describe("actuateSettlementOutcome", () => {
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
     prime(db, "settlementCrises").updateOne.mockResolvedValue({ matchedCount: 1 });
+
+    const { mergeCountry } = await import("@/lib/country/mergeCountry");
+    vi.mocked(mergeCountry).mockResolvedValue({
+      ok: true,
+      regionsTransferred: 6,
+      regionsSkipped: 0,
+      retired: true,
+    });
+    const { getCountryState } = await import("@/lib/countryState");
+    vi.mocked(getCountryState).mockResolvedValue({ governmentType: "onePartyState" } as never);
+    const { getCountryStateCollection } = await import("@/lib/db/collections/countryState");
+    vi.mocked(getCountryStateCollection).mockReturnValue({
+      updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+    } as never);
+    const { blocOrgFor } = await import("@/lib/world/blocMembership");
+    vi.mocked(blocOrgFor).mockReturnValue("WARSAW_PACT");
   });
 
   it("ignores a crisis that has not resolved", async () => {
@@ -77,29 +101,84 @@ describe("actuateSettlementOutcome", () => {
     expect(vi.mocked(recordCountryEvent).mock.calls[0][1].title).toContain("stays sovereign");
   });
 
-  it("records a reunification win as NOT enacted rather than implying a border moved", async () => {
-    // The absorption needs three capabilities this codebase does not have; the
-    // outcome is real, the map change is not built.
+  it("absorbs the GDR into the surviving Germany on a reunification win", async () => {
     const { actuateSettlementOutcome } = await import("./actuate");
     const res = await actuateSettlementOutcome(
       db as unknown as Db,
       crisis({ outcome: "challenger" }),
       412
     );
-    expect(res).toEqual({ actuated: true, outcome: "challenger", deferred: true });
-    const { recordCountryEvent } = await import("@/lib/turn/history/recordCountryEvent");
-    const first = vi.mocked(recordCountryEvent).mock.calls[0][1];
-    expect(first.title).toContain("awaits enactment");
-    expect(first.details).toMatchObject({ enacted: false });
+    expect(res).toEqual({ actuated: true, outcome: "challenger", deferred: false });
+    const { mergeCountry } = await import("@/lib/country/mergeCountry");
+    expect(vi.mocked(mergeCountry).mock.calls[0][1]).toEqual({
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 412,
+    });
   });
 
-  it("does not touch a single region on either outcome", async () => {
-    // The guard that matters: no half-merge. If this ever starts moving regions
-    // it must do the whole job, not part of it.
+  it("merges INTO the country already named Germany, never the other way", async () => {
+    // A renamed GDR is unbuildable: the country name is seed data read at ~90
+    // synchronous sites. The surviving shell must be the one already called
+    // Germany, or the unified state renders as "East Germany" everywhere.
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 412);
-    expect(db.collectionMocks.states).toBeUndefined();
-    expect(db.collectionMocks.countryGameStates).toBeUndefined();
+    const { mergeCountry } = await import("@/lib/country/mergeCountry");
+    const call = vi.mocked(mergeCountry).mock.calls[0][1];
+    expect(call.toCountryId).toBe("DE");
+    expect(call.fromCountryId).not.toBe("DE");
+  });
+
+  it("gives the unified state the winner's government type and bloc", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 412);
+    const { getCountryStateCollection } = await import("@/lib/db/collections/countryState");
+    const coll = vi.mocked(getCountryStateCollection).mock.results[0].value;
+    expect(coll.updateOne).toHaveBeenCalledWith(
+      { _id: "DE" },
+      expect.objectContaining({
+        $set: expect.objectContaining({ governmentType: "onePartyState" }),
+      }),
+      { upsert: true }
+    );
+    const { admitMember } = await import("@/lib/internationalOrganizations/joinApplication");
+    expect(vi.mocked(admitMember)).toHaveBeenCalledWith(
+      expect.anything(),
+      "WARSAW_PACT",
+      "DE",
+      412
+    );
+  });
+
+  it("reports a failed merge instead of a success the map does not show", async () => {
+    const { mergeCountry } = await import("@/lib/country/mergeCountry");
+    vi.mocked(mergeCountry).mockResolvedValue({
+      ok: false,
+      error: "Region SN could not transfer (region-not-found).",
+      regionsTransferred: 2,
+      regionsSkipped: 0,
+      retired: false,
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    const res = await actuateSettlementOutcome(
+      db as unknown as Db,
+      crisis({ outcome: "challenger" }),
+      412
+    );
+    expect(res.actuated).toBe(false);
+    expect(res.error).toContain("could not transfer");
+    // No triumphant history entry for a merge that did not happen.
+    const { recordCountryEvent } = await import("@/lib/turn/history/recordCountryEvent");
+    expect(vi.mocked(recordCountryEvent)).not.toHaveBeenCalled();
+  });
+
+  it("moves nobody on a Western win", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "incumbent" }), 412);
+    const { mergeCountry } = await import("@/lib/country/mergeCountry");
+    expect(vi.mocked(mergeCountry)).not.toHaveBeenCalled();
+    const { admitMember } = await import("@/lib/internationalOrganizations/joinApplication");
+    expect(vi.mocked(admitMember)).not.toHaveBeenCalled();
   });
 
   it("guards the cooldown write so two runners cannot both record history", async () => {
