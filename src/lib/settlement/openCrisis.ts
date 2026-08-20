@@ -1,27 +1,31 @@
 /**
  * Opening the German Question.
  *
- * Nothing else creates a settlement crisis. It is deliberately NOT a reset-time
- * seed: a reset would only reach worlds that are re-seeded, and the master gate
- * is expected to be flipped on a world that is already running. Checking every
- * tick makes the crisis self-healing — switch the flag on in the 1953 preset
- * and the question opens on the next turn, with no migration to run.
+ * ADMIN-STARTED ONLY. Nothing in the turn loop opens a settlement crisis: an
+ * operator decides when the question is asked, from the admin surface, and it
+ * may be asked at any point in a world's life. There is no era window and no
+ * re-open cooldown gating the start.
  *
- * The four preconditions are all things that can change under the feature's
- * feet, which is why they are tested here rather than at seed time:
+ * Two preconditions, both of which are about the world being in a state where
+ * the question means anything:
  *
- *   - the era window, because a world plays forward out of it;
- *   - the two Germanies both existing, because a resolved crisis MERGES one of
- *     them and the question must not then reopen against a country that is
- *     gone (or, worse, against itself);
- *   - the re-open cooldown, because a Western win is explicitly not a permanent
- *     lock;
- *   - no crisis already live, because two would both tick.
+ *   - no crisis is already live, because two would both tick; and
+ *   - the two Germanies are still separate states, because a question about
+ *     whether they should merge is meaningless once they have.
  *
- * The last of those is racy by nature — two overlapping turn runs both read
- * "none open". The unique partial index on `{ kind }` where `status: "open"` is
- * the real guard; the read is the cheap path that avoids relying on a caught
- * duplicate-key error every tick.
+ * The second is checked against the country registry rather than against a
+ * flag, so a reunification that has already happened — by this crisis or by
+ * anything else — closes the door on its own.
+ *
+ * A third refusal is a safety check rather than a rule: a resolution that has
+ * not been actuated yet is a merge still pending, and opening on top of it
+ * would produce a crisis whose challenger is dissolved a tick later. That is
+ * the "still separate" condition being violated one turn in the future.
+ *
+ * Concurrency: two admins pressing at once both read "none live". The unique
+ * partial index on `{ kind }` where `status: "open"` is the real guard; the read
+ * below is the cheap path that gives a readable error instead of relying on a
+ * caught duplicate key.
  */
 import type { Db, Filter } from "mongodb";
 import { MongoServerError } from "mongodb";
@@ -35,15 +39,13 @@ import {
   GERMAN_QUESTION_TARGET,
   SETTLEMENT_DEFAULT_RULES,
   SETTLEMENT_INSTITUTIONS,
-  SETTLEMENT_MAX_YEAR,
-  SETTLEMENT_MIN_YEAR,
   SETTLEMENT_SEATS,
 } from "@/lib/constants/settlementCrisis";
 import { recomputePosition } from "./position";
 
 export interface OpenCrisisResult {
   opened: boolean;
-  /** Why it did not open. Null on success — surfaced in the turn log. */
+  /** Why it did not open. Null on success — shown to the admin who pressed it. */
   reason: string | null;
   crisisId: string | null;
 }
@@ -82,8 +84,8 @@ export function buildGermanQuestion(turn: number): Omit<SettlementCrisisDoc, "_i
     ladder: { heat: 0, armedTurn: null },
     rules: { ...SETTLEMENT_DEFAULT_RULES },
     driftHistory: [],
-    // Null, not `turn`: the phase that opens the crisis has already done its
-    // sweeps this tick, so the first real tick is the next one.
+    // Null, not `turn`: the crisis opens at its authored figures and the first
+    // drift lands on the next tick, so the board is visible as designed.
     lastTickedTurn: null,
     conflictId: null,
     openedTurn: turn,
@@ -95,58 +97,45 @@ export function buildGermanQuestion(turn: number): Omit<SettlementCrisisDoc, "_i
   };
 }
 
-export async function openSettlementCrisisIfDue(
+export async function openSettlementCrisis(
   db: Db,
-  params: { turn: number; year: number | null }
+  params: { turn: number }
 ): Promise<OpenCrisisResult> {
-  const { turn, year } = params;
-
-  if (year === null) return skip("the world has no resolvable year");
-  if (year < SETTLEMENT_MIN_YEAR || year > SETTLEMENT_MAX_YEAR) {
-    return skip(`${year} is outside ${SETTLEMENT_MIN_YEAR}-${SETTLEMENT_MAX_YEAR}`);
-  }
-
+  const { turn } = params;
   const crises = await getSettlementCrisesCollection(db);
 
   const live = await crises.findOne({
     status: { $in: ["open", "frozen"] },
   } as Filter<SettlementCrisisDoc>);
-  if (live) return skip("a settlement crisis is already live");
+  if (live) return skip("A settlement crisis is already live.");
 
-  // The most recent close. `cooldownUntilTurn: null` means it has resolved but
-  // not been actuated yet — the actuation sweep runs before this, so seeing one
-  // here means it failed, and reopening on top of a pending absorption would be
-  // the worst possible moment.
-  const lastClosed = await crises
-    .find({ status: "resolved" } as Filter<SettlementCrisisDoc>)
-    .sort({ resolvedTurn: -1 })
-    .limit(1)
-    .toArray();
-  const previous = lastClosed[0];
-  if (previous) {
-    if (previous.cooldownUntilTurn == null) return skip("the last question has not been actuated");
-    if (previous.cooldownUntilTurn > turn) {
-      return skip(`cooling down until turn ${previous.cooldownUntilTurn}`);
+  // A resolved-but-unactuated crisis is a merge still pending. Not a cooldown —
+  // there is no cooldown any more — but opening here would name a challenger
+  // that the pending actuation is about to dissolve.
+  const pending = await crises.findOne({
+    status: "resolved",
+    cooldownUntilTurn: null,
+  } as Filter<SettlementCrisisDoc>);
+  if (pending) {
+    return skip("The last question has resolved but not yet been enacted. Wait one turn.");
+  }
+
+  // Both Germanies must still exist as separate states.
+  const registered = new Set<string>(await getRegisteredCountryIds(db));
+  for (const id of [GERMAN_QUESTION_TARGET, GERMAN_QUESTION_CHALLENGER]) {
+    if (!registered.has(id as CountryId)) {
+      return skip(`${id} is no longer a live country — the Germanies are not separate.`);
     }
   }
 
-  // Both Germanies must still exist as separate states. After a reunification
-  // win one of them is dissolved, and the registry is the authority on that.
-  const registered = new Set<string>(await getRegisteredCountryIds(db));
-  for (const id of [GERMAN_QUESTION_TARGET, GERMAN_QUESTION_CHALLENGER]) {
-    if (!registered.has(id as CountryId)) return skip(`${id} is not a live country`);
-  }
-
   try {
-    const doc = buildGermanQuestion(turn);
-    const inserted = await crises.insertOne(doc as SettlementCrisisDoc);
+    const inserted = await crises.insertOne(buildGermanQuestion(turn) as SettlementCrisisDoc);
     return { opened: true, reason: null, crisisId: inserted.insertedId.toString() };
   } catch (error) {
-    // Duplicate key on the partial unique index: another turn runner opened it
-    // between the read and the write. That is a success for the world, just not
-    // for this runner.
+    // Duplicate key on the partial unique index: another admin opened it between
+    // the read and the write.
     if (error instanceof MongoServerError && error.code === 11000) {
-      return skip("another runner opened it first");
+      return skip("Another operator opened it first.");
     }
     throw error;
   }

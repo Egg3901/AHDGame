@@ -8,7 +8,7 @@ vi.mock("@/lib/api/requireAdmin", () => ({ requireAdmin: vi.fn() }));
 vi.mock("@/lib/gameState", () => ({ getGameState: vi.fn() }));
 vi.mock("@/lib/settlement/openCrisis", async (original) => {
   const actual = await original<typeof import("@/lib/settlement/openCrisis")>();
-  return { ...actual, openSettlementCrisisIfDue: vi.fn() };
+  return { ...actual, openSettlementCrisis: vi.fn() };
 });
 
 const CRISIS_ID = new ObjectId();
@@ -92,7 +92,7 @@ describe("/api/admin/settlement", () => {
   it("reports the gate, the era and no crisis when none is live", async () => {
     const { GET } = await import("./route");
     const body = await (await GET()).json();
-    expect(body).toMatchObject({ enabled: true, currentTurn: 412, year: 1953, crisis: null });
+    expect(body).toMatchObject({ enabled: true, currentTurn: 412, crisis: null });
   });
 
   it("reports the live board with its rules resolved", async () => {
@@ -107,55 +107,44 @@ describe("/api/admin/settlement", () => {
     expect(body.crisis.institutions).toHaveLength(SETTLEMENT_INSTITUTIONS.length);
   });
 
-  it("routes an unforced open through the same gate the turn phase uses", async () => {
-    const { openSettlementCrisisIfDue } = await import("@/lib/settlement/openCrisis");
-    vi.mocked(openSettlementCrisisIfDue).mockResolvedValue({
+  it("opens the question at the current turn, with no options to pass", async () => {
+    const { openSettlementCrisis } = await import("@/lib/settlement/openCrisis");
+    vi.mocked(openSettlementCrisis).mockResolvedValue({
       opened: true,
       reason: null,
       crisisId: CRISIS_ID.toString(),
     });
     const { POST } = await import("./route");
-    const res = await POST(post({ action: "open", force: false }));
+    const res = await POST(post({ action: "open" }));
     expect(res.status).toBe(200);
-    expect(vi.mocked(openSettlementCrisisIfDue).mock.calls[0][1]).toEqual({
-      turn: 412,
-      year: 1953,
-    });
+    expect(vi.mocked(openSettlementCrisis).mock.calls[0][1]).toEqual({ turn: 412 });
   });
 
-  it("passes the gate's own reason back when it declines", async () => {
-    const { openSettlementCrisisIfDue } = await import("@/lib/settlement/openCrisis");
-    vi.mocked(openSettlementCrisisIfDue).mockResolvedValue({
+  it("passes the opener's own reason back when it declines", async () => {
+    const { openSettlementCrisis } = await import("@/lib/settlement/openCrisis");
+    vi.mocked(openSettlementCrisis).mockResolvedValue({
       opened: false,
-      reason: "cooling down until turn 500",
+      reason: "A settlement crisis is already live.",
       crisisId: null,
     });
     const { POST } = await import("./route");
-    const res = await POST(post({ action: "open", force: false }));
+    const res = await POST(post({ action: "open" }));
     expect(res.status).toBe(409);
-    expect((await res.json()).error).toContain("cooling down");
+    expect((await res.json()).error).toContain("already live");
   });
 
-  it("force-opens past the era gate", async () => {
-    const { getGameState } = await import("@/lib/gameState");
-    vi.mocked(getGameState).mockResolvedValue({
-      _id: "current",
-      currentTurn: 412,
-      currentYear: 2019,
-    } as never);
+  it("has no force escape hatch — a stale `force` flag changes nothing", async () => {
+    // There is no era gate or cooldown left to force past, so the schema takes
+    // no options and the opener's refusal stands however the caller asks.
+    const { openSettlementCrisis } = await import("@/lib/settlement/openCrisis");
+    vi.mocked(openSettlementCrisis).mockResolvedValue({
+      opened: false,
+      reason: "A settlement crisis is already live.",
+      crisisId: null,
+    });
     const { POST } = await import("./route");
-    const res = await POST(post({ action: "open", force: true }));
-    expect(res.status).toBe(200);
-    expect(prime(db, "settlementCrises").insertOne).toHaveBeenCalled();
-  });
-
-  it("refuses a forced open while one is already live", async () => {
-    // Two live crises would both tick.
-    prime(db, "settlementCrises").findOne.mockResolvedValue(liveCrisis());
-    const { POST } = await import("./route");
-    const res = await POST(post({ action: "open", force: true }));
-    expect(res.status).toBe(409);
-    expect(prime(db, "settlementCrises").insertOne).not.toHaveBeenCalled();
+    expect((await POST(post({ action: "open", force: true }))).status).toBe(409);
+    expect(vi.mocked(openSettlementCrisis).mock.calls[0][1]).toEqual({ turn: 412 });
   });
 
   it("flips one rule without touching the other two", async () => {

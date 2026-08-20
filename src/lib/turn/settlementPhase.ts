@@ -36,8 +36,6 @@ import { isSettlementCrisisEnabled } from "@/lib/settlement/featureFlag";
 import { levyMobilisation } from "@/lib/settlement/mobilisation";
 import { settleFrozenCrisisFromConflict } from "@/lib/settlement/settleFromConflict";
 import { actuateSettlementOutcome } from "@/lib/settlement/actuate";
-import { openSettlementCrisisIfDue } from "@/lib/settlement/openCrisis";
-import { resolveGameYear } from "@/lib/era/era";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
 import type { GameState } from "@/lib/db/types";
 
@@ -49,8 +47,6 @@ export interface SettlementTurnResult {
   position: number;
   /** Seat countries charged a mobilisation levy this tick. */
   countriesLevied: number;
-  /** 1 on the tick that opened the question. */
-  crisesOpened: number;
 }
 
 /**
@@ -66,26 +62,15 @@ const idle = (): SettlementTurnResult => ({
   heat: 0,
   position: 0,
   countriesLevied: 0,
-  crisesOpened: 0,
 });
 
 export async function processSettlementTurn(
   db: Db,
   currentTurn: number
 ): Promise<SettlementTurnResult> {
-  const gameState = await db.collection<GameState>("gameState").findOne(
-    { _id: "current" },
-    {
-      projection: {
-        settlementCrisisEnabled: 1,
-        // For the era gate on opening. `resolveGameYear` prefers the maintained
-        // `currentYear` and derives from turn + startingYear on legacy rows.
-        currentYear: 1,
-        currentTurn: 1,
-        startingYear: 1,
-      },
-    }
-  );
+  const gameState = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { settlementCrisisEnabled: 1 } });
   if (!(await isSettlementCrisisEnabled(gameState ?? {}))) return idle();
 
   const crises = await getSettlementCrisesCollection(db);
@@ -111,19 +96,11 @@ export async function processSettlementTurn(
     return { ...idle(), crisesResolved: settled.settled ? 1 : 0 };
   }
 
+  // Nothing here ever OPENS a crisis. The question is admin-started, from
+  // `/api/admin/settlement`, at whatever moment an operator judges right. This
+  // phase only advances one that already exists.
   const crisis = await crises.findOne({ status: "open" } as Filter<SettlementCrisisDoc>);
-  // Nothing live. This is the only place the question is ever opened — it is
-  // checked every tick rather than seeded at reset, so switching the gate on in
-  // a running 1953 world is enough. Opening does not also tick: the board opens
-  // at its authored figures and the first drift lands next turn, so a player
-  // who logs in the moment it opens sees the board it was designed as.
-  if (!crisis) {
-    const opened = await openSettlementCrisisIfDue(db, {
-      turn: currentTurn,
-      year: resolveGameYear(gameState ?? {}),
-    });
-    return { ...idle(), crisesOpened: opened.opened ? 1 : 0 };
-  }
+  if (!crisis) return idle();
   // `frozen` and `resolved` are both excluded by the query; the explicit guard
   // keeps this correct if the query is ever widened.
   if (crisis.status !== "open") return idle();
@@ -257,7 +234,6 @@ export async function processSettlementTurn(
     heat,
     position,
     countriesLevied: mobilisation.countriesLevied,
-    crisesOpened: 0,
   };
 }
 

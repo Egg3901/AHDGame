@@ -164,12 +164,13 @@ export const MOBILISATION_TREASURY_SHARE = 0.02;
 export const MOBILISATION_APPROVAL_HIT = 1;
 
 /**
- * Turns before a settled question may be asked again.
+ * The turn from which a settled question is considered fair to ask again.
  *
- * The owner's ruling was that a Western win is the plain status quo with no
- * permanent lock — the question can return. This is the anti-spam floor on
- * that, not a lock: two game-years of quiet before the four powers can reopen
- * a matter they have just settled.
+ * It GATES NOTHING. Opening is admin-started and unconditional on timing, so
+ * this is advice written onto the resolved document and shown in the admin
+ * history, not a lock. The field it lands in carries the load: a resolved
+ * crisis with a null `cooldownUntilTurn` is one the actuation sweep has not
+ * enacted yet, and that IS a refusal to reopen.
  */
 export const SETTLEMENT_REOPEN_COOLDOWN_TURNS = 96;
 
@@ -179,18 +180,6 @@ export const GERMAN_QUESTION_KIND = "settlement.germanQuestion" as const;
 /** Whose settlement is at stake, and who would absorb them. */
 export const GERMAN_QUESTION_TARGET = "DE";
 export const GERMAN_QUESTION_CHALLENGER = "DD";
-
-/**
- * Era window, inclusive, matching `AUTHORED_CRISES`' convention.
- *
- * Opens with the 1953 preset and closes at the Berlin Wall: once the border is
- * sealed, a contest fought on open borders, cross-border broadcasting and a
- * joint referendum is a different question, and the authored catalogue is not
- * that question. A world already past 1961 when the gate is switched on never
- * opens the crisis rather than opening a stale one.
- */
-export const SETTLEMENT_MIN_YEAR = 1953;
-export const SETTLEMENT_MAX_YEAR = 1961;
 
 /**
  * The three rule switches the source design declares under its "Rules" section.

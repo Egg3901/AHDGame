@@ -146,71 +146,30 @@ describe("processSettlementTurn", () => {
     expect(crises.updateOne).not.toHaveBeenCalled();
   });
 
-  it("does nothing when no crisis is open and the world is out of era", async () => {
+  it("does nothing when no crisis is open", async () => {
     prime(db, "gameState").findOne.mockResolvedValue({
       _id: "current",
       settlementCrisisEnabled: true,
-      currentYear: 2019,
     });
     prime(db, "settlementCrises").findOne.mockResolvedValue(null);
     const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(result.playsResolved).toBe(0);
-    expect(result.crisesOpened).toBe(0);
   });
 
-  it("opens the question when the gate is on, the era fits and nothing is live", async () => {
-    // The feature has no reset-time seed: flipping the gate on a running 1953
-    // world is the whole install procedure, so this path IS the seeding.
+  it("NEVER opens a crisis — the question is admin-started", async () => {
+    // The single most important thing about this phase's contract. If the tick
+    // could open one, an operator's decision about when to ask the question
+    // would be made for them by the calendar.
     prime(db, "gameState").findOne.mockResolvedValue({
       _id: "current",
       settlementCrisisEnabled: true,
       currentYear: 1953,
     });
     prime(db, "settlementCrises").findOne.mockResolvedValue(null);
-    prime(db, "settlementCrises").find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([]),
-      sort: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-    });
-    prime(db, "settlementCrises").insertOne.mockResolvedValue({ insertedId: CRISIS_ID });
-    prime(db, "countryGameStates").find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([]),
-      sort: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      project: vi.fn().mockReturnThis(),
-    });
-    const { processSettlementTurn } = await import("./settlementPhase");
-    const result = await processSettlementTurn(db as unknown as Db, 12);
-    expect(result.crisesOpened).toBe(1);
-    const inserted = prime(db, "settlementCrises").insertOne.mock.calls[0][0];
-    expect(inserted.status).toBe("open");
-    expect(inserted.openedTurn).toBe(12);
-  });
-
-  it("does not tick the crisis on the turn it opens it", async () => {
-    // The board opens at its authored figures. Drifting it in the same tick
-    // would mean nobody ever sees the position the design specifies.
-    prime(db, "gameState").findOne.mockResolvedValue({
-      _id: "current",
-      settlementCrisisEnabled: true,
-      currentYear: 1953,
-    });
-    prime(db, "settlementCrises").findOne.mockResolvedValue(null);
-    prime(db, "settlementCrises").find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([]),
-      sort: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-    });
-    prime(db, "settlementCrises").insertOne.mockResolvedValue({ insertedId: CRISIS_ID });
-    prime(db, "countryGameStates").find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([]),
-      sort: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      project: vi.fn().mockReturnThis(),
-    });
     const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 12);
+    expect(prime(db, "settlementCrises").insertOne).not.toHaveBeenCalled();
     expect(prime(db, "settlementCrises").updateOne).not.toHaveBeenCalled();
   });
 

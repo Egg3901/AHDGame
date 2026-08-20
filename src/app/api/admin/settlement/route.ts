@@ -8,7 +8,6 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import type { SettlementCrisisDoc } from "@/lib/db/types/settlementCrisis";
 import { getGameState } from "@/lib/gameState";
-import { resolveGameYear } from "@/lib/era/era";
 import {
   HUNDREDTHS,
   SETTLEMENT_INSTITUTIONS,
@@ -16,12 +15,16 @@ import {
   getInstitution,
   settlementRulesFor,
 } from "@/lib/constants/settlementCrisis";
-import { buildGermanQuestion, openSettlementCrisisIfDue } from "@/lib/settlement/openCrisis";
+import { openSettlementCrisis } from "@/lib/settlement/openCrisis";
 import { recomputePosition } from "@/lib/settlement/position";
 
 /**
  * Admin control surface for the German Question, mirroring
- * `/api/admin/crises/*`: force-open, force-resolve, set a position, flip a rule.
+ * `/api/admin/crises/*`: open, force-resolve, set a position, flip a rule.
+ *
+ * THIS ROUTE IS THE ONLY WAY THE QUESTION EVER OPENS. The turn phase advances a
+ * crisis that exists; it never creates one. An operator decides when the
+ * question is asked, and may ask it at any point in a world's life.
  *
  * The one thing this route deliberately does NOT do is enact an outcome. A
  * forced resolve writes the outcome and leaves `cooldownUntilTurn` null, which
@@ -31,11 +34,10 @@ import { recomputePosition } from "@/lib/settlement/position";
  * into `mergeCountry` is the last thing this feature needs.
  */
 const bodySchema = z.discriminatedUnion("action", [
-  z.object({
-    action: z.literal("open"),
-    /** Ignore the era window and the re-open cooldown. */
-    force: z.boolean().default(false),
-  }),
+  // No options. Opening is unconditional on timing — the only refusals are a
+  // crisis already live, a merge still pending, and the Germanies no longer
+  // being separate, all decided by `openSettlementCrisis`.
+  z.object({ action: z.literal("open") }),
   z.object({ action: z.literal("resolve"), outcome: z.enum(["incumbent", "challenger"]) }),
   z.object({
     action: z.literal("setPosition"),
@@ -73,7 +75,6 @@ export async function GET() {
     return NextResponse.json({
       enabled: gameState?.settlementCrisisEnabled === true,
       currentTurn,
-      year: resolveGameYear(gameState ?? {}),
       crisis: live
         ? {
             id: live._id.toString(),
@@ -121,34 +122,10 @@ export async function POST(request: Request) {
     const crises = await getSettlementCrisesCollection(db);
 
     if (body.action === "open") {
-      // Unforced goes through the same gate the turn phase uses, so an admin
-      // pressing "open" gets the same answer the tick would give and the same
-      // reason when it declines.
-      if (!body.force) {
-        const result = await openSettlementCrisisIfDue(db, {
-          turn: currentTurn,
-          year: resolveGameYear(gameState ?? {}),
-        });
-        return result.opened
-          ? NextResponse.json({ success: true, crisisId: result.crisisId })
-          : NextResponse.json({ error: result.reason }, { status: 409 });
-      }
-      // Forced still refuses to make a SECOND live crisis: two would both tick.
-      // The unique partial index would reject it anyway; this is the readable
-      // error rather than a duplicate-key 500.
-      const live = await crises.findOne({
-        status: { $in: ["open", "frozen"] },
-      } as Filter<SettlementCrisisDoc>);
-      if (live) {
-        return NextResponse.json(
-          { error: "A settlement crisis is already live." },
-          { status: 409 }
-        );
-      }
-      const inserted = await crises.insertOne(
-        buildGermanQuestion(currentTurn) as SettlementCrisisDoc
-      );
-      return NextResponse.json({ success: true, crisisId: inserted.insertedId.toString() });
+      const result = await openSettlementCrisis(db, { turn: currentTurn });
+      return result.opened
+        ? NextResponse.json({ success: true, crisisId: result.crisisId })
+        : NextResponse.json({ error: result.reason }, { status: 409 });
     }
 
     const live = await crises.findOne({

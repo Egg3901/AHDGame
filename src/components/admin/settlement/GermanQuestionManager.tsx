@@ -8,8 +8,11 @@ import { HUNDREDTHS, SETTLEMENT_RULE_KEYS } from "@/lib/constants/settlementCris
  *
  * Operational density, not game density: no hero, no meter art. The board the
  * players see lives at `/world/german-question`; this is the four levers the
- * design calls for — force-open, force-resolve, set a position, flip a rule —
- * plus enough state to tell whether pressing them will do anything.
+ * design calls for — open, force-resolve, set a position, flip a rule — plus
+ * enough state to tell whether pressing them will do anything.
+ *
+ * Opening is admin-only by design: nothing in the turn loop ever creates a
+ * settlement crisis, so this panel is the only door.
  */
 interface InstitutionRow {
   id: string;
@@ -38,7 +41,6 @@ interface CrisisState {
 interface AdminState {
   enabled: boolean;
   currentTurn: number;
-  year: number | null;
   crisis: CrisisState | null;
   history: {
     id: string;
@@ -125,10 +127,10 @@ export function GermanQuestionManager() {
         <h3 className="font-serif text-lg text-foreground">The German Question</h3>
         <p className="mt-0.5 max-w-2xl text-sm text-muted">
           The settlement crisis over whether West Germany stays sovereign in NATO or reunifies into
-          the Warsaw Pact. Opens on its own each tick while the gate is on and the world is in era;
-          these controls are for forcing and for testing.
+          the Warsaw Pact. It is started from here and nowhere else — the turn loop advances a live
+          crisis but never creates one.
         </p>
-        <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+        <dl className="mt-3 grid grid-cols-3 gap-3 text-sm">
           <div>
             <dt className="text-xs tracking-wide text-muted uppercase">Feature gate</dt>
             <dd className={state?.enabled ? "text-success" : "text-error"}>
@@ -140,10 +142,6 @@ export function GermanQuestionManager() {
             <dd className="text-foreground">{state?.currentTurn ?? "—"}</dd>
           </div>
           <div>
-            <dt className="text-xs tracking-wide text-muted uppercase">Year</dt>
-            <dd className="text-foreground">{state?.year ?? "unknown"}</dd>
-          </div>
-          <div>
             <dt className="text-xs tracking-wide text-muted uppercase">Status</dt>
             <dd className="text-foreground">{crisis ? crisis.status : "none live"}</dd>
           </div>
@@ -151,8 +149,8 @@ export function GermanQuestionManager() {
         {!state?.enabled && (
           <p className="mt-3 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-sm text-warning">
             The <code>settlementCrisisEnabled</code> gate is off, so the turn phase will not tick
-            this crisis even if you force it open. Flip it on the Dashboard&apos;s Feature Gates
-            panel first.
+            this crisis even after you open it. Flip it on the Dashboard&apos;s Feature Gates panel
+            first.
           </p>
         )}
       </section>
@@ -174,28 +172,20 @@ export function GermanQuestionManager() {
       {!crisis ? (
         <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
           <h4 className="font-semibold text-foreground">Open the question</h4>
-          <p className="mt-0.5 text-sm text-muted">
-            &ldquo;Open now&rdquo; runs the same gate the turn phase runs — era window, re-open
-            cooldown, both Germanies still separate — and tells you which one refused.
-            &ldquo;Force&rdquo; skips the era and cooldown checks but still refuses a second live
-            crisis.
+          <p className="mt-0.5 max-w-2xl text-sm text-muted">
+            Nothing opens this on its own — the turn loop only advances a crisis that already
+            exists. Open it whenever you judge the moment right. It will refuse only if a crisis is
+            already live, if a resolved one has not been enacted yet, or if the two Germanies are no
+            longer separate states.
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3">
             <button
               type="button"
               disabled={busy}
-              onClick={() => void post({ action: "open", force: false }, "Opened.")}
+              onClick={() => void post({ action: "open" }, "Opened.")}
               className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
             >
-              Open now
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void post({ action: "open", force: true }, "Force-opened.")}
-              className="rounded-lg border border-warning/50 px-3 py-1.5 text-sm font-semibold text-warning hover:bg-warning/10 disabled:opacity-50"
-            >
-              Force open
+              Open the German Question
             </button>
           </div>
         </section>
@@ -323,8 +313,8 @@ export function GermanQuestionManager() {
               <li key={h.id}>
                 T-{h.resolvedTurn ?? "?"} · {h.outcome ?? "no outcome"} ·{" "}
                 {h.cooldownUntilTurn == null
-                  ? "awaiting actuation"
-                  : `reopens at T-${h.cooldownUntilTurn}`}
+                  ? "awaiting actuation — cannot reopen yet"
+                  : `settled; free to reopen (advisory: T-${h.cooldownUntilTurn})`}
               </li>
             ))}
           </ul>

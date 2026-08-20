@@ -6,8 +6,6 @@ import {
   LOCK_THRESHOLD,
   SETTLEMENT_DEFAULT_RULES,
   SETTLEMENT_INSTITUTIONS,
-  SETTLEMENT_MAX_YEAR,
-  SETTLEMENT_MIN_YEAR,
   SETTLEMENT_SEATS,
 } from "@/lib/constants/settlementCrisis";
 
@@ -18,17 +16,16 @@ function prime(db: MockDb, name: string): MockCollection {
   return db.collection(name) as unknown as MockCollection;
 }
 
-function cursor(docs: unknown[]) {
-  return {
-    toArray: vi.fn().mockResolvedValue(docs),
-    sort: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    skip: vi.fn().mockReturnThis(),
-    project: vi.fn().mockReturnThis(),
-  };
+/**
+ * The two live-crisis reads differ only by filter, and MockDb's `findOne`
+ * ignores filters — so every test that cares must mock BY FILTER or the
+ * already-live check swallows the pending-actuation one.
+ */
+function noCrisis(db: MockDb) {
+  prime(db, "settlementCrises").findOne.mockResolvedValue(null);
 }
 
-describe("openSettlementCrisisIfDue", () => {
+describe("openSettlementCrisis", () => {
   let db: MockDb;
 
   beforeEach(async () => {
@@ -36,103 +33,92 @@ describe("openSettlementCrisisIfDue", () => {
     db = createMockDb();
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
-    // No crisis live, none ever resolved.
-    prime(db, "settlementCrises").findOne.mockResolvedValue(null);
-    prime(db, "settlementCrises").find.mockReturnValue(cursor([]));
+    noCrisis(db);
     prime(db, "settlementCrises").insertOne.mockResolvedValue({ insertedId: new ObjectId() });
     const { getRegisteredCountryIds } = await import("@/lib/country/registeredCountries");
     vi.mocked(getRegisteredCountryIds).mockResolvedValue(["DE", "DD", "US", "UK", "RU"] as never);
   });
 
-  it("opens the question inside the era window", async () => {
-    const { openSettlementCrisisIfDue } = await import("./openCrisis");
-    const res = await openSettlementCrisisIfDue(db as unknown as Db, {
-      turn: 12,
-      year: SETTLEMENT_MIN_YEAR,
-    });
+  it("opens the question on demand, at any turn", async () => {
+    const { openSettlementCrisis } = await import("./openCrisis");
+    const res = await openSettlementCrisis(db as unknown as Db, { turn: 12 });
     expect(res.opened).toBe(true);
     expect(res.crisisId).toBeTruthy();
   });
 
-  it("refuses before the window opens and after it closes", async () => {
-    const { openSettlementCrisisIfDue } = await import("./openCrisis");
-    for (const year of [SETTLEMENT_MIN_YEAR - 1, SETTLEMENT_MAX_YEAR + 1]) {
-      const res = await openSettlementCrisisIfDue(db as unknown as Db, { turn: 12, year });
-      expect(res.opened).toBe(false);
-      expect(res.reason).toContain("outside");
-    }
-    expect(prime(db, "settlementCrises").insertOne).not.toHaveBeenCalled();
-  });
-
-  it("refuses when the world has no resolvable year", async () => {
-    const { openSettlementCrisisIfDue } = await import("./openCrisis");
-    const res = await openSettlementCrisisIfDue(db as unknown as Db, { turn: 12, year: null });
-    expect(res.opened).toBe(false);
+  it("opens just as readily deep into a world's life", async () => {
+    // There is no era window: the question is asked when an operator decides
+    // to ask it, not when a calendar allows it.
+    const { openSettlementCrisis } = await import("./openCrisis");
+    expect((await openSettlementCrisis(db as unknown as Db, { turn: 9_000 })).opened).toBe(true);
   });
 
   it("refuses while a crisis is already open or frozen", async () => {
-    prime(db, "settlementCrises").findOne.mockResolvedValue({ _id: new ObjectId() });
-    const { openSettlementCrisisIfDue } = await import("./openCrisis");
-    const res = await openSettlementCrisisIfDue(db as unknown as Db, { turn: 12, year: 1953 });
-    expect(res).toMatchObject({ opened: false, reason: "a settlement crisis is already live" });
-  });
-
-  it("refuses while the last question is still cooling down", async () => {
-    prime(db, "settlementCrises").find.mockReturnValue(
-      cursor([{ _id: new ObjectId(), status: "resolved", cooldownUntilTurn: 500 }])
+    prime(db, "settlementCrises").findOne.mockImplementation(async (f: { status?: unknown }) =>
+      typeof f?.status === "object" ? { _id: new ObjectId() } : null
     );
-    const { openSettlementCrisisIfDue } = await import("./openCrisis");
-    const res = await openSettlementCrisisIfDue(db as unknown as Db, { turn: 412, year: 1953 });
+    const { openSettlementCrisis } = await import("./openCrisis");
+    const res = await openSettlementCrisis(db as unknown as Db, { turn: 12 });
     expect(res.opened).toBe(false);
-    expect(res.reason).toContain("cooling down");
+    expect(res.reason).toContain("already live");
+    expect(prime(db, "settlementCrises").insertOne).not.toHaveBeenCalled();
   });
 
-  it("reopens once the cooldown has passed", async () => {
-    prime(db, "settlementCrises").find.mockReturnValue(
-      cursor([{ _id: new ObjectId(), status: "resolved", cooldownUntilTurn: 400 }])
+  it("reopens immediately after a settled question, with no cooldown", async () => {
+    // The re-open cooldown gates nothing now. A resolved-and-actuated crisis is
+    // simply history.
+    prime(db, "settlementCrises").findOne.mockImplementation(async (f: { status?: unknown }) =>
+      f?.status === "resolved" ? null : null
     );
-    const { openSettlementCrisisIfDue } = await import("./openCrisis");
-    expect(
-      (await openSettlementCrisisIfDue(db as unknown as Db, { turn: 412, year: 1953 })).opened
-    ).toBe(true);
+    const { openSettlementCrisis } = await import("./openCrisis");
+    expect((await openSettlementCrisis(db as unknown as Db, { turn: 13 })).opened).toBe(true);
   });
 
-  it("refuses to reopen on top of a close that has not been actuated", async () => {
-    // A null cooldown means the absorption is still pending. Opening a fresh
-    // question there would race the merge.
-    prime(db, "settlementCrises").find.mockReturnValue(
-      cursor([{ _id: new ObjectId(), status: "resolved", cooldownUntilTurn: null }])
+  it("refuses while a resolved question is still waiting to be enacted", async () => {
+    // Not a cooldown — a merge still pending. Opening here would name a
+    // challenger that the actuation sweep dissolves a tick later.
+    prime(db, "settlementCrises").findOne.mockImplementation(async (f: { status?: unknown }) =>
+      f?.status === "resolved" ? { _id: new ObjectId(), cooldownUntilTurn: null } : null
     );
-    const { openSettlementCrisisIfDue } = await import("./openCrisis");
-    const res = await openSettlementCrisisIfDue(db as unknown as Db, { turn: 412, year: 1953 });
-    expect(res).toMatchObject({ opened: false, reason: "the last question has not been actuated" });
+    const { openSettlementCrisis } = await import("./openCrisis");
+    const res = await openSettlementCrisis(db as unknown as Db, { turn: 412 });
+    expect(res.opened).toBe(false);
+    expect(res.reason).toContain("not yet been enacted");
   });
 
   it("refuses once one of the two Germanies has been absorbed", async () => {
-    // The whole point of the registry check: a reunification win dissolves DD,
-    // and the question must not reopen against a country that no longer exists.
+    // A reunification win dissolves DD; the question must not reopen against a
+    // country that no longer exists.
     const { getRegisteredCountryIds } = await import("@/lib/country/registeredCountries");
     vi.mocked(getRegisteredCountryIds).mockResolvedValue(["DE", "US", "UK", "RU"] as never);
-    const { openSettlementCrisisIfDue } = await import("./openCrisis");
-    const res = await openSettlementCrisisIfDue(db as unknown as Db, { turn: 412, year: 1953 });
-    expect(res).toMatchObject({ opened: false, reason: "DD is not a live country" });
+    const { openSettlementCrisis } = await import("./openCrisis");
+    const res = await openSettlementCrisis(db as unknown as Db, { turn: 412 });
+    expect(res.opened).toBe(false);
+    expect(res.reason).toContain("not separate");
   });
 
-  it("treats a duplicate key as another runner winning, not as an error", async () => {
+  it("refuses when the target itself is gone, not only the challenger", async () => {
+    const { getRegisteredCountryIds } = await import("@/lib/country/registeredCountries");
+    vi.mocked(getRegisteredCountryIds).mockResolvedValue(["DD", "US", "UK", "RU"] as never);
+    const { openSettlementCrisis } = await import("./openCrisis");
+    expect((await openSettlementCrisis(db as unknown as Db, { turn: 412 })).reason).toContain("DE");
+  });
+
+  it("treats a duplicate key as another operator winning, not as an error", async () => {
     const dup = new MongoServerError({ message: "E11000 duplicate key" });
     dup.code = 11000;
     prime(db, "settlementCrises").insertOne.mockRejectedValue(dup);
-    const { openSettlementCrisisIfDue } = await import("./openCrisis");
-    const res = await openSettlementCrisisIfDue(db as unknown as Db, { turn: 12, year: 1953 });
-    expect(res).toMatchObject({ opened: false, reason: "another runner opened it first" });
+    const { openSettlementCrisis } = await import("./openCrisis");
+    const res = await openSettlementCrisis(db as unknown as Db, { turn: 12 });
+    expect(res).toMatchObject({ opened: false, reason: "Another operator opened it first." });
   });
 
   it("rethrows a write failure that is not a duplicate", async () => {
     prime(db, "settlementCrises").insertOne.mockRejectedValue(new Error("disk full"));
-    const { openSettlementCrisisIfDue } = await import("./openCrisis");
-    await expect(
-      openSettlementCrisisIfDue(db as unknown as Db, { turn: 12, year: 1953 })
-    ).rejects.toThrow("disk full");
+    const { openSettlementCrisis } = await import("./openCrisis");
+    await expect(openSettlementCrisis(db as unknown as Db, { turn: 12 })).rejects.toThrow(
+      "disk full"
+    );
   });
 });
 
@@ -163,7 +149,7 @@ describe("buildGermanQuestion", () => {
     const { buildGermanQuestion } = await import("./openCrisis");
     const doc = buildGermanQuestion(12);
     expect(doc.seats.map((s) => s.id)).toEqual(SETTLEMENT_SEATS.map((s) => s.id));
-    expect(doc.seats.every((s) => s.capital === 0 && s.committedPoints === 0)).toBe(true);
+    expect(doc.seats.every((s) => s.capital === 0 && s.actions === 0)).toBe(true);
   });
 
   it("opens cold, unarmed and never ticked", async () => {
