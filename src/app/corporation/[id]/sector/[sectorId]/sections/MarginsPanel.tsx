@@ -291,7 +291,7 @@ export default function MarginsPanel({
                 modifier={margins.roadConditionModifier}
                 rawValue={margins.roadCondition}
                 rawUnit=" / 100"
-                tooltip="Good roads (above 60) lower logistics costs (+3% max). Poor roads (below 60) raise them (-3% max)."
+                tooltip="Good roads (above 60) lower logistics costs (+3% max). Poor roads (below 60) raise them (-3% max). Driven by state infrastructure spending AND the region's own freight capacity — a strong local logistics sector lifts this, a thin one drags it."
                 icon={Route}
               />
             )}
