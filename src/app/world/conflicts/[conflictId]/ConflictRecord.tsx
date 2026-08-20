@@ -128,6 +128,7 @@ export interface ConflictRecordView {
    * promised a climb the turn processor will never deliver. Absent = fully funded.
    */
   arrearsRatio?: number;
+  readinessTier?: string | null;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -630,6 +631,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
                   enemyCountries: c.ownSide === "A" ? c.sideBCountries : c.sideACountries,
                   unopposed,
                   arrearsRatio: c.arrearsRatio,
+                  readinessTier: c.readinessTier,
                 }}
               />
             )}

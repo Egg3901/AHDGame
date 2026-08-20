@@ -36,7 +36,7 @@ function relayWikiReport(payload: Record<string, unknown>): void {
     .finally(() => clearTimeout(timer));
 }
 
-// POST /api/wiki/report — Records a wiki page issue (stale / incorrect / update / other).
+// POST /api/wiki/report: records a wiki page issue (stale / incorrect / update / other).
 // Auth: public (optional session); blocked when wiki is disabled
 // Errors: 400, 403, 429
 export async function POST(request: Request) {
