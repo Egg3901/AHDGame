@@ -45,13 +45,22 @@ export const COUNTRY_UNOWNED_REVENUE_MULTIPLIER: Partial<Record<CountryId, numbe
  * inside a fixed pie tops out near 1.4x; the country needs more downstream
  * plant, not a different slice of the same plant.
  *
- * WHY DD, AND WHY THESE TWO SECTORS. The CoCom embargo walls DD steel out of
- * the West, so it cannot export the surplus away, and private founding is
- * banned in a command economy, so no player can build the missing consumers.
- * Automobiles (IFA/Wartburg/Robur heavy machinery, steel demand rate 0.35) and
- * construction (the Aufbau/Stalinallee programme, steel demand rate 0.15) are
- * the two steel-consuming sectors the 1953 GDR genuinely ran at scale and the
- * seed sized at the era floor.
+ * WHY DD, AND WHY CONSTRUCTION CARRIES THE STEEL ROLE. The CoCom embargo walls
+ * DD steel out of the West, so it cannot export the surplus away, and private
+ * founding is banned in a command economy, so no player can build the missing
+ * consumers. Construction (the Aufbau/Stalinallee programme, steel demand rate
+ * 0.15) is the real downstream steel sink and is multiplied x8 to soak the
+ * lignite-fed steel glut.
+ *
+ * WHY AUTOMOBILES IS ONLY x2 (was x10, ticket-1072). Lifting the auto works to
+ * x10 back-fired: automobiles OUTPUT is `vehicles`, a commodity DD cannot sell.
+ * Every Warsaw Pact neighbour is already net-long vehicles and the West is
+ * CoCom-embargoed, so the extra output just piled up unsold (live prod: DD
+ * vehicles supply 3544.5 vs demand 341) while a player's nationalized IFA corp
+ * bled ~330k/turn on cars nobody buys. And auto consumes only ~5% of DD's steel
+ * demand (auto steel rate 0.25 × vehicles output rate 0.5 ≈ 1,772 of ~33,248),
+ * so cutting it back does NOT re-open the steel glut construction is sized to
+ * close. Kept at x2 for a token IFA/Wartburg/Robur presence, not as a steel sink.
  *
  * `capitalStock` is derived from this same ₳ figure (see `buildSector` in
  * seeds/reference/budgets.ts), so capacity and revenue move together and no
@@ -61,7 +70,7 @@ export const COUNTRY_SECTOR_SEED_MULTIPLIER: Partial<
   Record<CountryId, Partial<Record<CorporationType, number>>>
 > = {
   DD: {
-    automobiles: 10,
+    automobiles: 2,
     construction: 8,
   },
 };

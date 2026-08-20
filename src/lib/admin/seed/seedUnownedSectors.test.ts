@@ -14,7 +14,7 @@ function cursor(docs: unknown[]) {
 
 describe("countrySectorSeedMultiplier (ticket-1072)", () => {
   it("lifts East German automobiles and construction and nothing else", () => {
-    expect(countrySectorSeedMultiplier("DD", "automobiles")).toBe(10);
+    expect(countrySectorSeedMultiplier("DD", "automobiles")).toBe(2);
     expect(countrySectorSeedMultiplier("DD", "construction")).toBe(8);
     expect(countrySectorSeedMultiplier("DD", "manufacturing")).toBe(1);
     expect(countrySectorSeedMultiplier("DD", "extraction")).toBe(1);
@@ -34,7 +34,7 @@ describe("countrySectorSeedMultiplier (ticket-1072)", () => {
     const manufacturing = computeUnownedSeedRevenue({ ...args, sectorType: "manufacturing" });
 
     // Same bucket at multiplier 1 is the floor-or-market figure divided back out.
-    expect(auto / 10).toBeGreaterThan(0);
+    expect(auto / 2).toBeGreaterThan(0);
     expect(construction / 8).toBeGreaterThan(0);
     // Upstream is untouched: no sector is cut to pay for the uplift.
     const csManufacturing = computeUnownedSeedRevenue({
