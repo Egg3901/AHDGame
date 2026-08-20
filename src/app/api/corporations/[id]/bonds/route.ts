@@ -596,9 +596,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       {
         bondDefaultCreditPenaltyActive: penaltyActive,
         // Ticket #1138: this route DISPLAYS, it does not advance the model. Passing
-      // the stored snapshot as `previousCompositeScore` blended it a second time
-      // and reported a score the turn never wrote. Use it verbatim instead.
-      persistedCompositeScore: corporation.creditCompositeSnapshot ?? undefined,
+        // the stored snapshot as `previousCompositeScore` blended it a second time
+        // and reported a score the turn never wrote. Use it verbatim instead.
+        persistedCompositeScore: corporation.creditCompositeSnapshot ?? undefined,
         insiderConcentrationPenalty: insiderConcentrationPenaltyApplies(corporation),
       }
     );
