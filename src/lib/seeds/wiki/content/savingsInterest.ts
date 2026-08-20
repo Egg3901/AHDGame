@@ -67,6 +67,7 @@ Accrued-but-uncredited interest is tracked internally; if you close or move the 
 - **Rate-following:** Because APY = real rate / 2, savings is sensitive to both policy rates and inflation. In a high-rate environment it is a genuine yield instrument; in a low-rate environment it barely beats stuffing cash under a mattress.
 - **No lock-up:** Unlike bonds, savings can be withdrawn at any time. The cost of that liquidity is the half-real-rate haircut versus buying sovereign bonds directly.
 - **Compound effect:** Credited interest becomes part of the balance for the next quarter's accrual, so savings compounds quarterly, not just per-turn.
+- **Whale cap:** Only the lesser of your balance and **25%** of the whole currency's national savings pool earns interest. This closes a carry-trade loophole where a single huge account could farm interest on nearly 100% of a currency's savings; ordinary balances well under a quarter of the pool are unaffected.
 
 See also: [Central Banks](/wiki/central-banks), [Sovereign Bonds](/wiki/sovereign-bonds), [Line of Credit](/wiki/line-of-credit), [Currency Exchange](/wiki/currency-exchange)
 `;

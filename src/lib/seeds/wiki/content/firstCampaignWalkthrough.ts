@@ -50,7 +50,7 @@ The primary window opens. You and any other Democratic candidates declare, inclu
 Tactics for the primary:
 
 - **Sustain PI.** Keep spending 2 to 4 Campaign actions per day. PI at 40 beats PI at 30 in alignment-weighted score.
-- **Request NPP endorsements.** Visit the NPP profiles of Democrats in PA with views close to yours. 5 actions + base 40% chance. Each success is a demographic appeal boost.
+- **Request NPP endorsements.** Visit the NPP profiles of Democrats in PA with views close to yours. Requesting an endorsement costs 6 actions and is granted based on your relationship with that NPP, not a random roll, so build the relationship first. An endorsement is a demographic appeal boost.
 - **Don't attack fellow Democrats.** You'd raise your own Infamy and push Favorability down. If the field is crowded, just outperform on alignment.
 - **Run one Full Demographic Poll** (₳75k, 6 actions) early in the primary to understand your weakest groups. Adjust campaigning accordingly.
 
@@ -67,7 +67,7 @@ Daily routine now tighter:
 - **Campaign 4 to 6 actions/day** in-state to sustain PI (you need to keep it at 40+).
 - **Ads every other day** to hold Favorability at 65 to 70. Diminishing returns hit above 70; don't over-spend.
 - **Support allies and accept support:** NPP and player endorsements in the general land harder than in the primary. Get them before the Republican does.
-- **Watch for attacks.** If your Favorability drops 5+ points, the Republican is probably attacking you. You can counter-attack (costs Infamy and doesn't always recoup), counter-message via ads, or request NPP opposition to the attacker.
+- **Watch for attacks.** If your Favorability drops 5+ points, the Republican is probably attacking you. You can counter-attack (costs Infamy and doesn't always recoup), counter-message via ads, or shore up your own favorability directly.
 - **If you have a strong lead by Day 4 of the general**, stop spending aggressively. Bank actions and money for the final turns.
 
 ## Week 4: General election, closing sprint
@@ -120,7 +120,7 @@ Enter the next primary in 2 to 3 weeks real-time. You'll start it ahead of where
 - **Over-campaigning early and under-campaigning in the final turns.** PI decays. The final turns matter most. Save actions for the sprint.
 - **Buying ads above Favorability 75.** Diminishing returns are severe. Above 75 you're lighting money on fire.
 - **Attacking your own party's primary rivals.** Costs Infamy and reduces your general-election appeal.
-- **Ignoring NPP endorsements.** A single NPP endorsement is often 2 to 3% of the relevant demographic's appeal, which is cheaper than ads for the same effect.
+- **Ignoring NPP endorsements.** A single NPP endorsement can be a meaningful chunk of the relevant demographic's appeal, often cheaper than ads for the same effect.
 
 ## Related
 

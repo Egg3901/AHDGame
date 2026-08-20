@@ -42,14 +42,14 @@ Presidential primaries reward national reach and party infrastructure more than 
 
 | Bucket | Max | How it's scored |
 | --- | --- | --- |
-| Policy alignment (party only) | 40 | Points lost scale with how far your positions sit from your party's official platform |
-| Party organization (home state) | 25 | A straight percentage of your party's organization score in your home state |
-| National Political Influence | 25 | A curve based on your national reach, capped at the maximum |
-| Favorability | 10 | A straight percentage of your Favorability score |
+| Alignment (party only) | 40 | Points lost scale with how far your positions sit from your party's official platform |
+| Party Influence | 20 | Normalized on the candidate's own accumulated party influence (uncapped above the reference scale) |
+| National Reach | 15 | A diminishing-returns curve on your national political influence |
+| Favorability | 25 | A straight percentage of your Favorability score |
 
 The raw score gets the same infamy penalty as the state-level formula. Presidential primaries are national, so there's no state-position alignment component: only the party platform applies.
 
-Presidential contenders live or die on NPI and party-org investment in their home state. A candidate with low NPI but high state PI can win state races but loses presidential primaries.
+Presidential contenders live or die on national reach, party influence, and favorability. A candidate with low national reach but high state PI can win state races but loses presidential primaries.
 
 ## NPP primary candidates
 
@@ -72,8 +72,7 @@ NPPs (Non-Player Politicians) autonomously enter primaries. Entry is determinist
 2. **Alignment first.** If your policy positions are more than about 6 points away from your party's official position, reconsider. Check the party page: the official positions are visible there.
 3. **Don't attack fellow party members.** If someone else wins the primary, you want them at full strength going into the general.
 4. **Pump Political Influence.** Campaign 6-10 actions/day in-state. PI compounds over the primary window because decay is much slower than Campaign's +1% per action.
-5. **Request NPP endorsements.** Each success lifts your appeal across a demographic. 5 actions + 40% base success. Only endorse from NPPs whose party matches yours or who are independent; opposition-party NPPs won't endorse you even if alignment is close.
-6. **Don't sleep on Favorability.** 35 points of the score live here. Going into primary with Favorability 80 is worth 28 pts vs. 17 at Favorability 50, an 11-point swing.
+5. **Don't sleep on Favorability.** 35 points of the score live here. Going into primary with Favorability 80 is worth 28 pts vs. 17 at Favorability 50, an 11-point swing.
 
 ## Withdrawal during primary
 

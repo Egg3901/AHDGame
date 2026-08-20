@@ -12,7 +12,7 @@ You start with 4 actions per turn (refreshed every real hour). Actions **do** ro
 
 ## 2. Join a party before you declare
 
-You cannot win a primary as an independent against party-backed candidates. The party platform alignment score is worth up to 40 points, and running independent means a 0.3x general election penalty. Find a party whose platform econ/social coordinates are close to your character's ideology and join before you declare your first candidacy.
+You cannot win a primary as an independent against party-backed candidates. The party platform alignment score is worth up to 40 points, and running independent leaves you without any of that. Find a party whose platform econ/social coordinates are close to your character's ideology and join before you declare your first candidacy.
 
 ---
 
@@ -82,7 +82,7 @@ Presidential races also have **your own** Campaign Presence, built per state on 
 
 ## 11. Infamy is permanent (and costs you)
 
-Every action that generates infamy (attacking opponents, defying whip votes, certain legislative plays) adds permanently to your infamy score. High infamy reduces NPP endorsement chances and affects certain approval ratings. Don't attack opponents carelessly. Only attack when the favorability damage to them outweighs your infamy cost.
+Every action that generates infamy (attacking opponents, defying whip votes, certain legislative plays) adds permanently to your infamy score. High infamy strains your standing with NPPs and affects certain approval ratings. Don't attack opponents carelessly. Only attack when the favorability damage to them outweighs your infamy cost.
 
 ---
 

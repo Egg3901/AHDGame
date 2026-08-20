@@ -32,7 +32,7 @@ The strongest positions involve simultaneously holding:
 
 1. **An elected office**: action bonus, legislative access, party strength
 2. **A party leadership role**: whip directives, GOTV budget control, party org
-3. **A corporation**: passive income, economic influence, sector manipulation
+3. **A corporation**: passive income, economic influence, plant capacity across sectors (see [Corporations & Plants](/wiki/plants-corp-guide))
 
 Each lever amplifies the others. Office income funds party contributions; party influence raises electoral viability; corporate income funds campaigns. The player who fully cycles all three grows faster than anyone operating on one track.
 

@@ -2,7 +2,7 @@ export const generalsGuideContent = `# Generals & the Officer Corps
 
 A general is not an NPC. **A general is a player character** (one of your own, or one of your countrymen's) wearing a second hat.
 
-Every character has two profile tabs: **Political**, the career you already know, and **Military**, which holds their general. The Military tab is empty until somebody commissions them. After that, it is a full progression system running in parallel with their political life: rank, experience, skill points, and a trait tree of 115 nodes.
+Every character has two profile tabs: **Political**, the career you already know, and **Military**, which holds their general. The Military tab is empty until somebody commissions them. After that, it is a full progression system running in parallel with their political life: rank, experience, skill points, and a trait tree of 117 nodes.
 
 This matters more than it sounds. **Generals are the only thing that makes your army better than the sum of its units.** An unled army fights; a well-trained general's army fights considerably harder.
 
@@ -68,7 +68,7 @@ There are four sources:
 | **Tenure** | up to 20 | 1 point per **24 turns** of service, lifetime cap 20 |
 | **Post-Field-Marshal** | up to 15 | 1 point per **200 XP** past the rank-5 threshold, lifetime cap 15 |
 
-**Maximum lifetime total: 55 points**, against a tree of **115 nodes**.
+**Maximum lifetime total: 55 points**, against a tree of **117 nodes**.
 
 You will never train even half the tree. **A general specialises because they cannot afford not to.** That is the central design of the system: choose a discipline and commit.
 
@@ -92,7 +92,7 @@ The cap exists on purpose. Uncapped, a late-game commander eventually holds ever
 
 ## The trait tree
 
-115 nodes across **6 categories**:
+117 nodes across **6 categories**:
 
 | Category | Paths |
 | --- | --- |
@@ -122,7 +122,7 @@ This shapes long campaigns: banking points early lets you take newly unlocked ca
 
 Some nodes are marked **"Conflicts with …"**: *Shock Commander* against *Methodical Commander*, for instance, since a general cannot credibly be both the maximum-aggression and the maximum-caution commander.
 
-This is currently **advisory, not enforced**. Nothing stops you training both ends of a contradiction; the tree simply tells you that you are doing it. Treat it as roleplay and design guidance rather than a hard rule, and remember that with 55 points against 115 nodes, spending them on two traits that pull against each other is its own punishment.
+This is currently **advisory, not enforced**. Nothing stops you training both ends of a contradiction; the tree simply tells you that you are doing it. Treat it as roleplay and design guidance rather than a hard rule, and remember that with 55 points against 117 nodes, spending them on two traits that pull against each other is its own punishment.
 
 Some nodes are **boosted** by your nation's adopted doctrine. A trait whose matching national doctrine has been adopted is marked with a star in the tree, and the profile has a **Doctrine Fit** view listing which of your trained traits are currently amplified and which are not. Training with your nation's doctrine in mind is materially better than training against it.
 
@@ -169,7 +169,7 @@ If you are a Commanding General, a **"Manage your command →"** link appears on
 
 **Commission early and broadly.** Tenure points accrue from the day of commissioning and cap at 20. A general commissioned in peacetime arrives at the war already developed; one commissioned the week war breaks out starts from four points.
 
-**Pick a lane in the first few points.** With 55 lifetime points against 115 nodes, spreading thin produces a general who is mediocre at everything. Chains are strict, so a deep path costs you the early nodes anyway, and committing is the whole point.
+**Pick a lane in the first few points.** With 55 lifetime points against 117 nodes, spreading thin produces a general who is mediocre at everything. Chains are strict, so a deep path costs you the early nodes anyway, and committing is the whole point.
 
 **Train toward your nation's doctrine.** Boosted traits are strictly better than unboosted ones for the same point. Look at what your Secretary of Defense has adopted before spending.
 

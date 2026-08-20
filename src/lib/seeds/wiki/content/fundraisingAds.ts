@@ -80,9 +80,9 @@ Practical yields:
 | 60 | +2 |
 | 70 | +1 to +2 |
 | 75 | +1 |
-| 80+ | <1 (often rounds to 0) |
+| 80+ | +1 (floored, never rounds to 0) |
 
-Above 75 Favorability, each ad delivers a fraction of a point. Above 80 you're almost certainly lighting money on fire.
+Above 75 Favorability, each ad delivers less and less, but the gain is floored at +1: an ad is never fully wasted, just poor value.
 
 ### Out-of-state cost multipliers
 

@@ -13,7 +13,7 @@ Only the CEO can issue bonds. Access the bond panel from the corporation page.
 | Unit face value | anchor currency 1,000 per bond unit |
 | Maturity options | 96 turns (2 years), 240 turns (5 years), 336 turns (7 years) |
 | Coupon rate | prime rate + credit spread + 1.0pp + term premium (see below) |
-| Issuance cooldown | 24 turns between issuances |
+| Issuance cooldown | 24 turns between issuances for publicly-listed corporations; 12 turns for private corporations |
 
 **Blocked while under IMF bailout:** If your corporation is under an active IMF sovereign bailout, you cannot issue new bonds or refinance defaulted debt until the restructuring ends.
 
@@ -48,10 +48,10 @@ Longer bonds command a higher coupon to compensate investors for locking up capi
 
 **Full formula:** coupon rate = prime rate + credit spread + 1.0pp (corporate premium) + term premium
 
-A BBB-rated corporation with a prime rate of 3.0% would pay:
-- 2yr: 3.0 + 1.5 + 1.0 + 0.00 = **5.50%**
-- 5yr: 3.0 + 1.5 + 1.0 + 1.00 = **6.50%**
-- 7yr: 3.0 + 1.5 + 1.0 + 1.75 = **7.25%**
+A BBB-rated corporation (credit spread 3.0pp) with a prime rate of 3.0% would pay:
+- 2yr: 3.0 + 3.0 + 1.0 + 0.00 = **7.00%**
+- 5yr: 3.0 + 3.0 + 1.0 + 1.00 = **8.00%**
+- 7yr: 3.0 + 3.0 + 1.0 + 1.75 = **8.75%**
 
 The bond issuance form shows the exact rate for each duration before you commit.
 
@@ -106,7 +106,7 @@ CEOs can also **buy back** their own bonds from the public float to reduce outst
 
 ## Default
 
-A bond defaults when the corporation cannot cover its coupon obligations, specifically when liquid capital goes negative after payment is processed. On default:
+A bond defaults when the corporation's liquid capital goes negative after coupon payments, AND it fails a solvency check: a positive bond buyback escrow can cover the shortfall first, and a corp whose total assets (valued the same way the restructure planner values them) still exceed its debt is judged illiquid rather than insolvent and does not default. Only a corp that fails both checks actually defaults. On default:
 
 - Bondholders receive no payment that turn
 - The corporation's credit rating takes a **96-turn penalty**, locking it at CCC
@@ -119,17 +119,17 @@ A CEO can **refinance** defaulted bonds by issuing a new bond for the full defau
 
 **National corporations** (government-owned) cannot refinance defaulted bonds or pay them off with cash: only private corporations have these restructuring options.
 
-### Auto-restructure (asset-backed defaults)
+### Auto-resolving lingering defaults
 
-If a corporation defaults and the CEO does not resolve the crisis, the turn processor may **auto-restructure** on a later turn when:
+If a corporation defaults and the CEO does not resolve the crisis, the turn processor auto-resolves it on a later turn (once the default is at least one turn old, so the CEO had a turn to act in the crisis modal). National and IMF-managed corporations are never auto-resolved. Resolution is tried in this order:
 
-- The default is at least one turn old (the CEO had time to act in the crisis modal).
-- Liquidating the **minimum number of sectors** at orderly-sale salvage values can repay **100% of defaulted principal**.
-- The corporation is not nationalized and not under IMF management.
+1. **Refinance (no sale):** if the corp is within its leverage limits and hasn't hit the refinance cap, a replacement bond is issued and holders are rolled into it. This preserves every sector, the least destructive outcome.
+2. **Restructure (sell):** if refinance isn't feasible, the turn processor sells the **minimum number of sectors** needed, at orderly-sale salvage values, to repay **100% of defaulted principal**, cures the defaulted bonds, and keeps the corporation alive with its remaining sectors.
+3. **Stand for dissolution:** if neither works, the default stands until the CEO dissolves and settles.
 
-Auto-restructure sells the fewest sectors needed, pays bondholders in full, cures the defaulted bonds, and **keeps the corporation alive** with its remaining sectors. If even selling everything cannot cover the debt, the default stands until the CEO dissolves and settles.
+The CEO is notified and an audit entry is written for every auto-resolution.
 
-This closes the loophole of defaulting and ignoring the crisis when the balance sheet still has enough asset value to make creditors whole.
+This closes the loophole of defaulting and ignoring the crisis when the balance sheet still has enough asset value (or refinancing headroom) to make creditors whole.
 
 Distressed bond speculators can buy defaulted bonds cheaply and wait for the CEO to buy them back at face value, making a profit on the spread.
 

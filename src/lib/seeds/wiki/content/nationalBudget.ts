@@ -43,7 +43,7 @@ The **debt-to-GDP ratio** is the key solvency metric:
 debtToGdpRatio = totalPrincipal / GDP
 \`\`\`
 
-A sovereign credit rating from AAA to B reflects this ratio and affects borrowing costs:
+A sovereign credit rating from AAA to CCC reflects this ratio and affects borrowing costs:
 
 | Debt-to-GDP | Rating | Interest Rate | Public Trust Penalty |
 | --- | --- | --- | --- |
@@ -52,7 +52,10 @@ A sovereign credit rating from AAA to B reflects this ratio and affects borrowin
 | ≤100% | A | 3.5% | 0 |
 | ≤120% | BBB | 5.0% | 0 |
 | ≤150% | BB | 7.0% | −5 |
-| >150% | B | 10.0% | −10 |
+| ≤250% | B | 10.0% | −10 |
+| >250% | CCC | 14.0% | −15 |
+
+The CCC tier is a deliberately conservative extreme-distress floor: no live-world country is anywhere near 250% debt-to-GDP, so it only bites in runaway autonomous-world scenarios (or after a sovereign repudiation, which also stamps CCC).
 
 ## National debt
 
@@ -67,7 +70,7 @@ When the country runs a deficit, it issues sovereign bonds each quarter to cover
 | --- | --- |
 | Below 50% | None |
 | 50% to 100% | −0.5% per 10 percentage points |
-| Above 100% | −2.5% base + −1% per additional 10 pp (capped at −15%) |
+| Above 100% | −2.5% base + −1% per additional 10 pp (capped at −5%) |
 
 ## The fiscal year
 

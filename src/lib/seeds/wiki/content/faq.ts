@@ -124,7 +124,7 @@ Whip directives are instructions the party leadership sends to NPP legislators o
 
 **What do corporations do?**
 
-Corporations own economic sectors within countries. Each turn, sectors generate revenue based on sector size, policy environment, and economic conditions. Revenue flows to the corporation as income, which pays out to shareholders (including your character). Running a corporation alongside a political career provides passive income that funds campaigns and ads.
+Corporations build and own production plants within economic sectors. Each turn, plants generate revenue based on capacity, output, policy environment, and economic conditions. Revenue flows to the corporation as income, which pays out to shareholders (including your character). Running a corporation alongside a political career provides passive income that funds campaigns and ads. See [Corporations & Plants](/wiki/plants-corp-guide) for the full capacity economy.
 
 ---
 
@@ -144,7 +144,7 @@ When Forex is enabled, you can trade currencies: USD, GBP, EUR, and JPY. Exchang
 
 **Can I change my home state?**
 
-Yes, via the relocation action. Relocating costs actions and funds, and there is a cooldown period. After relocating, your home state updates for canvassing and future elections. You cannot change which country your character belongs to.
+Yes, via the relocation action. Relocating costs actions and funds, and there is a cooldown period. After relocating, your home state updates for canvassing and future elections. Relocation can also move you to a different country - that resets your national influence and drops you to independent in the new country, so treat it as a fresh start there, not a free jump.
 
 ---
 
