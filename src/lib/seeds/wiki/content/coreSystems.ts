@@ -81,7 +81,7 @@ Cash on Hand comes from passive income streams (corporation dividends, bond coup
 
 ## The turn processing order (engineer's note)
 
-Each hour the processor runs **40+ phases in 14 groups**. Most phases within a group run in parallel; some groups (notably election resolution) are strictly sequential. You don't need to know the order to play well, but if you're wondering why your campaign action from 03:59 shows up "on the next turn," this is why.
+Each hour the processor runs roughly a dozen top-level adapters that together call over 100 phase steps, organized into 14 groups. Most phases within a group run in parallel; some groups (notably election resolution) are strictly sequential. You don't need to know the order to play well, but if you're wondering why your campaign action from 03:59 shows up "on the next turn," this is why.
 
 | Group | What happens | Ordering |
 | --- | --- | --- |
@@ -120,7 +120,7 @@ Every player candidacy has a dedicated **Campaign page** at \`/campaign/[id]\`:
 - **Party view**: Intelligence snapshot: strategy, polling, spending.
 - **Public view**: Basic summary only.
 
-The campaign manager page is where you plan large campaign operations, track activity logs, and view NPP endorsements. Details: [Campaign Manager](/wiki/campaign-manager).
+The campaign manager page is where you spend a separate campaign budget on Fundraising, Ground Game, Media Spending, and Opposition Research: each is a branch tree, not a flat level ladder, so how you invest within a tree matters as much as how much. It's also where you track activity logs and view NPP endorsements. Details: [Campaign Manager](/wiki/campaign-manager) and [Campaign Strategy](/wiki/campaign-strategy).
 
 ## Perpetual elections
 

@@ -88,59 +88,11 @@ newModifier      = clamp(currentModifier + adjustedBoost, −20, +20)
 
 ---
 
-## Campaign upgrade costs and effects
+## Campaign ops trees
 
-### Fundraising (10 levels, no maintenance)
+Fundraising, Ground Game, Media Spending, and Opposition Research are each a **branch tree** on the campaign page (\`/campaign/[id]\`), not a flat level ladder. Each tree unlocks a starter node, then up to three further branches (for example Media Spending's Broadcast and Television branches, Opposition Research's Dossier, Scandal Leak, and Counter-Intel). Branch magnitudes stack with the starter and with each other. Maintenance is deducted from campaign funds each turn; branches that can't be covered auto-downgrade rather than collapsing the whole tree, with no refund.
 
-| Level | Upgrade cost | Actions | Income/turn |
-|---|---|---|---|
-| 0 (base) | n/a | n/a | ₳20,000 |
-| 1 | ₳50,000 | 10 | ₳35,000 |
-| 2 | ₳120,000 | 15 | ₳60,000 |
-| 3 | ₳250,000 | 20 | ₳100,000 |
-| 4 | ₳500,000 | 25 | ₳150,000 |
-| 5 | ₳900,000 | 30 | ₳200,000 |
-| 6 | ₳1,500,000 | 40 | ₳350,000 |
-| 7 | ₳2,500,000 | 50 | ₳600,000 |
-| 8 | ₳4,000,000 | 60 | ₳1,000,000 |
-| 9 | ₳6,500,000 | 75 | ₳2,500,000 |
-| 10 | ₳10,000,000 | 90 | ₳5,000,000 |
-
-### Ground game (5 levels, ongoing maintenance)
-
-Passive effect applies to presidential general elections only. Maintenance is cumulative across all purchased levels.
-
-| Level | Upgrade cost | Actions | Effect | Maintenance/turn |
-|---|---|---|---|---|
-| 1 | ₳55,000 | 10 | +3% swing states | ₳5,500 |
-| 2 | ₳110,000 | 15 | +6% swing states | ₳16,500 |
-| 3 | ₳220,000 | 20 | +9% swing states | ₳38,500 |
-| 4 | ₳440,000 | 25 | +12% swing states | ₳82,500 |
-| 5 | ₳880,000 | 30 | +15% swing states | ₳170,500 |
-
-### Media spending (5 levels, ongoing maintenance)
-
-Passive effect: +0.5% favorability per level per turn (presidential races only). Doubles during final 4 turns (season multiplier 2×).
-
-| Level | Upgrade cost | Actions | Effect | Maintenance/turn |
-|---|---|---|---|---|
-| 1 | ₳60,000 | 12 | +0.5%/turn favorability | ₳6,000 |
-| 2 | ₳120,000 | 16 | +1.0%/turn favorability | ₳18,000 |
-| 3 | ₳240,000 | 20 | +1.5%/turn favorability | ₳42,000 |
-| 4 | ₳480,000 | 24 | +2.0%/turn favorability | ₳90,000 |
-| 5 | ₳960,000 | 28 | +2.5%/turn favorability | ₳186,000 |
-
-### Opposition research (5 levels, no maintenance)
-
-Passive effect: Debuffs target candidate favorability by level × 0.5% per turn. Presidential races only.
-
-| Level | Upgrade cost | Actions | Effect |
-|---|---|---|---|
-| 1 | ₳40,000 | 8 | −0.5%/turn to target |
-| 2 | ₳80,000 | 12 | −1.0%/turn to target |
-| 3 | ₳160,000 | 16 | −1.5%/turn to target |
-| 4 | ₳320,000 | 20 | −2.0%/turn to target |
-| 5 | ₳640,000 | 24 | −2.5%/turn to target |
+Full per-tree cost and effect tables, current to the live constants: [Campaign Strategy](/wiki/campaign-strategy) and [Campaign Manager](/wiki/campaign-manager).
 
 **Campaign season multiplier:** All campaign passive effects (Media Spending, Opposition Research, Travel Presence, Primary Campaign bonus) double during the **final 4 turns** of an election.
 

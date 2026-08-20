@@ -22,6 +22,8 @@ The final 4 turns are a sharp closing spike: they carry 30% of the pool on their
 
 ## The total appeal pipeline
 
+General elections run on the **swing-flow model** by default, not the flat group-level split used in primaries and polls. Swing-flow starts from the same per-group appeal pipeline below, then layers presidential/gubernatorial **coattails**, a **median-voter** policy-distance reference, **persuasion drivers** (candidate support, policy distance, money, incumbency), and **party-tenure fatigue** on top, see [Formula Deep-Dive](/wiki/formula-deep-dive) for the driver math. The base pipeline:
+
 Each turn, for each candidate, for each demographic group:
 
 1. **Reach**: a sqrt curve on influence, capped at 1.0 once influence reaches 100. State races use Political Influence (already clamped to 100), presidential generals use National Political Influence (also saturates at 1.0, no celebrity bonus above 100).

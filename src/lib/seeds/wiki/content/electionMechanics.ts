@@ -127,6 +127,13 @@ The general-election pipeline includes three swing-flow factors that modulate ho
 
 These factors mean a candidate with high Support, low opponent Registration, and low persuasion resistance can swing larger vote shares per turn than one facing entrenched opposition in a high-Reg state.
 
+Two more swing-flow drivers matter for down-ballot strategy:
+
+4. **Coattails**: a sitting executive's approval swings a nominal-share multiplier for their own party in every eligible down-ballot general, governor coattails at state scope, presidential coattails at national scope (US only for now). A popular incumbent lifts their whole party's ticket; an unpopular one drags it.
+5. **Party-tenure fatigue**: a "time for a change" drag on a party that has held the executive office for multiple consecutive terms, roughly 3.5 points per term beyond the first. It bites even a popular incumbent's party, on top of the approval-based shield.
+
+Both apply after the base appeal pipeline and are separate from the reg/support/transferable-share factors above.
+
 ## Multi-seat races
 
 House and State Senate (US), Bundestag constituency seats, UK Commons regions, and JP Shugiin use proportional allocation:
