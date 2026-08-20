@@ -41,6 +41,12 @@ export interface SettlementSeatDef {
   capitalPerTurn: number;
   /** Display label for this seat's capital pool. */
   capitalLabel: string;
+  /**
+   * How the news wire names this delegation — the CAPITAL, not the seat id.
+   * The source design's wire reads "EAST BERLIN opens the inner border", not
+   * "DD opens the inner border".
+   */
+  wireLabel: string;
   /** May arm the ladder and declare. Washington and Moscow only. */
   authority: boolean;
 }
@@ -171,6 +177,7 @@ export const SETTLEMENT_SEATS: readonly SettlementSeatDef[] = [
     actionsPerTurn: 3,
     capitalPerTurn: 6,
     capitalLabel: "Party Capital",
+    wireLabel: "EAST BERLIN",
     authority: false,
   },
   {
@@ -182,6 +189,7 @@ export const SETTLEMENT_SEATS: readonly SettlementSeatDef[] = [
     actionsPerTurn: 1,
     capitalPerTurn: 3,
     capitalLabel: "Party Capital",
+    wireLabel: "MOSCOW",
     authority: true,
   },
   {
@@ -193,6 +201,7 @@ export const SETTLEMENT_SEATS: readonly SettlementSeatDef[] = [
     actionsPerTurn: 1,
     capitalPerTurn: 3,
     capitalLabel: "Political Capital",
+    wireLabel: "WASHINGTON",
     authority: true,
   },
   {
@@ -204,6 +213,7 @@ export const SETTLEMENT_SEATS: readonly SettlementSeatDef[] = [
     actionsPerTurn: 1,
     capitalPerTurn: 3,
     capitalLabel: "Political Capital",
+    wireLabel: "LONDON",
     authority: false,
   },
 ];
