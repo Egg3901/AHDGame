@@ -38,8 +38,6 @@ import {
   UNOWNED_CAPTURE_BONUS_MULTIPLIER,
   MS_CAPTURE_DIVISOR,
   DOMINANCE_MARKET_SHARE_THRESHOLD,
-  SECTOR_MARKET_GDP_FRACTION,
-  SECTOR_TYPE_COUNT,
   computeAllMarginModifiers,
   getHomeLocationMarginBonus,
   getStateSectorSpecializationMarginBonus,
@@ -52,7 +50,6 @@ import type {
   StateMetricValues,
   MacroEconomicValues,
 } from "@/lib/constants/corporations";
-import { getGdpAnchorRate } from "@/lib/currency/gdpAnchorRate";
 import type { CountryId } from "@/lib/constants/countries";
 import { getSubsidyMarginModifier } from "@/lib/subsidies/subsidyEffects";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
@@ -706,23 +703,9 @@ export function computeSectorMarketPosition(args: {
    */
   preset?: string;
 }) {
-  const {
-    state,
-    sector,
-    sectorCountryId,
-    corporation,
-    siblingCorps,
-    siblingsSectors,
-    siblingFxByCurrency,
-    unownedDoc,
-    preset,
-  } = args;
+  const { sector, sectorCountryId, corporation, siblingCorps, siblingsSectors, siblingFxByCurrency } =
+    args;
   const siblingCorpMap = new Map(siblingCorps.map((c) => [c._id.toString(), c]));
-  // Market context: other corps in same state + sector type
-  const countryUsdRate = getGdpAnchorRate(sectorCountryId as CountryId, preset);
-  const totalMarketPerSector = state
-    ? Math.round((state.gdp * countryUsdRate * SECTOR_MARKET_GDP_FRACTION) / SECTOR_TYPE_COUNT)
-    : 0;
 
   // Each sibling sector's `revenue` is denominated in its HOST-state currency
   // (the market it operates in), not its owner's. Every sibling here is in the
@@ -749,20 +732,10 @@ export function computeSectorMarketPosition(args: {
     0
   );
 
-  // Get unowned sector from DB to match state page calculation.
-  // `unownedSectors.revenue` is ₳-native (Task 9 — cross-corp shed
-  // normalizes on write) so it sums safely with `totalOwnedRevenue`.
-  const persistedUnownedRevenue = unownedDoc?.revenue ?? 0;
-
-  // Use persisted unowned pool when present so admin-spawned market is preserved.
-  // If not seeded, fall back to the GDP-derived market — but never below the
-  // revenue already owned in this bucket: a sector cannot hold >100% of its
-  // market. Without this floor, a nationalization that consumed the unowned
-  // pool left a tiny GDP baseline against the consolidated owned revenue,
-  // producing market shares well over 100% (Bug #0775).
-  const effectiveMarket = unownedDoc
-    ? Math.max(0, Math.round(totalOwnedRevenue + persistedUnownedRevenue))
-    : Math.max(totalMarketPerSector, Math.round(Math.max(0, totalOwnedRevenue)));
+  // Market = the TOTAL real revenue produced in this (state, sectorType) cell
+  // (ticket #1145). No unowned pool, no GDP floor: a sector's share is its
+  // revenue over what every producer actually earns, and the shares add to 100%.
+  const effectiveMarket = Math.max(0, Math.round(totalOwnedRevenue));
   // Focal sector's own revenue in ₳ for market-share + competitor ratios.
   const sectorRevenueAnchor = siblingRevenueAnchorById.get(sector._id.toString()) ?? 0;
   const marketShare =
@@ -789,9 +762,10 @@ export function computeSectorMarketPosition(args: {
       };
     });
 
-  const unownedRevenue = Math.max(0, effectiveMarket - totalOwnedRevenue);
-  const unownedPercent =
-    effectiveMarket > 0 ? Math.round((unownedRevenue / effectiveMarket) * 10000) / 100 : 0;
+  // No unclaimed market any more: every bit of the cell's revenue belongs to a
+  // real producer, so the "unowned" slice is gone (ticket #1145).
+  const unownedRevenue = 0;
+  const unownedPercent = 0;
 
   return {
     effectiveMarket,
