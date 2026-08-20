@@ -4,7 +4,7 @@ A Vote of No Confidence (VONC) is the primary tool for removing a sitting Prime 
 
 ## Which countries use this
 
-VONCs apply to parliamentary countries: **UK**, **JP**, and **DE**. The US has no equivalent mechanic: presidents can only be removed through impeachment (future system) or elections.
+VONCs apply to live parliamentary countries: **UK**, **JP**, **DE**, and **IE**. Presidential countries (US, NG, BR) have no VONC: executives are removed through [Impeachment](/wiki/impeachment) or elections. One-party states use internal party confidence, not this motion.
 
 ## Who can propose a VONC
 
@@ -98,11 +98,11 @@ This mirrors the UK convention of "constructive" confidence mechanics where an a
 
 - **Time it well.** The 48-turn cooldown after a failed VONC is costly. Don't call a VONC unless you have the numbers.
 - **Parallel nominations.** File a PM appointment vote for your preferred candidate before or during the VONC. If the VONC passes, your candidate is already in the queue.
-- **NPP favorability is decisive.** If the ruling party's NPPs have low favorability toward the PM (below 40), they'll break toward the VONC. High-favorability PMs survive narrow-margin VONCs through NPP support.
+- **NPP votes follow the whip, or default Aye.** If a whip directive exists, NPPs follow it. If none exists, NPPs automatically vote Aye (no confidence). Favorability is not a VONC threshold.
 
 ### For the PM
 
-- **Monitor ruling party NPP favorability.** If your favorability with your own party's NPPs drops below 40, you're vulnerable to a successful VONC from within.
+- **Whip your own NPPs.** Without a whip, ruling-party NPPs default to Aye (no confidence). Set a whip if you want them to vote No.
 - **You can't call a snap to escape a VONC.** If an active VONC exists, the snap gate blocks you. Survive the vote first.
 - **Building cross-party goodwill** (high favorability outside your coalition) doesn't help in a VONC: only ruling party/coalition MPs vote. Focus on keeping your own house in order.
 

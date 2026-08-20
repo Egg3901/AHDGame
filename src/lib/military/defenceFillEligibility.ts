@@ -32,7 +32,8 @@ export type FillIneligibilityReason =
 
 /** Player-facing text for each refusal. One voice across the picker, the routes, and the UI. */
 export const FILL_REASON_TEXT: Record<FillIneligibilityReason, string> = {
-  foreign_supplier: "This plant is not in the buying country, so it cannot hold its contracts.",
+  foreign_supplier:
+    "This corporation is not based in the buying country, so it cannot hold its contracts.",
   currency_mismatch:
     "This corporation is not paid in the buying country's currency, so it cannot be paid from " +
     "the defence appropriation.",

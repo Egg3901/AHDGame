@@ -160,6 +160,6 @@ Every bill has a detail page at \`/congress/bills/[id]\` showing:
 - [Voting & Whips](/wiki/voting-and-whips): Whip directives, how party discipline works, how to influence NPP votes
 - [Policy Effects](/wiki/policy-effects): How signed bills change national and state metrics each turn
 - [Congress Leadership](/wiki/congress-leadership): Speaker, floor leaders, how leadership shapes the legislative agenda
-- [Committees](/wiki/committees): Committee assignments and their future role in bill flow
+- [Committees](/wiki/committees): National party committees now; committee-stage bill flow is not live
 - [Government Formation](/wiki/government-formation): Parliamentary government status and the legislation freeze
 `;

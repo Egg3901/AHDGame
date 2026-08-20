@@ -23,6 +23,7 @@ import {
   BOND_INCOME_MAX_RELIANCE_PENALTY,
   SHARE_PRICE_MAX_TURN_MOVE,
   SHARE_PRICE_RATE_LIMIT_MIN_PREV,
+  STOCK_SPLIT_PREV_ANCHOR_MAX_RATIO,
 } from "@/lib/constants/corporations";
 import { IMF_BAILOUT_SHARE_PRICE_MULTIPLIER } from "@/lib/imf/constants";
 import { indexInclusionPriceMultiplier } from "@/lib/corporations/indexOwnership";
@@ -194,8 +195,19 @@ export function computeSharePrices(
     // Split-cooldown path has its own (stronger) smoothing; the per-turn rate
     // limiter only guards the normal fundamental path. Skipping the limiter in
     // cooldown avoids double-smoothing and keeps the split re-scaling intact.
+    //
+    // The previous-price anchor is clamped to within
+    // STOCK_SPLIT_PREV_ANCHOR_MAX_RATIO of the fresh fundamentalValue before
+    // blending. Without the clamp, the cooldown path (which skips the rate
+    // limiter by design) blended whatever the LIVE price happened to be —
+    // including a price pumped intra-turn via structure-change abuse or wash
+    // trades — directly into the new fundamental (2026-08-20 incident: a live
+    // price ~250x fundamentals became ~0.5x of itself the new fundamental).
+    // Honest splits rescale price and fundamental by the same share-count
+    // ratio, so prev/fundamental stays near 1 and the clamp never binds.
+    const clampedPrev = clampSplitCooldownPrevAnchor(i.previousSharePrice, fundamentalValue);
     const rawPrice = inSplitCooldown
-      ? STOCK_SPLIT_SMOOTHING_PREV_WEIGHT * i.previousSharePrice +
+      ? STOCK_SPLIT_SMOOTHING_PREV_WEIGHT * clampedPrev +
         (1 - STOCK_SPLIT_SMOOTHING_PREV_WEIGHT) * fundamentalValue
       : rateLimitPrice(fundamentalValue, i.previousSharePrice);
 
@@ -246,6 +258,23 @@ export function computeSharePrices(
  *   - Skipped when `prevPrice <= {@link SHARE_PRICE_RATE_LIMIT_MIN_PREV}` ($1.00)
  *     so genuinely-recovering penny corps aren't pinned near the floor.
  */
+/**
+ * Clamp the split-cooldown previous-price anchor to a sane band around the
+ * freshly computed fundamentalValue:
+ *   [fundamentalValue / K, fundamentalValue * K], K = STOCK_SPLIT_PREV_ANCHOR_MAX_RATIO.
+ *
+ * Returns prevPrice untouched when fundamentalValue is not positive/finite
+ * (a zero-fundamental corp has no meaningful band and the MIN_SHARE_PRICE
+ * floor handles it downstream).
+ */
+export function clampSplitCooldownPrevAnchor(prevPrice: number, fundamentalValue: number): number {
+  if (!Number.isFinite(prevPrice)) return prevPrice;
+  if (!Number.isFinite(fundamentalValue) || fundamentalValue <= 0) return prevPrice;
+  const upper = fundamentalValue * STOCK_SPLIT_PREV_ANCHOR_MAX_RATIO;
+  const lower = fundamentalValue / STOCK_SPLIT_PREV_ANCHOR_MAX_RATIO;
+  return Math.min(upper, Math.max(lower, prevPrice));
+}
+
 export function rateLimitPrice(rawPrice: number, prevPrice: number): number {
   if (!Number.isFinite(rawPrice) || !Number.isFinite(prevPrice)) return rawPrice;
   if (prevPrice <= SHARE_PRICE_RATE_LIMIT_MIN_PREV) return rawPrice;

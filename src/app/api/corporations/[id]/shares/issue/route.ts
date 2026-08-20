@@ -13,6 +13,7 @@ import type { Corporation } from "@/lib/db/types";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { corpLiquidCapitalToAnchor, getCorpFxRate } from "@/lib/currency/corporationCapital";
 import { resolveShareExecutionPrice } from "@/lib/corporations/marketExecution";
+import { issuanceDilutionFactorExpr } from "@/lib/corporations/shareConsolidation";
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 
@@ -130,15 +131,45 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const result = await db.collection<Corporation>("corporations").findOneAndUpdate(
       cooldownQuery as never,
-      {
-        // Create float inventory only — no cash credited at issuance (Bug #0624).
-        // liquidCapital + shareIssuanceProceeds are credited when the float sells.
-        $inc: {
-          totalShares: newShares,
-          publicFloat: newShares,
+      // Create float inventory only — no cash credited at issuance (Bug #0624).
+      // liquidCapital + shareIssuanceProceeds are credited when the float sells.
+      //
+      // Prices scale DOWN by the dilution factor oldTotal / (oldTotal + new) in
+      // the same atomic write: no cash enters at issuance, so market cap must be
+      // preserved exactly like a forward split. See issuanceDilutionFactorExpr
+      // and the matching fix on the vote-approved issuance path (voteEffects).
+      [
+        {
+          $set: {
+            totalShares: { $add: [{ $ifNull: ["$totalShares", 0] }, newShares] },
+            publicFloat: { $add: [{ $ifNull: ["$publicFloat", 0] }, newShares] },
+            sharePrice: {
+              $round: [
+                {
+                  $multiply: [
+                    { $ifNull: ["$sharePrice", 0] },
+                    issuanceDilutionFactorExpr(newShares),
+                  ],
+                },
+                4,
+              ],
+            },
+            fundamentalSharePrice: {
+              $round: [
+                {
+                  $multiply: [
+                    { $ifNull: ["$fundamentalSharePrice", { $ifNull: ["$sharePrice", 0] }] },
+                    issuanceDilutionFactorExpr(newShares),
+                  ],
+                },
+                4,
+              ],
+            },
+            lastShareIssuance: now,
+            updatedAt: now,
+          },
         },
-        $set: { lastShareIssuance: now, updatedAt: now },
-      },
+      ],
       { returnDocument: "after" }
     );
 

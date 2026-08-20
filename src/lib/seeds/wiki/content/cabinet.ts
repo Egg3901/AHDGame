@@ -1,10 +1,10 @@
 export const cabinetContent = `# Cabinet
 
-The US Cabinet is a council of 15 principal officers who lead the major executive departments. Each position is nominated by the President, confirmed by the Senate, and carries specific executive responsibilities. This page covers what each cabinet position is, how nominations work, and what cabinet members do in the game.
+The US Cabinet is a council of principal officers who lead the major executive departments. Each position is nominated by the President, confirmed by the Senate, and carries specific executive responsibilities. This page covers what each cabinet position is, how nominations work, and what cabinet members do in the game.
 
-## The 15 cabinet positions
+## Cabinet positions
 
-Cabinet positions are ordered by presidential line of succession (after the Vice President):
+Positions are ordered by presidential line of succession (after the Vice President). The live roster is **year-gated**: later departments (HUD, Transportation, Energy, Veterans Affairs, Homeland Security) unlock by year, and Education is carved out of HEW only when the Department of Education Act passes. The table is the full succession list; not every seat exists in every era.
 
 | # | Position | Department focus |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ Cabinet positions are ordered by presidential line of succession (after the Vice
 | 6 | Secretary of Agriculture | Farming, forestry, food safety, SNAP |
 | 7 | Secretary of Commerce | Economic growth, trade, patents, NOAA |
 | 8 | Secretary of Labor | Workers' rights, OSHA, unemployment |
-| 9 | Secretary of Health and Human Services | Public health, Medicare, Medicaid, CDC, FDA |
+| 9 | Secretary of Health, Education, and Welfare | Public health, education, and welfare (HEW). Becomes HHS only after the Department of Education Act splits Education off |
 | 10 | Secretary of Housing and Urban Development | Affordable housing, fair housing enforcement |
 | 11 | Secretary of Transportation | Highways, FAA, railroads, mass transit |
 | 12 | Secretary of Energy | Energy policy, nuclear security, national labs |
@@ -44,9 +44,9 @@ Once nominated, the candidate enters the Senate confirmation process. See [Confi
 
 When the Senate confirms a nomination, the character is installed as the cabinet member. Their current office is updated, and the position appears as filled on the executive dashboard.
 
-## Parliamentary equivalent (UK / JP / DE)
+## Parliamentary equivalent (UK / JP / DE / IE)
 
-In parliamentary countries (UK, JP, DE), the Cabinet is formed differently. The Prime Minister or Chancellor appoints cabinet members directly after government formation, because those countries lack the US-style Senate confirmation step. Instead, cabinet composition is tracked through the government formation record.
+In parliamentary countries (UK, JP, DE, IE), the Cabinet is formed differently. The Prime Minister, Chancellor, or Taoiseach appoints cabinet members directly after government formation, because those countries lack the US-style Senate confirmation step. Instead, cabinet composition is tracked through the government formation record.
 
 Japan additionally has a **Cabinet Bills** mechanic: cabinet members can propose bills via a cabinet review step before they enter the Diet. The UK and Germany do not model this; their cabinet members propose bills through the standard chamber flow like any other member.
 
@@ -67,11 +67,10 @@ Cabinet members have both structural roles and active executive mechanics:
 
 **Action economy:**
 - Cabinet members receive **cabinet actions** (or ministerial actions in parliamentary systems), capped at **4**.
-- Actions regenerate **1 every 24 turns**.
+- Actions refill daily at midnight Eastern, not 1 every 24 turns.
 - Orders and other active mechanics consume 1 action each.
 
 **Future / partially implemented:**
-- Emergency declarations, advocacy toggles, and treasury transfers are defined in cabinet configuration but not yet exposed as player actions.
 - Department-specific influence actions and confirmed-cabinet NPI generation are planned.
 
 ## Cabinet vacancies
@@ -107,5 +106,5 @@ When vacant, the position is open for a new presidential nomination. The turn pr
 - [Confirmation Process](/wiki/confirmation-process): How the Senate confirmation vote works
 - [Bills & Legislation](/wiki/bills-legislation): Cabinet bills in Japan (parliamentary systems may include this; UK and DE do not)
 - [Congress Leadership](/wiki/congress-leadership): The Senate Majority Leader's role in scheduling confirmation votes
-- [Government Formation](/wiki/government-formation): How the parliamentary Cabinet (UK/JP/DE) is appointed without a Senate confirmation step
+- [Government Formation](/wiki/government-formation): How the parliamentary Cabinet (UK/JP/DE/IE) is appointed without a Senate confirmation step
 `;

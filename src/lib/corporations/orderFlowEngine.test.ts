@@ -103,3 +103,16 @@ describe("computeOrderFlowMultiplier", () => {
     expect(result).toBe(1.0);
   });
 });
+
+describe("negative window clamping (wash-guard neutralization residue)", () => {
+  it("a negative window value never amplifies pressure", () => {
+    // Wash neutralization can leave a raw window negative after the round trip
+    // spans a cron reset. A negative buy window must read as zero, not as
+    // extra sell pressure (and vice versa).
+    const withNegativeBuy = computeOrderFlowMultiplier(-5_000_000, 0, 100_000, 10, 1_000_000, 1);
+    const neutral = computeOrderFlowMultiplier(0, 0, 100_000, 10, 1_000_000, 1);
+    expect(withNegativeBuy).toBe(neutral);
+    const withNegativeSell = computeOrderFlowMultiplier(0, -5_000_000, 100_000, 10, 1_000_000, 1);
+    expect(withNegativeSell).toBe(neutral);
+  });
+});

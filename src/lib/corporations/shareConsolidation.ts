@@ -339,3 +339,33 @@ export function scaleSharePricesForStructureChange(
   const round4 = (n: number) => Math.round(n * 10000) / 10000;
   return { sharePrice: round4(sharePrice * factor) };
 }
+
+/**
+ * Dilution factor for a share issuance that creates float inventory with no
+ * cash entering at issuance time: oldTotal / (oldTotal + newShares). Market
+ * cap must be preserved exactly like a forward split — the proceeds arrive
+ * only as the float is actually bought, so pricing the new shares in for free
+ * fabricates market cap (2026-08-20 incident: an uncapped issuance vote after
+ * a large reverse split inflated market cap ~127x in one turn).
+ */
+export function issuanceDilutionFactor(oldTotal: number, newShares: number): number {
+  if (!(oldTotal > 0) || !(newShares > 0)) return 1;
+  return oldTotal / (oldTotal + newShares);
+}
+
+/**
+ * Mongo aggregation-pipeline expression form of {@link issuanceDilutionFactor},
+ * evaluated against the document pre-image ("$totalShares") so the read and
+ * the scale happen in one atomic update.
+ */
+export function issuanceDilutionFactorExpr(newShares: number): Record<string, unknown> {
+  return {
+    $cond: [
+      { $gt: [{ $ifNull: ["$totalShares", 0] }, 0] },
+      {
+        $divide: ["$totalShares", { $add: ["$totalShares", newShares] }],
+      },
+      1,
+    ],
+  };
+}

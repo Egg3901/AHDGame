@@ -27,7 +27,7 @@ Every estate has four things you control or watch:
 - **Funding** (Reduced / Standard / Enhanced): the **Fund** lever, free to change. Higher funding costs more upkeep but raises output and the condition your estate settles at.
 - **Condition** (0-100): drifts a few points per turn toward your funding level's baseline (Reduced ~55, Standard ~75, Enhanced ~90). Effects scale with condition, so a neglected estate does proportionally less. Upkeep does NOT scale with condition: a run-down hospital still costs money.
 
-**Actions:** Open and Expand each cost 1 ministerial action. Close and Fund are free. Actions are capped at 4 and regenerate 1 every 24 turns.
+**Actions:** Open and Expand each cost 1 ministerial action. Close and Fund are free. Actions are capped at 4 and refill daily at midnight Eastern.
 
 **Effect size:** each estate's per-turn effect is small (roughly the same scale as ministerial orders), scaled by tier x funding x condition. All cabinet effects on the same metric are capped per turn, so stacking has diminishing returns.
 

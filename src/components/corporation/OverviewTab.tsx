@@ -8,7 +8,7 @@ import {
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { CorpEconomicModelBadge } from "@/components/economy/CorpEconomicModelBadge";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { formatMarketingStrength } from "@/lib/utils/formatters";
+import { formatEffectiveCouponPct, formatMarketingStrength } from "@/lib/utils/formatters";
 import { corpIncomeBasis } from "./financials/financialsModel";
 import type {
   CorporationDetail,
@@ -537,7 +537,7 @@ export default function OverviewTab({
                 />
                 <StatRow
                   label="Effective coupon"
-                  value={`${bondInfo.creditRating.effectiveCouponRate.toFixed(2)}%`}
+                  value={formatEffectiveCouponPct(bondInfo.creditRating.effectiveCouponRate)}
                 />
               </>
             ) : (
