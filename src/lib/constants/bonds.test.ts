@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateBondYieldToMaturityPercent,
+  calculateCreditScore,
   CORPORATE_BOND_SPREAD_PREMIUM,
   CORPORATE_BOND_TERM_PREMIUMS,
   getBondCouponRate,
@@ -65,5 +66,46 @@ describe("calculateBondYieldToMaturityPercent", () => {
 
   it("matches the live Japan example from the bonds table", () => {
     expect(calculateBondYieldToMaturityPercent(8.5, 1.01088, 37)).toBeCloseTo(7.01, 2);
+  });
+});
+
+describe("calculateCreditScore composite smoothing (ticket #1138)", () => {
+  // Numbers from the reported corporation: a raw composite that lands near 85
+  // against a stored snapshot of 47. The bonds panel showed AA / 76 while the
+  // header, health card and peer stats all showed the stored 47 / BBB.
+  const ARGS = [5_200_000, 500_000, 2_000_000, 88_000, 55_000_000] as const;
+
+  it("smooths against the previous snapshot for the turn", () => {
+    const raw = calculateCreditScore(...ARGS).compositeScore;
+    const smoothed = calculateCreditScore(...ARGS, {
+      previousCompositeScore: 47,
+    }).compositeScore;
+    expect(smoothed).toBe(Math.round(0.75 * raw + 0.25 * 47));
+    expect(smoothed).not.toBe(raw);
+  });
+
+  it("uses the persisted composite verbatim for display, never re-smoothing", () => {
+    const displayed = calculateCreditScore(...ARGS, {
+      persistedCompositeScore: 47,
+    });
+    expect(displayed.compositeScore).toBe(47);
+  });
+
+  it("agrees with the stored snapshot, which is the whole point", () => {
+    // A display surface passing the stored value must report that value, so the
+    // bonds panel cannot disagree with the header and health card again.
+    const stored = 47;
+    const displayed = calculateCreditScore(...ARGS, {
+      persistedCompositeScore: stored,
+    }).compositeScore;
+    expect(displayed).toBe(stored);
+  });
+
+  it("falls back to the raw composite when nothing is persisted yet", () => {
+    const raw = calculateCreditScore(...ARGS).compositeScore;
+    const displayed = calculateCreditScore(...ARGS, {
+      persistedCompositeScore: undefined,
+    }).compositeScore;
+    expect(displayed).toBe(raw);
   });
 });
