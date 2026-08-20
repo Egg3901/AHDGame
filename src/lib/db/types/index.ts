@@ -77,6 +77,8 @@ export type {
   EditHistoryEntry,
   AutoGenerateConfig,
 } from "./wikiPage";
+export type { WikiReport, WikiReportReason } from "./wikiReport";
+export { WIKI_REPORT_REASONS } from "./wikiReport";
 export type { SystemTag } from "./systemTag";
 export type { WikiTemplate, TemplateField, TemplateFieldType } from "./wikiTemplate";
 export * from "./politicianOverride";

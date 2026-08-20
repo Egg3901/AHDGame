@@ -1,145 +1,89 @@
-export const theGameLoopContent = `# The game loop
+export const theGameLoopContent = `# The Game Loop
 
-A House Divided is a real-time game that rewards steady play over burst play. This page sketches a typical player's rhythm at three cadences: every turn, every day, and every election cycle. If you're trying to figure out "how much do I need to log in," this is the page.
+You do not need to live in the tab. This page is when to click, and what happens if you do not.
 
-## The shortest engagement loop
+## How often to log in
 
-You don't have to log in every hour. The minimum viable cadence is **once or twice a day**. Actions carry over up to a cap of 200 (with a hoarding penalty above 100, so don't sit on 150+ for days), which means you can bank a morning's worth, come back at night, and spend everything in one session.
+**Default: once or twice a day.** Actions carry to a cap of 200. Above 100 you pay a -4 hoarding penalty per turn, so do not sit on a huge stack.
 
-A solid once-a-day routine in ~10 minutes:
+A 10-minute daily pass:
 
-1. Skim the notifications panel: someone may have endorsed you, attacked you, or a race may have advanced.
-2. If you're mid-campaign, spend enough Campaign actions to maintain or grow Political Influence in your race's state.
-3. Run ads if your Favorability is below your target (60 is the stable floor; most candidates target 60 to 75).
-4. Fundraise once if your donor base can sustain it.
-5. Check your current bill vote queue (if in office): late-turn votes can swing bills.
+1. Open **Dashboard**. Read notifications (endorsements, attacks, race phase changes).
+2. If you are in a race, open **View Campaign** and spend Campaign until PI holds or rises.
+3. If Favorability is under 60, **Run Advertisements** once.
+4. **Fundraise** once if Donor Level is 2+.
+5. If you hold office, open the legislature and clear your vote queue.
 
-## Per-turn rhythm (optional, for active players)
+\`\`\`guide-screenshot
+dashboard
+\`\`\`
 
-Every hour when the turn processor fires, several things happen to you automatically:
+## What a turn does (even while you are offline)
 
-- Actions refresh (+4 base + office + party bonus).
-- Campaign Funds generate passively from donor base and office.
-- Political Influence decays 0.75%.
-- NPI accrues +state PI / 100.
-- Infamy decays 5%.
-- Favorability decays if above 60.
+Every real hour:
 
-Then the rest of the world advances: elections tick toward resolution, bills age, NPPs may act, markets settle. If you're logged in, refresh your dashboard to see new state; if not, the world just keeps running.
+- Actions refresh (+4 base + office + party).
+- Campaign Funds tick from donor base and office.
+- PI decays 0.75%. NPI accrues from local PI. Infamy decays. Favorability decays if above 60.
+- Elections, bills, NPPs, and markets advance.
 
-**When it's worth logging in hourly:**
+Refresh the Dashboard after the hour if you want the new numbers.
 
-- The final ~4 turns of a competitive general election (each turn in the final window weighs heavily in the vote pool).
-- Immediately after a cabinet nomination drops and you're a senator with a 24-hour window to vote.
-- A confidence vote is live in your parliament.
-- A bill is about to close and you want the last-second campaigning / whipping / vote switching to land.
+## When to log in hourly
 
-## Per-day rhythm
+- Last ~4 turns of a close general (those turns carry ~25% of the vote pool).
+- Senate cabinet confirmation with a 24-hour window.
+- Live confidence vote in your parliament.
+- A bill about to close that you still need to whip or switch.
 
-Most of the game's structural events tick over at day-scale. Each real day = 24 game weeks = roughly half a game year.
+## Per-week clicks (positional)
 
-Every day:
+Once a day is not enough if you ignore these:
 
-- A full set of House seats moves closer to their term end (terms are measured in real days).
-- Any race in its general phase is either resolving or continuing to accumulate votes.
-- Bills on the floor advance or close.
-- Party organisation decays slightly unless players invest in Build Org.
-- Corporation production and financial markets process.
+1. Open **Elections**. Confirm you have not missed a primary declaration.
+2. Check PI, Favorability, donor level vs your next race.
+3. If you drifted on bills, your party alignment (and bonus actions) got worse. Skim your vote history.
+4. Help an ally: Barnstorm or NPP endorsement is cheaper than running yourself every cycle.
 
-A typical **active player's daily to-do**:
+\`\`\`guide-screenshot
+elections
+\`\`\`
 
-1. **Morning (5 min):** Scan notifications, campaign 2 to 4 actions to refresh PI, fundraise once.
-2. **Midday (3 min):** Run one ad if Favorability is under target; check if any bill needs your vote.
-3. **Evening (10 min):** Do the week's heaviest spend (Build Donor Network, Full Demographic Poll, NPP endorsement request, or a string of Barnstorms for an ally).
+## The election cycle (the real loop)
 
-## Per-week (24 hours) rhythm
+1. **Build** (no race open for your office): Campaign, ads, donor network, party influence.
+2. **Primary:** **Elections** → race → declare. Score = alignment + favorability + PI (NPI for president). Highest per party advances.
+3. **General:** same race page, live tally. Sustain PI and Favorability through the last 4 turns. **View Campaign** for spend.
 
-Once a day-scale, think **positional**:
+\`\`\`guide-screenshot
+campaign
+\`\`\`
 
-- Are my stats trending right? (PI over 60, Favorability over 65, donor level sufficient for next fundraise.)
-- Is my party still aligned with my policy positions? (If I've drifted through votes, my bonus-action share is smaller.)
-- Are any of my allies running in primaries I should help them win? (Barnstorms and NPP endorsements are cheap force-multipliers when you're not yet a candidate.)
-- Do I need to file for an upcoming race? (Primary declaration windows are limited; miss one and you wait a full cycle.)
+4. **Resolution:** winner takes office; a new cycle of that office spawns immediately.
+5. **In office:** legislature / cabinet tools unlock. You still re-elect.
 
-## The election cycle (the real game loop)
+Detail: [Election Mechanics](/wiki/election-mechanics). Career ladder: [Player Progression](/wiki/player-progression).
 
-The satisfying, compounding layer of gameplay is the election cycle. It's the rhythm that most players organise their week around:
+## Your first week
 
-### 1. Build phase (between cycles)
+- [ ] Daily Dashboard pass (notifications, Campaign, one ad or fundraise).
+- [ ] Elections page checked so a primary window cannot close unseen.
+- [ ] Favorability held at 60+; PI climbing, not rotting.
+- [ ] You know whether you are in Build, Primary, or General.
+- [ ] Last-4-turns alarm set if a general is live.
 
-Neither a primary nor a general election is open for your target office. You're accumulating: PI, Favorability, donor base, party influence, and maybe NPI if you have presidential ambitions. This is your longest phase, usually several days to weeks real-time depending on the office.
+## Safe to ignore (week one)
 
-### 2. Primary phase
+- Tiny Favorability drift. Infamy under 20. Uncontested NPP primaries. Most news posts.
 
-Primary declarations open. Your primary score is a mix of **policy alignment to your party** + **Favorability** + **Political Influence (or NPI for president)**. Highest primary score per party advances to the general.
+## Not safe to ignore
 
-Key moves this phase:
-
-- Commission a Quick Poll before declaring: know what you're walking into.
-- Ask allied NPPs for endorsements; each one lifts your primary score and demographic appeal.
-- Spend Campaign actions in-state to squeeze out the last PI.
-- Attack competitors within your party only if you're confident (their Infamy gain counts against you, not them).
-
-### 3. General phase
-
-You're the party nominee. The vote accumulates each turn from each demographic group. **The final ~4 turns account for roughly 25% of the total pool.** Sustained campaigning wins elections; bursty campaigning that fades at the end loses them.
-
-Key moves this phase:
-
-- Sustain PI in the race's state through the final turns (don't let it decay to 50 the morning of resolution).
-- Keep Favorability above 65 via ads. Above 70 gets expensive.
-- Targeted demographic action: if a Full Demographic Poll shows you're 12 points behind with a specific group, run ads or campaign actions that lift their segment.
-- Cultivate NPP endorsements for the general: they matter more than in primaries.
-- Pay attention to what opponents are doing. Attack damage from a determined rival is the hardest to recover from if you ignore it.
-
-### 4. Resolution
-
-At the configured turn, the election resolves. Winner takes office, earns their office action and fund bonuses, and enters the legislating workflow (if elected to a legislature). A new cycle of the same office immediately spawns; no vacant seats.
-
-### 5. In-office phase
-
-If elected:
-
-- Write bills (House/Senate/MP/MdB/Sangiin members).
-- Vote on bills: each provision you vote For shifts your policy position ±0.25 in the bill's direction.
-- Collect office fund and action bonuses.
-- Manage cabinet appointments if you're Executive.
-- Face re-election at the end of your term.
-
-If you lost the general, you go back to the Build Phase: same state, same party, lower starting PI (it'll have decayed through the cycle). Come back stronger.
-
-## The long loop: career arc
-
-Beyond any single cycle, your long-term loop is **moving up the office ladder**:
-
-- Start as an independent, build a base.
-- Join a party, build Party Influence.
-- Win a low-tier race (State Senate, House, MP) to unlock legislating and office bonuses.
-- Defend your seat while running for higher office (only one office at a time: advancement requires winning the next race before your current term locks you in).
-- Aim for executive office (Governor, President, PM, Chancellor), the peak of the career arc.
-
-See [Player Progression](/wiki/player-progression) for the full arc and each office's strategic value.
-
-## What you can safely ignore
-
-- Small day-to-day Favorability drift: decay is slow and easily reversed.
-- Infamy under 20: no penalty.
-- NPP opponents in uncompetitive primaries: they're predictable; save your actions for real fights.
-- Most news posts unless you're building a public profile.
-
-## What you cannot ignore
-
-- **Missed primary declarations.** Miss the window, wait a full cycle.
-- **Last-turn general elections.** A 2% Favorability dip the morning of resolution can lose you the seat.
-- **Cabinet confirmation votes if you're a Senator.** They close in 24 hours.
-- **Confidence votes in parliamentary systems.** A PM losing confidence triggers government formation.
-- **Drifting too far from your party.** You'll lose primary viability and party-pool bonus actions.
+- Missed primary declarations. Last-turn generals. Cabinet votes if you are a Senator. Confidence votes. Drifting far from your party.
 
 ## Related
 
-- [Core Systems](/wiki/core-systems): turn structure, timing.
-- [Stats & Actions](/wiki/stats-actions): full action catalogue.
-- [Campaign Strategy](/wiki/campaign-strategy): tactical decision-making during campaigns.
-- [Player Progression](/wiki/player-progression): multi-cycle career arc.
-- [First Campaign Walkthrough](/wiki/first-campaign-walkthrough): concrete week-by-week example.
+- [Core Systems](/wiki/core-systems)
+- [Stats & Actions](/wiki/stats-actions)
+- [Campaign Strategy](/wiki/campaign-strategy)
+- [First Campaign Walkthrough](/wiki/first-campaign-walkthrough)
 `;

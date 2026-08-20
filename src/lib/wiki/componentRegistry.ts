@@ -19,6 +19,7 @@ import { VoteShareCalculator } from "@/components/wiki/calculators/VoteShareCalc
 import { SectorSeedMap } from "@/components/wiki/widgets/SectorSeedMap";
 import { StartingStateDashboard } from "@/components/wiki/widgets/StartingStateDashboard";
 import { CabinetGuide } from "@/components/wiki/widgets/CabinetGuide";
+import { WikiGuideScreenshot } from "@/components/wiki/WikiGuideScreenshot";
 
 export interface WikiWidgetProps {
   data?: string;
@@ -37,6 +38,7 @@ export const WIKI_COMPONENT_REGISTRY: Record<string, ComponentType<WikiWidgetPro
   "sector-seed-map": SectorSeedMap,
   "starting-state-dashboard": StartingStateDashboard,
   "cabinet-guide": CabinetGuide,
+  "guide-screenshot": WikiGuideScreenshot,
 };
 
 export function getWikiComponent(lang: string): ComponentType<WikiWidgetProps> | null {

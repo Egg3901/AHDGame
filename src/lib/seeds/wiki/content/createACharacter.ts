@@ -1,112 +1,96 @@
 export const createACharacterContent = `# Create a Character
 
-Every account gets **one character** at a time. Character creation is fast but a few choices are durable: home state and country cost real resources to change. This page walks you through each decision.
+One character per account. A few clicks are expensive to undo. Do them in this order.
 
-## Account and character relationship
+## Open creation
 
-- **One character per account.** You can delete and re-create, but the new character starts from zero.
-- **Login is separate from character.** Your account (email, password, Patreon link, admin rights) persists; the character is your in-world identity.
-- **Characters are public.** Every character has a profile page at \`/character/[id]\`. Name, party, office, home state, and stats are visible to other players.
-- **Banned accounts** are hidden from public listings and their characters cannot act in the world.
+1. Log in with an account that has no living character.
+2. You are sent to **Create Character** (\`/create-character\`).
+3. If you already have a character, you cannot open this flow until you retire or delete it.
 
-## Step 1: country
+## Click path
 
-Pick a country. The roster below is the core Western set; the playable roster depends on the world's seed era, and a Cold War world (1953/1979) also opens the Soviet Union, East Germany, Brazil, and Nigeria:
+### 1. Country
 
-| Country | Home region type | First offices most players target |
+Pick the country you actually want to play. It scopes elections, parties, legislature, and who you can wire. Relocation later wipes party, national influence, and national office.
+
+| Country | Home pick | First office most people target |
 | --- | --- | --- |
-| United States | State (50 options) | State Senate → House → Senate → Governor → President |
-| United Kingdom | Region (ENG / SCO / WAL / NIR) | MP (Commons) → Party leadership → Prime Minister |
-| Germany | Land (16 options) | Bundestag MdB → Party leadership → Chancellor |
-| Japan | Prefecture (8 regions) | Sangiin / Shūgiin member → Party leadership → Prime Minister |
-| China | Macro-region (7 options) | NPC delegate → Premier (one-party regime; selecting CN shows a CCP disclaimer) |
-| Ireland | Region (8 NUTS-III) | TD (Dáil) → Party leadership → Taoiseach; Uachtarán is a separate nationwide race |
+| United States | State (50) | State Senate, then House |
+| United Kingdom | ENG / SCO / WAL / NIR | MP (Commons) |
+| Germany | Land (16) | Bundestag MdB |
+| Japan | Region (8) | Shūgiin or Sangiin |
+| China | Macro-region (7) | NPC delegate (one-party; disclaimer on pick) |
+| Ireland | Region (8) | TD (Dáil) |
 
-Your country scopes everything: which elections you can run in, which players you can wire money to, which party rosters you can join, and which legislature you vote in. Cross-country actions are blocked.
+Confirm. You cannot campaign across countries.
 
-## Step 2: name and avatar
+### 2. Name and avatar
 
-- **Name**: Displayed everywhere. Choose something readable; this is how other players refer to you in news, elections, and mail.
-- **Avatar**: Optional image. Profiles render a default initial tile if you skip it. You can update later from settings.
+Type a readable name. Optional avatar; skip it if you want the default tile. You can change the image later in Settings. There is no separate last-name field.
 
-There is no last-name or title system, just one free-form name field.
+### 3. Home state / region
 
-## Step 3: home state / region / prefecture
+This is where you canvass cheapest and where most local races live. National races (President, PM) are the exception.
 
-Your home region anchors your political career:
+US: any of 50 states. UK: England, Scotland, Wales, or Northern Ireland. DE: one Land. JP: one of 8 regions. CN: one of 7. IE: one of 8.
 
-- **Most elections are home-scoped.** You can only run in your home region's races by default (exception: national races like President or Prime Minister).
-- **Campaign costs are lowest at home** (1.0×), 1.25× for neighbours, 1.5× non-neighbour.
-- **Influence decays faster than it grows.** Home campaigning builds Political Influence most efficiently.
+You can [relocate](/wiki/relocation) later. You lose state Political Influence when you do. Pick once, carefully.
 
-US players pick any of the 50 states. UK players pick a **country within the UK** (England, Scotland, Wales, or Northern Ireland) which determines which Commons races are open to you. DE picks one of 16 Länder, JP picks one of 8 regions, CN picks one of 7 macro-regions, and IE picks one of 8 NUTS-III regions.
+### 4. Policy positions
 
-Home region can be changed later ([Relocation](/wiki/relocation)), but you lose all state Political Influence and most regional positions. Think before you pick.
+Two sliders, each -5 to +5:
 
-## Step 4: policy positions
+- **Economic:** -5 left / +5 right
+- **Social:** -5 progressive / +5 conservative
 
-Two axes, each −5 to +5:
+These feed primaries (distance to your party), bill voting (each vote nudges you ±0.25), and demographic appeal.
 
-- **Economic**: −5 (strongly left, higher taxes / social spending / market regulation) to +5 (strongly right, lower taxes / minimal state / free markets)
-- **Social**: −5 (strongly progressive) to +5 (strongly conservative)
+Do not slam both to -5 or +5 unless that party is actually extreme. Moderate parties punish extremes in the primary.
 
-These feed three systems:
+### 5. Confirm and take the kit
 
-1. **Primary scores.** Closer alignment to your party's official position = higher primary score.
-2. **Bill voting.** When you vote on a bill your policy position shifts ±0.25 toward the bill's direction. Over many votes this moves you.
-3. **Demographic appeal.** Demographic groups lean on both axes; matching their preference increases your vote share from that group.
-
-You can (and often will) **drift over a career** because of voting. The starting value anchors your primary eligibility in the party you join, so don't pick extreme positions if you plan to run in a moderate party.
-
-## Step 5: starting kit
-
-On creation you receive:
+On submit you receive:
 
 | Resource | Starting value |
 | --- | --- |
-| Actions | 25 (one-time grant) |
+| Actions | 25 (one-time) |
 | Campaign Funds | ₳250,000 |
 | Cash on Hand | ₳0 |
 | Political Influence | 0 |
-| National Political Influence (NPI) | 0 |
-| Favorability | 50 (neutral) |
+| NPI | 0 |
+| Favorability | 50 |
 | Infamy | 0 |
-| Donor Base Level | 1 |
-| Party Influence | 0 (you start Independent) |
-| Current Office | none |
+| Donor Base | 1 |
+| Party | Independent |
+| Office | none |
 
-Starting currency is always your country's local unit (USD, GBP, EUR, JPY). If you relocate to a different country later, balances are **not converted**: they remain in whatever currency you had them in, but you'll typically earn and spend in the new country's currency going forward.
+You land on your profile. A setup banner asks you to read Getting Started, join a party, and take a first action. Your name appears in the home-state player list.
 
-## Step 6: join a party
+## What to click immediately after
 
-Not required at creation, but you should do it early:
+1. Open **Parties**. Join one close to your sliders.
+2. Open **Dashboard**. Spend Campaign actions.
+3. Continue on [Getting Started](/wiki/getting-started).
 
-- **Independents** can Campaign, Fundraise, Run Ads, Build Donor Base, Support/Attack, Barnstorm, and influence NPPs, basically everything except run for office.
-- **Party members** can enter primaries, accumulate Party Influence, earn bonus actions from the party pool, and stand for party leadership positions (chair, vice chair, treasurer).
-- **Closeness to platform** matters. Your policy-axis distance from the party's official position amplifies how efficiently your Party Influence converts to bonus actions.
-- **Switching parties** is allowed but incurs penalties: Favorability and Political Influence both take hits.
+## Your first week
 
-Browse parties from the country's Parties page before committing. Custom player-founded parties exist alongside the major seeded parties.
+- [ ] Country and home region chosen on purpose, not at random.
+- [ ] Policy sliders within a few points of the party you joined.
+- [ ] Party joined the same day you created.
+- [ ] Starting actions not dumped into Fundraise before Donor Level 2.
+- [ ] First race identified on **Elections** (poll before declare).
 
-## What happens after creation
+## Common misses
 
-- You land on your profile page. A setup banner walks you through: reading the Getting Started wiki page, joining a party, and taking your first action.
-- Your character appears in the home-state player list and politicians directory.
-- A "Character Created" achievement fires (**Founding Father** badge if you joined during alpha).
-- The turn processor picks you up on the next hour boundary for passive effects (NPI accrual, infamy decay, favorability decay if above 60, etc.).
-
-## Common new-player mistakes
-
-- **Picking a low-population home state** hoping to dominate. Small states have lower fund-generation donor bonuses and fewer electoral stakes. Medium/large states give you more to work with.
-- **Setting policy positions at −5/−5 or +5/+5**. Extreme positions cap your primary viability in moderate parties and limit your demographic appeal ceiling.
-- **Skipping the party for the first 48 hours**. You're leaving bonus actions and primary access on the table.
-- **Spending the 25 starting actions on Fundraise**. Fundraise yields the most when your donor base is higher, so open with Campaign and one Build Donor Network first.
+- Skipping the party for two days: you leave bonus actions and primaries on the table.
+- Tiny home state for "easy wins": lower donor income and fewer stakes.
+- Fundraise as the first action: it pays once the donor base is higher.
 
 ## Related
 
-- [Getting Started](/wiki/getting-started): Overall first-player guide.
-- [Relocation](/wiki/relocation): Changing home state / country / CEO rules.
-- [Stats & Actions](/wiki/stats-actions): Full reference of every stat.
-- [Parties](/wiki/parties): How parties work and what leadership offers.
-- [First Campaign Walkthrough](/wiki/first-campaign-walkthrough): Step-by-step new-player playthrough.
+- [Getting Started](/wiki/getting-started)
+- [Relocation](/wiki/relocation)
+- [Parties](/wiki/political-parties)
+- [First Campaign Walkthrough](/wiki/first-campaign-walkthrough)
 `;

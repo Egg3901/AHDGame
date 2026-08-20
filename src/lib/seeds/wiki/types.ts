@@ -35,4 +35,17 @@ export interface WikiSeedPage {
 
   /** Admin-only page: hidden from public index and API unless the caller is admin. */
   private?: boolean;
+
+  /**
+   * Optional override for the "Updated <date>" badge (YYYY-MM-DD). When absent,
+   * the seeder uses lastUpdated.generated.ts, derived from the git history of the
+   * page's content file by scripts/generate-wiki-last-updated.ts.
+   */
+  lastUpdated?: string;
+
+  /**
+   * Path after the docs host, e.g. "design/elections.html".
+   * Rendered as a Design doc chip linking to NEXT_PUBLIC_DOCS_URL/<this>.
+   */
+  designDocUrl?: string;
 }

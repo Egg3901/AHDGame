@@ -1,120 +1,93 @@
 export const tipsForBeginnersContent = `# Tips for Beginners
 
-Starting out in A House Divided can be overwhelming: there are 50 US states, continuous elections, a live economy, and a political simulation running 24/7. These tips will save you the most common beginner mistakes in your first few game weeks.
+Short rules. Each one is a click, not a lecture.
 
----
+## 1. Spend actions; do not hoard them
 
-## 1. Spend all your actions every turn
-
-You start with 4 actions per turn (refreshed every real hour). Actions **do** roll over up to a cap of 200, but above 100 you pay a −4 hoarding penalty per turn that slows growth. Don't stockpile forever. Spend them. Even low-value actions (running a poll, building a donor network) are better than letting them sit idle.
-
----
+Dashboard shows actions. They roll to 200, but above 100 you pay -4/turn. Click Campaign, donor, poll, or ads every session.
 
 ## 2. Join a party before you declare
 
-You cannot win a primary as an independent against party-backed candidates. The party platform alignment score is worth up to 40 points, and running independent leaves you without any of that. Find a party whose platform econ/social coordinates are close to your character's ideology and join before you declare your first candidacy.
+**Parties** → join. Independents eat a primary and general penalty. Match your sliders to the platform.
 
----
+## 3. Poll, then declare
 
-## 3. Poll before declaring for any office
+Race page → Quick Poll (2 AP, ₳25k). If the primary math looks hopeless, pick another seat. **Elections** is where you look.
 
-A Quick Poll costs 2 actions and ₳25,000. It shows your topline appeal in the race and the 5 demographics where you're strongest and weakest. Never declare a candidacy without running a poll first: you might be walking into a race where you'll score 25 on the primary scale against an NPP scoring 45 (effective 22.5 with the penalty).
+\`\`\`guide-screenshot
+elections
+\`\`\`
 
----
+## 4. Canvass where you are
 
-## 4. Canvass where you're active
+Canvass is home-state (or the state a presidential candidate has traveled to). A click elsewhere errors and still spends the action.
 
-Canvassing targets one state at a time. For most characters that's your home state. Attempting to canvass elsewhere returns an error and wastes your action. Presidential candidates are the exception: they canvass in whichever state they've traveled to (general phase) or set as their primary campaign state (primary phase). Everything else (ads, endorsements, political influence spending) can work cross-state, but canvassing is tied to where you're physically active.
+## 5. Open demographics once
 
----
+On the race or state view, read which groups are large, high-turnout, and close to you. Aim ads and canvassing there.
 
-## 5. Don't skip demographics early
+## 6. Know the hour
 
-The demographics page shows your state's electorate breakdown: which groups are large, which have high turnout, which lean your way. Reading it once before your first campaign tells you which groups to target with ads and which to canvass. Ignoring demographics means your ad budget goes in random directions.
+Turns process on the hour. Ads and canvassing apply when you click; you do not wait for the turn for those. Votes and bills wait for the turn.
 
----
+## 7. Save big canvassing for campaign season
 
-## 6. Understand what turn processing does
+Last 4 turns before the race ends, campaign passives double. That is the window. Watch the timer on the race page.
 
-Every hour, on the hour, the game processes a turn:
-- Your actions refresh
-- Elections accumulate votes (or resolve)
-- Bills advance
-- Party GOTV runs
-- Demographic turnout modifiers decay
+## 8. Do not file with PI under 30
 
-You can check the turn log in the admin UI (or as a normal player, watch the turn timer) to know when the next turn fires. Canvassing and ads you submit mid-turn take effect immediately: you don't need to wait for turn processing for your actions to count.
+Campaign until PI is 30+. From 0, that is days of clicks, not one session.
 
----
+## 9. First office is the lowest one
 
-## 7. Watch the campaign season window
+State Senate or House (or MP / MdB). Senate and President wait. Office AP bonuses fund the next race.
 
-In the final 4 turns (4 real hours) before any election ends, all campaign passive effects **double**. This includes:
-- Canvassing alignment multiplier x 2
-- Media Spending favorability boost x 2
-- Opposition Research debuff x 2
+## 10. Party org is not optional
 
-This is the most important tactical timing in the game. Save your biggest canvassing runs for the last 4 turns, not earlier.
+Low home-state party org scales your general votes down. Ask the chair to Build Org. Presidential **Campaign Presence** is a separate spend on the presidential page.
 
----
+## 11. Infamy sticks
 
-## 8. Political Influence (PI) takes time to build
+Attack and whip-defy add Infamy. It decays slowly and hurts NPP endorsements. Click Attack only when the damage is worth it.
 
-PI is a stat you build by running Campaign actions in your home state. It grows by +1 per action, with 0.75% decay per turn. To get from 0 to 40 PI, plan on roughly 10 turns if you're spending most of your actions on Campaign each turn, or significantly longer if you're splitting actions across other activities.
+## 12. Watch declaration timers
 
-Do not declare a candidacy with PI under 30. You will lose.
+**Elections** → race → primary close time. Miss it, wait a full cycle (2 to 6 game years by office).
 
----
+\`\`\`guide-screenshot
+campaign
+\`\`\`
 
-## 9. Start with the lowest office
+## 13. Country is sticky
 
-Don't go straight for Senate. A State Senate or House seat is far more achievable for a new character. These offices also give you action bonuses (+1/turn) and legislative access, letting you build PI and favorability while holding office. Use the office as a launching pad for the next race.
+Picked at creation. Relocation wipes party, NPI, and national posts. See [Relocation](/wiki/relocation).
 
----
+## 14. Do not clone existing law
 
-## 10. Party organization matters more than you think
+Before **Propose bill**, skim active policy on the legislature pages. Duplicate provisions waste the bill slot and AP.
 
-The party organization (Org) stat for your home state affects two things: your vote total in general elections (0.5x to 1.0x scalar) and your presidential primary score (up to 25 points). If your party's home-state org is low, every candidate in that party is penalized. Coordinate with your party chair to invest in org.
+\`\`\`guide-screenshot
+legislature
+\`\`\`
 
-Presidential races also have **your own** Campaign Presence, built per state on the Presidential Election page. That is not party org. It is funded by your campaign, has no level cap, and gets more expensive each level while the bonus flattens: level 10 is worth about +19% primary vote weight there, three quarters of the maximum. Start investing before you file.
+## 15. Read what the last turn did
 
----
+Notifications (and the turn summary) list resolved elections and bills. If a candidacy vanished, look there first.
 
-## 11. Infamy is permanent (and costs you)
+## Your first week
 
-Every action that generates infamy (attacking opponents, defying whip votes, certain legislative plays) adds permanently to your infamy score. High infamy strains your standing with NPPs and affects certain approval ratings. Don't attack opponents carelessly. Only attack when the favorability damage to them outweighs your infamy cost.
-
----
-
-## 12. Watch the timer on elections
-
-Elections in A House Divided have fixed timers: the primary phase closes at a set deadline, and you cannot declare after that. The general phase closes at its own end time. Missing the primary window means you wait a full cycle (2-6 game years depending on the office). Check the elections page early in each cycle.
-
----
-
-## 13. Your character country is permanent
-
-The country you pick at character creation determines which country's elections, legislature, and parties you can participate in. Relocation to another country is possible but wipes party membership, national influence, and any national-level positions. If you want to try the UK or Japan system, plan for it from the start.
-
----
-
-## 14. Read existing legislation before proposing
-
-Legislation that already exists as active policy cannot be duplicated. Before introducing a new bill, check the state and federal legislation pages to see what's already in effect. Proposing a bill that does the same thing as an existing policy wastes your bill slot and actions.
-
----
-
-## 15. Check the turn log for what changed
-
-After each turn, the turn log (visible in your notifications or admin turn history) shows what resolved: which elections finished, which bills passed, what NPPs did. If something unexpected happened (your candidate was withdrawn, a bill failed), the answer is usually in the turn log.
-
----
+- [ ] Actions spent every session, not stacked past 100.
+- [ ] Party joined.
+- [ ] Quick Poll before first declare.
+- [ ] Lowest office chosen, not Senate.
+- [ ] PI 30+ before you file.
+- [ ] Primary timer written down.
 
 ## Related
 
-- [Getting Started](/wiki/getting-started): character creation and first steps.
-- [The Game Loop](/wiki/the-game-loop): how turns and elections run over time.
-- [Stats & Actions](/wiki/stats-actions): complete action cost reference.
-- [Primaries](/wiki/primaries): declaration rules and primary score formula.
-- [FAQ](/wiki/faq): answers to common questions.
+- [Getting Started](/wiki/getting-started)
+- [The Game Loop](/wiki/the-game-loop)
+- [Stats & Actions](/wiki/stats-actions)
+- [Primaries](/wiki/primaries)
+- [FAQ](/wiki/faq)
 `;
