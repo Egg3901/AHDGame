@@ -194,6 +194,20 @@ export function useAuthMe(): AuthDataContextValue {
 }
 
 /**
+ * Non-throwing accessor for the nav-bootstrap refetch.
+ *
+ * `/api/client-nav` is fetched once when the provider mounts and never again,
+ * so in a client-routed session every world-state flag it carries is frozen
+ * for the whole visit. Callers that observe world state changing — the status
+ * bar watching the turn counter — use this to bring it back in step. A no-op
+ * outside a provider, so a component using it stays renderable in isolation.
+ */
+export function useRefetchNav(): () => void {
+  const ctx = useContext(AuthDataContext);
+  return useMemo(() => ctx?.refetch ?? (() => {}), [ctx?.refetch]);
+}
+
+/**
  * Non-throwing accessor for the Conflicts-subsystem flag. Returns false when
  * rendered outside an AuthDataProvider (e.g. isolated component tests), so
  * conflicts-gated UI stays hidden rather than crashing.
