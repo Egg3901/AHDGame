@@ -159,6 +159,19 @@ export function DeliveryLimitedPill({
  * money had left the corporation and nothing on screen accounted for it. The
  * badge names both halves — how much, and how long.
  */
+/**
+ * The one sentence that explains the build-queue pill, shared by its tooltip and
+ * its accessible name so a screen reader and a mouse user get the same words.
+ */
+export function buildQueueBadgeLabel(queue: BuildQueueSummary): string {
+  const turns = queue.turnsRemaining;
+  return (
+    `${Math.round(queue.unitsOrdered).toLocaleString("en-US")} ${CAPACITY_UNIT_LABEL} of capacity is paid for and under construction` +
+    (queue.orders > 1 ? ` across ${queue.orders} orders` : "") +
+    (turns != null ? `. The next order lands in ${turns} turn${turns === 1 ? "" : "s"}.` : ".")
+  );
+}
+
 export function BuildQueueBadge({
   queue,
   className = "",
@@ -171,14 +184,21 @@ export function BuildQueueBadge({
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0 text-[10px] font-semibold tabular-nums text-primary ${className}`.trim()}
-      title={
-        `${Math.round(queue.unitsOrdered).toLocaleString("en-US")} ${CAPACITY_UNIT_LABEL} of capacity is paid for and under construction` +
-        (queue.orders > 1 ? ` across ${queue.orders} orders` : "") +
-        (turns != null ? `. The next order lands in ${turns} turn${turns === 1 ? "" : "s"}.` : ".")
-      }
+      aria-label={buildQueueBadgeLabel(queue)}
+      title={buildQueueBadgeLabel(queue)}
     >
       +{formatUnits(queue.unitsOrdered)}
-      {turns != null && <span className="font-normal opacity-80">{turns}T</span>}
+      {/* Ticket #1141: a player read this pill as part of the freight badge next
+          to it and asked what freight meant in sectors. The number and the bare
+          "38T" said nothing on their own, and the explanation was hover-only, so
+          it did not exist at all on touch. Name the thing on the face of it. */}
+      <span className="font-normal opacity-80">building</span>
+      {turns != null && (
+        <span className="font-normal opacity-80">
+          {turns}
+          {"T"}
+        </span>
+      )}
     </span>
   );
 }
