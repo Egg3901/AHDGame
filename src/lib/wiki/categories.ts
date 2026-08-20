@@ -45,7 +45,7 @@ export const WIKI_CATEGORIES: WikiCategory[] = [
     id: "countries",
     slug: "countries",
     name: "Countries",
-    description: "Country hubs: US, UK, DE, JP",
+    description: "Country hubs: US, UK, DE, JP, IE, BR, CN, NG, RU, DD",
     icon: "🗺️",
     color: "text-green-400",
   },

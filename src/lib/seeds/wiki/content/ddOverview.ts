@@ -19,7 +19,7 @@ East Germany (the German Democratic Republic) is a **one-party socialist state**
 | --- | --- | --- | --- |
 | General Secretary (head of government) | Internal party confidence | 5 years | 1 |
 | Chairman of the Council of State (ceremonial head of state) | Auto-populated as SED chair | No fixed term | 1 |
-| Volkskammer Deputy | Single-list regional election | 4-year cycle | 500 |
+| Volkskammer Deputy | Single-list regional election | 192 turns (4 game years) | 500 |
 | Land First Secretary (regional executive) | Regional election | 4 years | 1 per region |
 | President of the Staatsbank | Appointed action | 6 years | 1 |
 
@@ -31,7 +31,7 @@ The General Secretary carries **+4 actions per turn**, a Volkskammer Deputy +1, 
 
 The **Volkskammer** (People's Chamber) is mechanically **unicameral**: 500 deputies elected on the single National Front list, all seats contested each cycle, no snap elections. The **Staatsrat** (Council of State), a 25-seat collective head-of-state body, is not elected and sits outside the player legislative loop.
 
-Elections ride a **four-year cycle** (anchored to 1954 in the 1953 preset and 1981 in the 1979 preset, matching the GDR's early electoral cadence). Land First Secretary races ride the same anchor. The coalition threshold is **251 seats** (500 / 2 + 1), a formality given the seeded majority.
+Elections ride a **192-turn cycle** (4 game years at 48 turns per year), anchored to 1954 in the 1953 preset and 1981 in the 1979 preset, matching the GDR's early electoral cadence. Land First Secretary races ride the same anchor. The coalition threshold is **251 seats** (500 / 2 + 1), a formality given the seeded majority.
 
 The seeded composition mirrors the National Front's fixed allocation:
 

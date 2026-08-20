@@ -122,6 +122,6 @@ The only difference from the player flow: cooldown, country-availability gates, 
 
 - [Getting Started](/wiki/getting-started): Creating a character and first steps.
 - [Corporations](/wiki/corporations): Founding, HQ, CEO residency.
-- [United Kingdom](/wiki/united-kingdom): UK regions as "home state."
-- [Germany](/wiki/germany) · [Japan](/wiki/japan): Länder and prefectures.
+- [United Kingdom](/wiki/uk-overview): UK regions as "home state."
+- [Germany](/wiki/de-overview) · [Japan](/wiki/jp-overview): Länder and prefectures.
 `;

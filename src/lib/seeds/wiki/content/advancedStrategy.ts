@@ -64,11 +64,11 @@ Legislation influences state-level metrics (healthcare, economy, education, envi
 
 Legislation also creates infamy if you vote against party doctrine too often. Maintain whip compliance on low-stakes votes to preserve capital for the bills you care about.
 
-## Party org investment timing
+## Party influence vs party org
 
-Party Organization in your home state is the single biggest lever for a presidential primary (worth up to 25 points). It builds slowly and decays if neglected.
+Party influence (not state party org) is the second-largest presidential-primary bucket after alignment, worth up to 20 points. Favorability is 25. State party org still matters in the general.
 
-- Invest in party org at least 12 turns before any presidential primary you intend to enter.
+- Party influence accrues from party activity and leadership over time; it is not a one-cycle burst stat.
 - The chair of a state party controls party org growth; if your party has a bad chair, challenge for the position.
 - Party org also affects general election vote totals (0.5× to 1.0× scalar on all votes in that state).
 

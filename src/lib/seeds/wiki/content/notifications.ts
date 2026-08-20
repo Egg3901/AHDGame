@@ -45,5 +45,5 @@ These preferences are per-account and apply going forward; they do not retroacti
 - Use "Action needed" as your default working view during a busy turn rather than scrolling all of "All".
 - A snooze is temporary by design. If you actually want a type gone long-term, mute it instead of re-snoozing it every twelve hours.
 
-See also: [Reading the Game](/wiki/reading-the-game), [Coalitions](/wiki/coalitions).
+See also: [Reading the Game](/wiki/reading-the-game), [Coalitions](/wiki/coalitions), [Mail](/wiki/mail).
 `;

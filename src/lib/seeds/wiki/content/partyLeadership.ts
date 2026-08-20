@@ -121,7 +121,7 @@ If passed, the new method applies the next time a leadership election opens.
 
 ### Election duration
 
-Proposes a custom duration for future national leadership elections. The minimum is **168 turns** (1 week) and the maximum is **420 turns** (2.5 weeks). The party's default before any proposal passes is the game's standard duration. If passed, the custom duration is saved on the party and used when new elections are created.
+Proposes a custom duration for future national leadership elections. The minimum is **168 turns** (1 week) and the maximum is **420 turns** (2.5 weeks). The party's default before any proposal passes is **72 turns** (NATIONAL_ELECTION_DURATION_TURNS). If passed, the custom duration is saved on the party and used when new elections are created.
 
 ### Merge
 

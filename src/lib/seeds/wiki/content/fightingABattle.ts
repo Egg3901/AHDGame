@@ -161,7 +161,7 @@ The resolution model is deliberately not published in detail: knowing the exact 
 **Force quality**
 
 - **Strength.** A unit at 40% headcount fights like a much smaller unit. This is linear and it is the biggest single lever.
-- **Veterancy.** Elite formations are substantially better than green ones, and it compounds.
+- **Veterancy.** Elite formations are substantially better than green ones. Veterancy is a five-grade table, not a compounding multiplier.
 - **Technology tier.** Real but modest, smaller than veterancy, and it costs upkeep forever.
 - **Equipment.** A small, steady bonus.
 - **Readiness.** A tired army fights worse. Readiness drifts back toward its posture baseline each turn.
