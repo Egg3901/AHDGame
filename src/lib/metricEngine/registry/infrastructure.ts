@@ -80,17 +80,100 @@ const capitalCompute =
     return maintenanceDecay(base, supportedLevel(ctx, floor, span), effectiveDecay);
   };
 
+/**
+ * Share of a region's sector revenue coming from the logistics sector at which
+ * freight is considered adequately provisioned. Roughly the real
+ * transport-and-warehousing share of output.
+ */
+export const ROAD_FREIGHT_REFERENCE_SHARE = 0.05;
+
+/** Most the freight term can ADD to the road-condition target, in points. */
+export const ROAD_FREIGHT_MAX_BONUS = 6;
+
+/** Most the freight term can SUBTRACT, in points. */
+export const ROAD_FREIGHT_MAX_PENALTY = 4;
+
+/**
+ * Freight adequacy term for the road-condition target (ticket #1143).
+ *
+ * Same shape, and the same rationale, as `gridEnergyAdequacyTerm` (suggestion
+ * #90) — but for freight → transport instead of generation → grid. Before this,
+ * `roadCondition` (and `transportEfficiency`, which composites it) moved ONLY on
+ * government infrastructure spending. A player could build the logistics sector
+ * every turn and watch the road/transport reading sit still, while
+ * `getRoadConditionMarginModifier` taxed every ROAD_CONDITION_SECTORS
+ * corporation in the state — manufacturing among them — for the low reading.
+ * The player-visible symptom (ticket #1143): the region shows freight
+ * over-supplied while Manufacturing is penalized for "low logistics," two
+ * screens that never reconciled because logistics-sector output was not an input
+ * to the metric the penalty reads.
+ *
+ * Logistics-sector revenue share is the freight-provisioning proxy (mirrors the
+ * energy term's revenue-share model): an oversupplied freight sector still earns
+ * revenue, so its share is high → bonus → the road/logistics-cost line the
+ * corporation sees improves. A thin logistics sector → penalty.
+ *
+ * Returns 0 with no sector data, so a region the provider cannot see keeps
+ * exactly its old spending-only target.
+ */
+export function freightLogisticsAdequacyTerm(
+  rows: Array<{ revenue: number; sectorType?: string }>
+): number {
+  let logistics = 0;
+  let total = 0;
+  for (const row of rows) {
+    const rev = Number.isFinite(row.revenue) ? Math.max(0, row.revenue) : 0;
+    if (rev <= 0) continue;
+    total += rev;
+    if (row.sectorType === "logistics") logistics += rev;
+  }
+  if (total <= 0) return 0;
+
+  const share = logistics / total;
+  // Ratio of actual logistics share to the reference. 1 = adequately provisioned.
+  const ratio = share / ROAD_FREIGHT_REFERENCE_SHARE;
+  if (ratio >= 1) {
+    // Diminishing returns above adequacy: extra freight capacity past what the
+    // region needs still helps, but must not buy arbitrarily perfect roads.
+    return ROAD_FREIGHT_MAX_BONUS * Math.min(1, (ratio - 1) / 1.5);
+  }
+  return -ROAD_FREIGHT_MAX_PENALTY * (1 - ratio);
+}
+
 export const roadConditionNode: RegistryNode = {
   id: "infrastructure.roadCondition",
   categoryId: "infrastructure",
   metricId: "roadCondition",
   kind: "derived",
-  inputs: [{ spending: "infrastructure" }],
+  // Maintenance-decay off infrastructure spend, plus the region's own freight
+  // provisioning (ticket #1143) so logistics-sector build-out lifts the metric
+  // the corp margin penalty reads.
+  inputs: [{ spending: "infrastructure" }, { provider: "sectorRevenueTax" }],
   bounds: [0, 100],
   inertia: 0.85,
   decimals: 2, // 2dp storage: per-turn decay steps (~0.05) stall on a 0.1 rounding grain
-  // THRESHOLDS [40 worst, 90 best]; ~3 pts/yr erosion without upkeep.
-  compute: capitalCompute("infrastructure.roadCondition", 35, 60, 0.06, 0.85, 65),
+  // THRESHOLDS [40 worst, 90 best]; ~3 pts/yr erosion without upkeep. Same
+  // baseline-decay semantics as capitalCompute (decay the simBaseline, scaled by
+  // 1/(1−inertia)) with the freight-adequacy term added to the supported target.
+  compute: (ctx) => {
+    const id = "infrastructure.roadCondition";
+    const base = Number.isFinite(ctx.prevSimBaseline[id])
+      ? ctx.prevSimBaseline[id]
+      : Number.isFinite(ctx.prev[id])
+        ? ctx.prev[id]
+        : 65;
+    const payload = ctx.providers["sectorRevenueTax"] as
+      | {
+          owned: Array<{ revenue: number; sectorType?: string }>;
+          unowned: Array<{ revenue: number; sectorType?: string }>;
+        }
+      | undefined;
+    const freightTerm = payload
+      ? freightLogisticsAdequacyTerm([...payload.owned, ...payload.unowned])
+      : 0;
+    const target = supportedLevel(ctx, 35, 60) + freightTerm;
+    return maintenanceDecay(base, target, 0.06 / (1 - 0.85));
+  },
 };
 
 export const publicTransitNode: RegistryNode = {
