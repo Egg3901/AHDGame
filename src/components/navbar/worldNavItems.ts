@@ -19,6 +19,8 @@ export interface WorldNavOpts {
   myCorporationId?: number | null;
   conflictsEnabled?: boolean;
   unionsEnabled?: boolean;
+  /** Master gate for settlement crises — currently the German Question. */
+  settlementCrisisEnabled?: boolean;
 }
 
 /**
@@ -30,6 +32,7 @@ export function buildWorldNavItems({
   myCorporationId = null,
   conflictsEnabled = false,
   unionsEnabled = false,
+  settlementCrisisEnabled = false,
 }: WorldNavOpts): WorldNavItem[] {
   const country = countryId.toLowerCase();
 
@@ -82,6 +85,15 @@ export function buildWorldNavItems({
       href: "/world/conflicts",
       section: "main",
       show: conflictsEnabled,
+    },
+    {
+      // Gated on the master flag, like Conflicts: with the flag off there is no
+      // crisis to look at, and a link to an empty board is worse than no link.
+      id: "germanQuestion",
+      label: "The German Question",
+      href: "/world/german-question",
+      section: "main",
+      show: settlementCrisisEnabled,
     },
     {
       id: "internationalOrgs",
@@ -219,7 +231,7 @@ const WORLD_NAV_GROUPS: WorldNavGroupDef[] = [
     titleKey: "menus.world.groups.diplomacy",
     // Nations 0.32% > International Orgs 0.08% > Crises 0.06%. Map keeps
     // second place because it is the entry point to the region cluster.
-    itemIds: ["nations", "map", "internationalOrgs", "crises", "conflicts"],
+    itemIds: ["nations", "map", "internationalOrgs", "crises", "conflicts", "germanQuestion"],
   },
   { id: "other", title: "Other", titleKey: "menus.world.groups.other", itemIds: ["news"] },
   {

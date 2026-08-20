@@ -116,6 +116,7 @@ export async function GET() {
             wikiDisabled: 1,
             rpgStatsEnabled: 1,
             conflictsEnabled: 1,
+            settlementCrisisEnabled: 1,
             seasonRecapEnabled: 1,
           },
         }
@@ -154,6 +155,7 @@ export async function GET() {
           isImperialMode: false,
           wikiDisabled: !!gameState?.wikiDisabled,
           conflictsEnabled: !!gameState?.conflictsEnabled,
+          settlementCrisisEnabled: !!gameState?.settlementCrisisEnabled,
           unionsEnabled: false,
           pendingCharterCount: 0,
           pendingSeasonRecapId: null,
@@ -194,6 +196,7 @@ export async function GET() {
     const wikiDisabled = !!gameState?.wikiDisabled;
     const rpgStatsEnabled = !!gameState?.rpgStatsEnabled;
     const conflictsEnabled = !!gameState?.conflictsEnabled;
+    const settlementCrisisEnabled = !!gameState?.settlementCrisisEnabled;
 
     if (!user) {
       if (rawToken) {
@@ -222,6 +225,7 @@ export async function GET() {
           isImperialMode: false,
           wikiDisabled,
           conflictsEnabled,
+          settlementCrisisEnabled,
           unionsEnabled,
           pendingCharterCount: 0,
           pendingSeasonRecapId: null,
@@ -694,6 +698,7 @@ export async function GET() {
         isImperialMode,
         wikiDisabled,
         conflictsEnabled,
+        settlementCrisisEnabled,
         unionsEnabled,
         pendingCharterCount,
         pendingSeasonRecapId,

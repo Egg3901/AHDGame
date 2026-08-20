@@ -19,6 +19,11 @@
  * errors, and `postSettlementWire` catches around the news post as well. A
  * Discord outage must never stop a turn.
  *
+ * HOUSE STYLE. Modelled on the Vietnam Desk dispatches the bot already files:
+ * a short narrative title, two sentences of prose that carry no digits, a few
+ * terse labelled fields for the figures, and a NAMED DESK in the footer rather
+ * than the product name. Bonn Desk is this crisis's byline.
+ *
  * Copy rules this file follows (they are project-wide): no calendar years and
  * no "current rate" phrasing, because the same text has to read correctly in
  * every era; and no anchor-unit figures, because those are not a player-facing
@@ -44,6 +49,9 @@ export type SettlementWireEvent = "opened" | "armed" | "war" | "settled";
 const pts = (hundredths: number) => Math.round(hundredths) / HUNDREDTHS;
 const signed = (points: number) => `${points >= 0 ? "+" : ""}${points.toFixed(1)}`;
 
+/** The byline every dispatch carries, as the Vietnam Desk ones do. */
+const DESK = "Bonn Desk";
+
 export interface SettlementDispatch {
   title: string;
   /** Plain body, for the in-game news feed. */
@@ -64,6 +72,32 @@ function standing(eastPoints: number): string {
   if (eastPoints > 45) return "The question is finely balanced";
   if (eastPoints > 30) return "Sovereignty holds the advantage";
   return "Sovereignty is close to locking";
+}
+
+/**
+ * A headline that says what happened, not what the feature is called.
+ *
+ * The Vietnam dispatches read "Washington deepens its commitment in Vietnam" —
+ * a sentence about the world. A recurring post titled with the crisis's own
+ * name reads as a status widget instead, and gets skimmed past.
+ */
+function briefingTitle(eastPoints: number, delta: number): string {
+  if (eastPoints >= 80) return "Reunification is within reach";
+  if (eastPoints <= 20) return "Sovereignty is all but settled";
+  if (Math.abs(delta) < 0.5) return "Bonn holds where it stood";
+  if (delta >= 5) return "Bonn swings east";
+  if (delta <= -5) return "Bonn swings west";
+  return delta > 0 ? "Bonn drifts toward the East" : "Bonn drifts toward the West";
+}
+
+/** The institution that moved most since the last dispatch, for the prose. */
+function moverPhrase(crisis: SettlementCrisisDoc): string {
+  const moved = [...crisis.institutions].sort(
+    (a, b) => Math.abs(b.lastDrift) - Math.abs(a.lastDrift)
+  )[0];
+  if (!moved || moved.lastDrift === 0) return "No single institution is moving on its own";
+  const name = getInstitution(moved.id)?.name ?? moved.id;
+  return `${name} is where Bonn's own politics are pulling hardest`;
 }
 
 /** How the swing since the last dispatch reads. */
@@ -96,51 +130,66 @@ export function buildBriefing(input: BriefingInput): SettlementDispatch {
   const previous = pts(crisis.lastBriefing?.position ?? crisis.position);
   const delta = Math.round((east - previous) * 10) / 10;
 
-  const body =
-    `${standing(east)}. The settlement stands at ${east.toFixed(1)} for reunification ` +
-    `against ${west.toFixed(1)} for continued sovereignty, having ${swingPhrase(delta)} ` +
-    `(${signed(delta)}).`;
-
-  const fields: NonNullable<DiscordEmbed["fields"]> = crisis.institutions.map((inst) => {
-    const name = getInstitution(inst.id)?.name ?? inst.id;
-    const instEast = pts(inst.position);
-    const drift = pts(inst.lastDrift);
-    return {
-      name: `${name} · ×${inst.weight}`,
-      value:
-        `${instEast.toFixed(1)} reunification / ${(100 - instEast).toFixed(1)} sovereignty` +
-        (drift === 0 ? "" : `\nBonn's own drift: ${signed(drift)}`),
-      inline: true,
-    };
-  });
-
-  fields.push({
-    name: "The open floor",
-    value:
-      publicVoices === 0
-        ? "No private citizen took a public position."
-        : `${publicVoices.toLocaleString()} ${publicVoices === 1 ? "person" : "people"} took a public position.`,
-    inline: false,
-  });
-
   const heat = crisis.ladder.heat;
+  const title = briefingTitle(east, delta);
+
+  // Prose carries no digits, matching the desk style — the figures live in the
+  // fields, where they can be read at a glance instead of parsed out of a
+  // sentence.
+  const body =
+    `${standing(east)} in the four-power contest over Germany's settlement, ` +
+    `having ${swingPhrase(delta)}. ${moverPhrase(crisis)}.`;
+
+  const fields: NonNullable<DiscordEmbed["fields"]> = [
+    {
+      name: "Settlement",
+      value: `${east.toFixed(1)} reunification / ${west.toFixed(1)} sovereignty`,
+      inline: true,
+    },
+    { name: "Swing", value: `${signed(delta)} since the last dispatch`, inline: true },
+  ];
+
   if (heat > 0) {
     fields.push({
-      name: `Escalation · DEFCON ${defconFor(heat)}`,
-      value: LADDER_RUNGS[heat - 1] ?? `Rung ${heat}`,
-      inline: false,
+      name: "Rung",
+      value: `${heat}. ${LADDER_RUNGS[heat - 1] ?? "Unknown"} · DEFCON ${defconFor(heat)}`,
+      inline: true,
     });
   }
 
+  fields.push({
+    name: "The board",
+    value: crisis.institutions
+      .map((inst) => {
+        const name = getInstitution(inst.id)?.name ?? inst.id;
+        const drift = pts(inst.lastDrift);
+        return (
+          `${name} ×${inst.weight} — ${pts(inst.position).toFixed(1)}` +
+          (drift === 0 ? "" : ` (${signed(drift)})`)
+        );
+      })
+      .join("\n"),
+    inline: false,
+  });
+
+  fields.push({
+    name: "Open floor",
+    value:
+      publicVoices === 0
+        ? "Nobody took a public position."
+        : `${publicVoices.toLocaleString()} ${publicVoices === 1 ? "person" : "people"} took a public position.`,
+    inline: true,
+  });
+
   return {
-    title: "The German Question — where Bonn stands",
+    title,
     body,
     embed: {
-      title: "The German Question — where Bonn stands",
+      title,
       description: body,
       color: isArmed(heat) ? DISCORD_COLORS.settlementBrink : DISCORD_COLORS.settlementBriefing,
       fields,
-      footer: { text: "A House Divided · World News" },
+      footer: { text: DESK },
     },
   };
 }
@@ -154,14 +203,12 @@ export function buildEventDispatch(
   const west = Math.round((100 - east) * 10) / 10;
 
   if (event === "opened") {
-    const title = "The German Question is open";
+    const title = "The four powers reopen the German question";
     const body =
-      "The four occupying powers have reopened the question of Germany's settlement. " +
       "Bonn may remain a sovereign state inside NATO, or dissolve into one reunified " +
-      `Germany inside the Warsaw Pact. The board opens at ${east.toFixed(1)} for ` +
-      `reunification against ${west.toFixed(1)} for sovereignty, and Bonn does not get ` +
-      "a vote of its own — the Bundestag, the Länder, the street and the Allied garrison " +
-      "each answer separately.";
+      "Germany inside the Warsaw Pact. It does not get a vote of its own — the " +
+      "Bundestag, the Länder, the street and the Allied garrison each answer separately, " +
+      "and the four occupying powers will spend to move them.";
     return {
       title,
       body,
@@ -169,18 +216,25 @@ export function buildEventDispatch(
         title,
         description: body,
         color: DISCORD_COLORS.settlementBriefing,
-        footer: { text: "A House Divided · World News" },
+        fields: [
+          {
+            name: "Opening board",
+            value: `${east.toFixed(1)} reunification / ${west.toFixed(1)} sovereignty`,
+            inline: true,
+          },
+          { name: "Carries at", value: "85.0 · locks at 15.0", inline: true },
+        ],
+        footer: { text: DESK },
       },
     };
   }
 
   if (event === "armed") {
-    const title = "DEFCON 1 over Germany";
+    const title = "The alliances mobilise on the Elbe";
     const body =
-      "A superpower has forced the issue. The alliances are mobilised on the Elbe, the " +
-      "corridors are closed, and both blocs are paying for every turn they stand here. " +
-      "Nothing has been declared — but nothing now stands between the question and a war " +
-      "except a decision not to take it.";
+      "A superpower has forced the issue. The corridors are closed and both blocs are " +
+      "paying for every turn they stand here. Nothing has been declared — but nothing " +
+      "now stands between the question and a war except a decision not to take it.";
     return {
       title,
       body,
@@ -188,18 +242,30 @@ export function buildEventDispatch(
         title,
         description: body,
         color: DISCORD_COLORS.settlementBrink,
-        footer: { text: "A House Divided · World News" },
+        fields: [
+          {
+            name: "Rung",
+            value: `${LADDER_RUNGS.length}. ${LADDER_RUNGS[LADDER_RUNGS.length - 1]} · DEFCON 1`,
+            inline: true,
+          },
+          {
+            name: "Settlement",
+            value: `${east.toFixed(1)} reunification / ${west.toFixed(1)} sovereignty`,
+            inline: true,
+          },
+        ],
+        footer: { text: DESK },
       },
     };
   }
 
   if (event === "war") {
-    const title = "War for Germany";
+    const title = "The settlement goes to war";
     const body =
-      "The declaration has been made and the settlement is no longer being argued over — " +
-      "it is being fought for. The question is frozen where it stood; both Germanies are " +
-      "the ground, and whoever wins the war takes the settlement outright, however the " +
-      "meter read when the shooting started.";
+      "The declaration has been made and Germany's future is no longer being argued " +
+      "over — it is being fought for. The question is frozen where it stood; both " +
+      "Germanies are the ground, and whoever wins takes the settlement outright, however " +
+      "the meter read when the shooting started.";
     return {
       title,
       body,
@@ -207,13 +273,21 @@ export function buildEventDispatch(
         title,
         description: body,
         color: DISCORD_COLORS.settlementBrink,
-        footer: { text: "A House Divided · World News" },
+        fields: [
+          {
+            name: "Frozen at",
+            value: `${east.toFixed(1)} reunification / ${west.toFixed(1)} sovereignty`,
+            inline: true,
+          },
+          { name: "Theatre", value: "Germany", inline: true },
+        ],
+        footer: { text: DESK },
       },
     };
   }
 
   const reunified = crisis.outcome === "challenger";
-  const title = reunified ? "Germany is one country again" : "Bonn stands";
+  const title = reunified ? "Germany is one country again" : "Bonn keeps its sovereignty";
   const body = reunified
     ? "The question has carried. The German Democratic Republic is dissolved into a " +
       "single German state, which takes its government and its alliance with it into " +
@@ -228,7 +302,15 @@ export function buildEventDispatch(
       title,
       description: body,
       color: DISCORD_COLORS.settlementSettled,
-      footer: { text: "A House Divided · World News" },
+      fields: [
+        {
+          name: "Final",
+          value: `${east.toFixed(1)} reunification / ${west.toFixed(1)} sovereignty`,
+          inline: true,
+        },
+        { name: "Outcome", value: reunified ? "Reunification" : "Sovereignty", inline: true },
+      ],
+      footer: { text: DESK },
     },
   };
 }

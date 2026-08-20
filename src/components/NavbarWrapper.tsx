@@ -78,6 +78,7 @@ interface NavbarWrapperState {
   wikiDisabled: boolean;
   conflictsEnabled: boolean;
   unionsEnabled: boolean;
+  settlementCrisisEnabled: boolean;
 }
 
 type NavbarWrapperAction =
@@ -100,6 +101,7 @@ type NavbarWrapperAction =
   | { type: "SET_ACTIVE_PRESIDENT_ELECTION_ID"; id: string | null; seatId: string | null }
   | { type: "SET_WIKI_DISABLED"; wikiDisabled: boolean }
   | { type: "SET_CONFLICTS_ENABLED"; conflictsEnabled: boolean }
+  | { type: "SET_SETTLEMENT_CRISIS_ENABLED"; settlementCrisisEnabled: boolean }
   | { type: "SET_UNIONS_ENABLED"; unionsEnabled: boolean }
   | { type: "CLEAR_ALL" }
   | { type: "SET_LOADING"; isLoading: boolean }
@@ -132,6 +134,7 @@ const initialState: NavbarWrapperState = {
   wikiDisabled: false,
   conflictsEnabled: false,
   unionsEnabled: false,
+  settlementCrisisEnabled: false,
 };
 
 function navbarWrapperReducer(
@@ -169,6 +172,8 @@ function navbarWrapperReducer(
       return { ...state, wikiDisabled: action.wikiDisabled };
     case "SET_CONFLICTS_ENABLED":
       return { ...state, conflictsEnabled: action.conflictsEnabled };
+    case "SET_SETTLEMENT_CRISIS_ENABLED":
+      return { ...state, settlementCrisisEnabled: action.settlementCrisisEnabled };
     case "SET_UNIONS_ENABLED":
       return { ...state, unionsEnabled: action.unionsEnabled };
     case "CLEAR_ALL":
@@ -326,6 +331,10 @@ export function NavbarWrapper({
     dispatch({
       type: "SET_CONFLICTS_ENABLED",
       conflictsEnabled: navData.conflictsEnabled ?? false,
+    });
+    dispatch({
+      type: "SET_SETTLEMENT_CRISIS_ENABLED",
+      settlementCrisisEnabled: navData.settlementCrisisEnabled ?? false,
     });
     dispatch({
       type: "SET_UNIONS_ENABLED",
@@ -529,6 +538,7 @@ export function NavbarWrapper({
               adminCharacters={state.adminCharacters ?? undefined}
               imperialCharacter={state.imperialCharacter ?? undefined}
               conflictsEnabled={state.conflictsEnabled}
+              settlementCrisisEnabled={state.settlementCrisisEnabled}
               unionsEnabled={state.unionsEnabled}
               activePresidentElectionId={state.activePresidentElectionId ?? undefined}
               activePresidentElectionSeatId={state.activePresidentElectionSeatId ?? undefined}

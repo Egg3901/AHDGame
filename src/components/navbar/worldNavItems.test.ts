@@ -108,3 +108,20 @@ describe("buildWorldNavSections / looseWorldNavItems", () => {
     expect(items.find((i) => i.id === "banking")?.href).toBe("/banking");
   });
 });
+
+describe("the German Question link", () => {
+  it("is hidden while the settlement gate is off", () => {
+    const items = visibleWorldNavItems({ settlementCrisisEnabled: false });
+    expect(items.some((i) => i.id === "germanQuestion")).toBe(false);
+  });
+
+  it("appears under Diplomacy once the gate is on", () => {
+    // The page shipped with no navigation entry at all, so it was reachable
+    // only by typing the URL. This is the guard against that recurring.
+    const items = visibleWorldNavItems({ settlementCrisisEnabled: true });
+    const link = items.find((i) => i.id === "germanQuestion");
+    expect(link?.href).toBe("/world/german-question");
+    const diplomacy = buildWorldNavSections(items).find((g) => g.id === "diplomacy");
+    expect(diplomacy?.items.some((i) => i.id === "germanQuestion")).toBe(true);
+  });
+});
