@@ -4,7 +4,7 @@ Parliamentary countries (UK, JP, and DE) can dissolve their lower chamber **befo
 
 Snaps can happen two ways: a sitting Prime Minister (or Chancellor in DE) calls one voluntarily, or the system auto-triggers one when a PM vacancy extends beyond 96 turns.
 
-For the regular cycles see [United Kingdom](/wiki/united-kingdom), [Japan](/wiki/japan), and [Germany](/wiki/germany). For the underlying confidence mechanics see [No-Confidence Votes](/wiki/no-confidence-votes) and [Government Formation](/wiki/government-formation).
+For the regular cycles see [United Kingdom](/wiki/uk-overview), [Japan](/wiki/jp-overview), and [Germany](/wiki/de-overview). For the underlying confidence mechanics see [No-Confidence Votes](/wiki/no-confidence-votes) and [Government Formation](/wiki/government-formation).
 
 ## Where snaps are possible
 
@@ -101,8 +101,8 @@ The cycle counter increments: a snap that resolves at cycle N is followed by a r
 
 ## Related
 
-- [United Kingdom](/wiki/united-kingdom): UK political system, Commons, PM formation.
-- [Japan](/wiki/japan): JP political system, Diet, PM formation.
+- [United Kingdom](/wiki/uk-overview): UK political system, Commons, PM formation.
+- [Japan](/wiki/jp-overview): JP political system, Diet, PM formation.
 - [Election Mechanics](/wiki/election-mechanics): General election vote math.
 - [General Elections](/wiki/general-elections): Closing sprint tactics (same math applies to snap).
 - [No-Confidence Votes](/wiki/no-confidence-votes): VONC mechanics.

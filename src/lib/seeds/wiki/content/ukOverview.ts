@@ -119,7 +119,7 @@ The UK has an **imperial character**: the Monarch. This is a unique in-game role
 
 ## Key UK links
 
-- [UK Elections](/wiki/uk-elections): Commons elections, government formation, confidence votes
+- [UK overview](/wiki/uk-overview): Commons elections, government formation, confidence votes
 - [Snap Elections](/wiki/snap-elections): How and when snap elections are triggered
 - [Cabinet Guide](/wiki/cabinet-guide): every cabinet post, its metrics, and its actions
 - [Election Mechanics](/wiki/election-mechanics): Shared primary/general concepts

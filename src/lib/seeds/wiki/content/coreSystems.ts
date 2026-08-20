@@ -23,7 +23,7 @@ Term lengths below are stated in **real time** (hours/days you wait between elec
 
 **Staggering matters.** Senate Class 1, 2, and 3 elections fire at different times so one-third of the Senate is up for election every ~4 real days. This keeps Senate activity continuous.
 
-For UK MP and Prime Minister timing see [United Kingdom](/wiki/united-kingdom). For the German Bundestag and Chancellor see [Germany](/wiki/germany). For the Japanese Diet see [Japan](/wiki/japan).
+For UK MP and Prime Minister timing see [United Kingdom](/wiki/uk-overview). For the German Bundestag and Chancellor see [Germany](/wiki/de-overview). For the Japanese Diet see [Japan](/wiki/jp-overview).
 
 ## The action economy
 

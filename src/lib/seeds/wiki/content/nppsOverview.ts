@@ -21,7 +21,7 @@ NPPs fill every office that players don't hold. In a legislature with 435 House 
 
 1. **Vote on every bill**: NPP bill votes are weighted by seats held. An NPP with 7 House seats casts 7 votes. Their collective votes often determine whether legislation passes.
 2. **Enter elections**: NPPs run in primaries and generals. They are your automatic opponents unless you actively compete.
-3. **Vote in leadership elections**: Speaker of the House, Senate leadership, and similar positions are chosen partly by NPP votes. Building NPP support in your favor is a real strategic lever.
+3. **Hold party offices and fill legislatures**: NPPs occupy most seats and vote on bills. U.S. congressional leadership races (Speaker, House and Senate floor leaders) are player-only; NPPs do not autonomously vote in those.
 
 ## How many exist
 
@@ -36,22 +36,18 @@ Admins can spawn NPPs in bulk (1 to 500 at a time) for any party, with weighting
 
 ## Influence system
 
-Players can directly influence individual NPPs from the NPP profile page (\`/npp/[id]\`):
+Players can directly influence individual NPPs from the NPP profile page (\`/npp/[id]\`). Those profile actions are **deterministic** (\`CAPITAL_ACTIONS\` in \`src/lib/capital/actions.ts\`), not a chance roll:
 
-| Action | Actions | Funds | Base Chance |
-| --- | --- | --- | --- |
-| Request Endorsement | 5 | ₳0 | 40% |
-| Request Withdrawal | 8 | ₳50,000 | 25% |
-| Request Opposition | 5 | ₳25,000 | 35% |
-| Request Leadership Support | 4 | ₳0 | 45% |
+| Action | Actions | Funds | Min Relationship | Effect |
+| --- | --- | --- | --- | --- |
+| Request Endorsement | 6 | ₳0 | none (hidden policy/relationship gate) | Public endorsement of your current candidacy |
+| Private Meeting | 3 | ₳0 | -50 | +5 relationship |
+| Boost Favorability | 5 | ₳10,000 | none | +3 favorability, +2 relationship |
+| Reduce Favorability | 5 | ₳10,000 | -100 | -3 favorability, -2 relationship |
+| Boost Influence | 6 | ₳20,000 | none | +2 political influence, +2 relationship |
+| Reduce Influence | 6 | ₳20,000 | -100 | -2 political influence, -2 relationship |
 
-Success chance is modified by the NPP's stubbornness, your relationship score, and any fund boost you add (up to +15% for ₳150K spent). Outcomes affect your relationship with that NPP:
-
-- **Success**: +10 relationship
-- **Failure**: -5 relationship
-- **Backfire** (roll ≥ 95): -25 relationship
-
-Party leaders can also influence NPPs using party resources instead of personal character actions.
+Withdrawal, opposition, and leadership-support asks are **party-level** influence actions (3 party actions each). See [Party Actions](/wiki/party-actions) and [Political Capital](/wiki/political-capital).
 
 ## Displaying NPPs
 

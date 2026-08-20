@@ -12,7 +12,7 @@ In the **US**, coalitions have a direct mechanical effect on chamber leadership:
 - Minority-side leadership (Leader and Whip) remains open to non-majority parties outside the majority bloc
 - Speaker of the House, Senate President Pro Tempore, and the DE Bundestagspräsident are open to any seated chamber member: bloc and party affiliation do not gate candidacy or voting for these presiding-officer roles
 
-Outside the US, coalitions are **organizational and signaling only**. UK, CA, DE, and JP use their own government-formation systems and do not consult coalition membership when forming governments.
+Outside the US, coalitions are **organizational and signaling only**. Parliamentary countries (UK, DE, JP, IE) use their own government-formation systems and do not consult coalition membership when forming governments. There is no country CA in the live roster (CA is California).
 
 ## Coalition structure
 

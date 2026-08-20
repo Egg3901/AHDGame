@@ -23,6 +23,7 @@ import { notificationsContent } from "../content/notifications";
 import { granularPollingContent } from "../content/granularPolling";
 import { marketSafeguardsContent } from "../content/marketSafeguards";
 import { embargoAndTradeExposureContent } from "../content/embargoAndTradeExposure";
+import { worldEventsContent } from "../content/worldEvents";
 import {
   INTERNATIONAL_ORGANIZATION_ORDER,
   INTERNATIONAL_ORGANIZATIONS,
@@ -88,6 +89,8 @@ export const advancedPages: readonly WikiSeedPage[] = [
       "The complete turn processing sequence: 14 groups, 40+ phases, what runs in each, and why the Group 7 election resolution order is strictly load-bearing.",
     content: referenceTurnOrderContent,
     category: "advanced",
+    extraTags: ["turns", "phases"],
+    designDocUrl: "design/turn-processing.html",
     featured: false,
     difficulty: "advanced",
     contentType: "reference",
@@ -100,6 +103,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
       "Complete reference for all playable offices across the US, UK, Germany, and Japan: how each is won, term lengths, action bonuses, and party strength weights.",
     content: referenceOfficesContent,
     category: "advanced",
+    extraTags: ["offices", "action-bonus"],
     featured: false,
     difficulty: "intermediate",
     contentType: "reference",
@@ -207,6 +211,8 @@ export const advancedPages: readonly WikiSeedPage[] = [
       "Caucus health diagnostics: churn tracking over a 12-turn window, at-risk NPP retention with exit risk labels, whip defiance integration, and Healthy/Strained/Fragile health labels.",
     content: caucusesContent,
     category: "advanced",
+    extraTags: ["faction", "whip"],
+    designDocUrl: "design/caucuses.html",
     featured: false,
     difficulty: "intermediate",
     contentType: "guide",
@@ -243,6 +249,8 @@ export const advancedPages: readonly WikiSeedPage[] = [
       "Template crises, decision trees, collective contributions, chained multi-country decisions such as Vietnam, ambient cards, and automatic spawning.",
     content: crisisInteractionContent,
     category: "advanced",
+    extraTags: ["crisis"],
+    designDocUrl: "design/crisis-system.html",
     featured: false,
     difficulty: "intermediate",
     contentType: "guide",
@@ -279,6 +287,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
       "Reading and managing the in-app inbox: notifications versus mail, the All/Notifs/Mail/Action-needed segments, archiving, and per-type muting and snoozing.",
     content: notificationsContent,
     category: "advanced",
+    extraTags: ["inbox"],
     featured: false,
     difficulty: "beginner",
     contentType: "guide",
@@ -319,5 +328,18 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 5,
+  },
+  {
+    slug: "world-events",
+    title: "World Events",
+    description:
+      "Scheduled country-scope events offered to heads of government: one pending offer per country per turn, plus Olympics and World's Fair host picks.",
+    content: worldEventsContent,
+    category: "advanced",
+    extraTags: ["events", "olympics", "worlds-fair"],
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 4,
+    lastUpdated: "2026-08-20",
   },
 ];

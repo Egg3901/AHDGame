@@ -34,6 +34,8 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Commons**: The House of Commons, the elected lower chamber of the UK Parliament. 650 seats, FPTP. Whoever commands a Commons majority (326+ seats) forms the government.
 
+**Command economy**: A planned economy with administered prices, state-owned enterprises, and a monobank. Used by the USSR, China, and East Germany. See [Planned / Command Economies](/wiki/planned-economies).
+
 **Country**: The nation your character belongs to (US, UK, DE, JP, and others). It determines which country's elections, legislature, and parties they participate in. Set at character creation, but can be changed later through relocation, which resets your national influence and party affiliation in the new country.
 
 **Cycle**: One complete election from spawn to resolution. When a general election resolves, a new cycle begins immediately (next election spawns).
@@ -50,7 +52,9 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Endorsement**: A formal expression of support from a player or NPP for your candidacy. NPP endorsements grant campaign actions. Player endorsements count as campaign actions for presidential races only.
 
-**Favorability**: A 0 to 100 stat representing public approval of your character. Used in primary scoring (worth up to 35 pts state, 10 pts presidential), general vote appeal (as an approval scalar), and national/PM approval ratings.
+**Favorability**: A 0 to 100 stat representing public approval of your character. Used in primary scoring (worth up to 35 pts state, 25 pts presidential), general vote appeal (as an approval scalar), and national/PM approval ratings.
+
+**FOMC**: The 7-seat rate-setting board at a market central bank (Federal Open Market Committee in the US). The chair proposes hike, cut, or hold; a majority of the full board must agree. Abstains count against. See [FOMC / Rate-Setting Board](/wiki/fomc).
 
 **FPTP (First Past the Post)**: The winner-take-all election system used in the US, UK, and JP. The candidate with the most votes wins the seat. Creates spoiler effects: third parties bleed votes from the major party ideologically closest to them.
 
@@ -78,9 +82,13 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Manhattan distance**: The sum of absolute differences on the econ axis and social axis. Used to calculate ideological alignment. Distance 0 = perfect match; each point of distance costs 2 alignment points in the primary formula.
 
+**Ministerial actions**: The daily action pool for a cabinet seat (called cabinet actions in presidential systems). They refill at midnight Eastern and cap at 4. See [Cabinet Guide](/wiki/cabinet-guide).
+
 **Media Spending**: A campaign branch tree (starter node plus Broadcast, Television, and Rapid Response branches) that passively boosts the candidate's favorability each turn. Doubles during campaign season.
 
 **National metrics**: Country-level aggregated statistics (GDP, inflation, healthcare index, etc.) derived from state-level data each turn. Visible on country overview pages.
+
+**National Front**: East Germany's single electoral list for the Volkskammer. The SED leads; approved bloc parties take the rest. See [East Germany](/wiki/dd-overview).
 
 **NPI (National Political Influence)**: A national-level reputation metric, distinct from state PI. Grows from high offices, national legislation, and long-term activity. The primary influence stat for presidential primaries and national vote calculations.
 
@@ -106,6 +114,10 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Sangiin**: Japan's House of Councillors (upper house). 248 seats, staggered 6-year terms. Cannot be dissolved. Revises legislation but cannot override the Shūgiin on confidence matters.
 
+**SCOTUS**: The US Supreme Court, 9 seats. A justice seat does not occupy your current office. The President nominates; the Senate confirms by majority. See [Supreme Court](/wiki/scotus).
+
+**SED**: Sozialistische Einheitspartei Deutschlands, East Germany's ruling party.
+
 **Shūgiin**: Japan's House of Representatives (lower house). 465 seats, FPTP. The confidence-granting chamber: PM survival requires Shūgiin majority support. Can be dissolved for snap elections.
 
 **Snap election**: An early election called before the end of a parliamentary term. Available in the UK (PM-initiated), JP (PM-initiated via Shūgiin dissolution), and DE (Chancellor-initiated via Bundestag dissolution). Compresses the campaign cycle dramatically. See [Snap Elections](/wiki/snap-elections).
@@ -127,6 +139,8 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 **Whip directive**: An instruction from party leadership to NPP legislators on how to vote on a specific bill. NPPs in the party generally follow the whip. Players can defy the whip at an infamy cost.
 
 **Withdrawal**: Cancelling an active candidacy. Once withdrawn, you cannot re-enter the same election. Your votes are permanently removed from the tally. Candidates whose party changes mid-election are auto-withdrawn.
+
+**World events**: Scheduled country-scope events offered to a head of government. At most one pending offer per country per turn. See [World Events](/wiki/world-events).
 
 ---
 
