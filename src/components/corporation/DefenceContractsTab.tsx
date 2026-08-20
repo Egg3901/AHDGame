@@ -154,6 +154,8 @@ export default function DefenceContractsTab({
                       {c.countryId} · {c.lotsOrdered.toLocaleString("en-US")} lots of {c.component}
                     </div>
                     <div className="text-[11px] text-muted">
+                      at {c.plantLabel}
+                      {" · "}
                       {formatAmount(c.pricePerLot)} per lot on delivery · worth{" "}
                       {formatAmount(c.pricePerLot * c.lotsOrdered)} in full
                       {c.projectedLotsPerTurn > 0 && (
@@ -253,6 +255,7 @@ export default function DefenceContractsTab({
                       <div className="flex items-center gap-2">
                         <span className="text-[13px] font-medium text-foreground">
                           {c.countryId} · {c.component}
+                          {c.plantLabel ? ` · ${c.plantLabel}` : ""}
                         </span>
                         <span
                           className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
@@ -346,8 +349,8 @@ export default function DefenceContractsTab({
                         </button>
                       ))}
                       <span className="text-[11px] text-muted">
-                        of {c.totalFactories} at this plant. More lines deliver faster; the price
-                        per lot does not change.
+                        of {c.totalFactories} lines at {c.plantLabel}. More lines use more of this
+                        plant; they do not add plants, and the price per lot does not change.
                       </span>
                     </div>
                   )}
