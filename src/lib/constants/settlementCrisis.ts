@@ -91,6 +91,21 @@ export const PERSONAL_MULTIPLIER_PCT = 25;
 /** Max banked capital for any seat. */
 export const SEAT_CAPITAL_CAP = 60;
 
+/**
+ * How many turns' worth of action points a seat may bank.
+ *
+ * Banking exists so a secondary can save for a play that costs more AP than it
+ * earns; three turns is enough for the most expensive of those (2 AP) with one
+ * to spare. A ceiling at all is what stops a seat sitting out fifty turns and
+ * then emptying its whole catalogue into a single tick.
+ */
+export const SEAT_ACTION_BANK_TURNS = 3;
+
+/** The AP ceiling for one seat, derived from its per-turn grant. */
+export function seatActionBankCap(actionsPerTurn: number): number {
+  return actionsPerTurn * SEAT_ACTION_BANK_TURNS;
+}
+
 /** Index at or above which reunification carries, in hundredths. */
 export const CARRY_THRESHOLD = 85 * HUNDREDTHS;
 /** Index at or below which independence holds, in hundredths. */
@@ -98,13 +113,22 @@ export const LOCK_THRESHOLD = 15 * HUNDREDTHS;
 
 /**
  * Mean-reversion strength, as a percent of the distance from anchor per turn.
- * 6 = 0.06. Integer so drift stays exact on the hundredths grid.
+ * 3 = 0.03. Integer so drift stays exact on the hundredths grid.
  *
- * Chosen so that sustained maximum Eastern effort plateaus above the carry
- * threshold while both sides playing optimally stalls below it — the stall is
- * the pressure that sends a bloc to the escalation ladder.
+ * TUNED AGAINST MEASUREMENT, NOT INTUITION. The authored 0.06 was chosen so
+ * that maximum Eastern effort would plateau above the carry threshold. It does
+ * not: `scripts/debug/gq-balance-sim.ts`, driving these same modules, plateaus
+ * the best sustainable Eastern case at 73.5 against a threshold of 85, so
+ * reunification is unreachable by play and the West wins every game it bothers
+ * to contest. The brake, not the catalogue, is the cause — repricing the plays
+ * and doubling secondary AP were both measured and both failed, because
+ * reversion scales with the distance already travelled and swallows any
+ * constant push at 0.06.
+ *
+ * At 0.03 both endings are reachable and neither is cheap. See
+ * `ahd-german-question-balance-findings` for the measured table.
  */
-export const DRIFT_K_PCT = 6;
+export const DRIFT_K_PCT = 3;
 
 /** Half-width of the undisclosed drift noise band, in hundredths. */
 export const DRIFT_NOISE_SPAN = 3 * HUNDREDTHS;
@@ -148,6 +172,82 @@ export const MOBILISATION_APPROVAL_HIT = 1;
  * a matter they have just settled.
  */
 export const SETTLEMENT_REOPEN_COOLDOWN_TURNS = 96;
+
+/** The document `kind`, and the only settlement question that exists today. */
+export const GERMAN_QUESTION_KIND = "settlement.germanQuestion" as const;
+
+/** Whose settlement is at stake, and who would absorb them. */
+export const GERMAN_QUESTION_TARGET = "DE";
+export const GERMAN_QUESTION_CHALLENGER = "DD";
+
+/**
+ * Era window, inclusive, matching `AUTHORED_CRISES`' convention.
+ *
+ * Opens with the 1953 preset and closes at the Berlin Wall: once the border is
+ * sealed, a contest fought on open borders, cross-border broadcasting and a
+ * joint referendum is a different question, and the authored catalogue is not
+ * that question. A world already past 1961 when the gate is switched on never
+ * opens the crisis rather than opening a stale one.
+ */
+export const SETTLEMENT_MIN_YEAR = 1953;
+export const SETTLEMENT_MAX_YEAR = 1961;
+
+/**
+ * The three rule switches the source design declares under its "Rules" section.
+ *
+ * They are stored PER CRISIS rather than on `gameState`. Two of the three
+ * default ON, and the feature-gates panel reads every boolean fail-closed
+ * (`=== true`), so a missing field there would silently mean "off" and invert
+ * both of them. A crisis-scoped block also lets an admin run one question with
+ * the band revealed without changing the rules of the next one.
+ *
+ * The mockup declares the props and never consumes them, so the meanings below
+ * are the design doc's (§12), fixed here rather than left to each reader:
+ *
+ * - `openLog` — the wire is a PUBLIC log. Off, it carries only resolved lines,
+ *   so no delegation can read what the others committed before the tick.
+ * - `driftRevealed` — publishes Bonn's noise band. Off, the roll is disclosed
+ *   only after it lands.
+ * - `escalationEnabled` — the ladder is in play. Off, coercive plays add no
+ *   heat and the crisis cannot be armed or declared.
+ */
+export interface SettlementRules {
+  openLog: boolean;
+  driftRevealed: boolean;
+  escalationEnabled: boolean;
+}
+
+export const SETTLEMENT_DEFAULT_RULES: SettlementRules = {
+  openLog: true,
+  driftRevealed: false,
+  escalationEnabled: true,
+};
+
+export type SettlementRuleKey = keyof SettlementRules;
+
+export const SETTLEMENT_RULE_KEYS: readonly SettlementRuleKey[] = [
+  "openLog",
+  "driftRevealed",
+  "escalationEnabled",
+];
+
+/**
+ * A crisis's rules, tolerating a document written before the field existed.
+ *
+ * Falls back per key, not wholesale: a partially written block from an admin
+ * `$set` must not discard the other two switches.
+ */
+export function settlementRulesFor(crisis: {
+  rules?: Partial<SettlementRules> | null;
+}): SettlementRules {
+  return { ...SETTLEMENT_DEFAULT_RULES, ...(crisis.rules ?? {}) };
+}
+
+/** The disclosed band, when `driftRevealed` is on. Points, not hundredths. */
+export function driftBandLabel(): string {
+  const span = DRIFT_NOISE_SPAN / HUNDREDTHS;
+  return `−${span.toFixed(1)} to +${span.toFixed(1)} noise · ${(DRIFT_K_PCT / 100).toFixed(2)} reversion`;
+}
 
 export const LADDER_RUNGS: readonly string[] = [
   "Diplomatic notes · four-power channel",

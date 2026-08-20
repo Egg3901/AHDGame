@@ -7,6 +7,7 @@ import {
   HUNDREDTHS,
   SETTLEMENT_INSTITUTIONS,
   SETTLEMENT_SEATS,
+  seatActionBankCap,
 } from "@/lib/constants/settlementCrisis";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -31,7 +32,7 @@ function crisis(over: Partial<SettlementCrisisDoc> = {}): SettlementCrisisDoc {
     seats: SETTLEMENT_SEATS.map((s) => ({
       id: s.id,
       capital: 10,
-      actionsUsedTurn: 1,
+      actions: 1,
       lastActedTurn: 411,
       committedPoints: 0,
     })),
@@ -145,15 +146,72 @@ describe("processSettlementTurn", () => {
     expect(crises.updateOne).not.toHaveBeenCalled();
   });
 
-  it("does nothing when no crisis is open", async () => {
+  it("does nothing when no crisis is open and the world is out of era", async () => {
     prime(db, "gameState").findOne.mockResolvedValue({
       _id: "current",
       settlementCrisisEnabled: true,
+      currentYear: 2019,
     });
     prime(db, "settlementCrises").findOne.mockResolvedValue(null);
     const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(result.playsResolved).toBe(0);
+    expect(result.crisesOpened).toBe(0);
+  });
+
+  it("opens the question when the gate is on, the era fits and nothing is live", async () => {
+    // The feature has no reset-time seed: flipping the gate on a running 1953
+    // world is the whole install procedure, so this path IS the seeding.
+    prime(db, "gameState").findOne.mockResolvedValue({
+      _id: "current",
+      settlementCrisisEnabled: true,
+      currentYear: 1953,
+    });
+    prime(db, "settlementCrises").findOne.mockResolvedValue(null);
+    prime(db, "settlementCrises").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+    });
+    prime(db, "settlementCrises").insertOne.mockResolvedValue({ insertedId: CRISIS_ID });
+    prime(db, "countryGameStates").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+    });
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 12);
+    expect(result.crisesOpened).toBe(1);
+    const inserted = prime(db, "settlementCrises").insertOne.mock.calls[0][0];
+    expect(inserted.status).toBe("open");
+    expect(inserted.openedTurn).toBe(12);
+  });
+
+  it("does not tick the crisis on the turn it opens it", async () => {
+    // The board opens at its authored figures. Drifting it in the same tick
+    // would mean nobody ever sees the position the design specifies.
+    prime(db, "gameState").findOne.mockResolvedValue({
+      _id: "current",
+      settlementCrisisEnabled: true,
+      currentYear: 1953,
+    });
+    prime(db, "settlementCrises").findOne.mockResolvedValue(null);
+    prime(db, "settlementCrises").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+    });
+    prime(db, "settlementCrises").insertOne.mockResolvedValue({ insertedId: CRISIS_ID });
+    prime(db, "countryGameStates").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+    });
+    const { processSettlementTurn } = await import("./settlementPhase");
+    await processSettlementTurn(db as unknown as Db, 12);
+    expect(prime(db, "settlementCrises").updateOne).not.toHaveBeenCalled();
   });
 
   it("leaves a frozen crisis untouched", async () => {
@@ -274,14 +332,14 @@ describe("processSettlementTurn", () => {
     expect(update.driftHistory.slice(1)).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it("accrues seat capital to the cap and resets the per-turn action counters", async () => {
+  it("accrues seat capital to the cap and BANKS unspent action points", async () => {
     arrange(
       db,
       crisis({
         seats: SETTLEMENT_SEATS.map((s) => ({
           id: s.id,
           capital: 59,
-          actionsUsedTurn: 2,
+          actions: 1,
           lastActedTurn: 411,
           committedPoints: 0,
         })),
@@ -293,8 +351,56 @@ describe("processSettlementTurn", () => {
 
     const update = crisisUpdate(db);
     for (const seat of update.seats) {
+      const def = SETTLEMENT_SEATS.find((s) => s.id === seat.id)!;
       expect(seat.capital).toBe(60);
-      expect(seat.actionsUsedTurn).toBe(0);
+      // Added to, not reset to the grant. This is what lets Moscow save two
+      // turns of AP for the 2 AP garrison play it otherwise could never make.
+      expect(seat.actions).toBe(1 + def.actionsPerTurn);
+    }
+  });
+
+  it("clamps the action bank so a seat cannot hoard indefinitely", async () => {
+    arrange(
+      db,
+      crisis({
+        seats: SETTLEMENT_SEATS.map((s) => ({
+          id: s.id,
+          capital: 0,
+          actions: 99,
+          lastActedTurn: null,
+          committedPoints: 0,
+        })),
+      }),
+      []
+    );
+    const { processSettlementTurn } = await import("./settlementPhase");
+    await processSettlementTurn(db as unknown as Db, 412);
+
+    for (const seat of crisisUpdate(db).seats) {
+      const def = SETTLEMENT_SEATS.find((s) => s.id === seat.id)!;
+      expect(seat.actions).toBe(seatActionBankCap(def.actionsPerTurn));
+    }
+  });
+
+  it("fills an empty bank for a seat written before banking existed", async () => {
+    arrange(
+      db,
+      crisis({
+        seats: SETTLEMENT_SEATS.map((s) => ({
+          id: s.id,
+          capital: 0,
+          lastActedTurn: null,
+          committedPoints: 0,
+        })) as never,
+      }),
+      []
+    );
+    const { processSettlementTurn } = await import("./settlementPhase");
+    await processSettlementTurn(db as unknown as Db, 412);
+
+    for (const seat of crisisUpdate(db).seats) {
+      const def = SETTLEMENT_SEATS.find((s) => s.id === seat.id)!;
+      expect(seat.actions).toBe(def.actionsPerTurn);
     }
   });
 
@@ -481,6 +587,62 @@ describe("processSettlementTurn", () => {
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(crisisUpdate(db).ladder).toEqual({ heat: 4, armedTurn: null });
     expect(result.countriesLevied).toBe(0);
+  });
+
+  it("drives heat to zero while the ladder is switched off", async () => {
+    // Not merely frozen: a crisis left at rung 4 when an admin stood the ladder
+    // down would sit at DEFCON 2 forever, one flag-flip from a war.
+    arrange(
+      db,
+      crisis({
+        ladder: { heat: 4, armedTurn: null },
+        rules: { openLog: true, driftRevealed: false, escalationEnabled: false },
+      }),
+      [play({ playId: "border", targetInstitutionId: "street", heatAdded: 1 })]
+    );
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 412);
+    expect(crisisUpdate(db).ladder).toEqual({ heat: 0, armedTurn: null });
+    expect(result.heat).toBe(0);
+  });
+
+  it("still applies a coercive play's swing while the ladder is off", async () => {
+    // The play is not cancelled — only its heat is. The street still moves.
+    arrange(
+      db,
+      crisis({
+        ladder: { heat: 0, armedTurn: null },
+        rules: { openLog: true, driftRevealed: false, escalationEnabled: false },
+      }),
+      [play({ playId: "border", targetInstitutionId: "street", heatAdded: 1 })]
+    );
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 412);
+    expect(result.institutionsMoved).toBe(1);
+  });
+
+  it("levies nothing while the ladder is off, however hot it was", async () => {
+    arrange(
+      db,
+      crisis({
+        ladder: { heat: 5, armedTurn: 410 },
+        rules: { openLog: true, driftRevealed: false, escalationEnabled: false },
+      }),
+      []
+    );
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 412);
+    expect(result.countriesLevied).toBe(0);
+    expect(crisisUpdate(db).ladder).toEqual({ heat: 0, armedTurn: null });
+  });
+
+  it("keeps the ladder live for a crisis written before the rules block existed", async () => {
+    arrange(db, crisis({ ladder: { heat: 3, armedTurn: null } }), [
+      play({ playId: "border", targetInstitutionId: "street", heatAdded: 1 }),
+    ]);
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 412);
+    expect(result.heat).toBe(4);
   });
 
   it("records the play that moved an institution", async () => {

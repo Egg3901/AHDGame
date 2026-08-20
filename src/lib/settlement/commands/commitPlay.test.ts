@@ -26,7 +26,7 @@ function seatCtx(over: Record<string, unknown> = {}) {
       id: "DD",
       role: "headOfGovernment",
       direction: 1,
-      budget: { actionsPerTurn: 3, actionsRemaining: 3, capital: 30 },
+      budget: { actionsPerTurn: 3, actionsRemaining: 3, actionsBankCap: 9, capital: 30 },
       canAct: true,
       blockedReason: null,
       ...over,
@@ -174,9 +174,10 @@ describe("commitSettlementPlay", () => {
     expect(filter.seats.$elemMatch).toMatchObject({
       id: "DD",
       capital: { $gte: 0 },
-      actionsUsedTurn: { $lte: 2 },
+      actions: { $gte: 1 },
     });
-    expect(update.$inc["seats.$.actionsUsedTurn"]).toBe(1);
+    // A DEBIT against the bank, not a counter climbing toward an allowance.
+    expect(update.$inc["seats.$.actions"]).toBe(-1);
   });
 
   it("charges the treasury only after winning the guarded claim", async () => {

@@ -39,7 +39,7 @@ function crisisDoc(over: Record<string, unknown> = {}) {
     seats: SETTLEMENT_SEATS.map((s) => ({
       id: s.id,
       capital: 30,
-      actionsUsedTurn: 0,
+      actions: 3,
       lastActedTurn: null,
       committedPoints: 0,
     })),
@@ -56,7 +56,7 @@ function seatCtx(over: Record<string, unknown> = {}) {
       id: "DD",
       role: "headOfGovernment",
       direction: 1,
-      budget: { actionsPerTurn: 3, actionsRemaining: 3, capital: 30 },
+      budget: { actionsPerTurn: 3, actionsRemaining: 3, actionsBankCap: 9, capital: 30 },
       canAct: true,
       blockedReason: null,
       ...over,
@@ -203,7 +203,7 @@ describe("loadGermanQuestionDossier", () => {
         seats: SETTLEMENT_SEATS.map((s) => ({
           id: s.id,
           capital: 30,
-          actionsUsedTurn: 0,
+          actions: 3,
           lastActedTurn: null,
           committedPoints: s.id === "DD" ? 4000 : 1000,
         })),
@@ -303,6 +303,7 @@ describe("loadGermanQuestionDossier", () => {
       capitalLabel: "Party Capital",
       actionsRemaining: 3,
       actionsPerTurn: 3,
+      actionsBankCap: 9,
       canAct: true,
     });
     expect(view!.viewer.seat!.treasuryLabel).toContain("310,000,000");
@@ -450,5 +451,122 @@ describe("loadGermanQuestionDossier", () => {
     const { loadGermanQuestionDossier } = await import("./dossier");
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     expect(view!.settlementPlays.map((p) => p.id)).toEqual(["referendum"]);
+  });
+  it("carries the source design's rule defaults for a crisis with no rules block", async () => {
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.rules).toEqual({
+      openLog: true,
+      driftRevealed: false,
+      escalationEnabled: true,
+    });
+  });
+
+  it("keeps Bonn's band undisclosed by default", async () => {
+    prime(db, "settlementCrises").findOne.mockResolvedValue(crisisDoc({ driftHistory: [180] }));
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.drift).toMatchObject({ revealed: false, band: null });
+    expect(view!.wire[0].text).toContain("not disclosed");
+  });
+
+  it("publishes the band when driftRevealed is on", async () => {
+    prime(db, "settlementCrises").findOne.mockResolvedValue(
+      crisisDoc({
+        driftHistory: [180],
+        rules: { openLog: true, driftRevealed: true, escalationEnabled: true },
+      })
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.drift.revealed).toBe(true);
+    expect(view!.drift.band).toContain("noise");
+    expect(view!.wire[0].text).toContain("Band disclosed");
+  });
+
+  it("withholds pending commitments from the wire when the log is closed", async () => {
+    // The point of a closed log: nobody reads the board before the tick.
+    prime(db, "settlementCrises").findOne.mockResolvedValue(
+      crisisDoc({ rules: { openLog: false, driftRevealed: false, escalationEnabled: true } })
+    );
+    prime(db, "settlementPlays").find.mockReturnValue(
+      cursor([
+        {
+          _id: new ObjectId(),
+          crisisId: CRISIS_ID,
+          actor: "seat",
+          seatId: "US",
+          characterId: new ObjectId(),
+          playId: "credit",
+          targetInstitutionId: "laender",
+          direction: -1,
+          basePoints: 500,
+          appliedPoints: null,
+          turn: 412,
+          resolvedTurn: null,
+        },
+        {
+          _id: new ObjectId(),
+          crisisId: CRISIS_ID,
+          actor: "seat",
+          seatId: "DD",
+          characterId: new ObjectId(),
+          playId: "aid",
+          targetInstitutionId: "laender",
+          direction: 1,
+          basePoints: 400,
+          appliedPoints: 800,
+          turn: 412,
+          resolvedTurn: 412,
+        },
+      ])
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.wire.map((w) => w.who)).toContain("EAST BERLIN");
+    expect(view!.wire.map((w) => w.who)).not.toContain("WASHINGTON");
+  });
+
+  it("collapses the personal tier into one wire line naming raw and applied", async () => {
+    // §4: the cap must never be silent. Forty op-eds must not also push the four
+    // delegations off an eight-line wire.
+    const personal = Array.from({ length: 40 }, () => ({
+      _id: new ObjectId(),
+      crisisId: CRISIS_ID,
+      actor: "personal",
+      seatId: null,
+      characterId: new ObjectId(),
+      playId: "rally",
+      targetInstitutionId: "street",
+      direction: 1,
+      basePoints: 200,
+      appliedPoints: 15,
+      turn: 412,
+      resolvedTurn: 412,
+    }));
+    prime(db, "settlementPlays").find.mockReturnValue(cursor(personal));
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    const floor = view!.wire.filter((w) => w.who === "OPEN FLOOR");
+    expect(floor).toHaveLength(1);
+    // 40 x 200 x 0.25 = 2000 hundredths asked for; 600 applied.
+    expect(floor[0].text).toContain("+20.0");
+    expect(floor[0].text).toContain("+6.0");
+    expect(floor[0].text).toContain("capped");
+    expect(view!.openFloor.rawPoints).toBe(20);
+    expect(view!.openFloor.capPoints).toBe(6);
+  });
+
+  it("stands the ladder down for every seat when escalation is off", async () => {
+    prime(db, "settlementCrises").findOne.mockResolvedValue(
+      crisisDoc({
+        ladder: { heat: 4, armedTurn: null },
+        rules: { openLog: true, driftRevealed: false, escalationEnabled: false },
+      })
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.viewer.seat).toMatchObject({ canEscalate: false, canArmNow: false });
+    expect(view!.viewer.seat!.escalateGate).toContain("switched off");
   });
 });

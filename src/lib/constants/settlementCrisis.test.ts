@@ -9,7 +9,9 @@ import {
   CARRY_THRESHOLD,
   LOCK_THRESHOLD,
   HUNDREDTHS,
+  SEAT_ACTION_BANK_TURNS,
   playsForSeat,
+  seatActionBankCap,
   type SettlementInstitutionKey,
   type SettlementSeatKey,
   type SettlementPlayDef,
@@ -150,5 +152,47 @@ describe("settlement crisis config", () => {
       .map((s) => s.id)
       .sort();
     expect(authority).toEqual(["RU", "US"]);
+  });
+
+  it("keeps every seat play inside its seat's action bank", () => {
+    // THE REASON BANKING EXISTS. Four authored plays cost more AP than their
+    // seat earns in a turn, Moscow's only garrison lever among them. Without a
+    // bank they are unplayable; with one they must still fit inside it, or the
+    // catalogue ships a button nobody can ever press.
+    for (const seat of SETTLEMENT_SEATS) {
+      const bank = seatActionBankCap(seat.actionsPerTurn);
+      for (const play of playsForSeat(seat.id)) {
+        expect(play.actionCost, `${seat.id}/${play.id}`).toBeLessThanOrEqual(bank);
+      }
+    }
+  });
+
+  it("keeps every personal play inside a single character's turn", () => {
+    // Characters have no bank — their AP is the ordinary per-turn pool.
+    for (const play of playsForSeat(null)) {
+      expect(play.actionCost, play.id).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it("banks enough turns for the most expensive play on the slowest seat", () => {
+    const slowest = Math.min(...SETTLEMENT_SEATS.map((s) => s.actionsPerTurn));
+    const dearest = Math.max(...SETTLEMENT_PLAYS.map((p) => p.actionCost));
+    expect(SEAT_ACTION_BANK_TURNS * slowest).toBeGreaterThanOrEqual(dearest);
+  });
+
+  it("gives both blocs a lever on every institution", () => {
+    // The structural check the balance pass turned up: the index is a weighted
+    // mean, so an institution one bloc can never touch is a permanent ceiling
+    // on how far that bloc can move the whole board. Moscow's garrison play
+    // being unaffordable put reunification out of reach entirely.
+    const EAST = new Set(["DD", "RU"]);
+    for (const institution of SETTLEMENT_INSTITUTIONS) {
+      const reach = new Set(
+        SETTLEMENT_PLAYS.filter(
+          (p) => p.seat !== null && (p.target === institution.id || p.target === null)
+        ).map((p) => (EAST.has(p.seat as string) ? "east" : "west"))
+      );
+      expect([...reach].sort(), institution.id).toEqual(["east", "west"]);
+    }
   });
 });

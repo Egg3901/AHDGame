@@ -25,10 +25,13 @@ import {
   PERSONAL_NET_CAP,
   PERSONAL_MULTIPLIER_PCT,
   SETTLEMENT_SEATS,
+  driftBandLabel,
   getInstitution,
   getPlay,
   playsForSeat,
+  settlementRulesFor,
   type SettlementPlayDef,
+  type SettlementRules,
 } from "@/lib/constants/settlementCrisis";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
@@ -105,8 +108,12 @@ export interface DossierSeatView {
   capital: number;
   capitalLabel: string;
   treasuryLabel: string;
+  /** Banked and spendable now. May exceed `actionsPerTurn`. */
   actionsRemaining: number;
+  /** Granted each tick. */
   actionsPerTurn: number;
+  /** The bank's ceiling - what "full" means on the AP readout. */
+  actionsBankCap: number;
   canAct: boolean;
   blockedReason: string | null;
   canEscalate: boolean;
@@ -131,9 +138,19 @@ export interface DossierView {
   drift: { last: number; history: number[]; revealed: boolean; band: string | null };
   institutions: DossierInstitutionView[];
   benches: { west: DossierBenchView[]; east: DossierBenchView[] };
-  openFloor: { characters: number; netPoints: number; capped: boolean };
+  openFloor: {
+    characters: number;
+    /** Net points the personal tier actually bought, after the cap. */
+    netPoints: number;
+    /** What it asked for, before the cap. Equal to `netPoints` when uncapped. */
+    rawPoints: number;
+    capPoints: number;
+    capped: boolean;
+  };
   settlementPlays: DossierPlayView[];
   wire: DossierWireLine[];
+  /** The admin rule switches, so the board can render what is switched off. */
+  rules: SettlementRules;
   viewer: { seat: DossierSeatView | null; personalActions: number };
 }
 
@@ -258,17 +275,41 @@ export async function loadGermanQuestionDossier(
     .findOne({ _id: "current" }, { projection: { currentTurn: 1, nextScheduledTurn: 1 } });
   const turn = gameState?.currentTurn ?? 0;
 
+  const rules = settlementRulesFor(crisis);
+
   // ── this turn's plays, for the open floor and the wire ────────────────────
+  //
+  // Projected rather than read whole: the personal tier is one row per
+  // character who acted, so this is the one query on the board whose size grows
+  // with the player count. The `{ crisisId, turn }` index makes it a scan of
+  // exactly this turn's rows.
   const playsCol = await getSettlementPlaysCollection(db);
   const thisTurn = (await playsCol
-    .find({ crisisId: crisis._id, turn })
+    .find(
+      { crisisId: crisis._id, turn },
+      {
+        projection: {
+          actor: 1,
+          seatId: 1,
+          playId: 1,
+          characterId: 1,
+          targetInstitutionId: 1,
+          basePoints: 1,
+          direction: 1,
+          appliedPoints: 1,
+          turn: 1,
+        },
+      }
+    )
     .toArray()) as SettlementPlayDoc[];
 
   const personal = thisTurn.filter((p) => p.actor === "personal");
   const personalRawByInstitution = new Map<string, number>();
+  let personalRawTotal = 0;
   for (const p of personal) {
     if (!p.targetInstitutionId) continue;
     const raw = Math.round((p.basePoints * PERSONAL_MULTIPLIER_PCT) / 100) * p.direction;
+    personalRawTotal += raw;
     personalRawByInstitution.set(
       p.targetInstitutionId,
       (personalRawByInstitution.get(p.targetInstitutionId) ?? 0) + raw
@@ -277,6 +318,8 @@ export async function loadGermanQuestionDossier(
   const openFloor = {
     characters: new Set(personal.map((p) => String(p.characterId))).size,
     netPoints: pts(personal.reduce((sum, p) => sum + (p.appliedPoints ?? 0), 0)),
+    rawPoints: pts(personalRawTotal),
+    capPoints: pts(PERSONAL_NET_CAP),
     capped: [...personalRawByInstitution.values()].some((v) => Math.abs(v) > PERSONAL_NET_CAP),
   };
 
@@ -420,8 +463,16 @@ export async function loadGermanQuestionDossier(
   };
 
   // ── wire ──────────────────────────────────────────────────────────────────
+  // A CLOSED log carries only what has already happened. Pending commitments
+  // are withheld from everyone including the delegation that made them, because
+  // a line only this viewer can see is a line they can screenshot — the rule is
+  // "nobody reads the board before the tick", not "everybody but you".
+  const logged = rules.openLog ? thisTurn : thisTurn.filter((p) => p.appliedPoints !== null);
   const wire: DossierWireLine[] = [];
-  for (const p of [...thisTurn].reverse()) {
+  // Seat plays are named individually; the personal tier is one aggregate line
+  // below. Listing every character's op-ed would push the four delegations off
+  // an eight-line wire on any turn the public turned out.
+  for (const p of [...logged].reverse().filter((p) => p.actor !== "personal")) {
     const def = getPlay(p.playId);
     const applied = p.appliedPoints;
     const toward = (applied ?? p.direction * p.basePoints) >= 0 ? "reunification" : "NATO";
@@ -439,13 +490,35 @@ export async function loadGermanQuestionDossier(
           : `plays “${def?.name ?? p.playId}”. ${p.targetInstitutionId ? "Institution" : "Settlement"} moves ${signed(pts(applied))} toward ${toward}.`,
     });
   }
+  // The cap must never be silent (design §4): whenever the public moved, the
+  // wire says what it asked for AND what it bought, so a throttled turnout is
+  // visible as a throttle rather than as a disappointing result.
+  const loggedPersonal = logged.filter((p) => p.actor === "personal");
+  if (loggedPersonal.length > 0) {
+    const applied = pts(loggedPersonal.reduce((sum, p) => sum + (p.appliedPoints ?? 0), 0));
+    const pending = loggedPersonal.every((p) => p.appliedPoints == null);
+    wire.unshift({
+      at: `T-${turn}`,
+      who: "OPEN FLOOR",
+      bloc: "open",
+      text: pending
+        ? `${openFloor.characters} characters have moved. Resolves on the next tick.`
+        : `${openFloor.characters} characters moved ${signed(openFloor.rawPoints)}; ${signed(applied)} applied` +
+          (openFloor.capped
+            ? `, capped at ±${openFloor.capPoints.toFixed(1)} per institution.`
+            : `, under the ±${openFloor.capPoints.toFixed(1)} cap.`),
+    });
+  }
+
   const lastDrift = crisis.driftHistory[0];
   if (lastDrift !== undefined) {
     wire.unshift({
       at: `T-${turn}`,
       who: "BONN",
       bloc: "bonn",
-      text: `drifts ${signed(pts(lastDrift))} on its own. Band was not disclosed before the tick.`,
+      text: rules.driftRevealed
+        ? `drifts ${signed(pts(lastDrift))} on its own. Band disclosed: ${driftBandLabel()}.`
+        : `drifts ${signed(pts(lastDrift))} on its own. Band was not disclosed before the tick.`,
     });
   }
 
@@ -476,14 +549,15 @@ export async function loadGermanQuestionDossier(
     drift: {
       last: pts(crisis.driftHistory[0] ?? 0),
       history: crisis.driftHistory.map(pts),
-      revealed: false,
-      band: null,
+      revealed: rules.driftRevealed,
+      band: rules.driftRevealed ? driftBandLabel() : null,
     },
     institutions,
     benches,
     openFloor,
     settlementPlays: buildPlays(null),
     wire: wire.slice(0, 8),
+    rules,
     viewer: {
       seat:
         seat && seatDef && budget
@@ -500,14 +574,23 @@ export async function loadGermanQuestionDossier(
               ),
               actionsRemaining: budget.actionsRemaining,
               actionsPerTurn: budget.actionsPerTurn,
+              actionsBankCap: budget.actionsBankCap,
               canAct: seat.canAct,
               blockedReason: seat.blockedReason,
-              canEscalate: seatDef.authority,
+              canEscalate: seatDef.authority && rules.escalationEnabled,
               canArmNow:
                 seatDef.authority &&
+                rules.escalationEnabled &&
                 seat.direction !== null &&
                 crisis.ladder.heat === MAX_COERCIVE_RUNG,
-              escalateGate: seatDef.authority ? null : escalateGateFor(seat.id),
+              // The switched-off reason outranks the no-authority one: a
+              // Washington seat told "you have no authority" when the real
+              // answer is "nobody does right now" would be a lie.
+              escalateGate: !rules.escalationEnabled
+                ? "The escalation ladder is switched off for this question. Coercive plays still land; they simply leave no heat."
+                : seatDef.authority
+                  ? null
+                  : escalateGateFor(seat.id),
             }
           : null,
       personalActions: ctx.personal.actionsRemaining,

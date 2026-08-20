@@ -652,6 +652,8 @@ export interface TurnLog {
       position: number;
       /** Seat countries charged a mobilisation levy for standing at rung 5. */
       countriesLevied: number;
+      /** 1 on the tick that opened the question. */
+      crisesOpened: number;
     } | null;
 
     /** Phase 3 — passive Org→Reg drift + Reg decay phase. */

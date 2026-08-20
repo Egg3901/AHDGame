@@ -126,4 +126,32 @@ describe("armSettlementLadder", () => {
       heat: 5,
     });
   });
+  it("refuses while the escalation ladder is switched off", async () => {
+    prime(db, "settlementCrises").findOne.mockResolvedValue({
+      _id: CRISIS_ID,
+      rules: { openLog: true, driftRevealed: false, escalationEnabled: false },
+    });
+    const { armSettlementLadder } = await import("./armLadder");
+    const res = await armSettlementLadder(db as unknown as Db, characterId);
+    expect(res).toMatchObject({ ok: false, status: 403 });
+    expect(prime(db, "settlementCrises").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("restates the switch as a filter clause, tolerating a missing field", async () => {
+    // `$ne: false`, never `true`: a crisis written before the rules block has
+    // no field at all, and the authored default is on.
+    const { armSettlementLadder } = await import("./armLadder");
+    await armSettlementLadder(db as unknown as Db, characterId);
+    const [filter] = prime(db, "settlementCrises").updateOne.mock.calls[0];
+    expect(filter["rules.escalationEnabled"]).toEqual({ $ne: false });
+  });
+
+  it("arms a crisis written before the rules block existed", async () => {
+    prime(db, "settlementCrises").findOne.mockResolvedValue({ _id: CRISIS_ID });
+    const { armSettlementLadder } = await import("./armLadder");
+    expect(await armSettlementLadder(db as unknown as Db, characterId)).toEqual({
+      ok: true,
+      heat: 5,
+    });
+  });
 });

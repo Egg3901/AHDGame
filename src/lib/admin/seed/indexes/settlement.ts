@@ -17,10 +17,20 @@ import { ensureIndex } from "./helpers";
  *     field order: equality on `crisisId` first, then the `null` match on
  *     `resolvedTurn`. Also serves the per-crisis audit read a player's "what did
  *     my money buy" view will need.
+ *   - `settlementPlays { crisisId, turn }` — the dossier's read of this turn's
+ *     plays, which runs on every page view and every commit. The drain index
+ *     above cannot serve it: `resolvedTurn` is the second field there, and this
+ *     query filters on `turn`.
  *   - `settlementCrises { status }` — the open-crisis lookup. The collection
  *     holds a handful of documents at most, so this buys little today; it costs
  *     nothing and keeps the lookup honest if settlement crises ever run several
  *     at once, which the generic model deliberately allows for.
+ *   - `settlementCrises { kind }` UNIQUE, partial on `status: "open"` — the
+ *     guard that makes opening a crisis safe. Two overlapping turn runs both
+ *     see "no open crisis" and both insert; without this the world ends up with
+ *     two live German Questions and the phase ticks whichever it reads first.
+ *     Partial so the resolved history is unconstrained — the question is
+ *     designed to be asked again.
  */
 export async function seedSettlementIndexes(db: Db, log: (msg: string) => void) {
   log("Settlement crisis indexes:");
@@ -35,9 +45,29 @@ export async function seedSettlementIndexes(db: Db, log: (msg: string) => void) 
 
   await ensureIndex(
     db,
+    "settlementPlays",
+    { crisisId: 1, turn: 1 },
+    { name: "settlementPlays_crisis_turn" },
+    log
+  );
+
+  await ensureIndex(
+    db,
     "settlementCrises",
     { status: 1 },
     { name: "settlementCrises_status" },
+    log
+  );
+
+  await ensureIndex(
+    db,
+    "settlementCrises",
+    { kind: 1 },
+    {
+      name: "settlementCrises_open_unique",
+      unique: true,
+      partialFilterExpression: { status: "open" },
+    },
     log
   );
 

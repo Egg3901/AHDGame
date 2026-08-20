@@ -8,13 +8,18 @@
 import type { SettlementSeatState } from "@/lib/db/types/settlementCrisis";
 import {
   getSeat,
+  seatActionBankCap,
   type SettlementPlayDef,
   type SettlementSeatKey,
 } from "@/lib/constants/settlementCrisis";
 
 export interface SeatBudget {
+  /** Granted per tick, and the rate the bank fills at. */
   actionsPerTurn: number;
+  /** Banked and spendable right now. May exceed `actionsPerTurn`. */
   actionsRemaining: number;
+  /** The most this seat can ever hold. */
+  actionsBankCap: number;
   capital: number;
 }
 
@@ -30,12 +35,20 @@ export interface Affordability {
   reason?: AffordabilityReason;
 }
 
-/** What a seat has left this turn. */
+/**
+ * What a seat can spend right now.
+ *
+ * `actions` is a BANK, so this is not "grant minus spent this turn" — a seat
+ * that saved last turn holds more than its per-turn grant. A document written
+ * before banking existed has no field; it reads as an empty bank rather than a
+ * full one, and the next tick's accrual fills it.
+ */
 export function seatBudgetFor(state: SettlementSeatState, seatId: SettlementSeatKey): SeatBudget {
   const actionsPerTurn = getSeat(seatId)?.actionsPerTurn ?? 0;
   return {
     actionsPerTurn,
-    actionsRemaining: Math.max(0, actionsPerTurn - state.actionsUsedTurn),
+    actionsRemaining: Math.max(0, state.actions ?? 0),
+    actionsBankCap: seatActionBankCap(actionsPerTurn),
     capital: state.capital,
   };
 }

@@ -28,7 +28,7 @@ function crisisDoc() {
     seats: SETTLEMENT_SEATS.map((s) => ({
       id: s.id,
       capital: 30,
-      actionsUsedTurn: 0,
+      actions: 3,
       lastActedTurn: null,
       committedPoints: 0,
     })),
@@ -90,6 +90,7 @@ describe("loadSettlementActorContext", () => {
     expect(ctx?.seat?.budget).toEqual({
       actionsPerTurn: 3,
       actionsRemaining: 3,
+      actionsBankCap: 9,
       capital: 30,
     });
     // The switcher's whole premise: both budgets, independently.
@@ -119,7 +120,7 @@ describe("loadSettlementActorContext", () => {
 
   it("blocks a seat that has spent its action allowance", async () => {
     const spent = crisisDoc();
-    spent.seats = spent.seats.map((s) => (s.id === "US" ? { ...s, actionsUsedTurn: 1 } : s));
+    spent.seats = spent.seats.map((s) => (s.id === "US" ? { ...s, actions: 0 } : s));
     prime(db, "settlementCrises").findOne.mockResolvedValue(spent);
     const { resolveSettlementSeat } = await import("./seatResolution");
     vi.mocked(resolveSettlementSeat).mockResolvedValue({
@@ -136,7 +137,7 @@ describe("loadSettlementActorContext", () => {
 
   it("reports no-direction ahead of an exhausted allowance", async () => {
     const spent = crisisDoc();
-    spent.seats = spent.seats.map((s) => (s.id === "UK" ? { ...s, actionsUsedTurn: 5 } : s));
+    spent.seats = spent.seats.map((s) => (s.id === "UK" ? { ...s, actions: 0 } : s));
     prime(db, "settlementCrises").findOne.mockResolvedValue(spent);
     const { resolveSettlementSeat } = await import("./seatResolution");
     vi.mocked(resolveSettlementSeat).mockResolvedValue({
@@ -184,6 +185,7 @@ describe("loadSettlementActorContext", () => {
     expect(ctx?.seat?.budget).toEqual({
       actionsPerTurn: 0,
       actionsRemaining: 0,
+      actionsBankCap: 0,
       capital: 0,
     });
     expect(ctx?.seat?.canAct).toBe(false);

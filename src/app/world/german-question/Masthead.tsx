@@ -151,8 +151,8 @@ export function Masthead({ view }: { view: DossierView }) {
                   </span>
                   <span>{seat.treasuryLabel} treasury</span>
                   <span className="text-gold">
-                    {seat.actionsRemaining} / {seat.actionsPerTurn} actions · {seat.multiplier} seat
-                    multiplier
+                    {seat.actionsRemaining} / {seat.actionsBankCap} AP banked (+
+                    {seat.actionsPerTurn}/turn) · {seat.multiplier} seat multiplier
                   </span>
                 </>
               ) : (

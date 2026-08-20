@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { SettlementRules } from "@/lib/constants/settlementCrisis";
 
 /**
  * A settlement crisis: a standing contest over one nation's constitutional
@@ -31,8 +32,18 @@ export interface SettlementSeatState {
   id: SettlementSeatId;
   /** Banked capital, whole points, 0..SEAT_CAPITAL_CAP. */
   capital: number;
-  /** Seat action points spent this turn; reset by the turn phase. */
-  actionsUsedTurn: number;
+  /**
+   * BANKED action points, ready to spend.
+   *
+   * A pool, not a per-turn allowance, and shaped exactly like `capital`: the
+   * tick adds `actionsPerTurn` and clamps at a ceiling. Four of the authored
+   * seat plays cost more AP than their seat earns in a turn — Moscow's only
+   * lever on the garrison is one of them — so without banking they are
+   * unplayable and 60% of the board's weight has no Eastern lever at all. The
+   * source design says as much: "a secondary seat must bank AP across turns to
+   * afford a 2 AP play".
+   */
+  actions: number;
   lastActedTurn: number | null;
   /** Cumulative |appliedPoints| in hundredths — the delegation bench figure. */
   committedPoints: number;
@@ -54,6 +65,14 @@ export interface SettlementCrisisDoc {
   institutions: SettlementInstitutionState[];
   seats: SettlementSeatState[];
   ladder: { heat: number; armedTurn: number | null };
+  /**
+   * The three admin rule switches from the source design.
+   *
+   * Optional, and read through `settlementRulesFor` rather than directly: a
+   * crisis inserted before this field existed must keep the authored defaults
+   * rather than reading three `undefined`s as "off".
+   */
+  rules?: SettlementRules;
   /** Weighted drift applied per tick, newest first, capped at 6 entries. */
   driftHistory: number[];
   /**

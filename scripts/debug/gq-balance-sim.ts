@@ -29,6 +29,7 @@ import {
   SETTLEMENT_PLAYS,
   TOTAL_INSTITUTION_WEIGHT,
   getSeat,
+  seatActionBankCap,
   type SettlementPlayDef,
   type SettlementSeatKey,
 } from "../../src/lib/constants/settlementCrisis";
@@ -79,8 +80,6 @@ interface Scenario {
   personalCount?: number;
   /** Share of those pushing East, 0..1. */
   personalEastShare?: number;
-  /** Carry unspent AP forward, so 2-3 AP plays become reachable. */
-  apBanking?: boolean;
   /** What-if: override a seat's AP budget to test a proposed rebalance. */
   apOverride?: Partial<Record<SettlementSeatKey, number>>;
   /** What-if: reprice play magnitudes (playId → hundredths). */
@@ -144,12 +143,13 @@ function planSeatTurn(
   seat: SeatRuntime,
   prefersCoercive: boolean,
   institutions: readonly SettlementInstitutionState[],
-  apBanking: boolean,
   apPerTurn: number,
   catalogue: SettlementPlayDef[]
 ): { plays: SettlementPlayDef[]; apLeft: number } {
   const def = getSeat(seat.id)!;
-  let ap = apPerTurn + (apBanking ? seat.bankedAp : 0);
+  // AP is a BANK, exactly as the shipped `accrue` treats it: this turn's grant
+  // on top of whatever went unspent.
+  let ap = apPerTurn + seat.bankedAp;
   let capital = seat.capital;
   const chosen: SettlementPlayDef[] = [];
   const direction = directionOf(seat.id);
@@ -274,7 +274,6 @@ function run(scenario: Scenario): Result {
         seat,
         coercive.has(key),
         institutions,
-        scenario.apBanking === true,
         apPerTurn,
         repricedCatalogue(key, scenario.magnitudeOverride)
       );
@@ -285,9 +284,8 @@ function run(scenario: Scenario): Result {
         seat.playCount++;
         seat.playsUsed.add(def.id);
       }
-      // Bank whatever went unspent, so the 2-3 AP plays become reachable next
-      // turn. Capped at three turns' worth to stop indefinite hoarding.
-      seat.bankedAp = scenario.apBanking ? Math.min(apLeft, apPerTurn * 3) : 0;
+      // Bank whatever went unspent, under the shipped ceiling.
+      seat.bankedAp = Math.min(apLeft, seatActionBankCap(apPerTurn));
     }
 
     const headcount = scenario.personalCount ?? 0;
@@ -385,24 +383,25 @@ const SCENARIOS: Scenario[] = [
     active: ["US", "UK"],
   },
   {
-    name: "4. The street rises",
+    // The symmetry check against scenario 3, and the one that decides whether
+    // the crisis has two endings or one. If an uncontested East cannot carry
+    // while an uncontested West can lock, the question is not a contest.
+    name: "4. Eastern coalition unopposed",
+    blurb: "GDR + Moscow push for reunification; neither Western seat contests it.",
+    active: ["DD", "RU"],
+  },
+  {
+    name: "5. The street rises",
     blurb: "1,204 characters, 70% pushing East. All four seats play.",
     active: ["US", "UK", "RU", "DD"],
     personalCount: 1204,
     personalEastShare: 0.7,
   },
   {
-    name: "5. Escalation spiral",
+    name: "6. Escalation spiral",
     blurb: "Both blocs lean on coercive plays. All four seats, no public.",
     active: ["US", "UK", "RU", "DD"],
     coercive: ["US", "RU", "DD"],
-  },
-  {
-    name: "6. Same, with AP banking",
-    blurb: "Scenario 5 with unspent AP carried forward — the open question #1 comparison.",
-    active: ["US", "UK", "RU", "DD"],
-    coercive: ["US", "RU", "DD"],
-    apBanking: true,
   },
   {
     name: "7. WHAT-IF: secondaries at 2 AP",

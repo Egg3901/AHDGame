@@ -11,7 +11,12 @@
  */
 import { ObjectId, type Db } from "mongodb";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
-import { LADDER_RUNGS, MAX_COERCIVE_RUNG, getSeat } from "@/lib/constants/settlementCrisis";
+import {
+  LADDER_RUNGS,
+  MAX_COERCIVE_RUNG,
+  getSeat,
+  settlementRulesFor,
+} from "@/lib/constants/settlementCrisis";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { loadSettlementActorContext } from "../actorContext";
 
@@ -40,6 +45,13 @@ export async function armSettlementLadder(db: Db, characterId: ObjectId): Promis
   const crises = await getSettlementCrisesCollection(db);
   const crisisId = new ObjectId(ctx.crisisId);
 
+  // Read the rules for the error message; the write below re-states the switch
+  // as a filter clause so an admin flipping it mid-request still wins.
+  const doc = await crises.findOne({ _id: crisisId }, { projection: { rules: 1 } });
+  if (!settlementRulesFor(doc ?? {}).escalationEnabled) {
+    return fail(403, "The escalation ladder is switched off for this question.");
+  }
+
   // Guarded: the filter restates BOTH preconditions — the crisis is still open
   // and the ladder is still exactly at the coercive cap. Two authority seats
   // pressing at once means the second matches nothing rather than double-arming,
@@ -49,6 +61,9 @@ export async function armSettlementLadder(db: Db, characterId: ObjectId): Promis
       _id: crisisId,
       status: "open",
       "ladder.heat": MAX_COERCIVE_RUNG,
+      // `$ne: false` and not `true`: a crisis written before the rules block
+      // existed has no field, and the authored default is on.
+      "rules.escalationEnabled": { $ne: false },
     },
     {
       $set: {

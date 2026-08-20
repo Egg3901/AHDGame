@@ -72,7 +72,7 @@ export async function loadSettlementActorContext(
   const state = crisis.seats.find((s) => s.id === claim.seatId);
   const budget = state
     ? seatBudgetFor(state, claim.seatId)
-    : { actionsPerTurn: 0, actionsRemaining: 0, capital: 0 };
+    : { actionsPerTurn: 0, actionsRemaining: 0, actionsBankCap: 0, capital: 0 };
 
   const direction = await resolveSeatDirection(db, claim.seatId);
 

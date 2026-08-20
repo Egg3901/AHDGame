@@ -6,28 +6,44 @@ import { canCharacterAfford, canSeatAfford, seatBudgetFor } from "./affordabilit
 const ddState: SettlementSeatState = {
   id: "DD",
   capital: 20,
-  actionsUsedTurn: 0,
+  actions: 3,
   lastActedTurn: null,
   committedPoints: 0,
 };
 
 describe("seatBudgetFor", () => {
-  it("reports the configured allowance minus what this turn already spent", () => {
-    expect(seatBudgetFor({ ...ddState, actionsUsedTurn: 2 }, "DD")).toEqual({
+  it("reports the BANK, not a per-turn allowance", () => {
+    expect(seatBudgetFor({ ...ddState, actions: 1 }, "DD")).toEqual({
       actionsPerTurn: 3,
       actionsRemaining: 1,
+      actionsBankCap: 9,
       capital: 20,
     });
   });
 
+  it("lets a saved bank exceed the per-turn grant", () => {
+    // The whole point of banking: a secondary saves for a play it cannot
+    // afford out of one turn's income.
+    const saved = seatBudgetFor({ ...ddState, id: "RU", actions: 2 }, "RU");
+    expect(saved.actionsPerTurn).toBe(1);
+    expect(saved.actionsRemaining).toBe(2);
+  });
+
   it("never reports negative remaining actions", () => {
-    expect(seatBudgetFor({ ...ddState, actionsUsedTurn: 9 }, "DD").actionsRemaining).toBe(0);
+    expect(seatBudgetFor({ ...ddState, actions: -4 }, "DD").actionsRemaining).toBe(0);
+  });
+
+  it("reads an empty bank for a document written before banking existed", () => {
+    const legacy = { ...ddState } as Partial<SettlementSeatState>;
+    delete legacy.actions;
+    expect(seatBudgetFor(legacy as SettlementSeatState, "DD").actionsRemaining).toBe(0);
   });
 
   it("reports a zero allowance for an unknown seat rather than guessing one", () => {
     expect(seatBudgetFor({ ...ddState, id: "ZZ" as never }, "ZZ" as never)).toEqual({
       actionsPerTurn: 0,
-      actionsRemaining: 0,
+      actionsRemaining: 3,
+      actionsBankCap: 0,
       capital: 20,
     });
   });
@@ -42,7 +58,7 @@ describe("canSeatAfford", () => {
   });
 
   it("refuses a play the seat cannot action", () => {
-    const spent = seatBudgetFor({ ...ddState, actionsUsedTurn: 3 }, "DD");
+    const spent = seatBudgetFor({ ...ddState, actions: 0 }, "DD");
     expect(canSeatAfford(getPlay("aid")!, spent, 1e12)).toEqual({
       ok: false,
       reason: "actions",
@@ -65,13 +81,13 @@ describe("canSeatAfford", () => {
   });
 
   it("allows a play costing exactly what is left", () => {
-    const exact = seatBudgetFor({ ...ddState, capital: 22, actionsUsedTurn: 0 }, "DD");
+    const exact = seatBudgetFor({ ...ddState, capital: 22, actions: 3 }, "DD");
     expect(canSeatAfford(getPlay("referendum")!, exact, 30_000_000)).toEqual({ ok: true });
   });
 
   it("reports the action shortfall before the capital one", () => {
     // Deterministic ordering matters: the UI shows one reason, not a set.
-    const broke = seatBudgetFor({ ...ddState, capital: 0, actionsUsedTurn: 3 }, "DD");
+    const broke = seatBudgetFor({ ...ddState, capital: 0, actions: 0 }, "DD");
     expect(canSeatAfford(getPlay("referendum")!, broke, 0).reason).toBe("actions");
   });
 

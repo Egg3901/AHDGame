@@ -43,7 +43,7 @@ export function SeatSwitcher({ view, mode, onModeChange }: SeatSwitcherProps) {
           >
             <span className="text-body-sm font-semibold">{seat.name}</span>
             <span className="font-mono text-body-xs tracking-wider">
-              {seat.tier} · {seat.multiplier} · {seat.actionsRemaining}/{seat.actionsPerTurn} AP
+              {seat.tier} · {seat.multiplier} · {seat.actionsRemaining}/{seat.actionsBankCap} AP
             </span>
           </button>
 

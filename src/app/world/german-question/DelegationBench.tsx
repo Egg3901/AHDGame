@@ -76,7 +76,10 @@ export function OpenFloorPanel({ openFloor }: { openFloor: DossierView["openFloo
       </p>
       {openFloor.capped && (
         <p className="mt-2 font-mono text-body-xs leading-relaxed text-warning">
-          The public&apos;s net effect hit its per-institution cap this turn and was scaled down.
+          The floor asked for {openFloor.rawPoints >= 0 ? "+" : ""}
+          {openFloor.rawPoints.toFixed(1)} and was scaled to {openFloor.netPoints >= 0 ? "+" : ""}
+          {openFloor.netPoints.toFixed(1)}: the personal tier is capped at ±
+          {openFloor.capPoints.toFixed(1)} per institution per turn.
         </p>
       )}
     </section>

@@ -127,14 +127,14 @@ export async function commitSettlementPlay(
           $elemMatch: {
             id: seat.id,
             capital: { $gte: play.capitalCost },
-            actionsUsedTurn: { $lte: seat.budget.actionsPerTurn - play.actionCost },
+            actions: { $gte: play.actionCost },
           },
         },
       },
       {
         $inc: {
           "seats.$.capital": -play.capitalCost,
-          "seats.$.actionsUsedTurn": play.actionCost,
+          "seats.$.actions": -play.actionCost,
         },
         $set: { updatedAt: now },
       }

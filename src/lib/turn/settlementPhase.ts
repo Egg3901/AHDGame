@@ -25,6 +25,8 @@ import {
   SEAT_CAPITAL_CAP,
   getPlay,
   getSeat,
+  seatActionBankCap,
+  settlementRulesFor,
 } from "@/lib/constants/settlementCrisis";
 import { applyToInstitution, recomputePosition } from "@/lib/settlement/position";
 import { driftSeedFor, rollInstitutionDrift, weightedDrift } from "@/lib/settlement/drift";
@@ -34,6 +36,8 @@ import { isSettlementCrisisEnabled } from "@/lib/settlement/featureFlag";
 import { levyMobilisation } from "@/lib/settlement/mobilisation";
 import { settleFrozenCrisisFromConflict } from "@/lib/settlement/settleFromConflict";
 import { actuateSettlementOutcome } from "@/lib/settlement/actuate";
+import { openSettlementCrisisIfDue } from "@/lib/settlement/openCrisis";
+import { resolveGameYear } from "@/lib/era/era";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
 import type { GameState } from "@/lib/db/types";
 
@@ -45,6 +49,8 @@ export interface SettlementTurnResult {
   position: number;
   /** Seat countries charged a mobilisation levy this tick. */
   countriesLevied: number;
+  /** 1 on the tick that opened the question. */
+  crisesOpened: number;
 }
 
 /**
@@ -60,15 +66,26 @@ const idle = (): SettlementTurnResult => ({
   heat: 0,
   position: 0,
   countriesLevied: 0,
+  crisesOpened: 0,
 });
 
 export async function processSettlementTurn(
   db: Db,
   currentTurn: number
 ): Promise<SettlementTurnResult> {
-  const gameState = await db
-    .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { settlementCrisisEnabled: 1 } });
+  const gameState = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      projection: {
+        settlementCrisisEnabled: 1,
+        // For the era gate on opening. `resolveGameYear` prefers the maintained
+        // `currentYear` and derives from turn + startingYear on legacy rows.
+        currentYear: 1,
+        currentTurn: 1,
+        startingYear: 1,
+      },
+    }
+  );
   if (!(await isSettlementCrisisEnabled(gameState ?? {}))) return idle();
 
   const crises = await getSettlementCrisesCollection(db);
@@ -95,9 +112,21 @@ export async function processSettlementTurn(
   }
 
   const crisis = await crises.findOne({ status: "open" } as Filter<SettlementCrisisDoc>);
+  // Nothing live. This is the only place the question is ever opened — it is
+  // checked every tick rather than seeded at reset, so switching the gate on in
+  // a running 1953 world is enough. Opening does not also tick: the board opens
+  // at its authored figures and the first drift lands next turn, so a player
+  // who logs in the moment it opens sees the board it was designed as.
+  if (!crisis) {
+    const opened = await openSettlementCrisisIfDue(db, {
+      turn: currentTurn,
+      year: resolveGameYear(gameState ?? {}),
+    });
+    return { ...idle(), crisesOpened: opened.opened ? 1 : 0 };
+  }
   // `frozen` and `resolved` are both excluded by the query; the explicit guard
   // keeps this correct if the query is ever widened.
-  if (!crisis || crisis.status !== "open") return idle();
+  if (crisis.status !== "open") return idle();
 
   // A crisis with no institutions has no index to derive. Bail rather than
   // continue: `recomputePosition([])` is 0, which is below the lock threshold,
@@ -179,7 +208,14 @@ export async function processSettlementTurn(
   });
 
   const position = recomputePosition(institutions);
-  const heat = nextHeat({ current: crisis.ladder.heat, added: batch.heatAdded });
+  // With the ladder switched off, heat is not merely frozen — it is driven back
+  // to zero. A crisis that had climbed to rung 4 before an admin disabled
+  // escalation would otherwise sit permanently at DEFCON 2, one flag-flip away
+  // from a war nobody can now arm or stand down.
+  const rules = settlementRulesFor(crisis);
+  const heat = rules.escalationEnabled
+    ? nextHeat({ current: crisis.ladder.heat, added: batch.heatAdded })
+    : 0;
   const outcome = outcomeFor(position);
 
   // Charged on the heat the crisis is at AFTER this tick's decay, so a bloc that
@@ -221,6 +257,7 @@ export async function processSettlementTurn(
     heat,
     position,
     countriesLevied: mobilisation.countriesLevied,
+    crisesOpened: 0,
   };
 }
 
@@ -237,7 +274,7 @@ function lastPlayFor(
   return { seatId: latest.seatId, label: def?.name ?? latest.playId, turn };
 }
 
-/** This turn's capital accrual, action reset and committed-points credit. */
+/** This turn's capital and action accrual, plus the committed-points credit. */
 function accrue(
   seat: SettlementSeatState,
   claimed: readonly SettlementPlayDoc[],
@@ -246,6 +283,7 @@ function accrue(
 ): SettlementSeatState {
   const def = getSeat(seat.id);
   const perTurn = def?.capitalPerTurn ?? 0;
+  const apPerTurn = def?.actionsPerTurn ?? 0;
 
   const ids = new Set(claimed.filter((p) => p.seatId === seat.id).map((p) => String(p._id)));
   const credited = batch.stamped
@@ -255,7 +293,11 @@ function accrue(
   return {
     ...seat,
     capital: Math.min(SEAT_CAPITAL_CAP, seat.capital + perTurn),
-    actionsUsedTurn: 0,
+    // ACCRUE, do not reset. Unspent AP banks up to a ceiling so a secondary can
+    // save for a play that costs more than one turn's grant — without this the
+    // four 2 AP plays are unreachable and Moscow has no lever on the garrison
+    // at all.
+    actions: Math.min(seatActionBankCap(apPerTurn), (seat.actions ?? 0) + apPerTurn),
     lastActedTurn: ids.size > 0 ? turn : seat.lastActedTurn,
     committedPoints: seat.committedPoints + credited,
   };

@@ -36,13 +36,21 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
 
   const arm = () => post("escalate", "The ladder could not be forced.");
   const declare = () => post("declare", "The declaration could not be sent.");
+  // Switched off by an admin: the rungs still render, greyed, so the shape of
+  // the thing that is unavailable stays legible. A hidden ladder would read as
+  // a page that forgot to load.
+  const off = !view.rules.escalationEnabled;
   return (
-    <section className="rounded-xl border border-warning/40 bg-warning/[0.05] p-4">
+    <section
+      className={`rounded-xl border p-4 ${
+        off ? "border-card-border bg-card-muted/40" : "border-warning/40 bg-warning/[0.05]"
+      }`}
+    >
       <h2 className="mb-3 font-mono text-body-xs font-bold tracking-wider text-gold-muted">
-        ESCALATION LADDER · DEFCON {view.defcon}
+        ESCALATION LADDER · {off ? "STOOD DOWN" : `DEFCON ${view.defcon}`}
       </h2>
 
-      <ol className="flex flex-col">
+      <ol className={`flex flex-col ${off ? "opacity-50" : ""}`}>
         {[...view.ladder].reverse().map((rung) => (
           <li key={rung.num} className="flex items-center gap-2.5 py-1.5">
             <span
@@ -89,7 +97,12 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
         </p>
       )}
 
-      {seat?.canEscalate ? (
+      {off ? (
+        <p className="mt-3 rounded-md border border-dashed border-card-border p-3 font-mono text-body-xs leading-relaxed text-muted">
+          LADDER STOOD DOWN —{" "}
+          {seat?.escalateGate ?? "escalation is switched off for this question."}
+        </p>
+      ) : seat?.canEscalate ? (
         view.armed ? (
           // The SECOND press. Deliberately a separate control with its own copy
           // rather than the same button relabelled: arming can be walked back by
@@ -131,8 +144,9 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
       )}
 
       <p className="mt-2.5 font-mono text-body-xs leading-relaxed text-gold-muted">
-        At rung 5 the influence contest closes and a NATO–Warsaw Pact conflict opens on the
-        Conflicts board. The settlement goes to whoever wins it.
+        {off
+          ? "While the ladder is stood down, coercive plays land as ordinary plays and leave no heat. The question can only be settled on the index."
+          : "At rung 5 the influence contest closes and a NATO–Warsaw Pact conflict opens on the Conflicts board. The settlement goes to whoever wins it."}
       </p>
     </section>
   );

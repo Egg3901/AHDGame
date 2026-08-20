@@ -18,7 +18,7 @@
  */
 import { ObjectId, type Db } from "mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { LADDER_RUNGS, getSeat } from "@/lib/constants/settlementCrisis";
+import { LADDER_RUNGS, getSeat, settlementRulesFor } from "@/lib/constants/settlementCrisis";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { loadBlocMembership } from "@/lib/world/blocMembership";
@@ -69,11 +69,26 @@ export async function declareSettlementWar(
   const crisisId = new ObjectId(ctx.crisisId);
   const currentTurn = await getCurrentTurn(db);
 
+  const rules = settlementRulesFor(
+    (await crises.findOne({ _id: crisisId }, { projection: { rules: 1 } })) ?? {}
+  );
+  if (!rules.escalationEnabled) {
+    return fail(403, "The escalation ladder is switched off for this question.");
+  }
+
   // Guarded claim. Restates BOTH preconditions: still open, still armed. A tick
   // that decayed the heat between the read and the write cancels the
   // declaration, which is the point of decay.
   const claimed = await crises.updateOne(
-    { _id: crisisId, status: "open", "ladder.heat": ARMED_RUNG },
+    {
+      _id: crisisId,
+      status: "open",
+      "ladder.heat": ARMED_RUNG,
+      // Restated as a filter clause as well as read above: the tick zeroes heat
+      // while the ladder is off, but an admin can switch it off between a
+      // still-armed tick and this press.
+      "rules.escalationEnabled": { $ne: false },
+    },
     { $set: { status: "frozen", updatedAt: new Date() } }
   );
   if (claimed.matchedCount !== 1) {

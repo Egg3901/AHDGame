@@ -147,4 +147,24 @@ describe("declareSettlementWar", () => {
     const link = prime(db, "settlementCrises").updateOne.mock.calls[1];
     expect(link[1].$set.conflictId).toBe("gq_de_412");
   });
+  it("refuses while the escalation ladder is switched off", async () => {
+    prime(db, "settlementCrises").findOne.mockResolvedValue({
+      _id: CRISIS_ID,
+      rules: { openLog: true, driftRevealed: false, escalationEnabled: false },
+    });
+    const { declareSettlementWar } = await import("./declareWar");
+    const res = await declareSettlementWar(db as unknown as Db, characterId);
+    expect(res).toMatchObject({ ok: false, status: 403 });
+    // No freeze, and above all no war.
+    expect(prime(db, "settlementCrises").updateOne).not.toHaveBeenCalled();
+    const { createConflict } = await import("@/lib/military/createConflict");
+    expect(vi.mocked(createConflict)).not.toHaveBeenCalled();
+  });
+
+  it("restates the switch on the freeze claim, tolerating a missing field", async () => {
+    const { declareSettlementWar } = await import("./declareWar");
+    await declareSettlementWar(db as unknown as Db, characterId);
+    const [filter] = prime(db, "settlementCrises").updateOne.mock.calls[0];
+    expect(filter["rules.escalationEnabled"]).toEqual({ $ne: false });
+  });
 });
