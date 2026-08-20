@@ -121,16 +121,17 @@ When forex is enabled, bond coupon payments and maturity returns are paid in the
 
 The country's debt-to-GDP ratio determines its credit rating, which affects the interest rate the government pays on new debt:
 
-| Debt-to-GDP | Rating | Interest Rate | Public Trust Penalty |
-| --- | --- | --- | --- |
-| <= 60% | AAA | 2.0% | 0 |
-| <= 80% | AA | 2.5% | 0 |
-| <= 100% | A | 3.5% | 0 |
-| <= 120% | BBB | 5.0% | 0 |
-| <= 150% | BB | 7.0% | −5 |
-| > 150% | B | 10.0% | −10 |
+| Debt-to-GDP | Rating | Interest Rate | GDP Growth Penalty | Public Trust Penalty |
+| --- | --- | --- | --- | --- |
+| <= 60% | AAA | 2.0% | 0 | 0 |
+| <= 80% | AA | 2.5% | 0 | 0 |
+| <= 100% | A | 3.5% | -0.1% | 0 |
+| <= 120% | BBB | 5.0% | -0.2% | 0 |
+| <= 150% | BB | 7.0% | -0.3% | -5 |
+| <= 250% | B | 10.0% | -0.5% | -10 |
+| > 250% | CCC | 14.0% | -0.7% | -15 |
 
-The public trust penalty is applied directly to the \`governance.publicTrust\` state metric at fiscal year close. The economic drag from high debt reaches corporations through the [debt-to-GDP margin penalty](#how-national-debt-affects-corporations) rather than a direct GDP growth penalty.
+Both the GDP growth penalty and the public trust penalty are applied directly to the country's metrics at fiscal year close (\`applyDebtPenalties\`). The debt-to-GDP margin penalty below is a separate, additional drag on corporate profitability specifically.
 
 ## How national debt affects corporations
 

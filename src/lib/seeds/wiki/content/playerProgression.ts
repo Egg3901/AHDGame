@@ -26,7 +26,7 @@ You're an independent with no office. You cannot run for office yet. Everything 
 - Commission Polls (Quick ₳25k / Full ₳75k)
 - Support or Attack other politicians (+/−1% their Favorability)
 - Barnstorm for allies (+1% their PI, 5 actions + ₳100k)
-- Influence NPPs (endorsements, withdrawals, opposition)
+- Influence NPPs (request endorsement, private meeting, boost/reduce favorability or influence)
 - Post news, form coalitions (if you're a chair later)
 
 Typical Phase 1 goal: Political Influence 40 to 60, Favorability 60 to 70, Donor Level 3, one or two NPP relationships in your target demographic.
@@ -61,7 +61,7 @@ See [Primaries](/wiki/primaries) for full primary scoring details.
 
 You're a party nominee. You face nominees from other parties. Vote accumulates each turn per demographic group, weighted by your **reach** (PI or NPI-based) and **appeal** (favorability × policy closeness to each group).
 
-Final turns are heaviest: roughly 25% of the pool lands in the last ~4 turns. Sustained campaigning wins; bursty campaigning loses.
+Final turns are heaviest: roughly 30% of the pool lands in the last ~4 turns. Sustained campaigning wins; bursty campaigning loses.
 
 See [General Elections](/wiki/general-elections) for general-election tactics.
 
@@ -162,8 +162,8 @@ None of these are dead ends: cabinet experience often translates into later Sena
 | Stat | Starting | Grows by |
 | --- | --- | --- |
 | Political Influence | 0 | Campaign (+1/action, diminishing above 50); decays 0.75%/turn |
-| National Influence (NPI) | 0 | +state PI / 100 per turn (uncapped, logarithmic in presidential races) |
-| Favorability | 50 | Ads, Travel; decays if > 60 |
+| National Influence (NPI) | 0 | +state PI / 100 per turn plus an office/leadership position bonus (uncapped, never decays); growth is linear, but the reach it buys in elections follows a sqrt curve capped at 1.0 once NPI reaches 100 |
+| Favorability | 50 | Ads; decays if > 60 |
 | Infamy | 0 | Attack or NPP lower action; decays 5%/turn |
 | Campaign Funds | ₳250,000 | Fundraise, fund generation, donor base, office bonus |
 | Cash on Hand | ₳0 | Passive income, 50% of personal donations made |

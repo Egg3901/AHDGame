@@ -25,8 +25,8 @@ The final 4 turns are a sharp closing spike: they carry 30% of the pool on their
 Each turn, for each candidate, for each demographic group:
 
 1. **Reach**: a sqrt curve on influence, capped at 1.0 once influence reaches 100. State races use Political Influence (already clamped to 100), presidential generals use National Political Influence (also saturates at 1.0, no celebrity bonus above 100).
-2. **Appeal**: a quadratic position score (how close the candidate's positions are to the group's), plus a small floor, plus a directional bonus for candidates seen as tribally "us," plus a reach-based bonus. Per-group calculation using the group's lean. Max ~55 (position ~25 + floor 0.5 + direction up to 30 + reach ~12.5 at influence=100).
-3. **Approval scalar**: \`favorability / 100\`. 0% approval = 0 votes. A candidate with Favorability 30 gets only 30% of what their appeal+reach would otherwise earn.
+2. **Appeal**: a power-curve position score (exponent 1.5, how close the candidate's positions are to the group's), plus a small floor, plus a directional bonus for candidates seen as tribally "us," plus, for presidential races only, an influence term (state races keep influence out of appeal, reach-only). Per-group calculation using the group's lean. Position alone maxes at ~25.5, direction bonus up to 10 (5 per axis), influence term up to 12.5 at influence=100 (presidential only).
+3. **Approval scalar**: \`(favorability / 100) ^ 0.8\`. 0% approval = 0 votes. The exponent softens the curve compared to a straight percentage, so mid-favorability candidates lose less than a linear scalar would suggest.
 4. **Party Org as normalized state share**: each party's organization score divided by the state's total organization. Range \`[0, 1]\`. A party with 60 Org in a state where the total is 100 gets a 0.6 multiplier on its weight; a party not present in the state gets 0 (no votes from that party's candidates). When the state has no Org data at all (test fixtures, unbootstrapped seeds) every candidate falls back to a neutral \`1×\` so the game doesn't zero the whole field.
 5. **Reg resistance**: \`1 + 0.3 × (Reg / 100)\`. Range \`1.0×-1.3×\`. Higher own-Reg makes the party harder to peel away through persuasion. Independents and parties without a registration entry get neutral 1.0×. Reg data is bootstrap-deferred to a later phase, so most rows currently degrade to neutral.
 6. **Support mood**: \`0.6 + 0.8 × (support / 100)\`. Range \`0.6×-1.4×\` with neutral 1.0× at support=50. Captures short-term candidate mood / momentum (debate performance, scandals, endorsements). New candidates without a stored support value default to 1.0×.
@@ -74,7 +74,6 @@ Establish a base:
 
 - Campaign **heavily in-state** to push Political Influence above 60 and hold it.
 - Ads to lift Favorability to 65-70. Above 70 diminishing returns bite.
-- Request NPP endorsements early: they compound for the rest of the general.
 - Set up campaign upgrades (Ground Game, Media Spending, Opposition Research); see [Campaign Strategy](/wiki/campaign-strategy) and [Campaign Manager](/wiki/campaign-manager).
 
 ### Middle (middle 50%)
@@ -85,7 +84,7 @@ Consolidate:
 - Sustain Favorability via periodic ads.
 - Commission a Full Demographic Poll (₳75k, 6 actions) to identify weak groups.
 - Target weak groups with ads and canvassing.
-- Watch opponent damage: if your Favorability drops 5+ points in a span, they're running Opposition Research or attacking. Counter with more ads or request NPP opposition against them.
+- Watch opponent damage: if your Favorability drops 5+ points in a span, they're running Opposition Research or attacking. Counter with more ads or your own attacks.
 
 ### Final sprint (last 4 turns)
 

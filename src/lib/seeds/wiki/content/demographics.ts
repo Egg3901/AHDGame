@@ -31,9 +31,9 @@ During elections, candidates compete for votes from each cell through a multi-fa
 
 ### 1. Reach
 \`\`\`
-reach = politicalInfluence / 100
+reach = sqrt(min(100, politicalInfluence) / 100)
 \`\`\`
-How much of the turned-out voters a candidate can actually contact and persuade.
+How much of the turned-out voters a candidate can actually contact and persuade. The square-root curve gives diminishing returns: PI=25 gives 0.5 reach, PI=50 gives 0.707, and it caps at 1.0 once PI reaches 100.
 
 ### 2. Appeal
 \`\`\`
@@ -44,18 +44,19 @@ Where \`positionRaw\` is derived from the absolute economic and social distance 
 
 ### 3. Approval scalar
 \`\`\`
-approvalScalar = favorability / 100
+approvalScalar = (favorability / 100) ^ 0.8
 \`\`\`
-Voters won't support candidates they don't approve of, regardless of policy alignment.
+Voters won't support candidates they don't approve of, regardless of policy alignment. The exponent below 1.0 means the scalar falls off less steeply than favorability itself at low approval, and 0% approval still means 0 votes.
 
 ### 4. Party organization (general elections)
 In general elections, each party gets a multiplier equal to its **normalized share** of the state's total Org:
 
 \`\`\`
 orgShare = party.organization / Σ(every party's organization in this state)
+orgMultiplier = orgShare ^ 0.2
 \`\`\`
 
-A party with 60 Org in a state where the total is 100 gets a 0.6× multiplier; a party with no presence in the state gets 0 (no votes). Two more general-election factors layer on top:
+The share is raised to the 0.2 power, a diminishing-returns curve: a party with 60 Org in a state where the total is 100 gets roughly a 0.9× multiplier, not 0.6×, softening a dominant party's structural Org edge. A party with no presence in the state still gets 0 (no votes). Two more general-election factors layer on top:
 
 - **Reg resistance** (1.0×-1.3×): own-Reg makes voters harder to peel away through persuasion
 - **Support mood** (0.6×-1.4×): short-term candidate momentum from debates / endorsements / scandals; neutral 1.0× at Support=50
@@ -86,12 +87,14 @@ Candidates and parties can increase (or decrease) how many voters actually vote.
 
 ### Party GOTV spending
 
-Party budgets include a turn-by-turn GOTV budget that automatically boosts turnout each turn for aligned voters. A party only boosts groups within **2 points** of the party's position on both economic and social axes, so the DEM party (ideologically left) boosts young and graduate-educated voters, not the groups furthest to its right.
+Party budgets target a single chosen demographic bucket and spend automatically each turn: \`gotvBudgetPercent\` (0-25% of hourly revenue, with a legacy flat \`gotvBudgetPerTurn\` amount as a fallback). There is no binary "within 2 points" eligibility gate; instead a continuous alignment multiplier scales the boost by how close the party's position is to the target bucket's lean, from 1.0× at perfect alignment down to a 0.1× floor.
 
-Boost formula per group per turn:
+Boost formula per turn:
 \`\`\`
-boost = (budgetPerGroup × 0.01%) × diminishingReturns(currentModifier)
+boost = (spend / 5000) × alignmentMultiplier × diminishingReturns(currentModifier)
 \`\`\`
+
+$5,000 of spend buys one full turnout point before alignment and diminishing returns are applied. National spend divides evenly across all states; state-scoped spend applies in full to one state.
 
 Diminishing returns: at a +10% existing modifier, a 1% boost becomes only 0.5% effective.
 

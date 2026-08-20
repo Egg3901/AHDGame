@@ -28,7 +28,7 @@ Above NPI=100 there's no further reach bonus, but NPI=99 vs NPI=85 is now a mean
 
 - **Scale:** 0 to 100
 - **Start:** 50 (neutral)
-- **Grows by:** Ads (+1 to 3, diminishing above 70%), Travel (+1%/turn while in a travel state as a presidential candidate)
+- **Grows by:** Ads (+1 to 3, diminishing above 70%)
 - **Decays by:** Attack damage from opponents, Infamy passive drain (above 20%), natural decay only when above 60
 - **Drives:** Appeal multiplier in vote formulas across every race type
 
@@ -155,28 +155,27 @@ Available to active presidential candidates during the general phase.
 
 | Action | Cost | Effect |
 | --- | --- | --- |
-| Travel | 3 to 10 actions (scaled by state electoral votes: ≤5 EV = 3, ≤10 = 5, ≤20 = 7, >20 = 10) | Set your travel state; +1% Favorability/turn passively |
+| Travel | 3 to 10 actions (scaled by state electoral votes: ≤5 EV = 3, ≤10 = 5, ≤20 = 7, >20 = 10) | Sets your travel state; unlocks canvassing actions there. There is no automatic per-turn favorability gain from travel alone |
 
 - Only US states as destinations; one at a time.
 - Switching states costs another 3 to 10 actions (same EV scale).
 - Travel state shows as a badge on the electoral map and candidate row.
 - Travel expires on withdrawal or election end.
 
-## NPP influence requests
+## NPP direct actions
 
-From an NPP profile (\`/npp/[id]\`):
+From an NPP profile (\`/npp/[id]\`), these are deterministic capital actions gated by your relationship score with the NPP (−100 to +100), not random-chance rolls:
 
-| Request | Actions | Funds | Base success | Effect |
-| --- | --- | --- | --- | --- |
-| Request Endorsement | 5 | None | 40% | NPP publicly endorses a candidate |
-| Request Withdrawal | 8 | ₳50,000 | 25% | NPP drops out of an election |
-| Request Opposition | 5 | ₳25,000 | 35% | NPP publicly opposes a candidate |
-| Request Leadership Support | 4 | None | 45% | NPP supports your party leadership bid |
+| Action | Actions | Funds | Effect |
+| --- | --- | --- | --- |
+| Request Endorsement | 6 | None | NPP publicly endorses your current candidacy, if the relationship gate (based on the NPP's policy fit with you) is cleared |
+| Private Meeting | 3 | None | +5 relationship |
+| Boost Favorability | 5 | ₳10,000 | +3 NPP favorability, +2 relationship |
+| Reduce Favorability | 5 | ₳10,000 | -3 NPP favorability, -2 relationship |
+| Boost Influence | 6 | ₳20,000 | +2 NPP political influence, +2 relationship |
+| Reduce Influence | 6 | ₳20,000 | -2 NPP political influence, -2 relationship |
 
-Success is modified by NPP stubbornness, party-alignment match, your Political Influence, and the relationship score you've built (−100 to +100). Fund boosts (+5% per ₳50k up to +15%) are available.
-
-- Per-NPP cooldown: 2 turns
-- Max 3 attempts per turn across all NPPs
+There is no "Request Withdrawal", "Request Opposition", or "Request Leadership Support" action; the six above are the full set.
 
 Details: [NPP System](/wiki/npp-system).
 

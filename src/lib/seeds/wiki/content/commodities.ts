@@ -82,9 +82,9 @@ Raw D/S remains visible on market and admin screens. Prices and margins use the 
 
 Beyond sector-level supply and demand, several macroeconomic forces inject additional commodity demand each turn:
 
-**Advertising:** Corporate marketing budgets convert to advertising commodity demand. **40%** of a corporation's daily marketing budget becomes advertising demand, distributed to the corporation's HQ state.
+**Advertising:** Corporate marketing budgets convert to advertising commodity demand. **90%** of a corporation's daily marketing budget becomes advertising demand, distributed to the corporation's HQ state.
 
-**Healthcare services:** National healthcare budgets (Medicare, NHS, etc.) convert to healthcare_services demand. **0.5%** of annual healthcare spending is spread across turns as demand.
+**Healthcare services:** National healthcare budgets (Medicare, NHS, etc.) convert to healthcare_services demand. **1.5%** of annual healthcare spending is spread across turns as demand.
 
 **Financial services:** Bond-market activity drives latent financial services demand. Recent sovereign and corporate debt issuance (within the last 48 turns) is multiplied by a rate-environment factor and converted to demand. Lower central-bank prime rates boost financial activity; higher rates suppress it.
 
@@ -228,7 +228,7 @@ Government-owned corporations (natcorps) contribute only **100%** of their norma
 
 ## Operating strategies
 
-Each sector type has **2-7 operating strategies** that change which commodities it supplies and demands. See [Corporations](/wiki/corporations) for the full strategy list and switching mechanics.
+Each sector type has **4-8 operating strategies** that change which commodities it supplies and demands. See [Corporations](/wiki/corporations) for the full strategy list and switching mechanics.
 
 When a sector runs a non-standard strategy, its effective supply/demand rates override the default constants for both price calculation and margin modifier computation. The strategy confirmation panel shows a before/after comparison of commodity rates and estimated margin impact based on current market conditions.
 

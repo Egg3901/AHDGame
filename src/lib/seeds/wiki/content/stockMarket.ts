@@ -6,14 +6,16 @@ Corporations are listed on country-specific stock exchanges. Players can buy and
 
 | Country | Exchange | URL |
 | --- | --- | --- |
-| United States | NYSE | /stockmarket/us |
-| United Kingdom | FTSE | /stockmarket/uk |
-| Germany | DAX | /stockmarket/de |
-| Japan | Nikkei | /stockmarket/jp |
-| Ireland | ISEQ | /stockmarket/ie |
-| Brazil | B3 | /stockmarket/br |
-| China | SSE | /stockmarket/cn |
-| Nigeria | NGX | /stockmarket/ng |
+| United States | NYSE | /country/us/stockmarket |
+| United Kingdom | FTSE | /country/uk/stockmarket |
+| Germany | DAX | /country/de/stockmarket |
+| Japan | Nikkei | /country/jp/stockmarket |
+| Ireland | ISEQ | /country/ie/stockmarket |
+| Brazil | B3 | /country/br/stockmarket |
+| China | SSE | /country/cn/stockmarket |
+| Nigeria | NGX | /country/ng/stockmarket |
+
+21 exchanges are configured in total (every country with an \`exchangeName\` set); legacy \`/stockmarket/[country]\` URLs still work and redirect to the \`/country/[code]/stockmarket\` form above.
 
 Exchange pages display: market cap, share price, total revenue, net income, CEO, sector type, and headquarters location. Price history is shown as **OHLC candlestick charts** (open, high, low, close per period).
 
@@ -56,7 +58,7 @@ The formula produces a **fundamental value** each turn, then several additional 
 - **Bond-holdings haircut:** bonds counted in tangible book are marked at 0.75x their market price, so leveraged bond positions don't inflate the valuation.
 - **Insider-concentration discount:** a public corp whose character CEO personally holds more than 65% of shares takes a quadratic penalty reaching -30% at 100% CEO ownership.
 - **Index-inclusion premium:** shares held by index funds get a small price premium reflecting passive-flow demand.
-- **IMF bailout multiplier:** while a sovereign IMF facility is active, corporations headquartered in that country trade at a 0.85x discount.
+- **IMF bailout multiplier:** while a corporation is under its own IMF corporate restructuring (a per-corporation admin bailout flag, unrelated to any country's sovereign IMF facility), its share price trades at a 0.85x discount.
 - **±35% per-turn rate limiter:** the final price can't move more than 35% from the prior turn's price in a single turn (skipped once the price has fallen to $1.00 or below, so recovering penny corps aren't pinned at the floor).
 
 **Constants:**
@@ -246,7 +248,7 @@ National GDP growth is influenced by corporate sector growth rates, so a healthy
 
 ## Currency
 
-Each exchange displays values in that country's currency. If you hold shares in a UK corporation, dividends are paid in GBP. When the forex system is enabled, dividends are automatically converted to your home currency at the market-maker rate (0.275% spread). There is no per-holding preference: this conversion is automatic for all dividend income.
+Each exchange displays values in that country's currency. If you hold shares in a UK corporation, dividends are paid in GBP. When the forex system is enabled, dividends are automatically converted to your home currency at the market-maker rate (1% spread). There is no per-holding preference: this conversion is automatic for all dividend income.
 
 ## Strategic considerations
 

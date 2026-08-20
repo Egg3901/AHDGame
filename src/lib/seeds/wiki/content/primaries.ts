@@ -72,8 +72,7 @@ NPPs (Non-Player Politicians) autonomously enter primaries. Entry is determinist
 2. **Alignment first.** If your policy positions are more than about 6 points away from your party's official position, reconsider. Check the party page: the official positions are visible there.
 3. **Don't attack fellow party members.** If someone else wins the primary, you want them at full strength going into the general.
 4. **Pump Political Influence.** Campaign 6-10 actions/day in-state. PI compounds over the primary window because decay is much slower than Campaign's +1% per action.
-5. **Request NPP endorsements.** Each success lifts your appeal across a demographic. 5 actions + 40% base success. Only endorse from NPPs whose party matches yours or who are independent; opposition-party NPPs won't endorse you even if alignment is close.
-6. **Don't sleep on Favorability.** 35 points of the score live here. Going into primary with Favorability 80 is worth 28 pts vs. 17 at Favorability 50, an 11-point swing.
+5. **Don't sleep on Favorability.** 35 points of the score live here. Going into primary with Favorability 80 is worth 28 pts vs. 17 at Favorability 50, an 11-point swing.
 
 ## Withdrawal during primary
 

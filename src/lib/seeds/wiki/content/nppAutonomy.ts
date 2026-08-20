@@ -8,46 +8,53 @@ For baseline NPP behavior (bill cross-pressure, elections, influence actions), s
 
 | Level | What NPPs gain |
 | --- | --- |
-| **off** | Legacy behavior only: reactive voting and elections |
-| **v0** | Smarter bill sponsorship and voting patterns; fills stalled non-player countries (central-bank chair, PM gaps) |
-| **v1** | Executive formation, ministerial governance, governing agendas: NPP-led cabinets start behaving coherently |
-| **v2** | **Comingle tier for player countries**: caretaker ministers, deeper executive/campaign autonomy where players and NPPs share a country |
-| **v3** | Full economic autonomy for NPP actors (savings, campaign finance depth, expanded decision loops) |
-| **v4** | Extends comingle depth into player-enabled countries: active-bill sponsorship caps and further player-country NPP behavior tuning |
+| **off** | Legacy behavior only: reactive cross-pressure voting and elections |
+| **v0** | Autonomous party organization votes; fills stalled executive seats in non-player countries (central bank chair, stalled prime minister) |
+| **v1** | Autonomous bill sponsorship and voting, executive formation, ministerial governance, and governing agendas: NPP-led cabinets behave coherently |
+| **v2** | **Comingle tier**: caretaker ministers, caretaker CEOs for vacant corporations, and NPP corporate attacks. Also the floor at which autonomy acts at all in player-enabled countries |
+| **v3** | Economic and financial autonomy (savings, union bargaining, campaign finance) plus NPP entry into presidential primaries as challengers |
+| **v4** | Widest reach (the seeded default): global-scope economic actions and deeper autonomous bill sponsorship |
 
-Levels are cumulative: v2 includes everything in v0 and v1, v4 includes everything below it.
+Levels are cumulative: v2 includes everything in v0 and v1, and v4 includes everything below it.
 
 ## Player vs non-player countries
 
 Autonomy applies differently by country type:
 
 - **Non-player countries**: the configured global level applies as-is (v0/v1/v2/v3/v4).
-- **Player-enabled countries**: autonomy **only activates at v2 and above** (the "comingle" tiers). Below v2, player countries stay on manual NPP behavior so humans remain primary.
+- **Player-enabled countries**: autonomy **only activates at v2 and above** (the comingle tiers). Below v2 it resolves to off, so humans stay primary in countries people actually play.
 
-This rail prevents autonomous NPP governments from overriding player-led countries until admins explicitly enable comingle tiers.
+This rail prevents autonomous NPP governments from overriding player-led countries until admins enable the comingle tiers.
 
 ## What changes at each tier
 
-### v0: legislative smarts
+### v0: seating and org votes
 
-- NPPs sponsor and advance bills aligned with party/agenda pressure.
-- Stalled executive seats in NPC-only countries get filled (central bank chair, prime minister, etc.).
+- NPPs cast autonomous party organization votes.
+- Stalled executive seats in non-player countries get filled (central bank chair, stalled prime minister).
 
-### v1: government formation
+### v1: legislation and government formation
 
-- NPP prime ministers/presidents form cabinets from their party bench.
+- NPPs autonomously sponsor and vote on bills aligned with party and agenda pressure.
+- NPP prime ministers and presidents form cabinets from their party bench.
 - **Ministerial governance**: portfolio holders pursue agenda-aligned actions.
 - **Governing agendas**: coherent policy programs replace one-off bill spam.
 
-### v2: comingle (player countries)
+### v2: comingle
 
-- **Caretaker CEOs**: NPP-run corporations where no player holds the CEO seat (when enabled). Under a full-flags world they also set wages, sign same-country supply agreements, prospect short deposits, and park idle treasury in high-coupon bonds.
-- Expanded ministerial and campaign autonomy alongside player characters.
+- **Caretaker ministers and CEOs**: NPPs staff vacant ministries and NPP-run corporations where no player holds the seat. Under a full-flags world they also set wages, sign same-country supply agreements, prospect short deposits, and park idle treasury in high-coupon bonds.
+- NPP corporate attacks against rival firms.
+- This is the floor at which any autonomy runs in player-enabled countries.
 
-### v3: economic depth
+### v3: economic and financial depth
 
-- NPP **savings and finance** loops accrue like player accounts.
-- Richer campaign/economy decision-making for autonomous politicians.
+- NPP savings, union bargaining, and campaign finance loops run like player accounts.
+- NPPs enter presidential primaries as challengers, in autonomy-active countries that are not player-enabled.
+
+### v4: widest reach (seeded default)
+
+- Economic actions extend to global scope.
+- Deeper autonomous bill sponsorship. This is the level seeded in production.
 
 ## Admin controls
 

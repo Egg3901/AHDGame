@@ -108,14 +108,9 @@ Declaring a float cancels any standing intervention band. They are contradictory
 
 ## Chair selection
 
-When a term expires, a new Chair is selected from two pools:
+When a term expires, a new Chair is selected from a single pool: characters nominated by the country's executives (President/PM/Chancellor). An earlier version of this system also drew 30% of picks from a wealth pool (the nation's richest players); that pool has been removed, a Chair is now always someone the executive put forward, not whoever the leaderboard says is rich this turn.
 
-| Pool | Weight | Source |
-| --- | --- | --- |
-| Political | 70% | Characters nominated by executives (President/PM/Chancellor) |
-| Economic (Wealth) | 30% | Top 3 wealthiest player characters + 2 random from ranks 4 to 20 |
-
-Lobbying funds shift weights within each pool: spending ₳500,000 on lobbying **doubles** your selection weight.
+Lobbying funds shift weights within the pool: spending ₳500,000 on lobbying **doubles** your selection weight.
 
 The selected candidate must **accept** the offer. If they decline, the next eligible candidate is offered the post. Political pool declines re-run the weighted draw with decliners excluded.
 
@@ -213,8 +208,8 @@ The band **persists across chair transitions**. A new chair inherits the previou
 
 Each turn, if the published rate is outside the band:
 
-1. The game computes the **breach distance** (how far outside the band the rate sits).
-2. It calculates desired spend as \`breachDistance × aggressiveness × baseRate\`.
+1. The game computes the **breach distance** (how far outside the band the rate sits, as a fraction of the breached edge).
+2. It calculates desired spend as \`|breachDistance| × aggressiveness\`, in internal FX-volume units.
 3. Actual spend is capped by available reserves.
 4. The synthetic volume is folded into the same **volume-pressure channel** that organic trades use, so intervention obeys the same ±5% per-turn cap.
 5. The rate is recomputed with the synthetic volume included.
@@ -293,7 +288,7 @@ The Central Bank page's Insurance tab surfaces the fund: its balance, lifetime p
 
 ## Savings and credit lines
 
-The central bank system also manages player savings accounts and lines of credit. Interest on savings deposits flows through the central bank's reserve balance. The **savings APY is half the real rate** (prime rate minus inflation), floored so it never goes negative: a 5% prime rate against 2% inflation gives a 3% real rate, so the APY is 1.5%. These are secondary functions separate from the main Chair role.
+The central bank system also manages player savings accounts and lines of credit. Interest on savings deposits flows through the central bank's reserve balance. The **savings APY is half the real rate** (prime rate minus inflation), with the real rate floored at 0.5 percentage points so it can never go negative or near-zero: a 5% prime rate against 2% inflation gives a 3% real rate, so the APY is 1.5%. These are secondary functions separate from the main Chair role.
 
 See also: [Currency Exchange](/wiki/currency-exchange), [National Metrics](/wiki/national-metrics), [Sovereign Bonds](/wiki/sovereign-bonds), [Corporate Bonds](/wiki/corporate-bonds), [Private Banking](/wiki/private-banking), [Government Approval](/wiki/government-approval), [Planned / Command Economies](/wiki/planned-economies)
 `;

@@ -13,7 +13,7 @@ At founding you choose from **17 sector types**:
 | technology | Technology |
 | financial | Financial |
 | energy | Energy |
-| healthcare | Healthcare and Pharmaceuticals |
+| healthcare | Healthcare |
 | media | Media |
 | manufacturing | Manufacturing |
 | retail | Retail |
@@ -162,7 +162,7 @@ Because a game year is two financial days, you pay the daily growth cost twice f
 
 ## Unowned sector growth
 
-The unowned portion of every market sector grows automatically each turn at the **average growth rate of player-owned sectors** in that same state and sector type. If no player-owned sectors exist in that combination, it falls back to a 0.5% baseline growth rate.
+The unowned portion of every market sector grows automatically each turn at **half the average growth rate of player-owned sectors** in that same state and sector type. If no player-owned sectors exist in that combination, it falls back to a 1% baseline growth rate.
 
 This means unowned market share regenerates over time. A sector you partially captured will refill, so sustained expansion requires repeated splits or very high marketing strength to outpace regrowth.
 
@@ -215,7 +215,7 @@ Many factors adjust your sector profit margins. These are additive:
 | Dominance regulatory burden | up to 5% of revenue | Compliance/antitrust cost; scales with market share above 50% |
 || Sustained negative production | up to -45% | Builds after 48 turns of negative production policy; full penalty at 144 turns |
 | Sovereign default | up to -15% | Crisis-driven margin penalty from national or global default events |
-| Nationalized | -15% | Government-owned corporations only |
+| Nationalized (SOE efficiency) | -5% to -25% | Government-owned corporations only; dynamic penalty from corruption, governance quality, price-control/employment-guarantee mandates, and state-holding overreach |
 
 Sectors that don't match your primary or secondary type receive a **-15% penalty**. Focused corporations outperform diversified ones unless you manage logistics carefully.
 
@@ -281,7 +281,7 @@ Aggressive policy maximizes revenue and commodity throughput but also raises inp
 
 ## Operating strategies
 
-Each sector type has **2 to 8 operating strategies** that change which commodities it supplies and demands. Strategies are how you specialize: an energy sector can run Conventional (fossil fuels), Renewables Focus (solar/wind using electronics and rare earth), Nuclear Expansion (high output, heavy steel and chemicals), and several more besides. A chemical industries sector can pivot between industrial chemicals, fertilizer production, pharmaceuticals, or plastics.
+Each sector type has **4 to 8 operating strategies** that change which commodities it supplies and demands. Strategies are how you specialize: an energy sector can run Conventional (fossil fuels), Renewables Focus (solar/wind using electronics and rare earth), Nuclear Expansion (high output, heavy steel and chemicals), and several more besides. A chemical industries sector can pivot between industrial chemicals, fertilizer production, pharmaceuticals, or plastics.
 
 **Strategies have no direct margin bonus**: their value comes entirely from commodity market dynamics. Switching to a strategy that supplies a scarce commodity or avoids expensive inputs can dramatically improve margins; switching into an oversupplied market does the opposite.
 
@@ -305,21 +305,21 @@ Computer-run corporations may automatically retool a sector onto a better strate
 | Sector | Strategies | Count |
 | --- | --- | --- |
 | Energy | Hydraulic Fracturing, Conventional, Renewables Focus, Nuclear Expansion, Smart Grid, Fusion Generation | 6 |
-| Manufacturing | Standard, Heavy Metals, Electronics Manufacturing, and more | varies |
-| Technology | Standard, Hardware Focus, Software Focus, and more | varies |
-| Agriculture | Traditional, Industrial, Sustainable | 3 |
-| Chemical Industries | Industrial Chemicals, Fertilizer Production, Pharmaceuticals, Plastics & Polymers | 4 |
-| Healthcare | Standard, Hospital Networks, Outpatient & Preventive | 3 |
-| Automobiles | Standard, EV Focus, Heavy Machinery | 3 |
-| Financial | Standard, Fintech, Traditional Banking | 3 |
-| Media | Standard, Digital-First, Legacy Broadcast | 3 |
+| Manufacturing | Additive Manufacturing, Autonomous Factory, Standard, Heavy Metals, Electronics Manufacturing | 5 |
+| Technology | Quantum Computing, AI Platforms, Standard, Hardware Focus, Software Focus | 5 |
+| Agriculture | Vertical Farming, Precision Agriculture, Traditional, Industrial, Sustainable | 5 |
+| Chemical Industries | Specialty Chemicals, Industrial Chemicals, Fertilizer Production, Pharmaceuticals, Plastics & Polymers | 5 |
+| Healthcare | Telehealth Network, Standard, Hospital Networks, Outpatient & Preventive | 4 |
+| Automobiles | Autonomous Vehicles, Standard, EV Focus, Heavy Machinery | 4 |
+| Financial | Algorithmic Trading, Standard, Fintech, Traditional Banking | 4 |
+| Media | Streaming Media, Standard, Digital-First, Legacy Broadcast | 4 |
 | Defense | Directed-Energy Systems, Standard, Cyber Warfare, Heavy Armor, Munitions & Arms Export, Naval Systems, Missile & Rocket Systems, Aerospace Systems | 8 |
-| Real Estate | Standard, Commercial Development, Green Building | 3 |
-| Construction | General Contracting, Infrastructure Buildout, Modular Construction | 3 |
-| Telecommunications | Standard, 5G/Infrastructure, Cloud Services | 3 |
-| Entertainment | Standard, Streaming/Digital, Live/Venue | 3 |
-| Retail | Standard, E-Commerce, Brick & Mortar | 3 |
-| Logistics | Standard, Automated Logistics, Full-Service | 3 |
+| Real Estate | PropTech Platforms, Standard, Commercial Development, Green Building | 4 |
+| Construction | Modular Construction, General Contracting, Infrastructure Buildout, Modular Construction | 4 |
+| Telecommunications | 5G/6G Networks, Standard, 5G/Infrastructure, Cloud Services | 4 |
+| Entertainment | Live-Service Platforms, Standard, Streaming/Digital, Live/Venue | 4 |
+| Retail | E-Commerce Fulfillment, Standard, E-Commerce, Brick & Mortar | 4 |
+| Logistics | Autonomous Freight, Standard, Automated Logistics, Full-Service | 4 |
 | Extraction & Mining | Diversified, Iron & Metals Mining, Oil & Gas, Rare Earth Minerals Mining, Coal Mining, Timber & Forestry | 6 |
 
 There is no separate Copper Mining strategy: copper was merged into the Rare Earth Minerals commodity, and Rare Earth Minerals Mining covers both markets.

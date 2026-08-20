@@ -56,15 +56,16 @@ If either window expires without action, consequences escalate (forced resolutio
 
 ## Resolution paths
 
-The executive selects one of three resolutions, each with a different GDP penalty:
+The executive selects one of four resolutions:
 
 | Path | GDP penalty | Description |
 | --- | --- | --- |
 | **Repudiate** | −12% GDP | Refuse to pay; bondholders take the full hit |
 | **Restructure** | −6% GDP | Haircut + maturity extension for bondholders |
 | **IMF Bailout** | −2% GDP | Accept an IMF facility (see [IMF & Bailouts](/wiki/imf)) |
+| **Monetize** | no flat GDP hit; damage runs through inflation instead | Print money to cover the debt; blocked once current inflation exceeds 8% |
 
-Repudiate is the most destructive to the economy and to investor confidence but leaves the country debt-free. Restructure splits the pain between the state and bondholders. The IMF bailout is the smallest immediate GDP hit but comes with the IMF's own ongoing conditions (income capture, share-price discount).
+Repudiate is the most destructive to the economy and to investor confidence but leaves the country debt-free. Restructure splits the pain between the state and bondholders. The IMF bailout is the smallest immediate GDP hit but comes with the IMF's own ongoing conditions (income capture, share-price discount). Monetize avoids a direct GDP penalty but is gated off once inflation is already high, and triggers its own inflation shock plus (in parliamentary countries) an automatic no-confidence vote.
 
 ## Default scar
 
@@ -112,6 +113,7 @@ During this floor the country cannot roll debt, forcing it to run primary surplu
 | Repudiate GDP penalty | −12% |
 | Restructure GDP penalty | −6% |
 | IMF bailout GDP penalty | −2% |
+| Monetize inflation gate | blocked above 8% inflation |
 | Default scar duration | 100 turns |
 | Scar per-turn penalty | −1% |
 | Cascade depth | 3 levels |

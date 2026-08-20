@@ -65,19 +65,22 @@ During the general phase, votes accumulate each turn via the **Total Appeal Pipe
 
 ### Per-turn weighting
 
-- **Early turns:** \`0.75 * totalPool / (totalTurns - 4)\` per turn.
-- **Final 4 turns:** \`0.25 * totalPool / 4\` per turn.
+A three-tier closing surge, not a flat split:
 
-In other words, the last 4 turns are worth **~25% of the entire election**. If you're within 3% going into the last day, every campaign and ad action in those 4 turns compounds into the heaviest-weighted snapshots.
+- **Early band:** 50% of the pool spread over every turn before the ramp band.
+- **Ramp band:** the 8 turns before election day get 20% of the pool.
+- **Final band:** the last 4 turns get 30% of the pool.
+
+In other words, the last 4 turns are worth **~30% of the entire election**. If you're within a few points going into the last day, every campaign and ad action in those 4 turns compounds into the heaviest-weighted snapshots. Very short races (4 turns or fewer) spread the pool evenly instead.
 
 ### The total appeal pipeline
 
 For each demographic group, for each candidate, per turn:
 
 1. **Reach**: a sqrt curve on political influence, capped at 1.0 once influence reaches 100. State and presidential general elections both use this curve. Presidential primaries use a gentler diminishing-returns curve instead, leaving more room for Support, Favorability, and Org to compete.
-2. **Appeal (per group)**: \`(50 - |econDiff|*5 - |socialDiff|*5)^2 / 100 + APPEAL_POSITION_FLOOR(0.5) + DIRECTION_BONUS(tribal, up to +30) + reach * 12.5\`. Quadratic position scoring with a floor, directional bonus, and influence multiplier. Max **~55** in both state and presidential general races.
+2. **Appeal (per group)**: \`25 * ((50 - |econDiff|*5 - |socialDiff|*5) / 50)^1.5 + APPEAL_POSITION_FLOOR(0.5) + DIRECTION_BONUS(tribal, up to +10) + reach * 12.5\`. Power-curve position scoring (exponent 1.5, softened from the legacy squared curve) with a floor, directional bonus, and influence multiplier. Position alone maxes at 25.5, directional bonus at 10 (5 per axis, both axes aligned), influence at 12.5 -- theoretical ceiling around 48, though the position+direction terms are the dominant share in practice.
 3. **Approval scalar**: \`effectiveFavorability / 100\`, where \`effectiveFavorability = favorability + groupApproval * 0.5\` (clamped 0-100). 0% effective favorability = 0 votes.
-4. **Party org scalar**: a normalized share model, \`(partyOrg / totalStateOrg)^0.5\`. Ranges from near 0 (tiny org share) to 1.0 (monopoly). Independents use a flat 0.5. Presidential races use the same normalized share, damped when the field is crowded: \`max(0.2, 1 - (n-2) * 0.15)\`.
+4. **Party org scalar**: a normalized share model, \`(partyOrg / totalStateOrg)^0.2\`. Diminishing returns: a 3:1 org lead yields only ~1.25:1 weight. Ranges from 0 (no presence in a populated state) to 1.0 (monopoly), or a neutral 1.0 everywhere when the state has no org data at all. Primaries use a uniform neutral 1x instead (intra-party org cancels). Presidential races use the same normalized-share curve, no separate crowded-field damping.
 5. **Infamy scalar**: \`1 - 0.05 * (infamy/100)\`. Player characters with high infamy lose up to 5% of their per-group weight. NPPs aren't affected.
 6. **Turn pool scaled by party strength modifier:**
    - **State races:** \`(1 + (stateGovernmentApproval/100 - 0.5) * 0.2) * officeStrength\`. At 50% approval the modifier is 1.0x; at 100% it is 1.1x; at 0% it is 0.9x.
@@ -108,7 +111,7 @@ In **FPTP** states, after the per-turn group allocation:
 - In **presidential** races, the rate is halved to **2%**.
 - "Nearest" = Manhattan distance on the econ/social grid.
 - Major parties are determined per region: Democrat/Republican in the US, Labour/Conservative in England, SNP/Labour in Scotland, etc.
-- The transfer is **organization-aware**: a third party with stronger state org than the nearest major party amplifies the bleed (factor 0.25x-2x).
+- In **presidential** races only, the transfer is additionally **organization-aware**: a third party with stronger state org than the nearest major party amplifies the bleed (factor 0.25x-2x). State-level races (House, Senate, Governor, State Senate) do not apply this org-aware adjustment.
 
 This models real-world spoiler dynamics: a Green candidate bleeds Democratic votes, potentially handing the seat to the Republican.
 
@@ -187,7 +190,7 @@ No seat sits vacant. Mechanics:
 - **No EV majority:** If no candidate reaches 270 (including a **269-269** tie or a third party blocking a majority), a **contingent election** runs. The **House** elects the President from the top three EV finishers (one vote per state delegation; DC has EVs but no House vote; **26 states needed**). The **Senate** elects the Vice President from the top two running mates (**51 votes needed**). Representatives and senators vote primarily by party, then ideology proximity; tied state delegations abstain. Chamber composition is **snapshotted** when the contingent ballot first runs so same-turn House/Senate flips cannot change the ballot mid-resolution.
 - **MVP ballot:** Contingent races resolve on a **single simulated House/Senate ballot** per cycle. If neither chamber reaches its threshold, a deterministic deadlock breaker seats a winner (multi-turn contingent ballots with an acting VP are planned for a later version).
 - **Party-weighted positions:** In presidential general elections, candidate positions are blended toward their party platform with weight 1/3 (\`(partyPos + 3 * charPos) / 4\`). This keeps nominees aligned with their coalition while preserving individual identity: 75% candidate, 25% party.
-- **Swing-state ground game:** In swing states (|lean| < 0.5 for modern elections, |lean| < 1.0 for legacy cycle-1 elections), candidates with invested ground game receive **+3% votes per ground-game level**.
+- **Swing-state ground game:** In swing states (|lean| < 0.5), candidates with invested ground game receive **+3% votes per ground-game level** (legacy level-based path); the newer Campaign Ops tree path grants the starter + branch magnitude instead of the flat per-level rate.
 - **VP home-state effect:** A nominee whose running mate hails from the current state receives **+3%** in that state. Stacks with ground game.
 - **Campaign strength multiplier:** Player campaign contributions build campaign strength, which applies a multiplicative vote boost. Each contribution adds \`0.75 * NPI\` strength. The curve is \`1 + 1 * (1 - exp(-strength/50,000))\`, soft-capping at **+100%** (2x total votes) at very high strength. Each campaign turn also pulls the strict campaign-strength leader in an active race back toward that race's average by up to 175 strength.
 - **State lean multiplier:** Each electoral unit applies a lean multiplier: \`1 + lean * epSign * leanStrength\` (leanStrength = 0.3 for ME/NE districts, 0.1 for full states), clamped to **[0.8, 1.2]**. State partisanship stays visible as a tiebreaker-scale effect (at most a 1.5:1 two-party swing) rather than dominating appeal, which already prices in the state's leans.

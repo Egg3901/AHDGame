@@ -74,7 +74,7 @@ Two money pools, separate and non-convertible:
 Fund generation per turn (Campaign Funds):
 
 - **Base rate**: a small fixed amount per turn.
-- **Donor bonus**: scaled by donor level and state population tier (small state +₳500/level, medium +₳1000, large +₳2000, mega +₳4000).
+- **Donor bonus**: scaled by donor level and state population tier (small state +₳100/level, medium +₳200/level, large +₳400/level, mega +₳800/level).
 - **Office bonus**: House +₳5k, State Senate +₳3k, Senate +₳15k, VP +₳25k, Governor +₳15k, President +₳50k.
 
 Cash on Hand comes from passive income streams (corporation dividends, bond coupons, share sales) and a 50% slice of any Personal Campaign Donation you make (the other 50% moves to Campaign Funds).

@@ -129,7 +129,7 @@ The standard forex speculation flow:
 4. Invest in that country's assets while holding the cheap currency
 5. Sell when the currency recovers or fundamentals improve
 
-The 24-turn volume lookback means heavy buying gradually pushes the rate up, accelerating your returns, but also attracting other speculators who may exit before you.
+The 24-turn volume lookback means heavy buying gradually pushes the rate down (strengthening the currency further), accelerating your returns, but also attracting other speculators who may exit before you.
 
 See also: [Central Banks](/wiki/central-banks), [Stock Market](/wiki/stock-market), [Sovereign Bonds](/wiki/sovereign-bonds), [Planned / Command Economies](/wiki/planned-economies)
 `;
