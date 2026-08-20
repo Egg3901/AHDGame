@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
+import { INDEX_TARGETS } from "@/lib/admin/seed/indexTargets";
 
 interface SeedTarget {
   id: string;
@@ -88,80 +89,11 @@ const SEED_TARGETS: SeedTarget[] = [
     destructiveWarning: "Drops and re-seeds US budget data",
     scope: "US",
   },
-  {
-    id: "indexesCore",
-    label: "Indexes — Core",
-    description:
-      "Core identity/lookup indexes (users email/username/lastActivity, characters, states, parties, corporations)",
-  },
-  {
-    id: "indexesActivity",
-    label: "Indexes — Activity Log",
-    description:
-      "activityLog TTL + query indexes and suspiciousCharacters indexes for admin activity tracking",
-  },
-  {
-    id: "indexesCabinet",
-    label: "Indexes — Cabinet",
-    description:
-      "Unified cabinetMembers + UK cabinet cooldowns/members indexes (TTL on cooldownUntil)",
-  },
-  {
-    id: "indexesPerf",
-    label: "Indexes — Performance",
-    description:
-      "Compound indexes on hot read paths: bills, notifications, elections, primarySnapshots, npps, playerMail",
-  },
-  {
-    id: "indexesSlowQuery",
-    label: "Indexes — Slow Query",
-    description:
-      "COLLSCAN offenders: corporationHistory, commodityPriceHistory, actionLogs, statePartyElections",
-  },
-  {
-    id: "indexesInternationalOrganizations",
-    label: "Indexes — International Organizations",
-    description: "UN/IMF leadership, legislation, membership, vote indexes",
-  },
-  {
-    id: "indexesWriteGuards",
-    label: "Indexes — Write Guards",
-    description:
-      "Partial-unique indexes on election entry, endorsements, governance votes, share offers, cabinet noms, leadership ballots, corp votes",
-  },
-  {
-    id: "indexesPartyNppRework",
-    label: "Indexes — Party / NPP rework",
-    description:
-      "Caucuses, recruitment slates, NPP cross-pressure, political capital, treasury transactions",
-  },
-  {
-    id: "indexesSovereignDefault",
-    label: "Indexes — Sovereign Default",
-    description: "Crisis state-machine sweep indexes on federalBudget + sovereignCrisisDecisions",
-  },
-  {
-    id: "indexesObservability",
-    label: "Indexes — Observability",
-    description:
-      "gameHealthSnapshots, codeQualitySnapshots, siteTrafficPageviews (TTLs + query indexes)",
-  },
-  {
-    id: "indexesFinancialTxLog",
-    label: "Indexes — Financial Tx Log",
-    description: "financialTxLog query indexes + TTL on expiresAt",
-  },
-  {
-    id: "indexesCommodityPrices",
-    label: "Indexes — Commodity Prices",
-    description: "Unique index on commodityPrices.commodity",
-  },
-  {
-    id: "indexesSettlement",
-    label: "Indexes — Settlement Crisis",
-    description:
-      "settlementPlays drain + per-turn indexes, and the UNIQUE partial index on settlementCrises that stops two live German Questions. Required before the crisis is opened on a world that was never reset.",
-  },
+  // EVERY index module, from the list the seed route dispatches off. Keeping a
+  // parallel copy here is what let eight modules go unreachable from the UI —
+  // see `src/lib/admin/seed/indexTargets.ts`. That module is deliberately
+  // client-safe (no db imports) so this can read it directly.
+  ...INDEX_TARGETS.map((t) => ({ id: t.id, label: t.label, description: t.description })),
   {
     id: "forex",
     label: "Forex Layer",
