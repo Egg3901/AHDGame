@@ -45,6 +45,8 @@ export * from "./caucus";
 export * from "./caucusChairElection";
 export * from "./nppVotePrediction";
 export * from "./politicalCapital";
+export * from "./settlementCrisis";
+export * from "./settlementPlay";
 export * from "./recruitmentSlate";
 export * from "./treasuryTransaction";
 export * from "./voteTally";
