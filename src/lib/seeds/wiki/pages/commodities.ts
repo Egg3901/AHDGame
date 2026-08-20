@@ -176,5 +176,6 @@ export const commoditiesPages: readonly WikiSeedPage[] = COMMODITY_TYPES.map((co
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 3,
+    lastUpdated: "2026-08-12",
   } satisfies WikiSeedPage;
 });

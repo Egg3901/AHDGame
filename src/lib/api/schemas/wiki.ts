@@ -44,6 +44,16 @@ export const rejectWikiPageSchema = z.object({
   reason: z.string().min(10).max(500),
 });
 
+export const wikiReportSchema = z.object({
+  slug: z
+    .string()
+    .min(1, "Slug required")
+    .max(100)
+    .regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
+  reason: z.enum(["stale", "incorrect", "update-request", "other"]),
+  note: z.string().max(2000).optional().default(""),
+});
+
 export const createSystemTagSchema = z.object({
   id: z
     .string()

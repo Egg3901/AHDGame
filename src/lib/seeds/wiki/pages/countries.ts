@@ -23,6 +23,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "uk-overview",
@@ -36,6 +37,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "de-overview",
@@ -49,6 +51,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "jp-overview",
@@ -62,6 +65,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 9,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "ie-overview",
@@ -75,6 +79,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "br-overview",
@@ -88,6 +93,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "cn-overview",
@@ -101,6 +107,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 9,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "ng-overview",
@@ -114,6 +121,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "ru-overview",
@@ -127,6 +135,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 9,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "dd-overview",
@@ -140,5 +149,6 @@ export const countriesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-11",
   },
 ];

@@ -39,6 +39,8 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 11,
+    lastUpdated: "2026-08-16",
+    designDocUrl: "design/corporations.html",
   },
   {
     slug: "corporate-r-and-d",
@@ -50,6 +52,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-18",
   },
   {
     slug: "brand-loyalty",
@@ -62,6 +65,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "output-quality",
@@ -73,6 +77,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "supply-agreements",
@@ -84,6 +89,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 5,
+    lastUpdated: "2026-08-12",
   },
   {
     slug: "labour-and-wages",
@@ -96,6 +102,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "unions",
@@ -107,6 +114,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-18",
   },
   {
     slug: "corporate-bonds",
@@ -118,6 +126,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-12",
   },
   {
     slug: "sovereign-bonds",
@@ -130,6 +139,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "stock-market",
@@ -141,6 +151,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-12",
   },
   {
     slug: "commodities",
@@ -152,6 +163,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-13",
   },
   {
     slug: "market-system-guide",
@@ -173,6 +185,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 10,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "plants-corp-guide",
@@ -194,6 +207,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 12,
+    lastUpdated: "2026-08-18",
   },
   {
     slug: "logistics-guide",
@@ -207,6 +221,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-19",
   },
   {
     slug: "private-banking",
@@ -220,6 +235,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 10,
+    lastUpdated: "2026-08-18",
   },
   {
     slug: "currency-exchange",
@@ -231,6 +247,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 9,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "planned-economies",
@@ -243,6 +260,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "central-banks",
@@ -254,6 +272,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-12",
   },
   {
     slug: "national-budget",
@@ -265,6 +284,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "national-metrics",
@@ -276,6 +296,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "government-approval",
@@ -287,6 +308,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 6,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "nationalization",
@@ -299,6 +321,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 9,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "national-corporations",
@@ -312,6 +335,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 10,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "index-funds",
@@ -323,6 +347,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
+    lastUpdated: "2026-08-12",
   },
   {
     slug: "line-of-credit",
@@ -334,6 +359,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "savings-interest",
@@ -345,6 +371,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 4,
+    lastUpdated: "2026-08-19",
   },
   {
     slug: "sovereign-default",
@@ -356,6 +383,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "imf",
@@ -367,5 +395,6 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 6,
+    lastUpdated: "2026-08-11",
   },
 ];

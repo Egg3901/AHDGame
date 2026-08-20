@@ -39,6 +39,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "multi-country-play",
@@ -51,6 +52,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "power-player-guide",
@@ -63,6 +65,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 9,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "reference-formulas",
@@ -75,6 +78,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "reference",
     estimatedReadTime: 10,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "reference-turn-order",
@@ -87,6 +91,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "reference",
     estimatedReadTime: 10,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "reference-offices",
@@ -99,6 +104,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 9,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "tips-for-beginners",
@@ -111,6 +117,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 6,
+    lastUpdated: "2026-08-20",
   },
   {
     slug: "faq",
@@ -123,6 +130,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "glossary",
@@ -135,6 +143,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-19",
   },
   {
     slug: "endgame-goals",
@@ -147,6 +156,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "reading-the-game",
@@ -159,6 +169,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-19",
   },
   {
     slug: "political-capital",
@@ -171,6 +182,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 5,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "international-organizations",
@@ -182,6 +194,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "achievements",
@@ -194,6 +207,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 4,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "caucuses",
@@ -206,6 +220,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 5,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "trade-system",
@@ -218,6 +233,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "rpg-stats",
@@ -230,6 +246,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 5,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "crisis-interaction",
@@ -242,6 +259,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 5,
+    lastUpdated: "2026-08-18",
   },
   {
     slug: "player-events",
@@ -254,5 +272,6 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 4,
+    lastUpdated: "2026-08-11",
   },
 ];

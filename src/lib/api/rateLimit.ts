@@ -129,6 +129,9 @@ export const AUTH_LIMITS = { maxRequests: 10, windowMs: 60_000 };
 /** Limit for feedback (bug/suggestion) to prevent spam. */
 export const FEEDBACK_LIMITS = { maxRequests: 5, windowMs: 60_000 };
 
+/** Wiki page issue reports: a handful per IP per minute. */
+export const WIKI_REPORT_LIMITS = { maxRequests: 5, windowMs: 60_000 };
+
 /** Player suggestion submissions — one per 30 minutes per user or IP. */
 export const SUGGESTION_SUBMIT_LIMITS = { maxRequests: 1, windowMs: 30 * 60 * 1000 };
 

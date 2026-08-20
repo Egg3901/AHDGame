@@ -35,4 +35,16 @@ export interface WikiSeedPage {
 
   /** Admin-only page: hidden from public index and API unless the caller is admin. */
   private?: boolean;
+
+  /**
+   * ISO date (YYYY-MM-DD) of the last git commit that touched this page's
+   * content file. Shown as the "Updated <date>" badge. Not wall-clock reseed time.
+   */
+  lastUpdated: string;
+
+  /**
+   * Path after the docs host, e.g. "design/elections.html".
+   * Rendered as a Design doc chip linking to NEXT_PUBLIC_DOCS_URL/<this>.
+   */
+  designDocUrl?: string;
 }

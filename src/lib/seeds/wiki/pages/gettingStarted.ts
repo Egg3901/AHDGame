@@ -21,6 +21,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 5,
+    lastUpdated: "2026-08-20",
   },
   {
     slug: "create-a-character",
@@ -32,6 +33,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 4,
+    lastUpdated: "2026-08-20",
   },
   {
     slug: "core-systems",
@@ -44,6 +46,8 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 6,
+    lastUpdated: "2026-08-11",
+    designDocUrl: "design/core-systems.html",
   },
   {
     slug: "stats-actions",
@@ -55,6 +59,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "the-game-loop",
@@ -66,6 +71,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 5,
+    lastUpdated: "2026-08-20",
   },
   {
     slug: "player-progression",
@@ -77,6 +83,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-20",
   },
   {
     slug: "relocation",
@@ -88,6 +95,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 5,
+    lastUpdated: "2026-08-12",
   },
   {
     slug: "first-campaign-walkthrough",
@@ -100,6 +108,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 9,
+    lastUpdated: "2026-08-20",
   },
   {
     slug: "game-starting-state",
@@ -112,5 +121,6 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-11",
   },
 ];

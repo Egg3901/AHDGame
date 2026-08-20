@@ -39,6 +39,8 @@ export const militaryPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-11",
+    designDocUrl: "design/conflict-system-as-shipped.html",
   },
   {
     slug: "declaring-war",
@@ -51,6 +53,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 9,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "military-units",
@@ -63,6 +66,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 10,
+    lastUpdated: "2026-08-18",
   },
   {
     slug: "manpower-conscription",
@@ -75,6 +79,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "mechanics",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "generals",
@@ -88,6 +93,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 10,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "national-doctrine",
@@ -100,6 +106,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-14",
   },
   {
     slug: "military-commands",
@@ -112,6 +119,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 9,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "fighting-a-battle",
@@ -125,6 +133,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 11,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "occupation-and-victory",
@@ -137,6 +146,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "mechanics",
     estimatedReadTime: 8,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "peace-and-truces",
@@ -149,6 +159,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "a-war-start-to-finish",
@@ -162,5 +173,6 @@ export const militaryPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 12,
+    lastUpdated: "2026-08-14",
   },
 ];

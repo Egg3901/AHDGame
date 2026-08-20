@@ -16,6 +16,7 @@ export const resourcesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
+    lastUpdated: "2026-08-12",
   },
   {
     slug: "extraction-contracts",
@@ -28,6 +29,7 @@ export const resourcesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 7,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "subsidies",
@@ -40,6 +42,7 @@ export const resourcesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
+    lastUpdated: "2026-08-11",
   },
   {
     slug: "tariffs",
@@ -52,5 +55,6 @@ export const resourcesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
+    lastUpdated: "2026-08-11",
   },
 ];
