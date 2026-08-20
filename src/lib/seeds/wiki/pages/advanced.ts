@@ -21,6 +21,8 @@ import { playerEventsContent } from "../content/playerEvents";
 import { blocSpheresContent } from "../content/blocSpheres";
 import { notificationsContent } from "../content/notifications";
 import { granularPollingContent } from "../content/granularPolling";
+import { marketSafeguardsContent } from "../content/marketSafeguards";
+import { embargoAndTradeExposureContent } from "../content/embargoAndTradeExposure";
 import {
   INTERNATIONAL_ORGANIZATION_ORDER,
   INTERNATIONAL_ORGANIZATIONS,
@@ -281,6 +283,30 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 4,
+  },
+  {
+    slug: "market-safeguards",
+    title: "Market Safeguards",
+    description:
+      "The automated launch guard behind the live stock market: what aggregate market-cap drawdown trips it, how fundamentals can excuse a fall but never make it stricter, and what a tier revert looks like from the player side.",
+    content: marketSafeguardsContent,
+    category: "advanced",
+    featured: false,
+    difficulty: "advanced",
+    contentType: "guide",
+    estimatedReadTime: 5,
+  },
+  {
+    slug: "embargo-and-trade-exposure",
+    title: "Embargoes & Trade Exposure",
+    description:
+      "How ministerial and legislated embargoes are imposed, the cabinet action cost, duration and cooldown limits, and how the trade-exposure model scales a corporation's export revenue instead of shutting the sector down entirely.",
+    content: embargoAndTradeExposureContent,
+    category: "advanced",
+    featured: false,
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 6,
   },
   {
     slug: "granular-polling",
