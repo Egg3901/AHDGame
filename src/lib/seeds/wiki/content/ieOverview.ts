@@ -115,14 +115,15 @@ Ireland has no sub-national legislature equivalent to the US State Senate or UK 
 
 ### Economic model
 
-Ireland's seed economic model shifts by start-date era:
+Ireland has **three seeded start years**: 1953, 1991, and 2019 (the default), each with its own authored national baseline and regional tilts:
 
 | Era | Model | Description |
 | --- | --- | --- |
+| 1953 | Protectionist agrarian | De Valera-era Ireland: protectionist trade policy, mass emigration, punt pegged to sterling |
 | 1991 | Agrarian | Pre-Celtic Tiger: a developing, largely agrarian economy |
 | 2019 | Tech innovation | Modern Ireland: a tech-driven, FDI-led innovation economy |
 
-A 2019-start Ireland begins as a **tech innovation** economy: the same modern model as the US. A 1991-start Ireland begins as agrarian and modernizes over time through play.
+A 2019-start Ireland begins as a **tech innovation** economy: the same modern model as the US. A 1991-start Ireland begins as agrarian and modernizes over time through play. A 1953-start Ireland begins earlier still, in the protectionist, high-emigration economy that preceded both.
 
 ---
 
