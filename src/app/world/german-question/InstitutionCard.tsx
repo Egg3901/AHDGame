@@ -31,6 +31,9 @@ export function InstitutionCard({
         ? "text-info"
         : "text-muted";
   const actorLabel = mode === "seat" && seatName ? seatName : "YOU";
+  // Only the catalogue the viewer is currently acting from. Offering the other
+  // one would render buttons the command refuses 403 every time.
+  const plays = institution.plays.filter((p) => p.actor === mode);
 
   return (
     <section className="flex flex-col overflow-hidden rounded-lg border border-card-border bg-background">
@@ -65,10 +68,10 @@ export function InstitutionCard({
         <p className="font-mono text-body-xs tracking-widest text-muted">
           PLAYS OPEN TO {actorLabel} HERE
         </p>
-        {institution.plays.map((play) => (
-          <PlayButton key={play.id} play={play} actor={mode} onCommitted={onCommitted} />
+        {plays.map((play) => (
+          <PlayButton key={play.id} play={play} onCommitted={onCommitted} />
         ))}
-        {institution.plays.length === 0 && (
+        {plays.length === 0 && (
           <p className="rounded-md border border-dashed border-card-border p-3 font-mono text-body-xs leading-relaxed text-muted">
             No play here from this seat — {institution.gateNote}
           </p>

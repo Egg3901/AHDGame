@@ -40,6 +40,15 @@ import { resolvePersonalFunds } from "../playCost";
 
 export interface DossierPlayView {
   id: string;
+  /**
+   * Which catalogue this came from.
+   *
+   * Carried per play, not inferred from the viewer's current mode: the two
+   * catalogues are merged into one list per institution, and committing a
+   * personal play as a seat (or the reverse) is refused 403 by the command. The
+   * card filters on this so it never offers a play that cannot succeed.
+   */
+  actor: "seat" | "personal";
   name: string;
   detail: string;
   tag: string;
@@ -182,6 +191,7 @@ async function laenderSubtitle(db: Db): Promise<string> {
 /** One play as the board shows it, priced and gated for this viewer. */
 function playView(params: {
   play: SettlementPlayDef;
+  actor: "seat" | "personal";
   multiplierPct: number;
   direction: 1 | -1 | null;
   multiplierLabel: string;
@@ -214,6 +224,7 @@ function playView(params: {
 
   return {
     id: play.id,
+    actor: params.actor,
     name: play.name,
     detail: play.detail,
     tag: play.class.toUpperCase(),
@@ -316,6 +327,7 @@ export async function loadGermanQuestionDossier(
         views.push(
           playView({
             play,
+            actor: "seat",
             multiplierPct: seatDef.multiplierPct,
             direction: seat.direction,
             multiplierLabel: `${(seatDef.multiplierPct / 100).toFixed(1)}× seat`,
@@ -338,6 +350,7 @@ export async function loadGermanQuestionDossier(
       views.push(
         playView({
           play,
+          actor: "personal",
           multiplierPct: PERSONAL_MULTIPLIER_PCT,
           // Personal plays choose their own side, so the board shows the
           // magnitude and the card offers the direction.

@@ -341,6 +341,19 @@ describe("loadGermanQuestionDossier", () => {
     expect(view!.turn).toBe(412);
   });
 
+  it("tags every play with the catalogue it came from", async () => {
+    // The two catalogues are merged into one list per institution. Without this
+    // tag the card cannot tell them apart, and committing a personal play as a
+    // seat is refused 403 — a button that can never succeed.
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    const street = view!.institutions.find((i) => i.id === "street")!;
+    expect(street.plays.find((p) => p.id === "border")!.actor).toBe("seat");
+    expect(street.plays.find((p) => p.id === "oped")!.actor).toBe("personal");
+    // Both really are present on the same institution for a seat holder.
+    expect(new Set(street.plays.map((p) => p.actor))).toEqual(new Set(["seat", "personal"]));
+  });
+
   it("names the delegation by its capital on the wire, not by its seat id", async () => {
     prime(db, "settlementPlays").find.mockReturnValue(
       cursor([

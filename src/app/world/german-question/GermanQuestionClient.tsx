@@ -70,7 +70,7 @@ export function GermanQuestionClient({ initialView }: { initialView: DossierView
           </div>
           <div className="grid min-w-[280px] flex-1 gap-2.5 sm:grid-cols-2">
             {view.settlementPlays.map((play) => (
-              <PlayButton key={play.id} play={play} actor="seat" onCommitted={refresh} />
+              <PlayButton key={play.id} play={play} onCommitted={refresh} />
             ))}
           </div>
         </section>

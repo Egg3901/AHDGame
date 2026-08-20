@@ -15,8 +15,8 @@ import type { DossierPlayView } from "@/lib/settlement/queries/dossier";
  * than one. A seat play's side is its country's bloc and is decided server-side.
  */
 interface PlayButtonProps {
+  /** Carries its own `actor` — the button never guesses which catalogue it is. */
   play: DossierPlayView;
-  actor: "seat" | "personal";
   onCommitted: () => void;
 }
 
@@ -27,7 +27,8 @@ const REASON_COPY: Record<string, string> = {
   "no-direction": "Your country belongs to neither bloc.",
 };
 
-export function PlayButton({ play, actor, onCommitted }: PlayButtonProps) {
+export function PlayButton({ play, onCommitted }: PlayButtonProps) {
+  const actor = play.actor;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
