@@ -56,6 +56,18 @@ export interface WikiPage {
   gameIteration?: string;
   gameStartDate?: string;
 
+  /**
+   * Seed content date (from WikiSeedPage.lastUpdated). Distinct from updatedAt,
+   * which advances on every reseed or human edit.
+   */
+  lastUpdated?: Date;
+
+  /**
+   * Docs-site path after the host (e.g. "design/elections.html").
+   * Linked from the wiki page as a Design doc chip.
+   */
+  designDocUrl?: string;
+
   // Analytics
   viewCount?: number;
 

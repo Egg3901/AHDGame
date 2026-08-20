@@ -18,6 +18,7 @@ const seedPage: WikiSeedPage = {
   difficulty: "beginner",
   contentType: "guide",
   estimatedReadTime: 5,
+  lastUpdated: "2026-08-11",
 };
 
 function existingPage(overrides: Partial<WikiPage> = {}): WikiPage {
@@ -67,6 +68,7 @@ describe("seedWikiPages", () => {
     expect(inserted.tags).toContain("getting-started");
     expect(inserted.status).toBe("published");
     expect(inserted.editHistory).toHaveLength(1);
+    expect(inserted.lastUpdated).toEqual(new Date("2026-08-11T00:00:00.000Z"));
   });
 
   it("overwrites an existing seed-owned page when no human edits", async () => {
@@ -141,5 +143,15 @@ describe("seedWikiPages", () => {
     });
     // No mocking needed: vi falls through to the original mock for other call shapes
     vi.clearAllMocks();
+  });
+
+  it("resolves a lastUpdated date (YYYY-MM-DD) for every seed page", async () => {
+    const { WIKI_SEED_PAGES } = await import("./pages");
+    const { WIKI_LAST_UPDATED } = await import("./lastUpdated.generated");
+    expect(WIKI_SEED_PAGES.length).toBeGreaterThan(50);
+    for (const page of WIKI_SEED_PAGES) {
+      const date = page.lastUpdated ?? WIKI_LAST_UPDATED[page.slug];
+      expect(date, page.slug).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
   });
 });

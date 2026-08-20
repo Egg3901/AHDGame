@@ -58,6 +58,7 @@
     "test:performance": "vitest run src/app/api/performance",
     "test:e2e": "playwright test",
     "test:e2e:performance": "playwright test e2e/performance.spec.ts",
+    "wiki:screenshots": "npx tsx scripts/wiki-screenshots.ts",
     "simulate": "npx tsx scripts/simulate-legislation.ts",
     "simulate:industrial-relations": "npx tsx scripts/simulate-industrial-relations.ts",
     "sim:setup": "bash scripts/sim/local-setup.sh",
@@ -83,6 +84,10 @@
     ],
     "content/changelog/**/*.md": [
       "npx tsx scripts/changelog/check-entries.ts"
+    ],
+    "src/lib/seeds/wiki/{content,pages}/**/*.ts": [
+      "npx tsx scripts/generate-wiki-last-updated.ts",
+      "git add src/lib/seeds/wiki/lastUpdated.generated.ts"
     ]
   },
   "dependencies": {

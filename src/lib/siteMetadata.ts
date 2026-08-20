@@ -26,7 +26,20 @@ export function getCanonicalUrl(pathname: string): string {
   return `${base}${path}`;
 }
 
+const DEFAULT_DOCS_URL = "https://docs.lakesidegames.net";
 const WIKI_SITE_URL = "https://wiki.ahousedividedgame.com";
+
+/** Public design/engineering docs host. Override with NEXT_PUBLIC_DOCS_URL. */
+export function getDocsUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_DOCS_URL?.trim().replace(/\/$/, "");
+  if (raw?.startsWith("http://") || raw?.startsWith("https://")) return raw;
+  return DEFAULT_DOCS_URL;
+}
+
+export function getDesignDocUrl(slug: string): string {
+  const path = slug.replace(/^\//, "");
+  return `${getDocsUrl()}/${path}`;
+}
 
 /**
  * Canonical URL for wiki pages served from the subdomain.

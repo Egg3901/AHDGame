@@ -1,5 +1,7 @@
 import { getCategoryById } from "@/lib/wiki/categories";
 import type { WikiPageContentType, WikiPageDifficulty } from "@/lib/db/types";
+import { getDesignDocUrl } from "@/lib/siteMetadata";
+import { WikiReportButton } from "@/components/wiki/WikiReportButton";
 
 interface PageMetadataProps {
   category?: string;
@@ -7,8 +9,10 @@ interface PageMetadataProps {
   difficulty?: WikiPageDifficulty;
   estimatedReadTime?: number;
   lastUpdated?: Date;
+  designDocUrl?: string;
   gameIteration?: string;
   gameStartDate?: string;
+  reportSlug?: string;
 }
 
 const CONTENT_TYPE_LABELS: Record<WikiPageContentType, string> = {
@@ -66,8 +70,10 @@ export function PageMetadata({
   difficulty,
   estimatedReadTime,
   lastUpdated,
+  designDocUrl,
   gameIteration,
   gameStartDate,
+  reportSlug,
 }: PageMetadataProps) {
   const categoryData = category ? getCategoryById(category) : undefined;
 
@@ -77,8 +83,10 @@ export function PageMetadata({
     !difficulty &&
     !estimatedReadTime &&
     !lastUpdated &&
+    !designDocUrl &&
     !gameIteration &&
-    !gameStartDate
+    !gameStartDate &&
+    !reportSlug
   ) {
     return null;
   }
@@ -127,6 +135,19 @@ export function PageMetadata({
           })}
         </span>
       )}
+
+      {designDocUrl && (
+        <a
+          href={getDesignDocUrl(designDocUrl)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1 font-medium text-primary hover:border-primary/50"
+        >
+          Design doc
+        </a>
+      )}
+
+      {reportSlug && <WikiReportButton slug={reportSlug} />}
 
       {gameStartDate && (
         <span className="flex items-center gap-1.5 rounded-md border border-secondary/30 bg-secondary/10 px-2.5 py-1 font-medium text-secondary">

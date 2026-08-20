@@ -44,6 +44,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 6,
+    designDocUrl: "design/core-systems.html",
   },
   {
     slug: "stats-actions",

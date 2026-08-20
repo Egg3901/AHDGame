@@ -24,6 +24,7 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 8,
+    designDocUrl: "design/bills-legislation.html",
   },
   {
     slug: "voting-and-whips",

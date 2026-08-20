@@ -25,6 +25,7 @@ export const partiesPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 5,
+    designDocUrl: "design/parties.html",
   },
   {
     slug: "party-membership",
