@@ -131,6 +131,14 @@ export function formatSharePriceOrder(price: number, symbol = "$"): string {
 }
 
 /**
+ * Coupon % for the corporation overview. The private-corp bonds payload may
+ * omit `effectiveCouponRate`; callers must not call `.toFixed` on undefined.
+ */
+export function formatEffectiveCouponPct(rate: number | undefined): string {
+  return typeof rate === "number" && Number.isFinite(rate) ? `${rate.toFixed(2)}%` : "—";
+}
+
+/**
  * Format a number as full currency (no abbreviation).
  * @param amount - The amount to format
  * @param symbol - Currency symbol to prefix (defaults to "$")
