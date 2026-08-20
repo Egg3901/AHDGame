@@ -404,16 +404,23 @@ export async function GET() {
         : null,
     ]);
 
+    // "Market opportunity" recommendations were about splitting the unowned pool.
+    // Under plants that mechanic is retired — you expand by BUILDING PLANTS, which
+    // the per-sector build flow already surfaces (ticket #1145) — so skip the
+    // pool-split economy fetch entirely and don't recommend a dead action.
+    const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
+
     // Fetch economy data for home state only (for split recommendations)
     // Don't fetch all 50+ state economies - that's an N+1 anti-pattern
-    const homeStateEconomy = homeState
-      ? await fetchStateEconomy(
-          db as Awaited<ReturnType<typeof getDb>>,
-          character.homeState,
-          homeState.name,
-          homeState.countryId as CountryId
-        )
-      : undefined;
+    const homeStateEconomy =
+      homeState && !plantsEnabled
+        ? await fetchStateEconomy(
+            db as Awaited<ReturnType<typeof getDb>>,
+            character.homeState,
+            homeState.name,
+            homeState.countryId as CountryId
+          )
+        : undefined;
 
     // For national economy recommendations, fetch aggregated data in a single query
     // instead of fetching each state's economy individually

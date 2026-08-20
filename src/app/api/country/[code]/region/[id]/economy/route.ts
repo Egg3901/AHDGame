@@ -351,13 +351,16 @@ export async function GET(request: Request, { params }: RouteParams) {
       // owned revenue, so every participant clamped to 100% (Bug #0775). Shared,
       // tested helper — same invariant the sector-detail + turn paths use.
       // unownedSectors.revenue is ₳-native (Task 9) so it sums safely with the anchor total.
+      // Ticket #1145: under plants, market share is a corp's revenue over the
+      // cell's TOTAL real revenue — there is no unowned pool in the denominator,
+      // and splits are retired (estimatedCapture/splitCost below are already 0),
+      // so unowned is 0. Below plants (legacy split worlds) keep the pool so the
+      // split quotes further down still work.
       const persistedUnownedRevenue = unownedByType.get(sectorType);
-      const effectiveTotalMarket = effectiveMarketAnchor(
-        ownedRevenue,
-        persistedUnownedRevenue,
-        totalMarketPerSector
-      );
-      const unownedRevenue = Math.max(0, effectiveTotalMarket - ownedRevenue);
+      const effectiveTotalMarket = plantsMode
+        ? Math.max(0, ownedRevenue)
+        : effectiveMarketAnchor(ownedRevenue, persistedUnownedRevenue, totalMarketPerSector);
+      const unownedRevenue = plantsMode ? 0 : Math.max(0, effectiveTotalMarket - ownedRevenue);
 
       // Attacker's share of this (state, sectorType) cell — used by the
       // underdog amplifier so the preview's capture estimate matches what the

@@ -66,6 +66,27 @@ export async function GET(request: Request) {
     const db = await getDb();
 
     if (unowned) {
+      // Ticket #1145: the "unowned market per state" list was the split finder —
+      // where to CLAIM an unowned pool. Under plants that mechanic is retired
+      // (you expand by building plants, surfaced on the sector page), and the
+      // pool is no longer claimable market, so this mode returns nothing rather
+      // than advertising a slice that cannot be taken. A real per-state
+      // "where to build" finder is a separate API+bot feature (demand headroom is
+      // national per commodity, so it needs a new shape the bot renders).
+      const { getMarketSystemModeForDb, marketAtLeast } = await import("@/lib/market/featureFlag");
+      if (marketAtLeast(await getMarketSystemModeForDb(db), "plants")) {
+        return NextResponse.json({
+          found: false,
+          mode: "unowned",
+          sectorType,
+          sectorLabel: CORPORATION_TYPE_LABELS[sectorType],
+          page: 1,
+          totalPages: 1,
+          totalItems: 0,
+          sectors: [],
+        });
+      }
+
       // Compute unowned market per state for this sector type
       // 1. Get all states with GDP
       const states = await db
