@@ -30,6 +30,20 @@ export async function appointNppChair(
   // read the chair as "randomly selected". Adopt the committee's chair instead.
   const boardChair = (bank.fomcBoard ?? []).find((seat) => seat.isChair) ?? bank.fomcBoard?.[0];
   if (boardChair && boardChair.occupantType === "npp" && boardChair.nppId) {
+    const boardTerm = boardChair.termExpiresAtTurn;
+    // Copying an already-expired board term left termExpired true forever, so
+    // the selection phase re-appointed a technocrat every turn. Grant a fresh
+    // term and stamp it on the committee seat so FOMC does not roll the chair
+    // again next turn.
+    const chairTermExpiresAtTurn =
+      typeof boardTerm === "number" && boardTerm > currentTurn
+        ? boardTerm
+        : currentTurn + TERM_TURNS;
+    const nextBoard = (bank.fomcBoard ?? []).map((seat) =>
+      seat.isChair || seat.seatId === boardChair.seatId
+        ? { ...seat, termExpiresAtTurn: chairTermExpiresAtTurn }
+        : seat
+    );
     await db.collection<CentralBank>("centralBanks").updateOne(
       { _id: bank._id },
       {
@@ -39,7 +53,8 @@ export async function appointNppChair(
           chairCharacterId: null,
           chairCharacterName: null,
           chairAlignment: boardChair.alignment,
-          chairTermExpiresAtTurn: boardChair.termExpiresAtTurn ?? currentTurn + TERM_TURNS,
+          chairTermExpiresAtTurn,
+          fomcBoard: nextBoard,
           vacancyAwaitingAutomaticSelection: false,
           updatedAt: new Date(),
         },

@@ -89,6 +89,39 @@ describe("processFomcMeetings — chair seat rollover", () => {
     expect($set.vacancyAwaitingAutomaticSelection).toBe(true);
   });
 
+  it("does not re-flag a vacancy while a player chair offer is already pending", async () => {
+    const pendingId = new ObjectId();
+    const db = makeDb({
+      _id: "US",
+      countryId: "US",
+      primeRate: 5,
+      chairMode: "npp",
+      chairNppId: CHAIR_NPP,
+      chairTermExpiresAtTurn: null,
+      chairSelectionPending: {
+        characterId: pendingId,
+        characterName: "Poppy",
+        pool: "political",
+        proposedAt: new Date(),
+        proposedAtTurn: 258,
+        appointedByExecutiveId: null,
+        declinedCharacterIds: [],
+      },
+      lastFomcMeetingTurn: 218,
+      fomcTermStartedAtTurn: 192,
+      fomcBoard: [
+        seat({ seatId: "seat-1", isChair: true, nppId: CHAIR_NPP, termExpiresAtTurn: 219 }),
+        seat({ seatId: "seat-2" }),
+      ],
+    });
+
+    await processFomcMeetings(db as unknown as Db, 219, 1956, new Date());
+
+    const $set = setOf(db);
+    expect($set.vacancyAwaitingAutomaticSelection).toBeUndefined();
+    expect($set.chairSelectionPending).toBeUndefined();
+  });
+
   it("leaves the chair term alone when a non-chair seat rolls over", async () => {
     const db = makeDb({
       _id: "DD",
