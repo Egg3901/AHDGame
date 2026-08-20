@@ -335,19 +335,21 @@ describe("recomputeSharePricesAfterBondTurn", () => {
     }>;
     const priceWithoutCooldown = noCooldownOps[0].updateOne.update.$set.sharePrice;
 
-    // Cooldown anchors near the scaled $1000; no-cooldown converges toward BSP=$10.
-    // The cooldown price must be MUCH higher.
-    expect(priceInCooldown).toBeGreaterThan(priceWithoutCooldown);
-    expect(priceInCooldown).toBeGreaterThan(500); // proves cooldown held the price up
+    // The cooldown still swaps the prior to corp.sharePrice, but since the
+    // wash-trade incident fix the anchor is clamped to within
+    // STOCK_SPLIT_PREV_ANCHOR_MAX_RATIO (3x) of the fresh fundamental, so a
+    // post-split price 100x above fundamentals can no longer become the new
+    // fundamental. Here fundamental ~ $10, so the $1000 anchor clamps to $30
+    // and the blend lands at 0.7 * 30 + 0.3 * 10 = $24.
+    expect(priceInCooldown).toBeGreaterThan(10); // still anchored above raw fundamental
+    expect(priceInCooldown).toBeLessThan(31); // but clamped to <= 3x fundamental blend
+    expect(priceInCooldown).toBeCloseTo(24, 0);
     // The no-cooldown path does NOT snap to BSP=$10 in a single turn. Because it
     // skips the split-cooldown smoothing, it instead runs through the per-turn
     // rate limiter (issue #2888, rateLimitPrice), which caps a single-turn drop
     // at SHARE_PRICE_MAX_TURN_MOVE (35%) of the prior. With the turn-1 prior at
     // $100 the floor is 100 * (1 - 0.35) = $65, so this turn lands exactly there
-    // and keeps converging toward BSP over subsequent turns. The point of the
-    // test still holds: the cooldown price (~$700, anchored to the scaled $1000)
-    // is far above the rate-limited no-cooldown price. (Previously asserted < 50,
-    // which predated the rate limiter and never accounted for its 35% floor.)
+    // and keeps converging toward BSP over subsequent turns.
     expect(priceWithoutCooldown).toBeCloseTo(65, 5); // rate-limited 35% drop from $100 prior
   });
 });
