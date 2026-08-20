@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getCategoryById } from "@/lib/wiki/categories";
 import type { WikiPageContentType, WikiPageDifficulty } from "@/lib/db/types";
 import { getDesignDocUrl } from "@/lib/siteMetadata";
@@ -98,16 +99,27 @@ export function PageMetadata({
       aria-label="Page metadata"
     >
       {categoryData && (
-        <span className="rounded-md border border-card-border bg-card/40 px-2.5 py-1 font-medium text-muted">
+        <Link
+          href={`/wiki/category/${categoryData.slug}`}
+          className="rounded-md border border-card-border bg-card/40 px-2.5 py-1 font-medium text-muted transition-colors hover:border-primary/50 hover:text-foreground"
+        >
           {categoryData.name}
-        </span>
+        </Link>
       )}
 
-      {contentType && (
-        <span className="rounded-md border border-card-border bg-card/40 px-2.5 py-1 text-muted">
-          {CONTENT_TYPE_LABELS[contentType]}
-        </span>
-      )}
+      {contentType &&
+        (contentType === "guide" || contentType === "strategy" ? (
+          <Link
+            href="/wiki#guides"
+            className="rounded-md border border-card-border bg-card/40 px-2.5 py-1 text-muted transition-colors hover:border-primary/50 hover:text-foreground"
+          >
+            {CONTENT_TYPE_LABELS[contentType]}
+          </Link>
+        ) : (
+          <span className="rounded-md border border-card-border bg-card/40 px-2.5 py-1 text-muted">
+            {CONTENT_TYPE_LABELS[contentType]}
+          </span>
+        ))}
 
       {difficulty && (
         <span
