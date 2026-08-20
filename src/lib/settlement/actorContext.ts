@@ -13,7 +13,6 @@
  */
 import type { Db, ObjectId } from "mongodb";
 import type { Character, GameState } from "@/lib/db/types";
-import type { SettlementCrisisDoc } from "@/lib/db/types/settlementCrisis";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import type { SettlementSeatKey } from "@/lib/constants/settlementCrisis";
 import { isSettlementCrisisEnabled } from "./featureFlag";
@@ -32,11 +31,21 @@ export interface SettlementSeatContext {
 }
 
 export interface SettlementActorContext {
+  /** Null when no crisis is open. Distinct from the function returning null. */
   crisisId: string | null;
   seat: SettlementSeatContext | null;
   personal: { actionsRemaining: number };
 }
 
+/**
+ * THREE OUTCOMES, and callers must tell them apart:
+ *   - `null`                       — the feature gate is off; render nothing.
+ *   - `{ crisisId: null, … }`      — gate on, but no crisis is open.
+ *   - `{ crisisId: "…", … }`       — a live crisis this viewer can look at.
+ *
+ * Collapsing the first two would make a disabled feature and a quiet world
+ * look identical to the dossier.
+ */
 export async function loadSettlementActorContext(
   db: Db,
   characterId: ObjectId
@@ -52,7 +61,9 @@ export async function loadSettlementActorContext(
   const personal = { actionsRemaining: character?.actions ?? 0 };
 
   const crises = await getSettlementCrisesCollection(db);
-  const crisis = (await crises.findOne({ status: "open" })) as SettlementCrisisDoc | null;
+  // No cast: the collection is already typed, and a redundant `as` here would
+  // hide a real shape change behind a silent assertion later.
+  const crisis = await crises.findOne({ status: "open" });
   if (!crisis) return { crisisId: null, seat: null, personal };
 
   const claim = await resolveSettlementSeat(db, characterId);
