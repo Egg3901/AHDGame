@@ -139,9 +139,11 @@ function buildCommodityMarkdown(commodity: CommodityType): string {
 
 ## Market behaviour
 
+Supply for ${label} comes from real plant capacity: owned sectors produce up to what their capacity can make, sell into the clearing market, and only sold units count toward the D/S ratio and the price below. A sector that has not finished building, or that is mothballed, contributes nothing here even if its nameplate revenue implies it should. See [Running a Corporation under the Plants System](/wiki/plants-corp-guide) for how capacity is built and sold.
+
 Prices blend ${blendDescription}, drifting toward equilibrium at 6% per turn (95% closed in one game year). Raw D/S remains visible for diagnosis; price and margin math use the same raw ratio up to 3x, then a softened effective pressure tail beyond that.${macroNote}
 
-Sector profit margins are computed separately at three tiers: global, national, and local (state): then blended at **50/25/25** by default. Tariff pressure shifts weight from the global leg to the national leg (local stays fixed at 25%), so a heavily-tariffed country becomes more sensitive to its own domestic supply chain. See [Commodities](/wiki/commodities) for the full pricing mechanics and margin formula.${extractionNote}
+The price shown here does two jobs. It sets sector profit margins, computed separately at three tiers (global, national, local/state), then blended at **50/25/25** by default, with tariff pressure shifting weight from the global leg to the national leg (local stays fixed at 25%). It also scales sector revenue directly through **price realization**: a producer's realized revenue moves with the lagged price of what it sells (shortage rewards sellers with more top-line revenue, not just margin points; a glut bleeds revenue even at a tolerable margin). See [Commodities](/wiki/commodities) for the full pricing mechanics, price realization, and margin formula.${extractionNote}
 
 ${suppliersSection}
 

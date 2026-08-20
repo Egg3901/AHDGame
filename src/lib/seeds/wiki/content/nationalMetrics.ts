@@ -23,7 +23,7 @@ Unemployment follows a simplified Okun's Law relationship with GDP growth:
 - **Above neutral:** Unemployment falls at 0.2% per 1% excess growth
 - **Below neutral:** Unemployment rises at 0.25% per 1% shortfall in growth
 
-Unemployment has an **85% inertia** (very slow-moving) and hard bounds of **2% to 15%**. A recession that drops GDP growth to 0% for one turn barely moves unemployment: sustained slow growth over many turns does.
+Unemployment has an **85% inertia** (very slow-moving) and hard bounds of **1% to 15%**. A recession that drops GDP growth to 0% for one turn barely moves unemployment: sustained slow growth over many turns does.
 
 ### Inflation
 

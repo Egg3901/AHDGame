@@ -41,7 +41,7 @@ Shareholders are paid against the target's valuation, scaled by the tier the aut
 | **Discounted** | Half valuation. | Executive emergency. |
 | **Seizure** | Nothing. | Executive seizure (maximum political cost). |
 
-Valuation discounts future sector cash flows at the same rate corporations use for their own net-present-value math, so the buyout price tracks the going concern rather than a sticker number.
+Valuation discounts future sector cash flows at the same rate corporations use for their own net-present-value math, so the buyout price tracks the going concern rather than a sticker number. On top of the tier multiplier, the state pays a **5x premium** over that capitalized-earnings valuation: a Fair-tier buyout is not "1x valuation" in practice, it's 5x the discounted earnings stream, tier multiplier included. This reflects the going-concern value of a business as a whole, not a fire-sale liquidation price.
 
 ## Investor confidence
 
@@ -72,7 +72,7 @@ For the full operating manual, covering the National Corporation page and its ta
 
 Privatization is the inverse operation: the state carves a fraction of a sector out of the National Corporation into a **brand-new corporation** with its own name, then floats it by IPO or auction.
 
-- **Carve size** per spin-out is capped between 10% and 30% of a sector: fully divesting a sector means creating several separate companies, an anti-monopoly guard.
+- **Carve fraction** of the National Corporation's holding in a sector is between 10% and 100% per spin-out. That's a separate cap from the anti-monopoly rule: a spun-out corp can never end up controlling more than 30% of the whole (state, sector-type) market, so a National Corp that dominates a market is forced into several separate spin-outs even though any single carve fraction could be as high as 100%.
 - **Golden share.** The state may retain up to 40% of a spun-out corporation to keep a strategic foothold.
 - **Auctions** run for a bid window of 48 turns.
 - **Cooldowns.** A privatized corp cannot be re-nationalized for 168 turns, and a freshly absorbed sector cannot be privatized for 168 turns, preventing churn in either direction.

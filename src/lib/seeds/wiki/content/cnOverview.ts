@@ -155,14 +155,16 @@ The Premier is the top of the ladder, but it requires internal-party confidence,
 
 ### Economic model
 
-China's seed economic model shifts by start-date era:
+China has **four seeded start years**: 1953, 1979, 1991, and 2019 (the default), each with its own authored national baseline and regional tilts:
 
 | Era | Model | Description |
 | --- | --- | --- |
+| 1953 | Early command economy | First Five-Year Plan, Soviet-model industrialization, near-total illiteracy |
+| 1979 | Barely-reformed command economy | Deng era opening: household responsibility system pilots, first SEZs, trade still minimal |
 | 1991 | Agrarian | Pre-reform: a developing, largely agrarian/reforming economy |
 | 2019 | Industrial powerhouse | Modern China: the world's manufacturing powerhouse |
 
-A 2019-start China begins as an **industrial powerhouse** economy, the same model as Germany and Japan. A 1991-start China begins as agrarian and industrializes over time through play. Sector-supported identities (e.g. **State-Capitalist**) emerge via the 67%+ state-ownership lever once the government actually nationalizes: sectors start unowned.
+A 2019-start China begins as an **industrial powerhouse** economy, the same model as Germany and Japan. A 1991-start China begins as agrarian and industrializes over time through play. Earlier starts (1953, 1979) begin further back in China's development arc, well before the reform-era opening. Sector-supported identities (e.g. **State-Capitalist**) emerge via the 67%+ state-ownership lever once the government actually nationalizes: sectors start unowned.
 
 ---
 

@@ -128,7 +128,7 @@ The per-country cost multiplier:
 | **1.5** | FR |
 | **1.4** | JP |
 | **1.2** | IT, DD |
-| **1.1** | SE |
+| **1.1** | SE, UKR |
 | **1.0** | DE, IE, BR, PL, BLR, CS, BAL, ES, TR, SCO, WAL |
 | **0.95** | YU |
 | **0.9** | HU, RO, GR, FI |

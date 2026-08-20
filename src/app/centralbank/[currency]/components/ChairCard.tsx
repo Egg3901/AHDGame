@@ -6,6 +6,7 @@ import {
 } from "@/lib/centralBank/credibility";
 import { Avatar } from "@/components/Avatar";
 import { InfoTooltip } from "@/components/InfoTooltip";
+import { ChairAppointmentActions } from "./ChairAppointmentActions";
 import type { ChairData } from "./centralBankTypes";
 
 export function ChairCard({
@@ -21,6 +22,8 @@ export function ChairCard({
   latestGdp,
   chairSelectionPending,
   chairMode,
+  viewerIsChairNominee = false,
+  countryCode = "",
 }: {
   chairTitle: string;
   chair: ChairData | null;
@@ -40,6 +43,9 @@ export function ChairCard({
     acceptanceTurnsRemaining?: number | null;
   } | null;
   chairMode?: "character" | "npp";
+  /** True when the signed-in character is the pending nominee (ticket #1072). */
+  viewerIsChairNominee?: boolean;
+  countryCode?: string;
   /** Consecutive turns the corridor stance has been held. */
   resolveStreak?: number;
 }) {
@@ -156,6 +162,7 @@ export function ChairCard({
               "Awaiting acceptance"
             )}
           </p>
+          {viewerIsChairNominee && <ChairAppointmentActions countryCode={countryCode} />}
         </div>
       ) : (
         <div className="rounded-lg border border-card-border/50 bg-card-muted p-4 text-center">

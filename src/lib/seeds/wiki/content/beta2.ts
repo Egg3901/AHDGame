@@ -1,6 +1,6 @@
-export const beta2Content = `**Iterations:** *Alpha 1 (not documented)*  ·  [[Beta 1]] *(concluded)*  ·  **Beta 2** *(current)*
+export const beta2Content = `**Iterations:** *Alpha 1 (not documented)*  ·  [[Beta 1]] *(concluded)*  ·  **Beta 2** *(concluded)*
 
-*Alpha 1 ran before this wiki existed and was not documented; [[Beta 1]] is preserved as it was written; Beta 2 is the iteration you are living in.*
+*Alpha 1 ran before this wiki existed and was not documented; [[Beta 1]] and Beta 2 are preserved below as they were written. The live world has since moved on to a later iteration; check the current-turn banner in-game for where things stand today.*
 
 ---
 
@@ -8,7 +8,7 @@ export const beta2Content = `**Iterations:** *Alpha 1 (not documented)*  ·  [[B
 
 > *"Seven nations, a Cold War map, and a world that started in 1991. Germany walked out of NATO, Britain declared war on China, Ireland proclaimed a Commonwealth, and the two richest people on earth run car companies nobody can buy shares in."*
 
-**Beta 2** is the current iteration of *A House Divided*, and the first to run on the **era system**. The world booted on **1991** (a Cold War map with the Soviet Union still on it) and has marched forward at roughly forty-eight turns per in-game year. At the time of writing it is **turn 1192**, the in-game year is **2015**, and twenty-four years of simulated history have produced five American presidents, three Japanese prime ministers, one deposed Taoiseach, a German chancellor who has never once commanded a majority, and a Chinese Communist Party whose internal confidence has fallen to 32 out of 100.
+**Beta 2** ran on the **era system** and is preserved here as a historical snapshot, not a description of the current world. The world booted on **1991** (a Cold War map with the Soviet Union still on it) and marched forward at roughly forty-eight turns per in-game year. At the time this article was written it was **turn 1192**, the in-game year was **2015**, and twenty-four years of simulated history had produced five American presidents, three Japanese prime ministers, one deposed Taoiseach, a German chancellor who never once commanded a majority, and a Chinese Communist Party whose internal confidence had fallen to 32 out of 100.
 
 Beta 2 launched with **six playable countries**: the United States, the United Kingdom, Japan, Germany, China, and Ireland, where [[Beta 1]] had three. **Nigeria** was added mid-iteration and held its first presidential election in the in-game year 2005. Brazil remains an economy-only preview.
 
@@ -416,7 +416,7 @@ The world's central banks are run by **Jamie Dimon** (Federal Reserve), **Ariane
 Systems live in this iteration that [[Beta 1]] never had:
 
 - **The era system.** Beta 2 starts in 1991 and advances through historical eras, with era-appropriate metrics activating as the years pass. Beta 1 ran in a static present.
-- **The Cold War map.** The Soviet Union, East Germany, Yugoslavia, Czechoslovakia, and a dozen other 1991 states exist in the world as unseated shells, complete with working currencies: the Soviet ruble, the Ostmark, the franc, the lira, the peseta.
+- **The Cold War map.** The Soviet Union, East Germany, Yugoslavia, Czechoslovakia, and a dozen other 1991 states exist in the world with working currencies: the Soviet ruble, the Ostmark, the franc, the lira, the peseta. In later iterations the Soviet Union (RU) and East Germany (DD) are seated countries with active player bases, not unseated shells: treat any "unseated" claim as specific to this Beta 2 snapshot, not the current world.
 - **Five new exchanges**: DAX, ISEQ, SSE, B3, and NGX joined NYSE, FTSE, and Nikkei.
 - **Index funds** (32), including global sector trackers.
 - **Nationalisation and national corporations**, with compensation tiers, privatisation votes, and strategic sector designations.

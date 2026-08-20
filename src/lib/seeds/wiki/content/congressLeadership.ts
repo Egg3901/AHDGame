@@ -28,6 +28,10 @@ The Commons has its own leadership structure. See the [United Kingdom](/wiki/uni
 
 The Shugiin and Sangiin each elect a President (Speaker-equivalent). See the [Japan](/wiki/japan) hub.
 
+### DE Bundestag, NG National Assembly, CN legislature
+
+Presiding-officer elections use the same shared framework across countries, not just the US: DE elects a Bundestagspräsident, NG elects presiding officers for its National Assembly chambers, and CN elects a CPPCC Chairman and an NPCSC Chairman. All of these resolve top-vote-getter-wins on a fixed-duration ballot, differing only in electorate and eligibility gate. See the country hubs for details.
+
 ## How leadership elections work
 
 Leadership elections run on their own election system, separate from constituency races.
@@ -67,6 +71,10 @@ When a leadership position goes vacant - through electoral defeat, resignation, 
 - A new leadership election spawns automatically.
 - Interim leadership may be handled by the next most senior member until a new election completes.
 - The specific rules for each position (succession order, interim holder) vary; the turn system enforces the correct sequence.
+
+### Motion to Vacate the Speaker
+
+A sitting House member can force the Speaker out mid-term without waiting for the next general election, by filing a motion to vacate. Any House member may file, and any House member may vote For or Against. The motion needs an absolute majority of the House to pass, not a plurality. If it passes, the Speaker is vacated immediately and a fresh Speaker election opens right away. If it fails, the sitting Speaker stays in place.
 
 ## What leadership members do each turn
 

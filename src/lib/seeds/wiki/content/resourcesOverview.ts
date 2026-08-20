@@ -2,21 +2,20 @@ export const resourcesOverviewContent = `# Resources
 
 States across all five countries hold deposits of natural resources that can be extracted by corporations. These resources feed the commodity market, affect corporate profit margins, and represent sovereign wealth that governments can choose to contract out or protect.
 
-## The seven extractable resources
+## The six extractable resources
 
-Seven resources can be extracted from state deposits. Each is measured in its own unit:
+Six resources can be extracted from state deposits. Each is measured in its own unit:
 
 | Resource | Unit | Primary economic role |
 | --- | --- | --- |
 | Oil | barrels (bbl) | Energy sector input; chemical industries |
 | Coal | tons | Energy and industrial input |
 | Iron | tons | Industrial and construction input |
-| Copper | tons | Technology and manufacturing input |
 | Natural Gas | MMBtu | Energy sector input |
 | Timber | cubic metres (m³) | Construction and paper input |
 | Rare Earth | tons | Technology sector strategic input |
 
-These seven are a subset of the eleven commodities tracked in the broader commodity pricing engine. Standard manufactured commodities (steel, electronics, consumer goods) have no extraction model: they come from corporate sectors processing other inputs, not from the ground.
+Copper is folded into Rare Earth rather than tracked as its own commodity. These six are a subset of the broader set of commodities tracked in the commodity pricing engine. Standard manufactured commodities (steel, electronics, consumer goods) have no extraction model: they come from corporate sectors processing other inputs, not from the ground.
 
 ## The capacity system
 
@@ -28,7 +27,6 @@ A reference calculation: a ₳10M/day extraction corporation running at a 20% su
 - Oil: 25,000 bbl/turn
 - Coal: 13,333 tons/turn
 - Natural Gas: 48,000 MMBtu/turn
-- Copper: 111 tons/turn (at a 10% rate)
 - Timber: 2,000 m³/turn (at an 8% rate)
 
 **States without a capacity document are treated as uncapped**: a backward-compatible default for any state not explicitly seeded with resource data. In practice, every major producing state has been seeded with real-world-derived capacity numbers.
@@ -80,7 +78,7 @@ When contracts add up past 100% of a state's capacity (an **over-allocated** sta
 
 Major resource concentrations across the five countries:
 
-**United States**: Texas leads in oil and natural gas. Pennsylvania and West Virginia are major gas and coal producers. Minnesota holds the largest iron deposits. Arizona is the copper hub. Wyoming and Alaska are uniquely diverse, holding five or more resource types each.
+**United States**: Texas leads in oil and natural gas. Pennsylvania and West Virginia are major gas and coal producers. Minnesota holds the largest iron deposits. Wyoming and Alaska are uniquely diverse, holding several resource types each.
 
 **United Kingdom**: Scotland holds the country's largest oil and gas deposits (North Sea). Wales, Yorkshire, and the East and West Midlands hold most of the UK's remaining coal and iron.
 

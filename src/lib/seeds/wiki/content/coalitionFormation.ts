@@ -53,7 +53,7 @@ Every coalition tracks its chair party and the specific character within that pa
 
 ## Disband votes
 
-Any member party's chair can initiate a **disband vote** from the Chair's Office.
+Only the **coalition chair** can initiate a **disband vote**, from the Chair's Office. Other member chairs cannot start one; they can only vote once it's open.
 
 Rules:
 - Duration: **24 hours** from initiation

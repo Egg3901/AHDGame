@@ -46,6 +46,21 @@ netWorthScore = 100 × (1 − exp(−k_nw × netWorth))
 // saturates near 100 at ~4M internal units
 \`\`
 
+### Leverage penalty and prime-environment adjustment
+
+The blended base score above isn't the final composite. Two more adjustments apply in sequence before the spread is computed:
+
+\`\`\`
+afterLeverage = base − min(30, debtToAssetsRatio × 38)          // high existing LOC debt worsens your score
+final         = afterLeverage − rawStress × (1 − 0.65 × shield) // tighter policy worsens it further
+// rawStress = min(22, max(0, primeRate − 2.5) × 5)
+// shield    = netWorthScore / 100
+\`\`
+
+**Leverage penalty:** the more of your assets are already tied up in LOC debt, the worse your composite gets, capped at a 30-point hit.
+
+**Prime-environment adjustment:** when the central bank's prime rate runs above a 2.5% baseline, borrowers take an additional stress penalty (capped at 22 points) that scales with how far above baseline the rate sits. Wealthier borrowers are partially shielded: a high net-worth score cushions up to 65% of that stress.
+
 ## Spread (interest rate)
 
 The composite score maps to an interest-rate **spread** in percentage points versus the prime rate. A perfect 100 earns a 1pp discount; a zero score costs +5pp over prime.

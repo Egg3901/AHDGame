@@ -16,7 +16,7 @@ An NPP must satisfy all of these to enter a race:
 - Country must match the election's country
 - No same-party candidate already in that primary
 
-**Presidential races are excluded entirely.** NPPs are barred from entering presidential primaries regardless of ambition or eligibility.
+**Presidential races are barred by default**, but the bar lifts in **autonomy-active, non-player-enabled countries**. If NPP autonomy is active for a country and no player controls it, NPPs can enter that country's presidential primary; the standard eligibility checks above still apply. In every other country, NPPs stay locked out of presidential primaries regardless of ambition or eligibility.
 
 ## Two-phase entry: incumbents first
 
@@ -38,7 +38,7 @@ Every turn, the entry process runs in two phases:
 | 8 | shugiin (JP) |
 | 9 | npcDelegate (CN) |
 | 10 | governor |
-| n/a | president (barred) |
+| n/a | president (barred except in autonomy-active, non-player countries) |
 
 Each primary gets **exactly one NPP per party**: NPPs never split the party vote in a primary.
 

@@ -11,7 +11,7 @@ Every account gets **one character** at a time. Character creation is fast but a
 
 ## Step 1: country
 
-Pick one of the six playable countries:
+Pick a country. The roster below is the core Western set; the playable roster depends on the world's seed era, and a Cold War world (1953/1979) also opens the Soviet Union, East Germany, Brazil, and Nigeria:
 
 | Country | Home region type | First offices most players target |
 | --- | --- | --- |

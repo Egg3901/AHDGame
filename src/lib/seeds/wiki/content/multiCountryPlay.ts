@@ -12,7 +12,7 @@ Every character is locked to a single country when you create them. This determi
 - Which regional bills you can propose and vote on
 - Which country's currency your government income is paid in
 
-**You cannot switch your character's country after creation.** If you want to play in a second country, you need a second character. Each player account supports one character, so in practice multi-country play means coordinating with other players rather than switching contexts yourself.
+**You can relocate your character to a different country.** Relocation resets your national influence and party affiliation (you rejoin as independent in the new country), so it is a real reset, not a free swap. If you want to keep a presence in two countries at once, a second character is still the simpler option, but switching your existing character is possible.
 
 However, economic investments (corporations, bonds, forex positions) cross country lines freely.
 

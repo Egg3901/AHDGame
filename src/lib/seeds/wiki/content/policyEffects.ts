@@ -19,13 +19,13 @@ Every turn, the game recalculates the effects of every active piece of legislati
 
 ### 1. Exponential decay toward target
 
-Each legislation type has a set of weighted effect targets: the metric values that policy "wants" the world to reach. Metrics don't jump to the target instantly; they move 2% of the remaining gap per turn:
+Each legislation type has a set of weighted effect targets: the metric values that policy "wants" the world to reach. Metrics don't jump to the target instantly; they close the remaining gap at a fixed rate of about **0.72% per turn** (a decay time constant of 139 turns, giving a roughly 96-turn / 2-in-game-year half-life):
 
 \`\`\`
-newValue = current + (target - current) x 0.02
+newValue = current + (target - current) x (1 / 139)
 \`\`\`
 
-A metric that is 10 points away from its target closes 0.2 points per turn initially, then slows as it converges. This asymptotic approach means extreme legislation has immediate visible impact but takes many turns to fully manifest.
+A metric that is 10 points away from its target closes about 0.072 points per turn initially, then slows as it converges. This asymptotic approach means extreme legislation has immediate visible impact but takes many turns to fully manifest.
 
 ### 2. Direct tick rates
 

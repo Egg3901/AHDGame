@@ -114,14 +114,18 @@ Brazil has no sub-national legislature. The first rung of national play is a Fed
 
 ### Economic model
 
-Brazil's seed economic model shifts by start-date era:
+Brazil has **four seeded start years**: 1953, 1979, 1991, and 2019 (the default). Each start authors its own national baseline and per-region tilts for the full set of Brazil's tracked economic, education, healthcare, infrastructure, and social metrics, so the starting economy looks materially different depending on which era you launch into:
 
-| Era | Model | Description |
-| --- | --- | --- |
-| 1991 | Agrarian | Pre-modernization: a commodity-dependent, largely agrarian economy |
-| 2019 | Resource extraction | Modern Brazil: a resource-extraction-driven emerging market |
+| Era | Character |
+| --- | --- |
+| 1953 | Post-war import-substitution economy, early industrialization |
+| 1979 | Late military-regime "miracle" hangover: high inflation, second oil shock pressure |
+| 1991 | Pre-Real-Plan hyperinflation years (Collor-era recession and asset freeze), a young post-dictatorship democracy with a still-closed economy |
+| 2019 | Modern Brazil: a resource-extraction-driven emerging market (commodity exports like soybeans, iron ore, oil, and meat dominate) |
 
-A 2019-start Brazil begins as a **resource extraction** economy: commodity exports (soybeans, iron ore, oil, meat) dominate. A 1991-start Brazil begins as agrarian and transitions over time through play.
+A 1953 or 1979 start begins earlier in Brazil's industrialization arc; a 1991 start begins in hyperinflation and opens up over time through play; a 2019 start begins as a resource-extraction economy already integrated into modern global trade.
+
+Brazil's monetary baseline also shifts by era: the game tracks a target inflation rate and a neutral prime rate per country, and Brazil's central bank Taylor rule reacts to the gap between actual and target inflation. The default (modern) target is 4% inflation with an 8% neutral prime rate. Earlier starts use different era-appropriate anchors: the 1953 anchor holds Brazil's target at 4%/8% (same as default, since 1953 Brazil is authored as running policy-target inflation rather than the historical Vargas-era CPI spike), while the 1979 anchor moves the target to 12% inflation with a 15% neutral prime rate, reflecting the military-regime "miracle" hangover. These anchors set what the BCB's Taylor rule treats as "on target," not a fixed rate that never moves: actual in-game inflation and the prime rate still respond to real conditions each turn.
 
 ---
 

@@ -67,9 +67,9 @@ General: **selective attacks**: if an opponent's Favorability is 65-75 and you c
 
 The formula itself differs from state primaries:
 
-- **Party Organization matters a lot (25 pts).** Your home state's party-org investment pays off in presidential primaries specifically.
-- **National Political Influence (NPI) matters a lot (25 pts).** NPI is slow to accumulate: passive +state PI / 100 per turn. Build across many cycles.
-- **Favorability only 10 pts.** Personal popularity is de-prioritised vs state races.
+- **Party Influence matters (20 pts).** Your own accumulated party influence, not a home-state org score.
+- **National Reach matters (15 pts).** Built from national political influence via a diminishing-returns curve: NPI accrues passively (+state PI / 100 per turn), so build across many cycles.
+- **Favorability is 25 pts.** Repriced up from a 10-point floor so the primary selects for something close to what the general rewards.
 - **Alignment still 40 pts.** Still the biggest lever.
 
 The implication: **presidential primaries reward long-term investment** in state party org and NPI, not one-cycle Favorability and PI bursts.
@@ -80,7 +80,7 @@ The implication: **presidential primaries reward long-term investment** in state
 - Independent penalty 0.3x vote share (70% reduction).
 - Presidential Travel (5 actions) boosts Favorability +1%/turn while in-state. Deploy to swing states in the final month.
 - FPTP spoiler does **not** apply in the presidential model: third parties don't drain votes from their ideologically-nearest major.
-- Party-weighted positions (3x party + candidate) / 4 mean your party matters more than your personal position.
+- Party-weighted positions (party + 3x candidate) / 4 mean your personal position matters more than your party (75% candidate, 25% party).
 - Party org uses a steep curve (0.05x-1.0x). Low-org states are brutal.
 - State lean is much more important: the state lean times party position dynamic weights red-aligned candidates in red states and blue-aligned in blue.
 
