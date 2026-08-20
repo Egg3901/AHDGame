@@ -6,7 +6,7 @@ This page gets you from account creation to your first campaign in the shortest 
 
 ## Pick a country
 
-A House Divided currently supports six playable countries. Each has its own political system, electoral rules, and offices.
+A House Divided's playable roster depends on the world's seed era (the presets are 1953, 1979, 1991, and 2019). The countries below are the core Western roster; a Cold War world (1953 or 1979) also opens the Soviet Union and East Germany, and the 1991 scenario adds Brazil and Nigeria. Each country has its own political system, electoral rules, and offices.
 
 | Country | Legislature | Top office | Electoral system |
 | --- | --- | --- | --- |
