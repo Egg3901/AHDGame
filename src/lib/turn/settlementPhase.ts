@@ -33,6 +33,7 @@ import { isArmed, nextHeat, outcomeFor } from "@/lib/settlement/outcome";
 import { isSettlementCrisisEnabled } from "@/lib/settlement/featureFlag";
 import { levyMobilisation } from "@/lib/settlement/mobilisation";
 import { settleFrozenCrisisFromConflict } from "@/lib/settlement/settleFromConflict";
+import { actuateSettlementOutcome } from "@/lib/settlement/actuate";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
 import type { GameState } from "@/lib/db/types";
 
@@ -72,7 +73,19 @@ export async function processSettlementTurn(
 
   const crises = await getSettlementCrisesCollection(db);
 
-  // A frozen crisis is waiting on its war. Sweep that first: the moment the
+  // A resolved crisis that has not been actuated yet gets its consequences and
+  // its cooldown. Swept before anything else so an outcome written by last
+  // turn's threshold test or war never sits un-enacted.
+  const unactuated = await crises.findOne({
+    status: "resolved",
+    cooldownUntilTurn: null,
+  } as Filter<SettlementCrisisDoc>);
+  if (unactuated) {
+    await actuateSettlementOutcome(db, unactuated, currentTurn);
+    return idle();
+  }
+
+  // A frozen crisis is waiting on its war. Sweep that next: the moment the
   // conflict resolves, the settlement is decided by who won it, and the board
   // should not sit frozen for a turn longer than the fighting lasted.
   const frozen = await crises.findOne({ status: "frozen" } as Filter<SettlementCrisisDoc>);

@@ -139,6 +139,16 @@ export const MOBILISATION_TREASURY_SHARE = 0.02;
 /** Approval points each seat country loses per turn while armed. */
 export const MOBILISATION_APPROVAL_HIT = 1;
 
+/**
+ * Turns before a settled question may be asked again.
+ *
+ * The owner's ruling was that a Western win is the plain status quo with no
+ * permanent lock — the question can return. This is the anti-spam floor on
+ * that, not a lock: two game-years of quiet before the four powers can reopen
+ * a matter they have just settled.
+ */
+export const SETTLEMENT_REOPEN_COOLDOWN_TURNS = 96;
+
 export const LADDER_RUNGS: readonly string[] = [
   "Diplomatic notes · four-power channel",
   "Border incidents · troop alerts",
