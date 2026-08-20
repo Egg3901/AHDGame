@@ -38,6 +38,11 @@ import {
   isOrderFlowPriceEligible,
   resolveShareExecutionPrice,
 } from "@/lib/corporations/marketExecution";
+import {
+  buildOrderFlowWindowInc,
+  buildOrderFlowWindowIncReversal,
+  isOrderFlowWashRoundTrip,
+} from "@/lib/corporations/orderFlowWashGuard";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import {
   settleFloatSellDebit,
@@ -206,6 +211,31 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
       const buybackGate = await gateIssuerBuyback();
       if (buybackGate) return buybackGate;
 
+      // Wash-trade guard: a sell that round-trips this corp's own recent buy
+      // contributes nothing to the order-flow window and neutralizes the buy
+      // leg instead (see orderFlowWashGuard).
+      const washExcluded =
+        orderFlowEligible &&
+        (await isOrderFlowWashRoundTrip(
+          db,
+          corporation._id,
+          { corporationId: sellerCorp._id },
+          "sell",
+          now
+        ));
+      const orderFlowInc = buildOrderFlowWindowInc(
+        orderFlowEligible,
+        "sell",
+        shares * executionPrice,
+        washExcluded
+      );
+      const orderFlowIncReversal = buildOrderFlowWindowIncReversal(
+        orderFlowEligible,
+        "sell",
+        shares * executionPrice,
+        washExcluded
+      );
+
       const remainingAfterSale = await debitSharesFromCorp(
         db,
         corporation._id,
@@ -214,7 +244,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         {
           $inc: {
             publicFloat: shares,
-            ...(orderFlowEligible ? { orderFlowWindowSellValue: shares * executionPrice } : {}),
+            ...orderFlowInc,
           },
           $set: { updatedAt: now },
         },
@@ -248,9 +278,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
           {
             $inc: {
               publicFloat: -shares,
-              ...(orderFlowEligible
-                ? { orderFlowWindowSellValue: -(shares * executionPrice) }
-                : {}),
+              ...orderFlowIncReversal,
             },
             $set: { updatedAt: new Date() },
           }
@@ -370,8 +398,35 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
           { status: 409 }
         );
       }
+      // Wash-trade guard (see orderFlowWashGuard): round-trip legs are excluded
+      // from order-flow accumulation and neutralize the opposite leg instead.
+      const washExcluded =
+        orderFlowEligible &&
+        (await isOrderFlowWashRoundTrip(
+          db,
+          corporation._id,
+          { imperialCharacterId: imperial._id },
+          "sell",
+          now
+        ));
+      const orderFlowInc = buildOrderFlowWindowInc(
+        orderFlowEligible,
+        "sell",
+        shares * executionPrice,
+        washExcluded
+      );
+      const orderFlowIncReversal = buildOrderFlowWindowIncReversal(
+        orderFlowEligible,
+        "sell",
+        shares * executionPrice,
+        washExcluded
+      );
       let corporationUpdate: {
-        $inc: { publicFloat: number; orderFlowWindowSellValue?: number };
+        $inc: {
+          publicFloat: number;
+          orderFlowWindowSellValue?: number;
+          orderFlowWindowBuyValue?: number;
+        };
         $set: {
           updatedAt: Date;
           ceoVacant?: boolean;
@@ -385,7 +440,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
       } = {
         $inc: {
           publicFloat: shares,
-          ...(orderFlowEligible ? { orderFlowWindowSellValue: shares * executionPrice } : {}),
+          ...orderFlowInc,
         },
         $set: { updatedAt: now },
       };
@@ -394,7 +449,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         corporationUpdate = {
           $inc: {
             publicFloat: shares,
-            ...(orderFlowEligible ? { orderFlowWindowSellValue: shares * executionPrice } : {}),
+            ...orderFlowInc,
           },
           $set: {
             ceoVacant: true,
@@ -457,9 +512,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
           {
             $inc: {
               publicFloat: -shares,
-              ...(orderFlowEligible
-                ? { orderFlowWindowSellValue: -(shares * executionPrice) }
-                : {}),
+              ...orderFlowIncReversal,
             },
             $set: { updatedAt: new Date() },
           },
@@ -618,14 +671,41 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         { status: 409 }
       );
     }
+    // Wash-trade guard (see orderFlowWashGuard): round-trip legs are excluded
+    // from order-flow accumulation and neutralize the opposite leg instead.
+    const washExcluded =
+      orderFlowEligible &&
+      (await isOrderFlowWashRoundTrip(
+        db,
+        corporation._id,
+        { characterId: charDoc._id },
+        "sell",
+        now
+      ));
+    const orderFlowInc = buildOrderFlowWindowInc(
+      orderFlowEligible,
+      "sell",
+      shares * executionPrice,
+      washExcluded
+    );
+    const orderFlowIncReversal = buildOrderFlowWindowIncReversal(
+      orderFlowEligible,
+      "sell",
+      shares * executionPrice,
+      washExcluded
+    );
     let corporationUpdate: {
-      $inc: { publicFloat: number; orderFlowWindowSellValue?: number };
+      $inc: {
+        publicFloat: number;
+        orderFlowWindowSellValue?: number;
+        orderFlowWindowBuyValue?: number;
+      };
       $set: { updatedAt: Date; ceoVacant?: boolean; ceoVacantSinceTurn?: number };
       $unset?: { ceoId: ""; userId: ""; pendingCeoCharacterId: "" };
     } = {
       $inc: {
         publicFloat: shares,
-        ...(orderFlowEligible ? { orderFlowWindowSellValue: shares * executionPrice } : {}),
+        ...orderFlowInc,
       },
       $set: { updatedAt: now },
     };
@@ -634,7 +714,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
       corporationUpdate = {
         $inc: {
           publicFloat: shares,
-          ...(orderFlowEligible ? { orderFlowWindowSellValue: shares * executionPrice } : {}),
+          ...orderFlowInc,
         },
         $set: {
           ceoVacant: true,
@@ -695,7 +775,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         {
           $inc: {
             publicFloat: -shares,
-            ...(orderFlowEligible ? { orderFlowWindowSellValue: -(shares * executionPrice) } : {}),
+            ...orderFlowIncReversal,
           },
           $set: { updatedAt: new Date() },
         },
