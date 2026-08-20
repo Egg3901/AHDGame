@@ -182,7 +182,7 @@ export function VoteListTable({ billId, chamber, showSeats }: VoteListTableProps
       {filtered.length === 0 ? (
         <p className="text-xs text-muted py-4 text-center">No votes match the current filters.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-card-border text-muted">
