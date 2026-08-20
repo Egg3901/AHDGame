@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { SettlementInstitutionId, SettlementSeatId } from "@/lib/db/types/settlementCrisis";
+import type { SettlementPlayClass } from "@/lib/db/types/settlementPlay";
 import {
   SETTLEMENT_INSTITUTIONS,
   SETTLEMENT_SEATS,
@@ -8,7 +10,33 @@ import {
   LOCK_THRESHOLD,
   HUNDREDTHS,
   playsForSeat,
+  type SettlementInstitutionKey,
+  type SettlementSeatKey,
+  type SettlementPlayDef,
 } from "./settlementCrisis";
+
+/**
+ * COMPILE-TIME PARITY GUARD.
+ *
+ * The institution, seat and play-class unions are declared TWICE: once in
+ * `src/lib/db/types/settlementCrisis.ts` and once here in constants. They
+ * cannot be shared, because a constants file importing `src/lib/db/*` drags
+ * `mongodb` into the browser bundle and breaks `next build`.
+ *
+ * So nothing but this guard stops the two copies from silently diverging — add
+ * a fifth institution to one and forget the other, and `institution.id` becomes
+ * assignable-but-wrong with every test still green. A test file is not bundled,
+ * so it is the one place both sides can be compared.
+ *
+ * These are type-level assertions: they fail `npm run typecheck`, not vitest.
+ */
+type Equal<A, B> =
+  (<G>() => G extends A ? 1 : 2) extends <G>() => G extends B ? 1 : 2 ? true : false;
+type Expect<T extends true> = T;
+
+type _InstitutionUnionsMatch = Expect<Equal<SettlementInstitutionKey, SettlementInstitutionId>>;
+type _SeatUnionsMatch = Expect<Equal<SettlementSeatKey, SettlementSeatId>>;
+type _PlayClassUnionsMatch = Expect<Equal<SettlementPlayDef["class"], SettlementPlayClass>>;
 
 describe("settlement crisis config", () => {
   it("institution weights sum to the declared total", () => {
