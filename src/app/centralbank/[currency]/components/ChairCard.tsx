@@ -63,13 +63,48 @@ export function ChairCard({
   const colorClass = infamy > 25 ? "text-error" : infamy > 10 ? "text-warning" : "text-success";
   const barClass = infamy > 25 ? "bg-error" : infamy > 10 ? "bg-warning" : "bg-success";
 
+  // A leftover NPP caretaker (chairMode still "npp" after persistPendingProposal
+  // clears chairCharacterId) must not hide the pending offer. Ticket #1072 put
+  // Accept/Decline on this vacant branch; ticket #1144 is the same offer with
+  // the caretaker still rendered, so the nominee never saw the buttons.
   return (
     <div className="min-w-0 rounded-xl border border-card-border bg-card p-5">
       <h2 className="mb-3 break-words text-xs font-semibold uppercase tracking-widest text-muted">
         {chairTitle}
       </h2>
 
-      {chair ? (
+      {chairSelectionPending ? (
+        <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 text-center">
+          <p className="text-sm text-foreground">
+            Appointment pending for{" "}
+            <Link
+              href={`/character/${chairSelectionPending.characterId}`}
+              className="font-medium text-primary hover:underline"
+            >
+              {chairSelectionPending.characterName}
+            </Link>
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            {typeof chairSelectionPending.acceptanceTurnsRemaining === "number" ? (
+              chairSelectionPending.acceptanceTurnsRemaining > 0 ? (
+                <>
+                  Awaiting acceptance ·{" "}
+                  <span className="font-semibold text-foreground">
+                    {chairSelectionPending.acceptanceTurnsRemaining}
+                  </span>{" "}
+                  {chairSelectionPending.acceptanceTurnsRemaining === 1 ? "turn" : "turns"} to
+                  respond
+                </>
+              ) : (
+                "Awaiting acceptance · lapses this turn"
+              )
+            ) : (
+              "Awaiting acceptance"
+            )}
+          </p>
+          {viewerIsChairNominee && <ChairAppointmentActions countryCode={countryCode} />}
+        </div>
+      ) : chair ? (
         chairMode === "npp" ? (
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10">
@@ -133,37 +168,6 @@ export function ChairCard({
             </div>
           </div>
         )
-      ) : chairSelectionPending ? (
-        <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 text-center">
-          <p className="text-sm text-foreground">
-            Appointment pending for{" "}
-            <Link
-              href={`/character/${chairSelectionPending.characterId}`}
-              className="font-medium text-primary hover:underline"
-            >
-              {chairSelectionPending.characterName}
-            </Link>
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            {typeof chairSelectionPending.acceptanceTurnsRemaining === "number" ? (
-              chairSelectionPending.acceptanceTurnsRemaining > 0 ? (
-                <>
-                  Awaiting acceptance ·{" "}
-                  <span className="font-semibold text-foreground">
-                    {chairSelectionPending.acceptanceTurnsRemaining}
-                  </span>{" "}
-                  {chairSelectionPending.acceptanceTurnsRemaining === 1 ? "turn" : "turns"} to
-                  respond
-                </>
-              ) : (
-                "Awaiting acceptance · lapses this turn"
-              )
-            ) : (
-              "Awaiting acceptance"
-            )}
-          </p>
-          {viewerIsChairNominee && <ChairAppointmentActions countryCode={countryCode} />}
-        </div>
       ) : (
         <div className="rounded-lg border border-card-border/50 bg-card-muted p-4 text-center">
           <p className="text-sm text-muted">Position Vacant</p>
@@ -171,7 +175,7 @@ export function ChairCard({
         </div>
       )}
 
-      {chair && (
+      {chair && !chairSelectionPending && (
         <div className="mt-3 space-y-2">
           {chairTermExpiresAtTurn != null ? (
             <>
@@ -200,7 +204,7 @@ export function ChairCard({
         </div>
       )}
 
-      {chair && (
+      {chair && !chairSelectionPending && (
         <div className="mt-4 border-t border-card-border pt-4 space-y-2">
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
             <InfoTooltip

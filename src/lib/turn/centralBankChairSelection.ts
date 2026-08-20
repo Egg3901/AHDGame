@@ -382,19 +382,20 @@ export async function processCentralBankChairSelection(
 
     // Bootstrap vacancy: a bank that has never had a chair (null term + null chair)
     // should still trigger selection so the first chair can be seated.
-    const bootstrapVacancy = bank.chairCharacterId === null && bank.chairTermExpiresAtTurn === null;
-
-    // A caretaker technocrat yields the moment the executive names someone. The
-    // seat is not the technocrat's to serve out — it took the chair because the
-    // pool was empty, and the pool is no longer empty. Without this a country
-    // that nominates a day after the seat was filled waits four game years.
-    const caretakerWithNominations =
-      bank.chairMode === "npp" &&
+    //
+    // A seated NPP caretaker is not a bootstrap. Those chairs always have
+    // `chairCharacterId: null`, and after persistPendingProposal the term was
+    // also nulled — treating that as "never seated" re-opened the draw every
+    // turn, re-notified the nominee, and churned every bank in the world.
+    // Reopen those seats with vacancyAwaitingAutomaticSelection (FOMC chair
+    // rollover, resign, or an admin heal), not by inferring vacancy from the
+    // player-mirror fields.
+    const bootstrapVacancy =
       bank.chairCharacterId === null &&
-      (bank.nominations?.length ?? 0) > 0;
+      bank.chairTermExpiresAtTurn === null &&
+      bank.chairMode !== "npp";
 
-    if (!termExpired && !automaticVacancyFill && !bootstrapVacancy && !caretakerWithNominations)
-      continue;
+    if (!termExpired && !automaticVacancyFill && !bootstrapVacancy) continue;
 
     result.selectionsTriggered++;
 

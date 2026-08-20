@@ -75,4 +75,35 @@ describe("ChairCard", () => {
     expect(screen.queryByText("Autonomous Chair (AI)")).toBeNull();
     expect(screen.getByRole("link", { name: "Alex Smith" })).toBeTruthy();
   });
+
+  // Ticket #1144: persistPendingProposal leaves chairMode npp + chairNppId, so
+  // the query still returns the caretaker. The pending offer must win, and the
+  // nominee must get Accept/Decline (PR #602 only rendered those when chair was
+  // already null).
+  it("shows the pending offer and nominee controls even when an NPP caretaker is still seated", () => {
+    render(
+      <ChairCard
+        {...baseProps}
+        chair={{
+          characterId: "npp-1",
+          name: "Hanna Technocrat",
+        }}
+        chairMode="npp"
+        chairSelectionPending={{
+          characterId: "6a7899a8a705a10f4d8278b1",
+          characterName: "Poppy",
+          pool: "political",
+          proposedAt: "2026-08-20T08:00:00.000Z",
+          acceptanceTurnsRemaining: 22,
+        }}
+        viewerIsChairNominee
+        countryCode="US"
+      />
+    );
+    expect(screen.getByText("Poppy")).toBeTruthy();
+    expect(screen.getByText("Accept appointment")).toBeTruthy();
+    expect(screen.getByText("Decline")).toBeTruthy();
+    expect(screen.queryByText("Hanna Technocrat")).toBeNull();
+    expect(screen.queryByText("Autonomous Chair (AI)")).toBeNull();
+  });
 });

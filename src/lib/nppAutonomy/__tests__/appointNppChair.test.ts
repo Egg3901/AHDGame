@@ -69,6 +69,30 @@ describe("appointNppChair", () => {
     expect(String(op.$set.chairNppId)).not.toBe(String(existing._id));
   });
 
+  it("grants a fresh term when the adopted board chair seat is already expired", async () => {
+    const nppId = { toString: () => "t-board" };
+    const expiredBoardChair = {
+      _id: "bank1" as any,
+      countryId: "us",
+      fomcBoard: [
+        {
+          seatId: "seat-1",
+          isChair: true,
+          occupantType: "npp",
+          nppId,
+          alignment: "hawk",
+          termExpiresAtTurn: 10,
+        },
+      ],
+    } as any;
+    const { db, updateOne } = mockDb(null);
+    await appointNppChair(db, expiredBoardChair, "us" as any, 260);
+    const [, op] = updateOne.mock.calls[0];
+    expect(op.$set.chairTermExpiresAtTurn).toBe(260 + 192);
+    expect(op.$set.fomcBoard[0].termExpiresAtTurn).toBe(260 + 192);
+    expect(op.$set.vacancyAwaitingAutomaticSelection).toBe(false);
+  });
+
   it("flips the outgoing chair's alignment so temperament varies over terms", async () => {
     const existing = {
       _id: "t1" as any,
