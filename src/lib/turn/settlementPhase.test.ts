@@ -157,6 +157,26 @@ describe("processSettlementTurn", () => {
     expect(result.playsResolved).toBe(0);
   });
 
+  it("ignores a cancelled crisis entirely", async () => {
+    // "Closed as if it never started" only holds if every sweep skips it. The
+    // filters are all positive, so a cancelled document matches none of them —
+    // this test is what stops a future widened query from resurrecting one.
+    prime(db, "gameState").findOne.mockResolvedValue({
+      _id: "current",
+      settlementCrisisEnabled: true,
+    });
+    prime(db, "settlementCrises").findOne.mockImplementation(
+      async (filter: { status?: unknown }) => {
+        const doc = crisis({ status: "cancelled", outcome: null });
+        return filter?.status === "cancelled" ? doc : null;
+      }
+    );
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 412);
+    expect(result).toMatchObject({ playsResolved: 0, crisesResolved: 0, countriesLevied: 0 });
+    expect(prime(db, "settlementCrises").updateOne).not.toHaveBeenCalled();
+  });
+
   it("NEVER opens a crisis — the question is admin-started", async () => {
     // The single most important thing about this phase's contract. If the tick
     // could open one, an operator's decision about when to ask the question

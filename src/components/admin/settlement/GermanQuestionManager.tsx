@@ -7,8 +7,8 @@ import { HUNDREDTHS, SETTLEMENT_RULE_KEYS } from "@/lib/constants/settlementCris
  * Admin surface for the German Question.
  *
  * Operational density, not game density: no hero, no meter art. The board the
- * players see lives at `/world/german-question`; this is the four levers the
- * design calls for — open, force-resolve, set a position, flip a rule — plus
+ * players see lives at `/world/german-question`; this is the levers the design
+ * calls for — open, close, force-resolve, set a position, flip a rule — plus
  * enough state to tell whether pressing them will do anything.
  *
  * Opening is admin-only by design: nothing in the turn loop ever creates a
@@ -44,6 +44,7 @@ interface AdminState {
   crisis: CrisisState | null;
   history: {
     id: string;
+    status: string;
     outcome: string | null;
     resolvedTurn: number | null;
     cooldownUntilTurn: number | null;
@@ -269,6 +270,39 @@ export function GermanQuestionManager() {
             </ul>
           </section>
 
+          <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
+            <h4 className="font-semibold text-foreground">Close the question</h4>
+            <p className="mt-0.5 max-w-2xl text-sm text-muted">
+              Calls it off as though it was never asked. No winner, no absorption, no history entry
+              against either Germany — the next tick simply finds nothing live, and you can open it
+              again straight away.
+              {crisis.status === "frozen" && (
+                <>
+                  {" "}
+                  <strong className="text-warning">
+                    This crisis has already declared a war. Closing it does not end that conflict
+                    {crisis.conflictId ? ` (${crisis.conflictId})` : ""} — deal with it on the
+                    Conflicts board.
+                  </strong>
+                </>
+              )}
+            </p>
+            <p className="mt-2 max-w-2xl text-sm text-muted">
+              Money and actions already spent are <strong>not</strong> refunded. Those were real
+              debits taken turn by turn; unwinding them is a separate operation.
+            </p>
+            <div className="mt-3">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void post({ action: "close" }, "Closed.")}
+                className="rounded-lg border border-card-border px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-card-muted disabled:opacity-50"
+              >
+                Close the German Question
+              </button>
+            </div>
+          </section>
+
           <section className="rounded-xl border border-error/30 bg-error/[0.03] p-4">
             <h4 className="font-semibold text-foreground">Force a resolution</h4>
             <p className="mt-0.5 max-w-2xl text-sm text-muted">
@@ -311,10 +345,14 @@ export function GermanQuestionManager() {
           <ul className="mt-2 space-y-1 font-mono text-xs text-muted">
             {state!.history.map((h) => (
               <li key={h.id}>
-                T-{h.resolvedTurn ?? "?"} · {h.outcome ?? "no outcome"} ·{" "}
-                {h.cooldownUntilTurn == null
-                  ? "awaiting actuation — cannot reopen yet"
-                  : `settled; free to reopen (advisory: T-${h.cooldownUntilTurn})`}
+                T-{h.resolvedTurn ?? "?"} ·{" "}
+                {h.status === "cancelled"
+                  ? "closed without a decision — free to reopen"
+                  : `${h.outcome ?? "no outcome"} · ${
+                      h.cooldownUntilTurn == null
+                        ? "awaiting actuation — cannot reopen yet"
+                        : `settled; free to reopen (advisory: T-${h.cooldownUntilTurn})`
+                    }`}
               </li>
             ))}
           </ul>

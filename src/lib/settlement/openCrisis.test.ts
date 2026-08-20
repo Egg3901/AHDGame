@@ -74,6 +74,19 @@ describe("openSettlementCrisis", () => {
     expect((await openSettlementCrisis(db as unknown as Db, { turn: 13 })).opened).toBe(true);
   });
 
+  it("reopens on the same turn a crisis was closed", async () => {
+    // A cancelled crisis is neither live nor resolved, so neither refusal sees
+    // it. Closing and reopening back to back is the intended workflow.
+    prime(db, "settlementCrises").findOne.mockImplementation(async (f: { status?: unknown }) => {
+      const cancelled = { _id: new ObjectId(), status: "cancelled", cooldownUntilTurn: null };
+      if (typeof f?.status === "object") return null; // $in: [open, frozen]
+      if (f?.status === "resolved") return null;
+      return cancelled;
+    });
+    const { openSettlementCrisis } = await import("./openCrisis");
+    expect((await openSettlementCrisis(db as unknown as Db, { turn: 412 })).opened).toBe(true);
+  });
+
   it("refuses while a resolved question is still waiting to be enacted", async () => {
     // Not a cooldown — a merge still pending. Opening here would name a
     // challenger that the actuation sweep dissolves a tick later.

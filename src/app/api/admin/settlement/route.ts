@@ -16,11 +16,12 @@ import {
   settlementRulesFor,
 } from "@/lib/constants/settlementCrisis";
 import { openSettlementCrisis } from "@/lib/settlement/openCrisis";
+import { closeSettlementCrisis } from "@/lib/settlement/closeCrisis";
 import { recomputePosition } from "@/lib/settlement/position";
 
 /**
  * Admin control surface for the German Question, mirroring
- * `/api/admin/crises/*`: open, force-resolve, set a position, flip a rule.
+ * `/api/admin/crises/*`: open, close, force-resolve, set a position, flip a rule.
  *
  * THIS ROUTE IS THE ONLY WAY THE QUESTION EVER OPENS. The turn phase advances a
  * crisis that exists; it never creates one. An operator decides when the
@@ -38,6 +39,9 @@ const bodySchema = z.discriminatedUnion("action", [
   // crisis already live, a merge still pending, and the Germanies no longer
   // being separate, all decided by `openSettlementCrisis`.
   z.object({ action: z.literal("open") }),
+  // Closing is the counterpart to opening and takes no options either: it is
+  // "call it off", not a third outcome to choose between.
+  z.object({ action: z.literal("close") }),
   z.object({ action: z.literal("resolve"), outcome: z.enum(["incumbent", "challenger"]) }),
   z.object({
     action: z.literal("setPosition"),
@@ -66,8 +70,10 @@ export async function GET() {
     const live = await crises.findOne({
       status: { $in: ["open", "frozen"] },
     } as Filter<SettlementCrisisDoc>);
+    // Cancelled questions belong in the history too — an operator wants to see
+    // that one was called off, not have it vanish.
     const history = await crises
-      .find({ status: "resolved" } as Filter<SettlementCrisisDoc>)
+      .find({ status: { $in: ["resolved", "cancelled"] } } as Filter<SettlementCrisisDoc>)
       .sort({ resolvedTurn: -1 })
       .limit(5)
       .toArray();
@@ -94,6 +100,7 @@ export async function GET() {
         : null,
       history: history.map((h) => ({
         id: h._id.toString(),
+        status: h.status,
         outcome: h.outcome,
         resolvedTurn: h.resolvedTurn,
         cooldownUntilTurn: h.cooldownUntilTurn,
@@ -126,6 +133,21 @@ export async function POST(request: Request) {
       return result.opened
         ? NextResponse.json({ success: true, crisisId: result.crisisId })
         : NextResponse.json({ error: result.reason }, { status: 409 });
+    }
+
+    if (body.action === "close") {
+      const result = await closeSettlementCrisis(db, { turn: currentTurn });
+      if (!result.closed) {
+        return NextResponse.json({ error: result.reason }, { status: 409 });
+      }
+      return NextResponse.json({
+        success: true,
+        // Named, not hidden: the war a frozen crisis declared is a real conflict
+        // and closing the question does not end it.
+        note: result.orphanedConflictId
+          ? `Closed. Conflict ${result.orphanedConflictId} is still running on the Conflicts board and must be dealt with there.`
+          : undefined,
+      });
     }
 
     const live = await crises.findOne({

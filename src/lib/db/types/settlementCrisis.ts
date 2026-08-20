@@ -14,7 +14,14 @@ import type { SettlementRules } from "@/lib/constants/settlementCrisis";
  */
 export type SettlementInstitutionId = "bundestag" | "laender" | "street" | "garrison";
 export type SettlementSeatId = "US" | "UK" | "RU" | "DD";
-export type SettlementStatus = "open" | "frozen" | "resolved";
+/**
+ * `cancelled` is a crisis an admin closed without deciding it — see
+ * `closeSettlementCrisis`. It is terminal and inert: every sweep and every read
+ * in this feature filters POSITIVELY on `open`, `frozen` or `resolved`, so a
+ * cancelled document is picked up by nothing. That is what makes closing behave
+ * as though the question was never asked while the record survives.
+ */
+export type SettlementStatus = "open" | "frozen" | "resolved" | "cancelled";
 export type SettlementOutcome = "incumbent" | "challenger";
 
 export interface SettlementInstitutionState {
@@ -88,6 +95,10 @@ export interface SettlementCrisisDoc {
   /** Set when a declared war freezes the crisis. */
   conflictId: string | null;
   openedTurn: number;
+  /**
+   * The turn the crisis left play — decided OR cancelled. `outcome` is what
+   * says which: a cancelled crisis has a turn here and a null outcome.
+   */
   resolvedTurn: number | null;
   outcome: SettlementOutcome | null;
   cooldownUntilTurn: number | null;

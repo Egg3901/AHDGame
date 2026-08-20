@@ -10,6 +10,7 @@ vi.mock("@/lib/settlement/openCrisis", async (original) => {
   const actual = await original<typeof import("@/lib/settlement/openCrisis")>();
   return { ...actual, openSettlementCrisis: vi.fn() };
 });
+vi.mock("@/lib/settlement/closeCrisis", () => ({ closeSettlementCrisis: vi.fn() }));
 
 const CRISIS_ID = new ObjectId();
 
@@ -77,6 +78,12 @@ describe("/api/admin/settlement", () => {
     prime(db, "settlementCrises").find.mockReturnValue(cursor([]));
     prime(db, "settlementCrises").updateOne.mockResolvedValue({ matchedCount: 1 });
     prime(db, "settlementCrises").insertOne.mockResolvedValue({ insertedId: CRISIS_ID });
+    const { closeSettlementCrisis } = await import("@/lib/settlement/closeCrisis");
+    vi.mocked(closeSettlementCrisis).mockResolvedValue({
+      closed: true,
+      reason: null,
+      orphanedConflictId: null,
+    });
   });
 
   it("refuses a caller who is not an admin", async () => {
@@ -216,5 +223,66 @@ describe("/api/admin/settlement", () => {
     prime(db, "settlementCrises").updateOne.mockResolvedValue({ matchedCount: 0 });
     const { POST } = await import("./route");
     expect((await POST(post({ action: "resolve", outcome: "incumbent" }))).status).toBe(409);
+  });
+  it("closes the live question at the current turn", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(post({ action: "close" }));
+    expect(res.status).toBe(200);
+    const { closeSettlementCrisis } = await import("@/lib/settlement/closeCrisis");
+    expect(vi.mocked(closeSettlementCrisis).mock.calls[0][1]).toEqual({ turn: 412 });
+  });
+
+  it("passes the closer's own reason back when it declines", async () => {
+    const { closeSettlementCrisis } = await import("@/lib/settlement/closeCrisis");
+    vi.mocked(closeSettlementCrisis).mockResolvedValue({
+      closed: false,
+      reason: "No settlement crisis is live.",
+      orphanedConflictId: null,
+    });
+    const { POST } = await import("./route");
+    const res = await POST(post({ action: "close" }));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toContain("No settlement crisis is live");
+  });
+
+  it("names the war a closed frozen crisis leaves running", async () => {
+    // Silently orphaning a live conflict is exactly the failure the note exists
+    // to prevent.
+    const { closeSettlementCrisis } = await import("@/lib/settlement/closeCrisis");
+    vi.mocked(closeSettlementCrisis).mockResolvedValue({
+      closed: true,
+      reason: null,
+      orphanedConflictId: "gq_de_400",
+    });
+    const { POST } = await import("./route");
+    const body = await (await POST(post({ action: "close" }))).json();
+    expect(body.note).toContain("gq_de_400");
+    expect(body.note).toContain("Conflicts board");
+  });
+
+  it("does not route close through the resolve path", async () => {
+    // A close that wrote an outcome would merge two countries a turn later.
+    const { POST } = await import("./route");
+    await POST(post({ action: "close" }));
+    expect(prime(db, "settlementCrises").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("lists cancelled questions in the history alongside resolved ones", async () => {
+    prime(db, "settlementCrises").find.mockReturnValue(
+      cursor([
+        {
+          _id: CRISIS_ID,
+          status: "cancelled",
+          outcome: null,
+          resolvedTurn: 400,
+          cooldownUntilTurn: null,
+        },
+      ])
+    );
+    const { GET } = await import("./route");
+    const body = await (await GET()).json();
+    expect(body.history[0]).toMatchObject({ status: "cancelled", outcome: null });
+    const [filter] = prime(db, "settlementCrises").find.mock.calls[0];
+    expect(filter.status).toEqual({ $in: ["resolved", "cancelled"] });
   });
 });
