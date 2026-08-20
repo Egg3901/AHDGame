@@ -102,6 +102,25 @@ describe("/api/admin/settlement", () => {
     expect(body).toMatchObject({ enabled: true, currentTurn: 412, crisis: null });
   });
 
+  it("tells the operator when the next World News briefing is due", async () => {
+    // Without this an admin cannot tell whether the wire is running short of
+    // going and reading the channel.
+    prime(db, "settlementCrises").findOne.mockResolvedValue(
+      liveCrisis({ openedTurn: 400, lastBriefing: { turn: 406, position: 4400 } })
+    );
+    const { GET } = await import("./route");
+    const body = await (await GET()).json();
+    expect(body.crisis.nextBriefingTurn).toBe(412);
+  });
+
+  it("counts the briefing cadence from the opening when none has been filed", async () => {
+    prime(db, "settlementCrises").findOne.mockResolvedValue(liveCrisis({ openedTurn: 400 }));
+    const { GET } = await import("./route");
+    const body = await (await GET()).json();
+    expect(body.crisis.nextBriefingTurn).toBe(406);
+    expect(body.crisis.postedWireEvents).toEqual([]);
+  });
+
   it("reports the live board with its rules resolved", async () => {
     prime(db, "settlementCrises").findOne.mockResolvedValue(liveCrisis());
     const { GET } = await import("./route");

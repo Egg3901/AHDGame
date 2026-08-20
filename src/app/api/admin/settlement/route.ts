@@ -12,6 +12,7 @@ import {
   HUNDREDTHS,
   SETTLEMENT_INSTITUTIONS,
   SETTLEMENT_RULE_KEYS,
+  SETTLEMENT_WIRE_INTERVAL_TURNS,
   getInstitution,
   settlementRulesFor,
 } from "@/lib/constants/settlementCrisis";
@@ -89,6 +90,11 @@ export async function GET() {
             heat: live.ladder.heat,
             openedTurn: live.openedTurn,
             conflictId: live.conflictId,
+            // So an operator can tell at a glance whether the wire is running,
+            // without reading the channel.
+            nextBriefingTurn:
+              (live.lastBriefing?.turn ?? live.openedTurn) + SETTLEMENT_WIRE_INTERVAL_TURNS,
+            postedWireEvents: live.postedWireEvents ?? [],
             rules: settlementRulesFor(live),
             institutions: live.institutions.map((inst) => ({
               id: inst.id,

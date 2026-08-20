@@ -34,6 +34,8 @@ interface CrisisState {
   heat: number;
   openedTurn: number;
   conflictId: string | null;
+  nextBriefingTurn: number;
+  postedWireEvents: string[];
   rules: RulesState;
   institutions: InstitutionRow[];
 }
@@ -197,7 +199,11 @@ export function GermanQuestionManager() {
               <h4 className="font-semibold text-foreground">Institutions</h4>
               <p className="font-mono text-xs text-muted">
                 index {pts(crisis.position)} · heat {crisis.heat} · opened T-{crisis.openedTurn}
-                {crisis.conflictId ? ` · conflict ${crisis.conflictId}` : ""}
+                {crisis.conflictId ? ` · conflict ${crisis.conflictId}` : ""} · next World News
+                briefing T-{crisis.nextBriefingTurn}
+                {crisis.postedWireEvents.length > 0
+                  ? ` · filed: ${crisis.postedWireEvents.join(", ")}`
+                  : ""}
               </p>
             </div>
             <p className="mt-0.5 text-sm text-muted">

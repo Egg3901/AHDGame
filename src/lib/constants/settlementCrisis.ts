@@ -174,6 +174,15 @@ export const MOBILISATION_APPROVAL_HIT = 1;
  */
 export const SETTLEMENT_REOPEN_COOLDOWN_TURNS = 96;
 
+/**
+ * Turns between sentiment briefings on the World News wire.
+ *
+ * The public tier is one row per character who acted, so a post per action
+ * would bury the channel. Six turns is long enough that a briefing has a swing
+ * worth reporting and short enough that a crisis never goes quiet.
+ */
+export const SETTLEMENT_WIRE_INTERVAL_TURNS = 6;
+
 /** The document `kind`, and the only settlement question that exists today. */
 export const GERMAN_QUESTION_KIND = "settlement.germanQuestion" as const;
 

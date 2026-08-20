@@ -36,6 +36,7 @@ import { isSettlementCrisisEnabled } from "@/lib/settlement/featureFlag";
 import { levyMobilisation } from "@/lib/settlement/mobilisation";
 import { settleFrozenCrisisFromConflict } from "@/lib/settlement/settleFromConflict";
 import { actuateSettlementOutcome } from "@/lib/settlement/actuate";
+import { emitSettlementWire } from "@/lib/settlement/emitWire";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
 import type { GameState } from "@/lib/db/types";
 
@@ -47,6 +48,8 @@ export interface SettlementTurnResult {
   position: number;
   /** Seat countries charged a mobilisation levy this tick. */
   countriesLevied: number;
+  /** World News dispatches filed this tick. */
+  wirePosts: number;
 }
 
 /**
@@ -62,6 +65,7 @@ const idle = (): SettlementTurnResult => ({
   heat: 0,
   position: 0,
   countriesLevied: 0,
+  wirePosts: 0,
 });
 
 export async function processSettlementTurn(
@@ -83,8 +87,13 @@ export async function processSettlementTurn(
     cooldownUntilTurn: null,
   } as Filter<SettlementCrisisDoc>);
   if (unactuated) {
-    await actuateSettlementOutcome(db, unactuated, currentTurn);
-    return idle();
+    const actuated = await actuateSettlementOutcome(db, unactuated, currentTurn);
+    // Only once the consequences are real. Announcing a reunification whose
+    // merge then failed would be the one lie the wire could tell.
+    const wire = actuated.actuated
+      ? await emitSettlementWire(db, unactuated, currentTurn, { events: ["settled"] })
+      : { posts: 0 };
+    return { ...idle(), wirePosts: wire.posts };
   }
 
   // A frozen crisis is waiting on its war. Sweep that next: the moment the
@@ -93,7 +102,10 @@ export async function processSettlementTurn(
   const frozen = await crises.findOne({ status: "frozen" } as Filter<SettlementCrisisDoc>);
   if (frozen) {
     const settled = await settleFrozenCrisisFromConflict(db, frozen, currentTurn);
-    return { ...idle(), crisesResolved: settled.settled ? 1 : 0 };
+    // `war` is stamped, so this fires on the first frozen tick and not on the
+    // dozens that follow while the fighting runs.
+    const wire = await emitSettlementWire(db, frozen, currentTurn, { events: ["war"] });
+    return { ...idle(), crisesResolved: settled.settled ? 1 : 0, wirePosts: wire.posts };
   }
 
   // Nothing here ever OPENS a crisis. The question is admin-started, from
@@ -227,6 +239,23 @@ export async function processSettlementTurn(
     }
   );
 
+  // AFTER the state write, and reading the state as written: a briefing that
+  // reported the pre-tick board would be a turn stale every time.
+  const ticked: SettlementCrisisDoc = {
+    ...crisis,
+    institutions,
+    seats,
+    position,
+    driftHistory,
+    ladder: { heat, armedTurn },
+    status: outcome ? "resolved" : "open",
+    outcome,
+  };
+  const wire = await emitSettlementWire(db, ticked, currentTurn, {
+    events: ["opened", ...(armed ? (["armed"] as const) : [])],
+    briefing: true,
+  });
+
   return {
     playsResolved: claimed.length,
     institutionsMoved,
@@ -234,6 +263,7 @@ export async function processSettlementTurn(
     heat,
     position,
     countriesLevied: mobilisation.countriesLevied,
+    wirePosts: wire.posts,
   };
 }
 

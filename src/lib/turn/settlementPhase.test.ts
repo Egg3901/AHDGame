@@ -193,12 +193,18 @@ describe("processSettlementTurn", () => {
     expect(prime(db, "settlementCrises").updateOne).not.toHaveBeenCalled();
   });
 
-  it("leaves a frozen crisis untouched", async () => {
+  it("does not tick a frozen crisis — the meter is held where the war froze it", async () => {
     arrange(db, crisis({ status: "frozen", conflictId: "conflict-1" }), [play()]);
     const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(result.playsResolved).toBe(0);
-    expect(db.collectionMocks.settlementCrises!.updateOne).not.toHaveBeenCalled();
+    // No BOARD write. The sweep may stamp the war dispatch on the same
+    // document, so "never wrote" is the wrong assertion — "never moved the
+    // institutions" is the one that matters.
+    const boardWrite = db.collectionMocks.settlementCrises!.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.institutions !== undefined
+    );
+    expect(boardWrite).toBeUndefined();
   });
 
   it("applies a play at the seat multiplier and rewrites the index", async () => {

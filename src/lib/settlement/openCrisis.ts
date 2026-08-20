@@ -83,6 +83,10 @@ export function buildGermanQuestion(turn: number): Omit<SettlementCrisisDoc, "_i
     })),
     ladder: { heat: 0, armedTurn: null },
     rules: { ...SETTLEMENT_DEFAULT_RULES },
+    // Seeded at the opening board so the FIRST briefing has something honest to
+    // report a swing against, instead of comparing the board to itself.
+    lastBriefing: { turn, position: recomputePosition(institutions) },
+    postedWireEvents: [],
     driftHistory: [],
     // Null, not `turn`: the crisis opens at its authored figures and the first
     // drift lands on the next tick, so the board is visible as designed.

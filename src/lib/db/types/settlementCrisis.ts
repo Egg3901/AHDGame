@@ -100,6 +100,18 @@ export interface SettlementCrisisDoc {
    * says which: a cancelled crisis has a turn here and a null outcome.
    */
   resolvedTurn: number | null;
+  /**
+   * Cadence stamp for the World News sentiment briefing: when the last one went
+   * out and where the index stood then, which is what the next one reports the
+   * swing against.
+   */
+  lastBriefing?: { turn: number; position: number } | null;
+  /**
+   * One-off wire moments already posted for this crisis. The stamp, not the
+   * status, is what makes each post exactly once — a crisis can sit armed for
+   * many turns, and the tick sees that state on every one of them.
+   */
+  postedWireEvents?: string[];
   outcome: SettlementOutcome | null;
   cooldownUntilTurn: number | null;
   createdAt: Date;
