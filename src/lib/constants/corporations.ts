@@ -178,6 +178,26 @@ export const STOCK_SPLIT_SMOOTHING_BSP_WEIGHT = 0.2;
 export const STOCK_SPLIT_SMOOTHING_INCOME_WEIGHT = 0.1;
 
 /**
+ * During the post-split smoothing cooldown, the previous-price anchor is
+ * clamped to within this multiple of the freshly computed fundamentalValue
+ * (both directions). The cooldown path deliberately skips the per-turn rate
+ * limiter, which made previousSharePrice a poisoned anchor: a live price
+ * pumped intra-turn (wash trades, structure-change abuse) was blended straight
+ * into the new fundamental at STOCK_SPLIT_SMOOTHING_PREV_WEIGHT. A legit split
+ * rescales the previous price by the same share-count ratio as the fundamental,
+ * so prev/fundamental stays near 1 and this clamp is inert for honest splits.
+ */
+export const STOCK_SPLIT_PREV_ANCHOR_MAX_RATIO = 3;
+
+/**
+ * Share executions (market buys/sells, instant buyback payouts, limit fills,
+ * CEO self-issuance) may not price further than this factor away from the
+ * corp's fundamentalSharePrice in either direction. Bounds how far a
+ * manipulated live price or a stale/hostile limit order can move real money.
+ */
+export const SHARE_EXECUTION_PRICE_BAND_MAX_RATIO = 5;
+
+/**
  * Maximum single-turn fractional change in a corp's fundamental share price
  * (±35%). Prevents the unbounded knife-edge snap-back that occurs when issued
  * bond debt crosses total assets and equity flips through zero (issue #2888):

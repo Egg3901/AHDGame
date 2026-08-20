@@ -59,6 +59,7 @@ import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import {
   isOrderFlowPriceEligible,
+  isWithinShareExecutionBand,
   resolveShareExecutionPrice,
 } from "@/lib/corporations/marketExecution";
 import { recordAudit } from "@/lib/audit/recordAudit";
@@ -106,6 +107,21 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
       corporation.publicFloat,
       corporation.totalShares
     );
+
+    // Limit prices must sit inside the fundamental-anchored sanity band.
+    // Wildly off-fundamental limit orders were used as manipulation rails
+    // (2026-08-20 incident: limit fills ~10x fundamental inflated order-flow
+    // notionals and moved real money at fabricated prices). Honest orders
+    // near the market price are unaffected; the band only exists when the
+    // corp has a positive fundamentalSharePrice to anchor on.
+    if (!isWithinShareExecutionBand(corporation, pricePerShare)) {
+      return NextResponse.json(
+        {
+          error: `Limit price is too far from ${corporation.name}'s fundamental share price. Place an order closer to the current valuation.`,
+        },
+        { status: 400 }
+      );
+    }
 
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character) {
