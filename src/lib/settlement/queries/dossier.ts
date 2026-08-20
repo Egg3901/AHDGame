@@ -23,13 +23,11 @@ import {
   LADDER_RUNGS,
   PERSONAL_NET_CAP,
   PERSONAL_MULTIPLIER_PCT,
-  SETTLEMENT_INSTITUTIONS,
   SETTLEMENT_SEATS,
   getInstitution,
   getPlay,
   playsForSeat,
   type SettlementPlayDef,
-  type SettlementSeatKey,
 } from "@/lib/constants/settlementCrisis";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";

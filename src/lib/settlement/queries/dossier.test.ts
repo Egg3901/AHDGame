@@ -244,7 +244,7 @@ describe("loadGermanQuestionDossier", () => {
   });
 
   it("builds the wire newest-first and caps it at eight lines", async () => {
-    const many = Array.from({ length: 12 }, (_, n) => ({
+    const many = Array.from({ length: 12 }, () => ({
       _id: new ObjectId(),
       crisisId: CRISIS_ID,
       actor: "seat",
