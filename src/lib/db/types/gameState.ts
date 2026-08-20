@@ -369,6 +369,14 @@ export interface GameState {
   intOrgAlignmentEnabledBy?: string;
   intOrgAlignmentEnabledAt?: string;
   /**
+   * Master gate for settlement crises (the German Question). Fail-closed: only
+   * an explicit `true` enables. NOT in DEFAULT_GAME_STATE_FLAGS — staged
+   * rollout, default off; an explicit enable survives resets.
+   */
+  settlementCrisisEnabled?: boolean;
+  settlementCrisisEnabledBy?: string;
+  settlementCrisisEnabledAt?: string;
+  /**
    * Highest Bundestag cycle whose AMS list-seat reconciliation has completed.
    * Scopes `maybeReconcileBundestag` so each cycle reconciles exactly once and
    * a later cycle still reconciles after an earlier cycle was healed. Absent on
