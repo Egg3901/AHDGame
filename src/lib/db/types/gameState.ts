@@ -226,6 +226,9 @@ export interface GameState {
   conflictsEnabled?: boolean;
   conflictsEnabledBy?: string;
   conflictsEnabledAt?: string;
+  /** Living-conflict engine: generic phased conflicts/pandemics with per-role
+   *  responses and an event broadcast bus. Default off; fail-closed at runtime. */
+  livingConflictsEnabled?: boolean;
   /** Temporary freeze on NEW defence procurement. When true, no new contracts may be
    *  awarded and no pending offer may be accepted, but existing active contracts keep
    *  delivering and settling in the turn sweep, and ministers may still cancel. Mirrors
