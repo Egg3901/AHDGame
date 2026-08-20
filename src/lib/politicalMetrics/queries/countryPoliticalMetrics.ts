@@ -23,6 +23,7 @@ import {
   CABINET_SOURCE_IDS,
   cappedSourceCount,
   CABINET_RESIDUAL_TOTAL_CEILING,
+  type CabinetSourceId,
 } from "../cabinetResidual";
 import { aggregateNationalPoliticalMetrics, categoryScore, overallScore } from "../aggregate";
 import { loadEvidence, type EvidenceRow } from "../evidence";
@@ -74,6 +75,14 @@ export interface CountryPoliticalMetricsResponse {
 /** First calendar year of the information era for indicator-list selection (display flavor only). */
 const MODERN_INDICATORS_FROM_YEAR = 1990;
 
+/** One cabinet channel's population-weighted contribution to a metric. */
+export interface CabinetSourceContribution {
+  source: CabinetSourceId;
+  value: number;
+  /** True when this channel sits at its own ceiling across most of the country. */
+  atCap: boolean;
+}
+
 export interface MetricModifiersInfo {
   /** Contributing laws (sorted by points desc; L0 rows omitted). */
   laws: ModifierRow[];
@@ -92,6 +101,12 @@ export interface MetricModifiersInfo {
    * channel for this metric is pinned at ±CABINET_RESIDUAL_CAP_PER_SOURCE. Only
    * then does a further order or estate contribute exactly nothing.
    */
+  /**
+   * Which cabinet channels actually contribute, largest first, so a player can
+   * see WHICH one is moving the metric rather than one aggregate label
+   * (ticket #1142). Zero-contribution channels are omitted.
+   */
+  cabinetBySource: CabinetSourceContribution[];
   cabinetAtCap: boolean;
   /** The per-channel cap, so the UI can name the ceiling rather than hard-code it. */
   cabinetCap: number;
@@ -231,10 +246,19 @@ export async function loadCountryPoliticalMetrics(
    * the ministerial step has not touched since) falls back to comparing its
    * flat total against the full ceiling, which is the same question.
    */
-  const meanCabinet = (metricId: PoliticalMetricId): { mean: number; cappedShare: number } => {
-    if (totalPopulation <= 0) return { mean: 0, cappedShare: 0 };
+  const meanCabinet = (
+    metricId: PoliticalMetricId
+  ): { mean: number; cappedShare: number; bySource: CabinetSourceContribution[] } => {
+    if (totalPopulation <= 0) return { mean: 0, cappedShare: 0, bySource: [] };
     let weighted = 0;
     let cappedWeight = 0;
+    // Ticket #1142: a player saw a negative "Cabinet, orders and estates" line on a
+    // US infrastructure metric and asked which cabinet action could possibly be
+    // doing that. The honest answer was none of them: it was the energy channel
+    // alone, left saturated by a units bug that is now fixed. One aggregate label
+    // could not say that, so carry the split through to the panel.
+    const sourceWeighted = new Map<CabinetSourceId, number>();
+    const sourceCappedWeight = new Map<CabinetSourceId, number>();
     for (const doc of docs) {
       const weight = populationByRegion.get(doc._id) ?? 0;
       const cabinet = doc.cabinetResiduals?.[metricId] ?? 0;
@@ -244,20 +268,40 @@ export async function loadCountryPoliticalMetrics(
         ? cappedSourceCount(bySource, metricId) >= CABINET_SOURCE_IDS.length
         : Math.abs(cabinet) >= CABINET_RESIDUAL_TOTAL_CEILING - 0.01;
       if (saturated) cappedWeight += weight;
+      for (const source of CABINET_SOURCE_IDS) {
+        const value = bySource?.[source]?.[metricId] ?? 0;
+        if (value !== 0)
+          sourceWeighted.set(source, (sourceWeighted.get(source) ?? 0) + value * weight);
+        if (Math.abs(value) >= CABINET_RESIDUAL_CAP_PER_SOURCE - 0.01) {
+          sourceCappedWeight.set(source, (sourceCappedWeight.get(source) ?? 0) + weight);
+        }
+      }
     }
-    return { mean: weighted / totalPopulation, cappedShare: cappedWeight / totalPopulation };
+    const bySource: CabinetSourceContribution[] = CABINET_SOURCE_IDS.map((source) => ({
+      source,
+      value: Math.round(((sourceWeighted.get(source) ?? 0) / totalPopulation) * 10) / 10,
+      atCap: (sourceCappedWeight.get(source) ?? 0) / totalPopulation >= 0.5,
+    }))
+      .filter((row) => row.value !== 0)
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+    return {
+      mean: weighted / totalPopulation,
+      cappedShare: cappedWeight / totalPopulation,
+      bySource,
+    };
   };
   const halfLife = driftHalfLifeTurns(DRIFT_RATE_PER_TURN);
   const buildMetricModifiers = (metricId: PoliticalMetricId): MetricModifiersInfo => {
     const laws = metricModifierRows(countryId, metricId, enactedLevels);
     const residual = meanResidual(metricId);
-    const { mean: cabinet, cappedShare } = meanCabinet(metricId);
+    const { mean: cabinet, cappedShare, bySource: cabinetBySource } = meanCabinet(metricId);
     const target = composeTarget(nationalLawPoints[metricId], 0, residual + cabinet);
     const gap = target - national[metricId];
     return {
       laws,
       residual: Math.round(residual * 10) / 10,
       cabinet: Math.round(cabinet * 10) / 10,
+      cabinetBySource,
       cabinetAtCap: cappedShare >= 0.5,
       cabinetCap: CABINET_RESIDUAL_CAP_PER_SOURCE,
       driftHalfLifeTurns: halfLife,
