@@ -101,18 +101,9 @@ export const WIKI_GLOSSARY = {
     definition:
       "A campaign action that raises turnout for one demographic in the state you are active in. Effect drops as you repeat it and doubles in campaign season.",
   },
-  "campaign season": {
-    definition:
-      "The final 4 turns before an election ends. Campaign passive effects (canvassing, media, opposition research) double during this window.",
-  },
   "primary score": {
     definition:
       "The 0 to 100 total that decides who wins a primary. It blends party alignment, favorability, and influence (PI or NPI). Highest per party advances.",
-  },
-  "donor base": {
-    definition:
-      "Your fundraising level. Raise it with Build Donor Network. Higher levels earn more Campaign Funds per Fundraise and per turn.",
-    aliases: ["donor network", "donor level"],
   },
   "party org": {
     definition:
@@ -132,38 +123,6 @@ export const WIKI_GLOSSARY = {
     definition:
       "How close your economic and social positions are to a party platform or a voter group's ideology. Closer alignment raises primary scores and canvassing effect.",
   },
-  turnout: {
-    definition:
-      "The share of a demographic cell that actually votes. Canvassing and GOTV raise it; it is capped and decays toward the baseline.",
-  },
-  "campaign funds": {
-    definition:
-      "Your political war chest. Raised by fundraising and office income. Spent on ads, polls, donor network, NPP influence, and campaign actions.",
-  },
-  "cash on hand": {
-    definition:
-      "Personal liquid cash, separate from Campaign Funds. Earned from passive income and a slice of personal donations. Used for player-to-player wires.",
-  },
-  primary: {
-    definition:
-      "The intra-party nomination phase. Candidates from the same party compete on primary score; the winner advances to the general.",
-    aliases: ["primaries"],
-  },
-  "general election": {
-    definition:
-      "The inter-party contest after primaries. Votes accumulate each turn. The final 4 turns carry about 25% of the total pool.",
-    aliases: ["generals"],
-  },
-  endorsement: {
-    definition:
-      "Formal support from a player or NPP. NPP endorsements grant campaign help and demographic appeal. Request them from nearby allied profiles.",
-    aliases: ["endorsements"],
-  },
-  caucus: {
-    definition:
-      "A formal faction inside a party or chamber that votes as a bloc in leadership races and sometimes on bills.",
-    aliases: ["caucuses"],
-  },
   "total appeal pipeline": {
     definition:
       "The per-turn formula that turns reach, appeal, approval, and party org into votes from each demographic cell. Used for live tallies and polls.",
@@ -172,23 +131,6 @@ export const WIKI_GLOSSARY = {
     definition:
       "An early parliamentary election called before the term ends (UK, Japan, Germany). It compresses the campaign cycle. See Snap Elections.",
     aliases: ["snap elections"],
-  },
-  turn: {
-    definition:
-      "One game week, processed every real hour. Actions refresh, elections tick, bills age, and markets settle when a turn runs.",
-  },
-  "home state": {
-    definition:
-      "The state or region your character is based in. It decides which local races you can enter and where canvassing is cheapest.",
-    aliases: ["home region"],
-  },
-  "campaign manager": {
-    definition:
-      "A player assigned to run another candidate's campaign page: spending, upgrades, and operations. Used in presidential and some down-ballot races.",
-  },
-  "state senate": {
-    definition:
-      "The usual first office for new US players. Lower action and fund bonuses than Congress, but much easier to win from a cold start.",
   },
   filibuster: {
     definition:
