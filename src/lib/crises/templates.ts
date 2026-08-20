@@ -348,7 +348,7 @@ export const RECESSION_TEMPLATE: CrisisTemplate = {
     },
   },
   heroImage:
-    "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1651341050677-24dba59ce0fd?auto=format&fit=crop&w=1600&q=70",
   description:
     "Two consecutive quarters of negative GDP growth. Consumer spending falls, business investment stalls, and unemployment rises.",
   scope: "country",
@@ -1359,7 +1359,7 @@ export const REFUGEE_CRISIS_TEMPLATE: CrisisTemplate = {
   name: "Refugee Crisis",
   autoTrigger: { kind: "random", cooldownTurns: 216, scope: "country", spawnChance: 0.0025 },
   heroImage:
-    "https://images.unsplash.com/photo-1494059980473-813e73ee784b?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1721390017772-12182f8b685b?auto=format&fit=crop&w=1600&q=70",
   description:
     "A neighboring conflict triggers a mass displacement. Refugee flows strain border regions, social services buckle, and political tensions rise.",
   scope: "country",
@@ -1477,7 +1477,7 @@ export const PANDEMIC_TEMPLATE: CrisisTemplate = {
   // while leaving 1953 open. Removing it adds possibility space rather than
   // removing any, which is the direction this program pulls.
   heroImage:
-    "https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1584634731339-252c581abfc5?auto=format&fit=crop&w=1600&q=70",
   description:
     "A novel infectious disease spreads globally. Healthcare systems strain, economies lock down, and social life is disrupted.",
   scope: "global",
@@ -1816,7 +1816,7 @@ export const HOUSING_COLLAPSE_TEMPLATE: CrisisTemplate = {
 export const LABOR_STRIKES_TEMPLATE: CrisisTemplate = {
   name: "Labor Strike Wave",
   heroImage:
-    "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1511898634545-c01af8a54dd5?auto=format&fit=crop&w=1600&q=70",
   description:
     "Widespread strikes disrupt transport, manufacturing, and public services. Wage demands fuel inflationary pressure and supply chains seize up.",
   scope: "country",
@@ -1908,7 +1908,7 @@ export const LABOR_STRIKES_TEMPLATE: CrisisTemplate = {
 export const STEEL_STRIKE_TEMPLATE: CrisisTemplate = {
   name: "Nationwide Steel Strike",
   heroImage:
-    "https://images.unsplash.com/photo-1533630018502-c1cd6b2b1a1e?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1598299803204-b73796f43289?auto=format&fit=crop&w=1600&q=70",
   description:
     "The steelworkers have walked out nationwide. Blast furnaces bank down, and the shutdown ripples into autos, defense, construction, and power as steel supply dries up. The President must act.",
   scope: "country",
@@ -2121,7 +2121,7 @@ export const STEEL_STRIKE_TEMPLATE: CrisisTemplate = {
 export const UNION_BAN_GENERAL_STRIKE_TEMPLATE: CrisisTemplate = {
   name: "Wildcat General Strike",
   heroImage:
-    "https://images.unsplash.com/photo-1591189824344-9c2b9b0f4a5f?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1576193483630-1b61f26fad5b?auto=format&fit=crop&w=1600&q=70",
   description:
     "Unions have been outlawed and the workforce has walked out rather than dissolve. Steel, car plants, the docks and freight have all stopped, and with no lawful union left there is nobody the government can sign an agreement with.",
   scope: "country",
@@ -2309,7 +2309,7 @@ export const UNION_BAN_GENERAL_STRIKE_TEMPLATE: CrisisTemplate = {
 export const DEBT_DEFAULT_CONTAGION_TEMPLATE: CrisisTemplate = {
   name: "Sovereign Debt Default",
   heroImage:
-    "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1760872645513-63b6846ce3c9?auto=format&fit=crop&w=1600&q=70",
   description:
     "A major government defaults on its debt. Contagion spreads through credit markets, borrowing costs spike, and austerity looms for debtor nations.",
   scope: "country",
@@ -2563,7 +2563,7 @@ export const EXTREME_HEAT_TEMPLATE: CrisisTemplate = {
   naturalDisaster: true,
   name: "Extreme Heat Wave",
   heroImage:
-    "https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1563630381190-77c336ea545a?auto=format&fit=crop&w=1600&q=70",
   description:
     "Record-breaking temperatures overwhelm cooling infrastructure, spike energy demand, and cause widespread health emergencies. Agricultural yields fall and outdoor workers face deadly conditions.",
   scope: "region",
@@ -2922,7 +2922,7 @@ export const POWER_GRID_FAILURE_TEMPLATE: CrisisTemplate = {
     },
   },
   heroImage:
-    "https://images.unsplash.com/photo-1520116468816-95b69f847357?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1611416457332-946853cc75d6?auto=format&fit=crop&w=1600&q=70",
   description:
     "A cascading failure across the power grid plunges regions into darkness. Hospitals run on generators, factories shut down, and communications infrastructure strains under the outage.",
   scope: "country",
@@ -3012,7 +3012,7 @@ export const POWER_GRID_FAILURE_TEMPLATE: CrisisTemplate = {
 export const WATER_CRISIS_TEMPLATE: CrisisTemplate = {
   name: "Water Crisis",
   heroImage:
-    "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1769298315896-fc23a5dcbff8?auto=format&fit=crop&w=1600&q=70",
   description:
     "Aquifer depletion, contamination, or prolonged drought drives a severe water scarcity crisis. Agriculture collapses, cities impose rationing, and public health deteriorates.",
   scope: "region",
@@ -3606,7 +3606,7 @@ export const DUST_STORM_TEMPLATE: CrisisTemplate = {
   geo: { requiresRegionTags: ["arid"] },
   name: "Dust Storm",
   heroImage:
-    "https://images.unsplash.com/photo-1567470412546-f7d36d6e1f6a?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1603695820889-f8a0a86b8712?auto=format&fit=crop&w=1600&q=70",
   description:
     "A towering wall of dust has rolled across {location}, blotting out the sun and reducing visibility to a few meters along major highways. Drivers have pulled onto the shoulder with hazards on, flights are grounded, and residents are sealing doors and windows as fine grit works its way into homes and machinery. Forecasters expect the haze to linger for a day or two before the air clears.",
   scope: "region",
@@ -3630,7 +3630,7 @@ export const HAILSTORM_TEMPLATE: CrisisTemplate = {
   geo: { requiresRegionTags: ["tornado"] },
   name: "Hailstorm",
   heroImage:
-    "https://images.unsplash.com/photo-1620503324967-fb6d65e1c5e9?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1437624155766-b64bf17eb2ce?auto=format&fit=crop&w=1600&q=70",
   description:
     "A sudden hailstorm has pelted {location} with stones large enough to dent cars, shatter skylights, and strip fields bare in a matter of minutes. Roofs and vehicles across the area took the worst of it, and growers are surveying shredded crops as adjusters mobilize. Cleanup crews are clearing storm drains clogged with leaves and ice as the system moves on.",
   scope: "region",
@@ -3654,7 +3654,7 @@ export const AVALANCHE_TEMPLATE: CrisisTemplate = {
   geo: { requiresRegionTags: ["wintry"] },
   name: "Avalanche",
   heroImage:
-    "https://images.unsplash.com/photo-1483728642387-6c3bdd6c93e5?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1650378789660-8f725a4146b3?auto=format&fit=crop&w=1600&q=70",
   description:
     "A large avalanche has swept down a slope above {location}, burying a stretch of mountain road and several outbuildings under tons of snow. Search teams with dogs and probes are working the debris field, and the main route through the area is closed until crews can clear the slide and stabilize the slope. Officials are warning backcountry travelers to stay off steep terrain while the snowpack settles.",
   scope: "region",
@@ -3678,7 +3678,7 @@ export const KING_TIDE_FLOODING_TEMPLATE: CrisisTemplate = {
   geo: { requiresRegionTags: ["coastal"] },
   name: "King Tide Flooding",
   heroImage:
-    "https://images.unsplash.com/photo-1528465429440-38f8b7512077?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1657069344312-a500de53b566?auto=format&fit=crop&w=1600&q=70",
   description:
     "Seasonal king tides have pushed seawater up through storm drains and over low seawalls across {location}, flooding coastal streets on dry afternoons. Saltwater is lapping at storefronts and grounding traffic in the lowest neighborhoods, and planners say the nuisance flooding is creeping higher each year. Crews are pumping out intersections and handing out sandbags as another tide cycle builds.",
   scope: "region",
@@ -3702,7 +3702,7 @@ export const LANDSLIDE_TEMPLATE: CrisisTemplate = {
   geo: { requiresRegionTags: ["seismic"] },
   name: "Landslide",
   heroImage:
-    "https://images.unsplash.com/photo-1611279284655-4e0c61e30f6d?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1621315898086-0e940d7a221e?auto=format&fit=crop&w=1600&q=70",
   description:
     "A hillside above {location} has given way after sustained ground shaking and wet weather, sending a slide of mud and rock across homes and a key road below. Several structures are buried or pushed off their foundations, utilities are snapped, and geologists are assessing whether the slope is stable enough for rescue crews to work safely. Residents upslope are under evacuation orders as more rain is forecast.",
   scope: "region",
@@ -3727,7 +3727,7 @@ export const FOREST_PEST_OUTBREAK_TEMPLATE: CrisisTemplate = {
   geo: { requiresRegionTags: ["wildfire"] },
   name: "Forest Pest Outbreak",
   heroImage:
-    "https://images.unsplash.com/photo-1542273917363-3b0b3b3b3b3b?auto=format&fit=crop&w=1600&q=70",
+    "https://images.unsplash.com/photo-1567448903605-08e79b3ed079?auto=format&fit=crop&w=1600&q=70",
   description:
     "A native bark beetle outbreak has flared across the forests of {location}, killing stands of weakened trees faster than crews can cut buffer lines. The dead timber is piling up across a region already prone to fire, air quality is slipping as respiring canopy thins, and foresters are scrambling to salvage log before the killed wood loses value. Officials warn the outbreak will take seasons to run its course.",
   scope: "region",
@@ -4539,7 +4539,7 @@ export const ANTIWAR_PROTEST_TEMPLATE: CrisisTemplate = {
 const VIETNAM_HERO = [
   "https://images.unsplash.com/photo-1608396941316-ea89219bd56e?auto=format&fit=crop&w=1600&q=70",
   "https://images.unsplash.com/photo-1591259622709-bdb033b4be2b?auto=format&fit=crop&w=1600&q=70",
-  "https://images.unsplash.com/photo-1494059980473-813e73ee784b?auto=format&fit=crop&w=1600&q=70",
+  "https://images.unsplash.com/photo-1721390017772-12182f8b685b?auto=format&fit=crop&w=1600&q=70",
 ];
 
 /** Both superpowers on the ladder, from the ladder's own roster. Nobody else
