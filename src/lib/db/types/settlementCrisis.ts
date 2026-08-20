@@ -56,6 +56,16 @@ export interface SettlementCrisisDoc {
   ladder: { heat: number; armedTurn: number | null };
   /** Weighted drift applied per tick, newest first, capped at 6 entries. */
   driftHistory: number[];
+  /**
+   * Last turn the settlement phase ticked this crisis.
+   *
+   * The phase claims on this before doing anything, so two overlapping turn
+   * runs — which this project has had, from rolling deploys — cannot both tick
+   * it. Without the claim the loser computes a drift-only result from the same
+   * snapshot and overwrites the winner's write, silently discarding every play
+   * that landed that turn.
+   */
+  lastTickedTurn: number | null;
   /** Set when a declared war freezes the crisis. */
   conflictId: string | null;
   openedTurn: number;

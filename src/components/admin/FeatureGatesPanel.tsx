@@ -105,6 +105,11 @@ const BOOLEAN_GATES: BooleanGate[] = [
     label: "IntOrg alignment",
     desc: "Cold War alignment: every nation holds a share per bloc pole plus a non-aligned remainder, drifting each turn and moved by influence plays. Adds the Cold War Ledger and the per-org Influence tab. Off by default — seeded values are written regardless, so flipping this on shows a populated map rather than blank rows. Tune drift against a live world before enabling.",
   },
+  {
+    key: "settlementCrisisEnabled",
+    label: "Settlement crises",
+    desc: "The German Question: a standing contest over whether West Germany stays sovereign in NATO or reunifies into the Warsaw Pact, fought across four weighted institutions by the GDR, USSR, USA and UK. Off by default and incomplete — the turn phase runs but nothing creates a crisis yet, so enabling this on a live world currently does nothing.",
+  },
 ];
 
 /** Default when gameConfig omits the lever (matches commandEconomyTurn). */

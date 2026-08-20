@@ -42,13 +42,19 @@ export interface SettlementTurnResult {
   position: number;
 }
 
-const IDLE: SettlementTurnResult = {
+/**
+ * A fresh zero result. Deliberately a factory rather than a shared constant —
+ * the value is handed straight to `phaseResults.settlement` and written into the
+ * turn log, and a shared object would let one tick's mutation leak into every
+ * later idle tick.
+ */
+const idle = (): SettlementTurnResult => ({
   playsResolved: 0,
   institutionsMoved: 0,
   crisesResolved: 0,
   heat: 0,
   position: 0,
-};
+});
 
 export async function processSettlementTurn(
   db: Db,
@@ -57,13 +63,33 @@ export async function processSettlementTurn(
   const gameState = await db
     .collection<GameState>("gameState")
     .findOne({ _id: "current" }, { projection: { settlementCrisisEnabled: 1 } });
-  if (!(await isSettlementCrisisEnabled(gameState ?? {}))) return IDLE;
+  if (!(await isSettlementCrisisEnabled(gameState ?? {}))) return idle();
 
   const crises = await getSettlementCrisesCollection(db);
   const crisis = await crises.findOne({ status: "open" } as Filter<SettlementCrisisDoc>);
   // `frozen` and `resolved` are both excluded by the query; the explicit guard
   // keeps this correct if the query is ever widened.
-  if (!crisis || crisis.status !== "open") return IDLE;
+  if (!crisis || crisis.status !== "open") return idle();
+
+  // A crisis with no institutions has no index to derive. Bail rather than
+  // continue: `recomputePosition([])` is 0, which is below the lock threshold,
+  // so a malformed document would otherwise resolve itself for the incumbent on
+  // the very next tick.
+  if (crisis.institutions.length === 0) return idle();
+
+  // CLAIM THE TICK before touching anything. Two overlapping turn runs would
+  // otherwise both read this snapshot; the one that loses the per-play claims
+  // still computes a drift-only result and `$set`s it over the winner's write,
+  // discarding every play that landed this turn. Claiming here makes the whole
+  // tick single-writer, and the per-play claims below remain as the guard
+  // against a commit route racing the phase.
+  const wonTick = await claimStatusTransition(
+    db,
+    "settlementCrises",
+    { _id: crisis._id, lastTickedTurn: { $ne: currentTurn } },
+    { $set: { lastTickedTurn: currentTurn } }
+  );
+  if (!wonTick) return idle();
 
   const plays = await getSettlementPlaysCollection(db);
   const pending = await plays

@@ -37,6 +37,7 @@ function crisis(over: Partial<SettlementCrisisDoc> = {}): SettlementCrisisDoc {
     })),
     ladder: { heat: 2, armedTurn: null },
     driftHistory: [],
+    lastTickedTurn: 411,
     conflictId: null,
     openedTurn: 400,
     resolvedTurn: null,
@@ -87,6 +88,9 @@ function arrange(db: MockDb, doc: SettlementCrisisDoc, plays: SettlementPlayDoc[
     settlementCrisisEnabled: true,
   });
   prime(db, "settlementCrises").findOne.mockResolvedValue(doc);
+  // The tick claim runs through updateOne on the crisis collection. Default
+  // matchedCount 1 = this runner won the tick.
+  prime(db, "settlementCrises").updateOne.mockResolvedValue({ matchedCount: 1 });
   prime(db, "settlementPlays").find.mockReturnValue({
     toArray: vi.fn().mockResolvedValue(plays),
     sort: vi.fn().mockReturnThis(),
@@ -100,10 +104,18 @@ function arrange(db: MockDb, doc: SettlementCrisisDoc, plays: SettlementPlayDoc[
   prime(db, "settlementPlays").updateOne.mockResolvedValue({ matchedCount: 1 });
 }
 
-/** The `$set` payload of the crisis write. */
+/**
+ * The `$set` payload of the crisis STATE write.
+ *
+ * Not `calls[0]` — the tick claim is also an updateOne on this collection and
+ * runs first. The state write is the one carrying `institutions`.
+ */
 function crisisUpdate(db: MockDb) {
-  const call = db.collectionMocks.settlementCrises!.updateOne.mock.calls[0];
-  return call[1].$set;
+  const call = db.collectionMocks.settlementCrises!.updateOne.mock.calls.find(
+    (c) => c[1]?.$set?.institutions !== undefined
+  );
+  expect(call, "expected a crisis state write").toBeDefined();
+  return call![1].$set;
 }
 
 describe("processSettlementTurn", () => {
@@ -349,6 +361,59 @@ describe("processSettlementTurn", () => {
     const dd = crisisUpdate(db).seats.find((s: { id: string }) => s.id === "DD");
     expect(dd.committedPoints).toBe(800);
     expect(dd.lastActedTurn).toBe(412);
+  });
+
+  it("claims the tick so two overlapping runs cannot both write the crisis", async () => {
+    arrange(db, crisis(), [play()]);
+    const { processSettlementTurn } = await import("./settlementPhase");
+    await processSettlementTurn(db as unknown as Db, 412);
+
+    expect(db.collectionMocks.settlementCrises!.updateOne).toHaveBeenCalledWith(
+      { _id: CRISIS_ID, lastTickedTurn: { $ne: 412 } },
+      { $set: { lastTickedTurn: 412 } }
+    );
+  });
+
+  it("does nothing when another runner already claimed this tick", async () => {
+    arrange(db, crisis(), [play()]);
+    db.collectionMocks.settlementCrises!.updateOne.mockResolvedValue({ matchedCount: 0 });
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 412);
+
+    expect(result.playsResolved).toBe(0);
+    // Only the losing claim attempt — no state write, so the winner's write
+    // survives instead of being clobbered by a drift-only recomputation.
+    const stateWrites = db.collectionMocks.settlementCrises!.updateOne.mock.calls.filter(
+      (c) => c[1]?.$set?.institutions !== undefined
+    );
+    expect(stateWrites).toHaveLength(0);
+    expect(db.collectionMocks.settlementPlays!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("bails on a crisis with no institutions rather than resolving it", async () => {
+    // recomputePosition([]) is 0, which is below the lock threshold — without
+    // the guard a malformed document resolves itself for the incumbent.
+    arrange(db, crisis({ institutions: [], position: 0 }), []);
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 412);
+
+    expect(result.crisesResolved).toBe(0);
+    const stateWrites = db.collectionMocks.settlementCrises!.updateOne.mock.calls.filter(
+      (c) => c[1]?.$set?.institutions !== undefined
+    );
+    expect(stateWrites).toHaveLength(0);
+  });
+
+  it("returns a fresh idle result each time rather than a shared object", async () => {
+    prime(db, "gameState").findOne.mockResolvedValue({
+      _id: "current",
+      settlementCrisisEnabled: false,
+    });
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const a = await processSettlementTurn(db as unknown as Db, 412);
+    a.heat = 99;
+    const b = await processSettlementTurn(db as unknown as Db, 413);
+    expect(b.heat).toBe(0);
   });
 
   it("records the play that moved an institution", async () => {
