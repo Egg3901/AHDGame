@@ -10,18 +10,6 @@ import MarketPie from "../components/MarketPie";
 import { DEFAULT_CORP_COLORS } from "../lib/helpers";
 import type { Market, SectorData, CorporationRef, Financials } from "../types";
 
-/**
- * What the slices actually divide up. Players read this pie as a share of
- * commodity demand and then cannot reconcile it with the shortage badges on the
- * Commodity Flows panel, which ARE demand-based. The denominator here is the
- * state's revenue pool for this sector type, and "Unowned" is the part of that
- * pool no corporation has claimed — not unmet demand for what you produce.
- */
-const UNOWNED_NOTE =
-  "The share of this state's market for this sector type that no corporation has claimed yet. " +
-  "This pie divides the state's sector revenue pool, not commodity demand — a shortage badge on " +
-  "Commodity Flows is a separate, world-market measure and will not line up with these slices.";
-
 interface MarketPositionPanelProps {
   market: Market;
   sector: SectorData;
@@ -55,7 +43,6 @@ export default function MarketPositionPanel({
   const sectorCurrency = COUNTRY_CURRENCY_MAP[(sector.countryId ?? "US") as CountryId] ?? "USD";
   const corpCurrency = (corporation.liquidCurrencyCode ?? sectorCurrency) as CurrencyCode;
   const marketCurrencyNote = `Market values are normalized for forex. Local mode shows ${sectorCurrency}, this sector's home currency; other display modes convert from the same underlying value.`;
-  const fmtMarket = (v: number) => formatAmount(v, sectorCurrency);
   const fmtMarketChip = (v: number) => formatAmountChip(v, sectorCurrency);
   const fmtCorpSectorMoney = (v: number) =>
     formatAmount(toInternalFrom(v, corpCurrency), corpCurrency);
@@ -129,23 +116,10 @@ export default function MarketPositionPanel({
               </span>
             </div>
           ))}
-          {market.unownedPercent > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-muted/30" />
-              <Tooltip content={UNOWNED_NOTE}>
-                <span className="cursor-help border-b border-dashed border-card-border/70 text-muted">
-                  Unowned
-                </span>
-              </Tooltip>
-              <span className="ml-auto tabular-nums font-medium text-muted">
-                {market.unownedPercent.toFixed(1)}%
-              </span>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Compact mode: 2-row footer only */}
+      {/* Compact mode: 1-row footer only */}
       {compact ? (
         <div className="space-y-1.5 border-t border-card-border pt-3 text-xs">
           <div className="flex justify-between">
@@ -158,16 +132,10 @@ export default function MarketPositionPanel({
               {fmtMarketChip(perTurn(market.totalMarket))}/turn
             </span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Unowned revenue</span>
-            <span className="tabular-nums font-medium text-foreground">
-              {fmtMarket(perTurn(market.unownedRevenue))}/turn
-            </span>
-          </div>
         </div>
       ) : (
         /* Full mode: stats grid */
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-3 gap-4">
           <div>
             <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
               Your Revenue
@@ -190,17 +158,6 @@ export default function MarketPositionPanel({
               Competitors
             </span>
             <span className="text-sm font-bold text-foreground">{market.competitors.length}</span>
-          </div>
-          <div>
-            <Tooltip content={`${UNOWNED_NOTE} ${marketCurrencyNote}`}>
-              <span className="block cursor-help text-[10px] font-medium uppercase tracking-widest text-muted border-b border-dashed border-card-border/70 w-fit">
-                Unowned Revenue
-              </span>
-            </Tooltip>
-            <span className="text-sm font-bold tabular-nums text-foreground">
-              {fmtMarket(perTurn(market.unownedRevenue))}
-              <span className="text-[10px] font-normal text-muted">/turn</span>
-            </span>
           </div>
         </div>
       )}
