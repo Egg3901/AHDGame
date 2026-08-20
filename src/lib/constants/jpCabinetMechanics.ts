@@ -312,8 +312,12 @@ export const JP_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
         {
           id: "reduced",
           label: "Reduced",
-          description: "Lower readiness across the force, reducing upkeep.",
-          effects: {},
+          description:
+            "Lower readiness across the force, reducing upkeep. Civil-defence coverage thins with it.",
+          effects: {
+            "publicSafety.publicSafetyConfidence": -0.02,
+            "environment.naturalDisasterPreparedness": -0.02,
+          },
         },
         {
           id: "standard",
@@ -325,8 +329,12 @@ export const JP_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
           id: "elevated",
           label: "Elevated",
           description:
-            "Raise readiness across the force to strengthen resilience, at higher upkeep.",
-          effects: {},
+            "Raise the readiness every formation trains toward, strengthening civil-defence resilience at higher upkeep and some public tension.",
+          effects: {
+            "publicSafety.publicSafetyConfidence": 0.02,
+            "environment.naturalDisasterPreparedness": 0.03,
+            "governance.publicTrust": -0.01,
+          },
         },
       ],
     },

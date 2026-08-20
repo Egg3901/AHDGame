@@ -20,6 +20,8 @@ export interface OrderOfBattleView {
    * turn processor will never deliver. Absent = fully funded.
    */
   arrearsRatio?: number;
+  /** The viewer nation's department-wide readiness tier, which scales the same baseline. */
+  readinessTier?: string | null;
 }
 
 /**
@@ -66,7 +68,11 @@ export function OrderOfBattlePanel({ view }: { view: OrderOfBattleView }) {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {view.forces.map((f) => {
-            const target = readinessBaselineOf(f.posture, view.arrearsRatio ?? 0);
+            const target = readinessBaselineOf(
+              f.posture,
+              view.arrearsRatio ?? 0,
+              view.readinessTier
+            );
             const turnsToFull =
               f.readiness >= target
                 ? null
