@@ -14,9 +14,11 @@ interface RouteParams {
 }
 
 /**
- * POST /api/charters/[id]/replace-founder — Swaps a voided founder
- * (rejected / banned / withdrawn) with a fresh characterId. Returns the
- * charter to `pending-signatures`.
+ * POST /api/charters/[id]/replace-founder — Swaps a founder slot with a fresh
+ * characterId and returns the charter to `pending-signatures`. Works both for
+ * a voided founder (rejected / banned / withdrawn, status
+ * `founder-replacement`) and, per suggestion #287, for a voluntary swap of an
+ * inactive UNSIGNED founder while the charter is still `pending-signatures`.
  *
  * Authorization: caller must own at least one of the current founder
  * characters (the surviving founders OR the outgoing founder themselves
@@ -77,18 +79,20 @@ export async function POST(request: Request, { params }: RouteParams) {
         result.reason === "charter-not-found"
           ? "Charter not found"
           : result.reason === "not-replaceable"
-            ? "Charter is not in founder-replacement state"
+            ? "Charter is not accepting founder replacements right now"
             : result.reason === "outgoing-not-founder"
               ? "Outgoing character is not a founder on this charter"
-              : result.reason === "replacement-already-founder"
-                ? "Replacement character is already a founder on this charter"
-                : result.reason === "replacement-not-found"
-                  ? "Replacement character does not exist"
-                  : result.reason === "replacement-not-human"
-                    ? "Replacement must be a human-owned character"
-                    : result.reason === "replacement-not-adjacent"
-                      ? "Replacement must live in the anchor founder's home state or a state adjacent to it"
-                      : "Replacement character must belong to the charter's country";
+              : result.reason === "outgoing-already-signed"
+                ? "That founder has already signed and cannot be swapped out"
+                : result.reason === "replacement-already-founder"
+                  ? "Replacement character is already a founder on this charter"
+                  : result.reason === "replacement-not-found"
+                    ? "Replacement character does not exist"
+                    : result.reason === "replacement-not-human"
+                      ? "Replacement must be a human-owned character"
+                      : result.reason === "replacement-not-adjacent"
+                        ? "Replacement must live in the anchor founder's home state or a state adjacent to it"
+                        : "Replacement character must belong to the charter's country";
       return NextResponse.json({ error: message, reason: result.reason }, { status });
     }
 
