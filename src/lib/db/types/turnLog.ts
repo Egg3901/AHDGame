@@ -650,6 +650,8 @@ export interface TurnLog {
       heat: number;
       /** Settlement index after this tick, in hundredths. */
       position: number;
+      /** Seat countries charged a mobilisation levy for standing at rung 5. */
+      countriesLevied: number;
     } | null;
 
     /** Phase 3 — passive Org→Reg drift + Reg decay phase. */

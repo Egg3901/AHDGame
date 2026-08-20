@@ -122,6 +122,23 @@ export const PERSONAL_NET_CAP = 6 * HUNDREDTHS;
 /** Highest rung coercive plays alone can reach. Rung 5 is a deliberate act. */
 export const MAX_COERCIVE_RUNG = 4;
 
+/**
+ * What one turn at the top of the ladder costs each delegation's country.
+ *
+ * Rung 5 is DEFCON 1 — mobilised armies, closed corridors, a market that has
+ * priced in a war. Without a standing cost a bloc could arm and simply sit
+ * there, which turns the brink into a free threat and the ladder into a latch.
+ * Paired with heat decay, holding the top rung becomes a position you pay to
+ * maintain rather than a state you reach.
+ *
+ * Charged as a share of the country's own treasury rather than a flat sum, so
+ * it bites Washington and East Berlin proportionally instead of bankrupting the
+ * poorest seat first.
+ */
+export const MOBILISATION_TREASURY_SHARE = 0.02;
+/** Approval points each seat country loses per turn while armed. */
+export const MOBILISATION_APPROVAL_HIT = 1;
+
 export const LADDER_RUNGS: readonly string[] = [
   "Diplomatic notes · four-power channel",
   "Border incidents · troop alerts",

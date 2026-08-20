@@ -416,6 +416,32 @@ describe("processSettlementTurn", () => {
     expect(b.heat).toBe(0);
   });
 
+  it("levies mobilisation while the ladder is armed", async () => {
+    arrange(db, crisis({ ladder: { heat: 5, armedTurn: 410 } }), [
+      play({ playId: "border", targetInstitutionId: "street", heatAdded: 1 }),
+    ]);
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 412);
+    expect(result.countriesLevied).toBe(4);
+    expect(crisisUpdate(db).ladder).toEqual({ heat: 5, armedTurn: 410 });
+  });
+
+  it("levies nothing while the ladder is below the top rung", async () => {
+    arrange(db, crisis({ ladder: { heat: 3, armedTurn: null } }), [play()]);
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 412);
+    expect(result.countriesLevied).toBe(0);
+  });
+
+  it("clears the armed stamp when heat decays off the top rung", async () => {
+    // A disarmed crisis must not keep looking armed to the declare route.
+    arrange(db, crisis({ ladder: { heat: 5, armedTurn: 410 } }), []);
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 412);
+    expect(crisisUpdate(db).ladder).toEqual({ heat: 4, armedTurn: null });
+    expect(result.countriesLevied).toBe(0);
+  });
+
   it("records the play that moved an institution", async () => {
     arrange(db, crisis(), [play()]);
     const { processSettlementTurn } = await import("./settlementPhase");

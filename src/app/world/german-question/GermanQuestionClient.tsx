@@ -105,7 +105,7 @@ export function GermanQuestionClient({ initialView }: { initialView: DossierView
             bloc="east"
             seats={view.benches.east}
           />
-          <EscalationLadder view={view} />
+          <EscalationLadder view={view} onArmed={refresh} />
         </div>
       </div>
 

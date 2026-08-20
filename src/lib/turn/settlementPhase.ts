@@ -29,8 +29,9 @@ import {
 import { applyToInstitution, recomputePosition } from "@/lib/settlement/position";
 import { driftSeedFor, rollInstitutionDrift, weightedDrift } from "@/lib/settlement/drift";
 import { resolvePlayBatch, type ResolvedBatch } from "@/lib/settlement/resolvePlays";
-import { nextHeat, outcomeFor } from "@/lib/settlement/outcome";
+import { isArmed, nextHeat, outcomeFor } from "@/lib/settlement/outcome";
 import { isSettlementCrisisEnabled } from "@/lib/settlement/featureFlag";
+import { levyMobilisation } from "@/lib/settlement/mobilisation";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
 import type { GameState } from "@/lib/db/types";
 
@@ -40,6 +41,8 @@ export interface SettlementTurnResult {
   crisesResolved: number;
   heat: number;
   position: number;
+  /** Seat countries charged a mobilisation levy this tick. */
+  countriesLevied: number;
 }
 
 /**
@@ -54,6 +57,7 @@ const idle = (): SettlementTurnResult => ({
   crisesResolved: 0,
   heat: 0,
   position: 0,
+  countriesLevied: 0,
 });
 
 export async function processSettlementTurn(
@@ -154,6 +158,14 @@ export async function processSettlementTurn(
   const heat = nextHeat({ current: crisis.ladder.heat, added: batch.heatAdded });
   const outcome = outcomeFor(position);
 
+  // Charged on the heat the crisis is at AFTER this tick's decay, so a bloc that
+  // let the ladder fall pays nothing for the turn it stepped back.
+  const armed = isArmed(heat);
+  const mobilisation = await levyMobilisation(db, { armed });
+  // The stamp survives only while the ladder is actually at the top; letting it
+  // linger would leave a disarmed crisis looking armed to the declare route.
+  const armedTurn = armed ? (crisis.ladder.armedTurn ?? currentTurn) : null;
+
   const driftHistory = [
     weightedDrift(institutions.map((i) => ({ weight: i.weight, drift: i.lastDrift }))),
     ...crisis.driftHistory,
@@ -169,7 +181,7 @@ export async function processSettlementTurn(
         seats,
         position,
         driftHistory,
-        ladder: { heat, armedTurn: crisis.ladder.armedTurn },
+        ladder: { heat, armedTurn },
         status: outcome ? "resolved" : "open",
         outcome,
         resolvedTurn: outcome ? currentTurn : null,
@@ -184,6 +196,7 @@ export async function processSettlementTurn(
     crisesResolved: outcome ? 1 : 0,
     heat,
     position,
+    countriesLevied: mobilisation.countriesLevied,
   };
 }
 

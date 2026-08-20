@@ -326,6 +326,52 @@ describe("loadGermanQuestionDossier", () => {
     expect(view!.viewer.seat!.escalateGate).toBeNull();
   });
 
+  it("keeps the arm button dark until the ladder reaches the coercive cap", async () => {
+    // Heat is 2 in the default fixture — authority alone is not enough.
+    const { loadSettlementActorContext } = await import("../actorContext");
+    vi.mocked(loadSettlementActorContext).mockResolvedValue(
+      seatCtx({ id: "US", direction: -1 }) as never
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.armed).toBe(false);
+    expect(view!.viewer.seat!.canEscalate).toBe(true);
+    expect(view!.viewer.seat!.canArmNow).toBe(false);
+  });
+
+  it("lights the arm button for an authority seat once heat sits at rung 4", async () => {
+    prime(db, "settlementCrises").findOne.mockResolvedValue(
+      crisisDoc({ ladder: { heat: 4, armedTurn: null } })
+    );
+    const { loadSettlementActorContext } = await import("../actorContext");
+    vi.mocked(loadSettlementActorContext).mockResolvedValue(
+      seatCtx({ id: "US", direction: -1 }) as never
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.viewer.seat!.canArmNow).toBe(true);
+  });
+
+  it("never lights it for a seat without authority, even at rung 4", async () => {
+    prime(db, "settlementCrises").findOne.mockResolvedValue(
+      crisisDoc({ ladder: { heat: 4, armedTurn: null } })
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    // Default fixture is the GDR seat.
+    expect(view!.viewer.seat!.canArmNow).toBe(false);
+  });
+
+  it("reports the crisis as armed at the top rung", async () => {
+    prime(db, "settlementCrises").findOne.mockResolvedValue(
+      crisisDoc({ ladder: { heat: 5, armedTurn: 410 } })
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.armed).toBe(true);
+    expect(view!.defcon).toBe(1);
+  });
+
   it("marks the current ladder rung and the ones already passed", async () => {
     const { loadGermanQuestionDossier } = await import("./dossier");
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);

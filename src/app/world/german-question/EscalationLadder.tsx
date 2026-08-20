@@ -1,14 +1,38 @@
+"use client";
+
+import { useState } from "react";
 import type { DossierView } from "@/lib/settlement/queries/dossier";
 
 /**
  * The five rungs, and who may climb them.
  *
- * DISPLAY-ONLY THIS PHASE. Arming and declaring are Phase 5, so the control
- * renders disabled with an explanation rather than pretending to work — a
- * button that silently does nothing is worse than one that says why.
+ * Force the Issue ARMS the ladder; it does not declare. Declaring the war is a
+ * second, separate act and arrives with the war phase — so the armed state
+ * renders as a standing cost and a live warning rather than a button that
+ * quietly does nothing.
  */
-export function EscalationLadder({ view }: { view: DossierView }) {
+export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed: () => void }) {
   const seat = view.viewer.seat;
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const arm = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/world/german-question/escalate", { method: "POST" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        setError(body?.error ?? "The ladder could not be forced.");
+        return;
+      }
+      onArmed();
+    } catch {
+      setError("The order could not be sent. Check your connection and try again.");
+    } finally {
+      setPending(false);
+    }
+  };
   return (
     <section className="rounded-xl border border-warning/40 bg-warning/[0.05] p-4">
       <h2 className="mb-3 font-mono text-body-xs font-bold tracking-wider text-gold-muted">
@@ -55,18 +79,38 @@ export function EscalationLadder({ view }: { view: DossierView }) {
         ))}
       </ol>
 
+      {view.armed && (
+        <p className="mt-3 rounded-md border border-warning/50 bg-warning/10 p-3 font-mono text-body-xs leading-relaxed text-warning">
+          ARMED · DEFCON 1. Every delegation&apos;s country is paying a mobilisation levy each turn
+          it stands here. Let the heat decay and the ladder steps back down.
+        </p>
+      )}
+
       {seat?.canEscalate ? (
         <button
           type="button"
-          disabled
-          title="Arming and declaring arrive with the war phase."
-          className="mt-3 w-full cursor-not-allowed rounded-md border border-warning/40 bg-warning/[0.07] p-2.5 font-mono text-body-xs font-semibold tracking-wider text-warning opacity-60"
+          disabled={pending || !seat.canArmNow}
+          onClick={() => void arm()}
+          title={
+            seat.canArmNow
+              ? "Take the ladder to rung 5. This arms a declaration and starts the levy."
+              : view.armed
+                ? "The ladder is already at the top rung."
+                : "The ladder must reach rung 4 on coercive plays before it can be forced."
+          }
+          className="mt-3 w-full rounded-md border border-warning/40 bg-warning/[0.07] p-2.5 font-mono text-body-xs font-semibold tracking-wider text-warning hover:bg-warning/[0.14] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          ▲ FORCE THE ISSUE — ESCALATE
+          {pending ? "FORCING…" : "▲ FORCE THE ISSUE — ESCALATE"}
         </button>
       ) : (
         <p className="mt-3 rounded-md border border-dashed border-card-border p-3 font-mono text-body-xs leading-relaxed text-muted">
           NO ESCALATION AUTHORITY — {seat?.escalateGate ?? "only a delegation may take the ladder."}
+        </p>
+      )}
+
+      {error && (
+        <p role="alert" className="mt-2 font-mono text-body-xs text-error">
+          {error}
         </p>
       )}
 

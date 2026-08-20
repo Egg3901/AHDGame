@@ -21,6 +21,7 @@ import type { SettlementSeatState } from "@/lib/db/types/settlementCrisis";
 import {
   HUNDREDTHS,
   LADDER_RUNGS,
+  MAX_COERCIVE_RUNG,
   PERSONAL_NET_CAP,
   PERSONAL_MULTIPLIER_PCT,
   SETTLEMENT_SEATS,
@@ -33,7 +34,7 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { formatLocalFunds } from "@/lib/actions";
 import { getSettlementCrisesCollection, getSettlementPlaysCollection } from "@/lib/db/collections";
-import { defconFor } from "../outcome";
+import { defconFor, isArmed } from "../outcome";
 import { canCharacterAfford, canSeatAfford, seatBudgetFor } from "../affordability";
 import { loadSettlementActorContext } from "../actorContext";
 import { resolvePersonalFunds } from "../playCost";
@@ -109,6 +110,8 @@ export interface DossierSeatView {
   canAct: boolean;
   blockedReason: string | null;
   canEscalate: boolean;
+  /** Authority AND the ladder is at the cap right now — the button is live. */
+  canArmNow: boolean;
   escalateGate: string | null;
 }
 
@@ -122,6 +125,8 @@ export interface DossierView {
   leadNote: string;
   heat: number;
   defcon: number;
+  /** Rung 5 reached — the levy is running and a declaration is unlocked. */
+  armed: boolean;
   ladder: { num: number; label: string; here: boolean; passed: boolean }[];
   drift: { last: number; history: number[]; revealed: boolean; band: string | null };
   institutions: DossierInstitutionView[];
@@ -461,6 +466,7 @@ export async function loadGermanQuestionDossier(
     leadNote,
     heat: crisis.ladder.heat,
     defcon: defconFor(crisis.ladder.heat),
+    armed: isArmed(crisis.ladder.heat),
     ladder: LADDER_RUNGS.map((label, i) => ({
       num: i + 1,
       label,
@@ -497,6 +503,10 @@ export async function loadGermanQuestionDossier(
               canAct: seat.canAct,
               blockedReason: seat.blockedReason,
               canEscalate: seatDef.authority,
+              canArmNow:
+                seatDef.authority &&
+                seat.direction !== null &&
+                crisis.ladder.heat === MAX_COERCIVE_RUNG,
               escalateGate: seatDef.authority ? null : escalateGateFor(seat.id),
             }
           : null,
