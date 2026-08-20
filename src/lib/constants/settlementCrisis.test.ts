@@ -125,6 +125,26 @@ describe("settlement crisis config", () => {
     ).toEqual(["broadcast", "fourpower", "rhine"]);
   });
 
+  it("prices seat plays in the seat country's local currency", () => {
+    for (const play of SETTLEMENT_PLAYS.filter((p) => p.seat !== null)) {
+      expect(play.fundsUnit, play.id).toBe("local");
+    }
+  });
+
+  it("prices personal plays in anchor units so every character pays the same value", () => {
+    // A flat local cost would make the same play roughly four times cheaper for
+    // a Soviet character than an American one at 1953 rates.
+    for (const play of SETTLEMENT_PLAYS.filter((p) => p.seat === null)) {
+      expect(play.fundsUnit, play.id).toBe("anchor");
+    }
+  });
+
+  it("gives a funds unit to every play, including the free ones", () => {
+    for (const play of SETTLEMENT_PLAYS) {
+      expect(["local", "anchor"], play.id).toContain(play.fundsUnit);
+    }
+  });
+
   it("grants escalation authority to Washington and Moscow only", () => {
     const authority = SETTLEMENT_SEATS.filter((s) => s.authority)
       .map((s) => s.id)

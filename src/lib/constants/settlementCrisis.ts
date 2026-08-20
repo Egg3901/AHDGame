@@ -57,7 +57,21 @@ export interface SettlementPlayDef {
   magnitude: number;
   /** Whole capital points. */
   capitalCost: number;
-  /** Funds in the seat country's local currency, minor-unit-free whole amount. */
+  /**
+   * Which currency `fundsCost` is denominated in.
+   *
+   * `local` — the seat country's own currency. The authored seat costs are
+   * literal mockup figures (ℳ12M, $60M, £25M) and mean exactly what they say.
+   *
+   * `anchor` — converted at the actor's home FX rate before it is charged.
+   * Personal plays use this so a character pays the same real value wherever
+   * they live; a flat local figure would make `rally` roughly four times
+   * cheaper in Moscow than in Washington at 1953 rates. Matches how
+   * `applyEffectToCharacter` and `influence/executor` already treat a
+   * character's `fundsChange`.
+   */
+  fundsUnit: "local" | "anchor";
+  /** Funds cost in the unit named by `fundsUnit`. Zero for a free play. */
   fundsCost: number;
   actionCost: number;
   /** Coercive plays add a rung of ladder heat. */
@@ -204,6 +218,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "street",
     magnitude: 8 * HUNDREDTHS,
     capitalCost: 14,
+    fundsUnit: "local",
     fundsCost: 12_000_000,
     actionCost: 2,
     addsHeat: true,
@@ -218,6 +233,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "bundestag",
     magnitude: 6 * HUNDREDTHS,
     capitalCost: 18,
+    fundsUnit: "local",
     fundsCost: 0,
     actionCost: 3,
     addsHeat: false,
@@ -232,6 +248,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: null,
     magnitude: 5 * HUNDREDTHS,
     capitalCost: 22,
+    fundsUnit: "local",
     fundsCost: 30_000_000,
     actionCost: 3,
     addsHeat: true,
@@ -246,6 +263,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "laender",
     magnitude: 4 * HUNDREDTHS,
     capitalCost: 0,
+    fundsUnit: "local",
     fundsCost: 45_000_000,
     actionCost: 1,
     addsHeat: false,
@@ -261,6 +279,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "bundestag",
     magnitude: 4 * HUNDREDTHS,
     capitalCost: 12,
+    fundsUnit: "local",
     fundsCost: 20_000_000,
     actionCost: 2,
     addsHeat: false,
@@ -276,6 +295,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "garrison",
     magnitude: 5 * HUNDREDTHS,
     capitalCost: 16,
+    fundsUnit: "local",
     fundsCost: 0,
     actionCost: 2,
     addsHeat: true,
@@ -290,6 +310,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "street",
     magnitude: 5 * HUNDREDTHS,
     capitalCost: 0,
+    fundsUnit: "local",
     fundsCost: 35_000_000,
     actionCost: 1,
     addsHeat: false,
@@ -304,6 +325,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "garrison",
     magnitude: 6 * HUNDREDTHS,
     capitalCost: 10,
+    fundsUnit: "local",
     fundsCost: 0,
     actionCost: 2,
     addsHeat: false,
@@ -318,6 +340,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "laender",
     magnitude: 5 * HUNDREDTHS,
     capitalCost: 0,
+    fundsUnit: "local",
     fundsCost: 60_000_000,
     actionCost: 1,
     addsHeat: false,
@@ -332,6 +355,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "street",
     magnitude: 4 * HUNDREDTHS,
     capitalCost: 14,
+    fundsUnit: "local",
     fundsCost: 15_000_000,
     actionCost: 2,
     addsHeat: true,
@@ -347,6 +371,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "garrison",
     magnitude: 4 * HUNDREDTHS,
     capitalCost: 0,
+    fundsUnit: "local",
     fundsCost: 25_000_000,
     actionCost: 2,
     addsHeat: false,
@@ -360,6 +385,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "bundestag",
     magnitude: 3 * HUNDREDTHS,
     capitalCost: 8,
+    fundsUnit: "local",
     fundsCost: 0,
     actionCost: 1,
     addsHeat: false,
@@ -373,6 +399,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "street",
     magnitude: 3 * HUNDREDTHS,
     capitalCost: 0,
+    fundsUnit: "local",
     fundsCost: 10_000_000,
     actionCost: 1,
     addsHeat: false,
@@ -387,6 +414,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "street",
     magnitude: 150,
     capitalCost: 0,
+    fundsUnit: "anchor",
     fundsCost: 0,
     actionCost: 1,
     addsHeat: false,
@@ -401,6 +429,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "street",
     magnitude: 2 * HUNDREDTHS,
     capitalCost: 0,
+    fundsUnit: "anchor",
     fundsCost: 5_000,
     actionCost: 2,
     addsHeat: false,
@@ -414,6 +443,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     target: "bundestag",
     magnitude: 1 * HUNDREDTHS,
     capitalCost: 0,
+    fundsUnit: "anchor",
     fundsCost: 0,
     actionCost: 1,
     addsHeat: false,
