@@ -24,7 +24,7 @@ export default async function WikiLayout({ children }: { children: React.ReactNo
   return (
     <div className="min-h-screen min-w-0 overflow-x-hidden bg-background">
       <WikiSiteHeader playUrl={getSiteUrl()} docsUrl={getDocsUrl()} />
-      {children}
+      <main>{children}</main>
     </div>
   );
 }
