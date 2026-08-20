@@ -107,15 +107,65 @@ describe("replaceFounder", () => {
     expect(result).toEqual({ ok: false, reason: "charter-not-found" });
   });
 
-  it("returns not-replaceable when status isn't founder-replacement", async () => {
+  it("returns not-replaceable for a non-replaceable status (ratified)", async () => {
     const outgoing = new ObjectId();
     const initial = makeCharter({
-      status: "pending-signatures",
+      status: "ratified",
       foundersCharacterIds: [outgoing, new ObjectId(), new ObjectId()],
     });
     const { db } = stubDb({ initial });
     const result = await replaceFounder(initial._id, outgoing, new ObjectId(), db);
     expect(result).toEqual({ ok: false, reason: "not-replaceable" });
+  });
+
+  it("allows a voluntary swap of an UNSIGNED founder while pending-signatures (#287)", async () => {
+    const anchor = new ObjectId();
+    const outgoing = new ObjectId();
+    const replacement = new ObjectId();
+    const founders = [anchor, outgoing, new ObjectId()];
+    const initial = makeCharter({
+      status: "pending-signatures",
+      foundersCharacterIds: founders,
+      signatures: [
+        { characterId: anchor, signedAt: new Date() },
+        { characterId: outgoing }, // unsigned inactive founder
+        { characterId: founders[2]! },
+      ],
+    });
+    const { db, updateOne } = stubDb({
+      initial,
+      anchorCharacter: { _id: anchor, userId: new ObjectId(), countryId: "US", homeState: null },
+      replacementCharacter: { _id: replacement, userId: new ObjectId(), countryId: "US" },
+    });
+    const result = await replaceFounder(initial._id, outgoing, replacement, db);
+    expect(result).toEqual({ ok: true, status: "pending-signatures" });
+
+    // The write guard re-asserts the outgoing slot is still unsigned.
+    const guard = updateOne.mock.calls[0]![0] as Record<string, unknown>;
+    expect(guard.status).toBe("pending-signatures");
+    expect(guard.signatures).toBeDefined();
+    const update = updateOne.mock.calls[0]![1] as { $set: Record<string, unknown> };
+    const newFounders = update.$set.foundersCharacterIds as ObjectId[];
+    expect(newFounders[1]?.toString()).toBe(replacement.toString());
+  });
+
+  it("refuses to swap a founder who has already signed (#287)", async () => {
+    const anchor = new ObjectId();
+    const outgoing = new ObjectId();
+    const founders = [anchor, outgoing, new ObjectId()];
+    const initial = makeCharter({
+      status: "pending-signatures",
+      foundersCharacterIds: founders,
+      signatures: [
+        { characterId: anchor, signedAt: new Date() },
+        { characterId: outgoing, signedAt: new Date() }, // already committed
+        { characterId: founders[2]! },
+      ],
+    });
+    const { db, updateOne } = stubDb({ initial });
+    const result = await replaceFounder(initial._id, outgoing, new ObjectId(), db);
+    expect(result).toEqual({ ok: false, reason: "outgoing-already-signed" });
+    expect(updateOne).not.toHaveBeenCalled();
   });
 
   it("returns outgoing-not-founder when outgoing character isn't on the charter", async () => {

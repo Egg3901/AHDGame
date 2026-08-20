@@ -74,9 +74,13 @@ export async function ratifyCharter(
   // Founder slot 0 is the "anchor founder" (the proposer; `draftCharter`
   // always puts them here). They anchor the party's geography (home state
   // for the NPP founding cohort) and the cohort favorability baseline, and
-  // are stamped as `createdBy` — but they receive NO leadership role.
-  // Leadership starts vacant and is decided by the cycle-aligned national
-  // leadership elections opened at the end of this function.
+  // are stamped as `createdBy`. Per suggestion #289 they are ALSO seated as
+  // the party's first chair at ratification so the party is not headless
+  // (wrong color, no logo, no one able to customize it) while it waits for a
+  // leadership election to resolve. Vice-chair and treasurer still start
+  // vacant and are decided by the cycle-aligned national leadership elections
+  // opened at the end of this function; the chair seat is uncontested only for
+  // this first term and re-opens normally on the next cycle.
   const anchorFounderCharacterId = charter.foundersCharacterIds[0];
   const anchorFounder = anchorFounderCharacterId
     ? await db.collection<Character>("characters").findOne({ _id: anchorFounderCharacterId })
@@ -104,7 +108,9 @@ export async function ratifyCharter(
     color: "#4f46e5", // neutral indigo until chair customizes
     economicPosition: axisToPartyPosition(platform.economic),
     socialPosition: axisToPartyPosition(platform.social),
-    chairId: null,
+    // #289 — seat the proposer as first chair so the party isn't headless at
+    // birth. Falls back to null if the anchor founder character is missing.
+    chairId: anchorFounder?._id ?? null,
     viceChairId: null,
     treasurerId: null,
     committeeIds: [],
@@ -325,20 +331,40 @@ export async function ratifyCharter(
   try {
     const { createMissingNationalElections } = await import("@/lib/nationalPartyElections");
     await createMissingNationalElections(charterCurrentTurn, undefined, now, charter.countryId);
+    // #289 — the creator opens elections for every position lacking an active
+    // one, including chair. Since the proposer is now seated as chair for the
+    // first term, drop the freshly-created chair election for this party so the
+    // seat isn't immediately re-contested. Vice-chair and treasurer elections
+    // remain. Chair re-opens normally at the next cycle. Skipped when no chair
+    // was seated (anchor founder missing).
+    if (anchorFounder) {
+      await db.collection("nationalPartyElections").deleteOne({
+        partyId: partyIdStr,
+        countryId: charter.countryId,
+        position: "chair",
+        status: "voting",
+        winnerId: null,
+      });
+    }
   } catch {
     /* non-fatal — the hourly phase will create them */
   }
 
-  // Notify every founder that the party is live. Non-fatal. Leadership
-  // starts vacant, so instead of role announcements every founder is
-  // pointed at the freshly opened leadership elections.
+  // Notify every founder that the party is live. Non-fatal. The proposer is
+  // seated as chair (#289); vice-chair and treasurer start vacant, so founders
+  // are pointed at the freshly opened elections for those two seats.
   try {
     const { createNotification } = await import("@/lib/notifications");
+    const anchorFounderId = anchorFounder?._id ?? null;
     for (const ch of founderCharacters) {
       if (!ch.userId) continue;
-      const message =
-        `The charter passed 3-of-3 and the party is now live. Leadership starts vacant — ` +
-        `leadership elections are open on the party page, so declare your candidacy.`;
+      const isChair = anchorFounderId !== null && ch._id.equals(anchorFounderId);
+      const message = isChair
+        ? `The charter passed 3-of-3 and the party is now live. As the founder you are the ` +
+          `party's first chair — set your color and logo on the party page. Vice-chair and ` +
+          `treasurer elections are open.`
+        : `The charter passed 3-of-3 and the party is now live. The founder holds the chair; ` +
+          `vice-chair and treasurer elections are open on the party page, so declare your candidacy.`;
       await createNotification({
         userId: ch.userId,
         type: "charter_ratified",
