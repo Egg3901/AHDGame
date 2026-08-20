@@ -5,6 +5,7 @@ import { getControllingCorporateParent } from "@/lib/corporations/corporateOwner
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import {
   corporationWithReservedHoldings,
+  isSittingCeoOfControllingParent,
   loadReservedCorporatePositions,
   reservedCorporatePositions,
   resolveControllingCorporateParent,
@@ -117,6 +118,79 @@ describe("resolveControllingCorporateParent", () => {
   it("returns null when nothing is reserved and nobody holds >50%", async () => {
     const parent = await resolveControllingCorporateParent(db as never, child([]));
     expect(parent).toBeNull();
+  });
+});
+
+describe("isSittingCeoOfControllingParent", () => {
+  let db: MockDb;
+  const parentCeoUserId = new ObjectId();
+
+  beforeEach(() => {
+    db = createMockDb();
+    db.collection("shareOrders");
+    db.collection("shareListings");
+    db.collection("corporations");
+  });
+
+  it("is true when the viewer is the sitting CEO of the >50% corporate parent", async () => {
+    db.collectionMocks["corporations"]!.findOne.mockResolvedValue({
+      _id: parentId,
+      userId: parentCeoUserId,
+      ceoVacant: false,
+    });
+    expect(
+      await isSittingCeoOfControllingParent(
+        db as never,
+        child([{ corporationId: parentId, shares: 80 }]),
+        parentCeoUserId.toString()
+      )
+    ).toBe(true);
+  });
+
+  it("is false when the viewer is not the parent CEO", async () => {
+    db.collectionMocks["corporations"]!.findOne.mockResolvedValue({
+      _id: parentId,
+      userId: parentCeoUserId,
+      ceoVacant: false,
+    });
+    expect(
+      await isSittingCeoOfControllingParent(
+        db as never,
+        child([{ corporationId: parentId, shares: 80 }]),
+        new ObjectId().toString()
+      )
+    ).toBe(false);
+  });
+
+  it("is false when the parent CEO seat is vacant", async () => {
+    db.collectionMocks["corporations"]!.findOne.mockResolvedValue({
+      _id: parentId,
+      userId: parentCeoUserId,
+      ceoVacant: true,
+    });
+    expect(
+      await isSittingCeoOfControllingParent(
+        db as never,
+        child([{ corporationId: parentId, shares: 80 }]),
+        parentCeoUserId.toString()
+      )
+    ).toBe(false);
+  });
+
+  it("is false when no controlling parent exists", async () => {
+    expect(
+      await isSittingCeoOfControllingParent(db as never, child([]), parentCeoUserId.toString())
+    ).toBe(false);
+  });
+
+  it("is false when there is no viewer", async () => {
+    expect(
+      await isSittingCeoOfControllingParent(
+        db as never,
+        child([{ corporationId: parentId, shares: 80 }]),
+        undefined
+      )
+    ).toBe(false);
   });
 });
 

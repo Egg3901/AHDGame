@@ -14,6 +14,7 @@ import {
   formatPopulation,
   formatSharePrice,
   formatSharePriceOrder,
+  formatEffectiveCouponPct,
   formatRealTimeCountdown,
   formatTimeRemaining,
   formatTimeRemainingSimple,
@@ -241,6 +242,17 @@ describe("formatSharePrice", () => {
 describe("formatSharePriceOrder", () => {
   it("uses four decimal places", () => {
     expect(formatSharePriceOrder(12.3)).toBe("$12.3000");
+  });
+});
+
+describe("formatEffectiveCouponPct", () => {
+  it("formats a finite coupon rate to two decimals", () => {
+    expect(formatEffectiveCouponPct(4.5)).toBe("4.50%");
+  });
+
+  it("returns an em dash when the private-corp payload omitted the rate", () => {
+    expect(formatEffectiveCouponPct(undefined)).toBe("—");
+    expect(formatEffectiveCouponPct(Number.NaN)).toBe("—");
   });
 });
 
