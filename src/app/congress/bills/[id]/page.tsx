@@ -218,7 +218,7 @@ function BillDetailContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <main className="mx-auto max-w-4xl px-6 py-8 space-y-6">
+      <main className="mx-auto max-w-4xl min-w-0 px-6 py-8 space-y-6">
         {/* Back nav */}
         <Link
           href={backHref}
@@ -384,8 +384,8 @@ function BillDetailContent() {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-          <div className="space-y-6">
+        <div className="grid min-w-0 gap-6 lg:grid-cols-[1fr_340px]">
+          <div className="min-w-0 space-y-6">
             {/* Vote module — seating-chart hero + tally bar + cast vote, unified */}
             {(isCabinetReview ||
               isActive ||
@@ -526,7 +526,7 @@ function BillDetailContent() {
             {/* Vote by Party */}
             {((bill.voteByPartyOrigin?.length ?? 0) > 0 ||
               (bill.voteByPartyOther?.length ?? 0) > 0) && (
-              <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
+              <div className="min-w-0 rounded-xl border border-card-border bg-card p-5 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="font-display text-lg font-semibold">Vote by Party</h3>
                   {/* Chamber sub-tabs — bicameral only */}
@@ -790,7 +790,7 @@ function BillDetailContent() {
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             {/* Progress timeline */}
             <TimelineStepper bill={bill} />
 

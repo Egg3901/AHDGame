@@ -7,6 +7,7 @@ import { getGameClock } from "@/lib/time/gameClock.server";
 import { Badge } from "@/components/ui";
 import { PlatformSliders } from "@/components/charters/PlatformSliders";
 import { CharterActions } from "@/components/charters/CharterActions";
+import { FounderSlotReplace } from "@/components/charters/FounderSlotReplace";
 import type { Character, PartyCharter, PartyCharterStatus, PoliticalParty } from "@/lib/db/types";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 
@@ -70,6 +71,9 @@ export default async function CharterDetailPage({ params }: PageParams) {
     : undefined;
   const myActiveIsFounder = myActiveCharacterId !== null && myCharacterIds.has(myActiveCharacterId);
   const canAct = myActiveIsFounder && charter.status === "pending-signatures";
+  // #287 — any founder-owner may swap an inactive UNSIGNED founder for a
+  // replacement while the charter is still gathering signatures.
+  const viewerIsFounderOwner = myCharacterIds.size > 0 && charter.status === "pending-signatures";
   const signedCount = charter.signatures.filter((s) => s.signedAt).length;
   const requiredCount = charter.foundersCharacterIds.length;
 
@@ -162,9 +166,10 @@ export default async function CharterDetailPage({ params }: PageParams) {
           )}
         </div>
         <p className="mb-3 text-xs text-muted">
-          On ratification the party opens with <strong>vacant leadership</strong> — chair, vice
-          chair, and treasurer are decided by leadership elections that open immediately on the
-          shared election cycle.
+          On ratification the founder (Founder 1) becomes the party&apos;s first{" "}
+          <strong>chair</strong>, so the party can set its color and logo right away. Vice chair and
+          treasurer start vacant and are decided by leadership elections that open immediately on
+          the shared election cycle.
         </p>
         <ul className="space-y-2">
           {charter.foundersCharacterIds.map((cid, index) => {
@@ -179,23 +184,35 @@ export default async function CharterDetailPage({ params }: PageParams) {
                 ? { label: "rejected", color: "error" }
                 : { label: "awaiting", color: "default" };
             const role = `Founder ${index + 1}`;
+            // Slot 0 is the anchor founder and party geography — never swappable.
+            const canReplaceSlot =
+              viewerIsFounderOwner && index > 0 && !sig?.signedAt && meta !== undefined;
             return (
               <li
                 key={cid.toString()}
-                className="flex items-center justify-between rounded-md border border-card-border bg-background/50 px-3 py-2"
+                className="flex flex-col gap-2 rounded-md border border-card-border bg-background/50 px-3 py-2"
               >
-                <span className="flex items-baseline gap-2">
-                  <span className="text-[10px] uppercase tracking-wide text-muted">{role}</span>
-                  <span className="font-medium">
-                    {characterName}
-                    {isMine && (
-                      <span className="ml-2 text-[10px] uppercase tracking-wide text-primary">
-                        yours
-                      </span>
-                    )}
+                <div className="flex items-center justify-between">
+                  <span className="flex items-baseline gap-2">
+                    <span className="text-[10px] uppercase tracking-wide text-muted">{role}</span>
+                    <span className="font-medium">
+                      {characterName}
+                      {isMine && (
+                        <span className="ml-2 text-[10px] uppercase tracking-wide text-primary">
+                          yours
+                        </span>
+                      )}
+                    </span>
                   </span>
-                </span>
-                <Badge color={status.color}>{status.label}</Badge>
+                  <Badge color={status.color}>{status.label}</Badge>
+                </div>
+                {canReplaceSlot && (
+                  <FounderSlotReplace
+                    charterId={charter._id.toString()}
+                    outgoingCharacterId={cid.toString()}
+                    countryId={charter.countryId}
+                  />
+                )}
               </li>
             );
           })}

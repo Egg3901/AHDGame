@@ -12,7 +12,29 @@ import {
   getSocialLeanLabelHex,
   snapToPositionGrid,
   POSITION_GRID,
+  buildGeneralColors,
 } from "./politics";
+
+describe("buildGeneralColors", () => {
+  it("keeps distinct parties on their own pure party color", () => {
+    const colors = buildGeneralColors([
+      { id: "a", party: "democrat", partyColor: "#2563EB" },
+      { id: "b", party: "republican", partyColor: "#DC2626" },
+    ]);
+    // One candidate per party → pure party hex, and the two differ.
+    expect(colors.get("a")).not.toBe(colors.get("b"));
+  });
+
+  it("gives same-party candidates distinct shades (#272 USSR single-party general)", () => {
+    const colors = buildGeneralColors([
+      { id: "a", party: "communist", partyColor: "#B91C1C" },
+      { id: "b", party: "communist", partyColor: "#B91C1C" },
+      { id: "c", party: "communist", partyColor: "#B91C1C" },
+    ]);
+    const distinct = new Set([colors.get("a"), colors.get("b"), colors.get("c")]);
+    expect(distinct.size).toBe(3);
+  });
+});
 
 describe("getOfficeLabel", () => {
   it("labels US president with realm phrase when countryId is US", () => {

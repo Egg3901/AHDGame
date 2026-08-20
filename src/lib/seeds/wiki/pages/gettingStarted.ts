@@ -10,6 +10,7 @@ import { firstCampaignWalkthroughContent } from "../content/firstCampaignWalkthr
 import { gameStartingStateContent } from "../content/gameStartingState";
 import { mailContent } from "../content/mail";
 import { newsContent } from "../content/news";
+import { strategyGuidesIndexContent } from "../content/strategyGuidesIndex";
 
 export const gettingStartedPages: readonly WikiSeedPage[] = [
   {
@@ -25,6 +26,19 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 5,
+  },
+  {
+    slug: "strategy-guides",
+    title: "Strategy Guides",
+    description:
+      "Categorized index of every long-form strategy guide: corporations, commodities, command economies, investing, bonds, forex, running for office, and API automation.",
+    content: strategyGuidesIndexContent,
+    category: "getting-started",
+    featured: true,
+    difficulty: "beginner",
+    contentType: "guide",
+    estimatedReadTime: 3,
+    lastUpdated: "2026-08-20",
   },
   {
     slug: "create-a-character",
