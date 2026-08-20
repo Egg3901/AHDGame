@@ -81,7 +81,10 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
         </span>
       </div>
 
-      <div className="flex items-center gap-1.5 pl-1">
+      {/* Wraps rather than squeezing: at 375 the basis label and both direction
+          buttons do not fit on one line, and shrinking the buttons to fit is
+          how they ended up below a usable tap size in the first place. */}
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 pl-1">
         <span className="font-mono text-body-xs text-muted">{play.basisLabel}</span>
         <span className="ml-auto flex gap-1.5">
           {actor === "personal" ? (
@@ -90,7 +93,7 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
                 type="button"
                 disabled={disabled}
                 onClick={() => void commit(-1)}
-                className="rounded border border-info/40 px-2 py-0.5 font-mono text-body-xs text-info hover:bg-info/10 disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-11 min-w-16 rounded border border-info/40 px-3 font-mono text-body-xs text-info hover:bg-info/10 disabled:cursor-not-allowed disabled:opacity-50"
                 title={blockedCopy ?? "Push toward NATO"}
               >
                 {pending ? "…" : "NATO"}
@@ -99,7 +102,7 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
                 type="button"
                 disabled={disabled}
                 onClick={() => void commit(1)}
-                className="rounded border border-error/40 px-2 py-0.5 font-mono text-body-xs text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-11 min-w-16 rounded border border-error/40 px-3 font-mono text-body-xs text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50"
                 title={blockedCopy ?? "Push toward reunification"}
               >
                 {pending ? "…" : "PACT"}
@@ -110,7 +113,7 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
               type="button"
               disabled={disabled}
               onClick={() => void commit()}
-              className="rounded border border-gold/40 px-2.5 py-0.5 font-mono text-body-xs text-gold hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-11 rounded border border-gold/40 px-3 font-mono text-body-xs text-gold hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
               title={blockedCopy ?? play.detail}
             >
               {pending ? "COMMITTING…" : "COMMIT"}

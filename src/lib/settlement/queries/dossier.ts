@@ -155,7 +155,15 @@ export interface DossierView {
 }
 
 const EAST_SEATS = new Set<string>(["DD", "RU"]);
-const pts = (hundredths: number) => Math.round(hundredths) / HUNDREDTHS;
+/**
+ * Hundredths to display points, at ONE decimal.
+ *
+ * The grid is hundredths, so the raw division yields two — and the complement
+ * (`100 - east`) was separately rounded to one, so every pair on the board read
+ * "56.4% NATO / 43.62% PACT". Two halves of one split cannot disagree about
+ * their own precision; rounding here makes them agree by construction.
+ */
+const pts = (hundredths: number) => Math.round((hundredths / HUNDREDTHS) * 10) / 10;
 const signed = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}`;
 
 /** Escalation authority copy, verbatim from the source design. */

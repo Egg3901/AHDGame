@@ -77,13 +77,16 @@ export function Masthead({ view }: { view: DossierView }) {
             ladder, and the ladder ends in a war neither bloc has planned for.
           </p>
 
-          <div className="mt-5 flex flex-wrap items-start gap-6">
+          {/* Separators are hidden until the row actually sits on one line. As
+              `flex-wrap` items they survived the wrap at 375 and rendered as
+              vertical rules stranded to the right of each stacked stat. */}
+          <div className="mt-5 flex flex-wrap items-start gap-x-6 gap-y-4">
             <Stat label="SOVEREIGN · NATO" value={`${view.westPct}%`} tone="text-info" />
-            <div className="w-px self-stretch bg-card-border" />
+            <div className="hidden w-px self-stretch bg-card-border sm:block" />
             <Stat label="REUNIFIED · PACT" value={`${view.eastPct}%`} tone="text-error" />
-            <div className="w-px self-stretch bg-card-border" />
+            <div className="hidden w-px self-stretch bg-card-border sm:block" />
             <Stat label="LADDER HEAT" value={`${view.heat}/5`} tone="text-warning" />
-            <div className="w-px self-stretch bg-card-border" />
+            <div className="hidden w-px self-stretch bg-card-border sm:block" />
             <div>
               <div className="font-mono text-body-xs font-semibold tracking-widest text-muted">
                 STANDING

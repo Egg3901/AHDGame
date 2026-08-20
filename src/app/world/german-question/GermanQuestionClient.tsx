@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import type { DossierView } from "@/lib/settlement/queries/dossier";
+import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
 import { Masthead } from "./Masthead";
 import { InstitutionCard } from "./InstitutionCard";
 import { DelegationBench, OpenFloorPanel } from "./DelegationBench";
@@ -35,6 +36,12 @@ export function GermanQuestionClient({ initialView }: { initialView: DossierView
       }
       const body = (await res.json()) as { view: DossierView };
       setView(body.view);
+      // The board knows the play landed; the status bar does not. Personal
+      // plays debit character AP and funds server-side, so without this the
+      // global chip keeps showing the pre-play figures until something else
+      // happens to refetch it — the page and the chrome disagreeing about the
+      // player'''s own action points.
+      requestCharacterStatsRefetch();
     } catch {
       setRefreshError("The board could not be refreshed. Your play may still have landed.");
     } finally {

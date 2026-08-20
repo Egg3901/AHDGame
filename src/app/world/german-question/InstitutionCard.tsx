@@ -51,16 +51,20 @@ export function InstitutionCard({
         <div className="mt-3">
           <SplitBar eastPct={institution.eastPct} height="md" />
         </div>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        {/* Two rows, at every width. These cards go two-up from 640px, so the
+            card is narrow almost everywhere — as one wrapping three-column row
+            the drift note ended up beside the NATO figure with the PACT figure
+            orphaned below, reading as though the drift belonged to one side. */}
+        <div className="mt-2 flex items-baseline justify-between gap-2">
           <span className="font-mono text-body-sm font-bold text-info">
             {institution.westPct}% NATO
-          </span>
-          <span className={`font-mono text-body-xs font-semibold ${driftTone}`}>
-            {institution.driftNote}
           </span>
           <span className="font-mono text-body-sm font-bold text-error">
             {institution.eastPct}% PACT
           </span>
+        </div>
+        <div className={`mt-1 font-mono text-body-xs font-semibold ${driftTone}`}>
+          {institution.driftNote}
         </div>
       </header>
 
