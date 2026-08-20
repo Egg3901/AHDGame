@@ -52,7 +52,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Endorsement**: A formal expression of support from a player or NPP for your candidacy. NPP endorsements grant campaign actions. Player endorsements count as campaign actions for presidential races only.
 
-**Favorability**: A 0 to 100 stat representing public approval of your character. Used in primary scoring (worth up to 35 pts state, 10 pts presidential), general vote appeal (as an approval scalar), and national/PM approval ratings.
+**Favorability**: A 0 to 100 stat representing public approval of your character. Used in primary scoring (worth up to 35 pts state, 25 pts presidential), general vote appeal (as an approval scalar), and national/PM approval ratings.
 
 **FOMC**: The 7-seat rate-setting board at a market central bank (Federal Open Market Committee in the US). The chair proposes hike, cut, or hold; a majority of the full board must agree. Abstains count against. See [FOMC / Rate-Setting Board](/wiki/fomc).
 

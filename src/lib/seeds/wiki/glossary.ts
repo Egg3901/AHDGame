@@ -116,7 +116,7 @@ export const WIKI_GLOSSARY = {
   },
   "party org": {
     definition:
-      "Party organization in a state: ground infrastructure from 0 to 100. It scales general-election votes and feeds presidential primary scores.",
+      "Party organization in a state: ground infrastructure from 0 to 100. It scales general-election votes. Presidential primaries use party influence, not org.",
     aliases: ["party organization", "org score"],
   },
   whip: {
