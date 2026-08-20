@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Children, isValidElement } from "react";
+import { Children, isValidElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getWikiComponent } from "@/lib/wiki/componentRegistry";
+import { SKIP_GLOSSARY_PROP, wrapGlossaryChildren } from "@/components/wiki/wrapGlossaryChildren";
+import { WikiGuideScreenshot } from "@/components/wiki/WikiGuideScreenshot";
 
 const WIKI_LINK = /^\/wiki\//;
 
@@ -35,6 +37,10 @@ function toAnchorId(text: string): string {
 }
 
 export function MarkdownContent({ content }: { content: string; headings?: TocHeading[] }) {
+  const usedGlossary = new Set<string>();
+  const wrap = (children: ReactNode) => wrapGlossaryChildren(children, usedGlossary);
+  const noGlossary = { [SKIP_GLOSSARY_PROP]: "" };
+
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -42,7 +48,7 @@ export function MarkdownContent({ content }: { content: string; headings?: TocHe
         a: ({ href, children }) => {
           if (href && (href.startsWith("/") || WIKI_LINK.test(href))) {
             return (
-              <Link href={href} className="text-primary hover:underline">
+              <Link href={href} className="text-primary hover:underline" {...noGlossary}>
                 {children}
               </Link>
             );
@@ -53,13 +59,17 @@ export function MarkdownContent({ content }: { content: string; headings?: TocHe
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
+              {...noGlossary}
             >
               {children}
             </a>
           );
         },
         h1: ({ children }) => (
-          <h1 className="mb-4 mt-8 border-b border-card-border pb-2 text-2xl font-bold text-foreground first:mt-0">
+          <h1
+            className="mb-4 mt-8 border-b border-card-border pb-2 text-2xl font-bold text-foreground first:mt-0"
+            {...noGlossary}
+          >
             {children}
           </h1>
         ),
@@ -72,7 +82,11 @@ export function MarkdownContent({ content }: { content: string; headings?: TocHe
                 : String(children);
           const id = toAnchorId(text);
           return (
-            <h2 id={id} className="mb-3 mt-6 scroll-mt-24 text-xl font-semibold text-foreground">
+            <h2
+              id={id}
+              className="mb-3 mt-6 scroll-mt-24 text-xl font-semibold text-foreground"
+              {...noGlossary}
+            >
               {children}
             </h2>
           );
@@ -86,19 +100,23 @@ export function MarkdownContent({ content }: { content: string; headings?: TocHe
                 : String(children);
           const id = toAnchorId(text);
           return (
-            <h3 id={id} className="mb-2 mt-4 scroll-mt-24 text-lg font-medium text-foreground">
+            <h3
+              id={id}
+              className="mb-2 mt-4 scroll-mt-24 text-lg font-medium text-foreground"
+              {...noGlossary}
+            >
               {children}
             </h3>
           );
         },
-        p: ({ children }) => <p className="mb-3 leading-relaxed text-muted">{children}</p>,
+        p: ({ children }) => <p className="mb-3 leading-relaxed text-muted">{wrap(children)}</p>,
         ul: ({ children }) => (
           <ul className="mb-4 ml-6 list-disc space-y-1 text-muted">{children}</ul>
         ),
         ol: ({ children }) => (
           <ol className="mb-4 ml-6 list-decimal space-y-1 text-muted">{children}</ol>
         ),
-        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+        li: ({ children }) => <li className="leading-relaxed">{wrap(children)}</li>,
         table: ({ children }) => (
           <div className="mb-6 overflow-x-auto rounded-lg border border-card-border">
             <table className="w-full min-w-[400px] border-collapse text-sm">{children}</table>
@@ -110,12 +128,12 @@ export function MarkdownContent({ content }: { content: string; headings?: TocHe
           <tr className="border-b border-card-border last:border-b-0">{children}</tr>
         ),
         th: ({ children }) => (
-          <th className="px-4 py-3 text-left font-medium text-foreground">{children}</th>
+          <th className="px-4 py-3 text-left font-medium text-foreground">{wrap(children)}</th>
         ),
-        td: ({ children }) => <td className="px-4 py-3 text-muted">{children}</td>,
+        td: ({ children }) => <td className="px-4 py-3 text-muted">{wrap(children)}</td>,
         blockquote: ({ children }) => (
           <blockquote className="border-l-4 border-primary/50 bg-card/50 py-1 pl-4 italic text-muted">
-            {children}
+            {wrap(children)}
           </blockquote>
         ),
         pre: ({ children }) => {
@@ -124,7 +142,10 @@ export function MarkdownContent({ content }: { content: string; headings?: TocHe
             return <>{children}</>;
           }
           return (
-            <pre className="mb-4 overflow-x-auto rounded-lg border border-card-border bg-card-elevated p-4 text-sm">
+            <pre
+              className="mb-4 overflow-x-auto rounded-lg border border-card-border bg-card-elevated p-4 text-sm"
+              {...noGlossary}
+            >
               {children}
             </pre>
           );
@@ -142,7 +163,7 @@ export function MarkdownContent({ content }: { content: string; headings?: TocHe
               return <WikiComponent data={rawData} />;
             }
             return (
-              <code className="text-foreground" {...props}>
+              <code className="text-foreground" {...noGlossary} {...props}>
                 {children}
               </code>
             );
@@ -150,6 +171,7 @@ export function MarkdownContent({ content }: { content: string; headings?: TocHe
           return (
             <code
               className="rounded bg-card-elevated px-1.5 py-0.5 font-mono text-sm text-foreground"
+              {...noGlossary}
               {...props}
             >
               {children}
@@ -157,14 +179,19 @@ export function MarkdownContent({ content }: { content: string; headings?: TocHe
           );
         },
         strong: ({ children }) => (
-          <strong className="font-semibold text-foreground">{children}</strong>
+          <strong className="font-semibold text-foreground">{wrap(children)}</strong>
         ),
         img: ({ src, alt, title }) => {
           if (!isSafeImageSrc(typeof src === "string" ? src : undefined)) return null;
+          const srcStr = src as string;
+          const guideMatch = srcStr.match(/^\/wiki-images\/guides\/([^/]+)\.png$/);
+          if (guideMatch) {
+            return <WikiGuideScreenshot name={guideMatch[1] ?? ""} alt={alt ?? ""} />;
+          }
           return (
             /* eslint-disable-next-line @next/next/no-img-element -- user content URLs aren't known at build time; next/image requires configured domains */
             <img
-              src={src as string}
+              src={srcStr}
               alt={alt ?? ""}
               title={title}
               loading="lazy"
