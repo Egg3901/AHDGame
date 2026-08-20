@@ -1,4 +1,5 @@
 import type { Posture } from "@/lib/db/types/militaryUnit";
+import { TIER_FORCE_MODIFIER } from "@/lib/constants/military";
 
 /**
  * Where a unit's readiness settles, and how far it moves toward that each turn.
@@ -39,10 +40,23 @@ export const ARREARS_READINESS_WEIGHT = 0.35;
  * import, rather than in either caller: the record PROJECTS recovery at the player
  * ("+4%/turn · full in 6") from this same function, so a suppression applied in only one
  * of them would have the record promising a recovery the tick never delivers.
+ *
+ * `tier` is the DEPARTMENT-WIDE readiness setting the defence seat holds
+ * (reduced / standard / elevated), not the unit's own posture. Ticket #1140: it used to
+ * scale only the in-memory aggregate inside `aggregateForce`, so an Elevated department
+ * charged 1.25x upkeep nationally and moved no unit's readiness by a single point. A
+ * setting whose whole description is "higher force readiness" must move the number the
+ * player is looking at, so it scales the BASELINE each unit walks toward. Capped at 100:
+ * Elevated on High Alert (92 x 1.1) would otherwise target 101.
  */
-export function readinessBaselineOf(posture: string, arrearsRatio = 0): number {
+export function readinessBaselineOf(
+  posture: string,
+  arrearsRatio = 0,
+  tier?: string | null
+): number {
   const base =
     POSTURE_READINESS_BASELINE[posture as Posture] ?? POSTURE_READINESS_BASELINE.standard;
+  const tierMult = TIER_FORCE_MODIFIER[tier ?? "standard"]?.readinessMult ?? 1;
   const ratio = Math.min(1, Math.max(0, arrearsRatio));
-  return Math.round(base * (1 - ratio * ARREARS_READINESS_WEIGHT));
+  return Math.min(100, Math.round(base * tierMult * (1 - ratio * ARREARS_READINESS_WEIGHT)));
 }

@@ -8,6 +8,13 @@ export interface CrisisListResult {
   crises: Crisis[];
   currentTurn: number;
   startingYear: number;
+  /** State id → display name, for every region a listed crisis touches. */
+  regionNames: Record<string, string>;
+}
+
+interface StateNameRow {
+  _id: string;
+  name?: string;
 }
 
 export async function listCrises(
@@ -28,10 +35,25 @@ export async function listCrises(
     getGameState(db),
   ]);
 
+  // Region ids on a crisis are State `_id`s (e.g. "FR_ARA"); resolve them to the
+  // state's display name so the UI shows "Auvergne-Rhône-Alpes", not the raw code.
+  const regionIds = [...new Set(crises.flatMap((c) => c.regionIds ?? []))];
+  const regionNames: Record<string, string> = {};
+  if (regionIds.length > 0) {
+    const states = await db
+      .collection<StateNameRow>("states")
+      .find({ _id: { $in: regionIds } }, { projection: { name: 1 } })
+      .toArray();
+    for (const s of states) {
+      if (s.name) regionNames[s._id] = s.name;
+    }
+  }
+
   return {
     crises,
     currentTurn: gameState?.currentTurn ?? 0,
     startingYear: gameState?.startingYear ?? STARTING_YEAR,
+    regionNames,
   };
 }
 

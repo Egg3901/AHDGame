@@ -71,6 +71,11 @@ export interface RecordExtras {
    * promise a recovery the turn processor will not deliver.
    */
   arrearsRatio?: number;
+  /**
+   * The viewer nation's department-wide readiness setting (reduced / standard / elevated).
+   * It scales the same baseline, so the record must quote against it too.
+   */
+  readinessTier?: string | null;
   /** `command` only — the viewer's live forces at this front. */
   ownForces?: ForceRow[];
   /** `command` only — a coarse read of the opposing force, never a number. */
@@ -128,9 +133,12 @@ export interface SideForce {
  */
 export function recoveringCount(
   units: Pick<MilitaryUnit, "readiness" | "posture">[],
-  arrearsRatio = 0
+  arrearsRatio = 0,
+  readinessTier?: string | null
 ): number {
-  return units.filter((u) => u.readiness < readinessBaselineOf(u.posture, arrearsRatio)).length;
+  return units.filter(
+    (u) => u.readiness < readinessBaselineOf(u.posture, arrearsRatio, readinessTier)
+  ).length;
 }
 
 /** A force's mean readiness and how fast it recovers, or null for an empty force. */
@@ -141,12 +149,15 @@ export function forceReadiness(
    * toward a suppressed baseline, so the projection must be quoted against the SAME target
    * the turn processor drifts to — otherwise this promises a recovery that never arrives.
    */
-  arrearsRatio = 0
+  arrearsRatio = 0,
+  /** The owning country's department-wide readiness tier, which scales the same baseline. */
+  readinessTier?: string | null
 ): { readiness: number; recovery: { perTurn: number; turnsToFull: number } | null } | null {
   if (units.length === 0) return null;
   const readiness = Math.round(units.reduce((s, u) => s + u.readiness, 0) / units.length);
   const target = Math.round(
-    units.reduce((s, u) => s + readinessBaselineOf(u.posture, arrearsRatio), 0) / units.length
+    units.reduce((s, u) => s + readinessBaselineOf(u.posture, arrearsRatio, readinessTier), 0) /
+      units.length
   );
   // Already at (or above) baseline: nothing to recover, and promising a gain that
   // will not arrive is worse than saying nothing.

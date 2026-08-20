@@ -178,6 +178,8 @@ export interface CorporateCreditComputationInput {
   currentTurn: number;
   bondDefaultCreditPenaltyUntilTurn: number | null | undefined;
   previousCompositeScore?: number;
+  /** The composite the turn already wrote; used verbatim (ticket #1138). */
+  persistedCompositeScore?: number;
   /**
    * CEO's share ownership as a fraction of totalShares (0–1).
    * Triggers a one-notch credit rating downgrade on public corps when > 0.65.
@@ -239,6 +241,7 @@ export function computeCorporateCreditAtTurn(input: CorporateCreditComputationIn
     {
       bondDefaultCreditPenaltyActive: !!penaltyActive,
       previousCompositeScore: input.previousCompositeScore,
+      persistedCompositeScore: input.persistedCompositeScore,
       insiderConcentrationPenalty: concentrationPenalty,
       indexInclusionUpgrade,
     }

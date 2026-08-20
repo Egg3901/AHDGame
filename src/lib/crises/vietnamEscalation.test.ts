@@ -261,4 +261,46 @@ describe("Vietnam escalation ladder", () => {
     expect(supportPctGdpForLevel(1)).toBeLessThan(supportPctGdpForLevel(6));
     expect(supportPctGdpForLevel(0)).toBeGreaterThan(0);
   });
+
+  describe("earliestYear rung floor", () => {
+    it("holds the ladder below the next rung's year no matter the pressure", () => {
+      const l1 = stateAt(1);
+      const nextYear = rungForLevel(2)!.earliestYear;
+      // Both sides pour in support many years early; the rung cannot climb.
+      let s = l1;
+      for (let i = 0; i < 10; i++) {
+        s = applyVietnamMove(s, "west", "support", nextYear - 1);
+        s = applyVietnamMove(s, "east", "support", nextYear - 1);
+      }
+      expect(s.level).toBe(1);
+      // Pressure is held at the threshold, not ballooned to 100.
+      expect(s.westSupport).toBeLessThanOrEqual(VIETNAM_RUNG_PRESSURE);
+    });
+
+    it("climbs once the calendar reaches the rung's earliestYear", () => {
+      const nextYear = rungForLevel(2)!.earliestYear;
+      let s = stateAt(1);
+      // Prime pressure while blocked, then the year arrives.
+      s = applyVietnamMove(s, "west", "support", nextYear - 1);
+      s = applyVietnamMove(s, "west", "support", nextYear);
+      expect(s.level).toBe(2);
+    });
+
+    it("climbs at most one rung per move even with the year wide open", () => {
+      const s = applyVietnamMove(
+        stateAt(1, { westSupport: VIETNAM_RUNG_PRESSURE }),
+        "west",
+        "support",
+        3000
+      );
+      expect(s.level).toBe(2);
+    });
+
+    it("without a year (pure state-machine callers) falls back to pressure-only", () => {
+      let s = stateAt(1);
+      s = applyVietnamMove(s, "west", "support");
+      s = applyVietnamMove(s, "west", "support");
+      expect(s.level).toBe(2);
+    });
+  });
 });

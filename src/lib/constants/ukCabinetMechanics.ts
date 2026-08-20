@@ -114,7 +114,11 @@ export const UK_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
         higherIsBetter: true,
       },
       {
-        category: "governance",
+        // `socialCohesion` lives under the `social` category in metricDefinitions. Declaring
+        // it as `governance` here won resolveMetricPath's position-metrics preference and
+        // sent every one of this seat's cohesion effects to `governance.socialCohesion`,
+        // a StateMetrics path that does not exist (found auditing ticket #1140).
+        category: "social",
         metricId: "socialCohesion",
         label: "Social Cohesion",
         format: "index",
@@ -130,7 +134,11 @@ export const UK_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
         higherIsBetter: true,
       },
       {
-        category: "governance",
+        // `socialCohesion` lives under the `social` category in metricDefinitions. Declaring
+        // it as `governance` here won resolveMetricPath's position-metrics preference and
+        // sent every one of this seat's cohesion effects to `governance.socialCohesion`,
+        // a StateMetrics path that does not exist (found auditing ticket #1140).
+        category: "social",
         metricId: "socialCohesion",
         label: "Social Cohesion",
         format: "index",
@@ -456,8 +464,12 @@ export const UK_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
         {
           id: "reduced",
           label: "Reduced",
-          description: "Scaled-back military activity — lower force readiness and defence upkeep.",
-          effects: {},
+          description:
+            "Scaled-back military activity. Lower force readiness and defence upkeep, but demobilised garrison towns lose the work.",
+          effects: {
+            "economic.unemploymentRate": 0.02,
+            "governance.publicTrust": -0.01,
+          },
         },
         {
           id: "standard",
@@ -468,8 +480,13 @@ export const UK_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
         {
           id: "elevated",
           label: "Elevated",
-          description: "Heightened military readiness — higher force readiness, at greater upkeep.",
-          effects: {},
+          description:
+            "Heightened military readiness. Raises the readiness every formation trains toward and keeps garrison towns in work, at greater upkeep that crowds out civilian growth.",
+          effects: {
+            "governance.publicTrust": 0.02,
+            "economic.unemploymentRate": -0.02,
+            "economic.gdpGrowth": -0.01,
+          },
         },
       ],
     },
@@ -606,7 +623,10 @@ export const UK_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
       name: "Public Health Campaign",
       description:
         "Launch a focused public health campaign in one region, delivering a targeted healthcare quality improvement.",
-      effects: { healthcareQuality: 0.05 },
+      // `healthcareQuality` is a LABEL, not a metric id. The seat's actual metric is
+      // healthcare.publicHealthPreparedness, so the bare key resolved to nothing and this
+      // campaign wrote to no metric at all (found auditing ticket #1140).
+      effects: { "healthcare.publicHealthPreparedness": 0.05 },
     },
   },
 

@@ -751,6 +751,16 @@ export interface ForceAggregate {
   forwardShare: number; // fraction of units in forward/alert
 }
 
+/**
+ * Roll a country's units into the force totals the Defense seat and the appropriation
+ * sweep both read.
+ *
+ * `tier` is the department-wide readiness setting and reaches ONLY upkeep here. It used to
+ * also scale `avgReadiness` in this aggregate, which was the whole of what the setting did
+ * (ticket #1140): the multiplier never touched a stored unit, so the player saw an unchanged
+ * roster and a 25% larger bill. The tier now moves the readiness baseline units drift toward
+ * (`readinessBaselineOf`), so re-scaling it here would count it a second time.
+ */
 export function aggregateForce(
   units: MilitaryUnit[],
   countryId: string,
@@ -766,7 +776,6 @@ export function aggregateForce(
       forwardShare: 0,
     };
   }
-  const readinessMult = TIER_FORCE_MODIFIER[tier ?? "standard"]?.readinessMult ?? 1;
   let totalPower = 0;
   let totalPersonnel = 0;
   let totalUpkeep = 0;
@@ -776,7 +785,7 @@ export function aggregateForce(
     totalPower += computeEffectivePower(unit);
     totalPersonnel += unit.personnel;
     totalUpkeep += computeEffectiveUpkeep(unit, countryId, tier);
-    readinessSum += Math.min(100, Math.round(unit.readiness * readinessMult));
+    readinessSum += unit.readiness;
     if (unit.posture === "forward" || unit.posture === "alert") forward++;
   }
   return {

@@ -20,6 +20,7 @@ import { theaterCommanderOf } from "@/lib/military/assignments";
 import { getMilitaryCommands } from "@/lib/db/collections/militaryCommands";
 import { loadGeneralsById } from "@/lib/db/collections/characterGenerals";
 import { resolveCommandChain } from "@/lib/military/commandChain";
+import { getCabinetSettingsCollection } from "@/lib/db/collections/cabinetSettings";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { conflictTier, belligerentSideOf } from "@/lib/military/conflictVisibility";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -112,6 +113,18 @@ export default async function ConflictRecordPage({
   const viewerArrearsRatio = viewerCountry
     ? (await getDefenseAppropriation(db, viewerCountry)).arrearsRatio
     : 0;
+  // The department-wide readiness setting scales the SAME baseline (ticket #1140), so the
+  // record has to quote against it for the same reason it quotes against the arrears.
+  const viewerDefensePosition = viewerCountry
+    ? DEFENSE_POSITION_BY_COUNTRY[viewerCountry as CountryId]
+    : null;
+  const viewerReadinessTier = viewerDefensePosition
+    ? ((
+        await getCabinetSettingsCollection(db).findOne({
+          _id: `${viewerCountry}_${viewerDefensePosition}`,
+        })
+      )?.tierSetting ?? null)
+    : null;
 
   let isPostedGeneral = false;
   let isDefenseHolder = false;
@@ -334,7 +347,7 @@ export default async function ConflictRecordPage({
       };
     }
     const own = unitsOf(countries);
-    const rdy = forceReadiness(own, viewerArrearsRatio);
+    const rdy = forceReadiness(own, viewerArrearsRatio, viewerReadinessTier);
     return {
       divisions: own.length,
       personnel: own.reduce((s, u) => s + u.personnel, 0),
@@ -435,7 +448,7 @@ export default async function ConflictRecordPage({
   // Through the shared helper, not a second copy of its `?? 72` fallback: the baseline a
   // posture settles at is one rule, and this is the tick's own — including the arrears
   // suppression, without which this counts formations that will never actually climb.
-  const recovering = recoveringCount(ownAtFront, viewerArrearsRatio);
+  const recovering = recoveringCount(ownAtFront, viewerArrearsRatio, viewerReadinessTier);
   if (recovering > 0) {
     pending.push({
       text: `${recovering} formation${recovering === 1 ? "" : "s"} recovering readiness`,
@@ -554,6 +567,7 @@ export default async function ConflictRecordPage({
     ownForces: extras.ownForces,
     enemyBand: extras.enemyBand,
     arrearsRatio: viewerArrearsRatio,
+    readinessTier: viewerReadinessTier,
   };
 
   return <ConflictRecord conflict={conflict} />;

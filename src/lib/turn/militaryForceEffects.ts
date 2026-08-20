@@ -61,9 +61,17 @@ export function computeForceMetricDeltas(
   };
 }
 
-/** Move a unit's readiness one bounded step toward its posture baseline. */
-export function driftReadiness(current: number, posture: Posture, arrearsRatio = 0): number {
-  const target = readinessBaselineOf(posture, arrearsRatio);
+/**
+ * Move a unit's readiness one bounded step toward its posture baseline, as scaled by the
+ * country's department-wide readiness `tier` (ticket #1140).
+ */
+export function driftReadiness(
+  current: number,
+  posture: Posture,
+  arrearsRatio = 0,
+  tier?: string | null
+): number {
+  const target = readinessBaselineOf(posture, arrearsRatio, tier);
   if (current < target) return Math.min(target, current + READINESS_DRIFT_STEP);
   if (current > target) return Math.max(target, current - READINESS_DRIFT_STEP);
   return current;
@@ -161,10 +169,15 @@ export async function applyMilitaryForceEffects(
 export async function applyReadinessDrift(
   db: Db,
   units: MilitaryUnit[],
-  arrearsRatio: number
+  arrearsRatio: number,
+  /**
+   * The defence seat's department-wide readiness setting. Seatless nations have none and
+   * pass null, which reads as "standard", the posture they actually run at.
+   */
+  tier?: string | null
 ): Promise<void> {
   const ops = units
-    .map((u) => ({ u, next: driftReadiness(u.readiness, u.posture, arrearsRatio) }))
+    .map((u) => ({ u, next: driftReadiness(u.readiness, u.posture, arrearsRatio, tier) }))
     .filter(({ u, next }) => next !== u.readiness)
     .map(({ u, next }) => ({
       updateOne: { filter: { _id: u._id }, update: { $set: { readiness: next } } },
