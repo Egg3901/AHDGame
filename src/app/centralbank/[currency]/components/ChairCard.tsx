@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import {
   RESOLVE_SCRUTINY_RELIEF,
@@ -21,6 +24,8 @@ export function ChairCard({
   latestGdp,
   chairSelectionPending,
   chairMode,
+  viewerIsChairNominee = false,
+  countryCode = "",
 }: {
   chairTitle: string;
   chair: ChairData | null;
@@ -40,9 +45,39 @@ export function ChairCard({
     acceptanceTurnsRemaining?: number | null;
   } | null;
   chairMode?: "character" | "npp";
+  /** True when the signed-in character is the pending nominee (ticket #1072). */
+  viewerIsChairNominee?: boolean;
+  countryCode?: string;
   /** Consecutive turns the corridor stance has been held. */
   resolveStreak?: number;
 }) {
+  const [responding, setResponding] = useState<null | "accept" | "decline">(null);
+  const [responseError, setResponseError] = useState<string | null>(null);
+
+  // Ticket #1072: the nominee was shown "Awaiting acceptance" and given no way
+  // to accept. The routes already existed; the card just never called them.
+  const respond = async (action: "accept" | "decline") => {
+    if (!countryCode) return;
+    setResponding(action);
+    setResponseError(null);
+    try {
+      const res = await fetch(
+        `/api/country/${countryCode}/central-bank/chair-selection/${action}`,
+        { method: "POST" }
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setResponseError(body?.error ?? "That did not go through. Try again in a moment.");
+        setResponding(null);
+        return;
+      }
+      window.location.reload();
+    } catch {
+      setResponseError("That did not go through. Try again in a moment.");
+      setResponding(null);
+    }
+  };
+
   const infamy = chairInfamy ?? 0;
   const streak = resolveStreak ?? 0;
   const stanceHeld = streak > 0;
@@ -156,6 +191,29 @@ export function ChairCard({
               "Awaiting acceptance"
             )}
           </p>
+          {viewerIsChairNominee && (
+            <div className="mt-3">
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => respond("accept")}
+                  disabled={responding !== null}
+                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-60"
+                >
+                  {responding === "accept" ? "Accepting..." : "Accept appointment"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => respond("decline")}
+                  disabled={responding !== null}
+                  className="rounded-md border border-card-border px-3 py-1.5 text-xs font-semibold text-muted disabled:opacity-60"
+                >
+                  {responding === "decline" ? "Declining..." : "Decline"}
+                </button>
+              </div>
+              {responseError && <p className="mt-2 text-xs text-error">{responseError}</p>}
+            </div>
+          )}
         </div>
       ) : (
         <div className="rounded-lg border border-card-border/50 bg-card-muted p-4 text-center">
