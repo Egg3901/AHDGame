@@ -77,37 +77,30 @@ const CORP = { liquidCurrencyCode: "USD" } as never;
 
 beforeEach(() => vi.clearAllMocks());
 
-describe("fetchSectorMarketSharePercent resolves the tier from the db", () => {
-  it("picks the capacity basis under plants with no argument from the caller", async () => {
-    // The bug: plantsEnabled defaulted to false and ALL SEVEN call sites omitted
-    // it, so buildCapacity (the plants-native growth path) and monopolyTrigger
-    // (which decides nationalization) both computed share on legacy revenue.
+describe("fetchSectorMarketSharePercent is revenue-basis in every tier (ticket #1145)", () => {
+  // Market share = this sector's revenue over the TOTAL real revenue in the cell.
+  // 1M of (1M + 9M sibling) = 10%. The unowned pool (1M) is NOT in the
+  // denominator any more, and capacity units never were the basis — so every tier
+  // gives the same honest number and the old 9.09% (owned + unowned pool) is gone.
+  it("picks revenue share under plants, ignoring the unowned pool and capacity", async () => {
     const { db, sector } = makeDb("plants");
-
     const resolved = await fetchSectorMarketSharePercent(db, sector, CORP);
-    const forcedLegacy = await fetchSectorMarketSharePercent(db, sector, CORP, false);
-
-    // Revenue basis: 1M of (10M owned + 1M unowned) = 9.09%.
-    // Capacity basis: 5000 of (10000 owned + 100 headroom) = 49.5%.
-    // The point of the test is that they differ and that the no-argument call
-    // lands on the capacity one.
-    expect(forcedLegacy).toBeCloseTo(9.09, 1);
-    expect(resolved).toBeGreaterThan(40);
+    expect(resolved).toBeCloseTo(10, 6);
   });
 
-  it("stays on the revenue basis below plants", async () => {
+  it("gives the same revenue share below plants", async () => {
     const { db, sector } = makeDb("capital");
     const resolved = await fetchSectorMarketSharePercent(db, sector, CORP);
-    expect(resolved).toBeCloseTo(9.09, 1);
+    expect(resolved).toBeCloseTo(10, 6);
   });
 
-  it("treats an absent gameConfig as legacy rather than throwing", async () => {
+  it("treats an absent gameConfig as revenue basis rather than throwing", async () => {
     const { db, sector } = makeDb(undefined);
-    await expect(fetchSectorMarketSharePercent(db, sector, CORP)).resolves.toBeCloseTo(9.09, 1);
+    await expect(fetchSectorMarketSharePercent(db, sector, CORP)).resolves.toBeCloseTo(10, 6);
   });
 
-  it("still honours an explicit override, for callers that already know", async () => {
+  it("ignores the vestigial tier override — the basis is revenue regardless", async () => {
     const { db, sector } = makeDb("plants");
-    expect(await fetchSectorMarketSharePercent(db, sector, CORP, false)).toBeCloseTo(9.09, 1);
+    expect(await fetchSectorMarketSharePercent(db, sector, CORP, false)).toBeCloseTo(10, 6);
   });
 });
