@@ -17,6 +17,19 @@ vi.mock("@/lib/api/corporations/resolveQuery", () => ({
 }));
 vi.mock("@/lib/gameState", () => ({ getGameState: vi.fn() }));
 vi.mock("@/lib/corporations/shareTradeHistory", () => ({ recordShareTrade: vi.fn() }));
+vi.mock("@/lib/corporations/cleanupShareMarketActivity", () => ({
+  cleanupShareMarketActivityForCorporationTargets: vi.fn().mockResolvedValue({
+    ordersCancelled: 0,
+    listingsCancelled: 0,
+    offersCancelled: 0,
+  }),
+}));
+vi.mock("@/lib/turn/stockExchangeSnapshot", () => ({
+  generateStockExchangeSnapshots: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/currency/featureFlag", () => ({
+  isForexEnabled: vi.fn().mockResolvedValue(true),
+}));
 
 let db: MockDb;
 
@@ -154,5 +167,28 @@ describe("POST /api/corporations/[id]/shares/consolidate", () => {
         }),
       })
     );
+  });
+
+  it("clears orders/listings/offers then rebuilds exchange snapshots (ticket #1154)", async () => {
+    const corp = baseCorp();
+    const response = await runConsolidate({ corp, targetTotalShares: 1_000_000 });
+    expect(response.status).toBe(200);
+
+    const { cleanupShareMarketActivityForCorporationTargets } =
+      await import("@/lib/corporations/cleanupShareMarketActivity");
+    expect(cleanupShareMarketActivityForCorporationTargets).toHaveBeenCalledWith(
+      expect.anything(),
+      [corp._id],
+      expect.any(Date),
+      true
+    );
+
+    const { generateStockExchangeSnapshots } = await import("@/lib/turn/stockExchangeSnapshot");
+    expect(generateStockExchangeSnapshots).toHaveBeenCalledWith(100, expect.anything());
+
+    const body = await response.json();
+    expect(body.newMarketCap).toBe(Math.round(120 * 1_000_000));
+    expect(body.newSharePrice).toBe(120);
+    expect(body.newTotalShares).toBe(1_000_000);
   });
 });
