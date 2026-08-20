@@ -8,7 +8,8 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import MarketPie from "../components/MarketPie";
 import { DEFAULT_CORP_COLORS } from "../lib/helpers";
-import type { Market, SectorData, CorporationRef, Financials } from "../types";
+import { marketShareExplainer, pendingBuildUnits } from "../lib/marketShareExplainer";
+import type { Market, SectorData, CorporationRef, Financials, PlantsData } from "../types";
 
 interface MarketPositionPanelProps {
   market: Market;
@@ -21,6 +22,8 @@ interface MarketPositionPanelProps {
   clearingEnabled?: boolean;
   /** Capital market mode is on — output (and revenue) is gated by owned capacity. */
   capitalEnabled?: boolean;
+  /** Plants payload: buyer-room + in-flight builds so 100% share is not read as a cap. */
+  plants?: PlantsData | null;
 }
 
 export default function MarketPositionPanel({
@@ -31,9 +34,17 @@ export default function MarketPositionPanel({
   compact = false,
   clearingEnabled,
   capitalEnabled,
+  plants = null,
 }: MarketPositionPanelProps) {
   const { formatAmount, formatAmountChip, toInternalFrom } = useCurrency();
   const pieSize = compact ? 160 : 120;
+  const shareExplainer = marketShareExplainer({
+    marketShare: market.marketShare,
+    competitorCount: market.competitors.length,
+    unownedPercent: market.unownedPercent,
+    demandGapUnits: plants?.demandGapUnits,
+    pendingBuildUnits: pendingBuildUnits(plants?.buildQueue),
+  });
 
   // Market totals anchor on the sector's country economy, not the viewer's
   // wallet — otherwise a forex shift on the viewer's preferred currency makes
@@ -161,8 +172,15 @@ export default function MarketPositionPanel({
           </div>
         </div>
       )}
-      {(clearingEnabled || capitalEnabled) && (
+      {shareExplainer && (
         <p className="mt-3 border-t border-card-border/60 pt-2 text-[11px] leading-snug text-muted">
+          {shareExplainer}
+        </p>
+      )}
+      {(clearingEnabled || capitalEnabled) && (
+        <p
+          className={`${shareExplainer ? "mt-2" : "mt-3 border-t border-card-border/60 pt-2"} text-[11px] leading-snug text-muted`}
+        >
           {capitalEnabled
             ? "Revenue — and therefore this sector's valuation and share price — is limited by how much your capacity produces and how much of it actually sells. "
             : "Revenue — and therefore this sector's valuation and share price — reflects how much of your output actually sold this turn, not just your list price. "}

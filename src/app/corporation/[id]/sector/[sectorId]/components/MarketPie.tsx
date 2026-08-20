@@ -89,7 +89,7 @@ export default function MarketPie({
         {myShare.toFixed(1)}%
       </text>
       <text x={cx} y={cy + 10} textAnchor="middle" className="fill-muted text-[9px]" fontSize="9">
-        your share
+        {unownedPercent > 0 ? "your share" : "of producers"}
       </text>
     </svg>
   );
