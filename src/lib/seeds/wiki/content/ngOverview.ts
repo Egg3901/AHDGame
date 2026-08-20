@@ -2,7 +2,7 @@ export const ngOverviewContent = `# Nigeria
 
 Nigeria is a **federal presidential republic**: Africa's most populous democracy, with a directly elected President, a bicameral National Assembly, and 36 states plus the Federal Capital Territory. The President serves a fixed 4-year term with a 2-term limit per character. Nigeria uses First Past the Post (FPTP) for all federal elections, with single-member constituencies in both chambers.
 
-Nigeria's status is **coming soon**: it is fully authored (seeds, offices, election systems) but not yet open for play.
+Nigeria is fully authored (seeds, offices, and election systems) and is part of the **1991 scenario roster** (US, UK, JP, DE, CN, BR, IE, NG). Availability is seed and world dependent: a world seeded in an era that includes Nigeria can be played as Nigeria, while the current default world flags its status as coming soon.
 
 ---
 
