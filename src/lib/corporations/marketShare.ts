@@ -26,8 +26,6 @@ import {
 import { type CountryId } from "@/lib/constants/countries";
 import { SECTOR_MARKET_GDP_FRACTION, SECTOR_TYPE_COUNT } from "@/lib/constants/corporations";
 import type { CorporationType } from "@/lib/constants/corporations";
-import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
-import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import {
   computeSectorImpliedUnits,
   computeUnownedHeadroomUnits,
@@ -232,9 +230,7 @@ interface BuildSectorMarketShareInputs {
 export function buildMarketShareBySectorId(
   inputs: BuildSectorMarketShareInputs
 ): Map<string, number> {
-  const { sectors, stateById, unownedSectors, exchangeRatesByCurrency, preset } = inputs;
-  const plantsEnabled = inputs.plantsEnabled === true;
-  const unitScale = getEraUnitScale(preset);
+  const { sectors, stateById, exchangeRatesByCurrency } = inputs;
 
   // Anchor-normalize each sector's revenue once so we can sum and ratio against
   // it. Sector fields are stored in the sector's HOST-state currency (the market
@@ -268,68 +264,23 @@ export function buildMarketShareBySectorId(
     ownedRevenueByBucket.set(key, (ownedRevenueByBucket.get(key) ?? 0) + rev);
   }
 
-  const unownedByBucket = new Map<BucketKey, number>();
-  for (const u of unownedSectors) {
-    unownedByBucket.set(bucketKey(u.stateId, u.sectorType), u.revenue);
-  }
-
-  // Plants tier: per-sector capacity units and per-bucket owned-capacity sums,
-  // plus unowned headroom in units (persisted, or derived — fallback (b)).
-  const sectorUnitsById = new Map<string, number>();
-  const ownedUnitsByBucket = new Map<BucketKey, number>();
-  const headroomUnitsByBucket = new Map<BucketKey, number>();
-  if (plantsEnabled) {
-    for (const sector of sectors) {
-      const id = sector._id.toString();
-      const units = sectorCapacityUnits(
-        sector.sectorType as CorporationType,
-        sector.capitalStock,
-        sectorRevenueAnchorById.get(id) ?? 0,
-        sector.strategyId,
-        unitScale
-      );
-      sectorUnitsById.set(id, units);
-      const key = bucketKey(sector.stateId, sector.sectorType as CorporationType);
-      ownedUnitsByBucket.set(key, (ownedUnitsByBucket.get(key) ?? 0) + units);
-    }
-    for (const u of unownedSectors) {
-      headroomUnitsByBucket.set(
-        bucketKey(u.stateId, u.sectorType),
-        unownedHeadroomUnitsOf(u.sectorType, u.headroomUnits, u.revenue, unitScale)
-      );
-    }
-  }
-
   const marketShareBySectorId = new Map<string, number>();
   for (const sector of sectors) {
-    const state = stateById.get(sector.stateId);
-    if (!state) continue;
-    const countryId = (sector.countryId as CountryId | undefined) ?? (state.countryId as CountryId);
-    const gdpFallback = gdpDerivedMarketAnchor(state.gdp ?? 0, countryId, preset);
-    const key = bucketKey(sector.stateId, sector.sectorType as CorporationType);
-    const owned = ownedRevenueByBucket.get(key) ?? 0;
-    const unowned = unownedByBucket.get(key);
     const sectorId = sector._id.toString();
-
-    if (plantsEnabled) {
-      const sectorType = sector.sectorType as CorporationType;
-      const marketUnits = effectiveMarketUnits(
-        ownedUnitsByBucket.get(key) ?? 0,
-        headroomUnitsByBucket.get(key),
-        marketUnitsFromAnchor(sectorType, gdpFallback, unitScale)
-      );
-      // Fallback (c): no usable unit denominator (e.g. a sector type whose
-      // default strategy supplies nothing priceable) → legacy revenue path.
-      if (marketUnits > 0 && Number.isFinite(marketUnits)) {
-        marketShareBySectorId.set(
-          sectorId,
-          computeMarketSharePercent(sectorUnitsById.get(sectorId) ?? 0, marketUnits)
-        );
-        continue;
-      }
-    }
-
-    const market = effectiveMarketAnchor(owned, unowned, gdpFallback);
+    const key = bucketKey(sector.stateId, sector.sectorType as CorporationType);
+    // Market share is a sector's revenue over the TOTAL real revenue produced in
+    // its (state, sectorType) cell — its slice of the actual market, not of an
+    // "unowned pool" of demand nobody earns (ticket #1145). The former
+    // denominator (owned + a GDP-compounded unowned stock, or a capacity-units
+    // twin) was a phantom: it grew with the economy, was never drawn down when a
+    // corp built capacity, and read "60% unowned" in a market where every unit
+    // already cleared. Cell revenue sums across every producer (player AND NPP —
+    // both are corporateSectors rows), so shares in a cell add to 100% and a sole
+    // producer honestly reads 100% (the dominance density factor keeps a lone
+    // pioneer from being over-tolled). The unownedSectors revenue leg is left
+    // intact for its other consumers (GDP-growth weighting, the metric-engine
+    // adequacy terms, recommendations, the split-attack pool).
+    const market = ownedRevenueByBucket.get(key) ?? 0;
     const rev = sectorRevenueAnchorById.get(sectorId) ?? 0;
     marketShareBySectorId.set(sectorId, computeMarketSharePercent(rev, market));
   }
@@ -358,10 +309,8 @@ export function buildMarketShareBySectorId(
 export function buildNationalDominanceShareBySectorId(
   inputs: BuildSectorMarketShareInputs
 ): Map<string, number> {
-  const { sectors, stateById, unownedSectors, exchangeRatesByCurrency, preset } = inputs;
+  const { sectors, stateById, exchangeRatesByCurrency } = inputs;
 
-  const bucketKey = (stateId: string, sectorType: CorporationType): string =>
-    `${stateId}::${sectorType}`;
   const natKey = (countryId: string, sectorType: CorporationType): string =>
     `${countryId}::${sectorType}`;
 
@@ -386,54 +335,22 @@ export function buildNationalDominanceShareBySectorId(
     if (hostCountryId) sectorCountryById.set(sector._id.toString(), hostCountryId);
   }
 
-  // Owned + unowned revenue per (state, sectorType) bucket.
-  const ownedByBucket = new Map<string, number>();
-  for (const sector of sectors) {
-    const key = bucketKey(sector.stateId, sector.sectorType as CorporationType);
-    ownedByBucket.set(
-      key,
-      (ownedByBucket.get(key) ?? 0) + (anchorById.get(sector._id.toString()) ?? 0)
-    );
-  }
-  const unownedByBucket = new Map<string, number>();
-  for (const u of unownedSectors) {
-    unownedByBucket.set(bucketKey(u.stateId, u.sectorType), u.revenue);
-  }
-
-  // National market = Σ over the country's states of each bucket's effective
-  // market. Each (state, sectorType) contributes once — track visited buckets.
+  // National market = Σ over the country's states of each (state, sectorType)
+  // cell's TOTAL real revenue (ticket #1145). Same definition as the local
+  // builder: the denominator is what every producer actually earns, not an
+  // unowned pool of unclaimed demand. A national champion's share is its revenue
+  // over the sum of real revenue in that sector across the country.
   const nationalMarketByKey = new Map<string, number>();
-  const seenBucket = new Set<string>();
   for (const sector of sectors) {
     const state = stateById.get(sector.stateId);
     if (!state) continue;
     const sectorType = sector.sectorType as CorporationType;
-    const bKey = bucketKey(sector.stateId, sectorType);
-    if (seenBucket.has(bKey)) continue;
-    seenBucket.add(bKey);
     const countryId = (sector.countryId as CountryId | undefined) ?? (state.countryId as CountryId);
-    const gdpFallback = gdpDerivedMarketAnchor(state.gdp ?? 0, countryId, preset);
-    const market = effectiveMarketAnchor(
-      ownedByBucket.get(bKey) ?? 0,
-      unownedByBucket.get(bKey),
-      gdpFallback
-    );
     const nKey = natKey(countryId, sectorType);
-    nationalMarketByKey.set(nKey, (nationalMarketByKey.get(nKey) ?? 0) + market);
-  }
-  // Unowned buckets in a state that has NO owned sector of that type still add
-  // to the national market (unclaimed demand a champion could be dominating
-  // around). Add any bucket not already counted above.
-  for (const u of unownedSectors) {
-    const bKey = bucketKey(u.stateId, u.sectorType);
-    if (seenBucket.has(bKey)) continue;
-    seenBucket.add(bKey);
-    const state = stateById.get(u.stateId);
-    const countryId = (state?.countryId as CountryId | undefined) ?? ("US" as CountryId);
-    const gdpFallback = state ? gdpDerivedMarketAnchor(state.gdp ?? 0, countryId, preset) : 0;
-    const market = effectiveMarketAnchor(0, u.revenue, gdpFallback);
-    const nKey = natKey(countryId, u.sectorType);
-    nationalMarketByKey.set(nKey, (nationalMarketByKey.get(nKey) ?? 0) + market);
+    nationalMarketByKey.set(
+      nKey,
+      (nationalMarketByKey.get(nKey) ?? 0) + (anchorById.get(sector._id.toString()) ?? 0)
+    );
   }
 
   // Corp's national revenue per (corp, country, sectorType).
@@ -497,13 +414,14 @@ export async function fetchSectorMarketSharePercent(
    * caller ever overrides is not a default, it is a silent wrong answer, so the
    * function now works it out itself.
    */
-  plantsEnabledOverride?: boolean
+  // Retained for call-site compatibility. Market share is revenue-basis in every
+  // tier now (ticket #1145 — cell revenue share, no capacity-units twin), so the
+  // tier no longer selects a different basis.
+  _plantsEnabledOverride?: boolean
 ): Promise<number> {
   const { loadFxRatesByCurrency } = await import("@/lib/currency/corporationCapital");
-  const plantsEnabled =
-    plantsEnabledOverride ?? marketAtLeast(await getMarketSystemModeForDb(db), "plants");
 
-  const [state, siblingSectors, unownedDoc, fxByCurrency, preset] = await Promise.all([
+  const [state, siblingSectors, fxByCurrency] = await Promise.all([
     db
       .collection<State>("states")
       .findOne({ _id: sector.stateId }, { projection: { _id: 1, gdp: 1, countryId: 1 } }),
@@ -511,17 +429,11 @@ export async function fetchSectorMarketSharePercent(
       .collection<CorporateSector>("corporateSectors")
       .find({ stateId: sector.stateId, sectorType: sector.sectorType })
       .toArray(),
-    db
-      .collection<UnownedSector>("unownedSectors")
-      .findOne({ stateId: sector.stateId, sectorType: sector.sectorType }),
     loadFxRatesByCurrency(db),
-    loadWorldPreset(db),
   ]);
 
   if (!state) return 0;
   const countryId = (sector.countryId as CountryId | undefined) ?? (state.countryId as CountryId);
-  const gdpFallback = gdpDerivedMarketAnchor(state.gdp ?? 0, countryId, preset);
-  const unitScale = getEraUnitScale(preset);
 
   // Every sibling sector is in the same state (same host country), so they all
   // share one host-state functional currency — the currency their revenue is
@@ -529,61 +441,27 @@ export async function fetchSectorMarketSharePercent(
   const hostCode = resolveSectorHostCurrencyCode({ countryId }, null);
   const hostRate = fxRateForSectorHostFromMap({ countryId }, null, fxByCurrency);
 
-  const sectorType = sector.sectorType as CorporationType;
-  let ownedAnchor = 0;
+  // Market share = this sector's revenue over the TOTAL real revenue in its
+  // (state, sectorType) cell (ticket #1145). No unowned pool, no GDP floor, no
+  // capacity-units twin — the denominator is what every producer actually earns.
+  // Matches buildMarketShareBySectorId exactly.
+  let cellRevenue = 0;
   let thisSectorAnchor = 0;
-  let ownedUnits = 0;
-  let thisSectorUnits = 0;
   for (const s of siblingSectors) {
     const anchor = readCorpEconomicAnchor(s.revenue, hostCode, hostRate);
-    ownedAnchor += anchor;
-    const units = plantsEnabled
-      ? sectorCapacityUnits(sectorType, s.capitalStock, anchor, s.strategyId, unitScale)
-      : 0;
-    ownedUnits += units;
+    cellRevenue += anchor;
     if (s._id.toString() === sector._id.toString()) {
       thisSectorAnchor = anchor;
-      thisSectorUnits = units;
     }
   }
   // Fallback: if the focal sector wasn't in the siblings query result (race),
-  // normalize it directly at the same host rate.
+  // normalize it directly at the same host rate and include it in the cell total.
   if (thisSectorAnchor === 0) {
     thisSectorAnchor = readCorpEconomicAnchor(sector.revenue, hostCode, hostRate);
-    ownedAnchor += thisSectorAnchor;
-    if (plantsEnabled) {
-      thisSectorUnits = sectorCapacityUnits(
-        sectorType,
-        sector.capitalStock,
-        thisSectorAnchor,
-        sector.strategyId,
-        unitScale
-      );
-      ownedUnits += thisSectorUnits;
-    }
+    cellRevenue += thisSectorAnchor;
   }
 
-  if (plantsEnabled) {
-    const marketUnits = effectiveMarketUnits(
-      ownedUnits,
-      unownedDoc
-        ? unownedHeadroomUnitsOf(
-            sectorType,
-            unownedDoc.headroomUnits,
-            unownedDoc.revenue,
-            unitScale
-          )
-        : undefined,
-      marketUnitsFromAnchor(sectorType, gdpFallback, unitScale)
-    );
-    // Fallback (c): no usable unit denominator → legacy revenue path.
-    if (marketUnits > 0 && Number.isFinite(marketUnits)) {
-      return computeMarketSharePercent(thisSectorUnits, marketUnits);
-    }
-  }
-
-  const market = effectiveMarketAnchor(ownedAnchor, unownedDoc?.revenue, gdpFallback);
-  return computeMarketSharePercent(thisSectorAnchor, market);
+  return computeMarketSharePercent(thisSectorAnchor, cellRevenue);
 }
 
 /**
@@ -693,12 +571,13 @@ export async function fetchAttackerDefenderShares(
   // its host-state currency, so the defender corp's FX context is no longer used.
   _defenderCorp: CorpCapitalCurrencyInfo,
   attackerCorpId: import("mongodb").ObjectId,
-  /** Plants tier: capacity-unit share basis. Omit for legacy revenue behavior. */
-  plantsEnabled: boolean = false
+  // Retained for call-site compatibility. Market share is revenue-basis in every
+  // tier now (ticket #1145), so the tier no longer selects a different basis.
+  _plantsEnabled: boolean = false
 ): Promise<{ defenderSharePercent: number; attackerSharePercent: number }> {
   const { loadFxRatesByCurrency } = await import("@/lib/currency/corporationCapital");
 
-  const [state, siblingSectors, unownedDoc, fxByCurrency, preset] = await Promise.all([
+  const [state, siblingSectors, fxByCurrency] = await Promise.all([
     db
       .collection<State>("states")
       .findOne({ _id: targetSector.stateId }, { projection: { _id: 1, gdp: 1, countryId: 1 } }),
@@ -706,90 +585,43 @@ export async function fetchAttackerDefenderShares(
       .collection<CorporateSector>("corporateSectors")
       .find({ stateId: targetSector.stateId, sectorType: targetSector.sectorType })
       .toArray(),
-    db
-      .collection<UnownedSector>("unownedSectors")
-      .findOne({ stateId: targetSector.stateId, sectorType: targetSector.sectorType }),
     loadFxRatesByCurrency(db),
-    loadWorldPreset(db),
   ]);
 
   if (!state) return { defenderSharePercent: 0, attackerSharePercent: 0 };
   const countryId =
     (targetSector.countryId as CountryId | undefined) ?? (state.countryId as CountryId);
-  const gdpFallback = gdpDerivedMarketAnchor(state.gdp ?? 0, countryId, preset);
-  const unitScale = getEraUnitScale(preset);
 
   // Every sibling is in the same state (same host country), so they share one
   // host-state functional currency — resolve the ₳ rate once from the country.
   const hostCode = resolveSectorHostCurrencyCode({ countryId }, null);
   const hostRate = fxRateForSectorHostFromMap({ countryId }, null, fxByCurrency);
 
-  const sectorType = targetSector.sectorType as CorporationType;
-  let ownedAnchor = 0;
+  // Defender/attacker shares of the cell's TOTAL real revenue (ticket #1145),
+  // the same denominator every other share reads.
+  let cellRevenue = 0;
   let defenderAnchor = 0;
   let attackerAnchor = 0;
-  let ownedUnits = 0;
-  let defenderUnits = 0;
-  let attackerUnits = 0;
   const attackerIdStr = attackerCorpId.toString();
   for (const s of siblingSectors) {
     const anchor = readCorpEconomicAnchor(s.revenue, hostCode, hostRate);
-    ownedAnchor += anchor;
-    const units = plantsEnabled
-      ? sectorCapacityUnits(sectorType, s.capitalStock, anchor, s.strategyId, unitScale)
-      : 0;
-    ownedUnits += units;
+    cellRevenue += anchor;
     if (s._id.toString() === targetSector._id.toString()) {
       defenderAnchor = anchor;
-      defenderUnits = units;
     }
     if (s.corporationId.toString() === attackerIdStr) {
       attackerAnchor += anchor;
-      attackerUnits += units;
     }
   }
   // Race fallback: if the target sector wasn't yet visible in the siblings
   // query, normalize its revenue directly at the same host rate.
   if (defenderAnchor === 0) {
     defenderAnchor = readCorpEconomicAnchor(targetSector.revenue, hostCode, hostRate);
-    ownedAnchor += defenderAnchor;
-    if (plantsEnabled) {
-      defenderUnits = sectorCapacityUnits(
-        sectorType,
-        targetSector.capitalStock,
-        defenderAnchor,
-        targetSector.strategyId,
-        unitScale
-      );
-      ownedUnits += defenderUnits;
-    }
+    cellRevenue += defenderAnchor;
   }
 
-  if (plantsEnabled) {
-    const marketUnits = effectiveMarketUnits(
-      ownedUnits,
-      unownedDoc
-        ? unownedHeadroomUnitsOf(
-            sectorType,
-            unownedDoc.headroomUnits,
-            unownedDoc.revenue,
-            unitScale
-          )
-        : undefined,
-      marketUnitsFromAnchor(sectorType, gdpFallback, unitScale)
-    );
-    // Fallback (c): no usable unit denominator → legacy revenue path.
-    if (marketUnits > 0 && Number.isFinite(marketUnits)) {
-      return {
-        defenderSharePercent: computeMarketSharePercent(defenderUnits, marketUnits),
-        attackerSharePercent: computeMarketSharePercent(attackerUnits, marketUnits),
-      };
-    }
-  }
-
-  const market = effectiveMarketAnchor(ownedAnchor, unownedDoc?.revenue, gdpFallback);
   return {
-    defenderSharePercent: computeMarketSharePercent(defenderAnchor, market),
-    attackerSharePercent: computeMarketSharePercent(attackerAnchor, market),
+    defenderSharePercent: computeMarketSharePercent(defenderAnchor, cellRevenue),
+    attackerSharePercent: computeMarketSharePercent(attackerAnchor, cellRevenue),
   };
 }

@@ -100,22 +100,23 @@ describe("GET /api/discord-bot/marketshare", () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.totalMarket).toBe(300000);
+    // Ticket #1145: market = total real revenue (150k + 100k), no unowned pool.
+    expect(json.totalMarket).toBe(250000);
     expect(json.totalOwnedRevenue).toBe(250000);
-    expect(json.unownedRevenue).toBe(50000);
+    expect(json.unownedRevenue).toBe(0);
     expect(json.companies[0]).toMatchObject({
       corporationName: "Defense",
       liquidCurrencyCode: "USD",
       revenue: 150000,
       revenueAnchor: 150000,
-      marketSharePercent: 50,
+      marketSharePercent: 60,
     });
     expect(json.companies[1]).toMatchObject({
       corporationName: "Her Majesty's Arsenal",
       liquidCurrencyCode: "JPY",
       revenue: 9100000,
       revenueAnchor: 100000,
-      marketSharePercent: 33.33,
+      marketSharePercent: 40,
     });
   });
 });

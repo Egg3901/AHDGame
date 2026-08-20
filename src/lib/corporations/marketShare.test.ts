@@ -4,7 +4,6 @@ import {
   computeMarketSharePercent,
   gdpDerivedMarketAnchor,
   buildMarketShareBySectorId,
-  effectiveMarketUnits,
   sectorCapacityUnits,
   marketUnitsFromAnchor,
 } from "./marketShare";
@@ -17,7 +16,6 @@ import {
   computeSectorImpliedUnits,
   unownedHeadroomUnitsPerAnchor,
 } from "@/lib/market/unownedHeadroom";
-import { CAPITAL_SEED_HEADROOM } from "@/lib/market/capital";
 
 describe("effectiveMarketAnchor", () => {
   it("with a persisted unowned pool, the market is owned + unowned", () => {
@@ -106,91 +104,42 @@ describe("plants tier — unit-denominated market share", () => {
       plantsEnabled: opts.plantsEnabled,
     });
 
-  it("shares are ownedCapacityUnits / (Σ capacity + headroomUnits)", () => {
-    // Capacities 300 + 100, headroom 100 → market 500 units.
-    const shares = build(
-      [sector("a", 1_000_000, 300), sector("b", 1, 100)],
-      [unowned(999_999, 100)],
-      { plantsEnabled: true }
-    );
-    expect(shares.get("a")).toBeCloseTo(60, 10);
-    expect(shares.get("b")).toBeCloseTo(20, 10);
+  it("share is a sector's revenue over the cell's TOTAL real revenue", () => {
+    // 1000 + 3000 = 4000 real revenue in the cell → 25% / 75%.
+    const shares = build([sector("a", 1000), sector("b", 3000)], []);
+    expect(shares.get("a")).toBeCloseTo(25, 10);
+    expect(shares.get("b")).toBeCloseTo(75, 10);
   });
 
-  it("(a) a sector with no capitalStock contributes revenue-implied units", () => {
-    const impliedB = computeUnownedHeadroomUnits(TYPE, 1000, 1);
-    const shares = build([sector("a", 1, 300), sector("b", 1000)], [unowned(0, 100)], {
+  it("ignores the unowned pool entirely — it is not part of the denominator", () => {
+    // A huge unowned pool used to read as "unclaimed market" and shrink every
+    // share (ticket #1145). It no longer touches the ratio.
+    const withPool = build([sector("a", 1000), sector("b", 3000)], [unowned(9_999_999, 500)]);
+    const withoutPool = build([sector("a", 1000), sector("b", 3000)], []);
+    expect(withPool.get("a")).toBeCloseTo(25, 10);
+    expect([...withPool.entries()]).toEqual([...withoutPool.entries()]);
+  });
+
+  it("is identical whether or not plants is enabled — one revenue basis everywhere", () => {
+    const sectors = [sector("a", 1000, 5), sector("b", 3000, 900)];
+    const off = build(sectors, [unowned(500, 42)]);
+    const on = build(sectors, [unowned(500, 42)], { plantsEnabled: true });
+    expect([...on.entries()]).toEqual([...off.entries()]);
+    expect(on.get("a")).toBeCloseTo(25, 10);
+  });
+
+  it("a sole producer reads 100%, no matter the unowned pool or GDP", () => {
+    const shares = build([sector("a", 1000)], [unowned(500_000, 999)], {
       plantsEnabled: true,
+      gdp: 50_000_000,
     });
-    const market = 300 + impliedB + 100;
-    expect(shares.get("a")).toBeCloseTo((300 / market) * 100, 10);
-    expect(shares.get("b")).toBeCloseTo((impliedB / market) * 100, 10);
-  });
-
-  it("(b) an unowned doc with no headroomUnits derives headroom from its revenue", () => {
-    const derivedHeadroom = computeUnownedHeadroomUnits(TYPE, 2000, 1);
-    const shares = build([sector("a", 1, 300)], [unowned(2000)], { plantsEnabled: true });
-    expect(shares.get("a")).toBeCloseTo((300 / (300 + derivedHeadroom)) * 100, 10);
-  });
-
-  it("(c) falls back to the legacy revenue path when no units can be derived", () => {
-    // Degenerate market: nothing owned, no unowned doc, no GDP → the unit
-    // denominator is 0, so the bucket is scored on the legacy basis instead of
-    // producing NaN/Infinity.
-    expect(effectiveMarketUnits(0, undefined, 0)).toBe(0);
-    const plants = build([sector("a", 0)], [], { plantsEnabled: true });
-    const legacy = build([sector("a", 0)], []);
-    expect(plants.get("a")).toBe(legacy.get("a"));
-    expect(Number.isFinite(plants.get("a")!)).toBe(true);
-  });
-
-  it("the GDP floor still applies, converted to the same unit basis", () => {
-    // No unowned doc → floor = GDP-derived market anchor, in units.
-    const gdp = 1_000_000;
-    const gdpAnchor = gdpDerivedMarketAnchor(gdp, "US");
-    const floorUnits = computeUnownedHeadroomUnits(TYPE, gdpAnchor, 1);
-    const shares = build([sector("a", 1, 5)], [], { plantsEnabled: true, gdp });
-    expect(floorUnits).toBeGreaterThan(5);
-    expect(shares.get("a")).toBeCloseTo((5 / floorUnits) * 100, 10);
-  });
-
-  it("never exceeds 100% when one owner holds all capacity and there is no unowned doc", () => {
-    const shares = build([sector("a", 1000, 500)], [], { plantsEnabled: true, gdp: 0 });
     expect(shares.get("a")).toBe(100);
   });
 
-  // Rank preservation matters more than absolute values: the dominance
-  // growth-cost multiplier is banded, so what must not change across the flip
-  // is the ORDER of sectors within a market.
-  it("preserves ordering vs the revenue basis when capacity ∝ revenue", () => {
-    const revenues = [900, 150, 4000, 30, 1200];
-    const sectors = revenues.map((r, i) =>
-      // Mixed estate: even indices already flipped (capitalStock seeded at the
-      // flip identity, implied units × headroom), odd indices not yet flipped
-      // (fallback (a) derives the same implied units).
-      sector(
-        `s${i}`,
-        r,
-        i % 2 === 0 ? computeUnownedHeadroomUnits(TYPE, r, 1) * CAPITAL_SEED_HEADROOM : undefined
-      )
-    );
-    const unownedDocs = [unowned(2000, computeUnownedHeadroomUnits(TYPE, 2000, 1))];
-    const unitShares = build(sectors, unownedDocs, { plantsEnabled: true });
-    const revShares = build(sectors, unownedDocs);
-    const order = (m: Map<string, number>) =>
-      [...m.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
-    expect(order(unitShares)).toEqual(order(revShares));
-  });
-
-  it("is byte-identical to the legacy path when plants is off (default)", () => {
-    const sectors = [sector("a", 1000, 5), sector("b", 3000, 900)];
-    const unownedDocs = [unowned(500, 42)];
-    const withDefault = build(sectors, unownedDocs);
-    const explicitOff = build(sectors, unownedDocs, { plantsEnabled: false });
-    // Legacy revenue math: market = 1000 + 3000 + 500.
-    expect(withDefault.get("a")).toBeCloseTo((1000 / 4500) * 100, 10);
-    expect(withDefault.get("b")).toBeCloseTo((3000 / 4500) * 100, 10);
-    expect([...explicitOff.entries()]).toEqual([...withDefault.entries()]);
+  it("a zero-revenue cell is finite (0), not NaN", () => {
+    const shares = build([sector("a", 0)], []);
+    expect(shares.get("a")).toBe(0);
+    expect(Number.isFinite(shares.get("a")!)).toBe(true);
   });
 });
 
