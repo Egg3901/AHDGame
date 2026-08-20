@@ -209,7 +209,7 @@ describe("POST defence-contracts", () => {
     expect(res.status).toBe(400);
     // The shared fill resolver names the exact refusal now, rather than one message for
     // every domestic-supplier rule at once.
-    expect((await res.json()).error).toMatch(/not in the buying country/i);
+    expect((await res.json()).error).toMatch(/not based in the buying country/i);
   });
 
   // Refused at award, not discovered later as a permanently stalled contract.

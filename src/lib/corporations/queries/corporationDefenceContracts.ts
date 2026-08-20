@@ -50,6 +50,12 @@ export interface CorporationContractView {
   /** Production lines this order holds, and how many the plant has in total. */
   assignedFactories: number;
   totalFactories: number;
+  /**
+   * Which plant this order is on (CEO-given name, else the host state). Ticket #1149: the
+   * line-allocation control is per plant, and without a label a CEO with several defence
+   * works reads "4 lines" as "4 plants".
+   */
+  plantLabel: string;
   /** The grade this order is written for (0..3). */
   gradeCeiling?: number;
   /** Public disclosure that the awarding minister had an interest in this corporation. */
@@ -169,6 +175,11 @@ export async function loadCorporationDefenceContracts(
         : {}),
       assignedFactories: assigned,
       totalFactories: DEFENCE_FACTORY_SLOTS_PER_PLANT,
+      plantLabel: (() => {
+        const base = sector?.displayName?.trim() || sector?.stateId || "this plant";
+        const host = sector?.countryId;
+        return host && host !== c.countryId ? `${base} (${host})` : base;
+      })(),
       ...(c.gradeCeiling != null ? { gradeCeiling: c.gradeCeiling } : {}),
       ...(c.selfDealing
         ? {

@@ -15,14 +15,38 @@ function stubDb(w: World): Db {
     collection: (name: string) => {
       if (name === "corporateSectors") {
         return {
-          find: (f: Record<string, unknown>) => ({
-            toArray: async () =>
-              w.sectors.filter((s) => s.sectorType === f.sectorType && s.countryId === f.countryId),
+          find: (f: Record<string, unknown> = {}) => ({
+            toArray: async () => {
+              let rows = w.sectors.filter((s) => s.sectorType === f.sectorType);
+              const corpFilter = f.corporationId as { $in?: { toString(): string }[] } | undefined;
+              if (corpFilter?.$in) {
+                const ids = new Set(corpFilter.$in.map((id) => id.toString()));
+                rows = rows.filter((s) => ids.has((s.corporationId as ObjectId).toString()));
+              }
+              if (typeof f.countryId === "string") {
+                rows = rows.filter((s) => s.countryId === f.countryId);
+              }
+              return rows;
+            },
           }),
         };
       }
       if (name === "corporations") {
-        return { find: () => ({ toArray: async () => w.corps }) };
+        return {
+          find: (f: Record<string, unknown> = {}) => ({
+            toArray: async () => {
+              if (typeof f.countryId === "string") {
+                return w.corps.filter((c) => c.countryId === f.countryId);
+              }
+              const idFilter = f._id as { $in?: { toString(): string }[] } | undefined;
+              if (idFilter?.$in) {
+                const ids = new Set(idFilter.$in.map((id) => id.toString()));
+                return w.corps.filter((c) => ids.has((c._id as ObjectId).toString()));
+              }
+              return w.corps;
+            },
+          }),
+        };
       }
       // defenceContracts
       return {
@@ -247,5 +271,46 @@ describe("listDefenceSuppliers", () => {
       LOT_PRICE
     );
     expect(rows[0].plantLabel).toBe("TX");
+  });
+
+  // Ticket #1149. Delivery already accepted a home-country corp's overseas plant
+  // (`canSupply` keys on HQ / currency, not host state). The picker filtered sectors by
+  // `countryId`, so a UK minister could only award Streibl's tiny domestic line while the
+  // same corp's Greek works never appeared — and 4 production lines on that domestic plant
+  // still only yielded 0.02 lots/turn.
+  it("offers a domestic corporation's overseas plant", async () => {
+    const overseas = sector({ countryId: "GR", stateId: "GR_ATT", revenue: 9_000_000 });
+    const home = sector({ countryId: "UK", stateId: "SEE", revenue: 2_000 });
+    const rows = await listDefenceSuppliers(
+      stubDb(
+        world({
+          sectors: [overseas, home],
+          corps: [corp({ countryId: "UK", liquidCurrencyCode: "GBP" })],
+        })
+      ),
+      "UK",
+      1953,
+      LOT_PRICE
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0].sectorId).toBe(overseas._id.toString());
+    expect(rows[0].plantLabel).toBe("GR_ATT (GR)");
+    expect(rows[0].projectedLotsPerTurn).toBeGreaterThan(rows[1].projectedLotsPerTurn);
+    expect(rows[1].plantLabel).toBe("SEE");
+  });
+
+  it("still omits a foreign-owned plant that happens to sit in the buying country", async () => {
+    const rows = await listDefenceSuppliers(
+      stubDb(
+        world({
+          sectors: [sector({ countryId: "UK", stateId: "SEE" })],
+          corps: [corp({ countryId: "GR", liquidCurrencyCode: "GRD" })],
+        })
+      ),
+      "UK",
+      1953,
+      LOT_PRICE
+    );
+    expect(rows).toHaveLength(0);
   });
 });

@@ -1,7 +1,7 @@
-import { ObjectId, type Db } from "mongodb";
+import type { Db } from "mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types/corporation";
 import type { UnitDomain } from "@/lib/db/types/militaryUnit";
-import { resolveFillEligibility } from "@/lib/military/defenceFillEligibility";
+import { canSupply, resolveFillEligibility } from "@/lib/military/defenceFillEligibility";
 import {
   lotProductionCost,
   defaultFactoryAllocation,
@@ -55,6 +55,12 @@ export interface DefenceSupplierView {
  * currency rule. A picker that offered a plant the route would refuse would turn every one of
  * those clear 400s into a dead option the minister cannot diagnose.
  *
+ * Domestic is the CORPORATION, not the plant's host state (ticket #1149). `canSupply` and
+ * the delivery sweep both key on corp HQ / currency; filtering sectors by `countryId` hid
+ * every overseas works of a home-country supplier, so a UK minister could only award
+ * Streibl's tiny East-of-England line while the same corp's Greek and French plants — which
+ * delivery would have honoured — never appeared.
+ *
  * `alreadyContracted` marks rather than removes: a second contract on one plant is legal (its
  * output is split across them), but it is rarely what a minister means to do, so the decision
  * belongs to them with the fact in front of it.
@@ -70,18 +76,26 @@ export async function listDefenceSuppliers(
    */
   anchorPrice: number | null
 ): Promise<DefenceSupplierView[]> {
-  const sectors = await db
-    .collection<CorporateSector>("corporateSectors")
-    .find({ sectorType: "defense", countryId: countryId as CorporateSector["countryId"] })
-    .toArray();
-  if (sectors.length === 0) return [];
-
-  const corpIds = [...new Set(sectors.map((s) => s.corporationId.toString()))];
+  // Corps first, then their defence plants anywhere. Plant location is not a payment
+  // constraint: a UK corporation banking in pounds can be paid from the UK appropriation
+  // whether the works sit in Kent or Attica. The old sector-country filter implemented
+  // the opposite of `resolveFillEligibility` and is what ticket #1149 was looking at.
   const corps = await db
     .collection<Corporation>("corporations")
-    .find({ _id: { $in: corpIds.map((id) => new ObjectId(id)) } })
+    .find({ countryId: countryId as Corporation["countryId"] })
     .toArray();
-  const corpById = new Map(corps.map((c) => [c._id.toString(), c]));
+  const eligibleCorps = corps.filter((c) => canSupply(c, countryId));
+  if (eligibleCorps.length === 0) return [];
+
+  const sectors = await db
+    .collection<CorporateSector>("corporateSectors")
+    .find({
+      sectorType: "defense",
+      corporationId: { $in: eligibleCorps.map((c) => c._id) },
+    })
+    .toArray();
+  if (sectors.length === 0) return [];
+  const corpById = new Map(eligibleCorps.map((c) => [c._id.toString(), c]));
 
   // Open, not active: a plant already sitting on an unanswered offer is just as committed
   // from the minister's point of view as one already building.
@@ -138,7 +152,7 @@ export async function listDefenceSuppliers(
       sectorId: sector._id.toString(),
       corporationId: corp._id.toString(),
       corporationName: corp.name ?? "Unnamed corporation",
-      plantLabel: sector.displayName?.trim() || sector.stateId,
+      plantLabel: plantLabelFor(sector, countryId),
       strategyId: sector.strategyId ?? "standard",
       component: fill.components[0],
       components: fill.components,
@@ -163,4 +177,16 @@ export async function listDefenceSuppliers(
       b.projectedLotsPerTurn - a.projectedLotsPerTurn
   );
   return rows;
+}
+
+/**
+ * Where the works sit, with the host country when that is not the buyer — otherwise a UK
+ * minister looking at three Streibl rows cannot tell Kent from Attica.
+ */
+function plantLabelFor(
+  sector: Pick<CorporateSector, "displayName" | "stateId" | "countryId">,
+  buyerCountryId: string
+): string {
+  const base = sector.displayName?.trim() || sector.stateId;
+  return sector.countryId !== buyerCountryId ? `${base} (${sector.countryId})` : base;
 }
