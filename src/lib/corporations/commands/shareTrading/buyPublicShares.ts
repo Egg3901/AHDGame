@@ -43,6 +43,11 @@ import {
   isOrderFlowPriceEligible,
   resolveShareExecutionPrice,
 } from "@/lib/corporations/marketExecution";
+import {
+  buildOrderFlowWindowInc,
+  buildOrderFlowWindowIncReversal,
+  isOrderFlowWashRoundTrip,
+} from "@/lib/corporations/orderFlowWashGuard";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { GameState } from "@/lib/db/types";
@@ -230,6 +235,31 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
         );
       }
 
+      // Wash-trade guard (see orderFlowWashGuard): a buy that round-trips this
+      // corp's own recent sell contributes nothing to the order-flow window and
+      // neutralizes the sell leg instead.
+      const washExcluded =
+        orderFlowEligible &&
+        (await isOrderFlowWashRoundTrip(
+          db,
+          corporation._id,
+          { corporationId: buyingCorp._id },
+          "buy",
+          now
+        ));
+      const orderFlowInc = buildOrderFlowWindowInc(
+        orderFlowEligible,
+        "buy",
+        shares * executionPrice,
+        washExcluded
+      );
+      const orderFlowIncReversal = buildOrderFlowWindowIncReversal(
+        orderFlowEligible,
+        "buy",
+        shares * executionPrice,
+        washExcluded
+      );
+
       let sharesCredited = false;
       try {
         const credited = await creditSharesToCorp(
@@ -241,7 +271,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
           {
             $inc: {
               publicFloat: -shares,
-              ...(orderFlowEligible ? { orderFlowWindowBuyValue: shares * executionPrice } : {}),
+              ...orderFlowInc,
             },
             $set: { updatedAt: now },
           },
@@ -333,9 +363,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
             {
               $inc: {
                 publicFloat: shares,
-                ...(orderFlowEligible
-                  ? { orderFlowWindowBuyValue: -(shares * executionPrice) }
-                  : {}),
+                ...orderFlowIncReversal,
               },
               $set: { updatedAt: new Date() },
             },
@@ -495,6 +523,29 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
         );
       }
 
+      // Wash-trade guard (see orderFlowWashGuard).
+      const washExcluded =
+        orderFlowEligible &&
+        (await isOrderFlowWashRoundTrip(
+          db,
+          corporation._id,
+          { imperialCharacterId: imperial._id },
+          "buy",
+          now
+        ));
+      const orderFlowInc = buildOrderFlowWindowInc(
+        orderFlowEligible,
+        "buy",
+        shares * executionPrice,
+        washExcluded
+      );
+      const orderFlowIncReversal = buildOrderFlowWindowIncReversal(
+        orderFlowEligible,
+        "buy",
+        shares * executionPrice,
+        washExcluded
+      );
+
       let sharesCredited = false;
       try {
         const credited = await creditSharesToImperial(
@@ -505,7 +556,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
           {
             $inc: {
               publicFloat: -shares,
-              ...(orderFlowEligible ? { orderFlowWindowBuyValue: shares * executionPrice } : {}),
+              ...orderFlowInc,
             },
             $set: { updatedAt: now },
           },
@@ -589,9 +640,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
             {
               $inc: {
                 publicFloat: shares,
-                ...(orderFlowEligible
-                  ? { orderFlowWindowBuyValue: -(shares * executionPrice) }
-                  : {}),
+                ...orderFlowIncReversal,
               },
               $set: { updatedAt: new Date() },
             },
@@ -716,6 +765,29 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
       );
     }
 
+    // Wash-trade guard (see orderFlowWashGuard).
+    const washExcluded =
+      orderFlowEligible &&
+      (await isOrderFlowWashRoundTrip(
+        db,
+        corporation._id,
+        { characterId: character._id },
+        "buy",
+        now
+      ));
+    const orderFlowInc = buildOrderFlowWindowInc(
+      orderFlowEligible,
+      "buy",
+      shares * executionPrice,
+      washExcluded
+    );
+    const orderFlowIncReversal = buildOrderFlowWindowIncReversal(
+      orderFlowEligible,
+      "buy",
+      shares * executionPrice,
+      washExcluded
+    );
+
     let sharesCredited = false;
     try {
       const credited = await creditShares(
@@ -726,7 +798,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
         {
           $inc: {
             publicFloat: -shares,
-            ...(orderFlowEligible ? { orderFlowWindowBuyValue: shares * executionPrice } : {}),
+            ...orderFlowInc,
           },
           $set: { updatedAt: now },
         },
@@ -803,7 +875,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
           {
             $inc: {
               publicFloat: shares,
-              ...(orderFlowEligible ? { orderFlowWindowBuyValue: -(shares * executionPrice) } : {}),
+              ...orderFlowIncReversal,
             },
             $set: { updatedAt: new Date() },
           },

@@ -109,13 +109,15 @@ export function useShareTrading({
     Number.MAX_SAFE_INTEGER,
     Math.floor(corporation.totalShares * MAX_FORWARD_SHARE_SPLIT_MULTIPLIER)
   );
+  const minTotalShares =
+    corporation.shareConsolidationMinTotalShares ?? SHARE_CONSOLIDATION_MIN_TOTAL_SHARES;
   const isReverseTarget = consolidateTargetNum < corporation.totalShares;
   const isForwardTarget = consolidateTargetNum > corporation.totalShares;
   const shareStructureTargetValid =
     canSubmitShareStructure &&
     consolidateTargetNum > 0 &&
     ((isReverseTarget &&
-      consolidateTargetNum >= SHARE_CONSOLIDATION_MIN_TOTAL_SHARES &&
+      consolidateTargetNum >= minTotalShares &&
       consolidateTargetNum < corporation.totalShares) ||
       (isForwardTarget &&
         consolidateTargetNum > corporation.totalShares &&
@@ -125,7 +127,7 @@ export function useShareTrading({
     corporation.totalShares > 0 &&
     consolidateTargetNum !== corporation.totalShares &&
     ((isReverseTarget &&
-      consolidateTargetNum >= SHARE_CONSOLIDATION_MIN_TOTAL_SHARES &&
+      consolidateTargetNum >= minTotalShares &&
       consolidateTargetNum < corporation.totalShares) ||
       (isForwardTarget &&
         consolidateTargetNum > corporation.totalShares &&

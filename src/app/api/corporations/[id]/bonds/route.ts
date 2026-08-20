@@ -42,6 +42,7 @@ import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFla
 import { isBondDefaultCreditPenaltyActive } from "@/lib/bonds/corporateBondDefault";
 import { logWireEvent, wireHeadlineBond } from "@/lib/wireEvent";
 import { shouldRedactCorporation } from "@/lib/corporations/redaction";
+import { isSittingCeoOfControllingParent } from "@/lib/corporations/reservedCorporateHoldings";
 import { BOND_MATURITY_LABELS } from "@/lib/db/types/bond";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getCountryConfig } from "@/lib/constants/countries";
@@ -197,12 +198,18 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Fog of war: private corps redact bond amounts to non-CEO viewers.
     // Existence (count, maturity, defaulted status) stays visible so the bond
     // market can still display them; amounts and credit diagnostics are hidden.
-    const redact = shouldRedactCorporation(
+    // Controlling parent CEO is an insider of a private subsidiary (same rule
+    // as GET /api/corporations/[id]): otherwise the overview tab receives a
+    // rating-only creditRating and crashes on effectiveCouponRate.toFixed.
+    let redact = shouldRedactCorporation(
       corporation,
       user?.userId,
       user?.isAdmin === true,
       modViewEnabled
     );
+    if (redact && user?.userId) {
+      redact = !(await isSittingCeoOfControllingParent(db, corporation, user.userId));
+    }
     if (redact) {
       return NextResponse.json({
         isPrivate: true,
