@@ -161,8 +161,14 @@ const POLICY_STACK_LABELS: { key: keyof PolicyStackInput; label: string }[] = [
  * itemized (the nationalization penalty, SOE efficiency). Folding it in is what
  * lets a player add the rows up and land on the line.
  *
+ * Pass `appliedPolicyPp` (`plantsPnl.policyPp`) so those unlisted terms land
+ * on an "Other factors" row instead of being folded into the scale factor.
+ * Without that row, a named stack whose net pp has the opposite sign of the
+ * booked credit makes `credit / sum(pp)` negative and inverts every dollar
+ * amount: a type-switch penalty renders as income (ticket 1148).
+ *
  * A `remainderPp` row carries whatever the itemized set does not name, so the
- * split is complete rather than quietly short.
+ * split is complete rather than quietly short. `appliedPolicyPp` supersedes it.
  *
  * Returns an empty list when there is no stack to explain: a zero credit, a
  * zero pp total (nothing to be proportional to), or a degenerate revenue.
@@ -176,10 +182,20 @@ export function buildPolicyStackRows(args: {
   /**
    * Percentage points inside the stack that the itemized set does not name
    * (the corporation page's "Other factors" remainder), commodity excluded.
+   * Ignored when `appliedPolicyPp` is set: that value is the source of the
+   * remainder, so callers cannot double-count it.
    */
   remainderPp?: number;
+  /**
+   * The engine-applied stack, `plantsPnl.policyPp`. When this is present the
+   * unnamed slice (soft cap, SOE efficiency, strike, dominance, ...) becomes an
+   * "Other factors" row so `sum(pp)` has the same sign as the credit. Without
+   * it, `credit / sum(named pp)` inverts every dollar amount whenever the
+   * itemized net and the booked credit disagree (ticket 1148).
+   */
+  appliedPolicyPp?: number;
 }): PolicyStackRow[] {
-  const { policyCreditAnchor, revenueAnchor, mods, remainderPp = 0 } = args;
+  const { policyCreditAnchor, revenueAnchor, mods, remainderPp = 0, appliedPolicyPp } = args;
   if (!finite(policyCreditAnchor) || policyCreditAnchor === 0) return [];
   if (!finite(revenueAnchor) || revenueAnchor <= 0) return [];
 
@@ -187,13 +203,53 @@ export function buildPolicyStackRows(args: {
     const v = mods[key];
     return { key: key as string, label, pp: finite(v) ? v : 0 };
   }).filter((r) => r.pp !== 0);
-  const rest = finite(remainderPp) && Math.abs(remainderPp) >= 0.05 ? remainderPp : 0;
+  const namedSum = named.reduce((s, r) => s + r.pp, 0);
+  const rest = remainderPpFor({ namedSum, remainderPp, appliedPolicyPp, policyCreditAnchor });
   const rows = rest !== 0 ? [...named, { key: "other", label: "Other factors", pp: rest }] : named;
 
   const sumPp = rows.reduce((s, r) => s + r.pp, 0);
   if (!(Math.abs(sumPp) > 1e-9)) return [];
+  // Ticket 1148: scaling by `credit / sumPp` is only honest when they share a
+  // sign. Opposite signs invert every named row (a -10pp penalty becomes a
+  // credit). Convert those stacks at the natural $/pp and park the leftover
+  // on Other factors so the parts still sum to the line.
+  if (Math.sign(sumPp) !== Math.sign(policyCreditAnchor)) {
+    const perPp = revenueAnchor / 100;
+    const withMoney = rows.map((r) => ({ ...r, anchor: r.pp * perPp }));
+    const leftover = policyCreditAnchor - withMoney.reduce((s, r) => s + r.anchor, 0);
+    if (Math.abs(leftover) < 1e-6) return withMoney;
+    const other = withMoney.find((r) => r.key === "other");
+    if (other) {
+      other.anchor += leftover;
+      other.pp = perPp !== 0 ? other.anchor / perPp : other.pp;
+      return withMoney;
+    }
+    return [
+      ...withMoney,
+      { key: "other", label: "Other factors", pp: leftover / perPp, anchor: leftover },
+    ];
+  }
   // Scale so the parts sum to the whole. See the docblock: the difference is
   // the soft cap plus the unlisted terms, not rounding slack.
   const perPp = policyCreditAnchor / sumPp;
   return rows.map((r) => ({ ...r, anchor: r.pp * perPp }));
+}
+
+function remainderPpFor(args: {
+  namedSum: number;
+  remainderPp: number;
+  appliedPolicyPp: number | undefined;
+  policyCreditAnchor: number;
+}): number {
+  const rest =
+    finite(args.appliedPolicyPp) && args.appliedPolicyPp !== 0
+      ? args.appliedPolicyPp - args.namedSum
+      : args.remainderPp;
+  if (!finite(rest) || rest === 0) return 0;
+  if (Math.abs(rest) >= 0.05) return rest;
+  // Keep a sub-threshold remainder when dropping it would invert every line.
+  const namedSign = Math.sign(args.namedSum);
+  const creditSign = Math.sign(args.policyCreditAnchor);
+  if (namedSign !== 0 && creditSign !== 0 && namedSign !== creditSign) return rest;
+  return 0;
 }
