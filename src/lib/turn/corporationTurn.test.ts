@@ -784,22 +784,22 @@ describe("processCorporationTurn", () => {
     expect(insertCalls.length).toBe(1);
     const doc = (insertCalls[0][0] as Array<Record<string, unknown>>)[0];
 
-    // Each sector: hourly profit = $100, no overhead → $100 net. Raw tax:
-    //   US: $100 × (20% + 6%) = $26;  JP: $100 × (23% + 1.5%) = $24.50.
-    // Stored: corporateTaxPaid = round(43 + 7.5) = 51;  federalTaxPaid = round(43) = 43;
-    // stateTaxPaid = round(7.5) = 8 (banker's nearest-even → 8).
-    // Effective margin is now soft-capped, so profitMargin:100 + the live modifier
-    // stack realizes just under 100% (per-sector, modifier-dependent) instead of a
-    // hard-clamped exactly-100. Pre-tax income lands at ~196 (was 200) and each
-    // jurisdiction taxes its own soft-capped share. Values are the deterministic
-    // engine output under the soft cap; rates (20/6, 23/1.5) are unchanged.
-    expect(doc.corporateTaxPaid).toBe(49);
-    expect(doc.federalTaxPaid).toBe(42);
+    // Two sectors (US, JP), profitMargin:100 with no overhead. Two engine effects
+    // shape the taxed base: (1) the effective margin is soft-capped, so each sector
+    // realizes just under 100% instead of a hard-clamped exactly-100; (2) captured
+    // revenue is scaled by market share, which is now measured over real market
+    // revenue rather than an unowned pool (PR #1145). Together these land pre-tax
+    // income at ~174, and each jurisdiction taxes its own share. Values are the
+    // deterministic engine output; rates (20/6, 23/1.5) are unchanged. Aggregate
+    // stateTaxPaid and the per-state breakdown are rounded independently, so they
+    // can differ by a unit (7 vs 5+1).
+    expect(doc.corporateTaxPaid).toBe(44);
+    expect(doc.federalTaxPaid).toBe(37);
     expect(doc.stateTaxPaid).toBe(7);
-    expect(doc.incomePreDividends).toBeCloseTo(196, 0);
-    expect((doc.taxPaidByCountry as Record<string, number>).US).toBe(20);
-    expect((doc.taxPaidByCountry as Record<string, number>).JP).toBe(22);
-    expect((doc.taxPaidByState as Record<string, number>).US_CA).toBe(6);
+    expect(doc.incomePreDividends).toBeCloseTo(174, 0);
+    expect((doc.taxPaidByCountry as Record<string, number>).US).toBe(18);
+    expect((doc.taxPaidByCountry as Record<string, number>).JP).toBe(19);
+    expect((doc.taxPaidByState as Record<string, number>).US_CA).toBe(5);
     expect((doc.taxPaidByState as Record<string, number>).KNS).toBe(1);
   });
 
