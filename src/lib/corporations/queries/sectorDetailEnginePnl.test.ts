@@ -267,4 +267,54 @@ describe("buildPolicyStackRows", () => {
       })
     ).toEqual([]);
   });
+
+  it("keeps a penalty in the red when named pp and the credit disagree (ticket 1148)", () => {
+    // Live shape from Aldi sector 6a8673995e0aa13b049488d4: the itemized
+    // modifiers net slightly negative, but the engine booked a positive
+    // policy credit (unlisted terms + the soft cap). Splitting
+    // credit/sum(named pp) inverts every dollar sign, so a type-switch
+    // penalty of -10pp rendered as +$535K.
+    const rows = buildPolicyStackRows({
+      policyCreditAnchor: 35_300,
+      revenueAnchor: 3_000_000,
+      appliedPolicyPp: 1.18,
+      mods: {
+        techMarginBonus: 3.3,
+        sectorTypeMatchModifier: 5.0,
+        typeSwitchModifier: -10.0,
+        strategyTransitionModifier: -4.6,
+        stateMetricsModifier: 7.9,
+        regionalConditionsModifier: -0.3,
+        unemploymentModifier: 0.8,
+        gridReliabilityModifier: -0.1,
+        corruptionModifier: 0.1,
+        crimeRateModifier: 0.3,
+        roadConditionModifier: 0.2,
+        costOfLivingModifier: -0.8,
+        inflationModifier: -0.7,
+        debtToGdpModifier: -1.7,
+      },
+    });
+    expect(rows.reduce((s, r) => s + r.anchor, 0)).toBeCloseTo(35_300, 6);
+    const typeSwitch = rows.find((r) => r.key === "typeSwitchModifier");
+    const tech = rows.find((r) => r.key === "techMarginBonus");
+    expect(typeSwitch).toBeDefined();
+    expect(tech).toBeDefined();
+    expect(typeSwitch!.pp).toBe(-10);
+    expect(typeSwitch!.anchor).toBeLessThan(0);
+    expect(tech!.pp).toBe(3.3);
+    expect(tech!.anchor).toBeGreaterThan(0);
+    expect(rows.find((r) => r.key === "other")?.pp).toBeCloseTo(1.78, 6);
+  });
+
+  it("still keeps signs honest when the caller omits appliedPolicyPp (ticket 1148)", () => {
+    const rows = buildPolicyStackRows({
+      policyCreditAnchor: 35_300,
+      revenueAnchor: 3_000_000,
+      mods: { typeSwitchModifier: -10, techMarginBonus: 3.3, subsidyModifier: 5 },
+    });
+    expect(rows.reduce((s, r) => s + r.anchor, 0)).toBeCloseTo(35_300, 6);
+    expect(rows.find((r) => r.key === "typeSwitchModifier")!.anchor).toBeLessThan(0);
+    expect(rows.find((r) => r.key === "techMarginBonus")!.anchor).toBeGreaterThan(0);
+  });
 });

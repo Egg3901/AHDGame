@@ -815,6 +815,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
               policyCreditAnchor: sectorAmountAnchor(enginePnl.policyCredit),
               revenueAnchor: sectorAmountAnchor(enginePnl.revenue),
               mods: { ...mods, techMarginBonus: techMarginBonusPp },
+              appliedPolicyPp: enginePnl.policyPp,
             })
           : [],
         regulatoryBurdenPp: mods.dominanceRegulatoryBurdenPp ?? 0,
