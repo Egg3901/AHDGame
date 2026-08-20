@@ -4,16 +4,10 @@ import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_FINANCIAL_LIMITS } from "@/lib/api/rateLimit";
-import type { Corporation, CorporateSector, State, UnownedSector, User } from "@/lib/db/types";
-import {
-  CORPORATION_TYPES,
-  CORPORATION_TYPE_LABELS,
-  SECTOR_MARKET_GDP_FRACTION,
-  SECTOR_TYPE_COUNT,
-} from "@/lib/constants/corporations";
+import type { Corporation, CorporateSector, State, User } from "@/lib/db/types";
+import { CORPORATION_TYPES, CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
-import { getGdpAnchorRate, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import {
   fxRateForCorpFromMap,
@@ -125,29 +119,9 @@ export async function GET(request: Request) {
 
     const scopedStateIds = new Set(scopedStates.map((s) => s._id));
 
-    // GDP-derived fallback per state, used only when that state has no persisted
-    // unowned sector doc for this sectorType. When present, the persisted pool is
-    // authoritative — it grows alongside corporate sectors so effectiveMarket stays
-    // ≥ ownedRevenue by construction, which keeps market-share percentages ≤ 100%.
-    // Matches the precedent in /api/country/.../economy and /api/corporations/.../sectors.
-    // Era-scoped GDP→₳ rate (refs #3778).
-    const worldPreset = await loadWorldPreset(db);
-    const gdpFallbackForState = (gdp: number, countryId: CountryId) =>
-      Math.round(
-        (gdp * getGdpAnchorRate(countryId, worldPreset) * SECTOR_MARKET_GDP_FRACTION) /
-          SECTOR_TYPE_COUNT
-      );
-
-    const [sectorsInScope, unownedInScope, fxByCurrency] = await Promise.all([
+    const [sectorsInScope, fxByCurrency] = await Promise.all([
       db
         .collection<CorporateSector>("corporateSectors")
-        .find({
-          sectorType,
-          stateId: { $in: [...scopedStateIds] },
-        })
-        .toArray(),
-      db
-        .collection<UnownedSector>("unownedSectors")
         .find({
           sectorType,
           stateId: { $in: [...scopedStateIds] },
@@ -209,25 +183,6 @@ export async function GET(request: Request) {
       );
     }
 
-    const unownedRevenueByState = new Map<string, number>();
-    for (const u of unownedInScope) {
-      unownedRevenueByState.set(u.stateId, u.revenue);
-    }
-
-    let totalMarket = 0;
-    let totalUnownedFromPools = 0;
-    for (const s of scopedStates) {
-      const ownedRev = ownedRevenueAnchorByState.get(s._id) ?? 0;
-      const persistedUnowned = unownedRevenueByState.get(s._id);
-      if (persistedUnowned !== undefined) {
-        totalMarket += Math.max(0, ownedRev + persistedUnowned);
-        totalUnownedFromPools += persistedUnowned;
-      } else {
-        // No persisted unowned pool for this state+sector; use the GDP-derived reference.
-        totalMarket += gdpFallbackForState(s.gdp, s.countryId);
-      }
-    }
-
     type Row = {
       corporationId: string;
       corporationName: string;
@@ -264,10 +219,10 @@ export async function GET(request: Request) {
       });
     }
 
-    // Use max(totalMarket, totalOwnedRevenue) as the denominator so individual
-    // percentages always sum to ≤ 100% even when corp revenues have grown past
-    // the GDP-derived market cap.
-    const effectiveMarket = Math.max(totalMarket, totalOwnedRevenue);
+    // Ticket #1145: market share = a corp's revenue over the TOTAL real revenue
+    // in scope. No unowned pool in the denominator, so shares sum to 100% and
+    // there is no "unowned" slice.
+    const effectiveMarket = totalOwnedRevenue;
     for (const company of companies) {
       company.marketSharePercent = roundMarketSharePercent(company.revenueAnchor, effectiveMarket);
     }
@@ -276,14 +231,9 @@ export async function GET(request: Request) {
       (a, b) => b.marketSharePercent - a.marketSharePercent || b.revenueAnchor - a.revenueAnchor
     );
 
-    // Prefer the sum of persisted unowned pools (authoritative) when any exist in scope.
-    // Fall back to the GDP-gap derivation when no pool is seeded — matches how the state
-    // economy API treats it.
-    const unownedRevenue =
-      unownedInScope.length > 0
-        ? Math.max(0, Math.round(totalUnownedFromPools))
-        : Math.max(0, totalMarket - totalOwnedRevenue);
-    const unownedPercent = roundMarketSharePercent(unownedRevenue, effectiveMarket);
+    const totalMarket = totalOwnedRevenue;
+    const unownedRevenue = 0;
+    const unownedPercent = 0;
 
     const totalItems = companies.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
