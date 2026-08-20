@@ -703,8 +703,14 @@ export function computeSectorMarketPosition(args: {
    */
   preset?: string;
 }) {
-  const { sector, sectorCountryId, corporation, siblingCorps, siblingsSectors, siblingFxByCurrency } =
-    args;
+  const {
+    sector,
+    sectorCountryId,
+    corporation,
+    siblingCorps,
+    siblingsSectors,
+    siblingFxByCurrency,
+  } = args;
   const siblingCorpMap = new Map(siblingCorps.map((c) => [c._id.toString(), c]));
 
   // Each sibling sector's `revenue` is denominated in its HOST-state currency
