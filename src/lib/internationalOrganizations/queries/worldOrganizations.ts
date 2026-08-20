@@ -107,7 +107,15 @@ export async function loadWorldOrganizationsView(db: Db) {
     })
     .toArray();
   for (const b of budgets) {
-    const pct = defenseSharePct(resolveDefenseLineFrom(b), b.gdp ?? 0);
+    const gdp = b.gdp ?? 0;
+    const pct = defenseSharePct(
+      resolveDefenseLineFrom({
+        spending: b.spending,
+        baselineSpendingByCategory: b.baselineSpendingByCategory,
+        gdp,
+      }),
+      gdp
+    );
     if (pct !== undefined) defensePctByCountry.set(b.countryId, pct);
   }
 
