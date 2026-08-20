@@ -13,6 +13,9 @@ import { campaignManagerContent } from "../content/campaignManager";
 import { primaryGeneralTacticsContent } from "../content/primaryGeneralTactics";
 import { snapElectionsContent } from "../content/snapElections";
 import { electionsPlayerGuideContent } from "../content/electionsPlayerGuide";
+import { liveElectionResultsContent } from "../content/liveElectionResults";
+import { contingentElectionContent } from "../content/contingentElection";
+import { executiveTermLimitsContent } from "../content/executiveTermLimits";
 
 export const electionsPages: readonly WikiSeedPage[] = [
   {
@@ -173,5 +176,38 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "advanced",
     contentType: "reference",
     estimatedReadTime: 6,
+  },
+  {
+    slug: "live-election-results",
+    title: "Live Election Results",
+    description:
+      "Election-night results page: the final-hour drip, deterministic reveal order, 5-point call margin, and how national seat/EV projections roll up.",
+    content: liveElectionResultsContent,
+    category: "elections",
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 5,
+  },
+  {
+    slug: "contingent-election",
+    title: "Contingent Election",
+    description:
+      "The US 12th Amendment fallback when no Electoral College majority forms: House elects President by state delegation, Senate elects VP, deadlock rules.",
+    content: contingentElectionContent,
+    category: "elections",
+    difficulty: "advanced",
+    contentType: "reference",
+    estimatedReadTime: 6,
+  },
+  {
+    slug: "executive-term-limits",
+    title: "Executive Term Limits",
+    description:
+      "Per-country term caps on the top executive office: which countries have one, how terms served are counted, and what running-mate restrictions apply.",
+    content: executiveTermLimitsContent,
+    category: "elections",
+    difficulty: "intermediate",
+    contentType: "reference",
+    estimatedReadTime: 4,
   },
 ];

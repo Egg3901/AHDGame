@@ -16,7 +16,14 @@ import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { crisisSeverity } from "@/lib/crises/severity";
 import { formatCrisisEffectTarget } from "@/lib/crises/effectLabels";
 import { SovereignDebtWatchPanel } from "@/components/world/SovereignDebtWatchPanel";
+import { CountryFlag } from "@/components/CountryFlag";
 import type { Conflict } from "@/app/world/conflicts/_coldwar/conflicts";
+
+// Crisis effect magnitudes are floats and land with binary-rounding tails
+// (0.15 * 3 = 0.44999999999999996). Show at most two decimals, no trailing zeros.
+function formatEffectValue(v: number): string {
+  return Number(v.toFixed(2)).toString();
+}
 
 const SEVERITY_BADGE: Record<"low" | "medium" | "high", string> = {
   high: "border-rose-500/30 bg-rose-500/10 text-rose-500 dark:text-rose-400",
@@ -79,7 +86,7 @@ function EffectPills({ effects }: { effects: Crisis["effects"] }) {
             </svg>
           )}
           {e.value > 0 ? "+" : ""}
-          {e.value} {formatCrisisEffectTarget(e)}
+          {formatEffectValue(e.value)} {formatCrisisEffectTarget(e)}
         </span>
       ))}
       {overflow > 0 && (
@@ -227,22 +234,52 @@ function EmptyScope({ scope }: { scope: ScopeTab }) {
   );
 }
 
+function RegionLinks({
+  countryId,
+  regionIds,
+  regionNames,
+}: {
+  countryId: string;
+  regionIds: string[];
+  regionNames: Record<string, string>;
+}) {
+  return (
+    <p className="text-xs text-muted pl-1">
+      Regions:{" "}
+      {regionIds.map((id, i) => (
+        <span key={id}>
+          {i > 0 && ", "}
+          <Link
+            href={`/country/${countryId}/region/${id}`}
+            className="text-foreground hover:text-primary transition-colors"
+          >
+            {regionNames[id] ?? id}
+          </Link>
+        </span>
+      ))}
+    </p>
+  );
+}
+
 function CountryGroup({
   countryId,
   crises,
   currentTurn,
   startingYear,
   showRegions,
+  regionNames,
 }: {
   countryId: string;
   crises: Crisis[];
   currentTurn: number;
   startingYear: number;
   showRegions?: boolean;
+  regionNames: Record<string, string>;
 }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
+        <CountryFlag country={countryId} size="md" />
         <h3 className="text-sm font-semibold text-foreground">
           {COUNTRY_NAMES[countryId] ?? countryId}
         </h3>
@@ -253,9 +290,11 @@ function CountryGroup({
           {crises.map((crisis) => (
             <div key={crisis._id.toString()} className="space-y-1">
               {crisis.regionIds.length > 0 && (
-                <p className="text-xs text-muted pl-1">
-                  Regions: <span className="text-foreground">{crisis.regionIds.join(", ")}</span>
-                </p>
+                <RegionLinks
+                  countryId={countryId}
+                  regionIds={crisis.regionIds}
+                  regionNames={regionNames}
+                />
               )}
               <CrisisCard crisis={crisis} currentTurn={currentTurn} startingYear={startingYear} />
             </div>
@@ -285,6 +324,7 @@ export default function CrisesPage() {
   const [conflicts, setConflicts] = useState<Conflict[]>([]);
   const [currentTurn, setCurrentTurn] = useState(0);
   const [startingYear, setStartingYear] = useState<number | undefined>(undefined);
+  const [regionNames, setRegionNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -310,6 +350,7 @@ export default function CrisesPage() {
       }
       const d = await r.json();
       setCrises(d.crises ?? []);
+      setRegionNames(d.regionNames ?? {});
       setCurrentTurn(d.currentTurn ?? 0);
       setStartingYear(d.startingYear);
     } catch {
@@ -544,6 +585,7 @@ export default function CrisesPage() {
                         currentTurn={currentTurn}
                         startingYear={startingYear ?? STARTING_YEAR}
                         showRegions={activeTab === "region"}
+                        regionNames={regionNames}
                       />
                     ))}
                 </div>
@@ -608,6 +650,7 @@ export default function CrisesPage() {
                               currentTurn={currentTurn}
                               startingYear={startingYear ?? STARTING_YEAR}
                               showRegions={activeTab === "region"}
+                              regionNames={regionNames}
                             />
                           ))}
                       </div>

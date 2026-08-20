@@ -77,6 +77,19 @@ function aggregateVoteShares(
     }
   }
 
+  // Every accumulator above is weighted by cell.share, so it is currently
+  // expressed as a fraction of the WHOLE electorate. Dividing by the subset's
+  // share re-expresses each one as a fraction of THIS subset, which is what a
+  // vote share means and what makes you + opponents + undecided sum to 100%.
+  // Without this the topline (share === 1, so a no-op) was being compared
+  // against segment figures scaled down by the segment's size, which is what
+  // made "your share vs. topline" unreadable (ticket-1121).
+  you /= share;
+  undecided /= share;
+  for (const entry of Object.values(opponentTotals)) {
+    entry.share /= share;
+  }
+
   const opponentEntries = Object.values(opponentTotals);
   const best = opponentEntries.reduce(
     (bestSoFar, o) => (o.share > bestSoFar.share ? o : bestSoFar),
@@ -444,6 +457,18 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
           onChange={setActiveDim}
         />
 
+        {/* A poll taken during the primary phase carries no modelled rivals, so
+            every bar splits between the player and undecided voters and "you"
+            sits near 95%. Say that in the open instead of letting the player
+            read it as a real projection (ticket-1121). */}
+        {topline.totalOpponents <= 0 ? (
+          <div className="rounded-lg border border-card-border bg-foreground/[0.02] px-3 py-2 text-xs text-muted">
+            No rival candidates are modelled in this race yet, so every share below splits between
+            you and undecided voters only. Rivals enter the model once your race reaches the general
+            election, and your share drops accordingly.
+          </div>
+        ) : null}
+
         {/* Marginal rows */}
         <div className="space-y-3">
           {marginalRows.map((row) => {
@@ -563,14 +588,27 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-muted">Your share vs. topline</div>
-                    <div
-                      className={`text-lg font-bold tabular-nums ${
-                        segmentAggregate.you - topline.you >= 0 ? "text-green-400" : "text-red-400"
-                      }`}
-                    >
-                      {segmentAggregate.you >= topline.you ? "+" : ""}
-                      {formatPct(segmentAggregate.you - topline.you)}
+                    <div className="text-xs text-muted">Your share of this segment</div>
+                    <div className="text-lg font-bold tabular-nums text-primary">
+                      {formatPct(segmentAggregate.you)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted">vs. your race-wide share</div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span
+                        className={`text-lg font-bold tabular-nums ${
+                          segmentAggregate.you - topline.you >= 0
+                            ? "text-green-400"
+                            : "text-red-400"
+                        }`}
+                      >
+                        {segmentAggregate.you >= topline.you ? "+" : ""}
+                        {formatPct(segmentAggregate.you - topline.you)}
+                      </span>
+                      <span className="text-xs text-muted tabular-nums">
+                        ({formatPct(topline.you)} race-wide)
+                      </span>
                     </div>
                   </div>
                   <div className="ml-auto text-right">
@@ -590,6 +628,31 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
                     segmentAggregate.totalOpponents
                   )}, undecided ${formatPct(segmentAggregate.undecided)}`}
                 />
+                {/* Spelled out in the open: the reporter should never have to
+                    hover the bar to read what it splits into (ticket-1121). */}
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary" />
+                    You{" "}
+                    <span className="text-foreground font-medium tabular-nums">
+                      {formatPct(segmentAggregate.you)}
+                    </span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500" />
+                    Opponents{" "}
+                    <span className="text-foreground font-medium tabular-nums">
+                      {formatPct(segmentAggregate.totalOpponents)}
+                    </span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-slate-500" />
+                    Undecided{" "}
+                    <span className="text-foreground font-medium tabular-nums">
+                      {formatPct(segmentAggregate.undecided)}
+                    </span>
+                  </span>
+                </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
                   <span>
                     Best opponent:{" "}

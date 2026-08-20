@@ -62,8 +62,9 @@ export async function applyDefenseAppropriation(
   // which is what actually stops two overlapping turn runs double-crediting.
   if (pot.accruedThroughTurn >= turn) return null;
 
-  // The force tier scales upkeep. Countries with no defence seat have no cabinet setting
-  // and fall back to "standard", which is what their force actually runs at.
+  // The force tier scales upkeep AND the readiness baseline the drift below walks toward.
+  // Countries with no defence seat have no cabinet setting and fall back to "standard",
+  // which is what their force actually runs at.
   const positionId = DEFENSE_POSITION_BY_COUNTRY[countryId as CountryId];
   const setting = positionId
     ? await getCabinetSettingsCollection(db).findOne({ _id: `${countryId}_${positionId}` })
@@ -91,6 +92,6 @@ export async function applyDefenseAppropriation(
   // Only drift on the run that actually booked the turn. If the guarded write lost to a
   // concurrent turn pass, that pass has already drifted these units and doing it twice would
   // move readiness two steps in one turn.
-  if (settled) await applyReadinessDrift(db, units, settlement.arrearsRatio);
+  if (settled) await applyReadinessDrift(db, units, settlement.arrearsRatio, tier);
   return settlement;
 }

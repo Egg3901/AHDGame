@@ -306,20 +306,30 @@ export const US_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
           id: "reduced",
           label: "Reduced",
           description:
-            "Scaled-back military operations — lower force upkeep and readiness across the order of battle.",
-          effects: {},
+            "Scaled-back military operations. Lower force upkeep and readiness across the order of battle: the saving shows in the budget, the loss shows in public confidence.",
+          effects: {
+            "governance.budgetBalance": 0.02,
+            "publicSafety.publicSafetyConfidence": -0.02,
+            "governance.publicTrust": -0.01,
+          },
         },
         {
           id: "standard",
           label: "Standard",
-          description: "Normal operational readiness across the force.",
+          description:
+            "Normal operational readiness across the force. No additional metric effects.",
           effects: {},
         },
         {
           id: "elevated",
           label: "Elevated",
-          description: "Heightened military readiness — higher force readiness, at greater upkeep.",
-          effects: {},
+          description:
+            "Heightened military readiness. Raises the readiness every formation trains toward, at greater upkeep and with a standing army's cost to social cohesion at home.",
+          effects: {
+            "publicSafety.publicSafetyConfidence": 0.02,
+            "governance.budgetBalance": -0.02,
+            "social.socialCohesion": -0.01,
+          },
         },
       ],
     },
