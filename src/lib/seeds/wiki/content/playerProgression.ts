@@ -40,7 +40,7 @@ elections
 
 ## Phase 4: first general
 
-Same race page, now with a live tally. Final ~4 turns are ~25% of the pool.
+Same race page, now with a live tally. Final ~4 turns are ~30% of the pool.
 
 1. Keep PI up with Campaign every day.
 2. Ads to hold Favorability 65 to 70 (above 75 wastes money).
@@ -64,7 +64,7 @@ Bonuses (on top of 4 base AP):
 | --- | --- | --- |
 | House / State Sen / MP / MdB / Sangiin | +1 | House ₳5k / State Sen ₳3k |
 | Senate / VP | +2 | Senate ₳15k / VP ₳25k |
-| Governor | +3 | ₳15k |
+| Governor | +2 | ₳15k |
 | President / PM / Chancellor | +4 | President ₳50k |
 | Central Bank Chair | +3 (stacks) | (see country hub) |
 

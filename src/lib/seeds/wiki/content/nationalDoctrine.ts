@@ -14,7 +14,7 @@ Read this before anything else on the page.
 - The tree has **128 nodes**, costing **1 to 5 points each**.
 - **You gain 1 additional doctrine point at the start of each game year.** Fighting, research, and legislation do not grant more.
 
-Adopting the whole tree would cost **369 points**. A long campaign adds a handful of extra points — enough to specialise as later decades unlock, not enough to clear the tree.
+Adopting the whole tree would cost **369 points**. A long campaign adds a handful of extra points, enough to specialise as later decades unlock, not enough to clear the tree.
 
 So a nation still adopts only a small number of additional doctrines on top of what it starts with. This is not a tree you clear: it is a small number of permanent, irreversible commitments about the kind of military power your country intends to be.
 

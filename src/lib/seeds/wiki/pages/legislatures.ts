@@ -3,6 +3,7 @@ import { billsLegislationContent } from "../content/billsLegislation";
 import { votingAndWhipsContent } from "../content/votingAndWhips";
 import { policyEffectsContent } from "../content/policyEffects";
 import { congressLeadershipContent } from "../content/congressLeadership";
+import { chamberLeadershipContent } from "../content/chamberLeadership";
 import { cabinetContent } from "../content/cabinet";
 import { cabinetProjectsContent } from "../content/cabinetProjects";
 import { cabinetGuideContent } from "../content/cabinetGuide";
@@ -62,6 +63,17 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     contentType: "guide",
     estimatedReadTime: 7,
     lastUpdated: "2026-08-11",
+  },
+  {
+    slug: "chamber-leadership",
+    title: "Chamber Leadership",
+    description:
+      "How presiding-officer elections work across countries: US Speaker, German Bundestagspräsident, Nigerian National Assembly officers, and China's CPPCC/NPCSC chairs, plus the any-seated vs largest-party eligibility split.",
+    content: chamberLeadershipContent,
+    category: "legislatures",
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 7,
   },
   {
     slug: "cabinet",

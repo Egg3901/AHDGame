@@ -10,6 +10,7 @@ import { fightingABattleContent } from "../content/fightingABattle";
 import { occupationVictoryContent } from "../content/occupationVictory";
 import { peaceAndTrucesContent } from "../content/peaceAndTruces";
 import { warWalkthroughContent } from "../content/warWalkthrough";
+import { defenceProcurementContent } from "../content/defenceProcurement";
 
 /**
  * Conflicts & Military.
@@ -174,5 +175,17 @@ export const militaryPages: readonly WikiSeedPage[] = [
     contentType: "guide",
     estimatedReadTime: 12,
     lastUpdated: "2026-08-14",
+  },
+  {
+    slug: "defence-procurement",
+    title: "Defence Procurement",
+    description:
+      "How defence contracts turn the appropriation into materiel: quarterly contracting windows, the one-third supplier cap, the self-dealing disclosure and penalty, and the per-turn spend cap that throttles delivery.",
+    content: defenceProcurementContent,
+    category: "military",
+    extraTags: ["procurement", "contracts", "budget", "corruption"],
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 8,
   },
 ];

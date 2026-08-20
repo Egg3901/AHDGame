@@ -17,27 +17,23 @@ The IMF bailout is one of three resolution paths available to the executive duri
 While the bailout is active, the IMF captures a share of the country's per-turn income as loan payment:
 
 \`\`\`
-imfPayment = perTurnIncome × 0.35     // 35% of per-turn income
-// capped at 45% of per-turn income
+imfPayment = perTurnIncome × 0.20     // 20% of per-turn income by default
+// capped at 30% of per-turn income
 \`\`
 
 | Parameter | Value |
 | --- | --- |
-| Income capture rate | 35% of per-turn income |
-| Capture cap | 45% of per-turn income |
+| Income capture rate | 20% of per-turn income (default) |
+| Capture cap | 30% of per-turn income |
 | Duration | Until the IMF facility is repaid |
 
-The cap means even if amortization math would demand more than 35%, the IMF cannot take more than 45% of any single turn's income: the country keeps at least 55% to function.
+The cap means even if amortization math would demand more than 20%, the IMF cannot take more than 30% of any single turn's income: the country keeps at least 70% to function.
 
-## Share price multiplier
+## Corporate margin penalty
 
-All corporations headquartered in the bailed-out country trade at a discount while the facility is active:
+Corporations headquartered in the country carry a sector-margin penalty while any sovereign default resolution path is in its penalty window, not a share-price multiplier. The bailout path's penalty is smaller than the other two paths: repudiate -18% (financial-sector multiplier), restructure -9%, bailout -4.5%, all before per-sector multipliers and decay over the following turns.
 
-\`\`\`
-sharePriceMultiplier = 0.85     // 15% discount applied to share valuations
-\`\`
-
-This reflects investor unease about IMF oversight and the drag on national economic autonomy. The discount lifts automatically once the IMF facility is fully repaid.
+There is a separate, unrelated 0.85x (-15%) share-price discount in the game, but it applies only to an individual corporation placed under its own admin-driven corporate IMF restructuring (a per-corporation flag), not to every corporation in a country whose government is in a sovereign bailout.
 
 ## Loan amortization
 
@@ -65,10 +61,9 @@ Board members have influence over bailout terms and approvals: having a friendly
 
 ## Strategic considerations
 
-- **Cheapest up front, costliest over time:** The −2% GDP hit is attractive, but 35% income capture plus a 15% share discount can cost more than a one-time restructuring if the facility runs for many turns.
+- **Cheapest up front, costliest over time:** The −2% GDP hit is attractive, but 20-30% income capture plus the ongoing corporate margin penalty can cost more than a one-time restructuring if the facility runs for many turns.
 - **Repay early if possible:** Because conditions persist until the balance hits zero, running a primary surplus to accelerate principal repayment ends the drag sooner.
 - **Board politics:** Elections and appointments that change the IMF board composition can shift bailout terms mid-stream.
-- **No new corporate debt:** Corporations under an active IMF sovereign bailout cannot issue new bonds (see [Corporate Bonds](/wiki/corporate-bonds)).
 
 See also: [Sovereign Default](/wiki/sovereign-default), [Sovereign Bonds](/wiki/sovereign-bonds), [National Budget](/wiki/national-budget), [Central Banks](/wiki/central-banks)
 `;

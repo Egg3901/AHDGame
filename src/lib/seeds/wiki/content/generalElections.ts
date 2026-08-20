@@ -12,20 +12,23 @@ Per-turn allocation of the pool:
 
 | Turn phase | Share of pool | Per-turn weight |
 | --- | --- | --- |
-| Early turns (all non-final) | 75% | \`0.75 × pool / (totalTurns − 4)\` |
-| Final 4 turns | 25% | \`0.25 × pool / 4\` |
+| Early turns | 50% | Spread evenly across the early band |
+| Ramp (8 turns before election day) | 20% | Spread evenly across the ramp band |
+| Election day (final 4 turns) | 30% | \`0.3 × pool / 4\` |
 
-For a US House or Senate race (96 total turns with a 48-hour primary, so 48 general turns), the final 4 turns each hold ~12× the weight of an early turn.
+The final 4 turns are a sharp closing spike: they carry 30% of the pool on their own, well above their share of the turn count, and each one is heavier than any ramp or early turn.
 
 **Implication:** your stats at the moment of each turn's vote snapshot matter. A dip in Favorability or a stale Political Influence on the last day can cost you the race even if you dominated the first three-quarters.
 
 ## The total appeal pipeline
 
+General elections run on the **swing-flow model** by default, not the flat group-level split used in primaries and polls. Swing-flow starts from the same per-group appeal pipeline below, then layers presidential/gubernatorial **coattails**, a **median-voter** policy-distance reference, **persuasion drivers** (candidate support, policy distance, money, incumbency), and **party-tenure fatigue** on top, see [Formula Deep-Dive](/wiki/formula-deep-dive) for the driver math. The base pipeline:
+
 Each turn, for each candidate, for each demographic group:
 
 1. **Reach**: a sqrt curve on influence, capped at 1.0 once influence reaches 100. State races use Political Influence (already clamped to 100), presidential generals use National Political Influence (also saturates at 1.0, no celebrity bonus above 100).
-2. **Appeal**: a quadratic position score (how close the candidate's positions are to the group's), plus a small floor, plus a directional bonus for candidates seen as tribally "us," plus a reach-based bonus. Per-group calculation using the group's lean. Max ~55 (position ~25 + floor 0.5 + direction up to 30 + reach ~12.5 at influence=100).
-3. **Approval scalar**: \`favorability / 100\`. 0% approval = 0 votes. A candidate with Favorability 30 gets only 30% of what their appeal+reach would otherwise earn.
+2. **Appeal**: a power-curve position score (exponent 1.5, how close the candidate's positions are to the group's), plus a small floor, plus a directional bonus for candidates seen as tribally "us," plus, for presidential races only, an influence term (state races keep influence out of appeal, reach-only). Per-group calculation using the group's lean. Position alone maxes at ~25.5, direction bonus up to 10 (5 per axis), influence term up to 12.5 at influence=100 (presidential only).
+3. **Approval scalar**: \`(favorability / 100) ^ 0.8\`. 0% approval = 0 votes. The exponent softens the curve compared to a straight percentage, so mid-favorability candidates lose less than a linear scalar would suggest.
 4. **Party Org as normalized state share**: each party's organization score divided by the state's total organization. Range \`[0, 1]\`. A party with 60 Org in a state where the total is 100 gets a 0.6 multiplier on its weight; a party not present in the state gets 0 (no votes from that party's candidates). When the state has no Org data at all (test fixtures, unbootstrapped seeds) every candidate falls back to a neutral \`1×\` so the game doesn't zero the whole field.
 5. **Reg resistance**: \`1 + 0.3 × (Reg / 100)\`. Range \`1.0×-1.3×\`. Higher own-Reg makes the party harder to peel away through persuasion. Independents and parties without a registration entry get neutral 1.0×. Reg data is bootstrap-deferred to a later phase, so most rows currently degrade to neutral.
 6. **Support mood**: \`0.6 + 0.8 × (support / 100)\`. Range \`0.6×-1.4×\` with neutral 1.0× at support=50. Captures short-term candidate mood / momentum (debate performance, scandals, endorsements). New candidates without a stored support value default to 1.0×.
@@ -59,8 +62,8 @@ If a state has passed legislation switching to **Ranked Choice Voting**, the FPT
 US House, US State Senate, UK Commons regions, DE Bundestag constituencies, and JP Shūgiin use proportional allocation:
 
 - **Largest-remainder method** converts vote shares to seat shares.
-- **Minimum threshold:** 20% of votes needed for any seats.
-- **2-seat special case:** winner takes both unless the runner-up reaches 20%.
+- **Minimum threshold:** 20% of votes for US House and UK Commons; **10%** for US State Senate and Regional Council races, which run in larger districts where more parties split the vote.
+- **2-seat special case (House):** winner takes both unless the runner-up reaches the threshold.
 - **Seats estimate** updates each turn as votes accumulate.
 
 If you're running for a 4-seat region and your party projects to 42% of the vote, you expect ~2 seats. If you're projected at 17% and another party is at 25%, you likely get 0 and they get all.
@@ -73,7 +76,6 @@ Establish a base:
 
 - Campaign **heavily in-state** to push Political Influence above 60 and hold it.
 - Ads to lift Favorability to 65-70. Above 70 diminishing returns bite.
-- Request NPP endorsements early: they compound for the rest of the general.
 - Set up campaign upgrades (Ground Game, Media Spending, Opposition Research); see [Campaign Strategy](/wiki/campaign-strategy) and [Campaign Manager](/wiki/campaign-manager).
 
 ### Middle (middle 50%)
@@ -84,7 +86,7 @@ Consolidate:
 - Sustain Favorability via periodic ads.
 - Commission a Full Demographic Poll (₳75k, 6 actions) to identify weak groups.
 - Target weak groups with ads and canvassing.
-- Watch opponent damage: if your Favorability drops 5+ points in a span, they're running Opposition Research or attacking. Counter with more ads or request NPP opposition against them.
+- Watch opponent damage: if your Favorability drops 5+ points in a span, they're running Opposition Research or attacking. Counter with more ads or your own attacks.
 
 ### Final sprint (last 4 turns)
 
@@ -128,7 +130,7 @@ After the primary, each presidential nominee selects a running mate (VP):
 
 - Must be a valid character; cannot be the current President, cannot be the nominee themselves.
 - If confirmed, the VP takes office alongside the President on win.
-- **VP has +2 actions/turn and ₳25k/turn fund bonus; tie-breaks Senate votes.**
+- **VP has +2 actions/turn and ₳25k/turn fund bonus.**
 
 You can change your running mate any time before the election resolves, and clear it entirely if you want to run without one.
 

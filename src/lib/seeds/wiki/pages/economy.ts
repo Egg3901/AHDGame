@@ -27,6 +27,11 @@ import { lineOfCreditContent } from "../content/lineOfCredit";
 import { savingsInterestContent } from "../content/savingsInterest";
 import { sovereignDefaultContent } from "../content/sovereignDefault";
 import { imfContent } from "../content/imf";
+import { corporateMergersContent } from "../content/corporateMergers";
+import { subsidiaryCorporationsContent } from "../content/subsidiaryCorporations";
+import { pensionsContent } from "../content/pensions";
+import { imfSovereignFacilityContent } from "../content/imfSovereignFacility";
+import { interbankLendingContent } from "../content/interbankLending";
 export const economyPages: readonly WikiSeedPage[] = [
   {
     slug: "corporations",
@@ -396,5 +401,60 @@ export const economyPages: readonly WikiSeedPage[] = [
     contentType: "guide",
     estimatedReadTime: 6,
     lastUpdated: "2026-08-11",
+  },
+  {
+    slug: "corporate-mergers",
+    title: "Corporate Mergers & Acquisitions",
+    description:
+      "Proposing and accepting whole-corporation acquisitions: reference valuation, shareholder buyout, and the merger review gate that can block or condition a deal.",
+    content: corporateMergersContent,
+    category: "economy",
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 7,
+  },
+  {
+    slug: "subsidiary-corporations",
+    title: "Subsidiary Corporations",
+    description:
+      "Formalizing voting control over another player's corporation: capital injection, dividend floors, CEO appointment, spin-offs, and group tax relief.",
+    content: subsidiaryCorporationsContent,
+    category: "economy",
+    difficulty: "advanced",
+    contentType: "guide",
+    estimatedReadTime: 8,
+  },
+  {
+    slug: "pensions",
+    title: "Pensions",
+    description:
+      "Union-bargained occupational pensions: employer contributions, deficit top-ups, benefit payments, and how a scheme's funding health is measured.",
+    content: pensionsContent,
+    category: "economy",
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 6,
+  },
+  {
+    slug: "imf-sovereign-facility",
+    title: "IMF Sovereign Facility",
+    description:
+      "The country-level IMF bailout after a sovereign default crisis: loan sizing, income-capture repayment, and the IMF board's override window.",
+    content: imfSovereignFacilityContent,
+    category: "economy",
+    difficulty: "advanced",
+    contentType: "guide",
+    estimatedReadTime: 6,
+  },
+  {
+    slug: "interbank-lending",
+    title: "Interbank Lending",
+    description:
+      "Bank-to-bank lending, the central bank margin line, and what happens to a failed bank's outstanding loan book.",
+    content: interbankLendingContent,
+    category: "economy",
+    difficulty: "advanced",
+    contentType: "guide",
+    estimatedReadTime: 6,
   },
 ];

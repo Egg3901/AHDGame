@@ -45,16 +45,17 @@ Used for: US President only.
 
 | Component | Range | Formula |
 |---|---|---|
-| Policy alignment (party only) | 0 to 40 | \`max(0, 40 − (|econDiff_party| + |socialDiff_party|) × 2.0)\` |
-| Party Organization (home state) | 0 to 25 | \`(min(100, max(0, partyOrganization)) / 100) × 25\` |
-| National Political Influence | 0 to 25 | \`normalizeNationalReachPresidentialPrimary(NPI) × 25\` (*) |
-| Favorability | 0 to 10 | \`(favorability / 100) × 10\` |
+| Alignment (party only) | 0 to 40 | \`max(0, 40 − (|econDiff_party| + |socialDiff_party|) × 2.0)\` |
+| Party Influence | 0 to 20 | \`normalizePartyInfluencePresidentialPrimary(partyInfluence) × 20\` (reference scale: partyInfluence 150) |
+| National Reach | 0 to 15 | \`normalizeNationalReachPresidentialPrimary(NPI) × 15\` (*) |
+| Favorability | 0 to 25 | \`(favorability / 100) × 25\` |
 
 Same infamy penalty applies on the final score. Key differences from the state formula:
 - **No state-position alignment**: presidential primaries are national, only the party platform matters.
-- **Favorability is only worth 10 points** (vs 35 in state races).
-- **Party org is a major factor**: maxes out at 25 pts when home-state org = 100.
-- **NPI normalization curve is different**: uses a diminishing-returns curve \`1 − exp(−NPI/45)\` (\`normalizeNationalReachPresidentialPrimary\`), not the sqrt curve that state PI uses. The diminishing shape keeps Support, Favorability, and Org meaningful against a moderate NPI gap.
+- **Alignment stays dominant at 40 pts**, so parties still favor candidates who agree with them.
+- **Favorability is worth 25 points**, high enough to matter but never enough on its own to outweigh alignment.
+- **Party influence and national reach split the rest** (20 and 15 pts), with party influence still outranking raw reach.
+- **NPI normalization curve is different**: uses a diminishing-returns curve \`1 − exp(−NPI/45)\` (\`normalizeNationalReachPresidentialPrimary\`), not the sqrt curve that state PI uses. The diminishing shape keeps favorability and reach meaningful against a moderate NPI gap.
 
 ---
 
@@ -87,59 +88,11 @@ newModifier      = clamp(currentModifier + adjustedBoost, −20, +20)
 
 ---
 
-## Campaign upgrade costs and effects
+## Campaign ops trees
 
-### Fundraising (10 levels, no maintenance)
+Fundraising, Ground Game, Media Spending, and Opposition Research are each a **branch tree** on the campaign page (\`/campaign/[id]\`), not a flat level ladder. Each tree unlocks a starter node, then up to three further branches (for example Media Spending's Broadcast and Television branches, Opposition Research's Dossier, Scandal Leak, and Counter-Intel). Branch magnitudes stack with the starter and with each other. Maintenance is deducted from campaign funds each turn; branches that can't be covered auto-downgrade rather than collapsing the whole tree, with no refund.
 
-| Level | Upgrade cost | Actions | Income/turn |
-|---|---|---|---|
-| 0 (base) | n/a | n/a | ₳20,000 |
-| 1 | ₳50,000 | 10 | ₳35,000 |
-| 2 | ₳120,000 | 15 | ₳60,000 |
-| 3 | ₳250,000 | 20 | ₳100,000 |
-| 4 | ₳500,000 | 25 | ₳150,000 |
-| 5 | ₳900,000 | 30 | ₳200,000 |
-| 6 | ₳1,500,000 | 40 | ₳350,000 |
-| 7 | ₳2,500,000 | 50 | ₳600,000 |
-| 8 | ₳4,000,000 | 60 | ₳1,000,000 |
-| 9 | ₳6,500,000 | 75 | ₳2,500,000 |
-| 10 | ₳10,000,000 | 90 | ₳5,000,000 |
-
-### Ground game (5 levels, ongoing maintenance)
-
-Passive effect applies to presidential general elections only. Maintenance is cumulative across all purchased levels.
-
-| Level | Upgrade cost | Actions | Effect | Maintenance/turn |
-|---|---|---|---|---|
-| 1 | ₳55,000 | 10 | +3% swing states | ₳5,500 |
-| 2 | ₳110,000 | 15 | +6% swing states | ₳16,500 |
-| 3 | ₳220,000 | 20 | +9% swing states | ₳38,500 |
-| 4 | ₳440,000 | 25 | +12% swing states | ₳82,500 |
-| 5 | ₳880,000 | 30 | +15% swing states | ₳170,500 |
-
-### Media spending (5 levels, ongoing maintenance)
-
-Passive effect: +0.5% favorability per level per turn (presidential races only). Doubles during final 4 turns (season multiplier 2×).
-
-| Level | Upgrade cost | Actions | Effect | Maintenance/turn |
-|---|---|---|---|---|
-| 1 | ₳60,000 | 12 | +0.5%/turn favorability | ₳6,000 |
-| 2 | ₳120,000 | 16 | +1.0%/turn favorability | ₳18,000 |
-| 3 | ₳240,000 | 20 | +1.5%/turn favorability | ₳42,000 |
-| 4 | ₳480,000 | 24 | +2.0%/turn favorability | ₳90,000 |
-| 5 | ₳960,000 | 28 | +2.5%/turn favorability | ₳186,000 |
-
-### Opposition research (5 levels, no maintenance)
-
-Passive effect: Debuffs target candidate favorability by level × 0.5% per turn. Presidential races only.
-
-| Level | Upgrade cost | Actions | Effect |
-|---|---|---|---|
-| 1 | ₳40,000 | 8 | −0.5%/turn to target |
-| 2 | ₳80,000 | 12 | −1.0%/turn to target |
-| 3 | ₳160,000 | 16 | −1.5%/turn to target |
-| 4 | ₳320,000 | 20 | −2.0%/turn to target |
-| 5 | ₳640,000 | 24 | −2.5%/turn to target |
+Full per-tree cost and effect tables, current to the live constants: [Campaign Strategy](/wiki/campaign-strategy) and [Campaign Manager](/wiki/campaign-manager).
 
 **Campaign season multiplier:** All campaign passive effects (Media Spending, Opposition Research, Travel Presence, Primary Campaign bonus) double during the **final 4 turns** of an election.
 

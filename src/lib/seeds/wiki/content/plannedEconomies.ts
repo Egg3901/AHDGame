@@ -78,7 +78,7 @@ The single most important change: **marketization is no longer scripted.** The e
 | SOE performance | The state enterprises are chronically missing their plan |
 | Policy stance | The elected government and the Gosbank lean reformist (market-leaning ruling party, disciplined credit, hard budgets) |
 
-There is **no era gravity**. History can break. A well-run orthodox USSR can stay red long past 1991. A badly mismanaged one reforms toward the market and, eventually, out of communism. A hardline government with a disciplined plan can hold command indefinitely; a reformist government that lets the enterprises fail will marketize.
+There **is a weak era gravity**: a small restoring pull toward the historical schedule for that turn, on top of the three free drivers above. It is deliberately capped below what the free drivers can sustain, so it nudges rather than dictates. History can still break: a well-run orthodox USSR can stay red long past 1991, and a badly mismanaged one reforms toward the market and, eventually, out of communism. A hardline government with a disciplined plan can hold command indefinitely against gravity; a reformist government that lets the enterprises fail will marketize faster than the schedule alone would predict.
 
 **Government reformism is live.** The ruling party's economic position feeds the policy driver directly. Win an election with a market-leaning party, or shift the ruling party's economic stance through gameplay, and marketization responds. This works whether the government is player-led or run by the state brain.
 

@@ -64,7 +64,7 @@ The national score is rounded to one decimal place and clamped to 0-100.
 
 After the base metric score is computed, the system checks for **named conditions** (styled after Democracy 3) that add or subtract small bonuses when their thresholds are met. These stack: multiple active conditions sum their effects.
 
-There are **55** defined modifiers, each with 1-3 metric conditions that must all be met. Examples:
+There are **82** defined modifiers, each with 1-3 metric conditions that must all be met. Examples:
 
 | Modifier | Effect | Conditions |
 | --- | --- | --- |
@@ -89,9 +89,13 @@ There are **55** defined modifiers, each with 1-3 metric conditions that must al
 | Population Decline | -1 | Population growth <= 0 AND migration <= 0 |
 | High Immigration Pressure | -1 | Migration rate >= 0.4% |
 
-The full set of 55 modifiers covers economic, healthcare, safety, environmental, governance, social, infrastructure, media, and demographic conditions. Effects range from -3 (severe crises) to +2 (exceptional performance), with most modifiers at +/-1.
+The full set of 82 modifiers covers economic, healthcare, safety, environmental, governance, social, infrastructure, media, and demographic conditions. Effects range from -3 (severe crises) to +2 (exceptional performance), with most modifiers at +/-1.
 
 Modifiers are evaluated against the same flat metrics map used for the base score, so they work on both individual states and pre-computed national averages.
+
+### Per-turn damping
+
+Approval doesn't jump straight to its freshly-computed target each turn. Each state's stored rating is stepped toward the target by **at most 2 points per turn**, so even a modifier swing that would otherwise move approval by double digits plays out gradually over several turns rather than landing all at once.
 
 ### Cabinet penalties
 

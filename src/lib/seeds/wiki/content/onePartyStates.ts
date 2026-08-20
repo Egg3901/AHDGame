@@ -1,6 +1,6 @@
 export const onePartyStatesContent = `# One-Party States
 
-Some countries in A House Divided are **one-party states**: regimes where a single party (the *ruling party*) controls government formation, executive offices, and legislative direction, while other parties may exist in tolerated or banned forms. China (CN) is the first country modelled this way; the system is generic and any country configured as a one-party state follows the same rules.
+Twelve countries in A House Divided run as **one-party states**: CN, RU, DD, PL, CS, HU, RO, BG, YU, UKR, BLR, and BAL. In each, a single party (the *ruling party*) controls government formation, executive offices, and legislative direction, while other parties may exist in tolerated or banned forms. China (CN) was the first country modelled this way; the system is generic and every listed country follows the same rules, with a small amount of country-specific flavor (chamber names, bespoke executive-hub copy) layered on top.
 
 ## The three party tiers
 
@@ -8,7 +8,7 @@ Each party in a one-party state carries a **regime status** that determines what
 
 | Tier | Color | Who | What they can do |
 | --- | --- | --- | --- |
-| **Ruling** | Green | The single party in government (CN: CCP) | Everything: forms government, fields executive candidates, proposes/votes on bills, invites coalitions, accepts donations, holds cabinet |
+| **Ruling** | Green | The single party in government (CN: CCP; RU: CPSU; DD: SED) | Everything: forms government, fields executive candidates, proposes/votes on bills, invites coalitions, accepts donations, holds cabinet |
 | **Approved** | Yellow | Tolerated minor parties (CN: CDL, CNDCA) | Hold seats, run candidates for legislative offices, propose/vote on bills, accept donations, sit on cabinet, but **cannot form government** or **field executive candidates** |
 | **Banned** | Red | Outlawed parties (CN: none seeded; player-created NPPs land here) | **Nothing.** Cannot field candidates, propose or vote on bills, accept donations, or hold cabinet. Existing seats are vacated immediately when status flips to banned. |
 
@@ -24,6 +24,18 @@ Compared to a parliamentary democracy, several mechanics work differently:
 - **Snap elections**: not available by default for one-party states.
 - **Cabinet**: members of banned parties cannot be appointed.
 - **Executive offices** (Premier in CN): only the ruling party may field a candidate.
+
+## Legislature structure
+
+Most one-party legislatures are unicameral: a bill passes the single chamber by cast-votes majority and enacts with no assent delay. RU is the exception, its Supreme Soviet is bicameral, so a bill must clear both chambers and a second-chamber rejection kills it outright, since a one-party state has no override chamber. The union republics (UKR, BLR, BAL) are unicameral: their Presidium is a standing organ of the same chamber, not a second house.
+
+## Purges
+
+The ruling leader can order a purge against the party: minor, regional, senior, faction, or extreme severity, each costing more internal confidence than the last. Purges are simulation events (a logged history row), not data deletions. Anti-corruption purges are read by the popular-legitimacy driver as a public benefit rather than repression, unlike the other purge kinds.
+
+## Command economy
+
+Where the command-economy option is turned on for a world, the same one-party countries also run a planned economy: administered consumer prices instead of supply-and-demand pricing, a wage-fund ceiling that throttles cash growth, and a monetary overhang that feeds back into popular legitimacy and party confidence. This is off by default; worlds without it are unaffected. Three player-facing seats operate the levers where it's on (Gosplan/Gosbank-equivalent roles for RU/DD, Vice Premier/PBoC Governor for CN), plus SOE director appointments.
 
 ## Player parties (NPPs)
 
@@ -80,9 +92,12 @@ If the leader doesn't avert collapse, the Stage 4 decision triggers a forced con
 
 ## Currently supported one-party countries
 
-- **China (CN)**: Chinese Communist Party (ruling), China Democratic League and China National Democratic Construction Association (approved), no parties banned by default. Premier is the head of government, elected by NPC delegates. Collapse target: multi-party parliamentary republic.
+- **China (CN)**: Chinese Communist Party (ruling), China Democratic League and China National Democratic Construction Association (approved), no parties banned by default. Premier is the head of government, elected by NPC delegates. Head of state (President) auto-syncs to the party chair. Collapse target: multi-party parliamentary republic.
+- **Soviet Union (RU)**: Communist Party of the Soviet Union (ruling). Premier heads government; a Chairman of the Presidium is elected by a joint sitting of the bicameral Supreme Soviet.
+- **East Germany (DD)**: Socialist Unity Party (ruling). General Secretary heads government; a Chairman of the Council of State syncs to the SED chair.
+- **PL, CS, HU, RO, BG, YU, UKR, BLR, BAL**: the remaining Eastern Bloc one-party states, largely NPP-governed, using the same generic escalation chain and executive-hub surface derived from each country's configuration.
 
-The system is generic. Any country configured as a one-party state inherits the same escalation chain, liberalization reforms, convention pathway, and decision-event handlers.
+The system is generic. Any country configured as a one-party state inherits the same escalation chain, liberalization reforms, convention pathway, and decision-event handlers. Only CN and RU support a faction-split defection in the current build (they have a configured breakaway-party name); other countries no-op that step if triggered.
 
 ## See also
 

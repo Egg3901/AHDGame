@@ -14,8 +14,9 @@ Planned economies work differently: a fully command country's official rate is f
 | Germany / EU | Euro | EUR | 0.92 |
 | China | Chinese Yuan | CNY | 7.2 |
 | Brazil | Brazilian Real | BRL | 5.0 |
+| Nigeria | Nigerian Naira | NGN | 1,550.0 |
 
-All six currencies above are active in forex trading. Canada (CAD) is reserved for future expansion. Nigeria (NGN) has full monetary baselines (neutral prime rate 12.0%, target inflation 6.0%) and an initial rate of 1,550 NGN per internal unit, but is not yet in the forex trading system.
+Around 18 currencies are active in forex trading (the table above shows the majors; the rest cover Eastern-bloc and secondary European currencies). Nigeria's naira trades on the same footing as the others: full monetary baselines (neutral prime rate 12.0%, target inflation 6.0%) and an initial rate of 1,550 NGN per internal unit.
 
 Rates are measured against an internal "anchor" unit, not directly against each other. Cross-rates are derived: USD/JPY = jpyRate / usdRate.
 
@@ -37,6 +38,8 @@ macroTarget = baseRate × max(0.01, 1
 \`\`\`
 
 The rate drifts toward the target at **5% per turn**. A significant rate shock takes roughly a full game year (~48 turns) to converge 90% of the way. This creates multi-month currency trends: time to spot, build positions, and exit.
+
+A country running well above its target inflation also takes a direct hit on top of the drift: an absolute inflation penalty weakens the currency in proportion to how far inflation exceeds the baseline, independent of the macro-target math above.
 
 **Baseline economic values (neutral state):**
 
@@ -65,7 +68,7 @@ Volume pressure accounts for **20%** of rate direction; macro fundamentals drive
 
 ### 3. Random noise
 
-Per-turn jitter of **±0.3%** prevents perfectly predictable movements.
+Per-turn jitter of **±0.4%** prevents perfectly predictable movements.
 
 ### Guardrails
 
@@ -75,17 +78,17 @@ Rates are capped at ±50% from their base rate. A currency cannot hyperinflate o
 
 | Tier | Method | Spread | Fill |
 | --- | --- | --- | --- |
-| 1 | Market maker | 0.275% | Instant, always available |
-| 2 | Public limit order | 0.175% | When market rate meets your limit |
-| 3 | Direct player trade | 0.10% | When target player accepts |
+| 1 | Market maker | 1% | Instant, always available |
+| 2 | Public limit order | 0.64% | When market rate meets your limit |
+| 3 | Direct player trade | 0.36% | When target player accepts |
 
-**Tier 1 (Market Maker):** Instant fill at the current rate ± 0.275% spread. Used automatically for auto-convert purchases. Volume pressure still applies.
+**Tier 1 (Market Maker):** Instant fill at the current rate ± 1% spread. Used automatically for auto-convert purchases. Volume pressure still applies.
 
-**Tier 2 (Limit Orders):** Post a public order at a target rate. The order auto-fills when the market price crosses your limit (0.175% spread). Other players can manually fill it early for a direct player trade fee instead. Set an optional expiry in turns.
+**Tier 2 (Limit Orders):** Post a public order at a target rate. The order auto-fills when the market price crosses your limit (0.64% spread). Other players can manually fill it early for a direct player trade fee instead. Set an optional expiry in turns.
 
 **Tier 3 (Direct Trades):** Send a specific currency offer to a named character. They can accept or decline, no counter-offers. Expires after 24 turns by default.
 
-Spread fees are split: **50% destroyed** (deflationary sink) and **50% to the currency's central bank**. The central bank's share is itself split **80% to forex revenue** (intervention ammunition) and **20% to reserve balance** (long-term buffer).
+Spread fees are split three ways: **25% destroyed** (deflationary sink), **25% booked as the currency's central-bank forex revenue** (intervention ammunition), and **50% accrued to the central bank's foreign-currency reserve balance** (long-term buffer).
 
 ## Multi-currency wallet
 
@@ -96,14 +99,14 @@ Your character has two money pools:
 
 When making personal purchases in a foreign currency:
 1. Spend from your existing balance in that currency (free, no spread)
-2. If you lack enough, auto-convert the shortfall from your home currency (0.275% spread)
+2. If you lack enough, auto-convert the shortfall from your home currency (1% spread)
 3. If both are insufficient, the transaction is rejected
 
 ## Foreign income
 
 Income from foreign corporations is handled differently by type:
 
-- **Dividends:** Automatically converted to your home currency at the market-maker rate (0.275% spread) when forex is enabled. There is no per-holding preference: this conversion is automatic.
+- **Dividends:** Automatically converted to your home currency at the market-maker rate (1% spread) when forex is enabled. There is no per-holding preference: this conversion is automatic.
 - **Bond coupons:** Paid in the bond's denomination currency and deposited directly into your personal balance in that currency. No auto-conversion.
 - **CEO salary:** Paid in the corporation's home currency and deposited directly into your personal balance in that currency. No auto-conversion.
 
@@ -126,7 +129,7 @@ The standard forex speculation flow:
 4. Invest in that country's assets while holding the cheap currency
 5. Sell when the currency recovers or fundamentals improve
 
-The 24-turn volume lookback means heavy buying gradually pushes the rate up, accelerating your returns, but also attracting other speculators who may exit before you.
+The 24-turn volume lookback means heavy buying gradually pushes the rate down (strengthening the currency further), accelerating your returns, but also attracting other speculators who may exit before you.
 
 See also: [Central Banks](/wiki/central-banks), [Stock Market](/wiki/stock-market), [Sovereign Bonds](/wiki/sovereign-bonds), [Planned / Command Economies](/wiki/planned-economies)
 `;

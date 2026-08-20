@@ -34,7 +34,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Commons**: The House of Commons, the elected lower chamber of the UK Parliament. 650 seats, FPTP. Whoever commands a Commons majority (326+ seats) forms the government.
 
-**Country**: The nation your character belongs to (US, UK, DE, JP, and others). It determines which country's elections, legislature, and parties they participate in. Fixed at character creation and cannot be changed afterward.
+**Country**: The nation your character belongs to (US, UK, DE, JP, and others). It determines which country's elections, legislature, and parties they participate in. Set at character creation, but can be changed later through relocation, which resets your national influence and party affiliation in the new country.
 
 **Cycle**: One complete election from spawn to resolution. When a general election resolves, a new cycle begins immediately (next election spawns).
 
@@ -60,7 +60,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **GOTV (Get Out The Vote)**: The party action that boosts demographic turnout modifiers. Controlled by party chair GOTV budget allocation. Stacks additively with player canvassing, subject to the ±20 cap.
 
-**Ground game**: A campaign upgrade (5 levels) that boosts swing-state vote totals for presidential races. Costs ongoing maintenance per level.
+**Ground game**: A campaign branch tree (starter node plus Field Offices, Get-Out-The-Vote, and Volunteer Corps branches) that boosts turnout in a race's competitive areas. Costs ongoing maintenance; unaffordable branches auto-downgrade.
 
 **Home state / region**: The sub-national unit (US state, UK nation, DE Land, JP prefecture) where your character is based. Determines which elections you can enter, where you can canvass, and where your in-state party org applies.
 
@@ -78,7 +78,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Manhattan distance**: The sum of absolute differences on the econ axis and social axis. Used to calculate ideological alignment. Distance 0 = perfect match; each point of distance costs 2 alignment points in the primary formula.
 
-**Media Spending**: A campaign upgrade (5 levels) that passively boosts the candidate's favorability each turn. Applies to presidential races; doubles during campaign season.
+**Media Spending**: A campaign branch tree (starter node plus Broadcast, Television, and Rapid Response branches) that passively boosts the candidate's favorability each turn. Doubles during campaign season.
 
 **National metrics**: Country-level aggregated statistics (GDP, inflation, healthcare index, etc.) derived from state-level data each turn. Visible on country overview pages.
 
@@ -88,11 +88,11 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Office**: An elected or appointed position that grants action bonuses, income, and legislative/executive access. See [Reference: Offices](/wiki/reference-offices) for all offices and their stats.
 
-**Opposition research**: A campaign upgrade (5 levels) that passively debuffs a target opponent's favorability each turn. Presidential races only.
+**Opposition research**: A campaign branch tree (starter node plus Dossier, Scandal Leak, and Counter-Intel branches) that passively debuffs a target opponent's favorability each turn. Retargetable.
 
 **Party org**: Party organization: a 0 to 100 metric per state representing a party's ground-level infrastructure. Affects general election vote scalars (0.5× to 1.0×) and presidential primary scores.
 
-**Phase**: One step in the hourly turn processing sequence. 40+ phases run in 14 groups each turn. See [Reference: Turn Order](/wiki/reference-turn-order) for the complete list.
+**Phase**: One step in the hourly turn processing sequence. Turn processing runs through roughly a dozen top-level adapters that together call over 100 phase steps each turn. See [Reference: Turn Order](/wiki/reference-turn-order) for the complete list.
 
 **Political Influence (PI)**: State-level reputation built via Campaign actions. Used in state primary scoring (up to 25 pts) and general vote reach calculations. Decays 0.75% per turn.
 

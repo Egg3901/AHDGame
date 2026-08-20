@@ -83,8 +83,8 @@ Two of these are worth reading twice.
 
 Not every nation has the machinery.
 
-- **Full participants:** a defence cabinet seat, so every control on these pages is live: US, UK, CN, DE, JP, IE, NG, RU, DD, PL, HU, RO, YU, BG, CS.
-- **Read-only:** no defence seat is defined, so their forces exist and are simulated but no player can direct them: BR, BLR, BAL, FR, IT, ES, SE, TR, GR, AT, FI, SCO, WAL.
+- **Full participants:** a defence cabinet seat, so every control on these pages is live: US, UK, CN, DE, JP, IE, NG, RU, DD, PL, HU, RO, YU, BG, CS, UKR, BLR, BAL.
+- **Read-only:** no defence seat is defined, so their forces exist and are simulated but no player can direct them: BR, FR, IT, ES, SE, TR, GR, AT, FI, SCO, WAL.
 
 Era gating narrows this further. West Germany has **no armed forces at all in 1953**: the Bundeswehr stands up in 1955, and East Germany's NVA in 1956. A 1953 world correctly seeds those nations with zero branches rather than inventing a predecessor.
 

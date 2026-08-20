@@ -55,6 +55,14 @@ export interface VietnamRung {
   supportPctGdp: number;
   /** Extra procurement demand this rung creates, as a multiplier on the baseline. */
   procurementMultiplier: number;
+  /**
+   * Earliest in-game year this rung may be reached, anchored to the historical
+   * arc (Gulf of Tonkin 1964, Rolling Thunder 1965, ground troops 1965-66).
+   * Pressure alone cannot climb past a rung before its year: without this floor
+   * an aggressive US/RU races the whole 1955-1975 ladder in a couple of game
+   * years. The opening rung shares VIETNAM_FROM_YEAR so it is never blocked.
+   */
+  earliestYear: number;
 }
 
 /**
@@ -74,6 +82,7 @@ export const VIETNAM_RUNGS: readonly VietnamRung[] = [
     defcon: 4,
     supportPctGdp: 0.001,
     procurementMultiplier: 1.05,
+    earliestYear: 1955,
   },
   {
     level: 2,
@@ -83,6 +92,7 @@ export const VIETNAM_RUNGS: readonly VietnamRung[] = [
     defcon: 4,
     supportPctGdp: 0.002,
     procurementMultiplier: 1.15,
+    earliestYear: 1959,
   },
   {
     level: 3,
@@ -93,6 +103,7 @@ export const VIETNAM_RUNGS: readonly VietnamRung[] = [
     defcon: 3,
     supportPctGdp: 0.003,
     procurementMultiplier: 1.35,
+    earliestYear: 1964,
   },
   {
     level: 4,
@@ -102,6 +113,7 @@ export const VIETNAM_RUNGS: readonly VietnamRung[] = [
     defcon: 3,
     supportPctGdp: 0.006,
     procurementMultiplier: 1.6,
+    earliestYear: 1965,
   },
   {
     level: 5,
@@ -111,6 +123,7 @@ export const VIETNAM_RUNGS: readonly VietnamRung[] = [
     defcon: 2,
     supportPctGdp: 0.011,
     procurementMultiplier: 2.0,
+    earliestYear: 1966,
   },
   {
     level: 6,
@@ -120,6 +133,7 @@ export const VIETNAM_RUNGS: readonly VietnamRung[] = [
     defcon: 2,
     supportPctGdp: 0.018,
     procurementMultiplier: 2.5,
+    earliestYear: 1968,
   },
 ] as const;
 
@@ -204,11 +218,17 @@ export const VIETNAM_RUNG_PRESSURE = 24;
  *    superpower's commitment by announcing restraint.
  *  - Both sides supporting is how the ladder actually climbs fastest, because
  *    pressure is compared per side and the higher one governs.
+ *  - A rung is also gated by its `earliestYear`: pressure can max out but the
+ *    ladder holds until the calendar reaches the next rung's floor, so an
+ *    aggressive US/RU tracks the historical arc's ceiling rather than outrunning
+ *    it. Pass `currentYear` to enforce the floor; omit it (tests, callers with
+ *    no clock) to fall back to pressure-only, the pre-floor behaviour.
  */
 export function applyVietnamMove(
   state: VietnamEscalationState,
   side: VietnamSide,
-  move: VietnamMove
+  move: VietnamMove,
+  currentYear?: number
 ): VietnamEscalationState {
   const next: VietnamEscalationState = { ...state, updatedAt: new Date() };
   const key = side === "west" ? "westSupport" : "eastSupport";
@@ -218,10 +238,18 @@ export function applyVietnamMove(
   if (move === "support") {
     next[key] = Math.min(100, state[key] + SUPPORT_PRESSURE_STEP);
     const pressure = Math.max(next.westSupport, next.eastSupport);
-    if (pressure >= VIETNAM_RUNG_PRESSURE && next.level < VIETNAM_MAX_LEVEL) {
+    const nextRung = rungForLevel(next.level + 1);
+    const yearAllows =
+      currentYear === undefined || nextRung === null || currentYear >= nextRung.earliestYear;
+    if (pressure >= VIETNAM_RUNG_PRESSURE && next.level < VIETNAM_MAX_LEVEL && yearAllows) {
       next.level = clampVietnamLevel(next.level + 1);
       next.westSupport = Math.max(0, next.westSupport - VIETNAM_RUNG_PRESSURE);
       next.eastSupport = Math.max(0, next.eastSupport - VIETNAM_RUNG_PRESSURE);
+    } else if (pressure > VIETNAM_RUNG_PRESSURE && !yearAllows) {
+      // Year-blocked: hold pressure at the rung threshold rather than letting it
+      // balloon to 100, so the first support once the year arrives climbs cleanly.
+      next.westSupport = Math.min(next.westSupport, VIETNAM_RUNG_PRESSURE);
+      next.eastSupport = Math.min(next.eastSupport, VIETNAM_RUNG_PRESSURE);
     }
     return next;
   }
@@ -418,10 +446,15 @@ export async function recordVietnamMove(
   db: Db,
   side: VietnamSide,
   move: VietnamMove,
-  spend = 0
+  spend = 0,
+  currentYear?: number
 ): Promise<{ before: VietnamEscalationState; after: VietnamEscalationState }> {
   const before = await getVietnamEscalation(db);
-  const after = applyVietnamMove(before, side, move);
+  // `currentYear` enforces the earliestYear rung floor; callers resolve it from
+  // game state. Kept a parameter (not fetched here) so this module never imports
+  // the DB-backed game-state reader — VIETNAM_RUNGS is used by a client panel, and
+  // a mongodb import at the top would drag the driver into the browser bundle.
+  const after = applyVietnamMove(before, side, move, currentYear);
   if (spend > 0) {
     if (side === "west") after.westSpend += spend;
     else after.eastSpend += spend;

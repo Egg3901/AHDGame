@@ -23,6 +23,7 @@ describe("ModifiersPanel", () => {
             },
           ],
           cabinet: 0,
+          cabinetBySource: [],
           cabinetAtCap: false,
           cabinetCap: 8,
           driftHalfLifeTurns: 34,
@@ -59,5 +60,39 @@ describe("HistorySparkline", () => {
   it("renders nothing for fewer than two points", () => {
     const { container } = render(<HistorySparkline points={[{ turn: 24, value: 61.2 }]} />);
     expect(container.firstChild).toBeNull();
+  });
+});
+
+describe("ModifiersPanel cabinet attribution (ticket #1142)", () => {
+  // The reporter saw a negative "Cabinet, orders and estates" line on a US
+  // infrastructure metric and asked which cabinet action could be doing it. On
+  // prod the answer was the energy channel alone, saturated by a units bug that
+  // is now fixed. The panel has to be able to say that.
+  const MODIFIERS = {
+    laws: [],
+    residual: 0,
+    cabinet: -1.5,
+    cabinetBySource: [{ source: "energy" as const, value: -1.5, atCap: true }],
+    cabinetAtCap: false,
+    cabinetCap: 8,
+    driftHalfLifeTurns: 34,
+    target: 60,
+    direction: "down" as const,
+  };
+
+  it("names the channel instead of one aggregate label", () => {
+    render(<ModifiersPanel modifiers={MODIFIERS} />);
+    expect(screen.getByText("Energy estates")).toBeTruthy();
+  });
+
+  it("marks a channel sitting at its own ceiling", () => {
+    render(<ModifiersPanel modifiers={MODIFIERS} />);
+    expect(screen.getByText("at ceiling")).toBeTruthy();
+  });
+
+  it("omits channels that contribute nothing", () => {
+    render(<ModifiersPanel modifiers={MODIFIERS} />);
+    expect(screen.queryByText("Ministerial orders")).toBeNull();
+    expect(screen.queryByText("Estates")).toBeNull();
   });
 });

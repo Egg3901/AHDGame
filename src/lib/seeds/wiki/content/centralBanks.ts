@@ -108,14 +108,9 @@ Declaring a float cancels any standing intervention band. They are contradictory
 
 ## Chair selection
 
-When a term expires, a new Chair is selected from two pools:
+When a term expires, a new Chair is selected from a single pool: characters nominated by the country's executives (President/PM/Chancellor). An earlier version of this system also drew 30% of picks from a wealth pool (the nation's richest players); that pool has been removed, a Chair is now always someone the executive put forward, not whoever the leaderboard says is rich this turn.
 
-| Pool | Weight | Source |
-| --- | --- | --- |
-| Political | 70% | Characters nominated by executives (President/PM/Chancellor) |
-| Economic (Wealth) | 30% | Top 3 wealthiest player characters + 2 random from ranks 4 to 20 |
-
-Lobbying funds shift weights within each pool: spending ₳500,000 on lobbying **doubles** your selection weight.
+Lobbying funds shift weights within the pool: spending ₳500,000 on lobbying **doubles** your selection weight.
 
 The selected candidate must **accept** the offer. If they decline, the next eligible candidate is offered the post. Political pool declines re-run the weighted draw with decliners excluded.
 
@@ -132,7 +127,7 @@ Coupon rates on new corporate bonds = prime rate + credit spread. Raising rates 
 
 ### 2. Sovereign bond coupon rate
 
-Sovereign bonds pay exactly the prime rate, with no spread. New bond issuances each quarter carry whatever the current prime rate is. Higher rates mean the government pays more interest, widening the deficit.
+Sovereign bonds pay the prime rate plus a term premium for longer maturities, plus any central-bank credibility spread the issuing bank has accumulated: \`coupon = primeRate + termPremium + credibilitySpread\`. New bond issuances each quarter carry whatever that combined rate works out to. Higher rates, longer terms, or a discredited bank all mean the government pays more interest, widening the deficit.
 
 ### 3. Exchange rates
 
@@ -156,7 +151,7 @@ multiplier = 1
 The actual rate converges toward this target at **5% per turn** (\`DRIFT_SPEED\`), so a full rate shock takes roughly one game year (~48 turns) to work through. On top of macro drift, two additional forces apply each turn:
 
 - **Volume pressure**: net buy/sell activity creates a short-term offset capped at **±5%** per turn. Volume accounts for **20%** of rate direction; macro fundamentals account for **80%**.
-- **Random noise**: ±0.3% per-turn jitter prevents perfectly predictable movement.
+- **Random noise**: ±0.4% per-turn jitter prevents perfectly predictable movement.
 
 **Guardrails** clamp the final rate to **±50% of the base rate** (floor = 0.5× base, ceiling = 1.5× base).
 
@@ -213,8 +208,8 @@ The band **persists across chair transitions**. A new chair inherits the previou
 
 Each turn, if the published rate is outside the band:
 
-1. The game computes the **breach distance** (how far outside the band the rate sits).
-2. It calculates desired spend as \`breachDistance × aggressiveness × baseRate\`.
+1. The game computes the **breach distance** (how far outside the band the rate sits, as a fraction of the breached edge).
+2. It calculates desired spend as \`|breachDistance| × aggressiveness\`, in internal FX-volume units.
 3. Actual spend is capped by available reserves.
 4. The synthetic volume is folded into the same **volume-pressure channel** that organic trades use, so intervention obeys the same ±5% per-turn cap.
 5. The rate is recomputed with the synthetic volume included.
@@ -227,10 +222,10 @@ Each turn, if the published rate is outside the band:
 
 | Pool | Source | Purpose |
 | --- | --- | --- |
-| Forex Revenue | 40% of spread fees on every currency trade | Primary intervention ammunition |
-| Reserve Balance | Treasury transfers + 10% of spread fees on every trade | Secondary buffer when forex revenue is empty |
+| Forex Revenue | 25% of spread fees on every currency trade | Primary intervention ammunition |
+| Reserve Balance | Treasury transfers + 50% of spread fees on every trade | Secondary buffer when forex revenue is empty |
 
-**Spread fee split:** On every currency trade, 50% of the spread is destroyed (deflationary sink). The remaining 50% goes to the central bank: 40% of the total spread becomes forex revenue, and 10% of the total spread seeds the reserve balance directly.
+**Spread fee split:** On every currency trade, 25% of the spread is destroyed (deflationary sink). The remaining 75% goes to the central bank: 25% of the total spread becomes forex revenue, and 50% of the total spread seeds the reserve balance directly.
 
 **Treasury → FX Reserve Transfer:** The Finance Minister (US Secretary of the Treasury, UK Chancellor, JP/DE Finance Minister) can move federal surplus into the reserve balance. This action is capped at **0.5% of annual federal revenue per turn** and rate-limited to once per turn. It is config-driven via \`financeMinisterCabinetId\`, so future countries wire up automatically by setting that field.
 
@@ -293,7 +288,7 @@ The Central Bank page's Insurance tab surfaces the fund: its balance, lifetime p
 
 ## Savings and credit lines
 
-The central bank system also manages player savings accounts and lines of credit. Interest on savings deposits flows through the central bank's reserve balance. The **savings APY is half the prime rate** (e.g., 5% prime → 2.5% APY). These are secondary functions separate from the main Chair role.
+The central bank system also manages player savings accounts and lines of credit. Interest on savings deposits flows through the central bank's reserve balance. The **savings APY is half the real rate** (prime rate minus inflation), with the real rate floored at 0.5 percentage points so it can never go negative or near-zero: a 5% prime rate against 2% inflation gives a 3% real rate, so the APY is 1.5%. These are secondary functions separate from the main Chair role.
 
 See also: [Currency Exchange](/wiki/currency-exchange), [National Metrics](/wiki/national-metrics), [Sovereign Bonds](/wiki/sovereign-bonds), [Corporate Bonds](/wiki/corporate-bonds), [Private Banking](/wiki/private-banking), [Government Approval](/wiki/government-approval), [Planned / Command Economies](/wiki/planned-economies)
 `;
