@@ -26,16 +26,12 @@ import {
   scaleSharePricesForStructureChange,
   sumAccountedOutstandingShares,
 } from "@/lib/corporations/shareConsolidation";
-import { cancelShareOrderAndRefund } from "@/lib/corporations/cancelShareOrder";
+import { cleanupShareMarketActivityForCorporationTargets } from "@/lib/corporations/cleanupShareMarketActivity";
 import { buildStructureChangeHolderList } from "@/lib/corporations/structureChangeSnapshot";
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
-import type {
-  Character,
-  Corporation,
-  ShareOrder,
-  Shareholder,
-  ImperialCharacter,
-} from "@/lib/db/types";
+import { generateStockExchangeSnapshots } from "@/lib/turn/stockExchangeSnapshot";
+import { isForexEnabled } from "@/lib/currency/featureFlag";
+import type { Character, Corporation, Shareholder, ImperialCharacter } from "@/lib/db/types";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 
@@ -47,9 +43,10 @@ interface RouteParams {
  * POST /api/corporations/[id]/shares/consolidate
  * CEO-only stock split or reverse split: change total outstanding shares and scale prices
  * so market cap is unchanged. Applies proportionally to all shareholders and the public float.
- * 48-turn cooldown. Any open share orders on the corporation are auto-cancelled and refunded
- * (escrow to buyers, reserved shares to sell-side corps) before the restructure runs — this
- * prevents other players from blocking a restructure indefinitely via stale limit orders.
+ * 48-turn cooldown. Open share orders, private listings, and pending offers on the
+ * corporation are cancelled and refunded before the restructure runs (escrow to buyers,
+ * reserved shares to sellers) so leftover pre-split share counts cannot fill on the next
+ * turn and wipe holders (ticket #1154).
  */
 export async function POST(request: Request, { params }: RouteParams) {
   try {
@@ -153,33 +150,32 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
     }
 
-    // Auto-cancel all open orders for this corporation before restructuring.
-    // Escrow refunds and share reservations are unwound by the helper, matching
-    // the DELETE endpoint's semantics. Running this first also restores any
-    // shares previously debited from corp sell-order placers, so the subsequent
-    // `sumAccountedOutstandingShares` invariant check passes.
-    const openOrders = await db
-      .collection<ShareOrder>("shareOrders")
-      .find({ corporationId: corporation._id, status: "open" })
-      .toArray();
-
-    for (const order of openOrders) {
-      const result = await cancelShareOrderAndRefund(db, order);
-      if (!result.ok) {
-        // FX unavailability is transient — surface 503 so the CEO can retry.
-        const status = result.error.startsWith("Exchange rate") ? 503 : 400;
-        return NextResponse.json(
-          { error: `Could not clear open orders before restructure: ${result.error}` },
-          { status }
-        );
-      }
+    // Cancel orders, private listings, and pending offers before restructuring.
+    // Listings debit reserved shares out of the register; leaving them at the
+    // pre-split count lets a later fill dump more shares than exist. Currency
+    // conversion already uses this same target-corp cleanup.
+    const forexEnabled = await isForexEnabled();
+    let marketCleanup = { ordersCancelled: 0, listingsCancelled: 0, offersCancelled: 0 };
+    try {
+      marketCleanup = await cleanupShareMarketActivityForCorporationTargets(
+        db,
+        [corporation._id],
+        new Date(),
+        forexEnabled
+      );
+    } catch (cleanupErr) {
+      const message = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
+      const status = message.startsWith("Exchange rate") ? 503 : 400;
+      return NextResponse.json(
+        { error: `Could not clear open orders before restructure: ${message}` },
+        { status }
+      );
     }
 
+    // Always re-read: listing cancels restore reserved shares onto the register.
     const freshCorporation =
-      openOrders.length > 0
-        ? ((await db.collection<Corporation>("corporations").findOne({ _id: corporation._id })) ??
-          corporation)
-        : corporation;
+      (await db.collection<Corporation>("corporations").findOne({ _id: corporation._id })) ??
+      corporation;
 
     const accounted = sumAccountedOutstandingShares(freshCorporation);
     if (accounted !== oldTotal) {
@@ -435,14 +431,28 @@ export async function POST(request: Request, { params }: RouteParams) {
       });
     }
 
+    // Rebuild exchange listings now so market cap is price × post-split shares
+    // instead of a mixed stale snapshot (ticket #1154). A snapshot hiccup must
+    // not fail the restructure.
+    try {
+      await generateStockExchangeSnapshots(currentTurn, db);
+    } catch (snapErr) {
+      Sentry.captureException(snapErr, {
+        tags: { module: "consolidate/snapshot" },
+        extra: { corporationId: corporation._id.toString() },
+      });
+    }
+
     return NextResponse.json({
       success: true,
       previousTotalShares: oldTotal,
       newTotalShares: targetTotalShares,
       newSharePrice: scaled.sharePrice,
+      newMarketCap: Math.round(scaled.sharePrice * targetTotalShares),
       newPublicFloat,
       reverseSplit: isReverse,
-      cancelledOpenOrders: openOrders.length,
+      cancelledOpenOrders: marketCleanup.ordersCancelled,
+      cancelledOpenListings: marketCleanup.listingsCancelled,
     });
   } catch (error) {
     return handleRouteError(error);
