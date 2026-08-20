@@ -12,7 +12,7 @@ This means approval reflects the objective condition of the country: economy, he
 
 ## Metric categories
 
-Approval draws from 10 categories, each containing 4-7 individual metrics:
+Approval walks 10 `stateMetrics` category buckets (including population). Some cohort metrics in population are skipped as approval terms. The live metric engine has additional country-specific nodes beyond the sample table:
 
 | Category | Sample Metrics |
 | --- | --- |
