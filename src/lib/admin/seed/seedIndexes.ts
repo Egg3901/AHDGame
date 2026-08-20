@@ -23,6 +23,7 @@ import { seedAuditAnomaliesIndexes } from "./indexes/auditAnomalies";
 import { seedWatchlistIndexes } from "./indexes/watchlist";
 import { seedConflictIndexes } from "./indexes/conflicts";
 import { seedBankingIndexes } from "./indexes/banking";
+import { seedSettlementIndexes } from "./indexes/settlement";
 
 // Barrel that runs every index module in sequence. Bootstrap calls this directly;
 // the admin seeder route dispatches the individual module targets so admins can
@@ -62,6 +63,7 @@ const INDEX_MODULES: readonly IndexModule[] = [
   seedWatchlistIndexes,
   seedConflictIndexes,
   seedBankingIndexes,
+  seedSettlementIndexes,
 ];
 
 export async function seedIndexes(db: Db, log: (msg: string) => void) {
@@ -118,4 +120,5 @@ export {
   seedWatchlistIndexes,
   seedConflictIndexes,
   seedBankingIndexes,
+  seedSettlementIndexes,
 };
