@@ -96,6 +96,8 @@ writeFileSync(
     `export const WIKI_LAST_UPDATED: Record<string, string> = {\n${entries}\n};\n`
 );
 
+execFileSync("npx", ["prettier", "--write", OUT_FILE], { cwd: ROOT });
+
 console.log(
   `wrote ${Object.keys(slugToDate).length} slugs to ${path.relative(ROOT, OUT_FILE)}${missing ? `, ${missing} unresolved` : ""}`
 );
