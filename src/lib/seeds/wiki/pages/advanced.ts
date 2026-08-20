@@ -18,6 +18,11 @@ import { tradeSystemContent } from "../content/tradeSystem";
 import { rpgStatsContent } from "../content/rpgStats";
 import { crisisInteractionContent } from "../content/crisisInteraction";
 import { playerEventsContent } from "../content/playerEvents";
+import { blocSpheresContent } from "../content/blocSpheres";
+import { notificationsContent } from "../content/notifications";
+import { granularPollingContent } from "../content/granularPolling";
+import { marketSafeguardsContent } from "../content/marketSafeguards";
+import { embargoAndTradeExposureContent } from "../content/embargoAndTradeExposure";
 import {
   INTERNATIONAL_ORGANIZATION_ORDER,
   INTERNATIONAL_ORGANIZATIONS,
@@ -254,5 +259,65 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 4,
+  },
+  {
+    slug: "bloc-spheres",
+    title: "Bloc Alignment & Spheres of Influence",
+    description:
+      "Cold War pole shares and lead, the 60/40 join and leave thresholds with their deadband, passive drift and membership pull, and bloc stress from contested, leaving and newly-digested members.",
+    content: blocSpheresContent,
+    category: "advanced",
+    featured: false,
+    difficulty: "advanced",
+    contentType: "guide",
+    estimatedReadTime: 7,
+  },
+  {
+    slug: "notifications",
+    title: "Notification Center",
+    description:
+      "Reading and managing the in-app inbox: notifications versus mail, the All/Notifs/Mail/Action-needed segments, archiving, and per-type muting and snoozing.",
+    content: notificationsContent,
+    category: "advanced",
+    featured: false,
+    difficulty: "beginner",
+    contentType: "guide",
+    estimatedReadTime: 4,
+  },
+  {
+    slug: "market-safeguards",
+    title: "Market Safeguards",
+    description:
+      "The automated launch guard behind the live stock market: what aggregate market-cap drawdown trips it, how fundamentals can excuse a fall but never make it stricter, and what a tier revert looks like from the player side.",
+    content: marketSafeguardsContent,
+    category: "advanced",
+    featured: false,
+    difficulty: "advanced",
+    contentType: "guide",
+    estimatedReadTime: 5,
+  },
+  {
+    slug: "embargo-and-trade-exposure",
+    title: "Embargoes & Trade Exposure",
+    description:
+      "How ministerial and legislated embargoes are imposed, the cabinet action cost, duration and cooldown limits, and how the trade-exposure model scales a corporation's export revenue instead of shutting the sector down entirely.",
+    content: embargoAndTradeExposureContent,
+    category: "advanced",
+    featured: false,
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 6,
+  },
+  {
+    slug: "granular-polling",
+    title: "Granular Polling",
+    description:
+      "Reading the granular electorate panel on your poll results: Layer-1 demographic cross-tab segments, dimension tabs, stacked filters, and why smaller segments carry a wider margin of error.",
+    content: granularPollingContent,
+    category: "advanced",
+    featured: false,
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 5,
   },
 ];
