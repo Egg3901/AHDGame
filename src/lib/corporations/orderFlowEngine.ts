@@ -37,7 +37,11 @@ export function computeOrderFlowMultiplier(
     return 1 + Math.max(-ORDER_FLOW_CAP, Math.min(ORDER_FLOW_CAP, carry));
   }
 
-  const netPressure = (windowBuyValue - windowSellValue) / floatValue;
+  // Windows are floored at zero: the wash-trade guard neutralizes round-trip
+  // legs by subtracting from the opposite window (orderFlowWashGuard), which
+  // can transiently drive a raw window negative. A negative window is never a
+  // real signal and must not amplify pressure for third parties.
+  const netPressure = (Math.max(0, windowBuyValue) - Math.max(0, windowSellValue)) / floatValue;
   const liquidityFactor = 1 / (1 + Math.sqrt(publicFloat / totalShares));
   const pressureContrib = netPressure * liquidityFactor;
 

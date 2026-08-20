@@ -6,6 +6,7 @@ import { executeCorporationBondDefaultDissolution } from "@/lib/bonds/executeCor
 import { withCorporationSettlementLock } from "@/lib/corporations/settlementLock";
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import { isValidSuperShareMultiplier } from "@/lib/corporations/superShares";
+import { issuanceDilutionFactorExpr } from "@/lib/corporations/shareConsolidation";
 
 export async function applyPassedVoteEffects(opts: {
   db: Db;
@@ -68,13 +69,46 @@ export async function applyPassedVoteEffects(opts: {
       // corp realizes proceeds as the float is actually bought (treasury-backed
       // market maker in the share-buy paths). Pre-fix this $inc'd liquidCapital at
       // share creation while the buy path credited again, double-paying the issuer.
-      await db.collection("corporations").updateOne(
-        { _id: corporation._id },
+      //
+      // Prices are scaled DOWN by the dilution factor oldTotal / (oldTotal + new)
+      // in the same atomic write. No cash enters at issuance, so market cap must
+      // be preserved exactly like a forward split; leaving the price untouched
+      // let a reverse-split-then-issue round trip fabricate market cap out of
+      // thin air (2026-08-20 incident: reverse split multiplied the price ~250x
+      // cap-preservingly, then an uncapped issuance vote restored the share
+      // count at the pumped price, inflating market cap ~127x in one turn).
+      // Aggregation pipeline so every $ references the pre-image atomically.
+      await db.collection("corporations").updateOne({ _id: corporation._id }, [
         {
-          $inc: { totalShares: newShareCount, publicFloat: newShareCount },
-          $set: { updatedAt: now },
-        }
-      );
+          $set: {
+            totalShares: { $add: [{ $ifNull: ["$totalShares", 0] }, newShareCount] },
+            publicFloat: { $add: [{ $ifNull: ["$publicFloat", 0] }, newShareCount] },
+            sharePrice: {
+              $round: [
+                {
+                  $multiply: [
+                    { $ifNull: ["$sharePrice", 0] },
+                    issuanceDilutionFactorExpr(newShareCount),
+                  ],
+                },
+                4,
+              ],
+            },
+            fundamentalSharePrice: {
+              $round: [
+                {
+                  $multiply: [
+                    { $ifNull: ["$fundamentalSharePrice", { $ifNull: ["$sharePrice", 0] }] },
+                    issuanceDilutionFactorExpr(newShareCount),
+                  ],
+                },
+                4,
+              ],
+            },
+            updatedAt: now,
+          },
+        },
+      ]);
       void recordShareTrade(db, {
         corporationId: corporation._id,
         kind: "issuance",
