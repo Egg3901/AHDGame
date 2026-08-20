@@ -46,6 +46,7 @@ export {
   seedCommodityPriceIndexes,
   seedIndexFundIndexes,
   seedApiAccessIndexes,
+  seedSettlementIndexes,
 } from "./seedIndexes";
 export { seedCountyMapData } from "./seedMapData";
 export {

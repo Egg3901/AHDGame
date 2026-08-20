@@ -59,6 +59,7 @@ import {
   seedCommodityPriceIndexes,
   seedIndexFundIndexes,
   seedApiAccessIndexes,
+  seedSettlementIndexes,
   seedCountyMapData,
   seedUKRegions,
   seedUKParties,
@@ -162,6 +163,7 @@ const US_TARGETS = [
   "indexesCommodityPrices",
   "indexesIndexFunds",
   "indexesApiAccess",
+  "indexesSettlement",
   "seats",
   "unownedSectors",
   "unions",
@@ -359,6 +361,8 @@ export async function GET() {
           "Indexes for indexFunds, indexFundPositions, indexFundTransactions, indexFundRedemptionQueue, indexFundSnapshots",
         indexesApiAccess:
           "Unique tokenHash + per-user/scope indexes on userApiKeys, and TTL + query indexes on apiAccessLog",
+        indexesSettlement:
+          "settlementPlays drain + per-turn indexes, and the UNIQUE partial index on settlementCrises that stops two live German Questions. Required before the crisis is opened on a world that was never reset.",
         seats: "Permanent seat documents for all races (US + UK)",
         unownedSectors:
           "Unowned sector revenue docs (10% of GDP-derived market per state x type, insert-only)",
@@ -540,6 +544,7 @@ export async function POST(request: Request) {
     if (targets.includes("indexesCommodityPrices")) await seedCommodityPriceIndexes(db, log);
     if (targets.includes("indexesIndexFunds")) await seedIndexFundIndexes(db, log);
     if (targets.includes("indexesApiAccess")) await seedApiAccessIndexes(db, log);
+    if (targets.includes("indexesSettlement")) await seedSettlementIndexes(db, log);
     if (targets.includes("seats")) await seedSeats(db, reset, log, preset);
     // `reset` (hard re-seed) refreshes existing market docs so they track the
     // current preset's GDP; a soft fill stays insert-only to preserve live pools.

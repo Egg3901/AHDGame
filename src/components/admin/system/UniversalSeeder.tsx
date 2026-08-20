@@ -157,6 +157,12 @@ const SEED_TARGETS: SeedTarget[] = [
     description: "Unique index on commodityPrices.commodity",
   },
   {
+    id: "indexesSettlement",
+    label: "Indexes — Settlement Crisis",
+    description:
+      "settlementPlays drain + per-turn indexes, and the UNIQUE partial index on settlementCrises that stops two live German Questions. Required before the crisis is opened on a world that was never reset.",
+  },
+  {
     id: "forex",
     label: "Forex Layer",
     description:
