@@ -16,6 +16,7 @@ import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { crisisSeverity } from "@/lib/crises/severity";
 import { formatCrisisEffectTarget } from "@/lib/crises/effectLabels";
 import { SovereignDebtWatchPanel } from "@/components/world/SovereignDebtWatchPanel";
+import type { Conflict } from "@/app/world/conflicts/_coldwar/conflicts";
 
 const SEVERITY_BADGE: Record<"low" | "medium" | "high", string> = {
   high: "border-rose-500/30 bg-rose-500/10 text-rose-500 dark:text-rose-400",
@@ -23,7 +24,16 @@ const SEVERITY_BADGE: Record<"low" | "medium" | "high", string> = {
   low: "border-zinc-400/30 bg-zinc-400/10 text-muted",
 };
 
-type ScopeTab = "global" | "country" | "region";
+// Conflict severity rungs → the same badge palette the crisis cards use, so the merged
+// Global feed reads as one surface. WINDING DOWN falls through to the muted low style.
+const CONFLICT_SEVERITY_BADGE: Record<Conflict["sev"], string> = {
+  CRITICAL: SEVERITY_BADGE.high,
+  MAJOR: SEVERITY_BADGE.high,
+  ACTIVE: SEVERITY_BADGE.medium,
+  "WINDING DOWN": SEVERITY_BADGE.low,
+};
+
+type ScopeTab = "global" | "country" | "region" | "debt";
 
 // Pure id→name lookup over the full union (every config has a name); static is fine
 // here — display labels, not a "which countries exist" gate.
@@ -153,11 +163,62 @@ function CrisisCard({
   );
 }
 
+function ConflictCard({ conflict }: { conflict: Conflict }) {
+  return (
+    <Link
+      href="/world/conflicts"
+      className="block rounded-xl border border-card-border bg-card shadow-card card-hover group overflow-hidden"
+    >
+      <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-0">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-rose-500 dark:text-rose-400">
+              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z" />
+              </svg>
+              War
+            </span>
+            <span className="text-[10px] text-muted">{conflict.region}</span>
+          </div>
+          <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2 leading-snug">
+            {conflict.name}
+          </h3>
+        </div>
+        <span
+          className={`shrink-0 text-xs px-2 py-0.5 rounded-full border ${CONFLICT_SEVERITY_BADGE[conflict.sev]}`}
+        >
+          {conflict.sev === "WINDING DOWN" ? "Winding down" : "Global"}
+        </span>
+      </div>
+      <div className="px-5 pt-2 pb-5">
+        <p className="text-xs text-muted leading-relaxed line-clamp-2 mb-3">
+          {conflict.west} vs {conflict.east}. {conflict.status}.
+        </p>
+        <div className="flex flex-wrap gap-1">
+          <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-full border border-error/30 bg-error/5 text-error">
+            {conflict.deaths}
+          </span>
+          {conflict.escalating && (
+            <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              Escalating
+            </span>
+          )}
+        </div>
+        <div className="flex items-center justify-between mt-3 text-xs text-muted">
+          <span>{conflict.years}</span>
+          <span className="text-warning">Ongoing</span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 function EmptyScope({ scope }: { scope: ScopeTab }) {
   const labels: Record<ScopeTab, string> = {
-    global: "No active global crises",
+    global: "No active global crises or conflicts",
     country: "No active national crises",
     region: "No active regional crises",
+    debt: "No sovereign debt on watch",
   };
   return (
     <div className="rounded-xl border border-card-border bg-card p-10 text-center">
@@ -221,6 +282,7 @@ export default function CrisesPage() {
   const [activeTab, setActiveTab] = useState<ScopeTab>("global");
   const [showHistorical, setShowHistorical] = useState(false);
   const [crises, setCrises] = useState<Crisis[]>([]);
+  const [conflicts, setConflicts] = useState<Conflict[]>([]);
   const [currentTurn, setCurrentTurn] = useState(0);
   const [startingYear, setStartingYear] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -262,6 +324,23 @@ export default function CrisesPage() {
     fetchCrises();
   }, [fetchCrises]);
 
+  // Conflicts ride alongside global crises in the merged Global feed. Best-effort: a
+  // world with the subsystem off returns an empty list, and any failure just leaves the
+  // feed as crises-only rather than erroring the whole page.
+  useEffect(() => {
+    let cancelled = false;
+    fetchJson<{ conflicts?: Conflict[] }>("/api/world/conflicts/feed", {
+      feature: "world-crises-conflicts",
+    })
+      .then((d) => {
+        if (!cancelled) setConflicts(d.conflicts ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const allActive = crises.filter((c) => c.status === "active");
   const allResolved = crises.filter((c) => c.status === "resolved");
 
@@ -285,6 +364,7 @@ export default function CrisesPage() {
     { id: "global", label: "Global" },
     { id: "country", label: "National" },
     { id: "region", label: "Regional" },
+    { id: "debt", label: "Debt Watch" },
   ];
 
   return (
@@ -369,22 +449,6 @@ export default function CrisesPage() {
           </div>
         </header>
 
-        {/* Pre-crisis risk monitor */}
-        <details className="group" open>
-          <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium text-muted hover:text-foreground list-none select-none mb-3">
-            <svg
-              className="h-3.5 w-3.5 transition-transform group-open:rotate-90"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-            Pre-Crisis Risk Monitor
-          </summary>
-          <SovereignDebtWatchPanel />
-        </details>
-
         {/* Scope tabs + admin action */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex gap-1 rounded-xl border border-card-border bg-card p-1 w-fit">
@@ -442,12 +506,18 @@ export default function CrisesPage() {
           </div>
         ) : (
           <div className="space-y-8">
-            {/* Active crises */}
+            {/* Sovereign debt watch */}
+            {activeTab === "debt" && <SovereignDebtWatchPanel />}
+
+            {/* Merged Global feed: live conflicts sit alongside global crises. */}
             {activeTab === "global" &&
-              (activeByScopeTab.length === 0 ? (
+              (activeByScopeTab.length === 0 && conflicts.length === 0 ? (
                 <EmptyScope scope="global" />
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {conflicts.map((conflict) => (
+                    <ConflictCard key={conflict.id} conflict={conflict} />
+                  ))}
                   {activeByScopeTab.map((crisis) => (
                     <CrisisCard
                       key={crisis._id.toString()}
