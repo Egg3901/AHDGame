@@ -650,6 +650,8 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                 targetInflation={data.targetInflation}
                 latestGdp={latestGdp}
                 chairSelectionPending={data.chairSelectionPending}
+                viewerIsChairNominee={data.viewerIsChairNominee ?? false}
+                countryCode={data.countryId ?? ""}
                 chairMode={data.chairMode}
               />
               {data.isExecutive && data.chair && data.chairMode !== "npp" && (

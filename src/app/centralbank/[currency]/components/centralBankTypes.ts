@@ -189,6 +189,8 @@ export interface BankData {
   governmentControlled?: boolean;
   /** True when the signed-in viewer may set the rate under government control. */
   viewerSetsRate?: boolean;
+  /** True when the signed-in character is the pending chair nominee (ticket #1072). */
+  viewerIsChairNominee?: boolean;
   isExecutive: boolean;
   userCashOnHand: number;
   nationalCurrency?: CurrencyCode;
