@@ -33,3 +33,4 @@ export { getWatchlistCollection } from "./watchlist";
 export { getMacroCountriesCollection } from "./macroCountries";
 export { getSphereFlowLedgerCollection } from "./sphereFlowLedger";
 export { getSphereMembershipsCollection } from "./sphereMemberships";
+export { getWikiReportsCollection } from "./wikiReports";

@@ -42,6 +42,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 8,
+    designDocUrl: "design/elections.html",
   },
   {
     slug: "primaries",

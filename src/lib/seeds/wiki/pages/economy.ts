@@ -44,6 +44,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 11,
+    designDocUrl: "design/corporations.html",
   },
   {
     slug: "corporate-r-and-d",

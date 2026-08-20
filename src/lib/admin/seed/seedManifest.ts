@@ -863,6 +863,11 @@ const PRESERVED: CollectionEntry[] = [
   { name: "suggestionReactions", category: "preserved" },
   { name: "suggestionReads", category: "preserved" },
   { name: "suspiciousCharacters", category: "preserved", notes: "Mod tooling state." },
+  {
+    name: "wikiReports",
+    category: "preserved",
+    notes: "Player-filed wiki page issue reports; feedback, survives world resets.",
+  },
   { name: "systemSettings", category: "preserved" },
   { name: "systemTags", category: "preserved" },
   { name: "tasks", category: "preserved", notes: "Admin task tracker." },

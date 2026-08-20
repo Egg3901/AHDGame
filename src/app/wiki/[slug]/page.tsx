@@ -181,9 +181,11 @@ export default async function WikiPage({ params }: WikiPageProps) {
         contentType={page.contentType}
         difficulty={page.difficulty}
         estimatedReadTime={page.estimatedReadTime}
-        lastUpdated={page.updatedAt}
+        lastUpdated={page.lastUpdated ?? page.updatedAt}
+        designDocUrl={page.designDocUrl}
         gameIteration={page.gameIteration}
         gameStartDate={page.gameStartDate}
+        reportSlug={slug}
       />
 
       {headings.length > 0 && <WikiTableOfContents headings={headings} className="mb-8" />}
@@ -274,7 +276,12 @@ function GeneratedOfficeWikiPage({
         <p className="mt-2 max-w-3xl text-muted">{page.definition.description}</p>
       </header>
 
-      <PageMetadata category="reference" contentType="reference" lastUpdated={new Date()} />
+      <PageMetadata
+        category="reference"
+        contentType="reference"
+        lastUpdated={new Date()}
+        reportSlug={slug}
+      />
 
       {headings.length > 0 && <WikiTableOfContents headings={headings} className="mb-8" />}
 

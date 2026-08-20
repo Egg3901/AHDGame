@@ -40,6 +40,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "guide",
     estimatedReadTime: 8,
+    designDocUrl: "design/conflict-system-as-shipped.html",
   },
   {
     slug: "declaring-war",
