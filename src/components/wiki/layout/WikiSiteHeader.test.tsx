@@ -3,7 +3,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { WikiSiteHeader, wikiPageHref } from "./WikiSiteHeader";
+import { WikiSiteHeader, wikiAccountFromNav, wikiGamePath, wikiPageHref } from "./WikiSiteHeader";
+import type { ClientNavBootstrap } from "@/contexts/AuthDataContext";
 
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -12,9 +13,40 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
+const { authState } = vi.hoisted(() => ({
+  authState: {
+    user: null as Record<string, unknown> | null,
+    loading: false,
+    navData: null as ClientNavBootstrap | null,
+    refetch: vi.fn(),
+    authFetchError: "none" as const,
+  },
+}));
+
+vi.mock("@/contexts/AuthDataContext", () => ({
+  useAuthMe: () => authState,
+}));
+
+const signedInNav = {
+  user: {
+    username: "alice",
+    character: {
+      name: "Alice Sterling",
+      avatarUrl: "https://cdn.example/alice.png",
+      borderKey: null,
+      tintColor: null,
+    },
+  },
+  characterName: "Alice Sterling",
+  isImperialMode: false,
+} as unknown as ClientNavBootstrap;
+
 describe("WikiSiteHeader", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authState.user = null;
+    authState.loading = false;
+    authState.navData = null;
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -32,7 +64,7 @@ describe("WikiSiteHeader", () => {
     vi.unstubAllGlobals();
   });
 
-  it("links home, play, and docs", () => {
+  it("links home, play, docs, and sign-in on the main game site", () => {
     render(
       <WikiSiteHeader
         playUrl="https://ahousedividedgame.com"
@@ -46,6 +78,26 @@ describe("WikiSiteHeader", () => {
     );
     expect(screen.getByRole("link", { name: "Docs" }).getAttribute("href")).toBe(
       "https://docs.lakesidegames.net"
+    );
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe(
+      wikiGamePath("https://ahousedividedgame.com", "/login")
+    );
+  });
+
+  it("shows the Lakeside-auth profile avatar and a Profile link to the main site", () => {
+    authState.user = signedInNav.user;
+    authState.navData = signedInNav;
+
+    render(
+      <WikiSiteHeader
+        playUrl="https://ahousedividedgame.com"
+        docsUrl="https://docs.lakesidegames.net"
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Alice Sterling" }));
+    expect(screen.getByRole("menuitem", { name: "Profile" }).getAttribute("href")).toBe(
+      "https://ahousedividedgame.com/profile"
     );
   });
 
@@ -86,5 +138,31 @@ describe("WikiSiteHeader", () => {
     fireEvent.keyDown(input, { key: "Enter" });
 
     expect(pushMock).toHaveBeenCalledWith("/wiki/getting-started");
+  });
+});
+
+describe("wikiAccountFromNav", () => {
+  it("uses the character portrait when Lakeside auth has an active character", () => {
+    expect(wikiAccountFromNav(signedInNav)).toEqual({
+      name: "Alice Sterling",
+      avatarUrl: "https://cdn.example/alice.png",
+      borderKey: null,
+      tintColor: null,
+    });
+  });
+
+  it("falls back to the Lakeside username when there is no character", () => {
+    expect(
+      wikiAccountFromNav({
+        user: { username: "bob", character: null },
+        characterName: null,
+        isImperialMode: false,
+      } as unknown as ClientNavBootstrap)
+    ).toEqual({
+      name: "bob",
+      avatarUrl: null,
+      borderKey: null,
+      tintColor: null,
+    });
   });
 });

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
+import { Avatar } from "@/components/Avatar";
+import { useAuthMe, type ClientNavBootstrap } from "@/contexts/AuthDataContext";
 
 export interface WikiSearchHit {
   slug: string;
@@ -15,8 +17,38 @@ interface WikiSiteHeaderProps {
   docsUrl: string;
 }
 
+export interface WikiAccountProfile {
+  name: string;
+  avatarUrl: string | null;
+  borderKey: string | null;
+  tintColor: string | null;
+}
+
 export function wikiPageHref(slug: string): string {
   return `/wiki/${slug}`;
+}
+
+export function wikiGamePath(playUrl: string, path: string): string {
+  const base = playUrl.replace(/\/$/, "");
+  const suffix = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${suffix}`;
+}
+
+export function wikiAccountFromNav(navData: ClientNavBootstrap | null): WikiAccountProfile | null {
+  const user = navData?.user;
+  if (!user) return null;
+  const char = (navData.isImperialMode ? user.imperialCharacter : user.character) as {
+    avatarUrl?: string | null;
+    borderKey?: string | null;
+    tintColor?: string | null;
+    name?: string;
+  } | null;
+  return {
+    name: char?.name ?? navData.characterName ?? user.username ?? "Player",
+    avatarUrl: char?.avatarUrl ?? null,
+    borderKey: char?.borderKey ?? null,
+    tintColor: char?.tintColor ?? null,
+  };
 }
 
 export function WikiSiteHeader({ playUrl, docsUrl }: WikiSiteHeaderProps) {
@@ -40,9 +72,105 @@ export function WikiSiteHeader({ playUrl, docsUrl }: WikiSiteHeaderProps) {
           <a href={docsUrl} className="text-muted transition-colors hover:text-foreground">
             Docs
           </a>
+          <WikiAccountMenu playUrl={playUrl} />
         </nav>
       </div>
     </header>
+  );
+}
+
+function WikiAccountMenu({ playUrl }: { playUrl: string }) {
+  const { navData, loading } = useAuthMe();
+  const profile = wikiAccountFromNav(navData);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    function onPointerDown(event: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
+  async function signOut() {
+    setOpen(false);
+    try {
+      const res = await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+      if (res.ok) window.location.reload();
+    } catch {
+      /* stay on the wiki if logout fails */
+    }
+  }
+
+  if (loading && !profile) {
+    return <div className="h-9 w-9 shrink-0 animate-pulse rounded-lg bg-card-border" />;
+  }
+
+  if (!profile) {
+    return (
+      <a
+        href={wikiGamePath(playUrl, "/login")}
+        className="text-muted transition-colors hover:text-foreground"
+      >
+        Sign in
+      </a>
+    );
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={profile.name}
+        className={`relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-card-border bg-card transition-opacity hover:opacity-90 ${open ? "ring-2 ring-primary/40" : ""}`}
+      >
+        <Avatar
+          url={profile.avatarUrl}
+          name={profile.name}
+          size="h-9 w-9"
+          borderKey={profile.borderKey}
+          tintColor={profile.tintColor}
+          className="rounded-lg"
+        />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 z-50 mt-2 w-52 rounded-xl border border-card-border bg-card py-1 shadow-modal"
+        >
+          <p className="truncate px-3 py-2 text-sm font-medium text-foreground">{profile.name}</p>
+          <a
+            role="menuitem"
+            href={wikiGamePath(playUrl, "/profile")}
+            className="block px-3 py-2 text-sm text-muted transition-colors hover:bg-card-elevated hover:text-foreground"
+            onClick={() => setOpen(false)}
+          >
+            Profile
+          </a>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => void signOut()}
+            className="block w-full px-3 py-2 text-left text-sm text-error transition-colors hover:bg-card-elevated"
+          >
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
