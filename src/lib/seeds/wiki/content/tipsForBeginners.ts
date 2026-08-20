@@ -82,7 +82,7 @@ Presidential races also have **your own** Campaign Presence, built per state on 
 
 ## 11. Infamy is permanent (and costs you)
 
-Every action that generates infamy (attacking opponents, defying whip votes, certain legislative plays) adds permanently to your infamy score. High infamy reduces NPP endorsement chances and affects certain approval ratings. Don't attack opponents carelessly. Only attack when the favorability damage to them outweighs your infamy cost.
+Every action that generates infamy (attacking opponents, defying whip votes, certain legislative plays) adds permanently to your infamy score. High infamy strains your standing with NPPs and affects certain approval ratings. Don't attack opponents carelessly. Only attack when the favorability damage to them outweighs your infamy cost.
 
 ---
 
