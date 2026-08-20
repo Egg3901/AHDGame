@@ -38,6 +38,14 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
 const APPLY = process.argv.includes("--apply");
 
+interface LadderDoc {
+  _id: string;
+  level: number;
+  westSupport: number;
+  eastSupport: number;
+  warTurns: number;
+}
+
 /** Highest rung whose earliestYear has passed; at least 1 once the chain opened. */
 function allowedLevelForYear(year: number): number {
   let level = 1;
@@ -60,9 +68,8 @@ async function main() {
     const year = gs?.currentYear;
     if (typeof year !== "number") throw new Error("gameState.currentYear missing");
 
-    const ladder = await db
-      .collection(VIETNAM_ESCALATION_COLLECTION)
-      .findOne({ _id: VIETNAM_ESCALATION_ID });
+    const ladderCollection = db.collection<LadderDoc>(VIETNAM_ESCALATION_COLLECTION);
+    const ladder = await ladderCollection.findOne({ _id: VIETNAM_ESCALATION_ID });
     if (!ladder) {
       console.log("No vietnamEscalation doc; nothing to clamp.");
       return;
@@ -84,20 +91,18 @@ async function main() {
       return;
     }
 
-    await db
-      .collection(VIETNAM_ESCALATION_COLLECTION)
-      .updateOne(
-        { _id: VIETNAM_ESCALATION_ID },
-        {
-          $set: {
-            level: target,
-            westSupport: 0,
-            eastSupport: 0,
-            warTurns: 0,
-            updatedAt: new Date(),
-          },
-        }
-      );
+    await ladderCollection.updateOne(
+      { _id: VIETNAM_ESCALATION_ID },
+      {
+        $set: {
+          level: target,
+          westSupport: 0,
+          eastSupport: 0,
+          warTurns: 0,
+          updatedAt: new Date(),
+        },
+      }
+    );
     console.log(`APPLIED: ladder clamped to level ${target}.`);
   } finally {
     await client.close();
