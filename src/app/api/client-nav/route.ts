@@ -108,6 +108,19 @@ export async function GET() {
         { electionType: "president", state: "US", status: { $in: ["active", "upcoming"] } },
         { projection: { _id: 1, seatId: 1 } }
       );
+    /**
+     * Is there a settlement crisis to LOOK at — the subsystem flag AND a live
+     * crisis? The German Question is admin-started and can be closed again, so
+     * the flag alone would leave the nav link standing over an empty board.
+     * Short-circuited on the flag, so a world with the feature off pays nothing
+     * and every other world pays one indexed lookup over a handful of rows.
+     */
+    const isSettlementCrisisLive = async (enabled: boolean | undefined) =>
+      enabled === true &&
+      (await db
+        .collection("settlementCrises")
+        .findOne({ status: { $in: ["open", "frozen"] } }, { projection: { _id: 1 } })) != null;
+
     const gameStatePromise = getGameStateCollection(db).then((col) =>
       col.findOne(
         { _id: "current" },
@@ -155,7 +168,7 @@ export async function GET() {
           isImperialMode: false,
           wikiDisabled: !!gameState?.wikiDisabled,
           conflictsEnabled: !!gameState?.conflictsEnabled,
-          settlementCrisisEnabled: !!gameState?.settlementCrisisEnabled,
+          settlementCrisisLive: await isSettlementCrisisLive(gameState?.settlementCrisisEnabled),
           unionsEnabled: false,
           pendingCharterCount: 0,
           pendingSeasonRecapId: null,
@@ -196,7 +209,7 @@ export async function GET() {
     const wikiDisabled = !!gameState?.wikiDisabled;
     const rpgStatsEnabled = !!gameState?.rpgStatsEnabled;
     const conflictsEnabled = !!gameState?.conflictsEnabled;
-    const settlementCrisisEnabled = !!gameState?.settlementCrisisEnabled;
+    const settlementCrisisLive = await isSettlementCrisisLive(gameState?.settlementCrisisEnabled);
 
     if (!user) {
       if (rawToken) {
@@ -225,7 +238,7 @@ export async function GET() {
           isImperialMode: false,
           wikiDisabled,
           conflictsEnabled,
-          settlementCrisisEnabled,
+          settlementCrisisLive,
           unionsEnabled,
           pendingCharterCount: 0,
           pendingSeasonRecapId: null,
@@ -698,7 +711,7 @@ export async function GET() {
         isImperialMode,
         wikiDisabled,
         conflictsEnabled,
-        settlementCrisisEnabled,
+        settlementCrisisLive,
         unionsEnabled,
         pendingCharterCount,
         pendingSeasonRecapId,

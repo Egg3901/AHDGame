@@ -95,7 +95,7 @@ export interface ExperimentalNavbarProps {
   imperialCharacter?: ImperialCharacterNav;
   conflictsEnabled?: boolean;
   unionsEnabled?: boolean;
-  settlementCrisisEnabled?: boolean;
+  settlementCrisisLive?: boolean;
   activePresidentElectionId?: string;
   activePresidentElectionSeatId?: string;
 }
@@ -121,7 +121,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   imperialCharacter,
   conflictsEnabled = false,
   unionsEnabled = false,
-  settlementCrisisEnabled = false,
+  settlementCrisisLive = false,
   activePresidentElectionId: _activePresidentElectionId,
   activePresidentElectionSeatId: _activePresidentElectionSeatId,
 }: ExperimentalNavbarProps) {
@@ -321,7 +321,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
     myCorporationId,
     conflictsEnabled,
     unionsEnabled,
-    settlementCrisisEnabled,
+    settlementCrisisLive,
   });
 
   const profileOrgItems = visibleProfileOrgItems({
@@ -386,6 +386,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               onNavigate={closeAll}
               strong={item.id === "legacyLeaderboard"}
               dot={item.primary ? "bg-primary" : undefined}
+              nested={item.parentId != null}
             >
               {t(item.labelKey)}
             </MenuRow>

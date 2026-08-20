@@ -45,9 +45,10 @@ export interface ClientNavBootstrap {
   /** When true, the Conflicts subsystem is live — drives the conditional
    *  "Conflicts" link in the World dropdown. */
   conflictsEnabled: boolean;
-  /** When true, settlement crises are live — drives the conditional
-   *  "The German Question" link in the World dropdown. */
-  settlementCrisisEnabled: boolean;
+  /** When true a settlement crisis is actually running — drives the
+   *  conditional "The German Question" link nested under Crises. Not merely
+   *  the subsystem flag: the question can be opened and closed at will. */
+  settlementCrisisLive: boolean;
   /** When true, the labour system is at its "full" tier (player-run unions are
    *  live) — drives the conditional "Unions" link in the World dropdown. */
   unionsEnabled?: boolean;

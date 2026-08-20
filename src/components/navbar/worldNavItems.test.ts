@@ -110,18 +110,40 @@ describe("buildWorldNavSections / looseWorldNavItems", () => {
 });
 
 describe("the German Question link", () => {
-  it("is hidden while the settlement gate is off", () => {
-    const items = visibleWorldNavItems({ settlementCrisisEnabled: false });
+  it("is hidden while no crisis is live", () => {
+    // Not gated on the subsystem flag: the question is admin-started and can be
+    // closed again, so the flag alone would leave a link to an empty board.
+    const items = visibleWorldNavItems({ settlementCrisisLive: false });
     expect(items.some((i) => i.id === "germanQuestion")).toBe(false);
   });
 
-  it("appears under Diplomacy once the gate is on", () => {
+  it("appears once a crisis is live", () => {
     // The page shipped with no navigation entry at all, so it was reachable
     // only by typing the URL. This is the guard against that recurring.
-    const items = visibleWorldNavItems({ settlementCrisisEnabled: true });
-    const link = items.find((i) => i.id === "germanQuestion");
-    expect(link?.href).toBe("/world/german-question");
+    const items = visibleWorldNavItems({ settlementCrisisLive: true });
+    expect(items.find((i) => i.id === "germanQuestion")?.href).toBe("/world/german-question");
+  });
+
+  it("nests under Crises, immediately after it", () => {
+    // It IS a crisis, not a sibling of the crisis board, and a child must
+    // follow its parent for the indent to read as a relationship.
+    const items = visibleWorldNavItems({ settlementCrisisLive: true });
+    const at = items.findIndex((i) => i.id === "germanQuestion");
+    expect(items[at]?.parentId).toBe("crises");
+    expect(items[at - 1]?.id).toBe("crises");
+  });
+
+  it("nests in the mobile drawer too, not only the dropdown", () => {
+    const items = visibleWorldNavItems({ settlementCrisisLive: true });
     const diplomacy = buildWorldNavSections(items).find((g) => g.id === "diplomacy");
-    expect(diplomacy?.items.some((i) => i.id === "germanQuestion")).toBe(true);
+    const ids = diplomacy?.items.map((i) => i.id) ?? [];
+    expect(ids).toContain("germanQuestion");
+    expect(ids.indexOf("germanQuestion")).toBe(ids.indexOf("crises") + 1);
+  });
+
+  it("keeps Crises reachable in its own right", () => {
+    // Nesting is presentational. The parent is still a link to the crisis board.
+    const items = visibleWorldNavItems({ settlementCrisisLive: true });
+    expect(items.find((i) => i.id === "crises")?.href).toBe("/world/crises");
   });
 });
