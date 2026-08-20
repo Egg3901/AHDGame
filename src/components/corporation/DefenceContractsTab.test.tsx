@@ -30,6 +30,7 @@ const contract = (over: Partial<CorporationContractView> = {}): CorporationContr
   encumberedAmount: 60_000,
   assignedFactories: 4,
   totalFactories: 4,
+  plantLabel: "SEE",
   ...over,
 });
 
@@ -54,6 +55,13 @@ describe("DefenceContractsTab", () => {
     expect(screen.getByText("60")).toBeTruthy();
     expect(screen.getByText("20")).toBeTruthy();
     expect(screen.getByText("$40,000")).toBeTruthy();
+  });
+
+  it("names the plant the order is on, so 4 lines are not read as 4 plants", () => {
+    setup();
+    expect(screen.getByText(/RU · ground · SEE/)).toBeTruthy();
+    expect(screen.getByText(/of 4 lines at SEE/)).toBeTruthy();
+    expect(screen.getByText(/they do not add plants/)).toBeTruthy();
   });
 
   it("names the delivery grade rather than printing a bare number", () => {

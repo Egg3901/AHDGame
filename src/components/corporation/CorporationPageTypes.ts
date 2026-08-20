@@ -85,6 +85,8 @@ export interface CorporationContractView {
   /** Production lines this order holds, and the plant's total (suggestion #281). */
   assignedFactories: number;
   totalFactories: number;
+  /** Which plant this order is on (name or host state). */
+  plantLabel: string;
   /** The grade this order is written for (0..3). */
   gradeCeiling?: number;
   /** Public disclosure that the awarding minister had an interest in this corporation. */

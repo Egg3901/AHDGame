@@ -80,6 +80,33 @@ describe("loadCorporationDefenceContracts", () => {
       1953
     );
     expect(v.contracts[0].projectedLotsPerTurn).toBeGreaterThan(0);
+    expect(v.contracts[0].plantLabel).toBe("this plant");
+  });
+
+  it("names the contracted plant so a CEO can tell which works the order is on", async () => {
+    const v = await loadCorporationDefenceContracts(
+      stubDb({
+        contracts: [contract()],
+        sectors: [sector({ stateId: "SEE", displayName: "Woolwich Arsenal" })],
+        corp: {},
+      }),
+      CORP_ID,
+      1953
+    );
+    expect(v.contracts[0].plantLabel).toBe("Woolwich Arsenal");
+  });
+
+  it("marks an overseas plant with its host country", async () => {
+    const v = await loadCorporationDefenceContracts(
+      stubDb({
+        contracts: [contract({ countryId: "UK" })],
+        sectors: [sector({ stateId: "GR_ATT", countryId: "GR" })],
+        corp: {},
+      }),
+      CORP_ID,
+      1953
+    );
+    expect(v.contracts[0].plantLabel).toBe("GR_ATT (GR)");
   });
 
   // A re-tooled line cannot deliver against a contract frozen to another component, so
