@@ -105,7 +105,7 @@ Cabinet members are nominated by the President and confirmed by the Senate. They
 | 6 | Secretary of Agriculture |
 | 7 | Secretary of Commerce |
 | 8 | Secretary of Labor |
-| 9 | Secretary of Health and Human Services |
+| 9 | Secretary of Health, Education, and Welfare (HHS after the Education Act splits Education off) |
 | 10 | Secretary of Housing and Urban Development |
 | 11 | Secretary of Transportation |
 | 12 | Secretary of Energy |

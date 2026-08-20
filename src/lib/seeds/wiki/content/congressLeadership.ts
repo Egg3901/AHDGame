@@ -22,11 +22,11 @@ Congressional leadership positions - Speaker, floor leaders, committee chairs - 
 
 ### UK Commons
 
-The Commons has its own leadership structure. See the [United Kingdom](/wiki/united-kingdom) hub for details on the Speaker of the House of Commons and party leadership there.
+The Commons has its own leadership structure. See the [United Kingdom](/wiki/uk-overview) hub for details on the Speaker of the House of Commons and party leadership there.
 
 ### JP Diet
 
-The Shugiin and Sangiin each elect a President (Speaker-equivalent). See the [Japan](/wiki/japan) hub.
+The Shugiin and Sangiin each elect a President (Speaker-equivalent). See the [Japan](/wiki/jp-overview) hub.
 
 ### DE Bundestag, NG National Assembly, CN legislature
 

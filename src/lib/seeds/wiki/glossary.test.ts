@@ -17,6 +17,13 @@ describe("WIKI_GLOSSARY", () => {
       "SOE",
       "extraction",
       "apportionment",
+      "ministerial actions",
+      "SED",
+      "National Front",
+      "command economy",
+      "FOMC",
+      "world events",
+      "SCOTUS",
     ]) {
       expect(keys).toContain(term);
     }

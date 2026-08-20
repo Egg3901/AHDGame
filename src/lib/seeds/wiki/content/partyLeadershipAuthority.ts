@@ -60,5 +60,5 @@ The gate only applies to these five parties. Every other UK party, and every par
 - [Chamber Leadership](/wiki/chamber-leadership) - presiding officer elections (Speaker, Bundestagspräsident, etc.), which use a different eligibility engine but a similar tenure philosophy
 - [Party Organization](/wiki/party-organization) - what Build Org and the org score actually do
 - [Party Actions](/wiki/party-actions) - Suppression, GOTV, and other budget-based actions covered by the capture shield
-- [United Kingdom](/wiki/united-kingdom) - country hub with more on UK's regional party landscape
+- [United Kingdom](/wiki/uk-overview) - country hub with more on UK's regional party landscape
 `;

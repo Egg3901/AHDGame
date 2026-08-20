@@ -58,4 +58,6 @@ campaign
 - [Stats & Actions](/wiki/stats-actions): costs and formulas.
 - [Player Progression](/wiki/player-progression): office ladder.
 - [Tips for Beginners](/wiki/tips-for-beginners): common mistakes.
+- [Mail](/wiki/mail): player-to-player inbox.
+- [News](/wiki/news): the public feed.
 `;

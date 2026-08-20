@@ -87,5 +87,5 @@ Each bill's detail page shows live For / Against / Abstain percentages for both 
 
 - [Bills & Legislation](/wiki/bills-legislation): full bill lifecycle from proposal to signature
 - [Congress Leadership](/wiki/congress-leadership): who controls the whip apparatus
-- [Committees](/wiki/committees): committee-stage influence on bills (future mechanic)
+- [Committees](/wiki/committees): national party committees, chamber chairs, and the future bill-committee stage
 `;
