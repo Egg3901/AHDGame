@@ -279,6 +279,111 @@ describe("processCentralBankChairSelection", () => {
     expect(mockUpdateOne).not.toHaveBeenCalled();
   });
 
+  it("does not redraw every turn while an NPP caretaker is mid-term and nominations exist", async () => {
+    // Prod loop: every bank sat chairMode npp with chairCharacterId null (NPP
+    // chairs never occupy the player mirror). isNominationWindowOpen is always
+    // true for that shape, so a leftover nomination re-opened selection every
+    // turn, re-notifying the nominee and churning appointments world-wide.
+    mockFind.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "US",
+          countryId: "US",
+          chairMode: "npp",
+          chairNppId: new ObjectId(),
+          chairCharacterId: null,
+          chairCharacterName: null,
+          chairTermExpiresAtTurn: 411,
+          nominations: [
+            {
+              characterId: candidateId,
+              characterName: "Wealthy Player",
+              nominatedBy: executiveId,
+              nominatedByName: "The President",
+              nominatedAt: gameNow,
+            },
+          ],
+          lobbyingPool: [],
+          chairInfamy: 0,
+        },
+      ]),
+    });
+
+    const { processCentralBankChairSelection } = await import("./centralBankChairSelection");
+    const result = await processCentralBankChairSelection(mockDb as any, 260, gameNow);
+    expect(result.selectionsTriggered).toBe(0);
+    expect(mockUpdateOne).not.toHaveBeenCalled();
+  });
+
+  it("still draws when an NPP caretaker is occupying a flagged vacancy and nominations exist", async () => {
+    mockFind.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "US",
+          countryId: "US",
+          chairMode: "npp",
+          chairNppId: new ObjectId(),
+          chairCharacterId: null,
+          chairCharacterName: null,
+          chairTermExpiresAtTurn: null,
+          vacancyAwaitingAutomaticSelection: true,
+          nominations: [
+            {
+              characterId: candidateId,
+              characterName: "Wealthy Player",
+              nominatedBy: executiveId,
+              nominatedByName: "The President",
+              nominatedAt: gameNow,
+            },
+          ],
+          lobbyingPool: [],
+          chairInfamy: 0,
+        },
+      ]),
+    });
+
+    const { processCentralBankChairSelection } = await import("./centralBankChairSelection");
+    const result = await processCentralBankChairSelection(mockDb as any, 260, gameNow);
+    expect(result.selectionsTriggered).toBe(1);
+    expect(result.politicalPicks).toBe(1);
+  });
+
+  it("does not treat a seated NPP caretaker with a nulled term as a bootstrap vacancy", async () => {
+    // persistPendingProposal used to null chairTermExpiresAtTurn while leaving
+    // chairMode npp. If the pending row was then lost, bootstrap vacancy fired
+    // again every turn.
+    mockFind.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "US",
+          countryId: "US",
+          chairMode: "npp",
+          chairNppId: new ObjectId(),
+          chairCharacterId: null,
+          chairCharacterName: null,
+          chairTermExpiresAtTurn: null,
+          vacancyAwaitingAutomaticSelection: false,
+          nominations: [
+            {
+              characterId: candidateId,
+              characterName: "Wealthy Player",
+              nominatedBy: executiveId,
+              nominatedByName: "The President",
+              nominatedAt: gameNow,
+            },
+          ],
+          lobbyingPool: [],
+          chairInfamy: 0,
+        },
+      ]),
+    });
+
+    const { processCentralBankChairSelection } = await import("./centralBankChairSelection");
+    const result = await processCentralBankChairSelection(mockDb as any, 260, gameNow);
+    expect(result.selectionsTriggered).toBe(0);
+    expect(mockUpdateOne).not.toHaveBeenCalled();
+  });
+
   it("triggers selection for a bootstrap vacancy (null chair + null term)", async () => {
     mockFind.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([

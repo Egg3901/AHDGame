@@ -422,8 +422,14 @@ export async function processFomcMeetings(
         // no player has held a chair anywhere in the world. Flag the vacancy
         // instead and let the selection phase draw from the nomination pool.
         if (refreshed.chairRefreshed) {
-          set.vacancyAwaitingAutomaticSelection = true;
-          set.chairTermExpiresAtTurn = null;
+          // A player offer already in flight must not be treated as a fresh
+          // vacancy: that re-entered selection every turn and re-appointed
+          // over the pending nominee. The caretaker keeps the committee
+          // quorate; accept/decline still owns the seat.
+          if (!bank.chairSelectionPending) {
+            set.vacancyAwaitingAutomaticSelection = true;
+            set.chairTermExpiresAtTurn = null;
+          }
         }
       }
     }

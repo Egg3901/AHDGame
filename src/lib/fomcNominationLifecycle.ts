@@ -20,7 +20,7 @@ import { getGameState } from "@/lib/gameState";
 import { nppCabinetVote } from "@/lib/cabinetNominationLifecycle";
 import type { CountryId } from "@/lib/constants/countries";
 import type { ElectedOfficial, NPP, Character } from "@/lib/db/types";
-import type { CentralBank, FomcNomination } from "@/lib/db/types/centralBank";
+import { FOMC_TERM_TURNS, type CentralBank, type FomcNomination } from "@/lib/db/types/centralBank";
 
 /** Resolve a player character's owning userId for notifications. */
 async function nomineeUserId(
@@ -90,10 +90,16 @@ async function castNppFomcVotes(
 async function installConfirmedSeat(
   db: Awaited<ReturnType<typeof getDb>>,
   nom: FomcNomination,
-  now: Date
+  now: Date,
+  currentTurn: number
 ): Promise<void> {
   const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: nom.bankId });
   if (!bank?.fomcBoard) return;
+
+  // A fresh term is load-bearing: keeping the outgoing seat's (often already
+  // expired) term made `refreshExpiredSeats` replace the confirmed nominee
+  // with a technocrat on the same turn, which looked like endless appointment.
+  const termExpiresAtTurn = currentTurn + FOMC_TERM_TURNS;
 
   const board = bank.fomcBoard.map((seat) => {
     if (seat.seatId !== nom.seatId) {
@@ -109,7 +115,8 @@ async function installConfirmedSeat(
       alignment: nom.alignment,
       isChair: nom.makeChair ? true : seat.isChair,
       appointedByPresidentId: nom.proposedByPresidentId,
-      appointedAtTurn: bank.fomcTermStartedAtTurn ?? 0,
+      appointedAtTurn: currentTurn,
+      termExpiresAtTurn,
     };
   });
 
@@ -117,6 +124,8 @@ async function installConfirmedSeat(
   // Keep the single-chair mirror fields coherent when the chair seat changes.
   if (nom.makeChair) {
     set.chairAlignment = nom.alignment;
+    set.chairTermExpiresAtTurn = termExpiresAtTurn;
+    set.vacancyAwaitingAutomaticSelection = false;
     if (nom.occupantType === "player") {
       set.chairMode = "character";
       set.chairCharacterId = nom.nomineeCharacterId;
@@ -204,7 +213,7 @@ export async function processFomcNominationLifecycle(
     const seatLabel = nom.makeChair ? "Fed Chair" : `FOMC seat ${nom.seatId}`;
 
     if (passed) {
-      await installConfirmedSeat(db, nom, now);
+      await installConfirmedSeat(db, nom, now, currentTurn);
       await db
         .collection<FomcNomination>("fomcNominations")
         .updateOne(

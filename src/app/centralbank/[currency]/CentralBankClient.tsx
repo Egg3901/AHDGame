@@ -604,7 +604,10 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
 
       {activeTab === "overview" && (
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          {data.pendingChairRequiresMyResponse && data.chairMode !== "npp" && (
+          {/* Do not gate on chairMode !== "npp": persistPendingProposal leaves
+              chairMode npp on the caretaker, which hid this banner on every
+              live Fed/BoE/etc. offer (ticket #1144). */}
+          {data.pendingChairRequiresMyResponse && (
             <div className="mb-6 rounded-xl border border-primary/35 bg-primary/10 px-4 py-4 sm:px-5">
               <p className="text-sm font-semibold text-foreground">
                 You have been selected as the next {data.chairTitle}
@@ -651,7 +654,7 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                 latestGdp={latestGdp}
                 chairSelectionPending={data.chairSelectionPending}
                 viewerIsChairNominee={data.viewerIsChairNominee ?? false}
-                countryCode={data.countryId ?? ""}
+                countryCode={data.countryId || countryId}
                 chairMode={data.chairMode}
               />
               {data.isExecutive && data.chair && data.chairMode !== "npp" && (
