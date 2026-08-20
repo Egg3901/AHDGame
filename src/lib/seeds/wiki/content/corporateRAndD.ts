@@ -87,7 +87,7 @@ probability = min(1, rdScore / 200)
 | 100 | 50% |
 | 200 | 100% |
 
-On success, one random sector receives a **revenue boost** (1-5% regular corps, 1-3% extraction). Extraction corps also gain permanent **state resource capacity**. Breakthroughs notify the CEO in-game.
+On success, one random sector receives a **revenue boost** (2-10% for regular corps, 1-10% for extraction). Extraction corps also gain permanent **state resource capacity**. Breakthroughs notify the CEO in-game.
 
 Tech trees and breakthroughs complement each other: trees give targeted permanent power, and breakthroughs add random sector growth on top.
 

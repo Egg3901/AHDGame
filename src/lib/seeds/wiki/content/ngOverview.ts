@@ -2,6 +2,8 @@ export const ngOverviewContent = `# Nigeria
 
 Nigeria is a **federal presidential republic**: Africa's most populous democracy, with a directly elected President, a bicameral National Assembly, and 36 states plus the Federal Capital Territory. The President serves a fixed 4-year term with a 2-term limit per character. Nigeria uses First Past the Post (FPTP) for all federal elections, with single-member constituencies in both chambers.
 
+Nigeria is fully authored (seeds, offices, and election systems) and is part of the **1991 scenario roster** (US, UK, JP, DE, CN, BR, IE, NG). Availability is seed and world dependent: a world seeded in an era that includes Nigeria can be played as Nigeria, while the current default world flags its status as coming soon.
+
 ---
 
 ## Government structure
@@ -12,6 +14,7 @@ Nigeria is a **federal presidential republic**: Africa's most populous democracy
 | Vice President | Elected on presidential ticket | 4 years | 1 |
 | Senator | FPTP statewide election | 4 years | 109 |
 | Representative | FPTP district-level election | 4 years | 360 |
+| Assembly Member (State House of Assembly) | FPTP zone election | 4 years | 990 |
 | Governor | FPTP statewide election | 4 years | 1 per state (36) |
 | Governor of the CBN | Appointed action | 5 years | 1 |
 
@@ -70,6 +73,8 @@ Nigeria has no parliamentary confidence vote. The President serves the full 4-ye
 
 **FPTP single-member constituencies.** Nigeria is the only non-US country using pure FPTP with single-member districts for **both** chambers. This produces geographic-concentration-driven outcomes: a party with concentrated regional support overperforms relative to its national vote share.
 
+**State House of Assembly.** Each of Nigeria's six geopolitical zones elects Assembly Members to a 990-seat State House of Assembly (the "Assembly Member" office), allocated by zone population: North West 259, North East 137, North Central 146, South West 197, South South 134, South East 117.
+
 **No snap elections.** Both chambers have fixed 4-year terms. The President cannot dissolve the National Assembly.
 
 **No confidence votes.** The President serves the full term. There is no legislative mechanism to remove the President mid-term through a standard vote.
@@ -84,12 +89,12 @@ Nigeria has no parliamentary confidence vote. The President serves the full 4-ye
 
 | Stage | Target | Why |
 | --- | --- | --- |
-| Entry | Representative | +1 action/turn; national legislature access from the start |
-| Parallel | Senator | +2 actions/turn; 4-year terms; reviews House bills |
-| Mid-game | Governor | +2 actions/turn; controls state executive; 4-year term |
+| Entry | Assembly Member | +1 action/turn; cheapest race, builds favorability and PI in your home zone |
+| Parallel | Representative | +1 action/turn; national legislature access |
+| Mid-game | Senator or Governor | +2 actions/turn; either federal upper chamber or state executive |
 | Top | President | +4 actions/turn; heads state and government; 2-term cap |
 
-Nigeria has no sub-national legislature. The first rung of national play is a House of Representatives seat, contested via FPTP in your home district.
+The State House of Assembly is Nigeria's sub-national legislature: the cheapest entry point, similar to a US State Senate seat.
 
 ---
 
@@ -116,6 +121,8 @@ Nigeria's central bank operates at a structurally higher rate environment than o
 | Initial exchange rate | 1550 NGN per internal unit (≈ 0.00064 USD per NGN) |
 
 These baselines reflect the naira's historical weakness and Nigeria's inflationary macro environment. The CBN Governor's prime rate decisions ripple through borrowing costs, inflation, and GDP growth nationwide.
+
+**Era note.** These are the modern (1999+) anchors. A 1953-start world runs Nigeria under the colonial sterling peg instead: target inflation 2.0% and neutral prime rate 3.5%, imported UK-level price stability rather than the post-independence naira regime. The anchors graduate automatically as a world's in-game year advances past 1971/1979/1991.
 
 ---
 

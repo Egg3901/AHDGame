@@ -22,74 +22,49 @@ Every action should move you closer to **winning your next election.** Early gam
 | --- | --- |
 | New character, no office | Campaign > Build Donor Network (to level 2) > Fundraise > Quick Poll > Ads |
 | Mid-build, no election yet | Fundraise > Campaign > Build Donor Network > Barnstorm for allies |
-| Primary declared | Campaign heavily > targeted ads > NPP endorsement requests |
-| General, opening | Campaign + ads in weak demographics > NPP endorsements > Full Poll |
+| Primary declared | Campaign heavily > targeted ads > build alignment NPPs are likely to endorse |
+| General, opening | Campaign + ads in weak demographics > Full Poll |
 | General, middle | Maintain PI + Favorability > Opposition Research on leading opponent |
 | Final 4 turns | Closing-sprint campaign + canvassing + ads |
 | Incumbent between cycles | Maintain PI + fundraise for war chest + build party influence |
 
-## The campaign page (upgrades and budget)
+## The campaign page (Strategic Ops trees and budget)
 
-Once you're a candidate, your **campaign page** (\`/campaign/[id]\`) gives you a **separate budget** with upgrades. This is distinct from your personal Campaign Funds.
+Once you're a candidate, your **campaign page** (\`/campaign/[id]\`) gives you a **separate budget** spent on **Strategic Ops trees**. This is distinct from your personal Campaign Funds.
 
-### Fundraising levels (10 tiers)
+### Strategic Ops trees, not flat levels
 
-Your campaign has a fundraising level 0-10 that generates passive income per turn:
+Fundraising, Ground Game, Media Spending, and Opposition Research are each a small **branch tree**, not a flat 1-10 level ladder. You unlock a **starter** node (funds + actions), then invest further into up to three branches per tree (labelled a/b/c on the campaign page, e.g. Media Spending's Broadcast and Television branches, Opposition Research's Dossier, Scandal Leak, and Counter-Intel). Each branch has its own magnitude that stacks with the starter and with the other branches in the same tree, so two campaigns at "the same tree" can have very different effects depending on which branches they invested in.
 
-| Level | Income/turn | Upgrade cost | Actions |
-| --- | --- | --- | --- |
-| 0 | ₳20,000 | n/a | n/a |
-| 1 | ₳35,000 | ₳50,000 | 10 |
-| 2 | ₳60,000 | ₳120,000 | 15 |
-| 3 | ₳100,000 | ₳250,000 | 20 |
-| 4 | ₳150,000 | ₳500,000 | 25 |
-| 5 | ₳200,000 | ₳900,000 | 30 |
-| 6 | ₳350,000 | ₳1,500,000 | 40 |
-| 7 | ₳600,000 | ₳2,500,000 | 50 |
-| 8 | ₳1,000,000 | ₳4,000,000 | 60 |
-| 9 | ₳2,500,000 | ₳6,500,000 | 75 |
-| 10 | ₳5,000,000 | ₳10,000,000 | 90 |
+Approximate per-tree effects once started:
 
-**General phase multiplier:** Upgrade costs are **1.5× higher** once the election enters the general phase. Front-load upgrades during primaries.
+| Tree | Starter effect | Branches add |
+| --- | --- | --- |
+| **Fundraising** | Passive income per turn (base ~₳35k) | Grassroots, Bundlers, Direct Mail: more passive income |
+| **Media Spending** | Base passive Favorability gain per turn | Broadcast, Television: more Favorability per turn; Rapid Response: reacts to attacks |
+| **Ground Game** | Base swing-area turnout bonus | Field Offices: bigger swing-area bonus; Get-Out-The-Vote: turnout bonus everywhere, not just swing areas; Volunteer Corps |
+| **Opposition Research** | Base drain on one target (~-0.5%/turn) | Dossier: more drain; Scandal Leak; Counter-Intel: amplifies the drain |
 
-### Strategic upgrades (4 dimensions)
-
-Each upgrade tier has up to 5 levels (or 10 for Fundraising):
-
-| Upgrade | Levels | Effect per level | Maintenance/turn |
-| --- | --- | --- | --- |
-| **Fundraising** | 10 | Passive income per turn (see table above) | n/a |
-| **Media Spending** | 5 | +0.5% Favorability per level per turn (passive) | Yes (steep) |
-| **Ground Game** | 5 | +3% turnout in swing states per level | Yes |
-| **Opposition Research** | 5 | −0.5%/turn Favorability drain to one target | n/a |
-
-**Maintenance** is deducted from campaign funds each turn. If projected funds can't cover next turn's maintenance, levels **auto-downgrade**: Media first, then Ground Game. No refund.
+**Maintenance** is deducted from campaign funds each turn. If projected funds can't cover next turn's maintenance, branches **auto-downgrade** rather than the whole tree collapsing at once. No refund.
 
 ### Opposition Research
 
-Lets you drain an opponent's Favorability passively. Retargeting has a 6-hour cooldown.
+Lets you drain an opponent's Favorability passively. Retargeting has a cooldown.
 
-- Level 1: −0.5%/turn to target
-- Level 5: −2.5%/turn to target
-
-In the final 4 turns the effect **doubles** (2× campaign-season multiplier). A Level 3 Opposition Research in the closing sprint is effectively −3%/turn on the target, which over 4 turns is −12 Favorability, often race-deciding.
+In the final 4 turns the effect **doubles** (2× campaign-season multiplier). A well-invested Opposition Research tree in the closing sprint can be worth several points of Favorability drain over the final stretch, often race-deciding.
 
 ### Campaign actions
 
 Your campaign generates its own per-turn action pool:
 
-- **Base:** Every campaign earns at least 1 action/turn.
-- **Endorsements:** NPP and player endorsements (presidential only) add actions via \`1 + floor(sqrt(endorsements) × 3)\`. 9 endorsements ≈ 10 actions/turn.
+- **Base:** Every campaign earns at least 4 actions/turn (the player base action rate from game config, floored at 4).
+- **Endorsements:** NPP, player, governor, and executive endorsements add actions via \`baseline + floor(sqrt(endorsements) × 3)\`. At the 4-action baseline, 9 endorsements ≈ 13 actions/turn.
 
 Campaign actions are spent **only** on upgrades, not on regular character actions.
 
 ## Party organization
 
-Party organization (0-100) in your state gives a vote-pool multiplier:
-
-- **Formula:** \`1.0 + (stateOrg / 100) × 0.6\`
-- **Range:** 1.0× at org=0, **1.6× at org=100**
-- **No penalty:** low org gives baseline 1.0×
+Party organization in a state feeds a **normalized share** of that state's total party organization: your party's org divided by every party's org in the state. A party with no presence in a state gets 0 (no votes there); a dominant party gets a multiplier close to 1.0.
 
 Investing in your state party's organization pays off for **every candidate in your party** who runs in that state. See [Party Building](/wiki/party-building) for the chair-side tools.
 
@@ -133,7 +108,7 @@ Red flags:
 
 ### Build phase
 
-- Get Donor Base to Level 3 (₳75k + ₳100k = ₳175k investment, 12 actions), for permanent compounding income.
+- Build Donor Base early: base cost is $3K + $1.5K per current level (scaled by state GDP per capita), cheap at low levels and escalating toward ~$4.4M for the full 0→75 climb, for permanent compounding income.
 - Hit Favorability 65 via 3 to 5 ads.
 - Push Political Influence to 40+ through daily Campaign actions.
 - Join a party; invest ~2 weeks real-time to push Party Influence up.
@@ -143,7 +118,7 @@ Red flags:
 
 - Campaign aggressively in-state: every +1 PI converts to ~0.25 primary score points.
 - Keep Favorability 70+: each point is worth 0.35 primary score points.
-- Request NPP endorsements (align with party).
+- NPPs endorse autonomously based on alignment, so staying close to your party's platform makes you a more attractive endorsement target.
 - Don't attack primary rivals.
 
 ### Early general
@@ -151,7 +126,6 @@ Red flags:
 - Front-load upgrades (no 1.5× multiplier on primary-phase upgrades).
 - Full Demographic Poll to diagnose weak groups.
 - Target ads and canvassing to weak groups.
-- NPP endorsements are worth more in general than primary.
 
 ### Final sprint (last 4 turns)
 

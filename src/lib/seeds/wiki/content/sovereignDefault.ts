@@ -18,41 +18,26 @@ A default crisis is triggered by **3 consecutive failed auctions**: three straig
 
 ## Demand penalty curve
 
-The demand ratio is driven down by three penalties that stack:
-
-### Debt-to-GDP penalty
+The demand ratio starts from a base appetite and sums seven threshold-gated components, then adds a capped entity-holdings bonus:
 
 \`\`\`
 BASE_DEMAND = 1.2
-FLOOR       = 0.6
-RATE        = 0.3     // normal regime
-CLIFF_RATE  = 0.4     // kicks in once debt/GDP > 2.0
 
-demand = BASE_DEMAND − RATE × min(debtGDP, 2.0)
-if debtGDP > 2.0:
-    demand −= CLIFF_RATE × (debtGDP − 2.0)
-demand = max(demand, FLOOR)
+debtToGdpPenalty  = debtGDP > 0.6 ? −(debtGDP − 0.6) × 0.3 : 0
+debtToGdpCliff    = debtGDP > 2.0 ? −(debtGDP − 2.0) × 0.4 : 0   // stacks on top of the graduated penalty
+inflationPenalty  = inflation > 0.05 ? −(inflation − 0.05) × 2.0 : 0
+fxPenalty         = fxDepreciation10t > 0 ? −fxDepreciation10t × 1.5 : 0
+defaultScar       = turnsSinceDefault < 100 ? −(100 − turnsSinceDefault) × 0.01 : 0
+trustModifier     = (trust − 0.5) × 0.4
+couponPremium     = (sovereignCoupon − globalBenchmark) × 5.0
+
+demand = BASE_DEMAND + sum(debtToGdpPenalty, debtToGdpCliff, inflationPenalty,
+                            fxPenalty, defaultScar, trustModifier, couponPremium)
+       + min(entityHoldings ÷ requiredIssuance × 0.5, 0.4)   // capped Model B holdings bonus
+demand = max(demand, 0)
 \`\`
 
-The cliff at 2.0× debt-to-GDP means crossing that threshold accelerates the collapse: the rate steepens from 0.3 to 0.4 per unit of excess leverage.
-
-### Inflation penalty
-
-\`\`\`
-inflationPenalty = max(inflation × 2.0, floor 0.05)
-\`\`
-
-A minimum 0.05 penalty applies even at low inflation; above that it scales linearly with the inflation rate.
-
-### FX depreciation penalty
-
-\`\`\`
-fxPenalty = depreciation × 1.5
-\`\`
-
-A weakening currency compounds the demand problem: foreign buyers face a depreciating asset.
-
-The final demand ratio is the base minus all three penalties, floored at 0.6.
+Both the debt-to-GDP penalty and the inflation penalty are threshold-gated: they only kick in once debt exceeds 60% of GDP or inflation exceeds 5%. Below those lines, neither component subtracts anything. The 2.0× debt-to-GDP cliff stacks on top of the graduated penalty once leverage crosses that line. A country can also buy back demand by offering a coupon above the global benchmark rate, or lose it to a lingering default scar or low investor trust.
 
 ## Warning window
 
@@ -71,15 +56,16 @@ If either window expires without action, consequences escalate (forced resolutio
 
 ## Resolution paths
 
-The executive selects one of three resolutions, each with a different GDP penalty:
+The executive selects one of four resolutions:
 
 | Path | GDP penalty | Description |
 | --- | --- | --- |
 | **Repudiate** | −12% GDP | Refuse to pay; bondholders take the full hit |
 | **Restructure** | −6% GDP | Haircut + maturity extension for bondholders |
 | **IMF Bailout** | −2% GDP | Accept an IMF facility (see [IMF & Bailouts](/wiki/imf)) |
+| **Monetize** | no flat GDP hit; damage runs through inflation instead | Print money to cover the debt; blocked once current inflation exceeds 8% |
 
-Repudiate is the most destructive to the economy and to investor confidence but leaves the country debt-free. Restructure splits the pain between the state and bondholders. The IMF bailout is the smallest immediate GDP hit but comes with the IMF's own ongoing conditions (income capture, share-price discount).
+Repudiate is the most destructive to the economy and to investor confidence but leaves the country debt-free. Restructure splits the pain between the state and bondholders. The IMF bailout is the smallest immediate GDP hit but comes with the IMF's own ongoing conditions (income capture, share-price discount). Monetize avoids a direct GDP penalty but is gated off once inflation is already high, and triggers its own inflation shock plus (in parliamentary countries) an automatic no-confidence vote.
 
 ## Default scar
 
@@ -110,13 +96,14 @@ During this floor the country cannot roll debt, forcing it to run primary surplu
 | Constant | Value |
 | --- | --- |
 | BASE_DEMAND | 1.2 |
-| Demand floor | 0.6 |
-| Normal rate (debt/GDP) | 0.3 |
+| Debt-to-GDP penalty threshold | 60% of GDP |
+| Normal rate (debt/GDP, above threshold) | 0.3 |
 | Cliff rate (debt/GDP > 2.0) | 0.4 |
 | Debt-to-GDP cliff threshold | 2.0 |
-| Inflation floor | 0.05 |
-| Inflation rate | 2.0 |
+| Inflation penalty threshold | 5% |
+| Inflation rate (above threshold) | 2.0 |
 | FX depreciation rate | 1.5 |
+| Entity-holdings (Model B) bonus cap | 0.4 |
 | Failed-auction threshold | demand < 0.7 |
 | Undersubscribed threshold | demand < 1.0 |
 | Consecutive failures to trigger | 3 |
@@ -126,6 +113,7 @@ During this floor the country cannot roll debt, forcing it to run primary surplu
 | Repudiate GDP penalty | −12% |
 | Restructure GDP penalty | −6% |
 | IMF bailout GDP penalty | −2% |
+| Monetize inflation gate | blocked above 8% inflation |
 | Default scar duration | 100 turns |
 | Scar per-turn penalty | −1% |
 | Cascade depth | 3 levels |

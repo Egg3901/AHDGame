@@ -26,27 +26,18 @@ Every turn, for every candidate, the vote math computes **per-cell contributions
 | Factor | Range | What it measures |
 | --- | --- | --- |
 | **Reach** | 0-1.0 | A square-root curve on influence, clamped to 1.0 at 100 PI/NPI |
-| **Appeal** | 0-50 | (50 minus 5 times the econ distance minus 5 times the social distance), squared and divided by 100, plus 25 times the reach curve above |
+| **Appeal** | 0-50 | A power-curve position score (exponent 1.5, not squared) on econ/social distance, plus a small directional bonus for tribally-aligned candidates, plus a normalized-influence term worth up to 12.5 |
 | **Approval** | 0-1 | Favorability divided by 100 |
-| **Party Org** | 0.5-1.0 | 0.5 plus half of state party organization divided by 100 (1.0 for independents) |
+| **Party Org** | 0-1.0 | Each party's organization as a normalized share of the state's total organization (0 for parties with no presence there; independents use a neutral fallback) |
 | **Infamy** | 0.95-1.0 | 1 minus 0.05 times infamy divided by 100 (1.0 for NPPs) |
 
 For each cell the turn pool contribution is split among candidates proportional to **appeal x reach x approval x party org x infamy multiplier**. Then the party strength modifier, (1 plus state government approval) times office strength, scales the entire turn pool.
 
-### Appeal is quadratic
+### Appeal is a softened power curve
 
-The key insight: Appeal is a **quadratic function** of policy distance. A 1-point distance loses you far less than a 4-point distance:
+The key insight: Appeal responds to policy distance through a **power curve with exponent 1.5**, not a square. A 1-point distance loses you less than a 4-point distance, but the curve is deliberately softer than squaring so that campaigning, favorability, and org still move outcomes instead of ideology alone dominating every race.
 
-| Distance from group lean (econ + social combined) | Appeal component |
-| --- | --- |
-| 0 | 50 (max) |
-| 2 | 40 |
-| 4 | 28 |
-| 6 | 16 |
-| 8 | 6 |
-| 10 | 0 |
-
-A centrist candidate (0, 0) has moderate distance from every group, so appeal sits around 28 across the board. A far-left candidate (-5, -5) is nearly on top of the most progressive cells (appeal 50) and 20 points away from the most conservative ones (appeal 0). Specialists beat generalists within their core base; generalists beat specialists across the full field.
+A centrist candidate (0, 0) has moderate distance from every group, so appeal sits in the middle across the board. A far-left candidate (-5, -5) is nearly on top of the most progressive cells (appeal near max) and far from the most conservative ones (appeal near the floor). Specialists beat generalists within their core base; generalists beat specialists across the full field.
 
 ## Turnout system
 

@@ -37,7 +37,7 @@ Each turn you receive:
 - **Office bonus**: stacked on top of base:
   - House / State Senate / Bundestag member / Sangiin member / MP: **+1**
   - Senate / Vice President / state governor analogue: **+2**
-  - Governor: **+3**
+  - Governor: **+2**
   - President: **+4**
   - Central Bank Chair: **+3** (stacks on any office bonus you also hold)
 - **Party bonus**: a variable share of your party's action pool, allocated by Party Influence × platform-alignment closeness.
@@ -57,8 +57,8 @@ Action costs for core activities (full list on [Stats & Actions](/wiki/stats-act
 | Run Advertisements | 5-9 (tiered by favorability) | Scaled by state GDP | +1-3 Favorability (diminishing above 70%) |
 | Full Demographic Poll | 6 | ₳75k | complete breakdown |
 | Build Donor Network | 4-20 (tiered by level) | Scaled by state GDP | donor level +1 |
-| Support | 2 | none | +1% target Favorability |
-| Attack | 2 | none | −1% target Favorability; +2% own Infamy |
+| Support | 6 | none | +1% target Favorability (±12 net swing cap per target per turn) |
+| Attack | 6 | none | −1% target Favorability; +2% own Infamy (±12 net swing cap per target per turn) |
 | Barnstorm | 5 | ₳100k | +1-2% target Political Influence |
 | Presidential Travel | 5 | none | Sets travel state during general; +1%/turn Favorability while there |
 
@@ -74,14 +74,14 @@ Two money pools, separate and non-convertible:
 Fund generation per turn (Campaign Funds):
 
 - **Base rate**: a small fixed amount per turn.
-- **Donor bonus**: scaled by donor level and state population tier (small state +₳500/level, medium +₳1000, large +₳2000, mega +₳4000).
+- **Donor bonus**: scaled by donor level and state population tier (small state +₳100/level, medium +₳200/level, large +₳400/level, mega +₳800/level).
 - **Office bonus**: House +₳5k, State Senate +₳3k, Senate +₳15k, VP +₳25k, Governor +₳15k, President +₳50k.
 
 Cash on Hand comes from passive income streams (corporation dividends, bond coupons, share sales) and a 50% slice of any Personal Campaign Donation you make (the other 50% moves to Campaign Funds).
 
 ## The turn processing order (engineer's note)
 
-Each hour the processor runs **40+ phases in 14 groups**. Most phases within a group run in parallel; some groups (notably election resolution) are strictly sequential. You don't need to know the order to play well, but if you're wondering why your campaign action from 03:59 shows up "on the next turn," this is why.
+Each hour the processor runs roughly a dozen top-level adapters that together call over 100 phase steps, organized into 14 groups. Most phases within a group run in parallel; some groups (notably election resolution) are strictly sequential. You don't need to know the order to play well, but if you're wondering why your campaign action from 03:59 shows up "on the next turn," this is why.
 
 | Group | What happens | Ordering |
 | --- | --- | --- |
@@ -120,7 +120,7 @@ Every player candidacy has a dedicated **Campaign page** at \`/campaign/[id]\`:
 - **Party view**: Intelligence snapshot: strategy, polling, spending.
 - **Public view**: Basic summary only.
 
-The campaign manager page is where you plan large campaign operations, track activity logs, and view NPP endorsements. Details: [Campaign Manager](/wiki/campaign-manager).
+The campaign manager page is where you spend a separate campaign budget on Fundraising, Ground Game, Media Spending, and Opposition Research: each is a branch tree, not a flat level ladder, so how you invest within a tree matters as much as how much. It's also where you track activity logs and view NPP endorsements. Details: [Campaign Manager](/wiki/campaign-manager) and [Campaign Strategy](/wiki/campaign-strategy).
 
 ## Perpetual elections
 

@@ -35,8 +35,7 @@ The Diet is Japan's bicameral national legislature. Unlike the UK where the uppe
 - **6-year staggered terms**: half contested every 3 years (2 classes)
 - **Cannot be dissolved**: provides legislative continuity even during snap elections
 - Revises legislation; can reject Shūgiin bills but the Shūgiin can override with a 2/3 supermajority
-- Class 1 regions: Hokkaido, Kanto, Kansai, Shikoku (131 seats)
-- Class 2 regions: Tohoku, Chubu, Chugoku, Kyushu & Okinawa (117 seats)
+- Every region splits its Sangiin seats across both classes (Class 1 gets the ceiling half, Class 2 the floor half): 124 seats up per class, 248 total
 
 ---
 
