@@ -28,7 +28,8 @@ Instead of one national conglomerate, a command country's commanding heights are
 - **Plan target**: the output quota it is expected to hit.
 - **Output**: what it actually produced this turn.
 - **Plan fulfillment**: output divided by target. This is the score the enterprise is judged on.
-- **Capacity and efficiency**: how much it *could* produce and how well it uses what it has.
+- **Capacity**: how much the enterprise *could* produce if it ran flat out.
+- **Efficiency**: this is **capacity utilisation**, output divided by capacity. It is *not* cost per unit. Efficiency under 50% means the enterprise is only using half the capacity it owns; efficiency over 100% means it is running above nameplate. Idle capacity still costs upkeep every turn, so low efficiency is a bill, not just a low score.
 - **Cumulative losses**: the running tally of missed plan (the soft-budget bill).
 
 When lots of SOEs beat their targets, the plan is working and the command model holds. When they chronically miss, shortages build and pressure to reform the whole system grows.
@@ -43,9 +44,16 @@ One director seat per strategic SOE. The director runs a single enterprise and c
 
 - **Production target**: play it safe or stretch for a higher quota.
 - **Investment request**: ask the Gosbank Chair for capital to expand.
-- **Labor vs quality**: chase raw output now, or build efficiency and quality for later.
+- **Labor vs quality**: one slider, not two levers. Push it toward **quality** and the efficiency trend slowly climbs; push it toward **raw output** and the efficiency trend slowly drags down. It is a small nudge each turn (efficiency is mostly set by how well capacity is used, below), so treat it as a long-run lean: quality on the enterprises you are building up, raw output to squeeze the ones already running flat out.
 
 Hit your targets and your enterprise grows and your political standing rises. Miss them and you feed the shortages that erode the whole command system.
+
+### Reading efficiency and where investment goes
+
+Because efficiency is capacity utilisation, investment (new capacity from the Gosbank) does the opposite of what it looks like on a *low*-efficiency enterprise: adding capacity to a factory that is only half used pushes utilisation down further and adds more upkeep for capacity nobody is producing with. The rule of thumb:
+
+- **Invest where efficiency is high** (near or above 100%). These enterprises are capacity-constrained with real demand behind them, so more capacity turns into more output.
+- **Where efficiency is low** (well under 50%), do **not** pour in capacity. Either lean the labor/quality slider toward raw output to use the capacity already there, or **close** capacity to stop the upkeep bleed. An enterprise sized far above its demand is a loss machine, and the fix is to shrink it, not fund it.
 
 ### Gosplan Central Planner (the macro)
 

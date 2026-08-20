@@ -215,7 +215,10 @@ export default function PlannedEconomiesGuidePage() {
               </li>
               <li>
                 <strong className="text-foreground">Capacity and efficiency</strong>: how much it
-                could produce and how well it uses what it has.
+                could produce, and its efficiency, which is{" "}
+                <strong className="text-foreground">capacity utilisation</strong> (output divided by
+                capacity), not cost per unit. Under 50% means half the capacity sits idle; over 100%
+                means it runs above nameplate. Idle capacity still costs upkeep every turn.
               </li>
               <li>
                 <strong className="text-foreground">Cumulative losses</strong>: the running tally of
@@ -247,10 +250,21 @@ export default function PlannedEconomiesGuidePage() {
                   or a stretch quota), files an{" "}
                   <strong className="text-foreground">investment request</strong> to the Gosbank
                   Chair for capital, and sets the{" "}
-                  <strong className="text-foreground">labor-versus-quality</strong> mix (raw output
-                  now, or efficiency and quality for later). Hit your targets and the enterprise
-                  grows and your standing rises; miss them and you feed the shortages that erode the
-                  command system.
+                  <strong className="text-foreground">labor-versus-quality</strong> mix, a single
+                  slider where a quality lean slowly lifts the efficiency trend and a raw-output
+                  lean slowly drags it. Hit your targets and the enterprise grows and your standing
+                  rises; miss them and you feed the shortages that erode the command system.
+                </p>
+                <p className="text-sm text-muted leading-relaxed">
+                  Because efficiency is capacity utilisation,{" "}
+                  <strong className="text-foreground">
+                    investment goes where efficiency is high
+                  </strong>{" "}
+                  (near or above 100%), where an enterprise is capacity-constrained and more
+                  capacity becomes more output. Do not fund a low-efficiency enterprise: adding
+                  capacity it already cannot fill drops utilisation further and piles on upkeep.
+                  When one is sized far above its demand, shrink it (close capacity to stop the
+                  upkeep bleed) rather than invest.
                 </p>
               </div>
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
