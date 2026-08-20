@@ -179,3 +179,26 @@ export async function resolveControllingCorporateParent(
   const reserved = await loadReservedCorporatePositions(db, corporation._id);
   return getControllingCorporateParent(corporationWithReservedHoldings(corporation, reserved));
 }
+
+/**
+ * True iff `viewerUserId` is the sitting CEO of the corporation that currently
+ * controls `corporation` (>50% voting power, reserved corp sells counted).
+ *
+ * Private-corp redaction treats this viewer as an insider: a spin-off subsidiary
+ * is run by an NPP (or another player), so the parent CEO is not `corp.userId`
+ * and would otherwise get the outsider payload. The corporation detail GET
+ * already special-cases this; satellite routes (bonds, history, …) must too.
+ */
+export async function isSittingCeoOfControllingParent(
+  db: Db,
+  corporation: Corporation,
+  viewerUserId: string | undefined | null
+): Promise<boolean> {
+  if (!viewerUserId) return false;
+  const controllingParent = await resolveControllingCorporateParent(db, corporation);
+  if (!controllingParent) return false;
+  const parent = await db
+    .collection<Corporation>("corporations")
+    .findOne({ _id: controllingParent.corporationId }, { projection: { userId: 1, ceoVacant: 1 } });
+  return parent != null && parent.ceoVacant !== true && parent.userId?.toString() === viewerUserId;
+}
