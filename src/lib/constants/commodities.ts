@@ -22,6 +22,7 @@
  */
 
 import type { CorporationType } from "./corporations";
+import type { CountryId } from "./countries";
 import { getEffectiveStrategyRates, applyPlannedEconomyOutputMix } from "./sectorStrategies";
 import { getOutputMultiplier, getInputMultiplier } from "@/lib/utils/productionPolicy";
 import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
@@ -69,6 +70,47 @@ export const EXTRACTABLE_RESOURCES = [
 ] as const;
 
 export type ExtractableResource = (typeof EXTRACTABLE_RESOURCES)[number];
+
+/**
+ * Per-country, per-commodity NATIONAL demand multiplier — the demand half of the
+ * DD downstream fix (ticket-1072). The seed half (COUNTRY_SECTOR_SEED_MULTIPLIER
+ * in admin/seed/seedUnownedSectors.ts) grows East German construction CAPACITY;
+ * this grows the domestic APPETITE that capacity is meant to feed.
+ *
+ * WHY. DD construction is seeded x8 to soak its lignite-fed steel glut, but the
+ * Aufbau/Stalinallee building programme it represents has no in-game buyer sized
+ * to it: construction_services is a service DD cannot export, the West is
+ * CoCom-embargoed, and a command economy bans the private founding that would
+ * create private demand. Live prod: DD construction_services supply 18,276 vs
+ * demand 784 (ratio 0.04), so the sector clears at the price floor and the state
+ * corp that runs it bleeds. The x18 here lifts DD's national construction demand
+ * to ~0.75× its own supply so the plan-scale building programme actually buys
+ * the crew-days it was built to buy.
+ *
+ * HARD GUARD. This is a pure per-(country, commodity) lookup that DEFAULTS TO 1
+ * (see countryCommodityDemandMultiplier). It is applied only to the per-country
+ * national demand leg, never to the global book, so market economies and every
+ * unlisted (country, commodity) pair are byte-identical. Deliberately NOT applied
+ * to `vehicles`: that output has no reachable buyer, so inflating its demand
+ * would be fictional clearing rather than a real domestic sink.
+ */
+export const COUNTRY_COMMODITY_DEMAND_MULTIPLIER: Partial<
+  Record<CountryId, Partial<Record<CommodityType, number>>>
+> = {
+  DD: {
+    construction_services: 18,
+  },
+};
+
+/** The national demand multiplier for one (country, commodity); 1 when unset. */
+export function countryCommodityDemandMultiplier(
+  countryId: CountryId | string | undefined,
+  commodity: CommodityType
+): number {
+  if (countryId == null) return 1;
+  const value = COUNTRY_COMMODITY_DEMAND_MULTIPLIER[countryId as CountryId]?.[commodity];
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 1;
+}
 
 /**
  * Per-resource extraction output scale (audit t873, "structural extraction
