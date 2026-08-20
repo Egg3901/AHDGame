@@ -621,7 +621,14 @@ async function vietnamSupport(ctx: CrisisActionContext): Promise<void> {
     await spendFromTreasury(db, ctx.countryId as CountryId, amountLocal, { resyncDerived: true });
   }
 
-  const { after } = await recordVietnamMove(db, side, "support", amountLocal);
+  const gameState = await getGameState(db);
+  const { after } = await recordVietnamMove(
+    db,
+    side,
+    "support",
+    amountLocal,
+    gameState?.currentYear ?? undefined
+  );
 
   await applyCrisisEffects(
     db,

@@ -1,7 +1,6 @@
 import type { Db } from "mongodb";
 import type { CrisisEffect } from "@/lib/db/types/crisis";
 import { toNativeEffectValue } from "@/lib/crises/effectScale";
-import { getGameState } from "@/lib/gameState";
 
 /**
  * The Vietnam escalation ladder: the shared state behind the chained Vietnam
@@ -447,13 +446,14 @@ export async function recordVietnamMove(
   db: Db,
   side: VietnamSide,
   move: VietnamMove,
-  spend = 0
+  spend = 0,
+  currentYear?: number
 ): Promise<{ before: VietnamEscalationState; after: VietnamEscalationState }> {
   const before = await getVietnamEscalation(db);
-  // Resolve the current year so the earliestYear rung floor is enforced. A world
-  // with no clock yet falls back to pressure-only (yearAllows short-circuits).
-  const gameState = await getGameState(db);
-  const currentYear = gameState?.currentYear ?? undefined;
+  // `currentYear` enforces the earliestYear rung floor; callers resolve it from
+  // game state. Kept a parameter (not fetched here) so this module never imports
+  // the DB-backed game-state reader — VIETNAM_RUNGS is used by a client panel, and
+  // a mongodb import at the top would drag the driver into the browser bundle.
   const after = applyVietnamMove(before, side, move, currentYear);
   if (spend > 0) {
     if (side === "west") after.westSpend += spend;
