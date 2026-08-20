@@ -57,6 +57,7 @@ import {
   commodityMixWeight,
   embargoSupplyFactorFor,
   plantsSupplyScaledUnits,
+  countryCommodityDemandMultiplier,
 } from "@/lib/constants/commodities";
 import { updateScarcityMultiplier } from "@/lib/market/scarcityDrift";
 import { loadActiveSectorDemandModifierPctMap } from "@/lib/events/worldEvents/sectorDemandModifierMap";
@@ -1088,7 +1089,12 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       const stateBal = stateMap.get(c)!;
       const countryBal = countryBals.get(c)!;
       countryBal.supply += stateBal.supply;
-      countryBal.demand += stateBal.demand;
+      // Per-country national demand uplift for command economies whose seeded
+      // downstream capacity has no reachable buyer (ticket-1072). Pure lookup
+      // defaulting to 1, applied ONLY to this national leg — the global book is
+      // untouched — so market economies and unlisted (country, commodity) pairs
+      // are byte-identical. Today: DD construction_services ×18.
+      countryBal.demand += stateBal.demand * countryCommodityDemandMultiplier(countryId, c);
     }
   }
 
