@@ -148,7 +148,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       corporationId: corporation._id,
       currentTurn,
       bondDefaultCreditPenaltyUntilTurn: corporation.bondDefaultCreditPenaltyUntilTurn,
-      previousCompositeScore: corporation.creditCompositeSnapshot ?? undefined,
+      // Ticket #1138: this route DISPLAYS, it does not advance the model. Passing
+      // the stored snapshot as `previousCompositeScore` blended it a second time
+      // and reported a score the turn never wrote. Use it verbatim instead.
+      persistedCompositeScore: corporation.creditCompositeSnapshot ?? undefined,
       fxByCurrency,
       // Suggestion #62: same index-inclusion upgrade the turn's credit pass
       // applies, for the same reason the CIP leg above is duplicated here: the
@@ -592,7 +595,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       totalEquity,
       {
         bondDefaultCreditPenaltyActive: penaltyActive,
-        previousCompositeScore: corporation.creditCompositeSnapshot ?? undefined,
+        // Ticket #1138: this route DISPLAYS, it does not advance the model. Passing
+      // the stored snapshot as `previousCompositeScore` blended it a second time
+      // and reported a score the turn never wrote. Use it verbatim instead.
+      persistedCompositeScore: corporation.creditCompositeSnapshot ?? undefined,
         insiderConcentrationPenalty: insiderConcentrationPenaltyApplies(corporation),
       }
     );
