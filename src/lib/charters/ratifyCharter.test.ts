@@ -88,6 +88,7 @@ function makeDb(opts: StubOpts) {
   const updatedCharacters: unknown[] = [];
   const updatedParties: unknown[] = [];
   const updatedManyParties: unknown[] = [];
+  const deletedNationalElections: Record<string, unknown>[] = [];
 
   let charterReadCount = 0;
   const collection = vi.fn().mockImplementation((name: string) => {
@@ -194,9 +195,14 @@ function makeDb(opts: StubOpts) {
     }
     if (name === "nationalPartyElections") {
       // withdrawFromPartyLeadershipElections — no voting elections in fixtures.
+      // deleteOne — #289 chair-election suppression; captured for assertions.
       return {
         find: vi.fn().mockReturnValue({
           project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+        }),
+        deleteOne: vi.fn((filter: Record<string, unknown>) => {
+          deletedNationalElections.push(filter);
+          return Promise.resolve({ deletedCount: 1 });
         }),
       };
     }
@@ -221,6 +227,7 @@ function makeDb(opts: StubOpts) {
     updatedCharacters,
     updatedParties,
     updatedManyParties,
+    deletedNationalElections,
   };
 }
 
@@ -296,7 +303,7 @@ describe("ratifyCharter", () => {
     expect(memberCountUpdate).toBeTruthy();
   });
 
-  it("creates the party with vacant leadership (no founder role assignment)", async () => {
+  it("seats the anchor founder as first chair, vice-chair/treasurer vacant (#289)", async () => {
     const charter = makeCharter();
     const founderChars = charter.foundersCharacterIds.map((cid) => ({
       _id: cid,
@@ -304,7 +311,7 @@ describe("ratifyCharter", () => {
       party: "independent",
       homeState: "US-CA",
     }));
-    const { db, insertedParties } = makeDb({
+    const { db, insertedParties, deletedNationalElections } = makeDb({
       charter,
       states: [{ _id: "US-CA" }],
       founderCharacters: founderChars,
@@ -319,11 +326,20 @@ describe("ratifyCharter", () => {
       treasurerId: ObjectId | null;
       createdBy: ObjectId | null;
     };
-    expect(party.chairId).toBeNull();
+    // #289 — the proposer (founder slot 0) is seated as first chair so the
+    // party isn't headless; the other two seats still start vacant.
+    expect(party.chairId).toEqual(charter.foundersCharacterIds[0]);
     expect(party.viceChairId).toBeNull();
     expect(party.treasurerId).toBeNull();
-    // Founder slot 0 is still the anchor founder / creator.
     expect(party.createdBy).toEqual(charter.foundersCharacterIds[0]);
+
+    // The auto-created chair election is dropped so the seat isn't
+    // immediately re-contested; vice-chair/treasurer elections remain.
+    expect(deletedNationalElections).toHaveLength(1);
+    expect(deletedNationalElections[0]).toMatchObject({
+      partyId: "77",
+      position: "chair",
+    });
   });
 
   it("opens cycle-aligned national elections immediately after ratification", async () => {
@@ -351,7 +367,7 @@ describe("ratifyCharter", () => {
     );
   });
 
-  it("founder notifications announce open elections, not roles", async () => {
+  it("notifies the founder-chair of their seat and others of open elections (#289)", async () => {
     const { createNotification } = await import("@/lib/notifications");
     vi.mocked(createNotification).mockClear();
     const charter = makeCharter();
@@ -373,9 +389,12 @@ describe("ratifyCharter", () => {
       .mocked(createNotification)
       .mock.calls.map(([arg]) => (arg as { message: string }).message);
     expect(messages.length).toBeGreaterThan(0);
+    // Exactly one founder (the proposer) is told they are the first chair.
+    const chairMessages = messages.filter((m) => /you are the party's first chair/i.test(m));
+    expect(chairMessages).toHaveLength(1);
+    // Every founder is pointed at the open vice-chair / treasurer elections.
     for (const m of messages) {
-      expect(m).not.toMatch(/as chair|Vice Chair|Treasurer/);
-      expect(m).toMatch(/leadership elections/i);
+      expect(m).toMatch(/vice-chair and treasurer/i);
     }
   });
 

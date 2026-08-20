@@ -542,8 +542,26 @@ export function buildGeneralColors(
   candidates: { id: string; party: string; partyColor: string }[]
 ): Map<string, string> {
   const map = new Map<string, string>();
+  // Group by party so multiple candidates from the SAME party (e.g. USSR
+  // single-party generals, where every line is otherwise identical red) get
+  // distinct shades instead of collapsing to one indistinguishable color.
+  // Parties with a single candidate keep their pure party hex — no visual change
+  // for ordinary multi-party generals.
+  const byParty = new Map<string, { id: string; party: string; partyColor: string }[]>();
   for (const c of candidates) {
-    map.set(c.id, getPartyHex(c.party, c.partyColor));
+    const group = byParty.get(c.party) ?? [];
+    group.push(c);
+    byParty.set(c.party, group);
+  }
+  for (const [party, group] of byParty) {
+    if (group.length === 1) {
+      map.set(group[0].id, getPartyHex(party, group[0].partyColor));
+      continue;
+    }
+    // Candidates arrive pre-sorted by vote share, so the frontrunner gets the
+    // purest shade and trailing candidates get progressively lighter tints.
+    const shades = buildPrimaryShades(party, group[0].partyColor, group.length);
+    group.forEach((c, i) => map.set(c.id, shades[i] ?? getPartyHex(party, c.partyColor)));
   }
   return map;
 }
