@@ -100,6 +100,7 @@ export function buildWorldNavItems({
       // leave a link to an empty board standing indefinitely.
       id: "germanQuestion",
       label: "The German Question",
+      labelKey: "menus.world.germanQuestion",
       href: "/world/german-question",
       section: "main",
       show: settlementCrisisLive,
