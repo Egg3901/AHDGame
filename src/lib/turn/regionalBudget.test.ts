@@ -3,6 +3,8 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { SUBSIDY_COST_MULTIPLIER } from "@/lib/subsidies/subsidyBudgetCosts";
 import {
+  BUSINESS_RATES_GDP_SHARE,
+  COUNCIL_TAX_GDP_SHARE,
   calculateRegionalBudget,
   driftValueBase,
   processRegionalBudgets,
@@ -12,70 +14,78 @@ import {
 // ── Pure function tests ──────────────────────────────────────────────────────
 
 describe("calculateRegionalBudget", () => {
-  it("calculates revenue from council tax, business rates, and Westminster grant", () => {
-    const input: BudgetCalculationInput = {
-      councilTaxRate: 0.015, // 1.5%
-      businessRate: 0.5, // 50%
-      propertyValuePerCapita: 120_000,
-      commercialValuePerCapita: 45_000,
-      regionPopulation: 1_000_000,
-      westminsterGrantPerCapita: 1700,
-      nationalPopulation: 67_000_000,
-      chancellorAllocation: null,
-    };
+  /** London-scale 1957 figures: £3.44B regional GDP, 9.2M people. */
+  const LONDON: BudgetCalculationInput = {
+    regionGdp: 3_442_585_781,
+    propertyValueIndex: 1,
+    commercialValueIndex: 1,
+    regionPopulation: 9_206_136,
+    nationalPopulation: 57_560_675,
+    grantPool: 250_000_000,
+    chancellorAllocation: null,
+  };
 
-    const result = calculateRegionalBudget(input);
+  it("anchors council tax and business rates to regional GDP", () => {
+    const result = calculateRegionalBudget(LONDON);
 
-    // Council tax: 0.015 × 120,000 × 1,000,000 = 1,800,000,000
-    expect(result.councilTaxRevenue).toBe(1_800_000_000);
-    // Business rates: 0.5 × 45,000 × 1,000,000 = 22,500,000,000
-    expect(result.businessRatesRevenue).toBe(22_500_000_000);
-    // Westminster grant: 1700 × 67,000,000 / 12 = 9,491,666,666.67
-    expect(result.westminsterGrant).toBeCloseTo(9_491_666_666.67, 0);
-    // Total = sum of all three
+    expect(result.councilTaxRevenue).toBeCloseTo(LONDON.regionGdp * COUNCIL_TAX_GDP_SHARE, 0);
+    expect(result.businessRatesRevenue).toBeCloseTo(LONDON.regionGdp * BUSINESS_RATES_GDP_SHARE, 0);
+    // The era-scaled result stays inside the region's own economy, unlike the
+    // per-capita value bases this replaced (which billed London £18.8B of
+    // council tax against a £17.5B national GDP in 1957).
+    expect(result.totalBudget).toBeLessThan(LONDON.regionGdp * 0.1);
+  });
+
+  it("splits the Westminster grant pool by population share", () => {
+    const result = calculateRegionalBudget(LONDON);
+
+    expect(result.westminsterGrant).toBeCloseTo(
+      (250_000_000 * 9_206_136) / 57_560_675, // ≈ £40.0M
+      0
+    );
     expect(result.totalBudget).toBeCloseTo(
       result.councilTaxRevenue + result.businessRatesRevenue + result.westminsterGrant,
       0
     );
   });
 
-  it("uses chancellor allocation when provided instead of even split", () => {
-    const input: BudgetCalculationInput = {
-      councilTaxRate: 0.01,
-      businessRate: 0.4,
-      propertyValuePerCapita: 100_000,
-      commercialValuePerCapita: 40_000,
-      regionPopulation: 500_000,
-      westminsterGrantPerCapita: 1700,
-      nationalPopulation: 67_000_000,
-      chancellorAllocation: 5_000_000_000, // Fixed amount
-    };
+  it("scales tax revenue by the drifted value indices", () => {
+    const halved = calculateRegionalBudget({
+      ...LONDON,
+      propertyValueIndex: 0.5,
+      commercialValueIndex: 0.5,
+    });
+    const base = calculateRegionalBudget(LONDON);
 
-    const result = calculateRegionalBudget(input);
+    // The austerity feedback loop: eroded value bases must cost the region revenue.
+    expect(halved.councilTaxRevenue).toBeCloseTo(base.councilTaxRevenue / 2, 0);
+    expect(halved.businessRatesRevenue).toBeCloseTo(base.businessRatesRevenue / 2, 0);
+    // The grant is a central transfer — value drift must not touch it.
+    expect(halved.westminsterGrant).toBeCloseTo(base.westminsterGrant, 0);
+  });
 
-    expect(result.westminsterGrant).toBe(5_000_000_000);
-    expect(result.totalBudget).toBe(
-      result.councilTaxRevenue + result.businessRatesRevenue + 5_000_000_000
+  it("uses the chancellor allocation when provided instead of the population share", () => {
+    const result = calculateRegionalBudget({ ...LONDON, chancellorAllocation: 75_000_000 });
+
+    expect(result.westminsterGrant).toBe(75_000_000);
+    expect(result.totalBudget).toBeCloseTo(
+      result.councilTaxRevenue + result.businessRatesRevenue + 75_000_000,
+      0
     );
   });
 
-  it("returns zero revenues when rates are zero", () => {
-    const input: BudgetCalculationInput = {
-      councilTaxRate: 0,
-      businessRate: 0,
-      propertyValuePerCapita: 120_000,
-      commercialValuePerCapita: 45_000,
-      regionPopulation: 1_000_000,
-      westminsterGrantPerCapita: 0,
-      nationalPopulation: 67_000_000,
-      chancellorAllocation: null,
-    };
+  it("returns a zero grant rather than NaN when the nation has no population", () => {
+    const result = calculateRegionalBudget({ ...LONDON, nationalPopulation: 0 });
 
-    const result = calculateRegionalBudget(input);
+    expect(result.westminsterGrant).toBe(0);
+    expect(Number.isFinite(result.totalBudget)).toBe(true);
+  });
+
+  it("returns zero tax revenue for a region with no measured economy", () => {
+    const result = calculateRegionalBudget({ ...LONDON, regionGdp: 0, grantPool: 0 });
 
     expect(result.councilTaxRevenue).toBe(0);
     expect(result.businessRatesRevenue).toBe(0);
-    expect(result.westminsterGrant).toBe(0);
     expect(result.totalBudget).toBe(0);
   });
 });
@@ -138,184 +148,132 @@ describe("processRegionalBudgets", () => {
     db = createMockDb();
   });
 
+  const cursor = (rows: unknown[]) => ({
+    toArray: vi.fn().mockResolvedValue(rows),
+    sort: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    skip: vi.fn().mockReturnThis(),
+    project: vi.fn().mockReturnThis(),
+  });
+
+  /** Wire the collections `processRegionalBudgets` reads, RU-test style. */
+  function wire({
+    regions,
+    policies = [],
+    legTypes = [],
+    existingBudgets = [],
+    budget = { _id: "UK", spending: { stateGrants: 250_000_000 } } as unknown,
+  }: {
+    regions: unknown[];
+    policies?: unknown[];
+    legTypes?: unknown[];
+    existingBudgets?: unknown[];
+    budget?: unknown;
+  }) {
+    // Access each collection first so MockDb lazily creates the full default
+    // mock (spreading a not-yet-created entry would lose bulkWrite etc.).
+    for (const name of [
+      "states",
+      "statePolicies",
+      "legislationTypes",
+      "regionalBudgets",
+      "federalBudget",
+    ]) {
+      db.collection(name);
+    }
+    db.collectionMocks["states"]!.find.mockImplementation(() => cursor(regions));
+    db.collectionMocks["statePolicies"]!.find.mockImplementation(() => cursor(policies));
+    db.collectionMocks["legislationTypes"]!.find.mockImplementation(() => cursor(legTypes));
+    db.collectionMocks["regionalBudgets"]!.find.mockImplementation(() => cursor(existingBudgets));
+    db.collectionMocks["federalBudget"]!.findOne = vi.fn().mockResolvedValue(budget);
+  }
+
+  const written = () =>
+    db.collectionMocks["regionalBudgets"]!.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+
   it("returns 0 regions when there are no UK regions", async () => {
     // states.find returns empty array (default mock behavior)
     const result = await processRegionalBudgets(db as never, 10);
     expect(result).toEqual({ regionsProcessed: 0 });
   });
 
+  it("funds a region whose legacy UK legislation types no longer exist", async () => {
+    // The live 1953 shape: the political-legislation preset unseeds every
+    // legacy `uk_*` type, but the region still carries statePolicies pointing
+    // at them. Revenue must come from the region's economy, not that lookup.
+    wire({
+      regions: [{ _id: "LON", countryId: "UK", population: 9_206_136, gdp: 3442.585781 }],
+      policies: [
+        {
+          stateId: "LON",
+          scope: "state",
+          legislationTypeId: "uk_council_tax",
+          policyOptionId: "uk_council_tax_opt_5",
+          policyOptionIndex: 5,
+        },
+      ],
+      legTypes: [], // ← the type the policy references is gone
+    });
+
+    await processRegionalBudgets(db as never, 267);
+
+    const setData = written();
+    expect(setData.councilTaxRevenue).toBeCloseTo(3_442_585_781 * COUNCIL_TAX_GDP_SHARE, -3);
+    expect(setData.businessRatesRevenue).toBeCloseTo(3_442_585_781 * BUSINESS_RATES_GDP_SHARE, -3);
+    expect(setData.westminsterGrant).toBeGreaterThan(0);
+    expect(setData.totalBudget).toBeGreaterThan(0);
+  });
+
+  it("falls back to baselineStateGrants when the enacted grant line is zero", async () => {
+    // Live UK carries spending.stateGrants = 0 with baselineStateGrants = £250M;
+    // reading only the enacted line would leave every region unfunded.
+    wire({
+      regions: [{ _id: "LON", countryId: "UK", population: 1_000_000, gdp: 1000 }],
+      budget: { _id: "UK", spending: { stateGrants: 0 }, baselineStateGrants: 250_000_000 },
+    });
+
+    await processRegionalBudgets(db as never, 10);
+
+    expect(written().westminsterGrant).toBeCloseTo(250_000_000, 0);
+  });
+
   it("detects deficit when spending exceeds revenue", async () => {
-    // Pre-create collection mocks by accessing them (lazy creation)
-    db.collection("states");
-    db.collection("statePolicies");
-    db.collection("legislationTypes");
-    db.collection("regionalBudgets");
-
-    const statesColl = db.collectionMocks["states"]!;
-    const statePoliciesColl = db.collectionMocks["statePolicies"]!;
-    const legTypesColl = db.collectionMocks["legislationTypes"]!;
-    const budgetsColl = db.collectionMocks["regionalBudgets"]!;
-
-    // Mock UK region
-    statesColl.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([{ _id: "LON", countryId: "UK", population: 9_000_000 }]),
-      sort: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      skip: vi.fn().mockReturnThis(),
-      project: vi.fn().mockReturnThis(),
-    });
-
-    // Mock regional policies: council tax at 1.5% rate, plus a spending policy
-    const findCallCount = { count: 0 };
-    statePoliciesColl.find.mockImplementation(() => {
-      findCallCount.count++;
-      // First call: regional policies (UK_*), second call: national policies (uk_national)
-      if (findCallCount.count === 1) {
-        return {
-          toArray: vi.fn().mockResolvedValue([
-            {
-              stateId: "LON",
-              legislationTypeId: "uk_council_tax",
-              policyOptionId: "uk_council_tax_opt_5",
-              policyOptionIndex: 5,
-            },
-            {
-              stateId: "LON",
-              legislationTypeId: "uk_nhs_funding",
-              policyOptionId: "uk_nhs_funding_opt_0",
-              policyOptionIndex: 0,
-            },
-          ]),
-          sort: vi.fn().mockReturnThis(),
-          limit: vi.fn().mockReturnThis(),
-          skip: vi.fn().mockReturnThis(),
-          project: vi.fn().mockReturnThis(),
-        };
-      }
-      // National policies
-      return {
-        toArray: vi.fn().mockResolvedValue([
-          {
-            stateId: "uk_national",
-            legislationTypeId: "uk_local_government_funding",
-            policyOptionId: "uk_local_government_funding_opt_3",
-          },
-        ]),
-        sort: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        skip: vi.fn().mockReturnThis(),
-        project: vi.fn().mockReturnThis(),
-      };
-    });
-
-    // Mock legislation types
-    legTypesColl.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([
+    wire({
+      regions: [{ _id: "LON", countryId: "UK", population: 9_000_000, gdp: 3000 }],
+      policies: [
         {
-          _id: "uk_council_tax",
-          policyOptions: [{ id: "uk_council_tax_opt_5", rate: 1.5 }],
+          stateId: "LON",
+          scope: "state",
+          legislationTypeId: "uk_nhs_funding",
+          policyOptionId: "uk_nhs_funding_opt_0",
+          policyOptionIndex: 0,
         },
-        {
-          _id: "uk_local_government_funding",
-          policyOptions: [{ id: "uk_local_government_funding_opt_3", annualCostPerCapita: 1700 }],
-        },
+      ],
+      legTypes: [
         {
           _id: "uk_nhs_funding",
-          policyOptions: [
-            // Very expensive option — will create deficit
-            { id: "uk_nhs_funding_opt_0", annualCostPerCapita: 999_999 },
-          ],
+          // Very expensive option — will create deficit
+          policyOptions: [{ id: "uk_nhs_funding_opt_0", annualCostPerCapita: 999_999 }],
         },
-      ]),
-      sort: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      skip: vi.fn().mockReturnThis(),
-      project: vi.fn().mockReturnThis(),
-    });
-
-    // No existing budgets
-    budgetsColl.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([]),
-      sort: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      skip: vi.fn().mockReturnThis(),
-      project: vi.fn().mockReturnThis(),
+      ],
     });
 
     const result = await processRegionalBudgets(db as never, 10);
     expect(result).toEqual({ regionsProcessed: 1 });
 
     // Verify budget was upserted with deficit state (now via batched bulkWrite)
-    expect(budgetsColl.bulkWrite).toHaveBeenCalledTimes(1);
-    const setData = budgetsColl.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(db.collectionMocks["regionalBudgets"]!.bulkWrite).toHaveBeenCalledTimes(1);
+    const setData = written();
     expect(setData.isOverBudget).toBe(true);
     expect(setData.surplus).toBeLessThan(0);
     expect(setData.turnsOverBudget).toBe(1);
   });
 
   it("resets turnsOverBudget to 0 when in surplus", async () => {
-    db.collection("states");
-    db.collection("statePolicies");
-    db.collection("legislationTypes");
-    db.collection("regionalBudgets");
-
-    const statesColl = db.collectionMocks["states"]!;
-    const statePoliciesColl = db.collectionMocks["statePolicies"]!;
-    const legTypesColl = db.collectionMocks["legislationTypes"]!;
-    const budgetsColl = db.collectionMocks["regionalBudgets"]!;
-
-    statesColl.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([{ _id: "LON", countryId: "UK", population: 1_000_000 }]),
-      sort: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      skip: vi.fn().mockReturnThis(),
-      project: vi.fn().mockReturnThis(),
-    });
-
-    // No regional policies (no spending, no taxes) but Westminster grant exists
-    const findCallCount = { count: 0 };
-    statePoliciesColl.find.mockImplementation(() => {
-      findCallCount.count++;
-      if (findCallCount.count === 1) {
-        return {
-          toArray: vi.fn().mockResolvedValue([]),
-          sort: vi.fn().mockReturnThis(),
-          limit: vi.fn().mockReturnThis(),
-          skip: vi.fn().mockReturnThis(),
-          project: vi.fn().mockReturnThis(),
-        };
-      }
-      return {
-        toArray: vi.fn().mockResolvedValue([
-          {
-            stateId: "uk_national",
-            legislationTypeId: "uk_local_government_funding",
-            policyOptionId: "opt_3",
-          },
-        ]),
-        sort: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        skip: vi.fn().mockReturnThis(),
-        project: vi.fn().mockReturnThis(),
-      };
-    });
-
-    legTypesColl.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([
-        {
-          _id: "uk_local_government_funding",
-          policyOptions: [{ id: "opt_3", annualCostPerCapita: 1700 }],
-        },
-      ]),
-      sort: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      skip: vi.fn().mockReturnThis(),
-      project: vi.fn().mockReturnThis(),
-    });
-
-    // Existing budget was previously over budget
-    budgetsColl.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([
+    wire({
+      regions: [{ _id: "LON", countryId: "UK", population: 1_000_000, gdp: 1000 }],
+      // Existing budget was previously over budget
+      existingBudgets: [
         {
           _id: "LON",
           turnsOverBudget: 3,
@@ -325,17 +283,13 @@ describe("processRegionalBudgets", () => {
           commercialValueBaseline: 45_000,
           chancellorAllocation: null,
         },
-      ]),
-      sort: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      skip: vi.fn().mockReturnThis(),
-      project: vi.fn().mockReturnThis(),
+      ],
     });
 
     await processRegionalBudgets(db as never, 10);
 
-    const setData = budgetsColl.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
-    // No spending at all, so surplus should be positive (Westminster grant only)
+    const setData = written();
+    // No spending at all, so surplus should be positive
     expect(setData.isOverBudget).toBe(false);
     expect(setData.turnsOverBudget).toBe(0);
     expect(setData.surplus).toBeGreaterThan(0);

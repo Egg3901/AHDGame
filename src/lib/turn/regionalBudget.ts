@@ -6,30 +6,57 @@
  * then compares against enacted spending. Regions in deficit for more than one
  * turn trigger forced austerity (most expensive programme downgraded one tier).
  *
+ * **Revenue is derived from the region's own economy and the national grant
+ * pool — never from a `legislationTypes` lookup.** The political-legislation
+ * v2 preset unseeds every legacy `countryScope: "uk"` type (see
+ * `seedLegislationTypes`), so the previous model — council tax rate read off
+ * an enacted `uk_council_tax` policy, Westminster grant off a national
+ * `uk_local_government_funding` policy — resolved to a silent 0 on every v2
+ * world while the COST half kept pricing through the v2 catalog. That
+ * asymmetry left all 12 UK regions with £0 revenue against real enacted costs,
+ * pinning them in permanent deficit and firing forced austerity every turn.
+ * RU/DE/CN/JP regional budgets already derive from the national budget; this
+ * brings UK onto the same footing.
+ *
+ * The per-capita value bases that model replaced were also modern-calibrated
+ * (a flat £120,000/head) with no era awareness: on the 1953 preset they billed
+ * London £18.8B of council tax against a £17.5B *national* GDP. Anchoring to
+ * live regional GDP is era-proof by construction.
+ *
  * Pure calculation helpers are exported separately for testability.
  */
 
 import type { AnyBulkWriteOperation } from "mongodb";
 import type { State } from "@/lib/db/types";
+import type { FederalBudget } from "@/lib/db/types/budget";
 import type { StatePolicy } from "@/lib/db/types/statePolicy";
 import type { LegislationType, LegislationPolicyOption } from "@/lib/db/types/legislation";
 import type { RegionalBudget } from "@/lib/db/types/regionalBudget";
 import type { CabinetSetting } from "@/lib/db/types/cabinetSetting";
 import { loadAnnualSubsidyCostMaps } from "@/lib/subsidies/subsidyBudgetCosts";
+import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { getLaw } from "@/lib/politicalLegislation/catalog";
 import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
 
 // ── Pure calculation types ───────────────────────────────────────────────────
 
 export interface BudgetCalculationInput {
-  councilTaxRate: number; // e.g. 0.015 for 1.5%
-  businessRate: number; // e.g. 0.5 for 50%
-  propertyValuePerCapita: number;
-  commercialValuePerCapita: number;
+  /** Region GDP in absolute local currency (states.gdp × 1e6). */
+  regionGdp: number;
+  /**
+   * Drifted residential value base as a multiple of its baseline (1.0 = at
+   * baseline). Carries the austerity feedback loop: a region that lets its
+   * services decay erodes its own tax base, and collects less next turn.
+   */
+  propertyValueIndex: number;
+  /** Drifted commercial value base as a multiple of its baseline. */
+  commercialValueIndex: number;
   regionPopulation: number;
-  westminsterGrantPerCapita: number; // From uk_local_government_funding legislation
-  nationalPopulation: number; // ~67M
-  chancellorAllocation: number | null; // null = even 1/12th split
+  nationalPopulation: number;
+  /** National grant pool available to regions, absolute local currency. */
+  grantPool: number;
+  /** Chancellor's explicit allocation; null = population-proportional share. */
+  chancellorAllocation: number | null;
 }
 
 export interface BudgetCalculationResult {
@@ -41,8 +68,15 @@ export interface BudgetCalculationResult {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-/** Number of UK regions sharing the Westminster grant when no chancellor allocation exists. */
+/**
+ * Fallback share, as a percentage, for a region the Chancellor's allocation map
+ * omits (100/12 ≈ 8.33%). With NO allocation map at all the grant is split
+ * population-proportionally instead, so this is not an even-split constant.
+ */
 const UK_REGION_COUNT = 12;
+
+/** `states.gdp` is stored in millions of local currency; costs and revenue are absolute. */
+const GDP_MILLIONS = 1_000_000;
 
 /** Default property value per capita used when no budget doc exists yet. */
 const DEFAULT_PROPERTY_VALUE_PER_CAPITA = 120_000;
@@ -50,10 +84,25 @@ const DEFAULT_PROPERTY_VALUE_PER_CAPITA = 120_000;
 /** Default commercial value per capita used when no budget doc exists yet. */
 const DEFAULT_COMMERCIAL_VALUE_PER_CAPITA = 45_000;
 
+/**
+ * Domestic rates (council tax) as a share of regional GDP, at an unchanged
+ * value base. Calibrated on post-war UK local-authority accounts, where
+ * domestic rates ran ≈1.6% of GDP. The statutory-share form mirrors how DE
+ * (42.5% income-tax share / 46.5% VAT share) and CN (40% EIT share) derive
+ * regional revenue: an authored constant, not a per-region enacted rate.
+ */
+export const COUNCIL_TAX_GDP_SHARE = 0.016;
+
+/**
+ * Non-domestic rates (business rates) as a share of regional GDP, at an
+ * unchanged value base. Commercial property yields less than the residential
+ * base in the same period, hence ≈1.0% against council tax's 1.6%.
+ */
+export const BUSINESS_RATES_GDP_SHARE = 0.01;
+
 // Tax legislation type IDs
 const COUNCIL_TAX_TYPE_ID = "uk_council_tax";
 const BUSINESS_RATES_TYPE_ID = "uk_business_rates";
-const LOCAL_GOVT_FUNDING_TYPE_ID = "uk_local_government_funding";
 
 /** Tax type IDs excluded from spending calculations (they generate revenue, not spend). */
 const TAX_TYPE_IDS = new Set([COUNCIL_TAX_TYPE_ID, BUSINESS_RATES_TYPE_ID]);
@@ -63,21 +112,33 @@ const TAX_TYPE_IDS = new Set([COUNCIL_TAX_TYPE_ID, BUSINESS_RATES_TYPE_ID]);
 /**
  * Calculate a region's total budget from its three revenue sources.
  *
- * Council tax and business rates scale linearly with rate × value base × population.
- * The Westminster grant either uses a chancellor-set allocation or defaults to an
- * even 1/12th split of the national per-capita grant pool.
+ * Council tax and business rates are statutory shares of the region's own GDP,
+ * scaled by its drifted value indices. The Westminster grant either uses a
+ * chancellor-set allocation or a population-proportional share of the national
+ * grant pool.
  */
 export function calculateRegionalBudget(input: BudgetCalculationInput): BudgetCalculationResult {
-  const councilTaxRevenue =
-    input.councilTaxRate * input.propertyValuePerCapita * input.regionPopulation;
+  const councilTaxRevenue = input.regionGdp * COUNCIL_TAX_GDP_SHARE * input.propertyValueIndex;
   const businessRatesRevenue =
-    input.businessRate * input.commercialValuePerCapita * input.regionPopulation;
+    input.regionGdp * BUSINESS_RATES_GDP_SHARE * input.commercialValueIndex;
   const westminsterGrant =
     input.chancellorAllocation ??
-    (input.westminsterGrantPerCapita * input.nationalPopulation) / UK_REGION_COUNT;
+    (input.nationalPopulation > 0
+      ? (input.grantPool * input.regionPopulation) / input.nationalPopulation
+      : 0);
   const totalBudget = councilTaxRevenue + businessRatesRevenue + westminsterGrant;
 
   return { councilTaxRevenue, businessRatesRevenue, westminsterGrant, totalBudget };
+}
+
+/**
+ * A drifted value base as a multiple of its baseline. Guards a zero/absent
+ * baseline (legacy docs) by reporting "at baseline" rather than dividing by
+ * zero — a NaN here would silently zero the region's whole tax take.
+ */
+function valueIndex(current: number, baseline: number): number {
+  if (!(baseline > 0)) return 1;
+  return current / baseline;
 }
 
 /**
@@ -103,21 +164,6 @@ export function driftValueBase(
 }
 
 // ── Turn processing ──────────────────────────────────────────────────────────
-
-/**
- * Find the tax rate from a state policy by looking up its option in the legislation type.
- * Returns the `rate` field from the matching policy option, or 0 if not found.
- */
-function getTaxRateFromPolicy(
-  policy: StatePolicy | undefined,
-  legTypeMap: Map<string, LegislationType>
-): number {
-  if (!policy) return 0;
-  const legType = legTypeMap.get(policy.legislationTypeId);
-  if (!legType?.policyOptions) return 0;
-  const option = legType.policyOptions.find((o) => o.id === policy.policyOptionId);
-  return option?.rate ?? 0;
-}
 
 /**
  * Get the annual cost per capita for a policy option.
@@ -151,7 +197,7 @@ function enactedRegionalPolicyCost(
     const level = Math.max(0, Math.min(4, policy.policyOptionIndex ?? 0));
     const fiscal = computeLawCost(
       law.levels[level],
-      { gdp: (region.gdp ?? 0) * 1_000_000, population: region.population ?? 0 },
+      { gdp: (region.gdp ?? 0) * GDP_MILLIONS, population: region.population ?? 0 },
       law.countryId,
       null
     );
@@ -225,16 +271,10 @@ export async function processRegionalBudgets(
     .find({ stateId: { $in: ukRegions.map((r) => r._id as string) } })
     .toArray();
 
-  // 3. Fetch UK national policies (for Westminster grant amount)
-  const nationalPolicies = await db
-    .collection<StatePolicy>("statePolicies")
-    .find({ stateId: "uk_national" })
-    .toArray();
-
-  // 4. Fetch relevant legislation types for option lookups
-  const regionalLegTypeIds = new Set(allRegionalPolicies.map((p) => p.legislationTypeId));
-  const nationalLegTypeIds = new Set(nationalPolicies.map((p) => p.legislationTypeId));
-  const allLegTypeIds = [...new Set([...regionalLegTypeIds, ...nationalLegTypeIds])];
+  // 3. Fetch relevant legislation types for legacy option lookups. Only the
+  //    COST half still consults these (v2 laws price through the catalog), so
+  //    a missing type can no longer zero a region's revenue.
+  const allLegTypeIds = [...new Set(allRegionalPolicies.map((p) => p.legislationTypeId))];
 
   const legTypes = await db
     .collection<LegislationType>("legislationTypes")
@@ -242,15 +282,20 @@ export async function processRegionalBudgets(
     .toArray();
   const legTypeMap = new Map(legTypes.map((lt) => [lt._id, lt]));
 
-  // 5. Find Westminster grant per capita from national uk_local_government_funding policy
-  const fundingPolicy = nationalPolicies.find(
-    (p) => p.legislationTypeId === LOCAL_GOVT_FUNDING_TYPE_ID
-  );
-  const westminsterGrantPerCapita = fundingPolicy
-    ? getOptionCostPerCapita(fundingPolicy, legTypeMap)
-    : 0;
+  // 4. The Westminster grant pool comes from the national budget's state-grants
+  //    line — the enacted figure when there is one, else the authored era
+  //    baseline. Live UK carries stateGrants = 0 with baselineStateGrants =
+  //    £250M, so reading only the enacted line would unfund every region.
+  const nationalBudget = await db
+    .collection<FederalBudget>("federalBudget")
+    .findOne(
+      { _id: getNationalBudgetId("UK") },
+      { projection: { spending: 1, baselineStateGrants: 1 } }
+    );
+  const grantPool =
+    nationalBudget?.spending?.stateGrants || nationalBudget?.baselineStateGrants || 0;
 
-  // Total UK population for even-split calculation
+  // Total UK population for the grant's population-proportional split
   const nationalPopulation = ukRegions.reduce((sum, r) => sum + r.population, 0);
 
   // Group regional policies by stateId for efficient lookup
@@ -261,7 +306,7 @@ export async function processRegionalBudgets(
     policiesByRegion.set(policy.stateId, existing);
   }
 
-  // 6. Fetch existing budget documents for all regions
+  // 5. Fetch existing budget documents for all regions
   const regionIds = ukRegions.map((r) => r._id);
   const existingBudgets = await db
     .collection<RegionalBudget>("regionalBudgets")
@@ -290,18 +335,9 @@ export async function processRegionalBudgets(
     const regionPolicies = policiesByRegion.get(region._id) ?? [];
     const existingBudget = budgetMap.get(region._id);
 
-    // a. Find council tax rate and business rate from enacted tax policies
-    const councilTaxPolicy = regionPolicies.find(
-      (p) => p.legislationTypeId === COUNCIL_TAX_TYPE_ID
-    );
-    const businessRatePolicy = regionPolicies.find(
-      (p) => p.legislationTypeId === BUSINESS_RATES_TYPE_ID
-    );
-
-    const councilTaxRate = getTaxRateFromPolicy(councilTaxPolicy, legTypeMap) / 100;
-    const businessRate = getTaxRateFromPolicy(businessRatePolicy, legTypeMap) / 100;
-
-    // Use existing value bases or defaults
+    // a. Use existing value bases or defaults. These are no longer a currency
+    //    amount in the revenue formula — only their ratio to baseline is read,
+    //    so the drift feedback loop survives the switch to GDP anchoring.
     const propertyValuePerCapita =
       existingBudget?.propertyValuePerCapita ?? DEFAULT_PROPERTY_VALUE_PER_CAPITA;
     const commercialValuePerCapita =
@@ -311,19 +347,17 @@ export async function processRegionalBudgets(
     const commercialBaseline =
       existingBudget?.commercialValueBaseline ?? DEFAULT_COMMERCIAL_VALUE_PER_CAPITA;
     const chancellorAllocation = allocationPercents
-      ? ((allocationPercents[region._id] ?? 100 / UK_REGION_COUNT) / 100) *
-        (westminsterGrantPerCapita * nationalPopulation)
+      ? ((allocationPercents[region._id] ?? 100 / UK_REGION_COUNT) / 100) * grantPool
       : null;
 
     // b. Calculate total budget
     const budgetResult = calculateRegionalBudget({
-      councilTaxRate,
-      businessRate,
-      propertyValuePerCapita,
-      commercialValuePerCapita,
+      regionGdp: (region.gdp ?? 0) * GDP_MILLIONS,
+      propertyValueIndex: valueIndex(propertyValuePerCapita, propertyBaseline),
+      commercialValueIndex: valueIndex(commercialValuePerCapita, commercialBaseline),
       regionPopulation: region.population,
-      westminsterGrantPerCapita,
       nationalPopulation,
+      grantPool,
       chancellorAllocation,
     });
 

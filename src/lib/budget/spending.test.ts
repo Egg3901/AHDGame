@@ -211,4 +211,45 @@ describe("calculateFederalSpending", () => {
       total: 2010 + health,
     });
   });
+
+  it("books the UK Westminster grant the regions received as national stateGrants", async () => {
+    // UK used to route its regional grant through an isGrant funding law
+    // (uk_local_government_funding). The political-legislation v2 catalog has
+    // no such law, so the grant is now a config-derived transfer pool exactly
+    // like CN/DE — and unless it is booked here, regions spend money the
+    // national budget never records paying.
+    const db = createMockDb();
+    db.collection("enactedLaws").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          legislationTypeId: "uk.health.prevention.primary",
+          countryId: "UK",
+          scope: "national",
+          budgetCategory: "health",
+          budgetCost: 0,
+          annualCostUsd: 200,
+        },
+      ]),
+    });
+    db.collection("states").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: "LON", countryId: "UK", population: 600 },
+        { _id: "SCO", countryId: "UK", population: 400 },
+      ]),
+    });
+    db.collection("regionalBudgets").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: "LON", countryId: "UK", westminsterGrant: 150 },
+        { _id: "SCO", countryId: "UK", westminsterGrant: 100 },
+      ]),
+    });
+
+    const spending = await calculateFederalSpending(
+      db as unknown as Db,
+      mockBudget({ _id: "UK", countryId: "UK" }),
+      10
+    );
+
+    expect(spending.stateGrants).toBe(250);
+  });
 });

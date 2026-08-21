@@ -18,6 +18,7 @@ import type { LegislationType } from "@/lib/db/types/legislation";
 import type { State } from "@/lib/db/types";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import { normalizeStateSpending, SECTOR_SUBSIDIES_SPENDING_KEY } from "@/lib/budget/spending";
+import { computeRegionalSpendingByCategory } from "@/lib/budget/regionalSpending";
 import { calculateFiscalYear } from "@/lib/budget/fiscalYear";
 
 export async function GET(
@@ -55,24 +56,6 @@ const TAX_TYPE_IDS_BY_COUNTRY: Record<string, Set<string>> = {
   UK: new Set(["uk_council_tax", "uk_business_rates"]),
   JP: new Set(["jp_resident_tax", "jp_fixed_asset_tax"]),
   DE: new Set(["de_income_tax_rate", "de_vat_rate"]),
-};
-
-/** Display labels for policy domains */
-const DOMAIN_LABELS: Record<string, string> = {
-  healthcare: "Healthcare",
-  education: "Education",
-  infrastructure: "Infrastructure",
-  publicSafety: "Public Safety",
-  environment: "Environment",
-  social: "Social Services",
-  governance: "Governance",
-  economic: "Economic Development",
-  defense: "Defense",
-  immigration: "Immigration",
-  agriculture: "Agriculture",
-  foreign_policy: "Foreign Policy",
-  technology: "Technology",
-  law_justice: "Law & Justice",
 };
 
 /** Serve parliamentary-style regional budget from the regionalBudgets collection */
@@ -142,7 +125,7 @@ async function serveRegionalBudget(
     });
   }
 
-  // Fetch state and region population for per-capita cost calculation
+  // Fetch state for the region's fiscal base (population + GDP)
   const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
   const population = state?.population ?? 0;
 
@@ -156,24 +139,20 @@ async function serveRegionalBudget(
   const spendingPolicies = regionPolicies.filter((p) => !taxTypeIds.has(p.legislationTypeId));
 
   // Fetch legislation types to look up policyDomain and annualCostPerCapita
+  // (legacy policies only — v2 laws price through the shared cost engine).
   const legTypeIds = spendingPolicies.map((p) => p.legislationTypeId);
   const legTypes = await db
     .collection<LegislationType>("legislationTypes")
     .find({ _id: { $in: legTypeIds } })
     .toArray();
-  const legTypeMap = new Map(legTypes.map((lt) => [lt._id, lt]));
 
-  const byCategory: Record<string, number> = {};
-  for (const policy of spendingPolicies) {
-    const lt = legTypeMap.get(policy.legislationTypeId);
-    if (!lt?.policyOptions) continue;
-    const option = lt.policyOptions.find((o) => o.id === policy.policyOptionId);
-    const costPerCapita = option?.annualCostPerCapita ?? 0;
-    const totalCost = costPerCapita * population;
-    if (totalCost <= 0) continue;
-    const category = DOMAIN_LABELS[lt.policyDomain ?? ""] ?? lt.policyDomain ?? "Other";
-    byCategory[category] = (byCategory[category] ?? 0) + totalCost;
-  }
+  const byCategory = computeRegionalSpendingByCategory({
+    policies: spendingPolicies,
+    legTypes,
+    countryId,
+    regionGdp: (state?.gdp ?? 0) * 1_000_000,
+    regionPopulation: population,
+  });
   byCategory[SECTOR_SUBSIDIES_SPENDING_KEY] = regionalBudget.subsidyCosts ?? 0;
 
   const spendingTotal = Object.values(byCategory).reduce((sum, v) => sum + v, 0);
