@@ -252,4 +252,75 @@ describe("calculateFederalSpending", () => {
 
     expect(spending.stateGrants).toBe(250);
   });
+
+  it("books only the drawn-down grant for a planned economy, and the full grant for a market one", async () => {
+    // Plan-economy allocations LAPSE: the centre books what a republic actually
+    // draws down, not the whole allocation. Live RU distributes ₽44.00B and its
+    // republics spend ₽24.34B — the ₽19.66B remainder is banked into a regional
+    // surplus that is never accumulated anywhere, so booking it as national
+    // spending charges the union for programmes that do not exist. A market
+    // economy's transfer is genuinely disbursed, so it still books in full.
+    async function stateGrantsFor(countryId: "RU" | "UK", regions: unknown[]) {
+      const db = createMockDb();
+      // The lapse gate reads the command-economy flag and the world year.
+      db.collection("gameConfig").findOne.mockResolvedValue({
+        _id: "default",
+        commandEconomyEnabled: true,
+      });
+      db.collection("gameState").findOne.mockResolvedValue({
+        _id: "current",
+        preset: "1953-default",
+        currentYear: 1957,
+        currentTurn: 274,
+        startingYear: 1953,
+        eraSystemEnabled: true,
+      });
+      db.collection("enactedLaws").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            legislationTypeId: "x.health",
+            countryId,
+            scope: "national",
+            budgetCategory: "health",
+            budgetCost: 0,
+            annualCostUsd: 200,
+          },
+        ]),
+      });
+      db.collection("states").find.mockReturnValue({
+        toArray: vi
+          .fn()
+          .mockResolvedValue(
+            (regions as { _id: string }[]).map((r) => ({ _id: r._id, countryId }))
+          ),
+      });
+      db.collection("regionalBudgets").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue(regions),
+      });
+      const spending = await calculateFederalSpending(
+        db as unknown as Db,
+        // baselineStateGrants 0 so the empty-byCategory fallback contributes
+        // nothing and the assertion isolates the transfer arithmetic.
+        mockBudget({ _id: countryId, countryId, baselineStateGrants: 0 }),
+        10
+      );
+      return spending.stateGrants;
+    }
+
+    // RU (planned in 1957): one republic underspends its grant, one overspends.
+    expect(
+      await stateGrantsFor("RU", [
+        { _id: "FEA", countryId: "RU", unionGrant: 1000, enactedBillCosts: 400 },
+        { _id: "CEN", countryId: "RU", unionGrant: 1000, enactedBillCosts: 1800 },
+      ])
+    ).toBe(1400); // 400 drawn down + 1000 capped at the allocation
+
+    // UK (market): the transfer is disbursed whether the region spends it or not.
+    expect(
+      await stateGrantsFor("UK", [
+        { _id: "LON", countryId: "UK", westminsterGrant: 1000, enactedBillCosts: 400 },
+        { _id: "SCO", countryId: "UK", westminsterGrant: 1000, enactedBillCosts: 1800 },
+      ])
+    ).toBe(2000);
+  });
 });
