@@ -34,7 +34,7 @@ You can release a subsidiary yourself too, but not immediately: there's a **24-t
 
 ## Tax relief within a group
 
-Corporations connected by formalized subsidiary edges form a **group**. Each corporation is still taxed individually every turn, but afterward, if the group has both a profit-making member and a loss-making one in the **same country**, the loss shelters the profit and part of the tax already paid is rebated back. A loss in one country never shelters a profit in another; that's a different, unimplemented mechanic (transfer pricing).
+Corporations connected by formalized subsidiary edges form a **group**. Each corporation is still taxed individually every turn, but afterward, if the group has both a profit-making member and a loss-making one in the **same country**, the loss shelters the profit and part of the tax already paid is rebated back. A loss in one country never shelters profit in another. Cross-border intra-group transfer pricing is a separate live audit system: exposure above ₳5 million can trigger an assessment with a 40% surcharge, while same-country intra-group pricing is intentionally ignored.
 
 The rebate is capped at what was actually paid in tax, so it can never turn into the treasury handing money to a group that paid nothing, and it's allocated back to whichever members actually paid tax, in proportion to how much they paid.
 

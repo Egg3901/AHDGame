@@ -1,6 +1,6 @@
 export const governmentFormationContent = `# Government Formation
 
-In parliamentary countries (UK, JP, and DE), elections don't automatically produce a government. After the lower chamber results are in, parties must negotiate and win a confidence vote to seat a Prime Minister (or Chancellor in DE). This page covers that process from election night through a functioning government.
+In parliamentary countries (UK, JP, DE, and IE), elections don't automatically produce a government. After the lower chamber results are in, parties must negotiate and win a confidence vote to seat a Prime Minister, Chancellor in DE, or Taoiseach in IE. This page covers that process from election night through a functioning government.
 
 ## Which countries use this
 
@@ -10,6 +10,7 @@ In parliamentary countries (UK, JP, and DE), elections don't automatically produ
 | UK | Parliamentary | PM must hold confidence of Commons |
 | JP | Parliamentary | PM must hold confidence of Shūgiin |
 | DE | Parliamentary | Chancellor must hold confidence of Bundestag |
+| IE | Parliamentary | Taoiseach must hold confidence of Dáil |
 
 These mechanics apply to any parliamentary-style country (parliamentary monarchies, parliamentary republics, and one-party states) that uses a confidence-vote mechanism. Parliamentary monarchies and republics use one by default; one-party states don't, so the freeze does not apply to CN.
 
@@ -52,7 +53,7 @@ If the current PM **retained their seat** in the election, the system automatica
 Any eligible character can be nominated as PM by filing a PM appointment vote. Appointment votes:
 
 - Last 24 hours each
-- Are voted on by all lower-chamber members (Commons MPs or Shūgiin members)
+- Are voted on by all lower-chamber members (Commons MPs, Shūgiin members, Bundestag members, or TDs)
 - Require a simple majority of votes cast to pass
 
 Multiple appointment votes can be open simultaneously. The first candidate to reach a majority wins. When one passes, all others are cancelled.
@@ -108,7 +109,7 @@ After seating as PM, the character can appoint cabinet members directly from the
 
 ## Watching formation in real time
 
-The UK Government page and equivalent JP page show:
+Each parliamentary country's government page shows:
 
 - Current government status (formed or pending)
 - The sitting PM name and party (if formed)

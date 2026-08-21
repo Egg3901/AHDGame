@@ -103,7 +103,11 @@ Investment and universal charters (when the prop trading kill switch is on) run 
 - The **interbank** market: retail banks may lend part of their non reserved deposits to investment banks at a negotiated rate.
 - A **central bank margin** line against posted collateral at prime plus a spread.
 
-The prop book is capped at three times the desk's equity, and any single currency may be at most half the forex book. Borrowed money is never capital: drawing on the margin line or the discount window raises your cash and your debt together and leaves your capital ratio exactly where it was.
+The prop book is capped at three times the desk's equity, and any single forex
+currency may be at most 50% of prop-desk equity. It is not measured as half of
+the forex sub-book. Borrowed money is never capital: drawing on the margin line
+or the discount window raises cash and debt together and leaves the capital
+ratio unchanged.
 
 Forced liquidation feeds the confidence score. Flag off freezes prop and interbank actions without unwinding existing books.
 

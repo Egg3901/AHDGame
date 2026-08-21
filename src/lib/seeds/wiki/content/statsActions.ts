@@ -20,9 +20,10 @@ PI is the most important stat in the early game. Because decay is relative (not 
 - **Scale:** Uncapped; starts at 0
 - **Grows by:** +state PI ÷ 100 per turn (automatic, no action required), **plus a position bonus** per turn depending on held office (President/PM/Chancellor +2.5, VP +2.0, other seated offices, Governor, Senator, Representative, cabinet, etc., +1.0, none +0)
 - **Drives:** Presidential races **exclusively**: both reach and appeal
-- **Scaling:** Sqrt curve, capped at 1.0 once NPI reaches 100. NPI 25 → 0.5×; NPI 50 → ~0.71×; NPI 85 → ~0.92×; NPI 99 → ~0.995×; NPI ≥ 100 → 1.0× (cap)
+- **General-election scaling:** Sqrt curve, capped at 1.0 once NPI reaches 100. NPI 25 → 0.5×; NPI 50 → ~0.71×; NPI 85 → ~0.92×; NPI 99 → ~0.995×; NPI ≥ 100 → 1.0× (cap)
+- **Presidential-primary scaling:** A separate diminishing-return curve, \`1 − exp(−NPI/45)\`, approaches 1.0 without a hard cap
 
-Above NPI=100 there's no further reach bonus, but NPI=99 vs NPI=85 is now a meaningful spread (~7 percentage points of reach), which it wasn't under the old log curve. NPI is still a long game; only serious presidential contenders should optimise for it. You build NPI by sustaining high state PI over many turns: it accumulates passively. Holding national office accelerates the build.
+Above NPI=100 there is no further general-election reach bonus, although the presidential-primary curve continues to increase by progressively smaller amounts. NPI=99 vs NPI=85 is a meaningful general-election spread (~7 percentage points of reach), which it wasn't under the old log curve. NPI is still a long game; only serious presidential contenders should optimise for it. You build NPI by sustaining high state PI over many turns: it accumulates passively. Holding national office accelerates the build.
 
 ### Favorability
 
@@ -155,7 +156,7 @@ Available to active presidential candidates during the general phase.
 
 | Action | Cost | Effect |
 | --- | --- | --- |
-| Travel | 3 to 10 actions (scaled by state electoral votes: ≤5 EV = 3, ≤10 = 5, ≤20 = 7, >20 = 10) | Sets your travel state; unlocks canvassing actions there. There is no automatic per-turn favorability gain from travel alone |
+| Travel | 3 to 10 actions (scaled by state electoral votes: ≤5 EV = 3, ≤10 = 5, ≤20 = 7, >20 = 10) | Sets your travel state, unlocks canvassing there, and adds +1% Favorability per turn while you remain in-state |
 
 - Only US states as destinations; one at a time.
 - Switching states costs another 3 to 10 actions (same EV scale).
@@ -177,11 +178,11 @@ From an NPP profile (\`/npp/[id]\`), these are deterministic capital actions gat
 
 There is no "Request Withdrawal", "Request Opposition", or "Request Leadership Support" action; the six above are the full set.
 
-Details: [NPP System](/wiki/npp-system).
+Details: [NPPs Overview](/wiki/npps-overview).
 
 ## Party-level actions
 
-Party Chairs and Vice Chairs draw from the **party action pool** to run influence operations on NPPs (in-state for regional chairs, nationally for the National Chair). The pool refills each turn from member contributions. See [Parties](/wiki/parties) and [Party Building](/wiki/party-building).
+Party Chairs and Vice Chairs draw from the **party action pool** to run influence operations on NPPs (in-state for regional chairs, nationally for the National Chair). The pool refills each turn from member contributions. See [Political Parties](/wiki/political-parties) and [Party Organization](/wiki/party-organization).
 
 ## Per-turn resource flow (at a glance)
 
@@ -203,7 +204,7 @@ Then bills, NPP behavior, elections, and all other systems run.
 
 - [Core Systems](/wiki/core-systems): Time, actions, money in context.
 - [Election Mechanics](/wiki/election-mechanics): How stats feed into vote calculations.
-- [Formula Deep-Dive](/wiki/formula-deep-dive): Exact math for reach, appeal, primary scores.
-- [NPP System](/wiki/npp-system): Full NPP influence details.
-- [Parties](/wiki/parties): Party influence and action pool mechanics.
+- [Reference: Formulas](/wiki/reference-formulas): Exact math for reach, appeal, primary scores.
+- [NPPs Overview](/wiki/npps-overview): NPP concepts and links to detailed NPP guides.
+- [Political Parties](/wiki/political-parties): Party influence and action pool mechanics.
 `;

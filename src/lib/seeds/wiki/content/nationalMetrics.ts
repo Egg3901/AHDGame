@@ -6,24 +6,26 @@ National metrics are the economic and social health indicators tracked for each 
 
 ### GDP growth
 
-GDP growth measures the percentage change in total economic output. It is computed as a **revenue-weighted average** of corporate sector growth rates across all states:
+GDP growth measures the percentage change in total economic output. Corporate sector activity first produces a demand signal: owned sectors contribute their growth weighted by revenue, unowned sectors contribute a **0.5% background rate**, and a **40% inertia** smooths the sector signal.
+
+The displayed national rate then runs through the output-gap model:
 
 \`\`\`
-stateGdpGrowth = Σ(sectorRevenue × sectorGrowthRate) / Σ(sectorRevenue)
+sectorSignal = smoothed revenue-weighted sector activity
+impulse = sectorSignal - potentialGrowth
+gdpGrowth = potentialGrowth + realizedChangeInBoundedOutputGap
 \`\`\`
 
-Unowned sectors contribute a **0.5% default background growth rate**: the baseline for an economy with no active corporate sector. Owned sectors contribute their CEO-set growth rate weighted by revenue.
-
-National GDP growth uses a GDP-weighted average of state growth rates. The **40% inertia** applies to the **sectorGrowth EMA smoothing** used in per-sector growth calculations, not to the national GDP aggregation itself.
+The output gap closes over time, so a one-turn boom or contraction does not permanently reset the printed growth rate.
 
 ### Unemployment
 
-Unemployment follows a simplified Okun's Law relationship with GDP growth:
-- **Neutral GDP (2%):** No unemployment pressure
-- **Above neutral:** Unemployment falls at 0.2% per 1% excess growth
-- **Below neutral:** Unemployment rises at 0.25% per 1% shortfall in growth
+Unemployment follows a simplified Okun's Law relationship with GDP growth relative to the country's **potential growth**:
+- **At potential:** No Okun pressure
+- **Above potential:** Unemployment falls by 0.2 percentage points per 1% excess growth
+- **Below potential:** Unemployment rises by 0.25 percentage points per 1% shortfall
 
-Unemployment has an **85% inertia** (very slow-moving) and hard bounds of **1% to 15%**. A recession that drops GDP growth to 0% for one turn barely moves unemployment: sustained slow growth over many turns does.
+Potential falls back to 2% only when the country has no seeded value. When macro labour effects are active, wage and automation shocks add pressure after Okun. Unemployment has an **85% inertia** and hard bounds of **1% to 15%**.
 
 ### Inflation
 
@@ -93,8 +95,8 @@ Policy effects are applied each turn as long as the law remains enacted.
 ### Corporate effects
 
 Corporations drive several metrics directly:
-- **GDP growth:** Your sector growth rates feed directly into state and national GDP calculations
-- **Unemployment:** High GDP growth reduces unemployment via the Okun relationship
+- **GDP growth:** Your sector activity feeds the demand signal that moves the national output gap
+- **Unemployment:** Growth above or below potential moves unemployment through the Okun relationship
 - **Workforce skill:** Technology, Healthcare, Manufacturing, and Defense sectors have higher margins in states with higher workforce skill, and can be affected by a skills mismatch
 
 Additionally, per-sector margin modifiers mean that state conditions feed back into corporate decisions:

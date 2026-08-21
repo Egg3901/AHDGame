@@ -1,6 +1,6 @@
 export const corporationsContent = `# Corporations
 
-Corporations are player-owned businesses that generate revenue, employ workers, and interact with state economies. Every character can found exactly one corporation. Corporations earn money each turn, respond to economic conditions, and can become a significant source of personal wealth and political leverage.
+Corporations are player-owned businesses that generate revenue, employ workers, and interact with state economies. A character can hold one active CEO seat at a time. Founding starts a 168-turn per-user cooldown before that user may found another corporation. The clock starts at founding, not when the CEO later leaves. Corporations earn money each turn, respond to economic conditions, and can become a significant source of personal wealth and political leverage.
 
 ## Founding a corporation
 
@@ -45,6 +45,24 @@ When you found a corporation, you choose between two structures:
 
 Float % is capped at 49% so a founder always emerges from an IPO with majority control. After founding, a private corporation can also IPO later via the **Go Public** action in the CEO admin panel (96-turn cooldown since founding or last privatization).
 
+### Dual-class supershares
+
+A founder may adopt dual-class stock at IPO or later through an
+\`adopt_supershares\` shareholder vote. The chosen multiplier is an integer
+from 2x to 10x. Supershares receive the same dividends and buyout value as
+common shares; only governance voting power changes.
+
+Supershares never transfer. A buyer always receives common stock. If the
+founder sells below the number of supershares originally marked, their
+effective supershare count falls with the remaining holding and never grows
+back when common shares are repurchased. A dual-class IPO may float up to 75%
+instead of the normal 49% because voting control is measured separately from
+economic ownership.
+
+Shareholder votes and privatization eligibility use voting power. Cash payouts
+remain per share, so supervoting control does not increase the founder's
+economic claim.
+
 ### Privatization buyouts
 
 A CEO who controls more than 75% of a public corporation's **voting power** can call a privatization vote. Dual-class supershares count toward this, so a founder with voting control can privatize even if their economic stake is lower. The vote runs for 24 turns. Eligible voters are non-CEO character and corporation shareholders; the public float doesn't vote (no person owns it) but auto-tenders if the vote passes.
@@ -83,7 +101,8 @@ Entering a new state and industry is a **first build**, and it costs two things:
 
 The capacity **arrives**; it does not appear. A new sector starts at zero capacity with the starter order sitting in its build queue, and it comes online in half the normal build time because a greenfield plant is scoped to its site from day one. Until the order lands, the sector produces nothing.
 
-You can only build sectors in your **primary or secondary industry**.
+You may build a sector in any industry. Primary and secondary industries affect
+the margin bonus; they do not gate which plants you can found.
 
 ### Market capture (splits)
 
@@ -143,10 +162,9 @@ A sector shows more than one revenue figure. They mean different things, and onl
 | Nameplate revenue | What the plants you own could produce at list prices: capacity × price |
 | Realization | Production policy, commodity prices, throughput and capacity applied to that nameplate |
 | Realized revenue | What the sector actually earned. **Profit is computed from this** |
-| Effective margin | Base margin plus every state, corporate and national modifier |
-| Operating profit | Realized revenue x effective margin |
-| Growth cost | Cost of the currently active growth rate |
-| Net profit | Operating profit minus growth cost |
+| Operating profit | Realized revenue minus total operating cost |
+| Effective margin | Capped display output derived from the realized profit basis |
+| Net profit | The plants P&L result after revenue and all recorded costs |
 
 Nameplate revenue is **derived from the capacity you own**, so it does not compound on its own. Output grows when you build, and not otherwise. Revenue that moves without new plant is realization and clearing at work, not growth.
 
@@ -162,7 +180,9 @@ Because a game year is two financial days, you pay the daily growth cost twice f
 
 ## Unowned sector growth
 
-The unowned portion of every market sector grows automatically each turn at **half the average growth rate of player-owned sectors** in that same state and sector type. If no player-owned sectors exist in that combination, it falls back to a 1% baseline growth rate.
+In pre-plants modes, the unowned pool grows at half the average owned-sector
+growth rate, with a 1% fallback. In the live plants mode, unowned headroom
+grows from the state's \`economic.gdpGrowth\` instead.
 
 This means unowned market share regenerates over time. A sector you partially captured will refill, so sustained expansion requires repeated splits or very high marketing strength to outpace regrowth.
 
@@ -213,7 +233,7 @@ Many factors adjust your sector profit margins. These are additive:
 | Commodity output demand | ±50pp per commodity (soft cap) | Logarithmic; shortages in commodities you sell boost margins |
 | Dominance margin penalty | up to -15% | Scales from 0 at ≤50% market share to -15pp at 100% share |
 | Dominance regulatory burden | up to 5% of revenue | Compliance/antitrust cost; scales with market share above 50% |
-|| Sustained negative production | up to -45% | Builds after 48 turns of negative production policy; full penalty at 144 turns |
+| Sustained negative production | up to -45% | Builds after 48 turns of negative production policy; full penalty at 144 turns |
 | Sovereign default | up to -15% | Crisis-driven margin penalty from national or global default events |
 | Nationalized (SOE efficiency) | -5% to -25% | Government-owned corporations only; dynamic penalty from corruption, governance quality, price-control/employment-guarantee mandates, and state-holding overreach |
 
@@ -223,7 +243,10 @@ Sectors that don't match your primary or secondary type receive a **-15% penalty
 
 ### CEO salary
 
-Set a daily salary (no minimum or maximum). It is deducted from liquid capital each turn. High salaries drain capital and reduce share price over time.
+Set a daily salary from zero up to 1.25x the corporation's daily gross sector
+revenue. A corporation with zero revenue has a zero salary cap. Salary is
+deducted from liquid capital each turn, so high salaries drain capital and
+reduce share price over time.
 
 ### Overhead cap
 
@@ -292,7 +315,7 @@ Each sector type has **4 to 8 operating strategies** that change which commoditi
 | Initiation cost | 25% of sector daily revenue |
 | Transition duration | 12 turns (rates interpolate linearly) |
 | Transition margin penalty | Progressive −5% over 12 turns (starts at 0%, reaches full −5% at completion) |
-| Cooldown | 24 turns from initiation before another switch |
+| Cooldown | The 12-turn transition itself; another switch is allowed immediately after completion |
 
 During the transition, commodity flows blend from the old strategy toward the new one. The penalty represents retooling disruption. You can see a before/after comparison of estimated margin impact in the sector detail panel before confirming a switch.
 

@@ -4,15 +4,16 @@ This is the "bailout" resolution path for a country in a full sovereign debt cri
 
 ## When it's on the table
 
-A country enters crisis after three consecutive annual bond auctions fail to attract enough demand. From there, the executive has a window to choose one of three resolution paths:
+A country enters crisis after three consecutive bond auctions fail to attract enough demand. From there, the executive has a window to choose one of four resolution paths:
 
 | Resolution path | Direct GDP penalty | Ongoing conditions? |
 | --- | --- | --- |
 | Repudiate | −12% | No |
 | Restructure | −6% | No (one-time haircut) |
 | **Bailout (this facility)** | **−2%** | **Yes: income capture, 240-turn term** |
+| Monetize | No flat GDP hit | Inflation shock; unavailable at 8% inflation or above |
 
-Bailout is by far the gentlest hit up front. What it costs instead is a slice of the country's revenue for a long time afterward.
+Bailout has a smaller flat GDP hit than repudiate or restructure. Monetize has no flat GDP hit, but substitutes an inflation shock and can be unavailable when inflation is already high. The bailout's continuing cost is a slice of the country's revenue for a long time afterward.
 
 ## How the loan is sized
 
@@ -56,5 +57,5 @@ Taking the bailout puts a country into a recovery state. Full recovery needs a m
 | Ownership dilution | None | IMF takes an equity stake |
 | Oversight | 12-turn IMF board override window | None |
 
-See also: [Sovereign Default](/wiki/sovereign-default), [IMF & Bailouts](/wiki/imf), [Sovereign Bonds](/wiki/sovereign-bonds), [National Budget](/wiki/national-budget), [Central Banks](/wiki/central-banks)
+See also: [Sovereign Default](/wiki/sovereign-default), [Corporate IMF Restructuring](/wiki/imf), [Sovereign Bonds](/wiki/sovereign-bonds), [National Budget](/wiki/national-budget), [Central Banks](/wiki/central-banks)
 `;

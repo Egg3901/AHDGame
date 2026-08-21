@@ -16,8 +16,36 @@ import { electionsPlayerGuideContent } from "../content/electionsPlayerGuide";
 import { liveElectionResultsContent } from "../content/liveElectionResults";
 import { contingentElectionContent } from "../content/contingentElection";
 import { executiveTermLimitsContent } from "../content/executiveTermLimits";
+import { referendumsContent } from "../content/referendums";
+import { politicalOperationsContent } from "../content/politicalOperations";
 
 export const electionsPages: readonly WikiSeedPage[] = [
+  {
+    slug: "political-operations",
+    title: "Political Operations and Campaign Presence",
+    description:
+      "The US presidential operations hub: per-candidate state presence, campaign-funded build costs, vote bonuses, and cross-cycle carryover.",
+    content: politicalOperationsContent,
+    category: "elections",
+    extraTags: ["campaign-presence", "president", "ground-game"],
+    featured: true,
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 5,
+  },
+  {
+    slug: "referendums",
+    title: "Independence and Reunification Referendums",
+    description:
+      "How UK devolved regions request, campaign, vote, and complete independence or Northern Ireland reunification referendums.",
+    content: referendumsContent,
+    category: "elections",
+    extraTags: ["uk", "devolution", "independence", "reunification"],
+    featured: true,
+    difficulty: "advanced",
+    contentType: "reference",
+    estimatedReadTime: 6,
+  },
   {
     slug: "elections-player-guide",
     title: "Elections: A Granular Player Guide",
@@ -61,7 +89,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "general-elections",
     title: "General Elections",
     description:
-      "Vote accumulation across the general phase, the Total Appeal Pipeline, the final-4-turn 25% weighting, FPTP spoilers, and closing-sprint tactics.",
+      "Vote accumulation across the general phase, the Total Appeal Pipeline, the final-4-turn 30% weighting, FPTP spoilers, and closing-sprint tactics.",
     content: generalElectionsContent,
     category: "elections",
     extraTags: ["general", "appeal"],

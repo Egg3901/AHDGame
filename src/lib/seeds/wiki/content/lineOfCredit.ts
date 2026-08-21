@@ -80,6 +80,16 @@ spread = 5 − (composite / 100) × 6
 | 75 | +0.5pp | 3.5% |
 | 100 | −1.0pp | 2.0% |
 
+## Borrowing limits and payment mode
+
+The credit limit is also constrained by affordability and wealth:
+
+- Total debt service may use at most 70% of income under the DTI limit.
+- Outstanding LOC principal may not exceed 1x net worth.
+- Interest-only mode adds 2.0 percentage points to the rate.
+- Switching the interest-only setting starts a 24-turn cooldown before it can
+  be changed again.
+
 ## Funding sources
 
 The central bank funds LOC draws from one of three configured sources:

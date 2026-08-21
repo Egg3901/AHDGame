@@ -8,7 +8,7 @@ If you just want the formulas and constants, the [Commodities reference](/wiki/c
 
 Older versions of the game paid your corporation a revenue number based mostly on market share and margins. The market system makes that revenue **earned**: prices react to scarcity, your goods have to find real buyers, and the capacity you build is a durable asset that shows up in your valuation.
 
-It rolls out in **tiers**, switched on as a game world matures. Each tier that turns on adds one more layer of realism, and usually one more panel on your sector's detail page.
+It is organized in **tiers**. Fresh worlds start at **plants**, with the entire ladder active. Admins can select an earlier tier for a staged rollout or a legacy-world migration. Each tier adds one more layer of realism and usually one more panel on your sector's detail page.
 
 | Tier | What it does | What you see |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ It rolls out in **tiers**, switched on as a game world matures. Each tier that t
 | **Capital** | Your growth budget builds owned **capacity**; output is gated by it. | A **Capital panel** with a per-unit economics breakdown. |
 | **Plants** | Your sectors **are** their plants. Revenue is derived from what those plants make and sell, and the nameplate stops growing on its own. | Build orders and a capacity figure that only moves when you build. |
 
-You don't turn these on, the game does. Your job is to understand each one so you can price and invest well when it's active.
+You do not select the tier yourself. Your job is to understand each layer so you can price and invest well under the world configuration shown in the game.
 
 ## Prices come from supply and demand
 
