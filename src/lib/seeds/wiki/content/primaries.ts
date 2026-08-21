@@ -105,7 +105,7 @@ When the primary deadline passes:
 - [Election Mechanics](/wiki/election-mechanics): Full election structure.
 - [General Elections](/wiki/general-elections): What happens after you win the primary.
 - [Primary vs General Tactics](/wiki/primary-general-tactics): Pivoting once the general starts.
-- [NPP Opponents](/wiki/npp-opponents): Strategies for competing against autonomous candidates.
-- [Parties](/wiki/parties): Party platform positions, how to see them.
+- [NPP Elections](/wiki/npp-elections): Strategies for competing against autonomous candidates.
+- [Political Parties](/wiki/political-parties): Party platform positions, how to see them.
 - [Polling](/wiki/polling): Quick and Full poll details.
 `;

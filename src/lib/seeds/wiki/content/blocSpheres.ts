@@ -40,7 +40,9 @@ A bloc's own cohesion is modeled separately from any one member's alignment. An 
 
 Raw member count is deliberately not an input: a large bloc of settled, uncontested members is not penalized just for its size.
 
-Stress reduces how effectively the bloc's own plays land, up to a cap: a fully-stressed bloc is meaningfully impaired but never completely inert. It bucket into three player-facing labels: **Settled**, **Strained**, and **Overextended**. Stress is self-correcting; it falls back down as contested members settle and accessions finish digesting, with no action required from anyone.
+Stress reduces how effectively the bloc's own plays land, up to a cap: a fully stressed bloc is meaningfully impaired but never completely inert. It falls into three player-facing labels: **Settled**, **Strained**, and **Overextended**. Stress is self-correcting; it falls as contested members settle and accessions finish digesting, with no action required from anyone.
+
+Open **World > International Organizations**, select a bloc, and use its **Influence** tab to see pole shares, targets, and bloc stress. Diplomatic actions such as membership proposals use the acting country's per-turn diplomatic-action budget.
 
 ## What this means for you
 

@@ -15,7 +15,7 @@ Only the CEO can issue bonds. Access the bond panel from the corporation page.
 | Coupon rate | prime rate + credit spread + 1.0pp + term premium (see below) |
 | Issuance cooldown | 24 turns between issuances for publicly-listed corporations; 12 turns for private corporations |
 
-**Blocked while under IMF bailout:** If your corporation is under an active IMF sovereign bailout, you cannot issue new bonds or refinance defaulted debt until the restructuring ends.
+**Blocked while under IMF restructuring:** If your corporation is under an active corporate IMF restructuring, you cannot issue new bonds or refinance defaulted debt until the restructuring ends. This is separate from a country's sovereign IMF facility.
 
 Corporate bonds are issued in the corporation's home currency (see [Currency Exchange](/wiki/currency-exchange)). The proceeds go directly to corporate liquid capital. Bond units enter the **public float** and can be purchased by any player or corporation.
 

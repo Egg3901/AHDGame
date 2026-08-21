@@ -125,6 +125,6 @@ If your party chair is already running GOTV on your aligned demographics, the mo
 - [Demographics & Targeting](/wiki/demographics-targeting): Census composition and appeal math.
 - [Demographics](/wiki/demographics): Full demographic system, census buckets, turnout mechanics.
 - [General Elections](/wiki/general-elections): The 4-turn campaign season window.
-- [Parties](/wiki/parties): Party GOTV spending and how it interacts.
+- [Political Parties](/wiki/political-parties): Party GOTV spending and how it interacts.
 - [Polling](/wiki/polling): How to diagnose where canvassing has the highest ROI.
 `;

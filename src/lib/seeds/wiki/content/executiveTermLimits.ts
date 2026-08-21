@@ -10,10 +10,12 @@ Term limits are configured per country, not a universal rule. A country with no 
 | --- | --- | --- | --- |
 | United States | President | 2 terms | Yes |
 | Ireland | Uachtarán (President) | 2 terms | No |
+| Brazil | President | 2 terms | Yes |
+| Nigeria | President | 2 terms | Yes |
 
-Other countries that carry a Presidency-style office with a term cap follow the same 2-term pattern unless their country page says otherwise.
+Countries not listed here have no configured executive term cap.
 
-**"Blocks running-mate picks"** is the important distinction. In the US, a term-limited character can't just get elected VP instead and skip the line, the 22nd Amendment reading used here also disqualifies them from being selected as a running mate. In Ireland, the limit only blocks re-election to the Uachtarán seat itself, a two-term former President isn't barred from other offices.
+**"Blocks running-mate picks"** is the important distinction. In the US, Brazil, and Nigeria, a term-limited character cannot be selected as a running mate. In Ireland, the limit only blocks re-election to the Uachtarán seat itself; a two-term former President is not barred from other offices.
 
 ## How terms served are counted
 

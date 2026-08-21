@@ -19,12 +19,12 @@ import { iterationsPages } from "./pages/iterations";
  * canonical `WIKI_SEED_PAGES` list consumed by `seedWikiPages`.
  *
  * Phase status (page counts from the category files concatenated below):
- *   Getting Started (11 pages)
+ *   Getting Started (12 pages)
  *   Elections (17 pages)
  *   Legislatures & Government (15 pages)
  *   Parties, Coalitions, NPPs (13 pages)
  *   Country hubs (10 pages: US, UK, DE, JP, IE, BR, CN, NG, RU, DD)
- *   Economy & Finance (34 pages)
+ *   Economy & Finance (35 pages)
  *   Advanced + Reference + Strategy (25 pages)
  *   Resources & Contracts (4 pages)
  *   Commodities (one page per CommodityType, auto-generated)

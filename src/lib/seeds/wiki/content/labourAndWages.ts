@@ -59,7 +59,7 @@ Labour ships in tiers:
 | **unions** | Sector unionization drift, standing premium, strikes: see [Unions](/wiki/unions) |
 | **full** | Union-law bias, union-busting, player-run unions |
 
-Admins advance the labour system's tier independently; not every world runs all tiers on day one.
+Fresh worlds start at **full**, so all four layers are active. Admins can dial a particular world down to an earlier tier for rollout or testing.
 
 ## Related
 

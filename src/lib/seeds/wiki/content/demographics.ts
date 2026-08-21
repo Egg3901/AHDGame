@@ -65,7 +65,7 @@ In **primary** elections (intra-party), Org is applied as a uniform neutral \`1�
 
 ### 5. Vote allocation
 
-Within each cell, candidates split the cell's votes proportional to their relative \`appeal × reach × approvalScalar × orgShare × regResistance × supportMood × infamyMult\` in general elections. Primaries drop the three general-only factors (orgShare / regResistance / supportMood): Org is a neutral \`1×\` intra-party. Either way, the cell votes as a bloc, and each candidate gets a fraction of the cell's total turned-out voters.
+Within each cell, candidates split the cell's votes proportional to their relative \`appeal × reach × approvalScalar × orgMultiplier × regResistance × supportMood × infamyMult\` in general elections. Primaries drop the three general-only factors (orgMultiplier / regResistance / supportMood): Org is a neutral \`1×\` intra-party. Either way, the cell votes as a bloc, and each candidate gets a fraction of the cell's total turned-out voters.
 
 Total votes are summed across all cells. This cell-level split is the base pipeline; live general-election vote accumulation runs it through the **swing-flow model**, which additionally applies coattails, a median-voter policy reference, persuasion drivers, and party-tenure fatigue. See [Election Mechanics](/wiki/election-mechanics).
 

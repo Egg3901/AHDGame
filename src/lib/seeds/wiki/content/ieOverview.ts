@@ -1,6 +1,6 @@
 export const ieOverviewContent = `# Ireland
 
-Ireland is a **parliamentary republic**: a small open economy on the Atlantic edge of Europe. The **Taoiseach** leads the government through a majority in the 160-seat Dáil Éireann, elected by proportional representation using the Single Transferable Vote (PR-STV). Ireland uses the Euro (EUR) and shares the European Central Bank with other Eurozone members.
+Ireland is a **parliamentary republic**: a small open economy on the Atlantic edge of Europe. The **Taoiseach** leads the government through a majority in the 160-seat Dáil Éireann. The live allocator uses Hare-quota proportional representation with largest remainders; ranked STV transfers are not yet simulated.
 
 ---
 
@@ -11,10 +11,10 @@ Ireland is a **parliamentary republic**: a small open economy on the Atlantic ed
 | Taoiseach (head of government) | Confidence vote of Dáil members | No fixed term | 1 |
 | Tánaiste (deputy head of government) | Appointed by Taoiseach | No fixed term | 1 |
 | Uachtarán na hÉireann (President, head of state) | Direct election | 7 years | 1 |
-| Teachta Dála (TD) | PR-STV multi-seat election | 5 years | 160 |
+| Teachta Dála (TD) | Hare-quota multi-seat election | Modeled 4-year cycle | 160 |
 | Cathaoirleach (regional executive) | FPTP regional election | 5 years | 1 per region |
 | Local Councillor | Multi-seat local election | 5 years | 200 total |
-| President of the ECB | Appointed action | 8 years | 1 |
+| Governor of the Central Bank of Ireland | Appointed action | 4 years | 1 |
 
 The **Taoiseach** is Ireland's head of government: equivalent to a Prime Minister. The **Uachtarán na hÉireann** (President of Ireland) is a ceremonial, non-executive head of state with a 7-year term, max 2 terms per character. The **Tánaiste** is the deputy head of government, filled through cabinet appointment.
 
@@ -26,7 +26,7 @@ The **Oireachtas** is the bicameral national legislature. However, the **Seanad 
 
 The Oireachtas consists of two chambers:
 
-- **Dáil Éireann**: 160 TDs (Teachtaí Dála) elected by **PR-STV** (proportional representation using the Single Transferable Vote) across multi-seat constituencies. This is the primary legislative chamber and the source of the Taoiseach's authority. **All 160 seats are contested** each election cycle.
+- **Dáil Éireann**: 160 TDs (Teachtaí Dála) allocated proportionally across multi-seat constituencies using a **Hare quota and largest remainders**. This is the primary legislative chamber and the source of the Taoiseach's authority. **All 160 seats are contested** each election cycle.
 - **Seanad Éireann**: 60 senators (43 elected from vocational panels, 11 nominated by the Taoiseach, and 6 from universities). The Seanad is partly elected and partly appointed, and is **not part of the player legislative loop**. Bills do not require Seanad passage to enact: the Dáil is the sole legislative body.
 
 ---
@@ -43,7 +43,7 @@ Ireland has no single-party majority tradition: **coalition government is the no
 
 ## How Irish elections work
 
-Dáil elections use **PR-STV** (proportional representation using the Single Transferable Vote). Multi-seat constituencies elect multiple TDs, and voters rank candidates by preference. Surplus transfers and eliminations distribute votes until seats fill.
+Dáil elections currently use a generic **Hare-quota largest-remainder** allocator. This approximates proportional multi-seat results, but it does not model ranked ballots, surplus transfers, or eliminations. Wiki references to STV describe the real institution, not the live resolver.
 
 - **Primaries advance the top 3 candidates** per party per region (same as the UK / JP / DE rule, not the US top-1 rule).
 - **All Dáil seats are contested** in each cycle: no staggered classes.
@@ -64,8 +64,10 @@ Each region has a regional executive: the **Cathaoirleach**, using the same offi
 
 The **Uachtarán na hÉireann** is a directly elected ceremonial head of state: distinct from the Taoiseach, who is the head of government. Key features:
 
+Open the live office at [Áras an Uachtaráin](/country/ie/executive/aras).
+
 - **7-year term**: the longest of any directly elected office in the game.
-- **2-term limit per character**: a character cannot serve more than two consecutive terms.
+- **2-term lifetime limit per character**: a character cannot be elected to a third term, even after a break.
 - **+3 actions per turn** while in office.
 - **Party strength weight 0.5**: the ceremonial presidency carries less partisan weight than the Taoiseach or TDs.
 
@@ -75,13 +77,13 @@ The President does not introduce legislation and has no veto. The office is a st
 
 ## Key Irish mechanics
 
-**PR-STV electoral system.** Ireland is the only country in A House Divided using STV-style proportional representation. The closest built-in comparison is ranked-choice voting (RCV), but multi-seat constituencies with ranked transfers make it mechanically closer to UK/DE multi-seat allocation than US single-winner FPTP.
+**Proportional lower-chamber allocator.** Ireland's Dáil uses the same generic Hare-quota proportional allocator used by several multi-seat chambers. A future true-STV implementation would need ranked ballots and transfer rounds that the current resolver does not perform.
 
 **Unicameral legislative loop.** Although the Oireachtas is bicameral in name, only the Dáil participates in the player legislative loop. The Seanad is advisory-only: it cannot block or amend bills in gameplay.
 
 **Coalition government by default.** Ireland's two major parties rarely win an outright Dáil majority. Coalitions (Fine Gael + Labour, Fianna Fáil + Greens, etc.) are the standard form of government. The 81-seat threshold is the only hard number that matters for confidence.
 
-**Shared ECB.** Ireland uses the **Euro (EUR)** and shares the **European Central Bank (ECB)** with other Eurozone members. The ECB's prime rate is set by the ECB President: a role contested in-game through the EU international organization. Ireland cannot unilaterally set its prime rate.
+**Currency depends on era state.** Ireland starts with the Irish pound in pre-euro presets and can display the euro after Eurozone adoption. Its configured central-bank office is the **Governor of the Central Bank of Ireland**, not an independently contested ECB presidency.
 
 **Social axis baseline −1.5.** Ireland's social-axis position starts slightly libertarian (−1.5 on a −5…+5 scale), reflecting a permissive, socially liberal baseline. Drifts toward the social stance of enacted national laws over time.
 
@@ -106,9 +108,9 @@ Ireland has no sub-national legislature equivalent to the US State Senate or UK 
 
 | Item | Detail |
 | --- | --- |
-| Currency | EUR |
-| Central Bank | European Central Bank (ECB) |
-| Chair title | President of the ECB |
+| Currency | IEP before Eurozone adoption; EUR display after adoption |
+| Central Bank | Central Bank of Ireland |
+| Chair title | Governor of the Central Bank of Ireland |
 | Default prime rate | 3.0% (shared across Eurozone) |
 | Stock exchange | ISEQ |
 | Finance Minister | Minister for Finance |
@@ -131,10 +133,11 @@ A 2019-start Ireland begins as a **tech innovation** economy: the same modern mo
 
 - [Cabinet Guide](/wiki/cabinet-guide): every cabinet post, its metrics, and its actions
 - [Election Mechanics](/wiki/election-mechanics): Primary and general election rules
-- [Multi-Country Play](/wiki/multi-country-play): PR-STV vs FPTP, cross-border investments
+- [Multi-Country Play](/wiki/multi-country-play): proportional vs FPTP systems, cross-border investments
 - [Core Systems](/wiki/core-systems): Turn structure, action economy
 - [Player Progression](/wiki/player-progression): Career ladder details
 - [International Organizations](/wiki/international-organizations): EU / ECB shared institutions
+- [Referendums](/wiki/referendums): the Northern Ireland reunification path and its Dáil consent bill
 
 ---
 

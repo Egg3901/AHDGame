@@ -60,7 +60,7 @@ Action costs for core activities (full list on [Stats & Actions](/wiki/stats-act
 | Support | 6 | none | +1% target Favorability (±12 net swing cap per target per turn) |
 | Attack | 6 | none | −1% target Favorability; +2% own Infamy (±12 net swing cap per target per turn) |
 | Barnstorm | 5 | ₳100k | +1-2% target Political Influence |
-| Presidential Travel | 5 | none | Sets travel state during general; +1%/turn Favorability while there |
+| Presidential Travel | 3 to 10 | none | Sets travel state during the US general; +1%/turn Favorability while there |
 
 **Out-of-state multipliers** (1.0× home / 1.25× neighbour / 1.5× non-neighbour) apply to interpersonal actions (Support, Attack, Barnstorm), not to Campaign or Advertise.
 
@@ -95,7 +95,7 @@ Each hour the processor runs roughly a dozen top-level adapters that together ca
 | 7. Election resolution | Primary → accumulation → timer → snapshot → general → leadership vacate | **Strict order** |
 | 8. UK government | PM formation, confidence motions | After elections |
 | 9. Election coverage | Spawn next cycles, leadership elections, stale cleanup | Parallel |
-| 10. Fiscal year | October processing (turn 36 of 48) | Conditional |
+| 10. Fiscal year | October processing (turn 40 of 48) | Conditional |
 | 11. Effects & metrics | Policy effects, demographics, approval decay, unowned sector growth | Parallel |
 | 12. National aggregation | National metrics, inflation, central bank chair | After state effects |
 | 13. History | Metric/approval/interest-rate snapshots | Parallel |
@@ -131,6 +131,6 @@ No seat sits vacant. When a House/Senate/Governor/Bundestag/Sangiin cycle resolv
 - [The Game Loop](/wiki/the-game-loop): A player's hour-by-hour rhythm.
 - [Stats & Actions](/wiki/stats-actions): Full reference with formulas.
 - [Election Mechanics](/wiki/election-mechanics): How primaries and generals resolve.
-- [NPP System](/wiki/npp-system): How autonomous politicians behave.
+- [NPPs Overview](/wiki/npps-overview): How autonomous politicians fit into the game.
 - [Cabinet](/wiki/cabinet): Presidential nominations and Senate confirmation.
 `;

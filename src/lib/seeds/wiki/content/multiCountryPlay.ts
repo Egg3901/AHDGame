@@ -25,7 +25,7 @@ However, economic investments (corporations, bonds, forex positions) cross count
 | Germany | Parliamentary | Bundestag (+ Bundesrat) | Chancellor (confidence of Bundestag) | Mixed-member proportional (AMS) |
 | Japan | Parliamentary | Kokkai (Shūgiin + Sangiin) | Prime Minister (confidence of Shūgiin) | FPTP, snap elections allowed |
 | China | One-party state | National People's Congress (delegate-elected) | Premier (elected by NPC delegates) | One-party elections; approved/banned regime tiers; regime can collapse |
-| Ireland | Parliamentary | Oireachtas (Dáil + Seanad) | Taoiseach (confidence of Dáil); Uachtarán (directly elected, ceremonial head of state) | PR-STV multi-seat constituencies; snap elections allowed |
+| Ireland | Parliamentary | Oireachtas (Dáil + Seanad) | Taoiseach (confidence of Dáil); Uachtarán (directly elected, ceremonial head of state) | Hare-quota multi-seat allocation; snap elections allowed |
 
 Parliamentary systems (UK, DE, JP, IE) form governments through legislative confidence rather than direct election. No one runs "for Prime Minister" / "Taoiseach" / "Chancellor" directly - you win a seat, your party wins a majority (or coalition), and the party leader is appointed. Ireland also elects a separate ceremonial head of state, the Uachtarán, on a 7-year nationwide ballot. The 1.0 simulation resolves that race from first-preference totals; ranked transfer fidelity is planned as a later electoral-system upgrade.
 
@@ -44,7 +44,7 @@ In the UK, Germany, Japan, and Ireland, the path to executive power is:
 
 **Germany's AMS system** means seat allocation is proportional to party vote share nationally, not just by constituency wins. Third parties are far more viable in Germany than in FPTP countries.
 
-**Ireland's PR-STV multi-seat constituencies** distribute seats proportionally within each region, with a 10% per-candidate threshold to win a seat. This makes coalition government the norm rather than the exception. Ireland also separately elects a ceremonial **Uachtarán na hÉireann** (President of Ireland) on a 7-year, two-term-limited nationwide ranked-choice ballot.
+**Ireland's multi-seat constituencies** use Hare-quota largest-remainder allocation in the live resolver. This makes coalition government the norm rather than the exception. Ireland also separately elects a ceremonial **Uachtarán na hÉireann** (President of Ireland) on a 7-year, two-term-limited nationwide ballot.
 
 ## Playing in China
 

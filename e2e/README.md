@@ -8,6 +8,8 @@ End-to-end tests for A House Divided. Run against a local dev server.
 2. Start the dev server: `npm run dev`
 3. In another terminal: `npm run test:e2e`
 
+Set `PLAYWRIGHT_BASE_URL` to test a server other than `http://localhost:3000`.
+
 ## Login Tests
 
 Tests that require a logged-in user (e.g. dashboard, post-login navigation) are **skipped** unless credentials are provided:
@@ -32,6 +34,6 @@ Create a test account via the register page if needed. Login tests will skip wit
 | `critical-flows.spec.ts` | Elections list, congress bills, logged-in navigation                                                                                                                                                                                                                                                                                            |
 | `performance.spec.ts`    | Page load time budgets for public hubs (home, world, map, country US, forex, stock market, central bank, wiki, news, officials, parties, commodity) plus redirect targets (`/elections`, `/congress` → legislature, `/national` → metrics); Navigation Timing sanity checks; optional logged-in **portfolio** timing when `E2E_*` creds are set |
 
-## CI
+## Automation
 
-For CI, run with `E2E_TEST_EMAIL` and `E2E_TEST_PASSWORD` as secrets to execute login tests. Without them, smoke and critical-flow tests run but login tests are skipped.
+The current GitHub Actions workflows do not run Playwright. If you add these suites to another CI runner, provide `E2E_TEST_EMAIL` and `E2E_TEST_PASSWORD` as secrets to include login tests. Without them, the public smoke and critical-flow checks still run while login tests skip.

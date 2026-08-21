@@ -12,9 +12,9 @@ The US Senate uses staggered classes, so only one-third of seats (one class) are
 
 **Why did I lose the primary?**
 
-Primary scores are calculated at the moment the primary window closes. The highest score per party advances. Your score has three components: party alignment (0 to 40), favorability (0 to 35), and political influence (0 to 25). Common reasons for losing:
+Primary scores are calculated when the primary window closes. The highest score per party advances. State primaries use 25 alignment points against state lean, 15 against party position, 35 for favorability, and 25 for political influence. If the state has no cached lean, the two alignment buckets fall back to one 40-point party check. Common reasons for losing:
 
-- Your policy position (econ/social) was too far from the party platform. Each point of Manhattan distance costs 2 alignment points.
+- Your policy position was too far from the state's lean, the party platform, or both.
 - Your favorability was below 55 to 60. At 50 favorability, you're only contributing 17.5 of a possible 35 points.
 - An NPP scored higher than you without the penalty (NPPs only get the 0.5× penalty if at least one player is in the primary).
 
@@ -70,7 +70,7 @@ One real-world hour = one game turn = one game week. 48 turns = one game year. E
 
 **What happens when turn 48 ends?**
 
-The year counter increments (e.g., year 1 to year 2) and turn counting restarts at turn 1. The fiscal year processes at turn 36 (the game-year equivalent of October). There is no game reset: the simulation continues indefinitely.
+The year counter increments (e.g., year 1 to year 2) and turn counting restarts at turn 1. The fiscal year processes at turn 40 (the game-year equivalent of October). There is no game reset: the simulation continues indefinitely.
 
 ---
 
@@ -96,7 +96,7 @@ Bills need committee votes to advance to the floor. NPPs and other player legisl
 
 **Can a President veto a bill?**
 
-Yes. After a bill passes both chambers, the President (or PM/Chancellor) can sign or veto it. A vetoed bill fails and cannot be reintroduced in the same cycle. Coordinate with the executive branch before pushing legislation that the current executive might veto.
+In presidential systems, the executive can veto a bill after the required chambers pass it. Parliamentary Prime Ministers and Chancellors do not have that veto. Override and enactment rules are country-specific, so check [Bills & Legislation](/wiki/bills-legislation) for the active lifecycle.
 
 ---
 
@@ -110,7 +110,7 @@ You draft a **Party Charter** on the new-charter page: name, abbreviation, four-
 
 **What is Party Organization (Org)?**
 
-Party organization (Org) is a 0 to 100 metric per state that represents your party's ground-level infrastructure. It affects two things: general election vote totals (a 0-org state cuts your votes in half; a 100-org state applies the full 1.0× scalar) and presidential primary scores (up to 25 pts based on home-state org). The party chair controls org investment.
+Party organization (Org) is a 0 to 100 metric per state that represents your party's ground-level infrastructure. General-election weight uses your party's share of all Org in the state raised to the 0.2 exponent, which gives diminishing returns. Presidential primaries use party influence and national reach, not home-state Org. The party chair controls Org investment.
 
 ---
 
@@ -136,7 +136,7 @@ Governments issue bonds to raise capital. As a player, you can buy these bonds t
 
 **What is the Forex system?**
 
-When Forex is enabled, you can trade currencies: USD, GBP, EUR, and JPY. Exchange rates shift based on each country's inflation, trade balance, and interest rate differentials. Central bank chair characters influence rates through interest rate policy. Limit orders allow you to set automatic buy/sell prices.
+When Forex is enabled, you can trade every active country's currency. A full modern map includes USD, GBP, JPY, EUR or IEP, CNY, BRL, NGN, and the rest of the live set. Exchange rates shift based on inflation, trade balance, and interest-rate differentials. Planned economies use a fixed official rate rather than the floating path. Limit orders allow automatic buy/sell prices.
 
 ---
 
@@ -150,7 +150,7 @@ Yes, via the relocation action. Relocating costs actions and funds, and there is
 
 **What is infamy?**
 
-Infamy is a permanent stat that increases when you take certain negative actions (attacks, defying whip votes, certain legislative plays). Higher infamy reduces your chance of receiving NPP endorsements and affects some approval calculations. Infamy does not reset.
+Infamy increases when you take certain negative actions (attacks, defying whip votes, and some legislative plays). Higher infamy reduces NPP endorsement success and affects some approval calculations. It decays by 5% each turn, so a quiet stretch gradually fades it.
 
 ---
 

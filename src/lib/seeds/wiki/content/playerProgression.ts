@@ -10,7 +10,7 @@ Do this: [Create a Character](/wiki/create-a-character) leftover clicks, then [G
 
 ## Phase 1: build (still no office)
 
-You cannot enter a party primary yet if you are Independent. You can still Campaign, Fundraise, ads, polls, Support/Attack, Barnstorm, NPP influence, news.
+As an Independent you enter the independent primary rather than a named party's primary. You can also Campaign, Fundraise, buy ads, run polls, Support/Attack, Barnstorm, influence NPPs, and publish news.
 
 Target before you file: PI 40 to 60, Favorability 60 to 70, Donor Level 3.
 

@@ -25,11 +25,15 @@ Share prices are computed each turn from three fundamental components:
 
 **Tangible Book Per Share** (weight 1.0):
 \`\`\`
-tangibleBook = liquidCapital + sectorNPV + bondHoldings - issuedBondDebt
+tangibleBook = liquidCapital + sectorNPV + constructionInProgress
+             + techAssetValue + 0.75 * bondHoldings - issuedBondDebt
 tangibleBookPerShare = tangibleBook / totalShares
 \`\`\`
 
-Where sectorNPV is each sector's future profit converted to today's value (its annual profit divided by the cost of capital, the return investors expect), and bondHoldings counts bonds at their current market price plus IMF receivables held by the corporation.
+Where sectorNPV is each sector's future profit converted to today's value,
+construction in progress and technology contribute asset value, and held bonds
+are recognized at a 0.75 haircut. IMF receivables held by the corporation are
+also included by the live share-price calculation.
 
 **Earnings Power Per Share** (weight 0.4):
 \`\`\`
@@ -235,7 +239,7 @@ When a corporation (the acquirer) holds **at least 75%** of a target corporation
 - **Unique sectors:** Sectors that don't overlap are reassigned to the parent
 - **Cash transfer:** The target's liquid capital is transferred to the parent
 - **Orders cancelled:** All open share orders and listings on the target are cancelled
-- **Restrictions:** Cannot target insolvent corporations or corporations with outstanding bonds
+- **Debt and distress:** A hostile squeeze-out may target an insolvent corporation and reassigns unmatured bonds to the parent. Insolvency and outstanding-bond guards apply to agreed acquisitions, not this hostile path.
 
 ## Stock exchange index
 

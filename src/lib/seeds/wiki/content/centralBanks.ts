@@ -214,18 +214,22 @@ Each turn, if the published rate is outside the band:
 4. The synthetic volume is folded into the same **volume-pressure channel** that organic trades use, so intervention obeys the same ±5% per-turn cap.
 5. The rate is recomputed with the synthetic volume included.
 
-**Reserve draw order:**
-- **Forex Revenue** is spent first (the central bank's accumulated spread-fee income).
-- **Reserve Balance** is tapped only after forex revenue is exhausted.
+**Reserve draw order for sell-side defense:**
+- The currency-specific **spread-fee reserve pool** is spent first.
+- **Forex Revenue** is spent next.
+- The general **Reserve Balance** is tapped last.
 
 ### Reserve pools
 
 | Pool | Source | Purpose |
 | --- | --- | --- |
-| Forex Revenue | 25% of spread fees on every currency trade | Primary intervention ammunition |
-| Reserve Balance | Treasury transfers + 50% of spread fees on every trade | Secondary buffer when forex revenue is empty |
+| Spread-fee reserve balances | 50% of spread fees, credited by currency | First sell-defense pool |
+| Forex Revenue | 25% of spread fees on every currency trade | Second intervention pool |
+| Reserve Balance | Treasury transfers | Final buffer |
 
-**Spread fee split:** On every currency trade, 25% of the spread is destroyed (deflationary sink). The remaining 75% goes to the central bank: 25% of the total spread becomes forex revenue, and 50% of the total spread seeds the reserve balance directly.
+**Spread fee split:** On every currency trade, 25% of the spread is destroyed.
+Another 25% becomes forex revenue, and 50% enters the currency-specific
+\`spreadFeeReserveBalances\` pool.
 
 **Treasury → FX Reserve Transfer:** The Finance Minister (US Secretary of the Treasury, UK Chancellor, JP/DE Finance Minister) can move federal surplus into the reserve balance. This action is capped at **0.5% of annual federal revenue per turn** and rate-limited to once per turn. It is config-driven via \`financeMinisterCabinetId\`, so future countries wire up automatically by setting that field.
 
@@ -288,7 +292,12 @@ The Central Bank page's Insurance tab surfaces the fund: its balance, lifetime p
 
 ## Savings and credit lines
 
-The central bank system also manages player savings accounts and lines of credit. Interest on savings deposits flows through the central bank's reserve balance. The **savings APY is half the real rate** (prime rate minus inflation), with the real rate floored at 0.5 percentage points so it can never go negative or near-zero: a 5% prime rate against 2% inflation gives a 3% real rate, so the APY is 1.5%. These are secondary functions separate from the main Chair role.
+The central bank system also manages player savings accounts and lines of
+credit. Central-bank savings interest is created onto
+\`externalBroadMoney\` and \`netMoneyCreatedLifetime\`; it is not paid from
+\`reserveBalance\`. The **savings APY is half the real rate** (prime rate minus
+inflation), with the real rate floored at 0.5 percentage points so it can never
+go negative or near zero.
 
 See also: [Currency Exchange](/wiki/currency-exchange), [National Metrics](/wiki/national-metrics), [Sovereign Bonds](/wiki/sovereign-bonds), [Corporate Bonds](/wiki/corporate-bonds), [Private Banking](/wiki/private-banking), [Government Approval](/wiki/government-approval), [Planned / Command Economies](/wiki/planned-economies), [FOMC / Rate-Setting Board](/wiki/fomc)
 `;

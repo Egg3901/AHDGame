@@ -15,7 +15,7 @@ dashboard
 ## First ten minutes (do these in order)
 
 1. **Dashboard.** Note Actions remaining, Campaign Funds, Favorability, and Political Influence. Those four numbers are your week-one loop.
-2. **Join a party.** Open **Parties** in the nav. Pick the party whose economic/social platform is closest to yours. Independents can campaign but cannot win a real primary.
+2. **Choose whether to join a party.** Open **Parties** in the nav and compare platforms. Independents can run through the independent primary, but joining a party gives access to its primary, organization, action pool, and leadership path.
 3. **Spend Campaign.** On the Dashboard (or Actions), run **Campaign** until you have spent several of the 25 starting actions. Each click adds Political Influence in your home state.
 4. **Find a race.** Open **Elections**. Filter to your country and home state or region. Look for State Senate or House (or the local equivalent) still in primary.
 
@@ -60,4 +60,19 @@ campaign
 - [Tips for Beginners](/wiki/tips-for-beginners): common mistakes.
 - [Mail](/wiki/mail): player-to-player inbox.
 - [News](/wiki/news): the public feed.
+
+## Country hubs
+
+Read the hub for the country you chose. It explains that country's offices, election system, legislature, government formation, currency, and economy.
+
+- [United States](/wiki/us-overview)
+- [United Kingdom](/wiki/uk-overview)
+- [Germany](/wiki/de-overview)
+- [Japan](/wiki/jp-overview)
+- [Ireland](/wiki/ie-overview)
+- [Brazil](/wiki/br-overview)
+- [China](/wiki/cn-overview)
+- [Nigeria](/wiki/ng-overview)
+- [Soviet Union](/wiki/ru-overview)
+- [East Germany](/wiki/dd-overview)
 `;

@@ -103,25 +103,38 @@ Full per-tree cost and effect tables, current to the live constants: [Campaign S
 ### Per-turn vote pool weighting
 
 \`\`\`
-Early turns (all turns except final 4):
-  turnPool = 0.75 × totalPool / (totalTurns − 4)
+Early band:
+  turnPool = 0.50 × totalPool / earlyTurnCount
+
+Ramp band (up to 8 turns before the final band):
+  turnPool = 0.20 × totalPool / rampTurnCount
 
 Final 4 turns:
-  turnPool = 0.25 × totalPool / 4
+  turnPool = 0.30 × totalPool / 4
 \`\`\`
 
-The final 4 turns collectively deliver **25% of all votes** cast in an election.
+The final 4 turns collectively deliver **30% of all votes** cast in an election. Races of 4 turns or fewer split the pool evenly.
 
 ### Total appeal pipeline (per demographic group, per candidate, per turn)
 
 \`\`\`
-reach        = normalizeNPI(influence)         // sqrt curve, capped at 1.0 (PI/NPI ≥ 100)
-appeal       = (50 − |econDiff|×5 − |socialDiff|×5)² / 100 + normalizeNPI(influence) × 25
-approval     = favorability / 100
-partyOrg     = 0.5 + (statePartyOrg / 100) × 0.5      // 0.5× to 1.0×
-infamyMult   = 1 − 0.05 × (min(100, max(0, infamy))/100)   // 0.95× at infamy=100; 1.0× for NPPs
-weight       = appeal × reach × approval × partyOrg × infamyMult
+reach         = normalizeNPI(influence)         // sqrt curve, capped at 1.0 when PI/NPI reaches 100
+positionRaw   = max(0, 50 − |econDiff|×5 − |socialDiff|×5)
+positionScore = 25 × (positionRaw / 50)^1.5 + 0.5
+direction     = up to 5 per aligned ideological axis
+influenceAppeal = includeInfluence ? normalizeNPI(influence) × 12.5 : 0
+appeal        = positionScore + direction + influenceAppeal
+effectiveFav  = clamp(favorability + groupApproval × 0.5, 0, 100)
+approval      = (effectiveFav / 100)^0.8
+orgShare      = statePartyOrg / sum(all party Org in the state)
+partyOrg      = orgShare^0.2
+personalFloor = 0.1 × reach × approval
+effectiveOrg  = max(partyOrg, personalFloor)
+infamyMult    = 1 − 0.05 × (min(100, max(0, infamy))/100)
+weight        = appeal × reach × approval × effectiveOrg × infamyMult × other configured general-election factors
 \`\`\`
+
+State races use influence for reach but not \`influenceAppeal\`; presidential generals include it. Directional bonuses are continuous around the center and may be suppressed when a leaning candidate points against their party on that axis. General-election factors also include registration resistance, seeded registration baseline, candidate Support, campaign presence, NPP and regime multipliers, and race-specific coattails where configured.
 
 ### Office strength multipliers
 
@@ -160,10 +173,11 @@ Party org (0 to 100) affects:
 
 | Effect | Formula |
 |---|---|
-| General election vote scalar | \`0.5 + (statePartyOrg / 100) × 0.5\` (range 0.5× to 1.0×) |
-| Presidential primary score | \`(statePartyOrg / 100) × 25\` (range 0 to 25 pts) |
+| General election vote weight | \`(ownOrg / totalStateOrg) ^ 0.2\` |
+| Personal floor | \`max(orgWeight, 0.1 × reach × approval)\` |
+| Presidential primary score | Party Org does not enter; party influence and national reach are separate components |
 
-A state party org of 0 cuts your general vote total in half compared to a fully organized state.
+An empty state Org map gives every party a neutral 1× fallback. In a populated map, a party with 0 Org has 0 Org weight before the personal floor. A 3:1 Org lead produces about a 1.25:1 Org-weight advantage because of the 0.2 exponent.
 
 ---
 

@@ -7,7 +7,7 @@ Elections in A House Divided run perpetually. Every office has continuous cycles
 Every election has two phases:
 
 1. **Primary phase**: intra-party competition. Candidates from the same party compete for one nomination slot. Resolution uses a **primary score** (no votes accumulate). Highest score per party advances.
-2. **General phase**: inter-party competition. Nominees from different parties compete. **Votes accumulate turn by turn**; the final 4 turns land 25% of the pool.
+2. **General phase**: inter-party competition. Nominees from different parties compete. **Votes accumulate turn by turn**; the final 4 turns land 30% of the pool.
 
 When the general resolves, winners take office and the next cycle spawns.
 
@@ -79,7 +79,7 @@ For each demographic group, for each candidate, per turn:
 
 1. **Reach**: a sqrt curve on political influence, capped at 1.0 once influence reaches 100. State and presidential general elections both use this curve. Presidential primaries use a gentler diminishing-returns curve instead, leaving more room for Support, Favorability, and Org to compete.
 2. **Appeal (per group)**: \`25 * ((50 - |econDiff|*5 - |socialDiff|*5) / 50)^1.5 + APPEAL_POSITION_FLOOR(0.5) + DIRECTION_BONUS(tribal, up to +10) + reach * 12.5\`. Power-curve position scoring (exponent 1.5, softened from the legacy squared curve) with a floor, directional bonus, and influence multiplier. Position alone maxes at 25.5, directional bonus at 10 (5 per axis, both axes aligned), influence at 12.5 -- theoretical ceiling around 48, though the position+direction terms are the dominant share in practice.
-3. **Approval scalar**: \`effectiveFavorability / 100\`, where \`effectiveFavorability = favorability + groupApproval * 0.5\` (clamped 0-100). 0% effective favorability = 0 votes.
+3. **Approval scalar**: \`(effectiveFavorability / 100) ^ 0.8\`, where \`effectiveFavorability = favorability + groupApproval * 0.5\` (clamped 0-100). 0% effective favorability = 0 votes. The power curve softens differences in the middle while preserving both endpoints.
 4. **Party org scalar**: a normalized share model, \`(partyOrg / totalStateOrg)^0.2\`. Diminishing returns: a 3:1 org lead yields only ~1.25:1 weight. Ranges from 0 (no presence in a populated state) to 1.0 (monopoly), or a neutral 1.0 everywhere when the state has no org data at all. Primaries use a uniform neutral 1x instead (intra-party org cancels). Presidential races use the same normalized-share curve, no separate crowded-field damping.
 5. **Infamy scalar**: \`1 - 0.05 * (infamy/100)\`. Player characters with high infamy lose up to 5% of their per-group weight. NPPs aren't affected.
 6. **Turn pool scaled by party strength modifier:**
@@ -215,5 +215,5 @@ No seat sits vacant. Mechanics:
 - [Primary vs General Tactics](/wiki/primary-general-tactics): How to pivot between phases.
 - [Demographics & Targeting](/wiki/demographics-targeting): Appeal math and group composition.
 - [Snap Elections](/wiki/snap-elections): Parliamentary dissolution in UK, JP, and DE.
-- [Formula Deep-Dive](/wiki/formula-deep-dive): Every formula with derivations.
+- [Reference: Formulas](/wiki/reference-formulas): Every formula with derivations.
 `;
