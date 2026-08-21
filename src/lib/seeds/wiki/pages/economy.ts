@@ -33,6 +33,7 @@ import { pensionsContent } from "../content/pensions";
 import { imfSovereignFacilityContent } from "../content/imfSovereignFacility";
 import { interbankLendingContent } from "../content/interbankLending";
 import { fomcContent } from "../content/fomc";
+import { householdEconomyContent } from "../content/householdEconomy";
 
 export const economyPages: readonly WikiSeedPage[] = [
   {
@@ -165,11 +166,24 @@ export const economyPages: readonly WikiSeedPage[] = [
     description:
       "The 28-commodity market: supply, demand, dynamic pricing, three-tier margin blends, and how shortages affect corporate margins.",
     content: commoditiesContent,
-    category: "economy",
-    extraTags: ["prices", "supply"],
+    category: "commodities",
+    extraTags: ["economy", "prices", "supply"],
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 8,
+  },
+  {
+    slug: "household-economy",
+    title: "Household Demand & Price Level",
+    description:
+      "How household income, employment, confidence, prices, and Engel's law create consumer demand, plus the household price index and real-income display.",
+    content: householdEconomyContent,
+    category: "economy",
+    extraTags: ["consumption", "inflation", "real-income", "households"],
+    featured: true,
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 7,
   },
   {
     slug: "market-system-guide",
@@ -399,9 +413,9 @@ export const economyPages: readonly WikiSeedPage[] = [
   },
   {
     slug: "imf",
-    title: "IMF & Bailouts",
+    title: "Corporate IMF Restructuring",
     description:
-      "The IMF bailout facility: income capture, share-price discount, level-annuity repayment, and board membership.",
+      "The admin corporate rescue: bond haircut, IMF equity dilution, income-capped facility payments, and operating restrictions.",
     content: imfContent,
     category: "economy",
     difficulty: "advanced",

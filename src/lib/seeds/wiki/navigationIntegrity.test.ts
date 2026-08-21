@@ -13,7 +13,10 @@ function isSpecialWikiTarget(target: string): boolean {
 }
 
 function normalizeRedirectTarget(target: string): string {
-  return target.replace(/^\/wiki\//, "").replace(/^\//, "");
+  return target
+    .replace(/^\/wiki\//, "")
+    .replace(/^\//, "")
+    .split(/[?#]/, 1)[0];
 }
 
 describe("wiki navigation integrity", () => {
@@ -30,6 +33,11 @@ describe("wiki navigation integrity", () => {
         true
       );
     }
+  });
+
+  it("points US party aliases at numeric party routes", () => {
+    expect(WIKI_REDIRECTS.democrat).toBe("party/1?country=us");
+    expect(WIKI_REDIRECTS.republican).toBe("party/2?country=us");
   });
 
   it("uses seeded pages for every learning-path step", () => {

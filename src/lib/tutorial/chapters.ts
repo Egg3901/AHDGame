@@ -502,6 +502,7 @@ export const TUTORIAL_CHAPTERS: Record<TutorialChapterId, TutorialChapter> = {
     icon: "💰",
     blurb: "chapters.invest.blurb",
     estimatedMinutes: 4,
+    wikiPathSlug: "economy-operator",
     buildSteps: investSteps,
   },
   company: {
@@ -510,6 +511,7 @@ export const TUTORIAL_CHAPTERS: Record<TutorialChapterId, TutorialChapter> = {
     icon: "🏢",
     blurb: "chapters.company.blurb",
     estimatedMinutes: 6,
+    wikiPathSlug: "economy-operator",
     buildSteps: companySteps,
   },
   union: {

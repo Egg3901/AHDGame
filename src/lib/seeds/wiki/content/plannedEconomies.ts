@@ -10,7 +10,7 @@ Fresh worlds enable the regime. Countries that start on the command end of the d
 
 Two gates must both be true:
 
-1. An **admin** turns on the command-economy feature for the world (default off). Players cannot flip this themselves.
+1. The world-level command-economy feature is enabled. Fresh-world seed data enables it by default; an admin can change the world setting.
 2. The country's **marketization level** is below the market ceiling. The era only sets the *starting* value. From there the level moves on its own each turn based on what happens in the economy (see The Marketization Dial Is Earned below).
 
 | Band | Dial | What you get |
@@ -108,6 +108,8 @@ That is the hardliner tradeoff. Repression buys time against reform and keeps th
 
 The planned machinery from the passive model still applies while a country sits in the command or dual-track bands.
 
+- **Two-circuit wage fund**: planned share pulls nominal wage growth down toward real-goods growth plus 2 percentage points. It never raises wage growth. This is the primary brake on forced saving when wages outrun consumer goods.
+
 - **Fixed official currency**: in a fully command country the official rate is pinned to its era anchor and does not float. Do not build forex strategies around it the way you would around USD, GBP, or JPY.
 - **Passive central bank**: fully command economies run a passive monobank. The automatic rate setter does not fire, so do not expect rate hikes and cuts to chase inflation and growth.
 - **Administered prices and CPI**: national prices are set by the plan, not cleared by supply and demand, and open inflation sits on the era path. Shortage shows up as unmet demand at a held price, not as a price spike.
@@ -135,6 +137,8 @@ Dual-track means plan and market run in parallel: a share of pricing and shortag
 - Turn the regime on or off (admin only).
 - Set the world-wide second-economy tolerance (admin only).
 - Rewrite the era starting level; only the *starting* value is era-authored, and everything after that is earned.
+
+Open a country's live control room at **Country > Command Economy**, for example the [Soviet command-economy dashboard](/country/ru/command-economy).
 
 See also: [Commodities](/wiki/commodities), [Currency Exchange](/wiki/currency-exchange), [Central Banks](/wiki/central-banks), [National Metrics](/wiki/national-metrics), [Market System: A Player's Guide](/wiki/market-system-guide).
 `;

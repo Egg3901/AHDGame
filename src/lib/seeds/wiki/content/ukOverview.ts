@@ -9,8 +9,8 @@ The United Kingdom is a **constitutional monarchy and parliamentary democracy** 
 | Office | How Filled | Term | Seats |
 | --- | --- | --- | --- |
 | Prime Minister | Confidence vote of Commons MPs | No fixed term | 1 |
-| Member of Parliament (MP) | FPTP regional election | Up to 5 years | 650 |
-| Regional Councillor | Multi-seat regional election | Up to 5 years | 364 |
+| Member of Parliament (MP) | Regional multi-seat election | Up to 5 years | 650 modern / 625 in 1953 |
+| Regional Councillor | Multi-seat regional election | Up to 5 years | 578 total |
 | Monarch | Imperial character (ceremonial) | Lifetime | 1 |
 | Governor of the Bank of England | Appointed action | 4 years | 1 |
 
@@ -21,26 +21,34 @@ The United Kingdom is a **constitutional monarchy and parliamentary democracy** 
 
 ---
 
-## Four nations
+## Nations and election regions
 
-The UK is divided into four nations, each running separate Commons elections:
+The UK has four nations, but the Commons resolver runs one multi-seat race in each of 12 regions. England is split into nine regions; Scotland, Wales, and Northern Ireland each form one region.
 
-| Nation | Code | Commons Seats | Devolved Body |
+| Region | Code | Modern Commons Seats | Regional Council Seats |
 | --- | --- | --- | --- |
-| England | ENG | 543 | None |
-| Scotland | SCO | 57 | Scottish Parliament |
-| Wales | WAL | 32 | Senedd Cymru |
-| Northern Ireland | NIR | 18 | Northern Ireland Assembly |
+| London | LON | 75 | 32 |
+| South East England | SEE | 90 | 67 |
+| South West England | SWE | 58 | 39 |
+| East of England | EAE | 60 | 39 |
+| East Midlands | EMI | 47 | 39 |
+| West Midlands | WMI | 57 | 18 |
+| Yorkshire and the Humber | YHU | 54 | 21 |
+| North West England | NWE | 75 | 27 |
+| North East England | NEE | 27 | 17 |
+| Scotland | SCO | 57 | 129 |
+| Wales | WAL | 32 | 60 |
+| Northern Ireland | NIR | 18 | 90 |
 
-Your character's home nation determines where you can stand for Commons (party leaders may stand in any nation). Regional Councillors represent 12 sub-regions within these nations, with a total of 364 council seats.
+The 1953 preset uses its own 625-seat Commons map. Your character's home region normally determines where you can stand for Commons, while party leaders have broader access.
 
 ---
 
 ## How UK elections work
 
-UK Commons elections use **multi-seat proportional allocation** within each nation, not single-winner FPTP like the US. Each nation elects a block of MPs (543 in England, 57 in Scotland, 32 in Wales, 18 in Northern Ireland), and seats are allocated proportionally using the largest-remainder method.
+UK Commons elections use **regional multi-seat allocation**. In modern game years, each region's seats are allocated by the Hare largest-remainder path. Before 1999, the same exact-seat allocator applies a square-law majoritarian bonus to the leading electoral pair, which produces a stronger FPTP-style squeeze on smaller parties.
 
-A party needs at least **20% of votes** within a nation to qualify for seats. The FPTP spoiler effect still applies through major-party modelling: in England, Labour and Conservative are the two dominant parties; in Scotland, SNP and Labour; in Northern Ireland, DUP and Sinn Féin are the major forces.
+A party needs at least **20% of pooled regional votes** to qualify in the modern proportional path. The pre-1999 majoritarian path lowers that gate to 10% before applying its winner's bonus.
 
 **Primaries advance the top 3 candidates** (not 1 as in the US). Three candidates from each party advance to the general election per nation.
 
@@ -52,7 +60,7 @@ A party needs at least **20% of votes** within a nation to qualify for seats. Th
 
 There is no direct vote for Prime Minister. Instead:
 
-1. After Commons elections resolve across all four nations, seat totals are summed by party.
+1. After Commons elections resolve across all 12 regions, seat totals are summed by party.
 2. The **largest party** (by seats) attempts to form a government.
 3. A **confidence vote** is held among all 650 elected MPs. The nominee needs more than 50% (326 votes) to be confirmed as PM.
 4. If the confidence vote fails, the next-largest party's leader is nominated, and the process repeats.
@@ -76,7 +84,7 @@ The [Snap Elections](/wiki/snap-elections) guide covers the mechanics and costs 
 
 ## Regional councils
 
-Each of the 12 UK sub-regions has an elected Regional Council. These function similarly to US State Senates: councillors propose and vote on regional legislation, which takes effect without a governor veto (Bills auto-enact on passage). Total council seats: 364.
+Each of the 12 UK regions has an elected Regional Council. Councillors propose and vote on regional legislation. Scotland, Wales, Northern Ireland, and London also have elected regional executives who handle assent; English regions without an executive use the configured regional enactment path. Total council seats: **578**.
 
 Winning a Regional Council seat and a Commons seat are mutually exclusive: winning one vacates the other.
 
@@ -86,7 +94,7 @@ In Scotland, Wales, and Northern Ireland, the Regional Council represents the de
 
 ## The Monarch
 
-The UK has an **imperial character**: the Monarch. This is a unique in-game role with a ceremonial head-of-state function. The Monarch manages the **Royal Estate** corporation (real estate sector). The government is styled "His/Her/The Monarch's Government" based on the current Monarch's gender. The Monarch has no vote on legislation or the PM: Royal Assent to bills is automatic.
+The UK has an [imperial character](/wiki/imperial-characters): the Monarch. This is a ceremonial head-of-state role. The Monarch manages the **Royal Estate** corporation, while the elected government controls legislation and executive policy. The Monarch has no vote on legislation or the PM; Royal Assent to national bills is automatic.
 
 ---
 
@@ -122,6 +130,7 @@ The UK has an **imperial character**: the Monarch. This is a unique in-game role
 - [UK overview](/wiki/uk-overview): Commons elections, government formation, confidence votes
 - [Snap Elections](/wiki/snap-elections): How and when snap elections are triggered
 - [Cabinet Guide](/wiki/cabinet-guide): every cabinet post, its metrics, and its actions
+- [Referendums](/wiki/referendums): independence and Northern Ireland reunification campaigns
 - [Election Mechanics](/wiki/election-mechanics): Shared primary/general concepts
 - [Core Systems](/wiki/core-systems): Turn structure, action economy
 - [Player Progression](/wiki/player-progression): Career ladder details

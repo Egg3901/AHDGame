@@ -64,6 +64,8 @@ Each region has a regional executive: the **Cathaoirleach**, using the same offi
 
 The **Uachtarán na hÉireann** is a directly elected ceremonial head of state: distinct from the Taoiseach, who is the head of government. Key features:
 
+Open the live office at [Áras an Uachtaráin](/country/ie/executive/aras).
+
 - **7-year term**: the longest of any directly elected office in the game.
 - **2-term lifetime limit per character**: a character cannot be elected to a third term, even after a break.
 - **+3 actions per turn** while in office.
@@ -135,6 +137,7 @@ A 2019-start Ireland begins as a **tech innovation** economy: the same modern mo
 - [Core Systems](/wiki/core-systems): Turn structure, action economy
 - [Player Progression](/wiki/player-progression): Career ladder details
 - [International Organizations](/wiki/international-organizations): EU / ECB shared institutions
+- [Referendums](/wiki/referendums): the Northern Ireland reunification path and its Dáil consent bill
 
 ---
 

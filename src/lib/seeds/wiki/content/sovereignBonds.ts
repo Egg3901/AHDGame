@@ -80,7 +80,9 @@ Each turn, the bond system:
 4. Settles matured bonds (returns face value to holders, reduces national debt)
 5. Records history snapshots
 
-Sovereign bond coupon payments are **guaranteed** by the state. If the treasury cannot cover them, the deficit increases automatically, effectively monetizing the debt (printing money to cover what the government owes).
+Sovereign bond coupons are ledgered as government coupon payments. This is not
+the same as the Monetize sovereign-crisis resolution. Monetize is a separate
+executive action and is blocked once inflation reaches 8%.
 
 ## Market price dynamics
 

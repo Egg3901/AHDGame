@@ -87,7 +87,7 @@ Subsidy termination takes effect the turn the enacting bill is processed.
 
 Subsidies are not free for the government. Every turn, the system calculates the total cost of all active subsidies and writes it into the relevant budget:
 
-- **Cost basis:** Sum of \`revenue\` for every qualifying sector, multiplied by \`48\` (turns per game year) and then by \`0.105\` to annualize it.
+- **Cost basis:** Under plants, sum realized revenue for qualifying sectors, multiply by \`TURNS_PER_YEAR\`, then by \`0.105\`.
 - **Currency normalization:** Sector revenues are converted to the anchor currency via each corporation's FX rate before summing, so cross-currency corporations weight consistently.
 - **Budget impact:** The annualized total is written to \`spending.byCategory.sectorSubsidies\` under the federal budget for national subsidies, or the relevant state budget for state subsidies.
 

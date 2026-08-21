@@ -52,7 +52,8 @@ Once the crisis triggers, two clocks start:
 | Executive proposes a resolution | 12 turns |
 | Each legislative chamber votes | 24 turns per chamber |
 
-If either window expires without action, consequences escalate (forced resolution, governance collapse, or automatic repudiation depending on the country's constitution).
+If the executive decision window expires without action, the game
+automatically chooses Repudiate. A crisis does not sit unresolved forever.
 
 ## Resolution paths
 
@@ -65,17 +66,19 @@ The executive selects one of four resolutions:
 | **IMF Bailout** | −2% GDP | Accept an IMF facility (see [IMF & Bailouts](/wiki/imf)) |
 | **Monetize** | no flat GDP hit; damage runs through inflation instead | Print money to cover the debt; blocked once current inflation exceeds 8% |
 
-Repudiate is the most destructive to the economy and to investor confidence but leaves the country debt-free. Restructure splits the pain between the state and bondholders. The IMF bailout is the smallest immediate GDP hit but comes with the IMF's own ongoing conditions (income capture, share-price discount). Monetize avoids a direct GDP penalty but is gated off once inflation is already high, and triggers its own inflation shock plus (in parliamentary countries) an automatic no-confidence vote.
+Repudiate is the most destructive to the economy and to investor confidence but leaves the country debt-free. Restructure splits the pain between the state and bondholders. The IMF bailout has the smallest flat GDP hit among those three paths but comes with ongoing income capture and a temporary sector-margin penalty. Monetize avoids a flat GDP penalty but is gated off once inflation is already high, and triggers its own inflation shock plus, in parliamentary countries, an automatic no-confidence vote.
 
 ## Default scar
 
 Regardless of path, a default leaves a **scar** lasting 100 turns:
 
 \`\`\`
-scarPenalty = −1% per turn (applied for 100 turns)
+scarPenalty = −(100 − turnsSinceDefault) × 0.01
 \`\`
 
-This is a persistent drag on economic performance for the full 100 turns.
+This contribution starts at −1.0 on the auction-demand ratio and decays linearly
+to zero over 100 turns. It does not directly reduce GDP or other national
+economic metrics.
 
 ## Cascade depth
 

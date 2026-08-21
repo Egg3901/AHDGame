@@ -24,7 +24,7 @@ import { iterationsPages } from "./pages/iterations";
  *   Legislatures & Government (15 pages)
  *   Parties, Coalitions, NPPs (13 pages)
  *   Country hubs (10 pages: US, UK, DE, JP, IE, BR, CN, NG, RU, DD)
- *   Economy & Finance (34 pages)
+ *   Economy & Finance (35 pages)
  *   Advanced + Reference + Strategy (25 pages)
  *   Resources & Contracts (4 pages)
  *   Commodities (one page per CommodityType, auto-generated)

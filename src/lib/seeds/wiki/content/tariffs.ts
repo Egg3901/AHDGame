@@ -137,10 +137,13 @@ FTAs are stored as organization-level legislation (not country-level tariffs), s
 
 Tariffs and [subsidies](/wiki/subsidies) are complementary tools for industrial policy:
 
-- **Subsidies** give domestic corporations a +15pp margin bonus.
+- **Subsidies** give qualifying corporations +7.5pp per subsidy. Two distinct subsidy records can stack to +15pp.
 - **Tariffs** give foreign corporations a margin penalty equal to half the tariff rate, while domestic corps pay the smaller supply-chain malus described above.
 
-A 25% economy-wide tariff plus a +15pp subsidy creates a 25pp swing in competitiveness: foreign sectors take −12.5pp from the tariff, while domestic sectors net +12.5pp (+15pp subsidy − 2.5pp domestic malus). At higher tariff rates combined with generous subsidies, foreign corporations can be effectively priced out of a market entirely, but the domestic malus is also rising, so the swing grows more slowly than naive math suggests.
+A 25% economy-wide tariff plus one +7.5pp subsidy creates a 15pp swing before
+other modifiers: foreign sectors take −12.5pp from the tariff, while domestic
+sectors net +5pp after the subsidy and −2.5pp domestic malus. A second distinct
+subsidy can add another +7.5pp.
 
 ## Viewing active tariffs
 

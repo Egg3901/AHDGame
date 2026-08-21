@@ -81,7 +81,7 @@ npm run test:run      # ~27k Vitest tests
 npm run test:e2e      # Playwright, needs the dev server running
 ```
 
-CI runs lint, format check, typecheck, the architecture audit, the unit suite, and a Next build on pull requests and pushes to `main`. CodeQL runs separately.
+CI runs lint, format check, typecheck, the unit suite, and a Next build on pull requests and pushes to `main`. The architecture audit also runs as an advisory step because known pre-existing findings remain. CodeQL runs separately.
 
 Useful entry points:
 

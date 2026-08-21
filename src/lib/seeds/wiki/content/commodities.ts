@@ -195,7 +195,10 @@ Reference values for a single commodity at rate 1.0:
 | 5x (acute shortage) | 3.41x | -49.1% | +49.1% |
 | 10x (critical) | 4.05x | -50.0% (cap) | +50.0% (cap) |
 
-Each commodity's contribution is soft-capped at **±50pp** before summing, so a single market can't dominate. After blending, the total input modifier is also floored at **−30pp** and the total surplus modifier is capped at **+30pp**. This prevents routine market conditions from commercially destroying a sector (e.g. a construction company exposed to six scarce commodities at once) or inflating extraction margins unreasonably. Extreme crisis conditions created by intentional admin intervention are not subject to this cap.
+Each commodity's contribution is soft-capped at **±50pp** before summing. The
+input and surplus legs are capped at **−30pp** and **+30pp**, and their combined
+negative channel is floored at **−15pp** by scaling both legs. These clamps
+always apply, including when an admin peg creates an extreme price.
 
 **Sign convention:**
 - **Buyers** (sectors that consume a commodity): shortage *raises costs* (negative modifier), oversupply *lowers costs* (positive modifier)
@@ -254,7 +257,11 @@ Focused strategies produce roughly **3 to 5× more** of their target commodity t
 
 ### Extraction capacity multipliers
 
-Extraction sectors are further modulated by state resource capacity and active extraction contracts. A state's resource capacity determines how much of each extractable commodity a sector can actually supply: capacity-constrained sectors produce less than their revenue-based rate would suggest. Active extraction contracts can boost capacity above baseline. These multipliers are applied to extraction sector commodity supply before prices and margin modifiers are computed.
+Extraction sectors are further modulated by state resource capacity and active
+extraction contracts. A contract reserves a share of the existing state
+ceiling; it does not raise that ceiling. Prospecting and corporate R&D can add
+capacity. These multipliers are applied before prices and margin modifiers are
+computed.
 
 ## Viewing commodity data
 

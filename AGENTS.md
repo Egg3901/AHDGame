@@ -15,8 +15,10 @@ Treat every change as production-bound.
 - **Never open a public issue for a vulnerability or game exploit.** See
   [SECURITY.md](./SECURITY.md).
 - Match the surrounding code. Strict TypeScript, Zod on all request bodies,
-  database access through `src/lib/db` getters, no new dependencies without
-  discussion.
+  and no new dependencies without discussion. Prefer collection getters under
+  `src/lib/db/collections` when one exists; typed direct
+  `db.collection<T>("name")` access is also established. Do not invent a
+  repository layer.
 - No em dashes or en dashes in player-facing copy, in any language.
 
 ## Commands
