@@ -41,7 +41,14 @@ import { resolvePlayBatch } from "../../src/lib/settlement/resolvePlays";
 import { nextHeat, outcomeFor } from "../../src/lib/settlement/outcome";
 import { makeSeededRng } from "../../src/lib/events/substrate/rng";
 
-const MAX_TURNS = 200;
+/**
+ * 480 turns — ten in-game years at 48 turns to the year.
+ *
+ * The brief is at least three in-game years unopposed, so the cap has to leave
+ * room to show a contested question NOT resolving well past that; a cap only
+ * a little above the target would report every long game as a stall.
+ */
+const MAX_TURNS = 480;
 
 /** On-hand treasury from the source design, for the burn-rate report. */
 const OPENING_TREASURY: Record<SettlementSeatKey, { amount: number; label: string }> = {
@@ -436,7 +443,17 @@ const SCENARIOS: Scenario[] = [
     active: ["DD", "RU"],
   },
 
-  // ── Five varying-effort runs. Effort is how often a seat shows up. ───────
+  // ── Five varying-effort runs. Effort is how often a seat shows up.
+  //
+  //    MIND THE BANK. AP banks for SEAT_ACTION_BANK_TURNS turns, so a seat that
+  //    returns inside that window loses nothing: at a 1-in-3 cadence against a
+  //    3-turn bank, throughput is EXACTLY preserved — Washington logs the same
+  //    480 plays whether it shows up every turn or every third — and the only
+  //    difference left is that capital arrives in lumps, which is a small
+  //    ADVANTAGE. Cadences inside the bank therefore measure the bank, not
+  //    effort, and read as an inversion where committing more looks worse.
+  //    Runs 2 and 3 sit deliberately OUTSIDE it; run 4 sits deliberately inside
+  //    it, because "you may skip turns for free" is a property worth proving.
   {
     name: "1. Everyone full effort",
     blurb: "All four seats, every turn, no public. The contested baseline.",
@@ -444,19 +461,21 @@ const SCENARIOS: Scenario[] = [
   },
   {
     name: "2. East committed, West distracted",
-    blurb: "DD/RU every turn; US/UK every third. Asymmetric attention.",
+    blurb:
+      "DD/RU every turn; US/UK every sixth — past the AP bank, so the West really does lose actions.",
     active: ["US", "UK", "RU", "DD"],
-    effort: { US: 1 / 3, UK: 1 / 3 },
+    effort: { US: 1 / 6, UK: 1 / 6 },
   },
   {
     name: "3. West committed, East distracted",
-    blurb: "The mirror: US/UK every turn; DD/RU every third.",
+    blurb: "The mirror: US/UK every turn; DD/RU every sixth.",
     active: ["US", "UK", "RU", "DD"],
-    effort: { DD: 1 / 3, RU: 1 / 3 },
+    effort: { DD: 1 / 6, RU: 1 / 6 },
   },
   {
     name: "4. Everyone half-hearted",
-    blurb: "All four seats every other turn. What a quiet iteration looks like.",
+    blurb:
+      "All four seats every other turn — inside the bank, so this should cost nobody anything.",
     active: ["US", "UK", "RU", "DD"],
     effort: { US: 0.5, UK: 0.5, RU: 0.5, DD: 0.5 },
   },
@@ -483,28 +502,6 @@ const SCENARIOS: Scenario[] = [
   //    contested stall at 53 but drops the unopposed lock from 28 turns to 11,
   //    which is too cheap. These try one seat at a time.
   {
-    name: "W1. rhine at 1 AP",
-    blurb:
-      "London alone lifted to 2 AP — the only Western seat whose 2 AP play reaches the garrison. Contested.",
-    active: ["US", "UK", "RU", "DD"],
-  },
-  {
-    name: "W2. rhine at 1 AP, West unopposed",
-    blurb: "The lock must stay a commitment, not a formality.",
-    active: ["US", "UK"],
-  },
-  {
-    name: "W3. rhine at 1 AP, East unopposed",
-    blurb: "Reunification must remain reachable.",
-    active: ["DD", "RU"],
-  },
-  {
-    name: "W4. rhine at 1 AP, West distracted",
-    blurb: "And attention must still be worth paying.",
-    active: ["US", "UK", "RU", "DD"],
-    effort: { US: 1 / 3, UK: 1 / 3 },
-  },
-  {
     name: "D. Escalation spiral",
     blurb: "Both blocs prefer coercive plays. Measures how hot the ladder runs.",
     active: ["US", "UK", "RU", "DD"],
@@ -519,8 +516,15 @@ console.log("GERMAN QUESTION — BALANCE SIMULATION");
 console.log(`opening index ${pts(3820)}   carry ≥85.0   lock ≤15.0   cap ${MAX_TURNS} turns`);
 console.log("═".repeat(78));
 
+// Optional scenario filter: `npx tsx ... A. B.` runs only those. Tuning sweeps
+// re-run the bounds dozens of times and do not need the whole set each pass.
+const only = process.argv.slice(2);
+const selected = only.length
+  ? SCENARIOS.filter((s) => only.some((prefix) => s.name.startsWith(prefix)))
+  : SCENARIOS;
+
 const results: Result[] = [];
-for (const scenario of SCENARIOS) {
+for (const scenario of selected) {
   const r = run(scenario);
   results.push(r);
   console.log(`\n${r.scenario}`);

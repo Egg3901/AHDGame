@@ -38,6 +38,7 @@ import {
   LADDER_RUNGS,
   SETTLEMENT_WIRE_INTERVAL_TURNS,
   getInstitution,
+  swingBand,
 } from "@/lib/constants/settlementCrisis";
 import { defconFor, isArmed } from "./outcome";
 import { DISCORD_COLORS, sendNewsEvent, type DiscordEmbed } from "@/lib/discordWebhooks";
@@ -47,7 +48,11 @@ import { createSystemNewsPost } from "@/lib/news";
 export type SettlementWireEvent = "opened" | "armed" | "war" | "settled";
 
 const pts = (hundredths: number) => Math.round(hundredths) / HUNDREDTHS;
-const signed = (points: number) => `${points >= 0 ? "+" : ""}${points.toFixed(1)}`;
+/**
+ * Two decimals, not one: the swing between two dispatches is a fraction of a
+ * point at the tuned tempo, and one decimal would print most of them as +0.0.
+ */
+const signed = (points: number) => `${points >= 0 ? "+" : ""}${points.toFixed(2)}`;
 
 /** The byline every dispatch carries, as the Vietnam Desk ones do. */
 const DESK = "Bonn Desk";
@@ -84,9 +89,9 @@ function standing(eastPoints: number): string {
 function briefingTitle(eastPoints: number, delta: number): string {
   if (eastPoints >= 80) return "Reunification is within reach";
   if (eastPoints <= 20) return "Sovereignty is all but settled";
-  if (Math.abs(delta) < 0.5) return "Bonn holds where it stood";
-  if (delta >= 5) return "Bonn swings east";
-  if (delta <= -5) return "Bonn swings west";
+  if (Math.abs(delta) < swingBand(0.5)) return "Bonn holds where it stood";
+  if (delta >= swingBand(5)) return "Bonn swings east";
+  if (delta <= -swingBand(5)) return "Bonn swings west";
   return delta > 0 ? "Bonn drifts toward the East" : "Bonn drifts toward the West";
 }
 
@@ -102,10 +107,10 @@ function moverPhrase(crisis: SettlementCrisisDoc): string {
 
 /** How the swing since the last dispatch reads. */
 function swingPhrase(delta: number): string {
-  if (Math.abs(delta) < 0.5) return "barely moved since the last dispatch";
+  if (Math.abs(delta) < swingBand(0.5)) return "barely moved since the last dispatch";
   const direction = delta > 0 ? "toward reunification" : "toward sovereignty";
-  if (Math.abs(delta) >= 8) return `swung sharply ${direction}`;
-  if (Math.abs(delta) >= 3) return `moved ${direction}`;
+  if (Math.abs(delta) >= swingBand(8)) return `swung sharply ${direction}`;
+  if (Math.abs(delta) >= swingBand(3)) return `moved ${direction}`;
   return `edged ${direction}`;
 }
 
@@ -128,7 +133,7 @@ export function buildBriefing(input: BriefingInput): SettlementDispatch {
   const east = pts(crisis.position);
   const west = Math.round((100 - east) * 10) / 10;
   const previous = pts(crisis.lastBriefing?.position ?? crisis.position);
-  const delta = Math.round((east - previous) * 10) / 10;
+  const delta = Math.round((east - previous) * 100) / 100;
 
   const heat = crisis.ladder.heat;
   const title = briefingTitle(east, delta);

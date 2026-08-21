@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import type { SettlementCrisisDoc } from "@/lib/db/types/settlementCrisis";
 import {
   HUNDREDTHS,
+  swingBand,
   SETTLEMENT_INSTITUTIONS,
   SETTLEMENT_WIRE_INTERVAL_TURNS,
 } from "@/lib/constants/settlementCrisis";
@@ -66,7 +67,7 @@ describe("buildBriefing", () => {
     });
     const { embed } = buildBriefing({ crisis: doc, currentTurn: 406, publicVoices: 12 });
     expect(fieldOf(embed, "Settlement")).toBe("52.0 reunification / 48.0 sovereignty");
-    expect(fieldOf(embed, "Swing")).toBe("+8.0 since the last dispatch");
+    expect(fieldOf(embed, "Swing")).toBe("+8.00 since the last dispatch");
   });
 
   it("titles the post with what happened, not with the feature's name", () => {
@@ -112,7 +113,9 @@ describe("buildBriefing", () => {
 
   it("says so plainly when the board barely moved", () => {
     const doc = crisis({
-      position: 44 * HUNDREDTHS + 20,
+      // Inside the "barely moved" band, expressed through the band itself:
+      // the bands are tempo-scaled, so a frozen offset would fall out of them.
+      position: 44 * HUNDREDTHS + Math.round(swingBand(0.4) * HUNDREDTHS),
       lastBriefing: { turn: 400, position: 44 * HUNDREDTHS },
     });
     const { body } = buildBriefing({ crisis: doc, currentTurn: 406, publicVoices: 0 });
@@ -126,7 +129,7 @@ describe("buildBriefing", () => {
     });
     const { body, embed } = buildBriefing({ crisis: doc, currentTurn: 406, publicVoices: 3 });
     expect(body).toContain("toward sovereignty");
-    expect(fieldOf(embed, "Swing")).toBe("-14.0 since the last dispatch");
+    expect(fieldOf(embed, "Swing")).toBe("-14.00 since the last dispatch");
   });
 
   it("reports the public in AGGREGATE and never names an action", () => {

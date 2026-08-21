@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockCollection, type MockDb } from "@/lib/test-utils/mockDb";
-import { SETTLEMENT_INSTITUTIONS, SETTLEMENT_SEATS } from "@/lib/constants/settlementCrisis";
+import {
+  HUNDREDTHS,
+  PERSONAL_NET_CAP,
+  SETTLEMENT_INSTITUTIONS,
+  SETTLEMENT_SEATS,
+  getPlay,
+} from "@/lib/constants/settlementCrisis";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("../actorContext", () => ({ loadSettlementActorContext: vi.fn() }));
@@ -155,9 +161,11 @@ describe("loadGermanQuestionDossier", () => {
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     const street = view!.institutions.find((i) => i.id === "street")!;
     const border = street.plays.find((p) => p.id === "border")!;
-    // 8.0 base at the GDR's 2.0x, pushing East.
-    expect(border.effectivePoints).toBe(16);
-    expect(border.basisLabel).toBe("8.0 base × 2.0× seat");
+    // The GDR's 2.0x, pushing East. Derived from the catalogue so a tempo
+    // retune reads as a retune rather than as a broken card.
+    const base = getPlay("border")!.magnitude / HUNDREDTHS;
+    expect(border.effectivePoints).toBe(Math.round(base * 2 * 100) / 100);
+    expect(border.basisLabel).toBe(`${base.toFixed(2)} base × 2.0× seat`);
   });
 
   it("prices a seat play in the seat country's own currency", async () => {
@@ -549,12 +557,15 @@ describe("loadGermanQuestionDossier", () => {
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     const floor = view!.wire.filter((w) => w.who === "OPEN FLOOR");
     expect(floor).toHaveLength(1);
-    // 40 x 200 x 0.25 = 2000 hundredths asked for; 600 applied.
+    // 40 x 200 x 0.25 = 2000 hundredths asked for. The APPLIED figure is the
+    // fixture's own stamps (40 x 15), because the line reports what the tick
+    // already wrote rather than recomputing the cap; only the quoted ceiling
+    // comes from the constant, so a tempo retune moves that and nothing else.
     expect(floor[0].text).toContain("+20.0");
     expect(floor[0].text).toContain("+6.0");
     expect(floor[0].text).toContain("capped");
     expect(view!.openFloor.rawPoints).toBe(20);
-    expect(view!.openFloor.capPoints).toBe(6);
+    expect(view!.openFloor.capPoints).toBe(PERSONAL_NET_CAP / HUNDREDTHS);
   });
 
   it("stands the ladder down for every seat when escalation is off", async () => {

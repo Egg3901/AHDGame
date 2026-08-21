@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockCollection, type MockDb } from "@/lib/test-utils/mockDb";
-import { SETTLEMENT_INSTITUTIONS, SETTLEMENT_SEATS } from "@/lib/constants/settlementCrisis";
+import {
+  SETTLEMENT_INSTITUTIONS,
+  SETTLEMENT_SEATS,
+  getPlay,
+} from "@/lib/constants/settlementCrisis";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("../actorContext", () => ({ loadSettlementActorContext: vi.fn() }));
@@ -212,7 +216,8 @@ describe("commitSettlementPlay", () => {
       heatAdded: 0,
       turn: 412,
     });
-    expect(doc.basePoints).toBe(400);
+    // From the catalogue, not frozen: a tempo retune must not read as a bug.
+    expect(doc.basePoints).toBe(getPlay("aid")!.magnitude);
   });
 
   it("stamps heat on a coercive play", async () => {

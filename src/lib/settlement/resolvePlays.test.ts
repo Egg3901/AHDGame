@@ -171,8 +171,35 @@ describe("resolvePlayBatch", () => {
 
     expect(stampedTotal).toBe(batch.personalApplied.get("street"));
     expect(stampedTotal).toBe(batch.perInstitution.get("street"));
-    // 200 rows sharing a 600 cap: each bought 3, not the 50 it asked for.
-    expect(batch.stamped[0].appliedPoints).toBe(3);
+    // Derived, not frozen: the stamps must sum to exactly the cap and no row
+    // may be stamped above the 50 it asked for, whatever the cap is tuned to.
+    expect(stampedTotal).toBe(PERSONAL_NET_CAP);
+    for (const row of batch.stamped) {
+      expect(row.appliedPoints).toBeLessThanOrEqual(50);
+      expect(row.appliedPoints).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("still moves the institution when the tier is too crowded to divide", () => {
+    // Independent per-row rounding used to lose the entire cap here: each of a
+    // thousand rows is owed a fraction of a hundredth, each rounds to zero, and
+    // the public moves the board by nothing. The cap is a ceiling on the
+    // public's influence, not a way to delete it.
+    const crowd = Array.from({ length: 1_000 }, () =>
+      personalPlay({ playId: "rally", basePoints: 2 * HUNDREDTHS, direction: 1 })
+    );
+    const batch = resolvePlayBatch(crowd);
+    expect(batch.perInstitution.get("street")).toBe(PERSONAL_NET_CAP);
+    expect(batch.stamped.reduce((sum, r) => sum + r.appliedPoints, 0)).toBe(PERSONAL_NET_CAP);
+  });
+
+  it("apportions a crowded NEGATIVE tier to the cap as well", () => {
+    const crowd = Array.from({ length: 1_000 }, () =>
+      personalPlay({ playId: "rally", basePoints: 2 * HUNDREDTHS, direction: -1 })
+    );
+    const batch = resolvePlayBatch(crowd);
+    expect(batch.perInstitution.get("street")).toBe(-PERSONAL_NET_CAP);
+    for (const row of batch.stamped) expect(row.appliedPoints).toBeLessThanOrEqual(0);
   });
 
   it("keeps uncapped personal stamps at full value", () => {

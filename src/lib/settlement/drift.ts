@@ -16,7 +16,7 @@
  * Every value is integer hundredths and the rng is seeded, so a replayed turn
  * produces the identical roll.
  */
-import { DRIFT_K_PCT, DRIFT_NOISE_SPAN, getInstitution } from "@/lib/constants/settlementCrisis";
+import { DRIFT_K_BPS, DRIFT_NOISE_SPAN, getInstitution } from "@/lib/constants/settlementCrisis";
 
 /** Seed for a turn's drift rolls. One rng is drawn per tick and shared. */
 export function driftSeedFor(turn: number): string {
@@ -43,7 +43,7 @@ export function rollInstitutionDrift(params: {
   const def = getInstitution(institutionId);
   if (!def) return noise;
 
-  const reversion = Math.round((-DRIFT_K_PCT * (position - def.anchor)) / 100);
+  const reversion = Math.round((-DRIFT_K_BPS * (position - def.anchor)) / 10_000);
   return reversion + noise;
 }
 

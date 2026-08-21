@@ -79,20 +79,55 @@ export function resolvePlayBatch(plays: readonly SettlementPlayDoc[]): ResolvedB
     addTo(perInstitution, play.targetInstitutionId, applied);
   }
 
-  // Scale each institution's personal tier so its rows sum to the cap, then take
-  // the movement from the SUM OF THE STAMPS rather than from the cap itself.
-  // Rounding means the two differ by a hundredth or two, and the stamps are the
+  // Scale each institution's personal tier so its rows sum to the cap, and take
+  // the movement from the SUM OF THE STAMPS rather than from the cap itself —
+  // the stamps are what each character is told they bought, so they are the
   // side that has to be true.
-  for (const { play, requested } of personalPending) {
-    const institutionId = play.targetInstitutionId as string;
-    const raw = personalRaw.get(institutionId) ?? 0;
+  //
+  // Apportioned by LARGEST REMAINDER, not by rounding each row on its own.
+  // Independent rounding loses the whole cap once the tier is crowded: every
+  // row's share falls below half a hundredth, each rounds to zero, and a
+  // thousand characters move the board by nothing at all. The cap is a ceiling
+  // on the public's influence, never a way to delete it. Largest remainder
+  // makes the stamps sum to EXACTLY the cap however many rows share it — the
+  // cost is that a share too small to round up stamps as zero, which is honest:
+  // at that turnout one more signature genuinely did not buy a hundredth.
+  for (const [institutionId, raw] of personalRaw) {
+    const rows = personalPending.filter((r) => r.play.targetInstitutionId === institutionId);
     const magnitude = Math.abs(raw);
-    const scaled =
-      magnitude > PERSONAL_NET_CAP
-        ? Math.round((requested * PERSONAL_NET_CAP) / magnitude)
-        : requested;
-    stamped.push({ id: play._id, appliedPoints: scaled });
-    addTo(personalApplied, institutionId, scaled);
+    if (magnitude <= PERSONAL_NET_CAP) {
+      for (const { play, requested } of rows) {
+        stamped.push({ id: play._id, appliedPoints: requested });
+        addTo(personalApplied, institutionId, requested);
+      }
+      continue;
+    }
+
+    const target = Math.sign(raw) * PERSONAL_NET_CAP;
+    // Truncate toward zero so no row is ever stamped past what it asked for,
+    // then hand the shortfall to the rows with the largest lost fractions.
+    const shares = rows.map((row) => {
+      const exact = (row.requested * PERSONAL_NET_CAP) / magnitude;
+      const base = Math.trunc(exact);
+      return { row, base, remainder: exact - base };
+    });
+    let shortfall = target - shares.reduce((sum, sh) => sum + sh.base, 0);
+    const step = Math.sign(shortfall);
+    // Ascending remainder for a negative shortfall: the rows that kept the most
+    // by truncating toward zero are the ones that should give a hundredth back.
+    const queue = [...shares].sort((a, b) =>
+      step > 0 ? b.remainder - a.remainder : a.remainder - b.remainder
+    );
+    for (const share of queue) {
+      if (shortfall === 0) break;
+      share.base += step;
+      shortfall -= step;
+    }
+
+    for (const { row, base } of shares) {
+      stamped.push({ id: row.play._id, appliedPoints: base });
+      addTo(personalApplied, institutionId, base);
+    }
   }
 
   for (const [institutionId, applied] of personalApplied) {

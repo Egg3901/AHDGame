@@ -75,7 +75,7 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
         <span className="flex shrink-0 flex-col items-end gap-0.5 text-right">
           <span className={`font-mono text-body-sm font-bold ${swingTone}`}>
             {actor === "personal" ? "±" : play.effectivePoints >= 0 ? "+" : ""}
-            {Math.abs(play.effectivePoints).toFixed(1)}
+            {Math.abs(play.effectivePoints).toFixed(2)}
           </span>
           <span className={`font-mono text-body-xs tracking-wider ${tagTone}`}>{play.tag}</span>
         </span>

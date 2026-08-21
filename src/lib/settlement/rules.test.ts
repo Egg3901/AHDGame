@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  DRIFT_K_PCT,
+  DRIFT_K_BPS,
   DRIFT_NOISE_SPAN,
   HUNDREDTHS,
   SETTLEMENT_DEFAULT_RULES,
@@ -55,7 +55,7 @@ describe("settlementRulesFor", () => {
 describe("driftBandLabel", () => {
   it("quotes the real band, not a copy of it", () => {
     const label = driftBandLabel();
-    expect(label).toContain((DRIFT_NOISE_SPAN / HUNDREDTHS).toFixed(1));
-    expect(label).toContain((DRIFT_K_PCT / 100).toFixed(2));
+    expect(label).toContain((DRIFT_NOISE_SPAN / HUNDREDTHS).toFixed(2));
+    expect(label).toContain((DRIFT_K_BPS / 100).toFixed(2));
   });
 });

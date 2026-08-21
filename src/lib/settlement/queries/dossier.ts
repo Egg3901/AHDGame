@@ -166,6 +166,18 @@ const EAST_SEATS = new Set<string>(["DD", "RU"]);
 const pts = (hundredths: number) => Math.round((hundredths / HUNDREDTHS) * 10) / 10;
 const signed = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}`;
 
+/**
+ * A PLAY's worth in points, to two decimals.
+ *
+ * Positions keep one decimal so the two halves of a split still read 100.0,
+ * but a single play at the tuned tempo is worth a fraction of a point — the
+ * three personal plays span 0.04 to 0.07, and at one decimal all three round
+ * to the same "0.1" and hide a 2x spread.
+ */
+const magPts = (hundredths: number) => Math.round((hundredths / HUNDREDTHS) * 100) / 100;
+const signedMag = (hundredths: number) =>
+  `${hundredths >= 0 ? "+" : ""}${magPts(hundredths).toFixed(2)}`;
+
 /** Escalation authority copy, verbatim from the source design. */
 function escalateGateFor(seatId: string): string {
   if (seatId === "DD") {
@@ -259,8 +271,8 @@ function playView(params: {
     detail: play.detail,
     tag: play.class.toUpperCase(),
     danger: play.addsHeat,
-    effectivePoints: pts(effective),
-    basisLabel: `${pts(play.magnitude).toFixed(1)} base × ${multiplierLabel}`,
+    effectivePoints: magPts(effective),
+    basisLabel: `${magPts(play.magnitude).toFixed(2)} base × ${multiplierLabel}`,
     costLabel: costBits.join(" · "),
     affordable: params.affordable,
     blockedReason: params.blockedReason,
@@ -327,7 +339,7 @@ export async function loadGermanQuestionDossier(
     characters: new Set(personal.map((p) => String(p.characterId))).size,
     netPoints: pts(personal.reduce((sum, p) => sum + (p.appliedPoints ?? 0), 0)),
     rawPoints: pts(personalRawTotal),
-    capPoints: pts(PERSONAL_NET_CAP),
+    capPoints: magPts(PERSONAL_NET_CAP),
     capped: [...personalRawByInstitution.values()].some((v) => Math.abs(v) > PERSONAL_NET_CAP),
   };
 
@@ -495,7 +507,7 @@ export async function loadGermanQuestionDossier(
       text:
         applied === null
           ? `plays “${def?.name ?? p.playId}”. Resolves on the next tick.`
-          : `plays “${def?.name ?? p.playId}”. ${p.targetInstitutionId ? "Institution" : "Settlement"} moves ${signed(pts(applied))} toward ${toward}.`,
+          : `plays “${def?.name ?? p.playId}”. ${p.targetInstitutionId ? "Institution" : "Settlement"} moves ${signedMag(applied)} toward ${toward}.`,
     });
   }
   // The cap must never be silent (design §4): whenever the public moved, the
@@ -513,8 +525,8 @@ export async function loadGermanQuestionDossier(
         ? `${openFloor.characters} characters have moved. Resolves on the next tick.`
         : `${openFloor.characters} characters moved ${signed(openFloor.rawPoints)}; ${signed(applied)} applied` +
           (openFloor.capped
-            ? `, capped at ±${openFloor.capPoints.toFixed(1)} per institution.`
-            : `, under the ±${openFloor.capPoints.toFixed(1)} cap.`),
+            ? `, capped at ±${openFloor.capPoints.toFixed(2)} per institution.`
+            : `, under the ±${openFloor.capPoints.toFixed(2)} cap.`),
     });
   }
 

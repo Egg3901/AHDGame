@@ -13,6 +13,57 @@
 /** Hundredths per point. All positions, magnitudes and thresholds use this grid. */
 export const HUNDREDTHS = 100;
 
+/**
+ * How much slower the crisis runs than the source mockup's numbers imply.
+ *
+ * The board is a first-order system: every play adds a constant push P per
+ * turn, drift pulls back by k x (distance from anchor), and the index settles
+ * at `anchor + P/k` with a time constant of `1/k` turns. That means the pace
+ * and the destination are set by DIFFERENT things — P/k fixes where it ends up,
+ * 1/k fixes how long it takes to get there. Scaling P and k TOGETHER therefore
+ * dilates time and leaves every balance property untouched: same equilibrium,
+ * same relative worth of every play, same winner, just slower.
+ *
+ * At tempo 1 the mockup's magnitudes resolved an unopposed question in 35-43
+ * turns — under a real day, when a turn is an hour. The brief is at least three
+ * in-game years unopposed, and a contested question should run for real-world
+ * days. At 48 turns to the year, three years is 144 turns, and 7 is the lowest
+ * whole tempo that clears it on the FASTER of the two unopposed bounds:
+ * independence locks at 149 turns, reunification carries at 257. So:
+ *
+ *   - every authored magnitude below is written `mag(<mockup points>)`
+ *   - `DRIFT_K_BPS`, `DRIFT_NOISE_SPAN` and `PERSONAL_NET_CAP` divide by it too
+ *
+ * Change this one number to retune the whole clock. Changing a magnitude
+ * WITHOUT changing the brake changes where the crisis lands, not how long it
+ * takes — that is the balance dial, and this is the speed dial.
+ */
+export const SETTLEMENT_TEMPO = 7;
+
+/**
+ * A tempo-scaled threshold in POINTS, for prose that describes a swing.
+ *
+ * The wire's vocabulary — "edged", "moved", "swung sharply" — is banded in
+ * index points, and index points are what the tempo divides. Left unscaled,
+ * every dispatch on a slow board reads "barely moved": at tempo 7 the fastest
+ * unopposed pace is about 1.1 points per six-turn interval, under the authored
+ * 3.0 that meant "moved".
+ */
+export function swingBand(points: number): number {
+  return points / SETTLEMENT_TEMPO;
+}
+
+/**
+ * An authored magnitude in mockup points, converted to a tempo-scaled hundredth.
+ *
+ * Rounds to the hundredths grid so the integer arithmetic downstream stays
+ * exact. Sub-point results are intended: at this tempo a single play is worth
+ * a fraction of an index point, and the crisis is the sum of hundreds of them.
+ */
+export function mag(points: number): number {
+  return Math.round((points * HUNDREDTHS) / SETTLEMENT_TEMPO);
+}
+
 export type SettlementInstitutionKey = "bundestag" | "laender" | "street" | "garrison";
 export type SettlementSeatKey = "US" | "UK" | "RU" | "DD";
 
@@ -112,8 +163,9 @@ export const CARRY_THRESHOLD = 85 * HUNDREDTHS;
 export const LOCK_THRESHOLD = 15 * HUNDREDTHS;
 
 /**
- * Mean-reversion strength, as a percent of the distance from anchor per turn.
- * 3 = 0.03. Integer so drift stays exact on the hundredths grid.
+ * Mean-reversion strength per turn, in BASIS POINTS of the distance from
+ * anchor. 75 = 0.75%. Basis points rather than percent because the tempo
+ * divisor leaves no resolution in a whole percent.
  *
  * TUNED AGAINST MEASUREMENT, NOT INTUITION. The authored 0.06 was chosen so
  * that maximum Eastern effort would plateau above the carry threshold. It does
@@ -125,13 +177,28 @@ export const LOCK_THRESHOLD = 15 * HUNDREDTHS;
  * reversion scales with the distance already travelled and swallows any
  * constant push at 0.06.
  *
- * At 0.03 both endings are reachable and neither is cheap. See
- * `ahd-german-question-balance-findings` for the measured table.
+ * DERIVED from `SETTLEMENT_TEMPO` rather than written out, because the two must
+ * move together or the equilibrium moves with them: slowing the plays alone
+ * would put both thresholds out of reach, and this whole file's magnitudes are
+ * tempo-scaled. The numerator is therefore the BALANCE dial (it fixes where the
+ * index settles) and the tempo is the SPEED dial (it fixes how long the board
+ * takes to get there). A tempo change alone is provably balance-neutral.
+ *
+ * 200, down from the 300 that was measured at tempo 1, because the two
+ * unopposed bounds are asymmetric by the board's own geometry: the opening
+ * index of 38.2 is 23.2 points from the lock and 46.8 from the carry, so an
+ * unopposed East always takes about twice as long as an unopposed West. At 300
+ * that stretched to 159 turns against 350 — seven in-game years for a question
+ * nobody was contesting. Slackening the brake pulls the far bound in hard and
+ * the near one barely at all (350 -> 257 against 159 -> 149), and leaves the
+ * CONTESTED stall alone: it measures 57.3 at 300 and 57.5 at 200, still
+ * unresolved after 480 turns either way. See
+ * `ahd-german-question-balance-findings` for the measured sweep.
  */
-export const DRIFT_K_PCT = 3;
+export const DRIFT_K_BPS = Math.round(200 / SETTLEMENT_TEMPO);
 
 /** Half-width of the undisclosed drift noise band, in hundredths. */
-export const DRIFT_NOISE_SPAN = 3 * HUNDREDTHS;
+export const DRIFT_NOISE_SPAN = mag(3);
 
 /** Drift rolls retained for the rail's history strip. */
 export const DRIFT_HISTORY_LENGTH = 6;
@@ -140,8 +207,11 @@ export const DRIFT_HISTORY_LENGTH = 6;
  * Cap on the personal tier's NET contribution to one institution per turn, in
  * hundredths. Uncapped, thousands of characters at 0.25x would dominate every
  * national seat combined.
+ *
+ * Tempo-scaled with the rest, so the public tier keeps the same share of the
+ * board as the seats no matter how slowly the crisis is set to run.
  */
-export const PERSONAL_NET_CAP = 6 * HUNDREDTHS;
+export const PERSONAL_NET_CAP = mag(6);
 
 /** Highest rung coercive plays alone can reach. Rung 5 is a deliberate act. */
 export const MAX_COERCIVE_RUNG = 4;
@@ -171,8 +241,13 @@ export const MOBILISATION_APPROVAL_HIT = 1;
  * history, not a lock. The field it lands in carries the load: a resolved
  * crisis with a null `cooldownUntilTurn` is one the actuation sweep has not
  * enacted yet, and that IS a refusal to reopen.
+ *
+ * Three in-game years at 48 turns to the year, matching the shortest a question
+ * takes to answer: the old 96 dated from a tempo at which the whole crisis ran
+ * in under one, and advising "fair to ask again in two years" about something
+ * that takes three to settle reads as a mistake.
  */
-export const SETTLEMENT_REOPEN_COOLDOWN_TURNS = 96;
+export const SETTLEMENT_REOPEN_COOLDOWN_TURNS = 144;
 
 /**
  * Turns between sentiment briefings on the World News wire.
@@ -244,7 +319,7 @@ export function settlementRulesFor(crisis: {
 /** The disclosed band, when `driftRevealed` is on. Points, not hundredths. */
 export function driftBandLabel(): string {
   const span = DRIFT_NOISE_SPAN / HUNDREDTHS;
-  return `−${span.toFixed(1)} to +${span.toFixed(1)} noise · ${(DRIFT_K_PCT / 100).toFixed(2)} reversion`;
+  return `−${span.toFixed(2)} to +${span.toFixed(2)} noise · ${(DRIFT_K_BPS / 100).toFixed(2)}% reversion`;
 }
 
 export const LADDER_RUNGS: readonly string[] = [
@@ -351,7 +426,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "DD",
     class: "exclusive",
     target: "street",
-    magnitude: 8 * HUNDREDTHS,
+    magnitude: mag(8),
     capitalCost: 14,
     fundsUnit: "local",
     fundsCost: 12_000_000,
@@ -366,7 +441,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "DD",
     class: "exclusive",
     target: "bundestag",
-    magnitude: 6 * HUNDREDTHS,
+    magnitude: mag(6),
     capitalCost: 18,
     fundsUnit: "local",
     fundsCost: 0,
@@ -393,7 +468,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
      * which is right for the priciest play on the board and the only one no
      * single institution can block.
      */
-    magnitude: 2.5 * HUNDREDTHS,
+    magnitude: mag(2.5),
     capitalCost: 22,
     fundsUnit: "local",
     fundsCost: 30_000_000,
@@ -408,7 +483,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "DD",
     class: "spend",
     target: "laender",
-    magnitude: 4 * HUNDREDTHS,
+    magnitude: mag(4),
     capitalCost: 0,
     fundsUnit: "local",
     fundsCost: 45_000_000,
@@ -424,7 +499,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "RU",
     class: "diplomatic",
     target: "bundestag",
-    magnitude: 4 * HUNDREDTHS,
+    magnitude: mag(4),
     capitalCost: 12,
     fundsUnit: "local",
     fundsCost: 20_000_000,
@@ -440,7 +515,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "RU",
     class: "coercive",
     target: "garrison",
-    magnitude: 5 * HUNDREDTHS,
+    magnitude: mag(5),
     capitalCost: 16,
     fundsUnit: "local",
     fundsCost: 0,
@@ -455,7 +530,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "RU",
     class: "spend",
     target: "street",
-    magnitude: 5 * HUNDREDTHS,
+    magnitude: mag(5),
     capitalCost: 0,
     fundsUnit: "local",
     fundsCost: 35_000_000,
@@ -470,7 +545,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "US",
     class: "diplomatic",
     target: "garrison",
-    magnitude: 6 * HUNDREDTHS,
+    magnitude: mag(6),
     capitalCost: 10,
     fundsUnit: "local",
     fundsCost: 0,
@@ -485,7 +560,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "US",
     class: "spend",
     target: "laender",
-    magnitude: 5 * HUNDREDTHS,
+    magnitude: mag(5),
     capitalCost: 0,
     fundsUnit: "local",
     fundsCost: 60_000_000,
@@ -500,7 +575,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "US",
     class: "coercive",
     target: "street",
-    magnitude: 4 * HUNDREDTHS,
+    magnitude: mag(4),
     capitalCost: 14,
     fundsUnit: "local",
     fundsCost: 15_000_000,
@@ -516,7 +591,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "UK",
     class: "forces",
     target: "garrison",
-    magnitude: 4 * HUNDREDTHS,
+    magnitude: mag(4),
     capitalCost: 0,
     fundsUnit: "local",
     fundsCost: 25_000_000,
@@ -530,7 +605,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "UK",
     class: "diplomatic",
     target: "bundestag",
-    magnitude: 3 * HUNDREDTHS,
+    magnitude: mag(3),
     capitalCost: 8,
     fundsUnit: "local",
     fundsCost: 0,
@@ -544,7 +619,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "UK",
     class: "spend",
     target: "street",
-    magnitude: 3 * HUNDREDTHS,
+    magnitude: mag(3),
     capitalCost: 0,
     fundsUnit: "local",
     fundsCost: 10_000_000,
@@ -559,7 +634,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: null,
     class: "personal",
     target: "street",
-    magnitude: 150,
+    magnitude: mag(1.5),
     capitalCost: 0,
     fundsUnit: "anchor",
     fundsCost: 0,
@@ -574,7 +649,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: null,
     class: "personal",
     target: "street",
-    magnitude: 2 * HUNDREDTHS,
+    magnitude: mag(2),
     capitalCost: 0,
     fundsUnit: "anchor",
     fundsCost: 5_000,
@@ -588,7 +663,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: null,
     class: "personal",
     target: "bundestag",
-    magnitude: 1 * HUNDREDTHS,
+    magnitude: mag(1),
     capitalCost: 0,
     fundsUnit: "anchor",
     fundsCost: 0,

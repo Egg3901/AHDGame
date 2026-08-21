@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { makeSeededRng } from "@/lib/events/substrate/rng";
 import {
-  DRIFT_K_PCT,
+  DRIFT_K_BPS,
   DRIFT_NOISE_SPAN,
   HUNDREDTHS,
   SETTLEMENT_INSTITUTIONS,
@@ -31,7 +31,7 @@ describe("rollInstitutionDrift", () => {
     });
     // k of 2000 hundredths, pulling back. Derived from the constant rather
     // than frozen at one tuning: a balance retune must not read as a failure.
-    expect(drift).toBe(-(DRIFT_K_PCT * 20));
+    expect(drift).toBe(-Math.round((DRIFT_K_BPS * 20 * HUNDREDTHS) / 10_000));
   });
 
   it("pulls back toward the anchor when pushed West", () => {
@@ -40,7 +40,7 @@ describe("rollInstitutionDrift", () => {
       position: street.anchor - 20 * HUNDREDTHS,
       rng: fixedRng(0.5),
     });
-    expect(drift).toBe(DRIFT_K_PCT * 20);
+    expect(drift).toBe(Math.round((DRIFT_K_BPS * 20 * HUNDREDTHS) / 10_000));
   });
 
   it("adds the noise band at its extremes", () => {
