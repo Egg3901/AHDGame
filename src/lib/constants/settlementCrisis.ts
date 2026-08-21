@@ -41,19 +41,6 @@ export const HUNDREDTHS = 100;
 export const SETTLEMENT_TEMPO = 7;
 
 /**
- * A tempo-scaled threshold in POINTS, for prose that describes a swing.
- *
- * The wire's vocabulary — "edged", "moved", "swung sharply" — is banded in
- * index points, and index points are what the tempo divides. Left unscaled,
- * every dispatch on a slow board reads "barely moved": at tempo 7 the fastest
- * unopposed pace is about 1.1 points per six-turn interval, under the authored
- * 3.0 that meant "moved".
- */
-export function swingBand(points: number): number {
-  return points / SETTLEMENT_TEMPO;
-}
-
-/**
  * An authored magnitude in mockup points, converted to a tempo-scaled hundredth.
  *
  * Rounds to the hundredths grid so the integer arithmetic downstream stays
@@ -253,10 +240,38 @@ export const SETTLEMENT_REOPEN_COOLDOWN_TURNS = 144;
  * Turns between sentiment briefings on the World News wire.
  *
  * The public tier is one row per character who acted, so a post per action
- * would bury the channel. Six turns is long enough that a briefing has a swing
- * worth reporting and short enough that a crisis never goes quiet.
+ * would bury the channel. The interval has to be long enough that a briefing
+ * has a swing worth reporting and short enough that a crisis never goes quiet.
+ *
+ * Twelve, up from the design's six, because the crisis now runs 149-480 turns
+ * rather than the 43 it ran when six was chosen: at six that is 25-80 dispatches
+ * on one channel, about four a day. Twice a day still narrates a question that
+ * takes a real week to answer.
  */
-export const SETTLEMENT_WIRE_INTERVAL_TURNS = 6;
+export const SETTLEMENT_WIRE_INTERVAL_TURNS = 12;
+
+/** The interval the design's swing vocabulary was authored against. */
+const AUTHORED_WIRE_INTERVAL_TURNS = 6;
+
+/**
+ * A threshold in POINTS for the prose that describes a swing.
+ *
+ * The wire's vocabulary — "edged", "moved", "swung sharply" — is banded in
+ * index points measured BETWEEN DISPATCHES, so it has to track two things at
+ * once. Tempo divides it, because tempo is what divides an index point. The
+ * dispatch interval multiplies it, because waiting twice as long accumulates
+ * twice the swing.
+ *
+ * Left unscaled the vocabulary collapses to one word. At tempo 7 the fastest
+ * unopposed pace is about 2.2 points per twelve-turn interval; against the
+ * authored 3.0 that meant "moved" and 8.0 that meant "swung sharply", every
+ * dispatch in the game would read "barely moved".
+ */
+export function swingBand(points: number): number {
+  return (
+    (points * SETTLEMENT_WIRE_INTERVAL_TURNS) / (AUTHORED_WIRE_INTERVAL_TURNS * SETTLEMENT_TEMPO)
+  );
+}
 
 /** The document `kind`, and the only settlement question that exists today. */
 export const GERMAN_QUESTION_KIND = "settlement.germanQuestion" as const;
