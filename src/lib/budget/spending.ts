@@ -61,15 +61,25 @@ export const SECTOR_SUBSIDIES_SPENDING_KEY = "sectorSubsidies";
  * rather than an enacted `isGrant` national law. For these, the pool is credited
  * to regions but has no enacted law to book it as national spending, so
  * `calculateFederalSpending` must add the actually-distributed total to
- * `stateGrants`. UK/JP are absent here — their isGrant funding laws already book
- * the grant. The mapped value is the `regionalBudgets` field that holds each
- * region's received grant.
+ * `stateGrants`. UK joined them once the v2 catalog retired
+ * `uk_local_government_funding`; JP is still absent because its Local Allocation
+ * Tax Act is a real isGrant law that books the grant itself. The mapped value is
+ * the `regionalBudgets` field that holds each region's received grant.
  */
 const CONFIG_DERIVED_TRANSFER_FIELD: Partial<
-  Record<CountryId, "centralTransferGrant" | "federalEqualizationGrant">
+  Record<CountryId, "centralTransferGrant" | "federalEqualizationGrant" | "westminsterGrant">
 > = {
   CN: "centralTransferGrant",
   DE: "federalEqualizationGrant",
+  // UK joined this set when the political-legislation v2 catalog retired
+  // `uk_local_government_funding`: with no isGrant law left to book it, the
+  // Westminster grant is a config-derived pool like CN's and DE's, and the
+  // regional processor now draws it from `spending.stateGrants` /
+  // `baselineStateGrants`. Booking it back here closes the loop — otherwise
+  // regions spend a £250M/yr transfer the national budget never records.
+  // Stable, not circular: the per-region shares sum to the pool, so the
+  // next sync reads back the same figure it wrote.
+  UK: "westminsterGrant",
 };
 
 function sumSpendingByCategory(byCategory: Record<string, number>): number {
@@ -250,9 +260,9 @@ export async function calculateFederalSpending(
     }
   }
 
-  // Config-derived central transfer pools (CN/DE) are credited to regions in the
-  // regional-budget processors but — unlike UK/JP isGrant funding laws — have no
-  // enacted national law to book them as spending. Sum the actual distributed
+  // Config-derived central transfer pools (CN/DE/UK) are credited to regions in
+  // the regional-budget processors but — unlike JP's isGrant funding law — have
+  // no enacted national law to book them as spending. Sum the actual distributed
   // grants from regionalBudgets so the national budget reflects the transfer as
   // an expense and stays consistent with the Finance Minister's per-region split.
   // Scope by CURRENT state ids (not countryId) so stale orphan regionalBudgets
