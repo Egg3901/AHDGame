@@ -243,7 +243,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "currency-exchange",
     title: "Currency Exchange",
     description:
-      "The Forex system: four floating currencies, how rates are computed each turn, and how to trade for profit.",
+      "The Forex system: the active world's currencies, how rates are computed each turn, and how to trade for profit.",
     content: currencyExchangeContent,
     category: "economy",
     extraTags: ["forex", "fx"],
@@ -379,7 +379,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "savings-interest",
     title: "Savings & Interest",
     description:
-      "How idle cash earns interest at half the prime rate, accruing every turn and crediting quarterly.",
+      "How idle cash earns interest at half the inflation-adjusted real rate, accruing every turn and crediting quarterly.",
     content: savingsInterestContent,
     category: "economy",
     difficulty: "beginner",

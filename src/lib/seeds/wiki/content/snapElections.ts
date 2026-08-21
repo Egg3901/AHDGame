@@ -1,6 +1,6 @@
 export const snapElectionsContent = `# Snap Elections
 
-Parliamentary countries (UK, JP, and DE) can dissolve their lower chamber **before** its regular term ends. This creates an early general election, a **snap**. The US has no snap mechanic: it does not have a no-confidence mechanism.
+Parliamentary countries (UK, JP, DE, and IE) can dissolve their lower chamber **before** its regular term ends. This creates an early general election, a **snap**. The US has no snap mechanic: it does not have a no-confidence mechanism.
 
 Snaps can happen two ways: a sitting Prime Minister (or Chancellor in DE) calls one voluntarily, or the system auto-triggers one when a PM vacancy extends beyond 96 turns.
 
@@ -13,6 +13,7 @@ For the regular cycles see [United Kingdom](/wiki/uk-overview), [Japan](/wiki/jp
 | 🇬🇧 UK | Yes | Commons | Snap Commons election |
 | 🇯🇵 JP | Yes | Shūgiin | Snap Shūgiin election |
 | 🇩🇪 DE | Yes | Bundestag | Snap Bundestag election |
+| 🇮🇪 IE | Yes | Dáil | Snap Dáil election |
 | 🇺🇸 US | No | N/A | N/A |
 
 Upper chambers (UK Lords, JP Sangiin, DE Bundesrat) are explicitly excluded. Lords isn't elected at all, the Sangiin has its own fixed cycle independent of snaps, and the Bundesrat is appointed by Land governments.
@@ -68,6 +69,7 @@ Snap elections shift the regular cycle forward. The next regular lower-chamber e
 | UK Commons | 240 turns (5 game years) | Snap's end turn + 240 |
 | JP Shūgiin | 192 turns (4 game years) | Snap's end turn + 192 |
 | DE Bundestag | 192 turns (4 game years) | Snap's end turn + 192 |
+| IE Dáil | 192 turns (modeled 4-year cycle) | Snap's end turn + 192 |
 
 The cycle counter increments: a snap that resolves at cycle N is followed by a regular cycle N+1 whose end turn sits 240 (UK) or 192 (JP, DE) turns after the snap's end turn.
 
@@ -96,7 +98,7 @@ The cycle counter increments: a snap that resolves at cycle N is followed by a r
 ### For candidates (any party)
 
 - **Incumbency is tenuous.** Sitting MPs have their seats open just like everyone else. Your Political Influence and Favorability persist, which is a huge advantage, but you still have to run.
-- **Party organization is multiplied.** With the short 48-hour window, party org (the 0.5× to 1.0× scalar) matters disproportionately to individual campaigning.
+- **Party organization is multiplied.** With the short 48-hour window, the party's normalized state Org share raised to the 0.2 exponent matters disproportionately to individual campaigning.
 - **NPP endorsements land harder.** The compressed window means fewer opportunities for Favorability swings; NPP endorsements (each a demographic appeal boost) are near-decisive.
 
 ## Related

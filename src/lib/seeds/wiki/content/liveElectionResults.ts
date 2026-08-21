@@ -41,7 +41,7 @@ This projection reads live off however many regions have declared so far, so it 
 
 ## What you're watching, mechanically
 
-The results page polls every 30 seconds while an election is active. Nothing you do on the results page itself changes the outcome: canvassing, ads, and fundraising still work the way they always have, right up until the general phase's [final 4 turns](/wiki/general-elections), which carry 25% of the entire vote pool. Election night is just the moment that math becomes visible in public, one region at a time, instead of all at once.
+The results page polls every 30 seconds while an election is active. Nothing you do on the results page itself changes the outcome: canvassing, ads, and fundraising still work the way they always have, right up until the general phase's [final 4 turns](/wiki/general-elections), which carry 30% of the entire vote pool. Election night is just the moment that math becomes visible in public, one region at a time, instead of all at once.
 
 If your race ends up close enough to fall short of a majority, see [Contingent Election](/wiki/contingent-election) for what happens next in a US presidential race with no Electoral College majority.
 `;

@@ -1,6 +1,6 @@
 export const resourcesOverviewContent = `# Resources
 
-States across all five countries hold deposits of natural resources that can be extracted by corporations. These resources feed the commodity market, affect corporate profit margins, and represent sovereign wealth that governments can choose to contract out or protect.
+States across the enabled game world hold deposits of natural resources that can be extracted by corporations. These resources feed the commodity market, affect corporate profit margins, and represent sovereign wealth that governments can choose to contract out or protect.
 
 ## The six extractable resources
 
@@ -72,11 +72,11 @@ State resource capacity is divided between two pools:
 
 **Open-access capacity** is the remainder: available to all extraction sectors in that state on a first-come, proportional basis. If total demand from uncontracted sectors exceeds the open pool, every uncontracted sector's output is squeezed proportionally.
 
-When contracts add up past 100% of a state's capacity (an **over-allocated** state), the open-access pool collapses to zero. Uncontracted extraction sectors in an over-allocated state produce nothing for that resource.
+Player-issued offers cannot take the total offered and active share above **75%**, so at least one quarter remains open access. Admin grants are an override: they can push allocation past 100%, at which point the open-access pool collapses to zero and uncontracted sectors produce nothing for that resource.
 
 ## Which states have which resources
 
-Major resource concentrations across the five countries:
+Major resource concentrations vary with the countries and start date enabled in the world. The live Resources map is the authoritative view for every state. Some representative authored concentrations are:
 
 **United States**: Texas leads in oil and natural gas. Pennsylvania and West Virginia are major gas and coal producers. Minnesota holds the largest iron deposits. Wyoming and Alaska are uniquely diverse, holding several resource types each.
 
@@ -86,7 +86,7 @@ Major resource concentrations across the five countries:
 
 **Japan**: Hokkaido and Kyushu hold coal and timber. Chugoku and Tohoku hold rare earth and natural gas. Japan's overall resource base is modest compared to North American counterparts.
 
-**Canada** (not currently in-game): reserved for future expansion.
+Other enabled country maps, including Ireland, Brazil, Nigeria, China, Russia, and East Germany where present for the selected era, carry their own authored deposits. Use each country's Resources map instead of assuming the examples above are exhaustive.
 
 ## Why resources matter
 

@@ -12,7 +12,7 @@ For phase rules see [Primaries](/wiki/primaries) and [General Elections](/wiki/g
 | How winner is chosen | Highest primary score (no vote accumulation) | Vote accumulation across all turns |
 | Biggest stat lever | Alignment to party platform (40 pts) | Appeal via policy positioning to demographics |
 | Strategic target | Party base | Swing demographics |
-| Time pressure | Fixed declaration deadline (no vote gradient) | Gradient: final 4 turns weighted 25% |
+| Time pressure | Fixed declaration deadline (no vote gradient) | Gradient: final 4 turns weighted 30% |
 | Cost multiplier on campaign upgrades | 1.0x | 1.5x |
 | Attack rival candidates? | No (same party) | Carefully (opponents only) |
 | NPP endorsements | Useful, modest | Useful, higher weight |
@@ -78,7 +78,7 @@ The implication: **presidential primaries reward party influence and Favorabilit
 
 - National race with Electoral College resolution.
 - Independent penalty 0.3x vote share (70% reduction).
-- Presidential Travel (5 actions) boosts Favorability +1%/turn while in-state. Deploy to swing states in the final month.
+- Presidential Travel costs 3 to 10 actions by state electoral votes and boosts Favorability +1%/turn while in-state. Deploy to swing states in the final month.
 - FPTP spoiler does **not** apply in the presidential model: third parties don't drain votes from their ideologically-nearest major.
 - Party-weighted positions (party + 3x candidate) / 4 mean your personal position matters more than your party (75% candidate, 25% party).
 - Party org uses a steep curve (0.05x-1.0x). Low-org states are brutal.
@@ -117,7 +117,7 @@ The moment your primary resolves:
 - **Attacking primary rivals after the fact.** They're out of the race; Infamy gain is wasted.
 - **Ignoring Opposition Research entirely.** A well-placed Level 2 Opposition Research in the general is worth 2-4 Favorability drain on the frontrunner over 4 weeks, often race-deciding.
 - **Upgrading campaign tiers during general at 1.5x cost.** Upgrade during primary.
-- **Over-travelling in presidential.** Travel is +1% Favorability/turn, but every travel also costs 5 actions. Don't travel constantly. Pick strategic states and stay.
+- **Over-travelling in presidential.** Travel is +1% Favorability/turn, but each move costs 3 to 10 actions by state electoral votes. Don't travel constantly. Pick strategic states and stay.
 - **Not planning the closing sprint.** Reserve ~30% of your general-phase fund budget for the final 4 turns.
 
 ## Related
@@ -128,5 +128,5 @@ The moment your primary resolves:
 - [Campaign Strategy](/wiki/campaign-strategy): deep tactics with upgrade tables.
 - [Campaign Manager](/wiki/campaign-manager): /campaign/[id] page.
 - [Demographics & Targeting](/wiki/demographics-targeting): base vs swing groups.
-- [NPP Opponents](/wiki/npp-opponents): handling NPP competition.
+- [NPP Elections](/wiki/npp-elections): handling NPP competition.
 `;

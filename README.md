@@ -10,7 +10,7 @@ Play at [ahousedividedgame.com](https://www.ahousedividedgame.com). Docs at [doc
 
 **Eras.** Worlds seed from a historical preset (1953, 1979, 1991, 1999, 2007, 2019, or 2023) and play forward. A preset sets policies, budgets, demographics, seat maps, currencies, commodity prices, cabinet structures, franchise rules, and Supreme Court rosters. As the calendar crosses real inflection points, era checkpoints durably shift the electorate, paced by how the game's own Supreme Court rules on its docket.
 
-**Countries.** 24 registered countries on both sides of the Cold War, resolved at runtime as playable, economy-only, or hidden per world. Western democracies, one-party states with planned economies, and devolved systems (Scotland, Wales) each run their own political machinery.
+**Countries.** 24 registered countries on both sides of the Cold War, resolved per world as playable or economy-only. Western democracies and one-party states with planned economies run their own political machinery. Scotland and Wales are authored secession configurations that stay hidden until registered.
 
 **Politics.** Per-office electoral systems: first past the post, proportional (Sainte-Laguë and Hare), mixed-member, Electoral College, parliamentary selection. Primaries with delegate math, campaigns with upgrade tracks and upkeep, a two-layer voter model (country archetypes over a granular census-cell electorate), full bill lifecycles with committees and whips, coalitions and confidence votes, cabinets with confirmation fights, an active Supreme Court docket, impeachment, referendums, and politburo machinery for the one-party states.
 
@@ -24,13 +24,13 @@ Play at [ahousedividedgame.com](https://www.ahousedividedgame.com). Docs at [doc
 
 ```
 Browser (React 19 / Next.js App Router)
-  -> Next.js API routes (JWT auth, Zod validation, 400+ handlers)
+  -> Next.js API routes (JWT auth, Zod validation, 1,200+ handlers)
   -> MongoDB (native driver, 100+ document types)
   -> hourly turn processor: 120+ phases in ordered groups
      (elections, bills, NPPs, economy, demographics, conflict, metrics)
 ```
 
-Stack: Next.js 16, React 19, TypeScript, Tailwind 4, MongoDB, Vitest and Playwright, Sentry-compatible monitoring, Cloudflare R2 for uploads (local-disk fallback in dev), deployed on Railway with the turn processor on cron.
+Stack: Next.js 16, React 19, TypeScript, Tailwind 4, MongoDB, Vitest and Playwright, Sentry-compatible monitoring, Cloudflare R2 for uploads (local-disk fallback in dev), deployed on Railway with the turn processor scheduled in-process by `node-cron`.
 
 ## Running it locally
 
@@ -39,7 +39,7 @@ Requires Node 20+ and a MongoDB instance.
 ```bash
 git clone https://github.com/Egg3901/AHDGame.git
 cd AHDGame
-npm install
+npm ci
 cp .env.example .env.local
 ```
 
@@ -50,21 +50,26 @@ MONGODB_URI=mongodb://localhost:27017/a-house-divided
 AUTH_SECRET=            # openssl rand -base64 32
 ADMIN_REGISTRATION_KEY= # lets the first account register as admin
 CRON_SECRET=            # authenticates the turn cron
-INTERNAL_API_KEY=       # server-side scripts and the task API
 ```
 
-Everything else in `.env.example` (OAuth, monitoring, CAPTCHA, R2, the Discord bot) is optional and fails open for local development.
+Everything else in `.env.example` is optional for the main app. `INTERNAL_API_KEY` is needed by server-side task scripts, while OAuth, monitoring, CAPTCHA, R2, and bot integrations can stay unset for local development.
 
 ```bash
-npm run seed   # states, demographics, officials
-npm run dev    # http://localhost:3000
+npm run bootstrap:full   # complete historical world, including officials
+npm run dev              # http://localhost:3000
 ```
 
-Register with your `ADMIN_REGISTRATION_KEY` to unlock the admin console, bootstrap a full world from its seeding controls (era preset, countries, NPPs), and advance turns by hitting `/api/cron` with your `CRON_SECRET`.
+`next dev` auto-seeds an empty database and starts the in-process turn scheduler. For UI-only work, set `DISABLE_DEV_BACKGROUND=1` and use `npm run bootstrap:full` when you intentionally need a complete world. `npm run seed` only loads the US reference pack and does not create a full playable world.
+
+Register at `/register` with your `ADMIN_REGISTRATION_KEY` to unlock the admin console. To trigger a turn manually:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/turn
+```
 
 ### Auth, briefly
 
-Password login plus optional Discord and Google OAuth, optional Turnstile on registration. Sessions are HS256 JWTs signed with `AUTH_SECRET` in HTTP-only cookies (`src/lib/auth.ts`). `CRON_SECRET` authenticates the turn cron, `INTERNAL_API_KEY` authenticates server-side scripts, and the Discord bot uses admin-managed API keys.
+Password login plus optional Discord and Google OAuth, optional Turnstile on registration. Sessions are HS256 JWTs signed with `AUTH_SECRET` in HTTP-only cookies. Login and OAuth routes sign them; `src/lib/auth.ts` verifies them. `CRON_SECRET` authenticates cron routes, `INTERNAL_API_KEY` authenticates server-side scripts, and the Discord bot accepts deployment keys or user-created keys from Settings.
 
 ## Development
 
@@ -76,7 +81,7 @@ npm run test:run      # ~27k Vitest tests
 npm run test:e2e      # Playwright, needs the dev server running
 ```
 
-CI runs lint, format check, typecheck, and the unit suite on every push and PR. CodeQL runs separately.
+CI runs lint, format check, typecheck, the architecture audit, the unit suite, and a Next build on pull requests and pushes to `main`. CodeQL runs separately.
 
 Useful entry points:
 

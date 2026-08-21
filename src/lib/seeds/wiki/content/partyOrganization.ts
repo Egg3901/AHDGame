@@ -47,7 +47,7 @@ In general elections, party Org enters the vote-appeal formula as a **normalized
 orgShare(party) = party.organization / Σ(every party's organization in this state)
 \`\`\`
 
-Each party's share is a number in \`[0, 1]\` that distributes the state's vote weight proportional to where Org actually lives. A party with 60 Org in a state where the total is 100 gets a 0.6× multiplier on its weight; a party not present in the state gets 0 (no votes from that party's candidates).
+Each party's share is a number in \`[0, 1]\`. The live vote weight applies diminishing returns: \`orgVoteWeight = orgShare ^ 0.2\`. This preserves the ranking while softening a dominant party's structural edge. A 3:1 Org lead produces about a 1.25:1 Org-weight advantage. If the state has no Org data at all, every party gets a neutral 1× fallback. A candidate with strong personal reach and approval can also earn a small personal floor, capped at 0.1, instead of being erased by zero party Org.
 
 Two complementary signals also enter the per-candidate weight in general elections:
 

@@ -27,8 +27,9 @@ npm run lint           # eslint
 npm run format:check   # prettier
 npm run typecheck      # tsc --noEmit
 npm run test:run       # unit + integration tests
-npm run build          # next build (production build must succeed)
-npm run verify         # all of the above plus the architecture audit
+npm run verify         # lint + format + typecheck + architecture audit + tests
+npm run verify:build   # Next build used by CI
+npm run build          # Next build + postbuild quality publishing
 ```
 
 ## The CI gate
@@ -36,8 +37,8 @@ npm run verify         # all of the above plus the architecture audit
 A pull request must pass, and you should reproduce these locally before opening
 one:
 
-1. **`verify`** — lint, format, typecheck, and tests. This is the required gate.
-2. **`build`** — the production build.
+1. **`verify`**: lint, format, typecheck, architecture audit, and tests. This is the required gate.
+2. **`verify:build`**: the Next build run by CI. `npm run build` also runs postbuild quality publishing.
 3. **Semgrep `custom-rules`** — project-specific rules in `.semgrep/`. A hit here
    is a real bug, not a style nit; fix the code, do not silence the rule.
 4. **Dependency Review** — fails on a new high-severity or license-incompatible
@@ -60,7 +61,7 @@ CONTRIBUTING.md for the full policy.
 ## Where things live
 
 - `src/app/api/**` — thin route handlers: auth guard, Zod parse, call into lib.
-- `src/lib/**` — domain logic, one directory per system.
+- `src/lib/**`: domain logic, one directory per system. Database collection getters live under `src/lib/db/collections`.
 - `src/lib/turnSystem.ts` — the hourly turn processor; phases in
   `src/simulation/phases/`.
 - `scripts/seeds/` — seed data; `scripts/seed/` — seed runners.

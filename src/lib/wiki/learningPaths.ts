@@ -30,7 +30,6 @@ export interface LearningPath {
  * Global pages (slugs not in this map) are always visible.
  */
 const COUNTRY_PAGE_SLUGS: Record<string, CountryId> = {
-  "united-kingdom": "UK",
   "uk-overview": "UK",
   "us-overview": "US",
   "jp-overview": "JP",
@@ -85,7 +84,7 @@ export const LEARNING_PATHS: LearningPath[] = [
         estimatedMinutes: 7,
       },
       {
-        slug: "united-kingdom",
+        slug: "uk-overview",
         title: "United Kingdom",
         description: "UK regions, Commons, and Prime Minister basics",
         estimatedMinutes: 5,
@@ -139,7 +138,7 @@ export const LEARNING_PATHS: LearningPath[] = [
         estimatedMinutes: 18,
       },
       {
-        slug: "npp-opponents",
+        slug: "npp-elections",
         title: "NPP Opponents Guide",
         description: "Compete against NPP politicians",
         estimatedMinutes: 15,
@@ -174,33 +173,33 @@ export const LEARNING_PATHS: LearningPath[] = [
         estimatedMinutes: 12,
       },
       {
-        slug: "state-level-power",
-        title: "State-Level Power",
-        description: "Leverage state offices effectively",
+        slug: "reference-offices",
+        title: "Reference: Offices",
+        description: "Compare offices, terms, action bonuses, and party strength",
         estimatedMinutes: 18,
       },
       {
-        slug: "party-building",
-        title: "Party Building Guide",
-        description: "Grow and strengthen your party",
+        slug: "party-organization",
+        title: "Party Organization",
+        description: "Grow organization and strengthen your party",
         estimatedMinutes: 20,
       },
       {
-        slug: "formula-deep-dive",
-        title: "Formula Deep-Dive",
+        slug: "reference-formulas",
+        title: "Reference: Formulas",
         description: "Understand game mechanics formulas",
         estimatedMinutes: 20,
       },
       {
-        slug: "min-maxing",
-        title: "Min-Maxing Guide",
-        description: "Optimize every aspect of gameplay",
+        slug: "power-player-guide",
+        title: "Power Player Guide",
+        description: "Coordinate party, office, corporate, and NPP power",
         estimatedMinutes: 18,
       },
       {
-        slug: "meta-strategy",
-        title: "Meta Strategy",
-        description: "Advanced meta-game tactics",
+        slug: "advanced-strategy",
+        title: "Advanced Strategy",
+        description: "Plan career arcs and coordinate multiple systems",
         estimatedMinutes: 14,
       },
     ],
@@ -210,7 +209,7 @@ export const LEARNING_PATHS: LearningPath[] = [
     slug: "war-college",
     title: "War College",
     description:
-      "Everything you need to raise an army, command it, and fight a war — from the chain of command to a full worked campaign.",
+      "Everything you need to raise an army, command it, and fight a war, from the chain of command to a full worked campaign.",
     difficulty: "intermediate",
     icon: "⚔️",
     estimatedTime: "51 minutes",

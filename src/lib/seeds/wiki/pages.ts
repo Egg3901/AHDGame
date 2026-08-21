@@ -19,7 +19,7 @@ import { iterationsPages } from "./pages/iterations";
  * canonical `WIKI_SEED_PAGES` list consumed by `seedWikiPages`.
  *
  * Phase status (page counts from the category files concatenated below):
- *   Getting Started (11 pages)
+ *   Getting Started (12 pages)
  *   Elections (17 pages)
  *   Legislatures & Government (15 pages)
  *   Parties, Coalitions, NPPs (13 pages)

@@ -146,7 +146,7 @@ Shortages finally reward producers with higher **top-line revenue**, not just ma
 
 ## Market tiers: clearing & capital
 
-The market system rolls out in tiers. Price realization above is the first economic tier; the deeper tiers below are enabled as the world matures. When they are on, you'll see extra panels on each sector's detail page. For a plain-language walkthrough of the whole ladder, see the [Market System guide](/wiki/market-system-guide).
+The market system has a tier ladder. Fresh worlds start at **plants**, the deepest tier, while admins can dial a world back for staged rollout or legacy migration. The active tier controls which extra panels appear on each sector's detail page. For a plain-language walkthrough of the whole ladder, see the [Market System guide](/wiki/market-system-guide).
 
 ### Clearing: your goods have to actually sell
 
@@ -224,7 +224,7 @@ Retail sectors face only **25%** of negative commodity input penalties: they can
 
 ### Nationalized corporations
 
-Government-owned corporations (natcorps) contribute only **100%** of their normal commodity supply and demand. This prevents state-owned enterprises from dominating commodity markets.
+Government-owned corporations (natcorps) contribute **100%** of their normal commodity supply and demand. State ownership does not apply a special commodity-market discount.
 
 ## Operating strategies
 

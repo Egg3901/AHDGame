@@ -18,7 +18,7 @@ import { AdSenseUnit } from "@/components/AdSenseUnit";
 export const metadata: Metadata = wikiPublicPageMetadata({
   title: "Wiki | A House Divided",
   description:
-    "Official wiki for A House Divided: onboarding, elections, legislation, parties, corporations, forex, and country-specific rules for the US, UK, Germany, and Japan.",
+    "Official wiki for A House Divided: onboarding, elections, legislation, parties, corporations, forex, and country-specific systems across the playable world.",
   pathname: "/wiki",
 });
 
@@ -608,9 +608,9 @@ export default async function WikiOverviewPage({
               </div>
               <p className="text-body-lg max-w-3xl text-muted">
                 Official documentation for <em>A House Divided</em>. These pages explain how the
-                live simulation works: turns, elections, bills, parties, and country-specific
-                legislatures across the United States, United Kingdom, Germany, and Japan. Start
-                with the new player guide, then browse by category for deeper mechanics, economy
+                live simulation works: turns, elections, bills, parties, country-specific
+                legislatures, historical start dates, and the world economy. Start with the new
+                player guide, then browse by category for deeper mechanics, country hubs, economy
                 systems, and strategy.
               </p>
             </div>

@@ -57,7 +57,7 @@ Controlling a party means your legislative agenda passes, your candidates win se
 
 1. **Become party chair**: win the internal party election. This requires high party-member favorability and PI.
 2. **Coordinate GOTV**: allocate GOTV budget to swing states and states with active player candidates.
-3. **Manage party org**: keep party org above 70 in all key states. The org scalar (0.5× to 1.0×) directly affects every candidate's vote total.
+3. **Manage party org**: build a strong share of the total Org pool in key states. General-election weight uses that normalized share raised to the 0.2 exponent, so rivals' investment matters as much as your raw number.
 4. **Issue whip directives**: control how NPP legislators vote on bills.
 5. **Run candidates**: encourage new players to join your party; coordinate which races each player runs in so you don't split primaries.
 

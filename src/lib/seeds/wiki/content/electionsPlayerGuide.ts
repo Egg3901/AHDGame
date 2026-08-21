@@ -50,7 +50,7 @@ Practical primary checklist:
 
 ## General phase: read the live movement
 
-General-election votes accumulate every turn. Earlier turns distribute most of the pool, but the final four turns carry 25% of the total. A close race can move sharply at the end.
+General-election votes accumulate every turn. The early band carries 50% of the pool, the next 8-turn ramp carries 20%, and the final four turns carry 30%. A close race can move sharply at the end.
 
 The most useful panels are:
 

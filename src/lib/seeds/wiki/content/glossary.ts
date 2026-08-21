@@ -4,7 +4,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 ---
 
-**Action**: The primary resource consumed by player activities. Base 4 per turn, refreshed every real hour. Unused actions are lost when the turn processes. Office bonuses add to this pool.
+**Action**: The primary resource consumed by player activities. Base 4 per turn, refreshed every real hour, with office bonuses added. Unused actions carry forward up to the Energy-scaled cap (baseline 200). Above the hoard threshold (baseline 100), the pool loses 4 actions before each refresh.
 
 **Action bonus**: Additional actions per turn granted by holding a specific office. Example: Senator gets +2/turn; President gets +4/turn.
 
@@ -44,9 +44,9 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Diminishing returns**: A mechanic that reduces the effectiveness of repeated actions on the same target. Canvassing a turnout modifier already at +18 returns ~10% of base effect. Applies to both canvassing and influence building.
 
-**Dissolution**: Ending a parliamentary term early to call snap elections (UK Commons, JP Shūgiin, DE Bundestag). Triggers a compressed election cycle.
+**Dissolution**: Ending a parliamentary term early to call snap elections (UK Commons, JP Shūgiin, DE Bundestag, IE Dáil). Triggers a compressed election cycle.
 
-**Econ axis**: The economic dimension of the two-axis ideology grid (−100 to +100). Negative = left (redistributive, regulated); positive = right (market, low tax). Alongside the social axis, determines party alignment scoring.
+**Econ axis**: The economic dimension of the two-axis ideology grid (−5 to +5). Negative = left (redistributive, regulated); positive = right (market, low tax). Alongside the social axis, determines party alignment scoring.
 
 **Election timer**: The countdown tracking when a primary or general election ends. Processing group 7 advances timers each turn; elections marked "completed" by the timer phase are resolved in the same turn.
 
@@ -56,21 +56,21 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **FOMC**: The 7-seat rate-setting board at a market central bank (Federal Open Market Committee in the US). The chair proposes hike, cut, or hold; a majority of the full board must agree. Abstains count against. See [FOMC / Rate-Setting Board](/wiki/fomc).
 
-**FPTP (First Past the Post)**: The winner-take-all election system used in the US, UK, and JP. The candidate with the most votes wins the seat. Creates spoiler effects: third parties bleed votes from the major party ideologically closest to them.
+**FPTP (First Past the Post)**: In single-seat races, the candidate with the most votes wins. In the game's multi-seat FPTP families, the flag also enables a third-party spoiler transfer before the configured seat allocator distributes seats.
 
-**Fiscal year**: The game-year equivalent of October (turn 36 of 48). Budgets are finalized, deficits/surpluses posted, and regional grant allocations calculated once per game year.
+**Fiscal year**: The game-year equivalent of October (turn 40 of 48). Budgets are finalized, deficits/surpluses posted, and regional grant allocations calculated once per game year.
 
-**General election**: The second phase of an election cycle, after primaries. Candidates from different parties compete; votes accumulate each turn using the Total Appeal Pipeline. The final 4 turns carry 25% of total votes.
+**General election**: The second phase of an election cycle, after primaries. Candidates from different parties compete; votes accumulate each turn using the Total Appeal Pipeline. The final 4 turns carry 30% of total votes.
 
 **GOTV (Get Out The Vote)**: The party action that boosts demographic turnout modifiers. Controlled by party chair GOTV budget allocation. Stacks additively with player canvassing, subject to the ±20 cap.
 
 **Ground game**: A campaign branch tree (starter node plus Field Offices, Get-Out-The-Vote, and Volunteer Corps branches) that boosts turnout in a race's competitive areas. Costs ongoing maintenance; unaffordable branches auto-downgrade.
 
-**Home state / region**: The sub-national unit (US state, UK nation, DE Land, JP prefecture) where your character is based. Determines which elections you can enter, where you can canvass, and where your in-state party org applies.
+**Home state / region**: The sub-national unit (US state, UK region, DE Land, JP prefecture, or another country's configured region) where your character is based. Determines which elections you can enter, where you can canvass, and where your in-state party org applies.
 
 **Ideology grid**: The two-axis system (econ × social) used to position characters, parties, NPPs, and voter groups. Alignment scoring uses Manhattan distance on this grid.
 
-**Infamy**: A permanent accumulated stat increased by attacks, whip defiance, and certain actions. High infamy reduces NPP endorsement success rates and affects some approval metrics. Does not reset.
+**Infamy**: A stat increased by attacks, whip defiance, and certain actions. High infamy reduces NPP endorsement success rates and affects some approval metrics. It decays by 5% each turn rather than resetting at elections.
 
 **Influence**: Short for Political Influence (state level) or National Political Influence (national level). Used in primary score and general vote calculations. Built via Campaign actions; decays 0.75%/turn.
 
@@ -80,7 +80,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Majority**: The seat count required to control a legislative chamber or form a government. US House: 218; UK Commons: 326; DE Bundestag: 316; JP Shūgiin: 233.
 
-**Manhattan distance**: The sum of absolute differences on the econ axis and social axis. Used to calculate ideological alignment. Distance 0 = perfect match; each point of distance costs 2 alignment points in the primary formula.
+**Manhattan distance**: The sum of absolute differences on the econ axis and social axis. Used to calculate ideological alignment. Distance 0 is a perfect match. State primaries price each point at 1.25 against state lean and 0.75 against party position; the party-only fallback prices it at 2.
 
 **Ministerial actions**: The daily action pool for a cabinet seat (called cabinet actions in presidential systems). They refill at midnight Eastern and cap at 4. See [Cabinet Guide](/wiki/cabinet-guide).
 
@@ -98,9 +98,9 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Opposition research**: A campaign branch tree (starter node plus Dossier, Scandal Leak, and Counter-Intel branches) that passively debuffs a target opponent's favorability each turn. Retargetable.
 
-**Party org**: Party organization: a 0 to 100 metric per state representing a party's ground-level infrastructure. Affects general election vote scalars (0.5× to 1.0×) and presidential primary scores.
+**Party org**: Party organization: a 0 to 100 metric per state representing a party's ground-level infrastructure. General-election weight uses the party's normalized state Org share raised to the 0.2 exponent. Presidential primaries use party influence and national reach instead.
 
-**Phase**: One step in the hourly turn processing sequence. Turn processing runs through roughly a dozen top-level adapters that together call over 100 phase steps each turn. See [Reference: Turn Order](/wiki/reference-turn-order) for the complete list.
+**Phase**: One step in the hourly turn processing sequence. Turn processing uses 14 ordered groups with more than 120 named base phases, plus country election phases. See [Reference: Turn Order](/wiki/reference-turn-order) for the grouped sequence.
 
 **Political Influence (PI)**: State-level reputation built via Campaign actions. Used in state primary scoring (up to 25 pts) and general vote reach calculations. Decays 0.75% per turn.
 
@@ -118,9 +118,9 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **SED**: Sozialistische Einheitspartei Deutschlands, East Germany's ruling party.
 
-**Shūgiin**: Japan's House of Representatives (lower house). 465 seats, FPTP. The confidence-granting chamber: PM survival requires Shūgiin majority support. Can be dissolved for snap elections.
+**Shūgiin**: Japan's House of Representatives (lower house). 465 seats allocated through the configured multi-seat election path. The confidence-granting chamber: PM survival requires Shūgiin majority support. Can be dissolved for snap elections.
 
-**Snap election**: An early election called before the end of a parliamentary term. Available in the UK (PM-initiated), JP (PM-initiated via Shūgiin dissolution), and DE (Chancellor-initiated via Bundestag dissolution). Compresses the campaign cycle dramatically. See [Snap Elections](/wiki/snap-elections).
+**Snap election**: An early election called before the end of a parliamentary term. Available in the UK, JP, DE, and IE. Compresses the campaign cycle dramatically. See [Snap Elections](/wiki/snap-elections).
 
 **Social axis**: The social dimension of the two-axis ideology grid. Negative = progressive (individual rights, social liberalism); positive = conservative (traditional values, social order).
 

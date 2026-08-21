@@ -35,7 +35,7 @@ The ruling leader can order a purge against the party: minor, regional, senior, 
 
 ## Command economy
 
-Where the command-economy option is turned on for a world, the same one-party countries also run a planned economy: administered consumer prices instead of supply-and-demand pricing, a wage-fund ceiling that throttles cash growth, and a monetary overhang that feeds back into popular legitimacy and party confidence. This is off by default; worlds without it are unaffected. Three player-facing seats operate the levers where it's on (Gosplan/Gosbank-equivalent roles for RU/DD, Vice Premier/PBoC Governor for CN), plus SOE director appointments.
+The same one-party countries also run a planned economy when the world's command-economy option is active: administered consumer prices instead of supply-and-demand pricing, a wage-fund ceiling that throttles cash growth, and a monetary overhang that feeds back into popular legitimacy and party confidence. Fresh worlds enable this option; admins can disable it for a particular world. Three player-facing seats operate the levers where it is on (Gosplan/Gosbank-equivalent roles for RU/DD, Vice Premier/PBoC Governor for CN), plus SOE director appointments.
 
 ## Player parties (NPPs)
 

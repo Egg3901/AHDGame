@@ -172,5 +172,5 @@ On top of this direct scaling, approval is a useful **leading indicator**:
 - Vote against government bills that would improve key metrics
 - In the UK: monitor the PM vacancy clock, not approval thresholds, for snap election opportunities
 
-See also: [National Metrics](/wiki/national-metrics), [Demographics](/wiki/demographics), [Central Banks](/wiki/central-banks), [Snap Elections](/wiki/snap-elections), [Crisis System](/wiki/crisis-system)
+See also: [National Metrics](/wiki/national-metrics), [Demographics](/wiki/demographics), [Central Banks](/wiki/central-banks), [Snap Elections](/wiki/snap-elections), [Crisis Interaction](/wiki/crisis-interaction)
 `;

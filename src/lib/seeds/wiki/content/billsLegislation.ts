@@ -1,6 +1,6 @@
 export const billsLegislationContent = `# Bills & Legislation
 
-Every law in A House Divided starts as a bill drafted by a sitting legislator. Bills must survive votes in both legislative chambers and then either be signed by the executive or lapse to automatic signature. This page explains how that process works from start to finish.
+Most laws in A House Divided start as bills drafted by sitting national legislators. The route after proposal depends on the country's configured legislature and government type: unicameral bills need one chamber, bicameral bills need two, and only presidential systems send ordinary bills to an executive signature or veto stage.
 
 ## Who can propose bills
 
@@ -9,6 +9,13 @@ Every law in A House Divided starts as a bill drafted by a sitting legislator. B
 | US | Any sitting House or Senate member |
 | UK | Any sitting Commons member |
 | JP | Any sitting Shūgiin or Sangiin member |
+| DE | Any sitting Bundestag member |
+| IE | Any sitting Dáil member |
+| BR | Any sitting Chamber of Deputies or Senate member |
+| NG | Any sitting House or Senate member |
+| CN | Any sitting NPC delegate whose party is not banned |
+| RU | Any sitting Supreme Soviet deputy whose party is not banned |
+| DD | Any sitting Volkskammer deputy whose party is not banned |
 
 Admins can propose bills from any country at any time and are exempt from all proposal costs.
 
@@ -32,6 +39,11 @@ Bills can contain the following kinds of provisions:
 7. **Nationalize provisions**: transfer corporate assets or an entire sector to state ownership.
 8. **Privatize provisions**: spin state-owned assets out into a new private corporation (IPO or auction).
 9. **Designate strategic sector provisions**: mark a sector as strategically vital, arming nationalization triggers.
+10. **Union-law provisions**: set collective-bargaining bias, ban unions, or repeal a ban.
+11. **Electoral-law provisions**: change voting age and voter-registration access.
+12. **Central-bank independence provisions**: grant or revoke independence where the bank is not shared across countries.
+13. **Declare-war provisions**: created through the executive foreign-policy flow and requiring two-thirds support in every chamber.
+14. **Join-conflict provisions**: created from a passed international-organization resolution, not from the ordinary bill composer.
 
 ### Proposal costs
 
@@ -60,8 +72,8 @@ US tax types use a bracketed scale. All other types use a 7-option scale (3 left
 
 The system enforces several hard constraints on bill proposals:
 
-- **One active bill per sponsor**: a legislator cannot propose a new bill while they already have one active in either chamber.
-- **One pending PM/Chancellor**: if the government has no seated PM/Chancellor, all new bill proposals are blocked. Active bills remain in place until the freeze lifts.
+- **One first-chamber bill per sponsor**: in a bicameral system, the sponsor may propose another bill once the earlier bill clears its first chamber. Unicameral sponsors remain limited to one active bill through completion.
+- **Pending parliamentary government**: if the government has no seated PM, Chancellor, or Taoiseach, all new proposals are blocked and active bills pause until formation completes.
 - **Whip cooldown**: after a whip directive is issued, a cooldown period applies before another can be sent to the same target.
 - **NPP catch-up**: every turn, the system ensures NPPs that gained seats after a bill opened still vote before it closes.
 
@@ -74,13 +86,15 @@ Bills move through a strict status pipeline managed automatically by the turn pr
 | \`proposed\` | Drafted but not yet active (used for some internal flows) |
 | \`active\` | Voting open in the origin chamber (24-hour window) |
 | \`active_other\` | Voting open in the second chamber (24-hour window) |
-| \`enrolled\` | Passed both chambers; awaiting executive action (10-hour window) |
+| \`passed_origin\` | Cleared the origin chamber in a concurrent or staged country flow |
+| \`active_both\` | Both configured chambers are voting concurrently |
+| \`enrolled\` | Cleared the legislature and awaiting presidential action where required |
 | \`signed\` | Executive signed: bill is law |
 | \`vetoed\` | Executive vetoed the bill |
 | \`veto_override\` | Veto overridden by legislature: bill becomes law |
 | \`override_failed\` | Override vote failed: bill dies |
-| \`cabinet_review\` | Under review by the cabinet (parliamentary systems) |
-| \`filibustered\` | Filibuster invoked; needs 3/5 of votes cast to pass |
+| \`cabinet_review\` | Under cabinet review in a country flow that uses that stage |
+| \`filibustered\` | Legacy parked status; current US invocations are recorded while the Senate vote remains open |
 | \`failed\` | Failed a chamber vote or pocket-expired |
 | \`withdrawn\` | Sponsor withdrew before voting opened |
 
@@ -88,19 +102,23 @@ Bills move through a strict status pipeline managed automatically by the turn pr
 
 Submit the bill from the Congress or Parliament page. On submission, the bill immediately enters \`active\` status with a 24-hour voting window. There is no cooldown before a bill becomes active.
 
-### Step 2: origin chamber vote
+### Step 2: chamber vote or votes
 
-While active, all members of the origin chamber can vote For, Against, or Abstain. Votes can be changed any time during the 24-hour window. The result is a simple majority: For must exceed Against. Abstentions are neutral.
+While voting is open, members can vote For, Against, or Abstain and can change their vote before the deadline. Ordinary bills use a simple majority. Nationalization, privatization, and declarations of war require two-thirds of For plus Against in each required chamber.
 
 ### Step 3: second chamber
 
-If the origin chamber passes, the bill opens for a fresh 24-hour vote in the second chamber. Same rules apply.
+In a sequential bicameral flow, passage opens a fresh vote in the second chamber. Some country configurations vote in both chambers concurrently. Unicameral countries skip this step.
 
 ### Step 4: executive action
 
-Once both chambers have passed, the bill is \`enrolled\`. The president or PM has 10 hours to sign or veto. If no action is taken within 10 hours, the bill is **automatically signed** (pocket signature).
+In presidential systems, a bill that clears every required chamber is \`enrolled\`. The president has 10 hours to sign or veto. If no action is taken within 10 hours, the bill is **automatically signed**.
 
-Only the character currently holding the executive office can see the Sign / Veto buttons.
+Parliamentary executives do not receive an ordinary bill veto. Their bills enact after the configured chamber and cabinet stages complete. International-organization membership bills can also skip presidential action under their special lifecycle.
+
+### US Senate filibuster
+
+Any seated US Senator may invoke a filibuster while a bill is actively before the Senate, unless Senate rules have abolished it. The action costs **25 AP and 5 NPI**, extends the vote by about 12 hours with a Statecraft adjustment, and can be invoked once per Senator per bill. A filibustered Senate vote passes only when For reaches **three-fifths of For + Against + Abstain**. Members who never vote are excluded, but abstentions raise the threshold.
 
 ## How NPPs vote
 

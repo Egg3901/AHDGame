@@ -131,7 +131,7 @@ The country's debt-to-GDP ratio determines its credit rating, which affects the 
 | <= 250% | B | 10.0% | -0.5% | -10 |
 | > 250% | CCC | 14.0% | -0.7% | -15 |
 
-Both the GDP growth penalty and the public trust penalty are applied directly to the country's metrics at fiscal year close (\`applyDebtPenalties\`). The debt-to-GDP margin penalty below is a separate, additional drag on corporate profitability specifically.
+Public-trust penalties apply at fiscal year close. The table's GDP value is implemented as per-turn corporate margin drag, not as a direct write to the country's displayed GDP-growth metric. Risk scoring also normalizes debt against the country's seeded sovereign-risk anchor, so the raw bands do not automatically punish a high-debt starting baseline.
 
 ## How national debt affects corporations
 

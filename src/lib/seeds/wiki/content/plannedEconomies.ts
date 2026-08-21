@@ -4,7 +4,7 @@ Most countries in A House Divided are market economies: floating currencies, a c
 
 **This is not a bug.** If a Soviet-era ruble never drifts, national commodity prices ignore supply and demand, or a state firm stays alive while insolvent, you are looking at planned-economy rules. See [Commodities](/wiki/commodities) and [Currency Exchange](/wiki/currency-exchange) for the market path; this page is the planned path.
 
-The regime is **off by default**. When an admin enables command economy, countries that start on the command end of the dial (USSR/Russia, China in its early eras, Eastern-bloc satellites) come up as planned economies with their state industries split into separate enterprises you can run.
+Fresh worlds enable the regime. Countries that start on the command end of the dial (USSR/Russia, China in its early eras, Eastern-bloc satellites) come up as planned economies with their state industries split into separate enterprises you can run. Admins can disable the command-economy layer for a particular world.
 
 ## How a country becomes a command economy
 

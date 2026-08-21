@@ -1,128 +1,90 @@
 export const noConfidenceVotesContent = `# No-Confidence Votes
 
-A Vote of No Confidence (VONC) is the primary tool for removing a sitting Prime Minister in parliamentary countries. This page covers who can propose one, how voting works, what happens if it passes or fails, and how it connects to snap elections.
+A Vote of No Confidence (VONC) is the parliamentary route for removing a sitting Prime Minister, Chancellor, or Taoiseach. It is a whole-chamber test: the government stays in office unless the motion wins the required number of lower-chamber seats.
 
-## Which countries use this
+## Where VONCs apply
 
-VONCs apply to live parliamentary countries: **UK**, **JP**, **DE**, and **IE**. Presidential countries (US, NG, BR) have no VONC: executives are removed through [Impeachment](/wiki/impeachment) or elections. One-party states use internal party confidence, not this motion.
+VONCs apply in live parliamentary countries: **UK**, **JP**, **DE**, and **IE**. Presidential countries use elections or [Impeachment](/wiki/impeachment). One-party states use their internal confidence system instead of this generic motion.
 
-## Who can propose a VONC
+## Proposing a motion
 
-Any MP who is a member of the **ruling party or coalition** can propose a motion of no confidence against the current PM (or Chancellor in DE).
+Any sitting member of the country's lower chamber may propose a VONC. The proposer does not have to belong to the government, ruling party, or coalition.
 
-**Requirements:**
+Requirements:
 
-- Must be an elected lower-chamber member (Commons MP, Shūgiin member, or Bundestag member)
-- Must be in the ruling party or coalition
-- No active VONC already exists for the country
-- One VONC per PM per 48 turns (1 game year) cooldown after the previous vote resolved
+- A government is formed and has a sitting executive
+- The proposer holds the country's lower-chamber office, such as MP, Shūgiin member, Bundestag member, or TD
+- No VONC is already active in that country
+- At least 48 turns have passed since the previous VONC was proposed
 
-This action is filed from the government page and is scoped to the country you're proposing it in.
+The one-party-state command guard is stricter, but those countries do not currently expose this generic confidence-vote mechanism.
 
 ## Voting
 
-### Who votes
+Every sitting lower-chamber member may vote **Aye** for no confidence or **Nay** to keep the government. Opposition members are eligible. Seats may carry a weight greater than one in a grouped official record, so the tally is seat-weighted.
 
-Only MPs from the **ruling party or coalition** can vote on the VONC. Opposition MPs are not eligible.
+The voting window lasts 24 hours. The government page shows Aye, Nay, and not-voted totals while individual player votes remain private.
 
-**Example:**
+### NPP party-line voting
 
-- Ruling party: Labour (320 seats)
-- Coalition partner: Lib Dem (20 seats)
-- Eligible voters: 340 MPs
-- Not eligible: Conservatives, SNP, other opposition
+NPP members vote along the chamber's government/opposition split unless their party has issued a whip:
 
-### Duration
+- Government and coalition NPPs default **Nay**
+- Opposition NPPs default **Aye**
+- An NPP with no party does not cast a party-line vote
+- A party whip overrides the default
 
-The voting window is 24 hours from when the motion is proposed. Votes are locked in at window close.
+This pass runs during the vote and again before resolution so NPP-held benches are included in the result.
 
-### NPP votes
+## Passing threshold
 
-NPP members of the ruling party/coalition vote as follows:
+A VONC needs the government's stored chamber-majority threshold. If that value is unavailable, the engine uses \`floor(total lower-chamber seats / 2) + 1\`.
 
-- If a **whip directive** exists for the VONC, NPPs follow it (deterministic cross-pressure model, same as bill voting)
-- If **no whip directive** exists, NPPs automatically vote **Aye** (no confidence) for qualifying party members: this is the default behavior when no whip is present
+This is a majority of the **whole chamber**, not a majority of votes cast. Abstentions and unvoted seats therefore count against the motion. A tie does not remove the government.
 
-There are no favorability-based thresholds (e.g., 60+/40-59/<40) governing NPP VONC votes.
+## If the motion fails
 
-### Vote visibility
+- The executive stays in office
+- PM appointment votes filed during the active VONC are cancelled
+- The 48-turn filing cooldown still applies from the turn the motion was proposed
 
-Live vote totals (Yes / No / Not Voted) are visible to all players on the government page. Individual votes are **secret**: the tally is public but who voted which way is not shown.
+## If the motion passes
 
-## Resolution
-
-When the 24-hour window closes, the vote is tallied.
-
-### VONC fails (PM survives)
-
-- **Threshold:** More than 50% of eligible MPs voted No (confidence)
-- The PM retains office
-- All active PM appointment votes for the country are **cancelled** (nominees receive a notification explaining why)
-- A new VONC cannot be proposed against this PM for 48 turns
-
-### VONC passes (PM removed)
-
-- **Threshold:** More than 50% of eligible MPs voted Yes (no confidence)
-- The PM is removed from office immediately
-- Cabinet cleared, the officeholder's post cleared
+- The executive is removed immediately
+- Cabinet and officeholder fields are cleared
 - Government status returns to pending
-- The 96-turn PM vacancy clock arms
+- The 96-turn vacancy clock starts
+- PM appointment votes already filed during the VONC remain active
 
-After removal, existing parallel PM appointment votes continue running in the new pending window. Eligible nominees can also file new appointment votes. The first to secure a majority is seated as the new PM. This parallel-appointment mechanic is how the game models constructive no-confidence: the Bundestag must simultaneously agree on a replacement before the incumbent is removed, and the replacement is seated immediately upon securing a majority.
+New appointment votes can also be filed during the pending period. The first eligible nominee to win the required appointment vote takes office.
 
-## VONC and snap elections
+## VONCs and snap elections
 
-A passed VONC does **not** directly trigger a snap election. Instead:
+A passed motion does not immediately call an election:
 
-1. VONC passes and government enters a pending state
-2. PM appointment votes open for 24 hours each
-3. If no PM is seated within 96 turns of the vacancy clock arming, the system auto-triggers a snap election
+1. The VONC passes and government becomes pending
+2. Appointment votes may run for 24 hours each
+3. If no executive is seated within the 96-turn vacancy window, the system can auto-trigger a snap election
 
-The 96-turn window is the game's equivalent of the UK's post-FTPA 14-day alternative-government attempt and Japan's 10-day resign-or-dissolve convention.
+A sitting executive cannot use a voluntary dissolution to escape an active VONC. The snap-election gate blocks that action until the confidence vote resolves.
 
-**Key distinction:** A sitting PM **cannot** preempt an active VONC by calling a voluntary snap election. The snap gate checks for an active no-confidence vote and blocks PM-triggered snaps while one exists.
+## Practical play
 
-## VONC-parallel PM nominations
+### Opposition
 
-While a VONC is active, the game allows PM appointment votes to be filed even though the government is technically still formed:
+- Count the entire chamber, including abstentions and seats that may not vote
+- Whip your NPP benches before resolution
+- File a replacement appointment vote during the VONC if your preferred nominee is eligible
 
-- Players can nominate alternative candidates before the VONC resolves
-- If the VONC passes, those appointment votes continue running in the new pending window
-- If the VONC fails, all active appointment votes are cancelled
+### Government
 
-This mirrors the UK convention of "constructive" confidence mechanics where an alternative government can be assembled in parallel with the no-confidence vote.
-
-## Strategic considerations
-
-### For the opposition
-
-- **Time it well.** The 48-turn cooldown after a failed VONC is costly. Don't call a VONC unless you have the numbers.
-- **Parallel nominations.** File a PM appointment vote for your preferred candidate before or during the VONC. If the VONC passes, your candidate is already in the queue.
-- **NPP votes follow the whip, or default Aye.** If a whip directive exists, NPPs follow it. If none exists, NPPs automatically vote Aye (no confidence). Favorability is not a VONC threshold.
-
-### For the PM
-
-- **Whip your own NPPs.** Without a whip, ruling-party NPPs default to Aye (no confidence). Set a whip if you want them to vote No.
-- **You can't call a snap to escape a VONC.** If an active VONC exists, the snap gate blocks you. Survive the vote first.
-- **Building cross-party goodwill** (high favorability outside your coalition) doesn't help in a VONC: only ruling party/coalition MPs vote. Focus on keeping your own house in order.
-
-### For ruling party MPs
-
-- **The cooldown applies to the PM, not to you.** A failed VONC blocks a new one for 48 turns. Weigh whether this cycle is worth spending.
-- **A successful VONC resets the legislative clock.** Any bills in the lower chamber that were mid-passage will stay frozen during the pending period.
-
-## Viewing active VONCs
-
-Active VONC status is displayed on the UK Government page (\`/uk/government\`) or JP equivalent. The panel shows:
-
-- Target PM name
-- Current Yes / No / Not Voted totals
-- Time remaining
-- Your vote button (if you are eligible to vote)
+- Government NPPs already default to Nay, but a whip makes the direction explicit
+- Opposition votes count, so controlling only coalition discipline is not enough if the chamber majority has shifted
+- You cannot call a snap election while the VONC is active
 
 ## Related pages
 
-- [Government Formation](/wiki/government-formation): PM appointment votes and the full formation process
-- [Snap Elections](/wiki/snap-elections): How the 96-turn vacancy clock triggers a snap election
-- [Bills & Legislation](/wiki/bills-legislation): The legislation freeze during \`pending\` government status
+- [Government Formation](/wiki/government-formation): Appointment votes and the pending-government process
+- [Snap Elections](/wiki/snap-elections): Voluntary dissolution and the vacancy clock
+- [Bills & Legislation](/wiki/bills-legislation): The legislation freeze while government is pending
 `;

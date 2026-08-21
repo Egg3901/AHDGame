@@ -61,7 +61,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "general-elections",
     title: "General Elections",
     description:
-      "Vote accumulation across the general phase, the Total Appeal Pipeline, the final-4-turn 25% weighting, FPTP spoilers, and closing-sprint tactics.",
+      "Vote accumulation across the general phase, the Total Appeal Pipeline, the final-4-turn 30% weighting, FPTP spoilers, and closing-sprint tactics.",
     content: generalElectionsContent,
     category: "elections",
     extraTags: ["general", "appeal"],
