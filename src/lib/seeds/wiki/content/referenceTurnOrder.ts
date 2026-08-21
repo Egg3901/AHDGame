@@ -21,7 +21,7 @@ The game runs on an hourly cron. Every real-world hour is one game turn, which i
 | 7. Election resolution | Primary resolution → vote accumulation → campaign spend reset → timer advancement → snapshots → general resolution → clear resolved support → leadership vacate | **Strictly sequential: ordering is load-bearing** |
 | 8. UK/parliamentary government | Government formation, no-confidence votes, confidence votes, PM vacancy watcher | After election resolution |
 | 9. Election coverage | Perpetual elections, snap election checks, leadership elections, stale cleanup, auto-reelection entry, presidential succession, international organizations | Parallel-safe |
-| 10. Fiscal year | October processing (turn 36 of 48) | Conditional |
+| 10. Fiscal year | October processing (turn 40 of 48) | Conditional |
 | 11. Effects & metrics | Policy effects, demographic effects, approval decay, GDP growth, metric decay, subsidy budget, regional budgets, crisis turn, ministerial orders, top sectors recompute | Parallel-safe |
 | 12. National aggregation | GDP growth, national metrics, trade growth mirror, inflation recalc, Forex updates, central bank chair turn/selection, independence desire drift | After state effects |
 | 13. History | Metric snapshots, approval snapshots, interest rate snapshots, party history, portfolio/corp portfolio/stock exchange/investor ranking/wealth list snapshots, suspicious activity detection, game health snapshot | Parallel-safe |
@@ -125,7 +125,7 @@ Ensures no seat sits vacant:
 
 ### Group 10: fiscal year (conditional)
 
-Only runs on the fiscal year-end turn (turn 36 of each 48-turn year, corresponding to October):
+Only runs on the fiscal year-end turn (turn 40 of each 48-turn year, corresponding to October):
 
 - **Fiscal year processing**: Annual budgets finalized, deficits/surpluses posted, regional budget allocations calculated.
 

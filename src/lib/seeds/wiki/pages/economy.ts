@@ -33,6 +33,7 @@ import { pensionsContent } from "../content/pensions";
 import { imfSovereignFacilityContent } from "../content/imfSovereignFacility";
 import { interbankLendingContent } from "../content/interbankLending";
 import { fomcContent } from "../content/fomc";
+import { householdEconomyContent } from "../content/householdEconomy";
 
 export const economyPages: readonly WikiSeedPage[] = [
   {
@@ -165,11 +166,24 @@ export const economyPages: readonly WikiSeedPage[] = [
     description:
       "The 28-commodity market: supply, demand, dynamic pricing, three-tier margin blends, and how shortages affect corporate margins.",
     content: commoditiesContent,
-    category: "economy",
-    extraTags: ["prices", "supply"],
+    category: "commodities",
+    extraTags: ["economy", "prices", "supply"],
     difficulty: "intermediate",
     contentType: "reference",
     estimatedReadTime: 8,
+  },
+  {
+    slug: "household-economy",
+    title: "Household Demand & Price Level",
+    description:
+      "How household income, employment, confidence, prices, and Engel's law create consumer demand, plus the household price index and real-income display.",
+    content: householdEconomyContent,
+    category: "economy",
+    extraTags: ["consumption", "inflation", "real-income", "households"],
+    featured: true,
+    difficulty: "intermediate",
+    contentType: "guide",
+    estimatedReadTime: 7,
   },
   {
     slug: "market-system-guide",
@@ -243,7 +257,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "currency-exchange",
     title: "Currency Exchange",
     description:
-      "The Forex system: four floating currencies, how rates are computed each turn, and how to trade for profit.",
+      "The Forex system: the active world's currencies, how rates are computed each turn, and how to trade for profit.",
     content: currencyExchangeContent,
     category: "economy",
     extraTags: ["forex", "fx"],
@@ -379,7 +393,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "savings-interest",
     title: "Savings & Interest",
     description:
-      "How idle cash earns interest at half the prime rate, accruing every turn and crediting quarterly.",
+      "How idle cash earns interest at half the inflation-adjusted real rate, accruing every turn and crediting quarterly.",
     content: savingsInterestContent,
     category: "economy",
     difficulty: "beginner",
@@ -399,9 +413,9 @@ export const economyPages: readonly WikiSeedPage[] = [
   },
   {
     slug: "imf",
-    title: "IMF & Bailouts",
+    title: "Corporate IMF Restructuring",
     description:
-      "The IMF bailout facility: income capture, share-price discount, level-annuity repayment, and board membership.",
+      "The admin corporate rescue: bond haircut, IMF equity dilution, income-capped facility payments, and operating restrictions.",
     content: imfContent,
     category: "economy",
     difficulty: "advanced",

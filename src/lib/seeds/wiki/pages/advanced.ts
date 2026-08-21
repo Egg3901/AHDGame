@@ -24,6 +24,7 @@ import { granularPollingContent } from "../content/granularPolling";
 import { marketSafeguardsContent } from "../content/marketSafeguards";
 import { embargoAndTradeExposureContent } from "../content/embargoAndTradeExposure";
 import { worldEventsContent } from "../content/worldEvents";
+import { imperialCharactersContent } from "../content/imperialCharacters";
 import {
   INTERNATIONAL_ORGANIZATION_ORDER,
   INTERNATIONAL_ORGANIZATIONS,
@@ -34,6 +35,19 @@ const builtInOrgShortNames = INTERNATIONAL_ORGANIZATION_ORDER.map(
 ).join(", ");
 
 export const advancedPages: readonly WikiSeedPage[] = [
+  {
+    slug: "imperial-characters",
+    title: "Imperial Characters",
+    description:
+      "Persistent ceremonial monarchs and emperors: admin-only creation, shared crowns, public identity, and economic holdings.",
+    content: imperialCharactersContent,
+    category: "advanced",
+    extraTags: ["monarch", "emperor", "head-of-state"],
+    featured: false,
+    difficulty: "intermediate",
+    contentType: "reference",
+    estimatedReadTime: 4,
+  },
   {
     slug: "advanced-strategy",
     title: "Advanced Strategy",

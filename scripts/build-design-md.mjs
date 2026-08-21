@@ -131,6 +131,7 @@ const THEME_NOTES = {
   cloakroom: "Muted, stately parliamentary dark",
   broadsheet: "Light newsprint — serif, ink-on-paper",
   coldwar: "Stark cold-war dark — olive and red",
+  "command-1953": "Phosphor-green command console with radar-era scanlines",
 };
 
 const COMPONENT_NOTES = {

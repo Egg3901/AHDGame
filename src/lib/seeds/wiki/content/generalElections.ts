@@ -22,7 +22,7 @@ The final 4 turns are a sharp closing spike: they carry 30% of the pool on their
 
 ## The total appeal pipeline
 
-General elections run on the **swing-flow model** by default, not the flat group-level split used in primaries and polls. Swing-flow starts from the same per-group appeal pipeline below, then layers presidential/gubernatorial **coattails**, a **median-voter** policy-distance reference, **persuasion drivers** (candidate support, policy distance, money, incumbency), and **party-tenure fatigue** on top, see [Formula Deep-Dive](/wiki/formula-deep-dive) for the driver math. The base pipeline:
+General elections run on the **swing-flow model** by default, not the flat group-level split used in primaries and polls. Swing-flow starts from the same per-group appeal pipeline below, then layers presidential/gubernatorial **coattails**, a **median-voter** policy-distance reference, **persuasion drivers** (candidate support, policy distance, money, incumbency), and **party-tenure fatigue** on top, see [Reference: Formulas](/wiki/reference-formulas) for the driver math. The base pipeline:
 
 Each turn, for each candidate, for each demographic group:
 
@@ -143,5 +143,5 @@ You can change your running mate any time before the election resolves, and clea
 - [Canvassing](/wiki/canvassing): Turnout boosting per demographic.
 - [Fundraising & Ads](/wiki/fundraising-ads): Money flow during a general.
 - [Demographics & Targeting](/wiki/demographics-targeting): Group composition and appeal.
-- [Formula Deep-Dive](/wiki/formula-deep-dive): Full math with derivations.
+- [Reference: Formulas](/wiki/reference-formulas): Full math with derivations.
 `;

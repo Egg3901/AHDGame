@@ -70,7 +70,7 @@ Party influence (not state party org) is the second-largest presidential-primary
 
 - Party influence accrues from party activity and leadership over time; it is not a one-cycle burst stat.
 - The chair of a state party controls party org growth; if your party has a bad chair, challenge for the position.
-- Party org also affects general election vote totals (0.5× to 1.0× scalar on all votes in that state).
+- Party org affects general-election vote totals through the party's normalized state Org share raised to the 0.2 exponent.
 
 ## Reading the meta
 

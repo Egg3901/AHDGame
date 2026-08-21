@@ -73,7 +73,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     slug: "ie-overview",
     title: "Ireland",
     description:
-      "Parliamentary republic with PR-STV elections, a 160-seat Dáil, coalition government, and a ceremonial Uachtarán: shares the ECB with the Eurozone.",
+      "Parliamentary republic with Hare-quota multi-seat elections, a 160-seat Dáil, coalition government, and a ceremonial Uachtarán.",
     content: ieOverviewContent,
     category: "countries",
     extraTags: ["ie", "dail"],

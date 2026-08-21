@@ -192,6 +192,6 @@ Donations show up in the Budget tab and Activity Log with attribution.
 - [Campaign Strategy](/wiki/campaign-strategy): Upgrade tables, phase-by-phase allocation, all the numbers.
 - [Fundraising & Ads](/wiki/fundraising-ads): Personal Campaign Funds and ad mechanics.
 - [Election Mechanics](/wiki/election-mechanics): Where campaign-page effects enter vote math.
-- [Parties](/wiki/parties): Party chair donations and treasury disbursement.
-- [NPP System](/wiki/npp-system): Requesting NPP endorsements.
+- [Political Parties](/wiki/political-parties): Party chair donations and treasury disbursement.
+- [NPPs Overview](/wiki/npps-overview): Requesting NPP endorsements.
 `;

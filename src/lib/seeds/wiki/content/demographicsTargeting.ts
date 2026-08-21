@@ -116,5 +116,5 @@ The math is identical; the dimension list and bucket names differ. Every country
 - [Polling](/wiki/polling): quick vs full poll outputs.
 - [Election Mechanics](/wiki/election-mechanics): full vote math.
 - [Fundraising & Ads](/wiki/fundraising-ads): how to move Favorability.
-- [Formula Deep-Dive](/wiki/formula-deep-dive): every formula with derivations.
+- [Reference: Formulas](/wiki/reference-formulas): every formula with derivations.
 `;

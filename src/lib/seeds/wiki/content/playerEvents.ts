@@ -119,7 +119,9 @@ This is a game-admin setting, not a per-player choice. Once it's on, it applies 
 
 ## Related systems
 
+- **[Random Events browser](/wiki/random-events)**: browse approved player-event templates and their eligibility.
 - **[RPG Stats & Debates](/wiki/rpg-stats)**: debates take priority over normal random events when both are on.
 - **[Crisis Interaction](/wiki/crisis-interaction)**: a separate setting, independent of this system.
+- **[World Events](/wiki/world-events)**: scheduled and broadcast historical events that affect the wider simulation.
 - **[Core Systems](/wiki/core-systems)**: turn structure, action economy.
 `;

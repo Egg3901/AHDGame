@@ -14,12 +14,12 @@ Unowned and NPC assets can be nationalized freely. A **player-owned** corporatio
 
 | Trigger | Condition | Notice |
 | --- | --- | --- |
-| **Financial distress** | The corp's CEO seat has sat vacant for 72 turns (an abandoned firm). | Seized at once, no notice. |
+| **Financial distress** | The CEO seat has been vacant for 72 turns, or insolvency or a defaulted bond has accumulated 72 financial-distress turns. | Seized once the grace condition is complete, with no further notice. |
 | **Strategic sector** | The corp operates in a sector the government has designated strategic. | 48 turns. |
 | **Monopoly** | The corp holds 75% or more of a national sector market. | 48 turns. |
 | **Supermajority vote** | The legislature passes a taking with a two-thirds majority. | 48 turns. |
 
-The **notice window** is counterplay. When a strategic, monopoly, or supermajority taking is filed, the target owner sees a pending notice and has those turns to respond (sell down a monopoly share, fill a vacant CEO seat, restructure, or rally political opposition) before the taking completes. Only genuinely abandoned firms (distress) are taken immediately.
+The **notice window** is counterplay. When a strategic, monopoly, or supermajority taking is filed, the target owner sees a pending notice and has those turns to respond before the taking completes. Financial-distress takings are immediate.
 
 Each country starts with a set of **default strategic sectors** flavored to its economy (for example, defense and technology for the United States, financial and energy for the United Kingdom). A head of government can designate further sectors strategic through executive action or legislation.
 
@@ -41,7 +41,11 @@ Shareholders are paid against the target's valuation, scaled by the tier the aut
 | **Discounted** | Half valuation. | Executive emergency. |
 | **Seizure** | Nothing. | Executive seizure (maximum political cost). |
 
-Valuation discounts future sector cash flows at the same rate corporations use for their own net-present-value math, so the buyout price tracks the going concern rather than a sticker number. On top of the tier multiplier, the state pays a **5x premium** over that capitalized-earnings valuation: a Fair-tier buyout is not "1x valuation" in practice, it's 5x the discounted earnings stream, tier multiplier included. This reflects the going-concern value of a business as a whole, not a fire-sale liquidation price.
+Compensation follows the world's market-system mode. Fresh worlds use plants:
+Fair compensation is 1.0x replacement-cost tangible book, with the Discounted
+and Seizure tiers applying their stated reductions. The legacy pre-plants path
+uses capitalized earnings and its historical 5x going-concern premium. Do not
+apply that 5x multiplier to plants valuation.
 
 ## Investor confidence
 

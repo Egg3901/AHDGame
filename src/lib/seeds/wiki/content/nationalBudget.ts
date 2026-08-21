@@ -45,17 +45,17 @@ debtToGdpRatio = totalPrincipal / GDP
 
 A sovereign credit rating from AAA to CCC reflects this ratio and affects borrowing costs:
 
-| Debt-to-GDP | Rating | Interest Rate | Public Trust Penalty |
-| --- | --- | --- | --- |
-| ≤60% | AAA | 2.0% | 0 |
-| ≤80% | AA | 2.5% | 0 |
-| ≤100% | A | 3.5% | 0 |
-| ≤120% | BBB | 5.0% | 0 |
-| ≤150% | BB | 7.0% | −5 |
-| ≤250% | B | 10.0% | −10 |
-| >250% | CCC | 14.0% | −15 |
+| Debt-to-GDP risk band | Rating | Interest Rate | Corporate GDP drag | Public Trust Penalty |
+| --- | --- | --- | --- | --- |
+| ≤60% | AAA | 2.0% | 0 | 0 |
+| ≤80% | AA | 2.5% | 0 | 0 |
+| ≤100% | A | 3.5% | −0.1% | 0 |
+| ≤120% | BBB | 5.0% | −0.2% | 0 |
+| ≤150% | BB | 7.0% | −0.3% | −5 |
+| ≤250% | B | 10.0% | −0.5% | −10 |
+| >250% | CCC | 14.0% | −0.7% | −15 |
 
-The CCC tier is a deliberately conservative extreme-distress floor: no live-world country is anywhere near 250% debt-to-GDP, so it only bites in runaway autonomous-world scenarios (or after a sovereign repudiation, which also stamps CCC).
+The engine normalizes the raw ratio against the country's seeded sovereign-risk anchor before choosing the tier. A country that begins with structurally high debt is therefore not forced straight into the raw-ratio tier on day one. Public-trust penalties apply at fiscal close; the GDP value is corporate margin drag applied in the per-turn economy, not a direct write to the printed GDP metric.
 
 ## National debt
 
@@ -79,8 +79,8 @@ The game runs on a **48-turn year** (1 turn = 1 game week). The fiscal year proc
 - Revenue, spending, tax rates, and debt are frozen into a historical record
 - The snapshot is used for year-over-year comparisons in the budget panel
 - Fiscal year snapshots include all enacted laws active at that moment
-- Tax bases grow annually based on economic factors (GDP growth, wage growth, trade growth)
-- Corporate profit tax bases grow faster than wages (GDP + 1% capital returns premium)
+- Tax bases already grow every turn by 1/48 of that turn's wage, trade, and GDP rates
+- Fiscal close snapshots the budget and does not apply a second annual tax-base jump
 
 ## Debt ceiling crisis (US only)
 

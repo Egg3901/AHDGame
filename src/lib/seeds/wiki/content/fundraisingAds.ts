@@ -155,6 +155,6 @@ For a new player:
 - [Campaign Strategy](/wiki/campaign-strategy): Campaign page upgrades with maintenance math.
 - [Campaign Manager](/wiki/campaign-manager): The /campaign/[id] page.
 - [Demographics & Targeting](/wiki/demographics-targeting): Where to aim ads.
-- [Parties](/wiki/parties): Party tax, treasury operations.
+- [Political Parties](/wiki/political-parties): Party tax, treasury operations.
 - [Canvassing](/wiki/canvassing): Turnout-boosting alternative to ads.
 `;

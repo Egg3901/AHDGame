@@ -90,9 +90,9 @@ Embargoes are the most aggressive trade tool available. They are issued by a cab
 - **Cost:** Each embargo consumes **1 cabinet action** to enact.
 - **Duration:** An embargo lasts at most **96 turns** (approximately 2 game years), after which it expires automatically.
 - **Concurrent limit:** A single member can have at most **2 active embargoes** at any time.
-- **Cooldown:** After an embargo between a specific source and target pair expires, the same pair cannot be embargoed again for **168 turns** (~3.5 game years).
+- **Cooldown:** The **168-turn** source-to-target cooldown starts when the embargo is enacted, not when it expires.
 
-This cooldown prevents a country from permanently blockading another: the target gets a recovery window.
+Because the maximum embargo lasts 96 turns, a full-duration embargo leaves at least 72 turns before that source can target the same country again.
 
 ## Affinity calculation summary
 

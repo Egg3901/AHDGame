@@ -17,7 +17,7 @@ export const logisticsGuideContent = `# Logistics: Freight, Sourcing, and Supply
 
 Logistics connects the commodity market to the map. The game projects how a state with unmet input demand would source locally, across state lines, or from abroad after shipping and tariffs. Logistics sectors provide the freight capacity measured by that projection. Heavy haul becomes real Freight commodity demand, so tight capacity raises freight sold volume and price. Electricity and natural gas are the exception: they travel by wire and pipe, spend no freight capacity, and pay distance in transmission loss instead.
 
-The distinction matters: the haul calculation currently drives the Freight market and the Logistics map. It does not yet replace aggregate commodity clearing with per-route settlement or send a separate shipping payment from each buyer to a logistics corporation.
+The distinction matters: fresh worlds run freight settlement in **shadow** mode. The haul calculation drives the Freight market, sourcing report, and Logistics map, but it does not cap a sector's sales. An admin can switch settlement to **active**, which applies delivery limits to corporate clearing. Neither mode sends a separate shipping payment from each buyer to a logistics corporation.
 
 ## The short version
 
@@ -108,9 +108,9 @@ A short haul into a congested state usually still clears, because the surcharge 
 
 Because haul can now run past nominal capacity, a state's load can exceed its capacity. That is congestion, and the units above capacity are the ones paying the surcharge. Sustained congestion in a state is a standing signal for a logistics CEO: the haul is real Freight demand, and the last units of it are moving at a premium.
 
-## When a sector cannot deliver
+## When active settlement limits delivery
 
-A sector's clearing offer is capped by what the freight network could actually place. Output that no route could carry to a buyer is not counted as a sale, and the sector reports the share of its offered output that was produced and could not be delivered. When that share is meaningful, the sector row carries a **Freight** tag and the sector page states how many units had no freight to carry them.
+When an admin enables **active** freight settlement, a sector's clearing offer is capped by what the freight network could actually place. Output that no route could carry to a buyer is not counted as a sale, and the sector reports the share of its offered output that was produced and could not be delivered. When that share is meaningful, the sector row carries a **Freight** tag and the sector page states how many units had no freight to carry them. In the fresh-world **shadow** configuration, these route limits are measured without reducing sales.
 
 That splits one bad number into two different instructions:
 
@@ -131,7 +131,7 @@ The second case is a route problem, so check the Logistics map for the origin st
 
 ### After opening a sector
 
-- Watch **selling %** on the sector page together with the **Freight** tag beside it. Low selling with no Freight tag means the market does not need the output. Low selling with a Freight tag means the output could not get out of the state.
+- If active settlement is enabled, watch **selling %** on the sector page together with the **Freight** tag beside it. Low selling with no Freight tag means the market does not need the output. Low selling with a Freight tag means the output could not get out of the state.
 - Watch the Logistics map after each market turn. New industrial capacity can create new haul demand.
 - Compare your freight price with the cost of inputs used by physical industries. A freight shortage can raise costs across manufacturing, agriculture, chemicals, extraction, and construction.
 - Use a focused logistics strategy only when its output and input mix match the shortage you are trying to serve.

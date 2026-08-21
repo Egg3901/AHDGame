@@ -66,7 +66,7 @@ Campaign actions are spent **only** on upgrades, not on regular character action
 
 Party organization in a state feeds a **normalized share** of that state's total party organization: your party's org divided by every party's org in the state. A party with no presence in a state gets 0 (no votes there); a dominant party gets a multiplier close to 1.0.
 
-Investing in your state party's organization pays off for **every candidate in your party** who runs in that state. See [Party Building](/wiki/party-building) for the chair-side tools.
+Investing in your state party's organization pays off for **every candidate in your party** who runs in that state. See [Party Organization](/wiki/party-organization) for the chair-side tools.
 
 ## Fog of war
 
@@ -152,5 +152,5 @@ Red flags:
 - [Demographics & Targeting](/wiki/demographics-targeting): Appeal math and group composition.
 - [Campaign Manager](/wiki/campaign-manager): UI walkthrough of /campaign/[id].
 - [Primary vs General Tactics](/wiki/primary-general-tactics): Pivoting between phases.
-- [Party Building](/wiki/party-building): Growing your party's org.
+- [Party Organization](/wiki/party-organization): Growing your party's org.
 `;

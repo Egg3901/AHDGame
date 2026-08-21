@@ -6,7 +6,7 @@ Planned economies work differently: a fully command country's official rate is f
 
 ## Active currencies
 
-| Country | Currency | Code | Initial rate (vs. internal unit) |
+| Country | Currency | Code | Modern default rate (vs. internal unit) |
 | --- | --- | --- | --- |
 | United States | US Dollar | USD | 1.0 |
 | United Kingdom | Pound Sterling | GBP | 0.75 |
@@ -16,13 +16,16 @@ Planned economies work differently: a fully command country's official rate is f
 | Brazil | Brazilian Real | BRL | 5.0 |
 | Nigeria | Nigerian Naira | NGN | 1,550.0 |
 
-Around 18 currencies are active in forex trading (the table above shows the majors; the rest cover Eastern-bloc and secondary European currencies). Nigeria's naira trades on the same footing as the others: full monetary baselines (neutral prime rate 12.0%, target inflation 6.0%) and an initial rate of 1,550 NGN per internal unit.
+Around 18 currencies are active in forex trading. The table above shows modern
+defaults; historical presets use era-specific rates. For example, a 1953 world
+starts GBP at 0.357, JPY at 360, and NGN at 0.357 per anchor unit. Intermediate
+start years interpolate geometrically between authored anchors.
 
 Rates are measured against an internal "anchor" unit, not directly against each other. Cross-rates are derived: USD/JPY = jpyRate / usdRate.
 
 ## How exchange rates move
 
-Each turn, rates update through three components:
+Each turn, floating rates update through four components:
 
 ### 1. Macro fundamental drift
 
@@ -70,6 +73,12 @@ Volume pressure accounts for **20%** of rate direction; macro fundamentals drive
 
 Per-turn jitter of **±0.4%** prevents perfectly predictable movements.
 
+### 4. Directional regime pressure
+
+A 12-turn directional regime applies independently of macro fundamentals,
+trading volume, and noise. The direction and strength come from
+\`CYCLE_PRESSURE_BY_REGIME\`.
+
 ### Guardrails
 
 Rates are capped at ±50% from their base rate. A currency cannot hyperinflate or collapse beyond that floor/ceiling.
@@ -88,7 +97,10 @@ Rates are capped at ±50% from their base rate. A currency cannot hyperinflate o
 
 **Tier 3 (Direct Trades):** Send a specific currency offer to a named character. They can accept or decline, no counter-offers. Expires after 24 turns by default.
 
-Spread fees are split three ways: **25% destroyed** (deflationary sink), **25% booked as the currency's central-bank forex revenue** (intervention ammunition), and **50% accrued to the central bank's foreign-currency reserve balance** (long-term buffer).
+Spread fees are split three ways: **25% destroyed** (deflationary sink), **25%
+booked as the currency's central-bank forex revenue**, and **50% credited to
+\`spreadFeeReserveBalances.<currency>\`**. That currency-specific pool is not
+the general \`reserveBalance\`.
 
 ## Multi-currency wallet
 
@@ -107,7 +119,7 @@ When making personal purchases in a foreign currency:
 Income from foreign corporations is handled differently by type:
 
 - **Dividends:** Automatically converted to your home currency at the market-maker rate (1% spread) when forex is enabled. There is no per-holding preference: this conversion is automatic.
-- **Bond coupons:** Paid in the bond's denomination currency and deposited directly into your personal balance in that currency. No auto-conversion.
+- **Bond coupons:** Character coupons auto-convert to the holder's home currency at the market-maker spread.
 - **CEO salary:** Paid in the corporation's home currency and deposited directly into your personal balance in that currency. No auto-conversion.
 
 ## How forex affects the game

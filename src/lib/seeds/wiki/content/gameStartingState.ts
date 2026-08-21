@@ -2,7 +2,7 @@ export const gameStartingStateContent = `# Game Starting State
 
 Every country in A House Divided starts from a fixed seed: protected default parties, empty legislatures, generated NPPs, starting treasuries, national macro numbers, sovereign debt, regional sector specialties, resource capacity, and unowned sector markets. This page is the audit view of that opening board.
 
-Several start-date presets are available when an admin resets the world: **1953**, **1979**, **1991**, and **2019**. The 1953 and 1979 Cold War openings add the Soviet Union, East Germany, and the wider Eastern and Western bloc; the sections below document the **1991** and **2019** modern openings in detail. Those modern presets carry full economy/party/region/historical-seat coverage across US, UK, Japan, Germany, China, Brazil, and Ireland.
+Several start-date presets are available when an admin resets the world: **1953**, **1979**, **1991**, and **2019**. The 1953 and 1979 Cold War openings add the Soviet Union, East Germany, and the wider Eastern and Western bloc; the sections below focus on the **1991** and **2019** modern openings. Coverage is layered rather than all-or-nothing: core playable countries have full political rosters, while additional countries such as Nigeria and the wider macro board can carry regions, budgets, metrics, currencies, trade, or historical data without exposing every player surface.
 
 The 1991 preset seeds historical seat composition (US 102nd Congress, UK post-1992 election, JP post-1990 election, DE 12th Bundestag, CN 7th NPC, BR 49th Congress, IE 27th Dáil) plus era-gated party rosters (UUP / PDS / JSP / DSP / PMDB / PFL / PDT / PDS-BR / PTB / PRN / PSB / PCdoB / WP / PD restored; AfD / Linke / Reform UK / CDP / Ishin / DPFP / Sinn Féin (IE) / Green Party (IE) / União Brasil omitted). Election cycle scheduling anchors to real 1992-1994 cycles across US House (1992), US President (1992), UK Commons (1992), JP Shugiin (1993), JP Sangiin Class A (1992), DE Bundestag (1994), CN NPC (1993), BR Câmara (1994), and IE Dáil (1992). Registration / org footprints reflect 1988-1992 vote shares; sector weights reflect the 1990 manufacturing-heavy / pre-tech-cluster economic mix; state metrics are era-shifted (no broadband, no social media, US 1991 crime peak, US 1990-91 recession unemployment uplift, lower median age, lower life expectancy). DC is seeded for both presets.
 
@@ -37,7 +37,7 @@ Examples:
 - Dublin leans technology and finance; Ireland's southwest leans chemical industries and technology.
 - Brazil splits sharply: Norte favors extraction, Centro-Oeste favors agriculture, and Sudeste favors finance and manufacturing.
 
-The dashboard's **Specialties** section is the canonical opening audit for US, UK, DE, JP, BR, CN, and IE regional bonuses. It lists each region's primary +10pp and secondary +5pp sector margin bonuses and shows the local sector seed share behind both choices.
+The dashboard's **Specialties** section is the canonical opening audit for the countries with authored regional bonus coverage in the selected preset. It lists each region's primary +10pp and secondary +5pp sector margin bonuses and shows the local sector seed share behind both choices.
 
 Use the map below to inspect sector weight by region and country.
 
