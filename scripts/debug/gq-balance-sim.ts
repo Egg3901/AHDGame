@@ -67,6 +67,7 @@ interface SeatRuntime {
   committed: number;
   playCount: number;
   playsUsed: Set<string>;
+  playTally: Map<string, number>;
 }
 
 interface Scenario {
@@ -170,20 +171,49 @@ function planSeatTurn(
   const projected = institutions.map((i) => ({ ...i }));
 
   for (;;) {
-    const affordable = catalogue.filter(
-      (p) =>
-        p.actionCost <= ap &&
-        p.capitalCost <= capital &&
-        headroom(projected, p.target, direction) > 50
+    const reachable = catalogue.filter(
+      (p) => p.actionCost <= ap && headroom(projected, p.target, direction) > 50
     );
+    const affordable = reachable.filter((p) => p.capitalCost <= capital);
     if (affordable.length === 0) break;
 
-    affordable.sort((a, b) => {
+    const byRate = (a: SettlementPlayDef, b: SettlementPlayDef) => {
       if (prefersCoercive && a.addsHeat !== b.addsHeat) return a.addsHeat ? -1 : 1;
       return indexRate(b, def.multiplierPct) - indexRate(a, def.multiplierPct);
-    });
+    };
+    affordable.sort(byRate);
 
+    // SAVE rather than settle. A greedy seat spends its capital on whatever it
+    // can afford right now, which on this catalogue means buying `border` at
+    // 1.60 index/AP and never accumulating the 22 for `referendum` at 3.33.
+    // That made an ABSENT seat look stronger than a present one — it banked
+    // capital by accident and bought the better play. A real operator would
+    // simply wait, so the model has to as well, or every effort comparison
+    // measures the planner instead of the game.
+    const best = [...reachable].sort(byRate)[0];
     const pick = affordable[0];
+    if (
+      best &&
+      best.capitalCost > capital &&
+      indexRate(best, def.multiplierPct) > indexRate(pick, def.multiplierPct) &&
+      pick.capitalCost > 0
+    ) {
+      // Spend AP on capital-free plays only; hold the pool for the better one.
+      const free = affordable.filter((p) => p.capitalCost === 0);
+      if (free.length === 0) break;
+      free.sort(byRate);
+      const freePick = free[0];
+      chosen.push(freePick);
+      ap -= freePick.actionCost;
+      const appliedFree = Math.round((freePick.magnitude * def.multiplierPct) / 100) * direction;
+      if (freePick.target === null) {
+        for (const q of projected) q.position += appliedFree;
+      } else {
+        const hitFree = projected.find((q) => q.id === freePick.target);
+        if (hitFree) hitFree.position += appliedFree;
+      }
+      continue;
+    }
     chosen.push(pick);
     ap -= pick.actionCost;
     capital -= pick.capitalCost;
@@ -259,6 +289,7 @@ function run(scenario: Scenario): Result {
       committed: 0,
       playCount: 0,
       playsUsed: new Set(),
+      playTally: new Map(),
     });
   }
 
@@ -308,6 +339,7 @@ function run(scenario: Scenario): Result {
         seat.spent += def.fundsCost;
         seat.playCount++;
         seat.playsUsed.add(def.id);
+        seat.playTally.set(def.id, (seat.playTally.get(def.id) ?? 0) + 1);
       }
       // Bank whatever went unspent, under the shipped ceiling.
       seat.bankedAp = Math.min(apLeft, seatActionBankCap(apPerTurn));
@@ -447,6 +479,31 @@ const SCENARIOS: Scenario[] = [
     personalCount: 1204,
     personalEastShare: 0.7,
   },
+  // ── Rebalance candidates. Lifting BOTH Western seats to 2 AP centres the
+  //    contested stall at 53 but drops the unopposed lock from 28 turns to 11,
+  //    which is too cheap. These try one seat at a time.
+  {
+    name: "W1. rhine at 1 AP",
+    blurb:
+      "London alone lifted to 2 AP — the only Western seat whose 2 AP play reaches the garrison. Contested.",
+    active: ["US", "UK", "RU", "DD"],
+  },
+  {
+    name: "W2. rhine at 1 AP, West unopposed",
+    blurb: "The lock must stay a commitment, not a formality.",
+    active: ["US", "UK"],
+  },
+  {
+    name: "W3. rhine at 1 AP, East unopposed",
+    blurb: "Reunification must remain reachable.",
+    active: ["DD", "RU"],
+  },
+  {
+    name: "W4. rhine at 1 AP, West distracted",
+    blurb: "And attention must still be worth paying.",
+    active: ["US", "UK", "RU", "DD"],
+    effort: { US: 1 / 3, UK: 1 / 3 },
+  },
   {
     name: "D. Escalation spiral",
     blurb: "Both blocs prefer coercive plays. Measures how hot the ladder runs.",
@@ -487,6 +544,11 @@ for (const scenario of SCENARIOS) {
     const open = OPENING_TREASURY[seat.id];
     const burnTurns = seat.spent > 0 ? (open.amount / (seat.spent / r.turns)).toFixed(0) : "n/a";
     const catalogue = SETTLEMENT_PLAYS.filter((p) => p.seat === seat.id);
+    const tally = [...seat.playTally.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([id, n]) => `${id} x${n}`)
+      .join(", ");
+    if (tally) console.log(`       ${tally}`);
     const unreachable = catalogue.filter((p) => !seat.playsUsed.has(p.id)).map((p) => p.id);
     console.log(
       `   ${seat.id.padEnd(3)} ${String(seat.playCount).padStart(4)} plays` +

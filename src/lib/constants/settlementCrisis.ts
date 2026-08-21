@@ -381,7 +381,19 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "DD",
     class: "exclusive",
     target: null,
-    magnitude: 5 * HUNDREDTHS,
+    /*
+     * 2.5, not the mockup's 5.0, because a SETTLEMENT-level magnitude is not
+     * in the same unit as an institution one. Adding d to all four moves the
+     * weighted mean by exactly d, so 5.0 x 2.0 was worth 10.0 index points
+     * against `border`'s 8.0 x 2.0 on a weight-2 institution = 3.2. That is
+     * 3.33 index per action point against a catalogue median of 0.9, and it
+     * decided every simulated crisis on its own: with a seat that saves its
+     * capital for it, reunification carried in 18-25 turns in EVERY scenario,
+     * contested or not. At 2.5 it is worth 5.0 index — a shade above `border`,
+     * which is right for the priciest play on the board and the only one no
+     * single institution can block.
+     */
+    magnitude: 2.5 * HUNDREDTHS,
     capitalCost: 22,
     fundsUnit: "local",
     fundsCost: 30_000_000,
@@ -508,7 +520,7 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     capitalCost: 0,
     fundsUnit: "local",
     fundsCost: 25_000_000,
-    actionCost: 2,
+    actionCost: 1,
     addsHeat: false,
     detail: "Two more brigades forward. Small in numbers, large in signal.",
   },
