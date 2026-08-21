@@ -44,21 +44,6 @@ import {
   seedUnions,
   seedStateResourceCapacity,
   seedStateSectorSpecializations,
-  seedCoreIndexes,
-  seedActivityIndexes,
-  seedCabinetIndexes,
-  seedPerfIndexes,
-  seedSlowQueryIndexes,
-  seedSearchIndexes,
-  seedInternationalOrganizationIndexes,
-  seedWriteGuardIndexes,
-  seedPartyNppReworkIndexes,
-  seedSovereignDefaultIndexes,
-  seedObservabilityIndexes,
-  seedFinancialTxLogIndexes,
-  seedCommodityPriceIndexes,
-  seedIndexFundIndexes,
-  seedApiAccessIndexes,
   seedCountyMapData,
   seedUKRegions,
   seedUKParties,
@@ -130,6 +115,7 @@ import {
   seedNGGovernmentFormation,
   seedNgBudgets,
 } from "@/lib/admin/seed";
+import { INDEX_MODULE_REGISTRY, INDEX_TARGET_IDS } from "@/lib/admin/seed/seedIndexes";
 
 const US_TARGETS = [
   "states",
@@ -147,21 +133,10 @@ const US_TARGETS = [
   "politicalLegislation",
   "budgets",
   "countyMapData",
-  "indexesCore",
-  "indexesActivity",
-  "indexesCabinet",
-  "indexesPerf",
-  "indexesSlowQuery",
-  "indexesSearch",
-  "indexesInternationalOrganizations",
-  "indexesWriteGuards",
-  "indexesPartyNppRework",
-  "indexesSovereignDefault",
-  "indexesObservability",
-  "indexesFinancialTxLog",
-  "indexesCommodityPrices",
-  "indexesIndexFunds",
-  "indexesApiAccess",
+  // EVERY index module, derived from the registry. Hand-listing these is what
+  // let eight of them ship with no granular target at all — runnable from
+  // bootstrap and reset, and therefore unreachable on a world already running.
+  ...INDEX_TARGET_IDS,
   "seats",
   "unownedSectors",
   "unions",
@@ -332,33 +307,9 @@ export async function GET() {
         statePolicies: "Per-state and national policy records",
         budgets: "US federal budget, US state budgets, and formula grant definitions",
         countyMapData: "County and congressional district SVG map data",
-        indexesCore:
-          "Core identity/lookup indexes (users, characters, states, parties, corporations)",
-        indexesActivity:
-          "Activity log TTL + query indexes and suspicious character detection indexes",
-        indexesCabinet:
-          "Cabinet collection indexes (unified cabinetMembers + UK cooldowns/members)",
-        indexesPerf: "Compound indexes on hot read paths (bills, notifications, elections, mail)",
-        indexesSlowQuery:
-          "Indexes for COLLSCAN offenders (corporationHistory, commodityPriceHistory, actionLogs, statePartyElections)",
-        indexesInternationalOrganizations:
-          "Indexes for international organization tables (UN, IMF, etc.) - leadership, legislation, memberships",
-        indexesWriteGuards:
-          "Partial-unique indexes blocking double-submit on election entry, endorsements, governance votes, share offers, cabinet nominations, leadership ballots, corp votes (absorbs add-election/add-governance-write-guard-indexes.ts)",
-        indexesPartyNppRework:
-          "Caucus, recruitment slate, NPP cross-pressure / endorsement, political capital, and treasury indexes (absorbs add-party-npp-rework-indexes.ts)",
-        indexesSovereignDefault:
-          "Sovereign-crisis state-machine sweep indexes on federalBudget + sovereignCrisisDecisions (absorbs sovereignDefaultPhase1Indexes.ts)",
-        indexesObservability:
-          "Indexes + TTLs for gameHealthSnapshots, codeQualitySnapshots, siteTrafficPageviews (absorbs add-health-quality-indexes.ts + add-site-traffic-indexes.ts)",
-        indexesFinancialTxLog:
-          "Indexes + TTL for financialTxLog (absorbs createFinancialTxLogIndexes.ts)",
-        indexesCommodityPrices:
-          "Unique index on commodityPrices.commodity (absorbs add-commodity-prices-unique-index.ts)",
-        indexesIndexFunds:
-          "Indexes for indexFunds, indexFundPositions, indexFundTransactions, indexFundRedemptionQueue, indexFundSnapshots",
-        indexesApiAccess:
-          "Unique tokenHash + per-user/scope indexes on userApiKeys, and TTL + query indexes on apiAccessLog",
+        // Descriptions come from the registry, so a new module documents
+        // itself in the seeder UI the moment it is registered.
+        ...Object.fromEntries(INDEX_MODULE_REGISTRY.map((m) => [m.id, m.description])),
         seats: "Permanent seat documents for all races (US + UK)",
         unownedSectors:
           "Unowned sector revenue docs (10% of GDP-derived market per state x type, insert-only)",
@@ -524,22 +475,11 @@ export async function POST(request: Request) {
     }
     if (targets.includes("budgets")) await seedBudgets(db, reset, log, preset);
     if (targets.includes("countyMapData")) await seedCountyMapData(log);
-    if (targets.includes("indexesCore")) await seedCoreIndexes(db, log);
-    if (targets.includes("indexesActivity")) await seedActivityIndexes(db, log);
-    if (targets.includes("indexesCabinet")) await seedCabinetIndexes(db, log);
-    if (targets.includes("indexesPerf")) await seedPerfIndexes(db, log);
-    if (targets.includes("indexesSlowQuery")) await seedSlowQueryIndexes(db, log);
-    if (targets.includes("indexesSearch")) await seedSearchIndexes(db, log);
-    if (targets.includes("indexesInternationalOrganizations"))
-      await seedInternationalOrganizationIndexes(db, log);
-    if (targets.includes("indexesWriteGuards")) await seedWriteGuardIndexes(db, log);
-    if (targets.includes("indexesPartyNppRework")) await seedPartyNppReworkIndexes(db, log);
-    if (targets.includes("indexesSovereignDefault")) await seedSovereignDefaultIndexes(db, log);
-    if (targets.includes("indexesObservability")) await seedObservabilityIndexes(db, log);
-    if (targets.includes("indexesFinancialTxLog")) await seedFinancialTxLogIndexes(db, log);
-    if (targets.includes("indexesCommodityPrices")) await seedCommodityPriceIndexes(db, log);
-    if (targets.includes("indexesIndexFunds")) await seedIndexFundIndexes(db, log);
-    if (targets.includes("indexesApiAccess")) await seedApiAccessIndexes(db, log);
+    // One loop, every module. A module added to the registry is dispatchable
+    // immediately; there is no second list to forget.
+    for (const mod of INDEX_MODULE_REGISTRY) {
+      if (targets.includes(mod.id)) await mod.run(db, log);
+    }
     if (targets.includes("seats")) await seedSeats(db, reset, log, preset);
     // `reset` (hard re-seed) refreshes existing market docs so they track the
     // current preset's GDP; a soft fill stays insert-only to preserve live pools.

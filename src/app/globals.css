@@ -13,7 +13,8 @@
   --secondary: #1d4ed8;
   --secondary-dark: #1e3a8a;
   --accent: #e8e8ee;
-  --muted: #6b6b7a;
+  --muted: #8f8f9d; /* #6b6b7a measured 2.8-3.5:1 on these surfaces; this is the
+                       smallest lightening that clears 4.5:1 on all four */
   --card: #1d1d2a;
   --card-border: #2a2a3d;
 
@@ -65,7 +66,7 @@
   --secondary: #2563eb; /* Blue 600 - Clear blue */
   --secondary-dark: #1d4ed8; /* Blue 700 */
   --accent: #0f172a;
-  --muted: #64748b; /* Slate 500 - Readable gray */
+  --muted: #475569; /* Slate 600 - Slate 500 measured 4.34:1 on the elevated card */
   --card: #ffffff;
   --card-border: #e2e8f0; /* Slate 200 - Subtle border */
   /* Referendum campaigns-panel palette (light) */
@@ -73,6 +74,23 @@
   --ref-no: #e11d48;
   --ref-amber: #d97706;
   --ref-gold: #b3902c;
+  /* Semantic accents, tuned for a light ground.
+     These were previously INHERITED from the dark `:root` block, which is why
+     gold measured 1.9:1 and warning 1.8:1 against white — the values are
+     picked to sing on #14141c. The theme already knew this for its referendum
+     palette above and simply never carried it through to the semantic six.
+     Every value below clears 4.5:1 against the worst of card / background /
+     card-elevated, holding the same hue family. */
+  --success: #15803d; /* Green 700 */
+  --success-muted: #166534; /* Green 800 */
+  --warning: #854d0e; /* Yellow 800 - yellow cannot reach AA on white and stay yellow */
+  --warning-muted: #713f12; /* Yellow 900 */
+  --gold: #7c6414;
+  --gold-muted: #63500f;
+  --error: #b91c1c; /* Red 700 */
+  --error-muted: #991b1b; /* Red 800 */
+  --info: #1d4ed8; /* Blue 700 */
+  --info-muted: #1e40af; /* Blue 800 */
   --card-default: #ffffff;
   --card-elevated: #f1f5f9; /* Slate 100 */
   --card-muted: #f8fafc; /* Slate 50 */
@@ -133,6 +151,11 @@
   --primary-dark: #b91c1c; /* Red 700 */
   --secondary: #3b82f6; /* Blue 500 */
   --secondary-dark: #1d4ed8; /* Blue 700 */
+  /* Red 500 and Blue 500 are too dark to read as TEXT on this navy — 3.1:1 on
+     the card. Lifted one step; `--primary`/`--secondary` above keep the
+     original values, since those are fills rather than body text. */
+  --error: #f87171; /* Red 400 */
+  --info: #60a5fa; /* Blue 400 */
   --accent: #fffbeb;
   --muted: #cbd5e1; /* Slate 300 - lighter gray for contrast on navy */
   --card: #1e3a5f; /* Rich blue-slate for cards, distinct from background */
@@ -164,6 +187,19 @@
   --card: #ffffff; /* White - Clean contrast against pink bg */
   --card-border: #e9d5ff; /* Purple 200 - Soft border */
   --card-default: #ffffff;
+  /* Semantic accents for a light ground — pastel had the same gap as `light`,
+     inheriting values picked for #14141c. Green is one step darker here than
+     in `light` because the fuchsia-tinted surfaces are brighter. */
+  --success: #146c33;
+  --success-muted: #166534;
+  --warning: #854d0e;
+  --warning-muted: #713f12;
+  --gold: #7c6414;
+  --gold-muted: #63500f;
+  --error: #b91c1c;
+  --error-muted: #991b1b;
+  --info: #1d4ed8;
+  --info-muted: #1e40af;
   --card-elevated: #fae8ff; /* Fuchsia 100 */
   --card-muted: #fdf4ff;
   --shadow-sm: 0 1px 2px 0 rgb(192 38 211 / 0.05);
@@ -186,7 +222,7 @@
   --secondary: #67e8f9;
   --secondary-dark: #22d3ee;
   --accent: #ede0ff;
-  --muted: #7c6fa0;
+  --muted: #877ba8; /* was #7c6fa0 — 3.7:1 on this theme's card */
   --card: #16112a;
   --card-border: #2a1f4a;
   --card-default: #16112a;
@@ -248,7 +284,7 @@
   --secondary: #b58900;
   --secondary-dark: #946f00;
   --accent: #fdf6e3;
-  --muted: #839496;
+  --muted: #8e9e9f; /* was #839496 — 4.1:1 on base03 */
   --card: #073642;
   --card-border: #2a4a40;
   --card-default: #073642;
@@ -256,11 +292,11 @@
   --card-muted: #001a22;
   --success: #859900;
   --success-muted: #6d7e00;
-  --warning: #cb4b16;
+  --warning: #ec7b4c; /* was #cb4b16 — 2.8:1 — same for Solarized orange */
   --warning-muted: #a33a10;
   --gold: #b58900;
-  --gold-muted: #946f00;
-  --error: #dc322f;
+  --gold-muted: #c79500; /* was #946f00 — 2.8:1 — unreadable as text */
+  --error: #e87b79; /* was #dc322f — 2.8:1 — canonical Solarized red is a fill colour here */
   --error-muted: #b02825;
   --info: #2aa198;
   --info-muted: #1a7a72;
@@ -285,7 +321,7 @@
   --secondary: #c99a3d;
   --secondary-dark: #a17a28;
   --accent: #f5ecd8;
-  --muted: #8a7f6d;
+  --muted: #8d826f; /* was #8a7f6d — 4.45:1 */
   --card: #1c1915;
   --card-border: #2a2620;
   --card-default: #1c1915;
@@ -297,7 +333,7 @@
   --warning-muted: #a67f30;
   --gold: #e0b34d;
   --gold-muted: #b88f33;
-  --error: #b9452e;
+  --error: #d3634c; /* was #b9452e — 3.3:1 */
   --error-muted: #8e3422;
   --info: #b58763;
   --info-muted: #8a6446;
@@ -328,9 +364,9 @@
   --card-default: #fbf8f0;
   --card-elevated: #ffffff;
   --card-muted: #efeadd;
-  --success: #4a7c2f;
+  --success: #3d6626; /* was #4a7c2f — 4.0:1 on the darkest paper surface */
   --success-muted: #3a6224;
-  --warning: #a66b16;
+  --warning: #8a5810; /* was #a66b16 — 3.6:1 on the darkest paper surface */
   --warning-muted: #80510f;
   --gold: #846414;
   --gold-muted: #5f4a0f;
@@ -359,7 +395,7 @@
   --secondary: #6fa8dc;
   --secondary-dark: #4d85b8;
   --accent: #f5c46a;
-  --muted: #7a6430;
+  --muted: #977c3c; /* was #7a6430 — 3.3:1 */
   --card: #12100a;
   --card-border: #2a2416;
   --card-default: #12100a;

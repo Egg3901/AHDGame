@@ -76,6 +76,7 @@ export const BASE_TURN_PHASE_NAMES = [
   "autoReelectionEntry",
   "internationalOrganizations",
   "alignment",
+  "settlement",
   "impeachmentLifecycle",
   "presidentialSuccession",
   "fiscalYear",

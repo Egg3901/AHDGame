@@ -374,7 +374,11 @@ export function ExperimentalMobileMenu({
                                 key={item.id}
                                 href={item.href}
                                 onClick={onClose}
-                                className="flex items-center rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
+                                className={`flex items-center rounded-lg py-2 text-sm text-muted transition-colors hover:bg-white/5 ${
+                                  item.parentId != null
+                                    ? "ml-4 border-l border-card-border pl-3 pr-3"
+                                    : "px-3"
+                                }`}
                               >
                                 {item.labelKey ? t(item.labelKey) : item.label}
                               </Link>

@@ -23,6 +23,11 @@ import { seedAuditAnomaliesIndexes } from "./indexes/auditAnomalies";
 import { seedWatchlistIndexes } from "./indexes/watchlist";
 import { seedConflictIndexes } from "./indexes/conflicts";
 import { seedBankingIndexes } from "./indexes/banking";
+import { seedSettlementIndexes } from "./indexes/settlement";
+import { INDEX_TARGETS, type IndexTargetId, type IndexTargetMeta } from "./indexTargets";
+
+export { INDEX_TARGETS, INDEX_TARGET_IDS } from "./indexTargets";
+export type { IndexTargetId, IndexTargetMeta } from "./indexTargets";
 
 // Barrel that runs every index module in sequence. Bootstrap calls this directly;
 // the admin seeder route dispatches the individual module targets so admins can
@@ -34,35 +39,58 @@ import { seedBankingIndexes } from "./indexes/banking";
 type IndexModule = (db: Db, log: (msg: string) => void) => Promise<unknown>;
 
 /**
- * Declaration order is the order their log lines are emitted, NOT the order
- * they execute — see {@link seedIndexes}.
+ * Target id → the function that builds those indexes.
+ *
+ * A `Record` over `IndexTargetId`, deliberately: registering a target in
+ * `indexTargets.ts` without wiring its runner here is a COMPILE ERROR, not a
+ * module that silently never runs. That is the whole fix for the drift
+ * documented in that file.
  */
-const INDEX_MODULES: readonly IndexModule[] = [
-  seedCoreIndexes,
-  seedActivityIndexes,
-  seedCabinetIndexes,
-  seedPerfIndexes,
-  seedSlowQueryIndexes,
-  seedSearchIndexes,
-  seedInternationalOrganizationIndexes,
-  seedWriteGuardIndexes,
-  seedPartyNppReworkIndexes,
-  seedSovereignDefaultIndexes,
-  seedObservabilityIndexes,
-  seedFinancialTxLogIndexes,
-  seedLedgerIndexes,
-  seedCommodityPriceIndexes,
-  seedIndexFundIndexes,
-  seedApiAccessIndexes,
-  seedCrisisInteractionIndexes,
-  seedCrisisIndexes,
-  seedActionAuditLogIndexes,
-  seedAltDetectionIndexes,
-  seedAuditAnomaliesIndexes,
-  seedWatchlistIndexes,
-  seedConflictIndexes,
-  seedBankingIndexes,
-];
+const INDEX_RUNNERS: Record<IndexTargetId, IndexModule> = {
+  indexesCore: seedCoreIndexes,
+  indexesActivity: seedActivityIndexes,
+  indexesCabinet: seedCabinetIndexes,
+  indexesPerf: seedPerfIndexes,
+  indexesSlowQuery: seedSlowQueryIndexes,
+  indexesSearch: seedSearchIndexes,
+  indexesInternationalOrganizations: seedInternationalOrganizationIndexes,
+  indexesWriteGuards: seedWriteGuardIndexes,
+  indexesPartyNppRework: seedPartyNppReworkIndexes,
+  indexesSovereignDefault: seedSovereignDefaultIndexes,
+  indexesObservability: seedObservabilityIndexes,
+  indexesFinancialTxLog: seedFinancialTxLogIndexes,
+  indexesLedger: seedLedgerIndexes,
+  indexesCommodityPrices: seedCommodityPriceIndexes,
+  indexesIndexFunds: seedIndexFundIndexes,
+  indexesApiAccess: seedApiAccessIndexes,
+  indexesCrisisInteractions: seedCrisisInteractionIndexes,
+  indexesCrises: seedCrisisIndexes,
+  indexesActionAuditLog: seedActionAuditLogIndexes,
+  indexesAltDetection: seedAltDetectionIndexes,
+  indexesAuditAnomalies: seedAuditAnomaliesIndexes,
+  indexesWatchlist: seedWatchlistIndexes,
+  indexesConflict: seedConflictIndexes,
+  indexesBanking: seedBankingIndexes,
+  indexesSettlement: seedSettlementIndexes,
+};
+
+export interface IndexModuleEntry extends Omit<IndexTargetMeta, "id"> {
+  /** Narrowed to the literal union, so callers can use it as a seed target. */
+  id: IndexTargetId;
+  run: IndexModule;
+}
+
+/**
+ * The registry both server consumers read: the client-safe metadata joined to
+ * its runner. Declaration order is the order log lines are emitted, NOT the
+ * order they execute — see {@link seedIndexes}.
+ */
+export const INDEX_MODULE_REGISTRY: readonly IndexModuleEntry[] = INDEX_TARGETS.map((t) => ({
+  ...t,
+  run: INDEX_RUNNERS[t.id],
+}));
+
+const INDEX_MODULES: readonly IndexModule[] = INDEX_MODULE_REGISTRY.map((m) => m.run);
 
 export async function seedIndexes(db: Db, log: (msg: string) => void) {
   // The modules run concurrently. Running them in sequence meant ~275 round
@@ -118,4 +146,5 @@ export {
   seedWatchlistIndexes,
   seedConflictIndexes,
   seedBankingIndexes,
+  seedSettlementIndexes,
 };

@@ -38,6 +38,9 @@ const eslintConfig = defineConfig([
     "scripts/archive/**",
     // Ad-hoc debug diagnostic scripts — one-off, not maintained with current lint rules
     "scripts/debug/**",
+    // Claude Design mockups pulled down for reference while implementing them.
+    // Generated artefacts (the dc-runtime bundle targets React 17 APIs), not source.
+    ".design-ref/**",
     // Legacy backend build artifacts — gitignored but may exist on disk
     "backend/**",
     // Design handoff prototypes (Claude Design exports) — reference-only mocks

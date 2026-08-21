@@ -24,6 +24,8 @@ export { getOrganizationFundsCollection } from "./organizationFunds";
 export { getOrganizationPosturesCollection } from "./organizationPostures";
 export { getAlignmentCrisesCollection } from "./alignmentCrises";
 export { getAlignmentPlaysCollection } from "./alignmentPlays";
+export { getSettlementCrisesCollection } from "./settlementCrises";
+export { getSettlementPlaysCollection } from "./settlementPlays";
 export { getCountryAlignmentsCollection } from "./countryAlignments";
 export { getSupporterRequestsCollection } from "./supporterRequests";
 export { getActionAuditLogCollection } from "./actionAuditLog";

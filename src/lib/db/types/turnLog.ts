@@ -641,6 +641,21 @@ export interface TurnLog {
       crisesResolved: number;
     } | null;
 
+    /** Settlement crises (the German Question). Zeroes when the gate is off. */
+    settlement?: {
+      playsResolved: number;
+      institutionsMoved: number;
+      crisesResolved: number;
+      /** Ladder rung after this tick. */
+      heat: number;
+      /** Settlement index after this tick, in hundredths. */
+      position: number;
+      /** Seat countries charged a mobilisation levy for standing at rung 5. */
+      countriesLevied: number;
+      /** World News dispatches filed this tick. */
+      wirePosts: number;
+    } | null;
+
     /** Phase 3 — passive Org→Reg drift + Reg decay phase. */
     regDriftDecay?: {
       statesScanned: number;
