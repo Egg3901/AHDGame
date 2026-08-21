@@ -45,6 +45,7 @@ import {
   vacateLeadershipAfterElections,
 } from "@/lib/congress/leadershipElections";
 import { processAlignmentTurn } from "@/lib/turn/alignmentPhase";
+import { processSettlementTurn } from "@/lib/turn/settlementPhase";
 import { processInternationalOrganizationsTurn } from "@/lib/turn/internationalOrganizationsPhase";
 import { applyDecayToAllStates, processPartyGOTV } from "@/lib/turn/demographicTurnoutTurn";
 import {
@@ -1136,6 +1137,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // not run alongside it.
         phaseResults.alignment = await runtime.runPhase("alignment", () =>
           processAlignmentTurn(db, newTurn)
+        );
+
+        // Sequential and AFTER alignment: seat direction is read from live bloc
+        // membership, which the alignment phase writes.
+        phaseResults.settlement = await runtime.runPhase("settlement", () =>
+          processSettlementTurn(db, newTurn)
         );
 
         await runtime.runPhase("autoReelectionEntry", () =>

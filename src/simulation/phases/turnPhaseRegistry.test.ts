@@ -288,3 +288,21 @@ describe("turn phase registry", () => {
     });
   });
 });
+
+describe("settlement phase registration", () => {
+  it("registers a settlement phase name immediately after alignment", async () => {
+    const { BASE_TURN_PHASE_NAMES } = await import("./turnPhaseNames");
+    // Widened to string[] deliberately: the array is `as const`, so indexOf on
+    // a literal that is not yet a member is a typecheck error rather than the
+    // runtime failure this test wants to show.
+    const names: readonly string[] = BASE_TURN_PHASE_NAMES;
+    const alignment = names.indexOf("alignment");
+    const settlement = names.indexOf("settlement");
+    expect(alignment).toBeGreaterThan(-1);
+    expect(settlement).toBe(alignment + 1);
+  });
+
+  it("carries the settlement phase into the derived TURN_PHASE_NAMES list", () => {
+    expect(TURN_PHASE_NAMES).toContain("settlement");
+  });
+});

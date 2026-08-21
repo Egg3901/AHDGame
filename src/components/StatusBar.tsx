@@ -12,6 +12,7 @@ import {
 import { calendarTurn } from "@/lib/utils/gameDate";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { useRefetchNav } from "@/contexts/AuthDataContext";
 import { CHARACTER_STATS_UPDATED, CHARACTER_STATS_REFETCH } from "@/lib/characterStatsSync";
 import {
   useCharacterStats,
@@ -59,6 +60,9 @@ export function StatusBar() {
     formatAmountChip,
     formatFull,
   } = useCurrency();
+  // Only the refetch — StatusBar renders nothing from the nav payload; it is
+  // the one component that already watches the turn counter.
+  const refetchNav = useRefetchNav();
   const isInternalMode = displayCurrencyPreference === "internal";
   const homeCurrencyCode = (stats?.homeCurrency as CurrencyCode | undefined) ?? "USD";
   /** Format a home-currency face amount without re-converting it through display preference. */
@@ -218,6 +222,13 @@ export function StatusBar() {
   // Refresh when a new turn processes — the turn engine grants action points and
   // campaign-fund income server-side, so without this the bar lags a full turn
   // (the primary cause of the Actions/Campaign-Funds mismatch).
+  //
+  // The NAV bootstrap is refreshed on the same trigger. `/api/client-nav` is
+  // fetched once when its provider mounts and never again, so in a
+  // client-routed session every world-state flag it carries is frozen for the
+  // whole visit — a settlement crisis that closed on the tick left "The German
+  // Question" in the World menu until a hard reload. Same latent staleness for
+  // `conflictsEnabled` and `unionsEnabled`; those just change far more rarely.
   const prevTurnRef = useRef<number | null>(null);
   useEffect(() => {
     const turn = gameState?.currentTurn;
@@ -229,8 +240,9 @@ export function StatusBar() {
     if (turn !== prevTurnRef.current) {
       prevTurnRef.current = turn;
       void refetchStats();
+      refetchNav();
     }
-  }, [gameState?.currentTurn, refetchStats]);
+  }, [gameState?.currentTurn, refetchStats, refetchNav]);
 
   // Refresh when the player returns to the tab, plus a light visible-only poll,
   // so the bar self-heals even if a specific trigger is missed.

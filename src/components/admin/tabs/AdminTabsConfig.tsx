@@ -194,6 +194,7 @@ export const SUB_TABS_BY_TAB: Record<MainTabId, readonly SubTabConfig[]> = {
     { id: "npps", label: "NPPs" },
     { id: "politicians", label: "Politician Profiles" },
     { id: "crises", label: "Crises" },
+    { id: "german-question", label: "German Question" },
     { id: "events", label: "Random Events" },
     { id: "countries", label: "Countries" },
     { id: "conflicts", label: "Conflicts" },
@@ -291,7 +292,7 @@ export const SUB_GROUPS_BY_TAB: Partial<Record<MainTabId, readonly SubNavGroup[]
   ],
   world: [
     { label: "Population", ids: ["demographics", "npps", "politicians"] },
-    { label: "Events", ids: ["crises", "events", "conflicts"] },
+    { label: "Events", ids: ["crises", "german-question", "events", "conflicts"] },
     { label: "Setup", ids: ["countries"] },
   ],
   content: [{ label: "Publishing", ids: ["wiki", "wiki-review", "roadmap"] }],
