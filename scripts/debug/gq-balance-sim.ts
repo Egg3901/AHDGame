@@ -76,6 +76,17 @@ interface Scenario {
   active: SettlementSeatKey[];
   /** Seats that prefer coercive plays where one is available. */
   coercive?: SettlementSeatKey[];
+  /**
+   * How often a seat actually shows up, 0..1. 1 = every turn, 0.5 = every
+   * other, 0.25 = one turn in four. Deterministic rather than random so a run
+   * is reproducible.
+   *
+   * The original scenarios were all-or-nothing — a seat played optimally every
+   * single turn or sat the whole crisis out. Nobody plays like that, and the
+   * gap matters: AP and capital BANK, so a seat at half effort is not half as
+   * effective. It saves up and spends bigger.
+   */
+  effort?: Partial<Record<SettlementSeatKey, number>>;
   /** Characters taking a personal play each turn. */
   personalCount?: number;
   /** Share of those pushing East, 0..1. */
@@ -270,6 +281,20 @@ function run(scenario: Scenario): Result {
     for (const key of scenario.active) {
       const seat = seats.get(key)!;
       const apPerTurn = scenario.apOverride?.[key] ?? getSeat(key)!.actionsPerTurn;
+      // Absent this turn — but still accruing. That is the whole point of the
+      // bank: a seat at quarter effort arrives with four turns of AP and
+      // capital saved, so it plays the expensive cards the diligent seat
+      // cannot afford to reach.
+      const effort = scenario.effort?.[key] ?? 1;
+      if (effort < 1) {
+        const period = Math.max(1, Math.round(1 / effort));
+        if (turn % period !== 0) {
+          // AP only. Capital accrues for every seat at the end of the tick
+          // below, played or not, so adding it here would pay twice.
+          seat.bankedAp = Math.min(seat.bankedAp + apPerTurn, seatActionBankCap(apPerTurn));
+          continue;
+        }
+      }
       const { plays, apLeft } = planSeatTurn(
         seat,
         coercive.has(key),
@@ -367,91 +392,66 @@ function run(scenario: Scenario): Result {
 }
 
 const SCENARIOS: Scenario[] = [
+  // ── The two bounds. Everything else has to sit between these. ────────────
   {
-    name: "1. Superpower duel",
-    blurb: "Washington and Moscow only. East Berlin and London sit it out.",
-    active: ["US", "RU"],
-  },
-  {
-    name: "2. East Berlin unleashed",
-    blurb: "GDR + Moscow at full tilt; the West answers with both seats.",
-    active: ["DD", "RU", "US", "UK"],
-  },
-  {
-    name: "3. Western coalition unopposed",
-    blurb: "US + UK push for the lock; neither Eastern seat contests it.",
+    name: "A. Western coalition unopposed",
+    blurb: "US + UK at full effort; neither Eastern seat contests it.",
     active: ["US", "UK"],
   },
   {
-    // The symmetry check against scenario 3, and the one that decides whether
-    // the crisis has two endings or one. If an uncontested East cannot carry
-    // while an uncontested West can lock, the question is not a contest.
-    name: "4. Eastern coalition unopposed",
-    blurb: "GDR + Moscow push for reunification; neither Western seat contests it.",
+    name: "B. Eastern coalition unopposed",
+    blurb: "GDR + Moscow at full effort; neither Western seat contests it.",
     active: ["DD", "RU"],
   },
+
+  // ── Five varying-effort runs. Effort is how often a seat shows up. ───────
   {
-    name: "5. The street rises",
-    blurb: "1,204 characters, 70% pushing East. All four seats play.",
+    name: "1. Everyone full effort",
+    blurb: "All four seats, every turn, no public. The contested baseline.",
+    active: ["US", "UK", "RU", "DD"],
+  },
+  {
+    name: "2. East committed, West distracted",
+    blurb: "DD/RU every turn; US/UK every third. Asymmetric attention.",
+    active: ["US", "UK", "RU", "DD"],
+    effort: { US: 1 / 3, UK: 1 / 3 },
+  },
+  {
+    name: "3. West committed, East distracted",
+    blurb: "The mirror: US/UK every turn; DD/RU every third.",
+    active: ["US", "UK", "RU", "DD"],
+    effort: { DD: 1 / 3, RU: 1 / 3 },
+  },
+  {
+    name: "4. Everyone half-hearted",
+    blurb: "All four seats every other turn. What a quiet iteration looks like.",
+    active: ["US", "UK", "RU", "DD"],
+    effort: { US: 0.5, UK: 0.5, RU: 0.5, DD: 0.5 },
+  },
+  {
+    name: "5. Light seats, real public",
+    blurb:
+      "All four every third turn, plus 120 characters (10% turnout) at 60% East. " +
+      "The case where the street, not the delegations, decides.",
+    active: ["US", "UK", "RU", "DD"],
+    effort: { US: 1 / 3, UK: 1 / 3, RU: 1 / 3, DD: 1 / 3 },
+    personalCount: 120,
+    personalEastShare: 0.6,
+  },
+
+  // ── Reference: the public at maximum, and the coercive path. ─────────────
+  {
+    name: "C. Maximum turnout",
+    blurb: "1,204 characters at 70% East, all four seats at full effort.",
     active: ["US", "UK", "RU", "DD"],
     personalCount: 1204,
     personalEastShare: 0.7,
   },
   {
-    name: "6. Escalation spiral",
-    blurb: "Both blocs lean on coercive plays. All four seats, no public.",
+    name: "D. Escalation spiral",
+    blurb: "Both blocs prefer coercive plays. Measures how hot the ladder runs.",
     active: ["US", "UK", "RU", "DD"],
     coercive: ["US", "RU", "DD"],
-  },
-  {
-    name: "7. WHAT-IF: secondaries at 2 AP",
-    blurb: "Scenario 2 with US/UK/RU on 2 AP, unlocking the 2 AP plays. Tests the fix.",
-    active: ["DD", "RU", "US", "UK"],
-    apOverride: { US: 2, UK: 2, RU: 2 },
-  },
-  {
-    name: "8. WHAT-IF: 2 AP + public",
-    blurb: "Scenario 7 plus 1,204 characters at 70% East.",
-    active: ["DD", "RU", "US", "UK"],
-    apOverride: { US: 2, UK: 2, RU: 2 },
-    personalCount: 1204,
-    personalEastShare: 0.7,
-  },
-  {
-    // Multi-AP plays repriced so their index-per-AP is comparable to each
-    // seat's 1 AP option. These are the ONLY levers on bundestag and garrison
-    // (60% of the index weight), so while they stay dominated neither bloc
-    // touches 60% of the board.
-    name: "9. WHAT-IF: repriced + 2 AP",
-    blurb: "Both fixes together — 2 AP secondaries AND repriced multi-AP plays, 70% East public.",
-    active: ["DD", "RU", "US", "UK"],
-    apOverride: { US: 2, UK: 2, RU: 2 },
-    personalCount: 1204,
-    personalEastShare: 0.7,
-    magnitudeOverride: {
-      ostpolitik: 10 * HUNDREDTHS, // 2 AP → bundestag
-      pressure: 10 * HUNDREDTHS, // 2 AP → garrison
-      terms: 16 * HUNDREDTHS, // 3 AP → bundestag
-      article5: 10 * HUNDREDTHS, // 2 AP → garrison
-      station: 10 * HUNDREDTHS, // 2 AP → street
-      rhine: 7 * HUNDREDTHS, // 2 AP → garrison
-    },
-  },
-  {
-    name: "10. WHAT-IF: repriced + 2 AP, even public",
-    blurb: "Scenario 9 with the public split evenly instead of 70% East.",
-    active: ["DD", "RU", "US", "UK"],
-    apOverride: { US: 2, UK: 2, RU: 2 },
-    personalCount: 1204,
-    personalEastShare: 0.5,
-    magnitudeOverride: {
-      ostpolitik: 10 * HUNDREDTHS,
-      pressure: 10 * HUNDREDTHS,
-      terms: 16 * HUNDREDTHS,
-      article5: 10 * HUNDREDTHS,
-      station: 10 * HUNDREDTHS,
-      rhine: 7 * HUNDREDTHS,
-    },
   },
 ];
 
