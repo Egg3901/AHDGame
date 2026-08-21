@@ -369,6 +369,19 @@ describe("loadGermanQuestionDossier", () => {
     expect(view!.turnsUntilOpen).toBe(5);
   });
 
+  it("tells a seat with no authority the permanent truth, not the clock", async () => {
+    // East Berlin will NEVER hold escalation authority, so quoting it the turn
+    // the ladder opens reads as a promise the question cannot keep.
+    prime(db, "settlementCrises").findOne.mockResolvedValue(
+      crisisDoc({ ladder: { heat: 4, armedTurn: null }, openedTurn: 412 - LADDER_UNLOCK_TURNS + 5 })
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    // Default fixture is the GDR seat.
+    expect(view!.viewer.seat!.escalateGate).toContain("East Berlin");
+    expect(view!.viewer.seat!.escalateGate).not.toContain("four-power channel");
+  });
+
   it("counts the channel down to zero once it has run", async () => {
     const { loadGermanQuestionDossier } = await import("./dossier");
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);

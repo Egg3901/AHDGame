@@ -618,19 +618,20 @@ export async function loadGermanQuestionDossier(
                 seat.direction !== null &&
                 ladderIsOpen &&
                 crisis.ladder.heat === MAX_COERCIVE_RUNG,
-              // Ordered by which answer is TRUE rather than by which is most
-              // specific to the seat. A Washington seat told "you have no
-              // authority" when the real answer is "nobody does yet" is a lie,
-              // and so is telling an authority seat to raise the heat when the
-              // channel has not run its course.
+              // Ordered PERMANENT TRUTH FIRST, then temporary. The switch being
+              // off outranks everything because then nobody can escalate at
+              // all. Lack of authority comes next: East Berlin will never hold
+              // it, so telling that seat "the ladder opens on turn X" reads as
+              // a promise the question can never keep. Only a seat that could
+              // otherwise press today is told to wait for the clock.
               escalateGate: !rules.escalationEnabled
                 ? "The escalation ladder is switched off for this question. Coercive plays still land; they simply leave no heat."
-                : !ladderIsOpen
-                  ? `The four-power channel is still sitting. The ladder opens on turn ${ladderOpensAt}` +
-                    ` — ${ladderOpensAt - turn} turn${ladderOpensAt - turn === 1 ? "" : "s"} from now.`
-                  : seatDef.authority
-                    ? null
-                    : escalateGateFor(seat.id),
+                : !seatDef.authority
+                  ? escalateGateFor(seat.id)
+                  : !ladderIsOpen
+                    ? `The four-power channel is still sitting. The ladder opens on turn ${ladderOpensAt}` +
+                      ` — ${ladderOpensAt - turn} turn${ladderOpensAt - turn === 1 ? "" : "s"} from now.`
+                    : null,
             }
           : null,
       personalActions: ctx.personal.actionsRemaining,

@@ -168,7 +168,7 @@ describe("buildGermanQuestion", () => {
   it("opens cold, unarmed and never ticked", async () => {
     const { buildGermanQuestion } = await import("./openCrisis");
     const doc = buildGermanQuestion(12);
-    expect(doc.ladder).toEqual({ heat: 0, armedTurn: null });
+    expect(doc.ladder).toEqual({ heat: 0, armedTurn: null, quietTurns: 0 });
     expect(doc.lastTickedTurn).toBeNull();
     expect(doc.driftHistory).toEqual([]);
     expect(doc.openedTurn).toBe(12);

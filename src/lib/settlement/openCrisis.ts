@@ -81,7 +81,7 @@ export function buildGermanQuestion(turn: number): Omit<SettlementCrisisDoc, "_i
       lastActedTurn: null,
       committedPoints: 0,
     })),
-    ladder: { heat: 0, armedTurn: null },
+    ladder: { heat: 0, armedTurn: null, quietTurns: 0 },
     rules: { ...SETTLEMENT_DEFAULT_RULES },
     // Seeded at the opening board so the FIRST briefing has something honest to
     // report a swing against, instead of comparing the board to itself.

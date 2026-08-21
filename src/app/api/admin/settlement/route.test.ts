@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockCollection, type MockDb } from "@/lib/test-utils/mockDb";
-import { SETTLEMENT_INSTITUTIONS } from "@/lib/constants/settlementCrisis";
+import {
+  SETTLEMENT_INSTITUTIONS,
+  SETTLEMENT_WIRE_INTERVAL_TURNS,
+} from "@/lib/constants/settlementCrisis";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAdmin", () => ({ requireAdmin: vi.fn() }));
@@ -110,14 +113,17 @@ describe("/api/admin/settlement", () => {
     );
     const { GET } = await import("./route");
     const body = await (await GET()).json();
-    expect(body.crisis.nextBriefingTurn).toBe(412);
+    // Off the LAST BRIEFING, and derived from the constant rather than frozen:
+    // the cadence is a dial and a retune must not read as a broken route.
+    expect(body.crisis.nextBriefingTurn).toBe(406 + SETTLEMENT_WIRE_INTERVAL_TURNS);
   });
 
   it("counts the briefing cadence from the opening when none has been filed", async () => {
     prime(db, "settlementCrises").findOne.mockResolvedValue(liveCrisis({ openedTurn: 400 }));
     const { GET } = await import("./route");
     const body = await (await GET()).json();
-    expect(body.crisis.nextBriefingTurn).toBe(406);
+    // Off the OPENING, since no briefing has been filed yet.
+    expect(body.crisis.nextBriefingTurn).toBe(400 + SETTLEMENT_WIRE_INTERVAL_TURNS);
     expect(body.crisis.postedWireEvents).toEqual([]);
   });
 
