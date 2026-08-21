@@ -17,6 +17,7 @@ import { calculateEnactedLawAnnualCost } from "./costs";
 import { COST_INCOME_ANCHORS } from "@/lib/politicalLegislation/costAnchors";
 import { countryFiscalBase, regionFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
 import { getEraContext, type EraContext } from "@/lib/era/context";
+import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
@@ -67,7 +68,10 @@ export const SECTOR_SUBSIDIES_SPENDING_KEY = "sectorSubsidies";
  * the `regionalBudgets` field that holds each region's received grant.
  */
 const CONFIG_DERIVED_TRANSFER_FIELD: Partial<
-  Record<CountryId, "centralTransferGrant" | "federalEqualizationGrant" | "westminsterGrant">
+  Record<
+    CountryId,
+    "centralTransferGrant" | "federalEqualizationGrant" | "westminsterGrant" | "unionGrant"
+  >
 > = {
   CN: "centralTransferGrant",
   DE: "federalEqualizationGrant",
@@ -80,6 +84,12 @@ const CONFIG_DERIVED_TRANSFER_FIELD: Partial<
   // Stable, not circular: the per-region shares sum to the pool, so the
   // next sync reads back the same figure it wrote.
   UK: "westminsterGrant",
+  // RU distributes its whole regional budget as a population share of the
+  // central grants pool and, like CN/DE/UK, has no isGrant law to book it — the
+  // union was handing its republics ₽44.00B a year that the national budget
+  // recorded as ₽0. Booked under the plan-economy lapse rule below, so what the
+  // republics never draw down is not charged to the centre.
+  RU: "unionGrant",
 };
 
 function sumSpendingByCategory(byCategory: Record<string, number>): number {
@@ -201,19 +211,25 @@ export async function calculateFederalSpending(
   };
   // These five reads are independent of one another — one round instead of a
   // serial chain.
-  const [rawLaws, population, nationalMedianIncome, eraContext, v2Base] = await Promise.all([
-    db.collection<EnactedLaw>("enactedLaws").find(nationalQuery).toArray(),
-    getCountryPopulation(db, budgetCountryId),
-    resolveNationalMedianIncome(db, budgetCountryId),
-    // Spec B: era cost forms apply when the flag is on (year non-null); null ⇒ legacy.
-    hoistedEraContext ? Promise.resolve(hoistedEraContext) : getEraContext(db),
-    // Political-legislation v2 (spec §5.1): countries with new-generation laws
-    // price them on the REGIONAL-ROLLUP base, not the budget-seed gdp. One read
-    // per sync; other countries skip it entirely.
-    budgetCountryId in COST_INCOME_ANCHORS
-      ? countryFiscalBase(db, budgetCountryId)
-      : Promise.resolve(undefined),
-  ]);
+  const [rawLaws, population, nationalMedianIncome, eraContext, v2Base, gameConfig] =
+    await Promise.all([
+      db.collection<EnactedLaw>("enactedLaws").find(nationalQuery).toArray(),
+      getCountryPopulation(db, budgetCountryId),
+      resolveNationalMedianIncome(db, budgetCountryId),
+      // Spec B: era cost forms apply when the flag is on (year non-null); null ⇒ legacy.
+      hoistedEraContext ? Promise.resolve(hoistedEraContext) : getEraContext(db),
+      // Political-legislation v2 (spec §5.1): countries with new-generation laws
+      // price them on the REGIONAL-ROLLUP base, not the budget-seed gdp. One read
+      // per sync; other countries skip it entirely.
+      budgetCountryId in COST_INCOME_ANCHORS
+        ? countryFiscalBase(db, budgetCountryId)
+        : Promise.resolve(undefined),
+      // Plan-economy allocations lapse rather than disburse (see the transfer
+      // block below); joins this batch so the gate costs no extra round trip.
+      db
+        .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
+        .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
+    ]);
   const enactedLaws = keepLatestActiveLawPerType(rawLaws);
   const nationalGdpPerCapita = population > 0 ? budget.gdp / population : undefined;
   const { year: eraYear, incomeBandIndexByCountry } = eraContext;
@@ -280,7 +296,23 @@ export async function calculateFederalSpending(
       .collection<RegionalBudget>("regionalBudgets")
       .find({ _id: { $in: stateIds } })
       .toArray();
-    stateGrants += regionalBudgets.reduce((sum, rb) => sum + (rb[transferGrantField] ?? 0), 0);
+    // A PLANNED economy allocates rather than disburses: an allocation a
+    // republic never draws down lapses at the end of the year, so the centre is
+    // charged for what was actually spent, capped at the allocation. Live RU
+    // hands its republics ₽44.00B and they spend ₽24.34B — the ₽19.66B
+    // remainder banks into a regional surplus that is never accumulated
+    // anywhere, so booking it would charge the union for programmes that do not
+    // exist. A MARKET economy's transfer is genuinely disbursed whether the
+    // region spends it or not, so it still books in full.
+    const lapses = isPlannedEconomy(
+      budgetCountryId,
+      eraYear,
+      gameConfig?.commandEconomyEnabled === true
+    );
+    stateGrants += regionalBudgets.reduce((sum, rb) => {
+      const allocated = rb[transferGrantField] ?? 0;
+      return sum + (lapses ? Math.min(allocated, rb.enactedBillCosts ?? 0) : allocated);
+    }, 0);
   }
 
   return normalizeFederalSpending({
