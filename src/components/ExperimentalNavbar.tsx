@@ -688,7 +688,15 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
             NavbarTopFlair (a fixed strip in NavbarWrapper), matching the design. */}
         <div ref={barRef}>
           {/* ── Desktop bar ──────────────────────────────────────────────── */}
-          <div className="mx-auto hidden min-h-[60px] max-w-7xl items-center justify-between gap-3 overflow-visible px-5 md:flex">
+          {/* The full bar needs lg, not md. Its items are `shrink-0` inside an
+              `overflow-visible` row (the dropdown panels have to escape the
+              box), so at 768 they do not compress or wrap — they spill past the
+              container and off the viewport, taking Help and Staff with them.
+              Country labels are the variable: "Northwest Russia" overflows
+              where a shorter nation would fit, so it broke for some players and
+              not others. Below lg the drawer below handles it, and does so
+              already. */}
+          <div className="mx-auto hidden min-h-[60px] max-w-7xl items-center justify-between gap-3 overflow-visible px-5 lg:flex">
             {/* Brand */}
             <Link
               href="/profile"
@@ -978,7 +986,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
           </div>
 
           {/* ── Mobile bar ───────────────────────────────────────────────── */}
-          <div className="mx-auto flex h-14 items-center gap-2.5 px-3.5 md:hidden">
+          <div className="mx-auto flex h-14 items-center gap-2.5 px-3.5 lg:hidden">
             <Link href="/profile" className="flex shrink-0 items-center gap-2.5">
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white p-0.5">
                 <Image
