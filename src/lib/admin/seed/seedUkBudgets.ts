@@ -129,12 +129,23 @@ export async function seedUkBudgets(
   }
 
   // Seed/update UK regional state policies (spending + tax) with policyOptionId
-  // so the regional budget processor can look up annualCostPerCapita and tax rates.
+  // so the regional budget processor can look up annualCostPerCapita.
+  //
+  // Gated on the preset for the same reason `seedStatePolicies` gates the
+  // national ones (political-legislation spec §6): on a v2 preset
+  // `seedLegislationTypes` unseeds AND prunes every `countryScope: "uk"` type,
+  // so seeding these anyway wrote 18 policies × 12 regions pointing at
+  // legislation that no longer exists. Those dangling rows are invisible until
+  // something reads through them — which is how UK regional revenue silently
+  // resolved to £0 while the cost half kept pricing through the v2 catalog.
   const { legislationTypes } = await import("@/lib/seeds/reference/legislationTypes");
-  const ukRegionalTypes = legislationTypes.filter(
-    (lt: { countryScope?: string; allowedScope?: string }) =>
-      lt.countryScope === "uk" && lt.allowedScope === "state"
-  );
+  const { isPoliticalLegislationPreset } = await import("./seedPoliticalLegislation");
+  const ukRegionalTypes = isPoliticalLegislationPreset(preset)
+    ? []
+    : legislationTypes.filter(
+        (lt: { countryScope?: string; allowedScope?: string }) =>
+          lt.countryScope === "uk" && lt.allowedScope === "state"
+      );
   let regionalPoliciesSeeded = 0;
   const policyOps: AnyBulkWriteOperation<Document>[] = [];
   for (const state of states) {
