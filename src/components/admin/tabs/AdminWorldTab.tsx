@@ -25,6 +25,13 @@ const CrisesManager = dynamic(
     })),
   { ssr: false }
 );
+const GermanQuestionManager = dynamic(
+  () =>
+    import("@/components/admin/settlement/GermanQuestionManager").then((m) => ({
+      default: m.GermanQuestionManager,
+    })),
+  { ssr: false }
+);
 const CountryManagement = dynamic(() => import("@/components/admin/countries/CountryManagement"), {
   ssr: false,
 });
@@ -44,7 +51,14 @@ const RandomEventsManager = dynamic(
 );
 
 export type WorldSubTab =
-  "demographics" | "npps" | "politicians" | "crises" | "events" | "countries" | "conflicts";
+  | "demographics"
+  | "npps"
+  | "politicians"
+  | "crises"
+  | "german-question"
+  | "events"
+  | "countries"
+  | "conflicts";
 
 interface AdminWorldTabProps {
   activeSub: WorldSubTab;
@@ -84,6 +98,7 @@ export function AdminWorldTab({ activeSub, onSubChange }: AdminWorldTabProps) {
         {activeSub === "npps" && <NPPManagement />}
         {activeSub === "politicians" && <PoliticianPagesTab />}
         {activeSub === "crises" && <CrisesManager />}
+        {activeSub === "german-question" && <GermanQuestionManager />}
         {activeSub === "events" && <RandomEventsManager />}
         {activeSub === "countries" && <CountryManagement />}
         {activeSub === "conflicts" && <ConflictsManager />}

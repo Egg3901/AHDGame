@@ -13,7 +13,12 @@ interface BooleanGate {
 }
 
 // Mirrors FEATURE_GATE_BOOLEAN_KEYS in /api/admin/feature-gates.
-const BOOLEAN_GATES: BooleanGate[] = [
+//
+// Exported so `featureGateParity.test.ts` can hold the two lists in agreement.
+// `key` is a bare string and the route's enum is the real contract, so nothing
+// but that test stops a gate being added to one side and silently missing from
+// the other — which ships a flag no admin can reach, or a dead toggle.
+export const BOOLEAN_GATES: BooleanGate[] = [
   { key: "forexEnabled", label: "Forex", desc: "Multi-currency exchange-rate system." },
   {
     key: "nppCorpStrategyEnabled",
@@ -100,10 +105,36 @@ const BOOLEAN_GATES: BooleanGate[] = [
     label: "Macro-growth v1 (convergence)",
     desc: "Folds corporate buildout + historical catch-up into region GDP growth: a Solow convergence bonus toward the frontier (O2, gated by a state-ownership/trade/freedom openness index), a sector-signal blend into potential (O3), and paid corp growth-cost into the capital stock (O1c, capped at 5% of region GDP/yr). Review scripts/debug/macro-growth-dryrun.mjs before enabling.",
   },
+  // ── Three gates below were in the route's enum but missing from this panel,
+  // so they were unreachable from the UI. Found by featureGateParity.test.ts,
+  // which now holds the two lists in agreement.
+  {
+    key: "extractionAutoStrategyEnabled",
+    label: "Extraction auto strategy",
+    desc: "Nudges standard miners on shortage deposits onto the matching focused mining strategy (Phase 1a of the extraction-capacity remediation). Default off.",
+  },
+  {
+    key: "embargoTradeExposureEnabled",
+    label: "Embargo trade exposure",
+    desc: "Embargoes strip only a sector's cross-border leg, scaling revenue by its export exposure, instead of mothballing the whole operation including domestic host sales (#935). Off = legacy total-blackout behaviour.",
+  },
+  {
+    // `isSeasonRecapEnabled` documents this as "flipped from the admin Feature
+    // Gates panel" — but the entry was never added, so the doc described a
+    // control that did not exist.
+    key: "seasonRecapEnabled",
+    label: "Season recap (Wrapped)",
+    desc: "End-of-iteration Season Recap. Off or absent = inert: resetGameWorld builds no recaps, voluntary/admin retirements attach none, and the post-reset gate surfaces nothing.",
+  },
   {
     key: "intOrgAlignmentEnabled",
     label: "IntOrg alignment",
     desc: "Cold War alignment: every nation holds a share per bloc pole plus a non-aligned remainder, drifting each turn and moved by influence plays. Adds the Cold War Ledger and the per-org Influence tab. Off by default — seeded values are written regardless, so flipping this on shows a populated map rather than blank rows. Tune drift against a live world before enabling.",
+  },
+  {
+    key: "settlementCrisisEnabled",
+    label: "Settlement crises",
+    desc: "The German Question: a standing contest over whether West Germany stays sovereign in NATO or reunifies into the Warsaw Pact, fought across four weighted institutions by the GDR, USSR, USA and UK. Off by default and incomplete — the turn phase runs but nothing creates a crisis yet, so enabling this on a live world currently does nothing.",
   },
 ];
 

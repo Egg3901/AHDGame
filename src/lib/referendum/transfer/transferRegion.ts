@@ -36,8 +36,12 @@ export interface TransferRegionArgs {
   province: string;
   /** Optional display name the region takes in its new country (NIR → "Ulster"). */
   displayName?: string;
-  /** Where evacuated NPPs (+ their corporations) relocate in the source country. */
-  relocateToRegionId: string;
+  /**
+   * Where evacuated NPPs (+ their corporations) relocate in the source country.
+   * NULL when the source is being dissolved by a merge — they cross with the
+   * region instead. See `evacuateRegionPolitics`.
+   */
+  relocateToRegionId: string | null;
   currentTurn: number;
 }
 

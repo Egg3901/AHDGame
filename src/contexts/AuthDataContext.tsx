@@ -45,6 +45,10 @@ export interface ClientNavBootstrap {
   /** When true, the Conflicts subsystem is live — drives the conditional
    *  "Conflicts" link in the World dropdown. */
   conflictsEnabled: boolean;
+  /** When true a settlement crisis is actually running — drives the
+   *  conditional "The German Question" link nested under Crises. Not merely
+   *  the subsystem flag: the question can be opened and closed at will. */
+  settlementCrisisLive: boolean;
   /** When true, the labour system is at its "full" tier (player-run unions are
    *  live) — drives the conditional "Unions" link in the World dropdown. */
   unionsEnabled?: boolean;
@@ -187,6 +191,20 @@ export function useAuthMe(): AuthDataContextValue {
   const ctx = useContext(AuthDataContext);
   if (!ctx) throw new Error("useAuthMe must be used within AuthDataProvider");
   return ctx;
+}
+
+/**
+ * Non-throwing accessor for the nav-bootstrap refetch.
+ *
+ * `/api/client-nav` is fetched once when the provider mounts and never again,
+ * so in a client-routed session every world-state flag it carries is frozen
+ * for the whole visit. Callers that observe world state changing — the status
+ * bar watching the turn counter — use this to bring it back in step. A no-op
+ * outside a provider, so a component using it stays renderable in isolation.
+ */
+export function useRefetchNav(): () => void {
+  const ctx = useContext(AuthDataContext);
+  return useMemo(() => ctx?.refetch ?? (() => {}), [ctx?.refetch]);
 }
 
 /**

@@ -10,15 +10,21 @@ import type { CountryGameState } from "@/lib/db/types/gameState";
  * of raw COUNTRY_ORDER at any server site that must reflect live countries.
  */
 export async function getRegisteredCountryIds(db: Db): Promise<CountryId[]> {
+  // Two queries' worth of rows in one read: the actives that widen the base,
+  // and the dissolved that narrow it.
   const docs = await db
     .collection<CountryGameState>("countryGameStates")
-    .find({ status: "active" })
+    .find({ $or: [{ status: "active" }, { dissolvedTurn: { $ne: null } }] })
     .toArray();
   const activeExtra = docs
+    .filter((d) => d.status === "active" && d.dissolvedTurn == null)
     .map((d) => d._id as CountryId)
     .filter((id) => !COUNTRY_ORDER.includes(id));
+  // A country absorbed into another leaves the registry. Without this the base
+  // list is add-only and a merged country stays enumerated forever.
+  const dissolved = new Set(docs.filter((d) => d.dissolvedTurn != null).map((d) => String(d._id)));
   // Stable order: COUNTRY_ORDER base, then activated extras (sorted for determinism).
-  return [...COUNTRY_ORDER, ...activeExtra.sort()];
+  return [...COUNTRY_ORDER, ...activeExtra.sort()].filter((id) => !dissolved.has(id));
 }
 
 /**

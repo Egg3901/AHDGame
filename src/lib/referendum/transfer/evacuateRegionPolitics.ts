@@ -33,8 +33,16 @@ export interface EvacuateRegionPoliticsArgs {
   regionId: string;
   fromCountryId: CountryId;
   toCountryId: CountryId;
-  /** Where evacuated NPPs (and their corporations) relocate, e.g. "LON". */
-  relocateToRegionId: string;
+  /**
+   * Where evacuated NPPs (and their corporations) relocate, e.g. "LON".
+   *
+   * NULL when the source country is being DISSOLVED, not merely losing a
+   * region. There is then no "rest of the country" to retreat into, so NPPs and
+   * their corporations travel WITH the region into the target instead of being
+   * relocated out of it. Passing a region id here when the source is dissolving
+   * strands them in a country that is about to stop being simulated.
+   */
+  relocateToRegionId: string | null;
 }
 
 export interface EvacuateRegionPoliticsResult {
@@ -63,23 +71,37 @@ export async function evacuateRegionPolitics(
     .project({ _id: 1 })
     .toArray();
   const nppIds = npps.map((n) => n._id);
+  // A dissolving source has nowhere to retreat to: the NPPs stay in the region
+  // and cross with it, becoming the target's. Either way they drop their office
+  // — the body they sat in does not survive the transfer.
+  const dissolving = relocateToRegionId === null;
   if (nppIds.length) {
-    await db
-      .collection<NPP>("npps")
-      .updateMany(
-        { _id: { $in: nppIds } },
-        { $set: { homeState: relocateToRegionId, currentOffice: null, updatedAt: now } }
-      );
+    await db.collection<NPP>("npps").updateMany(
+      { _id: { $in: nppIds } },
+      {
+        $set: {
+          homeState: dissolving ? regionId : relocateToRegionId,
+          ...(dissolving ? { countryId: toCountryId } : {}),
+          currentOffice: null,
+          updatedAt: now,
+        },
+      }
+    );
   }
 
-  // 1b. A corporation an evacuated NPP CEOs follows them — for free — to the same
-  //     destination region, staying in the source country.
+  // 1b. A corporation an evacuated NPP CEOs follows them — for free — to the
+  //     same destination. Where that is depends on whether the source survives:
+  //     to another of its regions if so, into the target with the region if not.
   let corpsFollowedCeo = 0;
   if (nppIds.length) {
     const res = await db.collection("corporations").updateMany(
       { ceoType: "npp", ceoId: { $in: nppIds } },
       {
-        $set: { headquartersState: relocateToRegionId, countryId: fromCountryId, updatedAt: now },
+        $set: {
+          headquartersState: dissolving ? regionId : relocateToRegionId,
+          countryId: dissolving ? toCountryId : fromCountryId,
+          updatedAt: now,
+        },
       }
     );
     corpsFollowedCeo = res?.modifiedCount ?? 0;

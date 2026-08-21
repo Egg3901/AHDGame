@@ -130,7 +130,11 @@ export function WorldDropdown({
                 key={item.id}
                 href={item.href}
                 onClick={() => setIsOpen(false)}
-                className={linkClass}
+                className={
+                  item.parentId != null
+                    ? `${linkClass} ml-3 border-l border-card-border pl-3`
+                    : linkClass
+                }
                 role="menuitem"
               >
                 {t(item.labelKey)}

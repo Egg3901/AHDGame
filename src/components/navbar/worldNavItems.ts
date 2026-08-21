@@ -12,6 +12,16 @@ export interface WorldNavItem {
   show: boolean;
   /** Highlight as primary/corporate link */
   primary?: boolean;
+  /**
+   * Renders indented under the item with this id, which must be the one
+   * immediately before it. A child is a specific instance of its parent — the
+   * German Question is one crisis, not a peer of the crisis board — so it reads
+   * as a sub-entry rather than as another destination competing with it.
+   *
+   * Purely presentational: the child is an ordinary link with its own `show`,
+   * and hiding the parent does not hide it.
+   */
+  parentId?: string;
 }
 
 export interface WorldNavOpts {
@@ -19,6 +29,13 @@ export interface WorldNavOpts {
   myCorporationId?: number | null;
   conflictsEnabled?: boolean;
   unionsEnabled?: boolean;
+  /**
+   * A settlement crisis is LIVE — not merely that the subsystem is switched on.
+   * The German Question is admin-started and can be closed again, so the flag
+   * alone would leave a link to an empty board standing for as long as the
+   * feature is enabled.
+   */
+  settlementCrisisLive?: boolean;
 }
 
 /**
@@ -30,6 +47,7 @@ export function buildWorldNavItems({
   myCorporationId = null,
   conflictsEnabled = false,
   unionsEnabled = false,
+  settlementCrisisLive = false,
 }: WorldNavOpts): WorldNavItem[] {
   const country = countryId.toLowerCase();
 
@@ -74,6 +92,19 @@ export function buildWorldNavItems({
       href: "/world/crises",
       section: "main",
       show: true,
+    },
+    {
+      // Nested under Crises: it IS a crisis, not a sibling of the crisis board.
+      // Shown only while one is actually live — the question is admin-started
+      // and can be closed again, so gating on the subsystem flag alone would
+      // leave a link to an empty board standing indefinitely.
+      id: "germanQuestion",
+      label: "The German Question",
+      labelKey: "menus.world.germanQuestion",
+      href: "/world/german-question",
+      section: "main",
+      show: settlementCrisisLive,
+      parentId: "crises",
     },
     {
       id: "conflicts",
@@ -219,7 +250,7 @@ const WORLD_NAV_GROUPS: WorldNavGroupDef[] = [
     titleKey: "menus.world.groups.diplomacy",
     // Nations 0.32% > International Orgs 0.08% > Crises 0.06%. Map keeps
     // second place because it is the entry point to the region cluster.
-    itemIds: ["nations", "map", "internationalOrgs", "crises", "conflicts"],
+    itemIds: ["nations", "map", "internationalOrgs", "crises", "germanQuestion", "conflicts"],
   },
   { id: "other", title: "Other", titleKey: "menus.world.groups.other", itemIds: ["news"] },
   {

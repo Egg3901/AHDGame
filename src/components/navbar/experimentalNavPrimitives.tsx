@@ -148,6 +148,7 @@ export function MenuRow({
   meta,
   metaClass = "text-muted",
   dot,
+  nested = false,
 }: {
   children: React.ReactNode;
   href: string;
@@ -156,13 +157,17 @@ export function MenuRow({
   meta?: string;
   metaClass?: string;
   dot?: string;
+  /** Indented sub-entry of the row above it, with a leading rule to tie them. */
+  nested?: boolean;
 }) {
   return (
     <Link
       href={href}
       onClick={onNavigate}
       role="menuitem"
-      className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors hover:bg-white/5"
+      className={`flex items-center gap-2.5 rounded-lg py-2 transition-colors hover:bg-white/5 ${
+        nested ? "ml-3 border-l border-card-border pl-3 pr-2.5" : "px-2.5"
+      }`}
     >
       {dot && <span className={`h-[7px] w-[7px] shrink-0 rounded-full ${dot}`} />}
       <span className={`text-[13px] ${strong ? "font-medium text-foreground" : "text-fg-2"}`}>

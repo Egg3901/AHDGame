@@ -188,7 +188,12 @@ function registeredBase(docs: CountryGameState[]): CountryId[] {
     .filter((d) => d.status === "active" && !COUNTRY_ORDER.includes(d._id as CountryId))
     .map((d) => d._id as CountryId)
     .sort();
-  return [...COUNTRY_ORDER, ...activeExtra];
+  // A dissolved country is filtered out of the BASE, which is what lets a
+  // country compiled into COUNTRY_ORDER actually be retired. Everything
+  // downstream — the player list, the economy list, the simulated list — is
+  // derived from this, so one filter retires it everywhere at once.
+  const dissolved = new Set(docs.filter((d) => d.dissolvedTurn != null).map((d) => String(d._id)));
+  return [...COUNTRY_ORDER, ...activeExtra].filter((id) => !dissolved.has(id));
 }
 
 /**

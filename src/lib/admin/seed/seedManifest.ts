@@ -725,6 +725,18 @@ const RUNTIME: CollectionEntry[] = [
   // Flashpoints blocs bid over. Runtime world state like the rows they move.
   { name: "alignmentCrises", category: "runtime" },
 
+  // The German Question and any later settlement crisis: a standing contest
+  // over one nation's constitutional settlement, opened per iteration and
+  // advanced by the settlement turn phase. Runtime world state — wiped and
+  // reopened on reset, exactly like the alignment rows it sits beside.
+  { name: "settlementCrises", category: "runtime" },
+
+  // Queued and resolved plays against a settlement crisis. Player actions
+  // against runtime world state, so wiped with it. Resolved rows are stamped
+  // rather than deleted during a world's life (they are the audit trail for
+  // what a player's money bought), but they do not outlive the world.
+  { name: "settlementPlays", category: "runtime" },
+
   // Crises / referendums / debates / discussions.
   { name: "crisisAidCommitments", category: "runtime" },
   { name: "crisisInteractions", category: "runtime" },

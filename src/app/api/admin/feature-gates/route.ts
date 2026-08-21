@@ -39,6 +39,7 @@ export const FEATURE_GATE_BOOLEAN_KEYS = [
   "seasonRecapEnabled",
   "intOrgAlignmentEnabled",
   "nppCorpStrategyEnabled",
+  "settlementCrisisEnabled",
 ] as const;
 
 type FeatureGateBooleanKey = (typeof FEATURE_GATE_BOOLEAN_KEYS)[number];
