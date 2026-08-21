@@ -27,9 +27,9 @@ export const HUNDREDTHS = 100;
  * At tempo 1 the mockup's magnitudes resolved an unopposed question in 35-43
  * turns — under a real day, when a turn is an hour. The brief is at least three
  * in-game years unopposed, and a contested question should run for real-world
- * days. At 48 turns to the year, three years is 144 turns, and 7 is the lowest
+ * days. At 48 turns to the year, three years is 144 turns, and 8 is the lowest
  * whole tempo that clears it on the FASTER of the two unopposed bounds:
- * independence locks at 149 turns, reunification carries at 257. So:
+ * independence locks at 156 turns, reunification carries at 294. So:
  *
  *   - every authored magnitude below is written `mag(<mockup points>)`
  *   - `DRIFT_K_BPS`, `DRIFT_NOISE_SPAN` and `PERSONAL_NET_CAP` divide by it too
@@ -38,7 +38,7 @@ export const HUNDREDTHS = 100;
  * WITHOUT changing the brake changes where the crisis lands, not how long it
  * takes — that is the balance dial, and this is the speed dial.
  */
-export const SETTLEMENT_TEMPO = 7;
+export const SETTLEMENT_TEMPO = 8;
 
 /**
  * An authored magnitude in mockup points, converted to a tempo-scaled hundredth.
@@ -175,11 +175,10 @@ export const LOCK_THRESHOLD = 15 * HUNDREDTHS;
  * unopposed bounds are asymmetric by the board's own geometry: the opening
  * index of 38.2 is 23.2 points from the lock and 46.8 from the carry, so an
  * unopposed East always takes about twice as long as an unopposed West. At 300
- * that stretched to 159 turns against 350 — seven in-game years for a question
- * nobody was contesting. Slackening the brake pulls the far bound in hard and
- * the near one barely at all (350 -> 257 against 159 -> 149), and leaves the
- * CONTESTED stall alone: it measures 57.3 at 300 and 57.5 at 200, still
- * unresolved after 480 turns either way. See
+ * the far bound stretched to seven in-game years for a question nobody was
+ * contesting, while the near one barely moved. Slackening the brake pulls the
+ * far bound in hard and leaves the CONTESTED stall alone — it measured 57.3 at
+ * 300 and 57.5 at 200, still unresolved after 480 turns either way. See
  * `ahd-german-question-balance-findings` for the measured sweep.
  */
 export const DRIFT_K_BPS = Math.round(200 / SETTLEMENT_TEMPO);
@@ -202,6 +201,53 @@ export const PERSONAL_NET_CAP = mag(6);
 
 /** Highest rung coercive plays alone can reach. Rung 5 is a deliberate act. */
 export const MAX_COERCIVE_RUNG = 4;
+
+/**
+ * How long the four-power channel runs before the brink is available at all.
+ *
+ * Two in-game years at 48 turns to the year. MEASURED, NOT GUESSED: without
+ * this, `scripts/debug/gq-war-path-sim.ts` has Moscow standing at the coercive
+ * cap on turn 3, arming on turn 4 and declaring on turn 4 — of a settlement
+ * game tuned to run 149 to 257 turns. Nothing in `declareSettlementWar` gates
+ * on the index or on the age of the question, so the whole political board was
+ * optional: one authority seat could end an admin-opened set piece within four
+ * hours, before the other three delegations had logged in.
+ *
+ * The design's own logic is that the STALL is what sends a bloc to the ladder —
+ * war is the tiebreak when politics deadlocks. This makes that literal. A plain
+ * age gate rather than a cleverer deadlock test, because the player has to
+ * understand why the button is greyed out, and "the four-power channel runs
+ * until turn X" reads at a glance where "the index has been inside a band for
+ * N turns" does not.
+ *
+ * Heat still ACCUMULATES from turn one — the ladder climbs, the DEFCON display
+ * lives, the tension is legible. Only the press is held back.
+ */
+export const LADDER_UNLOCK_TURNS = 96;
+
+/**
+ * Consecutive quiet turns that cost the ladder a rung.
+ *
+ * The authored law decayed a rung on EVERY turn without a coercive play, which
+ * sets a hidden threshold nobody intended: a bloc has to land coercion on more
+ * than half of all turns simply to stay where it is, or the ladder walks back
+ * down faster than it climbs. Measured against the real catalogue, no bloc
+ * clears 50% for long — East Berlin's `border` costs money and its treasury is
+ * spent by about turn 60 — so heat collapsed to zero and the brink became
+ * unreachable rather than expensive.
+ *
+ * It also meant rung 5 could not be HELD, which is the opposite of the design's
+ * stated intent that the brink is "a position you pay to maintain rather than a
+ * state you reach". The standoff — both sides mobilised, DEFCON 1, somebody has
+ * to blink — lasted a single turn, and the mobilisation levy built to make it
+ * expensive was never charged long enough to bite.
+ *
+ * One counter governs every rung rather than special-casing the top one: three
+ * quiet turns cost a rung, so holding any position needs coercion one turn in
+ * three. Both blocs clear that once their authority seats' plays are priced to
+ * be affordable, and the levy compounds over a standoff long enough to hurt.
+ */
+export const LADDER_DECAY_TURNS = 3;
 
 /**
  * What one turn at the top of the ladder costs each delegation's country.
@@ -262,8 +308,8 @@ const AUTHORED_WIRE_INTERVAL_TURNS = 6;
  * dispatch interval multiplies it, because waiting twice as long accumulates
  * twice the swing.
  *
- * Left unscaled the vocabulary collapses to one word. At tempo 7 the fastest
- * unopposed pace is about 2.2 points per twelve-turn interval; against the
+ * Left unscaled the vocabulary collapses to one word. At the tuned tempo the
+ * fastest unopposed pace is about 2 points per twelve-turn interval; against the
  * authored 3.0 that meant "moved" and 8.0 that meant "swung sharply", every
  * dispatch in the game would read "barely moved".
  */
@@ -530,11 +576,34 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "RU",
     class: "coercive",
     target: "garrison",
-    magnitude: mag(5),
-    capitalCost: 16,
+    /*
+     * HALVED alongside the cost below, so the reprice buys escalation and not
+     * settlement. Landing twice as often at half the magnitude leaves this
+     * play's contribution to the INDEX exactly where the design put it, while
+     * letting it feed the ladder. Without the halving the two repricings alone
+     * pulled the unopposed lock from 156 turns to 116 — under the three
+     * in-game-year floor — and shoved the contested stall from 57.5 to 65.
+     */
+    magnitude: mag(2.5),
+    /*
+     * 1 AP and 8 capital, down from 2 and 16, for the same reason `station`
+     * was repriced and measured the same way: AN AUTHORITY SEAT MUST BE ABLE
+     * TO FEED THE LADDER IT CAN ARM. Moscow earns 1 AP and 3 capital a turn, so
+     * at the authored price this landed once every 5.3 turns — and it is the
+     * East's only coercive play that costs no money. East Berlin's is `border`
+     * at ℳ12M against a ℳ310M treasury, which runs dry around turn 60, so past
+     * that point the whole Eastern ladder rested on this one play at 19%
+     * density against a rung that decays every quiet turn. Measured, the East
+     * could not climb back to the coercive cap at all once the opening capital
+     * banks were spent.
+     *
+     * Still dearer than `station`: this is a weight-3 institution at a larger
+     * magnitude, so Moscow pays more per press than Washington does.
+     */
+    capitalCost: 8,
     fundsUnit: "local",
     fundsCost: 0,
-    actionCost: 2,
+    actionCost: 1,
     addsHeat: true,
     detail:
       "Harass the transit corridors. Makes the Allied presence look expensive and precarious.",
@@ -590,11 +659,27 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     seat: "US",
     class: "coercive",
     target: "street",
-    magnitude: mag(4),
-    capitalCost: 14,
+    /* Halved with the cost, for the reason given on `pressure`. */
+    magnitude: mag(2),
+    /*
+     * 1 AP and 6 capital, down from 2 and 14, because this is the WEST'S ONLY
+     * COERCIVE PLAY and at the authored price the West could not reach the
+     * escalation ladder at all. Washington earns 1 AP and 3 capital a turn, so
+     * a 2 AP / 14 capital play lands once every 4.7 turns against a ladder that
+     * decays every quiet turn: measured, Western heat oscillates between 0 and
+     * 1 forever, and London has no coercive play whatsoever. Washington holds
+     * authority to arm and could never satisfy the precondition — an arming
+     * control that is permanently inert, and no way to answer an Eastern
+     * escalation or to deter one.
+     *
+     * At this price it lands every other turn, inside LADDER_DECAY_TURNS,
+     * so NATO can both reach the brink and hold it. Still the cheapest thing on
+     * the board by index — it buys escalation, not settlement.
+     */
+    capitalCost: 6,
     fundsUnit: "local",
     fundsCost: 15_000_000,
-    actionCost: 2,
+    actionCost: 1,
     addsHeat: true,
     detail:
       "Place editorials, fund rival unions, expose the fronts. Effective — until it is exposed.",

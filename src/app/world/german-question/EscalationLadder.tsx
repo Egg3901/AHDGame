@@ -90,6 +90,16 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
         ))}
       </ol>
 
+      {view.turnsUntilOpen > 0 && !off && (
+        // The countdown is the whole reason the gate is an age and not a
+        // cleverer deadlock test: a greyed-out button has to say when it opens.
+        <p className="mt-3 rounded-md border border-dashed border-card-border p-3 font-mono text-body-xs leading-relaxed text-muted">
+          FOUR-POWER CHANNEL SITTING — the ladder opens on turn {view.opensAtTurn}, in{" "}
+          {view.turnsUntilOpen} turn{view.turnsUntilOpen === 1 ? "" : "s"}. Coercive plays still add
+          heat; the brink simply cannot be forced until the talks have run.
+        </p>
+      )}
+
       {view.armed && (
         <p className="mt-3 rounded-md border border-warning/50 bg-warning/10 p-3 font-mono text-body-xs leading-relaxed text-warning">
           ARMED · DEFCON 1. Every delegation&apos;s country is paying a mobilisation levy each turn
@@ -124,7 +134,9 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
             title={
               seat.canArmNow
                 ? "Take the ladder to rung 5. This arms a declaration and starts the levy."
-                : "The ladder must reach rung 4 on coercive plays before it can be forced."
+                : view.turnsUntilOpen > 0
+                  ? `The four-power channel is still sitting. The ladder opens on turn ${view.opensAtTurn}.`
+                  : "The ladder must reach rung 4 on coercive plays before it can be forced."
             }
             className="mt-3 w-full rounded-md border border-warning/40 bg-warning/[0.07] p-2.5 font-mono text-body-xs font-semibold tracking-wider text-warning hover:bg-warning/[0.14] disabled:cursor-not-allowed disabled:opacity-50"
           >

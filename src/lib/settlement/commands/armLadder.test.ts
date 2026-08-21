@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockCollection, type MockDb } from "@/lib/test-utils/mockDb";
-import { MAX_COERCIVE_RUNG } from "@/lib/constants/settlementCrisis";
+import { LADDER_UNLOCK_TURNS, MAX_COERCIVE_RUNG } from "@/lib/constants/settlementCrisis";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("../actorContext", () => ({ loadSettlementActorContext: vi.fn() }));
@@ -126,6 +126,48 @@ describe("armSettlementLadder", () => {
       heat: 5,
     });
   });
+  it("refuses while the four-power channel is still sitting", async () => {
+    // The whole point of the gate: without it the East stands at the coercive
+    // cap on turn 3 and can declare on turn 4, of a question tuned to run
+    // 156 to 294 turns.
+    prime(db, "settlementCrises").findOne.mockResolvedValue({
+      _id: CRISIS_ID,
+      openedTurn: 412 - LADDER_UNLOCK_TURNS + 1,
+    });
+    const { armSettlementLadder } = await import("./armLadder");
+    const res = await armSettlementLadder(db as unknown as Db, characterId);
+    expect(res).toMatchObject({ ok: false, status: 409 });
+    expect(prime(db, "settlementCrises").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("names the turn the ladder opens, so the refusal is actionable", async () => {
+    const openedTurn = 400;
+    prime(db, "settlementCrises").findOne.mockResolvedValue({ _id: CRISIS_ID, openedTurn });
+    const { armSettlementLadder } = await import("./armLadder");
+    const res = await armSettlementLadder(db as unknown as Db, characterId);
+    expect(res).toMatchObject({ ok: false });
+    if (res.ok) throw new Error("expected a refusal");
+    expect(res.error).toContain(String(openedTurn + LADDER_UNLOCK_TURNS));
+  });
+
+  it("arms once the channel has run its course", async () => {
+    prime(db, "settlementCrises").findOne.mockResolvedValue({
+      _id: CRISIS_ID,
+      openedTurn: 412 - LADDER_UNLOCK_TURNS,
+    });
+    const { armSettlementLadder } = await import("./armLadder");
+    expect(await armSettlementLadder(db as unknown as Db, characterId)).toMatchObject({ ok: true });
+  });
+
+  it("starts the armed rung on a fresh grace", async () => {
+    // The bloc that just pressed has not been quiet yet; inheriting a stale
+    // counter would drop it off the brink almost immediately.
+    const { armSettlementLadder } = await import("./armLadder");
+    await armSettlementLadder(db as unknown as Db, characterId);
+    const [, update] = prime(db, "settlementCrises").updateOne.mock.calls[0];
+    expect(update.$set["ladder.quietTurns"]).toBe(0);
+  });
+
   it("refuses while the escalation ladder is switched off", async () => {
     prime(db, "settlementCrises").findOne.mockResolvedValue({
       _id: CRISIS_ID,

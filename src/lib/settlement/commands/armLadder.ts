@@ -13,6 +13,7 @@ import { ObjectId, type Db } from "mongodb";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import {
   LADDER_RUNGS,
+  LADDER_UNLOCK_TURNS,
   MAX_COERCIVE_RUNG,
   getSeat,
   settlementRulesFor,
@@ -47,9 +48,22 @@ export async function armSettlementLadder(db: Db, characterId: ObjectId): Promis
 
   // Read the rules for the error message; the write below re-states the switch
   // as a filter clause so an admin flipping it mid-request still wins.
-  const doc = await crises.findOne({ _id: crisisId }, { projection: { rules: 1 } });
+  const doc = await crises.findOne({ _id: crisisId }, { projection: { rules: 1, openedTurn: 1 } });
   if (!settlementRulesFor(doc ?? {}).escalationEnabled) {
     return fail(403, "The escalation ladder is switched off for this question.");
+  }
+
+  // The four-power channel has to run its course first. Without this the brink
+  // is available on turn 4 of a question tuned to take 149 to 257 turns, and
+  // one authority seat can end an admin-opened set piece before the other three
+  // delegations have logged in. See LADDER_UNLOCK_TURNS.
+  const currentTurn = await getCurrentTurn(db);
+  const opensAt = (doc?.openedTurn ?? 0) + LADDER_UNLOCK_TURNS;
+  if (currentTurn < opensAt) {
+    return fail(
+      409,
+      `The four-power channel is still sitting. The ladder opens on turn ${opensAt}.`
+    );
   }
 
   // Guarded: the filter restates BOTH preconditions — the crisis is still open
@@ -71,7 +85,9 @@ export async function armSettlementLadder(db: Db, characterId: ObjectId): Promis
         // Stamped here, not left for the next tick: this is the turn the brink
         // was reached, and the levy should not get a free turn because the
         // phase had not run yet.
-        "ladder.armedTurn": await getCurrentTurn(db),
+        "ladder.armedTurn": currentTurn,
+        // A fresh grace: the bloc that just pressed has not been quiet yet.
+        "ladder.quietTurns": 0,
         updatedAt: new Date(),
       },
     }

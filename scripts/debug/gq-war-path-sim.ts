@@ -30,6 +30,8 @@
  * bill shrinks as the war chest does and a flat rate would misreport it.
  */
 import {
+  LADDER_DECAY_TURNS,
+  LADDER_UNLOCK_TURNS,
   MAX_COERCIVE_RUNG,
   MOBILISATION_APPROVAL_HIT,
   MOBILISATION_TREASURY_SHARE,
@@ -126,6 +128,7 @@ function run(bloc: "east" | "west", holdTurns: number): Run {
   let slips = 0;
   let approvalLost = 0;
   let coerciveTurns = 0;
+  let quietTurns = 0;
   let turnsAfterReady = 0;
   let note = "";
 
@@ -161,7 +164,9 @@ function run(bloc: "east" | "west", holdTurns: number): Run {
     }
 
     // ── the authority seat presses, against last tick's ladder ───────────────
-    if (heat === MAX_COERCIVE_RUNG && declaredTurn === null) {
+    // Gated on the unlock exactly as `armSettlementLadder` gates it: the
+    // four-power channel runs first, and the brink is unavailable until it has.
+    if (turn >= LADDER_UNLOCK_TURNS && heat === MAX_COERCIVE_RUNG && declaredTurn === null) {
       heat = 5;
       if (armedTurn === null) armedTurn = turn;
     }
@@ -208,7 +213,9 @@ function run(bloc: "east" | "west", holdTurns: number): Run {
 
     // ── the tick: the shipped ladder law, decay branch first ─────────────────
     const before = heat;
-    heat = nextHeat({ current: heat, added });
+    const ladder = nextHeat({ current: heat, added, quietTurns });
+    heat = ladder.heat;
+    quietTurns = ladder.quietTurns;
     if (before >= 5 && heat < 5) {
       // A turn with no coercive play knocks an ARMED ladder back to 4.
       slips++;
@@ -223,7 +230,7 @@ function run(bloc: "east" | "west", holdTurns: number): Run {
       armedTurn === null
         ? readyTurn === null
           ? "never reached the coercive cap"
-          : "reached the cap but never armed"
+          : `reached the cap on turn ${readyTurn} but never armed`
         : `armed on turn ${armedTurn} but could not hold ${holdTurns} turns (best ${bestHeld}, ${slips} slips)`;
   }
 
@@ -251,6 +258,10 @@ console.log(
   `coercive cap rung ${MAX_COERCIVE_RUNG} · armed rung 5 · ` +
     `levy ${(MOBILISATION_TREASURY_SHARE * 100).toFixed(0)}% of treasury + ` +
     `${MOBILISATION_APPROVAL_HIT} approval per armed turn, all four seats`
+);
+console.log(
+  `ladder unlocks on turn ${LADDER_UNLOCK_TURNS} · ` +
+    `the ladder loses a rung every ${LADDER_DECAY_TURNS} quiet turns`
 );
 console.log("═".repeat(78));
 

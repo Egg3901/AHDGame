@@ -305,6 +305,7 @@ function run(scenario: Scenario): Result {
 
   let heat = 0;
   let maxHeat = 0;
+  let quietTurns = 0;
   let armedTurns = 0;
   let peak = recomputePosition(institutions);
   let trough = peak;
@@ -394,7 +395,9 @@ function run(scenario: Scenario): Result {
       return { ...applyToInstitution(withPlays, drift), lastDrift: drift };
     });
 
-    heat = nextHeat({ current: heat, added: batch.heatAdded });
+    const ladder = nextHeat({ current: heat, added: batch.heatAdded, quietTurns });
+    heat = ladder.heat;
+    quietTurns = ladder.quietTurns;
     maxHeat = Math.max(maxHeat, heat);
     if (heat >= 5) armedTurns++;
 

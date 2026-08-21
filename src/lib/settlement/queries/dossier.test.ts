@@ -4,6 +4,7 @@ import { createMockDb, type MockCollection, type MockDb } from "@/lib/test-utils
 import {
   HUNDREDTHS,
   PERSONAL_NET_CAP,
+  LADDER_UNLOCK_TURNS,
   SETTLEMENT_INSTITUTIONS,
   SETTLEMENT_SEATS,
   getPlay,
@@ -50,6 +51,9 @@ function crisisDoc(over: Record<string, unknown> = {}) {
       committedPoints: 0,
     })),
     ladder: { heat: 2, armedTurn: null },
+    // Old enough that the four-power channel has run — the escalation gate is
+    // exercised on its own in the tests that care about it.
+    openedTurn: 412 - LADDER_UNLOCK_TURNS,
     driftHistory: [],
     ...over,
   };
@@ -346,6 +350,29 @@ describe("loadGermanQuestionDossier", () => {
     expect(view!.armed).toBe(false);
     expect(view!.viewer.seat!.canEscalate).toBe(true);
     expect(view!.viewer.seat!.canArmNow).toBe(false);
+  });
+
+  it("holds the arm button dark until the four-power channel has run", async () => {
+    // The gate that stops a bloc declaring on turn 4 of a 156-turn question.
+    prime(db, "settlementCrises").findOne.mockResolvedValue(
+      crisisDoc({ ladder: { heat: 4, armedTurn: null }, openedTurn: 412 - LADDER_UNLOCK_TURNS + 5 })
+    );
+    const { loadSettlementActorContext } = await import("../actorContext");
+    vi.mocked(loadSettlementActorContext).mockResolvedValue(
+      seatCtx({ id: "US", direction: -1 }) as never
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    // Washington: authority, in a bloc, heat at the cap — everything but time.
+    expect(view!.viewer.seat!.canArmNow).toBe(false);
+    expect(view!.viewer.seat!.escalateGate).toContain(String(412 + 5));
+    expect(view!.turnsUntilOpen).toBe(5);
+  });
+
+  it("counts the channel down to zero once it has run", async () => {
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.turnsUntilOpen).toBe(0);
   });
 
   it("lights the arm button for an authority seat once heat sits at rung 4", async () => {

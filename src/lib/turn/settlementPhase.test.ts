@@ -5,6 +5,7 @@ import type { SettlementCrisisDoc } from "@/lib/db/types/settlementCrisis";
 import type { SettlementPlayDoc } from "@/lib/db/types/settlementPlay";
 import {
   HUNDREDTHS,
+  LADDER_DECAY_TURNS,
   SETTLEMENT_INSTITUTIONS,
   SETTLEMENT_SEATS,
   seatActionBankCap,
@@ -431,12 +432,26 @@ describe("processSettlementTurn", () => {
     expect(update.outcome).toBe("incumbent");
   });
 
-  it("decays ladder heat when no coercive play lands", async () => {
+  it("holds ladder heat through a quiet turn — decay is slower than the climb", async () => {
     arrange(db, crisis({ ladder: { heat: 3, armedTurn: null } }), [play()]);
     const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
-    expect(crisisUpdate(db).ladder.heat).toBe(2);
+    expect(crisisUpdate(db).ladder).toMatchObject({ heat: 3, quietTurns: 1 });
+  });
+
+  it("decays ladder heat once the quiet run reaches the grace", async () => {
+    arrange(
+      db,
+      crisis({
+        ladder: { heat: 3, armedTurn: null, quietTurns: LADDER_DECAY_TURNS - 1 },
+      }),
+      [play()]
+    );
+    const { processSettlementTurn } = await import("./settlementPhase");
+    await processSettlementTurn(db as unknown as Db, 412);
+
+    expect(crisisUpdate(db).ladder).toMatchObject({ heat: 2, quietTurns: 0 });
   });
 
   it("raises ladder heat on a coercive play but not past rung 4", async () => {
@@ -555,7 +570,7 @@ describe("processSettlementTurn", () => {
     const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(result.countriesLevied).toBe(4);
-    expect(crisisUpdate(db).ladder).toEqual({ heat: 5, armedTurn: 410 });
+    expect(crisisUpdate(db).ladder).toEqual({ heat: 5, armedTurn: 410, quietTurns: 0 });
   });
 
   it("levies nothing while the ladder is below the top rung", async () => {
@@ -567,10 +582,14 @@ describe("processSettlementTurn", () => {
 
   it("clears the armed stamp when heat decays off the top rung", async () => {
     // A disarmed crisis must not keep looking armed to the declare route.
-    arrange(db, crisis({ ladder: { heat: 5, armedTurn: 410 } }), []);
+    arrange(
+      db,
+      crisis({ ladder: { heat: 5, armedTurn: 410, quietTurns: LADDER_DECAY_TURNS - 1 } }),
+      []
+    );
     const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
-    expect(crisisUpdate(db).ladder).toEqual({ heat: 4, armedTurn: null });
+    expect(crisisUpdate(db).ladder).toEqual({ heat: 4, armedTurn: null, quietTurns: 0 });
     expect(result.countriesLevied).toBe(0);
   });
 
@@ -587,7 +606,7 @@ describe("processSettlementTurn", () => {
     );
     const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
-    expect(crisisUpdate(db).ladder).toEqual({ heat: 0, armedTurn: null });
+    expect(crisisUpdate(db).ladder).toEqual({ heat: 0, armedTurn: null, quietTurns: 0 });
     expect(result.heat).toBe(0);
   });
 
@@ -618,7 +637,7 @@ describe("processSettlementTurn", () => {
     const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(result.countriesLevied).toBe(0);
-    expect(crisisUpdate(db).ladder).toEqual({ heat: 0, armedTurn: null });
+    expect(crisisUpdate(db).ladder).toEqual({ heat: 0, armedTurn: null, quietTurns: 0 });
   });
 
   it("keeps the ladder live for a crisis written before the rules block existed", async () => {

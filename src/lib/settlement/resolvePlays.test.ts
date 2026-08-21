@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
 import type { SettlementPlayDoc } from "@/lib/db/types/settlementPlay";
-import { HUNDREDTHS, PERSONAL_NET_CAP } from "@/lib/constants/settlementCrisis";
+import {
+  HUNDREDTHS,
+  PERSONAL_MULTIPLIER_PCT,
+  PERSONAL_NET_CAP,
+} from "@/lib/constants/settlementCrisis";
+
+/** What one default personal play buys, at the personal tier's multiplier. */
+const PERSONAL_QUARTER = Math.round((PERSONAL_NET_CAP * PERSONAL_MULTIPLIER_PCT) / 100);
 import { appliedPointsFor, resolvePlayBatch } from "./resolvePlays";
 
 function play(over: Partial<SettlementPlayDoc>): SettlementPlayDoc {
@@ -34,7 +41,10 @@ function personalPlay(over: Partial<SettlementPlayDoc> = {}): SettlementPlayDoc 
     countryId: null,
     playId: "oped",
     targetInstitutionId: "street",
-    basePoints: 150,
+    // Derived from the cap so that TWO of these stay under it whatever the
+    // tempo. A frozen literal drifted over the cap when the tempo moved, and
+    // the "under the cap" tests then silently measured the apportionment.
+    basePoints: PERSONAL_NET_CAP,
     direction: 1,
     class: "personal",
     ...over,
@@ -53,7 +63,7 @@ describe("appliedPointsFor", () => {
   });
 
   it("quarters a personal play", () => {
-    expect(appliedPointsFor(personalPlay())).toBe(38); // 150 * 0.25 = 37.5, rounded
+    expect(appliedPointsFor(personalPlay())).toBe(PERSONAL_QUARTER);
   });
 
   it("returns zero for an unknown seat rather than applying a default", () => {
@@ -94,8 +104,8 @@ describe("resolvePlayBatch", () => {
 
   it("leaves the personal tier alone when it is under the cap", () => {
     const batch = resolvePlayBatch([personalPlay(), personalPlay()]);
-    expect(batch.personalApplied.get("street")).toBe(76);
-    expect(batch.perInstitution.get("street")).toBe(76);
+    expect(batch.personalApplied.get("street")).toBe(PERSONAL_QUARTER * 2);
+    expect(batch.perInstitution.get("street")).toBe(PERSONAL_QUARTER * 2);
   });
 
   it("scales the personal tier down to the cap when it exceeds it", () => {
@@ -204,7 +214,7 @@ describe("resolvePlayBatch", () => {
 
   it("keeps uncapped personal stamps at full value", () => {
     const batch = resolvePlayBatch([personalPlay(), personalPlay()]);
-    expect(batch.stamped.map((s) => s.appliedPoints)).toEqual([38, 38]);
+    expect(batch.stamped.map((s) => s.appliedPoints)).toEqual([PERSONAL_QUARTER, PERSONAL_QUARTER]);
   });
 
   it("stamps seat plays at full value regardless of the personal cap", () => {

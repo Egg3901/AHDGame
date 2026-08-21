@@ -202,9 +202,16 @@ export async function processSettlementTurn(
   // escalation would otherwise sit permanently at DEFCON 2, one flag-flip away
   // from a war nobody can now arm or stand down.
   const rules = settlementRulesFor(crisis);
-  const heat = rules.escalationEnabled
-    ? nextHeat({ current: crisis.ladder.heat, added: batch.heatAdded })
-    : 0;
+  const ladder = rules.escalationEnabled
+    ? nextHeat({
+        current: crisis.ladder.heat,
+        added: batch.heatAdded,
+        quietTurns: crisis.ladder.quietTurns,
+      })
+    : // Switched off, the counter resets with the heat: a crisis that comes
+      // back on should not spend a stored grace it never earned.
+      { heat: 0, quietTurns: 0 };
+  const heat = ladder.heat;
   const outcome = outcomeFor(position);
 
   // Charged on the heat the crisis is at AFTER this tick's decay, so a bloc that
@@ -214,6 +221,7 @@ export async function processSettlementTurn(
   // The stamp survives only while the ladder is actually at the top; letting it
   // linger would leave a disarmed crisis looking armed to the declare route.
   const armedTurn = armed ? (crisis.ladder.armedTurn ?? currentTurn) : null;
+  const ladderState = { heat, armedTurn, quietTurns: ladder.quietTurns };
 
   const driftHistory = [
     weightedDrift(institutions.map((i) => ({ weight: i.weight, drift: i.lastDrift }))),
@@ -230,7 +238,7 @@ export async function processSettlementTurn(
         seats,
         position,
         driftHistory,
-        ladder: { heat, armedTurn },
+        ladder: ladderState,
         status: outcome ? "resolved" : "open",
         outcome,
         resolvedTurn: outcome ? currentTurn : null,
@@ -247,7 +255,7 @@ export async function processSettlementTurn(
     seats,
     position,
     driftHistory,
-    ladder: { heat, armedTurn },
+    ladder: ladderState,
     status: outcome ? "resolved" : "open",
     outcome,
   };

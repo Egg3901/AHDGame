@@ -21,6 +21,7 @@ import type { SettlementSeatState } from "@/lib/db/types/settlementCrisis";
 import {
   HUNDREDTHS,
   LADDER_RUNGS,
+  LADDER_UNLOCK_TURNS,
   MAX_COERCIVE_RUNG,
   PERSONAL_NET_CAP,
   PERSONAL_MULTIPLIER_PCT,
@@ -134,6 +135,10 @@ export interface DossierView {
   defcon: number;
   /** Rung 5 reached — the levy is running and a declaration is unlocked. */
   armed: boolean;
+  /** Turn the brink becomes available at all. See LADDER_UNLOCK_TURNS. */
+  opensAtTurn: number;
+  /** Zero once the four-power channel has run its course. */
+  turnsUntilOpen: number;
   ladder: { num: number; label: string; here: boolean; passed: boolean }[];
   drift: { last: number; history: number[]; revealed: boolean; band: string | null };
   institutions: DossierInstitutionView[];
@@ -296,6 +301,13 @@ export async function loadGermanQuestionDossier(
   const turn = gameState?.currentTurn ?? 0;
 
   const rules = settlementRulesFor(crisis);
+  // The brink is gated on the crisis's age, not on the board — see
+  // LADDER_UNLOCK_TURNS. Computed once here because both the ladder panel's
+  // countdown and each seat's escalate gate quote it.
+  // `?? 0` mirrors `armSettlementLadder`'s own fallback: the two must agree,
+  // or the panel offers a button the command refuses.
+  const ladderOpensAt = (crisis.openedTurn ?? 0) + LADDER_UNLOCK_TURNS;
+  const ladderIsOpen = turn >= ladderOpensAt;
 
   // ── this turn's plays, for the open floor and the wire ────────────────────
   //
@@ -560,6 +572,8 @@ export async function loadGermanQuestionDossier(
     heat: crisis.ladder.heat,
     defcon: defconFor(crisis.ladder.heat),
     armed: isArmed(crisis.ladder.heat),
+    opensAtTurn: ladderOpensAt,
+    turnsUntilOpen: Math.max(0, ladderOpensAt - turn),
     ladder: LADDER_RUNGS.map((label, i) => ({
       num: i + 1,
       label,
@@ -602,15 +616,21 @@ export async function loadGermanQuestionDossier(
                 seatDef.authority &&
                 rules.escalationEnabled &&
                 seat.direction !== null &&
+                ladderIsOpen &&
                 crisis.ladder.heat === MAX_COERCIVE_RUNG,
-              // The switched-off reason outranks the no-authority one: a
-              // Washington seat told "you have no authority" when the real
-              // answer is "nobody does right now" would be a lie.
+              // Ordered by which answer is TRUE rather than by which is most
+              // specific to the seat. A Washington seat told "you have no
+              // authority" when the real answer is "nobody does yet" is a lie,
+              // and so is telling an authority seat to raise the heat when the
+              // channel has not run its course.
               escalateGate: !rules.escalationEnabled
                 ? "The escalation ladder is switched off for this question. Coercive plays still land; they simply leave no heat."
-                : seatDef.authority
-                  ? null
-                  : escalateGateFor(seat.id),
+                : !ladderIsOpen
+                  ? `The four-power channel is still sitting. The ladder opens on turn ${ladderOpensAt}` +
+                    ` — ${ladderOpensAt - turn} turn${ladderOpensAt - turn === 1 ? "" : "s"} from now.`
+                  : seatDef.authority
+                    ? null
+                    : escalateGateFor(seat.id),
             }
           : null,
       personalActions: ctx.personal.actionsRemaining,

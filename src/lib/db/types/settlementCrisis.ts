@@ -71,7 +71,13 @@ export interface SettlementCrisisDoc {
   position: number;
   institutions: SettlementInstitutionState[];
   seats: SettlementSeatState[];
-  ladder: { heat: number; armedTurn: number | null };
+  /**
+   * `quietTurns` is consecutive ticks with no coercive play, and it is what
+   * paces decay — a rung is lost only every `LADDER_DECAY_TURNS` of them.
+   * Optional because crises written before the counter existed have no field;
+   * read it as `?? 0`.
+   */
+  ladder: { heat: number; armedTurn: number | null; quietTurns?: number };
   /**
    * The three admin rule switches from the source design.
    *
