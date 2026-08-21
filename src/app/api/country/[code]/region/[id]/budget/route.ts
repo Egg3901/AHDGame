@@ -19,6 +19,7 @@ import type { State } from "@/lib/db/types";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import { normalizeStateSpending, SECTOR_SUBSIDIES_SPENDING_KEY } from "@/lib/budget/spending";
 import { computeRegionalSpendingByCategory } from "@/lib/budget/regionalSpending";
+import { buildRegionalRevenueShape } from "@/lib/budget/regionalRevenueShape";
 import { calculateFiscalYear } from "@/lib/budget/fiscalYear";
 
 export async function GET(
@@ -157,45 +158,8 @@ async function serveRegionalBudget(
 
   const spendingTotal = Object.values(byCategory).reduce((sum, v) => sum + v, 0);
 
-  // Build revenue breakdown based on country — each parliamentary country has
-  // its own revenue model, but they all persist into the shared regionalBudgets
-  // collection so downstream UI can stay on one route.
-  const hasJPRevenue = regionalBudget.residentTaxRevenue != null;
-  const hasDERevenue = regionalBudget.incomeTaxShare != null || regionalBudget.vatShare != null;
-  const hasCNRevenue =
-    regionalBudget.eitShare != null || regionalBudget.centralTransferGrant != null;
-  const revenue = hasJPRevenue
-    ? {
-        residentTax: regionalBudget.residentTaxRevenue ?? 0,
-        fixedAssetTax: regionalBudget.fixedAssetTaxRevenue ?? 0,
-        federalGrants: regionalBudget.nationalGrant ?? 0,
-        total: regionalBudget.totalBudget,
-      }
-    : hasDERevenue
-      ? {
-          incomeTaxShare: regionalBudget.incomeTaxShare ?? 0,
-          vatShare: regionalBudget.vatShare ?? 0,
-          tradeTaxRevenue: regionalBudget.tradeTaxRevenue ?? 0,
-          federalGrants: regionalBudget.federalEqualizationGrant ?? 0,
-          total: regionalBudget.totalBudget,
-        }
-      : hasCNRevenue
-        ? {
-            eitShare: regionalBudget.eitShare ?? 0,
-            centralTransferGrant: regionalBudget.centralTransferGrant ?? 0,
-            resourceTaxRevenue: regionalBudget.resourceTaxRevenue ?? 0,
-            businessTaxRevenue: regionalBudget.businessTaxRevenue ?? 0,
-            total: regionalBudget.totalBudget,
-          }
-        : {
-            councilTax: regionalBudget.councilTaxRevenue,
-            businessRates: regionalBudget.businessRatesRevenue,
-            federalGrants: regionalBudget.westminsterGrant,
-            total:
-              regionalBudget.councilTaxRevenue +
-              regionalBudget.businessRatesRevenue +
-              regionalBudget.westminsterGrant,
-          };
+  // Per-country revenue view of the shared regionalBudgets document.
+  const { revenue, grantAmount } = buildRegionalRevenueShape(regionalBudget);
 
   const budget = {
     _id: stateId,
@@ -220,13 +184,6 @@ async function serveRegionalBudget(
     .find({ scope: "state", stateId, countryId, repealedAt: { $exists: false } })
     .toArray();
 
-  const grantAmount = hasJPRevenue
-    ? (regionalBudget.nationalGrant ?? 0)
-    : hasDERevenue
-      ? (regionalBudget.federalEqualizationGrant ?? 0)
-      : hasCNRevenue
-        ? (regionalBudget.centralTransferGrant ?? 0)
-        : regionalBudget.westminsterGrant;
   const grantBreakdown = [{ program: grantLabel, amount: grantAmount }];
 
   return NextResponse.json({
