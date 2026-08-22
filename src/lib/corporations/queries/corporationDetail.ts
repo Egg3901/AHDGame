@@ -1245,6 +1245,13 @@ export async function loadCorporationDetailView(args: {
       plantsMode && Number.isFinite(sector.deliveryLimitedFraction)
         ? Math.max(0, Math.min(1, sector.deliveryLimitedFraction as number))
         : null;
+    const deliveryLimitedFreightClass =
+      plantsMode &&
+      (sector.deliveryLimitedFreightClass === "bulk" ||
+        sector.deliveryLimitedFreightClass === "special" ||
+        sector.deliveryLimitedFreightClass === "grid")
+        ? sector.deliveryLimitedFreightClass
+        : null;
     const mothballed = plantsMode ? sector.mothballed === true : false;
     // Fill-adjusted margin (ticket #1027 family): realized profit over the full
     // cost bill, not over sold revenue. `effectiveProfitMargin` divides by the
@@ -1334,6 +1341,7 @@ export async function loadCorporationDetailView(args: {
       fillRate: sectorFillRate,
       fillRateBand: fillRateBand(sectorFillRate),
       deliveryLimitedFraction,
+      deliveryLimitedFreightClass,
       mothballed,
       buildQueueSummary,
       constructionInProgressAnchor,

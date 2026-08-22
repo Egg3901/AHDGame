@@ -34,6 +34,7 @@ import { clampAgreementPremium } from "@/lib/db/types/supplyAgreement";
 import { settleSupplyAgreements, type SettleableSupplyAgreement } from "./settleSupplyAgreements";
 import type { SupplyAgreement } from "@/lib/db/types/supplyAgreement";
 import type { CommodityType } from "@/lib/constants/commodities";
+import { FREIGHT_CLASS_BY_COMMODITY, type FreightClass } from "@/lib/logistics/freightClass";
 import {
   buildMinWageRatioByCountry,
   buildUnionLawBiasByCountry,
@@ -380,6 +381,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // place. Populated only while settlement is active, so worlds with it off
     // (and every modern world) offer exactly what they offered before.
     const deliveryLimitedBySectorId = new Map<string, number>();
+    const deliveryLimitedClassBySectorId = new Map<string, FreightClass | null>();
     /**
      * Share of a sector's output its host state could place last turn, 1 when
      * there is no measured limit. Min across the sector's output commodities:
@@ -415,16 +417,21 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     const deliveryLimitedForSector = (
       stateId: string | undefined,
       supplyRates: Partial<Record<CommodityType, number>>
-    ): number => {
-      if (!freightSettlementActive || !stateId) return 0;
+    ): { fraction: number; freightClass: FreightClass | null } => {
+      if (!freightSettlementActive || !stateId) return { fraction: 0, freightClass: null };
       const byCommodity = lookups.stateDeliveryLimitedRatioByState?.get(stateId);
-      if (!byCommodity) return 0;
+      if (!byCommodity) return { fraction: 0, freightClass: null };
       let ratio = 0;
+      let freightClass: FreightClass | null = null;
       for (const commodity of Object.keys(supplyRates) as CommodityType[]) {
         if (!((supplyRates[commodity] ?? 0) > 0)) continue;
-        ratio = Math.max(ratio, byCommodity.get(commodity) ?? 0);
+        const candidate = byCommodity.get(commodity) ?? 0;
+        if (candidate > ratio) {
+          ratio = candidate;
+          freightClass = FREIGHT_CLASS_BY_COMMODITY[commodity];
+        }
       }
-      return Math.max(0, Math.min(1, ratio));
+      return { fraction: Math.max(0, Math.min(1, ratio)), freightClass };
     };
     for (const [corpId, sectors] of lookups.sectorsByCorp) {
       const fx = fxByCorpId.get(corpId);
@@ -641,10 +648,9 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           }
         }
         if (freightSettlementActive) {
-          deliveryLimitedBySectorId.set(
-            sectorId,
-            deliveryLimitedForSector(sector.stateId, rates.supply ?? {})
-          );
+          const deliveryLimit = deliveryLimitedForSector(sector.stateId, rates.supply ?? {});
+          deliveryLimitedBySectorId.set(sectorId, deliveryLimit.fraction);
+          deliveryLimitedClassBySectorId.set(sectorId, deliveryLimit.freightClass);
         }
         clearingInputs.push(clearingInput);
         // Brand loyalty (A2): remember what the rollup needs, joined post-clearing.
@@ -671,7 +677,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // beside the fill it is NOT part of, so a player can read "nobody wanted it"
     // apart from "it could not get there". Carries the delivery-attributed
     // share alone, never the whole offer haircut.
-    if (freightSettlementActive) market.deliveryLimitedBySectorId = deliveryLimitedBySectorId;
+    if (freightSettlementActive) {
+      market.deliveryLimitedBySectorId = deliveryLimitedBySectorId;
+      market.deliveryLimitedClassBySectorId = deliveryLimitedClassBySectorId;
+    }
     market.clearingBySectorId = computeClearingFactors({
       sectors: clearingInputs,
       balances: lookups.globalCommodityBalances,

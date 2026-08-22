@@ -5,9 +5,6 @@ import {
   runSourcingPass,
   BUYER_TOLERANCE_SLACK,
   FREIGHT_TEU_PER_UNIT_HOP,
-  FREIGHT_CLASS_CAPACITY_SHARE,
-  FREIGHT_CLASS_SHARE_FLOOR,
-  adaptiveClassShares,
   SEA_FREIGHT_HOP_EQUIV,
   type SourcingInputs,
   FREIGHT_CONGESTION_OVERFLOW,
@@ -165,8 +162,8 @@ describe("runSourcingPass", () => {
     expect(coal.toleranceBoundUnits).toBeCloseTo(100);
   });
 
-  it("caps interstate shipping at the origin state's per-class freight capacity", () => {
-    // A2 freight supply 0.2 → bulk cap 0.2 × share; 1 hop × TEU/unit.
+  it("caps interstate shipping at the origin state's shared freight capacity", () => {
+    // A2 freight supply 0.2, shared by every hauled cargo class.
     const freightSupply = 0.2;
     const r = runSourcingPass(
       makeInputs({
@@ -192,8 +189,7 @@ describe("runSourcingPass", () => {
     );
     // Congestion, not a wall: with headroom under the buyer's tolerance the
     // network hauls past nominal capacity at a surcharge on the overflow units.
-    const nominal =
-      (freightSupply * FREIGHT_CLASS_CAPACITY_SHARE.bulk) / FREIGHT_TEU_PER_UNIT_HOP.bulk;
+    const nominal = freightSupply / FREIGHT_TEU_PER_UNIT_HOP.bulk;
     const shippable = nominal * (1 + FREIGHT_CONGESTION_OVERFLOW);
     const coal = r.summaries.find((s) => s.commodity === "coal")!;
     expect(coal.interStateUnits).toBeCloseTo(shippable);
@@ -203,8 +199,40 @@ describe("runSourcingPass", () => {
     expect(coal.unmetUnits).toBeCloseTo(100 - shippable);
     // Network load ledger records the consumption on the ORIGIN state.
     expect(r.freightTeuByState.get("A2")!.bulk).toBeCloseTo(
-      freightSupply * FREIGHT_CLASS_CAPACITY_SHARE.bulk * (1 + FREIGHT_CONGESTION_OVERFLOW)
+      freightSupply * (1 + FREIGHT_CONGESTION_OVERFLOW)
     );
+  });
+
+  it("lets special cargo use freight capacity that bulk cargo left idle", () => {
+    const freightSupply = 10;
+    const r = runSourcingPass(
+      makeInputs({
+        freightPrice: 100,
+        byState: new Map([
+          [
+            "A1",
+            new Map([["rare_earth", { supply: 0, demand: 1000 }]]) as Map<CommodityType, Balance>,
+          ],
+          [
+            "A2",
+            new Map([
+              ["rare_earth", { supply: 1000, demand: 0 }],
+              ["freight", { supply: freightSupply, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["rare_earth", { supply: 1000, demand: 1000 }]])]]),
+        // Normal haul is just inside tolerance; congested haul is outside it,
+        // so this measures nominal fleet use without overflow muddying the cap.
+        statePricesFor: () => ({ A1: 83, A2: 100 }),
+      })
+    );
+
+    expect(r.freightTeuByState.get("A2")!.special).toBeCloseTo(freightSupply);
   });
 
   it("is deterministic: identical inputs give identical flows", () => {
@@ -425,115 +453,6 @@ describe("runSourcingPass", () => {
     expect(r.unplacedSupplyByState.get("energy")!.get("A2")).toBeCloseTo(500 - dispatched);
     // The difference is real: 500 - delivered would over-credit the seller.
     expect(r.unplacedSupplyByState.get("energy")!.get("A2")).toBeLessThan(500 - delivered);
-  });
-});
-
-describe("adaptiveClassShares", () => {
-  it("falls back to the static split with no prior load", () => {
-    expect(adaptiveClassShares(undefined)).toEqual(FREIGHT_CLASS_CAPACITY_SHARE);
-    expect(adaptiveClassShares({ bulk: 0, special: 0, grid: 0 })).toEqual(
-      FREIGHT_CLASS_CAPACITY_SHARE
-    );
-  });
-
-  it("follows the measured mix (NY t202: ~90% special demand got 30% capacity)", () => {
-    const shares = adaptiveClassShares({ bulk: 328, special: 2958, grid: 0 });
-    expect(shares.special).toBeCloseTo(1 - FREIGHT_CLASS_SHARE_FLOOR, 5);
-    expect(shares.bulk).toBeCloseTo(FREIGHT_CLASS_SHARE_FLOOR, 5);
-  });
-
-  it("floors both classes so neither is starved by a one-turn skew", () => {
-    const allBulk = adaptiveClassShares({ bulk: 1000, special: 0, grid: 0 });
-    expect(allBulk.special).toBeCloseTo(FREIGHT_CLASS_SHARE_FLOOR, 5);
-    const even = adaptiveClassShares({ bulk: 500, special: 500, grid: 0 });
-    expect(even.bulk).toBeCloseTo(0.5, 5);
-    expect(even.special).toBeCloseTo(0.5, 5);
-  });
-
-  it("the pass sizes per-state capacity from the prior loads", () => {
-    // A2 hauled special-heavy last turn; with the static 30% share its special
-    // capacity would be 300 TEU, adaptive gives it 80% of 1000.
-    const heavy = new Map([["A2", { bulk: 100, special: 900, grid: 0 }]]);
-    const withPrior = runSourcingPass(
-      makeInputs({
-        freightPrice: 10,
-        priorClassLoads: heavy,
-        byState: new Map([
-          [
-            "A1",
-            (() => {
-              const m = new Map();
-              m.set("rare_earth", { supply: 0, demand: 5000 });
-              return m;
-            })(),
-          ],
-          [
-            "A2",
-            (() => {
-              const m = new Map();
-              m.set("rare_earth", { supply: 6000, demand: 0 });
-              m.set("freight", { supply: 1000, demand: 0 });
-              return m;
-            })(),
-          ],
-          ["B1", new Map()],
-        ]),
-        byCountry: new Map([
-          [
-            "US",
-            (() => {
-              const m = new Map();
-              m.set("rare_earth", { supply: 6000, demand: 5000 });
-              return m;
-            })(),
-          ],
-          ["UK", new Map()],
-        ]),
-      })
-    );
-    const noPrior = runSourcingPass(
-      makeInputs({
-        freightPrice: 10,
-        byState: new Map([
-          [
-            "A1",
-            (() => {
-              const m = new Map();
-              m.set("rare_earth", { supply: 0, demand: 5000 });
-              return m;
-            })(),
-          ],
-          [
-            "A2",
-            (() => {
-              const m = new Map();
-              m.set("rare_earth", { supply: 6000, demand: 0 });
-              m.set("freight", { supply: 1000, demand: 0 });
-              return m;
-            })(),
-          ],
-          ["B1", new Map()],
-        ]),
-        byCountry: new Map([
-          [
-            "US",
-            (() => {
-              const m = new Map();
-              m.set("rare_earth", { supply: 6000, demand: 5000 });
-              return m;
-            })(),
-          ],
-          ["UK", new Map()],
-        ]),
-      })
-    );
-    const shipped = (r: ReturnType<typeof runSourcingPass>) =>
-      r.flows
-        .filter((f) => f.commodity === "rare_earth" && f.originId === "A2")
-        .reduce((s, f) => s + f.units, 0);
-    // rare_earth is special class: adaptive split moves more of A2's fleet to
-    // special trailers, so more units reach A1 before capacity binds.
-    expect(shipped(withPrior)).toBeGreaterThan(shipped(noPrior));
   });
 });
 

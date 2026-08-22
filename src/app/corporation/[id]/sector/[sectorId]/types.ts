@@ -624,6 +624,8 @@ export interface PlantsData {
      * responses. Optional for payloads predating it; absent reads as 0.
      */
     deliveryLimitedFraction?: number;
+    /** Cargo class behind the delivery-limited output leg. */
+    deliveryLimitedFreightClass?: "bulk" | "special" | "grid" | null;
     /** Consecutive turns under half fill; optional for payloads predating it. */
     lowFillTurns?: number;
     /** Unsold-output inventory (§6); optional for payloads predating it. */

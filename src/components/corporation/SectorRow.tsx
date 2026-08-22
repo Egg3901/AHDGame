@@ -36,6 +36,11 @@ import { facilityPlural, facilitySingular } from "@/lib/constants/facilityVocabu
 import { facilitiesFromUnits } from "@/lib/constants/facilityQuantum";
 import { GROWTH_RATE_TURNS_PER_YEAR } from "@/lib/constants/corporations";
 import { SectorMarginDrilldown } from "./SectorMarginDrilldown";
+import {
+  FREIGHT_CLASS_LABELS,
+  freightClassAction,
+  freightClassExplanation,
+} from "@/lib/logistics/freightClass";
 
 export interface SectorRowProps {
   sector: SectorDetail;
@@ -174,6 +179,8 @@ export function SectorRow({
     deliveryLimited != null &&
     Number.isFinite(deliveryLimited) &&
     deliveryLimited > DELIVERY_LIMITED_MIN_SHARE;
+  const deliveryClass = sector.deliveryLimitedFreightClass ?? null;
+  const deliveryClassLabel = deliveryClass ? FREIGHT_CLASS_LABELS[deliveryClass] : "Delivery";
   const plantsRevenueTooltip = (
     <>
       <p className="font-semibold text-foreground mb-1">Capacity → net profit</p>
@@ -225,9 +232,14 @@ export function SectorRow({
       )}
       {deliveryLimitedShown && (
         <p className="mt-1.5 text-[10px] leading-snug text-muted">
-          {formatFillPercent(deliveryLimited)} of this sector&apos;s output has no freight to carry
-          it out of the state, so it can only reach buyers here. A thin freight network is the
-          limit, not demand.
+          {deliveryClassLabel} limited {formatFillPercent(deliveryLimited)} of this sector&apos;s
+          output from reaching buyers outside the state.{" "}
+          {deliveryClass
+            ? freightClassExplanation(deliveryClass)
+            : "The delivery network, not demand, is the limit."}{" "}
+          {deliveryClass
+            ? freightClassAction(deliveryClass)
+            : "Add freight capacity or build nearer buyers."}
         </p>
       )}
       {isMothballed && (
@@ -504,7 +516,10 @@ export function SectorRow({
           {/* Fill */}
           <div className="flex flex-wrap items-center justify-end gap-1">
             <FillChip fill={sector.fillRate} band={sector.fillRateBand} />
-            <DeliveryLimitedPill fraction={deliveryLimited} />
+            <DeliveryLimitedPill
+              fraction={deliveryLimited}
+              freightClass={sector.deliveryLimitedFreightClass}
+            />
           </div>
 
           {/* Revenue — one figure, chain in the tooltip */}
@@ -858,7 +873,10 @@ export function SectorRow({
                 <span className="text-[10px] text-muted uppercase tracking-wide">Fill</span>
                 <div className="mt-1 flex flex-wrap items-center gap-1">
                   <FillChip fill={sector.fillRate} band={sector.fillRateBand} />
-                  <DeliveryLimitedPill fraction={deliveryLimited} />
+                  <DeliveryLimitedPill
+                    fraction={deliveryLimited}
+                    freightClass={sector.deliveryLimitedFreightClass}
+                  />
                 </div>
               </div>
             </>

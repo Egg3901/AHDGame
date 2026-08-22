@@ -1,6 +1,5 @@
 import {
   BUYER_TOLERANCE_SLACK,
-  FREIGHT_CLASS_CAPACITY_SHARE,
   FREIGHT_CONGESTION_OVERFLOW,
   FREIGHT_CONGESTION_SURCHARGE,
   FREIGHT_TEU_PER_UNIT_HOP,
@@ -69,7 +68,7 @@ The cheapest eligible source fills first, up to three limits:
 2. the seller's spare supply;
 3. the buyer's price tolerance.
 
-Freight capacity is the fourth influence, and it now acts through price rather than as a limit of its own. Haul above a state's nominal class capacity keeps running at a surcharge, which pushes the landed price toward the tolerance ceiling. A state with no freight supply at all still hauls nothing.
+Freight capacity is the fourth influence, and it now acts through price rather than as a limit of its own. Bulk and special cargo draw from the same state freight fleet. Haul above that fleet's nominal capacity keeps running at a surcharge, which pushes the landed price toward the tolerance ceiling. A state with no freight supply at all still hauls nothing.
 
 The tolerance ceiling is the local price plus ${pct(BUYER_TOLERANCE_SLACK)}. A technically reachable projected shipment can still be rejected when freight and tariffs make it too expensive. The sourcing report records that amount as unmet, while aggregate commodity clearing remains the source of truth for the commodity market itself.
 
@@ -79,13 +78,13 @@ Imports use a flat ${SEA_FREIGHT_HOP_EQUIV}-hop sea equivalent for landed-price 
 
 Every shipped commodity belongs to one of three classes. Two of them ride the same haulage fleet and spend a state's freight capacity. The third does not.
 
-| Class | Share of state freight capacity | TEU per commodity unit per hop | Typical cargo |
-| --- | ---: | ---: | --- |
-| Bulk | ${pct(FREIGHT_CLASS_CAPACITY_SHARE.bulk)} | ${FREIGHT_TEU_PER_UNIT_HOP.bulk} | Heavy raw materials and ordinary physical goods |
-| Special | ${pct(FREIGHT_CLASS_CAPACITY_SHARE.special)} | ${FREIGHT_TEU_PER_UNIT_HOP.special} | Higher-care or specialized cargo |
+| Class | Capacity pool | TEU per commodity unit per hop | Typical cargo |
+| --- | --- | ---: | --- |
+| Bulk | Shared state freight fleet | ${FREIGHT_TEU_PER_UNIT_HOP.bulk} | Heavy raw materials and ordinary physical goods |
+| Special | Shared state freight fleet | ${FREIGHT_TEU_PER_UNIT_HOP.special} | Higher-care or specialized cargo |
 | Grid | None | ${FREIGHT_TEU_PER_UNIT_HOP.grid} | Electricity and natural gas |
 
-Special freight consumes more TEU per unit per hop. A state can therefore have spare bulk capacity while its special network is tight. The map tooltip exposes both loads. The bulk and special shares above are the starting split; each state's split then follows the mix it actually shipped last turn, with a floor under each class so neither can be starved to zero.
+Special cargo consumes more TEU per unit per hop, but it does not have a separate reserved pool. Bulk and special loads share every available TEU in the state. The map tooltip separates the two loads so you can see what is using the fleet, not because one class is forbidden from using capacity left idle by the other.
 
 ### Grid: wire and pipe
 
@@ -98,7 +97,7 @@ There is no capacity ceiling on a grid route, so a state short of power can alwa
 
 ## When the network is congested
 
-Freight capacity sets a price, not a ceiling. Once haul in a state passes the nominal capacity for a class:
+Freight capacity sets a price, not a ceiling. Once combined bulk and special haul in a state passes the fleet's nominal capacity:
 
 - the network keeps moving goods up to ${overflowMultiple}x that nominal capacity;
 - every unit above nominal pays a ${pct(FREIGHT_CONGESTION_SURCHARGE)} surcharge on the shipping leg of its landed price;

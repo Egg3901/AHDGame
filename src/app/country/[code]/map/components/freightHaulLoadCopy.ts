@@ -19,7 +19,7 @@ export type FreightHaulLoadEntry = {
 };
 
 export const FREIGHT_HAUL_LOAD_MODE_DESCRIPTION =
-  "Freight capacity and projected interstate haul load by state";
+  "Shared freight capacity and projected interstate haul load by state";
 
 /** Format TEU for map labels without rounding small loads into whole TEU. */
 export function formatFreightTeu(value: number): string {
@@ -60,7 +60,11 @@ export function freightHaulLoadTooltip(stateId: string, entry: FreightHaulLoadEn
     lines.push(`No operating freight capacity`);
   }
   if ((entry.openMarket ?? 0) > 0) lines.push("Open logistics market available");
-  lines.push(`Bulk: ${bulk} · Special: ${special}`);
+  lines.push(`Bulk load: ${bulk} TEU/turn`);
+  lines.push(`Special load: ${special} TEU/turn`);
+  lines.push(
+    "Both loads draw from one shared capacity pool; special cargo uses three times as much TEU per unit."
+  );
   lines.push("Haul counts as freight demand; open market is not operating capacity");
   return lines;
 }
@@ -72,7 +76,8 @@ export function freightHaulLoadCaption(hasData: boolean): string {
   return (
     "Green shows operating freight capacity. Amber shows an unowned logistics market waiting " +
     "for an operator. Tooltips show interstate haul from the freight settlement ledger. Haul is " +
-    "booked as freight demand each market turn, so heavy-haul states lift freight prices and sold %."
+    "booked as freight demand each market turn, so heavy-haul states lift freight prices and sold %. " +
+    "Bulk and special loads share the same capacity; special cargo uses three times as much TEU per unit."
   );
 }
 
