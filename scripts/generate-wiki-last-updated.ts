@@ -7,6 +7,7 @@
  * Re-run whenever wiki content changes (wired into lint-staged for src/lib/seeds/wiki).
  */
 import { execFileSync } from "child_process";
+import { createRequire } from "module";
 import { readFileSync, readdirSync, writeFileSync } from "fs";
 import path from "path";
 
@@ -96,7 +97,17 @@ writeFileSync(
     `export const WIKI_LAST_UPDATED: Record<string, string> = {\n${entries}\n};\n`
 );
 
-execFileSync("npx", ["prettier", "--write", OUT_FILE], { cwd: ROOT });
+// `npx` on Windows is `npx.cmd`, which `execFileSync` cannot spawn without a
+// shell — so this threw ENOENT and failed the pre-commit hook for anyone
+// editing a wiki page on Windows. Resolve prettier's own entry point and run it
+// through the SAME node binary instead: no shell, no PATH lookup, no
+// platform-specific extension, and no shell-quoting question about a repo path
+// containing spaces.
+execFileSync(
+  process.execPath,
+  [createRequire(import.meta.url).resolve("prettier/bin/prettier.cjs"), "--write", OUT_FILE],
+  { cwd: ROOT }
+);
 
 console.log(
   `wrote ${Object.keys(slugToDate).length} slugs to ${path.relative(ROOT, OUT_FILE)}${missing ? `, ${missing} unresolved` : ""}`

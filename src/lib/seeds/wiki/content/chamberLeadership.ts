@@ -55,6 +55,20 @@ China runs two separate chair elections, both drawn from seated National People'
 
 Both run 24-hour ballots and resolve on plurality, same as the DE and NG races.
 
+## Soviet Union: the Chairman of the Presidium is not one of these
+
+The Chairman of the Presidium is elected by a joint sitting of both Supreme Soviet chambers, so it looks like a presiding-officer race and is often mistaken for one. It is not. It is the **ceremonial head of state**, and it is closer to a figurehead presidency than to a Speaker or a Majority Leader:
+
+| | Presiding officers above | Chairman of the Presidium |
+| --- | --- | --- |
+| Actions per turn | Varies by office | **+0** |
+| Party strength weight | Contributes | **0** |
+| Controls the agenda | Chairs its chamber | No |
+
+The office carries no action bonus and no party-strength weight at all: it is a capstone, not a power base. Real Soviet legislative power sits with the **Premier** (head of government, +4 actions) and the **General Secretary** of the CPSU.
+
+The Supreme Soviet also has no Majority or Minority Leader, because the CPSU is the only seeded party and there is no second bloc for those roles to describe. See [Soviet Union](/wiki/ru-overview) for the full structure, including the convocation reset that clears the Presidium chair after the last election of each cycle.
+
 ## Vacancies
 
 If a ballot closes with no candidates, the seat is left vacant rather than defaulting to anyone. A new election opens on the same cycle as the next chamber reconciliation. Losing a seat in the relevant chamber (a House seat for the US Speaker, an NPC delegate seat for either Chinese chair) drops an incumbent from re-nomination even mid-term.
