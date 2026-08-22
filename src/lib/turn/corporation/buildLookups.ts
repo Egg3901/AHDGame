@@ -20,7 +20,7 @@ import { buildDisasterEffectsByState } from "@/lib/crises/disasterMarginPenalty"
 import type { CommodityPrice } from "@/lib/db/types";
 import type { TradeFlowSnapshot } from "@/lib/db/types/tradeFlowSnapshot";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, eraRateForCurrency } from "@/lib/constants/currencies";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { CountryId } from "@/lib/constants/countries";
 import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
@@ -174,6 +174,7 @@ export async function buildCorporationLookups(
     latestTradeSnapshot,
     orgMembershipDocs,
     activeEmbargoDocs,
+    worldPreset,
   ] = await Promise.all([
     db.collection<Corporation>("corporations").find({}).toArray(),
     db.collection<CorporateSector>("corporateSectors").find({}).toArray(),
@@ -299,6 +300,7 @@ export async function buildCorporationLookups(
         $or: [{ expiresTurn: { $exists: false } }, { expiresTurn: { $gte: embargoTurn } }],
       })
       .toArray(),
+    loadWorldPreset(db),
   ]);
 
   // Backfill countryId on corporations and sectors missing it (pre-migration data)
@@ -399,6 +401,17 @@ export async function buildCorporationLookups(
   const exchangeRatesByCurrency = new Map<CurrencyCode, number>(
     exchangeRateDocs.map((r) => [r.currencyCode as CurrencyCode, r.rate])
   );
+  // The corporation turn needs an economic conversion rate even when a
+  // currency is deliberately not player-traded. Six 1953 command-economy
+  // currencies have no exchangeRates document, but their sector revenue,
+  // profit, cash, debt, and share values are still stored in local units.
+  // Falling back to 1.0 inflated every anchor value by 13.5x to 27x. Preserve
+  // every live rate and fill only absent currencies from the authored preset.
+  for (const code of Object.values(COUNTRY_CURRENCY_MAP) as CurrencyCode[]) {
+    if (exchangeRatesByCurrency.has(code)) continue;
+    const authoredRate = eraRateForCurrency(code, worldPreset);
+    if (authoredRate !== undefined) exchangeRatesByCurrency.set(code, authoredRate);
+  }
   const issuedBondDebtByCorpId = new Map<string, number>();
   for (const [corpId, bonds] of bondsByCorpId) {
     const issuer = corpById.get(corpId);
@@ -775,7 +788,7 @@ export async function buildCorporationLookups(
   // #3778). Read here rather than reusing the `gameState` fetch further down:
   // that one happens after this block, and reordering it would move several
   // unrelated reads inside the same turn phase.
-  const marketSharePreset = await loadWorldPreset(db);
+  const marketSharePreset = worldPreset;
   // One era unit scale per world per turn: every ₳↔unit conversion downstream
   // reads this value from the lookups rather than re-resolving the preset.
   const eraUnitScale = getEraUnitScale(marketSharePreset);

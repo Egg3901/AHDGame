@@ -58,6 +58,7 @@ import {
   capacityCaptureBookUpdates,
   resolveWorldYear,
 } from "@/lib/corporations/capacityCapture";
+import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
 
 const attackSectorSchema = z.object({
   sectorId: z.string().length(24),
@@ -104,6 +105,19 @@ export async function POST(request: Request, { params }: RouteParams) {
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
       return NextResponse.json({ error: "State not found" }, { status: 404 });
+    }
+
+    // Capturing a rival sector creates or enlarges private productive capacity,
+    // so it is the same forbidden market entry as founding one directly.
+    const blockedCountries = await loadCommandEconomyBlockedCountries(db, [countryId]);
+    if (blockedCountries.has(countryId)) {
+      return NextResponse.json(
+        {
+          error:
+            "This market is state-controlled under a command economy and cannot be privately attacked.",
+        },
+        { status: 403 }
+      );
     }
 
     // Get player's corporation — supports both regular and imperial characters

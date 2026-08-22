@@ -711,7 +711,9 @@ describe("processCorporationTurn", () => {
       countryId: "JP",
       stateId: "KNS",
       sectorType: "technology",
-      revenue: 2400,
+      // Sector revenue is stored in the host currency. At 150 JPY per anchor
+      // unit this is the same 2,400 anchor-unit annual revenue as the US sector.
+      revenue: 360_000,
       profitMargin: 100,
       targetGrowthRate: 0,
       currentGrowthRate: 0,
@@ -767,6 +769,9 @@ describe("processCorporationTurn", () => {
     db.collectionMocks["corporateSectors"]!.find.mockReturnValue(makeCursor([usSector, jpSector]));
     db.collectionMocks["federalBudget"]!.find.mockReturnValue(makeCursor([usFed, jpFed]));
     db.collectionMocks["stateBudgets"]!.find.mockReturnValue(makeCursor([usState, jpState]));
+    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(
+      makeCursor([{ currencyCode: "JPY", rate: 150 }])
+    );
     db.collectionMocks["states"]!.find.mockReturnValue(
       makeCursor([
         // gdp drives the per-sector market floor; without it the floor is 0 and a
