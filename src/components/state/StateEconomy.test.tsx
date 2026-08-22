@@ -157,4 +157,35 @@ describe("StateEconomy", () => {
       "/corporation/corp-me?tab=sectors&expand=1&state=TX&sectorType=energy"
     );
   });
+
+  it("shows the attack MS cost even when unowned splits are retired under plants", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ...payload,
+          plantsMode: true,
+          userCorporationId: "corp-me",
+          userMarketingStrength: 36,
+          splitMsCost: 0,
+          attackMsCost: 128,
+          sectors: payload.sectors.map((sector) => ({
+            ...sector,
+            owners: sector.owners.map((owner) => ({
+              ...owner,
+              attackCost: 147_000,
+              attackEstimatedCapture: 155_000,
+            })),
+          })),
+        }),
+      })
+    );
+
+    render(<StateEconomy stateId="TX" countryId="US" />);
+
+    const attack = await screen.findByRole("button", { name: "Attack" });
+    expect(screen.getByText("128 MS")).toBeTruthy();
+    expect(attack.hasAttribute("disabled")).toBe(true);
+  });
 });

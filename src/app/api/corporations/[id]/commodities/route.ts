@@ -13,6 +13,7 @@ import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { CommodityFlow } from "@/lib/db/types/commodityFlow";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { GameState } from "@/lib/db/types/gameState";
+import type { SupplyAgreement } from "@/lib/db/types/supplyAgreement";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -37,6 +38,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       !authUser?.isAdmin &&
       authUser?.isModerator === true &&
       new URL(request.url).searchParams.get("modView") === "1";
+    const canViewPrivateSupply =
+      authUser?.isAdmin === true ||
+      modViewEnabled ||
+      (!!authUser?.userId && corporation.userId?.toString() === authUser.userId);
     if (
       shouldRedactCorporation(
         corporation,
@@ -49,7 +54,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         { isPrivate: true, clearingEnabled: false, commodities: [], regions: [], marketShare: [] },
         {
           headers: {
-            "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300, no-transform",
+            "Cache-Control": "private, no-store",
           },
         }
       );
@@ -83,56 +88,61 @@ export async function GET(request: Request, { params }: RouteParams) {
       })
       .toArray();
 
-    if (sectors.length === 0) {
-      return NextResponse.json(
-        {
-          clearingEnabled: market.clearingEnabled,
-          commodities: [],
-          regions: [],
-          marketShare: [],
-        },
-        {
-          headers: {
-            "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300, no-transform",
-          },
-        }
-      );
-    }
-
     const stateIds = [...new Set(sectors.map((s) => s.stateId))];
 
-    const [gameState, states, latestFlows, marketShare, gameConfig] = await Promise.all([
-      db
-        .collection<GameState>("gameState")
-        .findOne({ _id: "current" }, { projection: { currentTurn: 1 } }),
-      db
-        .collection<State>("states")
-        .find({ _id: { $in: stateIds } })
-        .project<{ _id: string; name: string; region: string }>({ _id: 1, name: 1, region: 1 })
-        .toArray(),
-      // Latest global flow ledger row per commodity (market context).
-      db
-        .collection<CommodityFlow>("commodityFlows")
-        .aggregate<CommodityFlow>([
-          { $sort: { turn: -1 } },
-          { $group: { _id: "$commodity", doc: { $first: "$$ROOT" } } },
-          { $replaceRoot: { newRoot: "$doc" } },
-        ])
-        .toArray(),
-      computeCorpMarketShare(db, corporation, sectors),
-      db.collection<GameConfig>("gameConfig").findOne(
-        { _id: "default" },
-        {
-          projection: {
-            brandLoyaltyEnabled: 1,
-            brandLoyaltySliceEnabled: 1,
-            sectorQualityEnabled: 1,
-            supplyAgreementsEnabled: 1,
-            marketSystemMode: 1,
-          },
-        }
-      ),
-    ]);
+    const [gameState, states, latestFlows, marketShare, gameConfig, supplyAgreements] =
+      await Promise.all([
+        db
+          .collection<GameState>("gameState")
+          .findOne({ _id: "current" }, { projection: { currentTurn: 1 } }),
+        db
+          .collection<State>("states")
+          .find({ _id: { $in: stateIds } })
+          .project<{ _id: string; name: string; region: string }>({ _id: 1, name: 1, region: 1 })
+          .toArray(),
+        // Latest global flow ledger row per commodity (market context).
+        db
+          .collection<CommodityFlow>("commodityFlows")
+          .aggregate<CommodityFlow>([
+            { $sort: { turn: -1 } },
+            { $group: { _id: "$commodity", doc: { $first: "$$ROOT" } } },
+            { $replaceRoot: { newRoot: "$doc" } },
+          ])
+          .toArray(),
+        computeCorpMarketShare(db, corporation, sectors),
+        db.collection<GameConfig>("gameConfig").findOne(
+          { _id: "default" },
+          {
+            projection: {
+              brandLoyaltyEnabled: 1,
+              brandLoyaltySliceEnabled: 1,
+              sectorQualityEnabled: 1,
+              supplyAgreementsEnabled: 1,
+              marketSystemMode: 1,
+            },
+          }
+        ),
+        canViewPrivateSupply
+          ? db
+              .collection<SupplyAgreement>("supplyAgreements")
+              .find({
+                buyerCorpId: corporation._id,
+                status: { $in: ["active", "cancelling"] },
+              })
+              .project<
+                Pick<
+                  SupplyAgreement,
+                  "commodity" | "volumeCap" | "lastDeliveryTurn" | "lastDeliveredUnits"
+                >
+              >({
+                commodity: 1,
+                volumeCap: 1,
+                lastDeliveryTurn: 1,
+                lastDeliveredUnits: 1,
+              })
+              .toArray()
+          : Promise.resolve([]),
+      ]);
 
     const currentTurn = gameState?.currentTurn ?? 0;
     const stateInfoById = new Map(
@@ -141,12 +151,49 @@ export async function GET(request: Request, { params }: RouteParams) {
     const latestFlowByCommodity = new Map<CommodityType, CommodityFlow>(
       latestFlows.map((f) => [f.commodity, f])
     );
+    const privateSupplyRollup = new Map<
+      CommodityType,
+      { contractedUnits: number; deliveredUnits: number; latestTurn: number | null }
+    >();
+    if (gameConfig?.supplyAgreementsEnabled === true) {
+      for (const agreement of supplyAgreements) {
+        const existing = privateSupplyRollup.get(agreement.commodity) ?? {
+          contractedUnits: 0,
+          deliveredUnits: 0,
+          latestTurn: null,
+        };
+        existing.contractedUnits += Math.max(0, agreement.volumeCap);
+        const deliveryTurn = agreement.lastDeliveryTurn;
+        if (Number.isFinite(deliveryTurn)) {
+          if (existing.latestTurn === null || deliveryTurn! > existing.latestTurn) {
+            existing.latestTurn = deliveryTurn!;
+            existing.deliveredUnits = Math.max(0, agreement.lastDeliveredUnits ?? 0);
+          } else if (deliveryTurn === existing.latestTurn) {
+            existing.deliveredUnits += Math.max(0, agreement.lastDeliveredUnits ?? 0);
+          }
+        }
+        privateSupplyRollup.set(agreement.commodity, existing);
+      }
+    }
+    const privateSupplyByCommodity = new Map<
+      CommodityType,
+      { contractedUnits: number; deliveredUnits: number; turn: number }
+    >();
+    for (const [commodity, rollup] of privateSupplyRollup) {
+      if (rollup.latestTurn === null) continue;
+      privateSupplyByCommodity.set(commodity, {
+        contractedUnits: rollup.contractedUnits,
+        deliveredUnits: rollup.deliveredUnits,
+        turn: rollup.latestTurn,
+      });
+    }
 
     const { commodities, regions } = computeCorpCommodityFlows(
       sectors,
       currentTurn,
       latestFlowByCommodity,
-      stateInfoById
+      stateInfoById,
+      privateSupplyByCommodity
     );
 
     return NextResponse.json(
@@ -163,7 +210,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       },
       {
         headers: {
-          "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300, no-transform",
+          "Cache-Control": "private, no-store",
         },
       }
     );

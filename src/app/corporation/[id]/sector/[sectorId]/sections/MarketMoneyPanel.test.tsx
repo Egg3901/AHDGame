@@ -114,3 +114,33 @@ describe("signed cost lines (ticket 1122)", () => {
     expect(screen.getByText("M285176")).toBeTruthy();
   });
 });
+
+describe("freight class explanation (ticket 1159)", () => {
+  it("names the limiting class and explains shared freight capacity", () => {
+    const specialLimited = {
+      ...(plants as unknown as Record<string, unknown>),
+      truth: {
+        soldFraction: 0.66,
+        soldByCommodity: [],
+        receivedPerUnitAnchor: 84.66,
+        costPerUnitAnchor: 76.36,
+        fillAdjustedMarginPct: 9.8,
+        breakEven: { status: "profitable_now", turns: null },
+        deliveryLimitedFraction: 0.3,
+        deliveryLimitedFreightClass: "special",
+      },
+    } as never;
+
+    render(
+      <MarketMoneyPanel
+        plants={specialLimited}
+        sectorType="retail"
+        financials={null}
+        corporation={{ _id: "corp-1", name: "Illinois Retail" }}
+      />
+    );
+
+    expect(screen.getByText(/Special freight limited/)).toBeTruthy();
+    expect(screen.getByText(/three times as much shared freight capacity/)).toBeTruthy();
+  });
+});

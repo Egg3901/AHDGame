@@ -2,6 +2,12 @@
 
 import { STRANDED_WARN_TURNS } from "@/lib/corporations/strandedPlant";
 import { DELIVERY_LIMITED_MIN_SHARE } from "@/components/corporation/plantsPresentation";
+import {
+  FREIGHT_CLASS_LABELS,
+  freightClassAction,
+  freightClassExplanation,
+  type FreightClass,
+} from "@/lib/logistics/freightClass";
 
 interface StrandedPlantBannerProps {
   /** Consecutive turns the sector cleared under half its output. */
@@ -15,6 +21,8 @@ interface StrandedPlantBannerProps {
    * goods buyers are still waiting for.
    */
   deliveryLimitedFraction?: number;
+  /** The route type that prevented delivery, when known. */
+  deliveryLimitedFreightClass?: FreightClass | null;
   isCeo: boolean;
 }
 
@@ -30,6 +38,7 @@ export default function StrandedPlantBanner({
   lowFillTurns,
   soldFraction,
   deliveryLimitedFraction = 0,
+  deliveryLimitedFreightClass = null,
   isCeo,
 }: StrandedPlantBannerProps) {
   if (lowFillTurns < STRANDED_WARN_TURNS) return null;
@@ -37,6 +46,15 @@ export default function StrandedPlantBanner({
   const soldPct = soldFraction != null ? Math.round(soldFraction * 100) : null;
   const deliveryLimited = deliveryLimitedFraction > DELIVERY_LIMITED_MIN_SHARE;
   const deliveryPct = Math.round(deliveryLimitedFraction * 100);
+  const deliveryLabel = deliveryLimitedFreightClass
+    ? FREIGHT_CLASS_LABELS[deliveryLimitedFreightClass]
+    : "Delivery";
+  const deliveryExplanation = deliveryLimitedFreightClass
+    ? freightClassExplanation(deliveryLimitedFreightClass)
+    : "The delivery network could not carry it to buyers outside this state.";
+  const deliveryAction = deliveryLimitedFreightClass
+    ? freightClassAction(deliveryLimitedFreightClass)
+    : "Add logistics capacity in this state, or build nearer buyers.";
 
   return (
     <div
@@ -58,14 +76,14 @@ export default function StrandedPlantBanner({
             For {lowFillTurns} turns in a row this sector has sold less than half of what it makes
             {soldPct != null ? ` (last turn: ${soldPct}%)` : ""}.{" "}
             {deliveryLimited
-              ? `Last turn ${deliveryPct}% of what it offered had no freight to carry it, so that output earned no revenue while its production costs still landed. Buyers still want it.`
+              ? `Last turn ${deliveryLabel} limited ${deliveryPct}% of what it offered, so that output earned no revenue while its production costs still landed. Buyers still want it. ${deliveryExplanation}`
               : "The local market is oversupplied for its goods, so extra output earns no revenue this turn while its production costs still land."}{" "}
             Its margin still looks healthy because margin only counts the units that do sell.
           </p>
           {isCeo && (
             <p className="mt-1.5 text-xs text-muted">
               {deliveryLimited
-                ? "Options: build or expand logistics capacity in this state so the freight exists to move the goods, or build your next capacity nearer the buyers. Shrinking this plant gives up output the market is still short of."
+                ? `Options: ${deliveryAction} Shrinking this plant gives up output the market is still short of.`
                 : "Options: stockpile storable goods for a temporary glut, set growth to zero and let the plant shrink, mothball it in the Plant panel, list it for sale, or abandon it in the panels below. Building capacity in a state where the goods are scarce will sell far better."}
             </p>
           )}

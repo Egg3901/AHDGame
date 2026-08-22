@@ -26,8 +26,11 @@ describe("freightHaulLoadCopy", () => {
     expect(tip[0]).toBe("NY");
     expect(tip[1]).toBe("Freight capacity: 65 TEU");
     expect(tip[2]).toBe("Interstate haul: 3.6 TEU/turn (5.5%)");
-    expect(tip[3]).toBe("Bulk: 3.6 · Special: 0");
-    expect(tip[4]).toMatch(/counts as freight demand/i);
+    expect(tip[3]).toBe("Bulk load: 3.6 TEU/turn");
+    expect(tip[4]).toBe("Special load: 0 TEU/turn");
+    expect(tip[5]).toMatch(/one shared capacity pool/i);
+    expect(tip[5]).toMatch(/three times/i);
+    expect(tip[6]).toMatch(/counts as freight demand/i);
     expect(freightHaulLoadLabel({ bulk: 3.6, special: 0, total: 3.6, capacity: 65 })).toBe(
       "65 TEU"
     );

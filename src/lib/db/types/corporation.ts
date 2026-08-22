@@ -806,6 +806,8 @@ export interface CorporateSector {
    * two being opposite instructions about what to do next.
    */
   deliveryLimitedFraction?: number;
+  /** Cargo class of the output leg with the largest delivery-limited share. */
+  deliveryLimitedFreightClass?: "bulk" | "special" | "grid" | null;
   /**
    * Posted-price market clearing (marketSystemMode >= "clearing", audit t806
    * Fix 2). `pricingPosture` is the CEO's posted price relative to market

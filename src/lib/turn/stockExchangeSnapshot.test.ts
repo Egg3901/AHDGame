@@ -42,6 +42,7 @@ describe("stockExchangeSnapshot", () => {
     project: vi.fn().mockReturnThis(),
     aggregate: vi.fn().mockReturnThis(),
     toArray: vi.fn().mockResolvedValue(result),
+    updateMany: vi.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 }),
   });
 
   beforeEach(() => {
@@ -61,6 +62,7 @@ describe("stockExchangeSnapshot", () => {
       // Era gate reads gameState once (null ⇒ flag off ⇒ legacy behavior).
       findOne: vi.fn().mockResolvedValue(null),
       updateOne: mockUpdateOne,
+      updateMany: vi.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 }),
       bulkWrite: vi.fn().mockResolvedValue({ ok: 1 }),
     }));
 
@@ -145,6 +147,22 @@ describe("stockExchangeSnapshot", () => {
       await generateStockExchangeSnapshots(100, mockDb);
 
       expect(mockUpdateOne).not.toHaveBeenCalled();
+    });
+
+    it("repairs public IPO corporations left hidden by their auction shell", async () => {
+      const corporations = createMockChain([]);
+      mockCollection.mockReturnValueOnce(corporations);
+
+      await generateStockExchangeSnapshots(100, mockDb);
+
+      expect(corporations.updateMany).toHaveBeenCalledWith(
+        {
+          isPrivate: { $ne: true },
+          hiddenFromExchange: true,
+          lastIpoTurn: { $exists: true },
+        },
+        { $set: { hiddenFromExchange: false } }
+      );
     });
 
     it("filters out hidden corporations", async () => {

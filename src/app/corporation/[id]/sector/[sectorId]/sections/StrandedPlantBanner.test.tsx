@@ -37,4 +37,21 @@ describe("StrandedPlantBanner", () => {
     expect(warning.textContent).toContain("list it for sale");
     expect(warning.textContent).toContain("abandon it");
   });
+
+  it("names special freight and explains its shared capacity cost", () => {
+    render(
+      <StrandedPlantBanner
+        lowFillTurns={STRANDED_WARN_TURNS}
+        soldFraction={0.4}
+        deliveryLimitedFraction={0.25}
+        deliveryLimitedFreightClass="special"
+        isCeo
+      />
+    );
+
+    const warning = screen.getByRole("status");
+    expect(warning.textContent).toContain("Special freight");
+    expect(warning.textContent).toContain("three times as much shared freight capacity");
+    expect(warning.textContent).toContain("shared freight capacity");
+  });
 });

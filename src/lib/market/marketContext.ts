@@ -1,6 +1,7 @@
 import type { MarketSystemMode } from "@/lib/market/featureFlag";
 import { marketAtLeast } from "@/lib/market/featureFlag";
 import type { SectorClearingResult } from "@/lib/market/clearing";
+import type { FreightClass } from "@/lib/logistics/freightClass";
 import {
   MARKET_REALIZATION_DEVIATION_CAP,
   MARKET_REALIZATION_RAMP_TURNS,
@@ -38,6 +39,8 @@ export interface MarketContext {
    * write inert on worlds that do not settle freight.
    */
   deliveryLimitedBySectorId?: ReadonlyMap<string, number>;
+  /** Cargo class responsible for the delivery-limited share above. */
+  deliveryLimitedClassBySectorId?: ReadonlyMap<string, FreightClass | null>;
   /**
    * Launch-safety governor bounds (tunable live via gameConfig). `cap` is the
    * max fractional deviation the clearing/throughput legs may take from the

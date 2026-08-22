@@ -71,6 +71,10 @@ export interface SupplyAgreement {
    */
   transferPricingExposureAnchor?: number;
   lastTransferPricingAuditTurn?: number;
+  /** Latest turn this agreement was evaluated for physical delivery. */
+  lastDeliveryTurn?: number;
+  /** Units this agreement delivered to its named buyer on lastDeliveryTurn. */
+  lastDeliveredUnits?: number;
   createdAt: Date;
   updatedAt: Date;
 }
