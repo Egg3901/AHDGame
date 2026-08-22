@@ -1,9 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Badge, Button, Slider } from "@/components/ui";
 import { formatCompactNumber } from "@/lib/utils/formatters";
-import type { CommandEconomyDashboard, SoeView } from "@/lib/economy/commandEconomyDashboard";
+import {
+  soeCapacityAdvice,
+  type CommandEconomyDashboard,
+  type SoeView,
+} from "@/lib/economy/commandEconomyDashboard";
 
 interface Props {
   dashboard: CommandEconomyDashboard;
@@ -53,6 +58,12 @@ export function SoeDirectorPanel({ dashboard, soe, onSaved }: Props) {
   }
 
   const under = soe.planFulfillment < 0.9;
+  const requestValue = Number(request);
+  const capacityAdvice = soeCapacityAdvice({
+    output: soe.output,
+    capacity: soe.capacity,
+    investmentRequest: Number.isFinite(requestValue) ? requestValue : soe.investmentRequest,
+  });
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
@@ -115,6 +126,25 @@ export function SoeDirectorPanel({ dashboard, soe, onSaved }: Props) {
           <p className="mt-1 text-[10px] text-muted">
             Ask Gosbank for capital. A request draws more directed credit toward this plant.
           </p>
+          {capacityAdvice && (
+            <div
+              className={`mt-2 rounded-lg border p-3 text-[11px] leading-snug ${
+                capacityAdvice.severity === "warning"
+                  ? "border-warning/40 bg-warning/10 text-warning"
+                  : "border-card-border bg-card-muted/40 text-muted"
+              }`}
+              aria-live="polite"
+            >
+              <p className="font-semibold text-foreground">Excess capacity</p>
+              <p className="mt-1">{capacityAdvice.message}</p>
+              <Link
+                href={`/corporation/${soe.corpId}`}
+                className="mt-2 inline-block font-semibold text-primary hover:underline"
+              >
+                Open enterprise plants
+              </Link>
+            </div>
+          )}
         </div>
       </div>
 
