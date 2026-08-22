@@ -150,6 +150,43 @@ describe("loadCorporationDefenceContracts", () => {
     expect(v.totalEarned).toBe(100 * 1_000);
   });
 
+  it("does not show a stale carry reason on a completed contract", async () => {
+    const v = await loadCorporationDefenceContracts(
+      stubDb({
+        contracts: [
+          contract({
+            status: "complete",
+            lotsDelivered: 100,
+            carryReason: "appropriation_short",
+            carryReasonTurn: 290,
+          }),
+        ],
+        sectors: [sector()],
+        corp: {},
+      }),
+      CORP_ID,
+      1953
+    );
+
+    expect(v.contracts[0].carryReason).toBeUndefined();
+    expect(v.contracts[0].carryReasonText).toBeUndefined();
+  });
+
+  it("still explains why an active contract is carrying output", async () => {
+    const v = await loadCorporationDefenceContracts(
+      stubDb({
+        contracts: [contract({ carryReason: "appropriation_short", carryReasonTurn: 290 })],
+        sectors: [sector()],
+        corp: {},
+      }),
+      CORP_ID,
+      1953
+    );
+
+    expect(v.contracts[0].carryReason).toBe("appropriation_short");
+    expect(v.contracts[0].carryReasonText).toContain("appropriation");
+  });
+
   it("survives a sector that has since been deleted", async () => {
     const v = await loadCorporationDefenceContracts(
       stubDb({ contracts: [contract()], sectors: [], corp: {} }),
