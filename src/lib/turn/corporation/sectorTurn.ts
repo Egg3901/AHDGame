@@ -114,6 +114,7 @@ import {
 import { resolveSectorGrowthPolicy } from "./sectorGrowthPolicy";
 import { resolveSectorLabourEconomics, resolveSectorLabourProductionEffects } from "./sectorLabour";
 import { computeSectorOutputUnits } from "./sectorOutputUnits";
+import { demandThrottleFactor } from "./demandThrottle";
 import { advanceSectorInventory } from "@/lib/corporations/sectorInventory";
 import type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
 import { legacyRevenueShadowTelemetry, marketTelemetry } from "./sectorTelemetry";
@@ -860,6 +861,29 @@ export function processSector(
       ? 0
       : plantsCapacity * bankingCommodityScale
     : nameplateUnits * bankingCommodityScale;
+  // ─── Demand-aware production throttle (#1072) ────────────────────────────
+  //
+  // Revenue carries `soldFraction` (via `clearingRevenueLeg`); the cost lines
+  // do not. Inputs bill at `utilization`, labor at headcount, upkeep at
+  // capacity, `otherOpexPerUnit` per produced unit — and unsold output is not
+  // capitalised, it goes to the shadow stock in `market/inventory.ts`. A plant
+  // making 60k and selling 10k therefore paid full freight on 60k against
+  // revenue on 10k, which is the -254%/-500% margin players reported and no
+  // operator could manage out of.
+  //
+  // Firms do not run flat out into a market that will not take the goods.
+  // Target last turn's SALES plus a probe margin. A plant at capacity that
+  // clears its output is unaffected (its target exceeds what it can make), so
+  // this is a flip identity for every healthy sector and only gluts move.
+  //
+  // Applied to the tonnage, NOT as another factor inside `productionFactor`:
+  // it is a decision about how much to run, not a physical constraint on the
+  // run, and folding it in would have it re-multiply everywhere
+  // `productionFactor` is reused.
+  const plannedUnits = productionNameplateUnits * productionFactor;
+  const demandThrottle = plantsEnabled
+    ? demandThrottleFactor(plannedUnits, sector.soldUnits, sector.producedUnits)
+    : 1;
   const { producedUnits, soldUnits } = computeSectorOutputUnits({
     // Plants inverts the P1 decomposition: units come from owned capacity, not
     // from the revenue nameplate. Everything downstream of `unitsBase` is the
@@ -867,7 +891,7 @@ export function processSector(
     // D12: mothballed plants are cold — zero units produced, hence zero offered
     // to the clearing book next turn.
     nameplateUnits: productionNameplateUnits,
-    productionFactor,
+    productionFactor: productionFactor * demandThrottle,
     soldFraction: market.clearingEnabled && clearing ? clearing.soldFraction : null,
   });
   // Plants: revenue is DERIVED from produced output, exactly inverting the P1

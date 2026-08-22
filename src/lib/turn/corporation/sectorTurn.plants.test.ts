@@ -17,6 +17,7 @@ import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
 import { TURNS_PER_DAY, GROWTH_RATE_TURNS_PER_YEAR } from "@/lib/constants/corporations";
 import type { CorporationLookups } from "./types";
 import { processSector, type SectorTurnEnv } from "./sectorTurn";
+import { DEMAND_PROBE_MARGIN, DEMAND_THROTTLE_FLOOR } from "./demandThrottle";
 
 /**
  * Plants tier (P2, buildable sectors): capacity is authoritative and revenue is
@@ -549,5 +550,62 @@ describe("plants mode — production policy throttles real tonnage (#1072)", () 
     const plain = run("plants", makeSector({ capitalStock: stock }), 1000);
     const capital = run("capital", makeSector({ capitalStock: stock }), 1000);
     expect(plain.result.hourlyRevenue).toBeCloseTo(capital.result.hourlyRevenue, 8);
+  });
+});
+
+/**
+ * Ticket #1072: cost is billed on what a plant PRODUCED, revenue is booked on
+ * what it SOLD, and unsold output is not capitalised. A plant making 60k and
+ * selling 10k therefore paid full freight against a sixth of the revenue, and
+ * no amount of good management could close the gap.
+ */
+describe("plants mode — demand-aware production throttle", () => {
+  const stock = IMPLIED_UNITS * CAPITAL_SEED_HEADROOM;
+
+  /** producedUnits for a sector carrying last turn's sales history. */
+  function producedWithHistory(
+    history: { producedUnits?: number; soldUnits?: number } = {}
+  ): number {
+    return run(
+      "plants",
+      makeSector({ capitalStock: stock, plantsStartTurn: 100, ...history }),
+      1000
+    ).update.producedUnits as number;
+  }
+
+  it("cuts output toward what actually sold, instead of stockpiling losses", () => {
+    const unthrottled = producedWithHistory();
+    const glutted = producedWithHistory({
+      producedUnits: unthrottled,
+      soldUnits: unthrottled / 6,
+    });
+    expect(glutted).toBeLessThan(unthrottled);
+    // Target is last turn's sales plus the probe margin.
+    expect(glutted).toBeCloseTo((unthrottled / 6) * (1 + DEMAND_PROBE_MARGIN), 2);
+  });
+
+  it("leaves a sector with no sales history exactly where it was", () => {
+    // Newly founded, or a world that has never run the clearing pre-pass —
+    // there is nothing to infer a demand ceiling from.
+    const capital = run("capital", makeSector({ capitalStock: stock }), 1000);
+    const plants = run("plants", makeSector({ capitalStock: stock }), 1000);
+    expect(plants.result.hourlyRevenue).toBeCloseTo(capital.result.hourlyRevenue, 8);
+  });
+
+  it("leaves a plant that cleared its whole run alone", () => {
+    const unthrottled = producedWithHistory();
+    const clearing = producedWithHistory({
+      producedUnits: unthrottled,
+      soldUnits: unthrottled,
+    });
+    expect(clearing).toBeCloseTo(unthrottled, 4);
+  });
+
+  it("never idles a plant completely after a turn with no sales", () => {
+    // Zero output means zero presence on the clearing book, which would make
+    // "sold nothing" permanent. Mothball is the deliberate way to stop.
+    const unthrottled = producedWithHistory();
+    const dead = producedWithHistory({ producedUnits: unthrottled, soldUnits: 0 });
+    expect(dead).toBeCloseTo(unthrottled * DEMAND_THROTTLE_FLOOR, 2);
   });
 });
