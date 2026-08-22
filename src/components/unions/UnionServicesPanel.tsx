@@ -3,10 +3,16 @@
 import { useEffect, useState } from "react";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { formatLocalAmountFull } from "@/lib/utils/formatters";
-import { duesIncomePerTurn, servicesCostPerTurn } from "@/lib/unions/unionDues";
+import {
+  approvalTarget,
+  duesIncomePerTurn,
+  servicesCostPerTurn,
+  trendApproval,
+} from "@/lib/unions/unionDues";
 import {
   UNION_SERVICES,
   normalizeServiceIds,
+  servicesApprovalBonus,
   type UnionServiceId,
 } from "@/lib/unions/unionServices";
 
@@ -20,6 +26,10 @@ interface UnionServicesPanelProps {
   treasury: number;
   duesPerWorkerAnnual: number;
   activeServices: readonly UnionServiceId[];
+  /** Current stored approval, used to show the next-turn movement. */
+  approval: number;
+  /** Political spending also affects the same approval target. */
+  politicalContributionPct?: number;
   /** Only the union head may toggle services; everyone else sees the read-only list. */
   isHead: boolean;
   suspended: boolean;
@@ -44,6 +54,8 @@ export function UnionServicesPanel({
   treasury,
   duesPerWorkerAnnual,
   activeServices,
+  approval,
+  politicalContributionPct = 0,
   isHead,
   suspended,
   onSaved,
@@ -75,6 +87,16 @@ export function UnionServicesPanel({
   // plus a turn's dues income cannot cover a turn's cost.
   const unfunded = draftCostPerTurn > treasury + duesIncome;
   const dirty = sortedIds(draft) !== sortedIds(committed);
+  const serviceBonus = unfunded ? 0 : servicesApprovalBonus(draft);
+  const draftApprovalTarget = approvalTarget({
+    duesPerWorkerAnnual,
+    annualWage,
+    activeServices: draft,
+    servicesLapsed: unfunded,
+    politicalContributionPct,
+  });
+  const nextApproval = trendApproval(approval, draftApprovalTarget);
+  const nextApprovalDelta = nextApproval - approval;
 
   async function handleSave() {
     setSaving(true);
@@ -167,6 +189,17 @@ export function UnionServicesPanel({
           <span className="text-muted">Treasury:</span>{" "}
           <span className="font-semibold tabular-nums">{cash(treasury)}</span>
         </div>
+      </div>
+
+      <div className="rounded-lg border border-card-border bg-card-muted/30 p-3 text-sm">
+        <p className="font-medium text-foreground">
+          Approval is {approval.toFixed(1)} and is moving toward {draftApprovalTarget.toFixed(1)}.
+        </p>
+        <p className="mt-1 text-xs text-muted">
+          Next funded turn: {nextApproval.toFixed(1)} ({nextApprovalDelta >= 0 ? "+" : ""}
+          {nextApprovalDelta.toFixed(1)}). Services add +{serviceBonus} to the target. Dues and
+          political spending can offset that bonus.
+        </p>
       </div>
 
       {unfunded && (

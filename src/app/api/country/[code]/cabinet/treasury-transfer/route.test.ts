@@ -65,7 +65,7 @@ function makeRequest(body: Record<string, unknown>) {
   });
 }
 
-const ctx = () => ({ params: Promise.resolve({ code: "US" }) });
+const ctx = (code = "US") => ({ params: Promise.resolve({ code }) });
 
 async function setup({
   user = makeUser(),
@@ -86,8 +86,8 @@ async function setup({
     isSeatHolder
       ? {
           _id: new ObjectId(),
-          countryId: "US",
-          positionId: "secretary_of_treasury",
+          countryId: budget.countryId,
+          positionId: budget.countryId === "US" ? "secretary_of_treasury" : "minister_of_finance",
           characterId: user.character._id,
           characterName: user.character.name,
           appointedByCharacterId: new ObjectId(),
@@ -194,6 +194,33 @@ describe("POST /api/country/[code]/cabinet/treasury-transfer", () => {
 
     const res = await POST(makeRequest({ amount: 500_000 }), ctx());
     expect(res.status).toBe(400);
+  });
+
+  it("uses East Germany's GDP-backed borrowing floor instead of the stale M10M cap", async () => {
+    await setup({
+      budget: makeBudget({
+        _id: "DD",
+        countryId: "DD",
+        gdp: 100_000_000,
+        revenue: {
+          total: 1_000_000_000,
+          incomeTax: 0,
+          corporateTax: 0,
+          payrollTax: 0,
+          tariffs: 0,
+          salesTax: 0,
+          healthcareIncome: 0,
+          other: 0,
+        },
+        surplus: -10_500_000,
+        debt: { principal: 0, interestRate: 0, ceiling: 10_000_000, ceilingLastRaisedYear: 1953 },
+      }),
+      bank: makeBank({ _id: "DD", countryId: "DD" }),
+    });
+    const { POST } = await import("./route");
+
+    const res = await POST(makeRequest({ amount: 500_000 }), ctx("DD"));
+    expect(res.status).toBe(200);
   });
 
   it("rejects a second transfer in the same turn", async () => {

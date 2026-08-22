@@ -73,6 +73,13 @@ describe("UnionDuesPanel", () => {
     expect(screen.getByText(/funds services, organizing drives and bargaining/i)).toBeTruthy();
   });
 
+  it("labels the zero delta as a dues-edit preview, not the union's total approval effect", () => {
+    render(panel({ activeServices: ["healthFund"] }));
+
+    expect(screen.getByText("Change from dues edit:")).toBeTruthy();
+    expect(screen.queryByText("Approval effect:")).toBeNull();
+  });
+
   it("locks the slider and says why when the union represents no paid workforce", () => {
     render(panel({ annualWage: 0 }));
 

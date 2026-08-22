@@ -195,7 +195,7 @@ export function UnionDuesPanel({
               <span className="font-semibold tabular-nums">{cash(draftIncome)}</span>
             </div>
             <div>
-              <span className="text-muted">Approval effect:</span>{" "}
+              <span className="text-muted">Change from dues edit:</span>{" "}
               <span
                 className={`font-semibold tabular-nums ${
                   approvalDelta < 0 ? "text-error" : approvalDelta > 0 ? "text-success" : ""

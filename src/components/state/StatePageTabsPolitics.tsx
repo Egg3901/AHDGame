@@ -111,6 +111,7 @@ export function PoliticsTab({
   const socThumbColor = soc < -0.1 ? "#2dd4bf" : soc > 0.1 ? "#f59e0b" : "#a1a1aa";
 
   const upperChamberName = config.legislature?.upperChamber?.shortName ?? "Senate";
+  const upperChamber = config.legislature?.upperChamber;
   const lowerChamberName = config.legislature?.lowerChamber?.shortName ?? "House";
   const subNationalName = config.subNationalChamber?.shortName ?? "State Senate";
   // Country-aware regional chief-executive label — "Governor" (US/JP),
@@ -364,6 +365,9 @@ export function PoliticsTab({
             senators={officials.senators}
             label={upperChamberName}
             memberTitle={upperMemberTitle}
+            isElected={upperChamber?.elected !== false}
+            configuredSeats={upperChamber?.seats ?? 2}
+            description={upperChamber?.description}
           />
           <HouseSection
             state={state}
