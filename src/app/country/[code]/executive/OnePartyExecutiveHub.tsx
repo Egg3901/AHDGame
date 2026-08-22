@@ -27,7 +27,7 @@ import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
 import { getCountryState } from "@/lib/countryState";
 import { ParliamentaryGovernmentActions } from "./components/ParliamentaryGovernmentActions";
 import { ExecutiveTabsClient } from "./ExecutiveTabsClient";
-import { turnToLarpDate } from "@/lib/utils/formatters";
+import { formationTurnToLarpDate } from "@/lib/government/formationDate";
 import {
   checkAppointmentEligibility,
   processParliamentaryGovernmentVotes,
@@ -668,7 +668,13 @@ export async function OnePartyExecutiveHub({ countryId }: { countryId: CountryId
             {premier ? (
               <div className="space-y-3 text-body-sm text-muted">
                 {govFormation?.formedTurn && (
-                  <p>Formed {turnToLarpDate(govFormation.formedTurn)}</p>
+                  <p>
+                    Formed{" "}
+                    {formationTurnToLarpDate(govFormation.formedTurn, {
+                      startingYear: executiveGameTime.startingYear,
+                      preIterationTurns: executiveGameTime.preIterationTurns,
+                    })}
+                  </p>
                 )}
                 {govFormation?.status && (
                   <p className="capitalize">

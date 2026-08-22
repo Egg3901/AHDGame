@@ -217,9 +217,13 @@ export async function applyDefenceDeliveries(
     // Every boundary now names itself. A contract that ships nothing must still say why, or
     // the CEO is back to watching a number sit still with no way to tell scarcity from a bug.
     const reasonFor = (shipped: number) => {
+      // A filled order has no stalled output. Check completion before comparing the plant's
+      // surplus production with the contract's now-exhausted funding envelope; otherwise an
+      // order that ships its final reserved lot is labelled `appropriation_short` merely
+      // because the plant could have built more than the order asked for (ticket #1171).
+      if (remaining - shipped <= 0) return undefined;
       if (available - shipped >= 1 && affordable <= shipped) return "appropriation_short" as const;
       if (available - shipped >= 1 && withinTurnCap <= shipped) return "turn_spend_cap" as const;
-      if (remaining - shipped <= 0) return undefined;
       if (available - shipped > 0 && available - shipped < 1) {
         return rawShare > 0 ? ("sub_lot_output" as const) : ("no_output" as const);
       }

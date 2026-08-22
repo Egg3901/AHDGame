@@ -119,6 +119,8 @@ function stubDb(w: World): Db {
             }
             const set = (u.$set ?? {}) as Record<string, unknown>;
             for (const [k, v] of Object.entries(set)) target[k] = v;
+            const unset = (u.$unset ?? {}) as Record<string, unknown>;
+            for (const k of Object.keys(unset)) delete target[k];
             return { matchedCount: 1, modifiedCount: 1 };
           },
         };
@@ -349,6 +351,28 @@ describe("applyDefenceDeliveries", () => {
     w.contracts[0].lotsOrdered = 5;
     const r = await applyDefenceDeliveries(stubDb(w), "US", 1953);
     expect(r.lots).toBe(5);
+  });
+
+  // Ticket #1171. A plant can have more output ready than the final lots an order needs. The
+  // order's exact encumbrance funds those lots, then reaches zero. Comparing the leftover plant
+  // output with that exhausted envelope before noticing the completed order stamped a false
+  // appropriation warning on a fully paid, 100%-delivered contract.
+  it("clears the carry reason when the final reserved lots complete the order", async () => {
+    const w = world({ encumbered: 500 });
+    Object.assign(w.contracts[0], {
+      lotsOrdered: 5,
+      encumberedAmount: 500,
+      carryReason: "appropriation_short",
+      carryReasonTurn: 41,
+    });
+
+    const r = await applyDefenceDeliveries(stubDb(w), "US", 1953, 3, 42);
+
+    expect(r.lots).toBe(5);
+    expect(r.paid).toBe(500);
+    expect(w.contracts[0].status).toBe("complete");
+    expect(w.encumbered).toBe(0);
+    expect(w.contracts[0].carryReason).toBeUndefined();
   });
 
   it("accumulates sub-lot output across turns instead of discarding it", async () => {
