@@ -30,7 +30,19 @@ export const TEXTURE_CAP = 12;
 export const TEXTURE_NOISE_FLOOR = 0.5;
 
 export function textureFromBoards(
-  boards: Record<string, Record<string, number>>
+  boards: Record<string, Record<string, number>>,
+  /**
+   * A (region, family) pair that will NOT receive texture -- currently the ones
+   * a hand-authored REGIONAL_MODIFIERS_1953 entry already covers.
+   *
+   * Excluded BEFORE the mean is taken, not filtered out afterwards. Those pairs
+   * are not randomly placed: an authored modifier exists precisely where the
+   * seed author already knew a region was extreme, and the derivation agrees.
+   * Centring over them and dropping afterwards removes a biased tail and shifts
+   * the country mean -- 1.02 points on US society.integration when this was
+   * done in the wrong order.
+   */
+  exclude?: (regionId: string, family: string) => boolean
 ): Record<string, Record<string, number>> {
   const regions = Object.keys(boards);
   const out: Record<string, Record<string, number>> = {};
@@ -42,7 +54,9 @@ export function textureFromBoards(
   }
 
   for (const family of families) {
-    const present = regions.filter((r) => Number.isFinite(boards[r][family]));
+    const present = regions.filter(
+      (r) => Number.isFinite(boards[r][family]) && !exclude?.(r, family)
+    );
     if (present.length === 0) continue;
 
     const mean = present.reduce((sum, r) => sum + boards[r][family], 0) / present.length;

@@ -57,6 +57,40 @@ describe("textureFromBoards", () => {
   });
 
   /**
+   * Regression: entries that will be thrown away must not be counted into the
+   * mean, or the survivors stop summing to zero.
+   *
+   * The hand-authored REGIONAL_MODIFIERS_1953 entries win over texture, so the
+   * generator drops the colliding pairs. Those collisions are NOT randomly
+   * placed: an authored modifier exists precisely where the seed author already
+   * knew the region was extreme, and the derivation finds the same region
+   * extreme. Centring first and dropping afterwards therefore removes a biased
+   * tail and shifts the country mean -- measured at 1.02 points on US
+   * society.integration before this was fixed.
+   */
+  it("excludes dropped pairs from the mean instead of centring around them", () => {
+    const boards = {
+      MS: { "society.integration": 20 },
+      AL: { "society.integration": 25 },
+      NY: { "society.integration": 70 },
+      CA: { "society.integration": 75 },
+    };
+    // MS and AL carry hand-authored modifiers, so they get no texture.
+    const exclude = (regionId: string, family: string) =>
+      family === "society.integration" && (regionId === "MS" || regionId === "AL");
+
+    const out = textureFromBoards(boards, exclude);
+
+    expect(out.MS?.["society.integration"]).toBeUndefined();
+    expect(out.AL?.["society.integration"]).toBeUndefined();
+    // The survivors are centred on THEIR OWN mean (72.5), not on all four (47.5).
+    expect(out.NY["society.integration"]).toBeCloseTo(-2.5, 6);
+    expect(out.CA["society.integration"]).toBeCloseTo(2.5, 6);
+    const sum = out.NY["society.integration"] + out.CA["society.integration"];
+    expect(sum).toBeCloseTo(0, 6);
+  });
+
+  /**
    * The noise floor is the ONE thing that stops the mean being preserved
    * exactly: a family where most regions sit near the mean drops all those
    * small deviations and keeps only the outlier, so the surviving entries no
