@@ -21,6 +21,7 @@ import { defect as privateMarketCapHistory } from "./defects/AHD-private-market-
 import { defect as ukVatRevenueGap } from "./defects/AHD-1102-uk-vat-revenue-gap";
 import { defect as brlForcedMaturityRestitution } from "./defects/AHD-1124-brl-forced-maturity-restitution";
 import { defect as commandEconomyPrivateSectorOwnership } from "./defects/AHD-command-economy-private-sector-ownership";
+import { defect as tinkyStaleVoteExcess } from "./defects/AHD-tinky-stale-vote-excess";
 import type { Defect } from "./types";
 
 export const DEFECTS: Defect[] = [
@@ -40,6 +41,7 @@ export const DEFECTS: Defect[] = [
   // so holders were force-converted out of BRL at the corrupted rate.
   brlForcedMaturityRestitution,
   commandEconomyPrivateSectorOwnership,
+  tinkyStaleVoteExcess,
 ];
 
 export function getDefect(id: string): Defect | undefined {

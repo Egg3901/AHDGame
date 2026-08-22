@@ -19,6 +19,7 @@ import type {
   User,
 } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
+import type { CorporationVote } from "@/lib/db/types/corporationVote";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import {
@@ -110,6 +111,16 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const subBlock = await subsidiaryIssuanceBlockReason(corporation);
     if (subBlock) return NextResponse.json({ error: subBlock }, { status: 403 });
+
+    const openShareholderVote = await db
+      .collection<CorporationVote>("corporationVotes")
+      .findOne({ corporationId: corporation._id, status: "open" }, { projection: { _id: 1 } });
+    if (openShareholderVote) {
+      return NextResponse.json(
+        { error: "Cannot issue shares while a shareholder vote is open" },
+        { status: 400 }
+      );
+    }
 
     // Cap self-issuance at MAX_SELF_ISSUANCE_PERCENT of outstanding shares
     const currentShares = corporation.totalShares ?? 10_000_000;

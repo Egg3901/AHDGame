@@ -45,6 +45,52 @@ beforeEach(async () => {
 });
 
 describe("POST /api/corporations/[id]/shares/self-issue", () => {
+  it("rejects self-issuance while a shareholder vote is open", async () => {
+    const userId = new ObjectId();
+    const corporationId = new ObjectId();
+
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: userId.toString() },
+    } as any);
+
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        _id: corporationId,
+        userId,
+        sharePrice: 10,
+        totalShares: 1000,
+        name: "Test Corp",
+        liquidCurrencyCode: "USD",
+      },
+    } as any);
+
+    db.collection("corporationVotes").findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      corporationId,
+      status: "open",
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/corporations/abc/shares/self-issue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shares: 10 }),
+      }),
+      { params: Promise.resolve({ id: "abc" }) }
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Cannot issue shares while a shareholder vote is open",
+    });
+    expect(db.collectionMocks["corporations"]).toBeUndefined();
+  });
+
   it("restores the issuance cooldown if the corporation write fails after cash debit", async () => {
     const userId = new ObjectId();
     const characterId = new ObjectId();
