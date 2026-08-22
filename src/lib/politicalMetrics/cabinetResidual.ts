@@ -112,6 +112,8 @@ export const CABINET_KEY_TO_POLITICAL: Partial<
   ],
   highSchoolGradRate: [{ id: "education.attainment", weight: 1 }],
   testPerformance: [{ id: "education.standards", weight: 1 }],
+  // Same correspondence ADAPTER_TIER1 already uses for this key.
+  literacyRate: [{ id: "education.universalSchooling", weight: 1 }],
   universityEnrollment: [
     { id: "education.attainment", weight: 0.5 },
     { id: "education.adultSkills", weight: 0.5 },
@@ -192,6 +194,13 @@ export const CABINET_KEY_TO_POLITICAL: Partial<
     { id: "society.integration", weight: 0.5 },
     { id: "society.demography", weight: 0.5 },
   ],
+  // society.tradition is "standing of traditional institutions and shared
+  // national identity"; a House of Culture is literally its "community hall
+  // construction" contributor, hence the smaller civicLife share.
+  nationalPride: [
+    { id: "society.tradition", weight: 0.7 },
+    { id: "society.civicLife", weight: 0.3 },
+  ],
 
   // — governance —
   publicTrust: [
@@ -206,6 +215,9 @@ export const CABINET_KEY_TO_POLITICAL: Partial<
     { id: "society.civicLife", weight: -0.5 },
   ],
   devolutionSatisfaction: [{ id: "governance.localAutonomy", weight: 1 }],
+  // defense.security is "protection against espionage, subversion, and direct
+  // threats", and lists "border control modernisation" as a contributor.
+  borderSecurity: [{ id: "defense.security", weight: 1 }],
 
   // Deliberately unmapped (outcome/monetary, no clean political driver):
   //   governmentApproval (an outcome, not a lever), interestRate, inflationPressure.

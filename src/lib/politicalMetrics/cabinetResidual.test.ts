@@ -178,3 +178,43 @@ describe("seedBySourceFromLegacy — reinterpreting pre-split docs without a mig
     expect(sumCabinetResiduals(next)["economy.competition"]).toBeCloseTo(8, 4);
   });
 });
+
+/**
+ * Ticket #1129 follow-up. Three estate effect paths reached NEITHER store for a
+ * political-pipeline country: the macro $inc skips them (they are not
+ * `economic`/`population`, nor one of the three hoisted governance paths) and
+ * `CABINET_KEY_TO_POLITICAL` had no row, so `mapCabinetDeltasToPolitical`
+ * dropped them silently. RU/DD players built the estate, paid the upkeep, and
+ * nothing moved:
+ *
+ *   culture/state_publishing_house           literacyRate + nationalPride → FULLY inert
+ *   culture/house_of_culture                 nationalPride
+ *   state_security/internal_troops_garrison  borderSecurity
+ */
+describe("ticket #1129 — estate effects that reached neither store", () => {
+  it("maps literacyRate onto universal schooling", () => {
+    const out = mapCabinetDeltasToPolitical({ "education.literacyRate": 1 });
+    expect(out["education.universalSchooling"]).toBeGreaterThan(0);
+  });
+
+  it("maps nationalPride onto shared national identity and civic life", () => {
+    const out = mapCabinetDeltasToPolitical({ "governance.nationalPride": 1 });
+    expect(out["society.tradition"]).toBeGreaterThan(0);
+    expect(out["society.civicLife"]).toBeGreaterThan(0);
+    expect(out["society.tradition"]).toBeGreaterThan(out["society.civicLife"]);
+  });
+
+  it("maps borderSecurity onto the defense security family", () => {
+    const out = mapCabinetDeltasToPolitical({ "governance.borderSecurity": 1 });
+    expect(out["defense.security"]).toBeGreaterThan(0);
+  });
+
+  it("leaves a State Publishing House with a non-empty political contribution", () => {
+    // The archetype's own effects, at tier 0 / standard / full condition.
+    const out = mapCabinetDeltasToPolitical({
+      "education.literacyRate": 0.02,
+      "governance.nationalPride": 0.015,
+    });
+    expect(Object.keys(out).length).toBeGreaterThan(0);
+  });
+});

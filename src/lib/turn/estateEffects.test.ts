@@ -4,6 +4,9 @@ import type { Db } from "mongodb";
 import { computeEstateDeltas, driftCondition, applyEstateEffects } from "./estateEffects";
 import type { CabinetEstate } from "@/lib/db/types/cabinetEstate";
 import { createMockDb } from "@/lib/test-utils/mockDb";
+import { ESTATE_CATALOG, ESTATE_PORTFOLIO_BY_COUNTRY } from "@/lib/constants/cabinetEstates";
+import { CABINET_KEY_TO_POLITICAL } from "@/lib/politicalMetrics/cabinetResidual";
+import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
 
 function estate(p: Partial<CabinetEstate>): CabinetEstate {
   return {
@@ -124,5 +127,53 @@ describe("applyEstateEffects routing", () => {
     await applyEstateEffects(db, "US", "secretary_of_defense", bucket);
     expect(Object.keys(bucket.national)).toHaveLength(0);
     expect(Object.keys(bucket.regional)).toHaveLength(0);
+  });
+});
+
+/**
+ * Ticket #1129 guard. `ministerialOrderProcessing` routes every accumulated
+ * cabinet delta through exactly two doors: `isMacroMetricPath` ($inc into
+ * macroMetrics) and `CABINET_KEY_TO_POLITICAL` (the political board). A path
+ * through NEITHER is dropped without an error, so the player builds the estate,
+ * pays the upkeep, and nothing moves — which is what ticket #1129 reported.
+ *
+ * This asserts the catalog and the routers agree, so a new archetype whose
+ * effect targets an unmapped metric fails here rather than shipping inert.
+ */
+describe("ticket #1129 — every estate effect reaches a store", () => {
+  function bareKey(path: string): string {
+    const parts = path.split(".");
+    const tail = parts[parts.length - 1] === "value" ? parts.slice(0, -1) : parts;
+    return tail[tail.length - 1] ?? path;
+  }
+
+  /** portfolioKey → the political-pipeline countries that can build it. */
+  function politicalOwners(): Map<string, string[]> {
+    const owners = new Map<string, string[]>();
+    for (const cid of ["US", "UK", "RU", "DD"] as const) {
+      for (const portfolioKey of Object.values(ESTATE_PORTFOLIO_BY_COUNTRY[cid] ?? {})) {
+        const list = owners.get(portfolioKey) ?? [];
+        if (!list.includes(cid)) list.push(cid);
+        owners.set(portfolioKey, list);
+      }
+    }
+    return owners;
+  }
+
+  it("no archetype a political country can build has an unroutable effect", () => {
+    const owners = politicalOwners();
+    const orphans: string[] = [];
+
+    for (const [portfolio, archetypes] of Object.entries(ESTATE_CATALOG)) {
+      if (!owners.has(portfolio)) continue;
+      for (const archetype of archetypes) {
+        for (const path of Object.keys(archetype.effects)) {
+          if (isMacroMetricPath(path) || CABINET_KEY_TO_POLITICAL[bareKey(path)]) continue;
+          orphans.push(`${portfolio}/${archetype.id} → ${path}`);
+        }
+      }
+    }
+
+    expect(orphans).toEqual([]);
   });
 });
