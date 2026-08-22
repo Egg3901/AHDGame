@@ -11,6 +11,7 @@ import {
   getExecutiveOfficeKey,
   getHeadOfStateTitle,
   getHeadOfStateOfficeType,
+  hasConfidenceVoteMechanism,
   getNationalAddressName,
   getOfficeTypeConfig,
   getPartyStrengthWeight,
@@ -34,6 +35,13 @@ describe("getCountryLocale", () => {
     expect(getCountryLocale("US")).toBe("en-US");
     expect(getCountryLocale("JP")).toBe("en-US");
     expect(getCountryLocale("DE")).toBe("en-US");
+  });
+});
+
+describe("confidence vote mechanisms", () => {
+  it("allows the USSR ruling party to challenge the Premier while China stays disabled", () => {
+    expect(hasConfidenceVoteMechanism(COUNTRY_CONFIGS.RU)).toBe(true);
+    expect(hasConfidenceVoteMechanism(COUNTRY_CONFIGS.CN)).toBe(false);
   });
 });
 
