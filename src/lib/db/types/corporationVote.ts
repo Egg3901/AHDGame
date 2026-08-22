@@ -62,6 +62,8 @@ export interface CorporationVote {
   deadlineAtTurn: number;
   status: CorporationVoteStatus;
   passThreshold: number;
+  /** Voting-power denominator captured at proposal time. Structure changes invalidate the vote. */
+  totalEligibleSharesAtOpen?: number;
   payload: CorporationVotePayload;
   votes: CorporationVoteCast[];
   /**
