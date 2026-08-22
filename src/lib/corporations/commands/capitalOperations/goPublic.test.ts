@@ -116,6 +116,7 @@ describe("goPublic command", () => {
     const setOps = updateCall[1].$set;
     const incOps = updateCall[1].$inc;
     expect(setOps.isPrivate).toBe(false);
+    expect(setOps.hiddenFromExchange).toBe(false);
     expect(setOps.lastIpoTurn).toBe(1_000);
     expect(incOps.totalShares).toBe(4_285_714);
     expect(incOps.publicFloat).toBe(4_285_714);
