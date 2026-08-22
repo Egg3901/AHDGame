@@ -89,6 +89,23 @@ function baseCorp(overrides: Record<string, unknown> = {}): Record<string, unkno
 }
 
 describe("POST /api/corporations/[id]/shares/consolidate", () => {
+  it("rejects a split while a shareholder vote is open", async () => {
+    const corp = baseCorp();
+    db.collection("corporationVotes").findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      corporationId: corp._id,
+      status: "open",
+    });
+
+    const response = await runConsolidate({ corp, targetTotalShares: 1_000_000 });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Cannot restructure shares while a shareholder vote is open",
+    });
+    expect(db.collectionMocks["corporations"]).toBeUndefined();
+  });
+
   it("scales fundamentalSharePrice alongside sharePrice on a reverse split (regression: bug #0449)", async () => {
     // Setup: corp where sharePrice and fundamentalSharePrice differ — i.e.,
     // sentiment/orderFlow multipliers have moved the live price off the

@@ -38,6 +38,51 @@ beforeEach(async () => {
 });
 
 describe("POST /api/corporations/[id]/shares/issue", () => {
+  it("rejects share issuance while a shareholder vote is open", async () => {
+    const corpId = new ObjectId();
+
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: new ObjectId().toString() },
+    } as never);
+
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        _id: corpId,
+        name: "Test Corp",
+        countryId: "US",
+        liquidCurrencyCode: "USD",
+        sharePrice: 10,
+        totalShares: 10_000,
+      },
+    } as never);
+
+    db.collection("corporationVotes").findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      corporationId: corpId,
+      status: "open",
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/corporations/x/shares/issue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ percent: 5 }),
+      }),
+      { params: Promise.resolve({ id: "x" }) }
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Cannot issue shares while a shareholder vote is open",
+    });
+    expect(db.collectionMocks["corporations"]).toBeUndefined();
+  });
+
   it("rejects share issuance for private corporations", async () => {
     const { requireBasicAuth } = await import("@/lib/api/requireAuth");
     vi.mocked(requireBasicAuth).mockResolvedValue({

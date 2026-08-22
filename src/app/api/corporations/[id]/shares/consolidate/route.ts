@@ -32,6 +32,7 @@ import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import { generateStockExchangeSnapshots } from "@/lib/turn/stockExchangeSnapshot";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import type { Character, Corporation, Shareholder, ImperialCharacter } from "@/lib/db/types";
+import type { CorporationVote } from "@/lib/db/types/corporationVote";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 
@@ -77,6 +78,16 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (await hasOpenPrivatizationVote(db, corporation._id)) {
       return NextResponse.json(
         { error: "Cannot restructure shares while a privatization vote is open" },
+        { status: 400 }
+      );
+    }
+
+    const openShareholderVote = await db
+      .collection<CorporationVote>("corporationVotes")
+      .findOne({ corporationId: corporation._id, status: "open" }, { projection: { _id: 1 } });
+    if (openShareholderVote) {
+      return NextResponse.json(
+        { error: "Cannot restructure shares while a shareholder vote is open" },
         { status: 400 }
       );
     }
