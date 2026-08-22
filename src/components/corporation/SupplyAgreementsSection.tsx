@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { COMMODITY_TYPES, COMMODITY_LABELS, type CommodityType } from "@/lib/constants/commodities";
+import {
+  COMMODITY_TYPES,
+  COMMODITY_LABELS,
+  COMMODITY_UNITS,
+  type CommodityType,
+} from "@/lib/constants/commodities";
 import { SUPPLY_AGREEMENT_PRICE_BAND } from "@/lib/db/types/supplyAgreement";
 import { useToast } from "@/contexts/ToastContext";
 
@@ -12,8 +17,10 @@ interface SupplyAgreement {
   commodity: CommodityType;
   volumeCap: number;
   pricePremium: number;
-  status: "pending" | "active" | "cancelled";
+  status: "pending" | "active" | "cancelling" | "cancelled";
   proposedByCorpId: string;
+  lastDeliveryTurn?: number;
+  lastDeliveredUnits?: number;
 }
 
 interface CorpSearchResult {
@@ -36,6 +43,7 @@ function fmtPremium(fraction: number): string {
 const STATUS_STYLES: Record<SupplyAgreement["status"], string> = {
   pending: "border-warning/40 bg-warning/10 text-warning",
   active: "border-success/40 bg-success/10 text-success",
+  cancelling: "border-warning/40 bg-warning/10 text-warning",
   cancelled: "border-card-border bg-card-elevated text-muted",
 };
 
@@ -215,6 +223,22 @@ export default function SupplyAgreementsSection({
             Price: <span className="font-medium text-foreground">{fmtPremium(a.pricePremium)}</span>
           </span>
         </div>
+
+        {(a.status === "active" || a.status === "cancelling") && (
+          <p className="text-xs text-muted">
+            {Number.isFinite(a.lastDeliveryTurn) ? (
+              <>
+                Last delivery:{" "}
+                <span className="font-medium text-foreground tabular-nums">
+                  {Math.max(0, a.lastDeliveredUnits ?? 0).toLocaleString("en-US")}{" "}
+                  {COMMODITY_UNITS[a.commodity]} on turn {a.lastDeliveryTurn}
+                </span>
+              </>
+            ) : (
+              "Awaiting first settlement"
+            )}
+          </p>
+        )}
 
         {(canAccept || canCancel) && (
           <div className="flex flex-wrap gap-2 border-t border-card-border pt-3">

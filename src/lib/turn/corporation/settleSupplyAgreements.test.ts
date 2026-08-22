@@ -1,12 +1,21 @@
 import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
+import type { Db } from "mongodb";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { computeSupplyAgreementSettlements, type SettleCorpInfo } from "./settleSupplyAgreements";
+import {
+  computeDemandCappedContractReservations,
+  computeSupplyAgreementBuyerDemand,
+  computeSupplyAgreementSettlements,
+  settleSupplyAgreements,
+  type SettleCorpInfo,
+} from "./settleSupplyAgreements";
 import {
   CONTRACT_DAMAGES_CAP_FRACTION,
   CONTRACT_SHORTFALL_PENALTY,
 } from "@/lib/db/types/supplyAgreement";
+import { createMockDb } from "@/lib/test-utils/mockDb";
+import type { CorporationLookups } from "./types";
 
 const now = new Date("2026-01-01T00:00:00Z");
 const commodity = Object.keys(COMMODITY_BASE_PRICES)[0] as CommodityType;
@@ -31,6 +40,167 @@ function makeInfo(
 }
 
 describe("computeSupplyAgreementSettlements", () => {
+  it("measures the buyer's current input consumption on the live plants unit basis", () => {
+    const demand = computeSupplyAgreementBuyerDemand({
+      sectors: [
+        {
+          corporationId: B,
+          sectorType: "manufacturing",
+          revenueAnchor: 30_000,
+          strategyId: "standard",
+          productionPolicyLevel: 0,
+          producedUnits: 50,
+          capacityUnits: 100,
+          mothballed: false,
+          isNatcorp: false,
+        },
+        {
+          corporationId: B,
+          sectorType: "manufacturing",
+          revenueAnchor: 30_000,
+          strategyId: "standard",
+          productionPolicyLevel: 0,
+          producedUnits: 100,
+          capacityUnits: 100,
+          mothballed: true,
+          isNatcorp: false,
+        },
+      ],
+      currentTurn: 5,
+      unitScale: 3,
+      plantsEnabled: true,
+    });
+
+    expect(demand.get(B)?.get("energy")).toBe(150);
+  });
+
+  it("caps clearing reservations at named buyers' combined physical demand", () => {
+    const supplier2 = new ObjectId().toString();
+    const buyer2 = new ObjectId().toString();
+    const reservations = computeDemandCappedContractReservations({
+      agreements: [
+        {
+          supplierCorpId: S,
+          buyerCorpId: B,
+          commodity,
+          volumeCap: 100,
+          pricePremium: 0,
+        },
+        {
+          supplierCorpId: S,
+          buyerCorpId: buyer2,
+          commodity,
+          volumeCap: 100,
+          pricePremium: 0,
+        },
+        {
+          supplierCorpId: supplier2,
+          buyerCorpId: B,
+          commodity,
+          volumeCap: 100,
+          pricePremium: 0,
+        },
+      ],
+      buyerDemandByCorpCommodity: new Map([
+        [B, new Map([[commodity, 100]])],
+        [buyer2, new Map([[commodity, 100]])],
+      ]),
+    });
+
+    expect(reservations.get(S)?.get(commodity)).toBe(150);
+    expect(reservations.get(supplier2)?.get(commodity)).toBe(50);
+  });
+
+  it("caps a buyer's delivery and premium at its actual commodity consumption", () => {
+    const r = computeSupplyAgreementSettlements({
+      agreements: [
+        {
+          agreementId: "agreement-1",
+          supplierCorpId: S,
+          buyerCorpId: B,
+          commodity,
+          volumeCap: 100,
+          pricePremium: 0.2,
+        },
+      ],
+      contractSettlementByCorp: new Map([[S, new Map([[commodity, 100]])]]),
+      buyerDemandByCorpCommodity: new Map([[B, new Map([[commodity, 30]])]]),
+      eraUnitScale: 1,
+      priceRatioByCommodity: ratio,
+      corpInfo: makeInfo(),
+      turn: 5,
+      now,
+    });
+
+    expect(r.deliveries).toEqual([
+      {
+        agreementId: "agreement-1",
+        supplierCorpId: S,
+        buyerCorpId: B,
+        commodity,
+        contractedUnits: 100,
+        deliveredUnits: 30,
+        turn: 5,
+      },
+    ]);
+    expect(r.deltaByCorp.get(S)).toBe(Math.round(30 * base * 0.2));
+    expect(r.deltaByCorp.get(B)).toBe(-Math.round(30 * base * 0.2));
+  });
+
+  it("routes available contract supply across buyers without stranding deliverable units", () => {
+    const supplier2 = new ObjectId().toString();
+    const buyer2 = new ObjectId().toString();
+    const r = computeSupplyAgreementSettlements({
+      agreements: [
+        {
+          agreementId: "s1-b1",
+          supplierCorpId: S,
+          buyerCorpId: B,
+          commodity,
+          volumeCap: 100,
+          pricePremium: 0,
+        },
+        {
+          agreementId: "s1-b2",
+          supplierCorpId: S,
+          buyerCorpId: buyer2,
+          commodity,
+          volumeCap: 100,
+          pricePremium: 0,
+        },
+        {
+          agreementId: "s2-b1",
+          supplierCorpId: supplier2,
+          buyerCorpId: B,
+          commodity,
+          volumeCap: 100,
+          pricePremium: 0,
+        },
+      ],
+      contractSettlementByCorp: new Map([
+        [S, new Map([[commodity, 100]])],
+        [supplier2, new Map([[commodity, 100]])],
+      ]),
+      buyerDemandByCorpCommodity: new Map([
+        [B, new Map([[commodity, 100]])],
+        [buyer2, new Map([[commodity, 100]])],
+      ]),
+      eraUnitScale: 1,
+      priceRatioByCommodity: ratio,
+      corpInfo: () => undefined,
+      turn: 5,
+      now,
+    });
+
+    expect(r.deliveries.reduce((sum, delivery) => sum + delivery.deliveredUnits, 0)).toBe(200);
+    expect(r.deliveries.find((delivery) => delivery.agreementId === "s1-b2")?.deliveredUnits).toBe(
+      100
+    );
+    expect(r.deliveries.find((delivery) => delivery.agreementId === "s2-b1")?.deliveredUnits).toBe(
+      100
+    );
+  });
+
   it("credits supplier and debits buyer the premium; conserves cash", () => {
     const r = computeSupplyAgreementSettlements({
       agreements: [
@@ -167,7 +337,84 @@ describe("computeSupplyAgreementSettlements", () => {
   });
 });
 
+describe("settleSupplyAgreements delivery persistence", () => {
+  it("records every agreement's delivered units even when its price is exactly at market", async () => {
+    const db = createMockDb();
+    db.collection("corporations");
+    db.collection("supplyAgreements");
+    const agreementId = new ObjectId();
+
+    await settleSupplyAgreements({
+      db: db as unknown as Db,
+      lookups: {
+        eraUnitScale: 1,
+        corpById: new Map(),
+        exchangeRatesByCurrency: new Map(),
+      } as unknown as CorporationLookups,
+      agreements: [
+        {
+          agreementId: agreementId.toString(),
+          supplierCorpId: S,
+          buyerCorpId: B,
+          commodity,
+          volumeCap: 100,
+          pricePremium: 0,
+        },
+      ],
+      contractSettlementByCorp: new Map([[S, new Map([[commodity, 100]])]]),
+      buyerDemandByCorpCommodity: new Map([[B, new Map([[commodity, 30]])]]),
+      priceRatioByCommodity: ratio,
+      turn: 5,
+      now,
+      thresholds: {} as never,
+    });
+
+    expect(db.collectionMocks.supplyAgreements.bulkWrite).toHaveBeenCalledWith([
+      {
+        updateOne: {
+          filter: { _id: agreementId },
+          update: {
+            $set: {
+              lastDeliveryTurn: 5,
+              lastDeliveredUnits: 30,
+              updatedAt: now,
+            },
+          },
+        },
+      },
+    ]);
+  });
+});
+
 describe("computeSupplyAgreementSettlements — shortfall damages (P3b)", () => {
+  it("does not penalize a supplier for contracted volume the buyer does not consume", () => {
+    const r = computeSupplyAgreementSettlements({
+      agreements: [
+        {
+          agreementId: "agreement-1",
+          supplierCorpId: S,
+          buyerCorpId: B,
+          commodity,
+          volumeCap: 100,
+          pricePremium: 0,
+        },
+      ],
+      contractSettlementByCorp: new Map(),
+      buyerDemandByCorpCommodity: new Map([[B, new Map([[commodity, 30]])]]),
+      producedByCorpCommodity: new Map(),
+      plantsEnabled: true,
+      eraUnitScale: 1,
+      priceRatioByCommodity: ratio,
+      corpInfo: makeInfo(),
+      turn: 5,
+      now,
+    });
+
+    const penalty = Math.round(30 * base * CONTRACT_SHORTFALL_PENALTY);
+    expect(r.deltaByCorp.get(S)).toBe(-penalty);
+    expect(r.deltaByCorp.get(B)).toBe(penalty);
+  });
+
   it("charges the supplier when it produced less than it contracted", () => {
     const r = computeSupplyAgreementSettlements({
       agreements: [

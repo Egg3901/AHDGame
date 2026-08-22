@@ -31,7 +31,13 @@ import {
   plantsSupplyScaledUnits,
 } from "@/lib/constants/commodities";
 import { clampAgreementPremium } from "@/lib/db/types/supplyAgreement";
-import { settleSupplyAgreements, type SettleableSupplyAgreement } from "./settleSupplyAgreements";
+import {
+  computeDemandCappedContractReservations,
+  computeSupplyAgreementBuyerDemand,
+  settleSupplyAgreements,
+  type SettleableSupplyAgreement,
+  type SupplyAgreementDemandSector,
+} from "./settleSupplyAgreements";
 import type { SupplyAgreement } from "@/lib/db/types/supplyAgreement";
 import type { CommodityType } from "@/lib/constants/commodities";
 import {
@@ -269,6 +275,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // the supplier's surplus above it still clears on the open market.
   let contractedByCorpCommodity: Map<string, Map<CommodityType, number>> | undefined;
   let settleableAgreements: SettleableSupplyAgreement[] | undefined;
+  let buyerDemandByCorpCommodity: Map<string, Map<CommodityType, number>> | undefined;
   // Populated during clearing: supplier corpId → commodity → contracted units that
   // actually cleared this turn. Drives the post-clearing premium settlement.
   const contractSettlementByCorp = new Map<string, Map<CommodityType, number>>();
@@ -315,14 +322,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       pricePremium?: number;
       volumeCapBasis?: SupplyAgreement["volumeCapBasis"];
     }[]) {
-      const corpId = a.supplierCorpId.toString();
       const cap = Math.max(0, a.volumeCap ?? 0);
-      const byCommodity = contractedByCorpCommodity.get(corpId) ?? new Map<CommodityType, number>();
-      byCommodity.set(a.commodity, (byCommodity.get(a.commodity) ?? 0) + cap);
-      contractedByCorpCommodity.set(corpId, byCommodity);
       settleableAgreements.push({
         agreementId: a._id?.toString(),
-        supplierCorpId: corpId,
+        supplierCorpId: a.supplierCorpId.toString(),
         buyerCorpId: a.buyerCorpId.toString(),
         commodity: a.commodity,
         volumeCap: cap,
@@ -371,6 +374,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       });
     }
     const clearingInputs: SectorClearingInput[] = [];
+    const supplyAgreementDemandSectors: SupplyAgreementDemandSector[] = [];
     // Market partition (era worlds): each sector clears in its HOME COUNTRY's
     // reachable book (lookups.countryClearingBooks), not the worldwide one.
     const clearingGroupBySector = lookups.countryClearingBooks
@@ -478,7 +482,22 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           clearingGroupBySector.set(sectorId, (sector as { countryId?: string }).countryId ?? "US");
         }
         const revenueAnchor = readCorpEconomicAnchor(sector.revenue, fx?.code, fx?.rate ?? 1);
-        if (supplyAgreementsEnabled) sectorCorpId.set(sectorId, corpId);
+        if (supplyAgreementsEnabled) {
+          sectorCorpId.set(sectorId, corpId);
+          supplyAgreementDemandSectors.push({
+            corporationId: corpId,
+            sectorType: sector.sectorType,
+            revenueAnchor,
+            strategyId: sector.strategyId,
+            transitionFromStrategyId: sector.transitionFromStrategyId,
+            transitionStartTurn: sector.transitionStartTurn,
+            productionPolicyLevel: sector.productionPolicyLevel,
+            producedUnits: sector.producedUnits,
+            capacityUnits: sector.capitalStock,
+            mothballed: sector.mothballed,
+            isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
+          });
+        }
         // PRODUCTION SINK for the supply-agreement shortfall leg, filled HERE
         // rather than from clearing's offered `s.units`.
         //
@@ -658,6 +677,18 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           });
         }
       }
+    }
+    if (supplyAgreementsEnabled && settleableAgreements) {
+      buyerDemandByCorpCommodity = computeSupplyAgreementBuyerDemand({
+        sectors: supplyAgreementDemandSectors,
+        currentTurn: turn ?? 0,
+        unitScale: market.plantsEnabled ? lookups.eraUnitScale : 1,
+        plantsEnabled: market.plantsEnabled,
+      });
+      contractedByCorpCommodity = computeDemandCappedContractReservations({
+        agreements: settleableAgreements,
+        buyerDemandByCorpCommodity,
+      });
     }
     // Book-sanity invariant: the diagnostic reports the RAW revenue/base nameplate.
     // A modest excess over lagged supply is EXPECTED and benign, the supply ledger
@@ -1297,6 +1328,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         lookups,
         agreements: settleableAgreements,
         contractSettlementByCorp,
+        buyerDemandByCorpCommodity,
         producedByCorpCommodity: market.plantsEnabled ? producedByCorpCommodity : undefined,
         plantsEnabled: market.plantsEnabled,
         priceRatioByCommodity: lookups.priceRatioByCommodity,

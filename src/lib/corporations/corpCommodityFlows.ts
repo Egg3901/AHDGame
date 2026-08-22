@@ -37,6 +37,27 @@ export interface CommodityMarketContext {
   unmetDemandUnits: number | null;
 }
 
+/** Latest private-agreement supply delivered to this corporation. */
+export interface CorpPrivateSupply {
+  /** Sum of the active agreements' maximum units for this commodity. */
+  contractedUnits: number;
+  /** Units actually delivered in the latest settled turn. */
+  deliveredUnits: number;
+  /** Delivered units that matched this corporation's consumption. */
+  consumptionCoveredUnits: number;
+  /** Share of consumption covered by delivered agreements, from 0 to 100. */
+  coveragePercent: number;
+  /** Turn the delivery quantities came from. */
+  turn: number;
+}
+
+/** Persisted agreement rollup supplied by the corporation commodities query. */
+export interface CorpPrivateSupplySnapshot {
+  contractedUnits: number;
+  deliveredUnits: number;
+  turn: number;
+}
+
 /** A commodity this corporation produces and/or consumes. */
 export interface CorpCommodityFlow {
   commodity: CommodityType;
@@ -51,6 +72,8 @@ export interface CorpCommodityFlow {
   /** outputUnits − consumptionUnits (net physical position). */
   netUnits: number;
   market: CommodityMarketContext;
+  /** Buyer-side outcome from active private supply agreements. */
+  privateSupply?: CorpPrivateSupply;
   /** Sectors that produce this commodity (for CEO pricing links). */
   outputSectors?: Array<{ sectorId: string; label: string }>;
 }
@@ -96,7 +119,8 @@ export function computeCorpCommodityFlows(
   sectors: FlowSector[],
   currentTurn: number,
   latestFlowByCommodity: ReadonlyMap<CommodityType, CommodityFlow>,
-  stateInfoById: ReadonlyMap<string, { name: string; region: string | null }>
+  stateInfoById: ReadonlyMap<string, { name: string; region: string | null }>,
+  privateSupplyByCommodity: ReadonlyMap<CommodityType, CorpPrivateSupplySnapshot> = new Map()
 ): CorpCommodityFlowsResult {
   // commodity → { output, consumption } across the whole corp.
   const totals = new Map<CommodityType, { output: number; consumption: number }>();
@@ -161,10 +185,20 @@ export function computeCorpCommodityFlows(
     }
   }
 
+  // A contract for a commodity this corporation does not otherwise consume is
+  // still important information: it is delivered surplus, not an invisible row.
+  for (const commodity of privateSupplyByCommodity.keys()) {
+    if (!totals.has(commodity)) totals.set(commodity, { output: 0, consumption: 0 });
+  }
+
   const commodities: CorpCommodityFlow[] = [];
   for (const [commodity, { output, consumption }] of totals) {
-    if (output <= 0 && consumption <= 0) continue;
     const flow = latestFlowByCommodity.get(commodity);
+    const privateSupply = privateSupplyByCommodity.get(commodity);
+    if (output <= 0 && consumption <= 0 && !privateSupply) continue;
+    const consumptionCoveredUnits = privateSupply
+      ? Math.min(Math.max(0, privateSupply.deliveredUnits), Math.max(0, consumption))
+      : 0;
     commodities.push({
       commodity,
       label: COMMODITY_LABELS[commodity],
@@ -182,6 +216,20 @@ export function computeCorpCommodityFlows(
         surplusUnits: flow ? round2(flow.surplusUnits) : null,
         unmetDemandUnits: flow ? round2(flow.unmetDemandUnits) : null,
       },
+      ...(privateSupply
+        ? {
+            privateSupply: {
+              contractedUnits: round2(Math.max(0, privateSupply.contractedUnits)),
+              deliveredUnits: round2(Math.max(0, privateSupply.deliveredUnits)),
+              consumptionCoveredUnits: round2(consumptionCoveredUnits),
+              coveragePercent:
+                consumption > 0
+                  ? round2(Math.min(100, (consumptionCoveredUnits / consumption) * 100))
+                  : 0,
+              turn: privateSupply.turn,
+            },
+          }
+        : {}),
       ...(output > 0 && outputSectorsByCommodity.has(commodity)
         ? { outputSectors: outputSectorsByCommodity.get(commodity) }
         : {}),
