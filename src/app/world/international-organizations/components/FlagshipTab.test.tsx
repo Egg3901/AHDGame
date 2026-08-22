@@ -114,6 +114,18 @@ describe("FlagshipTab (category-driven)", () => {
     expect(screen.getByText("Below")).toBeTruthy(); // DE < 2%
   });
 
+  it("security → members without a modelled budget are labelled, not blank", () => {
+    const org = {
+      ...makeOrg("NATO", false, "security", ["US", "CA"]),
+      defensePctByCountry: { US: 3.4 },
+    } as unknown as OrgSummary;
+    render(<FlagshipTab org={org} />);
+    expect(screen.getByText("3.4%")).toBeTruthy();
+    expect(screen.getByText("Met")).toBeTruthy();
+    expect(screen.getByText("n/a")).toBeTruthy();
+    expect(screen.getByText("No budget")).toBeTruthy();
+  });
+
   it("economic → directives in force + free-trade agreements", () => {
     const org = {
       ...makeOrg("EU", false, "economic", ["DE", "IE"]),

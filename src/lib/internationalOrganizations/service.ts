@@ -22,8 +22,8 @@ import {
   withdrawalKey,
 } from "@/lib/internationalOrganizations/withdrawalTombstone";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
-import { ROSTER_BY_KEY, type AlignmentCountryKey } from "@/lib/constants/alignmentRoster";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { entityFlag, entityName } from "@/lib/constants/entityDisplay";
 import { resolveOrgCategory } from "@/lib/constants/orgCategory";
 import type { GameState } from "@/lib/db/types";
 import type {
@@ -321,15 +321,14 @@ export async function loadOrganizationSummaries(db: Db): Promise<OrganizationSum
       categoryCtx
     );
     const orgMembers = (membersByOrg.get(id) ?? []).map((m) => {
-      // A macro-tier member has no CountryConfig; fall back to the alignment
-      // roster, which names every entity the world models.
+      // A macro-tier member has no CountryConfig; name/flag fall back to the
+      // alignment roster and ISO regional-indicator emoji so seated-but-unplayable
+      // allies (Canada, the Benelux, …) do not render as a white-flag blank.
       const isCountry = m.countryId in COUNTRY_CONFIGS;
-      const cfg = isCountry ? getCountryConfig(m.countryId as CountryId) : null;
       return {
         countryId: m.countryId,
-        countryName:
-          cfg?.name ?? ROSTER_BY_KEY[m.countryId as AlignmentCountryKey]?.name ?? m.countryId,
-        flagEmoji: cfg?.flagEmoji ?? "🏳️",
+        countryName: entityName(m.countryId),
+        flagEmoji: entityFlag(m.countryId),
         status: m.status,
         joinedTurn: m.joinedTurn,
         hasVote: countryAccess[m.countryId as CountryId]?.enabledForPlayers === true,
