@@ -22,6 +22,7 @@ import type {
 } from "@/lib/policy/types";
 import { getMetricDefinition } from "@/lib/constants/metricDefinitions";
 import type { MetricCategoryId } from "@/lib/db/types";
+import { taxSliderRateLabel } from "@/lib/politicalLegislation/taxSlider";
 
 /**
  * Shared national policy-record assembly — extracted verbatim from
@@ -224,7 +225,14 @@ export function buildPolicyResponse(
   const economic = record.economic ?? 0;
   const social = record.social ?? 0;
   const matchedOption = findMatchedOption(legislationType.policyOptions, economic, social);
-  const policyOptionName = matchedOption?.name ?? null;
+  const encodedSliderRate =
+    legislationType.taxSlider && record.policyOptionId?.startsWith("rate:")
+      ? Number(record.policyOptionId.slice("rate:".length))
+      : null;
+  const policyOptionName =
+    encodedSliderRate !== null && Number.isFinite(encodedSliderRate)
+      ? taxSliderRateLabel(encodedSliderRate)
+      : (matchedOption?.name ?? null);
   const metricEffects: PolicyMetricEffect[] = (matchedOption?.metricEffects ?? [])
     // 📊 budget-sync: computed fiscal metrics are mirror-owned — laws don't move
     // them, so they aren't surfaced as policy-record effects.
@@ -309,6 +317,21 @@ export function backfillNationalTaxPolicyRecords(args: {
   const { budget, legislationTypes, nationalStateId, recordsByCanonicalId } = args;
   if (!budget?.taxRates) return;
 
+  const typeByCanonicalId = new Map(
+    legislationTypes.map((type) => [canonicalizeLegislationTypeId(type._id) ?? type._id, type])
+  );
+  const controlledTaxTypes = new Set<string>();
+  for (const record of recordsByCanonicalId.values()) {
+    const type = typeByCanonicalId.get(record.legislationTypeId);
+    const controller =
+      type?.taxSlider?.scope === "federal"
+        ? type.taxSlider.taxType
+        : type?.taxRateChange?.scope === "federal"
+          ? type.taxRateChange.taxType
+          : undefined;
+    if (controller) controlledTaxTypes.add(controller);
+  }
+
   for (const legislationType of legislationTypes) {
     if (legislationType.policyDomain !== "tax") continue;
     if (legislationType.taxRateChange?.scope !== "federal") continue;
@@ -317,6 +340,7 @@ export function backfillNationalTaxPolicyRecords(args: {
     if (recordsByCanonicalId.has(canonicalId)) continue;
 
     const taxType = legislationType.taxRateChange.taxType as keyof FederalTaxRates;
+    if (controlledTaxTypes.has(taxType)) continue;
     const currentRate = getBudgetTaxRate(budget, taxType);
     if (typeof currentRate !== "number") continue;
 
@@ -330,6 +354,7 @@ export function backfillNationalTaxPolicyRecords(args: {
       policyOptionId: matchedOption?.id,
       updatedAt: budget.updatedAt,
     });
+    controlledTaxTypes.add(taxType);
   }
 }
 

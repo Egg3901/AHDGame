@@ -51,6 +51,7 @@ const membersPayload = {
 };
 
 const executivePayload = {
+  headOfState: null,
   government: {
     status: "formed",
     pmName: "Test Secretary",
@@ -107,7 +108,7 @@ describe("DDVolkskammerPage", () => {
 
     expect(await screen.findByText("Chairman of the Council of State")).toBeTruthy();
     await waitFor(() => {
-      expect(screen.getByText(/Vacant — awaiting election/)).toBeTruthy();
+      expect(screen.getByText(/Vacant because the SED chair is not seated/)).toBeTruthy();
     });
   });
 
@@ -125,6 +126,23 @@ describe("DDVolkskammerPage", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Seated Chairman")).toBeTruthy();
+    });
+  });
+
+  it("shows the party-chair-synced Chairman returned by the executive API", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        ...executivePayload,
+        headOfState: { characterName: "Ivanka Trump" },
+      }),
+    })) as unknown as typeof fetch;
+
+    render(<DDVolkskammerPage countryId="DD" />);
+    fireEvent.click(screen.getByRole("button", { name: "Leadership" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Ivanka Trump")).toBeTruthy();
     });
   });
 });

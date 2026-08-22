@@ -101,6 +101,8 @@ interface MockDbOptions {
   activeNppBillCount?: number;
   /** Turn of last nppSponsored bill (for cooldown test) */
   lastNppBillVotingEndsOnTurn?: number | null;
+  /** Recently introduced types returned to the per-type repeat guard. */
+  recentNppBills?: Array<{ legislationTypeId: string; votingEndsOnTurn: number }>;
   /** Legislation types to return */
   legTypes?: LegislationType[];
   /** Insert spy to capture bill inserts */
@@ -123,6 +125,7 @@ function makeMockDb(opts: MockDbOptions = {}) {
     enabledForPlayers = false,
     activeNppBillCount = 0,
     lastNppBillVotingEndsOnTurn = null,
+    recentNppBills = [],
     legTypes = [],
     insertSpy = vi.fn(async (_doc: unknown) => ({ insertedId: new ObjectId() })),
     governmentType = "presidential",
@@ -139,7 +142,7 @@ function makeMockDb(opts: MockDbOptions = {}) {
         : null
     ),
     find: vi.fn(() => ({
-      toArray: async () => [],
+      toArray: async () => recentNppBills,
     })),
     insertOne: insertSpy,
   };
@@ -429,6 +432,25 @@ describe("processNppBillSponsorship — throttle", () => {
     const callArgs = insertSpy.mock.calls[0] as unknown as [Record<string, unknown>];
     const insertedDoc = callArgs[0];
     expect(insertedDoc["nppSponsored"]).toBe(true);
+  });
+
+  it("chooses a different legislation type while the previous type is in the repeat window", async () => {
+    const npp = makeNpp({ sequentialId: 1 });
+    const official = makeOfficial(npp._id, "US", "house", "1");
+    const nppMap = new Map([[npp._id.toString(), npp]]);
+    const insertSpy = vi.fn(async () => ({ insertedId: new ObjectId() }));
+    const { db } = makeMockDb({
+      lastNppBillVotingEndsOnTurn: 109,
+      recentNppBills: [{ legislationTypeId: "aaa_type", votingEndsOnTurn: 109 }],
+      legTypes: [makeLegType("aaa_type", "social", 0, 0), makeLegType("bbb_type", "social", 0, 0)],
+      insertSpy,
+    });
+    const ctx = makeCtx(db, [official], nppMap);
+
+    expect(await processNppBillSponsorship(ctx)).toBe(1);
+    const callArgs = insertSpy.mock.calls[0] as unknown as [{ legislationTypeId?: string }];
+    const inserted = callArgs[0];
+    expect(inserted.legislationTypeId).toBe("bbb_type");
   });
 
   it("gap of 10 stays throttled below v3 (fixed 12-turn cooldown)", async () => {

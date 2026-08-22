@@ -41,6 +41,13 @@ export const NPP_SPONSOR_ACTIVE_CAP = 2;
 export const NPP_SPONSOR_COOLDOWN_TURNS = 12;
 
 /**
+ * A sponsor party cannot return to the same legislation type inside this
+ * window. Four game days is long enough to force several different agenda
+ * choices without making a failed policy unavailable for the rest of an era.
+ */
+export const NPP_SPONSOR_TYPE_REPEAT_COOLDOWN_TURNS = 96;
+
+/**
  * Voting window (in turns/hours) for an nppSponsored bill. Shared by the proposer
  * (sets votingEndsOnTurn = currentTurn + this) and the cooldown derivation
  * (recovers proposalTurn = votingEndsOnTurn - this), so the two can never drift.

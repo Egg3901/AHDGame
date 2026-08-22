@@ -4830,7 +4830,7 @@ export const NATIONAL_BUDGET_SEED_CONFIGS_1953: NationalBudgetSeedConfig[] = [
     debt: {
       principal: 3_000_000_000, // Soviet reparations treated as debt
       interestRate: 0.04,
-      ceiling: 10_000_000_000,
+      ceiling: 20_000_000_000, // 40% of NMP; credit repricing still disciplines deficits
       ceilingLastRaisedYear: 1953,
     },
     creditRating: "A",

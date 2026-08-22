@@ -37,14 +37,17 @@ const CHAMBER_KEY = "volkskammer";
 
 /**
  * Government-formation state for the Leadership tab, sourced from
- * `/api/country/dd/executive`. `hosName` is the legislature-elected Chairman
- * of the Council of State — null when the office is vacant.
+ * `/api/country/dd/executive`.
  */
 type GovernmentData = {
   status: "pending" | "formed";
   pmName: string | null;
   formationType: string | null;
   hosName?: string | null;
+} | null;
+
+type HeadOfStateData = {
+  characterName: string;
 } | null;
 
 const LEGISLATURE_STATUS_FILTERS = [
@@ -266,6 +269,7 @@ function LeadershipTab({
   leaders,
   loading,
   government,
+  headOfState,
   activeAppointmentVotes,
   activeNoConfidenceVote,
   viewerMayAppoint,
@@ -279,6 +283,7 @@ function LeadershipTab({
   leaders: LeadersData | null;
   loading: boolean;
   government: GovernmentData;
+  headOfState: HeadOfStateData;
   activeAppointmentVotes: AppointmentVotePayload[];
   activeNoConfidenceVote: NoConfidenceVotePayload | null;
   viewerMayAppoint: boolean;
@@ -325,12 +330,10 @@ function LeadershipTab({
           <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-2">
             Chairman of the Council of State
           </p>
-          {government?.hosName ? (
-            <p className="font-semibold">{government.hosName}</p>
+          {(headOfState?.characterName ?? government?.hosName) ? (
+            <p className="font-semibold">{headOfState?.characterName ?? government?.hosName}</p>
           ) : (
-            <p className="text-sm italic text-muted">
-              Vacant — awaiting election by the Volkskammer
-            </p>
+            <p className="text-sm italic text-muted">Vacant because the SED chair is not seated</p>
           )}
         </div>
       </div>
@@ -338,16 +341,16 @@ function LeadershipTab({
       <div className="rounded-xl border border-card-border/40 bg-card-muted/30 p-4">
         <p className="text-xs text-muted leading-relaxed">
           The General Secretary is nominated by a qualifying party chair and confirmed by a vote of
-          seated Volkskammer deputies. The Chairman of the Council of State — presiding officer of
-          the collective head of state — is elected by the Volkskammer; nominations open on the{" "}
+          seated Volkskammer deputies. The Chairman of the Council of State is the presiding officer
+          of the collective head of state and is automatically kept in sync with the SED chair. The{" "}
           <Link
             href={`/country/${countryId.toLowerCase()}/executive`}
             className="underline hover:text-foreground transition-colors"
           >
             executive page
           </Link>{" "}
-          whenever the office falls vacant. The Council of State acts for the Volkskammer between
-          sessions.
+          and the legislature show the same officeholder. The unelected Council of State acts for
+          the Volkskammer between sessions.
         </p>
       </div>
     </div>
@@ -374,6 +377,7 @@ export function DDVolkskammerPage({ countryId }: { countryId: CountryId }) {
   // endpoint — the legislature page and the executive hub agree on
   // appointment/no-confidence eligibility).
   const [government, setGovernment] = useState<GovernmentData>(null);
+  const [headOfState, setHeadOfState] = useState<HeadOfStateData>(null);
   const [activeAppointmentVotes, setActiveAppointmentVotes] = useState<AppointmentVotePayload[]>(
     []
   );
@@ -395,6 +399,7 @@ export function DDVolkskammerPage({ countryId }: { countryId: CountryId }) {
       .then((data) => {
         if (!data) return;
         setGovernment(data.government ?? null);
+        setHeadOfState(data.headOfState ?? null);
         setActiveAppointmentVotes(data.activeAppointmentVotes ?? []);
         setActiveNoConfidenceVote(data.activeNoConfidenceVote ?? null);
         setViewerMayAppoint(Boolean(data.viewerMayAppoint));
@@ -505,6 +510,7 @@ export function DDVolkskammerPage({ countryId }: { countryId: CountryId }) {
             leaders={leaders}
             loading={loading}
             government={government}
+            headOfState={headOfState}
             activeAppointmentVotes={activeAppointmentVotes}
             activeNoConfidenceVote={activeNoConfidenceVote}
             viewerMayAppoint={viewerMayAppoint}
