@@ -94,9 +94,7 @@ export async function loadWorldOrganizationsView(db: Db) {
   const budgets = await db
     .collection<FederalBudget>("federalBudget")
     .find({ countryId: { $in: [...allMembers] } })
-    .project<
-      Pick<FederalBudget, "countryId" | "gdp" | "spending" | "baselineSpendingByCategory">
-    >({
+    .project<Pick<FederalBudget, "countryId" | "gdp" | "spending" | "baselineSpendingByCategory">>({
       countryId: 1,
       gdp: 1,
       "spending.byCategory.defense": 1,
