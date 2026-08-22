@@ -46,19 +46,31 @@ describe("processAutoSectorSeed — plants boost basis", () => {
       };
       db.collectionMocks[name]!.find = vi.fn().mockReturnValue(cursor);
     }
-    // One open manufacturing pool to boost.
-    const poolCursor = {
-      toArray: vi
-        .fn()
-        .mockResolvedValue([{ _id: "pool-1", stateId: "CA", sectorType: "manufacturing" }]),
-      project: vi.fn(function (this: unknown) {
-        return this;
-      }),
-    };
-    poolCursor.project = vi.fn(() => poolCursor);
-    db.collectionMocks.unownedSectors!.find = vi.fn().mockReturnValue(poolCursor);
+    // One open manufacturing pool to boost. It holds LESS claimable headroom
+    // than the world has built plant (100 < 500), so it is a genuinely thin
+    // market and the distress boost applies.
+    setPool({ _id: "pool-1", stateId: "CA", sectorType: "manufacturing", headroomUnits: 100 });
+    setOwnedCapacity(500);
     db.collectionMocks.unownedSectors!.updateMany.mockResolvedValue({ modifiedCount: 1 });
   });
+
+  /** Replace the single open pool bucket the seeder will consider. */
+  function setPool(doc: Record<string, unknown>) {
+    const poolCursor = {
+      toArray: vi.fn().mockResolvedValue([doc]),
+      project: vi.fn(() => poolCursor),
+    };
+    db.collectionMocks.unownedSectors!.find = vi.fn().mockReturnValue(poolCursor);
+  }
+
+  /** Built manufacturing capacity in CA, as the bucket aggregation reports it. */
+  function setOwnedCapacity(units: number) {
+    db.collectionMocks.corporateSectors!.aggregate = vi.fn().mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([{ _id: { stateId: "CA", sectorType: "manufacturing" }, units }]),
+    });
+  }
 
   async function boostStage(plants: boolean) {
     const { marketAtLeast } = await import("@/lib/market/featureFlag");
@@ -94,5 +106,96 @@ describe("processAutoSectorSeed — plants boost basis", () => {
     const units = JSON.stringify(stage.headroomUnits);
     expect(units).toContain("$revenue");
     expect(units).not.toContain("$headroomUnits");
+  });
+});
+
+/**
+ * The boost is a $multiply and nothing but a build draws the pool down, so an
+ * uncapped boost compounds every year a commodity stays distressed. That is how
+ * a fully built-out market still advertised 60% unowned while the expand gate
+ * (a real demand gap) refused to build into it — ticket #1145.
+ */
+describe("processAutoSectorSeed — boost is capped by built capacity", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    for (const name of ["states", "unownedSectors", "corporateSectors", "gameState"]) {
+      db.collection(name);
+      const cursor = { toArray: vi.fn().mockResolvedValue([]), project: vi.fn(() => cursor) };
+      db.collectionMocks[name]!.find = vi.fn().mockReturnValue(cursor);
+    }
+    db.collectionMocks.unownedSectors!.updateMany.mockResolvedValue({ modifiedCount: 1 });
+  });
+
+  function wire(pool: Record<string, unknown>, ownedUnits: number) {
+    const poolCursor = {
+      toArray: vi.fn().mockResolvedValue([pool]),
+      project: vi.fn(() => poolCursor),
+    };
+    db.collectionMocks.unownedSectors!.find = vi.fn().mockReturnValue(poolCursor);
+    db.collectionMocks.corporateSectors!.aggregate = vi.fn().mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          { _id: { stateId: "CA", sectorType: "manufacturing" }, units: ownedUnits },
+        ]),
+    });
+  }
+
+  async function run() {
+    const { marketAtLeast } = await import("@/lib/market/featureFlag");
+    vi.mocked(marketAtLeast).mockReturnValue(true);
+    await processAutoSectorSeed(db as unknown as Db, 1000, {
+      autoSectorSeedEnabled: true,
+      lastAutoSeedTurn: 0,
+    });
+  }
+
+  const pool = (headroomUnits: number) => ({
+    _id: "pool-1",
+    stateId: "CA",
+    sectorType: "manufacturing",
+    headroomUnits,
+  });
+
+  it("boosts a thin market, where less is claimable than has been built", async () => {
+    wire(pool(100), 500);
+    await run();
+    expect(db.collectionMocks.unownedSectors!.updateMany).toHaveBeenCalled();
+  });
+
+  it("skips a market already holding more headroom than the world has built", async () => {
+    wire(pool(900), 500);
+    await run();
+    expect(db.collectionMocks.unownedSectors!.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("skips a market nobody has built in at all", async () => {
+    // Every unit of it is already claimable; adding more claimable share to a
+    // wholly unclaimed market relieves nothing.
+    wire(pool(100), 0);
+    await run();
+    expect(db.collectionMocks.unownedSectors!.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("heals a pre-backfill row from revenue rather than reading it as zero headroom", async () => {
+    // A row with `revenue` and no `headroomUnits` must not be treated as an
+    // empty pool — that would boost the most inflated markets hardest.
+    wire({ _id: "pool-1", stateId: "CA", sectorType: "manufacturing", revenue: 10_000_000 }, 1);
+    await run();
+    expect(db.collectionMocks.unownedSectors!.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("leaves the below-plants path ungated", async () => {
+    const { marketAtLeast } = await import("@/lib/market/featureFlag");
+    wire(pool(900), 500);
+    vi.mocked(marketAtLeast).mockReturnValue(false);
+    await processAutoSectorSeed(db as unknown as Db, 1000, {
+      autoSectorSeedEnabled: true,
+      lastAutoSeedTurn: 0,
+    });
+    expect(db.collectionMocks.unownedSectors!.updateMany).toHaveBeenCalled();
   });
 });
