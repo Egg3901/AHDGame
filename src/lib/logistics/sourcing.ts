@@ -9,7 +9,7 @@
  *   landed = seller's ask + shipping (per hop, by freight class) + tariff
  *
  * and fills cheapest-first up to the buyer's tolerance ceiling, the seller's
- * spare, and the origin state's per-class freight capacity. Intra-state fill is
+ * spare, and the origin state's shared freight capacity. Intra-state fill is
  * free and consumes no capacity.
  *
  * This pass MUTATES NOTHING in the price model. It reads copies of the state
@@ -77,10 +77,10 @@ export const GRID_LOSS_PER_HOP = 0.03;
 export const GRID_WHEELING_PER_HOP_FRACTION = 0.02;
 
 /**
- * How far a state's haulage may be pushed past its nominal class capacity
+ * How far a state's haulage may be pushed past its nominal shared capacity
  * before nothing more moves, and what the overflow costs.
  *
- * The capacity gate used to be a hard wall: once a state's class capacity ran
+ * The capacity gate used to be a hard wall: once a state's freight capacity ran
  * dry, the remaining units simply did not ship and the seller ate them with no
  * signal. Measured on prod at t225 that wall was a large part of why 60.4% of
  * world production sat in a state that did not need it while 28.7% of world
@@ -123,51 +123,6 @@ export function congestedLandedPrice(landed: number, shippingPerUnit: number): n
 export function freightTeuPerUnitHop(freightClass: FreightClass, eraUnitScale: number = 1): number {
   void eraUnitScale;
   return FREIGHT_TEU_PER_UNIT_HOP[freightClass];
-}
-
-/**
- * Share of a state's freight supply available per class while `freight` is
- * still a single commodity (plan build-order step 2 splits it for real).
- */
-export const FREIGHT_CLASS_CAPACITY_SHARE: Record<FreightClass, number> = {
-  bulk: 0.7,
-  special: 0.3,
-  grid: 0,
-};
-
-/**
- * Floor on either class's share under the adaptive split, so one class can
- * never be starved to zero by a single turn's demand skew (the mix must be
- * able to swing back).
- */
-export const FREIGHT_CLASS_SHARE_FLOOR = 0.2;
-
-/**
- * Per-state capacity split from LAST turn's measured class loads, floored at
- * FREIGHT_CLASS_SHARE_FLOOR each; the static 70/30 when there is no prior
- * signal (first turn, or a state that shipped nothing).
- *
- * Why adaptive: the fixed 70/30 wastes capacity wherever a state's real mix
- * differs — measured on prod t202, NY hauled 2958 special vs 328 bulk TEU
- * (wants ~90% special, got 30%) while CA hauled 1703 bulk vs 432 special. The
- * unusable remainder showed up as UNREACHABLE_HOP landed premiums on every
- * special-class commodity into the northeast. The single `freight` commodity
- * is one physical fleet; which trailers it runs should follow what the state
- * actually ships. Lagged one turn, so it converges instead of oscillating.
- */
-export function adaptiveClassShares(
-  priorLoad: Readonly<Record<FreightClass, number>> | undefined
-): Record<FreightClass, number> {
-  const bulk = priorLoad?.bulk ?? 0;
-  const special = priorLoad?.special ?? 0;
-  const total = bulk + special;
-  // grid never draws on the haulage fleet, so it holds no share of it.
-  if (!(total > 0)) return { ...FREIGHT_CLASS_CAPACITY_SHARE };
-  const specialShare = Math.min(
-    1 - FREIGHT_CLASS_SHARE_FLOOR,
-    Math.max(FREIGHT_CLASS_SHARE_FLOOR, special / total)
-  );
-  return { bulk: 1 - specialShare, special: specialShare, grid: 0 };
 }
 
 /**
@@ -223,7 +178,7 @@ export interface SourcingCommoditySummary {
   unmetUnits: number;
   /** Units that could not ship because a seller's landed price broke the ceiling. */
   toleranceBoundUnits: number;
-  /** Units that could not ship because the origin state's class capacity ran dry. */
+  /** Units that could not ship because the origin state's shared freight capacity ran dry. */
   capacityBoundUnits: number;
   /** Units that shipped only by pushing a state's network past nominal capacity. */
   congestionUnits: number;
@@ -288,7 +243,7 @@ export interface SourcingResult {
    * "it could not get there" says build freight. The test is whether any buyer
    * is still short at the end of the pass. Residual unmet demand and unsold
    * spare coexisting is the definition of a delivery failure, whatever stopped
-   * the haul (tolerance ceiling, class capacity, embargo, no route).
+   * the haul (tolerance ceiling, shared freight capacity, embargo, no route).
    *
    * Attributed proportionally and uniformly across the commodity's sellers:
    * `min(1, residualUnmet / totalSpare)` of every state's spare. Per-flow
@@ -329,12 +284,6 @@ export interface SourcingInputs {
   tariffRatePct: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => number;
   /** True when an embargo blocks the directed flow exporter→importer. */
   isBlocked: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => boolean;
-  /**
-   * LAST turn's per-state class loads (`freightTeuByState` from the previous
-   * sourcingNetworkLoad doc). Drives the adaptive bulk/special capacity split;
-   * absent → the static FREIGHT_CLASS_CAPACITY_SHARE for every state.
-   */
-  priorClassLoads?: ReadonlyMap<string, Readonly<Record<FreightClass, number>>>;
 }
 
 // ── Pass ─────────────────────────────────────────────────────────────────────
@@ -361,17 +310,14 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
   const sortedStates = [...states].sort((a, b) => a.stateId.localeCompare(b.stateId));
   const countryIds = [...byCountry.keys()].sort() as CountryId[];
 
-  // Freight capacity per state per class, from the state's freight supply.
-  const freightCapByState = new Map<string, Record<FreightClass, number>>();
+  // Freight is one fungible fleet. Bulk and special record different TEU rates,
+  // but they draw from the same state capacity instead of reserving idle slices
+  // that make freight look oversupplied while one cargo class cannot move.
+  const freightCapacityByState = new Map<string, number>();
   const freightUsedByState = new Map<string, Record<FreightClass, number>>();
   for (const { stateId } of sortedStates) {
     const freightSupply = byState.get(stateId)?.get("freight")?.supply ?? 0;
-    const shares = adaptiveClassShares(inputs.priorClassLoads?.get(stateId));
-    freightCapByState.set(stateId, {
-      bulk: freightSupply * shares.bulk,
-      special: freightSupply * shares.special,
-      grid: 0,
-    });
+    freightCapacityByState.set(stateId, freightSupply);
     freightUsedByState.set(stateId, { bulk: 0, special: 0, grid: 0 });
   }
 
@@ -558,9 +504,9 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
           // whole route to the origin's network). Past nominal capacity the
           // haul still runs, at a congestion surcharge on the overflow units
           // only, up to the overflow limit: freight is a cost, not a wall.
-          const cap = freightCapByState.get(cand.originId)!;
+          const nominal = freightCapacityByState.get(cand.originId) ?? 0;
           const used = freightUsedByState.get(cand.originId)!;
-          const nominal = cap[freightClass];
+          const totalUsed = used.bulk + used.special;
           const teuPerUnit = teuPerUnitHop * cand.hopCount;
           if (teuPerUnit > 0) {
             if (!(nominal > 0)) {
@@ -568,11 +514,11 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
               summary.capacityBoundUnits += deliver;
               continue;
             }
-            const unitsToNominal = Math.max(0, nominal - used[freightClass]) / teuPerUnit;
+            const unitsToNominal = Math.max(0, nominal - totalUsed) / teuPerUnit;
             const unitsInOverflow =
               Math.max(
                 0,
-                nominal * (1 + FREIGHT_CONGESTION_OVERFLOW) - Math.max(used[freightClass], nominal)
+                nominal * (1 + FREIGHT_CONGESTION_OVERFLOW) - Math.max(totalUsed, nominal)
               ) / teuPerUnit;
             // Overflow units carry the full surcharge. If that price breaks the
             // buyer's tolerance the overflow simply does not happen, which is a

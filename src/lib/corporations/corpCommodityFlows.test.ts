@@ -105,6 +105,61 @@ describe("computeCorpCommodityFlows", () => {
     expect(energy.market.stockUnits).toBeNull();
   });
 
+  it("attaches delivered private supply and computes consumption coverage", () => {
+    const { commodities } = computeCorpCommodityFlows(
+      [mkSector({ revenue: 30_000 })],
+      10,
+      new Map(),
+      stateInfo,
+      new Map([
+        [
+          "energy",
+          {
+            contractedUnits: 80,
+            deliveredUnits: 60,
+            turn: 9,
+          },
+        ],
+      ])
+    );
+
+    const energy = commodities.find((row) => row.commodity === "energy")!;
+    expect(energy.privateSupply).toEqual({
+      contractedUnits: 80,
+      deliveredUnits: 60,
+      consumptionCoveredUnits: 60,
+      coveragePercent: 60,
+      turn: 9,
+    });
+  });
+
+  it("keeps a zero-demand agreement visible instead of hiding phantom supply", () => {
+    const { commodities } = computeCorpCommodityFlows(
+      [],
+      10,
+      new Map(),
+      stateInfo,
+      new Map([
+        [
+          "energy",
+          {
+            contractedUnits: 80,
+            deliveredUnits: 0,
+            turn: 9,
+          },
+        ],
+      ])
+    );
+
+    expect(commodities.find((row) => row.commodity === "energy")?.privateSupply).toEqual({
+      contractedUnits: 80,
+      deliveredUnits: 0,
+      consumptionCoveredUnits: 0,
+      coveragePercent: 0,
+      turn: 9,
+    });
+  });
+
   it("omits commodities the corp neither produces nor consumes", () => {
     const { commodities } = computeCorpCommodityFlows([mkSector({})], 10, new Map(), stateInfo);
     // Manufacturing (standard) never supplies or demands pharmaceuticals.

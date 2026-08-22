@@ -116,6 +116,10 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
     {
       $set: {
         isPrivate: false,
+        // Auction-created shells are hidden until they have an owner. A later
+        // IPO must clear that flag or the now-public corporation stays absent
+        // from every exchange snapshot indefinitely.
+        hiddenFromExchange: false,
         lastIpoTurn: currentTurn,
         updatedAt: new Date(),
       },

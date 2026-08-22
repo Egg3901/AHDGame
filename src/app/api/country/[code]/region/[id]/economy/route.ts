@@ -44,6 +44,7 @@ import { roundMarketingStrength } from "@/lib/utils/formatters";
 import {
   calculateAttackCostAnchor,
   calculateSplitCostAnchor,
+  calculateSplitMsCost,
 } from "@/lib/corporations/marketActionCosts";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
@@ -570,6 +571,9 @@ export async function GET(request: Request, { params }: RouteParams) {
       userCorporationId,
       userCorporationSectorType,
       userMarketingStrength: roundMarketingStrength(userMarketingStrength),
+      // Rival attacks retain the escalation cost under plants even though
+      // unowned-market splits are retired there.
+      attackMsCost: calculateSplitMsCost(userSplitEscalation),
       // MS escalation only mattered for unowned splits; zero under plants so no
       // client can invent a Split CTA from a leftover quote.
       splitMsCost: plantsMode ? 0 : Math.pow(2, userSplitEscalation),

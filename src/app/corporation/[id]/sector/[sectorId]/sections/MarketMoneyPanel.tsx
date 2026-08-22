@@ -13,6 +13,11 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import { facilityPlural } from "@/lib/constants/facilityVocabulary";
 import { COMMODITY_LABELS, type CommodityType } from "@/lib/constants/commodities";
 import { DELIVERY_LIMITED_MIN_SHARE } from "@/components/corporation/plantsPresentation";
+import {
+  FREIGHT_CLASS_LABELS,
+  freightClassAction,
+  freightClassExplanation,
+} from "@/lib/logistics/freightClass";
 
 interface MarketMoneyPanelProps {
   plants: PlantsData;
@@ -72,6 +77,14 @@ export default function MarketMoneyPanel({
   const deliveryLimited = truth?.deliveryLimitedFraction ?? 0;
   const deliveryLimitedShown = deliveryLimited > DELIVERY_LIMITED_MIN_SHARE;
   const deliveryLimitedUnits = Math.round(offered * deliveryLimited);
+  const deliveryClass = truth?.deliveryLimitedFreightClass ?? null;
+  const deliveryLabel = deliveryClass ? FREIGHT_CLASS_LABELS[deliveryClass] : "Delivery";
+  const deliveryExplanation = deliveryClass
+    ? freightClassExplanation(deliveryClass)
+    : "The delivery network could not carry it to buyers outside this state.";
+  const deliveryAction = deliveryClass
+    ? freightClassAction(deliveryClass)
+    : "Add logistics capacity in this state, or site production nearer buyers.";
 
   // The whole policy/tech modifier stack as ONE signed money line, with the
   // itemized drilldown below it (ticket 1122). Under plants every modifier a
@@ -182,7 +195,7 @@ export default function MarketMoneyPanel({
                     .join(", ")}.`
                 : "The share of what you make that buyers actually take. Units that do not sell cost you money and earn nothing.") +
               (deliveryLimitedShown
-                ? ` Separately, ${fmtPct(deliveryLimited)} of your output cannot be shipped out of this state, so it can only sell to buyers here; building logistics capacity out of the state is what lets more of it reach outside markets.`
+                ? ` ${deliveryLabel} limited ${fmtPct(deliveryLimited)} of your output from reaching buyers outside this state. ${deliveryExplanation} ${deliveryAction}`
                 : "")
             }
           />
@@ -243,7 +256,7 @@ export default function MarketMoneyPanel({
           tone={unsold > 0 ? "warning" : "muted"}
           help={
             unsold > 0 && deliveryLimitedShown
-              ? `Units you made that earned nothing back. About ${fmtUnits(Math.min(deliveryLimitedUnits, unsold))} of them had buyers in other states that freight out of here could not reach.`
+              ? `Units you made that earned nothing back. ${deliveryLabel} limited about ${fmtUnits(Math.min(deliveryLimitedUnits, unsold))} of them from reaching buyers in other states. ${deliveryExplanation}`
               : "Units you made that nobody bought. You paid to make them and earned nothing back."
           }
         />
@@ -253,10 +266,10 @@ export default function MarketMoneyPanel({
           {fmtUnits(unsold)} units went unsold.{" "}
           {deliveryLimitedShown ? (
             <>
-              About {fmtUnits(Math.min(deliveryLimitedUnits, unsold))} of them had buyers in other
-              states, but freight out of this state could not carry them there. Cutting production
-              does not fix that. Build or expand logistics capacity in this state, or put your next
-              plants nearer the buyers.
+              <strong>{deliveryLabel} limited:</strong> About{" "}
+              {fmtUnits(Math.min(deliveryLimitedUnits, unsold))} of them had buyers in other states
+              but could not reach them. {deliveryExplanation} Cutting production does not fix that.{" "}
+              {deliveryAction}
             </>
           ) : (plants.demandGapUnits ?? 0) >= 1 ? (
             <>

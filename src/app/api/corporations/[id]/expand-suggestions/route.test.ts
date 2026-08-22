@@ -66,6 +66,49 @@ beforeEach(async () => {
 });
 
 describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
+  it("offers zero-revenue greenfield markets under plants", async () => {
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "plants",
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 10,
+      currentYear: 1953,
+    });
+    db.collectionMocks.unownedSectors.find.mockImplementation(
+      (query: { revenue?: { $gt?: number } } = {}) => ({
+        project: vi.fn().mockReturnThis(),
+        toArray: vi
+          .fn()
+          .mockResolvedValue(
+            query.revenue
+              ? []
+              : [{ stateId: "CA", sectorType: "real_estate", revenue: 0, headroomUnits: 1000 }]
+          ),
+      })
+    );
+    db.collectionMocks.states.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "CA", name: "California", countryId: "US" }]),
+    });
+    db.collectionMocks.corporateSectors.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.macroMetrics.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+
+    const { GET } = await import("./route");
+    const response = await GET(makeRequest("sectorType=real_estate&mode=unowned"), ctx());
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.suggestions).toEqual([
+      expect.objectContaining({ stateId: "CA", unownedRevenue: 0, canAfford: true }),
+    ]);
+  });
+
   it("serves plants suggestions for an off-type sector (any type is buildable)", async () => {
     db.collectionMocks.gameConfig.findOne.mockResolvedValue({
       _id: "default",

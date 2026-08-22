@@ -296,6 +296,22 @@ export default function CommoditiesTab({
                 </div>
               </div>
 
+              {c.privateSupply && (
+                <div className="mt-3 rounded-lg border border-emerald-500/25 bg-emerald-500/10 p-3">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                    Private supply
+                  </div>
+                  <div className="mt-1 text-xs font-medium text-foreground tabular-nums">
+                    {fmtUnits(c.privateSupply.deliveredUnits)} {c.unit} delivered on turn{" "}
+                    {c.privateSupply.turn}
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted">
+                    {fmtUnits(c.privateSupply.coveragePercent)}% of consumption covered. Contracted
+                    cap: {fmtUnits(c.privateSupply.contractedUnits)} {c.unit}/turn.
+                  </div>
+                </div>
+              )}
+
               {!data?.ledgerEnabled &&
                 (c.market.stockUnits != null || c.market.coverTurns != null) && (
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-card-border pt-2 text-[11px] text-muted">

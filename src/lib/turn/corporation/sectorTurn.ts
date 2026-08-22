@@ -1784,6 +1784,10 @@ export function processSector(
   const deliveryLimited = market.deliveryLimitedBySectorId?.get(sector._id.toString());
   if (deliveryLimited != null || typeof sector.deliveryLimitedFraction === "number") {
     sectorUpdate.deliveryLimitedFraction = Math.round((deliveryLimited ?? 0) * 1000) / 1000;
+    sectorUpdate.deliveryLimitedFreightClass =
+      deliveryLimited != null && deliveryLimited > 0
+        ? (market.deliveryLimitedClassBySectorId?.get(sector._id.toString()) ?? null)
+        : null;
   }
   // Labour telemetry: persist the per-turn labor cost on a daily basis (like
   // `revenue`), in the sector's host-state currency. Display/analytics only;
