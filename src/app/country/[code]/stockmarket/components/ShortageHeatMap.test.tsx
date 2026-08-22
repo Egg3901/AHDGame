@@ -54,4 +54,14 @@ describe("ShortageHeatMap", () => {
     expect(screen.getByText("What the world is short on")).toBeTruthy();
     expect(screen.getByText("Oil")).toBeTruthy();
   });
+
+  // Tone is computed at the SELECTED scope. At world scope there is no narrower
+  // frame to disclose, so the legend stays unqualified — the qualification only
+  // earns its place once the lens is excluding demand (tickets #1143, #1145).
+  it("leaves the oversupplied legend unqualified at world scope", () => {
+    render(<ShortageHeatMap commodities={SAMPLE} />);
+    expect(screen.getByText("Oversupplied")).toBeTruthy();
+    expect(screen.queryByText("Oversupplied in state")).toBeNull();
+    expect(screen.queryByText("Oversupplied in country")).toBeNull();
+  });
 });

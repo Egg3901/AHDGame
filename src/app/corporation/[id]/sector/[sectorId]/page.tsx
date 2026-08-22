@@ -768,6 +768,11 @@ export default function SectorDetailPage() {
                 financials={financials}
                 capitalEnabled={!!capital}
                 clearingEnabled={!!pricing}
+                room={
+                  plants
+                    ? { headroomUnits: plants.headroomUnits, demandGapUnits: plants.demandGapUnits }
+                    : null
+                }
                 compact
               />
               {!isCeo && sector.forSale && forSaleInfo && (
@@ -917,6 +922,11 @@ export default function SectorDetailPage() {
               financials={financials}
               capitalEnabled={!!capital}
               clearingEnabled={!!pricing}
+              room={
+                plants
+                  ? { headroomUnits: plants.headroomUnits, demandGapUnits: plants.demandGapUnits }
+                  : null
+              }
             />
             {margins && (
               <MarginsPanel

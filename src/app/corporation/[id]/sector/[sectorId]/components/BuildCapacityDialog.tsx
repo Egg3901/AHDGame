@@ -116,6 +116,10 @@ export default function BuildCapacityDialog({
   const ownedFacilities = facilitiesFromUnits(sectorType, plants.capacityUnits ?? 0);
   const buyersRoomUnits = Math.min(plants.headroomUnits, plants.demandGapUnits ?? 0);
   const headroomFacilities = Math.floor(buyersRoomUnits / unitsPerFacility);
+  // Which constraint actually bound, when there is no room at all. A market
+  // whose SHARE is fully claimed is a different situation from one where
+  // buyers have no unmet demand, and the player can act on the difference.
+  const noShareLeft = plants.headroomUnits < 1;
   const blockedByMothball = plants.mothballed;
   const canSubmit =
     !submitting && !blockedByMothball && preview.safeCount > 0 && preview.affordable;
@@ -346,11 +350,21 @@ export default function BuildCapacityDialog({
                   {fmtUnits(preview.safeCount)}. Expect the extra output to go unsold, or to be
                   taken from a rival.
                 </>
+              ) : noShareLeft ? (
+                // Two very different reasons the room is zero, and saying
+                // "oversupplied" for both is what made a fully-claimed market
+                // read as a broken one (ticket #1162).
+                <>
+                  Every unit of this market is already owned, here and by rivals. There is nothing
+                  left to claim, so growth has to come from taking share on price rather than from
+                  building.
+                </>
               ) : (
                 <>
                   The market for what this sector makes is oversupplied — buyers are already taking
-                  all they need. Expect extra output to go unsold unless you win share from a rival
-                  on price.
+                  all they need. Unclaimed share can still read above zero, because that counts
+                  market nobody has built into rather than buyers waiting. Expect extra output to go
+                  unsold unless you win share from a rival on price.
                 </>
               )
             ) : (

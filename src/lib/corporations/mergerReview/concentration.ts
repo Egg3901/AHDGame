@@ -61,7 +61,20 @@ export async function computeMergerConcentration(
     if (!basis || basis.basisMarket <= 0) continue;
     const acquirerBasis = basis.basisByCorp.get(acquirerId) ?? 0;
     const targetBasis = basis.basisByCorp.get(targetId) ?? 0;
-    if (acquirerBasis <= 0 && targetBasis <= 0) continue;
+    // ─── An overlap needs BOTH sides in the industry (#1163) ───────────────
+    //
+    // This used to record an industry whenever EITHER side held share, so a
+    // deal was referred over the acquirer's own pre-existing dominance in an
+    // industry the target does not operate in at all. The reporter's case: a
+    // target holding only chemical sectors triggered an extraction warning,
+    // because the acquirer already led extraction.
+    //
+    // A merger concentrates an industry only where the two firms were
+    // previously separate holders of it. Single-sided industries are unchanged
+    // by the deal — the acquirer's share there is identical before and after,
+    // and the target's share simply changes owner — so referring on them
+    // reports a state of the world that the merger did not create.
+    if (acquirerBasis <= 0 || targetBasis <= 0) continue;
     overlaps.push({
       sectorType,
       acquirerSharePercent: round2(computeMarketSharePercent(acquirerBasis, basis.basisMarket)),

@@ -130,6 +130,12 @@ function sectorSet(): Record<string, unknown> {
   return (call?.[1] as { $set: Record<string, unknown> }).$set;
 }
 
+/** The pipeline stages the command sent to the unowned pool. */
+function poolPipeline(): Array<{ $set: Record<string, unknown> }> {
+  const call = db.collectionMocks.unownedSectors.updateOne.mock.calls[0];
+  return call?.[1] as Array<{ $set: Record<string, unknown> }>;
+}
+
 describe("buildCapacity — build", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -138,6 +144,59 @@ describe("buildCapacity — build", () => {
     db.collection("corporateSectors");
     db.collection("characters");
     db.collection("gameState");
+    db.collection("unownedSectors");
+  });
+
+  // ─── unowned-pool drawdown (#1145) ──────────────────────────────────────
+  //
+  // Building on an EXISTING plant used to leave the pool untouched, so every
+  // post-founding unit counted as owned while its demand stayed claimable. The
+  // pie read "unowned" on a market that was already built out.
+
+  it("draws the ordered units down from the unowned pool", async () => {
+    await wireMocks(sectorDoc());
+    const { buildCapacity } = await import("./buildCapacity");
+    await buildCapacity(request({ action: "build", units: 1_000 }), { params });
+
+    const call = db.collectionMocks.unownedSectors.updateOne.mock.calls[0];
+    expect(call[0]).toEqual({ stateId: "US-CA", sectorType: "manufacturing" });
+    expect(call[2]).toEqual({ upsert: true });
+    // Negative delta, clamped so a pool smaller than the order cannot go under.
+    expect(JSON.stringify(poolPipeline()[0].$set.headroomUnits)).toContain("-1000");
+    expect(JSON.stringify(poolPipeline()[0].$set.headroomUnits)).toContain("$max");
+    // `revenue` is restated FROM the post-draw units in its own stage.
+    expect(JSON.stringify(poolPipeline()[1].$set.revenue)).toContain("$headroomUnits");
+  });
+
+  it("does not touch the pool when the order never queues", async () => {
+    // The queue write is the commit point. If it loses its CAS the money is
+    // handed back, so the market claim must not stand either.
+    await wireMocks(sectorDoc());
+    db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({
+      matchedCount: 0,
+      modifiedCount: 0,
+    });
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "build", units: 1_000 }), { params });
+    expect(res.status).toBe(409);
+    expect(db.collectionMocks.unownedSectors.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("previews without drawing the pool down", async () => {
+    await wireMocks(sectorDoc());
+    const { buildCapacity } = await import("./buildCapacity");
+    await buildCapacity(request({ action: "build", units: 500, preview: true }), { params });
+    expect(db.collectionMocks.unownedSectors.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("still queues the order when the pool write fails", async () => {
+    // Post-commit and best-effort: the cash and the queue write have landed, so
+    // a pool failure must not 500 the caller into re-ordering.
+    await wireMocks(sectorDoc());
+    db.collectionMocks.unownedSectors.updateOne.mockRejectedValue(new Error("pool down"));
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "build", units: 1_000 }), { params });
+    expect(res.status).toBe(201);
   });
 
   it("queues an order, charges computeBuildCost and tracks CIP", async () => {
@@ -226,6 +285,7 @@ describe("buildCapacity — cancel", () => {
     db.collection("corporateSectors");
     db.collection("characters");
     db.collection("gameState");
+    db.collection("unownedSectors");
   });
 
   const outstanding = {
@@ -234,6 +294,35 @@ describe("buildCapacity — cancel", () => {
     startTurn: 990,
     onlineTurn: CURRENT_TURN + 50,
   };
+
+  it("returns the cancelled units to the unowned pool", async () => {
+    await wireMocks(
+      sectorDoc({ buildQueue: [outstanding], constructionInProgressAnchor: 400_000 })
+    );
+    const { buildCapacity } = await import("./buildCapacity");
+    await buildCapacity(request({ action: "cancel", orderIndex: 0 }), { params });
+
+    // A legacy (non-smooth) order has delivered nothing, so the whole claim
+    // comes back: a positive delta, not the build's negative one.
+    const headroom = JSON.stringify(poolPipeline()[0].$set.headroomUnits);
+    expect(headroom).toContain("1000");
+    expect(headroom).not.toContain("-1000");
+  });
+
+  it("returns only the UNDELIVERED units of a half-built smooth order", async () => {
+    // Delivered capacity stays in `capitalStock` and keeps counting against
+    // market share, so returning the full order would resurrect headroom the
+    // corp is still occupying.
+    await wireMocks(
+      sectorDoc({
+        buildQueue: [{ ...outstanding, startTurn: CURRENT_TURN - 50, smooth: true }],
+        constructionInProgressAnchor: 400_000,
+      })
+    );
+    const { buildCapacity } = await import("./buildCapacity");
+    await buildCapacity(request({ action: "cancel", orderIndex: 0 }), { params });
+    expect(JSON.stringify(poolPipeline()[0].$set.headroomUnits)).toContain("500");
+  });
 
   it("removes the order and refunds the documented share — never all of it", async () => {
     await wireMocks(

@@ -835,6 +835,21 @@ export default function CorporationDetailPage() {
 
         <NationalizationStatusCard corpId={id} />
 
+        {/* Ticket #1153: a private corporation is deliberately excluded from
+            every exchange snapshot, but nothing said so, so its owner read the
+            absence as a listing that had failed and waited turns for it. Say it
+            on the page they are already looking at, and say what changes it. */}
+        {corporation.isPrivate && isCeo && (
+          <div className="rounded-xl border border-info/30 bg-info/10 px-4 py-3 text-sm">
+            <p className="font-semibold text-foreground">Not listed on any exchange</p>
+            <p className="mt-0.5 text-muted">
+              {corporation.name} is private, and private corporations do not appear on the stock
+              market. Take it public from the Shares tab to list it. Buying your own shares back
+              until nothing is left on the public float has the same effect as staying private.
+            </p>
+          </div>
+        )}
+
         {corporation.isPrivate && !isCeo && (isModerator || isAdmin) && (
           <div className="rounded-xl border border-info/30 bg-info/10 px-4 py-3 text-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">

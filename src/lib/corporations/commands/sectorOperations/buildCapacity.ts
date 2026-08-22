@@ -15,7 +15,9 @@ import type {
   SectorBuildOrder,
   State,
   StateMetrics,
+  UnownedSector,
 } from "@/lib/db/types";
+import { unownedPoolCredit, unownedPoolDrawdown } from "@/lib/market/unownedPoolDraw";
 import { getSectorTechEffects } from "@/lib/constants/techTree";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
@@ -244,6 +246,15 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     // `resolveCorpLiquidCurrencyCode` is optional-typed for null corps; this one
     // is resolved, and the tx log requires a concrete code.
     const corpCurrencyCode = resolveCorpLiquidCurrencyCode(corporation) ?? "USD";
+    // Hoisted out of the build branch: the cancel branch needs it too, to return
+    // the cancelled units to the unowned pool on the same unit basis the
+    // drawdown consumed them on.
+    const eraUnitScale = getEraUnitScale(resolvePresetIdFromGameState(gameState));
+    const poolBucket = {
+      stateId: sector.stateId,
+      countryId,
+      sectorType: sector.sectorType,
+    };
 
     // ─── mothball / reactivate (D12) ─────────────────────────────────────────
     if (body.action === "mothball" || body.action === "reactivate") {
@@ -338,6 +349,23 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
           );
       }
 
+      // Return the cancelled units to the unowned pool (#1145). The order-time
+      // drawdown consumed the whole order; only the part that never became
+      // capacity comes back, because the delivered remainder is still owned and
+      // still counts against market share. Same best-effort discipline as the
+      // drawdown itself.
+      const poolCredit = unownedPoolCredit(poolBucket, cancelledUnits, now, eraUnitScale);
+      if (poolCredit) {
+        await db
+          .collection<UnownedSector>("unownedSectors")
+          .updateOne({ stateId: sector.stateId, sectorType: sector.sectorType }, poolCredit, {
+            upsert: true,
+          })
+          .catch((err) => {
+            console.error("[buildCapacity] unowned pool credit failed", err);
+          });
+      }
+
       // Shadow-ledger credit leg. Without this the refund is a mint the
       // money-supply reconciler cannot attribute. Post-commit and best-effort:
       // the cash has already moved, so a tx-log failure must not 500 the caller
@@ -429,7 +457,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       sectorType: sector.sectorType,
       units,
       year: currentYear,
-      eraUnitScale: getEraUnitScale(resolvePresetIdFromGameState(gameState)),
+      eraUnitScale,
       marketSharePercent: marketSharePct,
       competitorCount: competitorCount ?? undefined,
       primeRate,
@@ -560,6 +588,36 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
         anchorToCorpLiquidCapital(spread.spreadAnchor, corporation, corpFxRate)
       );
       await safeDistributeConversionSpread(db, feeInCorp, spread.from, spread.to);
+    }
+
+    // ─── Draw the ordered capacity DOWN from the unowned pool (#1145) ────────
+    //
+    // Market share under plants is `owned / (owned + headroomUnits)`. Founding
+    // already consumed headroom (`expandSector`); building on an EXISTING plant
+    // did not, so every post-founding unit counted as owned while leaving the
+    // demand backing it in the pool. The pie therefore read "60% unowned" on a
+    // market the world had already built out, and the expand gate — which reads
+    // a real demand gap — refused to build into it.
+    //
+    // Drawn at ORDER time, not delivery: it is the CLAIM on the market that
+    // consumes headroom, and ordering-time is also what stops two concurrent
+    // builders from each buying the same slice. The cancel path returns the
+    // undelivered remainder, so the two are symmetric.
+    //
+    // Post-commit and best-effort, exactly like the capex leg below: the money
+    // and the queue write have already landed, and a pool-write failure must
+    // not 500 the caller into retrying an order that already exists. Failing
+    // here leaves the pre-existing (leaky) behaviour, never a worse one.
+    const drawdown = unownedPoolDrawdown(poolBucket, units, now, eraUnitScale);
+    if (drawdown) {
+      await db
+        .collection<UnownedSector>("unownedSectors")
+        .updateOne({ stateId: sector.stateId, sectorType: sector.sectorType }, drawdown, {
+          upsert: true,
+        })
+        .catch((err) => {
+          console.error("[buildCapacity] unowned pool drawdown failed", err);
+        });
     }
 
     // Shadow-ledger debit leg — the cash → CIP reclass. Logged at the CIP

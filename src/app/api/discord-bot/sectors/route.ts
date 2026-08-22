@@ -24,6 +24,8 @@ import { type CountryId } from "@/lib/constants/countries";
 import { getGdpAnchorRate, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import {
   fxRateForCorpFromMap,
+  fxRateForSectorHostFromMap,
+  resolveSectorHostCurrencyCode,
   loadFxRatesByCurrency,
   resolveCorpLiquidCurrencyCode,
   type CorpCapitalCurrencyInfo,
@@ -127,19 +129,20 @@ export async function GET(request: Request) {
               })
               .toArray()
           : [];
-      const fxByCorpId = new Map<string, { code: CurrencyCode | undefined; rate: number }>();
-      for (const c of ownerCorps) {
-        fxByCorpId.set(c._id.toString(), {
-          code: resolveCorpLiquidCurrencyCode(c),
-          rate: fxRateForCorpFromMap(c, fxByCurrency),
-        });
-      }
+      const ownerCorpMap = new Map(ownerCorps.map((c) => [c._id.toString(), c]));
 
-      // Sum owned revenue per state in ₳ (cross-corp, heterogeneous currencies)
+      // Sum owned revenue per state in ₳ (cross-corp, heterogeneous currencies).
+      // Ticket #1161: `revenue` is denominated in the SECTOR's host currency,
+      // so it converts at the SECTOR's host rate. Using the owner's rate read a
+      // foreign sector's local figure as if it were already the owner's money.
       const ownedByState = new Map<string, number>();
       for (const s of ownedSectors) {
-        const fx = fxByCorpId.get(s.corporationId.toString());
-        const revenueAnchor = readCorpEconomicAnchor(s.revenue, fx?.code, fx?.rate ?? 1);
+        const corp = ownerCorpMap.get(s.corporationId.toString());
+        const revenueAnchor = readCorpEconomicAnchor(
+          s.revenue,
+          resolveSectorHostCurrencyCode(s, corp),
+          fxRateForSectorHostFromMap(s, corp, fxByCurrency)
+        );
         ownedByState.set(s.stateId, (ownedByState.get(s.stateId) ?? 0) + revenueAnchor);
       }
 
@@ -273,12 +276,22 @@ export async function GET(request: Request) {
     }
 
     // Rank every sector by revenueAnchor (₳-comparable), then paginate.
+    // Ticket #1161: the anchor comes from the SECTOR's host currency, which is
+    // what `revenue` is stored in. Converting at the owner's rate ranked a
+    // foreign sector by its raw local magnitude, so a sector in a weak-currency
+    // country outranked genuinely larger ones. `liquidCurrencyCode` stays the
+    // OWNER's currency — it labels the corp, not the amount.
     const rankedSectors = allSectors
       .map((s) => {
+        const corp = corpMap.get(s.corporationId.toString());
         const fx = fxByCorpId.get(s.corporationId.toString());
         return {
           sector: s,
-          revenueAnchor: readCorpEconomicAnchor(s.revenue, fx?.code, fx?.rate ?? 1),
+          revenueAnchor: readCorpEconomicAnchor(
+            s.revenue,
+            resolveSectorHostCurrencyCode(s, corp),
+            fxRateForSectorHostFromMap(s, corp, fxByCurrency)
+          ),
           liquidCurrencyCode: fx?.code ?? null,
         };
       })
