@@ -10,9 +10,13 @@ import type {
   CorporationVoteCast,
 } from "@/lib/db/types/corporationVote";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
-import { hasSuperShares, isValidSuperShareMultiplier } from "@/lib/corporations/superShares";
+import {
+  hasSuperShares,
+  isValidSuperShareMultiplier,
+  totalVotingPower,
+} from "@/lib/corporations/superShares";
 
-export type VoteOutcome = "passed" | "failed" | "open";
+export type VoteOutcome = "passed" | "failed" | "open" | "cancelled";
 
 /**
  * Fund instructions stored on a vote, keyed the way `resolveFundStewardship`
@@ -141,6 +145,7 @@ export async function openCorporationVote(opts: {
     deadlineAtTurn: currentTurn + 24,
     status: "open",
     passThreshold: legalStructure.shareholderVoteThreshold,
+    totalEligibleSharesAtOpen: totalVotingPower(corporation),
     payload,
     votes: [],
     createdAt: now,
@@ -223,6 +228,24 @@ export async function resolveCorporationVoteIfReady(opts: {
   const { db, vote, totalEligibleShares, currentTurn } = opts;
 
   if (vote.status !== "open") return { outcome: vote.status as VoteOutcome, claimed: false };
+
+  if (
+    vote.totalEligibleSharesAtOpen != null &&
+    vote.totalEligibleSharesAtOpen !== totalEligibleShares
+  ) {
+    const now = new Date();
+    const claim = await db.collection<CorporationVote>("corporationVotes").updateOne(
+      { _id: vote._id, status: "open" },
+      {
+        $set: {
+          status: "cancelled",
+          resolvedAt: now,
+          updatedAt: now,
+        },
+      }
+    );
+    return { outcome: "cancelled", claimed: claim.matchedCount > 0 };
+  }
 
   const castYes = vote.votes.filter((v) => v.vote === "yes").reduce((s, v) => s + v.voteShares, 0);
   const castNo = vote.votes.filter((v) => v.vote === "no").reduce((s, v) => s + v.voteShares, 0);
