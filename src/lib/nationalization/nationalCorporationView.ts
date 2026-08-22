@@ -213,7 +213,8 @@ export interface NationalCorporationViewModel {
     retainedPerTurn: number; // share kept in the corp as working capital (retention split)
     remittedPerTurn: number; // what actually reaches the budget: split share, capped at liquidCapital
     remittanceCashCapped: boolean; // true when on-hand cash caps the remittance below the split share
-    grossRevenuePerTurn: number; // sum of held-sector revenue, before margin
+    /** Revenue actually earned this turn; realized rather than nameplate under plants. */
+    grossRevenuePerTurn: number;
     mandateSubsidyPerTurn: number; // treasury cost of price-controlled margin drag (≥0)
     investorConfidence: number;
     soeEfficiencyPenalty: number; // revenue-weighted avg vs the old flat −15
@@ -471,10 +472,16 @@ export async function buildNationalCorporationView(
     .sort((a, b) => a.stateName.localeCompare(b.stateName));
 
   // Headline stats.
-  const totalRevenue = viewSectors.reduce((acc, s) => acc + s.revenue, 0);
+  const totalNameplateRevenue = viewSectors.reduce((acc, s) => acc + s.revenue, 0);
+  // Under plants `revenue` is a capacity nameplate and survives mothballing.
+  // Every player-facing money claim must use what the sectors actually sold.
+  // Below plants, `realizedRevenue` deliberately falls back to `revenue`, so
+  // this remains byte-for-byte equivalent to the legacy total.
+  const totalRevenue = viewSectors.reduce((acc, s) => acc + s.realizedRevenue, 0);
   const weightedPenalty =
-    totalRevenue > 0
-      ? viewSectors.reduce((acc, s) => acc + s.efficiency.total * s.revenue, 0) / totalRevenue
+    totalNameplateRevenue > 0
+      ? viewSectors.reduce((acc, s) => acc + s.efficiency.total * s.revenue, 0) /
+        totalNameplateRevenue
       : 0;
   // Operating profit across held sectors — already net of the SOE efficiency
   // penalty and price-control margin drag (see `operatingProfit` per sector).

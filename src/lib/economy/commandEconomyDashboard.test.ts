@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   presentSoe,
+  soeCapacityAdvice,
   computeMarketizationDrivers,
   gosbankCostLabel,
   regimeFromLevel,
@@ -46,6 +47,33 @@ describe("presentSoe", () => {
     const v = presentSoe(raw(), null);
     expect(v.laborQuality).toBe(0.5);
     expect(v.investmentRequest).toBe(0);
+  });
+});
+
+describe("soeCapacityAdvice", () => {
+  it("warns a low-utilization director that investment worsens excess capacity", () => {
+    const advice = soeCapacityAdvice({ output: 500, capacity: 10_000, investmentRequest: 10_000 });
+
+    expect(advice?.severity).toBe("warning");
+    expect(advice?.utilizationPercent).toBe(5);
+    expect(advice?.message).toContain("Set the investment request to 0");
+    expect(advice?.message).toContain("Mothball or abandon");
+    expect(advice?.message).toContain("market reform");
+    expect(advice?.message).not.toMatch(/[—–]/);
+  });
+
+  it("keeps low-utilization advice without claiming an investment request exists", () => {
+    const advice = soeCapacityAdvice({ output: 400, capacity: 1_000, investmentRequest: 0 });
+
+    expect(advice?.severity).toBe("caution");
+    expect(advice?.message).toContain("Keep the investment request at 0");
+  });
+
+  it("does not warn when capacity is well used or unavailable", () => {
+    expect(
+      soeCapacityAdvice({ output: 800, capacity: 1_000, investmentRequest: 10_000 })
+    ).toBeNull();
+    expect(soeCapacityAdvice({ output: 0, capacity: 0, investmentRequest: 10_000 })).toBeNull();
   });
 });
 

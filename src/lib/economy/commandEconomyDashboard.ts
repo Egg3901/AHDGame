@@ -42,6 +42,42 @@ export interface SoeView {
   directedCreditLastTurn: number | null;
 }
 
+export interface SoeCapacityAdvice {
+  severity: "warning" | "caution";
+  utilizationPercent: number;
+  message: string;
+}
+
+/**
+ * Warn when a director is about to add capacity to an enterprise that already
+ * cannot use half of what it owns. `output / capacity` is the same utilization
+ * signal the command-economy turn feeds into marketization pressure. Keeping
+ * this pure lets the dashboard and its tests speak from the engine's actual
+ * quantities instead of the slower efficiency EMA shown beside them.
+ */
+export function soeCapacityAdvice(inputs: {
+  output: number;
+  capacity: number;
+  investmentRequest: number;
+}): SoeCapacityAdvice | null {
+  const capacity = Number.isFinite(inputs.capacity) ? Math.max(0, inputs.capacity) : 0;
+  if (capacity <= 0) return null;
+  const output = Number.isFinite(inputs.output) ? Math.max(0, inputs.output) : 0;
+  const utilization = output / capacity;
+  if (utilization >= 0.5) return null;
+
+  const utilizationPercent = Math.round(utilization * 100);
+  const hasInvestmentRequest =
+    Number.isFinite(inputs.investmentRequest) && inputs.investmentRequest > 0;
+  return {
+    severity: hasInvestmentRequest ? "warning" : "caution",
+    utilizationPercent,
+    message: hasInvestmentRequest
+      ? `This enterprise is using ${utilizationPercent}% of capacity. More investment adds capacity and upkeep before buyers exist. Set the investment request to 0. Mothball or abandon low-demand regional plants from the enterprise page. Persistently low utilization also pushes the country toward market reform.`
+      : `This enterprise is using ${utilizationPercent}% of capacity. Keep the investment request at 0 until buyers absorb more output. Mothball or abandon low-demand regional plants from the enterprise page to cut upkeep. Persistently low utilization also pushes the country toward market reform.`,
+  };
+}
+
 /** The three live drivers behind the marketization gauge. */
 export interface MarketizationDrivers {
   /** 0..1 — shortage / shadow premium / grey-market pressure toward the market. */
