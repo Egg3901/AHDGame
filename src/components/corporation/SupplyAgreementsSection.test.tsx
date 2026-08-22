@@ -19,7 +19,11 @@ beforeEach(() => {
           {
             _id: "agreement-1",
             supplierCorpId: "supplier",
+            supplierCorpName: "Gridworks",
+            supplierCorpTicker: "GRID",
             buyerCorpId: "buyer",
+            buyerCorpName: "Tinky Corporation",
+            buyerCorpTicker: "TCI",
             commodity: "energy",
             volumeCap: 80,
             pricePremium: 0,
@@ -39,6 +43,14 @@ describe("SupplyAgreementsSection delivery outcome", () => {
     render(<SupplyAgreementsSection corpId="buyer" />);
 
     await waitFor(() => expect(screen.getByText("As buyer")).toBeTruthy());
+    expect(screen.getByRole("link", { name: /Gridworks \(GRID\)/ })).toBeTruthy();
     expect(screen.getByText(/60 MWh on turn 296/)).toBeTruthy();
+  });
+
+  it("shows the buyer name on the supplier's agreement card", async () => {
+    render(<SupplyAgreementsSection corpId="supplier" />);
+
+    await waitFor(() => expect(screen.getByText("As supplier")).toBeTruthy());
+    expect(screen.getByRole("link", { name: /Tinky Corporation \(TCI\)/ })).toBeTruthy();
   });
 });

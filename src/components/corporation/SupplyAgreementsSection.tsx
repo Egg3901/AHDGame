@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   COMMODITY_TYPES,
   COMMODITY_LABELS,
@@ -13,7 +14,11 @@ import { useToast } from "@/contexts/ToastContext";
 interface SupplyAgreement {
   _id: string;
   supplierCorpId: string;
+  supplierCorpName?: string;
+  supplierCorpTicker?: string | null;
   buyerCorpId: string;
+  buyerCorpName?: string;
+  buyerCorpTicker?: string | null;
   commodity: CommodityType;
   volumeCap: number;
   pricePremium: number;
@@ -196,13 +201,24 @@ export default function SupplyAgreementsSection({
   function renderAgreement(a: SupplyAgreement, role: "supplier" | "buyer") {
     const canAccept = role === "buyer" && a.status === "pending";
     const canCancel = a.status === "pending" || a.status === "active";
+    const counterparty =
+      role === "supplier"
+        ? { id: a.buyerCorpId, name: a.buyerCorpName, ticker: a.buyerCorpTicker }
+        : { id: a.supplierCorpId, name: a.supplierCorpName, ticker: a.supplierCorpTicker };
     return (
       <div key={a._id} className="rounded-xl border border-card-border bg-card p-4 space-y-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">{COMMODITY_LABELS[a.commodity]}</p>
             <p className="text-xs text-muted">
-              {role === "supplier" ? "Supplying to buyer" : "Buying from supplier"}
+              {role === "supplier" ? "Supplying to " : "Buying from "}
+              <Link
+                href={`/corporation/${counterparty.id}`}
+                className="font-semibold text-foreground hover:text-primary"
+              >
+                {counterparty.name ?? (role === "supplier" ? "buyer" : "supplier")}
+                {counterparty.ticker ? ` (${counterparty.ticker})` : ""}
+              </Link>
             </p>
           </div>
           <span
