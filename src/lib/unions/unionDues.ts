@@ -160,16 +160,37 @@ export interface ApprovalInputs {
   politicalContributionPct?: number;
 }
 
+export interface ApprovalTargetBreakdown {
+  base: number;
+  servicesBonus: number;
+  duesPenalty: number;
+  politicalPenalty: number;
+  target: number;
+}
+
+/**
+ * Every term in the approval target, exposed from the same authority the turn engine uses.
+ * Keeping this arithmetic here lets the UI explain a flat target without reimplementing the
+ * balance rule and drifting away from actual turn processing (ticket #1168).
+ */
+export function approvalTargetBreakdown(inputs: ApprovalInputs): ApprovalTargetBreakdown {
+  const burden = duesBurdenRatio(inputs.duesPerWorkerAnnual, inputs.annualWage);
+  const duesPenalty = burden * APPROVAL_DUES_PENALTY_PER_UNIT;
+  const politicalPenalty = politicalContributionApprovalPenalty(inputs.politicalContributionPct);
+  const servicesBonus = inputs.servicesLapsed ? 0 : servicesApprovalBonus(inputs.activeServices);
+  const target = Math.max(
+    0,
+    Math.min(100, BASE_APPROVAL + servicesBonus - duesPenalty - politicalPenalty)
+  );
+  return { base: BASE_APPROVAL, servicesBonus, duesPenalty, politicalPenalty, target };
+}
+
 /**
  * Where approval is heading. Dues and political contributions subtract,
  * services add, and lapsed services add nothing.
  */
 export function approvalTarget(inputs: ApprovalInputs): number {
-  const burden = duesBurdenRatio(inputs.duesPerWorkerAnnual, inputs.annualWage);
-  const penalty = burden * APPROVAL_DUES_PENALTY_PER_UNIT;
-  const pacPenalty = politicalContributionApprovalPenalty(inputs.politicalContributionPct);
-  const bonus = inputs.servicesLapsed ? 0 : servicesApprovalBonus(inputs.activeServices);
-  return Math.max(0, Math.min(100, BASE_APPROVAL + bonus - penalty - pacPenalty));
+  return approvalTargetBreakdown(inputs).target;
 }
 
 /** Steps approval toward its target by at most `APPROVAL_TREND_STEP_PER_TURN`, no overshoot. */

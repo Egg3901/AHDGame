@@ -25,6 +25,10 @@ describe("UnionServicesPanel approval forecast", () => {
 
     expect(screen.getByText(/Approval is 50\.0 and is moving toward 54\.0/)).toBeTruthy();
     expect(screen.getByText(/Next funded turn: 51\.5 \(\+1\.5\)/)).toBeTruthy();
-    expect(screen.getByText(/Services add \+19 to the target/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Target math: 55 base \+19 services −20\.0 dues −0\.0 political spending =54\.0/
+      )
+    ).toBeTruthy();
   });
 });
