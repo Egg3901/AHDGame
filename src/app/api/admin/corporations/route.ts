@@ -11,7 +11,7 @@ import type { Corporation, CorporateSector, Character, GameState } from "@/lib/d
 import {
   corpCapitalToAnchor,
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
@@ -33,7 +33,7 @@ export async function GET() {
       db
         .collection<GameState>("gameState")
         .findOne({ _id: "current" }, { projection: { currentTurn: 1 } }),
-      loadFxRatesByCurrency(db),
+      loadValuationFxRates(db),
     ]);
     const currentTurn = gameState?.currentTurn ?? 0;
 

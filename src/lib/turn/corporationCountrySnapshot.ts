@@ -2,7 +2,7 @@ import type { Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import {
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
@@ -27,7 +27,7 @@ interface CorporationCountrySnapshot {
  * aggregates — confirmed before writing this).
  *
  * Corp financials (sharePrice, liquidCapital) are local-currency — converted
- * to anchor via the SAME loadFxRatesByCurrency + resolveCorpLiquidCurrencyCode
+ * to anchor via the valuation FX map + resolveCorpLiquidCurrencyCode
  * + readCorpEconomicAnchor pattern marketCapSnapshot.ts already uses, so this
  * doesn't repeat the currency-conversion bug this session already found and
  * fixed once for NPP wealth (src/lib/sim/metrics.ts).
@@ -50,7 +50,7 @@ export async function snapshotCorporationsByCountry(db: Db, turn: number): Promi
     .toArray();
   if (corporations.length === 0) return 0;
 
-  const fxByCurrency = await loadFxRatesByCurrency(db);
+  const fxByCurrency = await loadValuationFxRates(db);
 
   const byCountry = new Map<
     string,

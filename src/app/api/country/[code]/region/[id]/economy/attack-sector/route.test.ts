@@ -62,6 +62,27 @@ beforeEach(async () => {
 });
 
 describe("POST /api/country/[code]/region/[id]/economy/attack-sector", () => {
+  it("blocks private attacks in an eastern-bloc command economy", async () => {
+    const sectorId = new ObjectId();
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current" });
+    db.collectionMocks.states.findOne.mockResolvedValue({
+      _id: "PL-WAW",
+      countryId: "PL",
+      name: "Warsaw",
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest({ sectorId: sectorId.toHexString() }), {
+      params: Promise.resolve({ code: "PL", id: "PL-WAW" }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data.error).toMatch(/command economy/i);
+    expect(db.collectionMocks.corporations.findOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.insertOne).not.toHaveBeenCalled();
+  });
+
   it("self-heals an orphan sector and returns a dissolved-defender 404", async () => {
     const attackerCharId = new ObjectId();
     const attackerCorpId = new ObjectId();

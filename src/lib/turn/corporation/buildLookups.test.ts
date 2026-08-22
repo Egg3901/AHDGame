@@ -196,6 +196,27 @@ describe("buildCorporationLookups — bond holdings", () => {
     expect(lookups.issuedBondDebtByCorpId.get(issuerCorp._id.toString())).toBe(50_000_000);
   });
 
+  it("backfills authored rates for countries without a live forex market", async () => {
+    // Poland has a real local denomination in 1953, but it is deliberately not
+    // forex-traded and therefore has no exchangeRates row. The corporation turn
+    // still has to convert its revenue, profit, cash, debt, and market cap at
+    // 24 PLZ per anchor rather than silently treating PLZ as 1:1 with anchor.
+    db.collectionMocks.exchangeRates.find.mockReturnValue(
+      makeCursor([{ currencyCode: "USD", rate: 1 }])
+    );
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1953-default",
+    });
+
+    const { buildCorporationLookups } = await import("./buildLookups");
+    const lookups = await buildCorporationLookups(db as unknown as Db);
+
+    expect(lookups.exchangeRatesByCurrency.get("PLZ")).toBe(24);
+    expect(lookups.exchangeRatesByCurrency.get("CSK")).toBe(27);
+  });
+
   it("populates domestic and foreign corporate tax rate maps per country and state", async () => {
     db.collectionMocks.federalBudget.find.mockReturnValue(
       makeCursor([

@@ -143,6 +143,42 @@ describe("sectorRevenueTaxProvider", () => {
     expect(row.realizedRevenue).toBe(1000);
   });
 
+  it("uses the authored host rate when a country has no live forex row", async () => {
+    setupCollection("corporateSectors", [
+      {
+        _id: "sec-pl",
+        stateId: "PL-WAW",
+        countryId: "PL",
+        revenue: 2400,
+        realizedRevenue: 1200,
+        currentGrowthRate: 2,
+        corporationId: "corpPL",
+      },
+    ]);
+    setupCollection("unownedSectors", []);
+    setupCollection("corporations", [
+      { _id: "corpPL", countryId: "PL", liquidCurrencyCode: "PLZ" },
+    ]);
+    // Deliberately no PLZ row. Poland is budget-only in the 1953 forex model.
+    setupCollection("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
+    db.collection("gameState");
+    db.collectionMocks.gameState!.findOne = vi
+      .fn()
+      .mockResolvedValue({ _id: "current", preset: "1953-default" });
+    setupCollection("federalBudget", []);
+    setupCollection("stateBudgets", []);
+
+    const { sectorRevenueTaxProvider } = await import("./providers");
+    const row = (await sectorRevenueTaxProvider(db as unknown as Db)).ownedByState.get(
+      "PL-WAW"
+    )![0]!;
+
+    expect(row.hostRevenue).toBe(2400);
+    expect(row.hostRealizedRevenue).toBe(1200);
+    expect(row.revenue).toBe(100);
+    expect(row.realizedRevenue).toBe(50);
+  });
+
   it("governmentApprovalProvider maps countryId → approvalRating (P4)", async () => {
     setupCollection("governmentApprovals", [
       { _id: "US", countryId: "US", approvalRating: 52 },

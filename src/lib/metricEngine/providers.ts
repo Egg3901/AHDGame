@@ -4,7 +4,7 @@ import type { FederalBudget, StateBudget } from "@/lib/db/types/budget";
 import type { CorporationType } from "@/lib/constants/corporations";
 import {
   fxRateForSectorHostFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
@@ -129,7 +129,7 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
         countryId: 1,
       })
       .toArray(),
-    loadFxRatesByCurrency(db),
+    loadValuationFxRates(db),
     db
       .collection<FederalBudget>("federalBudget")
       .find({})
