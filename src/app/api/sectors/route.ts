@@ -10,13 +10,12 @@ import {
 } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS, COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
 import {
-  fxRateForCorpFromMap,
+  fxRateForSectorHostFromMap,
   loadFxRatesByCurrency,
-  resolveCorpLiquidCurrencyCode,
+  resolveSectorHostCurrencyCode,
   type CorpCapitalCurrencyInfo,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
-import type { CurrencyCode } from "@/lib/constants/currencies";
 import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
 
 export type SectorView = "unowned" | "owned" | "forSale";
@@ -202,21 +201,17 @@ export async function GET(request: Request) {
           : [];
 
       const corpMap = new Map(corporations.map((c) => [c._id.toString(), c]));
-      const fxByCorpId = new Map<string, { code: CurrencyCode | undefined; rate: number }>();
-      for (const c of corporations) {
-        fxByCorpId.set(c._id.toString(), {
-          code: resolveCorpLiquidCurrencyCode(c),
-          rate: fxRateForCorpFromMap(c, fxByCurrency),
-        });
-      }
 
       for (const s of ownedSectors) {
         const st = stateMap.get(s.stateId);
         const corp = corpMap.get(s.corporationId.toString());
-        const fx = fxByCorpId.get(s.corporationId.toString());
-        const revenueAnchor = readCorpEconomicAnchor(s.revenue, fx?.code, fx?.rate ?? 1);
-        const corpCountryId = corp?.countryId ?? s.countryId;
-        const cfg = COUNTRY_CONFIGS[corpCountryId as CountryId];
+        const hostCountryId = (s.countryId ?? st?.countryId ?? corp?.countryId) as CountryId;
+        const revenueAnchor = readCorpEconomicAnchor(
+          s.revenue,
+          resolveSectorHostCurrencyCode({ countryId: hostCountryId }, corp),
+          fxRateForSectorHostFromMap({ countryId: hostCountryId }, corp, fxByCurrency)
+        );
+        const cfg = COUNTRY_CONFIGS[hostCountryId];
 
         rows.push({
           id: s._id.toString(),
@@ -224,8 +219,8 @@ export async function GET(request: Request) {
           sectorTypeLabel: CORPORATION_TYPE_LABELS[s.sectorType],
           stateId: s.stateId,
           stateName: st?.name ?? s.stateId,
-          countryId: corpCountryId as CountryId,
-          countryName: cfg?.name ?? corpCountryId,
+          countryId: hostCountryId,
+          countryName: cfg?.name ?? hostCountryId,
           countryFlag: cfg?.flagEmoji ?? "",
           owned: true,
           corporationId: s.corporationId.toString(),

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -13,6 +14,7 @@ function makeRequest(query: string) {
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  resetCorpFxRateCacheForTests();
   db = createMockDb();
   db.collection("states");
   db.collection("exchangeRates");
@@ -91,6 +93,87 @@ describe("GET /api/sectors (view=unowned)", () => {
     expect(response.status).toBe(200);
     expect(db.collectionMocks.unownedSectors.countDocuments).toHaveBeenCalledWith({
       countryId: { $in: [] },
+    });
+  });
+});
+
+describe("GET /api/sectors (view=owned)", () => {
+  it("ranks and labels a foreign sector by its host market currency (ticket #1161)", async () => {
+    const foreignOwnerId = new ObjectId();
+    const domesticOwnerId = new ObjectId();
+
+    db.collectionMocks.states.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        { _id: "JP-13", name: "Tokyo", countryId: "JP" },
+        { _id: "US-CA", name: "California", countryId: "US" },
+      ]),
+    });
+    db.collectionMocks.exchangeRates.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        { currencyCode: "JPY", rate: 91 },
+        { currencyCode: "USD", rate: 1 },
+      ]),
+    });
+    db.collectionMocks.corporateSectors.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          corporationId: foreignOwnerId,
+          stateId: "JP-13",
+          countryId: "JP",
+          sectorType: "defense",
+          revenue: 9_100_000,
+        },
+        {
+          _id: new ObjectId(),
+          corporationId: domesticOwnerId,
+          stateId: "US-CA",
+          countryId: "US",
+          sectorType: "defense",
+          revenue: 500_000,
+        },
+      ]),
+    });
+    db.collectionMocks.corporations.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: foreignOwnerId,
+          name: "Foreign Holdings",
+          sequentialId: 1,
+          countryId: "US",
+          liquidCurrencyCode: "USD",
+        },
+        {
+          _id: domesticOwnerId,
+          name: "Real Giant",
+          sequentialId: 2,
+          countryId: "US",
+          liquidCurrencyCode: "USD",
+        },
+      ]),
+    });
+
+    const { GET } = await import("./route");
+    const response = await GET(makeRequest("view=owned&type=defense&sort=revenue&dir=desc"));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.sectors).toHaveLength(2);
+    expect(data.sectors[0]).toMatchObject({
+      corporationName: "Real Giant",
+      countryId: "US",
+      countryName: "United States",
+      revenueAnchor: 500_000,
+    });
+    expect(data.sectors[1]).toMatchObject({
+      corporationName: "Foreign Holdings",
+      stateName: "Tokyo",
+      countryId: "JP",
+      countryName: "Japan",
+      revenueAnchor: 100_000,
     });
   });
 });
