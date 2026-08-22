@@ -3687,6 +3687,11 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     headOfStateTitle: "Chairman of the Presidium",
     executiveRealmPhrase: "the Soviet Union",
     governmentType: "onePartyState",
+    // Unlike China, the USSR's constitutional model lets the ruling party move
+    // no confidence in the Premier through the Supreme Soviet. The generic
+    // one-party default is false, so this exception must be explicit or the
+    // route rejects the action even though the legislature renders it.
+    confidenceVoteMechanism: true,
     headOfStateSelection: "legislatureAppointment",
     governmentTypeLabel: "One Party State",
     coalitionThreshold: 376, // Soviet of the Union majority (750 / 2 + 1)

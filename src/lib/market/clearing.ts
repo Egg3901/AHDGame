@@ -149,24 +149,11 @@ export interface ClearingSeller {
  * 50 to the book, so `soldFraction` reflects real total sales (contracted +
  * open-market fill), never `contracted / produced`.
  *
- * ⚠ CONTRACTED VOLUME IS NOT GUARANTEED, despite what the pre-pass looks like.
- * The reservation is bounded by `remaining`, this book's TOTAL demand, so a
- * contract only delivers in full while the market as a whole wants at least that
- * much. In a thin book the contract silently under-delivers and the supplier
- * sees an unexplained low `soldFraction` with no indication that a signed
- * agreement was the thing that fell short (ticket #1139: 16k/day of freight
- * against a 13k agreement, delivering 40%).
- *
- * That interacts badly with the propose route, which caps `volumeCap` against
- * the SUPPLIER's plant capacity alone (`supplyAgreements.ts`) and never against
- * anything on the demand side. A player can therefore sign a contract that
- * cannot be delivered, and nothing tells them so at signing or afterwards.
- *
- * Fixing it is a product decision, not a cleanup, because the options differ in
- * what a contract MEANS: bound the volume at signing, let contracted units clear
- * ahead of the book's own demand, or keep this behaviour and report the
- * shortfall to the supplier. `contractCappedByBookDemand` below pins the
- * behaviour as it stands so whichever is chosen is chosen deliberately.
+ * Contracted volume is guaranteed ahead of the anonymous order book, up to the
+ * supplier's actual offer. The caller already caps reservations by each named
+ * buyer's physical demand. Bounding the reservation again by this pass's
+ * proportional anonymous demand made valid agreements under-deliver in thin
+ * books, such as ticket #1139's 13k freight contract filling only 6.4k.
  */
 export function clearCommodityMarket(
   demandUnits: number,
@@ -189,11 +176,11 @@ export function clearCommodityMarket(
   // ── Contracted pre-pass (private supply agreements) ────────────────────────
   // Runs FIRST: contracted units are guaranteed-sold for the supplier and leave
   // the open market (demand is reduced), before loyalty or cheapest-first.
-  if (contractedUnitsById && remaining > 0) {
+  if (contractedUnitsById) {
     for (const s of sellers) {
       const contracted = contractedUnitsById.get(s.id) ?? 0;
       if (contracted <= 0) continue;
-      const take = Math.min(contracted, offerUnits.get(s.id) ?? 0, remaining);
+      const take = Math.min(contracted, offerUnits.get(s.id) ?? 0);
       if (take <= 0) continue;
       filledUnits.set(s.id, (filledUnits.get(s.id) ?? 0) + take);
       offerUnits.set(s.id, (offerUnits.get(s.id) ?? 0) - take);
