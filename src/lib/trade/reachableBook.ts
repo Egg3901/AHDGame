@@ -50,6 +50,22 @@ export interface ReachableBookEntry {
   blockedSupply: number;
   /** Disclosure: world supply from countries that trade with nobody. */
   untradedSupply: number;
+  /**
+   * Foreign demand this country could win that NOBODY currently serves, in
+   * units — its gravity share of every other country's unserved deficit.
+   *
+   * Ticket #1162. Without this term `reachableDemandGap` is identically zero
+   * for every net exporter: `clearCommodity` scales the exporter row to exactly
+   * `surplus = supply - domesticDemand`, so `domesticDemand + exports - supply`
+   * cancels by construction. That is the same algebra-not-a-market-condition
+   * failure ticket #1077 fixed on the importer side and left standing on the
+   * exporter side, and it reported "room for 0" in 301 of 310 exporter books on
+   * prod at turn 319.
+   *
+   * Optional so books persisted before this field heal to the old behaviour
+   * rather than throwing; see {@link reachableDemandGap}.
+   */
+  unmetForeignDemand?: number;
 }
 
 export type ReachableBooks = Map<CountryId, Map<CommodityType, ReachableBookEntry>>;
@@ -75,15 +91,17 @@ export interface BuildReachableBooksArgs {
   /** Commodities to build books for. */
   commodities: readonly CommodityType[];
   /**
-   * True when an embargo blocks `exporter -> importer` for this commodity. The
-   * engine's convention is `affinityFor(...) === 0`, which is what the sourcing
-   * pass already uses.
+   * Gravity affinity for `exporter -> importer`, the same prior the IPF in
+   * `clearCommodity` fits against. Zero means the lane is closed (embargo or
+   * iron curtain), which is the `isBlocked` this argument used to be — one
+   * function instead of two, so a lane cannot be open for allocation and closed
+   * for disclosure.
    */
-  isBlocked: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => boolean;
+  affinity: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => number;
 }
 
 export function buildReachableBooks(args: BuildReachableBooksArgs): ReachableBooks {
-  const { countries, balances, clearing, commodities, isBlocked } = args;
+  const { countries, balances, clearing, commodities, affinity } = args;
 
   const trading = new Set<string>(countries);
   const books: ReachableBooks = new Map();
@@ -100,6 +118,56 @@ export function buildReachableBooks(args: BuildReachableBooksArgs): ReachableBoo
 
     const result = clearing.get(commodity);
 
+    // `affinityFor` rescans the embargo list and reprices the importer tariff on
+    // every call, and this pass needs each pair twice (once to weight the
+    // unserved pool, once for the blocked-supply disclosure). Memoise per
+    // commodity so the turn engine pays for each pair exactly once, as it did
+    // when this argument was the narrower `isBlocked`.
+    const affinityCache = new Map<string, number>();
+    const affinityOf = (exporter: CountryId, importer: CountryId): number => {
+      const key = `${exporter}|${importer}`;
+      const hit = affinityCache.get(key);
+      if (hit !== undefined) return hit;
+      const value = affinity(commodity, exporter, importer);
+      affinityCache.set(key, value);
+      return value;
+    };
+
+    // Deficit each country still carries after clearing. `uncleared` is
+    // positive for unsold surplus and negative for unmet demand, so a net
+    // exporter contributes nothing to the pool.
+    const unmetByCountry = new Map<CountryId, number>();
+    for (const c of countries) {
+      unmetByCountry.set(c, Math.max(0, -(result?.perCountry[c]?.uncleared ?? 0)));
+    }
+
+    // Gravity mass per exporter: affinity (can it reach this buyer) times
+    // supply (can it actually serve at scale). Normalised per importer so the
+    // shares sum to 1 and the world never sees more room than there is unserved
+    // demand. Weighting by affinity alone let a small, well-connected country
+    // quote the same room as a large producer; adding the raw pool unweighted
+    // made every country's book identical, which is what ticket #1077 built
+    // per-country books to avoid.
+    const shareOfImporter = new Map<CountryId, Map<CountryId, number>>();
+    for (const importer of countries) {
+      if ((unmetByCountry.get(importer) ?? 0) <= 0) continue;
+      const massByExporter = new Map<CountryId, number>();
+      let totalMass = 0;
+      for (const exporter of countries) {
+        if (exporter === importer) continue;
+        const a = affinityOf(exporter, importer);
+        if (!(a > 0)) continue;
+        const mass = a * (balances.get(exporter)?.get(commodity)?.supply ?? 0);
+        if (!(mass > 0)) continue;
+        massByExporter.set(exporter, mass);
+        totalMass += mass;
+      }
+      if (totalMass <= 0) continue;
+      const shares = new Map<CountryId, number>();
+      for (const [exporter, mass] of massByExporter) shares.set(exporter, mass / totalMass);
+      shareOfImporter.set(importer, shares);
+    }
+
     for (const home of countries) {
       const bal = balances.get(home)?.get(commodity);
       const supply = bal?.supply ?? 0;
@@ -109,10 +177,16 @@ export function buildReachableBooks(args: BuildReachableBooksArgs): ReachableBoo
       const exports = pc?.exports ?? 0;
 
       let blockedSupply = 0;
+      let unmetForeignDemand = 0;
       for (const other of countries) {
         if (other === home) continue;
-        if (!isBlocked(commodity, other, home)) continue;
-        blockedSupply += balances.get(other)?.get(commodity)?.supply ?? 0;
+        if (affinityOf(other, home) === 0) {
+          blockedSupply += balances.get(other)?.get(commodity)?.supply ?? 0;
+        }
+        const unmet = unmetByCountry.get(other) ?? 0;
+        if (unmet > 0) {
+          unmetForeignDemand += unmet * (shareOfImporter.get(other)?.get(home) ?? 0);
+        }
       }
 
       books.get(home)!.set(commodity, {
@@ -123,6 +197,7 @@ export function buildReachableBooks(args: BuildReachableBooksArgs): ReachableBoo
         exports,
         blockedSupply,
         untradedSupply,
+        unmetForeignDemand,
       });
     }
   }

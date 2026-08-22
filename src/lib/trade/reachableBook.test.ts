@@ -24,7 +24,7 @@ describe("buildReachableBooks", () => {
       // Nothing clears: the only lane is blocked.
       clearing: clearAllCommodities(countries, balances, () => 0),
       commodities: OIL,
-      isBlocked: () => true,
+      affinity: () => 0,
     });
 
     const us = books.get("US" as CountryId)!.get("oil")!;
@@ -47,7 +47,7 @@ describe("buildReachableBooks", () => {
       balances,
       clearing: clearAllCommodities(countries, balances, () => 1),
       commodities: OIL,
-      isBlocked: () => false,
+      affinity: () => 1,
     });
 
     const us = books.get("US" as CountryId)!.get("oil")!;
@@ -76,7 +76,7 @@ describe("buildReachableBooks", () => {
       balances,
       clearing: clearAllCommodities(["US"] as CountryId[], balances, () => 1),
       commodities: OIL,
-      isBlocked: () => false,
+      affinity: () => 1,
     });
 
     const us = books.get("US" as CountryId)!.get("oil")!;
@@ -93,7 +93,7 @@ describe("buildReachableBooks", () => {
       balances,
       clearing: clearAllCommodities(["US"] as CountryId[], balances, () => 1),
       commodities: OIL,
-      isBlocked: () => false,
+      affinity: () => 1,
     });
     expect(reachableDemandGap(books.get("US" as CountryId)!.get("oil")!)).toBe(0);
   });
@@ -106,7 +106,7 @@ describe("buildReachableBooks", () => {
         balances,
         clearing: clearAllCommodities(["US"] as CountryId[], balances, () => 1),
         commodities: OIL,
-        isBlocked: () => false,
+        affinity: () => 1,
       })
     );
     expect(JSON.parse(JSON.stringify(doc)).US.oil.demand).toBe(2);
@@ -185,5 +185,93 @@ describe("reachableDemandGap — import displacement (ticket #1077 follow-up)", 
       untradedSupply: 0,
     } as unknown as import("./reachableBook").ReachableBookEntry;
     expect(reachableDemandGap(legacy)).toBeCloseTo(1_115_631.43, 2);
+  });
+});
+
+describe("unmetForeignDemand", () => {
+  const countries = ["US", "UK", "FR"] as CountryId[];
+
+  it("gives a net exporter room equal to its gravity share of unserved foreign demand", () => {
+    // FR wants 1000 and makes none. US and UK together can only ship 300, so
+    // 700 of French demand goes unserved and is real room for new capacity.
+    const balances = new Map([
+      ["US" as CountryId, bal([["oil", { supply: 200, demand: 0 }]])],
+      ["UK" as CountryId, bal([["oil", { supply: 100, demand: 0 }]])],
+      ["FR" as CountryId, bal([["oil", { supply: 0, demand: 1000 }]])],
+    ]);
+    const books = buildReachableBooks({
+      countries,
+      balances,
+      clearing: clearAllCommodities(countries, balances, () => 1),
+      commodities: OIL,
+      affinity: () => 1,
+    });
+
+    const us = books.get("US" as CountryId)!.get("oil")!;
+    const uk = books.get("UK" as CountryId)!.get("oil")!;
+
+    // Both export their whole surplus, so the #1077 term is zero for each and
+    // the foreign term is the entire room.
+    expect(reachableDemandGap({ ...us, unmetForeignDemand: 0 })).toBe(0);
+
+    // 700 unserved, split by supply mass 200:100 with affinity flat.
+    expect(us.unmetForeignDemand).toBeCloseTo(700 * (200 / 300), 6);
+    expect(uk.unmetForeignDemand).toBeCloseTo(700 * (100 / 300), 6);
+    // The world never sees more room than there is unserved demand.
+    expect(us.unmetForeignDemand! + uk.unmetForeignDemand!).toBeCloseTo(700, 6);
+  });
+
+  it("gives an embargoed exporter no share of demand it cannot reach", () => {
+    const balances = new Map([
+      ["US" as CountryId, bal([["oil", { supply: 200, demand: 0 }]])],
+      ["UK" as CountryId, bal([["oil", { supply: 100, demand: 0 }]])],
+      ["FR" as CountryId, bal([["oil", { supply: 0, demand: 1000 }]])],
+    ]);
+    const books = buildReachableBooks({
+      countries,
+      balances,
+      clearing: clearAllCommodities(countries, balances, (_c, e) => (e === "US" ? 0 : 1)),
+      commodities: OIL,
+      // The US cannot ship to anyone; the UK takes the whole unserved pool.
+      affinity: (_c, exporter) => (exporter === "US" ? 0 : 1),
+    });
+
+    expect(books.get("US" as CountryId)!.get("oil")!.unmetForeignDemand).toBe(0);
+    expect(books.get("UK" as CountryId)!.get("oil")!.unmetForeignDemand).toBeGreaterThan(0);
+  });
+
+  it("gives no foreign room when every deficit already cleared", () => {
+    const balances = new Map([
+      ["US" as CountryId, bal([["oil", { supply: 1000, demand: 0 }]])],
+      ["UK" as CountryId, bal([["oil", { supply: 0, demand: 100 }]])],
+      ["FR" as CountryId, bal([["oil", { supply: 0, demand: 100 }]])],
+    ]);
+    const books = buildReachableBooks({
+      countries,
+      balances,
+      clearing: clearAllCommodities(countries, balances, () => 1),
+      commodities: OIL,
+      affinity: () => 1,
+    });
+
+    expect(books.get("US" as CountryId)!.get("oil")!.unmetForeignDemand).toBeCloseTo(0, 6);
+  });
+
+  it("gives a country producing none of the commodity no export share", () => {
+    const balances = new Map([
+      ["US" as CountryId, bal([["oil", { supply: 200, demand: 0 }]])],
+      ["UK" as CountryId, bal([["oil", { supply: 0, demand: 0 }]])],
+      ["FR" as CountryId, bal([["oil", { supply: 0, demand: 1000 }]])],
+    ]);
+    const books = buildReachableBooks({
+      countries,
+      balances,
+      clearing: clearAllCommodities(countries, balances, () => 1),
+      commodities: OIL,
+      affinity: () => 1,
+    });
+
+    expect(books.get("UK" as CountryId)!.get("oil")!.unmetForeignDemand).toBe(0);
+    expect(books.get("US" as CountryId)!.get("oil")!.unmetForeignDemand).toBeCloseTo(800, 6);
   });
 });
