@@ -426,6 +426,35 @@ describe("clearCommodityMarket — contracted pre-pass (supply agreements)", () 
     const sold = clearCommodityMarket(1000, sellers, undefined, new Map([["s", 999]]));
     expect(sold.get("s")).toBeCloseTo(1, 6); // can't sell more than it has
   });
+
+  /**
+   * Ticket #1139, pinned rather than fixed. A contract is ALSO capped by this
+   * book's total demand, so it under-delivers in a thin market and the supplier
+   * sees only an unexplained low fill. The propose route caps volumeCap against
+   * the supplier's own plant capacity and nothing on the demand side, so a
+   * contract that cannot be delivered is signable today.
+   *
+   * Whether that is right is a product decision about what a contract MEANS.
+   * This test exists so the behaviour is deliberate: if it starts failing,
+   * someone changed contract semantics and should say so.
+   */
+  it("caps a contract at the book's total demand, so a thin market under-delivers", () => {
+    // The reported shape: 16k/day of freight against a 13k agreement, in a book
+    // that only wants 6.4k in total.
+    const sellers = [{ id: "supplier", units: 16_000, posture: 0 }];
+    const sold = clearCommodityMarket(6_400, sellers, undefined, new Map([["supplier", 13_000]]));
+    // 6,400 of 16,000 clears: the 40% the reporter saw, not the 81% a delivered
+    // 13k contract would have produced.
+    expect(sold.get("supplier")).toBeCloseTo(0.4, 6);
+  });
+
+  it("delivers a contract in full when the book has demand for it", () => {
+    // The reporter's own control case: a 2k agreement against 3,271 of output
+    // cleared at 100%.
+    const sellers = [{ id: "supplier", units: 3_271, posture: 0 }];
+    const sold = clearCommodityMarket(10_000, sellers, undefined, new Map([["supplier", 2_000]]));
+    expect(sold.get("supplier")).toBeCloseTo(1, 6);
+  });
 });
 
 describe("computeClearingFactors — supply-agreement settlement + exclusivity", () => {

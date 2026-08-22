@@ -11,11 +11,13 @@ import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import {
   fxRateForCorpFromMap,
+  fxRateForSectorHostFromMap,
   loadFxRatesByCurrency,
   resolveCorpLiquidCurrencyCode,
+  resolveSectorHostCurrencyCode,
   type CorpCapitalCurrencyInfo,
 } from "@/lib/currency/corporationCapital";
-import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
+import { readCorpEconomicAnchor, writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
 
 const PAGE_SIZE = 15;
 
@@ -168,14 +170,26 @@ export async function GET(request: Request) {
       });
     }
 
-    const revenueByCorp = new Map<string, number>();
+    // ─── Convert each sector at its OWN host rate (#1161) ───────────────────
+    //
+    // `corporateSectors.revenue` is stored in the SECTOR's host currency, not
+    // the corp's (see the docblock on `corpDailyGrossRevenueLocal`, ticket
+    // #1118). Converting it at the corp's rate reads a foreign sector's local
+    // figure as if it were already in the corp's money, so one sector in a
+    // weak-currency country inflated a corp's revenue by whatever the two
+    // currencies differ by — and the ranking is built on that number. Reported
+    // as "people with one foreign sector in like bulgaria talking about how
+    // they have the biggest corp".
     const revenueAnchorByCorp = new Map<string, number>();
     const ownedRevenueAnchorByState = new Map<string, number>();
     for (const sec of sectorsInScope) {
       const id = sec.corporationId.toString();
-      revenueByCorp.set(id, (revenueByCorp.get(id) ?? 0) + sec.revenue);
-      const fx = fxByCorpId.get(id);
-      const revenueAnchor = readCorpEconomicAnchor(sec.revenue, fx?.code, fx?.rate ?? 1);
+      const corp = corpMap.get(id);
+      const revenueAnchor = readCorpEconomicAnchor(
+        sec.revenue,
+        resolveSectorHostCurrencyCode(sec, corp),
+        fxRateForSectorHostFromMap(sec, corp, fxByCurrency)
+      );
       revenueAnchorByCorp.set(id, (revenueAnchorByCorp.get(id) ?? 0) + revenueAnchor);
       ownedRevenueAnchorByState.set(
         sec.stateId,
@@ -199,11 +213,13 @@ export async function GET(request: Request) {
     const companies: Row[] = [];
     let totalOwnedRevenue = 0;
 
-    for (const [corpId, revenue] of revenueByCorp) {
-      const raw = Math.round(revenue);
+    for (const [corpId, revenueAnchor] of revenueAnchorByCorp) {
       const corp = corpMap.get(corpId);
-      const revenueAnchor = revenueAnchorByCorp.get(corpId) ?? 0;
       totalOwnedRevenue += revenueAnchor;
+      // The displayed figure is the anchor restated in the corp's OWN currency.
+      // It used to be a bare sum of per-sector amounts in whatever currency
+      // each sector happened to be stored in, which is not a quantity.
+      const corpFx = fxByCorpId.get(corpId);
       companies.push({
         corporationId: corpId,
         corporationName: corp?.name ?? "Unknown",
@@ -211,7 +227,7 @@ export async function GET(request: Request) {
         brandColor: corp?.brandColor ?? null,
         countryId: corp?.countryId ?? null,
         liquidCurrencyCode: resolveCorpLiquidCurrencyCode(corp) ?? null,
-        revenue: raw,
+        revenue: Math.round(writeCorpEconomicLocal(revenueAnchor, corpFx?.code, corpFx?.rate ?? 1)),
         // Placeholder — recalculated below once totalOwnedRevenue is known.
         revenueAnchor: Math.round(revenueAnchor),
         marketSharePercent: 0,

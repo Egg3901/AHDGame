@@ -13,6 +13,10 @@ import {
 } from "@/lib/internationalOrganizations/service";
 import { votingMembers } from "@/lib/internationalOrganizations/orgMembership";
 import { chargeOrganizationTribute } from "@/lib/internationalOrganizations/tribute";
+import {
+  ORG_TRIBUTE_RATES_ANNUAL,
+  orgTributeRateAnnual,
+} from "@/lib/constants/internationalOrganizations";
 import { getAllCountryAccess } from "@/lib/countryAccess";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
 import { dedupeOrganizationVotes } from "@/lib/internationalOrganizations/voteWrite";
@@ -200,22 +204,52 @@ async function chargeAllOrganizationContributions(
   const access = await getAllCountryAccess(db);
   const orgIds = new Set<string>();
   const votersByOrg = new Map<string, CountryId[]>();
-  const allVoters = new Set<CountryId>();
+  const nonVotersByOrg = new Map<string, CountryId[]>();
+  const allPayers = new Set<CountryId>();
   for (const m of memberships) {
     orgIds.add(m.organizationId);
-    if (access[m.countryId as CountryId]?.enabledForPlayers !== true) continue;
-    const list = votersByOrg.get(m.organizationId) ?? [];
+    const bucket =
+      access[m.countryId as CountryId]?.enabledForPlayers === true ? votersByOrg : nonVotersByOrg;
+    const list = bucket.get(m.organizationId) ?? [];
     list.push(m.countryId as CountryId);
-    votersByOrg.set(m.organizationId, list);
-    allVoters.add(m.countryId as CountryId);
+    bucket.set(m.organizationId, list);
+    allPayers.add(m.countryId as CountryId);
   }
 
-  const gdpByCountry = await loadUsdGdpByCountry(db, [...allVoters]);
+  const gdpByCountry = await loadUsdGdpByCountry(db, [...allPayers]);
+  // Cheapest gate first, exactly as `chargeOrganizationTribute` does it: only
+  // organisations named in the tribute table can levy it at all, so a world
+  // with none never pays for the preset round-trip.
+  let presetPromise: Promise<string> | null = null;
+  const leviesTributeFor = async (orgId: string): Promise<boolean> => {
+    if (!(orgId in ORG_TRIBUTE_RATES_ANNUAL)) return false;
+    presetPromise ??= loadWorldPreset(db);
+    return orgTributeRateAnnual(orgId, await presetPromise) > 0;
+  };
+
   let duesCharged = 0;
   let tributeCharged = 0;
   for (const orgId of orgIds) {
+    // ─── Every member contributes exactly once (#1156) ──────────────────────
+    //
+    // `orgMembership` partitions the roll into voters (dues) and everyone else
+    // (tribute), and its docblock promises "nobody is billed twice and nobody
+    // is billed not at all". The second half was not true: tribute exists only
+    // for the two armed blocs, so in EVERY other organisation the non-voting
+    // members were assessed nothing at all and sat on the roll for free. That
+    // is what players saw as members who never pay dues.
+    //
+    // Where the organisation levies tribute the partition stands untouched.
+    // Where it does not, non-voting members are assessed ordinary dues like
+    // anyone else — they are still members, they still have an economy, and
+    // there is no second instrument to catch them.
+    const duesPayers = (await leviesTributeFor(orgId))
+      ? (votersByOrg.get(orgId) ?? [])
+      : [...(votersByOrg.get(orgId) ?? []), ...(nonVotersByOrg.get(orgId) ?? [])];
     // gdpByCountry is USD *millions*; treasuries/fund hold absolute USD, so scale up.
-    const memberGdpUsd = (votersByOrg.get(orgId) ?? []).map((c) => ({
+    // A member absent from the map has no economic data, which is not a GDP of
+    // zero — `memberDueUsd` skips it rather than billing nothing silently.
+    const memberGdpUsd = duesPayers.map((c) => ({
       countryId: c,
       gdpUsd: (gdpByCountry.get(c) ?? 0) * GDP_MILLIONS_TO_USD,
     }));

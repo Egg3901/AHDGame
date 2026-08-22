@@ -42,6 +42,12 @@ vi.mock("@/lib/internationalOrganizations/founding", () => ({
 }));
 
 vi.mock("@/lib/countryAccess", () => ({ getAllCountryAccess: vi.fn() }));
+// The dues sweep resolves the world preset to decide whether an organisation
+// levies tribute; these cases hand in a bare `{}` for the db.
+vi.mock("@/lib/currency/gdpAnchorRate", () => ({
+  loadWorldPreset: vi.fn().mockResolvedValue("1953-default"),
+  getGdpAnchorRate: vi.fn().mockReturnValue(1),
+}));
 
 // The two money paths are asserted through their own modules; the phase's
 // contract here is which members it hands to which of them.
@@ -710,9 +716,9 @@ describe("internationalOrganizationsPhase", () => {
       updateOne: vi.fn(),
       find: vi.fn().mockReturnValue({
         toArray: vi.fn().mockResolvedValue([
-          { organizationId: "nato", countryId: "US" },
-          { organizationId: "nato", countryId: "TR" },
-          { organizationId: "nato", countryId: "JO" },
+          { organizationId: "NATO", countryId: "US" },
+          { organizationId: "NATO", countryId: "TR" },
+          { organizationId: "NATO", countryId: "JO" },
         ]),
       }),
     } as never);
@@ -720,7 +726,7 @@ describe("internationalOrganizationsPhase", () => {
     await processInternationalOrganizationsTurn({} as Db, 10);
 
     // Dues see only the enabled member — TR and JO are never in this list.
-    expect(fund.chargeOrganizationDues).toHaveBeenCalledWith(expect.anything(), "nato", [
+    expect(fund.chargeOrganizationDues).toHaveBeenCalledWith(expect.anything(), "NATO", [
       expect.objectContaining({ countryId: "US" }),
     ]);
     // Tribute is asked for the same org exactly once, and picks its own payers
@@ -728,7 +734,7 @@ describe("internationalOrganizationsPhase", () => {
     expect(tribute.chargeOrganizationTribute).toHaveBeenCalledTimes(1);
     expect(tribute.chargeOrganizationTribute).toHaveBeenCalledWith(
       expect.anything(),
-      "nato",
+      "NATO",
       expect.anything()
     );
   });
@@ -753,7 +759,7 @@ describe("internationalOrganizationsPhase", () => {
     vi.mocked(collections.getOrganizationMembershipsCollection).mockResolvedValue({
       updateOne: vi.fn(),
       find: vi.fn().mockReturnValue({
-        toArray: vi.fn().mockResolvedValue([{ organizationId: "nato", countryId: "JO" }]),
+        toArray: vi.fn().mockResolvedValue([{ organizationId: "NATO", countryId: "JO" }]),
       }),
     } as never);
 
@@ -762,5 +768,48 @@ describe("internationalOrganizationsPhase", () => {
     expect(fund.chargeOrganizationDues).not.toHaveBeenCalled();
     expect(result.tributeCharged).toBe(1);
     expect(result.duesCharged).toBe(0);
+  });
+
+  /**
+   * Ticket #1156. Tribute exists only for the two armed blocs, so in every
+   * other organisation the non-voting members were assessed nothing at all and
+   * sat on the roll for free. Players saw them as members who never pay dues.
+   */
+  it("bills a non-voting member dues when its organisation levies no tribute", async () => {
+    const collections = await import("@/lib/db/collections");
+    const fund = await import("@/lib/internationalOrganizations/organizationFund");
+    const tribute = await import("@/lib/internationalOrganizations/tribute");
+    const { getAllCountryAccess } = await import("@/lib/countryAccess");
+
+    vi.mocked(getAllCountryAccess).mockResolvedValue(accessSilencing("JO") as never);
+    vi.mocked(fund.chargeOrganizationDues).mockResolvedValue(0);
+    vi.mocked(tribute.chargeOrganizationTribute).mockResolvedValue({
+      collectedLocal: 0,
+      payers: 0,
+      minted: 0,
+    });
+
+    stubQuietCollections(collections);
+    vi.mocked(collections.getOrganizationMembershipsCollection).mockResolvedValue({
+      updateOne: vi.fn(),
+      find: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { organizationId: "UN", countryId: "US" },
+          { organizationId: "UN", countryId: "JO" },
+        ]),
+      }),
+    } as never);
+
+    await processInternationalOrganizationsTurn({} as Db, 10);
+
+    // The UN levies no tribute, so BOTH members are assessed dues.
+    expect(fund.chargeOrganizationDues).toHaveBeenCalledWith(
+      expect.anything(),
+      "UN",
+      expect.arrayContaining([
+        expect.objectContaining({ countryId: "US" }),
+        expect.objectContaining({ countryId: "JO" }),
+      ])
+    );
   });
 });

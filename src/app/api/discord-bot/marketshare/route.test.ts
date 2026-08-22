@@ -119,4 +119,88 @@ describe("GET /api/discord-bot/marketshare", () => {
       marketSharePercent: 40,
     });
   });
+
+  it("converts a foreign sector at ITS host rate, not the owner's (ticket #1161)", async () => {
+    // corporateSectors.revenue is stored in the SECTOR's host currency. Reading
+    // a Tokyo sector's yen figure at its US owner's rate treats 9.1M JPY as
+    // 9.1M USD, so one foreign sector in a weak-currency country made a small
+    // corp outrank a genuinely larger one.
+    const usCorpId = new ObjectId();
+    const rivalId = new ObjectId();
+
+    db.collectionMocks.states = db.collection("states");
+    db.collectionMocks.states.find.mockReturnValue(
+      makeCursor([
+        { _id: "JP-13", name: "Tokyo", gdp: 1_000_000, countryId: "JP" },
+        { _id: "US-CA", name: "California", gdp: 1_000_000, countryId: "US" },
+      ])
+    );
+
+    db.collectionMocks.corporateSectors = db.collection("corporateSectors");
+    db.collectionMocks.corporateSectors.find.mockReturnValue(
+      makeCursor([
+        // A US corp's Tokyo sector: 9.1M yen, worth 100k anchor.
+        {
+          _id: new ObjectId(),
+          corporationId: usCorpId,
+          stateId: "JP-13",
+          countryId: "JP",
+          sectorType: "defense",
+          revenue: 9_100_000,
+        },
+        // A rival with a genuinely larger US book.
+        {
+          _id: new ObjectId(),
+          corporationId: rivalId,
+          stateId: "US-CA",
+          countryId: "US",
+          sectorType: "defense",
+          revenue: 500_000,
+        },
+      ])
+    );
+
+    db.collectionMocks.unownedSectors = db.collection("unownedSectors");
+    db.collectionMocks.unownedSectors.find.mockReturnValue(makeCursor([]));
+
+    db.collectionMocks.exchangeRates = db.collection("exchangeRates");
+    db.collectionMocks.exchangeRates.find.mockReturnValue(
+      makeCursor([
+        { currencyCode: "JPY", rate: 91 },
+        { currencyCode: "USD", rate: 1 },
+      ])
+    );
+
+    db.collectionMocks.corporations = db.collection("corporations");
+    db.collectionMocks.corporations.find.mockReturnValue(
+      makeCursor([
+        {
+          _id: usCorpId,
+          name: "Bulgaria Holdings",
+          sequentialId: 1,
+          countryId: "US",
+          liquidCurrencyCode: "USD",
+        },
+        {
+          _id: rivalId,
+          name: "Real Giant",
+          sequentialId: 2,
+          countryId: "US",
+          liquidCurrencyCode: "USD",
+        },
+      ])
+    );
+
+    const request = new Request("https://example.com/api/discord-bot/marketshare?type=defense");
+    const { GET } = await import("./route");
+    const json = await (await GET(request)).json();
+
+    // 100k anchor, not 9.1M: the yen figure is read at the yen rate.
+    const holdings = json.companies.find(
+      (c: { corporationName: string }) => c.corporationName === "Bulgaria Holdings"
+    );
+    expect(holdings.revenueAnchor).toBe(100_000);
+    // And the genuinely larger corp ranks first, which is the reported symptom.
+    expect(json.companies[0].corporationName).toBe("Real Giant");
+  });
 });

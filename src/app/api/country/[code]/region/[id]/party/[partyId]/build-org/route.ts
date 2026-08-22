@@ -288,13 +288,19 @@ export async function POST(request: Request, { params }: RouteParams) {
   const eligibility = resolveSpenderScopeEligibility(spenderParty, spenderRow, authUser);
   if (psPool === "national" && !eligibility.national) {
     return NextResponse.json(
-      { error: "You are not authorized to spend from the national PS pool." },
+      {
+        error:
+          "Spending the national pool is limited to the party's national officers. You need to be its national chair, vice chair or campaigner. Switch to the state pool, or ask a party leader to appoint you.",
+      },
       { status: 403 }
     );
   }
   if (psPool === "state" && !eligibility.state) {
     return NextResponse.json(
-      { error: "You are not authorized to spend from the state PS pool." },
+      {
+        error:
+          "Spending a state pool is limited to that state's party officers. You need to be its state chair, vice chair or campaigner. Ask a party leader to appoint you from the party's management page.",
+      },
       { status: 403 }
     );
   }

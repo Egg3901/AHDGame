@@ -29,6 +29,37 @@ import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 // compounding the old $inc approach caused.
 const AUTO_SEED_MAX_BOOST = 0.06;
 
+/**
+ * Owned plant capacity per `state:sectorType` bucket, in the SAME units
+ * `unownedSectors.headroomUnits` is denominated in.
+ *
+ * Under plants `capitalStock` IS a sector's capacity in output units/day, which
+ * is exactly the basis `computeUnownedHeadroomUnits` converts pool revenue onto
+ * (both route through `impliedOutputUnits`). So the two are directly comparable
+ * and `headroomUnits >= ownedUnits` means "more of this market is still
+ * claimable than anyone has actually built".
+ */
+async function loadOwnedCapacityByBucket(db: Db): Promise<Map<string, number>> {
+  const rows = await db
+    .collection("corporateSectors")
+    .aggregate<{ _id: { stateId: string; sectorType: string }; units: number }>([
+      {
+        $group: {
+          _id: { stateId: "$stateId", sectorType: "$sectorType" },
+          units: { $sum: { $ifNull: ["$capitalStock", 0] } },
+        },
+      },
+    ])
+    .toArray();
+  const byBucket = new Map<string, number>();
+  for (const row of rows) {
+    if (!row?._id?.stateId || !row._id.sectorType) continue;
+    const units = Number.isFinite(row.units) ? Math.max(0, row.units) : 0;
+    byBucket.set(bucketKey(row._id.stateId, row._id.sectorType), units);
+  }
+  return byBucket;
+}
+
 export async function processAutoSectorSeed(
   db: Db,
   currentTurn: number,
@@ -46,9 +77,12 @@ export async function processAutoSectorSeed(
   const eraUnitScale = await loadWorldEraUnitScale(db);
   const ranking = await computeSectorDistressRanking(db);
   const boostMap = distressRankingToBoostMap(ranking, AUTO_SEED_MAX_BOOST);
-  const [redirectBuckets, nationalCorpIds] = await Promise.all([
+  const [redirectBuckets, nationalCorpIds, ownedCapacityByBucket] = await Promise.all([
     loadSeedProtectedBucketKeys(db),
     loadNationalCorpIds(db),
+    // Only needed to gate the boost under plants; below plants the pool leads in
+    // ₳ and there is nothing unit-denominated to compare against.
+    plantsEnabled ? loadOwnedCapacityByBucket(db) : Promise.resolve(new Map<string, number>()),
   ]);
   const natCorpObjectIds = [...nationalCorpIds].map((id) => new ObjectId(id));
 
@@ -87,6 +121,33 @@ export async function processAutoSectorSeed(
       .toArray();
     const openIds = sectorDocs
       .filter((u) => !redirectBuckets.has(bucketKey(u.stateId, u.sectorType)))
+      // ─── Cap the boost against actually-built capacity (#1145) ────────────
+      //
+      // The boost is a $multiply, so it compounds every year a commodity stays
+      // distressed. Nothing else grows the pool and only founding/building draw
+      // it down, so a market nobody is building into inflated indefinitely —
+      // and "Unowned 60.6%" on a market that is fully built out is precisely
+      // what players hit when the expand gate (a real demand gap) then refuses
+      // the build.
+      //
+      // Distress relief is meant to open room in markets that are genuinely
+      // thin. A bucket already holding more claimable headroom than the world
+      // has built plant is not thin, so it is skipped. Plants-gated: below
+      // plants the pool leads in ₳ and there is no comparable unit figure, so
+      // that path is byte-identical to before.
+      .filter((u) => {
+        if (!plantsEnabled) return true;
+        const owned = ownedCapacityByBucket.get(bucketKey(u.stateId, u.sectorType)) ?? 0;
+        const headroom =
+          typeof u.headroomUnits === "number" && Number.isFinite(u.headroomUnits)
+            ? u.headroomUnits
+            : computeUnownedHeadroomUnits(
+                u.sectorType as CorporationType,
+                u.revenue ?? 0,
+                eraUnitScale
+              );
+        return headroom < owned;
+      })
       .map((u) => u._id);
     if (openIds.length > 0) {
       // ONE shared pipeline with the admin `seed-unowned` route: which leg leads
