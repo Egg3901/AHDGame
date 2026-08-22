@@ -64,6 +64,10 @@ import type {
   ProposalVoteRecord,
 } from "@/lib/db/types/internationalOrganization";
 
+function countryName(countryId: string): string {
+  return COUNTRY_CONFIGS[countryId as CountryId]?.name ?? countryId;
+}
+
 /**
  * International-organizations turn phase.
  *
@@ -416,7 +420,7 @@ async function resolveExpiredMembershipProposals(db: Db, currentTurn: number): P
         db,
         proposingCountryId,
         currentTurn,
-        `${COUNTRY_CONFIGS[proposingCountryId].name} admitted to ${proposal.organizationId}.`,
+        `${countryName(proposingCountryId)} admitted to ${proposal.organizationId}.`,
         { organizationId: proposal.organizationId }
       );
     } else {
@@ -434,7 +438,7 @@ async function resolveExpiredMembershipProposals(db: Db, currentTurn: number): P
         db,
         proposingCountryId,
         currentTurn,
-        `${COUNTRY_CONFIGS[proposingCountryId].name}'s application to ${proposal.organizationId} was rejected.`,
+        `${countryName(proposingCountryId)}'s application to ${proposal.organizationId} was rejected.`,
         { organizationId: proposal.organizationId }
       );
     }
@@ -711,7 +715,7 @@ async function applyResolutionEffect(
           db,
           recipient,
           currentTurn,
-          `${resolution.organizationId} aid to ${COUNTRY_CONFIGS[recipient].name} could not be disbursed — the fund was short.`,
+          `${resolution.organizationId} aid to ${countryName(recipient)} could not be disbursed — the fund was short.`,
           { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
         );
       }
@@ -758,7 +762,7 @@ async function applyResolutionEffect(
             db,
             countryId,
             currentTurn,
-            `${COUNTRY_CONFIGS[countryId].name} could not act on ${resolution.organizationId}'s entry resolution: no legislature.`,
+            `${countryName(countryId)} could not act on ${resolution.organizationId}'s entry resolution: no legislature.`,
             { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
           );
           continue;
@@ -771,7 +775,7 @@ async function applyResolutionEffect(
             db,
             countryId,
             currentTurn,
-            `${COUNTRY_CONFIGS[countryId].name} is already fighting on the other side of ${conflict.name}.`,
+            `${countryName(countryId)} is already fighting on the other side of ${conflict.name}.`,
             { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
           );
           continue;
@@ -785,7 +789,7 @@ async function applyResolutionEffect(
             db,
             countryId,
             currentTurn,
-            `${COUNTRY_CONFIGS[countryId].name} could not act on ${resolution.organizationId}'s entry resolution: no head of government.`,
+            `${countryName(countryId)} could not act on ${resolution.organizationId}'s entry resolution: no head of government.`,
             { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
           );
           continue;
@@ -884,7 +888,7 @@ async function applyResolutionEffect(
         db,
         subject,
         currentTurn,
-        `${resolution.organizationId} ${verb} ${COUNTRY_CONFIGS[subject].name}.`,
+        `${resolution.organizationId} ${verb} ${countryName(subject)}.`,
         { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
       );
       return;
