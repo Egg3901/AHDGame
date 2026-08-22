@@ -65,6 +65,10 @@ vi.mock("@/lib/internationalOrganizations/tribute", () => ({
   chargeOrganizationTribute: vi.fn().mockResolvedValue({ collectedLocal: 0, payers: 0, minted: 0 }),
 }));
 
+vi.mock("@/lib/internationalOrganizations/aid", () => ({
+  payOrganizationAid: vi.fn().mockResolvedValue(false),
+}));
+
 // Admission writes memberships and clears withdrawal tombstones across three
 // collections; the resolver's contract here is that it calls it, not how it writes.
 vi.mock("@/lib/internationalOrganizations/joinApplication", () => ({
@@ -466,6 +470,66 @@ describe("internationalOrganizationsPhase", () => {
       "BR",
       10,
       expect.stringContaining("condemned"),
+      expect.anything()
+    );
+  });
+
+  it("records an underfunded aid package for a non-country member without crashing", async () => {
+    const legislationUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+    const collections = await import("@/lib/db/collections");
+    const service = await import("@/lib/internationalOrganizations/service");
+    const { getAllCountryAccess } = await import("@/lib/countryAccess");
+
+    vi.mocked(getAllCountryAccess).mockResolvedValue(accessSilencing("JO") as never);
+    vi.mocked(collections.getOrganizationProposalsCollection).mockResolvedValue({
+      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      updateOne: vi.fn(),
+    } as never);
+    vi.mocked(collections.getOrganizationMembershipsCollection).mockResolvedValue({
+      updateOne: vi.fn(),
+      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    } as never);
+    vi.mocked(collections.getOrganizationLegislationCollection).mockResolvedValue({
+      find: vi
+        .fn()
+        .mockReturnValueOnce({
+          toArray: vi.fn().mockResolvedValue([
+            {
+              _id: new ObjectId("507f1f77bcf86cd7994390e1"),
+              organizationId: "UN",
+              type: "aid_package",
+              aidRecipientCountryId: "JO",
+              aidAmount: 1_000,
+              parties: [],
+              proposingCountryId: "US",
+              proposedByCharacterId: new ObjectId("507f1f77bcf86cd7994390e2"),
+              status: "pending",
+              closesOnTurn: 10,
+              votes: [{ countryId: "US", vote: "yes" }],
+            },
+          ]),
+        })
+        .mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      updateOne: legislationUpdateOne,
+      updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+    } as never);
+    vi.mocked(collections.getOrganizationLeadershipElectionsCollection).mockResolvedValue({
+      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      updateOne: vi.fn(),
+    } as never);
+    vi.mocked(collections.getOrganizationLeadershipCollection).mockResolvedValue({
+      updateOne: vi.fn(),
+    } as never);
+    vi.mocked(service.getMembers).mockResolvedValue(["US", "JO"]);
+
+    const result = await processInternationalOrganizationsTurn(stubDb(), 10);
+
+    expect(result.legislationResolved).toBe(1);
+    expect(service.recordOrgHistoryEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      "JO",
+      10,
+      "UN aid to JO could not be disbursed — the fund was short.",
       expect.anything()
     );
   });
