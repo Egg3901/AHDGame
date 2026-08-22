@@ -242,11 +242,29 @@ export function serializeReachableBooks(books: ReachableBooks): ReachableBooksDo
  *
  * `domesticDemand` is reconstructed for books persisted before this field
  * existed, so the first turn after deploy is not a cliff.
+ *
+ * That covers the IMPORTER side only. The SAME cancellation recurs on the other
+ * side, and ticket #1077 left it standing: `clearCommodity` scales the exporter
+ * row to exactly `surplus = supply - domesticDemand`, so
+ * `domesticDemand + exports - supply` is identically zero for every net
+ * exporter no matter how badly the world wants the goods. Measured on prod at
+ * turn 319: 301 of 310 exporter books reported room for 0, against 0 of 308
+ * importer books, which is why a US manufacturing corp was told every one of
+ * its 51 home states was full (ticket #1162).
+ *
+ * `unmetForeignDemand` supplies the missing term — this country's gravity share
+ * of deficit nobody is serving. It is added, not substituted: a net importer's
+ * displaceable imports and its share of unserved foreign demand are different
+ * buyers, so both are real room. Absent on books persisted before the field
+ * existed, where it heals to 0 and the old value stands.
  */
 export function reachableDemandGap(book: ReachableBookEntry | undefined): number {
   if (!book) return 0;
   const domestic = domesticDemandOf(book);
-  return Math.max(0, domestic + book.exports - book.supply);
+  const displaceable = Math.max(0, domestic + book.exports - book.supply);
+  const foreign = book.unmetForeignDemand;
+  const reachableForeign = typeof foreign === "number" && Number.isFinite(foreign) ? foreign : 0;
+  return displaceable + Math.max(0, reachableForeign);
 }
 
 /**

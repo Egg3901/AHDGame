@@ -188,6 +188,42 @@ describe("reachableDemandGap — import displacement (ticket #1077 follow-up)", 
   });
 });
 
+describe("reachableDemandGap with foreign demand (ticket #1162)", () => {
+  const base = {
+    supply: 1000,
+    demand: 1000,
+    domesticDemand: 400,
+    imports: 0,
+    exports: 600,
+    blockedSupply: 0,
+    untradedSupply: 0,
+  };
+
+  it("no longer returns zero for a net exporter that can reach unserved demand", () => {
+    // 400 + 600 - 1000 = 0 by construction, so the foreign term is all the room.
+    expect(reachableDemandGap({ ...base, unmetForeignDemand: 250 })).toBe(250);
+  });
+
+  it("still returns zero for a net exporter when the world is genuinely served", () => {
+    expect(reachableDemandGap({ ...base, unmetForeignDemand: 0 })).toBe(0);
+  });
+
+  it("adds foreign room on top of displaceable imports for a net importer", () => {
+    const importer = { ...base, supply: 100, domesticDemand: 180, imports: 80, exports: 0 };
+    // 80 displaceable imports plus 20 of unserved foreign demand.
+    expect(reachableDemandGap({ ...importer, unmetForeignDemand: 20 })).toBeCloseTo(100, 6);
+  });
+
+  it("heals a book persisted before the field existed", () => {
+    expect(reachableDemandGap(base)).toBe(0);
+  });
+
+  it("ignores a non-finite foreign term rather than poisoning the gap", () => {
+    expect(reachableDemandGap({ ...base, unmetForeignDemand: Number.NaN })).toBe(0);
+    expect(reachableDemandGap({ ...base, unmetForeignDemand: Number.POSITIVE_INFINITY })).toBe(0);
+  });
+});
+
 describe("unmetForeignDemand", () => {
   const countries = ["US", "UK", "FR"] as CountryId[];
 
