@@ -216,10 +216,10 @@ function SecurityAlliance({ org }: { org: OrgSummary }) {
                   <div className="absolute inset-y-0 left-1/2 w-px bg-card-border" />
                 </div>
                 <span className="w-14 shrink-0 text-right text-[12px] tabular-nums text-foreground">
-                  {has ? `${pct.toFixed(1)}%` : "—"}
+                  {has ? `${pct.toFixed(1)}%` : "n/a"}
                 </span>
-                {has &&
-                  (met ? (
+                {has ? (
+                  met ? (
                     <Badge color="success" variant="subtle">
                       Met
                     </Badge>
@@ -227,7 +227,12 @@ function SecurityAlliance({ org }: { org: OrgSummary }) {
                     <Badge color="warning" variant="subtle">
                       Below
                     </Badge>
-                  ))}
+                  )
+                ) : (
+                  <Badge color="default" variant="subtle">
+                    No budget
+                  </Badge>
+                )}
               </div>
             );
           })}

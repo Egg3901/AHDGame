@@ -179,7 +179,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       // Find states with unowned revenue pools
       const unownedIds = await db
         .collection<UnownedSector>("unownedSectors")
-        .find({ sectorType, revenue: { $gt: 0 } })
+        // A plants market can be a valid greenfield build even before it earns
+        // revenue. Filtering those rows out made zero-revenue markets vanish
+        // from the only UI that can found their first plant.
+        .find(plantsMode ? { sectorType } : { sectorType, revenue: { $gt: 0 } })
         .project<{ stateId: string }>({ stateId: 1 })
         .toArray();
 

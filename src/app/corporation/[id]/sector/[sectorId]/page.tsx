@@ -872,6 +872,7 @@ export default function SectorDetailPage() {
                 lowFillTurns={plants.truth.lowFillTurns ?? 0}
                 soldFraction={plants.truth.soldFraction}
                 deliveryLimitedFraction={plants.truth.deliveryLimitedFraction ?? 0}
+                deliveryLimitedFreightClass={plants.truth.deliveryLimitedFreightClass ?? null}
                 isCeo={isCeo}
               />
             )}

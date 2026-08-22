@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import { getAuthUser } from "@/lib/auth";
@@ -29,8 +30,38 @@ export async function GET(_request: Request, { params }: RouteParams) {
       .find({ $or: [{ supplierCorpId: corpId }, { buyerCorpId: corpId }] })
       .sort({ updatedAt: -1 })
       .toArray();
+    const counterpartyIds = [
+      ...new Set(
+        agreements.flatMap((agreement) => [
+          agreement.supplierCorpId.toString(),
+          agreement.buyerCorpId.toString(),
+        ])
+      ),
+    ];
+    const counterparties =
+      counterpartyIds.length > 0
+        ? await db
+            .collection("corporations")
+            .find({
+              _id: { $in: counterpartyIds.map((counterpartyId) => new ObjectId(counterpartyId)) },
+            })
+            .project<{ _id: ObjectId; name: string; ticker?: string | null }>({
+              name: 1,
+              ticker: 1,
+            })
+            .toArray()
+        : [];
+    const counterpartyById = new Map(
+      counterparties.map((counterparty) => [counterparty._id.toString(), counterparty])
+    );
     return NextResponse.json({
       agreements: agreements.map((a) => ({
+        supplierCorpName:
+          counterpartyById.get(a.supplierCorpId.toString())?.name ?? "Unknown corporation",
+        supplierCorpTicker: counterpartyById.get(a.supplierCorpId.toString())?.ticker ?? null,
+        buyerCorpName:
+          counterpartyById.get(a.buyerCorpId.toString())?.name ?? "Unknown corporation",
+        buyerCorpTicker: counterpartyById.get(a.buyerCorpId.toString())?.ticker ?? null,
         ...a,
         _id: a._id?.toString(),
         supplierCorpId: a.supplierCorpId.toString(),

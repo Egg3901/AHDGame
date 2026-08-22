@@ -165,6 +165,8 @@ describe("redaction covers the plants-tier physical book", () => {
     soldUnits: 1300,
     fillRate: 1300 / 4200,
     fillRateBand: "low",
+    deliveryLimitedFraction: 0.25,
+    deliveryLimitedFreightClass: "special",
     constructionInProgressAnchor: 250_000,
     buildQueueSummary: { orders: 2, unitsOrdered: 800, nextOnlineTurn: 1200, turnsRemaining: 4 },
     mothballed: false,
@@ -178,6 +180,8 @@ describe("redaction covers the plants-tier physical book", () => {
       "soldUnits",
       "fillRate",
       "fillRateBand",
+      "deliveryLimitedFraction",
+      "deliveryLimitedFreightClass",
       "constructionInProgressAnchor",
       "buildQueueSummary",
     ]) {

@@ -20,6 +20,7 @@ import {
   getOrganizationFundsCollection,
   getOrganizationPosturesCollection,
 } from "@/lib/db/collections";
+import { getMacroCountriesCollection } from "@/lib/db/collections/macroCountries";
 import { DEFAULT_ALERT_POSTURE } from "@/lib/constants/orgPosture";
 import type { FederalBudget } from "@/lib/db/types";
 import { getAllCountryAccess } from "@/lib/countryAccess";
@@ -29,6 +30,11 @@ import {
   loadGdpUsdMillionsByEntity,
   loadWorldGdpUsdMillions,
 } from "@/lib/internationalOrganizations/entityGdp";
+import { resolveDefenseLineFrom } from "@/lib/turn/defenseEnvelope";
+import {
+  defenseSharePct,
+  defenseSharePctFromMacroSectors,
+} from "@/lib/internationalOrganizations/defensePledge";
 
 // Re-exported from its own module: `entityGdp` builds on it, and this view
 // builds on `entityGdp`. Kept exported here so existing callers are unaffected.
@@ -79,23 +85,46 @@ export async function loadWorldOrganizationsView(db: Db) {
   const postureByOrg = new Map(postureRows.map((p) => [p.organizationId, p.posture] as const));
 
   // Real defense-spending share per member (security flagship's 2%-of-GDP
-  // pledge). defense% = federal defense outlay / national GDP — both local, so
-  // the exchange rate cancels and no USD normalization is needed.
-  const defensePctByCountry = new Map<CountryId, number>();
+  // pledge). Playable countries: federal defense outlay / national GDP — both
+  // local, so the exchange rate cancels. The outlay uses the same enacted →
+  // baseline cascade as the defense appropriation, so a country whose enacted
+  // line is still empty is not silently unrated. Macro-tier members have no
+  // federalBudget; their defense-sector share of capacity fills the gap.
+  const defensePctByCountry = new Map<string, number>();
   const budgets = await db
     .collection<FederalBudget>("federalBudget")
     .find({ countryId: { $in: [...allMembers] } })
-    .project<{
-      countryId: string;
-      gdp?: number;
-      spending?: { byCategory?: Record<string, number> };
-    }>({ countryId: 1, gdp: 1, "spending.byCategory.defense": 1 })
+    .project<Pick<FederalBudget, "countryId" | "gdp" | "spending" | "baselineSpendingByCategory">>({
+      countryId: 1,
+      gdp: 1,
+      "spending.byCategory.defense": 1,
+      "baselineSpendingByCategory.defense": 1,
+    })
     .toArray();
   for (const b of budgets) {
-    const defense = b.spending?.byCategory?.defense ?? 0;
     const gdp = b.gdp ?? 0;
-    if (gdp > 0 && defense > 0) {
-      defensePctByCountry.set(b.countryId as CountryId, (defense / gdp) * 100);
+    const pct = defenseSharePct(
+      resolveDefenseLineFrom({
+        spending: b.spending,
+        baselineSpendingByCategory: b.baselineSpendingByCategory,
+        gdp,
+      }),
+      gdp
+    );
+    if (pct !== undefined) defensePctByCountry.set(b.countryId, pct);
+  }
+
+  const unratedEntities = [...allEntities].filter((id) => !defensePctByCountry.has(id));
+  if (unratedEntities.length > 0) {
+    const macros = await (
+      await getMacroCountriesCollection(db)
+    )
+      .find({ entityId: { $in: unratedEntities } })
+      .toArray();
+    for (const macro of macros) {
+      if (defensePctByCountry.has(macro.entityId)) continue;
+      const pct = defenseSharePctFromMacroSectors(macro.sectors);
+      if (pct !== undefined) defensePctByCountry.set(macro.entityId, pct);
     }
   }
 
@@ -177,8 +206,8 @@ export async function loadWorldOrganizationsView(db: Db) {
       posture: postureByOrg.get(s.id) ?? DEFAULT_ALERT_POSTURE,
       defensePctByCountry: Object.fromEntries(
         s.members
-          .map((m) => [m.countryId, defensePctByCountry.get(m.countryId as CountryId)] as const)
-          .filter((e): e is [CountryId, number] => e[1] !== undefined)
+          .map((m) => [m.countryId, defensePctByCountry.get(m.countryId)] as const)
+          .filter((e): e is [OrgMemberId, number] => e[1] !== undefined)
       ),
     };
   });

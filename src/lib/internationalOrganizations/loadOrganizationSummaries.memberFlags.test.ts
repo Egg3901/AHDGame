@@ -69,4 +69,11 @@ describe("loadOrganizationSummaries — member vote and country flags", () => {
     const members = await nato();
     expect([...members.keys()].sort()).toEqual(["JO", "TR", "UK"]);
   });
+
+  it("gives roster entities a real flag rather than the white placeholder", async () => {
+    const members = await nato();
+    expect(members.get("UK")?.flagEmoji).toBe("🇬🇧");
+    expect(members.get("TR")?.flagEmoji).toBe("🇹🇷");
+    expect(members.get("JO")?.flagEmoji).toBe("🇯🇴");
+  });
 });
