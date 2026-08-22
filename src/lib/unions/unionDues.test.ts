@@ -6,6 +6,7 @@ import {
   unionMembers,
   UNION_TREASURY_FLOW_SCALE,
   approvalTarget,
+  approvalTargetBreakdown,
   BASE_APPROVAL,
 } from "./unionDues";
 
@@ -51,5 +52,32 @@ describe("approvalTarget political contributions", () => {
     });
     expect(baseline).toBe(BASE_APPROVAL);
     expect(atCap).toBe(BASE_APPROVAL - 5);
+  });
+});
+
+describe("approvalTargetBreakdown", () => {
+  it("explains when service gains are offset by four-percent dues", () => {
+    const breakdown = approvalTargetBreakdown({
+      duesPerWorkerAnnual: 4,
+      annualWage: 100,
+      activeServices: ["healthFund", "training"],
+      politicalContributionPct: 0,
+    });
+
+    expect(breakdown).toEqual({
+      base: 55,
+      servicesBonus: 19,
+      duesPenalty: 20,
+      politicalPenalty: 0,
+      target: 54,
+    });
+    expect(
+      approvalTarget({
+        duesPerWorkerAnnual: 4,
+        annualWage: 100,
+        activeServices: ["healthFund", "training"],
+        politicalContributionPct: 0,
+      })
+    ).toBe(breakdown.target);
   });
 });

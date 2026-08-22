@@ -29,7 +29,7 @@ import { getLiveLowerChamberSeats } from "@/lib/turn/lowerChamberSeats";
 import { ParliamentaryGovernmentActions } from "./components/ParliamentaryGovernmentActions";
 import { ReferendumConsentSection } from "@/components/uk/ReferendumConsentSection";
 import { ExecutiveTabsClient } from "./ExecutiveTabsClient";
-import { turnToLarpDate } from "@/lib/utils/formatters";
+import { formationTurnToLarpDate } from "@/lib/government/formationDate";
 import { fetchImperialPossessive } from "@/lib/imperial";
 import {
   checkAppointmentEligibility,
@@ -489,7 +489,13 @@ export async function ParliamentaryExecutiveHub({ countryId }: { countryId: Coun
             {pmCharacter ? (
               <div className="space-y-3 text-body-sm text-muted">
                 {(govFormation?.formedTurn ?? parlGov?.formedTurn) && (
-                  <p>Formed {turnToLarpDate((govFormation?.formedTurn ?? parlGov!.formedTurn)!)}</p>
+                  <p>
+                    Formed{" "}
+                    {formationTurnToLarpDate((govFormation?.formedTurn ?? parlGov!.formedTurn)!, {
+                      startingYear: executiveGameTime.startingYear,
+                      preIterationTurns: executiveGameTime.preIterationTurns,
+                    })}
+                  </p>
                 )}
                 {(govFormation?.status ?? parlGov?.status) && (
                   <p className="capitalize">
