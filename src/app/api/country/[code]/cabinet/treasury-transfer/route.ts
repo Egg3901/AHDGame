@@ -17,6 +17,7 @@ import {
 import type { CentralBank } from "@/lib/db/types";
 import type { TreasuryTransferRecord } from "@/lib/db/types/centralBank";
 import type { FederalBudget } from "@/lib/db/types/budget";
+import { effectiveBorrowingLimit } from "@/lib/budget/borrowingLimit";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { getGameState } from "@/lib/gameState";
@@ -114,7 +115,11 @@ export async function POST(request: Request, context: RouteContext) {
       );
     }
 
-    const debtCeiling = budget.debt?.ceiling;
+    const debtCeiling = effectiveBorrowingLimit({
+      countryId,
+      gdp: budget.gdpSmoothed ?? budget.gdp,
+      storedCeiling: budget.debt?.ceiling ?? 0,
+    });
     if (typeof debtCeiling === "number" && budget.surplus - parsed.data.amount < -debtCeiling) {
       throw badRequest("Transfer would breach the federal debt ceiling.");
     }

@@ -7,6 +7,7 @@
  * so `<=` / `>=` comparisons remain meaningful. No cross-country checks.
  */
 import type { Db } from "mongodb";
+import { effectiveBorrowingLimit } from "@/lib/budget/borrowingLimit";
 import { COST_INCOME_ANCHORS } from "@/lib/politicalLegislation/costAnchors";
 import { countryFiscalBase, regionFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
 import type { FederalBudget, StateBudget } from "@/lib/db/types/budget";
@@ -158,7 +159,12 @@ export async function validateFederalBudgetImpact(
     newDebt,
   };
 
-  if (newDebt > federalBudget.debt.ceiling) {
+  const borrowingLimit = effectiveBorrowingLimit({
+    countryId: budgetCountryId,
+    gdp: federalBudget.gdpSmoothed ?? federalBudget.gdp,
+    storedCeiling: federalBudget.debt.ceiling,
+  });
+  if (newDebt > borrowingLimit) {
     result.warning = "DEBT_CEILING_EXCEEDED";
   } else if (federalBudget.debtToGdpRatio > 1.0) {
     result.warning = "HIGH_DEBT";

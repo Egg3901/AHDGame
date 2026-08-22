@@ -71,6 +71,20 @@ describe("selectNppBill agenda bias (V1.5)", () => {
     expect(withEmpty?.legType._id).toBe(without?.legType._id);
     expect(withEmpty?.legType._id).toBe("b");
   });
+
+  it("skips a recently sponsored type instead of proposing the same failed bill forever", () => {
+    const sel = selectNppBill(
+      [healthcareBill, environmentBill],
+      npp,
+      noUrgency,
+      undefined,
+      undefined,
+      undefined,
+      new Set(["b"])
+    );
+
+    expect(sel?.legType._id).toBe("a");
+  });
 });
 
 describe("selectNppBill fiscal-posture bias (V1.6)", () => {

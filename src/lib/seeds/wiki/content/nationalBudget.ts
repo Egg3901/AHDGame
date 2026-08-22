@@ -62,7 +62,9 @@ The engine normalizes the raw ratio against the country's seeded sovereign-risk 
 Your national debt record tracks:
 - **Principal:** Total outstanding sovereign bond debt
 - **Interest rate:** Weighted average coupon on all active bonds
-- **Debt ceiling:** Set by legislation; raising it requires a bill
+- **Debt ceiling / borrowing limit:** Most countries start from a fixed authored limit. East
+  Germany's borrowing limit cannot fall below 40% of smoothed GDP, while any higher stored limit
+  is still honored.
 
 When the country runs a deficit, it issues sovereign bonds each quarter to cover the gap (see [Sovereign Bonds](/wiki/sovereign-bonds) for the mechanics). High debt has economic consequences for corporations:
 
