@@ -47,9 +47,9 @@ export function freightClassExplanation(freightClass: FreightClass): string {
 
 export function freightClassAction(freightClass: FreightClass): string {
   if (freightClass === "grid") {
-    return "Improve the interstate route or add production nearer buyers. Building logistics capacity will not help grid delivery.";
+    return "Freight capacity will not help grid delivery. There is no separate route upgrade: lower this sector's price so distant buyers can afford its delivered price, or site production nearer buyers.";
   }
-  return "Bulk and special cargo share the state's freight fleet. Add logistics capacity in this state, or site production nearer buyers.";
+  return "Open or buy into a Logistics sector in this state to add freight capacity, or site production nearer buyers. Every corporation shipping bulk or special cargo from this state shares that capacity.";
 }
 
 /**
