@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { ObjectId } from "mongodb";
-import { computeVoteOutcome, checkAutoResolve, fundDirectionsFrom } from "./voteService";
+import { ObjectId, type Db } from "mongodb";
+import {
+  computeVoteOutcome,
+  checkAutoResolve,
+  fundDirectionsFrom,
+  resolveCorporationVoteIfReady,
+} from "./voteService";
 import type { CorporationVote } from "@/lib/db/types/corporationVote";
+import { createMockDb } from "@/lib/test-utils/mockDb";
 
 describe("computeVoteOutcome", () => {
   it("passes when yesShares meets threshold of all shares", () => {
@@ -88,5 +94,42 @@ describe("fundDirectionsFrom", () => {
 
   it("is empty for a vote created before fund direction shipped", () => {
     expect(fundDirectionsFrom({} as unknown as CorporationVote).size).toBe(0);
+  });
+});
+
+describe("resolveCorporationVoteIfReady", () => {
+  it("invalidates stale ballot weights after the share structure changes", async () => {
+    const db = createMockDb();
+    const vote = {
+      _id: new ObjectId(),
+      corporationId: new ObjectId(),
+      type: "share_issuance",
+      proposedByCharacterId: new ObjectId(),
+      proposedAtTurn: 262,
+      deadlineAtTurn: 286,
+      status: "open",
+      passThreshold: 0.5,
+      totalEligibleSharesAtOpen: 256_289_022,
+      payload: { newShareCount: 128_144_511, issuancePrice: 13.28 },
+      votes: [
+        {
+          characterId: new ObjectId(),
+          voteShares: 3_076_330,
+          vote: "yes",
+          castAt: new Date("2026-08-20T14:22:03.446Z"),
+        },
+      ],
+      createdAt: new Date("2026-08-20T14:21:55.074Z"),
+      updatedAt: new Date("2026-08-20T14:22:03.446Z"),
+    } as unknown as CorporationVote;
+
+    const result = await resolveCorporationVoteIfReady({
+      db: db as unknown as Db,
+      vote,
+      totalEligibleShares: 1_000_000,
+      currentTurn: 262,
+    });
+
+    expect(result).toEqual({ outcome: "cancelled", claimed: true });
   });
 });
