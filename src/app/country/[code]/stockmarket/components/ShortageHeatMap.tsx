@@ -61,7 +61,20 @@ function fmt(n: number): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
-function HeatRow({ row }: { row: ShortageRow }) {
+/**
+ * A row's tone is computed at the SELECTED SCOPE and nothing on screen says so.
+ * At state scope the supply/demand ratio ignores interstate demand entirely, so
+ * a state that ships its whole output to buyers elsewhere reads "Oversupplied"
+ * while every unit of it is in fact selling. Tickets #1143 and #1145 were both
+ * filed as "the label contradicts my sales".
+ */
+function scopeNarrowing(level: ShortageScope["level"]): string | null {
+  if (level === "state") return "the state";
+  if (level === "country") return "the country";
+  return null;
+}
+
+function HeatRow({ row, scopeLevel }: { row: ShortageRow; scopeLevel: ShortageScope["level"] }) {
   const isSurplus = row.tone === "oversupplied";
   const pct = Math.max(4, Math.round(row.intensity * 100)); // min sliver so a tiny signal still shows
   const color = TONE_VAR[row.tone];
@@ -83,6 +96,13 @@ function HeatRow({ row }: { row: ShortageRow }) {
       (row.blockedSupply > 0 ? `\n  embargoed ${fmt(row.blockedSupply)}` : "") +
       (row.untradedSupply > 0 ? `\n  produced where no one trades ${fmt(row.untradedSupply)}` : "")
     : "";
+  // Only rows carrying a demand judgement need the caveat; "no local supply"
+  // is a statement about this scope by construction.
+  const narrowed = scopeNarrowing(scopeLevel);
+  const scopeNote =
+    narrowed && row.dsRatio != null
+      ? `\nMeasured inside ${narrowed} only. Demand elsewhere is not counted, so output shipped out of ${narrowed} can still be selling.`
+      : "";
   const title = row.noSupply
     ? `${row.label}
 Demand ${fmt(row.demand)} ${row.unit}
@@ -94,7 +114,7 @@ Price ${premiumText}${walledOffText}`
 Demand ${fmt(row.demand)} ${row.unit}
 Supply ${fmt(row.supply)} ${row.unit}
 D/S ratio ${row.dsRatio.toFixed(2)}
-Price ${premiumText}${walledOffText}`;
+Price ${premiumText}${walledOffText}${scopeNote}`;
 
   return (
     <div className="flex items-center gap-2 py-1" title={title}>
@@ -246,7 +266,16 @@ export function ShortageHeatMap({ commodities }: { commodities: CommodityData[] 
         <div className="flex flex-wrap gap-x-3 gap-y-1">
           <Swatch tone="short-strong" label="In shortage (buy premium)" />
           <Swatch tone="balanced" label="Balanced" />
-          <Swatch tone="oversupplied" label="Oversupplied" />
+          <Swatch
+            tone="oversupplied"
+            label={
+              scope.level === "state"
+                ? "Oversupplied in state"
+                : scope.level === "country"
+                  ? "Oversupplied in country"
+                  : "Oversupplied"
+            }
+          />
         </div>
       </div>
 
@@ -359,7 +388,7 @@ export function ShortageHeatMap({ commodities }: { commodities: CommodityData[] 
         <div className="overflow-x-auto">
           <div className="min-w-[320px]">
             {rows.map((row) => (
-              <HeatRow key={row.commodity} row={row} />
+              <HeatRow key={row.commodity} row={row} scopeLevel={scope.level} />
             ))}
           </div>
         </div>
