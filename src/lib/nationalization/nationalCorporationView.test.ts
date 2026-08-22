@@ -356,6 +356,44 @@ describe("buildNationalCorporationView", () => {
     ]);
   });
 
+  it("counts realized gross revenue under plants, not idle nameplate (ticket #1072)", async () => {
+    db.collection("gameConfig");
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({ marketSystemMode: "plants" });
+    db.collectionMocks.corporateSectors.find.mockReturnValue(
+      cursor([
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          stateId: "US-CA",
+          sectorType: "energy",
+          revenue: 1_000_000,
+          realizedRevenue: 250_000,
+          workers: 500,
+          profitMargin: 20,
+          effectiveProfitMargin: 20,
+        },
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          stateId: "US-TX",
+          sectorType: "healthcare",
+          revenue: 500_000,
+          realizedRevenue: 0,
+          mothballed: true,
+          workers: 300,
+          profitMargin: 20,
+          effectiveProfitMargin: 20,
+        },
+      ])
+    );
+
+    const { buildNationalCorporationView } = await import("./nationalCorporationView");
+    const vm = await buildNationalCorporationView(db as unknown as Db, corp, new ObjectId());
+
+    expect(vm.stats.grossRevenuePerTurn).toBe(250_000);
+    expect(vm.finance.rdFullFundBudget).toBeLessThan(250_000);
+  });
+
   it("groups the acquisition register by trigger", async () => {
     const { getNationalizationLedger } = await import("./ledger");
     vi.mocked(getNationalizationLedger).mockResolvedValueOnce([

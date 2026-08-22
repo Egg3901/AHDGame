@@ -263,8 +263,10 @@ export default function PlannedEconomiesGuidePage() {
                   (near or above 100%), where an enterprise is capacity-constrained and more
                   capacity becomes more output. Do not fund a low-efficiency enterprise: adding
                   capacity it already cannot fill drops utilisation further and piles on upkeep.
-                  When one is sized far above its demand, shrink it (close capacity to stop the
-                  upkeep bleed) rather than invest.
+                  When one is sized far above its demand, open the enterprise and mothball or
+                  abandon low-demand regional plants rather than invest. Mothballing cuts upkeep
+                  while keeping the plant available; abandoning the regional holding removes its
+                  upkeep permanently.
                 </p>
               </div>
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">

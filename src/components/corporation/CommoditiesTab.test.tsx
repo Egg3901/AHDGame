@@ -62,4 +62,37 @@ describe("CommoditiesTab private supply", () => {
     expect(screen.getByText(/60% of consumption covered/)).toBeTruthy();
     expect(screen.getByText(/Contracted cap: 80 MWh/)).toBeTruthy();
   });
+
+  it("links supply-deal actions to the Structure tab where the form lives", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        clearingEnabled: true,
+        supplyAgreementsEnabled: true,
+        commodities: [
+          {
+            commodity: "freight",
+            label: "Freight",
+            icon: "FR",
+            color: "bg-sky-500",
+            unit: "units",
+            outputUnits: 100,
+            consumptionUnits: 0,
+            netUnits: 100,
+            market: {},
+          },
+        ],
+        regions: [],
+        marketShare: [],
+      }),
+    } as Response);
+
+    render(<CommoditiesTab corpId="604" isCeo />);
+
+    const link = await screen.findByRole("link", { name: "Supply deal" });
+    expect(link.getAttribute("href")).toBe("/corporation/604?tab=ownership&sub=structure");
+    expect(screen.getByRole("link", { name: "Structure" }).getAttribute("href")).toBe(
+      "/corporation/604?tab=ownership&sub=structure"
+    );
+  });
 });
