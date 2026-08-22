@@ -458,7 +458,7 @@ describe("GET /api/country/[code]/region/[id]/economy", () => {
       _id: viewerCorpId,
       type: "technology",
       marketingStrength: 50,
-      splitEscalation: 0,
+      splitEscalation: 7,
       countryId: "US",
     });
 
@@ -519,6 +519,7 @@ describe("GET /api/country/[code]/region/[id]/economy", () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
+    expect(data.attackMsCost).toBe(128);
     const extraction = (
       data.sectors as Array<{
         type: string;
