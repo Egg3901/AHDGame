@@ -220,7 +220,8 @@ export function findMatchedOption(
 export function buildPolicyResponse(
   record: PolicyRecordLike,
   legislationType: LegislationType,
-  activeOrder?: ActiveOrderInfo | null
+  activeOrder?: ActiveOrderInfo | null,
+  budget?: FederalBudget | null
 ): PolicyRecordResponse {
   const economic = record.economic ?? 0;
   const social = record.social ?? 0;
@@ -229,10 +230,21 @@ export function buildPolicyResponse(
     legislationType.taxSlider && record.policyOptionId?.startsWith("rate:")
       ? Number(record.policyOptionId.slice("rate:".length))
       : null;
+  const sliderTaxType = legislationType.taxSlider?.taxType as keyof FederalTaxRates | undefined;
+  const currentSliderRate = sliderTaxType
+    ? getBudgetTaxRate(budget ?? null, sliderTaxType)
+    : undefined;
+  const pendingSliderRate = sliderTaxType ? budget?.taxRatePhaseIn?.[sliderTaxType] : undefined;
   const policyOptionName =
-    encodedSliderRate !== null && Number.isFinite(encodedSliderRate)
-      ? taxSliderRateLabel(encodedSliderRate)
-      : (matchedOption?.name ?? null);
+    typeof currentSliderRate === "number" && Number.isFinite(currentSliderRate)
+      ? typeof pendingSliderRate === "number" &&
+        Number.isFinite(pendingSliderRate) &&
+        pendingSliderRate !== currentSliderRate
+        ? `${taxSliderRateLabel(currentSliderRate)} (target ${pendingSliderRate}%, phasing in)`
+        : taxSliderRateLabel(currentSliderRate)
+      : encodedSliderRate !== null && Number.isFinite(encodedSliderRate)
+        ? taxSliderRateLabel(encodedSliderRate)
+        : (matchedOption?.name ?? null);
   const metricEffects: PolicyMetricEffect[] = (matchedOption?.metricEffects ?? [])
     // 📊 budget-sync: computed fiscal metrics are mirror-owned — laws don't move
     // them, so they aren't surfaced as policy-record effects.
@@ -425,7 +437,7 @@ export async function assembleNationalPolicyRecords(
           };
         }
       }
-      return buildPolicyResponse(record, legislationType, activeOrder);
+      return buildPolicyResponse(record, legislationType, activeOrder, budget);
     })
     .filter((record): record is PolicyRecordResponse => record !== null);
 

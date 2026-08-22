@@ -47,6 +47,29 @@ describe("national tax policy records", () => {
     expect(row.policyOptionName).toBe("Rate: 16%");
   });
 
+  it("shows the live budget rate and the enacted target while a tax rate phases in", () => {
+    const row = buildPolicyResponse(
+      {
+        scope: "national",
+        stateId: "dd_national",
+        legislationTypeId: modernIncomeTax._id,
+        policyOptionId: "rate:16",
+        economic: -0.67,
+        social: 0,
+        updatedAt: new Date(0),
+      },
+      modernIncomeTax,
+      null,
+      {
+        _id: "DD",
+        taxRates: { incomeTax: 12 },
+        taxRatePhaseIn: { incomeTax: 16 },
+      } as unknown as FederalBudget
+    );
+
+    expect(row.policyOptionName).toBe("Rate: 12% (target 16%, phasing in)");
+  });
+
   it("does not backfill a second legacy law for a tax type controlled by a modern record", () => {
     const records = new Map([
       [
