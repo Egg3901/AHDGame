@@ -557,7 +557,7 @@ export const defect: Defect = {
   codeFix: {
     pr: 692,
     mergedTo: "main",
-    requiredCommit: "f50ae2f01b865adca12ff2fd724ef31ffa0e6ea0",
+    requiredCommit: "de013b0fe5eae522039c3a1a0776296893b69305",
   },
   seedFix: {
     status: "not-needed",
