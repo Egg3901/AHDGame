@@ -81,8 +81,21 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
       const now = new Date();
 
       // Fetch all data needed for snapshots
-      const corporations = await database
-        .collection<Corporation>("corporations")
+      const corporationsCollection = database.collection<Corporation>("corporations");
+      // Compatibility repair for auction shells that later completed an IPO.
+      // The late-IPO path used to clear isPrivate without clearing the auction's
+      // hiddenFromExchange marker, leaving a public corporation absent from every
+      // exchange forever. Future IPOs clear it in goPublic; this repairs existing
+      // public rows before each idempotent snapshot build.
+      await corporationsCollection.updateMany(
+        {
+          isPrivate: { $ne: true },
+          hiddenFromExchange: true,
+          lastIpoTurn: { $exists: true },
+        },
+        { $set: { hiddenFromExchange: false } }
+      );
+      const corporations = await corporationsCollection
         .find({ hiddenFromExchange: { $ne: true }, isPrivate: { $ne: true } })
         .sort({ createdAt: -1 })
         .toArray();
