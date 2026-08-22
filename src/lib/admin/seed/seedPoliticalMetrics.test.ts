@@ -41,9 +41,18 @@ describe("seedPoliticalMetrics", () => {
     const mi = byId.get("MI")!;
     const al = byId.get("AL")!;
     const base = NATIONAL_BASELINES_1953.US["economy.workerSecurity"].value;
-    // MI carries a positive workerSecurity modifier; AL's modifiers don't touch it.
+    // MI carries a positive hand-authored workerSecurity modifier, and the
+    // texture generator excludes any pair a modifier already covers, so MI lands
+    // on base+modifier exactly.
     expect(mi.values["economy.workerSecurity"]).toBeGreaterThan(base);
-    expect(al.values["economy.workerSecurity"]).toBe(base);
+    // AL has no workerSecurity modifier, so since ticket #1129 it takes derived
+    // TEXTURE there instead of sitting on the bare anchor. The "lands exactly on
+    // the anchor" property now belongs to a family with neither, which is what
+    // the defense block is: national by nature, no regional variation.
+    expect(al.values["economy.workerSecurity"]).not.toBe(base);
+    expect(al.values["defense.armedForces"]).toBe(
+      NATIONAL_BASELINES_1953.US["defense.armedForces"].value
+    );
     expect(mi.countryId).toBe("US");
     expect(Object.keys(mi.values)).toHaveLength(63);
     for (const v of Object.values(mi.values)) {
@@ -70,9 +79,11 @@ describe("seedPoliticalMetrics", () => {
     const calls = bulkOps(db.collectionMocks["politicalMetrics"]!.bulkWrite);
     const al = calls.find((c) => (c[0] as { _id: string })._id === "AL")!;
     const values = (al[1] as { $set: PoliticalMetricsDoc }).$set.values;
-    // AL carries no workerSecurity modifier, so it lands exactly on the anchor.
-    expect(values["economy.workerSecurity"]).toBe(
-      NATIONAL_BASELINES_1953.US["economy.workerSecurity"].value
+    // AL carries neither a modifier nor texture on the defense block, so the
+    // year-resolved anchor is exactly what lands. (Before ticket #1129 this
+    // asserted on economy.workerSecurity, which now takes derived texture.)
+    expect(values["defense.armedForces"]).toBe(
+      NATIONAL_BASELINES_1953.US["defense.armedForces"].value
     );
   });
 
@@ -154,8 +165,11 @@ describe("seedPoliticalMetrics", () => {
     const calls = bulkOps(db.collectionMocks["politicalMetrics"]!.bulkWrite);
     const al = calls.find((c) => (c[0] as { _id: string })._id === "AL")!;
     const values = (al[1] as { $set: PoliticalMetricsDoc }).$set.values;
-    expect(values["economy.workerSecurity"]).toBe(
-      NATIONAL_BASELINES_1953.US["economy.workerSecurity"].value
+    // An untextured, unmodified family proves the value came from the anchor
+    // table rather than NON_PLAYABLE_BOARDS. (Before ticket #1129 this asserted
+    // on economy.workerSecurity, which now takes derived texture.)
+    expect(values["defense.armedForces"]).toBe(
+      NATIONAL_BASELINES_1953.US["defense.armedForces"].value
     );
   });
 
@@ -180,5 +194,101 @@ describe("seedPoliticalMetrics", () => {
       (c) => (c[0] as { _id: string })._id
     );
     expect(written).not.toContain("ZZZ");
+  });
+});
+
+/**
+ * Ticket #1129. Playable regions used to take ONE national value each, so 47 of
+ * 63 US families were byte-identical across all 51 states on prod - including
+ * every order.* family, which is the whole Attorney General portfolio and the
+ * page the ticket screenshotted.
+ *
+ * REGIONAL_TEXTURE_1953 supplies the per-region deviation the sparse
+ * hand-authored modifier table never covered, without moving the authored
+ * national level.
+ */
+describe("seedPoliticalMetrics - per-region texture (ticket #1129)", () => {
+  const US_STATES = [
+    "AK",
+    "AL",
+    "AR",
+    "AZ",
+    "CA",
+    "CO",
+    "DC",
+    "DE",
+    "FL",
+    "GA",
+    "HI",
+    "IA",
+    "ID",
+    "IL",
+    "IN",
+    "MI",
+    "MS",
+    "NY",
+    "TX",
+    "WV",
+  ].map((id) => ({ _id: id, countryId: "US", name: id, population: 1_000_000 }));
+
+  let db: MockDb;
+  beforeEach(() => {
+    db = createMockDb();
+    db.collection("states").find().toArray.mockResolvedValue(US_STATES);
+  });
+
+  async function seededValues(): Promise<Map<string, Record<string, number>>> {
+    await seedPoliticalMetrics(db as unknown as Db, false, () => {}, 1953, "1953-default");
+    const calls = bulkOps(db.collectionMocks["politicalMetrics"]!.bulkWrite);
+    return new Map(
+      calls.map((c) => [
+        (c[0] as { _id: string })._id,
+        (c[1] as { $set: PoliticalMetricsDoc }).$set.values as unknown as Record<string, number>,
+      ])
+    );
+  }
+
+  it("no longer gives every US region the same order.safety", async () => {
+    const values = await seededValues();
+    const safety = [...values.values()].map((v) => v["order.safety"]);
+    expect(new Set(safety.map((s) => s.toFixed(3))).size).toBeGreaterThan(3);
+  });
+
+  it("keeps the country mean on the authored national baseline", async () => {
+    const values = await seededValues();
+    const safety = [...values.values()].map((v) => v["order.safety"]);
+    const mean = safety.reduce((a, b) => a + b, 0) / safety.length;
+    // Texture is mean-centred, so seeding it must not move the authored level.
+    // Not exact: the noise floor drops small deviations (see playableTexture).
+    expect(Math.abs(mean - NATIONAL_BASELINES_1953.US["order.safety"].value)).toBeLessThan(1.5);
+  });
+
+  it("lets a hand-authored modifier win over texture", async () => {
+    const values = await seededValues();
+    // MS carries a deliberate society.integration -18 (Jim Crow). The generator
+    // excludes that pair, so the authored value is what lands - undiluted.
+    const authored = NATIONAL_BASELINES_1953.US["society.integration"].value;
+    expect(values.get("MS")!["society.integration"]).toBeCloseTo(
+      Math.max(0, Math.min(100, authored - 18)),
+      6
+    );
+  });
+
+  it("still lands exactly on the anchor where there is neither modifier nor texture", async () => {
+    const values = await seededValues();
+    // The defense block is national by nature and carries no regional variation,
+    // so every region must agree with the anchor to the last decimal.
+    const anchor = NATIONAL_BASELINES_1953.US["defense.armedForces"].value;
+    for (const v of values.values()) expect(v["defense.armedForces"]).toBe(anchor);
+  });
+
+  it("keeps every seeded value inside 0-100", async () => {
+    const values = await seededValues();
+    for (const v of values.values()) {
+      for (const score of Object.values(v)) {
+        expect(score).toBeGreaterThanOrEqual(0);
+        expect(score).toBeLessThanOrEqual(100);
+      }
+    }
   });
 });

@@ -12,6 +12,7 @@ import {
   baselineFor,
 } from "@/lib/politicalMetrics/seeds/baselineAnchors";
 import { REGIONAL_MODIFIERS_1953 } from "@/lib/politicalMetrics/seeds/regionalModifiers1953";
+import { REGIONAL_TEXTURE_1953 } from "@/lib/politicalMetrics/seeds/regionalTexture1953";
 import { NON_PLAYABLE_BOARDS } from "@/lib/politicalMetrics/seeds/nonPlayableBoards";
 
 const PLAYABLE = new Set<string>(POLITICAL_METRIC_COUNTRY_IDS);
@@ -83,15 +84,29 @@ export async function seedPoliticalMetrics(
     if (!isPlayable && !BOARD_COUNTRIES.has(state.countryId)) continue;
     const values = {} as Record<PoliticalMetricId, number>;
     if (isPlayable) {
-      // Playables: year-anchored baselines + sparse regional modifiers.
+      // Playables: year-anchored baselines + sparse regional modifiers, with
+      // derived per-region texture filling the families the modifier table is
+      // silent on.
+      //
+      // Ticket #1129: the modifier table covers 24 of 63 families across all
+      // four countries combined, so on prod 47 of 63 US families were
+      // byte-identical across all 51 states -- including every order.* family,
+      // which is the entire Attorney General portfolio. Non-playables never had
+      // this problem: they seed from a per-region derived board.
+      //
+      // Either/or, never additive. A hand-authored modifier encodes deliberate
+      // history (Mississippi society.integration -18) and must not be diluted by
+      // a mechanical category average; the generator excludes those pairs from
+      // the texture file entirely, so this lookup can simply prefer the
+      // modifier.
       const countryId = state.countryId as PoliticalMetricsCountryId;
       const modifiers = REGIONAL_MODIFIERS_1953[countryId][state._id] ?? {};
+      const texture = REGIONAL_TEXTURE_1953[countryId]?.[state._id] ?? {};
       for (const metricId of Object.keys(
         POLITICAL_BASELINE_ANCHORS[countryId]
       ) as PoliticalMetricId[]) {
-        values[metricId] = clampScore(
-          baselineFor(countryId, metricId, year) + (modifiers[metricId] ?? 0)
-        );
+        const offset = modifiers[metricId] ?? texture[metricId] ?? 0;
+        values[metricId] = clampScore(baselineFor(countryId, metricId, year) + offset);
       }
     } else {
       // Non-playables: the region's OWN derived board. The legacy seeds carry
