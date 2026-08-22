@@ -30,7 +30,7 @@ import {
   revenuePerCapacityUnit,
 } from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
-import { unownedHeadroomBaseExpr, unownedPoolTrailingSet } from "@/lib/market/unownedHeadroom";
+import { unownedPoolDrawdown } from "@/lib/market/unownedPoolDraw";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
@@ -369,47 +369,22 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       // `headroomUnits` and `revenue` are two views of one quantity and must
       // move together (legacy readers still use `revenue`); both are clamped at
       // 0 so a pool smaller than the starter build cannot go negative.
-      await db.collection<UnownedSector>("unownedSectors").updateOne(
-        { stateId, sectorType },
-        [
-          {
-            $set: {
-              // UPSERT SCAFFOLDING. A (state, type) bucket with no pool doc is a
-              // legitimate state — the auto-seeder creates them lazily — and
-              // without the upsert the drawdown silently matched nothing and the
-              // founder took the starter capacity for free. Upserting records a
-              // drawn-to-zero pool instead, which is what the founding just made
-              // true. Every other pool writer in this sweep upserts.
-              stateId: { $ifNull: ["$stateId", stateId] },
-              countryId: { $ifNull: ["$countryId", corporation.countryId] },
-              sectorType: { $ifNull: ["$sectorType", sectorType] },
-              createdAt: { $ifNull: ["$createdAt", now] },
-              headroomUnits: {
-                // Self-healing base, NOT a bare `$ifNull: [..., 0]`: a pool doc
-                // that predates the `headroomUnits` backfill would otherwise be
-                // wiped to zero by its own first drawdown. See
-                // `unownedHeadroomBaseExpr`.
-                $max: [
-                  0,
-                  {
-                    $subtract: [unownedHeadroomBaseExpr(sectorType, eraUnitScale), starterUnits],
-                  },
-                ],
-              },
-              updatedAt: now,
-            },
-          },
-          // Restate `revenue` FROM the post-draw units rather than subtracting
-          // from it independently. Both legs clamp at 0, so two independent
-          // subtractions drift apart permanently the moment either bottoms out —
-          // the units hit 0 while `revenue` stays positive, and the next writer
-          // that heals units from revenue resurrects headroom this founding just
-          // consumed. The shared trailing stage keeps them one quantity in two
-          // units, and is now what every pool writer ends with.
-          { $set: unownedPoolTrailingSet(sectorType, true, eraUnitScale) },
-        ],
-        { upsert: true }
+      // The drawdown shape (upsert scaffolding, self-healing base, clamp at 0,
+      // and the trailing restatement of `revenue` from the post-draw units) is
+      // shared with `buildCapacity` via `unownedPoolDrawdown`. It used to live
+      // inline here and nowhere else, which is exactly how `buildCapacity`
+      // shipped without a drawdown at all (#1145).
+      const starterDrawdown = unownedPoolDrawdown(
+        { stateId, countryId: corporation.countryId, sectorType },
+        starterUnits,
+        now,
+        eraUnitScale
       );
+      if (starterDrawdown) {
+        await db
+          .collection<UnownedSector>("unownedSectors")
+          .updateOne({ stateId, sectorType }, starterDrawdown, { upsert: true });
+      }
 
       // Shadow-ledger debit leg for the starter build — the cash → CIP reclass,
       // logged at the CIP amount only (the entry fee is an expense, not

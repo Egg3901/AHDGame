@@ -129,10 +129,21 @@ export async function chargeOrganizationDues(
     const rate = getGdpAnchorRate(m.countryId, preset);
     const dueLocal = Math.round(dueUsd / rate); // member's own currency (debit)
     if (dueLocal <= 0) continue;
-    await budget.updateOne(
+    // CREDIT ONLY WHAT WAS ACTUALLY DEBITED. A member with no `federalBudget`
+    // row matches nothing here, and crediting the fund anyway would mint money
+    // the reconciler cannot attribute to anyone. That was unreachable while
+    // dues were restricted to player-enabled countries, which all have a row —
+    // it became reachable when non-voting members started paying dues in
+    // organisations that levy no tribute (#1156).
+    //
+    // Tribute takes the other branch for the same case and counts it as an
+    // explicit `minted` figure. Dues have no such accounting, so an unmodelled
+    // member simply does not contribute rather than contributing from nowhere.
+    const debit = await budget.updateOne(
       { countryId: m.countryId },
       { $inc: { treasuryBalance: -dueLocal }, $set: { updatedAt: now } }
     );
+    if (debit.matchedCount !== 1) continue;
     // Credit the fund in its (founding) currency.
     const fundRate = getGdpAnchorRate(currencyCountryId, preset);
     totalFund += dueUsd / fundRate;

@@ -143,11 +143,30 @@ export interface ClearingSeller {
  * byte-identical to the original cheapest-first behaviour.
  *
  * A supply agreement is ADDITIVE, not restrictive: `contractedUnitsById`
- * reserves the buyer's volume off the top (guaranteed-sold), and everything the
- * supplier produces ABOVE the contract clears on the open market like any other
- * unit. There is no surplus blackhole — a supplier that contracts 50 of 100
- * still offers the other 50 to the book, so `soldFraction` reflects real total
- * sales (contracted + open-market fill), never `contracted / produced`.
+ * reserves the buyer's volume off the top, and everything the supplier produces
+ * ABOVE the contract clears on the open market like any other unit. There is no
+ * surplus blackhole — a supplier that contracts 50 of 100 still offers the other
+ * 50 to the book, so `soldFraction` reflects real total sales (contracted +
+ * open-market fill), never `contracted / produced`.
+ *
+ * ⚠ CONTRACTED VOLUME IS NOT GUARANTEED, despite what the pre-pass looks like.
+ * The reservation is bounded by `remaining`, this book's TOTAL demand, so a
+ * contract only delivers in full while the market as a whole wants at least that
+ * much. In a thin book the contract silently under-delivers and the supplier
+ * sees an unexplained low `soldFraction` with no indication that a signed
+ * agreement was the thing that fell short (ticket #1139: 16k/day of freight
+ * against a 13k agreement, delivering 40%).
+ *
+ * That interacts badly with the propose route, which caps `volumeCap` against
+ * the SUPPLIER's plant capacity alone (`supplyAgreements.ts`) and never against
+ * anything on the demand side. A player can therefore sign a contract that
+ * cannot be delivered, and nothing tells them so at signing or afterwards.
+ *
+ * Fixing it is a product decision, not a cleanup, because the options differ in
+ * what a contract MEANS: bound the volume at signing, let contracted units clear
+ * ahead of the book's own demand, or keep this behaviour and report the
+ * shortfall to the supplier. `contractCappedByBookDemand` below pins the
+ * behaviour as it stands so whichever is chosen is chosen deliberately.
  */
 export function clearCommodityMarket(
   demandUnits: number,

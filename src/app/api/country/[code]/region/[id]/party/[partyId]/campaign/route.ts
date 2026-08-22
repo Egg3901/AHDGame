@@ -57,8 +57,13 @@ export async function POST(
       .collection<StatePartyOrg>("statePartyOrg")
       .findOne({ countryId: countryId as CountryId, stateId, partyId: String(party.sequentialId) });
     if (!canSpendOnStateParty(party, spo, auth.user)) {
+      // Ticket #1167: the old message named neither the rule nor the way to
+      // satisfy it, so a party member who had simply never been appointed read
+      // it as a bug. Say who may act and what to ask for.
       return NextResponse.json(
-        { error: "Not authorized to campaign for this party here" },
+        {
+          error: `Campaigning for ${party.name} draws on its party organisation, so it is limited to its officers. You need to be its chair, vice chair or campaigner in ${stateId}, or hold one of those roles nationally. A party leader can appoint you from the party's management page.`,
+        },
         { status: 403 }
       );
     }
