@@ -60,8 +60,8 @@ describe("settleFreightNetwork", () => {
 
     // 20 units land locally; the rest hauls up to nominal capacity plus the
     // congestion overflow (freight is a cost, not a wall).
-    expect(result.deliveredSupplyByCommodity.get("coal")?.get("B")).toBeCloseTo(25.25);
-    expect(result.inputAvailabilityByCommodity.get("coal")?.get("B")).toBeCloseTo(0.2525);
+    expect(result.deliveredSupplyByCommodity.get("coal")?.get("B")).toBeCloseTo(27.5);
+    expect(result.inputAvailabilityByCommodity.get("coal")?.get("B")).toBeCloseTo(0.275);
   });
 
   it("placedSupplyByCommodity credits a seller only for output that found a buyer", () => {
@@ -80,7 +80,7 @@ describe("settleFreightNetwork", () => {
     // cannot place it, so the sell side must not be told the market cleared.
     const result = settleFreightNetwork(inputs(0.2));
 
-    expect(result.placedSupplyByCommodity.get("coal")?.get("A")).toBeCloseTo(5.25);
+    expect(result.placedSupplyByCommodity.get("coal")?.get("A")).toBeCloseTo(7.5);
   });
 
   it("deliveryLimitedSupplyByCommodity separates a starved network from a full market", () => {
@@ -93,10 +93,10 @@ describe("settleFreightNetwork", () => {
     expect(healthy.placedSupplyByCommodity.get("coal")?.get("A")).toBeCloseTo(80);
     expect(healthy.deliveryLimitedSupplyByCommodity.get("coal")?.get("A")).toBe(0);
 
-    // Starved network: B is still 74.75 short while A sits on 94.75 unsold.
+    // Starved network: B is still 72.5 short while A sits on 92.5 unsold.
     // That part, and only that part, is a delivery failure.
-    expect(starved.placedSupplyByCommodity.get("coal")?.get("A")).toBeCloseTo(5.25);
-    expect(starved.deliveryLimitedSupplyByCommodity.get("coal")?.get("A")).toBeCloseTo(74.75);
+    expect(starved.placedSupplyByCommodity.get("coal")?.get("A")).toBeCloseTo(7.5);
+    expect(starved.deliveryLimitedSupplyByCommodity.get("coal")?.get("A")).toBeCloseTo(72.5);
   });
 
   it("treats unshipped commodities as fully placed: no network, no delivery limit", () => {

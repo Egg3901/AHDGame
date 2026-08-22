@@ -3,7 +3,7 @@
  *
  * Every commodity is either physically shipped (in one of three freight
  * classes) or not shipped at all (services and freight itself). A shipped
- * commodity spends freight capacity of its class when it crosses a state line;
+ * commodity spends shared freight capacity when it crosses a state line;
  * intra-state delivery is free by design.
  *
  * The `grid` class is the exception and the reason it exists. Energy and
@@ -19,15 +19,38 @@
  * instead of against a hard capacity ceiling.
  *
  * This is the "freight-class field on the commodity table" from the
- * interstate-logistics plan (Rev 4). The single `freight` commodity is NOT yet
- * split into bulk/special commodities — the class split here only partitions
- * shipping capacity and cost, so the later commodity split can land without
- * reclassifying anything.
+ * interstate-logistics plan (Rev 4). The single `freight` commodity remains
+ * one shared capacity pool. Classes determine TEU use and shipping cost, not
+ * reserved capacity slices.
  */
 
 import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
 
 export type FreightClass = "bulk" | "special" | "grid";
+export type HauledFreightClass = Exclude<FreightClass, "grid">;
+
+export const FREIGHT_CLASS_LABELS: Record<FreightClass, string> = {
+  bulk: "Bulk freight",
+  special: "Special freight",
+  grid: "Grid delivery",
+};
+
+export function freightClassExplanation(freightClass: FreightClass): string {
+  if (freightClass === "special") {
+    return "Special cargo uses three times as much shared freight capacity per unit as bulk cargo.";
+  }
+  if (freightClass === "bulk") {
+    return "Bulk cargo and special cargo draw from the same shared freight capacity in this state.";
+  }
+  return "Electricity and natural gas use the grid, not freight capacity.";
+}
+
+export function freightClassAction(freightClass: FreightClass): string {
+  if (freightClass === "grid") {
+    return "Improve the interstate route or add production nearer buyers. Building logistics capacity will not help grid delivery.";
+  }
+  return "Bulk and special cargo share the state's freight fleet. Add logistics capacity in this state, or site production nearer buyers.";
+}
 
 /**
  * `null` = never shipped interstate: services and non-physical flows are

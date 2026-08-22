@@ -1227,6 +1227,7 @@ export interface SectorPlantsSection {
      * build somewhere else. 0 when the engine wrote nothing.
      */
     deliveryLimitedFraction: number;
+    deliveryLimitedFreightClass: "bulk" | "special" | "grid" | null;
     /**
      * Consecutive turns the sector cleared under half its output (see
      * strandedPlant.ts). Drives the stranded-plant warning on the sector page
@@ -1606,6 +1607,12 @@ export function buildSectorPlantsSection(args: {
     0,
     Math.min(1, num(sector.deliveryLimitedFraction) ?? 0)
   );
+  const deliveryLimitedFreightClass =
+    sector.deliveryLimitedFreightClass === "bulk" ||
+    sector.deliveryLimitedFreightClass === "special" ||
+    sector.deliveryLimitedFreightClass === "grid"
+      ? sector.deliveryLimitedFreightClass
+      : null;
   // Full operating bill: maintenanceNet already carries inputs, upkeep on idle
   // capacity, compliance and other opex; labour is billed beside it.
   // Floor the SUM, not each leg: `maintenanceNet` is routinely negative (a
@@ -1713,6 +1720,7 @@ export function buildSectorPlantsSection(args: {
       soldFraction,
       soldByCommodity,
       deliveryLimitedFraction,
+      deliveryLimitedFreightClass,
       lowFillTurns: num(sector.lowFillTurns) ?? 0,
       inventory: {
         stockpileUnsold: sector.stockpileUnsold === true,

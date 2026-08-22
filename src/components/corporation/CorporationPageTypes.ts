@@ -663,6 +663,8 @@ export interface SectorDetail {
    * like `fillRate`: null when redacted, fogged, or below plants.
    */
   deliveryLimitedFraction?: number | null;
+  /** Cargo class of the output leg behind the delivery limit. */
+  deliveryLimitedFreightClass?: "bulk" | "special" | "grid" | null;
   /** Cold-stowed: produces nothing, pays reduced upkeep. */
   mothballed?: boolean;
   /** Outstanding capacity builds; null when nothing is on order. */

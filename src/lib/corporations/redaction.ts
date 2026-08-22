@@ -80,6 +80,7 @@ const PRIVATE_REDACTED_SECTOR_FIELDS = [
   // exact fill rate: it tells an attacker which of this corp's plants cannot
   // defend their market and why.
   "deliveryLimitedFraction",
+  "deliveryLimitedFreightClass",
   // profit / cost. Publishing it beside the (public) profit figure lets a
   // viewer solve cost = profit / ratio and then revenue = cost + profit,
   // reconstructing the redacted revenue exactly. So it goes too.

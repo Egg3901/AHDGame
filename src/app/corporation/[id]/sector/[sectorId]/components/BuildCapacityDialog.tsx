@@ -329,7 +329,13 @@ export default function BuildCapacityDialog({
             <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
           )}
           <p className="text-body-sm text-foreground">
-            {preview.overHeadroom ? (
+            {sectorType === "logistics" ? (
+              <>
+                Freight demand is the state&apos;s combined bulk and special cargo load. Both draw
+                from one shared fleet, and special cargo uses three times as much TEU per unit.
+                Check this state&apos;s combined load in the Logistics map before expanding.
+              </>
+            ) : preview.overHeadroom ? (
               buyersRoomUnits >= 1 ? (
                 <>
                   Buyers here have room for about{" "}
