@@ -166,7 +166,10 @@ export async function loadCorporationDefenceContracts(
           GRADE_PRICE_SCALE[normalizeGrade(c.gradeCeiling)]
         : null,
       encumberedAmount: c.encumberedAmount ?? 0,
-      ...(c.carryReason
+      // Carry reasons explain why a LIVE order did not move this turn. Older completed rows
+      // can retain a reason stamped before their final delivery, so never present that stale
+      // diagnostic as a current funding failure (ticket #1171).
+      ...(c.status === "active" && c.carryReason
         ? {
             carryReason: c.carryReason,
             carryReasonText: DEFENCE_CARRY_REASON_TEXT[c.carryReason],

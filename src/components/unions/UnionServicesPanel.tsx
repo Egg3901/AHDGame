@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { formatLocalAmountFull } from "@/lib/utils/formatters";
 import {
-  approvalTarget,
+  approvalTargetBreakdown,
   duesIncomePerTurn,
   servicesCostPerTurn,
   trendApproval,
@@ -12,7 +12,6 @@ import {
 import {
   UNION_SERVICES,
   normalizeServiceIds,
-  servicesApprovalBonus,
   type UnionServiceId,
 } from "@/lib/unions/unionServices";
 
@@ -87,14 +86,15 @@ export function UnionServicesPanel({
   // plus a turn's dues income cannot cover a turn's cost.
   const unfunded = draftCostPerTurn > treasury + duesIncome;
   const dirty = sortedIds(draft) !== sortedIds(committed);
-  const serviceBonus = unfunded ? 0 : servicesApprovalBonus(draft);
-  const draftApprovalTarget = approvalTarget({
+  const approvalBreakdown = approvalTargetBreakdown({
     duesPerWorkerAnnual,
     annualWage,
     activeServices: draft,
     servicesLapsed: unfunded,
     politicalContributionPct,
   });
+  const serviceBonus = approvalBreakdown.servicesBonus;
+  const draftApprovalTarget = approvalBreakdown.target;
   const nextApproval = trendApproval(approval, draftApprovalTarget);
   const nextApprovalDelta = nextApproval - approval;
 
@@ -197,8 +197,10 @@ export function UnionServicesPanel({
         </p>
         <p className="mt-1 text-xs text-muted">
           Next funded turn: {nextApproval.toFixed(1)} ({nextApprovalDelta >= 0 ? "+" : ""}
-          {nextApprovalDelta.toFixed(1)}). Services add +{serviceBonus} to the target. Dues and
-          political spending can offset that bonus.
+          {nextApprovalDelta.toFixed(1)}). Target math: {approvalBreakdown.base} base +
+          {serviceBonus} services −{approvalBreakdown.duesPenalty.toFixed(1)} dues −
+          {approvalBreakdown.politicalPenalty.toFixed(1)} political spending =
+          {draftApprovalTarget.toFixed(1)}.
         </p>
       </div>
 
