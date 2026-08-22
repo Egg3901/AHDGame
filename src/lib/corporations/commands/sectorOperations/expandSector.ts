@@ -52,6 +52,8 @@ import { isCorporateSectorDuplicateKey } from "@/lib/corporations/sectorLocation
 import { getSectorTechEffects } from "@/lib/constants/techTree";
 import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFlag";
 import { insufficientCapitalMessage } from "@/lib/currency/insufficientCapitalMessage";
+import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
+import type { CountryId } from "@/lib/constants/countries";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -104,6 +106,22 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     const state = await db.collection<State>("states").findOne({ _id: stateId });
     if (!state) {
       return NextResponse.json({ error: "Invalid state" }, { status: 400 });
+    }
+
+    // Suggestions already hide these markets, but the write command is the
+    // authority. Eastern-bloc production belongs to state enterprises; a
+    // private corporation cannot bypass that rule by posting a state id
+    // directly. The gate also follows dynamic marketization for countries such
+    // as China, so it opens automatically when the canonical model does.
+    const blockedCountries = await loadCommandEconomyBlockedCountries(db, [state.countryId]);
+    if (blockedCountries.has(state.countryId as CountryId)) {
+      return NextResponse.json(
+        {
+          error:
+            "This market is state-controlled under a command economy and is closed to private sector expansion.",
+        },
+        { status: 403 }
+      );
     }
 
     // Check not already in this state

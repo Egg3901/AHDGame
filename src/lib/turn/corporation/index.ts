@@ -67,8 +67,8 @@ import { executeMarketMakerTrade, distributeConversionSpread } from "@/lib/curre
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import {
-  fxRateForCorpFromMap,
-  resolveCorpLiquidCurrencyCode,
+  fxRateForSectorHostFromMap,
+  resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { loadExchangeRatesMap } from "@/lib/lineOfCredit/netWorth";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
@@ -361,19 +361,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // runs before the per-corp loop. Lagged balances/prices from lookups.
     //
     // FX (clearing collapse remediation, t879 clone A/B): sector.revenue is
-    // stored in the corp's LOCAL currency, but the lagged balances the book
+    // stored in the HOST market's local currency, but the lagged balances the book
     // clears against are ₳-denominated (commodityPriceTurn anchor-normalizes
     // before unit accumulation). Offered units MUST be anchor-normalized the
     // same way, or high-rate currencies (JPY ~101, NGN ~1900 per ₳) inflate
     // the book ~7× in aggregate and every seller's fill collapses (~0.13
     // corporate mean fill in a market whose flows cleared 88%).
-    const fxByCorpId = new Map<string, { code: CurrencyCode | undefined; rate: number }>();
-    for (const corp of lookups.corporations) {
-      fxByCorpId.set(corp._id.toString(), {
-        code: resolveCorpLiquidCurrencyCode(corp),
-        rate: fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency),
-      });
-    }
     const clearingInputs: SectorClearingInput[] = [];
     const supplyAgreementDemandSectors: SupplyAgreementDemandSector[] = [];
     // Market partition (era worlds): each sector clears in its HOME COUNTRY's
@@ -438,7 +431,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       return { fraction: Math.max(0, Math.min(1, ratio)), freightClass };
     };
     for (const [corpId, sectors] of lookups.sectorsByCorp) {
-      const fx = fxByCorpId.get(corpId);
+      const corp = lookups.corpById.get(corpId);
       for (const sector of sectors) {
         const baseRates = getEffectiveStrategyRates(
           sector.sectorType,
@@ -488,7 +481,9 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         if (clearingGroupBySector) {
           clearingGroupBySector.set(sectorId, (sector as { countryId?: string }).countryId ?? "US");
         }
-        const revenueAnchor = readCorpEconomicAnchor(sector.revenue, fx?.code, fx?.rate ?? 1);
+        const hostCode = resolveSectorHostCurrencyCode(sector, corp);
+        const hostRate = fxRateForSectorHostFromMap(sector, corp, lookups.exchangeRatesByCurrency);
+        const revenueAnchor = readCorpEconomicAnchor(sector.revenue, hostCode, hostRate);
         if (supplyAgreementsEnabled) {
           sectorCorpId.set(sectorId, corpId);
           supplyAgreementDemandSectors.push({

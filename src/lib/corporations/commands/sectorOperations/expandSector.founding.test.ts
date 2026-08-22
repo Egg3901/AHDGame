@@ -164,6 +164,28 @@ beforeEach(() => {
 });
 
 describe("expandSector — founding build (plants)", () => {
+  it("blocks private expansion into an eastern-bloc command economy", async () => {
+    await wireMocks(true);
+    db.collectionMocks.states.findOne.mockResolvedValue({
+      _id: "PL-WAW",
+      countryId: "PL",
+      name: "Warsaw",
+    });
+    const { expandSector } = await import("./expandSector");
+    const blockedRequest = new Request("http://localhost/api/corporations/1/sectors", {
+      method: "POST",
+      body: JSON.stringify({ stateId: "PL-WAW", sectorType: "manufacturing" }),
+    });
+
+    const res = await expandSector(blockedRequest, { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.error).toMatch(/command economy/i);
+    expect(db.collectionMocks.corporateSectors.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+
   it("founds the corporation's secondary sector type when requested", async () => {
     await wireMocks(true);
     const { expandSector } = await import("./expandSector");

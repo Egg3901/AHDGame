@@ -11,7 +11,7 @@ import { countryIdSchema } from "@/lib/api/schemas/country";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import {
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     const [corps, sectors, fxByCurrency] = await Promise.all([
       db.collection<Corporation>("corporations").find(corpFilter).toArray(),
       db.collection<CorporateSector>("corporateSectors").find({}).toArray(),
-      loadFxRatesByCurrency(db),
+      loadValuationFxRates(db),
     ]);
 
     // Per-corp currency + FX lookup — sector.revenue / sharePrice / liquidCapital

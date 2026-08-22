@@ -35,7 +35,7 @@ import {
   type CountryMacroRaw,
   type MacroGrowthInputs,
 } from "./macroGrowthInputs";
-import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
+import { loadValuationFxRates } from "@/lib/currency/corporationCapital";
 import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
@@ -361,7 +361,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
   // investment). Empty when the flag is off (the loop guards on macroGrowthEnabled).
   let fxByCurrency = new Map<import("@/lib/constants/currencies").CurrencyCode, number>();
   if (macroGrowthEnabled) {
-    fxByCurrency = await loadFxRatesByCurrency(db);
+    fxByCurrency = await loadValuationFxRates(db);
     // National state-ownership concentration (SOCI) per country — lagged command signal.
     const sociByCountry = new Map<string, number>();
     const budgets = await db
