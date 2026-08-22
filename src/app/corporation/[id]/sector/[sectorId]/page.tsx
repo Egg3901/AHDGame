@@ -768,6 +768,7 @@ export default function SectorDetailPage() {
                 financials={financials}
                 capitalEnabled={!!capital}
                 clearingEnabled={!!pricing}
+                plants={plantsEnabled ? plants : null}
                 compact
               />
               {!isCeo && sector.forSale && forSaleInfo && (
@@ -917,6 +918,7 @@ export default function SectorDetailPage() {
               financials={financials}
               capitalEnabled={!!capital}
               clearingEnabled={!!pricing}
+              plants={plantsEnabled ? plants : null}
             />
             {margins && (
               <MarginsPanel
