@@ -139,6 +139,9 @@ interface EconomyData {
   userCorporationId: string | null;
   userCorporationSectorType?: CorporationType | null;
   userMarketingStrength: number;
+  /** MS charged by the owned-sector attack route. */
+  attackMsCost?: number;
+  /** MS charged by the retired unowned split action in legacy worlds. */
   splitMsCost: number;
   stateResources?: Partial<Record<ExtractableResource, number>> | null;
 }
@@ -929,7 +932,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
                               </span>{" "}
                               +{" "}
                               <span className="text-foreground font-medium">
-                                {data.splitMsCost} MS
+                                {data.attackMsCost ?? data.splitMsCost} MS
                               </span>
                             </span>
                             {owner.attackEstimatedCapture != null &&
@@ -946,12 +949,12 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
                             onClick={() => handleAttackSector(owner.sectorId)}
                             disabled={
                               attackingId === owner.sectorId ||
-                              data.userMarketingStrength < data.splitMsCost
+                              data.userMarketingStrength < (data.attackMsCost ?? data.splitMsCost)
                             }
                             className="rounded border border-error/30 bg-error/10 px-3 py-1 text-xs font-medium text-error hover:bg-error/20 transition-colors disabled:opacity-40 shrink-0"
                             title={
-                              data.userMarketingStrength < data.splitMsCost
-                                ? `Need ${data.splitMsCost} MS, have ${formatMarketingStrength(data.userMarketingStrength)}`
+                              data.userMarketingStrength < (data.attackMsCost ?? data.splitMsCost)
+                                ? `Need ${data.attackMsCost ?? data.splitMsCost} MS, have ${formatMarketingStrength(data.userMarketingStrength)}`
                                 : "Attack this sector — capture based on your MS vs theirs"
                             }
                           >
