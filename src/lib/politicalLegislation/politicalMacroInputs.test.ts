@@ -44,6 +44,30 @@ describe("loadPoliticalMacroInputs", () => {
     expect(inputs.score("MA", "society.demography")).toBe(63);
   });
 
+  it("resolves legacyValue against the era band when a year is passed (ticket #1142)", async () => {
+    // powerGridReliability spans 97-99.9 modern and 85.5-98.3 in 1958. A caller
+    // that converts the other side of its comparison with a year has to read
+    // this one with the same year, or it differences two disjoint scales.
+    setDocs([{ _id: "CA", countryId: "US", values: { "infrastructure.utilities": 50 } }]);
+    const inputs = await loadPoliticalMacroInputs(db as unknown as Db);
+    const modern = inputs.legacyValue("CA", "infrastructure.powerGridReliability");
+    const era1958 = inputs.legacyValue("CA", "infrastructure.powerGridReliability", {
+      countryId: "US",
+      year: 1958,
+    });
+    expect(modern).toBeCloseTo(98.45, 2);
+    expect(era1958).toBeCloseTo(91.91, 2);
+    expect(era1958).toBeLessThan(modern!);
+  });
+
+  it("keeps legacyValue byte-identical when no era is passed", async () => {
+    setDocs([{ _id: "CA", countryId: "US", values: { "infrastructure.utilities": 72 } }]);
+    const inputs = await loadPoliticalMacroInputs(db as unknown as Db);
+    expect(inputs.legacyValue("CA", "infrastructure.powerGridReliability")).toBe(
+      inputs.legacyValue("CA", "infrastructure.powerGridReliability", undefined)
+    );
+  });
+
   it("never yields NaN when the region is on the board but the family is missing", async () => {
     // A partial values doc must not produce NaN: legacyUnit feeds straight into
     // the mortality modifier and the TFP basket, where a NaN would silently

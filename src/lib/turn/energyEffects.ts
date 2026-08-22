@@ -116,9 +116,11 @@ export async function applyEnergyEffects(
   // Board countries resolve their CURRENT energy levels from the political
   // board instead of the legacy doc. All three paths have ADAPTER_TIER1 rows.
   // `legacyValue`, not `legacyUnit`: the deltas below are computed against real
-  // legacy units (renewable %, tCO2/capita, grid reliability 97-99.9), and only
+  // legacy units (renewable %, tCO2/capita, grid reliability), and only
   // powerGridReliability has an authored Bridge A band — the other two would
-  // come back null and silently pin `current` to 0.
+  // come back null and silently pin `current` to 0. Which BAND each of the three
+  // resolves against is decided per metric at the `current` construction below;
+  // the rule is that it must match the band its target is expressed in.
   const political = await loadPoliticalMacroInputs(db);
   // Era-aware only while the era system is on, matching the dynamics phase: a
   // realistic 1953 grid never clears the modern band, so scoring it there reads
@@ -138,12 +140,23 @@ export async function applyEnergyEffects(
     // A region with no board reads all three as 0, which is what the legacy
     // branch removed here had already been returning: the store it queried has
     // been empty since every region gained a board.
-    const fromBoard = (path: string) =>
-      political.has(regionId) ? (political.legacyValue(regionId, path) ?? 0) : 0;
+    const fromBoard = (path: string, band?: typeof era) =>
+      political.has(regionId) ? (political.legacyValue(regionId, path, band) ?? 0) : 0;
     const current = {
+      // Renewable and carbon are compared against targets in the metric's OWN
+      // natural units (a share × 100, an intensity × carbonTargetMax), which do
+      // not move with the era — so their `current` must stay on the era-blind
+      // band too. Reading these era-aware would be the same mistake in reverse:
+      // 1958's renewable band bottoms out at −30%, and a coal plant measured
+      // against a negative "current" would read as RAISING renewable share.
       renewable: fromBoard("environment.renewableEnergy"),
       carbon: fromBoard("environment.carbonEmissions"),
-      reliability: fromBoard("infrastructure.powerGridReliability"),
+      // Reliability is the one target that is band-converted (score → uptime),
+      // so it is the one `current` that must use the SAME band. Ticket #1142:
+      // era-aware target vs era-blind current made the gap negative for every
+      // mix in the game, and this metric maps 1:1 onto `infrastructure.utilities`,
+      // so the channel could only ever drag that family down.
+      reliability: fromBoard("infrastructure.powerGridReliability", era),
     };
     const deltas = computeRegionEnergyDeltas(regionPlants, current, era);
     for (const [rawPath, v] of Object.entries(deltas)) {
