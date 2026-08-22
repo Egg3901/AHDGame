@@ -33,7 +33,10 @@ import { identifyOppositionParty } from "@/lib/nppAutonomy/oppositionBehavior";
 import { computeGoverningAgenda } from "@/lib/nppAutonomy/governingAgenda";
 // The cap/cooldown pair now comes from nppSponsorLimitsForCountry, which selects
 // between the non-player constants and the tighter player-country ones.
-import { NPP_BILL_VOTING_DURATION_HOURS } from "@/lib/nppAutonomy/constants";
+import {
+  NPP_BILL_VOTING_DURATION_HOURS,
+  NPP_SPONSOR_TYPE_REPEAT_COOLDOWN_TURNS,
+} from "@/lib/nppAutonomy/constants";
 import {
   selectNppBill,
   buildConditionsSignal,
@@ -124,6 +127,36 @@ async function lastNppSponsoredBillTurn(
     return doc.votingEndsOnTurn - NPP_BILL_VOTING_DURATION_HOURS;
   }
   return null;
+}
+
+/** Legislation types this party introduced recently, including failed bills. */
+async function recentNppSponsoredLegislationTypeIds(
+  db: Db,
+  countryId: CountryId,
+  sponsorParty: string,
+  currentTurn: number
+): Promise<Set<string>> {
+  const earliestVotingEnd =
+    currentTurn - NPP_SPONSOR_TYPE_REPEAT_COOLDOWN_TURNS + NPP_BILL_VOTING_DURATION_HOURS;
+  const recent = await db
+    .collection<Bill>("bills")
+    .find(
+      {
+        countryId,
+        nppSponsored: true,
+        sponsorParty,
+        legislationTypeId: { $exists: true },
+        votingEndsOnTurn: { $gte: earliestVotingEnd },
+      },
+      { projection: { legislationTypeId: 1 } }
+    )
+    .toArray();
+
+  return new Set(
+    recent
+      .map((bill) => bill.legislationTypeId)
+      .filter((id): id is string => typeof id === "string")
+  );
 }
 
 // ── Sponsor selection ─────────────────────────────────────────────────────────
@@ -426,13 +459,20 @@ async function attemptPartySponsorship(a: PartySponsorshipAttempt): Promise<numb
     return 0;
   }
 
+  const recentLegislationTypeIds = await recentNppSponsoredLegislationTypeIds(
+    db,
+    countryId,
+    party,
+    currentTurn
+  );
   const selection = selectNppBill(
     a.legTypes,
     npp,
     a.signal,
     a.agenda,
     a.fiscalStance,
-    a.currentPolicyOptionIds
+    a.currentPolicyOptionIds,
+    recentLegislationTypeIds
   );
   if (!selection) {
     console.log(`[nppBillSponsorship] ${countryId} (${tag}): no bill selected`);

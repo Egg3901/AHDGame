@@ -22,6 +22,7 @@ import {
   SOVEREIGN_CONFIDENCE_PREMIUM_MAX,
 } from "@/lib/nationalization/constants";
 import { IMF_SOVEREIGN_DEFAULT_RATE } from "@/lib/sovereignDefault/constants";
+import { effectiveBorrowingLimit } from "@/lib/budget/borrowingLimit";
 
 /**
  * Debt/GDP ratio at which a sovereign leaves the B band and degrades to CCC
@@ -194,7 +195,13 @@ export async function processAnnualDebt(
       federalBudget.imfSovereignBailoutActive,
       federalBudget.sovereignRiskAnchor
     ) + getSovereignConfidencePremium(federalBudget.investorConfidence);
-  const ceilingExceeded = newPrincipal > federalBudget.debt.ceiling;
+  const ceilingExceeded =
+    newPrincipal >
+    effectiveBorrowingLimit({
+      countryId: federalBudget.countryId,
+      gdp: federalBudget.gdpSmoothed ?? nationalGDP,
+      storedCeiling: federalBudget.debt.ceiling,
+    });
 
   return {
     newPrincipal,

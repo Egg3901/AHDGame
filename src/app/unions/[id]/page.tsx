@@ -658,6 +658,8 @@ export default function UnionDashboardPage({ params }: PageProps) {
           treasury={union.treasury}
           duesPerWorkerAnnual={duesPerWorkerAnnual}
           activeServices={activeServices}
+          approval={union.approval}
+          politicalContributionPct={politicalContributionPct}
           isHead={isLeader}
           suspended={suspended}
           onSaved={loadData}

@@ -18,7 +18,7 @@ export const WIKI_LAST_UPDATED: Record<string, string> = {
   canvassing: "2026-08-21",
   caucuses: "2026-08-11",
   "central-banks": "2026-08-21",
-  "chamber-leadership": "2026-08-20",
+  "chamber-leadership": "2026-08-21",
   "cn-overview": "2026-08-20",
   "coalition-formation": "2026-08-20",
   coalitions: "2026-08-20",

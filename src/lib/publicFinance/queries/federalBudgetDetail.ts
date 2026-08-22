@@ -22,6 +22,7 @@ import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import { estimateCountryOwnedBudgetNetLocal } from "@/lib/budget/publicEnterpriseRevenue";
 import { readStateOwnershipConcentration } from "@/lib/nationalization/concentration";
 import { nationalLawCountryQuery } from "@/lib/policy/nationalPolicyRecords";
+import { effectiveBorrowingLimit } from "@/lib/budget/borrowingLimit";
 
 /** One point on the fiscal-year trend series (stat strip compare + debt sparkline). */
 export interface FyHistoryPoint {
@@ -262,6 +263,16 @@ export async function loadFederalBudgetDetail(params: {
   if (!storedNationalBudget) {
     return { ok: false as const, status: 404, error: "National budget not found" };
   }
+
+  const borrowingLimit = effectiveBorrowingLimit({
+    countryId: budgetCountryId,
+    gdp: storedNationalBudget.gdpSmoothed ?? storedNationalBudget.gdp,
+    storedCeiling: storedNationalBudget.debt?.ceiling ?? 0,
+  });
+  storedNationalBudget = {
+    ...storedNationalBudget,
+    debt: { ...storedNationalBudget.debt, ceiling: borrowingLimit },
+  };
 
   const currentTurn = gameState?.currentTurn ?? 0;
   const turnInYear = ((currentTurn - 1) % TURNS_PER_YEAR) + 1;

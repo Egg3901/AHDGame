@@ -517,7 +517,9 @@ export function selectNppBill(
    * national statePolicies rows). Lets the fiscal-restraint pick treat the
    * enacted rung as a ceiling instead of choosing an absolute rung blind.
    */
-  currentPolicyOptionIds?: ReadonlyMap<string, string>
+  currentPolicyOptionIds?: ReadonlyMap<string, string>,
+  /** Legislation types this sponsor party introduced inside the repeat window. */
+  recentLegislationTypeIds?: ReadonlySet<string>
 ): NppBillSelection | null {
   if (candidates.length === 0) return null;
 
@@ -526,6 +528,7 @@ export function selectNppBill(
   let best: NppBillSelection | null = null;
 
   for (const legType of candidates) {
+    if (recentLegislationTypeIds?.has(legType._id)) continue;
     const options = legType.policyOptions ?? [];
     // Tax-slider laws carry no options ladder — synthesize a directional
     // stand-in so NPCs can sponsor rate moves (deferred-item fix).

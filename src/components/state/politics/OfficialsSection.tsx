@@ -22,12 +22,18 @@ export function SenateSection({
   label = "Senate",
   memberTitle = "Senator",
   isMultiSeat = false,
+  isElected = true,
+  configuredSeats = 2,
+  description,
 }: {
   state: State;
   senators: SerializedOfficial[];
   label?: string;
   memberTitle?: string;
   isMultiSeat?: boolean;
+  isElected?: boolean;
+  configuredSeats?: number;
+  description?: string;
 }) {
   const totalSeats = isMultiSeat ? senators.reduce((sum, s) => sum + (s.seatsHeld ?? 1), 0) : 2;
   const filledCount = isMultiSeat
@@ -40,11 +46,20 @@ export function SenateSection({
         <h2 className="text-xl font-semibold">{label}</h2>
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            {isMultiSeat ? `${filledCount} reps · ${totalSeats} seats` : "2 seats"}
+            {!isElected
+              ? `${configuredSeats} members · unelected`
+              : isMultiSeat
+                ? `${filledCount} reps · ${totalSeats} seats`
+                : `${configuredSeats} seats`}
           </span>
         </div>
       </div>
-      {senators.length > 0 ? (
+      {!isElected ? (
+        <div className="py-8 text-center text-muted">
+          <p>{description ?? `${label} is an unelected national institution.`}</p>
+          <p className="text-sm mt-1">It does not have regional elected-official seats.</p>
+        </div>
+      ) : senators.length > 0 ? (
         <div
           className={`grid gap-4 sm:gap-6 ${isMultiSeat ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4" : "grid-cols-2"}`}
         >
