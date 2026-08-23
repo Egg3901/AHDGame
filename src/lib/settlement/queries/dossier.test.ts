@@ -12,6 +12,21 @@ import {
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("../actorContext", () => ({ loadSettlementActorContext: vi.fn() }));
+vi.mock("../seatOffices", () => ({ resolveSeatOffices: vi.fn() }));
+
+/** Both offices of every seat, unheld unless a test says otherwise. */
+function seatOffices(over: Record<string, unknown> = {}) {
+  const base = Object.fromEntries(
+    SETTLEMENT_SEATS.map((s) => [
+      s.id,
+      [
+        { role: "headOfGovernment", title: "Head of Government", holder: null },
+        { role: "foreignMinister", title: "Foreign Minister", holder: null },
+      ],
+    ])
+  );
+  return { ...base, ...over };
+}
 
 function prime(db: MockDb, name: string): MockCollection {
   return db.collection(name) as unknown as MockCollection;
@@ -107,6 +122,8 @@ describe("loadGermanQuestionDossier", () => {
 
     const { loadSettlementActorContext } = await import("../actorContext");
     vi.mocked(loadSettlementActorContext).mockResolvedValue(seatCtx() as never);
+    const { resolveSeatOffices } = await import("../seatOffices");
+    vi.mocked(resolveSeatOffices).mockResolvedValue(seatOffices() as never);
   });
 
   it("returns null when the feature gate is off", async () => {
@@ -229,6 +246,36 @@ describe("loadGermanQuestionDossier", () => {
     expect(uk.barPct).toBe(25);
     expect(dd.committedPoints).toBe(40);
     expect(dd.isViewer).toBe(true);
+  });
+
+  it("carries each delegation's offices and holders onto its bench row", async () => {
+    const { resolveSeatOffices } = await import("../seatOffices");
+    vi.mocked(resolveSeatOffices).mockResolvedValue(
+      seatOffices({
+        US: [
+          { role: "headOfGovernment", title: "President", holder: "Ariane Yeong" },
+          { role: "foreignMinister", title: "Secretary of State", holder: null },
+        ],
+      }) as never
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    const us = view!.benches.west.find((b) => b.seatId === "US")!;
+    expect(us.offices).toEqual([
+      { role: "headOfGovernment", title: "President", holder: "Ariane Yeong" },
+      { role: "foreignMinister", title: "Secretary of State", holder: null },
+    ]);
+  });
+
+  it("gives every bench row both offices even when nobody holds either", async () => {
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    for (const b of [...view!.benches.west, ...view!.benches.east]) {
+      // The block says what the seat's offices ARE, not merely who is in them:
+      // "vacant" is the fact that no one can act for this delegation.
+      expect(b.offices.map((o) => o.role)).toEqual(["headOfGovernment", "foreignMinister"]);
+      expect(b.offices.every((o) => o.holder === null)).toBe(true);
+    }
   });
 
   it("counts the open floor live and flags when the cap bit", async () => {
