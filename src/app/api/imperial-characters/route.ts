@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
+import { randomBrandColor } from "@/lib/corporations/brandColor";
 import {
   getImperialConfig,
   getImperialEligibleCountries,
@@ -125,6 +126,7 @@ export async function POST(request: Request) {
       sharePrice: IMPERIAL_SHARE_PRICE,
       shareholders: [{ imperialCharacterId: imperialId, shares: IMPERIAL_INITIAL_SHARES }],
       publicFloat: 0,
+      brandColor: randomBrandColor(),
       sequentialId: corpSequentialId,
       createdAt: now,
       updatedAt: now,

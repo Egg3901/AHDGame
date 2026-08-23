@@ -9,6 +9,7 @@ import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getEraFounderShares } from "@/lib/constants/sectorSeedEra";
 import { generateTickerSymbol } from "@/lib/corporations/tickerSymbol";
 import { openCeoTenure } from "@/lib/corporations/ceoHistory";
+import { randomBrandColor } from "@/lib/corporations/brandColor";
 import { getDefaultLegalStructureId } from "@/lib/corporations/legalStructure";
 import {
   anchorToCorpLiquidCapital,
@@ -191,6 +192,9 @@ export async function spinOff(
       sharePrice: DEFAULT_SHARE_PRICE,
       shareholders: [{ corporationId: parent._id, shares: subsidiaryShares }],
       publicFloat: 0,
+      // Its own colour, not the parent's. A spin-off is a separate company and
+      // its cap table should not look like the one it came out of.
+      brandColor: randomBrandColor(),
       dividendRate: 0,
       suspended: false,
       hiddenFromExchange: false,

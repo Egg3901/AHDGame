@@ -30,6 +30,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
+import { randomBrandColor } from "@/lib/corporations/brandColor";
 import { computeUnownedSeedRevenue } from "@/lib/admin/seed/seedUnownedSectors";
 import { createNPP } from "@/lib/npp/generator";
 import { generateTickerSymbol } from "@/lib/corporations/tickerSymbol";
@@ -197,22 +198,8 @@ export interface SpawnNppCorporationResult {
   tickerSymbol: string;
 }
 
-const NPP_BRAND_COLORS = [
-  "#3b82f6", // blue
-  "#10b981", // emerald
-  "#f59e0b", // amber
-  "#ef4444", // red
-  "#8b5cf6", // violet
-  "#06b6d4", // cyan
-  "#84cc16", // lime
-  "#f97316", // orange
-  "#ec4899", // pink
-  "#6366f1", // indigo
-];
-
 function pickBrandColor(inputColor?: string): string {
-  if (inputColor) return inputColor;
-  return NPP_BRAND_COLORS[Math.floor(Math.random() * NPP_BRAND_COLORS.length)];
+  return inputColor ?? randomBrandColor();
 }
 
 /**
