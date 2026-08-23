@@ -449,6 +449,14 @@ export const SETTLEMENT_INSTITUTIONS: readonly SettlementInstitutionDef[] = [
 
 export const TOTAL_INSTITUTION_WEIGHT = 10;
 
+// `capitalPerTurn` was raised from 6/3 to 8/4 alongside the capital payment
+// route. The balance sim showed every seat's capital-only play going UNUSED
+// across a whole game — cash plays were reachable every turn while `terms` took
+// three turns of saving — so half the catalogue was decorative.
+//
+// ⚠️ SETTLEMENT_CAPITAL_K MOVES WITH THE SECONDARY RATE. A play's price in turns
+// of saving is points x k / capitalPerTurn, so changing one without the other
+// silently reprices the capital route. See that constant's doc comment.
 export const SETTLEMENT_SEATS: readonly SettlementSeatDef[] = [
   {
     id: "DD",
@@ -457,7 +465,7 @@ export const SETTLEMENT_SEATS: readonly SettlementSeatDef[] = [
     tier: "primary",
     multiplierPct: 200,
     actionsPerTurn: 3,
-    capitalPerTurn: 6,
+    capitalPerTurn: 8,
     capitalLabel: "Party Capital",
     wireLabel: "EAST BERLIN",
     authority: false,
@@ -469,7 +477,7 @@ export const SETTLEMENT_SEATS: readonly SettlementSeatDef[] = [
     tier: "secondary",
     multiplierPct: 100,
     actionsPerTurn: 1,
-    capitalPerTurn: 3,
+    capitalPerTurn: 4,
     capitalLabel: "Party Capital",
     wireLabel: "MOSCOW",
     authority: true,
@@ -481,7 +489,7 @@ export const SETTLEMENT_SEATS: readonly SettlementSeatDef[] = [
     tier: "secondary",
     multiplierPct: 100,
     actionsPerTurn: 1,
-    capitalPerTurn: 3,
+    capitalPerTurn: 4,
     capitalLabel: "Political Capital",
     wireLabel: "WASHINGTON",
     authority: true,
@@ -493,7 +501,7 @@ export const SETTLEMENT_SEATS: readonly SettlementSeatDef[] = [
     tier: "secondary",
     multiplierPct: 100,
     actionsPerTurn: 1,
-    capitalPerTurn: 3,
+    capitalPerTurn: 4,
     capitalLabel: "Political Capital",
     wireLabel: "LONDON",
     authority: false,

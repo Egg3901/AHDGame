@@ -6,8 +6,11 @@ import type { SettlementPlayDoc } from "@/lib/db/types/settlementPlay";
 import {
   HUNDREDTHS,
   LADDER_DECAY_TURNS,
+  SEAT_CAPITAL_CAP,
+  SETTLEMENT_CAPITAL_K,
   SETTLEMENT_INSTITUTIONS,
   SETTLEMENT_SEATS,
+  getSeat,
   seatActionBankCap,
 } from "@/lib/constants/settlementCrisis";
 
@@ -660,5 +663,31 @@ describe("processSettlementTurn", () => {
       label: "Fraternal Aid Package",
       turn: 412,
     });
+  });
+});
+
+describe("seat capital income", () => {
+  it("grants the raised per-turn capital", () => {
+    // Raised because the balance sim showed every seat's capital-only play
+    // going UNUSED across a whole game: cash plays were available every turn
+    // while `terms` took three turns of saving, so the capital half of the
+    // catalogue was decorative.
+    expect(getSeat("US")!.capitalPerTurn).toBe(4);
+    expect(getSeat("UK")!.capitalPerTurn).toBe(4);
+    expect(getSeat("RU")!.capitalPerTurn).toBe(4);
+    // DD is the primary seat and keeps double the secondaries' rate.
+    expect(getSeat("DD")!.capitalPerTurn).toBe(8);
+  });
+
+  it("keeps the capital price pegged to the income", () => {
+    // A play's price in turns of saving is points x k / capitalPerTurn. If
+    // these two drift apart the capital route silently gets cheaper or dearer,
+    // which is exactly the sort of unmeasured balance change the tempo divisor
+    // exists to prevent elsewhere.
+    expect(SETTLEMENT_CAPITAL_K).toBe(getSeat("US")!.capitalPerTurn);
+  });
+
+  it("keeps the bank ceiling unchanged", () => {
+    expect(SEAT_CAPITAL_CAP).toBe(60);
   });
 });
