@@ -14,7 +14,7 @@ import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
 import { NUCLEAR_NODES } from "@/lib/military/nuclearProgram";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 
-// Conflicts hub — every live conflict in the world, on the map and in the list,
+// Conflicts hub: every live conflict in the world, on the map and in the list,
 // under one headline: the global cold-war tension reading. Gated by
 // `conflictsEnabled`; the themed-island shell and fonts come from the layout.
 // The Cold War framing around the list still describes the conflicts a bloc actually

@@ -1,13 +1,13 @@
 import type { Db } from "mongodb";
 
 /**
- * Global cold-war tension: one 0–100 number the whole world shares, with a
+ * Global cold-war tension: one 0-100 number the whole world shares, with a
  * short ledger of what moved it.
  *
  * Discrete events (a nuclear test, an escalation rung, a stand-down) apply
  * spikes through `applyTensionEvent`. Each turn, the tension phase relaxes the
- * value toward a floor set by the world's standing pressure — the Vietnam
- * rung, active crises, how many warheads exist — so spikes fade but a hot
+ * value toward a floor set by the world's standing pressure: the Vietnam
+ * rung, active crises, how many warheads exist: so spikes fade but a hot
  * world never reads calm. The dials layer (lib/coldwar/dials.ts) turns the
  * reading into consequences: DEFCON, procurement demand, detente goodwill.
  */
@@ -128,7 +128,7 @@ export async function applyTensionEvent(
 
 /**
  * The per-turn tension step: relax toward the standing-pressure floor.
- * Idempotent per turn — a re-run of the same turn is a no-op.
+ * Idempotent per turn: a re-run of the same turn is a no-op.
  */
 export async function runTensionTurn(
   db: Db,

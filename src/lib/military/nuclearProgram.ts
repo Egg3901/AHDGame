@@ -31,7 +31,7 @@ export interface NuclearNode {
   cost: number;
   /** Device nodes: warheads/turn production cap this tier unlocks. */
   productionCap?: number;
-  /** Tension spike when the node lands (device nodes only — the test). */
+  /** Tension spike when the node lands (device nodes only: the test). */
   tensionSpike?: number;
   /** order.deterrence board shock when the node lands. */
   deterrenceShock?: number;
@@ -192,7 +192,7 @@ export function accrueWarheads(
 }
 
 /**
- * Deterrence credibility 0–100: warheads discounted by how survivable the
+ * Deterrence credibility 0-100: warheads discounted by how survivable the
  * delivery posture is. A big stockpile with no delivery leg deters nobody.
  */
 export function deterrenceScore(adopted: Record<string, number>, warheads: number): number {
