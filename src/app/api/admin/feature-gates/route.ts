@@ -20,6 +20,7 @@ export const FEATURE_GATE_BOOLEAN_KEYS = [
   "forexEnabled",
   "playerRandomEventsEnabled",
   "crisisInteractionEnabled",
+  "livingConflictsEnabled",
   "autoDisastersEnabled",
   "crisisAidBillsEnabled",
   "demographicsLayer1PositionsEnabled",

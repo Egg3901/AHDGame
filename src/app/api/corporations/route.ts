@@ -6,6 +6,7 @@ import { getEraFoundingBounds, getEraFounderShares } from "@/lib/constants/secto
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { foundCorporationSchema } from "@/lib/api/schemas/corporations";
+import { randomBrandColor } from "@/lib/corporations/brandColor";
 import { handleRouteError } from "@/lib/api/errors";
 import type { Character, Corporation, CorporateSector, State, User } from "@/lib/db/types";
 import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoSectorShed";
@@ -525,6 +526,10 @@ export async function POST(request: Request) {
         },
       ],
       publicFloat: publicFloatAtFounding,
+      // Every corp gets a colour at founding. It drives the cap-table charts and
+      // every place the corp appears next to rivals, and a random pick beats a
+      // shared default: two corps side by side are told apart on sight.
+      brandColor: randomBrandColor(),
       isPrivate: ipoResult ? false : true,
       // Private founding uses the jurisdiction's private form (e.g. UK Ltd),
       // not the public default (PLC) — otherwise the hero shows "Private PLC".

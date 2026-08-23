@@ -19,24 +19,19 @@ import {
   INSIDER_CONCENTRATION_THRESHOLD,
 } from "@/lib/corporations/sharePriceFormula";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { brandShades, resolveCorpColor } from "@/lib/corporations/brandColor";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PIE_COLORS = [
-  "#3b82f6",
-  "#8b5cf6",
-  "#ec4899",
-  "#f59e0b",
-  "#22c55e",
-  "#14b8a6",
-  "#ef4444",
-  "#6366f1",
-  "#f97316",
-  "#06b6d4",
-  "#84cc16",
-  "#a855f7",
-];
-const PUBLIC_FLOAT_COLOR = "#4ade80";
+// Slices are shades of the corporation's own brand colour, not a fixed rainbow.
+// A cap table is one company's ownership, so the chart should read as that
+// company; the twelve unrelated hues it used before said nothing about whose
+// shares they were. See brandShades() for how the shades stay separable.
+// Public float is deliberately OUTSIDE the ramp: those shares belong to no
+// named holder, and a neutral grey says so at any brand hue.
+const PUBLIC_FLOAT_COLOR = "hsl(215, 10%, 56%)";
+/** Holders named individually in the pie; the rest collapse into one slice. */
+const MAX_NAMED_SLICES = 10;
 const PAGE_SIZE = 8;
 const PIE_SIZE = 160;
 const PIE_CX = PIE_SIZE / 2;
@@ -52,17 +47,60 @@ interface PieSlice {
   pct: number;
 }
 
+/**
+ * Ranked holders to pie slices, tinted off the corp's own brand colour, with
+ * everything past the top few collapsed into one slice.
+ *
+ * The tail has to collapse. Real cap tables here run to hundreds of holders, and
+ * a pie with 250 wedges is 250 invisible slivers under a legend nobody can read.
+ * No palette rescues that, so the chart names the holders who actually move the
+ * company and totals the rest into one slice.
+ */
+function shadedSlices(
+  corporation: CorporationDetail,
+  ranked: Array<{ label: string; shares: number }>,
+  total: number
+): PieSlice[] {
+  const head = ranked.slice(0, MAX_NAMED_SLICES);
+  const tail = ranked.slice(MAX_NAMED_SLICES);
+  const shades = brandShades(
+    resolveCorpColor(corporation.brandColor, corporation._id),
+    head.length + (tail.length > 0 ? 1 : 0)
+  );
+
+  const slices: PieSlice[] = head.map((holder, i) => ({
+    label: holder.label,
+    shares: holder.shares,
+    color: shades[i],
+    pct: total > 0 ? (holder.shares / total) * 100 : 0,
+  }));
+
+  if (tail.length > 0) {
+    const tailShares = tail.reduce((sum, holder) => sum + holder.shares, 0);
+    slices.push({
+      label: `${tail.length} smaller holders`,
+      shares: tailShares,
+      color: shades[head.length],
+      pct: total > 0 ? (tailShares / total) * 100 : 0,
+    });
+  }
+
+  return slices;
+}
+
+function rankedShareholders(corporation: CorporationDetail) {
+  return corporation.shareholders.slice().sort((a, b) => b.shares - a.shares);
+}
+
 function buildSlices(corporation: CorporationDetail): PieSlice[] {
   const { totalShares, publicFloat } = corporation;
   if (totalShares <= 0) return [];
 
-  const sorted = corporation.shareholders.slice().sort((a, b) => b.shares - a.shares);
-  const slices: PieSlice[] = sorted.map((sh, i) => ({
-    label: sh.name,
-    shares: sh.shares,
-    color: PIE_COLORS[i % PIE_COLORS.length],
-    pct: (sh.shares / totalShares) * 100,
-  }));
+  const slices = shadedSlices(
+    corporation,
+    rankedShareholders(corporation).map((sh) => ({ label: sh.name, shares: sh.shares })),
+    totalShares
+  );
 
   if ((publicFloat ?? 0) > 0) {
     slices.push({
@@ -81,19 +119,19 @@ function buildVotingSlices(corporation: CorporationDetail): PieSlice[] | null {
   const tvp = totalVotingPower(corporation as Parameters<typeof totalVotingPower>[0]);
   if (tvp <= 0) return [];
 
-  const sorted = corporation.shareholders.slice().sort((a, b) => b.shares - a.shares);
-  const slices: PieSlice[] = sorted.map((sh, i) => {
-    const votes = shareholderVotingPower(
-      corporation as Parameters<typeof shareholderVotingPower>[0],
-      sh as Parameters<typeof shareholderVotingPower>[1]
-    );
-    return {
+  // Ranked by SHARES, same as the ownership pie, so a holder keeps the same
+  // shade in both charts and the two can be read against each other.
+  const slices = shadedSlices(
+    corporation,
+    rankedShareholders(corporation).map((sh) => ({
       label: sh.name,
-      shares: votes,
-      color: PIE_COLORS[i % PIE_COLORS.length],
-      pct: (votes / tvp) * 100,
-    };
-  });
+      shares: shareholderVotingPower(
+        corporation as Parameters<typeof shareholderVotingPower>[0],
+        sh as Parameters<typeof shareholderVotingPower>[1]
+      ),
+    })),
+    tvp
+  );
 
   // Public float votes 1 per share
   if ((corporation.publicFloat ?? 0) > 0) {
@@ -265,14 +303,14 @@ export default function MarketOverviewPanel({
 
   function buildPiePaths(sliceList: PieSlice[], totalUnits: number) {
     let cumAngle = -Math.PI / 2;
-    return sliceList.map((slice) => {
+    return sliceList.map((slice, i) => {
       const angle = totalUnits > 0 ? (slice.shares / totalUnits) * 2 * Math.PI : 0;
       const startAngle = cumAngle;
       const endAngle = cumAngle + angle;
       cumAngle = endAngle;
 
       if (angle >= 2 * Math.PI - 0.001) {
-        return <circle key={slice.label} cx={PIE_CX} cy={PIE_CY} r={PIE_R} fill={slice.color} />;
+        return <circle key={i} cx={PIE_CX} cy={PIE_CY} r={PIE_R} fill={slice.color} />;
       }
 
       const x1 = PIE_CX + PIE_R * Math.cos(startAngle);
@@ -283,7 +321,7 @@ export default function MarketOverviewPanel({
 
       return (
         <path
-          key={slice.label}
+          key={i}
           d={`M ${PIE_CX} ${PIE_CY} L ${x1} ${y1} A ${PIE_R} ${PIE_R} 0 ${largeArc} 1 ${x2} ${y2} Z`}
           fill={slice.color}
           stroke="var(--color-card)"
@@ -426,8 +464,8 @@ export default function MarketOverviewPanel({
               )}
             </div>
             <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1.5 max-w-[260px]">
-              {slices.map((slice) => (
-                <div key={slice.label} className="flex items-center gap-1.5">
+              {slices.map((slice, i) => (
+                <div key={i} className="flex items-center gap-1.5">
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-sm shrink-0"
                     style={{ backgroundColor: slice.color }}

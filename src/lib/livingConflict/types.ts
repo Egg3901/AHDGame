@@ -1,4 +1,9 @@
-import type { CrisisEffect, CrisisDecisionNode } from "@/lib/db/types/crisis";
+import type {
+  CrisisEffect,
+  CrisisDecisionNode,
+  GlobalResponseOutcome,
+  GlobalResponseRole,
+} from "@/lib/db/types/crisis";
 
 /**
  * The living-conflict engine.
@@ -29,8 +34,7 @@ import type { CrisisEffect, CrisisDecisionNode } from "@/lib/db/types/crisis";
  *  - `bloc`          — aligned to a side by alliance but not exposed.
  *  - `bystander`     — everyone else, who can still act diplomatically.
  */
-export type ConflictRole =
-  "belligerent" | "backer_a" | "backer_b" | "neighbor" | "bloc" | "bystander";
+export type ConflictRole = GlobalResponseRole;
 
 export const ALL_CONFLICT_ROLES: readonly ConflictRole[] = [
   "belligerent",
@@ -59,6 +63,16 @@ export type RoleEffects = Partial<Record<ConflictRole, CrisisEffect[]>>;
 
 /** A per-role decision tree root. A role with no entry gets no decision. */
 export type RoleDecisionTrees = Partial<Record<ConflictRole, CrisisDecisionNode>>;
+
+export interface EventResponseDefinition {
+  /** Number of hourly turns leaders have to answer. */
+  windowTurns: number;
+  /** One menu per relationship to the event. Absent roles do not answer. */
+  decisionTrees: RoleDecisionTrees;
+  defaultOptionIdByRole: Partial<Record<ConflictRole, string>>;
+  outcomes: GlobalResponseOutcome[];
+  defaultOutcomeId: string;
+}
 
 /**
  * How a procedural event decides to fire. Declarative and deterministic: the
@@ -89,6 +103,8 @@ export interface ConflictEvent {
   body: string;
   /** Effects applied to each affected nation by its role, when the event fires. */
   effects?: RoleEffects;
+  /** Optional shared response window materialized as an interactive crisis. */
+  response?: EventResponseDefinition;
 }
 
 /** One rung/stage of the conflict. Advancing swaps the tree, effects and events. */
@@ -146,8 +162,19 @@ export interface LivingConflictDef {
   /** Era window; the conflict cannot open outside it. */
   fromYear?: number;
   untilYear?: number;
+  /** False for conflicts that require an explicit trigger rather than a date. */
+  autoOpen?: boolean;
   /** The map anchor / host, for surfaces that need one. */
   hostCountry?: string;
+  /** Authored world participants. The role resolver may reinterpret them. */
+  participants: {
+    belligerents: string[];
+    backerA?: string;
+    backerB?: string;
+    neighbors: string[];
+    blocMembers: string[];
+    bystanders: string[];
+  };
   phases: ConflictPhase[];
   /** Classify a nation's role. Pure; reads only RoleContext. */
   roleResolver: (ctx: RoleContext) => ConflictRole;
@@ -171,6 +198,10 @@ export interface LivingConflictState {
   phaseTurns: number;
   /** Turns since the conflict opened (drives everyTurns cadences). */
   totalTurns: number;
+  /** Turn claim preventing a replay from advancing clocks or pressure twice. */
+  lastProcessedTurn?: number;
+  /** Compatibility import asks the current phase to publish its entry beat. */
+  emitPhaseEntryNextTurn?: boolean;
   updatedAt: Date;
 }
 

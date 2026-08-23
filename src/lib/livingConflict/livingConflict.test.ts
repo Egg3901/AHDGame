@@ -116,6 +116,7 @@ describe("living-conflict engine", () => {
         key: "t",
         type: "disaster",
         name: "T",
+        participants: { belligerents: [], neighbors: [], blocMembers: [], bystanders: [] },
         roleResolver: () => "bystander",
         phases: [
           {
@@ -185,6 +186,11 @@ describe("definitions", () => {
   it("registers vietnam and pandemic", () => {
     expect(livingConflictDef("vietnam")).toBeTruthy();
     expect(livingConflictDef("pandemic")).toBeTruthy();
+    expect(livingConflictDef("berlin")).toBeTruthy();
+    expect(livingConflictDef("congo")).toBeTruthy();
+    expect(livingConflictDef("suez_aftermath")).toBeTruthy();
+    expect(livingConflictDef("oil_disruption")).toBeTruthy();
+    expect(livingConflictDef("nuclear_incident")).toBeTruthy();
     expect(livingConflictDef("nope")).toBeNull();
   });
 
@@ -263,7 +269,7 @@ describe("driver", () => {
     const res = await driveConflictTurn(db, VIETNAM_DEF, participants, 10, 1955);
     expect(res.state.hasOpened).toBe(true);
     expect(res.state.phaseLevel).toBe(1);
-    const beat = res.events.find((e) => e.fired.event.key === "advisors_beat");
+    const beat = res.events.find((e) => e.fired.event.key === "advisors_entry");
     expect(beat).toBeTruthy();
     expect(beat!.affectedNations.length).toBeGreaterThan(0);
   });

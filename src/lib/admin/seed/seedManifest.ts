@@ -518,6 +518,12 @@ const RUNTIME: CollectionEntry[] = [
 
   // Sovereign / crisis
   { name: "crises", category: "runtime" },
+  {
+    name: "livingConflicts",
+    category: "runtime",
+    notes:
+      "Release 1.3 persistent phased world-conflict state. One row per authored definition; wiped on reset so phase, pressure, intensity, and clocks cannot leak into a new world.",
+  },
   { name: "sovereignCrisisDecisions", category: "runtime" },
   { name: "globalAlerts", category: "runtime" },
   { name: "wireEvents", category: "runtime" },
