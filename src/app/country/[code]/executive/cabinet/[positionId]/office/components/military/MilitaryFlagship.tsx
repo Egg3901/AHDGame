@@ -15,7 +15,9 @@ import { MilitaryBudgetTab } from "./MilitaryBudgetTab";
 import { MilitaryOperationsTab } from "./MilitaryOperationsTab";
 import { ArsenalTab } from "./ArsenalTab";
 import { NuclearTab, type NuclearStatusView } from "./NuclearTab";
+import { CovertPanel, type CovertStatusView } from "./CovertPanel";
 import { NUCLEAR_CAPABLE } from "@/lib/military/nuclearProgram";
+import { COVERT_CAPABLE, type CovertFunding } from "@/lib/military/covertNuclear";
 
 type SubTab = "military" | "arsenal" | "nuclear" | "budget" | "operations";
 const SUB_TABS: Array<{ id: SubTab; label: string }> = [
@@ -66,10 +68,12 @@ export function MilitaryFlagship({
   const [busy, setBusy] = useState(false);
   const [contractError, setContractError] = useState<string | null>(null);
 
-  // The nuclear tab exists only for countries in the era's capable set; everyone
-  // else never sees it and never fetches the programme.
+  // The nuclear tab exists only for countries in the era's capable set OR the
+  // covert set; everyone else never sees it and never fetches a programme.
   const nuclearCapable = (NUCLEAR_CAPABLE as readonly string[]).includes(countryId);
+  const covertCapable = (COVERT_CAPABLE as readonly string[]).includes(countryId);
   const [nuclear, setNuclear] = useState<NuclearStatusView | undefined>(undefined);
+  const [covert, setCovert] = useState<CovertStatusView | undefined>(undefined);
   const [nuclearError, setNuclearError] = useState<string | null>(null);
 
   const refreshNuclear = useCallback(async () => {
@@ -84,9 +88,24 @@ export function MilitaryFlagship({
     }
   }, [countryCode, positionId]);
 
+  const refreshCovert = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/country/${countryCode}/executive/cabinet/${positionId}/nuclear/covert`
+      );
+      if (!res.ok) return;
+      setCovert((await res.json()) as CovertStatusView);
+    } catch {
+      // Same posture as the overt read: leave the loading card.
+    }
+  }, [countryCode, positionId]);
+
   useEffect(() => {
-    if (nuclearCapable) void refreshNuclear();
-  }, [nuclearCapable, refreshNuclear]);
+    // A covert-set country fetches BOTH: the overt GET's widened eligibility
+    // decides whether the post-breakout tree renders alongside the panel.
+    if (nuclearCapable || covertCapable) void refreshNuclear();
+    if (covertCapable) void refreshCovert();
+  }, [nuclearCapable, covertCapable, refreshNuclear, refreshCovert]);
 
   /** Shared POST plumbing for the three nuclear mutations. */
   async function nuclearPost(path: string, body: Record<string, unknown>): Promise<boolean> {
@@ -109,6 +128,7 @@ export function MilitaryFlagship({
         return false;
       }
       await refreshNuclear();
+      if (covertCapable) await refreshCovert();
       onUpdate();
       return true;
     } catch {
@@ -187,7 +207,7 @@ export function MilitaryFlagship({
   return (
     <div className="space-y-4">
       <div className="inline-flex rounded-lg border border-card-border bg-card p-0.5">
-        {SUB_TABS.filter((t) => t.id !== "nuclear" || nuclearCapable).map((t) => (
+        {SUB_TABS.filter((t) => t.id !== "nuclear" || nuclearCapable || covertCapable).map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
@@ -249,22 +269,38 @@ export function MilitaryFlagship({
           onCancelContract={cancelContract}
         />
       )}
-      {tab === "nuclear" && nuclearCapable && (
+      {tab === "nuclear" && (nuclearCapable || covertCapable) && (
         <>
           {nuclearError && (
             <div className="rounded-lg border border-[color-mix(in_srgb,var(--error)_40%,transparent)] bg-[color-mix(in_srgb,var(--error)_8%,transparent)] p-2.5 text-[12px] text-foreground">
               {nuclearError}
             </div>
           )}
-          <NuclearTab
-            status={nuclear}
-            currencySymbol={currencySymbol}
-            canAct={canAct}
-            busy={busy}
-            onConductTest={(nodeKey) => nuclearPost("test", { nodeKey })}
-            onAdoptDelivery={(nodeKey) => nuclearPost("adopt", { nodeKey })}
-            onSetProduction={(rate) => nuclearPost("production", { rate })}
-          />
+          {covertCapable && (
+            <CovertPanel
+              status={covert}
+              currencySymbol={currencySymbol}
+              canAct={canAct}
+              busy={busy}
+              onSetFunding={(funding: CovertFunding) => nuclearPost("covert/funding", { funding })}
+              onBreakout={() => nuclearPost("covert/breakout", {})}
+            />
+          )}
+          {/* A covert-set country sees the overt tree only once it HAS an overt
+              programme: the GET route's widened eligibility flips capable on
+              after the breakout, and the locked-gates card before it would
+              only advertise a tree the DDR is not supposed to have. */}
+          {(nuclearCapable || nuclear?.eligibility.capable === true) && (
+            <NuclearTab
+              status={nuclear}
+              currencySymbol={currencySymbol}
+              canAct={canAct}
+              busy={busy}
+              onConductTest={(nodeKey) => nuclearPost("test", { nodeKey })}
+              onAdoptDelivery={(nodeKey) => nuclearPost("adopt", { nodeKey })}
+              onSetProduction={(rate) => nuclearPost("production", { rate })}
+            />
+          )}
         </>
       )}
       {tab === "budget" && (
