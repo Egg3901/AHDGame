@@ -390,6 +390,17 @@ describe("DELETE defence-contracts", () => {
     expect(r.body.terminationFee).toBeGreaterThan(0);
   });
 
+  // A closed order whose fee never moved is a repair item, not a settled record, and the
+  // supplier must not be told they were compensated.
+  it("records whether the fee actually landed", async () => {
+    const r = await cancel();
+    expect(r.body).toHaveProperty("terminationFeePaid");
+    const feeWrites = db.collectionMocks.defenceContracts.updateOne.mock.calls.filter((c) =>
+      JSON.stringify(c[1]).includes("termination.feePaid")
+    );
+    expect(feeWrites).toHaveLength(1);
+  });
+
   it("costs nothing to withdraw an offer the supplier never answered", async () => {
     db.collectionMocks.defenceContracts.findOne.mockResolvedValue(
       liveContract({ status: "pending", lotsDelivered: 0 })

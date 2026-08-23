@@ -204,8 +204,25 @@ describe("terminationNoticeToSupplier", () => {
       countryName: "the United Kingdom",
       lots: 5,
       fee: 42_000,
+      feePaid: true,
     });
     expect(msg).toContain("42,000");
+    expect(msg).toContain("paid");
     expect(msg).toContain("public wire");
+  });
+
+  // Telling a company it has been compensated when the money did not move is worse than
+  // telling it nothing: it stops them chasing it.
+  it("does not claim a supplier was paid when the fee has not landed", () => {
+    const msg = terminationNoticeToSupplier({
+      basis: "convenience",
+      countryName: "the United Kingdom",
+      lots: 5,
+      fee: 42_000,
+      feePaid: false,
+    });
+    expect(msg).toContain("owed");
+    expect(msg).toContain("not yet reached");
+    expect(msg).not.toContain("You are paid");
   });
 });

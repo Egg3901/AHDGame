@@ -600,8 +600,14 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     // The break fee. Paid AFTER the order is closed so a supplier cannot bank a delivery
     // against money already earmarked as compensation, and through the shared primitive so a
     // leg that throws lands in the repair queue rather than vanishing.
+    //
+    // Whether it landed is WRITTEN DOWN. A termination that says a fee was owed while the
+    // money never moved is exactly the silent gap the money primitive exists to make visible,
+    // and the supplier is about to be told they were paid. The key is derived from the
+    // contract, so a repair replays it without paying twice.
+    let feePaid = fee <= 0;
     if (fee > 0 && corp) {
-      await applyMoneyMove(db, {
+      const move = await applyMoneyMove(db, {
         key: `defence_contract_termination:${objectId.toString()}`,
         kind: "defence_contract_termination",
         turn: currentTurn,
@@ -624,6 +630,10 @@ export async function DELETE(request: Request, { params }: RouteParams) {
           },
         ],
       }).catch(() => null);
+      feePaid = move?.status === "applied" || move?.status === "replayed";
+      await db
+        .collection("defenceContracts")
+        .updateOne({ _id: objectId }, { $set: { "termination.feePaid": feePaid } });
     }
 
     // Disclosure and its price, the same answer the game gives to a self-dealt award: not a
@@ -669,6 +679,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
             countryName: COUNTRIES[countryId]?.name ?? countryId,
             lots: lotsCancelled,
             fee,
+            feePaid,
           }),
           metadata: {
             contractId: objectId.toString(),
@@ -677,6 +688,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
             basis,
             lotsCancelled,
             fee,
+            feePaid,
           },
         },
       ]);
@@ -687,6 +699,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       cancelled: true,
       basis,
       terminationFee: fee,
+      terminationFeePaid: feePaid,
       favorabilityPenalty,
     });
   } catch (error) {

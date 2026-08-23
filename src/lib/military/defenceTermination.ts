@@ -142,12 +142,18 @@ export function terminationDisclosure(input: {
   );
 }
 
-/** Plain text for the supplier, who finds out from a notification rather than the wire. */
+/**
+ * Plain text for the supplier, who finds out from a notification rather than the wire.
+ *
+ * `feePaid` is not decoration. Telling a company it has been compensated when the money did
+ * not move is worse than telling it nothing, because it stops them chasing it.
+ */
 export function terminationNoticeToSupplier(input: {
   basis: TerminationBasis;
   countryName: string;
   lots: number;
   fee: number;
+  feePaid?: boolean;
 }): string {
   const lots = input.lots.toLocaleString("en-US");
   if (input.basis === "withdrawal") {
@@ -160,9 +166,16 @@ export function terminationNoticeToSupplier(input: {
       `fee is owed.`
     );
   }
+  const owed = Math.round(input.fee).toLocaleString("en-US");
+  if (input.feePaid === false) {
+    return (
+      `${input.countryName} has terminated your contract for ${lots} undelivered lots. You are ` +
+      `owed ${owed} in break fees, which has not yet reached your account. The cancellation is ` +
+      `on the public wire.`
+    );
+  }
   return (
     `${input.countryName} has terminated your contract for ${lots} undelivered lots. You are ` +
-    `paid ${Math.round(input.fee).toLocaleString("en-US")} in break fees, and the cancellation ` +
-    `is on the public wire.`
+    `paid ${owed} in break fees, and the cancellation is on the public wire.`
   );
 }

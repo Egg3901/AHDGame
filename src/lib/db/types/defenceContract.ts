@@ -132,8 +132,16 @@ export interface DefenceContract {
    */
   termination?: {
     basis: "withdrawal" | "cause" | "convenience";
-    /** Break fee actually paid to the supplier, in local currency. Zero unless convenience. */
+    /** Break fee owed to the supplier, in local currency. Zero unless convenience. */
     fee: number;
+    /**
+     * Whether the fee's cash leg actually landed. Absent on a termination that owed nothing.
+     *
+     * False means the order is closed and the supplier has NOT been compensated, which is a
+     * repair queue item rather than a settled record. The money-move key is derived from the
+     * contract id, so replaying it cannot pay twice.
+     */
+    feePaid?: boolean;
     /** Undelivered lots at the moment it was torn up. */
     lotsCancelled: number;
     ministerCharacterId?: ObjectId;
