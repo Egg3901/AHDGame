@@ -320,7 +320,10 @@ export const defect: Defect = {
   id: "AHD-defence-procurement-overaward",
   title: "Defence contracts could obligate an unlimited future appropriation",
   severity: "P1",
-  codeFix: { mergedTo: "main" },
+  codeFix: {
+    mergedTo: "main",
+    requiredCommit: "2e526743207c61bcbf82d88771f79869a3a702d7",
+  },
   seedFix: {
     status: "not-needed",
     note: "contracts are created only by runtime player actions; the world seed creates no defence contracts",

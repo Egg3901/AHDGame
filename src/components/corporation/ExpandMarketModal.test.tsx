@@ -140,4 +140,53 @@ describe("ExpandMarketModal plants market finder", () => {
     });
     expect(router.push).toHaveBeenCalledWith("/corporation/corp-1/sector/sector-9?build=1");
   });
+
+  // Ticket #1162: a market quoting room for zero is still open to a build, but
+  // the list said only "0 farms" and the sentence explaining that was buried in
+  // the confirm step, so players read the whole board as closed.
+  it("says in the market list that a zero-headroom market is still buildable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: async () => ({
+            ...marketResponse,
+            suggestions: [{ ...marketResponse.suggestions[0], headroomUnits: 0 }],
+          }),
+        } as Response)
+      )
+    );
+
+    render(
+      <ExpandMarketModal
+        corpId="corp-1"
+        primaryType="agriculture"
+        secondaryType="retail"
+        liquidCapital={25_400}
+        plantsMode
+        onClose={() => undefined}
+      />
+    );
+
+    expect(await screen.findByText(/You can still build here/i)).toBeTruthy();
+  });
+
+  it("does not add the still-buildable note when the market has room", async () => {
+    vi.stubGlobal("fetch", vi.fn(suggestionReply));
+
+    render(
+      <ExpandMarketModal
+        corpId="corp-1"
+        primaryType="agriculture"
+        secondaryType="retail"
+        liquidCapital={25_400}
+        plantsMode
+        onClose={() => undefined}
+      />
+    );
+
+    await screen.findByText("Best fit");
+    expect(screen.queryByText(/You can still build here/i)).toBeNull();
+  });
 });

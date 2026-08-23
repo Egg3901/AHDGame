@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { MarketCapHistory } from "@/lib/db/types";
-import { removeUnlistedCaps } from "./AHD-private-market-cap-history";
+import { defect, removeUnlistedCaps } from "./AHD-private-market-cap-history";
+
+describe("AHD-private-market-cap-history remediation metadata", () => {
+  it("pins the deployed code fix used by the heal gate", () => {
+    expect(defect.codeFix?.requiredCommit).toBe("2e526743207c61bcbf82d88771f79869a3a702d7");
+  });
+});
 
 describe("removeUnlistedCaps", () => {
   it("subtracts private capitalization while preserving the candle spread", () => {
