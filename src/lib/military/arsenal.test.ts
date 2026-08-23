@@ -8,6 +8,7 @@ import {
   lotsToFillUnit,
   lotPrice,
   MATERIEL_SHARE_OF_UNIT_COST,
+  applyEquipmentLots,
 } from "./arsenal";
 import { MILITARY_COUNTRY_SCALE } from "@/lib/constants/military";
 
@@ -163,6 +164,28 @@ describe("lotsToFillUnit", () => {
       equipment: { firepower: 3, protection: 2, support: 3 },
     } as never;
     expect(lotsToFillUnit(almostFull, 12)).toBe(2);
+  });
+});
+
+describe("applyEquipmentLots", () => {
+  it("preserves twelve one-lot refits as exactly one full twelve-lot load", () => {
+    let equipment = { firepower: 0, protection: 0, support: 0 };
+    for (let lot = 0; lot < 12; lot++) {
+      equipment = applyEquipmentLots(equipment, 1, 12);
+    }
+    expect(equipment).toEqual({
+      firepower: EQUIPMENT_TRACK_MAX,
+      protection: EQUIPMENT_TRACK_MAX,
+      support: EQUIPMENT_TRACK_MAX,
+    });
+  });
+
+  it("redirects a lot away from full tracks instead of discarding their share", () => {
+    expect(applyEquipmentLots({ firepower: 3, protection: 2, support: 3 }, 1, 12)).toEqual({
+      firepower: 3,
+      protection: 2.75,
+      support: 3,
+    });
   });
 });
 
