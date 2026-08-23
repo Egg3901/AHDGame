@@ -40,6 +40,7 @@ import { formatLocalFunds } from "@/lib/actions";
 import { getSettlementCrisesCollection, getSettlementPlaysCollection } from "@/lib/db/collections";
 import { defconFor, isArmed } from "../outcome";
 import { canCharacterAfford, canSeatAfford, seatBudgetFor } from "../affordability";
+import { resolveSeatOffices, type SettlementSeatOffice } from "../seatOffices";
 import { loadSettlementActorContext } from "../actorContext";
 import { resolvePersonalFunds } from "../playCost";
 
@@ -92,6 +93,12 @@ export interface DossierBenchView {
   barPct: number;
   actedThisTurn: boolean;
   isViewer: boolean;
+  /**
+   * The two offices that can act for this delegation, head of government
+   * first. Always both, even when neither is held — the block names the
+   * offices, and an unheld one reads as `vacant`.
+   */
+  offices: SettlementSeatOffice[];
 }
 
 export interface DossierWireLine {
@@ -474,6 +481,8 @@ export async function loadGermanQuestionDossier(
 
   // ── benches ───────────────────────────────────────────────────────────────
   const maxCommitted = Math.max(1, ...crisis.seats.map((s) => s.committedPoints));
+  // Resolved once for all four seats rather than per bench row.
+  const officesBySeat = await resolveSeatOffices(db);
   const bench = (state: SettlementSeatState): DossierBenchView => {
     const def = SETTLEMENT_SEATS.find((s) => s.id === state.id)!;
     return {
@@ -487,6 +496,7 @@ export async function loadGermanQuestionDossier(
       barPct: Math.round((state.committedPoints / maxCommitted) * 100),
       actedThisTurn: state.lastActedTurn === turn,
       isViewer: seat?.id === state.id,
+      offices: officesBySeat[state.id] ?? [],
     };
   };
   const benches = {

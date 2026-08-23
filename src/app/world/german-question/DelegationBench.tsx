@@ -22,12 +22,13 @@ export function DelegationBench({
   const fill = bloc === "east" ? "from-primary-dark to-error-muted" : "from-secondary to-info";
 
   return (
-    <section className={`rounded-xl border p-4 ${frame}`}>
+    <section aria-label={title} className={`rounded-xl border p-4 ${frame}`}>
       <h2 className={`mb-3 font-mono text-body-xs font-bold tracking-wider ${accent}`}>{title}</h2>
       <div className="flex flex-col gap-2.5">
         {seats.map((seat) => (
           <div
             key={seat.seatId}
+            data-testid={`delegation-seat-${seat.seatId}`}
             className={`flex flex-col gap-1.5 border-b border-dashed pb-2.5 ${rule}`}
           >
             <div className="flex items-baseline justify-between gap-2">
@@ -40,6 +41,27 @@ export function DelegationBench({
               {seat.tier} · {seat.multiplier} ·{" "}
               {seat.isViewer ? "your seat" : seat.actedThisTurn ? "acted this turn" : "quiet"}
             </div>
+            {/*
+              Both offices, always — an unheld one is the fact that this
+              delegation has nobody who can act, which is worth as much to the
+              reader as a name would be.
+            */}
+            <dl className="flex flex-col gap-0.5 font-mono text-body-xs">
+              {seat.offices.map((office) => (
+                <div key={office.role} className="flex items-baseline justify-between gap-2">
+                  {/*
+                    Both sides truncate. A character name runs to 30 characters
+                    and "Minister of Foreign Affairs" to 27, which together
+                    overflow this column on a narrow viewport if either side is
+                    allowed to hold its width.
+                  */}
+                  <dt className="min-w-0 truncate text-muted">{office.title}</dt>
+                  <dd className="min-w-0 truncate text-right text-foreground">
+                    {office.holder ?? "vacant"}
+                  </dd>
+                </div>
+              ))}
+            </dl>
             <div className="relative h-1.5 overflow-hidden rounded border border-card-border bg-background">
               <div
                 className={`absolute inset-y-0 left-0 bg-gradient-to-r ${fill}`}
