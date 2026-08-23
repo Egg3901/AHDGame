@@ -30,6 +30,10 @@ function contract(input: {
 }
 
 describe("findProcurementClawbacks", () => {
+  it("pins the deployed code fix used by the heal gate", () => {
+    expect(defect.codeFix?.requiredCommit).toBe("2e526743207c61bcbf82d88771f79869a3a702d7");
+  });
+
   it("recognizes only one supplier tranche in each contracting window", () => {
     const supplier = new ObjectId();
     const contracts = [

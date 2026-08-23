@@ -233,7 +233,10 @@ export const defect: Defect = {
   id: "AHD-private-market-cap-history",
   title: "Private corporations contaminated stock-market capitalization history",
   severity: "P1",
-  codeFix: { mergedTo: "main" },
+  codeFix: {
+    mergedTo: "main",
+    requiredCommit: "2e526743207c61bcbf82d88771f79869a3a702d7",
+  },
   seedFix: {
     status: "not-needed",
     note: "market snapshots are created only by runtime turn processing and are not present in seeds",
