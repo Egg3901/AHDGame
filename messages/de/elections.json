@@ -96,6 +96,20 @@
       "pts": "Pkt.",
       "ceiling": "Grenze in diesem Zyklus: Höchstens {opponentSlice}% der Stimmen von {opponent} können zu {focus} wechseln, und {focusSlice}% der Stimmen von {focus} können abwandern. Die Registrierungsneigung bestimmt die Ausgangsverteilung und wie schwer eine Partei zu bewegen ist, nicht den Endanteil. Diese Faktoren ergeben zusammen {net} Pkt. dieses beweglichen Anteils."
     },
+    "nationalMood": {
+      "title": "Nationale Stimmung",
+      "subtitle": "Der Druck der Wirtschaft auf den nationalen Stimmenanteil der Regierungspartei",
+      "towardIncumbent": "Für {party}",
+      "againstIncumbent": "Gegen {party}",
+      "incumbentFallback": "die Regierungspartei",
+      "scaleNote": "Die Skala reicht von -{clamp} bis +{clamp} Punkte. Diese Verschiebung steckt bereits in den Stimmenzahlen.",
+      "componentsGroup": "Was einfließt",
+      "fatigue": "Strebt eine {term} Amtszeit in Folge an. Die Malus-Seite wird mit x{multiplier} skaliert.",
+      "termThird": "3.",
+      "termFourthPlus": "4. oder spätere",
+      "recordedTurn": "Stand von Zug {turn}.",
+      "pts": "Pkt."
+    },
     "registration": {
       "title": "Registrierungseinfluss",
       "noData": "{state} ({stateId}): für diesen Staat werden keine Registrierungsdaten erfasst.",
