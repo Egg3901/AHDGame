@@ -332,4 +332,152 @@ describe("commitSettlementPlay", () => {
     });
     expect(res).toMatchObject({ ok: false, status: 409 });
   });
+
+  describe("payment mode", () => {
+    // `aid` is DD's ℳ45M / 0-capital play. Its capital price is
+    // 0 + round(4.0 points x k=4) = 16, inside the seat's banked 30.
+
+    it("commits a funded play against capital, spending no money", async () => {
+      const { spendFromTreasury } = await import("@/lib/budget/treasurySpend");
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      const res = await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "seat",
+        playId: "aid",
+        payment: "capital",
+      });
+
+      expect(res).toMatchObject({ ok: true });
+      expect(vi.mocked(spendFromTreasury)).not.toHaveBeenCalled();
+    });
+
+    it("never reads the treasury in capital mode", async () => {
+      const budget = prime(db, "federalBudget");
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "seat",
+        playId: "aid",
+        payment: "capital",
+      });
+
+      expect(budget.findOne).not.toHaveBeenCalled();
+    });
+
+    it("claims the capital price, not the base capital cost", async () => {
+      const crises = prime(db, "settlementCrises");
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "seat",
+        playId: "aid",
+        payment: "capital",
+      });
+
+      const [filter, update] = crises.updateOne.mock.calls[0];
+      expect(filter.seats.$elemMatch.capital.$gte).toBe(16);
+      expect(update.$inc["seats.$.capital"]).toBe(-16);
+    });
+
+    it("still charges the treasury when no payment mode is given", async () => {
+      // An older client posts no `payment`. It has to keep working AND keep
+      // paying cash: silently switching it to capital would spend a budget the
+      // player never agreed to spend.
+      const { spendFromTreasury } = await import("@/lib/budget/treasurySpend");
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "seat",
+        playId: "aid",
+      });
+
+      expect(vi.mocked(spendFromTreasury)).toHaveBeenCalledWith(
+        expect.anything(),
+        "DD",
+        45_000_000
+      );
+    });
+
+    it("still adds ladder heat on the capital route", async () => {
+      // Payment buys the play; it does not change what the play does. If
+      // capital bought a coercive move quietly, the brink would get CHEAPER the
+      // poorer a country is, which is backwards.
+      const plays = prime(db, "settlementPlays");
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "seat",
+        playId: "border",
+        payment: "capital",
+      });
+
+      expect(getPlay("border")!.addsHeat).toBe(true);
+      expect(plays.insertOne.mock.calls[0][0].heatAdded).toBe(1);
+    });
+
+    it("records which budget paid", async () => {
+      const plays = prime(db, "settlementPlays");
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "seat",
+        playId: "aid",
+        payment: "capital",
+      });
+
+      expect(plays.insertOne.mock.calls[0][0]).toMatchObject({
+        payment: "capital",
+        costs: expect.objectContaining({ funds: 0, capital: 16 }),
+      });
+    });
+
+    it("records the funds route on an ordinary play", async () => {
+      const plays = prime(db, "settlementPlays");
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "seat",
+        playId: "aid",
+      });
+
+      expect(plays.insertOne.mock.calls[0][0]).toMatchObject({
+        payment: "funds",
+        costs: expect.objectContaining({ funds: 45_000_000, capital: 0 }),
+      });
+    });
+
+    it("refuses capital mode on a play with no treasury cost", async () => {
+      // `terms` is capital-only already. A second route would just be a worse
+      // price for the same thing.
+      const { commitSettlementPlay } = await import("./commitPlay");
+      const res = await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "seat",
+        playId: "terms",
+        payment: "capital",
+      });
+      expect(res).toMatchObject({ ok: false, status: 400 });
+    });
+
+    it("refuses capital mode on a personal play", async () => {
+      // A character has no seat capital pool, and inventing one for a route
+      // nobody asked for is a resource that exists for nothing.
+      const { commitSettlementPlay } = await import("./commitPlay");
+      const res = await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "personal",
+        playId: "letter",
+        direction: 1,
+        payment: "capital",
+      });
+      expect(res).toMatchObject({ ok: false, status: 400 });
+    });
+  });
 });

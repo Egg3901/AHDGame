@@ -29,7 +29,8 @@
  */
 import { ObjectId, type Db } from "mongodb";
 import type { Character } from "@/lib/db/types";
-import type { SettlementPlayDoc } from "@/lib/db/types/settlementPlay";
+import type { SettlementPaymentMode, SettlementPlayDoc } from "@/lib/db/types/settlementPlay";
+import { capitalPriceFor } from "../capitalPrice";
 import { getPlay } from "@/lib/constants/settlementCrisis";
 import type { CountryId } from "@/lib/constants/countries";
 import { getSettlementCrisesCollection, getSettlementPlaysCollection } from "@/lib/db/collections";
@@ -44,6 +45,12 @@ export interface CommitPlayInput {
   playId: string;
   /** Required for a personal play; ignored on a seat play. */
   direction?: 1 | -1;
+  /**
+   * Which budget pays. Defaults to `"funds"` so a client posting the old body
+   * keeps working AND keeps paying cash — silently switching an old client to
+   * capital would spend a budget the player never agreed to spend.
+   */
+  payment?: SettlementPaymentMode;
 }
 
 export type CommitPlayResult =
@@ -58,6 +65,20 @@ export async function commitSettlementPlay(
 ): Promise<CommitPlayResult> {
   const play = getPlay(input.playId);
   if (!play) return fail(400, "No such play.");
+
+  const payment: SettlementPaymentMode = input.payment ?? "funds";
+  if (payment === "capital") {
+    if (input.actor === "personal") {
+      return fail(400, "A personal play has no delegation capital to spend.");
+    }
+    if (play.fundsCost === 0) {
+      return fail(400, "That play has no treasury cost to pay another way.");
+    }
+  }
+  // ADDS to the play's own capital cost, so paying this way is never cheaper in
+  // capital than paying cash. The route buys a delegation out of indebting the
+  // nation; it is not a discount.
+  const capitalCharged = payment === "capital" ? capitalPriceFor(play) : play.capitalCost;
 
   const ctx = await loadSettlementActorContext(db, input.characterId);
   if (!ctx) return fail(404, "The German Question is not running.");
@@ -82,7 +103,8 @@ export async function commitSettlementPlay(
     playId: play.id,
     targetInstitutionId: play.target,
     class: play.class,
-    costs: { funds: play.fundsCost, capital: play.capitalCost, actions: play.actionCost },
+    costs: { funds: play.fundsCost, capital: capitalCharged, actions: play.actionCost },
+    payment,
     basePoints: play.magnitude,
     appliedPoints: null,
     heatAdded: play.addsHeat ? 1 : 0,
@@ -114,10 +136,14 @@ export async function commitSettlementPlay(
     // through interestRate, creditRating and debtToGdpRatio. It is a
     // consequence, not a refusal, and every other national payment in the app
     // (org dues, aid, membership bills) already works this way.
-    const fundsLocal = seatFundsLocal(play);
+    // Capital mode pays nothing at all from the treasury. `seatFundsLocal` is
+    // not even consulted, so the two routes cannot both charge for one play.
+    const fundsLocal = payment === "capital" ? 0 : seatFundsLocal(play);
 
     // Guarded debit. The filter restates the budget the context reported, so a
-    // second submit racing this one matches nothing and pays nothing.
+    // second submit racing this one matches nothing and pays nothing. It has to
+    // restate the CHARGED capital, not the catalogue's, or a capital-route play
+    // would be claimed against the cheaper cash price.
     const claimed = await crises.updateOne(
       {
         _id: crisisId,
@@ -125,14 +151,14 @@ export async function commitSettlementPlay(
         seats: {
           $elemMatch: {
             id: seat.id,
-            capital: { $gte: play.capitalCost },
+            capital: { $gte: capitalCharged },
             actions: { $gte: play.actionCost },
           },
         },
       },
       {
         $inc: {
-          "seats.$.capital": -play.capitalCost,
+          "seats.$.capital": -capitalCharged,
           "seats.$.actions": -play.actionCost,
         },
         $set: { updatedAt: now },
@@ -155,6 +181,9 @@ export async function commitSettlementPlay(
       seatId: seat.id,
       countryId: seat.id as CountryId,
       direction: seat.direction,
+      // Record what was ACTUALLY charged. On the capital route that is zero
+      // money, and the audit trail has to match the balance the player watched.
+      costs: { ...base.costs, funds: fundsLocal },
     });
     return { ok: true, playId: play.id, appliedDirection: seat.direction };
   }
