@@ -75,6 +75,13 @@ export interface ElectionVoteTally {
     sharePts: number;
     components: Array<{ key: string; label: string; contributionPts: number }>;
     fatigueMultiplier: number;
+    /**
+     * Share of the raw penalty forgiven by credit-for-response, in [0, 0.4].
+     * Absent when no enacted bill qualified.
+     */
+    forgivenessFrac?: number;
+    /** The bills that earned the forgiveness. */
+    creditedBills?: Array<{ key: string; title: string; component: string; weight: number }>;
     incumbentPartyId?: string;
     recordedTurn: number;
   };

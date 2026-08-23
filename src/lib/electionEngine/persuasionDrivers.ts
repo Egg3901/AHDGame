@@ -252,16 +252,15 @@ function incumbencyDriver(
   // signed budget; its challengers get the negation; bystander pairs neutral.
   const incumbentPartyId = options?.incumbentPartyId;
   if (incumbentPartyId != null) {
-    // Approval shield/drag (capped), then subtract the party-tenure voter-fatigue
-    // drag post-cap so a long-tenured party feels "time for a change" even when
-    // popular. Folded into this driver — the incumbent gets the net, its
-    // challengers the negation, so a net-negative (fatigue > shield) actively
-    // helps challengers.
-    const budget = approvalAdjustedIncumbencyBudget(
+    // Approval shield/drag (capped). The incumbent gets it, its challengers the
+    // negation. Party-tenure "time for a change" is NOT applied here: it is
+    // priced by the economic referendum's penalty-side multiplier
+    // (`economicReferendum.ts`), which acts on national vote share directly
+    // instead of on the thin persuadable slice this driver peels.
+    const net = approvalAdjustedIncumbencyBudget(
       options?.incumbentApproval,
       options?.incumbencyApprovalPivot
     );
-    const net = budget - (options?.incumbentTenurePenalty ?? 0);
     if (pj === incumbentPartyId) return net;
     if (pi === incumbentPartyId) return -net;
     return 0;

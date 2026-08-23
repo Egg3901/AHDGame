@@ -91,7 +91,6 @@ export interface DriverDisplayInputs {
    */
   incumbentPartyId?: string;
   incumbentApproval?: number;
-  incumbentTenurePenalty?: number;
   /**
    * Single-seat legislative own-race (US Senate): sitting senator's party and
    * consecutive terms. Switches the Incumbency row to the flat decaying shield
@@ -189,7 +188,6 @@ export function computePairwiseDriverDisplay(
   if (inputs.incumbentPartyId != null) {
     options.incumbentPartyId = inputs.incumbentPartyId;
     options.incumbentApproval = inputs.incumbentApproval;
-    options.incumbentTenurePenalty = inputs.incumbentTenurePenalty;
   }
   if (inputs.legislativeIncumbentPartyId != null) {
     options.legislativeIncumbentPartyId = inputs.legislativeIncumbentPartyId;

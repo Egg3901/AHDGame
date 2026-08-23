@@ -17,6 +17,10 @@ import {
   INCOME_TREND_CAP,
   TOTAL_BONUS_CAP,
   REFERENDUM_SHARE_CLAMP,
+  applyResponseCredit,
+  CREDIT_FORGIVENESS_MAX,
+  CREDIT_WEIGHT_DECAY,
+  type ResponseCreditCandidate,
 } from "./economicReferendum";
 
 const NEUTRAL = {
@@ -191,5 +195,130 @@ describe("applyReferendumShift", () => {
     expect(out.inc).toBeGreaterThanOrEqual(0);
     expect(out.opp).toBeGreaterThanOrEqual(0);
     expect(out.inc + out.opp).toBeCloseTo(150, 6);
+  });
+});
+
+describe("credit for response", () => {
+  const BAD = {
+    unemploymentRate: NATURAL_UNEMPLOYMENT_PCT + 4, // -2.4 pts
+    povertyRate: POVERTY_BASELINE_PCT + 10, // -1.5 pts
+    inflationRate: 10, // -2.4 pts
+    realIncomeTrendPct: 0,
+  };
+  const jobsBill: ResponseCreditCandidate = {
+    key: "bill-a",
+    title: "Emergency Jobs Act",
+    component: "unemployment",
+    enactedTurn: 100,
+  };
+
+  it("forgives CREDIT_FORGIVENESS_MAX of a component with one qualifying bill", () => {
+    const components = computeEconomicReferendum(BAD, 1).components;
+    const out = applyResponseCredit(components, [jobsBill]);
+    expect(out.forgivenessPts).toBeCloseTo(2.4 * CREDIT_FORGIVENESS_MAX, 6);
+    expect(out.creditedBills).toEqual([
+      { key: "bill-a", title: "Emergency Jobs Act", component: "unemployment", weight: 1 },
+    ]);
+  });
+
+  it("decays later bills on the same component and caps the component credit at 1", () => {
+    const components = computeEconomicReferendum(BAD, 1).components;
+    const out = applyResponseCredit(components, [
+      jobsBill,
+      { ...jobsBill, key: "bill-b", enactedTurn: 104 },
+      { ...jobsBill, key: "bill-c", enactedTurn: 108 },
+    ]);
+    expect(out.creditedBills.map((b) => b.weight)).toEqual([
+      1,
+      CREDIT_WEIGHT_DECAY,
+      CREDIT_WEIGHT_DECAY ** 2,
+    ]);
+    // Weights sum to 1.75 but the component credit is capped at 1, so the
+    // relief is the same as one bill would have earned.
+    expect(out.forgivenessPts).toBeCloseTo(2.4 * CREDIT_FORGIVENESS_MAX, 6);
+  });
+
+  it("orders by enactment turn, so the earliest response earns full weight", () => {
+    const components = computeEconomicReferendum(BAD, 1).components;
+    const out = applyResponseCredit(components, [
+      { ...jobsBill, key: "late", enactedTurn: 120 },
+      { ...jobsBill, key: "early", enactedTurn: 100 },
+    ]);
+    expect(out.creditedBills.map((b) => b.key)).toEqual(["early", "late"]);
+  });
+
+  it("never forgives more than CREDIT_FORGIVENESS_MAX of the whole penalty", () => {
+    const components = computeEconomicReferendum(BAD, 1).components;
+    const out = applyResponseCredit(components, [
+      jobsBill,
+      { ...jobsBill, key: "p", component: "poverty" },
+      { ...jobsBill, key: "i", component: "incomeTrend" },
+    ]);
+    expect(out.forgivenessFrac).toBeLessThanOrEqual(CREDIT_FORGIVENESS_MAX + 1e-9);
+    expect(out.forgivenessFrac).toBeCloseTo(
+      ((2.4 + 1.5) / (2.4 + 1.5 + 2.4)) * CREDIT_FORGIVENESS_MAX,
+      6
+    );
+  });
+
+  it("ignores bills aimed at a component that is not in penalty", () => {
+    const components = computeEconomicReferendum(BAD, 1).components;
+    const out = applyResponseCredit(components, [
+      { ...jobsBill, key: "inc", component: "incomeTrend" },
+    ]);
+    expect(out.forgivenessPts).toBe(0);
+    expect(out.creditedBills).toEqual([]);
+  });
+
+  it("does nothing when the economy is good (no penalty to forgive)", () => {
+    const out = applyResponseCredit(computeEconomicReferendum(NEUTRAL, 1).components, [jobsBill]);
+    expect(out).toEqual({ forgivenessFrac: 0, forgivenessPts: 0, creditedBills: [] });
+  });
+});
+
+describe("computeEconomicReferendum with response credit", () => {
+  const BAD = {
+    unemploymentRate: NATURAL_UNEMPLOYMENT_PCT + 4,
+    povertyRate: POVERTY_BASELINE_PCT,
+    inflationRate: 2,
+    realIncomeTrendPct: 0,
+  };
+  const jobsBill: ResponseCreditCandidate = {
+    key: "bill-a",
+    title: "Emergency Jobs Act",
+    component: "unemployment",
+    enactedTurn: 100,
+  };
+
+  it("applies forgiveness before the fatigue multiplier", () => {
+    const plain = computeEconomicReferendum(BAD, 3);
+    const credited = computeEconomicReferendum(BAD, 3, undefined, [jobsBill]);
+    // -2.4 raw; forgiven to -1.44; then x1.5 fatigue = -2.16.
+    expect(plain.sharePts).toBeCloseTo(-2.4 * 1.5, 6);
+    expect(credited.sharePts).toBeCloseTo(-2.4 * (1 - CREDIT_FORGIVENESS_MAX) * 1.5, 6);
+    expect(credited.fatigueMultiplier).toBe(1.5);
+  });
+
+  it("reports forgivenessFrac and creditedBills only when credit was earned", () => {
+    const credited = computeEconomicReferendum(BAD, 1, undefined, [jobsBill]);
+    expect(credited.forgivenessFrac).toBeCloseTo(CREDIT_FORGIVENESS_MAX, 6);
+    expect(credited.creditedBills?.[0]?.title).toBe("Emergency Jobs Act");
+
+    const plain = computeEconomicReferendum(BAD, 1);
+    expect(plain.forgivenessFrac).toBeUndefined();
+    expect(plain.creditedBills).toBeUndefined();
+  });
+
+  it("leaves the bonus side untouched", () => {
+    const good = {
+      unemploymentRate: NATURAL_UNEMPLOYMENT_PCT,
+      povertyRate: POVERTY_BASELINE_PCT,
+      inflationRate: 2,
+      realIncomeTrendPct: 3,
+    };
+    expect(computeEconomicReferendum(good, 1, undefined, [jobsBill]).sharePts).toBeCloseTo(
+      computeEconomicReferendum(good, 1).sharePts,
+      6
+    );
   });
 });

@@ -10,11 +10,11 @@
  * WHY A NEW CHANNEL. The existing persuasion-driver incumbency channel is
  * measured ~10x too weak: drivers only peel the persuadable slice inside
  * `distributeVotesBySwingFlow`, so 10 budget pts buys about 0.4 share pts
- * (k = 0.04). That makes `partyTenureFatigue.ts` (3.5 panel pts per term,
- * subtracted inside `incumbencyDriver`) near-inert in practice. This channel
- * supersedes it pending a calibration decision; the old fatigue pipe is left in
- * place and functioning as-is so the two can be A/B'd before anything is
- * removed.
+ * (k = 0.04). That made the old `partyTenureFatigue.ts` pipe (3.5 panel pts per
+ * term, subtracted inside `incumbencyDriver`) near-inert in practice. This
+ * channel replaced it: term fatigue now lives here as a penalty-side
+ * multiplier, and the old pipe has been removed rather than left to double-count
+ * a drag nobody could feel.
  *
  * APPLICATION RULES (learned from the rejected national-wave prototype):
  *   1. The shift is applied party-level at the share-combination step INSIDE the
@@ -52,6 +52,41 @@ export interface ReferendumComponent {
   contributionPts: number;
 }
 
+/**
+ * One enacted bill offered to the credit-for-response gate.
+ *
+ * The DB-side loader (`src/lib/elections/responseCredit.ts`) has already
+ * applied the two gates that need database access: a real budget cost, and
+ * revocation when the component's metric kept worsening. What is left here is
+ * ordering and the diminishing-returns decay, which is pure arithmetic.
+ */
+export interface ResponseCreditCandidate {
+  /** Stable identifier for the bill (its id as a string). */
+  key: string;
+  title: string;
+  /** Which {@link ReferendumComponent} key this bill pushes in the helpful direction. */
+  component: string;
+  /** Turn the bill was enacted. Earliest on a component earns full weight. */
+  enactedTurn: number;
+}
+
+/** A bill that actually earned credit, with the weight it earned. */
+export interface CreditedBill {
+  key: string;
+  title: string;
+  component: string;
+  /** Post-decay weight in [0, 1]. */
+  weight: number;
+}
+
+export interface ResponseCreditOutcome {
+  /** Share of the raw penalty forgiven, in [0, CREDIT_FORGIVENESS_MAX]. */
+  forgivenessFrac: number;
+  /** Points of penalty forgiven (>= 0). */
+  forgivenessPts: number;
+  creditedBills: CreditedBill[];
+}
+
 export interface ReferendumResult {
   /** Composite misery reading (sum of the excesses over each anchor). */
   miseryIndex: number;
@@ -60,6 +95,13 @@ export interface ReferendumResult {
   components: ReferendumComponent[];
   /** Multiplier applied to the PENALTY side only (never the bonus). */
   fatigueMultiplier: number;
+  /**
+   * Share of the raw penalty forgiven by credit-for-response. Absent or 0 when
+   * no bill qualified.
+   */
+  forgivenessFrac?: number;
+  /** The bills that earned the forgiveness, for the UI to show why. */
+  creditedBills?: CreditedBill[];
 }
 
 /* ------------------------------------------------------------------ *
@@ -108,6 +150,96 @@ export function referendumFatigueMultiplier(consecutiveTerms: number | undefined
   return 1.5; // seeking a 4th or beyond
 }
 
+/* ------------------------------------------------------------------ *
+ * Credit for response.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Most of the raw penalty that visible crisis response can forgive. Voters
+ * partially forgive a government that is demonstrably acting, because the
+ * metrics lag by turns and the election does not wait for them.
+ */
+export const CREDIT_FORGIVENESS_MAX = 0.4;
+/** Bills enacted within this many turns of the reading can earn credit. */
+export const CREDIT_WINDOW_TURNS = 24;
+/** Trailing window the revocation gate measures a component's metric over. */
+export const CREDIT_REVOCATION_TURNS = 8;
+/** Weight decay per additional qualifying bill on the same component. */
+export const CREDIT_WEIGHT_DECAY = 0.5;
+
+/**
+ * Turn qualifying bills into a penalty-side forgiveness.
+ *
+ * Credit is scored PER COMPONENT, so a government that passed five jobs bills
+ * cannot buy off an inflation penalty it never touched. Within a component the
+ * first bill earns weight 1, the next 0.5, the next 0.25 and so on, and the
+ * summed weight is capped at 1: a burst of token bills is worth barely more
+ * than one real one.
+ *
+ * Forgiveness on a component is `|penalty| x CREDIT_FORGIVENESS_MAX x credit`,
+ * so the relief lands hardest where the pain is, and the total can never
+ * exceed {@link CREDIT_FORGIVENESS_MAX} of the raw penalty.
+ *
+ * Pure: no DB, no clock. The cost gate and the revocation gate run in the
+ * loader and are expressed here as candidates simply being absent.
+ */
+export function applyResponseCredit(
+  components: readonly ReferendumComponent[],
+  candidates: readonly ResponseCreditCandidate[]
+): ResponseCreditOutcome {
+  const empty: ResponseCreditOutcome = {
+    forgivenessFrac: 0,
+    forgivenessPts: 0,
+    creditedBills: [],
+  };
+  if (!candidates || candidates.length === 0) return empty;
+
+  const penaltyByComponent = new Map<string, number>();
+  for (const c of components) {
+    if (c.contributionPts < 0) penaltyByComponent.set(c.key, -c.contributionPts);
+  }
+  const totalPenalty = [...penaltyByComponent.values()].reduce((s, v) => s + v, 0);
+  if (totalPenalty <= 0) return empty;
+
+  // Group by component, earliest enactment first so the bill that actually
+  // responded to the downturn is the one that earns full weight.
+  const byComponent = new Map<string, ResponseCreditCandidate[]>();
+  for (const cand of candidates) {
+    if (!penaltyByComponent.has(cand.component)) continue; // no penalty to forgive
+    const list = byComponent.get(cand.component);
+    if (list) list.push(cand);
+    else byComponent.set(cand.component, [cand]);
+  }
+
+  const creditedBills: CreditedBill[] = [];
+  let forgivenessPts = 0;
+
+  for (const [componentKey, list] of byComponent) {
+    const penalty = penaltyByComponent.get(componentKey) ?? 0;
+    const ordered = [...list].sort(
+      (a, b) => a.enactedTurn - b.enactedTurn || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
+    );
+    let credit = 0;
+    ordered.forEach((cand, index) => {
+      const weight = Math.pow(CREDIT_WEIGHT_DECAY, index);
+      credit += weight;
+      creditedBills.push({
+        key: cand.key,
+        title: cand.title,
+        component: cand.component,
+        weight,
+      });
+    });
+    forgivenessPts += penalty * CREDIT_FORGIVENESS_MAX * Math.min(1, credit);
+  }
+
+  return {
+    forgivenessFrac: forgivenessPts / totalPenalty,
+    forgivenessPts,
+    creditedBills,
+  };
+}
+
 function clampMagnitude(value: number, cap: number): number {
   return Math.max(-cap, Math.min(cap, value));
 }
@@ -121,9 +253,10 @@ function finite(value: number | undefined, fallback: number): number {
  *
  * Positive = bonus to the incumbent, negative = penalty. Each component is
  * linear beyond its anchor with its own slope and its own cap; the good-economy
- * side uses the same slopes, capped in total at {@link TOTAL_BONUS_CAP}. Term
- * fatigue scales the penalty side only. The signed total is clamped to
- * +/-{@link REFERENDUM_SHARE_CLAMP}.
+ * side uses the same slopes, capped in total at {@link TOTAL_BONUS_CAP}.
+ * `responseCredit` then forgives part of the penalty for visible crisis
+ * response, and term fatigue scales what is left of the penalty side only. The
+ * signed total is clamped to +/-{@link REFERENDUM_SHARE_CLAMP}.
  *
  * `era` is accepted for future era-specific anchors (a 6% natural rate is not
  * the same politics in 1953 as in 2020); it is currently unused and the anchors
@@ -132,7 +265,8 @@ function finite(value: number | undefined, fallback: number): number {
 export function computeEconomicReferendum(
   inputs: MiseryInputs,
   consecutiveTerms: number | undefined,
-  era?: string
+  era?: string,
+  responseCredit?: readonly ResponseCreditCandidate[]
 ): ReferendumResult {
   void era; // reserved for era-specific anchors; see the doc comment above.
   const unemployment = finite(inputs.unemploymentRate, NATURAL_UNEMPLOYMENT_PCT);
@@ -187,15 +321,28 @@ export function computeEconomicReferendum(
   const rawBonus = components.reduce((s, c) => s + Math.max(0, c.contributionPts), 0);
   const bonus = Math.min(TOTAL_BONUS_CAP, rawBonus);
 
+  // Credit for response: an incumbent who visibly acted on the downturn keeps
+  // part of the penalty back. Applied to the summed penalty BEFORE fatigue, so
+  // the fatigue multiplier scales what is left rather than what was owed.
+  const credit = applyResponseCredit(components, responseCredit ?? []);
+  const forgivenPenalty = penalty + credit.forgivenessPts;
+
   const fatigueMultiplier = referendumFatigueMultiplier(consecutiveTerms);
-  const sharePts = clampMagnitude(bonus + penalty * fatigueMultiplier, REFERENDUM_SHARE_CLAMP);
+  const sharePts = clampMagnitude(
+    bonus + forgivenPenalty * fatigueMultiplier,
+    REFERENDUM_SHARE_CLAMP
+  );
 
-  // TODO(referendum): credit-for-response forgiveness, see design doc. An
-  // incumbent who visibly acted on the downturn (relief spending, rate moves)
-  // should recover part of the penalty; that mechanic plugs in here, between
-  // the raw penalty and the fatigue multiplier.
-
-  return { miseryIndex, sharePts, components, fatigueMultiplier };
+  return {
+    miseryIndex,
+    sharePts,
+    components,
+    fatigueMultiplier,
+    ...(credit.forgivenessFrac > 0 && {
+      forgivenessFrac: credit.forgivenessFrac,
+      creditedBills: credit.creditedBills,
+    }),
+  };
 }
 
 /**

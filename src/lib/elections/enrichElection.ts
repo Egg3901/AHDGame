@@ -59,7 +59,6 @@ import { selectEndedDisplayCandidates } from "@/lib/elections/endedResultsCandid
 import { selectGeneralPhaseDisplayCandidates } from "@/lib/elections/generalPhaseCandidates";
 import { computeElectoralVotes } from "@/lib/elections/electoralVoteService";
 import { getFundsByPartyForElection } from "@/lib/electionEngine/fundsByParty";
-import { partyTenureFatiguePenalty } from "@/lib/electionEngine/partyTenureFatigue";
 import { getPresidentialConsecutiveTerms } from "@/lib/turn/election/presidentialTenureLedger";
 import { getIncumbentSeatShareByParty } from "@/lib/electionEngine/incumbentSeatShare";
 import {
@@ -722,6 +721,17 @@ export async function _enrichElection(
           })),
           fatigueMultiplier: referendumSnapshot.fatigueMultiplier,
           recordedTurn: referendumSnapshot.recordedTurn,
+          ...(referendumSnapshot.forgivenessFrac
+            ? {
+                forgivenessFrac: referendumSnapshot.forgivenessFrac,
+                creditedBills: (referendumSnapshot.creditedBills ?? []).map((b) => ({
+                  key: b.key,
+                  title: b.title,
+                  component: b.component,
+                  weight: b.weight,
+                })),
+              }
+            : {}),
           ...(referendumSnapshot.incumbentPartyId
             ? { incumbentPartyId: referendumSnapshot.incumbentPartyId }
             : {}),
@@ -907,7 +917,6 @@ export async function _enrichElection(
   let midtermOppositionBoostPctByParty: Record<string, number> | undefined;
   let incumbentApprovalForDisplay: number | undefined;
   let incumbentPartyIdForDisplay: string | undefined;
-  let incumbentTenurePenaltyForDisplay: number | undefined;
   let legislativeIncumbentPartyIdForDisplay: string | undefined;
   let legislativeIncumbentTenureTermsForDisplay: number | undefined;
   if (isFull && inGeneral) {
@@ -1048,11 +1057,6 @@ export async function _enrichElection(
       if (president) {
         incumbentPartyIdForDisplay = president.partyId;
         incumbentApprovalForDisplay = president.approval;
-        // Party-tenure voter-fatigue drag folded into the Incumbency row so the
-        // card matches the engine (no separate row).
-        incumbentTenurePenaltyForDisplay = partyTenureFatiguePenalty(
-          getPresidentialConsecutiveTerms(gameState, cid, president.partyId)
-        );
       }
     }
 
@@ -1179,9 +1183,6 @@ export async function _enrichElection(
       ? { incumbentApproval: incumbentApprovalForDisplay }
       : {}),
     ...(incumbentPartyIdForDisplay != null ? { incumbentPartyId: incumbentPartyIdForDisplay } : {}),
-    ...(incumbentTenurePenaltyForDisplay
-      ? { incumbentTenurePenalty: incumbentTenurePenaltyForDisplay }
-      : {}),
     ...(legislativeIncumbentPartyIdForDisplay != null
       ? {
           legislativeIncumbentPartyId: legislativeIncumbentPartyIdForDisplay,

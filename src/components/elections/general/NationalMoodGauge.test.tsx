@@ -79,6 +79,29 @@ describe("NationalMoodGauge", () => {
     expect(screen.getByText(/x1\.5/)).toBeTruthy();
   });
 
+  it("shows the response-credit line and the credited bill titles", () => {
+    render(
+      <NationalMoodGauge
+        data={{
+          ...PENALTY,
+          forgivenessFrac: 0.23,
+          creditedBills: [
+            { key: "b1", title: "Emergency Jobs Act", component: "unemployment", weight: 1 },
+            { key: "b2", title: "Relief Payments Act", component: "poverty", weight: 0.5 },
+          ],
+        }}
+      />
+    );
+    expect(screen.getByText(/soften the penalty by 23%/)).toBeTruthy();
+    expect(screen.getByText("Emergency Jobs Act")).toBeTruthy();
+    expect(screen.getByText("Relief Payments Act")).toBeTruthy();
+  });
+
+  it("hides the response-credit line when nothing was forgiven", () => {
+    render(<NationalMoodGauge data={PENALTY} />);
+    expect(screen.queryByText(/soften the penalty/)).toBeNull();
+  });
+
   it("falls back to a generic label when the incumbent party is unknown", () => {
     render(
       <NationalMoodGauge
