@@ -64,6 +64,21 @@ export interface ElectionVoteTally {
   /** President only: per-unit turn snapshots for EV projection */
   unitTurnSnapshots?: Record<string, VoteTurnSnapshot[]>;
   /**
+   * President only: the economic-referendum reading the engine applied on the
+   * last accumulation turn (see `src/lib/electionEngine/economicReferendum.ts`).
+   * Descriptive snapshot for the UI gauge — the shift is already baked into the
+   * vote totals and must NOT be applied again anywhere downstream.
+   */
+  economicReferendum?: {
+    miseryIndex: number;
+    /** The shift actually applied, after any calibration scale. */
+    sharePts: number;
+    components: Array<{ key: string; label: string; contributionPts: number }>;
+    fatigueMultiplier: number;
+    incumbentPartyId?: string;
+    recordedTurn: number;
+  };
+  /**
    * President only: frozen House/Senate chamber used for contingent ballots.
    * Captured when contingent resolution first runs so same-turn chamber flips
    * cannot change the ballot after down-ballot races resolve.

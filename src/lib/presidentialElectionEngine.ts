@@ -33,6 +33,12 @@ import { getCountryState } from "@/lib/countryState";
 import { getAllStateApprovalsForElection } from "@/lib/utils/getStateApprovalForElection";
 import { resolvePresidentApproval } from "@/lib/electionEngine/presidentialCoattail";
 import { partyTenureFatiguePenalty } from "@/lib/electionEngine/partyTenureFatigue";
+import {
+  applyReferendumShift,
+  computeEconomicReferendum,
+  type ReferendumResult,
+} from "@/lib/electionEngine/economicReferendum";
+import { loadReferendumInputs } from "@/lib/elections/referendumInputs";
 import { getPresidentialConsecutiveTerms } from "@/lib/turn/election/presidentialTenureLedger";
 import type { GameState } from "@/lib/db/types/gameState";
 import { BASE_APPROVAL } from "@/lib/utils/governmentApproval";
@@ -250,6 +256,12 @@ export interface PresidentVoteTurnCalibration {
    * a straight multiplier on the whole vote via `approvalScalar`.
    */
   favorabilityOverride?: Record<string, number>;
+  /**
+   * Scale on the economic-referendum share shift. 1 = production, 0 disables
+   * the channel entirely. Used by `scripts/sim/economic-referendum-replay.ts`
+   * to A/B the channel against the identical live inputs.
+   */
+  referendumScale?: number;
 }
 
 /** What a dry run hands back: enough to score winners and measure share deltas. */
@@ -257,6 +269,8 @@ export interface PresidentVoteTurnDryRun {
   totalVotes: Record<string, number>;
   totalVotesByUnit: Record<string, Record<string, number>>;
   candidateIds: string[];
+  /** The referendum reading used this turn, when the channel was active. */
+  referendum?: ReferendumResult;
 }
 
 export async function accumulatePresidentVoteTurn(
@@ -512,6 +526,28 @@ export async function accumulatePresidentVoteTurn(
   );
   const incumbentTenurePenalty = partyTenureFatiguePenalty(incumbentConsecutiveTerms);
 
+  // Economic referendum: the "are you better off than four years ago" channel.
+  // Priced ONCE per accumulation turn from national misery + the incumbent
+  // party's consecutive-term count, then applied party-level to each unit's
+  // share combination below. It must never be re-applied at resolution or in
+  // the live-results drip. `calibration.referendumScale` (0 = off) lets the
+  // replay harness A/B it; production leaves it at 1.
+  const referendumScale = calibration?.referendumScale ?? 1;
+  const referendumIncumbentCandidateIds =
+    incumbentExec?.partyId != null
+      ? enriched.filter((ec) => ec.party === incumbentExec.partyId).map((ec) => ec.candidateId)
+      : [];
+  let referendum: ReferendumResult | undefined;
+  if (referendumScale !== 0 && referendumIncumbentCandidateIds.length > 0) {
+    const miseryInputs = await loadReferendumInputs(db, electionCountryId);
+    referendum = computeEconomicReferendum(
+      miseryInputs,
+      incumbentConsecutiveTerms,
+      gsDoc?.preset
+    );
+  }
+  const referendumSharePts = referendum ? referendum.sharePts * referendumScale : 0;
+
   const newTotalVotesByUnit = { ...tally.totalVotesByUnit };
   const newTotalVotes: Record<string, number> = { ...tally.totalVotes };
 
@@ -596,7 +632,7 @@ export async function accumulatePresidentVoteTurn(
     const strengthMultiplier = (1 + (approvalDecimal - 0.5) * 0.5) * officeStrength;
     const effectiveTurnPool = turnPool * strengthMultiplier;
 
-    const { votesPerCandidate } = distributeVotesBySwingFlow(
+    const { votesPerCandidate: rawVotesPerCandidate } = distributeVotesBySwingFlow(
       effEnriched,
       effectiveTurnPool,
       effTotalPool,
@@ -646,6 +682,16 @@ export async function accumulatePresidentVoteTurn(
         stateOrgByCandidate: regionalBonuses.stateOrgByStateAndCandidate.get(stateId),
         homeStateByCandidate: regionalBonuses.homeStateByCandidate,
       }
+    );
+
+    // Share-combination step: the referendum shift moves `referendumSharePts`
+    // of this unit's pool from the rest of the field to the incumbent party
+    // (or the reverse when negative), with the mirror split in proportion to
+    // each other candidate's pre-shift share. Vote total is conserved.
+    const votesPerCandidate = applyReferendumShift(
+      rawVotesPerCandidate,
+      referendumIncumbentCandidateIds,
+      referendumSharePts
     );
 
     const unitTotals = { ...(tally.totalVotesByUnit[unit.unitId] ?? {}) };
@@ -766,6 +812,7 @@ export async function accumulatePresidentVoteTurn(
       totalVotes: newTotalVotes,
       totalVotesByUnit: newTotalVotesByUnit,
       candidateIds: enriched.map((ec) => ec.candidateId),
+      ...(referendum && { referendum }),
     };
   }
 
@@ -777,6 +824,19 @@ export async function accumulatePresidentVoteTurn(
         totalVotesByUnit: newTotalVotesByUnit,
         unitTurnSnapshots,
         updatedAt: now,
+        // Additive, optional: the UI gauge reads the referendum reading the
+        // engine actually used instead of recomputing it. Purely descriptive —
+        // nothing downstream applies it a second time.
+        ...(referendum && {
+          economicReferendum: {
+            miseryIndex: referendum.miseryIndex,
+            sharePts: referendumSharePts,
+            components: referendum.components,
+            fatigueMultiplier: referendum.fatigueMultiplier,
+            incumbentPartyId: incumbentExec?.partyId,
+            recordedTurn: turnNumber,
+          },
+        }),
       },
       $push: { turnSnapshots: snapshot } as never,
     }
