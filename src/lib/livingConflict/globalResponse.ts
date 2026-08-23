@@ -1,5 +1,12 @@
 import type { Db, ObjectId } from "mongodb";
 import type { FederalBudget } from "@/lib/db/types/budget";
+import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
+import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
+import type {
+  CampaignCapabilitySnapshot,
+  CampaignCountryMemory,
+  CampaignStage,
+} from "@/lib/db/types/livingConflictCampaign";
 import type {
   Crisis,
   CrisisDecisionNode,
@@ -13,9 +20,24 @@ import { spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { applyCrisisEffects } from "@/lib/crises/applyEffects";
 import { getGameState } from "@/lib/gameState";
 import { logWireEvent } from "@/lib/wireEvent";
+import { applyTensionEvent } from "@/lib/coldwar/tension";
 import { adjustIntensity, applyCommitment, relieveCommitment } from "./engine";
 import { livingConflictDef } from "./registry";
 import { loadConflictState, saveConflictState } from "./driver";
+import {
+  applyCampaignOutcome,
+  assessCampaignOptions,
+  assessCampaignRequirement,
+  CAMPAIGN_STAGE_LABELS,
+  consequenceBand,
+  emptyCountryMemory,
+  estimateCampaignIntelligence,
+  normalizeCampaignState,
+  recordCampaignCommitment,
+  shouldExposeCovertResponse,
+  type CampaignIntelligenceAssessment,
+  type CampaignRequirementResult,
+} from "./campaign";
 
 /**
  * The deep module for shared world-event responses. Callers only need to ask
@@ -39,6 +61,172 @@ export function optionsForGlobalResponder(
   const role = globalResponseRoleFor(crisis, countryId);
   if (!role) return [];
   return node.optionsByRole?.[role] ?? node.options ?? [];
+}
+
+function clamp(value: number, min = 0, max = 100): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.round(value * 10) / 10));
+}
+
+async function loadCampaignCapability(
+  db: Db,
+  countryId: string
+): Promise<CampaignCapabilitySnapshot> {
+  const [budget, approval, units] = await Promise.all([
+    db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ countryId: countryId as FederalBudget["countryId"] }),
+    db
+      .collection<GovernmentApproval>("governmentApprovals")
+      .findOne({ _id: countryId as GovernmentApproval["_id"] }),
+    db
+      .collection<MilitaryUnit>("militaryUnits")
+      .find({ countryId: countryId as MilitaryUnit["countryId"] })
+      .project<Pick<MilitaryUnit, "personnel" | "readiness" | "equipment">>({
+        personnel: 1,
+        readiness: 1,
+        equipment: 1,
+      })
+      .toArray(),
+  ]);
+  const totalPersonnel = units.reduce((sum, unit) => sum + Math.max(1, unit.personnel ?? 0), 0);
+  const militaryReadiness =
+    totalPersonnel > 0
+      ? units.reduce(
+          (sum, unit) => sum + clamp(unit.readiness) * Math.max(1, unit.personnel ?? 0),
+          0
+        ) / totalPersonnel
+      : 20;
+  const logistics =
+    totalPersonnel > 0
+      ? units.reduce(
+          (sum, unit) =>
+            sum + clamp(unit.equipment?.support ?? 0) * Math.max(1, unit.personnel ?? 0),
+          0
+        ) / totalPersonnel
+      : 20;
+  const gdp = budget?.gdpSmoothed && budget.gdpSmoothed > 0 ? budget.gdpSmoothed : budget?.gdp;
+  const treasuryPctGdp = gdp && gdp > 0 ? (budget?.treasuryBalance ?? 0) / gdp : 0;
+  return {
+    treasuryPctGdp: Math.max(-1, Math.min(1, treasuryPctGdp)),
+    militaryReadiness: clamp(militaryReadiness),
+    logistics: clamp(logistics),
+    domesticSupport: clamp(approval?.approvalRating ?? 50),
+    intelligence: clamp(25 + militaryReadiness * 0.35 + logistics * 0.25),
+    assessedAt: new Date(),
+  };
+}
+
+export interface GlobalResponseCampaignBrief {
+  stage: CampaignStage;
+  stageLabel: string;
+  stageTurns: number;
+  cycle: number;
+  capability: CampaignCapabilitySnapshot;
+  intelligence: CampaignIntelligenceAssessment;
+  countryMemory: CampaignCountryMemory;
+  consequenceBands: Record<string, ReturnType<typeof consequenceBand>>;
+  optionAvailability: Record<string, CampaignRequirementResult>;
+}
+
+/** Country-specific campaign view. Exact aggregate risk stays behind fog of war. */
+export async function campaignBriefForGlobalResponder(
+  db: Db,
+  crisis: Pick<Crisis, "globalResponse">,
+  countryId: string,
+  turn: number,
+  options: CrisisDecisionOption[]
+): Promise<GlobalResponseCampaignBrief | null> {
+  const definition = crisis.globalResponse;
+  const role = globalResponseRoleFor(crisis, countryId);
+  if (!definition || !role) return null;
+  const state = await loadConflictState(db, definition.conflictKey);
+  const campaign = normalizeCampaignState(state.campaign);
+  const stage = definition.campaign?.stage ?? campaign.stage;
+  const capability = await loadCampaignCapability(db, countryId);
+  return {
+    stage,
+    stageLabel: CAMPAIGN_STAGE_LABELS[stage],
+    stageTurns: campaign.stageTurns,
+    cycle: definition.campaign?.cycle ?? campaign.cycle,
+    capability,
+    intelligence: estimateCampaignIntelligence(campaign, capability, {
+      conflictKey: definition.conflictKey,
+      countryId,
+      role,
+      turn,
+      intensity: state.intensity,
+    }),
+    countryMemory: campaign.countryMemory[countryId] ?? emptyCountryMemory(),
+    consequenceBands: Object.fromEntries(
+      Object.entries(campaign.consequences).map(([key, value]) => [key, consequenceBand(value)])
+    ),
+    optionAvailability: assessCampaignOptions(options, capability, stage),
+  };
+}
+
+/** Re-read and enforce campaign requirements at command time. */
+export async function prepareGlobalResponseOption(
+  db: Db,
+  crisis: Pick<Crisis, "globalResponse">,
+  countryId: string,
+  option: CrisisDecisionOption
+): Promise<CampaignCapabilitySnapshot> {
+  const definition = crisis.globalResponse;
+  if (!definition) throw new Error("Global response definition missing");
+  const state = await loadConflictState(db, definition.conflictKey);
+  const stage = definition.campaign?.stage ?? normalizeCampaignState(state.campaign).stage;
+  const capability = await loadCampaignCapability(db, countryId);
+  const assessment = assessCampaignRequirement(option.campaignRequirement, capability, stage);
+  if (!assessment.eligible) {
+    throw new Error(`National capacity is insufficient: ${assessment.reasons.join("; ")}`);
+  }
+  return capability;
+}
+
+export async function recordGlobalResponseCommitment(
+  db: Db,
+  crisis: Pick<Crisis, "globalResponse" | "livingConflictEventId">,
+  countryId: string,
+  turn: number,
+  option: CrisisDecisionOption
+): Promise<void> {
+  const definition = crisis.globalResponse;
+  if (!definition || !option.campaignCommitment) return;
+  const state = await loadConflictState(db, definition.conflictKey);
+  state.campaign = recordCampaignCommitment(
+    state.campaign,
+    countryId,
+    `${crisis.livingConflictEventId ?? definition.eventKey}:${countryId}`,
+    turn,
+    option.campaignCommitment
+  );
+  await saveConflictState(db, state);
+}
+
+/** Redact covert choices from every country except the author until exposure. */
+export function visibleGlobalResponses(
+  responses: NonNullable<CrisisInteraction["leaderResponses"]>,
+  viewerCountryId: string
+): NonNullable<CrisisInteraction["leaderResponses"]> {
+  return responses.map((response) => {
+    if (
+      response.visibility !== "covert" ||
+      response.countryId === viewerCountryId ||
+      response.revealedAt
+    ) {
+      return response;
+    }
+    return {
+      ...response,
+      optionId: "undisclosed",
+      optionLabel: "Undisclosed action",
+      effects: [],
+      responseScores: undefined,
+      campaignCommitment: undefined,
+      capabilitySnapshot: undefined,
+    };
+  });
 }
 
 export function scoresForResponses(
@@ -150,14 +338,22 @@ async function applyEffectsForCountry(
 async function applyOutcomeTrajectory(
   db: Db,
   crisis: Crisis,
-  outcome: GlobalResponseOutcome
-): Promise<void> {
+  outcome: GlobalResponseOutcome,
+  resolutionId: string
+): Promise<{ previousStage: CampaignStage; nextStage: CampaignStage; applied: boolean } | null> {
   const definition = crisis.globalResponse;
-  if (!definition) return;
+  if (!definition) return null;
   const def = livingConflictDef(definition.conflictKey);
-  if (!def) return;
+  if (!def) return null;
 
   let state = await loadConflictState(db, def.key);
+  const campaignResult = applyCampaignOutcome(state.campaign, {
+    resolutionId,
+    outcomeId: outcome.outcomeId,
+    delta: outcome.campaignDelta,
+    nextStage: outcome.nextCampaignStage,
+  });
+  state.campaign = campaignResult.state;
   if (outcome.intensityDelta) {
     state = adjustIntensity(state, outcome.intensityDelta);
   }
@@ -170,6 +366,17 @@ async function applyOutcomeTrajectory(
         : relieveCommitment(def, state, side, Math.abs(amount));
   }
   await saveConflictState(db, state);
+  if (campaignResult.applied && outcome.tensionDelta) {
+    const gameState = await getGameState(db);
+    await applyTensionEvent(
+      db,
+      gameState?.currentTurn ?? crisis.startTurn,
+      outcome.tensionDelta > 0 ? "escalation" : "detente",
+      outcome.label,
+      outcome.tensionDelta
+    );
+  }
+  return campaignResult;
 }
 
 /**
@@ -206,12 +413,23 @@ export async function resolveGlobalResponse(
     eligibleCountries: Object.keys(crisis.globalResponse.roleByCountry).length,
     resolvedAt: now,
   };
+  const responsesWithExposure = (interaction.leaderResponses ?? []).map((response) => {
+    const risk = response.campaignCommitment?.covertExposureRisk ?? 0;
+    if (
+      response.visibility === "covert" &&
+      shouldExposeCovertResponse(crisisId.toString(), response.countryId, risk)
+    ) {
+      return { ...response, revealedAt: now };
+    }
+    return response;
+  });
 
   const claimed = await db.collection<CrisisInteraction>("crisisInteractions").updateOne(
     { _id: interaction._id, globalResponseOutcome: { $exists: false } },
     {
       $set: {
         globalResponseOutcome: resolved,
+        leaderResponses: responsesWithExposure,
         currentNodeId: null,
         decisionDeadline: null,
         resolvedAt: now,
@@ -234,7 +452,26 @@ export async function resolveGlobalResponse(
     const effects = outcome.effectsByRole?.[role] ?? [];
     if (effects.length > 0) await applyEffectsForCountry(db, countryId, effects);
   }
-  await applyOutcomeTrajectory(db, crisis, outcome);
+  const campaignResult = await applyOutcomeTrajectory(
+    db,
+    crisis,
+    outcome,
+    crisis.livingConflictEventId ?? crisisId.toString()
+  );
+  if (campaignResult) {
+    resolved.campaignStageBefore = campaignResult.previousStage;
+    resolved.campaignStageAfter = campaignResult.nextStage;
+    await db.collection<CrisisInteraction>("crisisInteractions").updateOne(
+      { _id: interaction._id },
+      {
+        $set: {
+          "globalResponseOutcome.campaignStageBefore": campaignResult.previousStage,
+          "globalResponseOutcome.campaignStageAfter": campaignResult.nextStage,
+          updatedAt: new Date(),
+        },
+      }
+    );
+  }
   await logWireEvent("crisis_outcome", outcome.wireMessage, {
     href: `/world/crises/${crisisId.toString()}`,
   });

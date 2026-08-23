@@ -4,6 +4,7 @@ import type {
   GlobalResponseOutcome,
   GlobalResponseRole,
 } from "@/lib/db/types/crisis";
+import type { CampaignStage, LivingCampaignState } from "@/lib/db/types/livingConflictCampaign";
 
 /**
  * The living-conflict engine.
@@ -88,6 +89,8 @@ export interface EventTrigger {
   onPhaseEnter?: boolean;
   /** Fires every N turns the conflict has run (deterministic cadence). */
   everyTurns?: number;
+  /** Restrict this beat to campaign stages. Omitted keeps legacy behavior. */
+  campaignStages?: CampaignStage[];
 }
 
 /** One beat inside a phase. Lightweight data, not a crisis document. */
@@ -202,6 +205,8 @@ export interface LivingConflictState {
   lastProcessedTurn?: number;
   /** Compatibility import asks the current phase to publish its entry beat. */
   emitPhaseEntryNextTurn?: boolean;
+  /** Persistent multi-window campaign depth. Absent legacy rows normalize on read. */
+  campaign?: LivingCampaignState;
   updatedAt: Date;
 }
 

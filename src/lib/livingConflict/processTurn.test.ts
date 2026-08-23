@@ -87,6 +87,19 @@ describe("living-conflict turn integration", () => {
       UK: "bloc",
       IE: "bystander",
     });
+    expect(crisis.globalResponse?.campaign).toMatchObject({
+      stage: "posture",
+      cycle: 1,
+      consequences: {
+        civilianStrain: 0,
+        refugees: 0,
+        infrastructureDamage: 0,
+        armsProliferation: 0,
+        regionalSpillover: 0,
+        casualties: 0,
+        settlementMomentum: 0,
+      },
+    });
     const interaction = stores.get("crisisInteractions")?.[0] as unknown as CrisisInteraction;
     expect(interaction.decisionTree[0].optionsByRole?.backer_a?.length).toBeGreaterThan(1);
     expect(interaction.decisionDeadline).toBeInstanceOf(Date);

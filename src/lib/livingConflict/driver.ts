@@ -8,6 +8,7 @@ import {
   selectEvents,
   tickConflict,
 } from "./engine";
+import { advanceCampaignTurn, normalizeCampaignState } from "./campaign";
 
 /**
  * The DB-facing turn driver for living conflicts. Loads a conflict's state, opens
@@ -65,7 +66,8 @@ export async function loadConflictState(db: Db, defKey: string): Promise<LivingC
   const doc = await db
     .collection<LivingConflictState>(LIVING_CONFLICT_COLLECTION)
     .findOne({ defKey });
-  return doc ?? emptyConflictState(defKey);
+  if (!doc) return emptyConflictState(defKey);
+  return { ...doc, campaign: normalizeCampaignState(doc.campaign) };
 }
 
 export async function saveConflictState(db: Db, state: LivingConflictState): Promise<void> {
@@ -108,6 +110,7 @@ export async function driveConflictTurn(
 ): Promise<DriveResult> {
   let state = await loadConflictState(db, def.key);
   if (state.lastProcessedTurn === turn) return { state, events: [] };
+  const wasOpen = state.hasOpened;
 
   if (!state.hasOpened) {
     if (!inWindow(def, year)) {
@@ -135,6 +138,10 @@ export async function driveConflictTurn(
         typeof year === "number" ? year : undefined
       );
     }
+  }
+
+  if (wasOpen && state.hasOpened) {
+    state = { ...state, campaign: advanceCampaignTurn(state.campaign) };
   }
 
   const fired = selectEvents(def, state, turn);

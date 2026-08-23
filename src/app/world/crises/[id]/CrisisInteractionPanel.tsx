@@ -47,7 +47,45 @@ interface SerializedInteraction {
     scores: Record<string, number>;
     respondedCountries: number;
     eligibleCountries: number;
+    campaignStageBefore?: string;
+    campaignStageAfter?: string;
   };
+}
+
+interface CampaignBrief {
+  stage: "posture" | "mobilization" | "operations" | "settlement" | "aftermath";
+  stageLabel: string;
+  stageTurns: number;
+  cycle: number;
+  capability: {
+    treasuryPctGdp: number;
+    militaryReadiness: number;
+    logistics: number;
+    domesticSupport: number;
+    intelligence: number;
+  };
+  intelligence: {
+    riskBand: string;
+    confidence: string;
+    estimatedRiskMin: number;
+    estimatedRiskMax: number;
+    summary: string;
+  };
+  countryMemory: {
+    credibility: number;
+    warWeariness: number;
+    militaryCommitment: number;
+    humanitarianCommitment: number;
+    covertExposure: number;
+  };
+  consequenceBands: Record<string, string>;
+  optionAvailability: Record<string, { eligible: boolean; reasons: string[] }>;
+}
+
+const CAMPAIGN_STAGES = ["posture", "mobilization", "operations", "settlement", "aftermath"];
+
+function campaignLabel(value: string): string {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function roleLabel(role?: string): string | null {
@@ -187,6 +225,111 @@ function LeaderResponseRow({ r, effects }: { r: LeaderResponse; effects: CrisisE
   );
 }
 
+function CampaignBriefPanel({ brief }: { brief: CampaignBrief }) {
+  const currentStage = CAMPAIGN_STAGES.indexOf(brief.stage);
+  const capacity = [
+    ["Readiness", brief.capability.militaryReadiness],
+    ["Logistics", brief.capability.logistics],
+    ["Mandate", brief.capability.domesticSupport],
+    ["Intelligence", brief.capability.intelligence],
+  ] as const;
+  const scars = Object.entries(brief.consequenceBands).filter(([, band]) => band !== "low");
+  return (
+    <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-primary">
+            Campaign cycle {brief.cycle}
+          </p>
+          <p className="text-sm font-semibold text-foreground">{brief.stageLabel}</p>
+        </div>
+        <p className="text-[11px] text-muted">{brief.stageTurns} turns in this stage</p>
+      </div>
+      <div className="grid grid-cols-5 gap-1">
+        {CAMPAIGN_STAGES.map((stage, index) => (
+          <div key={stage} className="text-center">
+            <div
+              className={`h-1.5 rounded-full ${
+                index <= currentStage ? "bg-primary" : "bg-card-border"
+              }`}
+            />
+            <p className="mt-1 truncate text-[8px] uppercase tracking-wide text-muted">
+              {campaignLabel(stage)}
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="rounded-md border border-card-border bg-card p-2.5">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted">
+            Intelligence estimate
+          </p>
+          <p className="mt-1 text-xs font-medium text-foreground">
+            {campaignLabel(brief.intelligence.riskBand)} risk
+          </p>
+          <p className="text-[11px] text-muted">
+            Range {brief.intelligence.estimatedRiskMin} to {brief.intelligence.estimatedRiskMax},{" "}
+            {brief.intelligence.confidence} confidence
+          </p>
+        </div>
+        <div className="rounded-md border border-card-border bg-card p-2.5">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted">
+            National memory
+          </p>
+          <p className="mt-1 text-[11px] text-muted">
+            Credibility {Math.round(brief.countryMemory.credibility)} · War weariness{" "}
+            {Math.round(brief.countryMemory.warWeariness)}
+          </p>
+          <p className="text-[11px] text-muted">
+            Military {Math.round(brief.countryMemory.militaryCommitment)} · Relief{" "}
+            {Math.round(brief.countryMemory.humanitarianCommitment)}
+          </p>
+        </div>
+      </div>
+      <div>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted">
+            Available national capacity
+          </p>
+          <p className="text-[10px] text-muted">
+            Treasury {(brief.capability.treasuryPctGdp * 100).toFixed(2)}% GDP
+          </p>
+        </div>
+        <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-4">
+          {capacity.map(([label, value]) => (
+            <div key={label}>
+              <div className="flex justify-between text-[9px] text-muted">
+                <span>{label}</span>
+                <span>{Math.round(value)}</span>
+              </div>
+              <div className="h-1 rounded-full bg-card-border">
+                <div
+                  className="h-1 rounded-full bg-primary"
+                  style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {scars.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {scars.map(([key, band]) => (
+            <span
+              key={key}
+              className="rounded-full border border-warning/25 bg-warning/5 px-2 py-0.5 text-[10px] text-warning"
+            >
+              {campaignLabel(key)}: {band}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[10px] text-muted">No major lasting damage has accumulated yet.</p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Interactive crisis-decision panel for the crisis detail page. Consumes
  * GET /api/crises/[id]/interaction and submits decisions via
@@ -209,6 +352,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
     senderCurrencyCode: string;
     alreadyPledged: boolean;
   } | null>(null);
+  const [campaignBrief, setCampaignBrief] = useState<CampaignBrief | null>(null);
   const { showToast } = useToast();
 
   const load = useCallback(async () => {
@@ -225,6 +369,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
       setAlreadyResponded(!!data.alreadyResponded);
       setResponseRole(data.responseRole ?? null);
       setAidContext(data.aidContext ?? null);
+      setCampaignBrief(data.campaignBrief ?? null);
     } catch {
       setInteraction(null);
     } finally {
@@ -334,6 +479,8 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
       </div>
 
       <div className="p-5 space-y-4">
+        {campaignBrief && <CampaignBriefPanel brief={campaignBrief} />}
+
         {/* Active decision node */}
         {!resolved && currentNode && (
           <div>
@@ -400,9 +547,11 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
                 <div className="grid gap-2 sm:grid-cols-2">
                   {currentNode.options.map((option) => {
                     const isSubmitting = submitting === option.optionId;
+                    const availability = campaignBrief?.optionAvailability[option.optionId];
                     const disabled =
                       !canInteract ||
                       isSubmitting ||
+                      availability?.eligible === false ||
                       (currentNode.type === "collective" && hasContributed);
                     return (
                       <button
@@ -415,6 +564,25 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
                       >
                         <div className="text-sm font-medium text-foreground">{option.label}</div>
                         <div className="text-xs text-muted mt-0.5">{option.description}</div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {option.campaignCommitment ? (
+                            <span className="rounded-full border border-card-border px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted">
+                              {campaignLabel(option.campaignCommitment.kind)} commitment
+                            </span>
+                          ) : null}
+                          {option.responseVisibility === "covert" ? (
+                            <span className="rounded-full border border-warning/30 bg-warning/5 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-warning">
+                              Covert
+                            </span>
+                          ) : null}
+                        </div>
+                        {availability?.eligible === false ? (
+                          <ul className="mt-2 space-y-0.5 text-[10px] text-error">
+                            {availability.reasons.map((reason) => (
+                              <li key={reason}>{reason}</li>
+                            ))}
+                          </ul>
+                        ) : null}
                         {option.collectiveContribution ? (
                           <div className="text-xs text-primary mt-1">
                             Contribute ${option.collectiveContribution.toLocaleString("en-US")}
@@ -481,6 +649,15 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
                   {interaction.globalResponseOutcome.eligibleCountries} eligible governments
                   responded
                 </p>
+                {interaction.globalResponseOutcome.campaignStageAfter ? (
+                  <p className="mt-1 text-[11px] text-muted">
+                    Campaign stage:{" "}
+                    {campaignLabel(
+                      interaction.globalResponseOutcome.campaignStageBefore ?? "posture"
+                    )}{" "}
+                    to {campaignLabel(interaction.globalResponseOutcome.campaignStageAfter)}
+                  </p>
+                ) : null}
                 {Object.keys(interaction.globalResponseOutcome.scores).length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {Object.entries(interaction.globalResponseOutcome.scores).map(

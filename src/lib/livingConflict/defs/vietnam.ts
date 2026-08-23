@@ -4,10 +4,14 @@ import type {
   LivingConflictDef,
   RoleDecisionTrees,
 } from "../types";
-import type { GlobalResponseOutcome } from "@/lib/db/types/crisis";
+import type {
+  CrisisDecisionOption,
+  CrisisEffect,
+  GlobalResponseOutcome,
+} from "@/lib/db/types/crisis";
 import { defaultRoleResolver } from "../roles";
 import { cfx } from "../effects";
-import { choiceNode, responseOpt } from "../authoring";
+import { choiceNode, responseOpt as authoredResponseOpt } from "../authoring";
 
 const VIETNAM_PARTICIPANTS: LivingConflictDef["participants"] = {
   belligerents: ["SVN", "NVN"],
@@ -17,6 +21,105 @@ const VIETNAM_PARTICIPANTS: LivingConflictDef["participants"] = {
   blocMembers: ["UK", "FR", "DE", "JP", "IT", "TR", "DD", "PL", "HU", "CS", "BG", "RO"],
   bystanders: ["IE", "BR", "NG", "YU", "SE", "AT", "FI", "GR", "ES", "BLR", "UKR", "BAL"],
 };
+
+type ResponseDepth = Pick<
+  CrisisDecisionOption,
+  "campaignRequirement" | "campaignCommitment" | "responseVisibility"
+>;
+
+function depthFor(optionId: string): ResponseDepth {
+  const military = (side?: "a" | "b", scale = 15): ResponseDepth => ({
+    campaignRequirement: {
+      allowedStages: ["posture", "mobilization", "operations"],
+      minTreasuryPctGdp: 0.0002,
+      minMilitaryReadiness: 44,
+      minLogistics: 40,
+      minDomesticSupport: 42,
+    },
+    campaignCommitment: {
+      kind: "military",
+      side,
+      scale,
+      credibilityDelta: 3,
+      warWearinessDelta: 4,
+      consequences: { armsProliferation: 6, casualties: 2, regionalSpillover: 3 },
+    },
+  });
+  if (optionId === "deepen_west") return military("a", 18);
+  if (optionId === "deepen_east") return military("b", 18);
+  if (optionId === "military_aid") return military(undefined, 12);
+  if (optionId === "guard_border") return military(undefined, 8);
+  if (["covert_west", "covert_east", "arm_north"].includes(optionId)) {
+    return {
+      campaignRequirement: {
+        allowedStages: ["posture", "mobilization", "operations"],
+        minTreasuryPctGdp: 0.0001,
+        minIntelligence: 52,
+        minLogistics: 30,
+      },
+      campaignCommitment: {
+        kind: "covert",
+        side: optionId === "covert_west" ? "a" : "b",
+        scale: 10,
+        credibilityDelta: 1,
+        covertExposureRisk: optionId === "arm_north" ? 45 : 35,
+        consequences: { armsProliferation: 4, regionalSpillover: 2 },
+      },
+      responseVisibility: "covert",
+    };
+  }
+  if (["humanitarian_aid", "relief"].includes(optionId)) {
+    return {
+      campaignRequirement: { minTreasuryPctGdp: 0.00005, minLogistics: 20 },
+      campaignCommitment: {
+        kind: "humanitarian",
+        scale: 12,
+        credibilityDelta: 2,
+        consequences: { civilianStrain: -7, refugees: -6, settlementMomentum: 2 },
+      },
+    };
+  }
+  if (["withdraw_west", "talks_east", "host_talks", "mediate"].includes(optionId)) {
+    return {
+      campaignRequirement: {
+        allowedStages: ["posture", "mobilization", "operations", "settlement"],
+        minDomesticSupport: 25,
+      },
+      campaignCommitment: {
+        kind: "diplomatic",
+        scale: 10,
+        credibilityDelta: optionId === "withdraw_west" ? -2 : 2,
+        consequences: { settlementMomentum: 8, civilianStrain: -2 },
+      },
+    };
+  }
+  return {
+    campaignCommitment: {
+      kind: "neutral",
+      scale: 2,
+      consequences: { settlementMomentum: 1 },
+    },
+  };
+}
+
+function responseOpt(
+  optionId: string,
+  label: string,
+  description: string,
+  responseScores: Record<string, number>,
+  effects: CrisisEffect[] = [],
+  treasuryCostPctGdp?: number
+): CrisisDecisionOption {
+  return authoredResponseOpt(
+    optionId,
+    label,
+    description,
+    responseScores,
+    effects,
+    treasuryCostPctGdp,
+    depthFor(optionId)
+  );
+}
 
 function responseTrees(phaseKey: string, level: number): RoleDecisionTrees {
   const supportCost = 0.0005 * level;
@@ -33,6 +136,14 @@ function responseTrees(phaseKey: string, level: number): RoleDecisionTrees {
           { escalation: 3, aid: 1 },
           [cfx("tick", "approval", "government", "overall", -0.012 * level, "War commitment")],
           supportCost
+        ),
+        responseOpt(
+          "covert_west",
+          "Expand covert support",
+          "Move intelligence, money, and equipment through deniable channels.",
+          { escalation: 2, aid: 1 },
+          [],
+          supportCost * 0.6
         ),
         responseOpt("hold_west", "Hold the line", "Maintain the present commitment.", {
           restraint: 1,
@@ -58,6 +169,14 @@ function responseTrees(phaseKey: string, level: number): RoleDecisionTrees {
           { escalation: 3, aid: 1 },
           [cfx("tick", "metric", "economy", "gdpGrowth", -0.001 * level, "Foreign war outlay")],
           supportCost
+        ),
+        responseOpt(
+          "covert_east",
+          "Expand covert support",
+          "Use deniable shipments and intelligence channels to strengthen Hanoi.",
+          { escalation: 2, aid: 1 },
+          [],
+          supportCost * 0.6
         ),
         responseOpt("hold_east", "Maintain support", "Keep the existing aid pipeline open.", {
           restraint: 1,
@@ -183,6 +302,14 @@ function outcomes(level: number): GlobalResponseOutcome[] {
       ],
       intensityDelta: -12,
       pressureDelta: { a: -8, b: -8 },
+      campaignDelta: {
+        civilianStrain: -10,
+        refugees: -6,
+        regionalSpillover: -5,
+        settlementMomentum: 38,
+      },
+      nextCampaignStage: "settlement",
+      tensionDelta: -8,
       effectsByRole: {
         bystander: [cfx("flat", "approval", "government", "overall", 0.012, "Diplomatic success")],
       },
@@ -198,6 +325,17 @@ function outcomes(level: number): GlobalResponseOutcome[] {
       conditions: [{ axis: "escalation", min: 6 }],
       intensityDelta: 12 + level,
       pressureDelta: { a: 12, b: 12 },
+      campaignDelta: {
+        civilianStrain: 10 + level,
+        refugees: 7,
+        infrastructureDamage: 6 + level,
+        armsProliferation: 14,
+        regionalSpillover: 9,
+        casualties: 7 + level,
+        settlementMomentum: -8,
+      },
+      nextCampaignStage: "operations",
+      tensionDelta: 8 + level,
       effectsByRole: {
         backer_a: [cfx("tick", "approval", "government", "overall", -0.015, "Widening war")],
         backer_b: [cfx("tick", "approval", "government", "overall", -0.012, "Widening war")],
@@ -212,6 +350,8 @@ function outcomes(level: number): GlobalResponseOutcome[] {
       priority: 20,
       conditions: [{ axis: "aid", min: 6 }],
       intensityDelta: -4,
+      campaignDelta: { civilianStrain: -14, refugees: -12, settlementMomentum: 8 },
+      tensionDelta: -1,
       effectsByRole: {
         bloc: [cfx("flat", "approval", "government", "overall", 0.008, "Relief effort")],
         bystander: [cfx("flat", "approval", "government", "overall", 0.008, "Relief effort")],
@@ -225,6 +365,14 @@ function outcomes(level: number): GlobalResponseOutcome[] {
       priority: 0,
       conditions: [],
       intensityDelta: 2,
+      campaignDelta: {
+        civilianStrain: 4,
+        refugees: 3,
+        armsProliferation: 3,
+        regionalSpillover: 2,
+        settlementMomentum: -2,
+      },
+      tensionDelta: 2,
       wireMessage:
         "The international response to Vietnam has fractured, leaving the war's course unchanged.",
     },
@@ -292,7 +440,10 @@ function phase(
         kind: "procedural",
         severity: level >= 4 ? "critical" : "major",
         affects: "all",
-        trigger: { everyTurns: 24 },
+        trigger: {
+          everyTurns: 24,
+          campaignStages: ["posture", "mobilization", "operations", "settlement"],
+        },
         headline: `${label}: the world is asked to respond`,
         body: `${summary} Governments must decide whether to widen the commitment, contain it, or organize relief.`,
         response: response(`${key}_recurring`, level),

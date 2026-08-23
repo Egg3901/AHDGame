@@ -142,6 +142,45 @@ describe("living-conflict engine", () => {
       const s = openConflict(emptyConflictState("t"), 2000);
       expect(selectEvents(def, s, 1)).toHaveLength(0);
     });
+
+    it("suppresses authored response beats outside their campaign stages", () => {
+      const def: LivingConflictDef = {
+        key: "staged",
+        type: "war",
+        name: "Staged",
+        participants: { belligerents: [], neighbors: [], blocMembers: [], bystanders: [] },
+        roleResolver: () => "bystander",
+        phases: [
+          {
+            level: 1,
+            key: "p",
+            label: "P",
+            summary: "s",
+            advancePressure: 10,
+            decisionTrees: {},
+            events: [
+              {
+                key: "consultation",
+                kind: "authored",
+                severity: "major",
+                affects: "all",
+                headline: "h",
+                body: "b",
+                trigger: { everyTurns: 1, campaignStages: ["posture", "operations"] },
+              },
+            ],
+          },
+        ],
+      };
+      const posture = { ...openConflict(emptyConflictState("staged"), 1960), totalTurns: 1 };
+      const aftermath = {
+        ...posture,
+        campaign: { ...posture.campaign!, stage: "aftermath" as const },
+      };
+
+      expect(selectEvents(def, posture, 1)).toHaveLength(1);
+      expect(selectEvents(def, aftermath, 1)).toHaveLength(0);
+    });
   });
 });
 

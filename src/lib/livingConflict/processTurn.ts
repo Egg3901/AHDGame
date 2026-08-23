@@ -9,6 +9,8 @@ import type {
 import { createCrisisFromTemplate } from "@/lib/crises/createCrisisFromTemplate";
 import { logWireEvent } from "@/lib/wireEvent";
 import { allLivingConflictDefs } from "./registry";
+import { loadConflictState } from "./driver";
+import { normalizeCampaignState } from "./campaign";
 import { migrateLegacyVietnamState } from "./vietnamCompat";
 import {
   allParticipants,
@@ -105,6 +107,7 @@ async function materializeEvent(
   const roleByCountry = roleMapForEvent(def, participants, driven);
   const countryIds = Object.keys(roleByCountry);
   if (countryIds.length === 0) return false;
+  const campaign = normalizeCampaignState((await loadConflictState(db, def.key)).campaign);
 
   await createCrisisFromTemplate(db, {
     template: eventTemplate(driven, countryIds),
@@ -121,6 +124,11 @@ async function materializeEvent(
       defaultOptionIdByRole: response.defaultOptionIdByRole,
       outcomes: response.outcomes,
       defaultOutcomeId: response.defaultOutcomeId,
+      campaign: {
+        stage: campaign.stage,
+        cycle: campaign.cycle,
+        consequences: { ...campaign.consequences },
+      },
     },
   });
   return true;
