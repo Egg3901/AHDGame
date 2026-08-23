@@ -113,12 +113,18 @@ describe("computeEconomicReferendum", () => {
   });
 
   it("treats a missing income trend as neutral", () => {
-    const without = computeEconomicReferendum({
-      unemploymentRate: 8,
-      povertyRate: 22,
-      inflationRate: 2,
-    }, 1);
-    const withZero = computeEconomicReferendum({ ...NEUTRAL, unemploymentRate: 8, povertyRate: 22 }, 1);
+    const without = computeEconomicReferendum(
+      {
+        unemploymentRate: 8,
+        povertyRate: 22,
+        inflationRate: 2,
+      },
+      1
+    );
+    const withZero = computeEconomicReferendum(
+      { ...NEUTRAL, unemploymentRate: 8, povertyRate: 22 },
+      1
+    );
     expect(without.sharePts).toBeCloseTo(withZero.sharePts, 6);
   });
 });

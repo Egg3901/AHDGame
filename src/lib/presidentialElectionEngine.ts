@@ -540,11 +540,7 @@ export async function accumulatePresidentVoteTurn(
   let referendum: ReferendumResult | undefined;
   if (referendumScale !== 0 && referendumIncumbentCandidateIds.length > 0) {
     const miseryInputs = await loadReferendumInputs(db, electionCountryId);
-    referendum = computeEconomicReferendum(
-      miseryInputs,
-      incumbentConsecutiveTerms,
-      gsDoc?.preset
-    );
+    referendum = computeEconomicReferendum(miseryInputs, incumbentConsecutiveTerms, gsDoc?.preset);
   }
   const referendumSharePts = referendum ? referendum.sharePts * referendumScale : 0;
 
