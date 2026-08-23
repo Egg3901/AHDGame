@@ -225,7 +225,14 @@ export async function applyLegislationEffect(
           // war the proposal gate had already refused. A ratified declaration that has
           // become an attack on an ally is dropped rather than enacted.
           const alliedNow = await allianceBarBetween(db, countryId, p.targetCountry);
-          if (!alliedNow) {
+          if (alliedNow) {
+            // Logged because the divergence is otherwise invisible: the bill is still
+            // marked passed and still announces itself as passed, and only the absence
+            // of a conflict would say the war never opened.
+            console.warn(
+              `[legislationEffects] declaration ${String(bill._id)} dropped: ${countryId} and ${p.targetCountry} are now both in ${alliedNow}`
+            );
+          } else {
             await declareWar(db, {
               declarer: countryId,
               defender: p.targetCountry,
