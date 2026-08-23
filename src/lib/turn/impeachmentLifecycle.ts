@@ -18,6 +18,7 @@ import {
 } from "@/lib/impeachment/removeImpeachedExecutive";
 import { IMPEACHMENT_SENATE_VOTING_TURNS } from "@/lib/constants/impeachment";
 import { createNotification } from "@/lib/notifications";
+import { autoVoteNppsForImpeachmentStage } from "@/lib/impeachment/autoVoteNpps";
 
 /** Country-scoped governor filter (US governor rows predate the explicit countryId). */
 function governorFilter(
@@ -84,6 +85,8 @@ export async function processImpeachmentLifecycle(
       continue;
     }
 
+    const stageVotes = await autoVoteNppsForImpeachmentStage(db, imp);
+
     // Governor: single-chamber state-legislature conviction vote (filed at
     // stage "senate"). 2/3 removes; the merged byElectionWatcher then spawns a
     // governor by-election to refill the seat.
@@ -94,7 +97,7 @@ export async function processImpeachmentLifecycle(
         db,
         imp.countryId,
         stateChamber,
-        imp.senateVotes,
+        stageVotes,
         imp.state
       );
       if (passesSenateConviction(tally)) {
@@ -130,7 +133,7 @@ export async function processImpeachmentLifecycle(
         db,
         imp.countryId,
         getLowerChamberOfficeType(imp.countryId),
-        imp.houseVotes
+        stageVotes
       );
       if (passesHouseImpeachment(tally)) {
         const advanced = await db.collection<Impeachment>("impeachments").updateOne(
@@ -154,7 +157,7 @@ export async function processImpeachmentLifecycle(
     if (imp.senateVotingEndsOnTurn == null || currentTurn < imp.senateVotingEndsOnTurn) continue;
     const upperOffice = getUpperChamberOfficeType(imp.countryId);
     const tally = upperOffice
-      ? await tallyImpeachmentChamber(db, imp.countryId, upperOffice, imp.senateVotes)
+      ? await tallyImpeachmentChamber(db, imp.countryId, upperOffice, stageVotes)
       : { for: 0, against: 0, seats: 0 };
 
     if (upperOffice && passesSenateConviction(tally)) {
