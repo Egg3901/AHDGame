@@ -145,7 +145,7 @@ export const defect: Defect = {
     issue: 1171,
     pr: 705,
     mergedTo: "development",
-    requiredCommit: "b347e708565217e908e3168923ed085c54dfe83f",
+    requiredCommit: "ff0946bf8832ce1de276ef35f397fec62ec6731b",
   },
   seedFix: {
     status: "not-needed",
