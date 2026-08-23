@@ -93,6 +93,7 @@ import { resolveProspects } from "@/lib/turn/prospecting/resolveProspects";
 import { settleExtractionContracts } from "@/lib/turn/extraction/contractSettlement";
 import { isProspectingEnabled, isContractIssuanceEnabled } from "@/lib/extraction/featureFlag";
 import { processBondTurn } from "@/lib/turn/bondTurn";
+import { processDefenceWindfallRecoveryTurn } from "@/lib/turn/defenceWindfallRecoveryTurn";
 import { recomputeSharePricesAfterBondTurn } from "@/lib/turn/corporation/recomputeSharePrices";
 import { processSavingsInterestTurn } from "@/lib/turn/savingsInterestTurn";
 import { processNpcBankPolicyTurn } from "@/lib/banking/npcBanks";
@@ -455,6 +456,17 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           runtime.runPhase("bondTurn", () => processBondTurn(newTurn)),
           runtime.runPhase("commodityPrices", () => processCommodityPriceTurn(newTurn)),
         ]);
+
+        // Collect a staged procurement-windfall assessment after bond coupons
+        // and maturities land, while preserving the supplier's operating reserve.
+        // This runs before share-price recomputation so the balance sheet and
+        // price snapshot agree in the same turn.
+        const windfallRecovery = await runtime.runPhase("defenceWindfallRecovery", () =>
+          processDefenceWindfallRecoveryTurn(context.db, newTurn, context.realNow)
+        );
+        if (windfallRecovery) {
+          (phaseResults as Record<string, unknown>).defenceWindfallRecovery = windfallRecovery;
+        }
 
         // Extraction-contract settlement, runs AFTER commodityPrices because
         // the per-turn royalty is priced off this turn's market. No-op unless
