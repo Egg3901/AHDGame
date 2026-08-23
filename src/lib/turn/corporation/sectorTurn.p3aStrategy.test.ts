@@ -97,6 +97,7 @@ function makeLookups(marketSharePct = 0): CorporationLookups {
     stateResourceCapacityByState: new Map(),
     stateSectorSpecializationByState: new Map(),
     rawWorkforceSkillByState: new Map(),
+    labourTightnessByState: new Map(),
     regionalConditionMarginByState: new Map(),
     sectorPresenceKeys: new Set(),
     exportIntensityByCountry: new Map(),

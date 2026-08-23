@@ -115,6 +115,13 @@ export interface CorporationLookups {
   corruptionByState: Map<string, number>;
   workforceSkillByState: Map<string, number>;
   rawWorkforceSkillByState: Map<string, number>;
+  /**
+   * Phase 2: prior-turn labour market tightness per state (desired corporate
+   * headcount over civilian labour force). Absent for states the metric engine
+   * has no labour force reading for, and on the first turn after this shipped;
+   * both cases mean no rationing, which is the pre-phase-2 behaviour.
+   */
+  labourTightnessByState: Map<string, number>;
   crimeRateByState: Map<string, number>;
   broadbandByState: Map<string, number>;
   roadConditionByState: Map<string, number>;

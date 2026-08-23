@@ -28,6 +28,7 @@ describe("resolveSectorLabourProductionEffects", () => {
     expect(resolveSectorLabourProductionEffects(labour(), sector())).toEqual({
       strikeActive: false,
       outputFactor: 1,
+      staffingFactor: 1,
       strikeMarginModifier: 0,
     });
   });
@@ -44,6 +45,7 @@ describe("resolveSectorLabourProductionEffects", () => {
     expect(effects).toEqual({
       strikeActive: true,
       outputFactor: (1 - STRIKE_REVENUE_THROTTLE) * 0.9,
+      staffingFactor: 1,
       strikeMarginModifier: STRIKE_MARGIN_PENALTY_PP,
     });
   });
@@ -58,6 +60,7 @@ describe("resolveSectorLabourProductionEffects", () => {
     ).toEqual({
       strikeActive: false,
       outputFactor: 1,
+      staffingFactor: 1,
       strikeMarginModifier: 0,
     });
   });

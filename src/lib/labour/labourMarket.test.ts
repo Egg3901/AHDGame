@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   accumulateLabourDemand,
   computeLabourTightness,
+  filledWorkers,
   makeLabourDemandByState,
   roundTightness,
+  staffingFactorFromTightness,
 } from "./labourMarket";
 
 describe("accumulateLabourDemand", () => {
@@ -76,5 +78,60 @@ describe("roundTightness", () => {
 
   it("leaves large readings intact", () => {
     expect(roundTightness(200.9123)).toBe(200.912);
+  });
+});
+
+describe("staffingFactorFromTightness", () => {
+  it("does not ration a slack market", () => {
+    expect(staffingFactorFromTightness(0.4)).toBe(1);
+    expect(staffingFactorFromTightness(1)).toBe(1);
+  });
+
+  it("halves every sector's headcount when a state is twice oversubscribed", () => {
+    expect(staffingFactorFromTightness(2)).toBe(0.5);
+  });
+
+  it("rations the live Arizona case down to well under one percent", () => {
+    // Tightness ~200: 63.2M jobs wanted against a 314,613 person labour force.
+    const factor = staffingFactorFromTightness(200.9);
+    expect(factor).toBeLessThan(0.005);
+    expect(63_200_000 * factor).toBeLessThan(320_000);
+  });
+
+  it("does not ration when tightness is unknown, so missing data never throttles a state", () => {
+    expect(staffingFactorFromTightness(undefined)).toBe(1);
+    expect(staffingFactorFromTightness(null)).toBe(1);
+    expect(staffingFactorFromTightness(Number.NaN)).toBe(1);
+    expect(staffingFactorFromTightness(Number.POSITIVE_INFINITY)).toBe(1);
+  });
+
+  it("ignores a negative tightness rather than inverting the sign of output", () => {
+    expect(staffingFactorFromTightness(-3)).toBe(1);
+  });
+});
+
+describe("filledWorkers", () => {
+  it("passes desired headcount straight through in a slack market", () => {
+    expect(filledWorkers(1200, 1)).toBe(1200);
+  });
+
+  it("staffs the pro rata share when rationed", () => {
+    expect(filledWorkers(1000, 0.25)).toBe(250);
+  });
+
+  it("floors a rationed sector at one worker rather than abolishing it", () => {
+    // A 0 here would divide-by-zero the wagePerWorker derivation downstream.
+    expect(filledWorkers(10, 0.001)).toBe(1);
+  });
+
+  it("keeps a genuinely empty sector empty", () => {
+    expect(filledWorkers(0, 1)).toBe(0);
+    expect(filledWorkers(-5, 1)).toBe(0);
+    expect(filledWorkers(Number.NaN, 1)).toBe(0);
+  });
+
+  it("collapses the Arizona sector from 48M to the state's actual capacity", () => {
+    const factor = staffingFactorFromTightness(200.9);
+    expect(filledWorkers(47_996_752, factor)).toBeLessThan(250_000);
   });
 });

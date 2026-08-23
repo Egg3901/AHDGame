@@ -89,3 +89,39 @@ export function computeLabourTightness(
 export function roundTightness(tightness: number): number {
   return Math.round(tightness * 1000) / 1000;
 }
+
+/**
+ * Staffing fill rate implied by a state's labour market tightness (phase 2).
+ *
+ * When a state's corporate sectors collectively want more workers than the
+ * state has, every sector fills the same PRO RATA share of what it asked for.
+ * Tightness 2.0 means each sector staffs half its desired headcount; tightness
+ * 200 means each staffs one two-hundredth.
+ *
+ * Slack markets return exactly 1. So does an unknown tightness, so a state the
+ * metric engine has no labour force reading for behaves exactly as it does
+ * today rather than being silently throttled on missing data.
+ *
+ * Pro rata rather than first-come: sectors are processed in an arbitrary order
+ * inside the turn, so any priority rule would hand a windfall to whichever
+ * sector happened to be iterated first, and that order is not something a
+ * player can see or act on. Bidding for priority is phase 3, once wages can
+ * actually respond to scarcity.
+ */
+export function staffingFactorFromTightness(tightness: number | undefined | null): number {
+  if (typeof tightness !== "number" || !Number.isFinite(tightness) || tightness <= 1) return 1;
+  return 1 / tightness;
+}
+
+/**
+ * Headcount a sector can actually staff, given what it wanted and what its state
+ * can supply.
+ *
+ * Floors at 1 for any sector that wanted at least one worker: a rationed sector
+ * is understaffed, not abolished, and a 0 here would divide-by-zero the
+ * `wagePerWorker` derivation downstream.
+ */
+export function filledWorkers(desiredWorkers: number, staffingFactor: number): number {
+  if (!Number.isFinite(desiredWorkers) || desiredWorkers <= 0) return 0;
+  return Math.max(1, Math.round(desiredWorkers * staffingFactor));
+}
