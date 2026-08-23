@@ -24,6 +24,7 @@ export function emptyConflictState(defKey: string): LivingConflictState {
     pressure: {},
     phaseTurns: 0,
     totalTurns: 0,
+    lastProcessedTurn: undefined,
     updatedAt: new Date(0),
   };
 }

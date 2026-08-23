@@ -4,6 +4,8 @@ import {
   getVietnamEscalation,
   type VietnamDials,
 } from "@/lib/crises/vietnamEscalation";
+import { getGameState } from "@/lib/gameState";
+import { livingVietnamAsLegacyState } from "@/lib/livingConflict/vietnamCompat";
 
 /**
  * The Cold War console's dials, as the server holds them.
@@ -72,7 +74,10 @@ function fromVietnam(dials: VietnamDials): ColdWarDials {
  * across drivers rather than the last one to write.
  */
 export async function getColdWarDials(db: Db): Promise<ColdWarDials> {
-  const vietnam = await getVietnamEscalation(db);
+  const gameState = await getGameState(db);
+  const vietnam = gameState?.livingConflictsEnabled
+    ? await livingVietnamAsLegacyState(db)
+    : await getVietnamEscalation(db);
   if (vietnam.level <= 0) return PEACETIME_DIALS;
   return fromVietnam(deriveVietnamDials(vietnam));
 }

@@ -6,6 +6,7 @@ import {
   getCrisisInteraction,
   canCharacterInteract,
   resolveCharacterRoles,
+  isMultiResponderNode,
 } from "@/lib/crises/interactionEngine";
 import {
   shouldShowCrisisOnActionsPage,
@@ -14,6 +15,10 @@ import {
 import type { Crisis, CrisisInteraction } from "@/lib/db/types/crisis";
 import { isCrisisInteractionEnabled } from "@/lib/crises/featureFlag";
 import { conditionalJson } from "@/lib/api/conditionalJson";
+import {
+  globalResponseRoleFor,
+  optionsForGlobalResponder,
+} from "@/lib/livingConflict/globalResponse";
 
 export interface ActiveCrisisForCharacter {
   crisis: Crisis;
@@ -71,15 +76,21 @@ export async function GET(request: Request) {
           ? await getCrisisInteraction(db, crisis._id)
           : null;
 
-        const currentNode = interaction
+        const storedCurrentNode = interaction
           ? (interaction.decisionTree.find((n) => n.nodeId === interaction.currentNodeId) ?? null)
           : null;
+        const currentNode =
+          storedCurrentNode && crisis.globalResponse && countryId
+            ? {
+                ...storedCurrentNode,
+                options: optionsForGlobalResponder(crisis, storedCurrentNode, countryId),
+              }
+            : storedCurrentNode;
 
         // Multi-responder (global choice) crises: each country's leader answers
         // once. A leader whose country already responded can no longer act, so
         // the prompt drops off their Actions page.
-        const multiResponder =
-          crisis.scope === "global" && currentNode?.type === "choice" && !!interaction;
+        const multiResponder = !!currentNode && isMultiResponderNode(crisis, currentNode);
         const alreadyResponded =
           multiResponder && countryId
             ? (interaction!.leaderResponses ?? []).some((r) => r.countryId === countryId)
@@ -87,7 +98,9 @@ export async function GET(request: Request) {
 
         const canInteract =
           currentNode && !interaction?.resolvedAt
-            ? canCharacterInteract(currentNode, characterRoles) && !alreadyResponded
+            ? canCharacterInteract(currentNode, characterRoles) &&
+              !alreadyResponded &&
+              (!crisis.globalResponse || !!globalResponseRoleFor(crisis, countryId))
             : false;
 
         const timeRemainingMinutes = interaction?.decisionDeadline

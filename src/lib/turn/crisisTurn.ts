@@ -22,8 +22,18 @@ import { processCrisisAidResolutions, reverseCrisisAidPenalties } from "@/lib/cr
 import { processCrisisChain, processVietnamChainOpening } from "@/lib/crises/crisisChain";
 import { tickVietnamEscalation } from "@/lib/crises/vietnamEscalation";
 import { syncVietnamFront, VIETNAM_FRONT_NAME } from "@/lib/crises/vietnamFront";
-import { refreshVietnamEscalationLevel } from "@/lib/crises/vietnamEscalationInterface";
+import {
+  normalizeVietnamLevel,
+  refreshVietnamEscalationLevel,
+  setVietnamEscalationLevel,
+} from "@/lib/crises/vietnamEscalationInterface";
 import { getGameState } from "@/lib/gameState";
+import { resolveGlobalResponse } from "@/lib/livingConflict/globalResponse";
+import { processLivingConflictsTurn } from "@/lib/livingConflict/processTurn";
+import {
+  livingVietnamAsLegacyState,
+  retireLegacyVietnamCrises,
+} from "@/lib/livingConflict/vietnamCompat";
 
 /**
  * Process active crises for the current turn.
@@ -44,8 +54,6 @@ function truncate(s: string | undefined | null, max: number): string {
 }
 
 export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
-  const crises = await db.collection<Crisis>("crises").find({ status: "active" }).toArray();
-
   // Aid-bill resolution + penalty reversal run independently of whether any
   // crisis is currently active, so they must execute before the early return.
   await processCrisisAidResolutions(db, turn);
@@ -56,9 +64,26 @@ export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
   // advances every turn the war is being fought, which is what makes prolonging
   // it progressively more expensive in approval.
   const gameState = await getGameState(db);
-  await processVietnamChainOpening(db, turn, gameState?.currentYear);
-  const vietnam = await tickVietnamEscalation(db);
-  await refreshVietnamEscalationLevel(db);
+  await processLivingConflictsTurn(
+    db,
+    turn,
+    gameState?.currentYear,
+    gameState?.livingConflictsEnabled === true
+  );
+  const livingEnabled = gameState?.livingConflictsEnabled === true;
+  if (livingEnabled) await retireLegacyVietnamCrises(db);
+  // Fetch after living-conflict materialization so new response events receive
+  // their start-turn effects, interaction, wire item, and notifications now.
+  const crises = await db.collection<Crisis>("crises").find({ status: "active" }).toArray();
+  let vietnam;
+  if (livingEnabled) {
+    vietnam = await livingVietnamAsLegacyState(db);
+    setVietnamEscalationLevel(normalizeVietnamLevel(vietnam.level));
+  } else {
+    await processVietnamChainOpening(db, turn, gameState?.currentYear);
+    vietnam = await tickVietnamEscalation(db);
+    await refreshVietnamEscalationLevel(db);
+  }
   // The ladder decides how deep the superpowers are in; the front is what that
   // adds up to on the ground. Gated on the conflicts subsystem: a world with it
   // switched off gets the ladder and its dials but no combat document.
@@ -178,6 +203,11 @@ export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
 
   // Batch-resolve expired crises
   if (toResolve.length > 0) {
+    // Shared response windows derive and apply their aggregate outcome before
+    // the generic lifecycle close. The resolver is idempotent on replay.
+    for (const crisis of toResolve) {
+      if (crisis.globalResponse) await resolveGlobalResponse(db, crisis._id);
+    }
     const ids = toResolve.map((c) => c._id);
     await db
       .collection<Crisis>("crises")
@@ -215,7 +245,12 @@ export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
 
     // A rung of a chained family ending is what advances the chain. The family's
     // own state decides what comes next, including nothing at all.
-    await processCrisisChain(db, toResolve, turn, gameState?.currentYear);
+    await processCrisisChain(
+      db,
+      livingEnabled ? toResolve.filter((crisis) => crisis.chain?.family !== "vietnam") : toResolve,
+      turn,
+      gameState?.currentYear
+    );
   }
 
   // Auto-resolve expired interactions (only if enabled)
