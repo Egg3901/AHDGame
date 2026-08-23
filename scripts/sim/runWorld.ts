@@ -53,7 +53,7 @@ interface SimRunDoc {
   lastMessage?: string;
   lastWarnings?: string[];
   // Elections-only run metadata (sim-only).
-  simTurnPhaseMode?: "full" | "elections-only";
+  simTurnPhaseMode?: "full" | "elections-only" | "economy-only" | "macro-only";
   electionScope?: string[] | null;
   emptyCandidateSupplyCountries?: string[];
 }
@@ -141,6 +141,9 @@ const demographicsDemand = hasFlag("demographics");
 // bootstrap (below), because the multi-SOE split in the budget seed reads the
 // flag at seed time — flip it after bootstrap and RU/CN seed as single NatCorps.
 const commandEconomy = hasFlag("command-economy");
+// Supply-side growth A/B: enables the existing gameState gate after bootstrap.
+// Kept explicit so baseline runs remain byte-identical unless requested.
+const macroGrowth = hasFlag("macro-growth");
 // Founding phase override. Leave unset to get the preset's own default
 // (`presetDefaultsToFoundingPhase`, currently 1953-default only), mirroring
 // `resetAndBootstrapGameWorld`'s semantics exactly. Pass `--pre-iteration` /
@@ -156,19 +159,20 @@ const preIterationOverride = hasFlag("pre-iteration")
     ? false
     : undefined;
 
-// SIM-ONLY turn-phase profile. --mode=elections-only makes processTurn() skip
-// the economy/finance/ledger phases (src/simulation/phases/simTurnProfiles.ts)
-// and run only the political/election/approval/campaign phases, so an
-// election-balance run isn't paying for corporationTurn/markets/forex. Applied
-// to the sandbox gameConfig below (like --market-mode). Default: full turn.
-const SIM_TURN_PHASE_MODES = ["full", "elections-only"];
+// SIM-ONLY turn-phase profile. The elections-only and economy-only modes isolate
+// one side of the simulation for faster balance runs. Applied to the sandbox
+// gameConfig below (like --market-mode). Default: full turn.
+const SIM_TURN_PHASE_MODES = ["full", "elections-only", "economy-only", "macro-only"];
 const modeRaw = arg("mode");
 if (modeRaw && !SIM_TURN_PHASE_MODES.includes(modeRaw)) {
   console.error(`--mode must be one of ${SIM_TURN_PHASE_MODES.join(", ")}`);
   process.exit(1);
 }
-const simTurnPhaseMode = modeRaw as "full" | "elections-only" | undefined;
+const simTurnPhaseMode = modeRaw as
+  "full" | "elections-only" | "economy-only" | "macro-only" | undefined;
 const electionsOnly = simTurnPhaseMode === "elections-only";
+const economyOnly = simTurnPhaseMode === "economy-only";
+const macroOnly = simTurnPhaseMode === "macro-only";
 
 // Election country scope: comma-separated allowlist (e.g. --countries=US,UK,DE).
 // Omitted → global (the preset's default election roster). Narrows seeding and,
@@ -668,6 +672,13 @@ async function main() {
     .collection<GameConfig>("gameConfig")
     .updateOne({ _id: "default" }, { $set: { simSandbox: true } }, { upsert: true });
 
+  if (macroGrowth) {
+    await db
+      .collection<GameState>("gameState")
+      .updateOne({ _id: "current" }, { $set: { macroGrowthV1: true } });
+    log("Set macroGrowthV1=true on sandbox gameState");
+  }
+
   // ── SIM-ONLY: elections-only turn profile + country scope ──────────────────
   // Runs for fresh, resumed AND clone worlds (idempotent) so the profile always
   // takes effect before the turn loop, mirroring how --market-mode is applied.
@@ -677,7 +688,13 @@ async function main() {
       .updateOne({ _id: "default" }, { $set: { simTurnPhaseMode } }, { upsert: true });
     log(
       `Set simTurnPhaseMode="${simTurnPhaseMode}" on sandbox gameConfig` +
-        (electionsOnly ? " — economy/finance/ledger phases skipped each turn" : "")
+        (electionsOnly
+          ? ": economy, finance, and ledger phases skipped each turn"
+          : economyOnly
+            ? ": political and random-event phases skipped each turn"
+            : macroOnly
+              ? ": corporate, political, and heavy-ledger phases skipped each turn"
+              : "")
     );
   }
   if (electionScope) {
@@ -849,7 +866,9 @@ if (hasFlag("help") || hasFlag("h")) {
   console.log(
     "Usage: SIM_MONGODB_URI=... npx tsx scripts/sim/runWorld.ts " +
       "--seed=<id> [--preset=2019-default] [--turns=500] [--db=<name>] [--autonomy=v3|v4] " +
-      "[--run-id=<id>] [--checkpoint-every=10] [--pre-iteration|--no-pre-iteration]"
+      "[--run-id=<id>] [--checkpoint-every=10] " +
+      "[--mode=full|elections-only|economy-only|macro-only] " +
+      "[--macro-growth] [--pre-iteration|--no-pre-iteration]"
   );
   process.exit(0);
 }

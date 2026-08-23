@@ -25,7 +25,7 @@ export type SpendingCategory = (typeof SPENDING_CHANNEL_CATEGORIES)[number];
 const CHANNEL_SOURCE_KEYS: Record<SpendingCategory, readonly string[]> = {
   education: ["education"],
   healthcare: ["healthcare"],
-  infrastructure: ["infrastructure"],
+  infrastructure: ["infrastructure", "transport", "transportation"],
   publicSafety: ["publicSafety"],
   social: ["social", "welfare", "socialSecurity"],
   environment: ["environment"],
@@ -49,6 +49,8 @@ export interface SpendingRollup {
    * {@link US_REFERENCE_GDP_PER_CAPITA}.
    */
   perCapitaByRegion: Map<string, Partial<Record<SpendingCategory, number>>>;
+  /** Annual productive-capital budget by region, in local currency millions. */
+  publicCapitalAnnualLocalMillionsByRegion: Map<string, number>;
 }
 
 /**
@@ -68,6 +70,17 @@ export interface SpendingRollup {
 export const US_REFERENCE_GDP_PER_CAPITA = 24_000;
 
 const num = (x: unknown): number => (typeof x === "number" && Number.isFinite(x) ? x : 0);
+
+const PUBLIC_CAPITAL_SOURCE_KEYS = [
+  "infrastructure",
+  "transport",
+  "transportation",
+  "housing",
+  "energy",
+] as const;
+
+const publicCapitalSpend = (byCat: Record<string, number>): number =>
+  PUBLIC_CAPITAL_SOURCE_KEYS.reduce((sum, key) => sum + num(byCat[key]), 0);
 
 /**
  * Per-capita budget spending by category, per region (spec P2 §3, R1 provider).
@@ -111,6 +124,7 @@ export async function spendingProvider(db: Db): Promise<SpendingRollup> {
   // Federal per-capita by country/category + the country's GDP-normalization
   // factor (local per-capita → US-reference units; see US_REFERENCE_GDP_PER_CAPITA).
   const federalPerCapita = new Map<string, Partial<Record<SpendingCategory, number>>>();
+  const federalCapitalPerCapita = new Map<string, number>();
   const normFactorByCountry = new Map<string, number>();
   for (const fb of federalBudgets) {
     const cid = fb.countryId || (String(fb._id) === "federal" ? "US" : String(fb._id));
@@ -120,6 +134,7 @@ export async function spendingProvider(db: Db): Promise<SpendingRollup> {
     // No usable GDP → factor 1 (raw local per-capita, the pre-#0887 behavior).
     if (gdpPerCapita > 0) normFactorByCountry.set(cid, US_REFERENCE_GDP_PER_CAPITA / gdpPerCapita);
     const byCat = fb.spending?.byCategory ?? {};
+    federalCapitalPerCapita.set(cid, publicCapitalSpend(byCat) / pop);
     const rec: Partial<Record<SpendingCategory, number>> = {};
     for (const cat of SPENDING_CHANNEL_CATEGORIES) rec[cat] = channelSpend(byCat, cat) / pop;
     federalPerCapita.set(cid, rec);
@@ -128,16 +143,19 @@ export async function spendingProvider(db: Db): Promise<SpendingRollup> {
   // State per-capita by region/category (needs region population).
   const popByRegion = new Map(real.map((s) => [s._id, num(s.population)]));
   const statePerCapita = new Map<string, Partial<Record<SpendingCategory, number>>>();
+  const stateCapitalPerCapita = new Map<string, number>();
   for (const sb of stateBudgets) {
     const pop = popByRegion.get(String(sb._id)) ?? 0;
     if (pop <= 0) continue;
     const byCat = sb.spending?.byCategory ?? {};
+    stateCapitalPerCapita.set(String(sb._id), publicCapitalSpend(byCat) / pop);
     const rec: Partial<Record<SpendingCategory, number>> = {};
     for (const cat of SPENDING_CHANNEL_CATEGORIES) rec[cat] = channelSpend(byCat, cat) / pop;
     statePerCapita.set(String(sb._id), rec);
   }
 
   const perCapitaByRegion = new Map<string, Partial<Record<SpendingCategory, number>>>();
+  const publicCapitalAnnualLocalMillionsByRegion = new Map<string, number>();
   for (const s of real) {
     const fed = federalPerCapita.get(s.countryId) ?? {};
     const st = statePerCapita.get(s._id) ?? {};
@@ -146,9 +164,15 @@ export async function spendingProvider(db: Db): Promise<SpendingRollup> {
     const rec: Partial<Record<SpendingCategory, number>> = {};
     for (const cat of SPENDING_CHANNEL_CATEGORIES) rec[cat] = (num(fed[cat]) + num(st[cat])) * norm;
     perCapitaByRegion.set(s._id, rec);
+    const localPerCapita =
+      (federalCapitalPerCapita.get(s.countryId) ?? 0) + (stateCapitalPerCapita.get(s._id) ?? 0);
+    publicCapitalAnnualLocalMillionsByRegion.set(
+      s._id,
+      (localPerCapita * num(s.population)) / 1_000_000
+    );
   }
 
-  return { perCapitaByRegion };
+  return { perCapitaByRegion, publicCapitalAnnualLocalMillionsByRegion };
 }
 
 export const SPENDING_PROVIDER: ExternalAggregateProvider<SpendingRollup> = {

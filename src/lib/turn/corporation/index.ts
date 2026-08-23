@@ -88,6 +88,7 @@ import { COMMODITY_LABELS } from "@/lib/constants/commodities";
 import { trackFinancialDistress } from "./financialDistressTracking";
 import {
   persistLabourIndices,
+  persistLabourMarketTelemetry,
   creditCorpDividends,
   updateCorporateTaxBases,
   emitCorporationTurnTx,
@@ -965,6 +966,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     profitMarginByCorpId,
     labourWageIndexByState,
     automationIndexByState,
+    labourDemandByState,
     strikeEvents,
     capacityBindingEvents,
   } = processSectors(
@@ -1052,6 +1054,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     labourWageIndexByState,
     automationIndexByState,
   });
+
+  // Phase 1 labour market telemetry: record how many jobs the corporate sector
+  // wants per state and how that compares to the civilian labour force. Inert
+  // measurement, deliberately not gated on the labour system being on.
+  await persistLabourMarketTelemetry({ db, labourDemandByState, turn });
 
   // Phase 3: Bulk write sector and corp updates
   if (sectorOps.length > 0) {
