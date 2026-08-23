@@ -84,8 +84,8 @@ export async function requireUserApiKey(
     return { ok: false as const, reason: "insufficient_scope" };
   }
 
-  // Update usage stats
-  await db.collection("userApiKeys").updateOne(
+  // Update usage stats (background, don't await)
+  void db.collection("userApiKeys").updateOne(
     { _id: keyDoc._id },
     {
       $set: { lastUsedAt: new Date(), updatedAt: new Date() },
