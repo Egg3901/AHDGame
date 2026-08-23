@@ -33,7 +33,7 @@ import {
 import { turnVoteWeight } from "@/lib/electionEngine/voteCalculations";
 import { resolvePresidentApproval } from "@/lib/electionEngine/presidentialCoattail";
 
-const COUNTRY = process.env.COUNTRY ?? "US";
+const COUNTRY = (process.env.COUNTRY ?? "US") as import("@/lib/constants/countries").CountryId;
 /** Variant scale; 1 is production. Set >1 to probe a stronger channel. */
 const VARIANT_SCALE = Number(process.env.REFERENDUM_SCALE ?? 1);
 
