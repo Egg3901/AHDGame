@@ -141,7 +141,11 @@ export const defect: Defect = {
   id: DEFECT_ID,
   title: "Paid US marine lot was consumed without equipment progress",
   severity: "P1",
-  codeFix: { issue: 1171, mergedTo: "development" },
+  codeFix: {
+    issue: 1171,
+    mergedTo: "development",
+    requiredCommit: "b347e708565217e908e3168923ed085c54dfe83f",
+  },
   seedFix: {
     status: "not-needed",
     files: ["src/lib/admin/seed/seedMilitaryUnits.ts"],
