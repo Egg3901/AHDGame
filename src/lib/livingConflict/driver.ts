@@ -30,11 +30,17 @@ export interface ConflictParticipants {
   backerB?: string;
   neighbors: string[];
   blocMembers: string[];
+  bystanders?: string[];
 }
 
 /** Every nation named in the conflict, for "all"-affecting events. */
 export function allParticipants(p: ConflictParticipants): string[] {
-  const set = new Set<string>([...p.belligerents, ...p.neighbors, ...p.blocMembers]);
+  const set = new Set<string>([
+    ...p.belligerents,
+    ...p.neighbors,
+    ...p.blocMembers,
+    ...(p.bystanders ?? []),
+  ]);
   if (p.backerA) set.add(p.backerA);
   if (p.backerB) set.add(p.backerB);
   return [...set];
@@ -48,6 +54,7 @@ export function nationsForRoles(p: ConflictParticipants, roles: ConflictRole[] |
     if (role === "belligerent") p.belligerents.forEach((n) => out.add(n));
     else if (role === "neighbor") p.neighbors.forEach((n) => out.add(n));
     else if (role === "bloc") p.blocMembers.forEach((n) => out.add(n));
+    else if (role === "bystander") (p.bystanders ?? []).forEach((n) => out.add(n));
     else if (role === "backer_a" && p.backerA) out.add(p.backerA);
     else if (role === "backer_b" && p.backerB) out.add(p.backerB);
   }
@@ -100,12 +107,21 @@ export async function driveConflictTurn(
   year: number | null | undefined
 ): Promise<DriveResult> {
   let state = await loadConflictState(db, def.key);
+  if (state.lastProcessedTurn === turn) return { state, events: [] };
 
   if (!state.hasOpened) {
     if (!inWindow(def, year)) {
       return { state, events: [] };
     }
     state = openConflict(state, typeof year === "number" ? year : null);
+  } else if (state.emitPhaseEntryNextTurn) {
+    state = {
+      ...state,
+      phaseTurns: 0,
+      totalTurns: state.totalTurns + 1,
+      emitPhaseEntryNextTurn: false,
+      updatedAt: new Date(),
+    };
   } else {
     state = tickConflict(state);
     const phase = phaseFor(def, state.phaseLevel);
@@ -127,6 +143,7 @@ export async function driveConflictTurn(
     affectedNations: nationsForRoles(participants, f.event.affects),
   }));
 
+  state = { ...state, lastProcessedTurn: turn };
   await saveConflictState(db, state);
   return { state, events };
 }

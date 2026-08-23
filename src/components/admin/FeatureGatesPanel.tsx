@@ -36,6 +36,11 @@ export const BOOLEAN_GATES: BooleanGate[] = [
     desc: "Decision trees, collective contributions, input nodes.",
   },
   {
+    key: "livingConflictsEnabled",
+    label: "Living conflicts and global responses",
+    desc: "1.3 phased world conflicts, role-specific government responses, and aggregate outcomes. Enabling retires the legacy Vietnam choice chain.",
+  },
+  {
     key: "autoDisastersEnabled",
     label: "Auto crises & disasters",
     desc: "Master gate for the automatic crisis/disaster system.",

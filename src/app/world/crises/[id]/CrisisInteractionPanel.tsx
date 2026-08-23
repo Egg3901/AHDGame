@@ -20,6 +20,9 @@ interface LeaderResponse {
   nodeId: string;
   optionId: string;
   optionLabel: string;
+  responseRole?: string;
+  effects?: CrisisEffect[];
+  responseScores?: Record<string, number>;
   respondedAt: string;
 }
 
@@ -37,6 +40,19 @@ interface SerializedInteraction {
   resolvedAt: string | null;
   resolutionPath: string[];
   resolutionOutcome: string | null;
+  globalResponseOutcome?: {
+    outcomeId: string;
+    label: string;
+    description: string;
+    scores: Record<string, number>;
+    respondedCountries: number;
+    eligibleCountries: number;
+  };
+}
+
+function roleLabel(role?: string): string | null {
+  if (!role) return null;
+  return role.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function countryName(countryId: string): string {
@@ -145,6 +161,11 @@ function LeaderResponseRow({ r, effects }: { r: LeaderResponse; effects: CrisisE
         className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover ring-1 ring-card-border"
       />
       <span className="font-medium text-foreground shrink-0">{countryName(r.countryId)}</span>
+      {r.responseRole ? (
+        <span className="rounded-full border border-card-border px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted">
+          {roleLabel(r.responseRole)}
+        </span>
+      ) : null}
       <span className="text-muted/70 shrink-0">·</span>
       <span className="text-muted truncate">{r.characterName}</span>
       <span className="ml-auto flex items-center gap-1.5 shrink-0">
@@ -177,6 +198,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
   const [canInteract, setCanInteract] = useState(false);
   const [multiResponder, setMultiResponder] = useState(false);
   const [alreadyResponded, setAlreadyResponded] = useState(false);
+  const [responseRole, setResponseRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [hasContributed, setHasContributed] = useState(false);
@@ -201,6 +223,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
       setCanInteract(!!data.canInteract);
       setMultiResponder(!!data.multiResponder);
       setAlreadyResponded(!!data.alreadyResponded);
+      setResponseRole(data.responseRole ?? null);
       setAidContext(data.aidContext ?? null);
     } catch {
       setInteraction(null);
@@ -318,13 +341,20 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
             <p className="text-xs text-muted mt-0.5 mb-3">{currentNode.description}</p>
 
             {multiResponder && (
-              <p className="text-[11px] text-muted -mt-2 mb-3">
-                Each nation&rsquo;s leader responds for their own country — your choice affects only{" "}
-                {interaction.leaderResponses?.length
-                  ? "your nation"
-                  : "your nation, not the whole world"}
-                .
-              </p>
+              <div className="text-[11px] text-muted -mt-2 mb-3 space-y-1">
+                <p>
+                  Each nation&rsquo;s leader responds for their own country. The combined choices
+                  determine the global outcome.
+                </p>
+                <p>
+                  Governments that send no order follow the event&rsquo;s default posture at expiry.
+                </p>
+                {responseRole ? (
+                  <p className="font-medium text-foreground/80">
+                    Your role: {roleLabel(responseRole)}
+                  </p>
+                ) : null}
+              </div>
             )}
 
             {currentNode.type === "collective" && (
@@ -435,6 +465,39 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
                 </p>
               </div>
             ) : null}
+            {interaction.globalResponseOutcome ? (
+              <div className="mt-3 rounded-lg border border-primary/25 bg-primary/5 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-primary">
+                  Global outcome
+                </p>
+                <p className="mt-1 text-sm font-semibold text-foreground">
+                  {interaction.globalResponseOutcome.label}
+                </p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                  {interaction.globalResponseOutcome.description}
+                </p>
+                <p className="mt-2 text-[11px] text-muted">
+                  {interaction.globalResponseOutcome.respondedCountries} of{" "}
+                  {interaction.globalResponseOutcome.eligibleCountries} eligible governments
+                  responded
+                </p>
+                {Object.keys(interaction.globalResponseOutcome.scores).length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {Object.entries(interaction.globalResponseOutcome.scores).map(
+                      ([axis, value]) => (
+                        <span
+                          key={axis}
+                          className="rounded-full border border-card-border bg-card px-2 py-0.5 text-[10px] text-muted"
+                        >
+                          {axis.replaceAll("_", " ")} {value > 0 ? "+" : ""}
+                          {value}
+                        </span>
+                      )
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {terminalNode?.outcomeEffects && terminalNode.outcomeEffects.length > 0 && (
               <div className="mt-3 rounded-lg border border-card-border bg-card-elevated p-3">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-2">
@@ -454,12 +517,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
             </p>
             <ul className="space-y-1.5">
               {interaction.leaderResponses!.map((r) => {
-                const option = interaction.decisionTree
-                  .find((n) => n.nodeId === r.nodeId)
-                  ?.options?.find((o) => o.optionId === r.optionId);
-                return (
-                  <LeaderResponseRow key={r.countryId} r={r} effects={option?.effects ?? []} />
-                );
+                return <LeaderResponseRow key={r.countryId} r={r} effects={r.effects ?? []} />;
               })}
             </ul>
           </div>

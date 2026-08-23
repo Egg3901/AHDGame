@@ -7,11 +7,16 @@ import {
   getCrisisInteraction,
   canCharacterInteract,
   resolveCharacterRoles,
+  isMultiResponderNode,
 } from "@/lib/crises/interactionEngine";
 import { isCrisisInteractionEnabled, isCrisisAidBillsEnabled } from "@/lib/crises/featureFlag";
 import type { Crisis, CrisisInteraction } from "@/lib/db/types/crisis";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import { ObjectId } from "mongodb";
+import {
+  globalResponseRoleFor,
+  optionsForGlobalResponder,
+} from "@/lib/livingConflict/globalResponse";
 
 /**
  * GET /api/crises/[id]/interaction
@@ -62,7 +67,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // for their own nation. A leader whose country already responded can no longer
     // interact, even though the interaction stays open for the rest.
     const multiResponder =
-      !!interaction && !!activeNode && crisis.scope === "global" && activeNode.type === "choice";
+      !!interaction && !!activeNode && isMultiResponderNode(crisis, activeNode);
     const alreadyResponded =
       multiResponder && !!character.countryId
         ? (interaction!.leaderResponses ?? []).some((r) => r.countryId === character.countryId)
@@ -70,8 +75,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const canInteract =
       crisis.interactionDefinition && interaction && activeNode && !interaction.resolvedAt
-        ? canCharacterInteract(activeNode, characterRoles) && !alreadyResponded
+        ? canCharacterInteract(activeNode, characterRoles) &&
+          !alreadyResponded &&
+          (!crisis.globalResponse || !!globalResponseRoleFor(crisis, character.countryId))
         : false;
+
+    const responseRole = character.countryId
+      ? globalResponseRoleFor(crisis, character.countryId)
+      : null;
+    const serializedTree = interaction?.decisionTree.map((node) =>
+      node.nodeId === interaction.currentNodeId && crisis.globalResponse && character.countryId
+        ? { ...node, options: optionsForGlobalResponder(crisis, node, character.countryId) }
+        : node
+    );
 
     // Aid context: expose sender fiscal fields for the slider UI when the current
     // node is an aid node and the aid-bills feature flag is on.
@@ -111,6 +127,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       interaction: interaction
         ? {
             ...interaction,
+            decisionTree: serializedTree,
             _id: interaction._id.toString(),
             crisisId: interaction.crisisId.toString(),
             leaderResponses: (interaction.leaderResponses ?? []).map((r) => ({
@@ -123,6 +140,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       multiResponder,
       alreadyResponded,
       characterRoles,
+      responseRole,
       visibleDecisionTree,
       aidContext,
     });
