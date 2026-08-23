@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  LABOUR_STAFFING_MAX_TURN_MOVE,
   accumulateLabourDemand,
   computeLabourTightness,
   filledWorkers,
+  glideStaffingFactor,
   makeLabourDemandByState,
   roundTightness,
   staffingFactorFromTightness,
@@ -133,5 +135,56 @@ describe("filledWorkers", () => {
   it("collapses the Arizona sector from 48M to the state's actual capacity", () => {
     const factor = staffingFactorFromTightness(200.9);
     expect(filledWorkers(47_996_752, factor)).toBeLessThan(250_000);
+  });
+});
+
+describe("glideStaffingFactor", () => {
+  it("starts a sector with no history at full staffing", () => {
+    // First turn after this ships, world-wide, with no migration.
+    expect(glideStaffingFactor(0.005, undefined)).toBeCloseTo(1 - LABOUR_STAFFING_MAX_TURN_MOVE, 8);
+    expect(glideStaffingFactor(0.005, null)).toBeCloseTo(1 - LABOUR_STAFFING_MAX_TURN_MOVE, 8);
+  });
+
+  it("never moves more than the per-turn cap in either direction", () => {
+    expect(glideStaffingFactor(0, 1)).toBeCloseTo(0.9, 8);
+    expect(glideStaffingFactor(1, 0)).toBeCloseTo(0.1, 8);
+  });
+
+  it("settles exactly on target instead of overshooting past it", () => {
+    expect(glideStaffingFactor(0.95, 1)).toBeCloseTo(0.95, 8);
+    expect(glideStaffingFactor(0.42, 0.4)).toBeCloseTo(0.42, 8);
+  });
+
+  it("holds still once it has arrived", () => {
+    expect(glideStaffingFactor(0.25, 0.25)).toBeCloseTo(0.25, 8);
+    expect(glideStaffingFactor(1, 1)).toBe(1);
+  });
+
+  it("reaches a fully rationed target within ten turns", () => {
+    // The whole point of the ramp: a CEO gets ten turns to divest, relocate or
+    // shrink capacity, not one. It must still ARRIVE, or the constraint never
+    // actually bites and the exploit keeps paying forever.
+    const target = staffingFactorFromTightness(200.9);
+    let factor: number | undefined = undefined;
+    let turns = 0;
+    for (; turns < 50; turns++) {
+      const next: number = glideStaffingFactor(target, factor);
+      if (factor !== undefined && Math.abs(next - factor) < 1e-9) break;
+      factor = next;
+    }
+    expect(turns).toBeLessThanOrEqual(10);
+    expect(factor).toBeCloseTo(target, 8);
+  });
+
+  it("recovers symmetrically when a state's labour market frees up", () => {
+    let factor = 0.1;
+    for (let i = 0; i < 9; i++) factor = glideStaffingFactor(1, factor);
+    expect(factor).toBeCloseTo(1, 8);
+  });
+
+  it("clamps a corrupt persisted factor into range rather than propagating it", () => {
+    expect(glideStaffingFactor(1, 5)).toBe(1);
+    expect(glideStaffingFactor(0, -2)).toBe(0);
+    expect(glideStaffingFactor(0.5, Number.NaN)).toBeCloseTo(0.9, 8);
   });
 });

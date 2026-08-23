@@ -29,6 +29,7 @@ import { servicesStrikeSoftening } from "@/lib/unions/unionServices";
 import {
   accumulateLabourDemand,
   filledWorkers,
+  glideStaffingFactor,
   staffingFactorFromTightness,
   type LabourDemandByState,
 } from "@/lib/labour/labourMarket";
@@ -55,7 +56,7 @@ export interface SectorLabourProductionEffects {
  */
 export function resolveSectorLabourProductionEffects(
   labour: LabourContext,
-  sector: Pick<CorporateSector, "_id" | "strikeStartedAtTurn">,
+  sector: Pick<CorporateSector, "_id" | "strikeStartedAtTurn" | "labourStaffingFactor">,
   stateLabourTightness?: number
 ): SectorLabourProductionEffects {
   const protectedByAgreement =
@@ -85,7 +86,13 @@ export function resolveSectorLabourProductionEffects(
   // sites and would be silently dropped at whichever one was missed. It is
   // exactly the same shape as the strike throttle sitting beside it: labour the
   // sector does not have does not make output.
-  const staffingFactor = staffingFactorFromTightness(stateLabourTightness);
+  // Glided from last turn's value rather than snapped to target, so a state
+  // that newly reads oversubscribed loses output over ten turns instead of one.
+  // See LABOUR_STAFFING_MAX_TURN_MOVE for why this is not capacityHaircutFactor.
+  const staffingFactor = glideStaffingFactor(
+    staffingFactorFromTightness(stateLabourTightness),
+    sector.labourStaffingFactor
+  );
 
   return {
     strikeActive,

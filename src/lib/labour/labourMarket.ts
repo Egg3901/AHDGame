@@ -125,3 +125,44 @@ export function filledWorkers(desiredWorkers: number, staffingFactor: number): n
   if (!Number.isFinite(desiredWorkers) || desiredWorkers <= 0) return 0;
   return Math.max(1, Math.round(desiredWorkers * staffingFactor));
 }
+
+/**
+ * Most the staffing factor may move in a single turn, in absolute terms.
+ *
+ * A state that reads oversubscribed for the first time does not lose its
+ * workforce overnight. The factor glides toward its target at up to this much
+ * per turn, so the worst case (full staffing to fully rationed) takes ten turns
+ * rather than one, and a CEO watching output fall has time to divest, relocate,
+ * or shrink capacity before the constraint fully bites.
+ *
+ * The alternative was `capacityHaircutFactor`'s start-turn stamp, used by the
+ * extraction haircut. It does not fit here: that ramp assumes a ONE-WAY
+ * transition into a permanent constraint, whereas labour tightness comes and
+ * goes as sectors are built and sold. A stamped sector whose state recovered
+ * would stay pinned to a ramp that no longer describes anything.
+ */
+export const LABOUR_STAFFING_MAX_TURN_MOVE = 0.1;
+
+/**
+ * Glide this turn's staffing factor toward its target from last turn's value.
+ *
+ * Symmetric on purpose. Rationing that bit hard and then released instantly
+ * would let a sector flip between full and throttled output as its state's
+ * tightness crossed 1, and the recovery side is the same physical story as the
+ * cut: hiring a workforce back takes as long as losing it.
+ *
+ * A sector with no previous factor (new, or the first turn after this shipped)
+ * starts from 1. That makes the ramp automatic for the whole world rather than
+ * needing a migration, and it errs toward paying a sector for output it may not
+ * be able to staff, which is the right way round for a constraint arriving
+ * without warning.
+ */
+export function glideStaffingFactor(target: number, previous: number | undefined | null): number {
+  const prev =
+    typeof previous === "number" && Number.isFinite(previous)
+      ? Math.max(0, Math.min(1, previous))
+      : 1;
+  const clampedTarget = Math.max(0, Math.min(1, target));
+  if (clampedTarget >= prev) return Math.min(clampedTarget, prev + LABOUR_STAFFING_MAX_TURN_MOVE);
+  return Math.max(clampedTarget, prev - LABOUR_STAFFING_MAX_TURN_MOVE);
+}

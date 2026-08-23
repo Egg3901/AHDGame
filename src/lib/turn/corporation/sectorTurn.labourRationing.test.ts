@@ -4,6 +4,10 @@ import type { Corporation, CorporateSector } from "@/lib/db/types";
 import { buildMarketContext } from "@/lib/market/marketContext";
 import type { CorporationLookups } from "./types";
 import { processSector, type SectorTurnEnv } from "./sectorTurn";
+import {
+  LABOUR_STAFFING_MAX_TURN_MOVE,
+  staffingFactorFromTightness,
+} from "@/lib/labour/labourMarket";
 
 /**
  * Phase 2 labour rationing, end to end through `processSector`.
@@ -35,7 +39,7 @@ function makeCorp(): Corporation {
   } as unknown as Corporation;
 }
 
-function makeSector(): CorporateSector {
+function makeSector(priorStaffingFactor?: number): CorporateSector {
   return {
     _id: SECTOR_ID,
     corporationId: CORP_ID,
@@ -52,6 +56,7 @@ function makeSector(): CorporateSector {
     productionPolicy: 0,
     productionPolicyLevel: 0,
     workers: 1000,
+    labourStaffingFactor: priorStaffingFactor,
     createdAt: new Date(),
   } as unknown as CorporateSector;
 }
@@ -97,7 +102,13 @@ function makeLookups(tightness: number | undefined): CorporationLookups {
   } as unknown as CorporationLookups;
 }
 
-function run(tightness: number | undefined) {
+/**
+ * `priorStaffingFactor` stands in for last turn's persisted value. The staffing
+ * factor GLIDES toward its target at LABOUR_STAFFING_MAX_TURN_MOVE per turn, so
+ * a test that wants to observe the settled constraint has to say which turn of
+ * the ramp it is looking at. Passing the target itself means "fully ramped".
+ */
+function run(tightness: number | undefined, priorStaffingFactor?: number) {
   const env = {
     lookups: makeLookups(tightness),
     turn: 1000,
@@ -113,7 +124,7 @@ function run(tightness: number | undefined) {
     pendingCapacityBindingEvents: [],
     sectorOps: [],
   } as unknown as SectorTurnEnv;
-  const result = processSector(env, makeCorp(), makeSector(), 1, undefined, 1);
+  const result = processSector(env, makeCorp(), makeSector(priorStaffingFactor), 1, undefined, 1);
   const op = env.sectorOps[0] as { updateOne: { update: { $set: Record<string, unknown> } } };
   return { result, env, update: op.updateOne.update.$set };
 }
@@ -131,7 +142,7 @@ describe("phase 2 labour rationing through processSector", () => {
   });
 
   it("staffs half the desired headcount when the state is twice oversubscribed", () => {
-    const { update } = run(2);
+    const { update } = run(2, 0.5);
     const desired = update.workersDesired as number;
     expect(update.labourStaffingFactor).toBe(0.5);
     expect(update.workers as number).toBe(Math.round(desired * 0.5));
@@ -141,15 +152,15 @@ describe("phase 2 labour rationing through processSector", () => {
     // The wiring assertion. If the staffing factor never reached the output
     // legs, headcount would fall and revenue would not, which is precisely the
     // bug that let one Arizona sector bill 48M phantom workers of production.
-    const slack = run(1);
-    const tight = run(4);
+    const slack = run(1, 1);
+    const tight = run(4, 0.25);
 
     expect(tight.result.hourlyRevenue).toBeCloseTo(slack.result.hourlyRevenue * 0.25, 6);
   });
 
   it("collapses a 200x oversubscribed state to under one percent of its output", () => {
-    const slack = run(1);
-    const arizona = run(200.9);
+    const slack = run(1, 1);
+    const arizona = run(200.9, staffingFactorFromTightness(200.9));
 
     expect(arizona.result.hourlyRevenue).toBeLessThan(slack.result.hourlyRevenue * 0.006);
     expect(arizona.result.hourlyRevenue).toBeGreaterThan(0);
@@ -161,8 +172,8 @@ describe("phase 2 labour rationing through processSector", () => {
     // haircut reached that field, a rationed state would report low demand next
     // turn, read as slack, un-ration, spike, and flip-flop every turn forever.
     // Realized output falls; the nameplate the sector is sized from does not.
-    const slack = run(1);
-    const tight = run(200.9);
+    const slack = run(1, 1);
+    const tight = run(200.9, staffingFactorFromTightness(200.9));
 
     expect(tight.update.revenue).toBeCloseTo(slack.update.revenue as number, 6);
     expect(tight.result.hourlyRevenue).toBeLessThan(slack.result.hourlyRevenue * 0.006);
@@ -172,10 +183,31 @@ describe("phase 2 labour rationing through processSector", () => {
     // Next turn's tightness sums this. Recording the rationed figure would drive
     // the reading toward 1 and quietly switch rationing back off, restoring the
     // bug one turn later.
-    const { env, update } = run(10);
+    const { env, update } = run(10, 0.1);
     const accumulated = env.labourDemandByState.get(STATE_ID);
 
     expect(accumulated).toBe(update.workersDesired);
     expect(accumulated).toBeGreaterThan(update.workers as number);
+  });
+  it("does not snap a newly oversubscribed sector straight to its floor", () => {
+    // A CEO gets warning and time to act, not a one-turn wipeout.
+    const firstTurn = run(200.9);
+    expect(firstTurn.update.labourStaffingFactor).toBeCloseTo(1 - LABOUR_STAFFING_MAX_TURN_MOVE, 8);
+    expect(firstTurn.result.hourlyRevenue).toBeGreaterThan(0);
+  });
+
+  it("still arrives at the full constraint by replaying the ramp turn by turn", () => {
+    // The ramp must CONVERGE. A ramp that never lands is just the exploit
+    // paying out more slowly, which is the failure mode worth guarding.
+    const target = staffingFactorFromTightness(200.9);
+    let prior: number | undefined = undefined;
+    let turns = 0;
+    for (; turns < 25; turns++) {
+      const next = run(200.9, prior).update.labourStaffingFactor as number;
+      if (prior !== undefined && Math.abs(next - prior) < 1e-9) break;
+      prior = next;
+    }
+    expect(turns).toBeLessThanOrEqual(10);
+    expect(prior).toBeCloseTo(target, 8);
   });
 });
