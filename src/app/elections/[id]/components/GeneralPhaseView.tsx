@@ -15,6 +15,7 @@ import {
   PersuasionDrivers,
   type PersuasionDriverCandidate,
 } from "@/components/elections/general/PersuasionDrivers";
+import { NationalMoodGauge } from "@/components/elections/general/NationalMoodGauge";
 import { states as referenceStates } from "@/lib/seeds/reference/states";
 import { getSubdivisionMode } from "@/lib/maps/subdivisionConfig";
 import { UK_REGION_NAMES, RU_REGION_NAMES } from "@/lib/constants/states";
@@ -212,6 +213,15 @@ export function GeneralPhaseView({
               />
             ) : null;
           })()}
+
+        {/* National Mood — the economy's push on the incumbent party, read off
+            the tally snapshot the engine wrote. Sits with the driver panels so
+            the national channel is visible before election day. Renders for the
+            live race and for resolved races that carry the snapshot; older
+            races have no field and the card returns null. */}
+        {election.electionType === "president" && !localInPrimary && (
+          <NationalMoodGauge data={election.economicReferendum} />
+        )}
 
         {isUS && election.electionType === "president" && !localInPrimary && (
           <GeneralElectionShellClient

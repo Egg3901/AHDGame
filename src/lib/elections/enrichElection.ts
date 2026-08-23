@@ -641,6 +641,8 @@ export async function _enrichElection(
   let snapshotHistory: SnapshotEntry[] | null = null;
   let generalVotes: GeneralVotesData | null = null;
   let myEndorsedCandidateId: string | null = null;
+  /** Read-through of the tally's economic-referendum snapshot (president only). */
+  let economicReferendum: ElectionResponse["economicReferendum"];
 
   if (isPresident && inPrimary) {
     const projectedDisplay = await applyPresidentialPrimaryDisplay(
@@ -701,6 +703,33 @@ export async function _enrichElection(
     );
 
     if (resolvedTally) {
+      // National Mood gauge input. Pass-through of what the presidential engine
+      // recorded on its last accumulation turn; the shift is already inside the
+      // vote totals, so nothing here re-applies it. Party name/colour are the
+      // only additions, resolved for display.
+      const referendumSnapshot = resolvedTally.economicReferendum ?? tally?.economicReferendum;
+      if (isPresident && referendumSnapshot) {
+        const referendumParty = referendumSnapshot.incumbentPartyId
+          ? partyMap.get(String(referendumSnapshot.incumbentPartyId))
+          : undefined;
+        economicReferendum = {
+          miseryIndex: referendumSnapshot.miseryIndex,
+          sharePts: referendumSnapshot.sharePts,
+          components: referendumSnapshot.components.map((c) => ({
+            key: c.key,
+            label: c.label,
+            contributionPts: c.contributionPts,
+          })),
+          fatigueMultiplier: referendumSnapshot.fatigueMultiplier,
+          recordedTurn: referendumSnapshot.recordedTurn,
+          ...(referendumSnapshot.incumbentPartyId
+            ? { incumbentPartyId: referendumSnapshot.incumbentPartyId }
+            : {}),
+          ...(referendumParty?.name ? { incumbentPartyName: referendumParty.name } : {}),
+          ...(referendumParty?.color ? { incumbentPartyColor: referendumParty.color } : {}),
+        };
+      }
+
       const filterRecord = <T>(rec: Record<string, T>): Record<string, T> => {
         const out: Record<string, T> = {};
         for (const [k, v] of Object.entries(rec)) {
@@ -1159,6 +1188,9 @@ export async function _enrichElection(
           legislativeIncumbentTenureTerms: legislativeIncumbentTenureTermsForDisplay,
         }
       : {}),
+
+    // National Mood gauge input (president only, when the engine recorded one).
+    ...(economicReferendum ? { economicReferendum } : {}),
 
     // Registration Influence card inputs (US presidential general only).
     ...(regByState ? { regByState } : {}),

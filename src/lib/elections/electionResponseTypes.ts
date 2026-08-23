@@ -243,6 +243,27 @@ export interface ElectionResponse {
   midtermOppositionBoostPctByParty?: Record<string, number>;
 
   /**
+   * President only: the economic-referendum reading the engine recorded on the
+   * race's vote tally (`ElectionVoteTally.economicReferendum`). Read straight
+   * off the tally and passed through, never recomputed here, so the National
+   * Mood gauge shows exactly the shift the engine applied. Absent for races
+   * that ran before the channel existed, and for non-presidential races.
+   */
+  economicReferendum?: {
+    miseryIndex: number;
+    /** Signed share shift for the incumbent party, in points. */
+    sharePts: number;
+    components: Array<{ key: string; label: string; contributionPts: number }>;
+    /** Penalty-side multiplier for consecutive terms held. 1 when it does not apply. */
+    fatigueMultiplier: number;
+    incumbentPartyId?: string;
+    /** Resolved display name for `incumbentPartyId`, when the party is known. */
+    incumbentPartyName?: string;
+    incumbentPartyColor?: string;
+    recordedTurn: number;
+  };
+
+  /**
    * Per-state registration-lean breakdown for the presidential
    * RegistrationInfluenceCard. Keyed by stateId → party shares (each
    * party's `statePartyOrg.registration` as a lean %) plus the

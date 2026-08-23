@@ -96,6 +96,20 @@
       "pts": "pts",
       "ceiling": "Ceiling this cycle: at most {opponentSlice}% of {opponent}'s vote can be persuaded across to {focus}, and {focusSlice}% of {focus}'s vote can be persuaded away. Registration lean sets the starting split and how hard a party is to move, not the final share. These drivers add up to {net} pts of that movable slice."
     },
+    "nationalMood": {
+      "title": "National Mood",
+      "subtitle": "The economy's push on the incumbent party's national vote",
+      "towardIncumbent": "Toward {party}",
+      "againstIncumbent": "Against {party}",
+      "incumbentFallback": "the incumbent party",
+      "scaleNote": "Scale runs from -{clamp} to +{clamp} pts. This shift is already inside the vote totals.",
+      "componentsGroup": "What feeds it",
+      "fatigue": "Seeking a {term} consecutive term. The penalty side is scaled x{multiplier}.",
+      "termThird": "3rd",
+      "termFourthPlus": "4th or later",
+      "recordedTurn": "Read on turn {turn}.",
+      "pts": "pts"
+    },
     "registration": {
       "title": "Registration Influence",
       "noData": "{state} ({stateId}): no registration data tracked for this state.",

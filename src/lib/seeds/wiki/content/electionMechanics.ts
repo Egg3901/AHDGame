@@ -134,6 +134,25 @@ Two more swing-flow drivers matter for down-ballot strategy:
 
 Both apply after the base appeal pipeline and are separate from the reg/support/transferable-share factors above.
 
+## National Mood (economic referendum)
+
+Presidential races carry one more channel: the economy is scored as a referendum on the party that holds the office. The presidential race page shows it as the **National Mood** card, so you can read the size and direction of the push before election day instead of inferring it from the result.
+
+What feeds it:
+
+- **Unemployment** above the natural rate of 6%: 0.6 share points per point, capped at 4.
+- **Poverty** above the 20% baseline: 0.15 share points per point, capped at 3.
+- **Inflation** outside the 1% to 4% band, in either direction: 0.4 share points per point, capped at 3.
+- **Real median income trend**, flat being neutral: 0.3 share points per point either way, capped at 1.5.
+
+Each component is signed. A good economy pays the incumbent party a bonus, capped at 4 points in total; a bad one charges a penalty. The signed total is then clamped to **+/-8 points** of national vote share, so the economy can decide a close race but never hands one side an automatic win.
+
+**Term fatigue scales the penalty side only.** A party seeking a 3rd consecutive term wears a bad economy at 1.25x, a 4th or later at 1.5x. The bonus side is never scaled, so a long-tenured party gets no extra credit for good numbers. The card shows this line only when it applies.
+
+The shift is applied inside the normal vote accumulation, so it is already in the totals the card and tally show. It is not added twice.
+
+Because the inputs are live national metrics, this channel is a lever, not weather. Legislation and budget choices that pull unemployment, poverty, or inflation back toward their anchors shrink the penalty for whoever holds the office next election. Governing badly is a campaign cost.
+
 ## Multi-seat races
 
 House and State Senate (US), Bundestag constituency seats, UK Commons regions, and JP Shugiin use proportional allocation:
