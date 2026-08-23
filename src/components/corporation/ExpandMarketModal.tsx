@@ -618,7 +618,11 @@ export default function ExpandMarketModal({
                     {plantsMode
                       ? suggestionMode === "playerCorp"
                         ? "No established markets found for this sector type."
-                        : "No open demand found for this sector type. Every domestic market is already being served."
+                        : // Never claim the world is served. This branch means no
+                          // candidate market rows came back at all, which is a
+                          // different thing, and the old wording told players the
+                          // board was closed when it was not (#1162).
+                          "No markets found for this sector type yet."
                       : suggestionMode === "playerCorp"
                         ? "No player corporations found in this sector type."
                         : "No available markets found for this sector type."}
@@ -723,6 +727,16 @@ export default function ExpandMarketModal({
                                       ? facilitySingular(selectedType)
                                       : facilityPlural(selectedType)}
                                   </span>
+                                  {/* A market with no unmet demand is still open
+                                      to a build, you just start by taking sales
+                                      off the incumbents. That was only ever said
+                                      at the confirm step, so a board of zeroes
+                                      read as "every market is closed" (#1162). */}
+                                  {facilityCount === 0 && (
+                                    <span className="mt-0.5 block text-[9px] font-normal leading-snug text-warning">
+                                      You can still build here
+                                    </span>
+                                  )}
                                 </span>
                                 <span
                                   className={`text-right text-xs tabular-nums ${s.canAfford ? "text-foreground" : "text-error"}`}

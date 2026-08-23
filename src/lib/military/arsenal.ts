@@ -123,7 +123,7 @@ export function equipUnit(
   // A zero requirement counts as fully supplied: there is nothing outstanding to issue, and
   // dividing by it would be the only way this function could throw.
   const fill = lotsNeeded > 0 ? Math.min(1, Math.max(0, lotsDrawn / lotsNeeded)) : 1;
-  const track = Math.round(EQUIPMENT_TRACK_MAX * fill);
+  const track = EQUIPMENT_TRACK_MAX * fill;
 
   // Tier is the grade of the materiel RECEIVED, so nothing received means no tier — even
   // when the store still reports a grade. Drawing does not lower `grade`, so a drained
@@ -166,7 +166,68 @@ function eqAvgOf(unit: Pick<MilitaryUnit, "equipment">): number {
 /** How many more lots this unit needs to reach a full load of `lotsNeeded`. */
 export function lotsToFillUnit(unit: Pick<MilitaryUnit, "equipment">, lotsNeeded: number): number {
   const shortfall = 1 - eqAvgOf(unit) / EQUIPMENT_TRACK_MAX;
-  return Math.max(0, Math.round(lotsNeeded * shortfall));
+  // Lots are indivisible. Rounding to nearest understated the final requirement for an
+  // unevenly-equipped unit: a Marine Division at 3/2/3 was shown as needing one lot even
+  // though its exact shortfall was 1.33. The minister then ordered the displayed amount and
+  // quite reasonably saw the same warning after it was issued. A tiny epsilon prevents a
+  // floating-point residue at an exact boundary from inventing an extra lot.
+  return Math.max(0, Math.ceil(lotsNeeded * shortfall - Number.EPSILON * 16));
+}
+
+const EQUIPMENT_TRACKS = ["firepower", "protection", "support"] as const;
+
+/**
+ * Apply whole arsenal lots without discarding their sub-track equipment value.
+ *
+ * One lot carries `3 * EQUIPMENT_TRACK_MAX / fullLots` total equipment points. The old refit
+ * path added one third of that value to every track and rounded each track immediately. A
+ * one-lot Marine Division top-up therefore changed 2.25 back to 2, while the lot had already
+ * been removed from the arsenal. Keeping fractional track values makes every paid lot
+ * persistent; filling the lowest tracks first also redirects value that would otherwise be
+ * thrown away against a track already at the ceiling.
+ */
+export function applyEquipmentLots(
+  equipment: MilitaryUnit["equipment"],
+  lotsDrawn: number,
+  fullLots: number
+): UnitEquipment {
+  const out: UnitEquipment = {
+    firepower: Math.min(EQUIPMENT_TRACK_MAX, Math.max(0, equipment?.firepower ?? 0)),
+    protection: Math.min(EQUIPMENT_TRACK_MAX, Math.max(0, equipment?.protection ?? 0)),
+    support: Math.min(EQUIPMENT_TRACK_MAX, Math.max(0, equipment?.support ?? 0)),
+  };
+  let points =
+    (Math.max(0, lotsDrawn) / Math.max(1, fullLots)) *
+    EQUIPMENT_TRACK_MAX *
+    EQUIPMENT_TRACKS.length;
+
+  while (points > Number.EPSILON) {
+    const incomplete = EQUIPMENT_TRACKS.filter((track) => out[track] < EQUIPMENT_TRACK_MAX);
+    if (incomplete.length === 0) break;
+
+    const floor = Math.min(...incomplete.map((track) => out[track]));
+    const lowest = incomplete.filter((track) => Math.abs(out[track] - floor) < Number.EPSILON * 16);
+    const nextLevel = Math.min(
+      EQUIPMENT_TRACK_MAX,
+      ...incomplete.filter((track) => out[track] > floor).map((track) => out[track])
+    );
+    const capacity = (nextLevel - floor) * lowest.length;
+
+    if (points >= capacity - Number.EPSILON) {
+      for (const track of lowest) out[track] = nextLevel;
+      points -= capacity;
+      continue;
+    }
+
+    const increment = points / lowest.length;
+    for (const track of lowest) out[track] = floor + increment;
+    points = 0;
+  }
+
+  for (const track of EQUIPMENT_TRACKS) {
+    out[track] = Math.round(out[track] * 1e12) / 1e12;
+  }
+  return out;
 }
 
 /**
