@@ -275,24 +275,12 @@ export interface DistributeVotesOptions {
    */
   incumbencyApprovalPivot?: number;
   /**
-   * Executive own-race only: party-tenure "voter fatigue" drag in incumbency
-   * budget units (≥ 0), subtracted from the incumbent's approval-scaled shield
-   * AFTER the cap so it bites popular multi-term incumbents. Derived from the
-   * consecutive terms the incumbent party has held (see
-   * `partyTenureFatiguePenalty`). Folded into the Incumbency driver — no
-   * separate display row. Unset / 0 for a first re-election or non-executive
-   * races. Currently plumbed for the US presidential race only.
-   */
-  incumbentTenurePenalty?: number;
-  /**
    * Executive own-race only: raw consecutive terms the incumbent PARTY has
-   * already held the office (current term counts as 1) — the same input
-   * `partyTenureFatiguePenalty` converts to `incumbentTenurePenalty` for the
-   * swing-side incumbency driver. Threaded separately (rather than deriving
-   * it back out of the budget-unit penalty) so `appealWeight`'s nominal-share
-   * `personalStatTenureFatigue` can apply its own points-based erosion to the
-   * PI/favorability-driven reach/approval terms. Unset ⇒ no fatigue (first
-   * term / open seat / non-executive races).
+   * already held the office (current term counts as 1). Feeds `appealWeight`'s
+   * nominal-share `personalStatTenureFatigue`, which erodes the
+   * PI/favorability-driven reach/approval terms. The "time for a change" drag
+   * itself is priced by the economic referendum channel, not here. Unset ⇒ no
+   * fatigue (first term / open seat / non-executive races).
    */
   incumbentConsecutiveTerms?: number;
   /**

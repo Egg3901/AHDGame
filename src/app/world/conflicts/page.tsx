@@ -6,10 +6,17 @@ import { listActiveConflicts } from "@/lib/db/collections/conflicts";
 import { casualtiesByTheater } from "@/lib/db/collections/battleReports";
 import { toConflictView } from "./_coldwar/conflictView";
 import { VietnamEscalationPanel } from "./_coldwar/VietnamEscalationPanel";
-import { getVietnamEscalationSummary } from "@/lib/crises/vietnamEscalation";
+import { getVietnamEscalationSummary, VIETNAM_RUNGS } from "@/lib/crises/vietnamEscalation";
+import { TensionHeader, type NuclearPowerView } from "./_coldwar/TensionHeader";
+import { getColdWarTension, tensionBand } from "@/lib/coldwar/tension";
+import { getColdWarDials } from "@/lib/coldwar/dials";
+import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
+import { NUCLEAR_NODES } from "@/lib/military/nuclearProgram";
+import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 
-// Conflicts hub — every live conflict in the world, on the map and in the list.
-// Gated by `conflictsEnabled`; the themed-island shell and fonts come from the layout.
+// Conflicts hub: every live conflict in the world, on the map and in the list,
+// under one headline: the global cold-war tension reading. Gated by
+// `conflictsEnabled`; the themed-island shell and fonts come from the layout.
 // The Cold War framing around the list still describes the conflicts a bloc actually
 // backs; one nobody backs renders neutrally (see conflictView).
 export default async function ConflictsPage() {
@@ -28,15 +35,67 @@ export default async function ConflictsPage() {
     toConflictView(d, { startingYear, casualties: casualties[d._id] ?? 0, preIterationTurns })
   );
 
-  const vietnam = await getVietnamEscalationSummary(db);
+  const [vietnam, tension, dials, programs] = await Promise.all([
+    getVietnamEscalationSummary(db),
+    getColdWarTension(db),
+    getColdWarDials(db),
+    listNuclearPrograms(db),
+  ]);
+
+  // Who holds the bomb: any programme with a stockpile or an adopted node.
+  // A country that never opened one has no document and never appears.
+  const powers: NuclearPowerView[] = programs
+    .filter((p) => p.warheads > 0 || Object.keys(p.adopted).length > 0)
+    .map((p) => {
+      // Devices are declared in ascending order, so the last adopted is the best.
+      const bestDevice = NUCLEAR_NODES.filter(
+        (n) => n.kind === "device" && p.adopted[n.key] != null
+      ).at(-1);
+      return {
+        countryId: p._id,
+        flag: COUNTRY_CONFIGS[p._id]?.flagEmoji ?? "",
+        name: COUNTRY_CONFIGS[p._id]?.name ?? p._id,
+        warheads: p.warheads,
+        bestDevice: bestDevice?.name ?? null,
+      };
+    });
 
   return (
     <>
-      {vietnam.level > 0 ? (
-        <div style={{ padding: "26px 26px 0" }}>
-          <VietnamEscalationPanel summary={vietnam} />
-        </div>
-      ) : null}
+      <div style={{ padding: "26px 26px 0" }}>
+        <TensionHeader
+          tension={tension.value}
+          band={tensionBand(tension.value)}
+          defcon={dials.defcon}
+          events={tension.events.map((e) => ({ turn: e.turn, label: e.label, delta: e.delta }))}
+          powers={powers}
+        />
+        {/* Vietnam is one driver among several now, so its ladder folds into a
+            secondary strip under the headline rather than leading the page. */}
+        {vietnam.level > 0 ? (
+          <details style={{ margin: "0 auto 18px", maxWidth: 1340 }}>
+            <summary
+              style={{
+                cursor: "pointer",
+                listStyle: "none",
+                padding: "9px 16px",
+                border: "1px solid rgba(220,38,38,.35)",
+                background: "rgba(220,38,38,.06)",
+                borderRadius: 10,
+                font: "600 9px 'IBM Plex Mono',monospace",
+                letterSpacing: ".18em",
+                color: "#d98a8a",
+              }}
+            >
+              ◆ VIETNAM · ESCALATION LADDER · RUNG {vietnam.level} OF {VIETNAM_RUNGS.length}
+              {vietnam.rungLabel ? ` · ${vietnam.rungLabel.toUpperCase()}` : ""} · EXPAND
+            </summary>
+            <div style={{ marginTop: 10 }}>
+              <VietnamEscalationPanel summary={vietnam} />
+            </div>
+          </details>
+        ) : null}
+      </div>
       <GlobalConflictsBoard year={currentYear ?? startingYear} conflicts={conflicts} />
     </>
   );

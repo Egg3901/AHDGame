@@ -3,6 +3,7 @@ import { COUNTRY_ELECTION_PHASES } from "@/lib/turn/countryPhases";
 export const BASE_TURN_PHASE_NAMES = [
   "bannedShareholderRelease",
   "inactiveShareholderShareRelease",
+  "coldWarTension",
   "actionRefresh",
   "fundGeneration",
   "corporationTurn",

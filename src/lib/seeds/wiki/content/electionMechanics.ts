@@ -130,9 +130,32 @@ These factors mean a candidate with high Support, low opponent Registration, and
 Two more swing-flow drivers matter for down-ballot strategy:
 
 4. **Coattails**: a sitting executive's approval swings a nominal-share multiplier for their own party in every eligible down-ballot general, governor coattails at state scope, presidential coattails at national scope (US only for now). A popular incumbent lifts their whole party's ticket; an unpopular one drags it.
-5. **Party-tenure fatigue**: a "time for a change" drag on a party that has held the executive office for multiple consecutive terms, roughly 3.5 points per term beyond the first. It bites even a popular incumbent's party, on top of the approval-based shield.
+5. **Party-tenure fatigue**: a "time for a change" effect on a party that has held the executive office for multiple consecutive terms. It is priced in the National Mood channel below, as a multiplier on the economic penalty side, not as a drag inside this driver.
 
 Both apply after the base appeal pipeline and are separate from the reg/support/transferable-share factors above.
+
+## National Mood (economic referendum)
+
+Presidential races carry one more channel: the economy is scored as a referendum on the party that holds the office. The presidential race page shows it as the **National Mood** card, so you can read the size and direction of the push before election day instead of inferring it from the result.
+
+What feeds it:
+
+- **Unemployment** above the natural rate of 6%: 0.6 share points per point, capped at 4.
+- **Poverty** above the 20% baseline: 0.15 share points per point, capped at 3.
+- **Inflation** outside the 1% to 4% band, in either direction: 0.4 share points per point, capped at 3.
+- **Real median income trend**, flat being neutral: 0.3 share points per point either way, capped at 1.5.
+
+Each component is signed. A good economy pays the incumbent party a bonus, capped at 4 points in total; a bad one charges a penalty. The signed total is then clamped to **+/-8 points** of national vote share, so the economy can decide a close race but never hands one side an automatic win.
+
+**Credit for response.** Metrics move slowly and elections do not wait for them, so voters partially forgive a government that is visibly acting. National bills enacted in the last 24 turns that push a suffering component the right way (unemployment or poverty down, real incomes up) cut the raw penalty by up to **40%**, scored per component: five jobs bills do nothing about an inflation penalty. Three rules keep it honest. A bill must have carried a real budget cost. The first bill on a component earns full weight and later ones earn half, then a quarter, and so on. And if the component's metric has kept getting worse over the eight turns since the response landed, that component's credit is cancelled outright. Inflation cannot earn credit at all, because no law in the game declares a direct effect on it.
+
+**Term fatigue scales the penalty side only.** A party seeking a 3rd consecutive term wears a bad economy at 1.25x, a 4th or later at 1.5x. Fatigue applies to what is left of the penalty after credit for response, so acting on a downturn is worth more the longer your party has held the office. The bonus side is never scaled, so a long-tenured party gets no extra credit for good numbers. The card shows this line only when it applies.
+
+This is now the only place party-tenure fatigue is priced. The older "time for a change" drag inside the incumbency persuasion driver has been removed; it only moved the thin persuadable slice of the vote and was too weak to feel.
+
+The shift is applied inside the normal vote accumulation, so it is already in the totals the card and tally show. It is not added twice.
+
+Because the inputs are live national metrics, this channel is a lever, not weather. Legislation and budget choices that pull unemployment, poverty, or inflation back toward their anchors shrink the penalty for whoever holds the office next election. Governing badly is a campaign cost.
 
 ## Multi-seat races
 
