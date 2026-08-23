@@ -36,8 +36,21 @@ export interface PoliticalMacroInputs {
    * neutral. Use this where the consumer is simply asking "what value does
    * this region's board correspond to?"; use `legacyUnit` where an engine has
    * a neutral whose behaviour must be preserved.
+   *
+   * `era` is OPT-IN and must mirror whatever the caller converts the OTHER side
+   * of its comparison with (ticket #1142). The inverse runs over
+   * `metricQualityRange`, which moves with the era: `powerGridReliability` spans
+   * 85.5-98.3 in 1958 against a modern 97-99.9, and those two barely overlap. A
+   * caller that band-converts its target with a year but reads `current` without
+   * one is not comparing like with like — for that metric the era ceiling sits
+   * BELOW the modern midpoint, so the difference is negative whatever the input.
+   * Omit it and the modern thresholds apply, byte-for-byte as before.
    */
-  legacyValue(stateId: string, path: string): number | null;
+  legacyValue(
+    stateId: string,
+    path: string,
+    era?: { countryId?: string | null; year?: number | null }
+  ): number | null;
   /** Raw 0-100 family score by family id, or null when unavailable. */
   score(stateId: string, familyId: string): number | null;
 }
@@ -59,14 +72,14 @@ export async function loadPoliticalMacroInputs(db: Db): Promise<PoliticalMacroIn
       if (score == null) return null;
       return legacyUnitFromPoliticalScore(path, score);
     },
-    legacyValue(stateId, path) {
+    legacyValue(stateId, path, era) {
       const values = valuesById.get(stateId);
       if (!values) return null;
       const [category, metricId] = path.split(".");
       if (!category || !metricId) return null;
       const score = politicalValueForLegacyMetric(values, category, metricId);
       if (score == null) return null;
-      return legacyValueFromPoliticalScore(category, metricId, score);
+      return legacyValueFromPoliticalScore(category, metricId, score, era);
     },
     score(stateId, familyId) {
       const values = valuesById.get(stateId);
