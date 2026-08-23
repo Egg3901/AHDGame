@@ -8,6 +8,7 @@ import {
   lotsToFillUnit,
   lotPrice,
   MATERIEL_SHARE_OF_UNIT_COST,
+  applyEquipmentLots,
 } from "./arsenal";
 import { MILITARY_COUNTRY_SCALE } from "@/lib/constants/military";
 
@@ -114,11 +115,9 @@ describe("equipUnit", () => {
     expect(equipUnit(999, 10, 2).equipment.firepower).toBe(EQUIPMENT_TRACK_MAX);
   });
 
-  it("emits whole-number equipment tracks", () => {
-    for (const drawn of [0, 1, 3, 5, 7, 10]) {
-      const eq = equipUnit(drawn, 10, 2).equipment;
-      for (const v of Object.values(eq)) expect(Number.isInteger(v)).toBe(true);
-    }
+  it("preserves sub-track progress from every consumed lot", () => {
+    const oneLot = equipUnit(1, 12, 2).equipment;
+    expect(oneLot).toEqual({ firepower: 0.25, protection: 0.25, support: 0.25 });
   });
 });
 
@@ -158,6 +157,35 @@ describe("lotsToFillUnit", () => {
   it("never asks for a negative number of lots", () => {
     const over = { equipment: { firepower: 99, protection: 99, support: 99 } } as never;
     expect(lotsToFillUnit(over, 10)).toBe(0);
+  });
+
+  it("rounds a fractional shortfall up so the UI never understates the order", () => {
+    const almostFull = {
+      equipment: { firepower: 3, protection: 2, support: 3 },
+    } as never;
+    expect(lotsToFillUnit(almostFull, 12)).toBe(2);
+  });
+});
+
+describe("applyEquipmentLots", () => {
+  it("preserves twelve one-lot refits as exactly one full twelve-lot load", () => {
+    let equipment = { firepower: 0, protection: 0, support: 0 };
+    for (let lot = 0; lot < 12; lot++) {
+      equipment = applyEquipmentLots(equipment, 1, 12);
+    }
+    expect(equipment).toEqual({
+      firepower: EQUIPMENT_TRACK_MAX,
+      protection: EQUIPMENT_TRACK_MAX,
+      support: EQUIPMENT_TRACK_MAX,
+    });
+  });
+
+  it("redirects a lot away from full tracks instead of discarding their share", () => {
+    expect(applyEquipmentLots({ firepower: 3, protection: 2, support: 3 }, 1, 12)).toEqual({
+      firepower: 3,
+      protection: 2.75,
+      support: 3,
+    });
   });
 });
 

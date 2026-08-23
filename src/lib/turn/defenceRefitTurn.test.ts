@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { applyDefenceRefit } from "./defenceRefitTurn";
-import { EQUIPMENT_TRACK_MAX } from "@/lib/military/arsenal";
+import { EQUIPMENT_TRACK_MAX, lotsToFillUnit } from "@/lib/military/arsenal";
 
 interface World {
   units: Record<string, unknown>[];
@@ -101,6 +101,30 @@ describe("applyDefenceRefit", () => {
     const w: World = { units: [unit()], stock: { ...emptyStock, ground: 9_999 }, writes: [] };
     await applyDefenceRefit(stubDb(w), "US");
     expect(w.stock.ground).toBeLessThan(9_999);
+  });
+
+  it("does not consume the final marine lot without clearing the displayed shortfall", async () => {
+    const marineDivision = unit({
+      domain: "marine",
+      type: "Marine Division",
+      equipment: { firepower: 3, protection: 2, support: 3 },
+    });
+    const w: World = {
+      units: [marineDivision],
+      stock: { ...emptyStock, marine: 1 },
+      writes: [],
+    };
+
+    expect(lotsToFillUnit(marineDivision as never, 12)).toBe(2);
+    await applyDefenceRefit(stubDb(w), "US");
+
+    expect(w.stock.marine).toBe(0);
+    expect(w.writes[0].update.$set.equipment).toEqual({
+      firepower: 3,
+      protection: 2.75,
+      support: 3,
+    });
+    expect(lotsToFillUnit(w.writes[0].update.$set as never, 12)).toBe(1);
   });
 
   // A per-domain arsenal means a full armoury does not help a starved navy.

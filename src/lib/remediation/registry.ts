@@ -22,6 +22,7 @@ import { defect as ukVatRevenueGap } from "./defects/AHD-1102-uk-vat-revenue-gap
 import { defect as brlForcedMaturityRestitution } from "./defects/AHD-1124-brl-forced-maturity-restitution";
 import { defect as commandEconomyPrivateSectorOwnership } from "./defects/AHD-command-economy-private-sector-ownership";
 import { defect as tinkyStaleVoteExcess } from "./defects/AHD-tinky-stale-vote-excess";
+import { defect as usMarineLotProgress } from "./defects/AHD-1171-us-marine-lot-progress";
 import type { Defect } from "./types";
 
 export const DEFECTS: Defect[] = [
@@ -42,6 +43,7 @@ export const DEFECTS: Defect[] = [
   brlForcedMaturityRestitution,
   commandEconomyPrivateSectorOwnership,
   tinkyStaleVoteExcess,
+  usMarineLotProgress,
 ];
 
 export function getDefect(id: string): Defect | undefined {
