@@ -318,7 +318,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
     ? { pieOwners: sector.owners, playerOwners: sector.owners }
     : splitNppOwners(sector.owners);
 
-  const ownedPercent = 100 - sector.unownedPercent;
+  const ownedPercent = largestSharePercent(sector.owners);
   const specializationBonus =
     data.sectorSpecializations?.primary === selectedType
       ? data.sectorSpecializations.primaryBonus
@@ -330,7 +330,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
     type: s.type,
     label: s.label,
     totalMarket: s.totalMarket,
-    ownedPercent: 100 - s.unownedPercent,
+    ownedPercent: largestSharePercent(s.owners) ?? 0,
     star:
       data.sectorSpecializations?.primary === s.type
         ? { rank: "primary", bonus: data.sectorSpecializations.primaryBonus }
@@ -409,19 +409,18 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
             )}
           </span>
         </div>
-        {/* Market Control — average owned % across all sectors */}
+        {/* Active Sectors — how many of this state's sectors anyone operates in.
+            Replaces a "Market Control" average that averaged 100 - unownedPercent
+            and so read 100.0% on every board under plants, empty sectors
+            included (ticket #1162). An average of per-sector leading shares
+            would be no more meaningful, so this reports occupancy instead. */}
         <div className="flex min-w-max flex-1 flex-col justify-center px-4 py-2.5">
           <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
-            Market Control
+            Active Sectors
           </span>
-          <span className="mt-0.5 text-sm font-bold text-success tabular-nums">
-            {data.sectors.length > 0
-              ? (
-                  data.sectors.reduce((sum, s) => sum + (100 - s.unownedPercent), 0) /
-                  data.sectors.length
-                ).toFixed(1)
-              : "0.0"}
-            %
+          <span className="mt-0.5 text-sm font-bold text-foreground tabular-nums">
+            {data.sectors.filter((s) => s.owners.length > 0).length}
+            <span className="text-[10px] font-normal text-muted"> of {data.sectors.length}</span>
           </span>
         </div>
       </div>
@@ -650,10 +649,10 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
           </div>
           <div>
             <span className="block text-[10px] uppercase tracking-widest text-muted font-medium">
-              Market Control
+              Largest Share
             </span>
             <span className="text-sm font-bold text-primary tabular-nums">
-              {ownedPercent.toFixed(1)}%
+              {ownedPercent === null ? "Empty" : `${ownedPercent.toFixed(1)}%`}
             </span>
           </div>
         </div>
@@ -988,7 +987,11 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
             shares are the same partition of the same market — but the headline
             number changes from "% share of a pool" to "units/day nobody is
             meeting", because that is the figure a player sizes a build against. */}
-        {sector.unownedRevenue > 0 && (
+        {/* Under plants the route forces unownedRevenue to 0 for every sector
+            (#1145), so gating on it hid this panel on every board in a plants
+            world — the one panel that tells a player how much room a build has.
+            Gate on the figure the panel actually shows in each mode (#1162). */}
+        {(data.plantsMode ? (sector.headroomUnits ?? 0) > 0 : sector.unownedRevenue > 0) && (
           <div
             className={`rounded-xl border bg-card overflow-hidden ${
               data.plantsMode ? "border-primary/30" : "border-card-border"
@@ -1024,9 +1027,8 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
             {data.plantsMode && (
               <p className="px-4 pb-3 text-xs leading-snug text-muted">
                 About {formatUnits(sector.headroomUnits)} {CAPACITY_UNIT_LABEL} of in-state demand
-                in {data.stateName} has no plant serving it. That is{" "}
-                {sector.unownedPercent.toFixed(1)}% of this state&apos;s market — not national or
-                global.
+                in {data.stateName} has no plant serving it. That is demand in this state only, not
+                national or global.
               </p>
             )}
 
@@ -1293,6 +1295,21 @@ function splitNppOwners(owners: SectorOwner[]): {
   };
 }
 
+/**
+ * Leading corporation's share of a sector, or null when nobody operates there.
+ *
+ * Replaces `100 - unownedPercent`, which under plants is always 100: ticket
+ * #1145 took the unowned pool out of the market-share denominator, so
+ * `unownedPercent` is hardcoded to 0 for every sector and the derived "market
+ * control" read as total control everywhere. On prod that was all 867 US
+ * (state, sector) cells, including the 546 with no corporation in them at all
+ * (ticket #1162), which players correctly read as "this market is closed to me".
+ */
+function largestSharePercent(owners: { marketShare: number }[]): number | null {
+  if (owners.length === 0) return null;
+  return owners.reduce((max, o) => Math.max(max, o.marketShare), 0);
+}
+
 function MarketSharePie({
   owners,
   unownedPercent,
@@ -1360,7 +1377,12 @@ function MarketSharePie({
         className="fill-foreground text-sm font-bold"
         fontSize="14"
       >
-        {(100 - unownedPercent).toFixed(0)}%
+        {/* Summed owner shares, not 100 - unownedPercent: under plants the
+            latter is always 100 because unownedPercent is hardcoded to 0, so an
+            empty pie with no segments still read "100% owned" (#1162). This
+            works unchanged in legacy split worlds, where the owner shares sum to
+            exactly 100 - unownedPercent. */}
+        {owners.reduce((sum, o) => sum + o.marketShare, 0).toFixed(0)}%
       </text>
       <text x={cx} y={cy + 10} textAnchor="middle" className="fill-muted text-[9px]" fontSize="9">
         owned
