@@ -35,6 +35,8 @@ import { settleDoctrineIncome } from "@/lib/db/collections/nationalDoctrine";
 import { applyDefenceDeliveries } from "./defenceDeliveryTurn";
 import { applyDefenceRefit } from "./defenceRefitTurn";
 import { applyNuclearProduction } from "./nuclearProductionTurn";
+import { applyCovertNuclearTurn } from "./covertNuclearTurn";
+import { COVERT_CAPABLE } from "@/lib/military/covertNuclear";
 import { maxTechTierForPreset } from "@/lib/admin/seed/seedMilitaryUnits";
 import { resolveGameYear } from "@/lib/era/era";
 import { getGameState } from "@/lib/gameState";
@@ -395,6 +397,14 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
       await applyNuclearProduction(db, cid as CountryId, defenceYear, currentTurn, {
         coldWarEnabled: defenceGameState?.coldWarEnabled,
         defenceProcurementPaused: defenceGameState?.defenceProcurementPaused,
+      });
+    }
+    // The covert grind, for the few countries that can run one. Skips without
+    // a write when the programme was never opened. Deliberately not behind the
+    // procurement pause: covert funding is off the books by design.
+    if (COVERT_CAPABLE.includes(cid as CountryId)) {
+      await applyCovertNuclearTurn(db, cid as CountryId, currentTurn, {
+        coldWarEnabled: defenceGameState?.coldWarEnabled,
       });
     }
   }
