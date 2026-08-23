@@ -6,6 +6,7 @@ import {
   clearCommodityMarket,
   computeClearingFactors,
   qualityPremiumMultiplier,
+  type ClearingBookDiagnostic,
 } from "./clearing";
 
 const bals = (entries: Array<[CommodityType, { supply: number; demand: number }]>) =>
@@ -282,10 +283,10 @@ describe("computeClearingFactors", () => {
     expect(results.get("player")!.effectivePosture).toBe(0.2);
   });
 
-  it("emits book diagnostics so callers can trip the unit-mismatch invariant", () => {
-    const seen: { commodity: string; offeredUnits: number; laggedSupply: number }[] = [];
-    // revenue 80_000 / basePrice 800 = 100 offered units vs lagged supply 10 —
-    // a 10× mismatch (the t879 FX-bug shape).
+  it("emits both raw and normalized book diagnostics", () => {
+    const seen: ClearingBookDiagnostic[] = [];
+    // Revenue 80_000 / basePrice 800 yields 100 raw units. The legacy offer
+    // reconciles to the 10 units that exist in lagged supply.
     computeClearingFactors({
       sectors: [{ sectorId: "s", revenue: 80_000, supplyRates: { steel: 1 }, posture: 0 }],
       balances: bals([["steel", { supply: 10, demand: 9 }]]),
@@ -295,7 +296,9 @@ describe("computeClearingFactors", () => {
     });
     expect(seen).toHaveLength(1);
     expect(seen[0].commodity).toBe("steel");
-    expect(seen[0].offeredUnits).toBeCloseTo(100, 10);
+    expect(seen[0].rawOfferedUnits).toBeCloseTo(100, 10);
+    expect(seen[0].normalizedOfferedUnits).toBeCloseTo(10, 10);
+    expect(seen[0].offeredUnits).toBeCloseTo(10, 10);
     expect(seen[0].laggedSupply).toBe(10);
   });
 
@@ -304,7 +307,7 @@ describe("computeClearingFactors", () => {
     // 60 units of supply (scale/haircut). The book is reconciled down to 60, so a
     // shortage market (demand 90 > supply 60) clears everyone: soldFraction 1 — not
     // depressed to 90/100 by the phantom 100-unit nameplate.
-    const seen: { commodity: string; offeredUnits: number; laggedSupply: number }[] = [];
+    const seen: ClearingBookDiagnostic[] = [];
     const results = computeClearingFactors({
       sectors: [{ sectorId: "s", revenue: 80_000, supplyRates: { steel: 1 }, posture: 0 }],
       balances: bals([["steel", { supply: 60, demand: 90 }]]),
@@ -312,11 +315,129 @@ describe("computeClearingFactors", () => {
       basePrices,
       onBookDiagnostic: (d) => seen.push(d),
     });
-    // Diagnostic still reports the RAW nameplate (100) so the FX tripwire can fire.
-    expect(seen[0].offeredUnits).toBeCloseTo(100, 10);
+    // Raw telemetry preserves the 100-unit nameplate, while the actionable
+    // total reports the 60-unit book that clearing actually used.
+    expect(seen[0].rawOfferedUnits).toBeCloseTo(100, 10);
+    expect(seen[0].normalizedOfferedUnits).toBeCloseTo(60, 10);
     expect(seen[0].laggedSupply).toBe(60);
     // But clearing used the reconciled book → sole seller sells out in the shortage.
     expect(results.get("s")!.soldFraction).toBeCloseTo(1, 10);
+  });
+
+  it("diagnoses the reconciled book without treating expected nameplate inflation as actionable", () => {
+    const seen: ClearingBookDiagnostic[] = [];
+    computeClearingFactors({
+      sectors: [{ sectorId: "s", revenue: 80_000, supplyRates: { steel: 1 }, posture: 0 }],
+      balances: bals([["steel", { supply: 60, demand: 90 }]]),
+      priceRatioByCommodity: new Map([["steel", 1]]),
+      basePrices,
+      onBookDiagnostic: (diagnostic) => seen.push(diagnostic),
+    });
+
+    expect(seen).toEqual([
+      expect.objectContaining({
+        group: null,
+        rawOfferedUnits: 100,
+        offeredUnits: 60,
+        normalizableUnits: 100,
+        exemptRealUnits: 0,
+        laggedSupply: 60,
+      }),
+    ]);
+    expect(seen[0].offeredUnits).not.toBeGreaterThan(seen[0].laggedSupply * 3);
+  });
+
+  it("keeps a measured produced-unit mismatch actionable after normalization", () => {
+    const seen: ClearingBookDiagnostic[] = [];
+    computeClearingFactors({
+      sectors: [
+        {
+          sectorId: "plant",
+          revenue: 80_000,
+          supplyRates: { steel: 1 },
+          producedUnits: 400,
+          posture: 0,
+        },
+      ],
+      balances: bals([["steel", { supply: 100, demand: 90 }]]),
+      priceRatioByCommodity: new Map([["steel", 1]]),
+      basePrices,
+      plantsEnabled: true,
+      onBookDiagnostic: (diagnostic) => seen.push(diagnostic),
+    });
+
+    expect(seen[0]).toEqual(
+      expect.objectContaining({
+        rawOfferedUnits: 400,
+        normalizedOfferedUnits: 400,
+        normalizableUnits: 0,
+        exemptRealUnits: 400,
+        laggedSupply: 100,
+      })
+    );
+    expect(seen[0].normalizedOfferedUnits).toBeGreaterThan(seen[0].laggedSupply * 3);
+  });
+
+  it("reconciles only legacy units in a mixed measured and nameplate book", () => {
+    const seen: ClearingBookDiagnostic[] = [];
+    computeClearingFactors({
+      sectors: [
+        {
+          sectorId: "legacy",
+          revenue: 80_000,
+          supplyRates: { steel: 1 },
+          posture: 0,
+        },
+        {
+          sectorId: "plant",
+          revenue: 80_000,
+          supplyRates: { steel: 1 },
+          producedUnits: 40,
+          posture: 0,
+        },
+      ],
+      balances: bals([["steel", { supply: 60, demand: 90 }]]),
+      priceRatioByCommodity: new Map([["steel", 1]]),
+      basePrices,
+      plantsEnabled: true,
+      onBookDiagnostic: (diagnostic) => seen.push(diagnostic),
+    });
+
+    expect(seen[0]).toEqual(
+      expect.objectContaining({
+        rawOfferedUnits: 140,
+        normalizedOfferedUnits: 60,
+        normalizableUnits: 100,
+        exemptRealUnits: 40,
+      })
+    );
+  });
+
+  it("identifies each country book in partitioned diagnostics", () => {
+    const seen: ClearingBookDiagnostic[] = [];
+    computeClearingFactors({
+      sectors: [
+        { sectorId: "us", revenue: 8_000, supplyRates: { steel: 1 }, posture: 0 },
+        { sectorId: "ca", revenue: 8_000, supplyRates: { steel: 1 }, posture: 0 },
+      ],
+      balances: bals([["steel", { supply: 20, demand: 20 }]]),
+      balancesByGroup: new Map([
+        ["US", bals([["steel", { supply: 10, demand: 10 }]])],
+        ["CA", bals([["steel", { supply: 10, demand: 10 }]])],
+      ]),
+      groupBySector: new Map([
+        ["us", "US"],
+        ["ca", "CA"],
+      ]),
+      priceRatioByCommodity: new Map([["steel", 1]]),
+      basePrices,
+      onBookDiagnostic: (diagnostic) => seen.push(diagnostic),
+    });
+
+    expect(seen).toEqual([
+      expect.objectContaining({ commodity: "steel", group: "US" }),
+      expect.objectContaining({ commodity: "steel", group: "CA" }),
+    ]);
   });
 
   it("does NOT scale a book already within supply (no phantom inflation)", () => {
