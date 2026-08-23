@@ -11,6 +11,7 @@ import { getUnitArchetype } from "@/lib/constants/military";
 import type { UnitDomain } from "@/lib/db/types/militaryUnit";
 import { lotsRequired, lotsToFillUnit } from "@/lib/military/arsenal";
 import { lotPriceBand } from "@/lib/military/defenceLotEconomics";
+import { DEFENCE_TERMINATION_CAUSE_TURNS } from "@/lib/military/defenceTermination";
 import { AggTile, MilIcon, domainIcon, fmtMoneyAbs } from "./militaryUi";
 
 /** Presentation order — the arms of the service as a minister would list them. */
@@ -522,7 +523,9 @@ export function ArsenalTab({
                           }}
                           className="rounded-lg border border-[color-mix(in_srgb,var(--error)_40%,transparent)] px-2.5 py-1 text-[11px] font-semibold text-[var(--error)] disabled:opacity-50"
                         >
-                          Confirm
+                          {(c.terminationFee ?? 0) > 0
+                            ? `Pay ${fmtMoneyAbs(currencySymbol, c.terminationFee ?? 0)}`
+                            : "Confirm"}
                         </button>
                       ) : (
                         <button
@@ -550,6 +553,21 @@ export function ArsenalTab({
                         ? "owns this supplier"
                         : `holds ${(c.selfDealing.stakeShare * 100).toFixed(1)}% of this supplier`}
                       .
+                    </p>
+                  )}
+                  {/* The terms, stated only once the minister has asked to cancel. On every
+                      row it would be noise; on the row they are about to tear up it is the
+                      one thing they need. */}
+                  {confirming === c._id && (
+                    <p className="mt-1.5 text-[11px] text-[var(--warning)]">
+                      {c.terminationBasis === "withdrawal"
+                        ? "The supplier has not accepted yet, so withdrawing costs nothing."
+                        : c.terminationBasis === "cause"
+                          ? `This plant has missed ${DEFENCE_TERMINATION_CAUSE_TURNS} delivery turns in a row. Terminating for cause costs nothing.`
+                          : `Breaking a contract the supplier accepted pays them ${fmtMoneyAbs(
+                              currencySymbol,
+                              c.terminationFee ?? 0
+                            )} out of the appropriation, keeps the lots charged to this quarter's tranche, and goes on the public wire under your name.`}
                     </p>
                   )}
                 </div>

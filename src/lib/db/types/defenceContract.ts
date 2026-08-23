@@ -111,6 +111,40 @@ export interface DefenceContract {
     favorabilityPenalty: number;
   };
   /**
+   * Consecutive delivery turns this contract missed for a reason of the SUPPLIER's making.
+   *
+   * Counted by the delivery sweep, never asserted by the minister, because it is the thing
+   * that decides whether tearing the contract up is free. Reset to zero on any turn that
+   * ships, banks normal sub-lot progress, or fails for a reason on the buyer's side. Absent
+   * means zero, which is the right reading for every contract awarded before the streak
+   * existed: a clean record, not an unprovable one.
+   */
+  supplierFaultTurns?: number;
+  /** Last turn the fault streak was incremented, so a re-run cannot count the same turn twice. */
+  supplierFaultThroughTurn?: number;
+  /**
+   * How this contract ended when a minister ended it, and what that cost.
+   *
+   * Set once, on cancellation, and never cleared. A withdrawn offer and a contract torn up
+   * mid-build are both `status: "cancelled"` on the order book, and the difference between
+   * them is the whole point: one owed nothing, the other owed the supplier its margin and put
+   * the minister's name on the public wire.
+   */
+  termination?: {
+    basis: "withdrawal" | "cause" | "convenience";
+    /** Break fee actually paid to the supplier, in local currency. Zero unless convenience. */
+    fee: number;
+    /** Undelivered lots at the moment it was torn up. */
+    lotsCancelled: number;
+    ministerCharacterId?: ObjectId;
+    ministerName?: string;
+    /** Favorability the minister paid for it, for the order book to state plainly. */
+    favorabilityPenalty: number;
+    /** A competing domestic supplier the minister holds a stake in, when there was one. */
+    competingSupplierName?: string;
+    turn: number;
+  };
+  /**
    * Which economics settle this contract's deliveries (ticket #1134).
    *
    * `"margin"` means build cost is a share of `pricePerLot` at `TARGET_SUPPLIER_MARGIN`, so a

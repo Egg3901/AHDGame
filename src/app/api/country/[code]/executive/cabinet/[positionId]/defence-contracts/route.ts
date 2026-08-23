@@ -38,6 +38,16 @@ import {
   selfDealingDisclosure,
 } from "@/lib/military/defenceSelfDealing";
 import {
+  terminationBasis,
+  terminationFee,
+  terminationFavorabilityPenalty,
+  terminationDisclosure,
+  terminationNoticeToSupplier,
+} from "@/lib/military/defenceTermination";
+import { findCompetingSupplierInterest } from "@/lib/military/defenceMinisterInterests";
+import { applyMoneyMove } from "@/lib/banking/moneyMove";
+import type { DefenceContract } from "@/lib/db/types/defenceContract";
+import {
   awardContract,
   cancelContract,
   assignedFactoriesForSector,
@@ -488,13 +498,197 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     // Scoped to the caller's own country: without this a defence minister could cancel
     // another nation's contracts by id.
-    const contract = await db.collection("defenceContracts").findOne({ _id: objectId, countryId });
+    const contract = await db
+      .collection<DefenceContract>("defenceContracts")
+      .findOne({ _id: objectId, countryId });
     if (!contract) {
       return NextResponse.json({ error: "No such contract" }, { status: 404 });
     }
 
-    const cancelled = await cancelContract(db, objectId);
-    return NextResponse.json({ success: true, cancelled });
+    const basis = terminationBasis(contract);
+    const fee = terminationFee({ ...contract, basis });
+
+    // Refused BEFORE anything is cancelled. The contract's own commitment covers the fee by
+    // construction, so this only bites a country already spending into arrears - and a
+    // minister who cannot pay the break fee does not get to tear the contract up and leave
+    // the supplier holding the bill.
+    if (fee > 0) {
+      const appropriation = await getDefenseAppropriation(db, countryId);
+      if (appropriation.balance < fee) {
+        return NextResponse.json(
+          {
+            error:
+              `Terminating this contract owes the supplier ` +
+              `${fee.toLocaleString("en-US")} in break fees and the defence appropriation ` +
+              `holds ${Math.round(appropriation.balance).toLocaleString("en-US")}. Let the ` +
+              `order run, or wait for the appropriation to accrue.`,
+            terminationFee: fee,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    const corp = await db
+      .collection<Corporation>("corporations")
+      .findOne({ _id: contract.corporationId });
+
+    // Only a convenience termination is a conflict question. Withdrawing an unanswered offer
+    // and dropping a plant that has not built anything for three turns are things a minister
+    // is supposed to do, and putting either on the wire would teach players to read the wire
+    // as noise.
+    const competing =
+      basis === "convenience"
+        ? await findCompetingSupplierInterest(db, {
+            countryId,
+            ministerUserId: guard.user.userId ? new ObjectId(guard.user.userId.toString()) : null,
+            ministerCharacterId: guard.user.character?._id ?? null,
+            excludeCorporationId: contract.corporationId,
+          })
+        : null;
+
+    const lotsCancelled = Math.max(0, contract.lotsOrdered - contract.lotsDelivered);
+    const cancelledValue = lotsCancelled * contract.pricePerLot;
+    const gameState = await getGameState();
+    const currentTurn = gameState?.currentTurn ?? 1;
+    const tranche =
+      basis === "convenience"
+        ? (
+            await getDefenceContractAvailability(db, {
+              countryId,
+              corporationId: contract.corporationId.toString(),
+              currentTurn,
+              defenseLine: resolveDefenseLineFrom(
+                await ensureFederalBudget(db, countryId, gameState?.preset ?? DEFAULT_SEED_PRESET)
+              ),
+              pricePerLot: contract.pricePerLot,
+              stateOwned: corp ? isStateOwned(corp) : false,
+            })
+          ).procurementNotional
+        : 0;
+    const favorabilityPenalty =
+      basis === "convenience"
+        ? terminationFavorabilityPenalty({
+            cancelledValue,
+            tranche,
+            conflicted: competing != null,
+          })
+        : 0;
+
+    const cancelled = await cancelContract(db, objectId, {
+      // A convenience termination keeps the tranche spent. Cancel a rival and the room does
+      // not come back to you this window; that is the loop this closes.
+      releaseQuota: basis !== "convenience",
+      termination: {
+        basis,
+        fee,
+        lotsCancelled,
+        ministerCharacterId: guard.user.character?._id,
+        ministerName: guard.user.character?.name,
+        favorabilityPenalty,
+        ...(competing ? { competingSupplierName: competing.name } : {}),
+        turn: currentTurn,
+      },
+    });
+    if (!cancelled) {
+      return NextResponse.json(
+        { error: "That contract is no longer open, or it changed while you were looking at it." },
+        { status: 409 }
+      );
+    }
+
+    // The break fee. Paid AFTER the order is closed so a supplier cannot bank a delivery
+    // against money already earmarked as compensation, and through the shared primitive so a
+    // leg that throws lands in the repair queue rather than vanishing.
+    if (fee > 0 && corp) {
+      await applyMoneyMove(db, {
+        key: `defence_contract_termination:${objectId.toString()}`,
+        kind: "defence_contract_termination",
+        turn: currentTurn,
+        legs: [
+          {
+            kind: "debit",
+            amount: fee,
+            collection: "federalBudget",
+            filter: { countryId },
+            path: "defenseAppropriation.balance",
+            note: `${countryId} pays break fees on a terminated defence contract`,
+          },
+          {
+            kind: "credit",
+            amount: fee,
+            collection: "corporations",
+            filter: { _id: corp._id },
+            path: "liquidCapital",
+            note: "supplier is compensated for lots it was ordered to build and will not",
+          },
+        ],
+      }).catch(() => null);
+    }
+
+    // Disclosure and its price, the same answer the game gives to a self-dealt award: not a
+    // refusal, because withdrawing from a contract is a legitimate thing a government does,
+    // but the voters find out and the minister wears it.
+    if (basis === "convenience" && guard.user.character) {
+      if (favorabilityPenalty > 0) {
+        await db
+          .collection("characters")
+          .updateOne(
+            { _id: guard.user.character._id },
+            { $inc: { favorability: -favorabilityPenalty } }
+          );
+      }
+      await createSystemNewsPost(
+        terminationDisclosure({
+          ministerName: guard.user.character.name ?? "The defence minister",
+          supplierName: corp?.name ?? "the supplier",
+          countryName: COUNTRIES[countryId]?.name ?? countryId,
+          lots: lotsCancelled,
+          fee,
+          ...(competing ? { competingSupplierName: competing.name } : {}),
+        }),
+        "executive",
+        {
+          title: competing
+            ? "Minister cancels a rival's defence contract"
+            : "Defence contract terminated",
+        }
+      );
+    }
+
+    // The supplier learns it from a notification either way. Before this, a CEO whose order
+    // was torn up mid-build found out by noticing it had stopped.
+    if (corp?.userId) {
+      await createNotifications([
+        {
+          userId: corp.userId,
+          type: "defence_contract_cancelled",
+          title: basis === "withdrawal" ? "Defence Offer Withdrawn" : "Defence Contract Terminated",
+          message: terminationNoticeToSupplier({
+            basis,
+            countryName: COUNTRIES[countryId]?.name ?? countryId,
+            lots: lotsCancelled,
+            fee,
+          }),
+          metadata: {
+            contractId: objectId.toString(),
+            corporationId: contract.corporationId.toString(),
+            countryId,
+            basis,
+            lotsCancelled,
+            fee,
+          },
+        },
+      ]);
+    }
+
+    return NextResponse.json({
+      success: true,
+      cancelled: true,
+      basis,
+      terminationFee: fee,
+      favorabilityPenalty,
+    });
   } catch (error) {
     return handleRouteError(error);
   }

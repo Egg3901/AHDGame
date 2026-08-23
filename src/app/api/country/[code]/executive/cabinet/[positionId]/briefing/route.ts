@@ -59,6 +59,7 @@ import {
 } from "@/lib/corporations/queries/defenceSuppliers";
 import { lotPrice } from "@/lib/military/arsenal";
 import { DEFENCE_CARRY_REASON_TEXT } from "@/lib/db/types/defenceContract";
+import { terminationBasis, terminationFee } from "@/lib/military/defenceTermination";
 import { DEFENCE_FACTORY_SLOTS_PER_PLANT } from "@/lib/military/defenceLotEconomics";
 import { militaryPriceAnchor } from "@/lib/military/procurement";
 import type { NationalArsenal } from "@/lib/db/types/nationalArsenal";
@@ -376,6 +377,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
               },
             }
           : {}),
+        // Quoted on the board, not discovered afterwards. The cancel button is one click from
+        // a bill against the appropriation, so the bill belongs next to the button.
+        terminationBasis: terminationBasis(c),
+        terminationFee: terminationFee({ ...c, basis: terminationBasis(c) }),
       }));
 
       // The award form needs both halves: who can build, and what a lot costs. The price is
