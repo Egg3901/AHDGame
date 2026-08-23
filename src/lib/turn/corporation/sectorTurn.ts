@@ -71,7 +71,6 @@ import {
   softCapEffectiveMargin,
   getSustainedNegativeProductionPenalty,
   nextNegativeProductionCounter,
-  calculateWorkers,
   TYPE_SWITCH_MARGIN_PENALTY,
   TYPE_SWITCH_PENALTY_TURNS,
 } from "@/lib/constants/corporations";
@@ -112,7 +111,11 @@ import {
   disasterProductionFactor,
 } from "@/lib/crises/disasterMarginPenalty";
 import { resolveSectorGrowthPolicy } from "./sectorGrowthPolicy";
-import { resolveSectorLabourEconomics, resolveSectorLabourProductionEffects } from "./sectorLabour";
+import {
+  resolveSectorHeadcount,
+  resolveSectorLabourEconomics,
+  resolveSectorLabourProductionEffects,
+} from "./sectorLabour";
 import { computeSectorOutputUnits } from "./sectorOutputUnits";
 import { demandThrottleFactor } from "./demandThrottle";
 import { advanceSectorInventory } from "@/lib/corporations/sectorInventory";
@@ -159,6 +162,7 @@ export function processSector(
     market,
     wageIndexByState,
     automationIndexByState,
+    labourDemandByState,
     pendingStrikeEvents,
     pendingCapacityBindingEvents,
     sectorOps,
@@ -288,8 +292,12 @@ export function processSector(
   // in practice unionsEnabled always implies wagesEnabled via
   // LABOUR_MODE_ORDER, but LabourContext doesn't enforce that, so this
   // reads `sector.strikeStartedAtTurn` regardless of wagesEnabled.
-  const { outputFactor: labourOutputFactor, strikeMarginModifier } =
-    resolveSectorLabourProductionEffects(labour, sector);
+  const tightness = lookups.labourTightnessByState.get(sector.stateId);
+  const {
+    outputFactor: labourOutputFactor,
+    strikeMarginModifier,
+    staffingFactor,
+  } = resolveSectorLabourProductionEffects(labour, sector, tightness);
   // Effective strategy rates, resolved once here and reused below by the
   // capacity haircut, price realization, and the blended commodity margin
   // modifiers (so non-standard strategies are priced against what the
@@ -1240,16 +1248,15 @@ export function processSector(
   const effectiveMargin = softCapEffectiveMargin(
     sector.profitMargin + totalMarginMod + nationalizedMarginPenalty
   );
-  // Workers for this sector (revenue + state workforce skill). Computed here
-  // — ahead of the labor-cost split below — so labor can be expressed as
-  // workers × wage-per-worker. Also persisted on the sector update later.
-  // SP4: playable regions' workforce skill resolves from the political board
-  // (education.adultSkills, same 0-100 higher-better scale).
-  const rawSkill =
-    lookups.rawWorkforceSkillByState.get(sector.stateId) ??
-    politicalBoard?.["education.adultSkills"] ??
-    null;
-  const computedWorkers = calculateWorkers(newRevenue, rawSkill);
+  // Ahead of the labor-cost split below, so labor is workers x wage-per-worker.
+  const { desiredWorkers, workers: computedWorkers } = resolveSectorHeadcount({
+    revenue: newRevenue,
+    stateId: sector.stateId,
+    rawWorkforceSkillByState: lookups.rawWorkforceSkillByState,
+    politicalBoard,
+    staffingFactor,
+    labourDemandByState,
+  });
 
   const grossMaintenance = hourlyRevenue * (1 - effectiveMargin / 100);
   const {
@@ -1654,6 +1661,8 @@ export function processSector(
     targetGrowthRate: brakedTargetRate,
     currentGrowthCost: writeCorpEconomicLocal(newGrowthCost, sectorCurrencyCode, sectorFxRate),
     workers: computedWorkers,
+    workersDesired: desiredWorkers,
+    labourStaffingFactor: staffingFactor,
     productionPolicyLevel: newPolicyLevel,
     negativeProductionSustainedTurns: newNegativeProductionTurns,
     countryId: sectorCountryId,

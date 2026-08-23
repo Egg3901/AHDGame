@@ -26,6 +26,14 @@ import {
   unionizationDriftTarget,
 } from "@/lib/labour/unionization";
 import { servicesStrikeSoftening } from "@/lib/unions/unionServices";
+import {
+  accumulateLabourDemand,
+  filledWorkers,
+  glideStaffingFactor,
+  staffingFactorFromTightness,
+  type LabourDemandByState,
+} from "@/lib/labour/labourMarket";
+import { calculateWorkers } from "@/lib/constants/corporations";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import type { SectorTurnEnv } from "./sectorTurnTypes";
 
@@ -33,6 +41,11 @@ export interface SectorLabourProductionEffects {
   strikeActive: boolean;
   outputFactor: number;
   strikeMarginModifier: number;
+  /**
+   * Pro rata share of desired headcount the sector's state can actually supply,
+   * 0 to 1. Exactly 1 wherever the labour market is not oversubscribed.
+   */
+  staffingFactor: number;
 }
 
 /**
@@ -43,7 +56,8 @@ export interface SectorLabourProductionEffects {
  */
 export function resolveSectorLabourProductionEffects(
   labour: LabourContext,
-  sector: Pick<CorporateSector, "_id" | "strikeStartedAtTurn">
+  sector: Pick<CorporateSector, "_id" | "strikeStartedAtTurn" | "labourStaffingFactor">,
+  stateLabourTightness?: number
 ): SectorLabourProductionEffects {
   const protectedByAgreement =
     labour.noStrikeProtectedSectorIds?.has(sector._id.toString()) === true;
@@ -62,11 +76,64 @@ export function resolveSectorLabourProductionEffects(
       : 1;
   const strikeFactor = strikeActive ? 1 - STRIKE_REVENUE_THROTTLE : 1;
 
+  // Phase 2 labour rationing. A state's sectors cannot collectively staff more
+  // people than the state has, so each fills the same pro rata share of what it
+  // asked for and the capacity it could not staff does not produce.
+  //
+  // Folded into `outputFactor` rather than returned as a separate leg because
+  // that factor is already threaded through every revenue and production path
+  // in sectorTurn; a separate leg would have to be remembered at four call
+  // sites and would be silently dropped at whichever one was missed. It is
+  // exactly the same shape as the strike throttle sitting beside it: labour the
+  // sector does not have does not make output.
+  // Glided from last turn's value rather than snapped to target, so a state
+  // that newly reads oversubscribed loses output over ten turns instead of one.
+  // See LABOUR_STAFFING_MAX_TURN_MOVE for why this is not capacityHaircutFactor.
+  const staffingFactor = glideStaffingFactor(
+    staffingFactorFromTightness(stateLabourTightness),
+    sector.labourStaffingFactor
+  );
+
   return {
     strikeActive,
-    outputFactor: strikeFactor * industrialActionFactor,
+    outputFactor: strikeFactor * industrialActionFactor * staffingFactor,
     strikeMarginModifier: strikeActive ? STRIKE_MARGIN_PENALTY_PP : 0,
+    staffingFactor,
   };
+}
+
+/**
+ * Resolve a sector's headcount for the turn: what it WANTS at its current
+ * revenue, and what its state's labour market lets it actually STAFF.
+ *
+ * Owns the workforce-skill resolution too, because skill only exists here to
+ * size headcount. SP4: playable regions resolve skill from the political board
+ * (`education.adultSkills`, same 0-100 higher-better scale) when the state has
+ * no metric-engine reading.
+ *
+ * Records DESIRED headcount into the per-state demand accumulator, never the
+ * staffed figure. Next turn's tightness sums that accumulator, so recording the
+ * rationed result would drive the reading toward 1 and silently switch
+ * rationing back off one turn later. Accumulation happens here rather than in
+ * `resolveSectorLabourEconomics` because that function early-returns when
+ * `labour.wagesEnabled` is off, and how many jobs a sector wants is a fact
+ * about the sector rather than about whether the wage system is switched on.
+ */
+export function resolveSectorHeadcount(args: {
+  revenue: number;
+  stateId: string;
+  rawWorkforceSkillByState: Map<string, number>;
+  politicalBoard: Record<string, number> | undefined;
+  staffingFactor: number;
+  labourDemandByState: LabourDemandByState;
+}): { desiredWorkers: number; workers: number } {
+  const rawSkill =
+    args.rawWorkforceSkillByState.get(args.stateId) ??
+    args.politicalBoard?.["education.adultSkills"] ??
+    null;
+  const desiredWorkers = calculateWorkers(args.revenue, rawSkill);
+  accumulateLabourDemand(args.labourDemandByState, args.stateId, desiredWorkers);
+  return { desiredWorkers, workers: filledWorkers(desiredWorkers, args.staffingFactor) };
 }
 
 export interface SectorLabourEconomicsInput {

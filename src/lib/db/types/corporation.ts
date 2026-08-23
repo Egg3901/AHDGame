@@ -690,8 +690,29 @@ export interface CorporateSector {
   embargoExportExposure?: number;
   /** Profit margin percentage (0-100). Maintenance = revenue × (1 - profitMargin/100) */
   profitMargin: number;
-  /** Number of workers in this sector */
+  /**
+   * Workers this sector actually STAFFS. Rationed against the state's civilian
+   * labour force when that state's corporate sectors collectively want more
+   * people than it has (phase 2). Every consumer of headcount reads this one:
+   * union dues charge these members, the per-state wage and automation indices
+   * weight by them, and shedding sheds them.
+   */
   workers: number;
+  /**
+   * Workers this sector WANTS at its current revenue, before rationing. Equal to
+   * `workers` in any state with a slack labour market. Display and telemetry
+   * only: next turn's tightness reading sums this rather than `workers`, since
+   * summing the rationed result would converge tightness to 1 and switch the
+   * rationing back off.
+   */
+  workersDesired?: number;
+  /**
+   * The pro rata share of desired headcount this sector could staff, 0 to 1.
+   * 1 wherever the labour market is not oversubscribed. Persisted so the UI can
+   * explain a throttled sector as understaffed rather than leaving the output
+   * gap unattributed.
+   */
+  labourStaffingFactor?: number;
   /**
    * Labour system (labourSystemMode ≥ "wages"): wage-level multiplier on the
    * sector's baseline labor cost. 1.0 = baseline, which is profit-invariant
