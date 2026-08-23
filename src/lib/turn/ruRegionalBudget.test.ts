@@ -124,6 +124,37 @@ describe("processRURegionalBudgets", () => {
     expect(op.update.$set.policyOptionId).toBe("l3");
   });
 
+  it("uses the baseline grants pool when the live spending pool is negative", async () => {
+    const bigLaw = RU_LAWS.find((l) => l.id === "ru.infrastructure.publicHousing.primary")!;
+    wire({
+      regions: [REGIONS[0]],
+      policies: [
+        {
+          stateId: "CEN",
+          scope: "state",
+          legislationTypeId: bigLaw.id,
+          policyOptionId: "l4",
+          policyOptionIndex: 4,
+        },
+      ],
+      budget: {
+        _id: "RU",
+        spending: { stateGrants: -360_343_252 },
+        baselineStateGrants: 60_000_000_000,
+      },
+      existingBudgets: [{ _id: "CEN", turnsOverBudget: 1 }],
+    });
+
+    await processRURegionalBudgets(db as unknown as Db, 11);
+
+    const budgetWrites = (db.collectionMocks.regionalBudgets.bulkWrite as ReturnType<typeof vi.fn>)
+      .mock.calls[0][0] as Array<{ updateOne: { update: { $set: Record<string, number> } } }>;
+    const budget = budgetWrites[0].updateOne.update.$set;
+    expect(budget.unionGrant).toBe(60_000_000_000);
+    expect(budget.isOverBudget).toBe(false);
+    expect(db.collectionMocks.statePolicies.bulkWrite).not.toHaveBeenCalled();
+  });
+
   it("no-ops without RU regions or a budget", async () => {
     wire({ regions: [], policies: [], budget: null });
     expect((await processRURegionalBudgets(db as unknown as Db, 1)).regionsProcessed).toBe(0);

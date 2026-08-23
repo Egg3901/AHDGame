@@ -71,7 +71,15 @@ export async function processRURegionalBudgets(
       { projection: { spending: 1, baselineStateGrants: 1 } }
     );
   if (!budget) return { regionsProcessed: 0 };
-  const grantsPool = budget.spending?.stateGrants || budget.baselineStateGrants || 0;
+  // `stateGrants` is normally the live pool, but a negative value is an invalid
+  // allocation, not a valid negative regional grant. Treat it like a missing
+  // value and retain the seeded pool instead. Otherwise every region becomes
+  // permanently over budget and forced austerity unwinds enacted laws to L0.
+  const liveGrantsPool = budget.spending?.stateGrants;
+  const grantsPool =
+    typeof liveGrantsPool === "number" && liveGrantsPool > 0
+      ? liveGrantsPool
+      : Math.max(0, budget.baselineStateGrants ?? 0);
 
   const nationalPopulation = regions.reduce((sum, r) => sum + (r.population ?? 0), 0);
 
