@@ -90,3 +90,19 @@ export function blocOrgFor(preset: string | undefined, bloc: WorldBloc): string 
   }
   return null;
 }
+
+/**
+ * The display name of the alliance a bloc admits through, for player-facing copy.
+ *
+ * Resolved from the same preset-keyed channel list as `blocOrgFor` so a refusal names
+ * the treaty a player can actually read on the organisation page ("the Warsaw Pact"),
+ * not the internal bloc token ("east"). Null when the bloc has no accession-governing
+ * organisation in this world, which is the honest answer rather than a guessed name.
+ */
+export function allianceNameFor(preset: string | undefined, bloc: WorldBloc): string | null {
+  const orgId = blocOrgFor(preset, bloc);
+  if (!orgId) return null;
+  return (
+    INTERNATIONAL_ORGANIZATIONS[orgId as keyof typeof INTERNATIONAL_ORGANIZATIONS]?.name ?? null
+  );
+}
