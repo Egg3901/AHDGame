@@ -6,6 +6,7 @@ import {
 } from "@/lib/crises/vietnamEscalation";
 import { getGameState } from "@/lib/gameState";
 import { livingVietnamAsLegacyState } from "@/lib/livingConflict/vietnamCompat";
+import { getColdWarTension, TENSION_BASELINE } from "@/lib/coldwar/tension";
 
 /**
  * The Cold War console's dials, as the server holds them.
@@ -40,7 +41,7 @@ export interface ColdWarDials {
    * `"peacetime"` when nothing is driving them and they are the console's own
    * resting values. The UI does not have to guess whether a calm reading is real.
    */
-  source: "vietnam" | "peacetime";
+  source: "vietnam" | "tension" | "peacetime";
 }
 
 /** The console's resting values with no war anywhere. Mirrors its own defaults. */
@@ -66,18 +67,56 @@ function fromVietnam(dials: VietnamDials): ColdWarDials {
   };
 }
 
+/** DEFCON implied by a tension reading. Tension alone never reaches DEFCON 1. */
+export function defconFromTension(tension: number): number {
+  if (tension >= 85) return 2;
+  if (tension >= 65) return 3;
+  if (tension >= 45) return 4;
+  return 5;
+}
+
+/** The dials a bare tension reading implies, with no war on any ladder. */
+export function fromTension(tension: number): ColdWarDials {
+  return {
+    defcon: defconFromTension(tension),
+    cohesionWest: PEACETIME_DIALS.cohesionWest,
+    cohesionEast: PEACETIME_DIALS.cohesionEast,
+    warWeariness: 0,
+    procurementMultiplier: 1 + Math.max(0, tension - TENSION_BASELINE) * 0.005,
+    detenteGoodwillPenalty: Math.round(Math.max(0, tension - 35) * 0.75),
+    source: "tension",
+  };
+}
+
+/**
+ * Tightest reading across the war ladder and the tension driver. Tension only
+ * drives readiness, procurement and detente goodwill; cohesion and weariness
+ * are the war's own story and pass through untouched.
+ */
+function tightest(war: ColdWarDials, tension: ColdWarDials): ColdWarDials {
+  return {
+    ...war,
+    defcon: Math.min(war.defcon, tension.defcon),
+    procurementMultiplier: Math.max(war.procurementMultiplier, tension.procurementMultiplier),
+    detenteGoodwillPenalty: Math.max(war.detenteGoodwillPenalty, tension.detenteGoodwillPenalty),
+  };
+}
+
 /**
  * Read the console's dials off server state.
  *
- * Only the Vietnam ladder feeds them today. When a second driver arrives (a
- * Berlin or Cuba ladder, say) it composes here, taking the tightest reading
- * across drivers rather than the last one to write.
+ * Two drivers feed them: the war ladder (legacy or living-conflict Vietnam)
+ * and the global tension reading. They compose by taking the tightest reading
+ * across drivers, dial by dial, rather than the last one to write.
  */
 export async function getColdWarDials(db: Db): Promise<ColdWarDials> {
   const gameState = await getGameState(db);
-  const vietnam = gameState?.livingConflictsEnabled
-    ? await livingVietnamAsLegacyState(db)
-    : await getVietnamEscalation(db);
-  if (vietnam.level <= 0) return PEACETIME_DIALS;
-  return fromVietnam(deriveVietnamDials(vietnam));
+  const [vietnam, tension] = await Promise.all([
+    gameState?.livingConflictsEnabled ? livingVietnamAsLegacyState(db) : getVietnamEscalation(db),
+    getColdWarTension(db),
+  ]);
+  const tensionDials =
+    tension.value > TENSION_BASELINE ? fromTension(tension.value) : PEACETIME_DIALS;
+  if (vietnam.level <= 0) return tensionDials;
+  return tightest(fromVietnam(deriveVietnamDials(vietnam)), tensionDials);
 }

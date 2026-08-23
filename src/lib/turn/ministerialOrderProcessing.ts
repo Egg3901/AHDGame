@@ -34,6 +34,7 @@ import { applyDefenseAppropriation } from "./defenseAppropriationTurn";
 import { settleDoctrineIncome } from "@/lib/db/collections/nationalDoctrine";
 import { applyDefenceDeliveries } from "./defenceDeliveryTurn";
 import { applyDefenceRefit } from "./defenceRefitTurn";
+import { applyNuclearProduction } from "./nuclearProductionTurn";
 import { maxTechTierForPreset } from "@/lib/admin/seed/seedMilitaryUnits";
 import { resolveGameYear } from "@/lib/era/era";
 import { getGameState } from "@/lib/gameState";
@@ -385,6 +386,17 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
       await applyDefenceDeliveries(db, cid, defenceYear, defenceEraMaxGrade, currentTurn);
     }
     await applyDefenceRefit(db, cid);
+    // Nuclear stockpile accrual, right after refit so it competes for the same
+    // appropriation AFTER conventional deliveries have settled: a nation short
+    // of rifles equips the army before it grows the arsenal of last resort.
+    // Gates itself on coldWarEnabled and the procurement kill switch via the
+    // preloaded flags; countries with no programme return without a write.
+    if (defenceYear != null) {
+      await applyNuclearProduction(db, cid as CountryId, defenceYear, currentTurn, {
+        coldWarEnabled: defenceGameState?.coldWarEnabled,
+        defenceProcurementPaused: defenceGameState?.defenceProcurementPaused,
+      });
+    }
   }
 
   // Yearly doctrine-point income. Same reach as the appropriation sweep: every

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   MilitaryUnitView,
   ForceSummaryView,
@@ -14,11 +14,14 @@ import { MilitaryRosterTab } from "./MilitaryRosterTab";
 import { MilitaryBudgetTab } from "./MilitaryBudgetTab";
 import { MilitaryOperationsTab } from "./MilitaryOperationsTab";
 import { ArsenalTab } from "./ArsenalTab";
+import { NuclearTab, type NuclearStatusView } from "./NuclearTab";
+import { NUCLEAR_CAPABLE } from "@/lib/military/nuclearProgram";
 
-type SubTab = "military" | "arsenal" | "budget" | "operations";
+type SubTab = "military" | "arsenal" | "nuclear" | "budget" | "operations";
 const SUB_TABS: Array<{ id: SubTab; label: string }> = [
   { id: "military", label: "Military" },
   { id: "arsenal", label: "Arsenal" },
+  { id: "nuclear", label: "Nuclear" },
   { id: "budget", label: "Budget" },
   { id: "operations", label: "Operations" },
 ];
@@ -62,6 +65,59 @@ export function MilitaryFlagship({
   const [tab, setTab] = useState<SubTab>("military");
   const [busy, setBusy] = useState(false);
   const [contractError, setContractError] = useState<string | null>(null);
+
+  // The nuclear tab exists only for countries in the era's capable set; everyone
+  // else never sees it and never fetches the programme.
+  const nuclearCapable = (NUCLEAR_CAPABLE as readonly string[]).includes(countryId);
+  const [nuclear, setNuclear] = useState<NuclearStatusView | undefined>(undefined);
+  const [nuclearError, setNuclearError] = useState<string | null>(null);
+
+  const refreshNuclear = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/country/${countryCode}/executive/cabinet/${positionId}/nuclear`
+      );
+      if (!res.ok) return;
+      setNuclear((await res.json()) as NuclearStatusView);
+    } catch {
+      // A failed status read leaves the loading card; mutations surface their own errors.
+    }
+  }, [countryCode, positionId]);
+
+  useEffect(() => {
+    if (nuclearCapable) void refreshNuclear();
+  }, [nuclearCapable, refreshNuclear]);
+
+  /** Shared POST plumbing for the three nuclear mutations. */
+  async function nuclearPost(path: string, body: Record<string, unknown>): Promise<boolean> {
+    setBusy(true);
+    setNuclearError(null);
+    try {
+      const res = await fetch(
+        `/api/country/${countryCode}/executive/cabinet/${positionId}/nuclear/${path}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      );
+      if (!res.ok) {
+        // The route refuses for reasons the tab cannot pre-empt - a drained
+        // appropriation, a lost seat - so surface its own wording.
+        const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+        setNuclearError(payload?.error ?? "That order could not be given.");
+        return false;
+      }
+      await refreshNuclear();
+      onUpdate();
+      return true;
+    } catch {
+      setNuclearError("That request could not be sent.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function awardContract(
     sectorId: string,
@@ -131,7 +187,7 @@ export function MilitaryFlagship({
   return (
     <div className="space-y-4">
       <div className="inline-flex rounded-lg border border-card-border bg-card p-0.5">
-        {SUB_TABS.map((t) => (
+        {SUB_TABS.filter((t) => t.id !== "nuclear" || nuclearCapable).map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
@@ -192,6 +248,24 @@ export function MilitaryFlagship({
           onAwardContract={awardContract}
           onCancelContract={cancelContract}
         />
+      )}
+      {tab === "nuclear" && nuclearCapable && (
+        <>
+          {nuclearError && (
+            <div className="rounded-lg border border-[color-mix(in_srgb,var(--error)_40%,transparent)] bg-[color-mix(in_srgb,var(--error)_8%,transparent)] p-2.5 text-[12px] text-foreground">
+              {nuclearError}
+            </div>
+          )}
+          <NuclearTab
+            status={nuclear}
+            currencySymbol={currencySymbol}
+            canAct={canAct}
+            busy={busy}
+            onConductTest={(nodeKey) => nuclearPost("test", { nodeKey })}
+            onAdoptDelivery={(nodeKey) => nuclearPost("adopt", { nodeKey })}
+            onSetProduction={(rate) => nuclearPost("production", { rate })}
+          />
+        </>
       )}
       {tab === "budget" && (
         <MilitaryBudgetTab
