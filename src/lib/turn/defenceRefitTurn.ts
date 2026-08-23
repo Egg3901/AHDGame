@@ -5,7 +5,7 @@ import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import { getUnitArchetype } from "@/lib/constants/military";
 import { getNationalArsenal, drawLots, returnLots } from "@/lib/db/collections/nationalArsenal";
 import {
-  EQUIPMENT_TRACK_MAX,
+  applyEquipmentLots,
   lotsRequired,
   lotsToFillUnit,
   refitOrder,
@@ -76,23 +76,18 @@ export async function applyDefenceRefit(db: Db, countryId: string): Promise<Refi
       const drawn = await drawLots(db, countryId, unit.domain, needed);
       if (drawn <= 0) break; // this domain's store is exhausted
 
-      // Raise the tracks by the share of the shortfall actually covered. A partial draw
-      // partially refits: the unit improves this turn and finishes in a later one.
       const fullLots = lotsRequired(archetype);
-      const gain = (drawn / Math.max(1, fullLots)) * EQUIPMENT_TRACK_MAX;
-      const cap = (v: number) => Math.min(EQUIPMENT_TRACK_MAX, Math.round(v + gain));
-      const e = unit.equipment ?? { firepower: 0, protection: 0, support: 0 };
+      // Preserve the sub-track value of every lot and redirect it toward tracks that still
+      // need equipment. Rounding each track here used to consume small deliveries without
+      // changing the unit at all.
+      const equipment = applyEquipmentLots(unit.equipment, drawn, fullLots);
 
       ops.push({
         updateOne: {
           filter: { _id: unit._id },
           update: {
             $set: {
-              equipment: {
-                firepower: cap(e.firepower ?? 0),
-                protection: cap(e.protection ?? 0),
-                support: cap(e.support ?? 0),
-              },
+              equipment,
             },
           },
         },
