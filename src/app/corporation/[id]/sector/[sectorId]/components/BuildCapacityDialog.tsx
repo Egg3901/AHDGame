@@ -28,11 +28,26 @@ interface BuildCapacityDialogProps {
   onSubmit: (units: number) => void;
 }
 
-/** Step sizes the +/- buttons walk, chosen so a stepper scales with the order. */
-function stepFor(count: number): number {
-  if (count >= 100) return 10;
-  if (count >= 20) return 5;
+/** Nobody builds this many at once; the cap only stops a stray paste locking the dialog. */
+const MAX_FACILITIES = 1_000_000;
+
+/**
+ * Desktop accelerators for the +/- buttons and the arrow keys. Holding a
+ * modifier multiplies whatever step the control already walks, so shift on the
+ * +10 button moves 100 and ctrl moves 1000. Touch users get the same reach from
+ * the +10/-10 buttons and from typing the number straight in.
+ */
+function stepMultiplier(e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }): number {
+  const coarse = e.ctrlKey || e.metaKey;
+  if (coarse && e.shiftKey) return 1000;
+  if (coarse) return 100;
+  if (e.shiftKey) return 10;
   return 1;
+}
+
+function clampCount(n: number): number {
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(MAX_FACILITIES, Math.floor(n));
 }
 
 /**
@@ -65,6 +80,23 @@ export default function BuildCapacityDialog({
   // units. One facility = plantSizeUnits(type) units — see facilityQuantum.ts
   // for why a "power station" is not one ₳92/day unit.
   const [count, setCount] = useState(1);
+  // Raw text while the field is focused. Without it, clamping on every keystroke
+  // means the field can never be empty, so a player cannot clear "1" and type
+  // "250" - the leading digit keeps getting eaten.
+  const [countDraft, setCountDraft] = useState<string | null>(null);
+
+  /** Set the count from a control (not from typing) and drop any in-flight draft. */
+  function commitCount(next: number) {
+    setCount(clampCount(next));
+    setCountDraft(null);
+  }
+
+  /** Move by `base`, multiplied by whichever modifier keys are held. */
+  function nudge(base: number, e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) {
+    const delta = base * stepMultiplier(e);
+    setCount((c) => clampCount(c + delta));
+    setCountDraft(null);
+  }
 
   const vocab = facilityVocabulary(sectorType);
   const site = facilitySingular(sectorType);
@@ -111,7 +143,6 @@ export default function BuildCapacityDialog({
     };
   }, [count, unitsPerFacility, q, plants]);
 
-  const step = stepFor(count);
   const maxAffordableFacilities = Math.floor(q.maxAffordableUnits / unitsPerFacility);
   const ownedFacilities = facilitiesFromUnits(sectorType, plants.capacityUnits ?? 0);
   const buyersRoomUnits = Math.min(plants.headroomUnits, plants.demandGapUnits ?? 0);
@@ -160,44 +191,87 @@ export default function BuildCapacityDialog({
           >
             {capitalizeFacility(sites)} to {vocab.buildVerb}
           </label>
-          <div className="mt-2 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setCount((c) => Math.max(1, c - step))}
+          <div className="mt-2 flex items-center gap-2">
+            <StepButton
+              label={`${vocab.buildVerb} 10 fewer ${sites}`}
               disabled={count <= 1}
-              aria-label={`${vocab.buildVerb} fewer ${sites}`}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-card-border bg-background text-body-lg font-bold text-foreground transition-colors hover:bg-card-elevated disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={(e) => nudge(-10, e)}
+              wide
+            >
+              −10
+            </StepButton>
+            <StepButton
+              label={`${vocab.buildVerb} one fewer ${site}`}
+              disabled={count <= 1}
+              onClick={(e) => nudge(-1, e)}
             >
               −
-            </button>
-            <div className="flex-1 rounded-lg border border-card-border bg-background px-3 py-2 text-center">
+            </StepButton>
+            <div className="min-w-0 flex-1 rounded-lg border border-card-border bg-background px-3 py-2 text-center">
               <input
                 id="build-count"
-                type="number"
-                min={1}
-                value={count}
-                onChange={(e) => setCount(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                // Text, not number: the spinners and the scroll wheel nudge a
+                // large order by accident, and `type="number"` refuses to report
+                // a half-typed value.
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                value={countDraft ?? String(count)}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/[^0-9]/g, "").slice(0, 7);
+                  setCountDraft(digits);
+                  // An empty field reads as zero, so the cost preview and the
+                  // build button go quiet instead of quoting a stale number.
+                  setCount(digits === "" ? 0 : clampCount(Number(digits)));
+                }}
+                onBlur={() => {
+                  setCountDraft(null);
+                  if (count < 1) setCount(1);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    nudge(1, e);
+                  } else if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    nudge(-1, e);
+                  } else if (e.key === "PageUp") {
+                    e.preventDefault();
+                    nudge(10, e);
+                  } else if (e.key === "PageDown") {
+                    e.preventDefault();
+                    nudge(-10, e);
+                  }
+                }}
+                aria-describedby="build-count-help"
                 className="w-full bg-transparent text-center text-heading font-bold tabular-nums text-foreground focus:outline-none"
               />
               <p className="text-body-xs text-muted">
                 {count === 1 ? site : sites} · {fmtUnits(unitsPerFacility)} units/day each
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setCount((c) => c + step)}
-              aria-label={`${vocab.buildVerb} more ${sites}`}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-card-border bg-background text-body-lg font-bold text-foreground transition-colors hover:bg-card-elevated"
-            >
+            <StepButton label={`${vocab.buildVerb} one more ${site}`} onClick={(e) => nudge(1, e)}>
               +
-            </button>
+            </StepButton>
+            <StepButton
+              label={`${vocab.buildVerb} 10 more ${sites}`}
+              onClick={(e) => nudge(10, e)}
+              wide
+            >
+              +10
+            </StepButton>
           </div>
-          <p className="mt-2 text-body-xs text-muted">
+          <p id="build-count-help" className="mt-2 text-body-xs text-muted">
+            Type a number, or hold <kbd className="font-semibold">Shift</kbd> for ten times the step
+            and <kbd className="font-semibold">Ctrl</kbd> for a hundred times.
+          </p>
+          <p className="mt-1 text-body-xs text-muted">
             You hold {fmtUnits(ownedFacilities)} {ownedFacilities === 1 ? site : sites} today (
             {fmtUnits(plants.capacityUnits)} units/day). Most you can afford right now:{" "}
             <button
               type="button"
-              onClick={() => setCount(Math.max(1, maxAffordableFacilities))}
+              onClick={() => commitCount(Math.max(1, maxAffordableFacilities))}
               className="font-semibold text-primary underline decoration-dotted underline-offset-2"
             >
               {fmtUnits(maxAffordableFacilities)}
@@ -399,6 +473,39 @@ export default function BuildCapacityDialog({
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * One step control. Passes the click event up so the caller can read the
+ * modifier keys off it; that is the whole shift/ctrl accelerator.
+ */
+function StepButton({
+  label,
+  onClick,
+  disabled = false,
+  wide = false,
+  children,
+}: {
+  label: string;
+  onClick: (e: React.MouseEvent) => void;
+  disabled?: boolean;
+  wide?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={`flex h-10 shrink-0 items-center justify-center rounded-lg border border-card-border bg-background font-bold text-foreground transition-colors hover:bg-card-elevated disabled:cursor-not-allowed disabled:opacity-40 ${
+        wide ? "w-12 text-body-sm" : "w-10 text-body-lg"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
