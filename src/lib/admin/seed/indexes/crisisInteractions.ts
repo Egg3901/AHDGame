@@ -40,5 +40,13 @@ export async function seedCrisisInteractionIndexes(db: Db, log: (msg: string) =>
 
   await ensureIndex(db, "crisisInteractions", { createdAt: -1 }, { name: "ci_createdAt" }, log);
 
+  await ensureIndex(
+    db,
+    "crisisInteractions",
+    { "leaderResponses.countryId": 1, resolvedAt: 1 },
+    { name: "ci_leader_response_country", sparse: true },
+    log
+  );
+
   log("Crisis interaction indexes ensured");
 }

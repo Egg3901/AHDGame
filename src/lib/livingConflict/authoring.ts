@@ -15,6 +15,22 @@ export function opt(
   return { optionId, label, description, effects, nextNodeId: null };
 }
 
+/** Add aggregate scores and a real treasury cost to an authored option. */
+export function responseOpt(
+  optionId: string,
+  label: string,
+  description: string,
+  responseScores: Record<string, number>,
+  effects: CrisisEffect[] = [],
+  treasuryCostPctGdp?: number
+): CrisisDecisionOption {
+  return {
+    ...opt(optionId, label, description, effects),
+    responseScores,
+    ...(treasuryCostPctGdp !== undefined ? { treasuryCostPctGdp } : {}),
+  };
+}
+
 /** A one-shot choice node answered by a nation's head of state. */
 export function choiceNode(
   nodeId: string,

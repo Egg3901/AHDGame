@@ -18,5 +18,29 @@ export async function seedCrisisIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  await ensureIndex(
+    db,
+    "crises",
+    { livingConflictEventId: 1 },
+    { name: "crises_living_event", unique: true, sparse: true },
+    log
+  );
+
+  await ensureIndex(
+    db,
+    "crises",
+    { "globalResponse.conflictKey": 1, status: 1 },
+    { name: "crises_global_response_active", sparse: true },
+    log
+  );
+
+  await ensureIndex(
+    db,
+    "livingConflicts",
+    { defKey: 1 },
+    { name: "living_conflicts_def", unique: true },
+    log
+  );
+
   log("Crisis indexes ensured");
 }

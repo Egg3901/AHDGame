@@ -65,6 +65,13 @@ export const PANDEMIC_DEF: LivingConflictDef = {
   key: "pandemic",
   type: "pandemic",
   name: "Novel Pandemic",
+  autoOpen: false,
+  participants: {
+    belligerents: ["CN"],
+    neighbors: ["JP", "RU"],
+    blocMembers: ["US", "UK", "DE", "FR", "IT"],
+    bystanders: ["IE", "BR", "NG", "IN", "SE", "TR", "GR", "AT", "FI"],
+  },
   roleResolver: pandemicRole,
   phases: [
     {

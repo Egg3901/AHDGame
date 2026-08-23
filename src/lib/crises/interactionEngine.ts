@@ -19,6 +19,12 @@ import { isCrisisAidBillsEnabled } from "./featureFlag";
 import { AID_MAX_PCT_GDP, AID_DEFAULT_PCT_GDP } from "@/lib/constants/crises";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import { getGameState } from "@/lib/gameState";
+import {
+  globalResponseRoleFor,
+  optionsForGlobalResponder,
+  resolveGlobalResponse,
+  spendGlobalResponseCost,
+} from "@/lib/livingConflict/globalResponse";
 
 /** Read a country's national treasury balance (the unified fiscal cash position). */
 async function getTreasuryBalance(db: Db, countryId: string): Promise<number> {
@@ -437,7 +443,10 @@ export async function submitCrisisDecision(
   //    interaction stays open on the same node so other leaders can still
   //    respond — it does not resolve on a single decision. ──
   if (crisis && isMultiResponderNode(crisis, currentNode)) {
-    const option = currentNode.options?.find((o) => o.optionId === optionId);
+    const responseOptions = crisis.globalResponse
+      ? optionsForGlobalResponder(crisis, currentNode, countryId)
+      : (currentNode.options ?? []);
+    const option = responseOptions.find((o) => o.optionId === optionId);
     if (!option) throw new Error("Invalid option");
 
     const already = (interaction.leaderResponses ?? []).some((r) => r.countryId === countryId);
@@ -450,8 +459,48 @@ export async function submitCrisisDecision(
           `Insufficient funds. Required: ${option.requiredBudget}, Available: ${treasury}`
         );
       }
+    }
+
+    const character = await db
+      .collection<{ name?: string }>("characters")
+      .findOne({ _id: characterId }, { projection: { name: 1 } });
+
+    const response = {
+      countryId,
+      characterId,
+      characterName: character?.name ?? "Unknown leader",
+      nodeId: currentNode.nodeId,
+      optionId,
+      optionLabel: option.label,
+      responseRole: globalResponseRoleFor(crisis, countryId) ?? undefined,
+      effects: option.effects,
+      responseScores: option.responseScores,
+      respondedAt: new Date(),
+    };
+    interaction.updatedAt = new Date();
+
+    // Claim the country's one response before any money or effects move. The
+    // guarded write makes a double-click or concurrent request idempotent.
+    const claimed = await db.collection<CrisisInteraction>("crisisInteractions").updateOne(
+      {
+        _id: interactionId,
+        resolvedAt: null,
+        "leaderResponses.countryId": { $ne: countryId },
+      },
+      {
+        $push: { leaderResponses: response },
+        $set: { updatedAt: interaction.updatedAt },
+      }
+    );
+    if (claimed.modifiedCount === 0) {
+      throw new Error("Your country has already responded to this crisis");
+    }
+    interaction.leaderResponses = [...(interaction.leaderResponses ?? []), response];
+
+    if (option.requiredBudget) {
       await debitTreasury(db, countryId, option.requiredBudget);
     }
+    await spendGlobalResponseCost(db, countryId, option);
 
     if (option.effects.length > 0) {
       await applyEffectsForCountry(db, countryId, option.effects);
@@ -473,30 +522,6 @@ export async function submitCrisisDecision(
         currentTurn: gameState?.currentTurn ?? crisis.startTurn,
       });
     }
-
-    const character = await db
-      .collection<{ name?: string }>("characters")
-      .findOne({ _id: characterId }, { projection: { name: 1 } });
-
-    const response = {
-      countryId,
-      characterId,
-      characterName: character?.name ?? "Unknown leader",
-      nodeId: currentNode.nodeId,
-      optionId,
-      optionLabel: option.label,
-      respondedAt: new Date(),
-    };
-    interaction.leaderResponses = [...(interaction.leaderResponses ?? []), response];
-    interaction.updatedAt = new Date();
-
-    await db.collection<CrisisInteraction>("crisisInteractions").updateOne(
-      { _id: interactionId },
-      {
-        $push: { leaderResponses: response },
-        $set: { updatedAt: interaction.updatedAt },
-      }
-    );
 
     return { interaction, nextNode: currentNode, appliedEffects: option.effects };
   }
@@ -688,6 +713,10 @@ export async function autoResolveCrisisInteraction(db: Db, interactionId: Object
   // country, including those that already chose. Just mark it resolved.
   const crisis = await db.collection<Crisis>("crises").findOne({ _id: interaction.crisisId });
   if (crisis && isMultiResponderNode(crisis, currentNode)) {
+    if (crisis.globalResponse) {
+      await resolveGlobalResponse(db, crisis._id);
+      return;
+    }
     await db.collection<CrisisInteraction>("crisisInteractions").updateOne(
       { _id: interactionId },
       {

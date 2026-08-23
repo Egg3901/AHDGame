@@ -129,7 +129,19 @@ export interface CrisisDecisionOption {
   /** Optional real-subsystem action fired when this option is chosen. See
    *  {@link CrisisOptionAction}. Absent = effects-only (legacy behaviour). */
   action?: CrisisOptionAction;
+  /**
+   * Contributions to a shared global-response tally. Axes are authored by the
+   * event (for example `escalation`, `restraint`, `aid`, or `mediation`) and
+   * summed once when the response window closes.
+   */
+  responseScores?: Record<string, number>;
+  /** Spend this share of the responding country's GDP from its treasury. */
+  treasuryCostPctGdp?: number;
 }
+
+/** A government's relationship to a shared world event. */
+export type GlobalResponseRole =
+  "belligerent" | "backer_a" | "backer_b" | "neighbor" | "bloc" | "bystander";
 
 export interface CrisisDecisionNode {
   nodeId: string;
@@ -139,6 +151,12 @@ export interface CrisisDecisionNode {
   title: string;
   description: string;
   options?: CrisisDecisionOption[];
+  /**
+   * Role-specific choices for a global-response event. `options` remains the
+   * fallback and keeps ordinary crisis nodes unchanged. The interaction route
+   * exposes only the responding country's menu.
+   */
+  optionsByRole?: Partial<Record<GlobalResponseRole, CrisisDecisionOption[]>>;
   collectiveTarget?: number;
   collectiveCurrency?: string;
   /** Aid nodes only: slider cap as a fraction of the sender's GDP (default AID_MAX_PCT_GDP). */
@@ -164,7 +182,54 @@ export interface CrisisLeaderResponse {
   optionId: string;
   /** Denormalized option label so the display needs no tree lookup. */
   optionLabel: string;
+  /** Relationship to the event at the time of the response. */
+  responseRole?: GlobalResponseRole;
+  /** Snapshots keep the public ledger legible after authoring changes. */
+  effects?: CrisisEffect[];
+  responseScores?: Record<string, number>;
   respondedAt: Date;
+}
+
+export interface GlobalResponseOutcomeCondition {
+  axis: string;
+  min?: number;
+  max?: number;
+}
+
+export interface GlobalResponseOutcome {
+  outcomeId: string;
+  label: string;
+  description: string;
+  /** First matching outcome wins, highest priority first. */
+  priority: number;
+  conditions: GlobalResponseOutcomeCondition[];
+  /** Applied once to every country assigned the named role. */
+  effectsByRole?: Partial<Record<GlobalResponseRole, CrisisEffect[]>>;
+  /** Persistent living-conflict trajectory changes applied at resolution. */
+  intensityDelta?: number;
+  pressureDelta?: Partial<Record<"a" | "b", number>>;
+  wireMessage: string;
+}
+
+export interface GlobalResponseDefinition {
+  conflictKey: string;
+  eventKey: string;
+  /** Snapshotted role map. Only listed countries may answer. */
+  roleByCountry: Record<string, GlobalResponseRole>;
+  /** Deterministic expiry choice for an eligible government that sends no order. */
+  defaultOptionIdByRole: Partial<Record<GlobalResponseRole, string>>;
+  outcomes: GlobalResponseOutcome[];
+  defaultOutcomeId: string;
+}
+
+export interface ResolvedGlobalResponse {
+  outcomeId: string;
+  label: string;
+  description: string;
+  scores: Record<string, number>;
+  respondedCountries: number;
+  eligibleCountries: number;
+  resolvedAt: Date;
 }
 
 export interface CrisisInteraction {
@@ -188,6 +253,7 @@ export interface CrisisInteraction {
    * crises, which still resolve on the first leader's choice.
    */
   leaderResponses?: CrisisLeaderResponse[];
+  globalResponseOutcome?: ResolvedGlobalResponse;
   decisionDeadline: Date | null;
   autoResolveOnExpiry: boolean;
   resolvedAt: Date | null;
@@ -255,6 +321,10 @@ export interface Crisis {
     decisionTree: CrisisDecisionNode[];
     autoResolveOnExpiry: boolean;
   };
+  /** Shared, role-aware response and aggregate-outcome rules for this event. */
+  globalResponse?: GlobalResponseDefinition;
+  /** Deterministic living-conflict event id used to suppress replay duplicates. */
+  livingConflictEventId?: string;
 }
 
 /** One row per (auto-crisis template, scope key) tracking the last turn it
