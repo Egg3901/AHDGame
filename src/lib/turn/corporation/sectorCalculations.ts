@@ -40,6 +40,7 @@ import {
   type WageIndexAccumulator,
   type AutomationIndexAccumulator,
 } from "@/lib/labour/laborCost";
+import { makeLabourDemandByState } from "@/lib/labour/labourMarket";
 import { computeTechAssetValueAnchor } from "@/lib/corporations/techAssetValue";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { indexFundOwnershipFraction } from "@/lib/corporations/indexOwnership";
@@ -136,6 +137,10 @@ export function processSectors(
   // Deliberately separate from wageIndexByState — see accumulateWageIndex's call
   // site below for why automation is excluded from the wage index.
   const automationIndexByState = new Map<string, AutomationIndexAccumulator>();
+  // Phase 1 labour market telemetry: per-state desired headcount. Unlike the two
+  // indices above this is NOT gated on the labour system being on, so it stays
+  // populated in worlds where wages are off.
+  const labourDemandByState = makeLabourDemandByState();
   // v3 Phase 6: strike trigger/resolution events, for index.ts (which owns
   // db) to turn into sentiment pulses. Same "collect during the pure loop,
   // consume after" pattern as sectorFxSpreadFees below.
@@ -175,6 +180,7 @@ export function processSectors(
     market,
     wageIndexByState,
     automationIndexByState,
+    labourDemandByState,
     pendingStrikeEvents,
     pendingCapacityBindingEvents,
     sectorOps,
@@ -1074,6 +1080,7 @@ export function processSectors(
     automationIndexByState: new Map(
       Array.from(automationIndexByState, ([stateId, acc]) => [stateId, resolveAutomationIndex(acc)])
     ),
+    labourDemandByState,
     strikeEvents: pendingStrikeEvents,
     capacityBindingEvents: pendingCapacityBindingEvents,
   };

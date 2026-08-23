@@ -115,6 +115,13 @@ export interface CorporationLookups {
   corruptionByState: Map<string, number>;
   workforceSkillByState: Map<string, number>;
   rawWorkforceSkillByState: Map<string, number>;
+  /**
+   * Phase 2: prior-turn labour market tightness per state (desired corporate
+   * headcount over civilian labour force). Absent for states the metric engine
+   * has no labour force reading for, and on the first turn after this shipped;
+   * both cases mean no rationing, which is the pre-phase-2 behaviour.
+   */
+  labourTightnessByState: Map<string, number>;
   crimeRateByState: Map<string, number>;
   broadbandByState: Map<string, number>;
   roadConditionByState: Map<string, number>;
@@ -412,6 +419,16 @@ export interface SectorCalculationsResult {
    * labour system is off.
    */
   automationIndexByState: Map<string, number>;
+  /**
+   * Phase 1 labour market telemetry: per-state sum of every sector's
+   * revenue-implied headcount, i.e. how many jobs the corporate sector WANTS in
+   * that state this turn. Compared against `macroMetrics.economic.laborForce` to
+   * produce a tightness reading. Unlike the two indices above this is populated
+   * regardless of whether the labour system is on, because desired headcount is
+   * a property of the sector rather than of the wage system. Measurement only:
+   * no mechanic reads it back into the economy yet.
+   */
+  labourDemandByState: Map<string, number>;
   /**
    * v3 Phase 6: strike trigger/resolution events emitted this turn, for
    * `index.ts` (which owns `db`) to translate into sentiment pulses. Empty
