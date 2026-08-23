@@ -31,6 +31,7 @@ import {
   type PresidentVoteTurnDryRun,
 } from "@/lib/presidentialElectionEngine";
 import { turnVoteWeight } from "@/lib/electionEngine/voteCalculations";
+import { resolvePresidentApproval } from "@/lib/electionEngine/presidentialCoattail";
 
 const COUNTRY = process.env.COUNTRY ?? "US";
 /** Variant scale; 1 is production. Set >1 to probe a stronger channel. */
@@ -70,15 +71,20 @@ async function main() {
   >;
   const names = (tallyBefore?.candidateNames ?? {}) as Record<string, string>;
 
-  // Identify the incumbent's candidacy: the sitting president in this race.
-  const incumbentChar = await db
-    .collection("characters")
-    .findOne({ countryId: COUNTRY, "currentOffice.type": "president" });
-  const incumbentCandidate = await db
-    .collection("electionCandidates")
-    .findOne({ electionId: election._id, characterId: incumbentChar?._id });
+  // Identify the incumbent PARTY's candidacy the same way the engine does:
+  // the channel is party-level, so the sitting president need not be on the
+  // ballot (open seat, third-term nominee). resolvePresidentApproval is the
+  // engine's own incumbent-party source.
+  const incumbentExec = await resolvePresidentApproval(db, COUNTRY);
+  if (!incumbentExec?.partyId) throw new Error("presidency vacant or has no party");
+  const incumbentCandidate = await db.collection("electionCandidates").findOne({
+    electionId: election._id,
+    party: incumbentExec.partyId,
+    status: "active",
+  });
   const INC = String(incumbentCandidate?._id ?? "");
-  if (!INC) throw new Error("could not identify the incumbent's candidacy");
+  if (!INC)
+    throw new Error(`incumbent party ${incumbentExec.partyId} fields no candidate in this race`);
 
   const evByState = new Map<string, number>();
   await db
