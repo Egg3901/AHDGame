@@ -76,6 +76,7 @@ import { TURNS_PER_YEAR, STARTING_YEAR } from "@/lib/constants/turnTime";
 import { isFiscalYearEnd, calculateFiscalYear, processFiscalYear } from "@/lib/budget/fiscalYear";
 import { processAutoDisasterTurn } from "@/lib/turn/autoDisasterTurn";
 import { processAutoCrisisTurn } from "@/lib/turn/autoCrisisTurn";
+import { processColdWarTensionTurn } from "@/lib/turn/coldWarTensionTurn";
 import { processAutoSectorSeed } from "@/lib/turn/autoSectorSeed";
 import { processExtractionAutoStrategy } from "@/lib/turn/extractionAutoStrategy";
 import { processCorporationTurn } from "@/lib/turn/corporationTurn";
@@ -208,6 +209,14 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             processAutoCrisisTurn(context.db, newTurn, gameState)
           );
         }
+        // Global cold-war tension relaxes toward its standing-pressure floor.
+        // Deliberately OUTSIDE the corpActionsPaused gate: tension is world
+        // politics, not a corporation action, and pausing the economy should
+        // not freeze the temperature of the Cold War. Gated internally on
+        // gameState.coldWarEnabled; a world with the subsystem off is a no-op.
+        await runtime.runPhase("coldWarTension", () =>
+          processColdWarTensionTurn(context.db, newTurn, gameState)
+        );
         await runtime.runPhase("autoSectorSeed", () =>
           processAutoSectorSeed(context.db, newTurn, gameState)
         );

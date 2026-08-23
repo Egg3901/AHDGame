@@ -5,8 +5,9 @@
  * `electedOfficials` row, the election doc never flags a winner, and per-
  * character career history misses NPP-held terms. So we maintain an explicit
  * O(1) counter on `gameState.presidentialTenureByCountry`, updated each time a
- * presidential election resolves. Read by the party-tenure voter-fatigue
- * penalty (`partyTenureFatiguePenalty`) folded into the incumbency driver.
+ * presidential election resolves. Read by the economic referendum channel
+ * (`economicReferendum.ts`), whose term-fatigue multiplier scales the
+ * penalty side, and by `appealWeight`'s `personalStatTenureFatigue`.
  */
 
 import type { Db } from "mongodb";

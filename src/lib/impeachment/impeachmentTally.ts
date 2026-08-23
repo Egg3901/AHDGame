@@ -14,7 +14,7 @@ export interface ChamberTally {
  * predate the explicit countryId, so keep matching legacy US docs that lack it
  * (mirrors getExecutiveOfficialFilter).
  */
-function chamberOfficialFilter(
+export function impeachmentChamberOfficialFilter(
   countryId: CountryId,
   officeType: string,
   state?: string
@@ -42,7 +42,7 @@ export async function tallyImpeachmentChamber(
 ): Promise<ChamberTally> {
   const officials = await db
     .collection<ElectedOfficial>("electedOfficials")
-    .find(chamberOfficialFilter(countryId, officeType, state))
+    .find(impeachmentChamberOfficialFilter(countryId, officeType, state))
     .project<Pick<ElectedOfficial, "characterId" | "nppId" | "seatsHeld">>({
       characterId: 1,
       nppId: 1,

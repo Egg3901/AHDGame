@@ -195,13 +195,6 @@ export interface ElectionResponse {
   incumbentPartyId?: string;
   incumbentApproval?: number;
   /**
-   * Party-tenure voter-fatigue drag (incumbency-budget units) folded into the
-   * Incumbency row. Presidential own-race only, when the party is seeking a 3rd+
-   * consecutive term. Absent / 0 otherwise.
-   */
-  incumbentTenurePenalty?: number;
-
-  /**
    * Single-seat legislative own-race (US Senate): sitting senator's party and
    * consecutive terms, feeding the card's flat incumbency shield. Populated
    * only when the incumbent is running (open seats omit). Not fog-sensitive.
@@ -241,6 +234,34 @@ export interface ElectionResponse {
 
   /** Per-party +5% nominal-share tilt for eligible UK regional midterms. */
   midtermOppositionBoostPctByParty?: Record<string, number>;
+
+  /**
+   * President only: the economic-referendum reading the engine recorded on the
+   * race's vote tally (`ElectionVoteTally.economicReferendum`). Read straight
+   * off the tally and passed through, never recomputed here, so the National
+   * Mood gauge shows exactly the shift the engine applied. Absent for races
+   * that ran before the channel existed, and for non-presidential races.
+   */
+  economicReferendum?: {
+    miseryIndex: number;
+    /** Signed share shift for the incumbent party, in points. */
+    sharePts: number;
+    components: Array<{ key: string; label: string; contributionPts: number }>;
+    /** Penalty-side multiplier for consecutive terms held. 1 when it does not apply. */
+    fatigueMultiplier: number;
+    /**
+     * Share of the raw penalty forgiven by credit-for-response, in [0, 0.4].
+     * Absent when no enacted bill qualified.
+     */
+    forgivenessFrac?: number;
+    /** The bills that earned the forgiveness. */
+    creditedBills?: Array<{ key: string; title: string; component: string; weight: number }>;
+    incumbentPartyId?: string;
+    /** Resolved display name for `incumbentPartyId`, when the party is known. */
+    incumbentPartyName?: string;
+    incumbentPartyColor?: string;
+    recordedTurn: number;
+  };
 
   /**
    * Per-state registration-lean breakdown for the presidential

@@ -300,4 +300,27 @@ export interface ElectionDetail {
    * (sequentialId as a string), used to render `regByState`.
    */
   partyDisplayById?: Record<string, { abbr: string; color: string }>;
+
+  /**
+   * President only: the economic-referendum reading the engine recorded on the
+   * vote tally, passed through by `_enrichElection`. Feeds the National Mood
+   * gauge. Absent for races that ran before the channel existed.
+   */
+  economicReferendum?: {
+    miseryIndex: number;
+    sharePts: number;
+    components: Array<{ key: string; label: string; contributionPts: number }>;
+    fatigueMultiplier: number;
+    /**
+     * Share of the raw penalty forgiven by credit-for-response, in [0, 0.4].
+     * Absent when no enacted bill qualified.
+     */
+    forgivenessFrac?: number;
+    /** The bills that earned the forgiveness. */
+    creditedBills?: Array<{ key: string; title: string; component: string; weight: number }>;
+    incumbentPartyId?: string;
+    incumbentPartyName?: string;
+    incumbentPartyColor?: string;
+    recordedTurn: number;
+  };
 }

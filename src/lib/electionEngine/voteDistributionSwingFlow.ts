@@ -98,7 +98,7 @@ function appealWeight(
   // comment in electionFormulaFactors.ts for the full root-cause writeup).
   // politicalInfluence / favorability have no tenure-aware decay of their
   // own — unlike the swing-side incumbency driver (which already erodes via
-  // `partyTenureFatiguePenalty`), a multi-term incumbent's reach/approval
+  // the economic referendum channel), a multi-term incumbent's reach/approval
   // edge from these two stats never shrinks on its own. This mirrors that
   // same per-term erosion directly onto the raw stat values feeding
   // reach/appeal/approval below, gated on tenure data that only exists for
