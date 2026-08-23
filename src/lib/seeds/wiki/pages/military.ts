@@ -11,6 +11,8 @@ import { occupationVictoryContent } from "../content/occupationVictory";
 import { peaceAndTrucesContent } from "../content/peaceAndTruces";
 import { warWalkthroughContent } from "../content/warWalkthrough";
 import { defenceProcurementContent } from "../content/defenceProcurement";
+import { nuclearProgrammeContent } from "../content/nuclearProgramme";
+import { coldWarTensionContent } from "../content/coldWarTension";
 
 /**
  * Conflicts & Military.
@@ -176,5 +178,29 @@ export const militaryPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 8,
+  },
+  {
+    slug: "nuclear-programme",
+    title: "The Nuclear Programme",
+    description:
+      "The bomb as a defence-seat project: entry gates, the device ladder and its public tests, delivery legs, production rates and warhead costs, the defence-budget funding path, and covert programmes.",
+    content: nuclearProgrammeContent,
+    category: "military",
+    extraTags: ["nuclear", "coldwar", "doctrine", "budget"],
+    difficulty: "advanced",
+    contentType: "guide",
+    estimatedReadTime: 9,
+  },
+  {
+    slug: "cold-war-tension",
+    title: "Cold War Tension",
+    description:
+      "The world's shared 0 to 100 tension gauge: its five bands, what raises and lowers it, and how it drives readiness, procurement demand, and detente goodwill.",
+    content: coldWarTensionContent,
+    category: "military",
+    extraTags: ["coldwar", "tension", "deterrence"],
+    difficulty: "intermediate",
+    contentType: "mechanics",
+    estimatedReadTime: 6,
   },
 ];
