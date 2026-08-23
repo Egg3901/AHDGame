@@ -21,7 +21,114 @@
  * for reading election balance without economy noise.
  */
 
-export type SimTurnPhaseMode = "full" | "elections-only";
+export type SimTurnPhaseMode = "full" | "elections-only" | "economy-only" | "macro-only";
+
+/**
+ * Economic phases retained for a fixed-policy macro balance run. This is an
+ * allowlist so elections, campaigns, legislation, cabinet churn, and random
+ * events remain frozen while the real economy and accounting loops advance.
+ */
+export const ECONOMY_ONLY_PHASES: ReadonlySet<string> = new Set<string>([
+  "bannedShareholderRelease",
+  "inactiveShareholderShareRelease",
+  "corporationTurn",
+  "unionsTurn",
+  "savingsInterestTurn",
+  "npcBankPolicyTurn",
+  "bankingTurn",
+  "pensionTurn",
+  "prospectingResolution",
+  "macroCountryTurn",
+  "bondTurn",
+  "commodityPrices",
+  "contractSettlement",
+  "lineOfCreditTurn",
+  "recomputeSharePrices",
+  "bankSolvencyTurn",
+  "financialSuspectScan",
+  "settlement",
+  "fiscalYear",
+  "policyEffects",
+  "demographicEffects",
+  "unownedSectorGrowth",
+  "metricDecay",
+  "investorConfidenceDecay",
+  "stateOwnershipConcentration",
+  "subsidyBudget",
+  "regionalBudgetProcessing",
+  "jpRegionalBudgetProcessing",
+  "deRegionalBudgetProcessing",
+  "metricEngine",
+  "demographicFlows",
+  "census",
+  "eraCrossing",
+  "metricActivation",
+  "nationalMetrics",
+  "fiscalBaseGrowth",
+  "economicModel",
+  "tradeGrowthMirror",
+  "inflationRecalc",
+  "commandEconomy",
+  "forexTurn",
+  "centralBankChairTurn",
+  "fomcMeetings",
+  "nppMonetaryOperations",
+  "metricHistory",
+  "interestRateSnapshot",
+  "portfolioSnapshot",
+  "corpPortfolioSnapshot",
+  "stockExchangeSnapshot",
+  "investorRankingSnapshot",
+  "wealthListSnapshot",
+  "gameHealthSnapshot",
+  "auditAnomalyScan",
+  "suspiciousDetection",
+  "moneySupplySnapshot",
+  "ledgerBalanceSnapshot",
+  "ledgerReconcile",
+]);
+
+/**
+ * Fixed-corporate subset for long macro horizons. Commodity prices still run
+ * against the cloned flow state, while corporate strategy and heavy ledgers
+ * remain frozen.
+ */
+export const MACRO_ONLY_PHASES: ReadonlySet<string> = new Set<string>([
+  "macroCountryTurn",
+  "commodityPrices",
+  "fiscalYear",
+  "policyEffects",
+  "demographicEffects",
+  "unownedSectorGrowth",
+  "metricDecay",
+  "investorConfidenceDecay",
+  "stateOwnershipConcentration",
+  "subsidyBudget",
+  "regionalBudgetProcessing",
+  "jpRegionalBudgetProcessing",
+  "deRegionalBudgetProcessing",
+  "metricEngine",
+  "demographicFlows",
+  "census",
+  "eraCrossing",
+  "metricActivation",
+  "nationalMetrics",
+  "fiscalBaseGrowth",
+  "economicModel",
+  "tradeGrowthMirror",
+  "inflationRecalc",
+  "commandEconomy",
+  "forexTurn",
+  "centralBankChairTurn",
+  "fomcMeetings",
+  "nppMonetaryOperations",
+  "metricHistory",
+  "interestRateSnapshot",
+  "gameHealthSnapshot",
+  "auditAnomalyScan",
+  "suspiciousDetection",
+  "moneySupplySnapshot",
+]);
 
 /**
  * Economy / finance / ledger phases skipped under the "elections-only" profile.
@@ -99,6 +206,8 @@ export const ELECTIONS_SKIP_PHASES: ReadonlySet<string> = new Set<string>([
 export function getSimTurnPhasePredicate(
   mode: SimTurnPhaseMode | undefined | null
 ): ((phaseName: string) => boolean) | undefined {
+  if (mode === "macro-only") return (phaseName: string) => MACRO_ONLY_PHASES.has(phaseName);
+  if (mode === "economy-only") return (phaseName: string) => ECONOMY_ONLY_PHASES.has(phaseName);
   if (mode !== "elections-only") return undefined;
   return (phaseName: string) => !ELECTIONS_SKIP_PHASES.has(phaseName);
 }

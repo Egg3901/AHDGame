@@ -84,8 +84,15 @@ function seedWorld(db: MockDb, macroGrowthV1: boolean): void {
   });
   (db as unknown as { _metricOps: typeof metricOps })._metricOps = metricOps;
 
+  const stateOps: Array<{
+    updateOne: { filter: { _id: string }; update: { $set: Record<string, number> } };
+  }> = [];
   db.collection("states");
-  db.collectionMocks.states!.bulkWrite = vi.fn().mockResolvedValue({ ok: 1 });
+  db.collectionMocks.states!.bulkWrite = vi.fn().mockImplementation((o: typeof stateOps) => {
+    stateOps.push(...o);
+    return Promise.resolve({ ok: 1 });
+  });
+  (db as unknown as { _stateOps: typeof stateOps })._stateOps = stateOps;
 }
 
 function cnPotentialFor(db: MockDb, stateId: string): number {
@@ -102,6 +109,18 @@ function cnPotentialFor(db: MockDb, stateId: string): number {
 
 function cnPotential(db: MockDb): number {
   return cnPotentialFor(db, "s_cn");
+}
+
+function capitalFor(db: MockDb, stateId: string): number {
+  const ops = (
+    db as unknown as {
+      _stateOps: Array<{
+        updateOne: { filter: { _id: string }; update: { $set: Record<string, number> } };
+      }>;
+    }
+  )._stateOps;
+  const doc = ops.find((o) => o.updateOne.filter._id === stateId);
+  return doc!.updateOne.update.$set.capitalStock;
 }
 
 describe("macroGrowthV1: O2 convergence on potential", () => {
@@ -180,5 +199,44 @@ describe("macroGrowthV1: O1c corp investment on capital → potential", () => {
     const base = await runWithStates(usStates());
     const stale = await runWithStates(usStates({ anchor: 200_000_000_000, turn: 42 }));
     expect(stale).toBeCloseTo(base, 6);
+  });
+});
+
+describe("macroGrowthV1: budget-backed public capital", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetCorpFxRateCacheForTests();
+  });
+
+  const runWithInfrastructure = async (annualLocalMillions: number): Promise<number> => {
+    const db = createMockDb();
+    seedWorld(db, true);
+    db.collectionMocks.federalBudget!.find = vi.fn().mockReturnValue({
+      project: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: "federal",
+            countryId: "US",
+            taxRates: { salesTax: 0 },
+            spending: { byCategory: { infrastructure: annualLocalMillions } },
+          },
+          {
+            _id: "CN",
+            countryId: "CN",
+            taxRates: { salesTax: 0 },
+            stateOwnershipConcentration: 100,
+          },
+        ]),
+      }),
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    await runMetricEngine(db as unknown as Db, 100);
+    return capitalFor(db, "s_us");
+  };
+
+  it("turns a funded infrastructure budget into additional capital", async () => {
+    const withoutBudget = await runWithInfrastructure(0);
+    const withBudget = await runWithInfrastructure(250_000);
+    expect(withBudget).toBeGreaterThan(withoutBudget);
   });
 });

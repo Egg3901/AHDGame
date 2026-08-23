@@ -80,6 +80,72 @@ export function opennessGate(f: { econSystem: number; trade: number; freedom: nu
   return clamp01(GATE_W_ECON * f.econSystem + GATE_W_TRADE * f.trade + GATE_W_FREEDOM * f.freedom);
 }
 
+export interface PlannedDevelopmentInputs {
+  industrialPolicyExecution?: number;
+  workforceSkill?: number;
+  transportEfficiency?: number;
+  /** Productive public investment effort, normalized to 0..1. */
+  publicInvestmentEffort?: number;
+  /** Pre-normalized trade factor in the range 0..1. */
+  trade: number;
+}
+
+const scoreFactor = (value: number | undefined, fallback: number, scale: number): number => {
+  const score = typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  return clamp01(score / scale);
+};
+
+/**
+ * Administrative catch-up route for a planned economy. Strong execution,
+ * human capital, infrastructure, public investment, and trade access can absorb frontier
+ * technology even when private ownership and economic freedom are low.
+ */
+export function plannedDevelopmentGate(inputs: PlannedDevelopmentInputs): number {
+  const execution = scoreFactor(inputs.industrialPolicyExecution, 0.5, 1);
+  const skill = scoreFactor(inputs.workforceSkill, 60, 100);
+  const transport = scoreFactor(inputs.transportEfficiency, 55, 100);
+  const publicInvestment = scoreFactor(inputs.publicInvestmentEffort, 0, 1);
+  const trade = clamp01(Number.isFinite(inputs.trade) ? inputs.trade : 0.5);
+  return clamp01(
+    0.25 * execution + 0.25 * skill + 0.2 * transport + 0.1 * trade + 0.2 * publicInvestment
+  );
+}
+
+export interface DevelopmentGateInputs {
+  soci?: number;
+  tradeGrowth?: number;
+  economicFreedom?: number;
+  industrialPolicyExecution?: number;
+  workforceSkill?: number;
+  transportEfficiency?: number;
+  publicInvestmentEffort?: number;
+}
+
+/**
+ * Use the stronger credible development route. The planned route fades in
+ * only above the market-ownership band, so a market economy cannot stack both
+ * systems while a state-heavy economy is not forced to liberalize to catch up.
+ */
+export function developmentGate(inputs: DevelopmentGateInputs): number {
+  const trade = tradeFactor(inputs.tradeGrowth);
+  const market = opennessGate({
+    econSystem: econSystemFactor(inputs.soci),
+    trade,
+    freedom: freedomFactor(inputs.economicFreedom),
+  });
+  const soci =
+    typeof inputs.soci === "number" && Number.isFinite(inputs.soci) ? inputs.soci : SOCI_MARKET;
+  const plannedWeight = clamp01((soci - SOCI_MARKET) / (SOCI_COMMAND - SOCI_MARKET));
+  const planned = plannedDevelopmentGate({
+    industrialPolicyExecution: inputs.industrialPolicyExecution,
+    workforceSkill: inputs.workforceSkill,
+    transportEfficiency: inputs.transportEfficiency,
+    publicInvestmentEffort: inputs.publicInvestmentEffort,
+    trade,
+  });
+  return Math.max(market, plannedWeight * planned);
+}
+
 /**
  * Conditional convergence bonus (pp/yr): `openness × min(CAP, β·ln(frontier/own))`,
  * only when the region is BEHIND the frontier (ratio > 1). Never negative — at or

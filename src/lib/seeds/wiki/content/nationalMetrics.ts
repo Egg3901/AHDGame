@@ -18,6 +18,10 @@ gdpGrowth = potentialGrowth + realizedChangeInBoundedOutputGap
 
 The output gap closes over time, so a one-turn boom or contraction does not permanently reset the printed growth rate.
 
+Potential growth comes from labor-force growth, capital accumulation, and productivity. Productive public spending on infrastructure, transport, housing, and energy can add to capital alongside paid corporate expansion. Both channels share a cap, so they cannot stack into unlimited growth.
+
+Economies below the live GDP-per-capita frontier can also receive a self-extinguishing catch-up bonus. Market economies qualify through ownership, trade, and economic freedom. State-heavy economies can instead qualify through industrial-plan execution, workforce skill, transport efficiency, productive public investment, and trade access. The bonus shrinks as the income gap closes and never reduces frontier-country growth.
+
 ### Unemployment
 
 Unemployment follows a simplified Okun's Law relationship with GDP growth relative to the country's **potential growth**:
