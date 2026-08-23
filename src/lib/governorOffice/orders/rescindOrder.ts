@@ -1,7 +1,7 @@
 import type { Db, ObjectId } from "mongodb";
 import type { GovernorExecutiveOrder, LegislationType, StatePolicy } from "@/lib/db/types";
-import { effectDirectionAtIndex } from "@/lib/legislature/optionIntensity";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { buildOrderRevertPolicyFields } from "./revertPolicy";
 
 export interface RescindOrderInput {
   orderId: ObjectId;
@@ -51,16 +51,7 @@ export async function rescindOrder(
       { stateId: order.stateId, legislationTypeId: order.legislationTypeId },
       {
         $set: {
-          policyOptionIndex: order.policyOptionIndexBefore,
-          ...(order.policyOptionIdBefore ? { policyOptionId: order.policyOptionIdBefore } : {}),
-          ...(order.economicBefore != null ? { economic: order.economicBefore } : {}),
-          ...(order.socialBefore != null ? { social: order.socialBefore } : {}),
-          effectDirection: effectDirectionAtIndex(
-            legislationType?.policyOptions,
-            order.policyOptionIndexBefore
-          ),
-          enactedTurn: currentTurn,
-          enactedBy: { kind: "expiry", id: order._id! },
+          ...buildOrderRevertPolicyFields(order, legislationType, currentTurn),
         },
       }
     );

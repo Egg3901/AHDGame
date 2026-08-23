@@ -48,6 +48,7 @@ import { migration as repointRuSoes } from "./entries/2026-08-13-repoint-ru-soes
 import { migration as campaignOpsTrees } from "./entries/2026-08-18-campaign-ops-trees";
 import { migration as backfillPoliticalLegislationTypes } from "./entries/2026-08-19-backfill-political-legislation-types";
 import { migration as seedGlobalResponseFoundations } from "./entries/2026-08-23-seed-global-response-foundations";
+import { migration as repairKazakhLawLevels } from "./entries/2026-08-23-repair-kazakh-law-levels";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -126,6 +127,9 @@ export const MIGRATIONS: Migration[] = [
   // only, so admin law-type edits are preserved.
   backfillPoliticalLegislationTypes,
   seedGlobalResponseFoundations,
+  // Ticket #1174: reconcile KAZ laws from their durable enacted-law and
+  // pre-executive-order records after legacy order expiry left mismatched rows.
+  repairKazakhLawLevels,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.
