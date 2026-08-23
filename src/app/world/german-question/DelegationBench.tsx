@@ -46,19 +46,18 @@ export function DelegationBench({
               delegation has nobody who can act, which is worth as much to the
               reader as a name would be.
             */}
-            <dl className="flex flex-col gap-0.5 font-mono text-body-xs">
+            {/*
+              Stacked, not side by side. "Minister of Foreign Affairs" is 27
+              characters and a name runs to 30; sharing one line in this column
+              clipped BOTH halves to "Minister of Fo… Cecelia …". Each gets the
+              full width of the card instead, so the title reads whole on its
+              own line with the holder beneath it.
+            */}
+            <dl className="flex flex-col gap-1 font-mono text-body-xs">
               {seat.offices.map((office) => (
-                <div key={office.role} className="flex items-baseline justify-between gap-2">
-                  {/*
-                    Both sides truncate. A character name runs to 30 characters
-                    and "Minister of Foreign Affairs" to 27, which together
-                    overflow this column on a narrow viewport if either side is
-                    allowed to hold its width.
-                  */}
-                  <dt className="min-w-0 truncate text-muted">{office.title}</dt>
-                  <dd className="min-w-0 truncate text-right text-foreground">
-                    {office.holder ?? "vacant"}
-                  </dd>
+                <div key={office.role}>
+                  <dt className="truncate text-muted">{office.title}</dt>
+                  <dd className="truncate text-foreground">{office.holder ?? "vacant"}</dd>
                 </div>
               ))}
             </dl>
