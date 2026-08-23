@@ -14,7 +14,11 @@ export interface SectorBoardTile {
   label: string;
   /** Total daily market size (₳-scale; caller supplies the formatter). */
   totalMarket: number;
-  /** Corporate-owned share of the market, 0–100. */
+  /**
+   * Leading corporation's share of the market, 0-100, or 0 when nobody
+   * operates here. Was the corporate-owned share, which under plants is always
+   * 100 because the unowned pool is out of the denominator (ticket #1162).
+   */
   ownedPercent: number;
   /** Regional specialization mark (primary/secondary + margin bonus in pp). */
   star?: { rank: "primary" | "secondary"; bonus: number } | null;
@@ -89,7 +93,11 @@ export function SectorBoard({
             <div className="text-[9.5px] text-muted">market /day</div>
             <div
               className="mt-2 h-1 overflow-hidden rounded-full bg-track"
-              title={`Owned share ${Math.round(tile.ownedPercent)}%`}
+              title={
+                tile.ownedPercent > 0
+                  ? `Largest share ${Math.round(tile.ownedPercent)}%`
+                  : "No corporations here yet"
+              }
             >
               <div
                 className="h-full rounded-full bg-secondary"

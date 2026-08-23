@@ -111,6 +111,29 @@ describe("buildReachableBooks", () => {
     );
     expect(JSON.parse(JSON.stringify(doc)).US.oil.demand).toBe(2);
   });
+
+  it("persists unmetForeignDemand through serialization", () => {
+    // The founding UI reads this off the stored snapshot, so a field that is
+    // computed but dropped on the way to Mongo would silently restore the
+    // pre-#1162 behaviour on every read.
+    const countries = ["US", "FR"] as CountryId[];
+    const balances = new Map([
+      ["US" as CountryId, bal([["oil", { supply: 200, demand: 0 }]])],
+      ["FR" as CountryId, bal([["oil", { supply: 0, demand: 1000 }]])],
+    ]);
+    const doc = serializeReachableBooks(
+      buildReachableBooks({
+        countries,
+        balances,
+        clearing: clearAllCommodities(countries, balances, () => 1),
+        commodities: OIL,
+        affinity: () => 1,
+      })
+    );
+    const roundTripped = JSON.parse(JSON.stringify(doc)).US.oil;
+    expect(roundTripped.unmetForeignDemand).toBeCloseTo(800, 6);
+    expect(reachableDemandGap(roundTripped)).toBeCloseTo(800, 6);
+  });
 });
 
 describe("reachableDemandGap", () => {
