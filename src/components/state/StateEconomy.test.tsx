@@ -189,3 +189,66 @@ describe("StateEconomy", () => {
     expect(attack.hasAttribute("disabled")).toBe(true);
   });
 });
+
+describe("StateEconomy market control under plants (ticket #1162)", () => {
+  /**
+   * Under plants the route forces unownedPercent to 0 for every sector (#1145
+   * took the unowned pool out of the market-share denominator), so the old
+   * `100 - unownedPercent` read 100% on all 867 US cells including the 546 with
+   * no corporation in them at all.
+   */
+  const plantsPayload = {
+    ...payload,
+    plantsMode: true,
+    sectors: payload.sectors.map((s) => ({ ...s, unownedPercent: 0, headroomUnits: 1000 })),
+  };
+
+  const stubPlants = (overrides: Record<string, unknown> = {}) =>
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue({ ok: true, json: async () => ({ ...plantsPayload, ...overrides }) })
+    );
+
+  it("labels the per-sector stat Largest Share rather than Market Control", async () => {
+    stubPlants();
+    render(<StateEconomy stateId="TX" countryId="US" />);
+    await waitFor(() => expect(screen.getByText("$1.82T")).toBeTruthy());
+
+    expect(screen.getByText("Largest Share")).toBeTruthy();
+    expect(screen.queryByText("Market Control")).toBeNull();
+  });
+
+  it("shows the leading corporation's share for an occupied sector", async () => {
+    stubPlants();
+    render(<StateEconomy stateId="TX" countryId="US" />);
+    // Energy is selected first and its lone corp holds 34 percent.
+    await waitFor(() => expect(screen.getByText("34.0%")).toBeTruthy());
+  });
+
+  it("shows Empty instead of 100% for a sector nobody operates in", async () => {
+    stubPlants();
+    render(<StateEconomy stateId="TX" countryId="US" />);
+    await waitFor(() => expect(screen.getByText("$1.82T")).toBeTruthy());
+
+    // Financial has owners: [] and, under plants, unownedPercent 0.
+    fireEvent.change(screen.getByRole("combobox", { name: /select sector/i }), {
+      target: { value: "financial" },
+    });
+
+    await waitFor(() => expect(screen.getByText("Empty")).toBeTruthy());
+    expect(screen.queryByText("100.0%")).toBeNull();
+  });
+
+  it("summarises the state as a count of sectors anyone operates in", async () => {
+    stubPlants();
+    render(<StateEconomy stateId="TX" countryId="US" />);
+    await waitFor(() => expect(screen.getByText("Active Sectors")).toBeTruthy());
+    // One of the two fixture sectors has an owner. Read the tile itself rather
+    // than a bare "1", which matches growth figures elsewhere on the board.
+    const tile = screen.getByText("Active Sectors").parentElement!;
+    expect(tile.textContent).toContain("1");
+    expect(tile.textContent).toContain("of 2");
+  });
+});

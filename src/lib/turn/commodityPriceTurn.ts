@@ -1308,7 +1308,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     balances: byCountry,
     clearing: tradeClearing,
     commodities: COMMODITY_TYPES,
-    isBlocked: (commodity, exporter, importer) => affinityFor(commodity, exporter, importer) === 0,
+    affinity: affinityFor,
   });
   applyTradeConvergence(COUNTRY_ORDER, byCountry, tradeClearing, TRADE_PRICE_CONVERGENCE_K);
 
