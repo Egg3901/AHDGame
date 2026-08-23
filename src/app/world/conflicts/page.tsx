@@ -13,6 +13,8 @@ import { getColdWarDials } from "@/lib/coldwar/dials";
 import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
 import { NUCLEAR_NODES } from "@/lib/military/nuclearProgram";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import type { Crisis } from "@/lib/db/types/crisis";
+import { GlobalResponseCrisisStrip } from "./_coldwar/GlobalResponseCrisisStrip";
 
 // Conflicts hub: every live conflict in the world, on the map and in the list,
 // under one headline: the global cold-war tension reading. Gated by
@@ -23,7 +25,7 @@ export default async function ConflictsPage() {
   await requireConflictsEnabled();
   // Use the pinned display year so the founding phase shows the era start.
   // getGameTime always populates currentYear; startingYear is a defensive floor.
-  const { currentYear, startingYear, preIterationTurns } = await getGameTime();
+  const { currentTurn, currentYear, startingYear, preIterationTurns } = await getGameTime();
 
   const db = await getDb();
   const docs = await listActiveConflicts(db);
@@ -35,13 +37,23 @@ export default async function ConflictsPage() {
     toConflictView(d, { startingYear, casualties: casualties[d._id] ?? 0, preIterationTurns })
   );
 
-  const [vietnam, tension, dials, programs, activeCrisisCount] = await Promise.all([
+  const [vietnam, tension, dials, programs, responseCrisisDocs] = await Promise.all([
     getVietnamEscalationSummary(db),
     getColdWarTension(db),
     getColdWarDials(db),
     listNuclearPrograms(db),
-    db.collection("crises").countDocuments({ status: "active" }),
+    db
+      .collection<Crisis>("crises")
+      .find({ status: "active", globalResponse: { $exists: true } })
+      .sort({ startTurn: -1 })
+      .toArray(),
   ]);
+
+  // Response scope answers who owns the decision, not how far the crisis reaches.
+  // Living-conflict events are stored as country-scoped because every government
+  // answers separately; globalResponse is the canonical international marker.
+  const responseCrises = responseCrisisDocs.filter((crisis) => crisis.globalResponse != null);
+  const activeCrisisCount = responseCrises.length;
 
   const totalWarheads = programs.reduce((sum, program) => sum + Math.max(0, program.warheads), 0);
   const pressureBreakdown = tensionPressureBreakdown({
@@ -110,6 +122,11 @@ export default async function ConflictsPage() {
             </div>
           </details>
         ) : null}
+        <GlobalResponseCrisisStrip
+          crises={responseCrises}
+          currentTurn={currentTurn}
+          startingYear={startingYear}
+        />
       </div>
       <GlobalConflictsBoard year={currentYear ?? startingYear} conflicts={conflicts} />
     </>
