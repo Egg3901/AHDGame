@@ -1,7 +1,9 @@
-// GET /api/country/[code]/executive/truces — live truces binding this country.
-// Read-only and not sensitive: a truce is a public fact about two countries, and the
-// declare-war panel needs it to state the bar rather than let a player discover it by
-// being refused. Auth: any authenticated character.
+// GET /api/country/[code]/executive/truces — the per-country bars on declaring war:
+// live truces, and the alliance this country cannot fight inside.
+//
+// Read-only and not sensitive: a truce and a treaty roll are both public facts about
+// two countries, and the declare-war panel needs them to state the bar rather than let
+// a player discover it by being refused. Auth: any authenticated character.
 // Errors: 400, 401, 404.
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
@@ -10,6 +12,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
 import { listActiveTruces } from "@/lib/military/truce";
+import { alliesOf, loadAllianceRoll } from "@/lib/military/allianceBar";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
@@ -31,9 +34,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     }
     const currentTurn = gs.currentTurn ?? 0;
 
+    // The alliance roll is a second bar on the same picker, returned alongside the
+    // truces so the panel resolves both in one round trip. `alliance` is null and
+    // `allies` empty for a non-aligned country, which bars nothing.
+    const { alliance, mates } = alliesOf(await loadAllianceRoll(db), countryId);
+
     return NextResponse.json({
       currentTurn,
       truces: await listActiveTruces(db, countryId, currentTurn),
+      alliance,
+      allies: mates,
     });
   } catch (error) {
     return handleRouteError(error);

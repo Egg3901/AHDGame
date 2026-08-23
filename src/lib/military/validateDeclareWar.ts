@@ -4,6 +4,7 @@ import { findWarBetween } from "@/lib/military/findWarBetween";
 import { activeTruceExpiry } from "@/lib/military/truce";
 import { isSelectableWarGoal, WAR_DECLARATION_COOLDOWN_TURNS } from "@/lib/military/warGoals";
 import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
+import { allianceBarBetween } from "@/lib/military/allianceBar";
 import type { Bill } from "@/lib/db/types/legislation";
 
 export type DeclareWarCheck = { ok: true } | { ok: false; status: number; error: string };
@@ -45,6 +46,20 @@ export async function validateDeclareWar(
   }
   if (!p.warGoal || !isSelectableWarGoal(p.warGoal)) {
     return { ok: false, status: 400, error: "That war goal is not yet available." };
+  }
+
+  // An alliance is a mutual-defence treaty, so its members cannot fight each other.
+  // Read from the live roll rather than a table: a country that acceded last turn is
+  // an ally this turn, and one that withdrew is a legitimate target again. Placed
+  // above the war and cooldown reads because it is the durable bar of the three, and
+  // because a player refused here should be told about the treaty, not the calendar.
+  const alliance = await allianceBarBetween(db, sourceCountry, target);
+  if (alliance) {
+    return {
+      ok: false,
+      status: 400,
+      error: `You cannot declare war on a fellow member of the ${alliance}. Withdraw from the alliance first.`,
+    };
   }
 
   // ONE war at a time between the same two countries. A live conflict is NOT itself

@@ -33,3 +33,17 @@ export type BlocLookup = Readonly<Record<string, Bloc>>;
 export function blocOf(lookup: BlocLookup, country: string): Bloc {
   return lookup[country] ?? "nonAligned";
 }
+
+/**
+ * Do these two countries sit inside the SAME alliance bloc?
+ *
+ * `nonAligned` is deliberately NOT a shared bloc. It is the absence of an
+ * accession-governing alliance, not a pact between the countries that lack one. The
+ * 1991, 2019 and 2023 eras carry NATO with no eastern counterpart, so Russia and China
+ * read `nonAligned` there; counting that as a shared bloc would make a war between
+ * them — or between any two unaligned states, in any era — impossible.
+ */
+export function sharesBloc(lookup: BlocLookup, a: string, b: string): boolean {
+  const bloc = blocOf(lookup, a);
+  return bloc !== "nonAligned" && bloc === blocOf(lookup, b);
+}
