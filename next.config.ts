@@ -3,6 +3,7 @@ import { withSentryConfig } from "@sentry/nextjs";
 import createNextIntlPlugin from "next-intl/plugin";
 import { execSync } from "child_process";
 import { readFileSync } from "fs";
+import { PRIVATE_PAGE_CACHE_CONTROL } from "./src/lib/cacheHeaders";
 
 // Railway's build context no longer exposes the .git directory, so `git
 // rev-parse` fails on every deploy build (#2772). Prefer Railway's injected
@@ -88,24 +89,18 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Page documents and RSC navigation payloads have the same zstd problem
-        // as the scoped /api rules below: Next's default page Cache-Control
-        // carries no no-transform, so Cloudflare re-compresses HTML/RSC with
-        // zstd and the affected Android WebViews fail the navigation outright —
-        // the app shows its "Can't Reach the Server" screen (R&D reports
-        // 2026-07-12, worst on the Elections/Politics tabs). This mirrors
-        // Next's default value for dynamic pages plus no-transform. Excludes
-        // /api (scoped rules + shared helpers own those) and /_next (static
-        // assets are edge-cached gzip/br and Next overwrites their
-        // Cache-Control in production anyway). Prod-verified that config
-        // Cache-Control DOES apply to page responses (the /country/... rule is
-        // live). MUST stay first: for a duplicate header key the LAST matching
-        // rule wins, so the specific rules below override this blanket one.
+        // Dynamic page documents and RSC payloads are private and must never be
+        // shared by a CDN. Their bodies may be compressed at the origin, while
+        // Cloudflare separately restricts edge encoding to gzip/Brotli for old
+        // Android WebViews. API routes keep no-transform unless they explicitly
+        // opt into another policy. Excludes /api and /_next. MUST stay first:
+        // for a duplicate header key the LAST matching rule wins, so the
+        // specific rules below override this blanket one.
         source: "/((?!api/|_next/).*)",
         headers: [
           {
             key: "Cache-Control",
-            value: "private, no-cache, no-store, max-age=0, must-revalidate, no-transform",
+            value: PRIVATE_PAGE_CACHE_CONTROL,
           },
         ],
       },
