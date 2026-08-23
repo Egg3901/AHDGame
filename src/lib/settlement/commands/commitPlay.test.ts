@@ -152,19 +152,25 @@ describe("commitSettlementPlay", () => {
     expect(doc.direction).toBe(1);
   });
 
-  it("refuses a seat play the treasury cannot cover, before debiting anything", async () => {
-    prime(db, "federalBudget").findOne.mockResolvedValue({ treasuryBalance: 1_000 });
+  it("commits a seat play against a treasury already in debt", async () => {
+    // `treasuryBalance` is the SIGNED national cash position: negative IS the
+    // national debt, and `debt.principal` mirrors max(0, -balance). Refusing on
+    // `balance < cost` therefore locked every country carrying debt out of every
+    // funded play, which is what player suggestion S#308 reported.
+    prime(db, "federalBudget").findOne.mockResolvedValue({ treasuryBalance: -500_000_000 });
     const { commitSettlementPlay } = await import("./commitPlay");
     const res = await commitSettlementPlay(db as unknown as Db, {
       characterId,
       actor: "seat",
       playId: "aid",
     });
-    expect(res).toMatchObject({ ok: false, status: 402 });
+    expect(res).toMatchObject({ ok: true });
+    // `spendFromTreasury` splits the spend into fromSurplus/addedToDebt itself,
+    // so borrowing is modelled rather than refused.
     const { spendFromTreasury } = await import("@/lib/budget/treasurySpend");
-    expect(vi.mocked(spendFromTreasury)).not.toHaveBeenCalled();
-    expect(prime(db, "settlementCrises").updateOne).not.toHaveBeenCalled();
-    expect(prime(db, "settlementPlays").insertOne).not.toHaveBeenCalled();
+    expect(vi.mocked(spendFromTreasury)).toHaveBeenCalledWith(expect.anything(), "DD", 45_000_000);
+    expect(prime(db, "settlementCrises").updateOne).toHaveBeenCalled();
+    expect(prime(db, "settlementPlays").insertOne).toHaveBeenCalled();
   });
 
   it("debits the seat with a guarded $inc on the crisis document", async () => {

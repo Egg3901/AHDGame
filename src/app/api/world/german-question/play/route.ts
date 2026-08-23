@@ -21,7 +21,11 @@ const schema = z.object({
 
 // POST /api/world/german-question/play - Commit one play against the German Question.
 // Auth: requireHumanSessionWithCharacter
-// Errors: 400, 401, 402, 403, 404, 409, 413, 429
+// Errors: 400, 401, 403, 404, 409, 413, 429
+//
+// No 402: a play is never refused for want of money. `treasuryBalance` is the
+// signed national cash position, so spending past zero is national debt, which
+// `spendFromTreasury` models rather than blocks.
 //
 // `requireHumanSessionWithCharacter` rather than `requireAuthWithCharacter`:
 // this route spends a NATIONAL TREASURY, so it needs the same-origin assertion

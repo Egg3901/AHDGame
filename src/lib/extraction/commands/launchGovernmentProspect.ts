@@ -1,6 +1,6 @@
 import { getEraContext } from "@/lib/era/context";
 import type { Db, ObjectId, Filter } from "mongodb";
-import type { FederalBudget, StateBudget } from "@/lib/db/types/budget";
+import type { StateBudget } from "@/lib/db/types/budget";
 import type { GovernorOfficeState } from "@/lib/db/types/governorOfficeState";
 import type { ProspectingSurvey } from "@/lib/db/types/prospectingSurvey";
 import type { ExtractableResource } from "@/lib/constants/commodities";
@@ -132,18 +132,11 @@ export async function launchGovernmentProspect(
   const costLocal = Math.round(costAnchor * fxRate);
 
   if (level === "national") {
-    // Pre-check the treasury can cover it (moveTreasury itself would silently
-    // borrow). Read the doc the same way the mover does — by countryId field.
-    const budget = await db
-      .collection<FederalBudget>("federalBudget")
-      .findOne(
-        { countryId: countryId as FederalBudget["countryId"] },
-        { projection: { treasuryBalance: 1 } }
-      );
-    const balance = budget?.treasuryBalance ?? 0;
-    if (balance < costLocal) {
-      return { ok: false, status: 402, error: "The national treasury cannot cover this survey." };
-    }
+    // NO pre-check. `treasuryBalance` is the SIGNED national cash position, so
+    // a negative balance IS the national debt and `balance < cost` refused every
+    // survey for an already-indebted country. `spendFromTreasury` is built to
+    // borrow — it splits the spend into fromSurplus and addedToDebt — and the
+    // rest of the app spends into debt the same way.
     await spendFromTreasury(db, countryId, costLocal);
   } else {
     // Spend 1 gubernatorial action point atomically.

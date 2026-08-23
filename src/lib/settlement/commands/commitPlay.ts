@@ -32,7 +32,6 @@ import type { Character } from "@/lib/db/types";
 import type { SettlementPlayDoc } from "@/lib/db/types/settlementPlay";
 import { getPlay } from "@/lib/constants/settlementCrisis";
 import type { CountryId } from "@/lib/constants/countries";
-import type { FederalBudget } from "@/lib/db/types/budget";
 import { getSettlementCrisesCollection, getSettlementPlaysCollection } from "@/lib/db/collections";
 import { spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -103,19 +102,19 @@ export async function commitSettlementPlay(
       return fail(409, "Your country belongs to neither bloc, so it has no side to push for.");
     }
 
+    // NO treasury pre-check. `treasuryBalance` is the SIGNED national cash
+    // position — negative IS the national debt, and `debt.principal` mirrors
+    // max(0, -balance) — so a `balance < cost` guard refused every funded play
+    // for any country already carrying debt. That is what player suggestion
+    // S#308 reported.
+    //
+    // `spendFromTreasury` is built to borrow: it splits a spend into
+    // fromSurplus and addedToDebt, and its own contract says the treasury "is
+    // allowed to go negative — that is national debt". Borrowing is modelled
+    // through interestRate, creditRating and debtToGdpRatio. It is a
+    // consequence, not a refusal, and every other national payment in the app
+    // (org dues, aid, membership bills) already works this way.
     const fundsLocal = seatFundsLocal(play);
-    if (fundsLocal > 0) {
-      // Pre-check: `spendFromTreasury` borrows silently rather than refusing.
-      const budget = await db
-        .collection<FederalBudget>("federalBudget")
-        .findOne(
-          { countryId: seat.id as FederalBudget["countryId"] },
-          { projection: { treasuryBalance: 1 } }
-        );
-      if ((budget?.treasuryBalance ?? 0) < fundsLocal) {
-        return fail(402, "The national treasury cannot cover this play.");
-      }
-    }
 
     // Guarded debit. The filter restates the budget the context reported, so a
     // second submit racing this one matches nothing and pays nothing.
