@@ -9,6 +9,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { getNationalDoctrine } from "@/lib/db/collections/nationalDoctrine";
+import { getNuclearProgram } from "@/lib/db/collections/nuclearPrograms";
 import { isAdoptedByName } from "@/lib/military/doctrineTree";
 import { NUCLEAR_CAPABLE, NUCLEAR_ENTRY_DOCTRINE_NODE } from "@/lib/military/nuclearProgram";
 import { resolveGameYear } from "@/lib/era/era";
@@ -78,7 +79,12 @@ export async function resolveEligibility(
   countryId: CountryId,
   coldWarEnabled: boolean
 ): Promise<NuclearEligibility> {
-  const capable = NUCLEAR_CAPABLE.includes(countryId);
+  // Capable = the era's named set OR a live programme with anything adopted.
+  // The second arm is the covert breakout: a nation that already detonated a
+  // device has proven the base the named set stands in for, and may climb the
+  // tree like anyone. Used by every route, mutations included.
+  const program = await getNuclearProgram(db, countryId);
+  const capable = NUCLEAR_CAPABLE.includes(countryId) || Object.keys(program.adopted).length > 0;
   const doctrine = await getNationalDoctrine(db, countryId);
   const doctrineAdopted = isAdoptedByName(doctrine.adopted, NUCLEAR_ENTRY_DOCTRINE_NODE);
   return {
