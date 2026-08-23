@@ -4,6 +4,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import {
   runSourcingPass,
   BUYER_TOLERANCE_SLACK,
+  FREIGHT_PRICE_TEU_PER_UNIT_HOP,
   FREIGHT_TEU_PER_UNIT_HOP,
   SEA_FREIGHT_HOP_EQUIV,
   type SourcingInputs,
@@ -40,7 +41,7 @@ function makeInputs(overrides: Partial<SourcingInputs> = {}): SourcingInputs {
       ["UK", bal({ coal: { supply: 500, demand: 0 } })],
     ]),
     statePricesFor: () => ({ A1: 100, A2: 90, B1: 80 }),
-    nationalPricesFor: () => ({ US: 95, UK: 60 }),
+    nationalPricesFor: () => ({ US: 95, UK: 80 }),
     basePriceFor: () => 100,
     freightPrice: 1000,
     hops: (_c, from, to) => (from === to ? 0 : from[0] === to[0] ? 1 : null),
@@ -100,28 +101,85 @@ describe("runSourcingPass", () => {
     expect(flows[0].shippingPerUnit).toBeGreaterThan(0);
   });
 
+  it("prices a one-hop bulk haul independently from its freight-capacity load", () => {
+    // Production t322: median-state iron was 4.92/unit and freight was
+    // 221.25/TEU. The 0.04 TEU capacity weight must remain, but using it as the
+    // price weight charges 8.85/unit and rejects even a one-hop route against
+    // the 35% buyer ceiling. The original 0.004 price weight charges 0.885 and
+    // lets the route clear while still consuming 4 TEU of network capacity.
+    const ironPrice = 4.92;
+    const freightPrice = 221.25;
+    const units = 100;
+    const r = runSourcingPass(
+      makeInputs({
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byState: new Map([
+          [
+            "A1",
+            new Map([
+              ["iron", { supply: 0, demand: units }],
+              ["freight", { supply: 100, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+          [
+            "A2",
+            new Map([
+              ["iron", { supply: units, demand: 0 }],
+              ["freight", { supply: 100, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        byCountry: new Map([["US", new Map([["iron", { supply: units, demand: units }]])]]),
+        statePricesFor: () => ({ A1: ironPrice, A2: ironPrice }),
+        nationalPricesFor: () => ({ US: ironPrice }),
+        basePriceFor: () => ironPrice,
+        freightPrice,
+      })
+    );
+
+    const flow = r.flows.find((candidate) => candidate.commodity === "iron");
+    expect(flow?.units).toBeCloseTo(units);
+    expect(flow?.shippingPerUnit).toBe(0.89);
+    expect(flow?.freightTeuConsumed).toBeCloseTo(units * FREIGHT_TEU_PER_UNIT_HOP.bulk);
+    const iron = r.summaries.find((summary) => summary.commodity === "iron")!;
+    expect(iron.toleranceBoundUnits).toBe(0);
+  });
+
   it("buys from the cheapest landed seller, not the cheapest ask", () => {
-    // At freightPrice 1000 the sea leg dominates (bulk 0.04 TEU/unit/hop):
-    // UK landed 60+240=300 > A2 landed 90+40=130 — domestic wins despite higher ask.
+    // At freightPrice 1000 the sea leg dominates (bulk 0.004 price weight/unit/hop):
+    // UK landed 80+24=104 > A2 landed 90+4=94, so domestic wins despite
+    // the foreign seller's lower ask.
     const r = runSourcingPass(makeInputs());
     const flows = coalFlow(r);
     expect(flows[0].originType).toBe("state");
     expect(flows[0].originId).toBe("A2");
-    expect(flows[0].landedPrice).toBeCloseTo(90 + 1000 * FREIGHT_TEU_PER_UNIT_HOP.bulk * 1);
+    expect(flows[0].landedPrice).toBeCloseTo(90 + 1000 * FREIGHT_PRICE_TEU_PER_UNIT_HOP.bulk);
     expect(flows[0].units).toBeCloseTo(100);
   });
 
   it("prefer foreign when sea shipping is cheap enough, then tariffs flip it", () => {
-    // freightPrice 100: UK landed 60+24=84 < A2 90+4=94.
-    const cheapSea = makeInputs({ freightPrice: 100 });
+    // freightPrice 100: UK landed 60+2.4=62.4 < A2 90+0.4=90.4.
+    const cheapSea = makeInputs({
+      freightPrice: 100,
+      nationalPricesFor: () => ({ US: 95, UK: 60 }),
+    });
     const cheap = coalFlow(runSourcingPass(cheapSea))[0];
     expect(cheap.originId).toBe("UK");
     expect(cheap.landedPrice).toBeCloseTo(
-      60 + 100 * FREIGHT_TEU_PER_UNIT_HOP.bulk * SEA_FREIGHT_HOP_EQUIV
+      60 + 100 * FREIGHT_PRICE_TEU_PER_UNIT_HOP.bulk * SEA_FREIGHT_HOP_EQUIV
     );
 
-    // 60% tariff: UK 60×1.6 + 24 = 120 > A2's 94.
-    const taxed = runSourcingPass(makeInputs({ freightPrice: 100, tariffRatePct: () => 60 }));
+    // 60% tariff: UK 60×1.6 + 2.4 = 98.4 > A2's 90.4.
+    const taxed = runSourcingPass(
+      makeInputs({
+        freightPrice: 100,
+        nationalPricesFor: () => ({ US: 95, UK: 60 }),
+        tariffRatePct: () => 60,
+      })
+    );
     const taxedFlows = coalFlow(taxed);
     expect(taxedFlows[0].originId).toBe("A2");
     expect(taxedFlows).toHaveLength(1);
@@ -129,8 +187,14 @@ describe("runSourcingPass", () => {
   });
 
   it("books tariff paid on import flows", () => {
-    // freightPrice 100 + 10% tariff: UK landed 66 + 24 = 90 < 94, still wins.
-    const r = runSourcingPass(makeInputs({ freightPrice: 100, tariffRatePct: () => 10 }));
+    // freightPrice 100 + 10% tariff: UK landed 60 + 6 + 2.4 = 68.4 < 90.4.
+    const r = runSourcingPass(
+      makeInputs({
+        freightPrice: 100,
+        nationalPricesFor: () => ({ US: 95, UK: 60 }),
+        tariffRatePct: () => 10,
+      })
+    );
     const flow = coalFlow(r)[0];
     expect(flow.originId).toBe("UK");
     expect(flow.tariffRatePct).toBe(10);
@@ -228,7 +292,7 @@ describe("runSourcingPass", () => {
         byCountry: new Map([["US", new Map([["rare_earth", { supply: 1000, demand: 1000 }]])]]),
         // Normal haul is just inside tolerance; congested haul is outside it,
         // so this measures nominal fleet use without overflow muddying the cap.
-        statePricesFor: () => ({ A1: 83, A2: 100 }),
+        statePricesFor: () => ({ A1: 75.1, A2: 100 }),
       })
     );
 
@@ -250,11 +314,11 @@ describe("runSourcingPass", () => {
 
   it("landedPremiumByDestState: interstate fill carries shipping as extra cost", () => {
     // Same as "buys from the cheapest landed seller": A1 buys 100 units from
-    // A2 at ask 90, shippingPerUnit = 1000 × 0.04 × 1 hop = 40.
+    // A2 at ask 90, shippingPerUnit = 1000 × 0.004 × 1 hop = 4.
     const r = runSourcingPass(makeInputs());
     const a1 = r.landedPremiumByDestState.get("A1")!.get("coal")!;
     expect(a1.metUnits).toBeCloseTo(100);
-    expect(a1.extraCost).toBeCloseTo(100 * 40);
+    expect(a1.extraCost).toBeCloseTo(100 * 4);
     // Sellers/pure-domestic states never buy, so they carry no accumulator.
     expect(r.landedPremiumByDestState.get("A2")?.get("coal")).toBeUndefined();
   });
@@ -286,13 +350,19 @@ describe("runSourcingPass", () => {
       })
     );
     const a1 = r.landedPremiumByDestState.get("A1")!.get("coal")!;
-    // 60 units local (free) + 40 interstate at shippingPerUnit 40.
+    // 60 units local (free) + 40 interstate at shippingPerUnit 4.
     expect(a1.metUnits).toBeCloseTo(100);
-    expect(a1.extraCost).toBeCloseTo(40 * 40);
+    expect(a1.extraCost).toBeCloseTo(40 * 4);
   });
 
   it("importAggregatesByCountry: sums import value and tariff paid by buyer country", () => {
-    const r = runSourcingPass(makeInputs({ freightPrice: 100, tariffRatePct: () => 10 }));
+    const r = runSourcingPass(
+      makeInputs({
+        freightPrice: 100,
+        nationalPricesFor: () => ({ US: 95, UK: 60 }),
+        tariffRatePct: () => 10,
+      })
+    );
     const usAgg = r.importAggregatesByCountry.get("US")!;
     expect(usAgg.importValue).toBeCloseTo(100 * 60);
     expect(usAgg.tariffPaid).toBeCloseTo(100 * 60 * 0.1);

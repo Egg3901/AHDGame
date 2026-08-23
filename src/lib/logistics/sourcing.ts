@@ -38,7 +38,6 @@ import {
 
 /**
  * Freight (TEU) consumed per commodity unit per state-line crossing, by class.
- * Also the basis of the shipping charge: perUnitHopCost = freightPrice × this.
  * Special care hauls fewer goods per TEU-equivalent, hence the higher factor.
  *
  * Calibrated 10× up from the 0.004/0.012 v1 seeds (ticket #1039): live
@@ -52,6 +51,24 @@ export const FREIGHT_TEU_PER_UNIT_HOP: Record<FreightClass, number> = {
   special: 0.12,
   // Grid rides wire and pipe, not the haulage fleet: it never spends TEU.
   // Distance is paid in transmission loss and a wheeling charge instead.
+  grid: 0,
+};
+
+/**
+ * Price weight per commodity unit per state-line crossing, by class.
+ *
+ * This deliberately remains at the original v1 calibration while
+ * {@link FREIGHT_TEU_PER_UNIT_HOP} keeps ticket #1039's 10x capacity weight.
+ * The two signals measure different things: the capacity weight makes a haul
+ * visible on the Logistics map, while this weight converts the freight-market
+ * price into a shipping charge buyers can compare with the cargo price.
+ * Coupling them made the capacity calibration multiply every shipping bill by
+ * ten and priced low-value cargo out before the network could become capacity
+ * bound (production market audit, turn 322).
+ */
+export const FREIGHT_PRICE_TEU_PER_UNIT_HOP: Record<FreightClass, number> = {
+  bulk: 0.004,
+  special: 0.012,
   grid: 0,
 };
 
@@ -123,6 +140,15 @@ export function congestedLandedPrice(landed: number, shippingPerUnit: number): n
 export function freightTeuPerUnitHop(freightClass: FreightClass, eraUnitScale: number = 1): number {
   void eraUnitScale;
   return FREIGHT_TEU_PER_UNIT_HOP[freightClass];
+}
+
+/** Freight-price weight per commodity unit per hop on the era unit basis. */
+export function freightPriceTeuPerUnitHop(
+  freightClass: FreightClass,
+  eraUnitScale: number = 1
+): number {
+  void eraUnitScale;
+  return FREIGHT_PRICE_TEU_PER_UNIT_HOP[freightClass];
 }
 
 /**
@@ -349,11 +375,12 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
   for (const commodity of SHIPPED_COMMODITIES) {
     const freightClass = FREIGHT_CLASS_BY_COMMODITY[commodity]!;
     const teuPerUnitHop = freightTeuPerUnitHop(freightClass, eraUnitScale);
+    const priceTeuPerUnitHop = freightPriceTeuPerUnitHop(freightClass, eraUnitScale);
     const isGrid = freightClass === "grid";
     // Haulage legs are priced off the freight market; grid legs are wheeled at
     // a fraction of the ask, because a trucking price spike has no business
     // moving the cost of electricity.
-    const shippingPerUnitPerHop = freightPrice * teuPerUnitHop;
+    const shippingPerUnitPerHop = freightPrice * priceTeuPerUnitHop;
     const gridWheelingPerHop = (ask: number) => ask * GRID_WHEELING_PER_HOP_FRACTION;
     /** Share of dispatched units that survive `hopCount` hops on the grid. */
     const gridDeliveryFactor = (hopCount: number) =>

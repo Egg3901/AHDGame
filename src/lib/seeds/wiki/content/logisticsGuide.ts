@@ -1,5 +1,6 @@
 import {
   BUYER_TOLERANCE_SLACK,
+  FREIGHT_PRICE_TEU_PER_UNIT_HOP,
   FREIGHT_CONGESTION_OVERFLOW,
   FREIGHT_CONGESTION_SURCHARGE,
   FREIGHT_TEU_PER_UNIT_HOP,
@@ -78,13 +79,15 @@ Imports use a flat ${SEA_FREIGHT_HOP_EQUIV}-hop sea equivalent for landed-price 
 
 Every shipped commodity belongs to one of three classes. Two of them ride the same haulage fleet and spend a state's freight capacity. The third does not.
 
-| Class | Capacity pool | TEU per commodity unit per hop | Typical cargo |
-| --- | --- | ---: | --- |
-| Bulk | Shared state freight fleet | ${FREIGHT_TEU_PER_UNIT_HOP.bulk} | Heavy raw materials and ordinary physical goods |
-| Special | Shared state freight fleet | ${FREIGHT_TEU_PER_UNIT_HOP.special} | Higher-care or specialized cargo |
-| Grid | None | ${FREIGHT_TEU_PER_UNIT_HOP.grid} | Electricity and natural gas |
+| Class | Capacity TEU per unit-hop | Shipping-price weight per unit-hop | Typical cargo |
+| --- | ---: | ---: | --- |
+| Bulk | ${FREIGHT_TEU_PER_UNIT_HOP.bulk} | ${FREIGHT_PRICE_TEU_PER_UNIT_HOP.bulk} | Heavy raw materials and ordinary physical goods |
+| Special | ${FREIGHT_TEU_PER_UNIT_HOP.special} | ${FREIGHT_PRICE_TEU_PER_UNIT_HOP.special} | Higher-care or specialized cargo |
+| Grid | ${FREIGHT_TEU_PER_UNIT_HOP.grid} | ${FREIGHT_PRICE_TEU_PER_UNIT_HOP.grid} | Electricity and natural gas |
 
 Special cargo consumes more TEU per unit per hop, but it does not have a separate reserved pool. Bulk and special loads share every available TEU in the state. The map tooltip separates the two loads so you can see what is using the fleet, not because one class is forbidden from using capacity left idle by the other.
+
+Capacity load and shipping price use separate weights. The capacity weight keeps real haul visible on the Logistics map; the smaller shipping-price weight converts the freight-market price into the charge buyers compare with the cargo price. Raising network load therefore does not automatically multiply every shipping bill by the same amount.
 
 ### Grid: wire and pipe
 
