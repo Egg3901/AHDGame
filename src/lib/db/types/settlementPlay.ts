@@ -5,6 +5,12 @@ import type { SettlementInstitutionId, SettlementSeatId } from "./settlementCris
 /** Whether a play was made for the nation or by the character personally. */
 export type SettlementActor = "seat" | "personal";
 
+/**
+ * Which budget paid for a play. Personal plays are always `"funds"` — a
+ * character has no seat capital pool to draw on.
+ */
+export type SettlementPaymentMode = "funds" | "capital";
+
 export type SettlementPlayClass =
   "exclusive" | "diplomatic" | "spend" | "coercive" | "forces" | "personal";
 

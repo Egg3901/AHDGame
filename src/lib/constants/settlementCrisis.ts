@@ -130,6 +130,27 @@ export const PERSONAL_MULTIPLIER_PCT = 25;
 export const SEAT_CAPITAL_CAP = 60;
 
 /**
+ * Capital points charged per authored magnitude point when a delegation pays
+ * for a play with political capital instead of its national treasury.
+ *
+ * Bounded ABOVE by measurement (`scripts/debug/gq-capital-route-sweep.ts`): a
+ * play bought with capital must not be better value per capital point than the
+ * play that seat already buys with capital alone, or that play is obsolete and
+ * the catalogue has lost an option rather than gained one. k=2.5 makes `rhine`
+ * beat the UK's own `fourpower`; k=3 and above break nothing.
+ *
+ * Fixed FROM BELOW by the capital income raise. A play's price in TURNS OF
+ * SAVING is `points x k / capitalPerTurn`, so k and the income have to move
+ * together or the route's real price silently changes: at (k=3, income 3) and
+ * at (k=4, income 4) a zero-capital play costs the same `points` turns either
+ * way, and DD lands identically because 6 to 8 and 3 to 4 are the same 4/3.
+ *
+ * ⚠️ THIS TRACKS THE SECONDARY SEATS' `capitalPerTurn`. Move one, move the
+ * other, or a speed change becomes an unmeasured balance change.
+ */
+export const SETTLEMENT_CAPITAL_K = 4;
+
+/**
  * How many turns' worth of action points a seat may bank.
  *
  * Banking exists so a secondary can save for a play that costs more AP than it
