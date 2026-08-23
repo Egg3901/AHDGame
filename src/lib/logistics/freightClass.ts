@@ -45,9 +45,21 @@ export function freightClassExplanation(freightClass: FreightClass): string {
   return "Electricity and natural gas use the grid, not freight capacity.";
 }
 
+/**
+ * The action half of the guidance. Every branch must name a lever the player
+ * can actually pull, and pull at the mechanism the explanation just described.
+ *
+ * The grid branch used to say "lower this sector's price so distant buyers can
+ * afford its delivered price". That lever does not exist. The sourcing pass
+ * asks at the STATE MARKET price for the commodity (`statePricesFor` in
+ * `turn/commodityPriceTurn.ts`), while a sector's `pricingPosture` only ever
+ * reaches the clearing book (`market/clearing.ts`). No posture a player can set
+ * moves the number the old copy told them to move, and 13 of the 167 grid-
+ * limited sectors live at t318 had set one anyway.
+ */
 export function freightClassAction(freightClass: FreightClass): string {
   if (freightClass === "grid") {
-    return "Freight capacity will not help grid delivery. There is no separate route upgrade: lower this sector's price so distant buyers can afford its delivered price, or site production nearer buyers.";
+    return "Freight capacity will not help grid delivery, and there is no route to upgrade. Distance is paid in transmission loss and a wheeling charge, which pricing posture cannot offset: the grid sources against the state market price, not against your sector's posted price. Siting capacity nearer buyers is the only lever here.";
   }
   return "Open or buy into a Logistics sector in this state to add freight capacity, or site production nearer buyers. Every corporation shipping bulk or special cargo from this state shares that capacity.";
 }
@@ -92,6 +104,43 @@ export const FREIGHT_CLASS_BY_COMMODITY: Record<CommodityType, FreightClass | nu
   network_services: null,
   entertainment_services: null,
 };
+
+/**
+ * The whole guidance triple for one delivery-limited sector, including the
+ * unknown-class case.
+ *
+ * Four surfaces render this guidance (the row pill, the row's expanded panel,
+ * the sector page's stranded banner and its money panel) and each carried its
+ * own hand-written fallback for a null class. They had already drifted, and
+ * every one of them asserted freight: "Add freight capacity out of this
+ * state". That is the exact copy Napoleon Hill acted on in #1169, on eighteen
+ * ENERGY sectors, where the class is `grid` and freight cannot move the output
+ * at all. The class was null only because the turn processor had not yet
+ * stamped `deliveryLimitedFreightClass` in the window right after the field
+ * shipped, but the advice was wrong for a whole freight class regardless.
+ *
+ * So the fallback names only what is true whatever the route turns out to be,
+ * and defers the freight half to the class-aware branches.
+ */
+export function deliveryGuidance(freightClass: FreightClass | null | undefined): {
+  label: string;
+  explanation: string;
+  action: string;
+} {
+  if (freightClass) {
+    return {
+      label: FREIGHT_CLASS_LABELS[freightClass],
+      explanation: freightClassExplanation(freightClass),
+      action: freightClassAction(freightClass),
+    };
+  }
+  return {
+    label: "Delivery",
+    explanation: "This output could not reach buyers outside its state.",
+    action:
+      "Siting capacity nearer buyers helps whatever the route. Adding freight capacity in this state helps only if this output moves by freight; output that moves on the grid, such as electricity and natural gas, will not use it.",
+  };
+}
 
 /** True when the class rides the haulage fleet and spends TEU capacity. */
 export function isHauledClass(freightClass: FreightClass): boolean {

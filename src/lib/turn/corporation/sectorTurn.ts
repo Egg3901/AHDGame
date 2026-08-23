@@ -114,6 +114,7 @@ import {
 import { resolveSectorGrowthPolicy } from "./sectorGrowthPolicy";
 import { resolveSectorLabourEconomics, resolveSectorLabourProductionEffects } from "./sectorLabour";
 import { computeSectorOutputUnits } from "./sectorOutputUnits";
+import { deliveryLimitedTelemetry } from "./deliveryLimitedTelemetry";
 import { demandThrottleFactor } from "./demandThrottle";
 import { advanceSectorInventory } from "@/lib/corporations/sectorInventory";
 import type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
@@ -1774,21 +1775,18 @@ export function processSector(
   }
   // Freight seam telemetry (t225): the share of output that was wanted and
   // still could not be delivered, sat next to `soldFraction` above, which
-  // measures the opposite thing. A glut is NOT in this number: it is attributed
-  // in the sourcing pass against residual unmet demand, because the sector
-  // surface reads it as "buyers still wanted it" and tells the player to fix
-  // freight rather than cut output.
-  // Only settlement worlds populate the map, so a world with settlement off
-  // writes nothing new, except to clear a value it wrote while settlement was
-  // on, which would otherwise sit stale on the sector forever.
-  const deliveryLimited = market.deliveryLimitedBySectorId?.get(sector._id.toString());
-  if (deliveryLimited != null || typeof sector.deliveryLimitedFraction === "number") {
-    sectorUpdate.deliveryLimitedFraction = Math.round((deliveryLimited ?? 0) * 1000) / 1000;
-    sectorUpdate.deliveryLimitedFreightClass =
-      deliveryLimited != null && deliveryLimited > 0
-        ? (market.deliveryLimitedClassBySectorId?.get(sector._id.toString()) ?? null)
-        : null;
-  }
+  // measures the opposite thing. Reconciled against this sector's own fill
+  // before persisting (#1169) — see `deliveryLimitedTelemetry`.
+  const sectorIdKey = sector._id.toString();
+  Object.assign(
+    sectorUpdate,
+    deliveryLimitedTelemetry({
+      sector,
+      stateRatio: market.deliveryLimitedBySectorId?.get(sectorIdKey),
+      soldFraction: market.clearingEnabled && clearing ? clearing.soldFraction : null,
+      freightClass: market.deliveryLimitedClassBySectorId?.get(sectorIdKey),
+    })
+  );
   // Labour telemetry: persist the per-turn labor cost on a daily basis (like
   // `revenue`), in the sector's host-state currency. Display/analytics only;
   // never read back into the economy. Only written when the labour system is on.

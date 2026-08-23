@@ -2,12 +2,7 @@
 
 import { STRANDED_WARN_TURNS } from "@/lib/corporations/strandedPlant";
 import { DELIVERY_LIMITED_MIN_SHARE } from "@/components/corporation/plantsPresentation";
-import {
-  FREIGHT_CLASS_LABELS,
-  freightClassAction,
-  freightClassExplanation,
-  type FreightClass,
-} from "@/lib/logistics/freightClass";
+import { deliveryGuidance, type FreightClass } from "@/lib/logistics/freightClass";
 
 interface StrandedPlantBannerProps {
   /** Consecutive turns the sector cleared under half its output. */
@@ -46,15 +41,11 @@ export default function StrandedPlantBanner({
   const soldPct = soldFraction != null ? Math.round(soldFraction * 100) : null;
   const deliveryLimited = deliveryLimitedFraction > DELIVERY_LIMITED_MIN_SHARE;
   const deliveryPct = Math.round(deliveryLimitedFraction * 100);
-  const deliveryLabel = deliveryLimitedFreightClass
-    ? FREIGHT_CLASS_LABELS[deliveryLimitedFreightClass]
-    : "Delivery";
-  const deliveryExplanation = deliveryLimitedFreightClass
-    ? freightClassExplanation(deliveryLimitedFreightClass)
-    : "The delivery network could not carry it to buyers outside this state.";
-  const deliveryAction = deliveryLimitedFreightClass
-    ? freightClassAction(deliveryLimitedFreightClass)
-    : "Add logistics capacity in this state, or build nearer buyers.";
+  const {
+    label: deliveryLabel,
+    explanation: deliveryExplanation,
+    action: deliveryAction,
+  } = deliveryGuidance(deliveryLimitedFreightClass);
 
   return (
     <div

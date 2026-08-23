@@ -305,7 +305,11 @@ export async function GET(request: Request, { params }: RouteParams) {
             row.fillAdjustedMarginPct = null;
             // Also a ratio, and the same class of intel as the exact fill rate:
             // it names which of this corp's plants cannot reach their market.
+            // The class goes with it: `redaction.ts` treats the pair as one
+            // secret, and leaving the class behind would publish WHY a fogged
+            // plant is stranded while withholding only the magnitude.
             row.deliveryLimitedFraction = null;
+            row.deliveryLimitedFreightClass = null;
           }
         }
         const corpPhysical = corpObj?.physical as Record<string, unknown> | null | undefined;

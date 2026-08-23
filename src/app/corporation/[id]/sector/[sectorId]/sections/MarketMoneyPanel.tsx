@@ -13,11 +13,7 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import { facilityPlural } from "@/lib/constants/facilityVocabulary";
 import { COMMODITY_LABELS, type CommodityType } from "@/lib/constants/commodities";
 import { DELIVERY_LIMITED_MIN_SHARE } from "@/components/corporation/plantsPresentation";
-import {
-  FREIGHT_CLASS_LABELS,
-  freightClassAction,
-  freightClassExplanation,
-} from "@/lib/logistics/freightClass";
+import { deliveryGuidance } from "@/lib/logistics/freightClass";
 
 interface MarketMoneyPanelProps {
   plants: PlantsData;
@@ -78,13 +74,11 @@ export default function MarketMoneyPanel({
   const deliveryLimitedShown = deliveryLimited > DELIVERY_LIMITED_MIN_SHARE;
   const deliveryLimitedUnits = Math.round(offered * deliveryLimited);
   const deliveryClass = truth?.deliveryLimitedFreightClass ?? null;
-  const deliveryLabel = deliveryClass ? FREIGHT_CLASS_LABELS[deliveryClass] : "Delivery";
-  const deliveryExplanation = deliveryClass
-    ? freightClassExplanation(deliveryClass)
-    : "The delivery network could not carry it to buyers outside this state.";
-  const deliveryAction = deliveryClass
-    ? freightClassAction(deliveryClass)
-    : "Add logistics capacity in this state, or site production nearer buyers.";
+  const {
+    label: deliveryLabel,
+    explanation: deliveryExplanation,
+    action: deliveryAction,
+  } = deliveryGuidance(deliveryClass);
 
   // The whole policy/tech modifier stack as ONE signed money line, with the
   // itemized drilldown below it (ticket 1122). Under plants every modifier a

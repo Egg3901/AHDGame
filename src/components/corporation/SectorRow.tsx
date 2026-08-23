@@ -36,11 +36,7 @@ import { facilityPlural, facilitySingular } from "@/lib/constants/facilityVocabu
 import { facilitiesFromUnits } from "@/lib/constants/facilityQuantum";
 import { GROWTH_RATE_TURNS_PER_YEAR } from "@/lib/constants/corporations";
 import { SectorMarginDrilldown } from "./SectorMarginDrilldown";
-import {
-  FREIGHT_CLASS_LABELS,
-  freightClassAction,
-  freightClassExplanation,
-} from "@/lib/logistics/freightClass";
+import { deliveryGuidance } from "@/lib/logistics/freightClass";
 
 export interface SectorRowProps {
   sector: SectorDetail;
@@ -180,7 +176,11 @@ export function SectorRow({
     Number.isFinite(deliveryLimited) &&
     deliveryLimited > DELIVERY_LIMITED_MIN_SHARE;
   const deliveryClass = sector.deliveryLimitedFreightClass ?? null;
-  const deliveryClassLabel = deliveryClass ? FREIGHT_CLASS_LABELS[deliveryClass] : "Delivery";
+  const {
+    label: deliveryClassLabel,
+    explanation: deliveryExplanation,
+    action: deliveryAction,
+  } = deliveryGuidance(deliveryClass);
   const plantsRevenueTooltip = (
     <>
       <p className="font-semibold text-foreground mb-1">Capacity → net profit</p>
@@ -233,13 +233,7 @@ export function SectorRow({
       {deliveryLimitedShown && (
         <p className="mt-1.5 text-[10px] leading-snug text-muted">
           {deliveryClassLabel} limited {formatFillPercent(deliveryLimited)} of this sector&apos;s
-          output from reaching buyers outside the state.{" "}
-          {deliveryClass
-            ? freightClassExplanation(deliveryClass)
-            : "The delivery network, not demand, is the limit."}{" "}
-          {deliveryClass
-            ? freightClassAction(deliveryClass)
-            : "Add freight capacity or build nearer buyers."}
+          output from reaching buyers outside the state. {deliveryExplanation} {deliveryAction}
         </p>
       )}
       {isMothballed && (

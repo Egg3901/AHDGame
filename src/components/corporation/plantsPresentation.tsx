@@ -25,12 +25,7 @@ import {
 import type { BuildQueueSummary } from "@/lib/corporations/sectorBuildQueue";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { capitalizeFacility, facilityPlural } from "@/lib/constants/facilityVocabulary";
-import {
-  FREIGHT_CLASS_LABELS,
-  freightClassAction,
-  freightClassExplanation,
-  type FreightClass,
-} from "@/lib/logistics/freightClass";
+import { deliveryGuidance, type FreightClass } from "@/lib/logistics/freightClass";
 
 /** Canonical noun for capacity across every plants surface. */
 export const CAPACITY_UNIT_LABEL = "units/day";
@@ -150,13 +145,7 @@ export function DeliveryLimitedPill({
   if (fraction == null || !Number.isFinite(fraction) || fraction <= DELIVERY_LIMITED_MIN_SHARE) {
     return null;
   }
-  const label = freightClass ? FREIGHT_CLASS_LABELS[freightClass] : "Delivery";
-  const explanation = freightClass
-    ? freightClassExplanation(freightClass)
-    : "This output could not reach buyers outside its state.";
-  const action = freightClass
-    ? freightClassAction(freightClass)
-    : "Add freight capacity out of this state, or site capacity nearer buyers.";
+  const { label, explanation, action } = deliveryGuidance(freightClass);
   return (
     <span
       className={`inline-flex items-center rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0 text-[9px] font-bold uppercase tracking-wider text-warning ${className}`.trim()}
