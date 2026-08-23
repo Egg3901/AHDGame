@@ -43,7 +43,7 @@ describe("GlobalConflictsBoard", () => {
   it("allows the hero stat cards to wrap on narrow screens", () => {
     const { container } = render(<GlobalConflictsBoard year={1953} conflicts={[base]} />);
     const active = screen.getByText("ACTIVE").parentElement;
-    expect(active?.parentElement?.style.flexWrap).toBe("wrap");
+    expect(active?.parentElement?.parentElement?.style.flexWrap).toBe("wrap");
     // A sibling card in the same wrapping row — the point of the test is that the row
     // holds several and wraps them. It named READINESS until the placeholder command
     // boards that card linked to were removed.
@@ -51,8 +51,11 @@ describe("GlobalConflictsBoard", () => {
   });
 
   it("keeps the at-peace state when there are none", () => {
-    render(<GlobalConflictsBoard year={1953} conflicts={[]} />);
+    const { container } = render(<GlobalConflictsBoard year={1953} conflicts={[]} />);
     expect(screen.getByText(/no active conflicts/i)).toBeTruthy();
+    expect((container.querySelector("[data-theater-map]") as HTMLElement).style.display).toBe(
+      "none"
+    );
   });
 
   it("counts the conflicts it was given", () => {

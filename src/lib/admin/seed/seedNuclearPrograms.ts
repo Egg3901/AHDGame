@@ -13,10 +13,9 @@ import { getNuclearProgramsCollection } from "@/lib/db/collections/nuclearProgra
  * unconditional and harmless.
  *
  * NEVER clobbers: a country whose doc already has adopted nodes is skipped,
- * so re-runs, live-world migrations, and resets cannot wipe player progress.
- * `nuclearPrograms` is deliberately NOT in RESET_DROP_COLLECTIONS and no
- * later seeder writes the collection (checked 2026-08-23: the only writers
- * are the cabinet nuclear routes, the production turn, and this seeder).
+ * so re-runs and live-world migrations cannot wipe player progress. A world
+ * reset drops this runtime collection and calls this seeder for the new era,
+ * preventing arsenal state from leaking across presets.
  */
 
 /** node key -> historical adoption year, per country. */

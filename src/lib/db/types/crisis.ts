@@ -1,5 +1,14 @@
 import { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import type {
+  CampaignCapabilitySnapshot,
+  CampaignCommitment,
+  CampaignConsequencesDelta,
+  CampaignRequirement,
+  CampaignResponseVisibility,
+  CampaignStage,
+  CampaignWindowSnapshot,
+} from "./livingConflictCampaign";
 
 export interface CrisisEffect {
   effectType: "flat" | "tick" | "decay";
@@ -137,6 +146,12 @@ export interface CrisisDecisionOption {
   responseScores?: Record<string, number>;
   /** Spend this share of the responding country's GDP from its treasury. */
   treasuryCostPctGdp?: number;
+  /** Live national capacity and campaign-stage requirements, enforced server-side. */
+  campaignRequirement?: CampaignRequirement;
+  /** Persistent contribution to the campaign, beyond this option's immediate effects. */
+  campaignCommitment?: CampaignCommitment;
+  /** Covert choices are redacted from other governments unless later exposed. */
+  responseVisibility?: CampaignResponseVisibility;
 }
 
 /** A government's relationship to a shared world event. */
@@ -187,6 +202,10 @@ export interface CrisisLeaderResponse {
   /** Snapshots keep the public ledger legible after authoring changes. */
   effects?: CrisisEffect[];
   responseScores?: Record<string, number>;
+  capabilitySnapshot?: CampaignCapabilitySnapshot;
+  campaignCommitment?: CampaignCommitment;
+  visibility?: CampaignResponseVisibility;
+  revealedAt?: Date;
   respondedAt: Date;
 }
 
@@ -208,6 +227,11 @@ export interface GlobalResponseOutcome {
   /** Persistent living-conflict trajectory changes applied at resolution. */
   intensityDelta?: number;
   pressureDelta?: Partial<Record<"a" | "b", number>>;
+  /** Persistent campaign damage, settlement progress, and stage transition. */
+  campaignDelta?: CampaignConsequencesDelta;
+  nextCampaignStage?: CampaignStage;
+  /** Discrete change to the shared Cold War tension ledger. */
+  tensionDelta?: number;
   wireMessage: string;
 }
 
@@ -220,6 +244,7 @@ export interface GlobalResponseDefinition {
   defaultOptionIdByRole: Partial<Record<GlobalResponseRole, string>>;
   outcomes: GlobalResponseOutcome[];
   defaultOutcomeId: string;
+  campaign?: CampaignWindowSnapshot;
 }
 
 export interface ResolvedGlobalResponse {
@@ -229,6 +254,8 @@ export interface ResolvedGlobalResponse {
   scores: Record<string, number>;
   respondedCountries: number;
   eligibleCountries: number;
+  campaignStageBefore?: CampaignStage;
+  campaignStageAfter?: CampaignStage;
   resolvedAt: Date;
 }
 

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { clampTension, stepTension, tensionBand, tensionFloor, TENSION_BASELINE } from "./tension";
+import {
+  clampTension,
+  stepTension,
+  tensionBand,
+  tensionFloor,
+  tensionPressureBreakdown,
+  TENSION_BASELINE,
+} from "./tension";
 
 describe("tensionBand", () => {
   it("maps the full range to the five bands", () => {
@@ -15,6 +22,24 @@ describe("tensionFloor", () => {
   it("is the baseline in a quiet, disarmed world", () => {
     expect(tensionFloor({ escalationLevel: 0, activeCrises: 0, totalWarheads: 0 })).toBe(
       TENSION_BASELINE
+    );
+  });
+
+  it("explains every contribution to the same floor players see", () => {
+    const breakdown = tensionPressureBreakdown({
+      escalationLevel: 2,
+      activeCrises: 3,
+      totalWarheads: 100,
+    });
+    expect(breakdown).toEqual({
+      baseline: 12,
+      escalation: 8,
+      activeCrises: 9,
+      arsenal: 12,
+      floor: 41,
+    });
+    expect(tensionFloor({ escalationLevel: 2, activeCrises: 3, totalWarheads: 100 })).toBe(
+      breakdown.floor
     );
   });
 
