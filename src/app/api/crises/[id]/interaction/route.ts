@@ -14,9 +14,12 @@ import type { Crisis, CrisisInteraction } from "@/lib/db/types/crisis";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import { ObjectId } from "mongodb";
 import {
+  campaignBriefForGlobalResponder,
   globalResponseRoleFor,
   optionsForGlobalResponder,
+  visibleGlobalResponses,
 } from "@/lib/livingConflict/globalResponse";
+import { getGameState } from "@/lib/gameState";
 
 /**
  * GET /api/crises/[id]/interaction
@@ -88,6 +91,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         ? { ...node, options: optionsForGlobalResponder(crisis, node, character.countryId) }
         : node
     );
+    const campaignBrief =
+      interaction && activeNode && crisis.globalResponse && character.countryId
+        ? await campaignBriefForGlobalResponder(
+            db,
+            crisis,
+            character.countryId,
+            (await getGameState(db))?.currentTurn ?? crisis.startTurn,
+            optionsForGlobalResponder(crisis, activeNode, character.countryId)
+          )
+        : null;
+    const visibleLeaderResponses = character.countryId
+      ? visibleGlobalResponses(interaction?.leaderResponses ?? [], character.countryId)
+      : [];
 
     // Aid context: expose sender fiscal fields for the slider UI when the current
     // node is an aid node and the aid-bills feature flag is on.
@@ -130,7 +146,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             decisionTree: serializedTree,
             _id: interaction._id.toString(),
             crisisId: interaction.crisisId.toString(),
-            leaderResponses: (interaction.leaderResponses ?? []).map((r) => ({
+            leaderResponses: visibleLeaderResponses.map((r) => ({
               ...r,
               characterId: r.characterId.toString(),
             })),
@@ -141,6 +157,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       alreadyResponded,
       characterRoles,
       responseRole,
+      campaignBrief,
       visibleDecisionTree,
       aidContext,
     });

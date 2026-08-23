@@ -38,6 +38,23 @@ function seat(as: "hog" | "defence" | "none") {
   );
 }
 
+/**
+ * Seat `countries` in `orgId` on the live roll the alliance bar reads.
+ *
+ * The preset is stamped alongside because the roll is keyed on it, never on the live
+ * year: only a 1953 world has a Warsaw Pact to be barred by.
+ */
+function allyRoll(orgId: string, countries: string[]) {
+  db.collectionMocks.gameState.findOne.mockResolvedValue({
+    conflictsEnabled: true,
+    currentTurn: 40,
+    preset: "1953-default",
+  });
+  db.collectionMocks.organizationMemberships.find.mockReturnValue({
+    toArray: async () => countries.map((countryId) => ({ organizationId: orgId, countryId })),
+  });
+}
+
 async function authAs(id: ObjectId) {
   const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
   vi.mocked(requireAuthWithCharacter).mockResolvedValue({
@@ -65,6 +82,7 @@ beforeEach(async () => {
     "bills",
     "conflicts",
     "characters",
+    "organizationMemberships",
   ]) {
     db.collection(c);
   }
@@ -135,6 +153,37 @@ describe("POST declare-war", () => {
       targetCountry: "CN",
       warGoal: "punitive",
     });
+  });
+
+  // End to end through the real validator and the real bloc roll: the route reads
+  // organizationMemberships, so seating both countries in NATO is the whole fixture.
+  it("refuses a declaration against a fellow alliance member", async () => {
+    seat("hog");
+    await authAs(HOG);
+    allyRoll("NATO", ["US", "UK"]);
+    const { POST } = await import("./route");
+    const res = await POST(req({ ...good, targetCountry: "UK" }), params);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/North Atlantic Treaty Organization/);
+    expect(db.collectionMocks.bills.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("does not charge action points for a declaration the alliance bars", async () => {
+    seat("hog");
+    await authAs(HOG);
+    allyRoll("NATO", ["US", "UK"]);
+    const { POST } = await import("./route");
+    await POST(req({ ...good, targetCountry: "UK" }), params);
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("still allows a declaration across the bloc line", async () => {
+    seat("hog");
+    await authAs(HOG);
+    // US in NATO, CN in neither: an alliance binds its own members, nobody else.
+    allyRoll("NATO", ["US"]);
+    const { POST } = await import("./route");
+    expect((await POST(req(good), params)).status).toBe(200);
   });
 
   it("refuses the reserved conquest goal", async () => {

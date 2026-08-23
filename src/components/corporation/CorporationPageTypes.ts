@@ -91,6 +91,13 @@ export interface CorporationContractView {
   gradeCeiling?: number;
   /** Public disclosure that the awarding minister had an interest in this corporation. */
   selfDealing?: { basis: "owner" | "shareholding"; stakeShare: number; ministerName?: string };
+  /** How a cancelled order ended, and what the buyer owed for ending it that way. */
+  termination?: {
+    basis: "withdrawal" | "cause" | "convenience";
+    fee: number;
+    lotsCancelled: number;
+    ministerName?: string;
+  };
 }
 
 /**

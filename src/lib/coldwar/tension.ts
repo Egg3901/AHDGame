@@ -62,15 +62,34 @@ export interface TensionPressures {
   totalWarheads: number;
 }
 
+/** Player-facing explanation of the standing pressure floor. */
+export interface TensionPressureBreakdown {
+  baseline: number;
+  escalation: number;
+  activeCrises: number;
+  arsenal: number;
+  floor: number;
+}
+
+export function tensionPressureBreakdown(p: TensionPressures): TensionPressureBreakdown {
+  const escalation = Math.min(30, p.escalationLevel * 4);
+  const activeCrises = Math.min(12, p.activeCrises * 3);
+  const arsenal = Math.min(18, Math.sqrt(Math.max(0, p.totalWarheads)) * 1.2);
+  return {
+    baseline: TENSION_BASELINE,
+    escalation: clampTension(escalation),
+    activeCrises: clampTension(activeCrises),
+    arsenal: clampTension(arsenal),
+    floor: clampTension(TENSION_BASELINE + escalation + activeCrises + arsenal),
+  };
+}
+
 /**
  * The floor standing pressure holds tension at: spikes decay toward this, not
  * toward zero. An armed, embroiled world stays tense without new events.
  */
 export function tensionFloor(p: TensionPressures): number {
-  const escalation = Math.min(30, p.escalationLevel * 4);
-  const crises = Math.min(12, p.activeCrises * 3);
-  const arsenal = Math.min(18, Math.sqrt(Math.max(0, p.totalWarheads)) * 1.2);
-  return clampTension(TENSION_BASELINE + escalation + crises + arsenal);
+  return tensionPressureBreakdown(p).floor;
 }
 
 /** One turn of relaxation toward the pressure floor. */

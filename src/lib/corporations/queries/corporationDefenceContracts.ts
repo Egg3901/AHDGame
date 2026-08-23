@@ -64,6 +64,20 @@ export interface CorporationContractView {
     stakeShare: number;
     ministerName?: string;
   };
+  /**
+   * How a cancelled order ended, from the supplier's side of the desk.
+   *
+   * A CEO whose contract was torn up needs to know which of the three it was, because the
+   * three mean completely different things to them: an offer they never accepted, a plant of
+   * their own that stopped building, or a minister who changed their mind and owes them a
+   * break fee for it.
+   */
+  termination?: {
+    basis: "withdrawal" | "cause" | "convenience";
+    fee: number;
+    lotsCancelled: number;
+    ministerName?: string;
+  };
 }
 
 export interface CorporationDefenceView {
@@ -190,6 +204,16 @@ export async function loadCorporationDefenceContracts(
               basis: c.selfDealing.basis,
               stakeShare: c.selfDealing.stakeShare,
               ministerName: c.selfDealing.ministerName,
+            },
+          }
+        : {}),
+      ...(c.termination
+        ? {
+            termination: {
+              basis: c.termination.basis,
+              fee: c.termination.fee,
+              lotsCancelled: c.termination.lotsCancelled,
+              ministerName: c.termination.ministerName,
             },
           }
         : {}),

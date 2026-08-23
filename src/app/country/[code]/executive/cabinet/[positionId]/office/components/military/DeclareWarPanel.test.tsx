@@ -9,9 +9,17 @@ vi.mock("@/lib/hooks/useEnabledCountryIds", () => ({
   useEnabledCountryIds: () => ["US", "CN", "UK"],
 }));
 
+// The bars on the picker — truces and the alliance roll — arrive from one read.
+// Empty by default so only the tests that arm a bar see one.
+const barsSpy = vi.fn().mockResolvedValue({ truces: [], alliance: null, allies: [] });
+vi.mock("@/lib/observability/fetchJson", () => ({
+  fetchJson: (...a: unknown[]) => barsSpy(...a),
+}));
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  barsSpy.mockResolvedValue({ truces: [], alliance: null, allies: [] });
 });
 
 const props = { countryCode: "us", countryId: "US" as const, canAct: true };
@@ -90,6 +98,60 @@ describe("DeclareWarPanel", () => {
     expect(button.disabled).toBe(true);
     fireEvent.change(screen.getByLabelText(/target country/i), { target: { value: "CN" } });
     expect(button.disabled).toBe(true);
+  });
+
+  it("states the alliance bar in the copy, not only in a refusal", () => {
+    render(<DeclareWarPanel {...props} />);
+    expect(screen.getByText(/fellow member of your own alliance/i)).toBeTruthy();
+  });
+
+  it("greys an ally in the picker and names the treaty", async () => {
+    barsSpy.mockResolvedValue({
+      truces: [],
+      alliance: "North Atlantic Treaty Organization",
+      allies: ["UK"],
+    });
+    render(<DeclareWarPanel {...props} />);
+
+    const uk = await waitFor(() => {
+      const opt = screen.getByRole("option", {
+        name: /United Kingdom/,
+      }) as HTMLOptionElement;
+      expect(opt.disabled).toBe(true);
+      return opt;
+    });
+    expect(uk.textContent).toMatch(/North Atlantic Treaty Organization/);
+    // A country on the other side of the line stays a legitimate target.
+    expect((screen.getByRole("option", { name: /China/ }) as HTMLOptionElement).disabled).toBe(
+      false
+    );
+  });
+
+  it("will not file a declaration against an ally", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    vi.stubGlobal("fetch", fetchMock);
+    barsSpy.mockResolvedValue({
+      truces: [],
+      alliance: "North Atlantic Treaty Organization",
+      allies: ["UK"],
+    });
+    render(<DeclareWarPanel {...props} />);
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("option", { name: /United Kingdom/ }) as HTMLOptionElement).disabled
+      ).toBe(true)
+    );
+
+    // Set past the disabled option the way a stale client could, and confirm the
+    // button stays barred rather than the panel relying on the picker alone.
+    fireEvent.change(screen.getByLabelText(/target country/i), { target: { value: "UK" } });
+    fireEvent.change(screen.getByLabelText(/war goal/i), { target: { value: "punitive" } });
+
+    const button = screen.getByRole("button", { name: /file declaration/i }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(screen.getByText(/cannot declare war on an ally/i)).toBeTruthy();
+    fireEvent.click(button);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("is read-only for someone who does not hold the seat", () => {

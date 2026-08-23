@@ -524,6 +524,18 @@ const RUNTIME: CollectionEntry[] = [
     notes:
       "Release 1.3 persistent phased world-conflict state. One row per authored definition; wiped on reset so phase, pressure, intensity, and clocks cannot leak into a new world.",
   },
+  {
+    name: "coldWarTension",
+    category: "runtime",
+    notes:
+      "Release 1.3 shared tension value and event ledger. Wiped on reset and recreated at the era-appropriate arsenal pressure floor.",
+  },
+  {
+    name: "nuclearPrograms",
+    category: "runtime",
+    notes:
+      "Per-country nuclear research, stockpile, and production orders. Wiped on reset and recreated from game-scaled historical baselines without automatic production.",
+  },
   { name: "sovereignCrisisDecisions", category: "runtime" },
   { name: "globalAlerts", category: "runtime" },
   { name: "wireEvents", category: "runtime" },

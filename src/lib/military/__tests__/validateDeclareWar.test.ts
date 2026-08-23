@@ -13,6 +13,11 @@ vi.mock("@/lib/military/truce", () => ({
   activeTruceExpiry: (...a: unknown[]) => truceSpy(...a),
 }));
 
+const allianceSpy = vi.fn().mockResolvedValue(null);
+vi.mock("@/lib/military/allianceBar", () => ({
+  allianceBarBetween: (...a: unknown[]) => allianceSpy(...a),
+}));
+
 /**
  * A db whose conflicts lookup returns `live` and whose bills lookup returns `bills`.
  *
@@ -41,6 +46,7 @@ beforeEach(() => {
   // re-armed or a test that arms a truce would leak into the next one.
   enabledSpy.mockResolvedValue(true);
   truceSpy.mockResolvedValue(null);
+  allianceSpy.mockResolvedValue(null);
 });
 
 describe("validateDeclareWar", () => {
@@ -162,6 +168,40 @@ describe("one war at a time between the same two countries", () => {
       sideB: { countries: ["UK"], kind: "state", backer: "west" },
     };
     expect(await validateDeclareWar(stubDb(live), good, "US")).toEqual({ ok: true });
+  });
+});
+
+describe("alliance bar", () => {
+  it("refuses a declaration against a fellow bloc member", async () => {
+    allianceSpy.mockResolvedValue("Warsaw Pact");
+    const r = await validateDeclareWar(stubDb(), good, "US");
+    expect(r.ok).toBe(false);
+    expect((r as { error: string }).error).toMatch(/fellow member of the Warsaw Pact/i);
+  });
+
+  it("names the alliance, so the bar is not discovered as a bare refusal", async () => {
+    allianceSpy.mockResolvedValue("North Atlantic Treaty Organization");
+    const r = await validateDeclareWar(stubDb(), good, "US");
+    expect((r as { error: string }).error).toContain("North Atlantic Treaty Organization");
+  });
+
+  it("compares the declarer against the TARGET", async () => {
+    await validateDeclareWar(stubDb(), good, "US");
+    expect(allianceSpy).toHaveBeenCalledWith(expect.anything(), "US", "CN");
+  });
+
+  // Non-alignment is the absence of a treaty, not a treaty of its own. 1991, 2019 and
+  // 2023 carry NATO with no eastern counterpart, so RU and CN read non-aligned there;
+  // barring that pair would make every modern-era war unfileable.
+  it("allows a declaration when neither country is in a bloc", async () => {
+    allianceSpy.mockResolvedValue(null);
+    expect(await validateDeclareWar(stubDb(), good, "US")).toEqual({ ok: true });
+  });
+
+  it("refuses before spending a read on the cooldown", async () => {
+    allianceSpy.mockResolvedValue("Warsaw Pact");
+    await validateDeclareWar(stubDb(), good, "US", 100);
+    expect(truceSpy).not.toHaveBeenCalled();
   });
 });
 

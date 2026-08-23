@@ -5,6 +5,7 @@ import {
   NUCLEAR_NODES,
   nuclearNode,
   nuclearNodeStatus,
+  nuclearStandoffPossible,
   productionCapFor,
   warheadUnitCost,
 } from "./nuclearProgram";
@@ -37,6 +38,24 @@ describe("nuclearNodeStatus", () => {
       "available"
     );
     expect(nuclearNodeStatus(fission, { "device-fission": 1 }, 1953)).toBe("adopted");
+  });
+});
+
+describe("nuclearStandoffPossible", () => {
+  const armed = {
+    adopted: { "device-fission": 1, "delivery-bombers": 2 },
+    warheads: 4,
+  };
+
+  it("requires two deliverable, non-empty arsenals", () => {
+    expect(nuclearStandoffPossible([armed])).toBe(false);
+    expect(nuclearStandoffPossible([armed, armed])).toBe(true);
+  });
+
+  it("does not count stockpiles without a delivery leg", () => {
+    expect(
+      nuclearStandoffPossible([armed, { adopted: { "device-fission": 1 }, warheads: 20 }])
+    ).toBe(false);
   });
 });
 

@@ -1,11 +1,15 @@
-import type { GlobalResponseOutcome } from "@/lib/db/types/crisis";
+import type {
+  CrisisDecisionOption,
+  CrisisEffect,
+  GlobalResponseOutcome,
+} from "@/lib/db/types/crisis";
 import type {
   ConflictPhase,
   EventResponseDefinition,
   LivingConflictDef,
   RoleDecisionTrees,
 } from "../types";
-import { choiceNode, responseOpt } from "../authoring";
+import { choiceNode, responseOpt as authoredResponseOpt } from "../authoring";
 import { cfx } from "../effects";
 import { defaultRoleResolver } from "../roles";
 
@@ -30,6 +34,135 @@ interface ScenarioCopy {
   escalation: string;
   relief: string;
   stalemate: string;
+}
+
+type ResponseDepth = Pick<
+  CrisisDecisionOption,
+  "campaignRequirement" | "campaignCommitment" | "responseVisibility"
+>;
+
+function depthFor(optionId: string): ResponseDepth {
+  const military = (side?: "a" | "b", scale = 14): ResponseDepth => ({
+    campaignRequirement: {
+      allowedStages: ["posture", "mobilization", "operations"],
+      minTreasuryPctGdp: 0.0002,
+      minMilitaryReadiness: 42,
+      minLogistics: 38,
+      minDomesticSupport: 40,
+    },
+    campaignCommitment: {
+      kind: "military",
+      side,
+      scale,
+      credibilityDelta: 3,
+      warWearinessDelta: 3,
+      consequences: { armsProliferation: 5, regionalSpillover: 3, casualties: 1 },
+    },
+  });
+  if (["mobilize", "fortify", "allied_support"].includes(optionId)) return military(undefined, 16);
+  if (optionId === "commit_a") return military("a");
+  if (optionId === "commit_b") return military("b");
+  if (optionId === "covert_a" || optionId === "covert_b") {
+    return {
+      campaignRequirement: {
+        allowedStages: ["posture", "mobilization", "operations"],
+        minTreasuryPctGdp: 0.0001,
+        minIntelligence: 52,
+        minLogistics: 28,
+      },
+      campaignCommitment: {
+        kind: "covert",
+        side: optionId === "covert_a" ? "a" : "b",
+        scale: 9,
+        credibilityDelta: 1,
+        covertExposureRisk: 35,
+        consequences: { armsProliferation: 3, regionalSpillover: 1 },
+      },
+      responseVisibility: "covert",
+    };
+  }
+  if (["sanctions", "allied_sanctions"].includes(optionId)) {
+    return {
+      campaignRequirement: { minDomesticSupport: 38, minIntelligence: 38 },
+      campaignCommitment: {
+        kind: "sanctions",
+        scale: 10,
+        credibilityDelta: 1,
+        consequences: { civilianStrain: 2, settlementMomentum: 4 },
+      },
+    };
+  }
+  if (optionId === "civilian_relief") {
+    return {
+      campaignRequirement: { minTreasuryPctGdp: 0.00005, minLogistics: 20 },
+      campaignCommitment: {
+        kind: "humanitarian",
+        scale: 12,
+        credibilityDelta: 2,
+        consequences: { civilianStrain: -6, refugees: -5, settlementMomentum: 2 },
+      },
+    };
+  }
+  if (
+    [
+      "negotiate",
+      "mediate_a",
+      "mediate_b",
+      "regional_talks",
+      "allied_mediation",
+      "un_mediation",
+    ].includes(optionId)
+  ) {
+    return {
+      campaignRequirement: {
+        allowedStages: ["posture", "mobilization", "operations", "settlement"],
+        minDomesticSupport: 25,
+      },
+      campaignCommitment: {
+        kind: "diplomatic",
+        scale: 10,
+        credibilityDelta: 2,
+        consequences: { settlementMomentum: 7, civilianStrain: -1 },
+      },
+    };
+  }
+  if (optionId === "concede") {
+    return {
+      campaignCommitment: {
+        kind: "diplomatic",
+        scale: 8,
+        credibilityDelta: -2,
+        consequences: { settlementMomentum: 6, civilianStrain: -2 },
+      },
+    };
+  }
+  return {
+    campaignCommitment: {
+      kind: "neutral",
+      scale: 2,
+      credibilityDelta: -1,
+      consequences: { settlementMomentum: 1 },
+    },
+  };
+}
+
+function responseOpt(
+  optionId: string,
+  label: string,
+  description: string,
+  responseScores: Record<string, number>,
+  effects: CrisisEffect[] = [],
+  treasuryCostPctGdp?: number
+): CrisisDecisionOption {
+  return authoredResponseOpt(
+    optionId,
+    label,
+    description,
+    responseScores,
+    effects,
+    treasuryCostPctGdp,
+    depthFor(optionId)
+  );
 }
 
 function decisionTrees(scenario: ScenarioCopy, phaseKey: string): RoleDecisionTrees {
@@ -80,6 +213,14 @@ function decisionTrees(scenario: ScenarioCopy, phaseKey: string): RoleDecisionTr
           0.0004
         ),
         responseOpt(
+          "covert_a",
+          "Authorize covert support",
+          "Move money, intelligence, and equipment through deniable channels.",
+          { escalation: 2, solidarity: 1 },
+          [],
+          0.0002
+        ),
+        responseOpt(
           "mediate_a",
           "Press for a settlement",
           "Use influence over your partner to open talks.",
@@ -105,6 +246,14 @@ function decisionTrees(scenario: ScenarioCopy, phaseKey: string): RoleDecisionTr
           { escalation: 3, solidarity: 2 },
           [],
           0.0004
+        ),
+        responseOpt(
+          "covert_b",
+          "Authorize covert support",
+          "Use intelligence channels and deniable shipments to strengthen your partner.",
+          { escalation: 2, solidarity: 1 },
+          [],
+          0.0002
         ),
         responseOpt(
           "mediate_b",
@@ -214,6 +363,14 @@ function outcomes(copy: ScenarioCopy): GlobalResponseOutcome[] {
       ],
       intensityDelta: -12,
       pressureDelta: { a: -8, b: -8 },
+      campaignDelta: {
+        civilianStrain: -8,
+        refugees: -4,
+        regionalSpillover: -5,
+        settlementMomentum: 35,
+      },
+      nextCampaignStage: "settlement",
+      tensionDelta: -8,
       effectsByRole: {
         belligerent: [cfx("flat", "approval", "government", "overall", 0.015, "Crisis settlement")],
         bystander: [
@@ -230,6 +387,17 @@ function outcomes(copy: ScenarioCopy): GlobalResponseOutcome[] {
       conditions: [{ axis: "escalation", min: 6 }],
       intensityDelta: 14,
       pressureDelta: { a: 12, b: 12 },
+      campaignDelta: {
+        civilianStrain: 12,
+        refugees: 8,
+        infrastructureDamage: 7,
+        armsProliferation: 15,
+        regionalSpillover: 10,
+        casualties: 8,
+        settlementMomentum: -8,
+      },
+      nextCampaignStage: "operations",
+      tensionDelta: 10,
       effectsByRole: {
         belligerent: [cfx("tick", "approval", "government", "overall", -0.02, "Escalating crisis")],
         backer_a: [cfx("tick", "metric", "economy", "gdpGrowth", -0.0025, "Foreign commitment")],
@@ -245,6 +413,8 @@ function outcomes(copy: ScenarioCopy): GlobalResponseOutcome[] {
       conditions: [{ axis: "sanctions", min: 6 }],
       intensityDelta: -4,
       pressureDelta: { a: -4, b: -4 },
+      campaignDelta: { civilianStrain: 3, armsProliferation: -3, settlementMomentum: 10 },
+      tensionDelta: -3,
       effectsByRole: {
         neighbor: [
           cfx("tick", "metric", "economy", "gdpGrowth", -0.002, "Regional trade disruption"),
@@ -260,6 +430,8 @@ function outcomes(copy: ScenarioCopy): GlobalResponseOutcome[] {
       priority: 10,
       conditions: [{ axis: "aid", min: 6 }],
       intensityDelta: -3,
+      campaignDelta: { civilianStrain: -12, refugees: -10, settlementMomentum: 8 },
+      tensionDelta: -1,
       effectsByRole: {
         bystander: [cfx("flat", "approval", "government", "overall", 0.008, "Relief leadership")],
       },
@@ -272,6 +444,13 @@ function outcomes(copy: ScenarioCopy): GlobalResponseOutcome[] {
       priority: 0,
       conditions: [],
       intensityDelta: 2,
+      campaignDelta: {
+        civilianStrain: 4,
+        refugees: 2,
+        armsProliferation: 3,
+        settlementMomentum: -2,
+      },
+      tensionDelta: 2,
       wireMessage: copy.stalemate,
     },
   ];
@@ -286,6 +465,7 @@ function response(copy: ScenarioCopy, phaseKey: string): EventResponseDefinition
       backer_a: "distance_a",
       backer_b: "distance_b",
       neighbor: "fortify",
+      bloc: "allied_mediation",
       bystander: "abstain",
     },
     outcomes: outcomes(copy),
@@ -321,7 +501,10 @@ function buildDef(copy: ScenarioCopy): LivingConflictDef {
           kind: "procedural",
           severity: "major",
           affects: "all",
-          trigger: { everyTurns: 36 },
+          trigger: {
+            everyTurns: 36,
+            campaignStages: ["posture", "mobilization", "operations", "settlement"],
+          },
           headline: `${copy.name}: governments are called to respond`,
           body: `${phase.summary} The international balance now depends on what governments do next.`,
           response: response(copy, `${phase.key}_recurring`),

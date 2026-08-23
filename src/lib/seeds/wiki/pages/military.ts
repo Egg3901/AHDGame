@@ -171,10 +171,10 @@ export const militaryPages: readonly WikiSeedPage[] = [
     slug: "defence-procurement",
     title: "Defence Procurement",
     description:
-      "How defence contracts turn the appropriation into materiel: quarterly contracting windows, the one-third supplier cap, the self-dealing disclosure and penalty, and the per-turn spend cap that throttles delivery.",
+      "How defence contracts turn the appropriation into materiel: quarterly contracting windows, the one-third supplier cap, the self-dealing disclosure and penalty, what it costs a minister to tear a contract up, and the per-turn spend cap that throttles delivery.",
     content: defenceProcurementContent,
     category: "military",
-    extraTags: ["procurement", "contracts", "budget", "corruption"],
+    extraTags: ["procurement", "contracts", "budget", "corruption", "termination"],
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 8,

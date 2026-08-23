@@ -43,6 +43,7 @@ import { electionToLarpYear } from "@/lib/utils/formatters";
 import { getSeatIdFromElection } from "@/lib/seats/seatId";
 import type { Election, GameConfig } from "@/lib/db/types";
 import type { GameState } from "@/lib/db/types/gameState";
+import { seedColdWarFoundations } from "@/lib/admin/seed/seedColdWarFoundations";
 import { seedHistoricalOfficials, seedFromSeats } from "@/lib/npp/seedHistorical";
 import { getPresetSeats } from "@/lib/constants/historicalSeats";
 import { initializeOfficials } from "@/lib/admin/bootstrap/initializeOfficials";
@@ -773,6 +774,14 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
 
   const gameState = await initializeGameState();
   log(`Game state ready at turn ${gameState.currentTurn}`);
+  const coldWarFoundation = await seedColdWarFoundations(
+    db,
+    gameState.currentYear ?? getStartingYearForPreset(preset),
+    gameState.currentTurn
+  );
+  log(
+    `Cold War foundation: ${coldWarFoundation.programsInserted} programmes, ${coldWarFoundation.conflictsInserted} campaigns`
+  );
 
   // Build the initial stock-exchange snapshot so the market page is populated
   // immediately after a reset, even while the game is paused / in maintenance.
