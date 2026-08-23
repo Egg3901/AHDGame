@@ -735,16 +735,34 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       qualityPremiumEnabled: qualityPremiumPricingEnabled,
       plantsEnabled: market.plantsEnabled,
       onBookDiagnostic: (d) => {
-        if (d.laggedSupply > 0 && d.offeredUnits > d.laggedSupply * BOOK_MISMATCH_TRIPWIRE) {
+        if (
+          d.laggedSupply > 0 &&
+          d.normalizedOfferedUnits > d.laggedSupply * BOOK_MISMATCH_TRIPWIRE
+        ) {
+          const book = d.group ? d.commodity + "@" + d.group : d.commodity;
           bookViolations.push(
-            `${d.commodity}: offered ${Math.round(d.offeredUnits)} vs lagged supply ${Math.round(d.laggedSupply)} (${(d.offeredUnits / d.laggedSupply).toFixed(1)}×)`
+            book +
+              ": normalized " +
+              Math.round(d.normalizedOfferedUnits) +
+              " vs lagged supply " +
+              Math.round(d.laggedSupply) +
+              " (" +
+              (d.normalizedOfferedUnits / d.laggedSupply).toFixed(1) +
+              "×; raw " +
+              Math.round(d.rawOfferedUnits) +
+              ")"
           );
         }
       },
     });
     if (bookViolations.length > 0) {
       console.warn(
-        `[clearing] order-book/ledger unit mismatch on ${bookViolations.length} commodit${bookViolations.length === 1 ? "y" : "ies"}, fills will be depressed: ${bookViolations.slice(0, 5).join("; ")}`
+        "[clearing] post-normalization order-book/ledger unit mismatch on " +
+          bookViolations.length +
+          " market book" +
+          (bookViolations.length === 1 ? "" : "s") +
+          ", fills may be depressed: " +
+          bookViolations.slice(0, 5).join("; ")
       );
     }
 

@@ -291,14 +291,26 @@ export interface SectorClearingInput {
 
 /**
  * Per-commodity book-sanity diagnostic emitted by computeClearingFactors.
- * offeredUnits should not materially exceed the lagged aggregate supply —
- * corporate sectors are a subset of the sellers that produced it. A large
- * excess means the offered book and the balance ledger are in different
- * units (the t879 FX bug) and fill rates will be structurally depressed.
+ * The raw book can legitimately exceed lagged supply because legacy nameplate
+ * offers omit ledger-side scale and extraction haircuts. Callers should apply
+ * mismatch tripwires to normalizedOfferedUnits, not rawOfferedUnits. A large
+ * post-normalization excess means exempt measured production and the balance
+ * ledger are in different units, so fill rates can still be depressed.
  */
 export interface ClearingBookDiagnostic {
   commodity: CommodityType;
+  /** Country/reachable-market book key, or null for the worldwide book. */
+  group: string | null;
+  /** Total before legacy nameplate reconciliation. Informational only. */
+  rawOfferedUnits: number;
+  /** Total after legacy nameplate reconciliation. Use for mismatch alarms. */
+  normalizedOfferedUnits: number;
+  /** @deprecated Alias of normalizedOfferedUnits for existing consumers. */
   offeredUnits: number;
+  /** Legacy/nameplate units before reconciliation. */
+  normalizableUnits: number;
+  /** Measured produced units exempt from nameplate reconciliation. */
+  exemptRealUnits: number;
   laggedSupply: number;
   laggedDemand: number;
 }
@@ -481,19 +493,11 @@ export function computeClearingFactors(args: {
 
     for (const [g, groupSellers] of partitioned) {
       const bal = balForGroup(g);
-      const nameplateUnits = groupSellers.reduce((sum, s) => sum + s.units, 0);
+      const rawOfferedUnits = groupSellers.reduce((sum, s) => sum + s.units, 0);
       const laggedSupply = bal?.supply ?? 0;
-      // Diagnostic reports the RAW nameplate so the caller's tripwire still catches
-      // genuine unit-scale bugs (e.g. the t879 FX book, ~100×). The benign scale/
-      // haircut gap (nameplate a bit above supply because the ledger applies
-      // natcorpScale/outputMultiplier/haircut the nameplate omits) is reconciled
-      // below and no longer depresses fills.
-      onBookDiagnostic?.({
-        commodity,
-        offeredUnits: nameplateUnits,
-        laggedSupply,
-        laggedDemand: bal?.demand ?? 0,
-      });
+      const normalizable = groupSellers.filter((s) => !s.realUnits);
+      const normalizableUnits = normalizable.reduce((sum, s) => sum + s.units, 0);
+      const exemptRealUnits = rawOfferedUnits - normalizableUnits;
       // When the nameplate exceeds lagged supply, scale every seller down
       // proportionally so the offered book equals the units that actually reach the
       // market. This makes aggregate corp fill track the true clear rate
@@ -504,11 +508,8 @@ export function computeClearingFactors(args: {
       // outputMultiplier and the extraction haircut that the supply ledger
       // applies). Capacity-derived offers already carry every production leg, so
       // scaling them down would double-count the same haircuts and depress fills.
-      if (laggedSupply > 0 && nameplateUnits > laggedSupply) {
-        const normalizable = groupSellers.filter((s) => !s.realUnits);
-        const normalizableUnits = normalizable.reduce((sum, s) => sum + s.units, 0);
-        const exemptUnits = nameplateUnits - normalizableUnits;
-        const target = laggedSupply - exemptUnits;
+      if (laggedSupply > 0 && rawOfferedUnits > laggedSupply) {
+        const target = laggedSupply - exemptRealUnits;
         if (normalizableUnits > 0 && target > 0 && target < normalizableUnits) {
           const norm = target / normalizableUnits;
           for (const s of normalizable) s.units *= norm;
@@ -518,6 +519,18 @@ export function computeClearingFactors(args: {
           for (const s of normalizable) s.units = 0;
         }
       }
+      const normalizedOfferedUnits = groupSellers.reduce((sum, s) => sum + s.units, 0);
+      onBookDiagnostic?.({
+        commodity,
+        group: g || null,
+        rawOfferedUnits,
+        normalizedOfferedUnits,
+        offeredUnits: normalizedOfferedUnits,
+        normalizableUnits,
+        exemptRealUnits,
+        laggedSupply,
+        laggedDemand: bal?.demand ?? 0,
+      });
     }
 
     // Post-normalization per-corp unit totals ACROSS groups: a corp whose
