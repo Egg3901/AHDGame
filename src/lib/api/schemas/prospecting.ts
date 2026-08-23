@@ -22,7 +22,7 @@ const stateIdSchema = z.string().min(1).max(12);
 
 /** POST /api/prospecting/corporation */
 export const corpProspectSchema = z.object({
-  corporationId: schemas.objectId,
+  corporationId: z.union([schemas.objectId, z.string().regex(/^\d+$/, "Invalid ID format")]),
   stateId: stateIdSchema,
   resource: resourceSchema,
 });
