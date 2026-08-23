@@ -194,8 +194,8 @@ describe("loadGermanQuestionDossier", () => {
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     const laender = view!.institutions.find((i) => i.id === "laender")!;
     const aid = laender.plays.find((p) => p.id === "aid")!;
-    expect(aid.costLabel).toContain("45,000,000");
-    expect(aid.costLabel).toContain("1 AP");
+    expect(aid.payments[0].costLabel).toContain("45,000,000");
+    expect(aid.payments[0].costLabel).toContain("1 AP");
   });
 
   it("offers personal plays to a viewer with no seat, and no seat plays", async () => {
@@ -535,17 +535,20 @@ describe("loadGermanQuestionDossier", () => {
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     const street = view!.institutions.find((i) => i.id === "street")!;
     const rally = street.plays.find((p) => p.id === "rally")!;
-    expect(rally.affordable).toBe(false);
-    expect(rally.blockedReason).toBe("funds");
+    expect(rally.payments[0].affordable).toBe(false);
+    expect(rally.payments[0].blockedReason).toBe("funds");
     // A free personal play is still offered.
     const oped = street.plays.find((p) => p.id === "oped")!;
-    expect(oped.affordable).toBe(true);
+    expect(oped.payments[0].affordable).toBe(true);
   });
 
   it("exposes the GDR's settlement-level play outside the institution cards", async () => {
     const { loadGermanQuestionDossier } = await import("./dossier");
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     expect(view!.settlementPlays.map((p) => p.id)).toEqual(["referendum"]);
+    // The settlement-level list goes through the same builder, so it carries
+    // both routes too — it is rendered by the same card component.
+    expect(view!.settlementPlays[0].payments.map((p) => p.mode)).toEqual(["funds", "capital"]);
   });
   it("carries the source design's rule defaults for a crisis with no rules block", async () => {
     const { loadGermanQuestionDossier } = await import("./dossier");
@@ -666,5 +669,73 @@ describe("loadGermanQuestionDossier", () => {
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     expect(view!.viewer.seat).toMatchObject({ canEscalate: false, canArmNow: false });
     expect(view!.viewer.seat!.escalateGate).toContain("switched off");
+  });
+
+  describe("payment routes", () => {
+    const playOn = async (institutionId: string, playId: string) => {
+      const { loadGermanQuestionDossier } = await import("./dossier");
+      const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+      return view!.institutions
+        .find((i) => i.id === institutionId)!
+        .plays.find((p) => p.id === playId)!;
+    };
+
+    it("offers both payment routes on a treasury-funded seat play", async () => {
+      const border = await playOn("street", "border");
+      expect(border.payments.map((p) => p.mode)).toEqual(["funds", "capital"]);
+      // border: 14 base capital + round(8.0 points x k=4) = 46
+      expect(border.payments[1].costLabel).toContain("46 capital");
+    });
+
+    it("offers one route on a play the treasury never pays for", async () => {
+      // `terms` is capital-only already. A second button would be the same
+      // thing at a worse price.
+      const terms = await playOn("bundestag", "terms");
+      expect(terms.payments).toHaveLength(1);
+      expect(terms.payments[0].mode).toBe("funds");
+    });
+
+    it("offers one route on a personal play", async () => {
+      const letter = await playOn("bundestag", "letter");
+      expect(letter.payments).toHaveLength(1);
+      expect(letter.payments[0].mode).toBe("funds");
+    });
+
+    it("names the borrowing when the cash route would run into debt", async () => {
+      // Spending into debt is allowed now, so the cash button is ALWAYS live.
+      // This note is the only thing left telling a player they are taking a
+      // loan rather than spending savings.
+      prime(db, "federalBudget").findOne.mockResolvedValue({ treasuryBalance: 2_000_000 });
+      const border = await playOn("street", "border");
+
+      expect(border.payments[0].affordable).toBe(true);
+      // ℳ12M against a ℳ2M balance: ℳ10M of it is new debt.
+      expect(border.payments[0].debtNote).toContain("10,000,000");
+      expect(border.payments[1].debtNote).toBeNull();
+    });
+
+    it("leaves the debt note off when the treasury covers the play", async () => {
+      const border = await playOn("street", "border");
+      expect(border.payments[0].debtNote).toBeNull();
+    });
+
+    it("gates the capital route on capital alone, never on the treasury", async () => {
+      // A seat deep in debt still has a live capital button. That is the whole
+      // point of the route. `aid` prices at 16 capital, inside the seat's 30;
+      // `border` at 46 would be refused for want of capital and prove nothing
+      // about the treasury.
+      prime(db, "federalBudget").findOne.mockResolvedValue({ treasuryBalance: -900_000_000 });
+      const aid = await playOn("laender", "aid");
+      expect(aid.payments[1].affordable).toBe(true);
+      expect(aid.payments[1].blockedReason).toBeNull();
+    });
+
+    it("still refuses a capital route the seat cannot afford in capital", async () => {
+      // The route removes the treasury as a gate, not capital. `border` prices
+      // at 46 against a 30-point bank.
+      const border = await playOn("street", "border");
+      expect(border.payments[1].affordable).toBe(false);
+      expect(border.payments[1].blockedReason).toBe("capital");
+    });
   });
 });

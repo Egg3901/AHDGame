@@ -41,8 +41,29 @@ import { getSettlementCrisesCollection, getSettlementPlaysCollection } from "@/l
 import { defconFor, isArmed } from "../outcome";
 import { canCharacterAfford, canSeatAfford, seatBudgetFor } from "../affordability";
 import { resolveSeatOffices, type SettlementSeatOffice } from "../seatOffices";
+import { capitalPriceFor } from "../capitalPrice";
+import type { SettlementPaymentMode } from "@/lib/db/types/settlementPlay";
 import { loadSettlementActorContext } from "../actorContext";
 import { resolvePersonalFunds } from "../playCost";
+
+export interface DossierPaymentView {
+  mode: SettlementPaymentMode;
+  /** Button copy. "TREASURY" or "CAPITAL", or "COMMIT" when there is only one. */
+  label: string;
+  /** "£25M · 1 AP" or "16 capital · 1 AP". */
+  costLabel: string;
+  affordable: boolean;
+  blockedReason: string | null;
+  /**
+   * Set when this route would borrow, naming the shortfall.
+   *
+   * Load-bearing, not decoration. Spending into debt is allowed, so the cash
+   * button is ALWAYS live and nothing else on the board distinguishes spending
+   * savings from taking a loan — which is also the only reason to prefer the
+   * capital route.
+   */
+  debtNote: string | null;
+}
 
 export interface DossierPlayView {
   id: string;
@@ -63,9 +84,12 @@ export interface DossierPlayView {
   effectivePoints: number;
   /** "8.0 base × 2.0× seat" — the explanation under the number. */
   basisLabel: string;
-  costLabel: string;
-  affordable: boolean;
-  blockedReason: string | null;
+  /**
+   * One entry per route this play can be bought with, cash first. Always at
+   * least one, so personal plays and the four capital-only plays take the same
+   * code path and the card renders a single loop with no special case.
+   */
+  payments: DossierPaymentView[];
 }
 
 export interface DossierInstitutionView {
@@ -242,39 +266,48 @@ async function laenderSubtitle(db: Db): Promise<string> {
   return `${count} state governments · Bundesrat bloc`;
 }
 
-/** One play as the board shows it, priced and gated for this viewer. */
-function playView(params: {
-  play: SettlementPlayDef;
-  actor: "seat" | "personal";
-  multiplierPct: number;
-  direction: 1 | -1 | null;
-  multiplierLabel: string;
-  currency: CountryId | null;
-  /** Personal plays: the converted local cost, so the card never shows anchor. */
-  localFundsOverride?: number;
-  affordable: boolean;
-  blockedReason: string | null;
-}): DossierPlayView {
-  const { play, multiplierPct, direction, multiplierLabel } = params;
-  const magnitude = (play.magnitude * multiplierPct) / 100;
-  // Direction is unknown for a seat with no bloc; show the magnitude unsigned
-  // rather than guessing a side.
-  const effective = direction === null ? magnitude : magnitude * direction;
-
-  const costBits: string[] = [];
-  if (play.capitalCost > 0) costBits.push(`${play.capitalCost} capital`);
-  const fundsShown = params.localFundsOverride ?? play.fundsCost;
+/**
+ * One route's cost line: capital, then money, then AP, omitting the zeroes.
+ *
+ * `capital` and `fundsShown` are passed rather than read off the play, because
+ * the two routes charge different amounts for the same play.
+ */
+function costLabelFor(
+  play: SettlementPlayDef,
+  capital: number,
+  fundsShown: number,
+  currency: CountryId | null
+): string {
+  const bits: string[] = [];
+  if (capital > 0) bits.push(`${capital} capital`);
   if (fundsShown > 0) {
-    costBits.push(
-      params.currency
-        ? formatLocalFunds(fundsShown, COUNTRY_CURRENCY_MAP[params.currency])
+    bits.push(
+      currency
+        ? formatLocalFunds(fundsShown, COUNTRY_CURRENCY_MAP[currency])
         : // A personal play's cost is already converted to the viewer's local
           // currency by `resolvePersonalFunds`; the symbol is theirs, not a
           // seat's, so it is left to the client's own formatter.
           fundsShown.toLocaleString()
     );
   }
-  costBits.push(`${play.actionCost} AP`);
+  bits.push(`${play.actionCost} AP`);
+  return bits.join(" · ");
+}
+
+/** One play as the board shows it, with every route it can be bought through. */
+function playView(params: {
+  play: SettlementPlayDef;
+  actor: "seat" | "personal";
+  multiplierPct: number;
+  direction: 1 | -1 | null;
+  multiplierLabel: string;
+  payments: DossierPaymentView[];
+}): DossierPlayView {
+  const { play, multiplierPct, direction, multiplierLabel } = params;
+  const magnitude = (play.magnitude * multiplierPct) / 100;
+  // Direction is unknown for a seat with no bloc; show the magnitude unsigned
+  // rather than guessing a side.
+  const effective = direction === null ? magnitude : magnitude * direction;
 
   return {
     id: play.id,
@@ -285,9 +318,7 @@ function playView(params: {
     danger: play.addsHeat,
     effectivePoints: magPts(effective),
     basisLabel: `${magPts(play.magnitude).toFixed(2)} base × ${multiplierLabel}`,
-    costLabel: costBits.join(" · "),
-    affordable: params.affordable,
-    blockedReason: params.blockedReason,
+    payments: params.payments,
   };
 }
 
@@ -409,8 +440,44 @@ export async function loadGermanQuestionDossier(
   const buildPlays = (institutionId: string | null): DossierPlayView[] => {
     const views: DossierPlayView[] = [];
     if (seat && seatDef && budget) {
+      const balance = treasury?.treasuryBalance ?? 0;
       for (const play of catalogue.filter((p) => p.target === institutionId)) {
-        const check = canSeatAfford(play, budget, treasury?.treasuryBalance ?? 0);
+        const cash = canSeatAfford(play, budget);
+        // `treasuryBalance` is the signed cash position, so a shortfall is what
+        // this play would ADD to the national debt. Negative balances give the
+        // full cost, which is correct: all of it is borrowed.
+        const shortfall = Math.max(0, play.fundsCost - balance);
+        const payments: DossierPaymentView[] = [
+          {
+            mode: "funds",
+            label: "TREASURY",
+            costLabel: costLabelFor(play, play.capitalCost, play.fundsCost, seat.id as CountryId),
+            affordable: seat.canAct && cash.ok,
+            blockedReason: seat.blockedReason ?? cash.reason ?? null,
+            debtNote:
+              shortfall > 0
+                ? `adds ${formatLocalFunds(shortfall, COUNTRY_CURRENCY_MAP[seat.id as CountryId])} to the national debt`
+                : null,
+          },
+        ];
+        // Only a play the treasury actually pays for gets a second route. The
+        // four capital-only plays would otherwise show two buttons for the same
+        // thing, the second one dearer.
+        if (play.fundsCost > 0) {
+          const capitalCost = capitalPriceFor(play);
+          // Priced through the SAME affordability rule as the cash route, so a
+          // live button and the command can never disagree about what is
+          // payable. `fundsCost: 0` is what makes the treasury irrelevant here.
+          const alt = canSeatAfford({ ...play, capitalCost }, budget);
+          payments.push({
+            mode: "capital",
+            label: "CAPITAL",
+            costLabel: costLabelFor(play, capitalCost, 0, seat.id as CountryId),
+            affordable: seat.canAct && alt.ok,
+            blockedReason: seat.blockedReason ?? alt.reason ?? null,
+            debtNote: null,
+          });
+        }
         views.push(
           playView({
             play,
@@ -418,9 +485,7 @@ export async function loadGermanQuestionDossier(
             multiplierPct: seatDef.multiplierPct,
             direction: seat.direction,
             multiplierLabel: `${(seatDef.multiplierPct / 100).toFixed(1)}× seat`,
-            currency: seat.id as CountryId,
-            affordable: seat.canAct && check.ok,
-            blockedReason: seat.blockedReason ?? check.reason ?? null,
+            payments,
           })
         );
       }
@@ -443,10 +508,18 @@ export async function loadGermanQuestionDossier(
           // magnitude and the card offers the direction.
           direction: null,
           multiplierLabel: "0.25× personal",
-          currency: null,
-          localFundsOverride: money?.local,
-          affordable: check.ok,
-          blockedReason: check.reason ?? null,
+          // One route only: a character has no seat capital pool, and the
+          // command refuses capital mode on a personal play.
+          payments: [
+            {
+              mode: "funds",
+              label: "COMMIT",
+              costLabel: costLabelFor(play, play.capitalCost, money?.local ?? play.fundsCost, null),
+              affordable: check.ok,
+              blockedReason: check.reason ?? null,
+              debtNote: null,
+            },
+          ],
         })
       );
     }
