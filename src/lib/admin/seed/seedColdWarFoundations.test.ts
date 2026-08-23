@@ -25,9 +25,9 @@ describe("seedColdWarFoundations", () => {
   });
 
   it("gives a 1959 world two credible superpower arsenals and a smaller UK programme", () => {
-    const baselines = nuclearProgramBaselines(1959, 338);
+    const baselines = nuclearProgramBaselines(1959);
     expect(baselines.map((program) => program._id)).toEqual(["US", "RU", "UK"]);
-    expect(baselines.find((program) => program._id === "US")?.adopted["delivery-icbm"]).toBe(338);
+    expect(baselines.find((program) => program._id === "US")?.adopted["delivery-icbm"]).toBe(1);
     expect(baselines.find((program) => program._id === "RU")?.warheads).toBeGreaterThan(0);
     expect(baselines.find((program) => program._id === "UK")?.warheads).toBeLessThan(
       baselines.find((program) => program._id === "US")!.warheads
@@ -36,16 +36,20 @@ describe("seedColdWarFoundations", () => {
 
   it("does not replace existing nuclear programme documents", async () => {
     db.collectionMocks.nuclearPrograms!.find.mockReturnValue({
-      toArray: async () => [{ _id: "US", warheads: 99 }],
+      toArray: async () => [{ _id: "US", adopted: { "device-fission": 10 }, warheads: 99 }],
     } as never);
+    db.collectionMocks.nuclearPrograms!.findOne.mockImplementation(async (filter) =>
+      filter._id === "US"
+        ? { _id: "US", adopted: { "device-fission": 10 }, warheads: 99, productionRate: 2 }
+        : null
+    );
 
     await seedColdWarFoundations(db as unknown as Db, 1959, 338);
 
-    const operations = db.collectionMocks.nuclearPrograms!.bulkWrite.mock.calls[0][0] as Array<{
-      updateOne: { filter: { _id: string }; update: Record<string, unknown> };
-    }>;
-    expect(operations.map((operation) => operation.updateOne.filter._id)).toEqual(["RU", "UK"]);
-    expect(JSON.stringify(operations)).not.toContain('"$set"');
+    const written = db.collectionMocks.nuclearPrograms!.updateOne.mock.calls.map(
+      (call) => call[0]._id
+    );
+    expect(written).toEqual(["RU", "UK"]);
   });
 
   it("writes nothing during migration preview", async () => {
@@ -54,7 +58,7 @@ describe("seedColdWarFoundations", () => {
     });
 
     expect(result.programsInserted).toBe(3);
-    expect(db.collectionMocks.nuclearPrograms!.bulkWrite).not.toHaveBeenCalled();
+    expect(db.collectionMocks.nuclearPrograms!.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.gameState!.updateOne).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,11 @@ import { emptyConflictState } from "@/lib/livingConflict/engine";
 import { normalizeCampaignState } from "@/lib/livingConflict/campaign";
 import { DEFAULT_ADOPTED, DEFAULT_POINTS, keyOf } from "@/lib/military/doctrineTree";
 import { tensionPressureBreakdown } from "@/lib/coldwar/tension";
+import {
+  historicalAdoptedNodes,
+  historicalWarheads,
+  seedNuclearPrograms,
+} from "@/lib/admin/seed/seedNuclearPrograms";
 
 const NUCLEAR_DELIVERY_DOCTRINE_KEY = keyOf("strat", 5);
 
@@ -28,52 +33,16 @@ type TensionSeedDocument = {
   updatedAt: Date;
 };
 
-function adoptedAt(turn: number, keys: string[]): Record<string, number> {
-  return Object.fromEntries(keys.map((key) => [key, turn]));
-}
-
 /** Game-scaled historical starting arsenals. Counts are balance units, not literal inventories. */
-export function nuclearProgramBaselines(year: number, turn: number): BaselineProgram[] {
-  const common = ["device-fission", "device-boosted", "device-thermo", "delivery-bombers"];
-  const missile = year >= 1956 ? ["delivery-irbm"] : [];
-  const icbm = year >= 1959 ? ["delivery-icbm"] : [];
-  const slbm = year >= 1960 ? ["delivery-slbm"] : [];
-  const mirv = year >= 1968 ? ["device-mirv"] : [];
-  const late = [...common, ...missile, ...icbm, ...slbm, ...mirv];
-
-  if (year < 1945) return [];
-  if (year < 1952) {
-    return [
-      {
-        _id: "US",
-        adopted: adoptedAt(turn, ["device-fission", "device-boosted", "delivery-bombers"]),
-        warheads: 6,
-        productionRate: 0,
-      },
-      {
-        _id: "RU",
-        adopted: adoptedAt(turn, ["device-fission", "delivery-bombers"]),
-        warheads: 3,
-        productionRate: 0,
-      },
-    ];
-  }
-
-  const usWarheads = year < 1956 ? 10 : year < 1968 ? 18 : year < 1991 ? 60 : 65;
-  const ruWarheads = year < 1956 ? 6 : year < 1968 ? 14 : year < 1991 ? 55 : 60;
-  const ukWarheads = year < 1957 ? 2 : year < 1968 ? 5 : year < 1991 ? 15 : 15;
-  const ukNodes = [
-    "device-fission",
-    ...(year >= 1957 ? ["device-boosted", "device-thermo"] : []),
-    "delivery-bombers",
-    ...(year >= 1960 ? ["delivery-irbm", "delivery-icbm", "delivery-slbm"] : []),
-  ];
-
-  return [
-    { _id: "US", adopted: adoptedAt(turn, late), warheads: usWarheads, productionRate: 0 },
-    { _id: "RU", adopted: adoptedAt(turn, late), warheads: ruWarheads, productionRate: 0 },
-    { _id: "UK", adopted: adoptedAt(turn, ukNodes), warheads: ukWarheads, productionRate: 0 },
-  ];
+export function nuclearProgramBaselines(year: number): BaselineProgram[] {
+  return (["US", "RU", "UK"] as const)
+    .map((countryId) => ({
+      _id: countryId,
+      adopted: historicalAdoptedNodes(countryId, year),
+      warheads: historicalWarheads(countryId, year),
+      productionRate: 0,
+    }))
+    .filter((program) => Object.keys(program.adopted).length > 0);
 }
 
 /**
@@ -86,14 +55,19 @@ export async function seedColdWarFoundations(
   turn: number,
   opts: { dryRun?: boolean } = {}
 ): Promise<ColdWarFoundationResult> {
-  const baselines = nuclearProgramBaselines(year, turn);
+  const baselines = nuclearProgramBaselines(year);
   const programIds = baselines.map((program) => program._id);
   const existingPrograms = await db
     .collection<NuclearProgram>("nuclearPrograms")
-    .find({}, { projection: { _id: 1, warheads: 1 } })
+    .find({}, { projection: { _id: 1, adopted: 1, warheads: 1 } })
     .toArray();
-  const existingProgramIds = new Set(existingPrograms.map((program) => program._id));
-  const missingPrograms = baselines.filter((program) => !existingProgramIds.has(program._id));
+  const existingProgramByCountry = new Map(
+    existingPrograms.map((program) => [program._id, program])
+  );
+  const missingPrograms = baselines.filter((program) => {
+    const existing = existingProgramByCountry.get(program._id);
+    return !existing || Object.keys(existing.adopted ?? {}).length === 0;
+  });
 
   const conflictDefs = allLivingConflictDefs();
   const existingConflicts = await db
@@ -138,15 +112,7 @@ export async function seedColdWarFoundations(
 
   const now = new Date();
   if (missingPrograms.length > 0) {
-    await db.collection<NuclearProgram>("nuclearPrograms").bulkWrite(
-      missingPrograms.map((program) => ({
-        updateOne: {
-          filter: { _id: program._id },
-          update: { $setOnInsert: { ...program, updatedAt: now } },
-          upsert: true,
-        },
-      }))
-    );
+    await seedNuclearPrograms(db, { year });
   }
 
   for (const countryId of programIds) {
@@ -194,8 +160,14 @@ export async function seedColdWarFoundations(
     const activeCrises = await db.collection("crises").countDocuments({ status: "active" });
     const escalationLevel =
       existingConflicts.find((conflict) => conflict.defKey === "vietnam")?.phaseLevel ?? 0;
-    const totalWarheads = [...existingPrograms, ...missingPrograms].reduce(
-      (sum, program) => sum + Math.max(0, program.warheads ?? 0),
+    const warheadsByCountry = new Map(
+      existingPrograms.map((program) => [program._id, Math.max(0, program.warheads ?? 0)])
+    );
+    for (const program of missingPrograms) {
+      warheadsByCountry.set(program._id, Math.max(0, program.warheads));
+    }
+    const totalWarheads = [...warheadsByCountry.values()].reduce(
+      (sum, warheads) => sum + warheads,
       0
     );
     const value = tensionPressureBreakdown({
