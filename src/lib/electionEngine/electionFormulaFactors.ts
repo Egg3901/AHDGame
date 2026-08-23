@@ -184,8 +184,8 @@ export function applyVoteReachFloor(reach: number): number {
 
 /**
  * Personal-stat (politicalInfluence / favorability) tenure fatigue —
- * the nominal-share-side counterpart to `partyTenureFatiguePenalty`
- * (see `partyTenureFatigue.ts`).
+ * the nominal-share-side counterpart to the economic referendum's
+ * penalty-side term-fatigue multiplier (see `economicReferendum.ts`).
  *
  * Root-cause context: politicalInfluence and favorability grow every turn a
  * character/NPP campaigns (Campaign: flat +1%/action; Advertise: +3 base,
@@ -218,8 +218,8 @@ export function applyVoteReachFloor(reach: number): number {
  * The actual defect is not "a large gap is unfair" (a genuinely popular
  * first-term candidate SHOULD win decisively) — it's that the SAME party
  * carries the SAME gap into every election for 12 years straight because
- * nothing about the gap is tenure-aware. So — like the swing-side
- * incumbency driver already does via `partyTenureFatiguePenalty` — this
+ * nothing about the gap is tenure-aware. So — like the economic referendum
+ * channel already does on the national-share side — this
  * erodes the tenure-holder's effective PI/favorability by a fixed number of
  * points per consecutive term beyond the first, gated on tenure data that's
  * only present for single-winner races with tracked incumbency (US

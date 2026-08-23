@@ -54,36 +54,27 @@ describe("incumbencyDriver directional (executive own-race)", () => {
   });
 });
 
-describe("incumbencyDriver party-tenure fatigue (folded post-cap)", () => {
-  it("bites a popular incumbent at the shield cap (the whole point)", () => {
-    // 70% approval → +10 shield; a 4th-term bid (penalty 0.07 = 7pp) nets +3.
+describe("incumbencyDriver no longer carries party-tenure fatigue", () => {
+  // Term fatigue moved to the economic referendum channel, which scales the
+  // penalty side of a national share shift. The incumbency driver is now the
+  // pure approval shield/drag, whatever the incumbent party's tenure.
+  it("leaves the approval shield intact regardless of consecutive terms", () => {
     const opts: DistributeVotesOptions = {
       incumbentPartyId: "dem",
       incumbentApproval: 70,
-      incumbentTenurePenalty: 0.07,
-    };
-    expect(incPct("dem", "rep", opts)).toBeCloseTo(3, 4);
-    expect(incPct("rep", "dem", opts)).toBeCloseTo(-3, 4); // challenger mirrors
-  });
-
-  it("can flip a modest shield to a net drag on a long-tenured party", () => {
-    // 48% approval → +2 shield (pivot 46); 5th-term bid (penalty 0.105 = 10.5pp) nets −8.5.
-    const opts: DistributeVotesOptions = {
-      incumbentPartyId: "dem",
-      incumbentApproval: 48,
-      incumbentTenurePenalty: 0.105,
-    };
-    expect(incPct("dem", "rep", opts)).toBeCloseTo(-8.5, 4);
-    expect(incPct("rep", "dem", opts)).toBeCloseTo(8.5, 4); // now actively helps the challenger
-  });
-
-  it("no penalty leaves the pure approval shield intact", () => {
-    const opts: DistributeVotesOptions = {
-      incumbentPartyId: "dem",
-      incumbentApproval: 70,
-      incumbentTenurePenalty: 0,
+      incumbentConsecutiveTerms: 4,
     };
     expect(incPct("dem", "rep", opts)).toBeCloseTo(10, 4);
+    expect(incPct("rep", "dem", opts)).toBeCloseTo(-10, 4);
+  });
+
+  it("still drags an unpopular incumbent on approval alone", () => {
+    const opts: DistributeVotesOptions = {
+      incumbentPartyId: "dem",
+      incumbentApproval: 20,
+      incumbentConsecutiveTerms: 1,
+    };
+    expect(incPct("dem", "rep", opts)).toBeCloseTo(-10, 4);
   });
 });
 

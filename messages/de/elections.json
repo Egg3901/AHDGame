@@ -105,6 +105,7 @@
       "scaleNote": "Die Skala reicht von -{clamp} bis +{clamp} Punkte. Diese Verschiebung steckt bereits in den Stimmenzahlen.",
       "componentsGroup": "Was einfließt",
       "fatigue": "Strebt eine {term} Amtszeit in Folge an. Die Malus-Seite wird mit x{multiplier} skaliert.",
+      "responseCredit": "Hilfsmaßnahmen mildern den Malus um {percent}%.",
       "termThird": "3.",
       "termFourthPlus": "4. oder spätere",
       "recordedTurn": "Stand von Zug {turn}.",

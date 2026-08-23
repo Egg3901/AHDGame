@@ -23,6 +23,10 @@ export interface NationalMoodData {
   components: Array<{ key: string; label: string; contributionPts: number }>;
   /** Penalty-side multiplier for consecutive terms held. 1 when it does not apply. */
   fatigueMultiplier: number;
+  /** Share of the raw penalty forgiven by credit-for-response, in [0, 0.4]. */
+  forgivenessFrac?: number;
+  /** The enacted bills that earned the forgiveness. */
+  creditedBills?: Array<{ key: string; title: string; component: string; weight: number }>;
   incumbentPartyId?: string;
   incumbentPartyName?: string;
   incumbentPartyColor?: string;
@@ -70,6 +74,11 @@ export function NationalMoodGauge({ data }: { data?: NationalMoodData | null }) 
   const barColor = isPositive ? positiveColor : NEGATIVE_COLOR;
   const widthPct =
     (Math.min(Math.abs(data.sharePts), REFERENDUM_SHARE_CLAMP) / REFERENDUM_SHARE_CLAMP) * 50;
+
+  // Credit for response: relief the government earned by enacting costly bills
+  // that push the suffering components the right way. Rounded for display only.
+  const forgivenessPct = Math.round((data.forgivenessFrac ?? 0) * 100);
+  const creditedTitles = [...new Set((data.creditedBills ?? []).map((b) => b.title))];
 
   const fatigueTerm =
     data.fatigueMultiplier >= 1.5 ? t("nationalMood.termFourthPlus") : t("nationalMood.termThird");
@@ -126,6 +135,23 @@ export function NationalMoodGauge({ data }: { data?: NationalMoodData | null }) 
               positiveColor={positiveColor}
             />
           ))}
+        </div>
+      ) : null}
+
+      {forgivenessPct > 0 ? (
+        <div className="mt-2 rounded border border-card-border bg-background px-2 py-1.5">
+          <p className="text-[11px] leading-snug text-muted">
+            {t("nationalMood.responseCredit", { percent: forgivenessPct })}
+          </p>
+          {creditedTitles.length > 0 ? (
+            <ul className="mt-1 flex flex-col gap-0.5">
+              {creditedTitles.map((title) => (
+                <li key={title} className="text-[11px] leading-snug font-semibold">
+                  {title}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
 

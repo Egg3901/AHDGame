@@ -12,6 +12,7 @@
  *
  * What it measures:
  *   - the referendum reading (misery index, components, fatigue multiplier)
+ *   - credit-for-response forgiveness and the bills that earned it
  *   - the per-state marginal vote-share delta for one turn (engine-measured)
  *   - the national marginal share delta
  *   - projected electoral college and any state flips under the variant
@@ -32,8 +33,9 @@ import {
 } from "@/lib/presidentialElectionEngine";
 import { turnVoteWeight } from "@/lib/electionEngine/voteCalculations";
 import { resolvePresidentApproval } from "@/lib/electionEngine/presidentialCoattail";
+import type { CountryId } from "@/lib/constants/countries";
 
-const COUNTRY = (process.env.COUNTRY ?? "US") as import("@/lib/constants/countries").CountryId;
+const COUNTRY = (process.env.COUNTRY ?? "US") as CountryId;
 /** Variant scale; 1 is production. Set >1 to probe a stronger channel. */
 const VARIANT_SCALE = Number(process.env.REFERENDUM_SCALE ?? 1);
 
@@ -125,6 +127,16 @@ async function main() {
   console.log(`fatigue multiplier: ${ref.fatigueMultiplier.toFixed(2)}`);
   for (const c of ref.components) {
     console.log(`  ${c.label.padEnd(16)} ${c.contributionPts.toFixed(2).padStart(7)} pts`);
+  }
+  if (ref.forgivenessFrac) {
+    console.log(
+      `response credit   : ${(ref.forgivenessFrac * 100).toFixed(1)}% of the raw penalty forgiven`
+    );
+    for (const bill of ref.creditedBills ?? []) {
+      console.log(`  ${bill.component.padEnd(14)} weight ${bill.weight.toFixed(2)}  ${bill.title}`);
+    }
+  } else {
+    console.log("response credit   : none (no qualifying enacted bill in the window)");
   }
   console.log(
     `raw shift ${ref.sharePts.toFixed(2)} pts  |  applied ${(ref.sharePts * VARIANT_SCALE).toFixed(2)} pts\n`

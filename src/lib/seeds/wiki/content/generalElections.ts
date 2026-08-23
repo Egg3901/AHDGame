@@ -22,7 +22,7 @@ The final 4 turns are a sharp closing spike: they carry 30% of the pool on their
 
 ## The total appeal pipeline
 
-General elections run on the **swing-flow model** by default, not the flat group-level split used in primaries and polls. Swing-flow starts from the same per-group appeal pipeline below, then layers presidential/gubernatorial **coattails**, a **median-voter** policy-distance reference, **persuasion drivers** (candidate support, policy distance, money, incumbency), and **party-tenure fatigue** on top, see [Reference: Formulas](/wiki/reference-formulas) for the driver math. The base pipeline:
+General elections run on the **swing-flow model** by default, not the flat group-level split used in primaries and polls. Swing-flow starts from the same per-group appeal pipeline below, then layers presidential/gubernatorial **coattails**, a **median-voter** policy-distance reference, **persuasion drivers** (candidate support, policy distance, money, incumbency), and, for presidential races, the **National Mood** economic channel that also carries party-tenure fatigue, see [Reference: Formulas](/wiki/reference-formulas) for the driver math. The base pipeline:
 
 Each turn, for each candidate, for each demographic group:
 

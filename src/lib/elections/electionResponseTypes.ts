@@ -195,13 +195,6 @@ export interface ElectionResponse {
   incumbentPartyId?: string;
   incumbentApproval?: number;
   /**
-   * Party-tenure voter-fatigue drag (incumbency-budget units) folded into the
-   * Incumbency row. Presidential own-race only, when the party is seeking a 3rd+
-   * consecutive term. Absent / 0 otherwise.
-   */
-  incumbentTenurePenalty?: number;
-
-  /**
    * Single-seat legislative own-race (US Senate): sitting senator's party and
    * consecutive terms, feeding the card's flat incumbency shield. Populated
    * only when the incumbent is running (open seats omit). Not fog-sensitive.
@@ -256,6 +249,13 @@ export interface ElectionResponse {
     components: Array<{ key: string; label: string; contributionPts: number }>;
     /** Penalty-side multiplier for consecutive terms held. 1 when it does not apply. */
     fatigueMultiplier: number;
+    /**
+     * Share of the raw penalty forgiven by credit-for-response, in [0, 0.4].
+     * Absent when no enacted bill qualified.
+     */
+    forgivenessFrac?: number;
+    /** The bills that earned the forgiveness. */
+    creditedBills?: Array<{ key: string; title: string; component: string; weight: number }>;
     incumbentPartyId?: string;
     /** Resolved display name for `incumbentPartyId`, when the party is known. */
     incumbentPartyName?: string;

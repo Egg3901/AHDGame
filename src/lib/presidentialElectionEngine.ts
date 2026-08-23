@@ -32,13 +32,13 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCountryState } from "@/lib/countryState";
 import { getAllStateApprovalsForElection } from "@/lib/utils/getStateApprovalForElection";
 import { resolvePresidentApproval } from "@/lib/electionEngine/presidentialCoattail";
-import { partyTenureFatiguePenalty } from "@/lib/electionEngine/partyTenureFatigue";
 import {
   applyReferendumShift,
   computeEconomicReferendum,
   type ReferendumResult,
 } from "@/lib/electionEngine/economicReferendum";
 import { loadReferendumInputs } from "@/lib/elections/referendumInputs";
+import { loadResponseCredit } from "@/lib/elections/responseCredit";
 import { getPresidentialConsecutiveTerms } from "@/lib/turn/election/presidentialTenureLedger";
 import type { GameState } from "@/lib/db/types/gameState";
 import { BASE_APPROVAL } from "@/lib/utils/governmentApproval";
@@ -515,16 +515,14 @@ export async function accumulatePresidentVoteTurn(
   // the presidency is vacant / has no party → driver degrades to neutral.
   const incumbentExec = await resolvePresidentApproval(db, electionCountryId);
 
-  // Party-tenure voter fatigue: a party seeking a 3rd+ consecutive term takes a
-  // drag (−3.5pp per term beyond the second) subtracted post-cap from the
-  // incumbency shield, so even a popular long-tenured party faces a "time for a
-  // change" slog. Folded into the incumbency driver — no separate row.
+  // Consecutive terms the incumbent PARTY has already held. Term fatigue is
+  // priced by the economic referendum below (penalty-side multiplier); this
+  // count also feeds `appealWeight`'s nominal-share `personalStatTenureFatigue`.
   const incumbentConsecutiveTerms = getPresidentialConsecutiveTerms(
     gsDoc,
     electionCountryId,
     incumbentExec?.partyId
   );
-  const incumbentTenurePenalty = partyTenureFatiguePenalty(incumbentConsecutiveTerms);
 
   // Economic referendum: the "are you better off than four years ago" channel.
   // Priced ONCE per accumulation turn from national misery + the incumbent
@@ -539,8 +537,16 @@ export async function accumulatePresidentVoteTurn(
       : [];
   let referendum: ReferendumResult | undefined;
   if (referendumScale !== 0 && referendumIncumbentCandidateIds.length > 0) {
-    const miseryInputs = await loadReferendumInputs(db, electionCountryId);
-    referendum = computeEconomicReferendum(miseryInputs, incumbentConsecutiveTerms, gsDoc?.preset);
+    const [miseryInputs, responseCredit] = await Promise.all([
+      loadReferendumInputs(db, electionCountryId),
+      loadResponseCredit(db, electionCountryId, turnNumber),
+    ]);
+    referendum = computeEconomicReferendum(
+      miseryInputs,
+      incumbentConsecutiveTerms,
+      gsDoc?.preset,
+      responseCredit
+    );
   }
   const referendumSharePts = referendum ? referendum.sharePts * referendumScale : 0;
 
@@ -662,7 +668,6 @@ export async function accumulatePresidentVoteTurn(
         incumbentApproval:
           calibration?.incumbentApprovalSource === "state" ? approvalPct : incumbentExec?.approval,
         incumbencyApprovalPivot: calibration?.incumbencyApprovalPivot,
-        incumbentTenurePenalty,
         incumbentConsecutiveTerms,
         votingSystem: "fptp",
         spoilerRate: PRESIDENTIAL_SPOILER_RATE,
@@ -829,6 +834,10 @@ export async function accumulatePresidentVoteTurn(
             sharePts: referendumSharePts,
             components: referendum.components,
             fatigueMultiplier: referendum.fatigueMultiplier,
+            ...(referendum.forgivenessFrac != null && {
+              forgivenessFrac: referendum.forgivenessFrac,
+              creditedBills: referendum.creditedBills ?? [],
+            }),
             incumbentPartyId: incumbentExec?.partyId,
             recordedTurn: turnNumber,
           },

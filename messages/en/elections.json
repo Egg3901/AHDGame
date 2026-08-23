@@ -105,6 +105,7 @@
       "scaleNote": "Scale runs from -{clamp} to +{clamp} pts. This shift is already inside the vote totals.",
       "componentsGroup": "What feeds it",
       "fatigue": "Seeking a {term} consecutive term. The penalty side is scaled x{multiplier}.",
+      "responseCredit": "Relief efforts soften the penalty by {percent}%.",
       "termThird": "3rd",
       "termFourthPlus": "4th or later",
       "recordedTurn": "Read on turn {turn}.",
