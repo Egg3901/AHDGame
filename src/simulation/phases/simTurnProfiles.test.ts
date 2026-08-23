@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { BASE_TURN_PHASE_NAMES } from "@/simulation/phases/turnPhaseNames";
 import {
+  ECONOMY_ONLY_PHASES,
   ELECTIONS_SKIP_PHASES,
+  MACRO_ONLY_PHASES,
   getSimTurnPhasePredicate,
 } from "@/simulation/phases/simTurnProfiles";
 
@@ -89,5 +91,59 @@ describe("simTurnProfiles — elections-only turn-phase gate", () => {
     expect(BASE_TURN_PHASE_NAMES).toContain("nppUnionBehavior");
     expect(ELECTIONS_SKIP_PHASES.has("nppUnionBehavior")).toBe(true);
     expect(getSimTurnPhasePredicate("elections-only")!("nppUnionBehavior")).toBe(false);
+  });
+});
+
+describe("simTurnProfiles: economy-only turn-phase gate", () => {
+  it("keeps the macro and accounting phases", () => {
+    const pred = getSimTurnPhasePredicate("economy-only")!;
+    for (const phase of [
+      "corporationTurn",
+      "commodityPrices",
+      "fiscalYear",
+      "metricEngine",
+      "economicModel",
+      "inflationRecalc",
+      "commandEconomy",
+      "forexTurn",
+      "ledgerReconcile",
+    ]) {
+      expect(ECONOMY_ONLY_PHASES.has(phase)).toBe(true);
+      expect(pred(phase)).toBe(true);
+    }
+  });
+
+  it("freezes political and random-event phases", () => {
+    const pred = getSimTurnPhasePredicate("economy-only")!;
+    for (const phase of [
+      "statePartyElections",
+      "nppBillSponsorship",
+      "campaignTurn",
+      "playerRandomEvents",
+      "ministerialOrders",
+    ]) {
+      expect(pred(phase)).toBe(false);
+    }
+  });
+});
+
+describe("simTurnProfiles: macro-only turn-phase gate", () => {
+  it("keeps macro outcomes but freezes corporate strategy and ledgers", () => {
+    const pred = getSimTurnPhasePredicate("macro-only")!;
+    for (const phase of [
+      "commodityPrices",
+      "fiscalYear",
+      "metricEngine",
+      "economicModel",
+      "inflationRecalc",
+      "commandEconomy",
+      "forexTurn",
+    ]) {
+      expect(MACRO_ONLY_PHASES.has(phase)).toBe(true);
+      expect(pred(phase)).toBe(true);
+    }
+    for (const phase of ["corporationTurn", "campaignTurn", "ledgerReconcile"]) {
+      expect(pred(phase)).toBe(false);
+    }
   });
 });

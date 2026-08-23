@@ -10,6 +10,12 @@ Open the system at [World Conflicts](/world/conflicts). The page separates three
 
 These layers affect each other, but they are not the same thing. A proxy campaign can exist before it opens a shooting war. A nuclear buildup can raise tension without creating a battlefield.
 
+## International Response Desk
+
+The International Response Desk on **World Conflicts** lists every open international response campaign. A card can say **National** even though it appears here. National means that your government owns its response choice; it does not mean the crisis or its consequences stop at your border.
+
+Each desk card shows how long the window has been open, which governments can shape the shared outcome, and a link to the complete response. Ordinary domestic crises, such as a national industrial strike, stay on the Crises and Actions pages and do not appear on this desk.
+
 ## Campaign stages
 
 Every response campaign moves through five stages:
@@ -73,7 +79,7 @@ Events such as escalation, nuclear tests, and crisis outcomes move the current r
 
 - A baseline of 12
 - 4 points for each Vietnam escalation rung, capped at 30
-- 3 points for each active crisis, capped at 12
+- 3 points for each active international response crisis, capped at 12
 - 1.2 times the square root of the total world warhead stockpile, capped at 18
 
 The page shows each driver, the floor, and whether the current reading is rising or easing toward it. Tension also sets the displayed DEFCON posture, strategic procurement pressure, and detente penalty.

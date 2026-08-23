@@ -182,6 +182,7 @@ function makeLookups(
     corruptionByState: new Map(),
     workforceSkillByState: new Map(),
     rawWorkforceSkillByState: new Map(),
+    labourTightnessByState: new Map(),
     crimeRateByState: new Map(),
     broadbandByState: new Map(),
     roadConditionByState: new Map(),

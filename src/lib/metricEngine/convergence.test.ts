@@ -7,6 +7,8 @@ import {
   tradeFactor,
   freedomFactor,
   opennessGate,
+  plannedDevelopmentGate,
+  developmentGate,
   convergenceBonus,
   applySectorBlend,
 } from "./convergence";
@@ -75,6 +77,78 @@ describe("opennessGate (weighted blend)", () => {
   });
   it("reform-CN-like (econSystem 0.574, trade 1, freedom 0.3) stays high (~0.647)", () => {
     expect(opennessGate({ econSystem: 0.574, trade: 1, freedom: 0.3 })).toBeCloseTo(0.647, 2);
+  });
+});
+
+describe("plannedDevelopmentGate", () => {
+  it("rewards execution, skills, infrastructure, and bloc trade", () => {
+    expect(
+      plannedDevelopmentGate({
+        industrialPolicyExecution: 0.8,
+        workforceSkill: 75,
+        transportEfficiency: 70,
+        publicInvestmentEffort: 1,
+        trade: 1,
+      })
+    ).toBeGreaterThan(0.75);
+  });
+
+  it("does not rescue an incapable plan economy", () => {
+    expect(
+      plannedDevelopmentGate({
+        industrialPolicyExecution: 0.15,
+        workforceSkill: 25,
+        transportEfficiency: 20,
+        trade: 0,
+      })
+    ).toBeLessThan(0.25);
+  });
+});
+
+describe("developmentGate", () => {
+  it("lets a capable command economy use its planned path", () => {
+    const marketOnly = opennessGate({ econSystem: 0.5, trade: 0.5, freedom: 0 });
+    const combined = developmentGate({
+      soci: 85,
+      tradeGrowth: 2.5,
+      economicFreedom: 10,
+      industrialPolicyExecution: 0.8,
+      workforceSkill: 75,
+      transportEfficiency: 70,
+      publicInvestmentEffort: 0.8,
+    });
+    expect(combined).toBeGreaterThan(marketOnly);
+  });
+
+  it("keeps a market economy on the market path", () => {
+    const combined = developmentGate({
+      soci: 5,
+      tradeGrowth: 7.5,
+      economicFreedom: 60,
+      industrialPolicyExecution: 1,
+      workforceSkill: 100,
+      transportEfficiency: 100,
+    });
+    expect(combined).toBeCloseTo(1);
+  });
+
+  it("gives seeded 1953 planned economies a viable route with sparse capacity metrics", () => {
+    const soviet = developmentGate({
+      soci: 100,
+      tradeGrowth: 3.7,
+      economicFreedom: 5.1,
+      industrialPolicyExecution: 0.37,
+      publicInvestmentEffort: 0.78,
+    });
+    const eastGerman = developmentGate({
+      soci: 100,
+      tradeGrowth: 2.3,
+      economicFreedom: 40.3,
+      industrialPolicyExecution: 0.28,
+      publicInvestmentEffort: 0.75,
+    });
+    expect(soviet).toBeGreaterThan(0.5);
+    expect(eastGerman).toBeGreaterThan(0.52);
   });
 });
 
