@@ -87,6 +87,13 @@ describe("launchCorpProspect", () => {
     if (!res.ok) expect(res.status).toBe(400);
   });
 
+  it("allows a corporation with extraction as its secondary sector", async () => {
+    primeEligible(db);
+    const res = await run(db, makeCorp({ type: "retail", secondaryType: "extraction" }));
+    expect(res.ok).toBe(true);
+    expect(db.collectionMocks.prospectingSurveys.insertOne).toHaveBeenCalledOnce();
+  });
+
   it("rejects when the corp has no sector in the state", async () => {
     primeEligible(db);
     db.collectionMocks.corporateSectors.findOne.mockResolvedValue(null);

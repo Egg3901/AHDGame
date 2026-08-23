@@ -17,6 +17,11 @@ vi.mock("@/lib/nationalization/billTargetPreview", () => ({
 vi.mock("@/lib/turn/currentTurn", () => ({
   getCurrentTurn: vi.fn().mockResolvedValue(42),
 }));
+const allianceBarSpy = vi.fn().mockResolvedValue(null);
+vi.mock("@/lib/military/allianceBar", () => ({
+  allianceBarBetween: (...a: unknown[]) => allianceBarSpy(...a),
+}));
+
 const declareWarSpy = vi.fn().mockResolvedValue({ conflict: {}, joined: false });
 vi.mock("@/lib/military/declareWar", () => ({
   declareWar: (...a: unknown[]) => declareWarSpy(...a),
@@ -477,6 +482,37 @@ describe("applyLegislationEffect — war declarations", () => {
   beforeEach(() => {
     db = createMockDb();
     vi.clearAllMocks();
+    // clearAllMocks resets calls but NOT implementations, so a test that seats an
+    // alliance would otherwise leak into every test after it.
+    allianceBarSpy.mockResolvedValue(null);
+  });
+
+  // A declaration sits before the chambers for turns, and either country can accede to
+  // the other's bloc while it does. Without this re-read, a bill filed against a
+  // neutral would enact as an intra-alliance war the proposal gate had already refused.
+  it("drops a ratified declaration that has become an attack on an ally", async () => {
+    allianceBarSpy.mockResolvedValue("North Atlantic Treaty Organization");
+    await applyLegislationEffect(
+      db as unknown as Db,
+      {
+        _id: new ObjectId(),
+        countryId: "US",
+        provisions: [{ type: "declare_war", targetCountry: "UK", warGoal: "punitive" }],
+      } as never
+    );
+    expect(declareWarSpy).not.toHaveBeenCalled();
+  });
+
+  it("re-reads the bar for the declarer against the target", async () => {
+    await applyLegislationEffect(
+      db as unknown as Db,
+      {
+        _id: new ObjectId(),
+        countryId: "US",
+        provisions: [{ type: "declare_war", targetCountry: "CN", warGoal: "punitive" }],
+      } as never
+    );
+    expect(allianceBarSpy).toHaveBeenCalledWith(expect.anything(), "US", "CN");
   });
 
   it("starts the war when a declaration is enacted", async () => {
